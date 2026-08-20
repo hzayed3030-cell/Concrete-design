@@ -1,0 +1,1099 @@
+"""
+ECP 203 - Egyptian Code of Practice
+Design Calculation Sheet & Report Generator
+============================================
+Generates comprehensive, standalone, print-ready HTML/PDF calculation sheets
+with high-resolution embedded base64 CAD sketches, design tables, punching checks,
+column reactions, and engineering sign-off blocks.
+"""
+
+import io
+import os
+import shutil
+import base64
+import tempfile
+import subprocess
+import datetime
+from typing import Dict, List, Any, Optional
+
+
+def find_browser_executable() -> Optional[str]:
+    """Finds an installed Edge or Chrome executable for headless PDF generation."""
+    candidates = [
+        shutil.which("msedge"),
+        shutil.which("chrome"),
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        os.path.expandvars(r"%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe"),
+        os.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
+        os.path.expandvars(r"%PROGRAMFILES%\Microsoft\Edge\Application\msedge.exe"),
+        os.path.expandvars(r"%PROGRAMFILES(X86)%\Microsoft\Edge\Application\msedge.exe"),
+    ]
+    for c in candidates:
+        if c and os.path.exists(c):
+            return c
+    return None
+
+
+def html_to_pdf_bytes(html_content: str, timeout_sec: int = 25) -> Optional[bytes]:
+    """
+    Converts standalone HTML calculation sheet content directly into a PDF byte stream
+    using the system's built-in Edge / Chrome headless printing engine.
+    """
+    browser_exe = find_browser_executable()
+    if not browser_exe:
+        return None
+
+    html_file = None
+    pdf_file = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8") as f:
+            f.write(html_content)
+            html_file = f.name
+
+        pdf_file = html_file.replace(".html", ".pdf")
+
+        cmd = [
+            browser_exe,
+            "--headless=new",
+            "--disable-gpu",
+            "--no-pdf-header-footer",
+            f"--print-to-pdf={pdf_file}",
+            html_file
+        ]
+
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec)
+        if res.returncode == 0 and os.path.exists(pdf_file):
+            with open(pdf_file, "rb") as pf:
+                return pf.read()
+    except Exception as e:
+        print("PDF generation error:", e)
+        return None
+    finally:
+        if html_file and os.path.exists(html_file):
+            try:
+                os.remove(html_file)
+            except OSError:
+                pass
+        if pdf_file and os.path.exists(pdf_file):
+            try:
+                os.remove(pdf_file)
+            except OSError:
+                pass
+
+    return None
+
+
+def fig_to_base64(fig) -> str:
+    """Converts a matplotlib figure into a high-resolution base64 PNG data URI."""
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight", dpi=300)
+    buf.seek(0)
+    encoded = base64.b64encode(buf.read()).decode("utf-8")
+    return f"data:image/png;base64,{encoded}"
+
+
+def _get_base_report_css() -> str:
+    """Returns the print and screen CSS for standalone calculation sheets."""
+    return """
+    <style>
+        :root {
+            --primary: #1e3a8a;
+            --primary-dark: #0f172a;
+            --primary-light: #eff6ff;
+            --accent: #2563eb;
+            --success: #16a34a;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --border-color: #cbd5e1;
+            --text-main: #0f172a;
+            --text-muted: #475569;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, Tahoma, sans-serif;
+            background-color: #f8fafc;
+            color: var(--text-main);
+            line-height: 1.5;
+            padding: 24px 16px;
+        }
+
+        .report-container {
+            max-width: 1100px;
+            margin: 0 auto;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+            padding: 36px 44px;
+        }
+
+        /* Top Action Bar (Visible only on screen) */
+        .action-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #1e293b;
+            color: #ffffff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            margin-bottom: 24px;
+        }
+
+        .btn-print {
+            background: #2563eb;
+            color: #ffffff;
+            border: none;
+            padding: 9px 20px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            border-radius: 6px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-print:hover {
+            background: #1d4ed8;
+            transform: translateY(-1px);
+        }
+
+        /* Report Header Block */
+        .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 3px solid var(--primary);
+            padding-bottom: 16px;
+            margin-bottom: 24px;
+        }
+
+        .header-title h1 {
+            color: var(--primary-dark);
+            font-size: 1.6rem;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+
+        .header-title .code-badge {
+            display: inline-block;
+            background: #dbeafe;
+            color: #1e40af;
+            font-size: 0.85rem;
+            font-weight: 700;
+            padding: 2px 10px;
+            border-radius: 6px;
+            border: 1px solid #bfdbfe;
+        }
+
+        .header-meta {
+            text-align: right;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        /* Section Headings */
+        .section-title {
+            background: linear-gradient(90deg, #1e3a8a, #3b82f6);
+            color: #ffffff;
+            font-size: 1.1rem;
+            font-weight: 700;
+            padding: 8px 14px;
+            border-radius: 6px;
+            margin: 22px 0 12px 0;
+        }
+
+        .subsection-title {
+            color: #1e3a8a;
+            font-size: 0.95rem;
+            font-weight: 700;
+            margin: 14px 0 8px 0;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 4px;
+        }
+
+        /* Engineering Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0 18px 0;
+            font-size: 0.88rem;
+        }
+
+        th, td {
+            padding: 8px 10px;
+            text-align: left;
+            border: 1px solid #cbd5e1;
+        }
+
+        th {
+            background-color: #f1f5f9;
+            color: #1e293b;
+            font-weight: 700;
+        }
+
+        tr:nth-child(even) td {
+            background-color: #f8fafc;
+        }
+
+        /* Metric Grid / Key-Value Grid */
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            margin: 12px 0;
+        }
+
+        .info-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 10px 14px;
+        }
+
+        .info-card .card-lbl {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #64748b;
+        }
+
+        .info-card .card-val {
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #0f172a;
+            margin-top: 2px;
+        }
+
+        /* Classification Highlight Cards */
+        .classification-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin: 14px 0;
+        }
+
+        .type-card {
+            border-radius: 8px;
+            padding: 12px 14px;
+            font-size: 0.85rem;
+        }
+
+        .type-card-int {
+            background: #f0fdf4;
+            border: 2px solid #22c55e;
+        }
+
+        .type-card-edge {
+            background: #eff6ff;
+            border: 2px solid #3b82f6;
+        }
+
+        .type-card-corner {
+            background: #fff7ed;
+            border: 2px solid #f97316;
+        }
+
+        /* Drawings and CAD Sketches */
+        .drawing-box {
+            text-align: center;
+            margin: 16px 0;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 10px;
+            background: #ffffff;
+            page-break-inside: avoid;
+        }
+
+        .drawing-box img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+        }
+
+        .drawing-caption {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #475569;
+            margin-top: 6px;
+        }
+
+        /* Highlight Notes & Banners */
+        .note-banner {
+            border-radius: 8px;
+            padding: 12px 16px;
+            margin: 14px 0;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .note-success {
+            background: #f0fdf4;
+            border-left: 5px solid #16a34a;
+            color: #15803d;
+        }
+
+        .note-info {
+            background: #eff6ff;
+            border-left: 5px solid #2563eb;
+            color: #1e40af;
+        }
+
+        .note-warning {
+            background: #fffbeb;
+            border-left: 5px solid #f59e0b;
+            color: #92400e;
+        }
+
+        /* Sign-off / Approval Block */
+        .signature-block {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-top: 36px;
+            padding-top: 20px;
+            border-top: 2px solid #e2e8f0;
+            font-size: 0.85rem;
+            page-break-inside: avoid;
+        }
+
+        .sig-box {
+            border: 1px dashed #94a3b8;
+            border-radius: 6px;
+            padding: 12px;
+            min-height: 90px;
+        }
+
+        .sig-title {
+            font-weight: 700;
+            color: #334155;
+            margin-bottom: 4px;
+        }
+
+        /* Print Media Rules */
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+
+            body {
+                background: #ffffff !important;
+                padding: 0 !important;
+                font-size: 9.5pt !important;
+            }
+
+            .report-container {
+                box-shadow: none !important;
+                border: none !important;
+                padding: 0 !important;
+                max-width: 100% !important;
+            }
+
+            .section-title {
+                background: #1e3a8a !important;
+                color: #ffffff !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+                margin-top: 16px !important;
+            }
+
+            .page-break {
+                page-break-before: always;
+            }
+
+            .drawing-box, .info-card, .type-card, table, .signature-block {
+                page-break-inside: avoid;
+            }
+
+            @page {
+                size: A4;
+                margin: 12mm 10mm 15mm 10mm;
+            }
+        }
+    </style>
+    """
+
+
+def generate_flat_slab_report_html(
+    project_name: str,
+    ts: float,
+    d: float,
+    num_floors: int,
+    Wu: float,
+    Lx_spans: List[float],
+    Ly_spans: List[float],
+    cantilevers: Dict[str, float],
+    mesh_btm_str: str,
+    mesh_top_str: str,
+    prov_btm_mesh_cm2m: float,
+    prov_top_mesh_cm2m: float,
+    Fcu: float,
+    Fy: float,
+    SDL: float,
+    wall_load: float,
+    LL: float,
+    bc: float,
+    tc: float,
+    boq: Dict[str, Any],
+    top_extra_cols: List[Dict[str, Any]],
+    btm_extra_spans: List[Dict[str, Any]],
+    punching_results: List[Dict[str, Any]],
+    all_punching_safe: bool,
+    col_reactions_data: List[Dict[str, Any]],
+    summary_models: List[Dict[str, Any]],
+    img_verif_b64: Optional[str] = None,
+    img_top_rft_b64: Optional[str] = None,
+    img_btm_rft_b64: Optional[str] = None,
+    img_reactions_b64: Optional[str] = None,
+    img_m11_b64: Optional[str] = None,
+    img_m22_b64: Optional[str] = None,
+    img_dual_moment_b64: Optional[str] = None,
+) -> str:
+    """
+    Generates a complete, standalone, print-ready HTML engineering calculation sheet
+    for Module 3: Flat Slabs (ECP 203).
+    """
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    active_btm_extras = [b for b in btm_extra_spans if isinstance(b, dict) and b.get("n_extra", 0) > 0]
+
+    # Build Inputs Table HTML
+    inputs_html = f"""
+    <div class="info-grid">
+        <div class="info-card">
+            <div class="card-lbl">Slab Thickness (ts)</div>
+            <div class="card-val">{ts:.0f} cm  <span style="font-size:0.8rem; color:#64748b;">(d = {d:.1f} cm)</span></div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Number of Floors (عدد الأدوار)</div>
+            <div class="card-val">{num_floors} Floors</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Design Load (Wu)</div>
+            <div class="card-val">{Wu:.3f} t/m²</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Materials (Fcu / Fy)</div>
+            <div class="card-val">{Fcu:.0f} / {Fy:.0f} kg/cm²</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Column Size (bc × tc)</div>
+            <div class="card-val">{bc:.0f} × {tc:.0f} cm</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Surface Loads (DL/LL/WL)</div>
+            <div class="card-val">{SDL:.2f} / {LL:.2f} / {wall_load:.2f} t/m²</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Bottom Mesh (B1, B2)</div>
+            <div class="card-val" style="color:#1d4ed8;">{mesh_btm_str}</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Top Mesh (T1, T2)</div>
+            <div class="card-val" style="color:#1d4ed8;">{mesh_top_str}</div>
+        </div>
+    </div>
+    """
+
+    # Build Drawings Section HTML
+    drawings_html = ""
+    fig_idx = 1
+    if img_verif_b64:
+        drawings_html += f"""
+        <div class="drawing-box">
+            <img src="{img_verif_b64}" alt="Structural Geometry Sketch & Verification Card">
+            <div class="drawing-caption">Figure {fig_idx}: Structural Geometry Layout & Data Card Verification Plan</div>
+        </div>
+        """
+        fig_idx += 1
+
+    if img_m11_b64:
+        drawings_html += f"""
+        <div class="drawing-box">
+            <img src="{img_m11_b64}" alt="2D Bending Moment M11 Contour Plan">
+            <div class="drawing-caption">Figure {fig_idx}: 2D Bending Moment M11 Matrix & Color Contour Map (X-Direction / اتجاه X)</div>
+        </div>
+        """
+        fig_idx += 1
+    if img_m22_b64:
+        drawings_html += f"""
+        <div class="drawing-box">
+            <img src="{img_m22_b64}" alt="2D Bending Moment M22 Contour Plan">
+            <div class="drawing-caption">Figure {fig_idx}: 2D Bending Moment M22 Matrix & Color Contour Map (Y-Direction / اتجاه Y)</div>
+        </div>
+        """
+        fig_idx += 1
+    if img_dual_moment_b64 and not (img_m11_b64 or img_m22_b64):
+        drawings_html += f"""
+        <div class="drawing-box">
+            <img src="{img_dual_moment_b64}" alt="Dual Bending Moment Contours">
+            <div class="drawing-caption">Figure {fig_idx}: Dual Bending Moment Matrix & Color Contour Maps (M11 & M22)</div>
+        </div>
+        """
+        fig_idx += 1
+
+    if img_top_rft_b64:
+        drawings_html += f"""
+        <div class="drawing-box">
+            <img src="{img_top_rft_b64}" alt="Top Reinforcement Plan">
+            <div class="drawing-caption">Figure {fig_idx}: Top Reinforcement Plan (Top Mesh, Top Extra @ Columns, Cantilever Shawka)</div>
+        </div>
+        """
+        fig_idx += 1
+    if active_btm_extras and img_btm_rft_b64:
+        drawings_html += f"""
+        <div class="drawing-box">
+            <img src="{img_btm_rft_b64}" alt="Bottom Reinforcement Plan">
+            <div class="drawing-caption">Figure {fig_idx}: Bottom Reinforcement Plan (Bottom Mesh & Bay Extra Bottom Steel)</div>
+        </div>
+        """
+        fig_idx += 1
+    elif not active_btm_extras:
+        drawings_html += f"""
+        <div class="note-banner note-success" style="text-align:center; font-weight:700; font-size:1.05rem;">
+            ✅ ملاحظة إنشائية: لا حاجة لحديد إضافي سفلي في أي باكية — الشبكة السفلية الأساسية ({mesh_btm_str}) تغطي بالكامل جميع عزوم الانحناء الموجبة (+M).
+        </div>
+        """
+
+    # Build Punching Shear Table HTML
+    punching_rows = ""
+    for p in punching_results:
+        status_color = "#16a34a" if "Safe" in p.get("Status", "") else "#dc2626"
+        punching_rows += f"""
+        <tr>
+            <td><b>{p.get('Column ID', '')}</b></td>
+            <td>{p.get('Grid', '')}</td>
+            <td>{p.get('Location Type', '')}</td>
+            <td>{p.get('Pu (ton)', 0.0):.2f}</td>
+            <td>{p.get('bo (cm)', 0.0):.1f}</td>
+            <td>{p.get('qup (kg/cm²)', 0.0):.2f}</td>
+            <td>{p.get('qcup (kg/cm²)', 0.0):.2f}</td>
+            <td>{p.get('Ratio', 0.0):.2f}</td>
+            <td style="color:{status_color}; font-weight:bold;">{p.get('Status', '')}</td>
+        </tr>
+        """
+    punching_table_html = f"""
+    <table>
+        <thead>
+            <tr>
+                <th>Column ID</th>
+                <th>Grid</th>
+                <th>Type</th>
+                <th>Pu (ton)</th>
+                <th>bo (cm)</th>
+                <th>qup (kg/cm²)</th>
+                <th>qcup (kg/cm²)</th>
+                <th>qup / qcup</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {punching_rows}
+        </tbody>
+    </table>
+    """
+
+    # Build Column Reactions Table HTML
+    reaction_rows = ""
+    for r in col_reactions_data:
+        reaction_rows += f"""
+        <tr>
+            <td><b>{r.get('Column ID', '')}</b></td>
+            <td>{r.get('Grid', '')}</td>
+            <td>{r.get('Location Type', '')}</td>
+            <td>{r.get('Tributary Area (m²)', '')}</td>
+            <td><b>{r.get('Pu (1 Floor) [ton]', '')}</b></td>
+            <td style="color:#1e40af; font-weight:bold;">{r.get(f'Total Pu ({num_floors} Floors) [ton]', '')}</td>
+        </tr>
+        """
+    reactions_table_html = f"""
+    <table>
+        <thead>
+            <tr>
+                <th>Column ID</th>
+                <th>Grid Axes</th>
+                <th>Location Type</th>
+                <th>Tributary Area (m²)</th>
+                <th>Pu (1 Floor) [ton]</th>
+                <th>Total Pu ({num_floors} Floors) [ton]</th>
+            </tr>
+        </thead>
+        <tbody>
+            {reaction_rows}
+        </tbody>
+    </table>
+    """
+
+    # Build BOQ HTML Tables
+    boq_items_rows = ""
+    for it in boq.get("items", []):
+        boq_items_rows += f"""
+        <tr>
+            <td><b>{it.get('item_name', '')}</b></td>
+            <td style="color:#1d4ed8; font-weight:bold;">{it.get('dia_str', '—')}</td>
+            <td style="color:#1e293b; font-weight:bold;">{it.get('qty_str', '')}</td>
+            <td>{it.get('length_str', '—')}</td>
+            <td style="font-size:0.82rem; color:#475569;">{it.get('spec', '')}</td>
+        </tr>
+        """
+    boq_items_table_html = f"""
+    <table>
+        <thead>
+            <tr>
+                <th>بند حديد التسليح / المادة (Material Component)</th>
+                <th>قطر الحديد Φ (Bar Dia)</th>
+                <th>الكمية الإجمالية (Quantity)</th>
+                <th>إجمالي الطول (Total Length)</th>
+                <th>المواصفات والملاحظات الإنشائية (Specification / Notes)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {boq_items_rows}
+        </tbody>
+    </table>
+    """
+
+    boq_dia_rows = ""
+    for d in boq.get("by_dia", []):
+        boq_dia_rows += f"""
+        <tr>
+            <td><b style="color:#1e3a8a;">{d.get('dia_str', '')}</b></td>
+            <td>{d.get('unit_w_kg_m', 0.0):.3f} kg/m'</td>
+            <td>{d.get('length_str', '')}</td>
+            <td>{d.get('weight_kg_str', '')}</td>
+            <td style="color:#15803d; font-weight:bold;">{d.get('weight_ton_str', '')}</td>
+            <td><b>{d.get('percent_str', '')}</b></td>
+            <td style="font-size:0.82rem; color:#475569;">{d.get('apps', '')}</td>
+        </tr>
+        """
+    boq_dia_rows += f"""
+    <tr style="background:#edf2f7; font-weight:bold; border-top:2px solid #0f172a;">
+        <td style="color:#0f172a;">📌 الإجمالي الكلي لحديد التسليح (Grand Total)</td>
+        <td>—</td>
+        <td style="color:#0f172a;">{boq.get('total_steel_len_m', 0.0):,.1f} m'</td>
+        <td style="color:#0f172a;">{boq.get('total_steel_kg', 0.0):,.1f} kg</td>
+        <td style="color:#15803d; font-size:1.0rem;">{boq.get('total_steel_ton', 0.0):.3f} Ton</td>
+        <td>100.0 %</td>
+        <td style="color:#1e40af;">معدل الاستهلاك: {boq.get('steel_ratio_kg_m3', 0.0):.1f} kg/m³ خرسانة</td>
+    </tr>
+    """
+    boq_dia_table_html = f"""
+    <table>
+        <thead>
+            <tr>
+                <th>قطر السيخ Φ (Bar Dia)</th>
+                <th>وزن المتر الطولي</th>
+                <th>إجمالي الطول (m')</th>
+                <th>إجمالي الوزن (kg)</th>
+                <th>إجمالي الوزن (Ton)</th>
+                <th>النسبة المئوية (%)</th>
+                <th>الاستخدامات الإنشائية في السقف (Applications)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {boq_dia_rows}
+        </tbody>
+    </table>
+    """
+
+    # Build Governing Models HTML
+    models_rows = ""
+    for m in summary_models:
+        models_rows += f"""
+        <tr>
+            <td><b>{m.get('Column Model (نموذج التصميم)', '')}</b></td>
+            <td>{m.get('Governing Column', '')}</td>
+            <td>{m.get('Location Type', '')}</td>
+            <td>{m.get('Tributary Area (m²)', '')}</td>
+            <td><b>{m.get('Pu (1 Floor) [ton]', '')}</b></td>
+            <td style="color:#1e40af; font-weight:bold; font-size:1.0rem;">{m.get(f'Total Pu ({num_floors} Floors) [ton]', '')}</td>
+        </tr>
+        """
+    models_table_html = f"""
+    <table>
+        <thead>
+            <tr>
+                <th>Design Model (النموذج)</th>
+                <th>Governing Column</th>
+                <th>Location Type</th>
+                <th>Tributary Area (m²)</th>
+                <th>Pu (1 Floor) [ton]</th>
+                <th>Total Pu ({num_floors} Floors) [ton]</th>
+            </tr>
+        </thead>
+        <tbody>
+            {models_rows}
+        </tbody>
+    </table>
+    """
+
+    reaction_drawing_html = f"""
+    <div class="drawing-box">
+        <img src="{img_reactions_b64}" alt="Column Reactions & Multi-Storey Load Plan">
+        <div class="drawing-caption">Column Reactions & Vertical Load Distribution Plan ({num_floors} Floors)</div>
+    </div>
+    """ if img_reactions_b64 else ""
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>ECP 203 - Flat Slab Calculation Sheet</title>
+    {_get_base_report_css()}
+</head>
+<body>
+
+<div class="report-container">
+
+    <!-- Top Action Bar -->
+    <div class="action-bar no-print">
+        <div style="font-weight:700; font-size:1.05rem;">📑 مذكرة الحسابات الإنشائية — Flat Slab Design Sheet</div>
+        <button class="btn-print" onclick="window.print();">🖨️ طباعة المذكرة / حفظ كـ PDF (Print / Save as PDF)</button>
+    </div>
+
+    <!-- Report Header -->
+    <div class="report-header">
+        <div class="header-title">
+            <h1>مذكرة الحسابات والتصميم الإنشائي للأسقف اللاكمرية (Flat Slab)</h1>
+            <span class="code-badge">الكود المصري لتصميم وتنفيذ المنشآت الخرسانية ECP 203-2018</span>
+        </div>
+        <div class="header-meta">
+            <div><b>المشروع:</b> {project_name}</div>
+            <div><b>تاريخ التصميم:</b> {now_str}</div>
+            <div><b>عدد الطوابق:</b> {num_floors} طوابق</div>
+        </div>
+    </div>
+
+    <!-- Section 1: Design Inputs -->
+    <div class="section-title">1. مدخلات التصميم والخصائص الهندسية (Design Parameters & Loads)</div>
+    {inputs_html}
+
+    <!-- Section 2: Drawings -->
+    <div class="section-title">2. المخططات الإنشائية وتفاصيل التسليح (Structural Drawings & Reinforcement)</div>
+    {drawings_html}
+
+    <!-- Section 3: Punching Shear -->
+    <div class="section-title page-break">3. التحقق من القص الثاقب للأعمدة (Punching Shear Verification)</div>
+    <div class="note-banner {'note-success' if all_punching_safe else 'note-warning'}">
+        {'✅ جميع الأعمدة آمنة تماماً ضد القص الثاقب (All Columns Safe in Punching Shear).' if all_punching_safe else '⚠️ تنبيه: بعض الأعمدة تتطلب زيادة سمك البلاطة أو إضافة سقوط Drop Panel.'}
+    </div>
+    {punching_table_html}
+
+    <!-- Section 4: Column Reactions & Multi-Storey Loads -->
+    <div class="section-title page-break">4. ردود أفعال وأحمال الأعمدة ({num_floors} طوابق) — (Column Reactions & Loads)</div>
+    {reaction_drawing_html}
+    {reactions_table_html}
+
+    <div class="subsection-title">📌 نماذج التصميم الحاكمة للأعمدة (Governing Column Models by Type):</div>
+    {models_table_html}
+
+    <!-- Section 5: BOQ & Quantities -->
+    <div class="section-title page-break">5. حصر الكميات التقديري وجداول تفريد الأقطار (Estimated BOQ & Steel Take-off)</div>
+    <div class="info-grid">
+        <div class="info-card">
+            <div class="card-lbl">إجمالي مسطح السقف (Total Slab Area)</div>
+            <div class="card-val" style="color:#1e40af;">{boq.get('slab_area_m2', 0.0):.1f} m²</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">إجمالي حجم الخرسانة المسلحة</div>
+            <div class="card-val" style="color:#1e40af;">{boq.get('concrete_vol_m3', 0.0):.2f} m³</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">إجمالي وزن حديد التسليح الكلي</div>
+            <div class="card-val" style="color:#15803d;">{boq.get('total_steel_ton', 0.0):.3f} Ton ({boq.get('total_steel_kg', 0.0):,.0f} kg)</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">معدل استهلاك الحديد (Steel Ratio)</div>
+            <div class="card-val">{boq.get('steel_ratio_kg_m3', 0.0):.1f} kg/m³</div>
+        </div>
+    </div>
+
+    <div class="subsection-title">📋 5.1 جدول حصر بنود حديد التسليح والمواد (Reinforcement & Material Breakdown):</div>
+    {boq_items_table_html}
+
+    <div class="subsection-title">📊 5.2 جدول إجمالي كميات الحديد لكل قطر والإجمالي الكلي (Total Quantities by Bar Diameter & Grand Total):</div>
+    {boq_dia_table_html}
+
+    <!-- Sign-off Block -->
+    <div class="signature-block">
+        <div class="sig-box">
+            <div class="sig-title">مهندس التصميم الإنشائي (Designer):</div>
+            <div style="margin-top:20px; color:#94a3b8;">التوقيع: ___________________</div>
+        </div>
+        <div class="sig-box">
+            <div class="sig-title">المراجعة الهندسية (Reviewer):</div>
+            <div style="margin-top:20px; color:#94a3b8;">التوقيع: ___________________</div>
+        </div>
+        <div class="sig-box">
+            <div class="sig-title">اعتماد المكتب الاستشاري (Approval):</div>
+            <div style="margin-top:20px; color:#94a3b8;">الختم والتاريخ: ______________</div>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>
+"""
+    return html_content
+
+
+def generate_column_report_html(
+    project_name: str,
+    b: float,
+    t: float,
+    H: float,
+    Pu: float,
+    fcu: float,
+    fy: float,
+    main_steel_str: str,
+    stirrups_str: str,
+    pu_cap: float,
+    slender_str: str,
+    img_col_b64: Optional[str] = None,
+) -> str:
+    """Generates a standalone, print-ready HTML calculation sheet for Module 1: Columns."""
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    ratio = (Pu / pu_cap * 100.0) if pu_cap and pu_cap > 0 else 0.0
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>ECP 203 - Column Design Calculation Sheet</title>
+    {_get_base_report_css()}
+</head>
+<body>
+
+<div class="report-container">
+
+    <!-- Top Action Bar -->
+    <div class="action-bar no-print">
+        <div style="font-weight:700; font-size:1.05rem;">📑 مذكرة الحسابات الإنشائية — Column Design Sheet</div>
+        <button class="btn-print" onclick="window.print();">🖨️ طباعة المذكرة / حفظ كـ PDF (Print / Save as PDF)</button>
+    </div>
+
+    <!-- Report Header -->
+    <div class="report-header">
+        <div class="header-title">
+            <h1>مذكرة الحسابات والتصميم الإنشائي للأعمدة المستطيلة (Rectangular Columns)</h1>
+            <span class="code-badge">الكود المصري لتصميم وتنفيذ المنشآت الخرسانية ECP 203-2018</span>
+        </div>
+        <div class="header-meta">
+            <div><b>المشروع:</b> {project_name}</div>
+            <div><b>تاريخ التصميم:</b> {now_str}</div>
+        </div>
+    </div>
+
+    <!-- Section 1: Inputs & Parameters -->
+    <div class="section-title">1. مدخلات التصميم والخصائص الهندسية (Design Parameters & Loads)</div>
+    <div class="info-grid">
+        <div class="info-card">
+            <div class="card-lbl">Column Dimensions (b × t)</div>
+            <div class="card-val">{b:.0f} × {t:.0f} cm</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Clear Height (H)</div>
+            <div class="card-val">{H:.2f} m</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Ultimate Load (Pu)</div>
+            <div class="card-val" style="color:#1e40af;">{Pu:.2f} Ton</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Material Strength (Fcu / Fy)</div>
+            <div class="card-val">{fcu:.0f} / {fy:.0f} kg/cm²</div>
+        </div>
+    </div>
+
+    <!-- Section 2: Reinforcement & CAD Sketch -->
+    <div class="section-title">2. تفاصيل التسليح والمخطط الإنشائي للقطاع (CAD Cross-Section)</div>
+    <div class="info-grid">
+        <div class="info-card">
+            <div class="card-lbl">Main Reinforcement (التسليح الرأسي)</div>
+            <div class="card-val" style="color:#15803d;">{main_steel_str}</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Stirrups / Ties (الكانات)</div>
+            <div class="card-val" style="color:#1d4ed8;">{stirrups_str}</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Section Capacity (Pu,capacity)</div>
+            <div class="card-val" style="color:#16a34a;">{pu_cap:.2f} Ton</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Capacity Utilization Ratio</div>
+            <div class="card-val">{ratio:.1f}%</div>
+        </div>
+    </div>
+
+    {f'<div class="drawing-box"><img src="{img_col_b64}" alt="Column Cross-Section"><div class="drawing-caption">Figure 1: Column Cross-Section & Reinforcement Detailing</div></div>' if img_col_b64 else ''}
+
+    <!-- Sign-off Block -->
+    <div class="signature-block">
+        <div class="sig-box">
+            <div class="sig-title">مهندس التصميم الإنشائي (Designer):</div>
+            <div style="margin-top:20px; color:#94a3b8;">التوقيع: ___________________</div>
+        </div>
+        <div class="sig-box">
+            <div class="sig-title">المراجعة الهندسية (Reviewer):</div>
+            <div style="margin-top:20px; color:#94a3b8;">التوقيع: ___________________</div>
+        </div>
+        <div class="sig-box">
+            <div class="sig-title">اعتماد المكتب الاستشاري (Approval):</div>
+            <div style="margin-top:20px; color:#94a3b8;">الختم والتاريخ: ______________</div>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>
+"""
+    return html_content
+
+
+def generate_footing_report_html(
+    project_name: str,
+    col_bc: float,
+    col_tc: float,
+    P_serv: float,
+    Pu: float,
+    q_all: float,
+    L_rc: float,
+    B_rc: float,
+    d_rc: float,
+    rebar_L_str: str,
+    rebar_B_str: str,
+    img_footing_b64: Optional[str] = None,
+    img_plan_b64: Optional[str] = None,
+    img_sec_b64: Optional[str] = None,
+) -> str:
+    """Generates a standalone, print-ready HTML calculation sheet for Module 3: Isolated Footings."""
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    # Determine drawings HTML
+    drawings_html = ""
+    if img_plan_b64 and img_sec_b64:
+        drawings_html = f"""
+        <div class="drawing-box" style="margin-top:20px;">
+            <img src="{img_plan_b64}" alt="Footing Plan View">
+            <div class="drawing-caption">Figure 1: Isolated Footing Plan View (المسقط الأفقي للقاعدة الخرسانية المسلحة والعادية)</div>
+        </div>
+        <div class="drawing-box" style="margin-top:24px;">
+            <img src="{img_sec_b64}" alt="Footing Section Elevation">
+            <div class="drawing-caption">Figure 2: Isolated Footing Section Elevation A-A (القطاع الرأسي وتفاصيل التسليح الإنشائي)</div>
+        </div>
+        """
+    elif img_footing_b64:
+        drawings_html = f"""
+        <div class="drawing-box" style="margin-top:20px;">
+            <img src="{img_footing_b64}" alt="Footing Detailing">
+            <div class="drawing-caption">Figure 1: Isolated Footing Structural Detailing Sketch (المخطط الإنشائي وتفاصيل تسليح القاعدة)</div>
+        </div>
+        """
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>ECP 203 - Isolated Footing Calculation Sheet</title>
+    {_get_base_report_css()}
+</head>
+<body>
+
+<div class="report-container">
+
+    <!-- Top Action Bar -->
+    <div class="action-bar no-print">
+        <div style="font-weight:700; font-size:1.05rem;">📑 مذكرة الحسابات الإنشائية — Isolated Footing Design Sheet</div>
+        <button class="btn-print" onclick="window.print();">🖨️ طباعة المذكرة / حفظ كـ PDF (Print / Save as PDF)</button>
+    </div>
+
+    <!-- Report Header -->
+    <div class="report-header">
+        <div class="header-title">
+            <h1>مذكرة الحسابات والتصميم الإنشائي للقواعد المنفصلة (Isolated Footing)</h1>
+            <span class="code-badge">الكود المصري لتصميم وتنفيذ المنشآت الخرسانية ECP 203-2018</span>
+        </div>
+        <div class="header-meta">
+            <div><b>المشروع:</b> {project_name}</div>
+            <div><b>تاريخ التصميم:</b> {now_str}</div>
+        </div>
+    </div>
+
+    <!-- Section 1: Inputs & Parameters -->
+    <div class="section-title">1. مدخلات التصميم وأبعاد العمود والتربة (Parameters & Loads)</div>
+    <div class="info-grid">
+        <div class="info-card">
+            <div class="card-lbl">Column Size (bc × tc)</div>
+            <div class="card-val">{col_bc:.0f} × {col_tc:.0f} cm</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Service Load (P_service)</div>
+            <div class="card-val">{P_serv:.2f} Ton</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Ultimate Load (Pu)</div>
+            <div class="card-val" style="color:#1e40af;">{Pu:.2f} Ton</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Allowable Soil Stress (q_all)</div>
+            <div class="card-val">{q_all:.2f} kg/cm²</div>
+        </div>
+    </div>
+
+    <!-- Section 2: Footing Dimensions & Reinforcement -->
+    <div class="section-title">2. أبعاد وتفاصيل تسليح القاعدة المسلحة (RC Footing Output)</div>
+    <div class="info-grid">
+        <div class="info-card">
+            <div class="card-lbl">RC Footing Dimensions (L × B)</div>
+            <div class="card-val" style="color:#1e40af;">{L_rc:.2f} × {B_rc:.2f} m</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Effective Depth (d)</div>
+            <div class="card-val">{d_rc:.0f} cm</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Reinforcement in Long Dir (L)</div>
+            <div class="card-val" style="color:#15803d;">{rebar_L_str}</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Reinforcement in Short Dir (B)</div>
+            <div class="card-val" style="color:#15803d;">{rebar_B_str}</div>
+        </div>
+    </div>
+
+    {drawings_html}
+
+    <!-- Sign-off Block -->
+    <div class="signature-block">
+        <div class="sig-box">
+            <div class="sig-title">مهندس التصميم الإنشائي (Designer):</div>
+            <div style="margin-top:20px; color:#94a3b8;">التوقيع: ___________________</div>
+        </div>
+        <div class="sig-box">
+            <div class="sig-title">المراجعة الهندسية (Reviewer):</div>
+            <div style="margin-top:20px; color:#94a3b8;">التوقيع: ___________________</div>
+        </div>
+        <div class="sig-box">
+            <div class="sig-title">اعتماد المكتب الاستشاري (Approval):</div>
+            <div style="margin-top:20px; color:#94a3b8;">الختم والتاريخ: ______________</div>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>
+"""
+    return html_content
