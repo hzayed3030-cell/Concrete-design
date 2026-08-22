@@ -74,7 +74,9 @@ ECP_DEFAULTS: dict = {
     "slab_ts_initial":             20,       # Initial thickness in cm
     "slab_n_floors":               1,        # Number of floors for column load calculation
     "slab_bottom_mesh_dia_idx":    2,        # index into BAR_DIA -> 12mm
+    "slab_n_btm_mesh":             5,        # number of bars per meter for bottom base mesh
     "slab_top_mesh_dia_idx":       1,        # index into BAR_DIA -> 10mm
+    "slab_n_top_mesh":             5,        # number of bars per meter for top base mesh
     "slab_col_extra_dia_idx":      2,        # index into BAR_DIA -> 12mm
     "slab_strip_top_extra_dia_idx": 2,       # index into BAR_DIA -> 12mm
     "slab_strip_bottom_extra_dia_idx": 2,    # index into BAR_DIA -> 12mm

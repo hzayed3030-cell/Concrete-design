@@ -705,6 +705,57 @@ def generate_flat_slab_report_html(
     </table>
     """
 
+    boq_concrete_mat_table_html = f"""
+    <table>
+        <thead>
+            <tr>
+                <th>المادة / المكون الإنشائي (Material Component)</th>
+                <th>الكمية الإجمالية (Quantity)</th>
+                <th>الوحدة (Unit)</th>
+                <th>معدل الخلط والنسب المعيارية (Mix Proportion / Standard)</th>
+                <th>ملاحظات التنفيذ والتوريد بالموقع (Procurement & Site Notes)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><b>1. الخرسانة المسلحة الجاهزة (Reinforced Concrete Volume)</b></td>
+                <td style="color:#166534; font-weight:bold; font-size:0.95rem;">{boq.get('concrete_vol_m3', 0.0):.2f} m³</td>
+                <td>متر مكعب (m³)</td>
+                <td>مسطح السقف: {boq.get('slab_area_m2', 0.0):.1f} m² × سمك {ts:.0f} cm</td>
+                <td>رتبة الخرسانة Fcu = {Fcu:.0f} kg/cm² (صب بالمضخة Pump)</td>
+            </tr>
+            <tr>
+                <td><b>2. الأسمنت البورتلاندي العادي (Ordinary Portland Cement)</b></td>
+                <td style="color:#1e3a8a; font-weight:bold; font-size:0.95rem;">{boq.get('cement_ton', 0.0):.2f} Ton <span style="font-size:0.8rem; color:#475569;">({boq.get('cement_kg', 0.0):,.0f} kg)</span></td>
+                <td>طن (Ton) / شكارة (Bag)</td>
+                <td>{boq.get('cement_content_kg_m3', 350.0):.0f} kg/m³ ({boq.get('cement_content_kg_m3', 350.0)/50:.0f} شكاير / م³ خرسانة)</td>
+                <td>إجمالي عدد الشكائر: <b>{boq.get('cement_bags', 0):,} شكارة</b> (وزن الشكارة 50 كجم)</td>
+            </tr>
+            <tr>
+                <td><b>3. الزلط / الركام الكبير (Gravel / Coarse Aggregate)</b></td>
+                <td style="color:#92400e; font-weight:bold; font-size:0.95rem;">{boq.get('gravel_m3', 0.0):.2f} m³</td>
+                <td>متر مكعب (m³)</td>
+                <td>0.80 m³ زلط لكل 1.0 m³ خرسانة مسلحة</td>
+                <td>زلط نظيف متدرج الحبيبات خالٍ من الشوائب والمواد العضوية</td>
+            </tr>
+            <tr>
+                <td><b>4. الرمل الحرش / الركام الصغير (Clean Coarse Sand)</b></td>
+                <td style="color:#991b1b; font-weight:bold; font-size:0.95rem;">{boq.get('sand_m3', 0.0):.2f} m³</td>
+                <td>متر مكعب (m³)</td>
+                <td>0.40 m³ رمل لكل 1.0 m³ خرسانة مسلحة (نصف حجم الزلط)</td>
+                <td>رمل حرش نظيف متدرج خالٍ من الطفلة والأملاح الضارة</td>
+            </tr>
+            <tr>
+                <td><b>5. مياه الخلط التقريبية (Mixing Water)</b></td>
+                <td style="color:#0284c7; font-weight:bold;">{boq.get('water_liters', 0.0):,.0f} لتر</td>
+                <td>لتر (Liters) / m³</td>
+                <td>175 لتر / م³ خرسانة (نسبة مياه/أسمنت w/c ≈ 0.50)</td>
+                <td>مياه صالحة للشرب وخالية من الشوائب والزيوت</td>
+            </tr>
+        </tbody>
+    </table>
+    """
+
     # Build Governing Models HTML
     models_rows = ""
     for m in summary_models:
@@ -822,6 +873,9 @@ def generate_flat_slab_report_html(
 
     <div class="subsection-title">📊 5.2 جدول إجمالي كميات الحديد لكل قطر والإجمالي الكلي (Total Quantities by Bar Diameter & Grand Total):</div>
     {boq_dia_table_html}
+
+    <div class="subsection-title">🧱 5.3 جدول حصر كميات الخرسانة المسلحة والمواد الأولية (Concrete & Raw Materials Estimate):</div>
+    {boq_concrete_mat_table_html}
 
     <!-- Sign-off Block -->
     <div class="signature-block">

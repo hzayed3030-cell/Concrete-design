@@ -499,12 +499,12 @@ with st.sidebar:
     st.markdown("**Egyptian Code of Practice**")
     st.markdown("---")
     module = S_radio(
-        "📂 Select Design Module",
+        "📂 Select Design Module (اختر موديول التصميم)",
         "selected_module_idx",
         options=[
-            "🟦  Module 1 - Flat Slabs",
-            "🏛️  Module 2 - Rectangular Columns",
-            "🪨  Module 3 - Isolated Footings",
+            "🟦  Module 1 — Flat Slabs (البلاطات اللاكمرية)",
+            "🏛️  Module 2 — Rectangular Columns (الأعمدة المستطيلة)",
+            "🪨  Module 3 — Isolated Footings (القواعد المنفصلة)",
         ],
     )
     st.markdown("---")

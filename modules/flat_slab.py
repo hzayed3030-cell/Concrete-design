@@ -20,6 +20,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.patches as patches
 from matplotlib.patches import FancyBboxPatch, Circle
+import matplotlib.colors as mcolors
+import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import streamlit as st
 import pandas as pd
@@ -294,7 +296,9 @@ def generate_flat_slab_sketch(
     ts_initial=20,
     n_floors=1,
     bottom_mesh_dia=12,
+    bottom_mesh_n=5,
     top_mesh_dia=10,
+    top_mesh_n=5,
     col_extra_dia=12,
     strip_top_extra_dia=12,
     strip_bottom_extra_dia=12,
@@ -599,8 +603,8 @@ def generate_flat_slab_sketch(
         ("Slab Thickness (ts)", f"{ts_initial:.0f} cm  (d = {d_eff_sketch:.1f} cm)", "#0f172a"),
         ("No. of Floors", f"{n_floors} Floors (طوابق)", "#1e40af"),
         ("Concrete Cover", f"{concrete_cover:.1f} cm  (15 mm)", "#334155"),
-        ("Bottom Mesh (B1, B2)", f"Φ {bottom_mesh_dia} mm", "#1d4ed8"),
-        ("Top Mesh (T1, T2)", f"Φ {top_mesh_dia} mm", "#1d4ed8"),
+        ("Bottom Mesh (B1, B2)", f"{bottom_mesh_n} Φ {bottom_mesh_dia} / m'", "#1d4ed8"),
+        ("Top Mesh (T1, T2)", f"{top_mesh_n} Φ {top_mesh_dia} / m'", "#1d4ed8"),
         ("Col Extra Top Φ", f"Φ {col_extra_dia} mm", "#15803d"),
         ("Strip Extra Top / Btm", f"Φ {strip_top_extra_dia} / Φ {strip_bottom_extra_dia} mm", "#15803d"),
         ("Materials (fcu / fy)", f"{int(fcu_kg)} / {int(fy_kg)} kg/cm²", "#334155"),
@@ -1010,11 +1014,13 @@ def generate_flat_slab_bottom_rft_sketch(
     col_d_cm=30,
     removed_cols=None,
     void_panel_ids=None,
+    direction="both",   # "X", "Y", or "both"
 ):
     """
     Generate the full-width engineering Bottom Reinforcement Drawing (المخطط الإنشائي للحديد السفلي).
     - Bottom Mesh (الشبكة السفلية الأساسية B1, B2).
     - Bottom Extra Steel in Enlarged / High-Moment Bays in Blue (🔵) with hatched zones & callouts.
+    - `direction` filters which extra-steel items to draw: "X", "Y", or "both".
     - Dedicated CAD Title Block for Bottom Steel details.
     """
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
@@ -1171,7 +1177,14 @@ def generate_flat_slab_bottom_rft_sketch(
 
     # 🔵 2. BOTTOM EXTRA REBAR IN ENLARGED BAYS (BLUE)
     if btm_extra_spans:
-        active_btm_extras = [be for be in btm_extra_spans if isinstance(be, dict) and be.get("n_extra", 0) > 0]
+        # Filter by direction
+        if direction in ("X", "Y"):
+            active_btm_extras = [
+                be for be in btm_extra_spans
+                if isinstance(be, dict) and be.get("n_extra", 0) > 0 and be.get("dir", "X") == direction
+            ]
+        else:
+            active_btm_extras = [be for be in btm_extra_spans if isinstance(be, dict) and be.get("n_extra", 0) > 0]
         has_both_dirs = len({be.get("dir", "X") for be in active_btm_extras}) > 1 and len(active_btm_extras) > 1
 
         for be in active_btm_extras:
@@ -1299,12 +1312,16 @@ def generate_flat_slab_bottom_rft_sketch(
             ha="center", va="center", fontsize=19.6, color="#1e293b", weight="normal", linespacing=1.22, zorder=3
         )
 
+    dir_label_en = {"X": "X-Direction (Horizontal Spans ↔)", "Y": "Y-Direction (Vertical Spans ↕)", "both": "Both Directions"}.get(direction, "")
+    dir_label_ar = {"X": "الاتجاه الأفقي X", "Y": "الاتجاه الرأسي Y", "both": "كلا الاتجاهين"}.get(direction, "")
     fig.suptitle(
-        f"BOTTOM REINFORCEMENT & STRUCTURAL LAYOUT PLAN (المخطط الإنشائي للحديد السفلي والإضافي في الباكيات — ts = {ts_cm:.0f} cm)",
-        fontsize=20, weight="bold", y=0.98, color="#0f172a"
+        f"BOTTOM EXTRA REINFORCEMENT PLAN — {dir_label_en}\n"
+        f"(مخطط الحديد السفلي الإضافي — {dir_label_ar} — ts = {ts_cm:.0f} cm)",
+        fontsize=19, weight="bold", y=0.98, color="#0f172a",
     )
 
     return fig
+
 
 
 def generate_flat_slab_reactions_sketch(
@@ -2263,11 +2280,1981 @@ def generate_flat_slab_dual_moment_contour(
     return fig
 
 
+def generate_moment_deficit_contour(
+    Lx_spans,
+    Ly_spans,
+    cantilevers,
+    rows_x,
+    rows_y,
+    Wu,
+    prov_btm_mesh_cm2m,
+    d_cm,
+    Fcu,
+    Fy,
+    mode="M11",          # "M11" or "M22"
+    col_w_cm=30,
+    col_d_cm=30,
+    removed_cols=None,
+    void_panel_ids=None,
+):
+    """
+    Generates a 2D colour-contour map of the MOMENT DEFICIT in the bottom steel.
+
+    Deficit = max(0,  M_field  −  M_cap_btm)
+
+    Green  → bottom mesh is sufficient (Deficit = 0).
+    Yellow/Orange/Red → extra bottom steel is required (Deficit > 0).
+    """
+    plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
+
+    # ── Grid coordinates ──────────────────────────────────────────────────────
+    x_coords = [0.0]
+    for lx in Lx_spans:
+        x_coords.append(x_coords[-1] + lx)
+
+    y_coords = [0.0]
+    for ly in Ly_spans:
+        y_coords.append(y_coords[-1] + ly)
+
+    cant_left   = cantilevers.get("left",   0.0)
+    cant_right  = cantilevers.get("right",  0.0)
+    cant_bottom = cantilevers.get("bottom", 0.0)
+    cant_top    = cantilevers.get("top",    0.0)
+
+    x_slab_min = x_coords[0]  - cant_left
+    x_slab_max = x_coords[-1] + cant_right
+    y_slab_min = y_coords[0]  - cant_bottom
+    y_slab_max = y_coords[-1] + cant_top
+
+    slab_w = x_slab_max - x_slab_min
+    slab_h = y_slab_max - y_slab_min
+
+    # ── Moment field from DDM ─────────────────────────────────────────────────
+    X, Y, M11, M22, M11_raw, M22_raw = build_slab_moment_field(
+        Lx_spans, Ly_spans, cantilevers, rows_x, rows_y, Wu,
+        void_panel_ids=void_panel_ids
+    )
+
+    M_field = M11 if mode == "M11" else M22
+    x_vec   = X[0, :]
+    y_vec   = Y[:, 0]
+
+    # ── Moment capacity of bottom mesh ────────────────────────────────────────
+    M_cap = calc_moment_capacity_btm(prov_btm_mesh_cm2m, d_cm, Fcu, Fy)
+
+    # ── Deficit matrix: only positive moments can be compared to bottom steel ─
+    # Negative (hogging) moments are resisted by top steel — not bottom steel.
+    # We take only the sagging (+M) part and subtract the capacity.
+    M_sagging = np.where(M_field > 0, M_field, 0.0)
+    M_deficit = np.where(~np.isnan(M_field), np.maximum(0.0, M_sagging - M_cap), np.nan)
+
+    # ── Figure layout (mirrors existing contour function style) ───────────────
+    bubble_radius    = max(0.44, min(slab_w, slab_h) * 0.034)
+    offset_grid_top  = max(1.8, slab_h * 0.10)
+    offset_grid_left = max(1.8, slab_w * 0.10)
+    dim_offset_bot   = max(1.6, slab_h * 0.10)
+    dim_offset_right = max(1.5, slab_w * 0.08)
+
+    margin_left  = offset_grid_left + bubble_radius * 2 + 0.6
+    margin_right = dim_offset_right + 1.2
+    margin_top   = offset_grid_top  + bubble_radius * 2 + 0.6
+    margin_bot   = dim_offset_bot   + 1.2
+
+    total_w = slab_w + margin_left + margin_right
+    total_h = slab_h + margin_top  + margin_bot
+    ar_plan = total_w / total_h
+
+    target_plan_h = 16.5
+    target_plan_w = target_plan_h * ar_plan
+    legend_h = 4.5
+
+    fig_w = max(24.0, min(36.0, target_plan_w + 1.6))
+    fig_h = max(18.0, min(36.0, target_plan_h + legend_h + 1.2))
+
+    plan_ratio   = (fig_h - legend_h - 1.0) / fig_h
+    legend_ratio = legend_h / fig_h
+
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=150, facecolor="#ffffff")
+    gs  = fig.add_gridspec(
+        2, 1,
+        height_ratios=[plan_ratio, legend_ratio],
+        hspace=0.05,
+        left=0.02, right=0.96, top=0.94, bottom=0.02,
+    )
+
+    ax_plan   = fig.add_subplot(gs[0, 0])
+    ax_legend = fig.add_subplot(gs[1, 0])
+
+    # ── حساب هل يوجد عجز أم لا (قبل أي رسم) ────────────────────────────────
+    valid_def   = M_deficit[~np.isnan(M_deficit) & (M_deficit > 0.001)]
+    has_deficit = len(valid_def) > 0
+    def_max     = float(np.max(valid_def)) if has_deficit else 1.0
+
+    # ── خلفية بيضاء محايدة دائماً ───────────────────────────────────────────
+    ax_plan.set_facecolor("#ffffff")
+
+    if has_deficit:
+        # ── pcolormesh بدلاً من contourf ─────────────────────────────────────
+        # pcolormesh يرسم كل خلية مستقلة بدون أي interpolation بين الخلايا
+        # → الخلية التي قيمتها صفر تبقى بيضاء تماماً حتى لو جارتها أحمر
+        M_deficit_draw = np.ma.masked_where(
+            (M_deficit <= 0.001) | np.isnan(M_deficit),
+            M_deficit,
+        )
+
+        cmap_yr = plt.cm.YlOrRd.copy()
+        cmap_yr.set_bad(color="none")   # الخلايا المخفية → شفافة تماماً
+
+        norm = mcolors.Normalize(vmin=0.001, vmax=def_max)
+        pc = ax_plan.pcolormesh(
+            X, Y, M_deficit_draw,
+            cmap=cmap_yr,
+            norm=norm,
+            shading="auto",
+            zorder=2,
+            alpha=0.93,
+        )
+
+        # خطوط iso-value فوق الـ pcolormesh للقراءة السريعة
+        line_levels = np.linspace(0.001, def_max, 10)
+        try:
+            cs_lines = ax_plan.contour(
+                X, Y, M_deficit_draw,
+                levels=line_levels,
+                colors="#7f1d1d",
+                linewidths=0.9,
+                alpha=0.5,
+                zorder=3,
+            )
+            ax_plan.clabel(cs_lines, inline=True, fontsize=10.5, fmt="%.2f", colors="#7f1d1d")
+        except Exception:
+            pass   # إذا لم يكن هناك بيانات كافية للخطوط
+
+        # شريط الألوان
+        cbar_ax = fig.add_axes([0.965, 0.32, 0.015, 0.58])
+        cbar = fig.colorbar(pc, cax=cbar_ax)
+        dir_txt = "X-Direction (↔ M11)" if mode == "M11" else "Y-Direction (↕ M22)"
+        cbar.set_label(
+            f"Moment Deficit  [{mode}] (t·m/m) | فارق العزم السفلي [{dir_txt}]",
+            fontsize=13, weight="bold", labelpad=12,
+        )
+        cbar.ax.tick_params(labelsize=11)
+
+    else:
+        # ── لا يوجد عجز — لا يُرسم أي كنتور إطلاقاً، فقط رسالة واضحة ────────
+        ax_plan.text(
+            (x_slab_min + x_slab_max) / 2.0,
+            (y_slab_min + y_slab_max) / 2.0,
+            (
+                "✓  No Moment Deficit\n"
+                "الشبكة السفلية كافية — لا يوجد عجز في العزوم\n\n"
+                f"M_cap = {M_cap:.3f} t.m/m\n"
+                f"(covers all positive sagging moments)"
+            ),
+            ha="center", va="center", fontsize=18, weight="bold", color="#15803d",
+            linespacing=1.6,
+            bbox=dict(boxstyle="round,pad=0.7", facecolor="#dcfce7", edgecolor="#16a34a", lw=2.5),
+            zorder=10,
+        )
+
+    # ── Slab boundary ─────────────────────────────────────────────────────────
+    ax_plan.add_patch(patches.Rectangle(
+        (x_slab_min, y_slab_min), slab_w, slab_h,
+        linewidth=3.5, edgecolor="#0f172a", facecolor="none", zorder=4,
+    ))
+
+    # ── Cantilever outlines ───────────────────────────────────────────────────
+    cant_style = dict(linewidth=1.6, edgecolor="#1d4ed8", facecolor="none", linestyle="--", zorder=4)
+    if cant_left   > 0: ax_plan.add_patch(patches.Rectangle((x_slab_min, y_slab_min), cant_left,  slab_h,    **cant_style))
+    if cant_right  > 0: ax_plan.add_patch(patches.Rectangle((x_coords[-1], y_slab_min), cant_right, slab_h,   **cant_style))
+    if cant_bottom > 0: ax_plan.add_patch(patches.Rectangle((x_slab_min, y_slab_min), slab_w,    cant_bottom, **cant_style))
+    if cant_top    > 0: ax_plan.add_patch(patches.Rectangle((x_slab_min, y_coords[-1]), slab_w,  cant_top,    **cant_style))
+
+    # ── Voids / Openings ─────────────────────────────────────────────────────
+    _voids = set(void_panel_ids) if void_panel_ids else set()
+    for j in range(len(Ly_spans)):
+        for i in range(len(Lx_spans)):
+            pid = f"P_{i+1}_{j+1}"
+            if pid in _voids:
+                x1, x2 = x_coords[i], x_coords[i+1]
+                y1, y2 = y_coords[j], y_coords[j+1]
+                lx, ly = x2 - x1, y2 - y1
+                ax_plan.add_patch(patches.Rectangle(
+                    (x1, y1), lx, ly,
+                    linewidth=2.2, edgecolor="#475569", facecolor="#cbd5e1", zorder=5,
+                ))
+                ax_plan.plot([x1, x2], [y1, y2], color="#475569", linestyle="--", linewidth=1.8, zorder=5)
+                ax_plan.plot([x1, x2], [y2, y1], color="#475569", linestyle="--", linewidth=1.8, zorder=5)
+                ax_plan.text(
+                    (x1 + x2) / 2.0, (y1 + y2) / 2.0, f"VOID\n{lx*ly:.1f} m²",
+                    ha="center", va="center", fontsize=13, weight="bold", color="#0f172a",
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor="#f1f5f9", edgecolor="#64748b", lw=1.5),
+                    zorder=6,
+                )
+
+    # ── Grid axes & CAD bubbles ───────────────────────────────────────────────
+    for idx, x in enumerate(x_coords):
+        y_top_ext = y_slab_max + offset_grid_top
+        ax_plan.plot([x, x], [y_slab_min - 0.6, y_top_ext], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.75, zorder=3)
+        bub = Circle((x, y_top_ext), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=6)
+        ax_plan.add_patch(bub)
+        ax_plan.text(x, y_top_ext, f"Y{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
+
+    for idx, y in enumerate(y_coords):
+        x_left_ext = x_slab_min - offset_grid_left
+        ax_plan.plot([x_left_ext, x_slab_max + 0.6], [y, y], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.75, zorder=3)
+        bub = Circle((x_left_ext, y), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=6)
+        ax_plan.add_patch(bub)
+        ax_plan.text(x_left_ext, y, f"X{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
+
+    # ── Columns ───────────────────────────────────────────────────────────────
+    col_w_m   = max(col_w_cm / 100.0, slab_w * 0.045)
+    col_d_m   = max(col_d_cm / 100.0, slab_h * 0.045)
+    rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
+    col_idx = 1
+    for j_idx, y in enumerate(y_coords):
+        for i_idx, x in enumerate(x_coords):
+            if (x, y) in rem_coords:
+                continue
+            ax_plan.add_patch(patches.Rectangle(
+                (x - col_w_m / 2.0, y - col_d_m / 2.0), col_w_m, col_d_m,
+                linewidth=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=6,
+            ))
+            ax_plan.text(x, y, f"C{col_idx}", color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=7)
+            col_idx += 1
+
+    # ── مربعات العجز على كل بلاطة ──────────────────────────────────────────────
+    for j in range(len(Ly_spans)):
+        for i in range(len(Lx_spans)):
+            pid = f"P_{i+1}_{j+1}"
+            if pid in _voids:
+                continue
+
+            mid_x = (x_coords[i] + x_coords[i+1]) / 2.0
+            mid_y = (y_coords[j] + y_coords[j+1]) / 2.0
+
+            # ── أقصى عجز داخل حدود البلاطة كاملة (وليس نقطة المنتصف فقط) ──
+            ix_lo = np.searchsorted(x_vec, x_coords[i],   side="left")
+            ix_hi = np.searchsorted(x_vec, x_coords[i+1], side="right")
+            iy_lo = np.searchsorted(y_vec, y_coords[j],   side="left")
+            iy_hi = np.searchsorted(y_vec, y_coords[j+1], side="right")
+
+            panel_def = M_deficit[iy_lo:iy_hi+1, ix_lo:ix_hi+1]
+            valid_cells = panel_def[~np.isnan(panel_def)]
+            max_def = float(np.max(valid_cells)) if len(valid_cells) > 0 else 0.0
+
+            if max_def > 0.01:
+                # ── تحديد موقع أقصى عجز (شريط الأعمدة أم منتصف البلاطة) ──────
+                flat_idx   = int(np.nanargmax(panel_def))
+                local_iy, local_ix = np.unravel_index(flat_idx, panel_def.shape)
+
+                # إحداثيات نقطة أقصى عجز
+                max_xi = min(ix_lo + local_ix, len(x_vec) - 1)
+                max_yi = min(iy_lo + local_iy, len(y_vec) - 1)
+                max_x  = float(x_vec[max_xi])
+                max_y  = float(y_vec[max_yi])
+
+                Lx = x_coords[i+1] - x_coords[i]
+                Ly = y_coords[j+1] - y_coords[j]
+
+                # عرض شريط الأعمدة = min(Lx, Ly)/4 من كل جانب
+                # (وفقاً لـ ECP 203: عرض شريط الأعمدة = نصف أصغر بحر)
+                col_hw = min(Lx, Ly) / 4.0
+
+                if mode == "M11":
+                    # M11: عزوم أفقية — شريط الأعمدة على طول محاور Y
+                    near_col = (
+                        (max_y < y_coords[j]   + col_hw) or
+                        (max_y > y_coords[j+1] - col_hw)
+                    )
+                else:
+                    # M22: عزوم رأسية — شريط الأعمدة على طول محاور X
+                    near_col = (
+                        (max_x < x_coords[i]   + col_hw) or
+                        (max_x > x_coords[i+1] - col_hw)
+                    )
+
+                location_txt = "📍 في شريط الأعمدة" if near_col else "📍 في منتصف البلاطة"
+
+                badge_color  = "#fef3c7"
+                border_color = "#d97706"
+                txt_color    = "#92400e"
+                label = (
+                    f"أقصى عجز:\n"
+                    f"Δ_max = +{max_def:.2f} t.m/m\n"
+                    f"{location_txt}\n"
+                    f"حديد سفلي إضافي مطلوب"
+                )
+            else:
+                badge_color  = "#f0fdf4"
+                border_color = "#16a34a"
+                txt_color    = "#15803d"
+                label = (
+                    f"✓ الشبكة السفلية كافية\n"
+                    f"لا يوجد عجز في أي نقطة\n"
+                    f"M_cap = {M_cap:.2f} t.m/m"
+                )
+
+            ax_plan.text(
+                mid_x, mid_y, label,
+                ha="center", va="center", fontsize=11.5, weight="bold", color=txt_color,
+                linespacing=1.4,
+                bbox=dict(boxstyle="round,pad=0.35", facecolor=badge_color, edgecolor=border_color, lw=1.8),
+                zorder=8,
+            )
+
+    # ── Span dimensions ───────────────────────────────────────────────────────
+    y_dim_lx = y_slab_min - dim_offset_bot
+    for i, lx in enumerate(Lx_spans):
+        mid_x = (x_coords[i] + x_coords[i+1]) / 2.0
+        ax_plan.annotate("", xy=(x_coords[i+1], y_dim_lx), xytext=(x_coords[i], y_dim_lx),
+                         arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=2.4, shrinkA=0, shrinkB=0))
+        ax_plan.plot([x_coords[i], x_coords[i]],     [y_dim_lx - 0.35, y_dim_lx + 0.35], color="#0f172a", lw=1.8)
+        ax_plan.plot([x_coords[i+1], x_coords[i+1]], [y_dim_lx - 0.35, y_dim_lx + 0.35], color="#0f172a", lw=1.8)
+        ax_plan.text(mid_x, y_dim_lx - 0.45, f"{lx:.2f} m", color="#0f172a", fontsize=16.5, weight="bold", ha="center", va="top")
+
+    dim_offset_right_plot = max(1.6, slab_w * 0.10)
+    x_dim_ly = x_slab_max + dim_offset_right_plot
+    for j, ly in enumerate(Ly_spans):
+        mid_y = (y_coords[j] + y_coords[j+1]) / 2.0
+        ax_plan.annotate("", xy=(x_dim_ly, y_coords[j+1]), xytext=(x_dim_ly, y_coords[j]),
+                         arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=2.4, shrinkA=0, shrinkB=0))
+        ax_plan.plot([x_dim_ly - 0.35, x_dim_ly + 0.35], [y_coords[j],   y_coords[j]],   color="#0f172a", lw=1.8)
+        ax_plan.plot([x_dim_ly - 0.35, x_dim_ly + 0.35], [y_coords[j+1], y_coords[j+1]], color="#0f172a", lw=1.8)
+        ax_plan.text(x_dim_ly + 0.45, mid_y, f"{ly:.2f} m", color="#0f172a", fontsize=16.5, weight="bold", ha="left", va="center")
+
+    ax_plan.set_xlim(x_slab_min - margin_left,  x_slab_max + margin_right)
+    ax_plan.set_ylim(y_slab_min - margin_bot,   y_slab_max + margin_top)
+    ax_plan.set_aspect("equal", adjustable="box")
+    ax_plan.axis("off")
+
+    # ── Legend block ──────────────────────────────────────────────────────────
+    ax_legend.set_facecolor("#ffffff")
+    ax_legend.axis("off")
+    ax_legend.set_xlim(0, 1)
+    ax_legend.set_ylim(0, 1)
+
+    ax_legend.add_patch(FancyBboxPatch(
+        (0.005, 0.02), 0.99, 0.96,
+        boxstyle="round,pad=0.02,rounding_size=0.025",
+        linewidth=2.4, edgecolor="#0f172a", facecolor="#f8fafc", zorder=1,
+    ))
+
+    dir_txt_ar = "اتجاه المحور الأفقي X" if mode == "M11" else "اتجاه المحور الرأسي Y"
+    cards_info = [
+        (
+            f"BOTTOM MESH CAPACITY ({mode})\n(طاقة الشبكة السفلية)",
+            f"M_cap = {M_cap:.3f} t.m/m\n(prov. = {prov_btm_mesh_cm2m:.2f} cm²/m, d = {d_cm:.1f} cm)",
+            "#1e40af", "#dbeafe", "#2563eb",
+        ),
+        (
+            "COLOUR CODE\n(دلالة الألوان)",
+            (
+                "⬜ White  → Deficit = 0  (Mesh Sufficient)\n🟡→🔴 Yellow-Red → Extra Bottom Steel Needed"
+                if has_deficit else
+                "⬜ All Zones: No Deficit\n✓ Base Mesh Covers Everything"
+            ),
+            "#b45309", "#fef3c7", "#d97706",
+        ),
+        (
+            "DEFICIT DEFINITION\n(تعريف الفارق)",
+            f"Δ = max(0,  M_{mode} − M_cap)\nOnly positive (sagging) moments compared",
+            "#15803d", "#dcfce7", "#16a34a",
+        ),
+        (
+            "EXTREME VALUES\n(القيم القصوى)",
+            (f"Max Deficit: {float(np.nanmax(M_deficit)):.3f} t.m/m\nM_cap Provided: {M_cap:.3f} t.m/m"
+             if has_deficit else
+             "Max Deficit: 0.000 t.m/m\n✓ All zones covered by base mesh"),
+            "#0f172a", "#f1f5f9", "#64748b",
+        ),
+    ]
+
+    x_box_w   = 0.235
+    x_box_gap = 0.012
+    x_start   = 0.015
+    for k, (title, content, t_color, bg_color, border_color) in enumerate(cards_info):
+        bx = x_start + k * (x_box_w + x_box_gap)
+        ax_legend.add_patch(FancyBboxPatch(
+            (bx, 0.04), x_box_w, 0.92,
+            boxstyle="round,pad=0.015,rounding_size=0.02",
+            linewidth=1.6, edgecolor=border_color, facecolor=bg_color, zorder=2,
+        ))
+        ax_legend.text(bx + x_box_w / 2.0, 0.74, title,
+                       ha="center", va="center", fontsize=14.5, weight="bold", color=t_color, linespacing=1.2, zorder=3)
+        ax_legend.text(bx + x_box_w / 2.0, 0.28, content,
+                       ha="center", va="center", fontsize=13.5, color="#1e293b", weight="normal", linespacing=1.25, zorder=3)
+
+    if has_deficit:
+        _main_title = (
+            f"BOTTOM STEEL MOMENT DEFICIT CONTOUR — {mode}"
+            f"  |  كونتور فارق العزوم السفلي — {dir_txt_ar}"
+        )
+        _title_color = "#7f1d1d"
+    else:
+        _main_title = (
+            f"✓ BOTTOM MESH SUFFICIENT — NO DEFICIT ({mode})"
+            f"  |  الشبكة السفلية كافية — لا يوجد عجز — {dir_txt_ar}"
+        )
+        _title_color = "#15803d"
+
+    fig.suptitle(_main_title, fontsize=19, weight="bold", y=0.98, color=_title_color)
+
+    return fig
+
+
+def generate_flat_slab_rebar_bending_details(
+    Lx_spans, Ly_spans, cantilevers, ts_cm,
+    mesh_btm_n, mesh_btm_dia,
+    mesh_top_n, mesh_top_dia,
+    col_extras, cant_rft_list,
+    btm_extra_spans=None,
+    void_panels=None,
+    bc_cm=30, tc_cm=30,
+):
+    """
+    Generates a professional engineering BBS & Rebar Detailing sheet (اسكتش تفريد وتفاصيل الحديد)
+    showing M11, M22, Column Caps, Additional Bottom Steel, Cantilevers, Edge U-Pins, and Chairs,
+    complete with rebar shapes, cutting lengths, bar counts, covered areas, and weights.
+    """
+    cant_L = cantilevers.get("left", 0.0)
+    cant_R = cantilevers.get("right", 0.0)
+    cant_B = cantilevers.get("bottom", 0.0)
+    cant_T = cantilevers.get("top", 0.0)
+
+    total_w = sum(Lx_spans) + cant_L + cant_R
+    total_h = sum(Ly_spans) + cant_B + cant_T
+    gross_area = total_w * total_h
+    void_area = sum(p["area"] for p in void_panels if p.get("is_void")) if void_panels else 0.0
+    slab_area = max(0.1, gross_area - void_area)
+
+    uw = lambda dia: (dia ** 2) / 162.0
+
+    # 1. M11 Bottom Mesh (X-dir)
+    n_runs_m11 = int(np.ceil(total_h * mesh_btm_n))
+    L_bar_m11 = total_w + 0.30
+    tot_len_m11_btm = n_runs_m11 * L_bar_m11
+    wt_m11_btm = tot_len_m11_btm * uw(mesh_btm_dia)
+    area_m11 = slab_area
+
+    # 2. M22 Bottom Mesh (Y-dir)
+    n_runs_m22 = int(np.ceil(total_w * mesh_btm_n))
+    L_bar_m22 = total_h + 0.30
+    tot_len_m22_btm = n_runs_m22 * L_bar_m22
+    wt_m22_btm = tot_len_m22_btm * uw(mesh_btm_dia)
+    area_m22 = slab_area
+
+    # 3. Top Mesh (T1, T2 in X & Y)
+    n_runs_top_x = int(np.ceil(total_h * mesh_top_n))
+    n_runs_top_y = int(np.ceil(total_w * mesh_top_n))
+    L_bar_top_x = total_w + 0.20
+    L_bar_top_y = total_h + 0.20
+    tot_len_top = (n_runs_top_x * L_bar_top_x) + (n_runs_top_y * L_bar_top_y)
+    wt_top_mesh = tot_len_top * uw(mesh_top_dia)
+
+    # 4. Column Caps Top Extra
+    active_caps = [ce for ce in col_extras if ce.get("is_needed")]
+    tot_cap_bars = sum(ce.get("n_extra", 0) for ce in active_caps)
+    tot_cap_len = sum(ce.get("n_extra", 0) * ce.get("L_extra", 0) for ce in active_caps)
+    cap_dia = active_caps[0].get("dia_extra", 12) if active_caps else 12
+    wt_caps = tot_cap_len * uw(cap_dia)
+    avg_Lx = float(np.mean(Lx_spans)) if Lx_spans else 5.0
+    avg_Ly = float(np.mean(Ly_spans)) if Ly_spans else 5.0
+    cap_cov_w = min(avg_Lx, avg_Ly) / 2.0
+    cap_cov_area = len(active_caps) * (cap_cov_w ** 2)
+
+    # 5. Additional Bottom Steel in Bays
+    active_btm_extras = [be for be in (btm_extra_spans or []) if isinstance(be, dict) and be.get("n_extra", 0) > 0]
+    tot_btm_ex_bars = sum(be.get("n_extra", 0) for be in active_btm_extras)
+    tot_btm_ex_len = sum(be.get("n_extra", 0) * be.get("L_extra", 4.0) for be in active_btm_extras)
+    btm_ex_dia = active_btm_extras[0].get("dia_extra", 12) if active_btm_extras else 12
+    wt_btm_ex = tot_btm_ex_len * uw(btm_ex_dia)
+    btm_ex_area = sum(be.get("span_len", 5.0) * avg_Ly for be in active_btm_extras)
+
+    # 6. Cantilever Shawka
+    tot_cant_bars = 0
+    tot_cant_len = 0.0
+    cant_area = 0.0
+    for cr in cant_rft_list:
+        s_len = total_w if cr["side"] in ["bottom", "top"] else total_h
+        n_c = int(np.ceil(s_len * 6.0))
+        tot_cant_bars += n_c
+        tot_cant_len += n_c * cr["total_bar_length"]
+        cant_area += s_len * cr["length"]
+    wt_cant = tot_cant_len * uw(12)
+
+    # 7. Edge U-Pins & Trim
+    perim = 2.0 * (total_w + total_h)
+    n_upins = int(np.ceil(perim / 0.20))
+    l_upin_each = 2.0 * 0.35 + (ts_cm - 5.0) / 100.0
+    tot_upins_len = n_upins * l_upin_each
+    wt_upins = tot_upins_len * uw(10)
+
+    # 8. Chairs & Spacers
+    n_chairs = int(np.ceil(slab_area * 1.0))
+    h_chair = max(0.08, (ts_cm - 5.0 - 4.0) / 100.0)
+    l_chair_each = 2 * h_chair + 0.40
+    tot_chair_len = n_chairs * l_chair_each
+    wt_chairs = tot_chair_len * uw(12)
+
+    # Create 8-panel grid figure (4 rows x 2 columns)
+    fig, axes = plt.subplots(4, 2, figsize=(18, 20), dpi=140)
+    fig.patch.set_facecolor("#ffffff")
+
+    plt.subplots_adjust(left=0.04, right=0.96, top=0.945, bottom=0.025, hspace=0.36, wspace=0.20)
+
+    fig.suptitle(
+        "FLAT SLAB REINFORCEMENT BENDING SCHEDULE & CURTAILMENT DETAILS (ECP 203)",
+        fontsize=16.5, fontweight="bold", color="#0f172a", y=0.985
+    )
+
+    panels = [
+        {
+            "ax": axes[0, 0],
+            "title": "1. M11 — BOTTOM MESH (X-DIRECTION)",
+            "bg": "#eff6ff", "border": "#3b82f6",
+            "draw_func": "m11_btm",
+            "dia": mesh_btm_dia, "count": n_runs_m11, "L_cut": L_bar_m11,
+            "density": f"{mesh_btm_n} Φ{mesh_btm_dia}/m'",
+            "cov_area": f"{area_m11:.1f} m² (Full Slab Width Wx={total_w:.2f}m)",
+            "tot_len": f"{tot_len_m11_btm:,.1f} m'", "weight": f"{wt_m11_btm/1000.0:.3f} Ton ({wt_m11_btm:,.0f} kg)",
+            "notes": "Straight continuous bottom bar extending 15 cm past exterior support centerline."
+        },
+        {
+            "ax": axes[0, 1],
+            "title": "2. M22 — BOTTOM MESH (Y-DIRECTION)",
+            "bg": "#eff6ff", "border": "#3b82f6",
+            "draw_func": "m22_btm",
+            "dia": mesh_btm_dia, "count": n_runs_m22, "L_cut": L_bar_m22,
+            "density": f"{mesh_btm_n} Φ{mesh_btm_dia}/m'",
+            "cov_area": f"{area_m22:.1f} m² (Full Slab Height Wy={total_h:.2f}m)",
+            "tot_len": f"{tot_len_m22_btm:,.1f} m'", "weight": f"{wt_m22_btm/1000.0:.3f} Ton ({wt_m22_btm:,.0f} kg)",
+            "notes": "Straight continuous bottom bar spanning across Ly spans perpendicular to M11."
+        },
+        {
+            "ax": axes[1, 0],
+            "title": "3. TOP BASE MESH (T1 & T2 — X & Y)",
+            "bg": "#f0fdf4", "border": "#22c55e",
+            "draw_func": "top_mesh",
+            "dia": mesh_top_dia, "count": n_runs_top_x + n_runs_top_y, "L_cut": (L_bar_top_x + L_bar_top_y)/2.0,
+            "density": f"{mesh_top_n} Φ{mesh_top_dia}/m' (X & Y)",
+            "cov_area": f"{slab_area:.1f} m² (Full Top Slab Surface)",
+            "tot_len": f"{tot_len_top:,.1f} m'", "weight": f"{wt_top_mesh/1000.0:.3f} Ton ({wt_top_mesh:,.0f} kg)",
+            "notes": "Top nominal crack-control mesh with 90° standard down-hooks at slab boundary edges."
+        },
+        {
+            "ax": axes[1, 1],
+            "title": "4. COLUMN CAPS / TOP EXTRA REINFORCEMENT",
+            "bg": "#fef2f2", "border": "#ef4444",
+            "draw_func": "col_caps",
+            "dia": cap_dia, "count": tot_cap_bars if tot_cap_bars else "— (0)", "L_cut": active_caps[0]["L_extra"] if active_caps else 3.5,
+            "density": f"Top Extra @ {len(active_caps)} Cols (Col Strip w={cap_cov_w:.2f}m)",
+            "cov_area": f"{cap_cov_area:.1f} m² (Column Strips Negative Moment Zones)",
+            "tot_len": f"{tot_cap_len:,.1f} m'" if tot_cap_len else "0.0 m'", "weight": f"{wt_caps/1000.0:.3f} Ton ({wt_caps:,.0f} kg)" if wt_caps else "0.00 Ton (Base Mesh Covers -M)",
+            "notes": "Placed in Column Strip over columns. Length = 0.50 Ln + bc (0.25 Ln each side) with 90° hooks."
+        },
+        {
+            "ax": axes[2, 0],
+            "title": "5. ADDITIONAL BOTTOM STEEL (ENLARGED BAYS)",
+            "bg": "#fffbeb", "border": "#f59e0b",
+            "draw_func": "btm_extra",
+            "dia": btm_ex_dia, "count": tot_btm_ex_bars if tot_btm_ex_bars else "— (0)", "L_cut": active_btm_extras[0]["L_extra"] if active_btm_extras else 4.0,
+            "density": f"Bottom Extra @ {len(active_btm_extras)} Bay Zones",
+            "cov_area": f"{btm_ex_area:.1f} m² (Middle Strips Positive Moment Zones)" if btm_ex_area else "0.0 m² (Base mesh is sufficient)",
+            "tot_len": f"{tot_btm_ex_len:,.1f} m'" if tot_btm_ex_len else "0.0 m'", "weight": f"{wt_btm_ex/1000.0:.3f} Ton ({wt_btm_ex:,.0f} kg)" if wt_btm_ex else "0.00 Ton (Base Mesh Covers +M)",
+            "notes": "Centered in enlarged bays to resist +M moments. Cut length ≈ 0.80 Ln."
+        },
+        {
+            "ax": axes[2, 1],
+            "title": "6. CANTILEVER SHAWKA & SECONDARY REBAR",
+            "bg": "#faf5ff", "border": "#a855f7",
+            "draw_func": "cantilever",
+            "dia": 12, "count": tot_cant_bars if tot_cant_bars else "— (0)", "L_cut": cant_rft_list[0]["total_bar_length"] if cant_rft_list else 3.5,
+            "density": "6 Φ12 / m' + Secondary 5Φ10/m'" if tot_cant_bars else "No cantilevers defined",
+            "cov_area": f"{cant_area:.1f} m² (Cantilever Overhangs)" if cant_area else "0.0 m²",
+            "tot_len": f"{tot_cant_len:,.1f} m'" if tot_cant_len else "0.0 m'", "weight": f"{wt_cant/1000.0:.3f} Ton ({wt_cant:,.0f} kg)" if wt_cant else "0.00 Ton",
+            "notes": "Main top Shawka extends 1.5 L_cant into slab + edge loop + 0.5 L_cant bottom return leg."
+        },
+        {
+            "ax": axes[3, 0],
+            "title": "7. PERIMETER U-PINS & BOUNDARY EDGE REBAR",
+            "bg": "#f8fafc", "border": "#64748b",
+            "draw_func": "upins",
+            "dia": 10, "count": n_upins, "L_cut": l_upin_each,
+            "density": "U-Pins Φ10 @ 20 cm + 4Φ12 Edge Bars",
+            "cov_area": f"Perimeter = {perim:.1f} m' (All Free Boundary Edges)",
+            "tot_len": f"{tot_upins_len:,.1f} m'", "weight": f"{wt_upins/1000.0:.3f} Ton ({wt_upins:,.0f} kg)",
+            "notes": "U-shaped hairpins enclosing slab edge depth ts with 2 top & 2 bottom longitudinal bars."
+        },
+        {
+            "ax": axes[3, 1],
+            "title": "8. REBAR CHAIRS & TOP MESH SUPPORTS",
+            "bg": "#f1f5f9", "border": "#475569",
+            "draw_func": "chairs",
+            "dia": 12, "count": n_chairs, "L_cut": l_chair_each,
+            "density": "1 Chair / m² (Spaced @ 1.0 m grid)",
+            "cov_area": f"{slab_area:.1f} m² (Top Mesh Support Grid)",
+            "tot_len": f"{tot_chair_len:,.1f} m'", "weight": f"{wt_chairs/1000.0:.3f} Ton ({wt_chairs:,.0f} kg)",
+            "notes": "Chairs with height h = ts - 2*cov - 4*dia to rigidly support top rebar mesh during concreting."
+        },
+    ]
+
+    for p in panels:
+        ax = p["ax"]
+        ax.set_xlim(0, 100)
+        ax.set_ylim(0, 100)
+        ax.axis("off")
+
+        # Background card
+        rect = patches.FancyBboxPatch(
+            (1, 1), 98, 98,
+            boxstyle="round,pad=1.5,rounding_size=4",
+            facecolor=p["bg"],
+            edgecolor=p["border"],
+            linewidth=2.0,
+        )
+        ax.add_patch(rect)
+
+        # Header Title Strip
+        title_box = patches.FancyBboxPatch(
+            (2, 82), 96, 15,
+            boxstyle="round,pad=1.0,rounding_size=3",
+            facecolor=p["border"],
+            edgecolor="none",
+        )
+        ax.add_patch(title_box)
+        ax.text(50, 89.5, p["title"], ha="center", va="center", fontsize=11.5, fontweight="bold", color="#ffffff")
+
+        # Draw Sketch depending on item
+        dfunc = p["draw_func"]
+        if dfunc == "m11_btm":
+            ax.plot([15, 85], [60, 60], color="#1e40af", lw=4.5, solid_capstyle="round")
+            ax.plot([15, 15], [56, 64], color="#1e40af", lw=3.0)
+            ax.plot([85, 85], [56, 64], color="#1e40af", lw=3.0)
+            ax.annotate("", xy=(85, 52), xytext=(15, 52), arrowprops=dict(arrowstyle="<->", color="#1e40af", lw=1.8))
+            ax.text(50, 48, f"Cutting Length L = {p['L_cut']:.2f} m'  (Total Width Wx = {total_w:.2f} m)", ha="center", va="center", fontsize=10.5, fontweight="bold", color="#1e40af")
+            ax.text(50, 66, f"Straight Bottom Bar — Φ {p['dia']} mm", ha="center", va="center", fontsize=10.0, fontweight="bold", color="#0f172a")
+
+        elif dfunc == "m22_btm":
+            ax.plot([15, 85], [60, 60], color="#1e40af", lw=4.5, solid_capstyle="round")
+            ax.plot([15, 15], [56, 64], color="#1e40af", lw=3.0)
+            ax.plot([85, 85], [56, 64], color="#1e40af", lw=3.0)
+            ax.annotate("", xy=(85, 52), xytext=(15, 52), arrowprops=dict(arrowstyle="<->", color="#1e40af", lw=1.8))
+            ax.text(50, 48, f"Cutting Length L = {p['L_cut']:.2f} m'  (Total Height Wy = {total_h:.2f} m)", ha="center", va="center", fontsize=10.5, fontweight="bold", color="#1e40af")
+            ax.text(50, 66, f"Straight Bottom Bar — Φ {p['dia']} mm", ha="center", va="center", fontsize=10.0, fontweight="bold", color="#0f172a")
+
+        elif dfunc == "top_mesh":
+            ax.plot([20, 80], [64, 64], color="#16a34a", lw=4.0)
+            ax.plot([20, 20], [64, 52], color="#16a34a", lw=4.0)
+            ax.plot([80, 80], [64, 52], color="#16a34a", lw=4.0)
+            ax.text(14, 58, f"Hook {ts_cm-5:.0f}cm", ha="center", va="center", fontsize=8.5, color="#15803d")
+            ax.text(86, 58, f"Hook {ts_cm-5:.0f}cm", ha="center", va="center", fontsize=8.5, color="#15803d")
+            ax.annotate("", xy=(80, 47), xytext=(20, 47), arrowprops=dict(arrowstyle="<->", color="#16a34a", lw=1.8))
+            ax.text(50, 43, f"Span Length L ≈ {p['L_cut']:.2f} m'", ha="center", va="center", fontsize=10.5, fontweight="bold", color="#15803d")
+            ax.text(50, 70, f"Top Mesh Bar with 90° Down-Hooks — Φ {p['dia']} mm", ha="center", va="center", fontsize=10.0, fontweight="bold", color="#0f172a")
+
+        elif dfunc == "col_caps":
+            ax.plot([22, 78], [64, 64], color="#dc2626", lw=4.5)
+            ax.plot([22, 22], [64, 54], color="#dc2626", lw=4.5)
+            ax.plot([78, 78], [64, 54], color="#dc2626", lw=4.5)
+            ax.plot([50, 50], [48, 74], color="#64748b", ls="--", lw=1.8)
+            ax.text(50, 76, "CL Column", ha="center", va="center", fontsize=9.0, color="#475569", fontweight="bold")
+            ax.annotate("", xy=(50, 50), xytext=(22, 50), arrowprops=dict(arrowstyle="<->", color="#dc2626", lw=1.5))
+            ax.annotate("", xy=(78, 50), xytext=(50, 50), arrowprops=dict(arrowstyle="<->", color="#dc2626", lw=1.5))
+            ax.text(36, 46, "0.25 Ln", ha="center", va="center", fontsize=9.5, fontweight="bold", color="#dc2626")
+            ax.text(64, 46, "0.25 Ln", ha="center", va="center", fontsize=9.5, fontweight="bold", color="#dc2626")
+            ax.text(50, 70, f"Top Extra Cap Bar — Φ {p['dia']} mm (L_ext = {p['L_cut']:.2f} m)", ha="center", va="center", fontsize=10.0, fontweight="bold", color="#991b1b")
+
+        elif dfunc == "btm_extra":
+            ax.plot([25, 75], [60, 60], color="#d97706", lw=5.0)
+            ax.plot([25, 25], [56, 64], color="#d97706", lw=2.5)
+            ax.plot([75, 75], [56, 64], color="#d97706", lw=2.5)
+            ax.plot([12, 12], [48, 72], color="#94a3b8", ls=":", lw=1.8)
+            ax.plot([88, 88], [48, 72], color="#94a3b8", ls=":", lw=1.8)
+            ax.text(12, 75, "Col A", ha="center", va="center", fontsize=8.5, color="#64748b")
+            ax.text(88, 75, "Col B", ha="center", va="center", fontsize=8.5, color="#64748b")
+            ax.annotate("", xy=(75, 52), xytext=(25, 52), arrowprops=dict(arrowstyle="<->", color="#d97706", lw=1.8))
+            ax.text(50, 48, f"Cut Length L_ext ≈ 0.80 Ln = {p['L_cut']:.2f} m'", ha="center", va="center", fontsize=10.0, fontweight="bold", color="#b45309")
+            ax.text(50, 67, f"Bottom Extra Bar (Mid-Span) — Φ {p['dia']} mm", ha="center", va="center", fontsize=10.0, fontweight="bold", color="#0f172a")
+
+        elif dfunc == "cantilever":
+            ax.plot([15, 80], [66, 66], color="#9333ea", lw=4.0)
+            ax.plot([80, 85, 85, 80], [66, 66, 56, 56], color="#9333ea", lw=4.0)
+            ax.plot([80, 45], [56, 56], color="#9333ea", lw=4.0)
+            ax.plot([45, 45], [56, 60], color="#9333ea", lw=3.0)
+            ax.plot([15, 15], [66, 60], color="#9333ea", lw=3.0)
+            ax.plot([50, 50], [48, 74], color="#64748b", ls="--", lw=1.8)
+            ax.text(50, 76, "Slab Edge / Col", ha="center", va="center", fontsize=8.5, color="#475569", fontweight="bold")
+            ax.text(32, 70, "1.5 L_cant", ha="center", va="center", fontsize=9.5, fontweight="bold", color="#7e22ce")
+            ax.text(68, 70, "L_cant", ha="center", va="center", fontsize=9.5, fontweight="bold", color="#7e22ce")
+            ax.text(50, 46, f"Total Cutting Length = {p['L_cut']:.2f} m'", ha="center", va="center", fontsize=10.0, fontweight="bold", color="#7e22ce")
+
+        elif dfunc == "upins":
+            ax.plot([25, 75], [66, 66], color="#475569", lw=4.0)
+            ax.plot([75, 80, 80, 75], [66, 66, 54, 54], color="#475569", lw=4.0)
+            ax.plot([75, 25], [54, 54], color="#475569", lw=4.0)
+            for bx, by in [(35, 62), (65, 62), (35, 58), (65, 58)]:
+                c_dot = patches.Circle((bx, by), 1.5, facecolor="#0284c7", edgecolor="none")
+                ax.add_patch(c_dot)
+            ax.text(50, 71, "Top Leg 35cm", ha="center", va="center", fontsize=8.5, color="#475569")
+            ax.text(50, 49, "Bottom Leg 35cm", ha="center", va="center", fontsize=8.5, color="#475569")
+            ax.text(86, 60, f"{ts_cm-5:.0f}cm", ha="left", va="center", fontsize=8.5, color="#475569")
+            ax.text(50, 43, f"Cutting Length = {p['L_cut']:.2f} m' + 4Φ12 Edge Bars", ha="center", va="center", fontsize=9.5, fontweight="bold", color="#1e293b")
+
+        elif dfunc == "chairs":
+            ax.plot([25, 35], [52, 52], color="#334155", lw=4.0)
+            ax.plot([35, 42], [52, 66], color="#334155", lw=4.0)
+            ax.plot([42, 58], [66, 66], color="#334155", lw=4.0)
+            ax.plot([58, 65], [66, 52], color="#334155", lw=4.0)
+            ax.plot([65, 75], [52, 52], color="#334155", lw=4.0)
+            c_car = patches.Circle((50, 68), 2.0, facecolor="#dc2626", edgecolor="none")
+            ax.add_patch(c_car)
+            ax.text(50, 73, "Carrier Rebar", ha="center", va="center", fontsize=8.5, color="#b91c1c", fontweight="bold")
+            ax.text(20, 60, f"h = {h_chair*100:.0f}cm", ha="center", va="center", fontsize=8.5, color="#334155")
+            ax.text(50, 44, f"Chair Cut Length = {p['L_cut']:.2f} m' (Height = {h_chair*100:.0f} cm)", ha="center", va="center", fontsize=9.5, fontweight="bold", color="#1e293b")
+
+        # Metric & Info Strip below drawing
+        info_box = patches.FancyBboxPatch(
+            (3, 4), 94, 34,
+            boxstyle="round,pad=0.8,rounding_size=3",
+            facecolor="#ffffff",
+            edgecolor="#cbd5e1",
+            linewidth=1.2,
+        )
+        ax.add_patch(info_box)
+
+        t_y = 33
+        ax.text(6, t_y, "• Total Bar Count:", fontsize=10.0, fontweight="bold", color="#1e293b")
+        ax.text(42, t_y, f"{p['count']} pcs", fontsize=10.0, fontweight="bold", color="#1e40af")
+        ax.text(58, t_y, f"Density: {p['density']}", fontsize=9.5, color="#64748b")
+
+        t_y -= 7.5
+        ax.text(6, t_y, "• Covered Area / Strip:", fontsize=10.0, fontweight="bold", color="#1e293b")
+        ax.text(42, t_y, f"{p['cov_area']}", fontsize=10.0, fontweight="bold", color="#047857")
+
+        t_y -= 7.5
+        ax.text(6, t_y, "• Length & Weight:", fontsize=10.0, fontweight="bold", color="#1e293b")
+        ax.text(42, t_y, f"{p['tot_len']}  |  {p['weight']}", fontsize=10.0, fontweight="bold", color="#7e22ce")
+
+        t_y -= 7.5
+        ax.text(6, t_y, f"• Code Detailing: {p['notes']}", fontsize=8.8, color="#475569", style="italic")
+
+    return fig
+
+
+# ── 1. COLUMN CAPS (TOP EXTRA) ───────────────────────────────────────────────
+def generate_flat_slab_column_caps_sketch(
+    Lx_spans, Ly_spans, cantilevers, ts_cm,
+    top_extra_cols,
+    col_w_cm=30, col_d_cm=30,
+    removed_cols=None, void_panel_ids=None,
+):
+    plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
+
+    x_coords = [0.0]
+    for lx in Lx_spans:
+        x_coords.append(x_coords[-1] + lx)
+    y_coords = [0.0]
+    for ly in Ly_spans:
+        y_coords.append(y_coords[-1] + ly)
+
+    cant_left   = cantilevers.get("left",   0.0)
+    cant_right  = cantilevers.get("right",  0.0)
+    cant_bottom = cantilevers.get("bottom", 0.0)
+    cant_top    = cantilevers.get("top",    0.0)
+
+    x_slab_min = x_coords[0]  - cant_left
+    x_slab_max = x_coords[-1] + cant_right
+    y_slab_min = y_coords[0]  - cant_bottom
+    y_slab_max = y_coords[-1] + cant_top
+
+    slab_w = x_slab_max - x_slab_min
+    slab_h = y_slab_max - y_slab_min
+
+    bubble_radius = max(0.50, min(slab_w, slab_h) * 0.038)
+    offset_grid_top = max(2.2, slab_h * 0.11)
+    offset_grid_left = max(2.2, slab_w * 0.11)
+    dim_offset_bot = max(2.0, slab_h * 0.11)
+    dim_offset_right = max(1.8, slab_w * 0.09)
+
+    margin_left = offset_grid_left + bubble_radius * 2 + 0.8
+    margin_right = dim_offset_right + 1.5
+    margin_top = offset_grid_top + bubble_radius * 2 + 0.8
+    margin_bot = dim_offset_bot + 1.5
+
+    total_w = slab_w + margin_left + margin_right
+    total_h = slab_h + margin_top + margin_bot
+    ar_plan = total_w / total_h
+
+    target_plan_h = 16.0
+    target_plan_w = target_plan_h * ar_plan
+    legend_h = 5.2
+
+    fig_w = max(22.0, min(34.0, target_plan_w + 1.6))
+    fig_h = max(18.0, min(32.0, target_plan_h + legend_h + 1.0))
+
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=140)
+    fig.patch.set_facecolor("#ffffff")
+
+    plan_ratio = (fig_h - legend_h - 0.8) / fig_h
+    legend_ratio = legend_h / fig_h
+
+    gs = fig.add_gridspec(2, 1, height_ratios=[plan_ratio, legend_ratio], hspace=0.06, left=0.03, right=0.97, top=0.94, bottom=0.02)
+    ax_plan = fig.add_subplot(gs[0, 0])
+    ax_legend = fig.add_subplot(gs[1, 0])
+    ax_plan.set_facecolor("#f8fafc")
+
+    ax_plan.add_patch(patches.Rectangle((x_slab_min, y_slab_min), slab_w, slab_h, lw=3.2, edgecolor="#0f172a", facecolor="#ffffff", zorder=1))
+
+    _voids = set(void_panel_ids) if void_panel_ids else set()
+    for j in range(len(Ly_spans)):
+        for i in range(len(Lx_spans)):
+            pid = f"P_{i+1}_{j+1}"
+            if pid in _voids:
+                px0, px1 = x_coords[i], x_coords[i+1]
+                py0, py1 = y_coords[j], y_coords[j+1]
+                pw, ph = px1 - px0, py1 - py0
+                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#f1f5f9", edgecolor="#ef4444", lw=2.2, hatch="//", zorder=2)
+                ax_plan.add_patch(v_rect)
+                ax_plan.text(px0 + pw/2, py0 + ph/2, "OPENING / VOID", ha="center", va="center", fontsize=13, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.4", facecolor="#fee2e2", edgecolor="#ef4444", lw=1.5))
+
+    for idx, x in enumerate(x_coords):
+        y_top_ext = y_slab_max + offset_grid_top
+        ax_plan.plot([x, x], [y_slab_min - 0.5, y_top_ext], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.8, zorder=3)
+        bub = Circle((x, y_top_ext), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=6)
+        ax_plan.add_patch(bub)
+        ax_plan.text(x, y_top_ext, f"Y{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
+
+    for idx, y in enumerate(y_coords):
+        x_left_ext = x_slab_min - offset_grid_left
+        ax_plan.plot([x_left_ext, x_slab_max + 0.5], [y, y], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.8, zorder=3)
+        bub = Circle((x_left_ext, y), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=6)
+        ax_plan.add_patch(bub)
+        ax_plan.text(x_left_ext, y, f"X{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
+
+    col_w_m   = max(col_w_cm / 100.0, slab_w * 0.042)
+    col_d_m   = max(col_d_cm / 100.0, slab_h * 0.042)
+    rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
+    col_dict = {}
+    col_idx = 1
+    for j_idx, y in enumerate(y_coords):
+        for i_idx, x in enumerate(x_coords):
+            if (x, y) in rem_coords:
+                continue
+            cid = f"C{col_idx}"
+            col_dict[cid] = (x, y, i_idx, j_idx)
+            ax_plan.add_patch(patches.Rectangle((x - col_w_m / 2.0, y - col_d_m / 2.0), col_w_m, col_d_m, lw=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=8))
+            ax_plan.text(x, y, cid, color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=9)
+            col_idx += 1
+
+    active_caps_count = 0
+    for c_info in (top_extra_cols or []):
+        cid = c_info["id"]
+        if cid not in col_dict:
+            continue
+        cx, cy, ci, cj = col_dict[cid]
+        is_needed = c_info.get("is_needed", False)
+        L_ext = c_info.get("L_extra", 3.0)
+        n_ext = c_info.get("n_extra", 6)
+        dia_ext = c_info.get("dia_extra", 12)
+        callout = c_info.get("callout", f"{n_ext}Φ{dia_ext}")
+
+        if is_needed:
+            active_caps_count += 1
+            cap_w = L_ext
+            cap_h = min(Lx_spans[min(ci, len(Lx_spans)-1)], Ly_spans[min(cj, len(Ly_spans)-1)]) * 0.45
+            cap_rect = patches.Rectangle(
+                (cx - cap_w/2.0, cy - cap_h/2.0), cap_w, cap_h,
+                lw=2.0, edgecolor="#dc2626", facecolor="#fee2e2", alpha=0.55, linestyle="--", zorder=4
+            )
+            ax_plan.add_patch(cap_rect)
+
+            bar_y = cy + col_d_m/2.0 + 0.15
+            ax_plan.plot([cx - cap_w/2.0, cx + cap_w/2.0], [bar_y, bar_y], color="#b91c1c", lw=4.0, zorder=6)
+            ax_plan.plot([cx - cap_w/2.0, cx - cap_w/2.0], [bar_y, bar_y - 0.25], color="#b91c1c", lw=3.0, zorder=6)
+            ax_plan.plot([cx + cap_w/2.0, cx + cap_w/2.0], [bar_y, bar_y - 0.25], color="#b91c1c", lw=3.0, zorder=6)
+
+            bar_x = cx + col_w_m/2.0 + 0.15
+            ax_plan.plot([bar_x, bar_x], [cy - cap_h/2.0, cy + cap_h/2.0], color="#b91c1c", lw=4.0, zorder=6)
+            ax_plan.plot([bar_x, bar_x - 0.25], [cy - cap_h/2.0, cy - cap_h/2.0], color="#b91c1c", lw=3.0, zorder=6)
+            ax_plan.plot([bar_x, bar_x - 0.25], [cy + cap_h/2.0, cy + cap_h/2.0], color="#b91c1c", lw=3.0, zorder=6)
+
+            # Alternating Callout Placement (الكتابة بالتبادل لتجنب التداخل)
+            is_above = ((ci + cj) % 2 == 0)
+            if is_above:
+                tag_y = cy + cap_h/2.0 + 0.35
+                va_pos = "bottom"
+            else:
+                tag_y = cy - cap_h/2.0 - 0.35
+                va_pos = "top"
+
+            ax_plan.text(
+                cx, tag_y,
+                f"★ {cid} Top Cap: {n_ext}Φ{dia_ext}\n"
+                f"Strip Dim: {cap_w:.2f}m (L) × {cap_h:.2f}m (W)",
+                ha="center", va=va_pos, fontsize=12.0, fontweight="bold", color="#991b1b", zorder=8,
+                bbox=dict(boxstyle="round,pad=0.4", facecolor="#ffffff", edgecolor="#dc2626", lw=1.8)
+            )
+        else:
+            is_above = ((ci + cj) % 2 == 0)
+            tag_y = (cy + col_d_m/2.0 + 0.25) if is_above else (cy - col_d_m/2.0 - 0.25)
+            va_pos = "bottom" if is_above else "top"
+            ax_plan.text(
+                cx, tag_y, f"{cid}: Base Mesh OK",
+                ha="center", va=va_pos, fontsize=11.0, fontweight="bold", color="#15803d", zorder=7,
+                bbox=dict(boxstyle="round,pad=0.25", facecolor="#f0fdf4", edgecolor="#22c55e", lw=1.2)
+            )
+
+    dim_y = y_slab_min - dim_offset_bot
+    if cant_left > 0:
+        ax_plan.annotate("", xy=(x_coords[0], dim_y), xytext=(x_slab_min, dim_y), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
+        ax_plan.text((x_slab_min + x_coords[0])/2.0, dim_y - 0.4, f"{cant_left:.2f}m", ha="center", va="top", fontsize=13, fontweight="bold", color="#0f172a")
+    for i, lx in enumerate(Lx_spans):
+        x0, x1 = x_coords[i], x_coords[i+1]
+        ax_plan.annotate("", xy=(x1, dim_y), xytext=(x0, dim_y), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
+        ax_plan.text((x0 + x1)/2.0, dim_y - 0.4, f"{lx:.2f}m", ha="center", va="top", fontsize=13, fontweight="bold", color="#0f172a")
+    if cant_right > 0:
+        ax_plan.annotate("", xy=(x_slab_max, dim_y), xytext=(x_coords[-1], dim_y), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
+        ax_plan.text((x_coords[-1] + x_slab_max)/2.0, dim_y - 0.4, f"{cant_right:.2f}m", ha="center", va="top", fontsize=13, fontweight="bold", color="#0f172a")
+
+    dim_x = x_slab_max + dim_offset_right
+    if cant_bottom > 0:
+        ax_plan.annotate("", xy=(dim_x, y_coords[0]), xytext=(dim_x, y_slab_min), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
+        ax_plan.text(dim_x + 0.4, (y_slab_min + y_coords[0])/2.0, f"{cant_bottom:.2f}m", ha="left", va="center", fontsize=13, fontweight="bold", color="#0f172a")
+    for j, ly in enumerate(Ly_spans):
+        y0, y1 = y_coords[j], y_coords[j+1]
+        ax_plan.annotate("", xy=(dim_x, y1), xytext=(dim_x, y0), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
+        ax_plan.text(dim_x + 0.4, (y0 + y1)/2.0, f"{ly:.2f}m", ha="left", va="center", fontsize=13, fontweight="bold", color="#0f172a")
+    if cant_top > 0:
+        ax_plan.annotate("", xy=(dim_x, y_slab_max), xytext=(dim_x, y_coords[-1]), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
+        ax_plan.text(dim_x + 0.4, (y_coords[-1] + y_slab_max)/2.0, f"{cant_top:.2f}m", ha="left", va="center", fontsize=13, fontweight="bold", color="#0f172a")
+
+    ax_plan.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
+    ax_plan.set_ylim(y_slab_min - margin_bot, y_slab_max + margin_top)
+    ax_plan.set_aspect("equal", adjustable="datalim")
+    ax_plan.axis("off")
+
+    ax_legend.set_facecolor("#ffffff")
+    ax_legend.set_xlim(0, 100)
+    ax_legend.set_ylim(0, 100)
+    ax_legend.axis("off")
+
+    c_box = FancyBboxPatch((1, 3), 98, 94, boxstyle="round,pad=1.0,rounding_size=3", facecolor="#fef2f2", edgecolor="#ef4444", lw=2.5)
+    ax_legend.add_patch(c_box)
+    ax_legend.text(2.5, 75, "COLUMN CAPS (TOP EXTRA REINFORCEMENT) SPECIFICATIONS (ECP 203)", fontsize=18.0, fontweight="bold", color="#991b1b")
+    ax_legend.text(2.5, 38, f"• Columns Requiring Extra Top Steel: {active_caps_count} Columns  |  Coverage: Column Strips (شريحة الأعمدة w ≈ min(Lx,Ly)/2)\n"
+                          f"• Bar Extension Rule: L_ext = 0.50 Ln + bc (Extends 0.25 Ln each side of internal columns, 0.30 Ln for exterior)\n"
+                          f"• Strip Dimensions: Length (L) and Width (W) are indicated for each column cap zone on plan.",
+                   fontsize=15.0, fontweight="bold", color="#1e293b", linespacing=1.6)
+
+    fig.suptitle(
+        f"COLUMN CAPS (TOP EXTRA REINFORCEMENT) LAYOUT — ts = {ts_cm:.0f} cm\n"
+        f"مسقط كابات وحديد إضافي علوي فوق الأعمدة (أبعاد ومساحة الشرائح)",
+        fontsize=17.0, fontweight="bold", color="#0f172a", y=0.985
+    )
+    return fig
+
+
+# ── 2. BOTTOM EXTRA & SHAWKA (WITH BASE MESHES BOX) ─────────────────────────
+def generate_flat_slab_bottom_extra_shawka_sketch(
+    Lx_spans, Ly_spans, cantilevers, ts_cm,
+    btm_extra_spans, cant_rft_list,
+    n_mesh_btm=6, bottom_mesh_dia=12,
+    n_mesh_top=5, top_mesh_dia=10,
+    col_w_cm=30, col_d_cm=30,
+    removed_cols=None, void_panel_ids=None,
+    direction="X",
+):
+    plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
+
+    x_coords = [0.0]
+    for lx in Lx_spans:
+        x_coords.append(x_coords[-1] + lx)
+    y_coords = [0.0]
+    for ly in Ly_spans:
+        y_coords.append(y_coords[-1] + ly)
+
+    cant_left   = cantilevers.get("left",   0.0)
+    cant_right  = cantilevers.get("right",  0.0)
+    cant_bottom = cantilevers.get("bottom", 0.0)
+    cant_top    = cantilevers.get("top",    0.0)
+
+    x_slab_min = x_coords[0]  - cant_left
+    x_slab_max = x_coords[-1] + cant_right
+    y_slab_min = y_coords[0]  - cant_bottom
+    y_slab_max = y_coords[-1] + cant_top
+
+    slab_w = x_slab_max - x_slab_min
+    slab_h = y_slab_max - y_slab_min
+
+    bubble_radius = max(0.50, min(slab_w, slab_h) * 0.038)
+    offset_grid_top = max(2.2, slab_h * 0.11)
+    offset_grid_left = max(2.2, slab_w * 0.11)
+    dim_offset_bot = max(2.0, slab_h * 0.11)
+    dim_offset_right = max(1.8, slab_w * 0.09)
+
+    margin_left = offset_grid_left + bubble_radius * 2 + 0.8
+    margin_right = dim_offset_right + 1.5
+    margin_top = offset_grid_top + bubble_radius * 2 + 0.8
+    margin_bot = dim_offset_bot + 1.5
+
+    total_w = slab_w + margin_left + margin_right
+    total_h = slab_h + margin_top + margin_bot
+    ar_plan = total_w / total_h
+
+    target_plan_h = 16.0
+    target_plan_w = target_plan_h * ar_plan
+    legend_h = 5.2
+
+    fig_w = max(22.0, min(34.0, target_plan_w + 1.6))
+    fig_h = max(18.0, min(32.0, target_plan_h + legend_h + 1.0))
+
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=140)
+    fig.patch.set_facecolor("#ffffff")
+
+    plan_ratio = (fig_h - legend_h - 0.8) / fig_h
+    legend_ratio = legend_h / fig_h
+
+    gs = fig.add_gridspec(2, 1, height_ratios=[plan_ratio, legend_ratio], hspace=0.06, left=0.03, right=0.97, top=0.94, bottom=0.02)
+    ax_plan = fig.add_subplot(gs[0, 0])
+    ax_legend = fig.add_subplot(gs[1, 0])
+    ax_plan.set_facecolor("#f8fafc")
+
+    # Slab boundary
+    ax_plan.add_patch(patches.Rectangle((x_slab_min, y_slab_min), slab_w, slab_h, lw=3.2, edgecolor="#0f172a", facecolor="#ffffff", zorder=1))
+
+    # Voids
+    _voids = set(void_panel_ids) if void_panel_ids else set()
+    for j in range(len(Ly_spans)):
+        for i in range(len(Lx_spans)):
+            pid = f"P_{i+1}_{j+1}"
+            if pid in _voids:
+                px0, px1 = x_coords[i], x_coords[i+1]
+                py0, py1 = y_coords[j], y_coords[j+1]
+                pw, ph = px1 - px0, py1 - py0
+                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#f1f5f9", edgecolor="#ef4444", lw=2.2, hatch="//", zorder=2)
+                ax_plan.add_patch(v_rect)
+                ax_plan.text(px0 + pw/2, py0 + ph/2, "OPENING / VOID", ha="center", va="center", fontsize=13, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.4", facecolor="#fee2e2", edgecolor="#ef4444", lw=1.5))
+
+    # Grids & Bubbles
+    for idx, x in enumerate(x_coords):
+        y_top_ext = y_slab_max + offset_grid_top
+        ax_plan.plot([x, x], [y_slab_min - 0.5, y_top_ext], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.8, zorder=3)
+        bub = Circle((x, y_top_ext), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=6)
+        ax_plan.add_patch(bub)
+        ax_plan.text(x, y_top_ext, f"Y{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
+
+    for idx, y in enumerate(y_coords):
+        x_left_ext = x_slab_min - offset_grid_left
+        ax_plan.plot([x_left_ext, x_slab_max + 0.5], [y, y], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.8, zorder=3)
+        bub = Circle((x_left_ext, y), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=6)
+        ax_plan.add_patch(bub)
+        ax_plan.text(x_left_ext, y, f"X{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
+
+    # Columns
+    col_w_m   = max(col_w_cm / 100.0, slab_w * 0.042)
+    col_d_m   = max(col_d_cm / 100.0, slab_h * 0.042)
+    rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
+    col_idx = 1
+    for j_idx, y in enumerate(y_coords):
+        for i_idx, x in enumerate(x_coords):
+            if (x, y) in rem_coords:
+                continue
+            cid = f"C{col_idx}"
+            ax_plan.add_patch(patches.Rectangle((x - col_w_m / 2.0, y - col_d_m / 2.0), col_w_m, col_d_m, lw=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=8))
+            ax_plan.text(x, y, cid, color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=9)
+            col_idx += 1
+
+    # Filter items by direction
+    dir_req = (direction or "X").upper()
+    filtered_bays = [
+        b for b in (btm_extra_spans or [])
+        if isinstance(b, dict) and b.get("n_extra", 0) > 0 and b.get("dir", "X").upper() == dir_req
+    ]
+
+    has_extra = len(filtered_bays) > 0
+
+    if has_extra:
+        for b_info in filtered_bays:
+            pid = b_info.get("panel_id", "")
+            if pid in _voids:
+                continue
+
+            L_ext = b_info.get("L_extra", 4.5)
+            W_bay = b_info.get("W_bay", b_info.get("strip_w", 4.5))
+            n_ext = b_info.get("n_extra", 6)
+            dia_ext = b_info.get("dia_extra", 12)
+            cx = b_info.get("cx", b_info.get("mid_x", 0.0))
+            cy = b_info.get("cy", b_info.get("mid_y", 0.0))
+
+            line_c = "#d97706"
+            edge_c = "#d97706"
+            face_c = "#fef3c7"
+
+            if dir_req == "X":
+                area_w = L_ext
+                area_h = W_bay * 0.88
+                area_rect = patches.Rectangle(
+                    (cx - area_w/2.0, cy - area_h/2.0), area_w, area_h,
+                    lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.60, linestyle="--", zorder=3
+                )
+                ax_plan.add_patch(area_rect)
+
+                y_bar = cy + 0.35
+                ax_plan.plot([cx - L_ext/2.0, cx + L_ext/2.0], [y_bar, y_bar], color=line_c, lw=4.5, solid_capstyle="round", zorder=6)
+                ax_plan.plot([cx - L_ext/2.0, cx - L_ext/2.0], [y_bar - 0.25, y_bar + 0.25], color=line_c, lw=3.0, zorder=6)
+                ax_plan.plot([cx + L_ext/2.0, cx + L_ext/2.0], [y_bar - 0.25, y_bar + 0.25], color=line_c, lw=3.0, zorder=6)
+
+                ax_plan.text(
+                    cx, cy - 0.45,
+                    f"★ Bottom Extra (X-Dir / اتجاه X): {n_ext}Φ{dia_ext}\n"
+                    f"Bay Dim: {area_w:.2f}m (L) × {W_bay:.2f}m (W)",
+                    ha="center", va="center", fontsize=12.5, fontweight="bold", color="#b45309", zorder=8,
+                    rotation=0,
+                    bbox=dict(boxstyle="round,pad=0.4", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
+                )
+            else:
+                area_w = W_bay * 0.88
+                area_h = L_ext
+                area_rect = patches.Rectangle(
+                    (cx - area_w/2.0, cy - area_h/2.0), area_w, area_h,
+                    lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.60, linestyle="--", zorder=3
+                )
+                ax_plan.add_patch(area_rect)
+
+                x_bar = cx + 0.35
+                ax_plan.plot([x_bar, x_bar], [cy - L_ext/2.0, cy + L_ext/2.0], color=line_c, lw=4.5, solid_capstyle="round", zorder=6)
+                ax_plan.plot([x_bar - 0.25, x_bar + 0.25], [cy - L_ext/2.0, cy - L_ext/2.0], color=line_c, lw=3.0, zorder=6)
+                ax_plan.plot([x_bar - 0.25, x_bar + 0.25], [cy + L_ext/2.0, cy + L_ext/2.0], color=line_c, lw=3.0, zorder=6)
+
+                ax_plan.text(
+                    cx - 0.45, cy,
+                    f"★ Bottom Extra (Y-Dir / اتجاه Y): {n_ext}Φ{dia_ext}\n"
+                    f"Bay Dim: {W_bay:.2f}m (W) × {area_h:.2f}m (L)",
+                    ha="center", va="center", fontsize=12.5, fontweight="bold", color="#b45309", zorder=8,
+                    rotation=90,
+                    bbox=dict(boxstyle="round,pad=0.4", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
+                )
+    else:
+        # Prominent banner when no extra bottom rebar needed in this direction
+        mid_x_slab = (x_slab_min + x_slab_max) / 2.0
+        mid_y_slab = (y_slab_min + y_slab_max) / 2.0
+        banner_w = min(slab_w * 0.78, 14.0)
+        banner_h = max(1.8, slab_h * 0.12)
+
+        banner_box = FancyBboxPatch(
+            (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
+            boxstyle="round,pad=0.5,rounding_size=0.6",
+            facecolor="#f0fdf4", edgecolor="#16a34a", lw=2.6, zorder=10
+        )
+        ax_plan.add_patch(banner_box)
+
+        dir_en = "X-DIRECTION" if dir_req == "X" else "Y-DIRECTION"
+        ax_plan.text(
+            mid_x_slab, mid_y_slab,
+            f"[OK] NO BOTTOM EXTRA REQUIRED IN {dir_en} (كافية تماماً)",
+            ha="center", va="center", fontsize=15.0, fontweight="bold", color="#15803d", zorder=11
+        )
+
+    # 2. Cantilever Shawka (filtered for relevant direction)
+    for cr in (cant_rft_list or []):
+        side = cr.get("side", "")
+        L_c = cr.get("length", 0.0)
+        tot_L = cr.get("total_bar_length", 3.0)
+        callout = cr.get("rft_callout", "6Φ12/m'")
+
+        if dir_req == "X":
+            if side == "left" and cant_left > 0:
+                cy_mid = (y_slab_min + y_slab_max) / 2.0
+                cx_tip = x_slab_min
+                cx_inner = x_coords[0] + 1.5 * L_c
+                ax_plan.plot([cx_tip, cx_inner], [cy_mid, cy_mid], color="#9333ea", lw=4.2, zorder=6)
+                ax_plan.plot([cx_tip, cx_tip + 0.5 * L_c], [cy_mid - 0.35, cy_mid - 0.35], color="#9333ea", lw=3.5, zorder=6)
+                ax_plan.plot([cx_tip, cx_tip], [cy_mid - 0.35, cy_mid], color="#9333ea", lw=3.5, zorder=6)
+                ax_plan.text(
+                    cx_tip + L_c/2.0, cy_mid + 0.55, f"★ Shawka: {callout}\n(Total Cut L = {tot_L:.2f} m)",
+                    ha="center", va="bottom", fontsize=13.0, fontweight="bold", color="#7e22ce", zorder=8,
+                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#faf5ff", edgecolor="#a855f7", lw=1.6)
+                )
+            elif side == "right" and cant_right > 0:
+                cy_mid = (y_slab_min + y_slab_max) / 2.0
+                cx_tip = x_slab_max
+                cx_inner = x_coords[-1] - 1.5 * L_c
+                ax_plan.plot([cx_tip, cx_inner], [cy_mid, cy_mid], color="#9333ea", lw=4.2, zorder=6)
+                ax_plan.plot([cx_tip, cx_tip - 0.5 * L_c], [cy_mid - 0.35, cy_mid - 0.35], color="#9333ea", lw=3.5, zorder=6)
+                ax_plan.plot([cx_tip, cx_tip], [cy_mid - 0.35, cy_mid], color="#9333ea", lw=3.5, zorder=6)
+                ax_plan.text(
+                    cx_tip - L_c/2.0, cy_mid + 0.55, f"★ Shawka: {callout}\n(Total Cut L = {tot_L:.2f} m)",
+                    ha="center", va="bottom", fontsize=13.0, fontweight="bold", color="#7e22ce", zorder=8,
+                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#faf5ff", edgecolor="#a855f7", lw=1.6)
+                )
+        else: # Y
+            if side == "top" and cant_top > 0:
+                cx_mid = (x_slab_min + x_slab_max) / 2.0
+                cy_tip = y_slab_max
+                cy_inner = y_coords[-1] - 1.5 * L_c
+                ax_plan.plot([cx_mid, cx_mid], [cy_tip, cy_inner], color="#9333ea", lw=4.2, zorder=6)
+                ax_plan.plot([cx_mid + 0.35, cx_mid + 0.35], [cy_tip, cy_tip - 0.5 * L_c], color="#9333ea", lw=3.5, zorder=6)
+                ax_plan.plot([cx_mid, cx_mid + 0.35], [cy_tip, cy_tip], color="#9333ea", lw=3.5, zorder=6)
+                ax_plan.text(
+                    cx_mid + 0.65, cy_tip - L_c/2.0, f"★ Shawka: {callout}\n(Total Cut L = {tot_L:.2f} m)",
+                    ha="left", va="center", fontsize=13.0, fontweight="bold", color="#7e22ce", zorder=8,
+                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#faf5ff", edgecolor="#a855f7", lw=1.6)
+                )
+            elif side == "bottom" and cant_bottom > 0:
+                cx_mid = (x_slab_min + x_slab_max) / 2.0
+                cy_tip = y_slab_min
+                cy_inner = y_coords[0] + 1.5 * L_c
+                ax_plan.plot([cx_mid, cx_mid], [cy_tip, cy_inner], color="#9333ea", lw=4.2, zorder=6)
+                ax_plan.plot([cx_mid + 0.35, cx_mid + 0.35], [cy_tip, cy_tip + 0.5 * L_c], color="#9333ea", lw=3.5, zorder=6)
+                ax_plan.plot([cx_mid, cx_mid + 0.35], [cy_tip, cy_tip], color="#9333ea", lw=3.5, zorder=6)
+                ax_plan.text(
+                    cx_mid + 0.65, cy_tip + L_c/2.0, f"★ Shawka: {callout}\n(Total Cut L = {tot_L:.2f} m)",
+                    ha="left", va="center", fontsize=13.0, fontweight="bold", color="#7e22ce", zorder=8,
+                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#faf5ff", edgecolor="#a855f7", lw=1.6)
+                )
+
+    # Dimensions
+    dim_y = y_slab_min - dim_offset_bot
+    if cant_left > 0:
+        ax_plan.annotate("", xy=(x_coords[0], dim_y), xytext=(x_slab_min, dim_y), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
+        ax_plan.text((x_slab_min + x_coords[0])/2.0, dim_y - 0.4, f"{cant_left:.2f}m", ha="center", va="top", fontsize=13, fontweight="bold", color="#0f172a")
+    for i, lx in enumerate(Lx_spans):
+        x0, x1 = x_coords[i], x_coords[i+1]
+        ax_plan.annotate("", xy=(x1, dim_y), xytext=(x0, dim_y), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
+        ax_plan.text((x0 + x1)/2.0, dim_y - 0.4, f"{lx:.2f}m", ha="center", va="top", fontsize=13, fontweight="bold", color="#0f172a")
+    if cant_right > 0:
+        ax_plan.annotate("", xy=(x_slab_max, dim_y), xytext=(x_coords[-1], dim_y), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
+        ax_plan.text((x_coords[-1] + x_slab_max)/2.0, dim_y - 0.4, f"{cant_right:.2f}m", ha="center", va="top", fontsize=13, fontweight="bold", color="#0f172a")
+
+    dim_x = x_slab_max + dim_offset_right
+    if cant_bottom > 0:
+        ax_plan.annotate("", xy=(dim_x, y_coords[0]), xytext=(dim_x, y_slab_min), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
+        ax_plan.text(dim_x + 0.4, (y_slab_min + y_coords[0])/2.0, f"{cant_bottom:.2f}m", ha="left", va="center", fontsize=13, fontweight="bold", color="#0f172a")
+    for j, ly in enumerate(Ly_spans):
+        y0, y1 = y_coords[j], y_coords[j+1]
+        ax_plan.annotate("", xy=(dim_x, y1), xytext=(dim_x, y0), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
+        ax_plan.text(dim_x + 0.4, (y0 + y1)/2.0, f"{ly:.2f}m", ha="left", va="center", fontsize=13, fontweight="bold", color="#0f172a")
+    if cant_top > 0:
+        ax_plan.annotate("", xy=(dim_x, y_slab_max), xytext=(dim_x, y_coords[-1]), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
+        ax_plan.text(dim_x + 0.4, (y_coords[-1] + y_slab_max)/2.0, f"{cant_top:.2f}m", ha="left", va="center", fontsize=13, fontweight="bold", color="#0f172a")
+
+    ax_plan.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
+    ax_plan.set_ylim(y_slab_min - margin_bot, y_slab_max + margin_top)
+    ax_plan.set_aspect("equal", adjustable="datalim")
+    ax_plan.axis("off")
+
+    # ── 🌟 DUAL HIGH-CONTRAST LEGEND STRIP WITH BIG FONT ─────────────────────
+    ax_legend.set_facecolor("#ffffff")
+    ax_legend.set_xlim(0, 100)
+    ax_legend.set_ylim(0, 100)
+    ax_legend.axis("off")
+
+    # Card 1: Base Meshes Card (Left, 48% width)
+    box_mesh = FancyBboxPatch((1, 3), 47.5, 94, boxstyle="round,pad=1.0,rounding_size=3", facecolor="#eff6ff", edgecolor="#2563eb", lw=2.5)
+    ax_legend.add_patch(box_mesh)
+    ax_legend.text(2.5, 75, "[1] BASE MESHES (شبكات التسليح الأساسية)", fontsize=16.5, fontweight="bold", color="#1e3a8a")
+    txt_base = (
+        f"• Bottom Mesh (الرقة السفلية): M11(X) & M22(Y) = {n_mesh_btm} Φ {bottom_mesh_dia} mm / m'\n"
+        f"• Top Base Mesh (الرقة العلوية): T1(X) & T2(Y) = {n_mesh_top} Φ {top_mesh_dia} mm / m'\n"
+        f"• Slab Thickness: ts = {ts_cm:.0f} cm  |  Cover = 25 mm (Spacers @ 1.0m)"
+    )
+    ax_legend.text(2.5, 38, txt_base, fontsize=14.0, fontweight="bold", color="#0f172a", linespacing=1.6)
+
+    # Card 2: Extra Steel & Shawka Card (Right, 48% width)
+    box_extra = FancyBboxPatch((50.5, 3), 48.5, 94, boxstyle="round,pad=1.0,rounding_size=3", facecolor="#fffbeb" if has_extra else "#f0fdf4", edgecolor="#f59e0b" if has_extra else "#16a34a", lw=2.5)
+    ax_legend.add_patch(box_extra)
+    dir_title = "X-DIR (اتجاه X)" if dir_req == "X" else "Y-DIR (اتجاه Y)"
+    ax_legend.text(52.0, 75, f"[2] BOTTOM EXTRA & SHAWKA — {dir_title}", fontsize=16.5, fontweight="bold", color="#b45309" if has_extra else "#15803d")
+
+    if dir_req == "X":
+        txt_extra = "• Bottom Extra (X-Dir): Indicated in yellow shaded zones\n" if has_extra else "• Bottom Extra (X-Dir): 100% Sufficient (No extra steel)\n"
+        txt_shawka = "• Cantilever Shawka: 6 Φ 12 / m' (Left / Right Cantilevers)\n"
+    else:
+        txt_extra = "• Bottom Extra (Y-Dir): Indicated in yellow shaded zones\n" if has_extra else "• Bottom Extra (Y-Dir): 100% Sufficient (No extra steel)\n"
+        txt_shawka = "• Cantilever Shawka: 6 Φ 12 / m' (Bottom / Top Cantilevers)\n"
+
+    txt_extra_card = (
+        f"{txt_extra}"
+        f"{txt_shawka}"
+        f"• Perimeter Trim (حواف البلاطة): U-Pins Φ10@20cm + 4Φ12 Bars"
+    )
+    ax_legend.text(52.0, 38, txt_extra_card, fontsize=14.0, fontweight="bold", color="#1e293b" if has_extra else "#166534", linespacing=1.6)
+
+    dir_main_title = f"BOTTOM EXTRA ({dir_req}-DIRECTION)"
+    dir_main_title_ar = f"الإضافي السفلي (اتجاه {dir_req})"
+    fig.suptitle(
+        f"REINFORCEMENT LAYOUT: {dir_main_title}, SHAWKA & BASE MESHES — ts = {ts_cm:.0f} cm\n"
+        f"مسقط تسليح البلاطة: {dir_main_title_ar} وشوك الكوابيل وبيان شبكات التسليح الأساسية",
+        fontsize=16.5, fontweight="bold", color="#0f172a", y=0.985
+    )
+    return fig
+
+
+# ── 3. TOP BASE MESH & EXTRA SLAB TOP MESH SKETCH ────────────────────────────
+def generate_flat_slab_top_mesh_extra_sketch(
+    Lx_spans, Ly_spans, cantilevers, ts_cm,
+    top_extra_slab_bays=None,
+    n_mesh_top=5, top_mesh_dia=10,
+    n_mesh_btm=6, bottom_mesh_dia=12,
+    col_w_cm=30, col_d_cm=30,
+    removed_cols=None, void_panel_ids=None,
+    direction="X",
+):
+    plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
+
+    x_coords = [0.0]
+    for lx in Lx_spans:
+        x_coords.append(x_coords[-1] + lx)
+    y_coords = [0.0]
+    for ly in Ly_spans:
+        y_coords.append(y_coords[-1] + ly)
+
+    cant_left   = cantilevers.get("left",   0.0)
+    cant_right  = cantilevers.get("right",  0.0)
+    cant_bottom = cantilevers.get("bottom", 0.0)
+    cant_top    = cantilevers.get("top",    0.0)
+
+    x_slab_min = x_coords[0]  - cant_left
+    x_slab_max = x_coords[-1] + cant_right
+    y_slab_min = y_coords[0]  - cant_bottom
+    y_slab_max = y_coords[-1] + cant_top
+
+    slab_w = x_slab_max - x_slab_min
+    slab_h = y_slab_max - y_slab_min
+
+    bubble_radius = max(0.50, min(slab_w, slab_h) * 0.038)
+    offset_grid_top = max(2.2, slab_h * 0.11)
+    offset_grid_left = max(2.2, slab_w * 0.11)
+    dim_offset_bot = max(2.0, slab_h * 0.11)
+    dim_offset_right = max(1.8, slab_w * 0.09)
+
+    margin_left = offset_grid_left + bubble_radius * 2 + 0.8
+    margin_right = dim_offset_right + 1.5
+    margin_top = offset_grid_top + bubble_radius * 2 + 0.8
+    margin_bot = dim_offset_bot + 1.5
+
+    total_w = slab_w + margin_left + margin_right
+    total_h = slab_h + margin_top + margin_bot
+    ar_plan = total_w / total_h
+
+    target_plan_h = 16.0
+    target_plan_w = target_plan_h * ar_plan
+    legend_h = 5.2
+
+    fig_w = max(22.0, min(34.0, target_plan_w + 1.6))
+    fig_h = max(18.0, min(32.0, target_plan_h + legend_h + 1.0))
+
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=140)
+    fig.patch.set_facecolor("#ffffff")
+
+    plan_ratio = (fig_h - legend_h - 0.8) / fig_h
+    legend_ratio = legend_h / fig_h
+
+    gs = fig.add_gridspec(2, 1, height_ratios=[plan_ratio, legend_ratio], hspace=0.06, left=0.03, right=0.97, top=0.94, bottom=0.02)
+    ax_plan = fig.add_subplot(gs[0, 0])
+    ax_legend = fig.add_subplot(gs[1, 0])
+    ax_plan.set_facecolor("#f8fafc")
+
+    # Slab boundary
+    ax_plan.add_patch(patches.Rectangle((x_slab_min, y_slab_min), slab_w, slab_h, lw=3.2, edgecolor="#0f172a", facecolor="#ffffff", zorder=1))
+
+    # Voids
+    _voids = set(void_panel_ids) if void_panel_ids else set()
+    for j in range(len(Ly_spans)):
+        for i in range(len(Lx_spans)):
+            pid = f"P_{i+1}_{j+1}"
+            if pid in _voids:
+                px0, px1 = x_coords[i], x_coords[i+1]
+                py0, py1 = y_coords[j], y_coords[j+1]
+                pw, ph = px1 - px0, py1 - py0
+                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#f1f5f9", edgecolor="#ef4444", lw=2.2, hatch="//", zorder=2)
+                ax_plan.add_patch(v_rect)
+                ax_plan.text(px0 + pw/2, py0 + ph/2, "OPENING / VOID", ha="center", va="center", fontsize=13, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.4", facecolor="#fee2e2", edgecolor="#ef4444", lw=1.5))
+
+    # Grids & Bubbles
+    for idx, x in enumerate(x_coords):
+        y_top_ext = y_slab_max + offset_grid_top
+        ax_plan.plot([x, x], [y_slab_min - 0.5, y_top_ext], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.8, zorder=3)
+        bub = Circle((x, y_top_ext), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=6)
+        ax_plan.add_patch(bub)
+        ax_plan.text(x, y_top_ext, f"Y{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
+
+    for idx, y in enumerate(y_coords):
+        x_left_ext = x_slab_min - offset_grid_left
+        ax_plan.plot([x_left_ext, x_slab_max + 0.5], [y, y], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.8, zorder=3)
+        bub = Circle((x_left_ext, y), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=6)
+        ax_plan.add_patch(bub)
+        ax_plan.text(x_left_ext, y, f"X{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
+
+    # Columns
+    col_w_m   = max(col_w_cm / 100.0, slab_w * 0.042)
+    col_d_m   = max(col_d_cm / 100.0, slab_h * 0.042)
+    rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
+    col_idx = 1
+    for j_idx, y in enumerate(y_coords):
+        for i_idx, x in enumerate(x_coords):
+            if (x, y) in rem_coords:
+                continue
+            cid = f"C{col_idx}"
+            ax_plan.add_patch(patches.Rectangle((x - col_w_m / 2.0, y - col_d_m / 2.0), col_w_m, col_d_m, lw=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=8))
+            ax_plan.text(x, y, cid, color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=9)
+            col_idx += 1
+
+    # ── Check Extra Top Slab Reinforcement by Direction ─────────────────────
+    dir_req = (direction or "X").upper()
+    filtered_bays = [
+        b for b in (top_extra_slab_bays or [])
+        if isinstance(b, dict) and b.get("n_extra", 0) > 0 and b.get("dir", "X").upper() == dir_req
+    ]
+
+    has_extra_top = len(filtered_bays) > 0
+
+    if has_extra_top:
+        for b_info in filtered_bays:
+            pid = b_info.get("panel_id", "")
+            if pid in _voids:
+                continue
+
+            L_ext = b_info.get("L_extra", 4.0)
+            W_bay = b_info.get("W_bay", 4.0)
+            n_ext = b_info.get("n_extra", 4)
+            dia_ext = b_info.get("dia_extra", 10)
+            cx = b_info.get("cx", (x_coords[0] + x_coords[-1])/2.0)
+            cy = b_info.get("cy", (y_coords[0] + y_coords[-1])/2.0)
+
+            line_c = "#2563eb"
+            edge_c = "#2563eb"
+            face_c = "#dbeafe"
+
+            if dir_req == "X":
+                area_w = L_ext
+                area_h = W_bay * 0.88
+                area_rect = patches.Rectangle(
+                    (cx - area_w/2.0, cy - area_h/2.0), area_w, area_h,
+                    lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.60, linestyle="--", zorder=3
+                )
+                ax_plan.add_patch(area_rect)
+
+                y_bar = cy + 0.35
+                ax_plan.plot([cx - L_ext/2.0, cx + L_ext/2.0], [y_bar, y_bar], color=line_c, lw=4.5, solid_capstyle="round", zorder=6)
+                ax_plan.plot([cx - L_ext/2.0, cx - L_ext/2.0], [y_bar, y_bar - 0.35], color=line_c, lw=3.0, zorder=6)
+                ax_plan.plot([cx + L_ext/2.0, cx + L_ext/2.0], [y_bar, y_bar - 0.35], color=line_c, lw=3.0, zorder=6)
+
+                ax_plan.text(
+                    cx, cy - 0.45,
+                    f"★ Top Slab Extra (X-Dir / اتجاه X): {n_ext}Φ{dia_ext}\n"
+                    f"Bay Dim: {area_w:.2f}m (L) × {W_bay:.2f}m (W)",
+                    ha="center", va="center", fontsize=12.5, fontweight="bold", color="#1d4ed8", zorder=8,
+                    rotation=0,
+                    bbox=dict(boxstyle="round,pad=0.4", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
+                )
+            else:
+                area_w = W_bay * 0.88
+                area_h = L_ext
+                area_rect = patches.Rectangle(
+                    (cx - area_w/2.0, cy - area_h/2.0), area_w, area_h,
+                    lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.60, linestyle="--", zorder=3
+                )
+                ax_plan.add_patch(area_rect)
+
+                x_bar = cx + 0.35
+                ax_plan.plot([x_bar, x_bar], [cy - L_ext/2.0, cy + L_ext/2.0], color=line_c, lw=4.5, solid_capstyle="round", zorder=6)
+                ax_plan.plot([x_bar - 0.35, x_bar], [cy - L_ext/2.0, cy - L_ext/2.0], color=line_c, lw=3.0, zorder=6)
+                ax_plan.plot([x_bar - 0.35, x_bar], [cy + L_ext/2.0, cy + L_ext/2.0], color=line_c, lw=3.0, zorder=6)
+
+                ax_plan.text(
+                    cx - 0.45, cy,
+                    f"★ Top Slab Extra (Y-Dir / اتجاه Y): {n_ext}Φ{dia_ext}\n"
+                    f"Bay Dim: {W_bay:.2f}m (W) × {area_h:.2f}m (L)",
+                    ha="center", va="center", fontsize=12.5, fontweight="bold", color="#1d4ed8", zorder=8,
+                    rotation=90,
+                    bbox=dict(boxstyle="round,pad=0.4", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
+                )
+    else:
+        # ── 🌟 PROMINENT LARGE BANNER WHEN NO EXTRA TOP SLAB REBAR REQUIRED ─────
+        mid_x_slab = (x_slab_min + x_slab_max) / 2.0
+        mid_y_slab = (y_slab_min + y_slab_max) / 2.0
+        banner_w = min(slab_w * 0.78, 14.0)
+        banner_h = max(1.8, slab_h * 0.12)
+
+        banner_box = FancyBboxPatch(
+            (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
+            boxstyle="round,pad=0.5,rounding_size=0.6",
+            facecolor="#f0fdf4", edgecolor="#16a34a", lw=2.6, zorder=10
+        )
+        ax_plan.add_patch(banner_box)
+
+        dir_en = "X-DIRECTION" if dir_req == "X" else "Y-DIRECTION"
+        ax_plan.text(
+            mid_x_slab, mid_y_slab,
+            f"[OK] NO EXTRA TOP SLAB REBAR IN {dir_en} (كافية تماماً)",
+            ha="center", va="center", fontsize=15.0, fontweight="bold", color="#15803d", zorder=11
+        )
+
+    # Dimensions
+    dim_y = y_slab_min - dim_offset_bot
+    if cant_left > 0:
+        ax_plan.annotate("", xy=(x_coords[0], dim_y), xytext=(x_slab_min, dim_y), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
+        ax_plan.text((x_slab_min + x_coords[0])/2.0, dim_y - 0.4, f"{cant_left:.2f}m", ha="center", va="top", fontsize=13, fontweight="bold", color="#0f172a")
+    for i, lx in enumerate(Lx_spans):
+        x0, x1 = x_coords[i], x_coords[i+1]
+        ax_plan.annotate("", xy=(x1, dim_y), xytext=(x0, dim_y), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
+        ax_plan.text((x0 + x1)/2.0, dim_y - 0.4, f"{lx:.2f}m", ha="center", va="top", fontsize=13, fontweight="bold", color="#0f172a")
+    if cant_right > 0:
+        ax_plan.annotate("", xy=(x_slab_max, dim_y), xytext=(x_coords[-1], dim_y), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
+        ax_plan.text((x_coords[-1] + x_slab_max)/2.0, dim_y - 0.4, f"{cant_right:.2f}m", ha="center", va="top", fontsize=13, fontweight="bold", color="#0f172a")
+
+    dim_x = x_slab_max + dim_offset_right
+    if cant_bottom > 0:
+        ax_plan.annotate("", xy=(dim_x, y_coords[0]), xytext=(dim_x, y_slab_min), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
+        ax_plan.text(dim_x + 0.4, (y_slab_min + y_coords[0])/2.0, f"{cant_bottom:.2f}m", ha="left", va="center", fontsize=13, fontweight="bold", color="#0f172a")
+    for j, ly in enumerate(Ly_spans):
+        y0, y1 = y_coords[j], y_coords[j+1]
+        ax_plan.annotate("", xy=(dim_x, y1), xytext=(dim_x, y0), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
+        ax_plan.text(dim_x + 0.4, (y0 + y1)/2.0, f"{ly:.2f}m", ha="left", va="center", fontsize=13, fontweight="bold", color="#0f172a")
+    if cant_top > 0:
+        ax_plan.annotate("", xy=(dim_x, y_slab_max), xytext=(dim_x, y_coords[-1]), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
+        ax_plan.text(dim_x + 0.4, (y_coords[-1] + y_slab_max)/2.0, f"{cant_top:.2f}m", ha="left", va="center", fontsize=13, fontweight="bold", color="#0f172a")
+
+    ax_plan.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
+    ax_plan.set_ylim(y_slab_min - margin_bot, y_slab_max + margin_top)
+    ax_plan.set_aspect("equal", adjustable="datalim")
+    ax_plan.axis("off")
+
+    # ── 🌟 DUAL HIGH-CONTRAST LEGEND STRIP WITH BIG FONT ─────────────────────
+    ax_legend.set_facecolor("#ffffff")
+    ax_legend.set_xlim(0, 100)
+    ax_legend.set_ylim(0, 100)
+    ax_legend.axis("off")
+
+    # Card 1: Top Base Mesh Card (Left, 48% width)
+    box_mesh = FancyBboxPatch((1, 3), 47.5, 94, boxstyle="round,pad=1.0,rounding_size=3", facecolor="#eff6ff", edgecolor="#2563eb", lw=2.5)
+    ax_legend.add_patch(box_mesh)
+    ax_legend.text(2.5, 75, "[1] TOP BASE MESH (الرقة العلوية الأساسية)", fontsize=16.5, fontweight="bold", color="#1e3a8a")
+    txt_top_base = (
+        f"• Top Base Mesh (الرقة العلوية): T1(X) & T2(Y) = {n_mesh_top} Φ {top_mesh_dia} mm / m'\n"
+        f"• High Chairs (الكراسي الحاملة): Φ 10 mm @ 1.0 m spacing\n"
+        f"• Slab Thickness: ts = {ts_cm:.0f} cm  |  Concrete Cover = 25 mm"
+    )
+    ax_legend.text(2.5, 38, txt_top_base, fontsize=14.0, fontweight="bold", color="#0f172a", linespacing=1.6)
+
+    # Card 2: Top Extra Status Card (Right, 48% width)
+    box_extra = FancyBboxPatch((50.5, 3), 48.5, 94, boxstyle="round,pad=1.0,rounding_size=3", facecolor="#eff6ff" if has_extra_top else "#f0fdf4", edgecolor="#2563eb" if has_extra_top else "#16a34a", lw=2.5)
+    ax_legend.add_patch(box_extra)
+    dir_title = "X-DIR (اتجاه X)" if dir_req == "X" else "Y-DIR (اتجاه Y)"
+    ax_legend.text(52.0, 75, f"[2] SLAB TOP EXTRA — {dir_title}", fontsize=16.5, fontweight="bold", color="#1d4ed8" if has_extra_top else "#15803d")
+    if not has_extra_top:
+        txt_top_extra = (
+            f"• Status: 100% Sufficient — No extra top slab rebar needed\n"
+            f"• All middle strip negative moments resisted by Top Mesh\n"
+            f"• For column caps top extra moments, refer to Tab 1"
+        )
+        ax_legend.text(52.0, 38, txt_top_extra, fontsize=14.0, fontweight="bold", color="#166534", linespacing=1.6)
+    else:
+        txt_top_extra = (
+            f"• Top Extra ({dir_title}): Indicated in blue shaded bay zones\n"
+            f"• Placement: Upper layer with downward end hooks\n"
+            f"• For column caps top extra moments, refer to Tab 1"
+        )
+        ax_legend.text(52.0, 38, txt_top_extra, fontsize=14.0, fontweight="bold", color="#1e293b", linespacing=1.6)
+
+    dir_main_title = f"EXTRA SLAB TOP STEEL ({dir_req}-DIRECTION)"
+    dir_main_title_ar = f"الحديد الإضافي العلوي للبلاطة (اتجاه {dir_req})"
+    fig.suptitle(
+        f"REINFORCEMENT LAYOUT: TOP BASE MESH & {dir_main_title} — ts = {ts_cm:.0f} cm\n"
+        f"مسقط تسليح البلاطة: الرقة العلوية الأساسية و{dir_main_title_ar}",
+        fontsize=16.5, fontweight="bold", color="#0f172a", y=0.985
+    )
+    return fig
+
+
+def generate_flat_slab_master_steel_layout_sketch(
+    Lx_spans, Ly_spans, cantilevers, ts_cm,
+    n_mesh_btm, bottom_mesh_dia,
+    n_mesh_top, top_mesh_dia,
+    top_extra_cols, cant_rft_list,
+    btm_extra_spans=None,
+    col_w_cm=30, col_d_cm=30,
+    removed_cols=None,
+    void_panel_ids=None,
+):
+    """
+    Generates a master 2D structural floor plan (Steel Layout - مسقط أفقي لتسليح البلاطة)
+    showing ALL reinforcement layers on one comprehensive CAD-style drawing:
+    - Base Bottom Mesh (M11, M22)
+    - Base Top Mesh (T1, T2)
+    - Column Top Extra Caps (كابات الأعمدة) with exact counts, dia, and lengths
+    - Additional Bottom Steel in enlarged bays (حديد إضافي سفلي) with lengths and counts
+    - Cantilever Shawka Rebar (شوك الكوابيل)
+    - Perimeter U-Pins & Edge Bars
+    """
+    plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
+
+    x_coords = [0.0]
+    for lx in Lx_spans:
+        x_coords.append(x_coords[-1] + lx)
+
+    y_coords = [0.0]
+    for ly in Ly_spans:
+        y_coords.append(y_coords[-1] + ly)
+
+    cant_left   = cantilevers.get("left",   0.0)
+    cant_right  = cantilevers.get("right",  0.0)
+    cant_bottom = cantilevers.get("bottom", 0.0)
+    cant_top    = cantilevers.get("top",    0.0)
+
+    x_slab_min = x_coords[0]  - cant_left
+    x_slab_max = x_coords[-1] + cant_right
+    y_slab_min = y_coords[0]  - cant_bottom
+    y_slab_max = y_coords[-1] + cant_top
+
+    slab_w = x_slab_max - x_slab_min
+    slab_h = y_slab_max - y_slab_min
+
+    # Grid bubble offsets & margins
+    bubble_radius = max(0.44, min(slab_w, slab_h) * 0.034)
+    offset_grid_top = max(1.8, slab_h * 0.10)
+    offset_grid_left = max(1.8, slab_w * 0.10)
+    dim_offset_bot = max(1.6, slab_h * 0.10)
+    dim_offset_right = max(1.5, slab_w * 0.08)
+
+    margin_left = offset_grid_left + bubble_radius * 2 + 0.6
+    margin_right = dim_offset_right + 1.2
+    margin_top = offset_grid_top + bubble_radius * 2 + 0.6
+    margin_bot = dim_offset_bot + 1.2
+
+    total_w = slab_w + margin_left + margin_right
+    total_h = slab_h + margin_top + margin_bot
+    ar_plan = total_w / total_h
+
+    target_plan_h = 16.5
+    target_plan_w = target_plan_h * ar_plan
+    legend_h = 4.4
+
+    fig_w = max(24.0, min(36.0, target_plan_w + 1.6))
+    fig_h = max(18.0, min(36.0, target_plan_h + legend_h + 1.2))
+
+    plan_ratio = (fig_h - legend_h - 1.0) / fig_h
+    legend_ratio = legend_h / fig_h
+
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=140)
+    fig.patch.set_facecolor("#ffffff")
+
+    gs = gridspec.GridSpec(
+        2, 1,
+        height_ratios=[plan_ratio, legend_ratio],
+        hspace=0.06,
+        left=0.03, right=0.97, top=0.94, bottom=0.02,
+    )
+
+    ax_plan   = fig.add_subplot(gs[0, 0])
+    ax_legend = fig.add_subplot(gs[1, 0])
+    ax_plan.set_facecolor("#f8fafc")
+
+    # 1. Slab Outer Boundary
+    slab_rect = patches.Rectangle(
+        (x_slab_min, y_slab_min), slab_w, slab_h,
+        linewidth=3.0, edgecolor="#0f172a", facecolor="#ffffff", zorder=1,
+    )
+    ax_plan.add_patch(slab_rect)
+
+    # 2. Voids / Openings
+    _voids = set(void_panel_ids) if void_panel_ids else set()
+    for j in range(len(Ly_spans)):
+        for i in range(len(Lx_spans)):
+            pid = f"P_{i+1}_{j+1}"
+            if pid in _voids:
+                px0, px1 = x_coords[i], x_coords[i+1]
+                py0, py1 = y_coords[j], y_coords[j+1]
+                pw, ph = px1 - px0, py1 - py0
+                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#f1f5f9", edgecolor="#ef4444", lw=2.0, hatch="//", zorder=2)
+                ax_plan.add_patch(v_rect)
+                ax_plan.plot([px0, px1], [py0, py1], color="#ef4444", lw=1.5, ls="--", zorder=3)
+                ax_plan.plot([px0, px1], [py1, py0], color="#ef4444", lw=1.5, ls="--", zorder=3)
+                ax_plan.text(px0 + pw/2, py0 + ph/2, "OPENING / VOID", ha="center", va="center", fontsize=11, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.3", facecolor="#fee2e2", edgecolor="#ef4444", lw=1.2))
+
+    # 3. Grid Lines & Bubbles
+    for idx, x in enumerate(x_coords):
+        y_top_ext = y_slab_max + offset_grid_top
+        ax_plan.plot([x, x], [y_slab_min - 0.4, y_top_ext], color="#dc2626", linestyle=":", linewidth=1.6, alpha=0.75, zorder=3)
+        bub = Circle((x, y_top_ext), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.2, zorder=6)
+        ax_plan.add_patch(bub)
+        ax_plan.text(x, y_top_ext, f"Y{idx+1}", color="#991b1b", fontsize=14, weight="bold", ha="center", va="center", zorder=7)
+
+    for idx, y in enumerate(y_coords):
+        x_left_ext = x_slab_min - offset_grid_left
+        ax_plan.plot([x_left_ext, x_slab_max + 0.4], [y, y], color="#dc2626", linestyle=":", linewidth=1.6, alpha=0.75, zorder=3)
+        bub = Circle((x_left_ext, y), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.2, zorder=6)
+        ax_plan.add_patch(bub)
+        ax_plan.text(x_left_ext, y, f"X{idx+1}", color="#991b1b", fontsize=14, weight="bold", ha="center", va="center", zorder=7)
+
+    # 4. Columns & Labels
+    col_w_m   = max(col_w_cm / 100.0, slab_w * 0.04)
+    col_d_m   = max(col_d_cm / 100.0, slab_h * 0.04)
+    rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
+
+    col_dict = {}
+    col_idx = 1
+    for j_idx, y in enumerate(y_coords):
+        for i_idx, x in enumerate(x_coords):
+            if (x, y) in rem_coords:
+                continue
+            cid = f"C{col_idx}"
+            col_dict[cid] = (x, y, i_idx, j_idx)
+            ax_plan.add_patch(patches.Rectangle(
+                (x - col_w_m / 2.0, y - col_d_m / 2.0), col_w_m, col_d_m,
+                linewidth=2.0, edgecolor="#0f172a", facecolor="#1e293b", zorder=8,
+            ))
+            ax_plan.text(x, y, cid, color="#facc15", fontsize=11, ha="center", va="center", weight="bold", zorder=9)
+            col_idx += 1
+
+    # 5. Base Mesh Indicators (Bottom & Top) in Central Bays
+    mid_i = len(Lx_spans) // 2
+    mid_j = len(Ly_spans) // 2
+    bm_x0 = x_coords[mid_i] + 0.3 * Lx_spans[mid_i]
+    bm_y0 = y_coords[mid_j] + 0.3 * Ly_spans[mid_j]
+
+    # Bottom Mesh symbol
+    ax_plan.annotate("", xy=(bm_x0 + 1.8, bm_y0), xytext=(bm_x0 - 0.2, bm_y0),
+                    arrowprops=dict(arrowstyle="<->", color="#2563eb", lw=3.0), zorder=5)
+    ax_plan.annotate("", xy=(bm_x0 + 0.8, bm_y0 + 1.8), xytext=(bm_x0 + 0.8, bm_y0 - 0.2),
+                    arrowprops=dict(arrowstyle="<->", color="#2563eb", lw=3.0), zorder=5)
+    ax_plan.text(bm_x0 + 0.8, bm_y0 - 0.55,
+                f"BOTTOM MESH (BTM)\n"
+                f"M11 (X): {n_mesh_btm} Φ{bottom_mesh_dia}/m'\n"
+                f"M22 (Y): {n_mesh_btm} Φ{bottom_mesh_dia}/m'",
+                ha="center", va="top", fontsize=10.0, fontweight="bold", color="#1e40af", zorder=7,
+                bbox=dict(boxstyle="round,pad=0.35", facecolor="#eff6ff", edgecolor="#3b82f6", lw=1.5))
+
+    # Top Mesh symbol
+    top_i = 0 if len(Lx_spans) > 1 else mid_i
+    top_j = 0 if len(Ly_spans) > 1 else mid_j
+    tm_x0 = x_coords[top_i] + 0.5 * Lx_spans[top_i]
+    tm_y0 = y_coords[top_j] + 0.5 * Ly_spans[top_j]
+    ax_plan.annotate("", xy=(tm_x0 + 1.5, tm_y0), xytext=(tm_x0 - 0.5, tm_y0),
+                    arrowprops=dict(arrowstyle="<->", color="#16a34a", lw=2.5, ls="--"), zorder=5)
+    ax_plan.annotate("", xy=(tm_x0 + 0.5, tm_y0 + 1.5), xytext=(tm_x0 + 0.5, tm_y0 - 0.5),
+                    arrowprops=dict(arrowstyle="<->", color="#16a34a", lw=2.5, ls="--"), zorder=5)
+    ax_plan.text(tm_x0 + 0.5, tm_y0 + 1.75,
+                f"TOP BASE MESH (TOP)\n"
+                f"T1 & T2: {n_mesh_top} Φ{top_mesh_dia}/m' (X & Y)",
+                ha="center", va="bottom", fontsize=10.0, fontweight="bold", color="#15803d", zorder=7,
+                bbox=dict(boxstyle="round,pad=0.35", facecolor="#f0fdf4", edgecolor="#22c55e", lw=1.5))
+
+    # 6. Column Caps (Top Extra Reinforcement over columns)
+    for c_info in (top_extra_cols or []):
+        if not c_info.get("is_needed"):
+            continue
+        cid = c_info["id"]
+        if cid not in col_dict:
+            continue
+        cx, cy, ci, cj = col_dict[cid]
+        L_ext = c_info.get("L_extra", 3.0)
+        n_ext = c_info.get("n_extra", 6)
+        dia_ext = c_info.get("dia_extra", 12)
+        callout = c_info.get("callout", f"{n_ext}Φ{dia_ext}")
+
+        cap_w = L_ext
+        cap_h = min(Lx_spans[min(ci, len(Lx_spans)-1)], Ly_spans[min(cj, len(Ly_spans)-1)]) * 0.45
+        cap_rect = patches.Rectangle(
+            (cx - cap_w/2.0, cy - cap_h/2.0), cap_w, cap_h,
+            linewidth=1.5, edgecolor="#dc2626", facecolor="#fee2e2", alpha=0.55, linestyle="--", zorder=4
+        )
+        ax_plan.add_patch(cap_rect)
+
+        bar_y = cy + col_d_m/2.0 + 0.15
+        ax_plan.plot([cx - cap_w/2.0, cx + cap_w/2.0], [bar_y, bar_y], color="#dc2626", lw=3.0, zorder=6)
+        ax_plan.plot([cx - cap_w/2.0, cx - cap_w/2.0], [bar_y, bar_y - 0.25], color="#dc2626", lw=2.5, zorder=6)
+        ax_plan.plot([cx + cap_w/2.0, cx + cap_w/2.0], [bar_y, bar_y - 0.25], color="#dc2626", lw=2.5, zorder=6)
+
+        is_above = ((ci + cj) % 2 == 0)
+        tag_y = (cy + cap_h/2.0 + 0.30) if is_above else (cy - cap_h/2.0 - 0.30)
+        va_pos = "bottom" if is_above else "top"
+        ax_plan.text(
+            cx, tag_y, f"Top Cap: {callout} (L={L_ext:.2f}m)",
+            ha="center", va=va_pos, fontsize=9.5, fontweight="bold", color="#991b1b", zorder=8,
+            bbox=dict(boxstyle="round,pad=0.25", facecolor="#ffffff", edgecolor="#dc2626", lw=1.2)
+        )
+
+    # 7. Additional Bottom Steel in Bays
+    for b_info in (btm_extra_spans or []):
+        if not isinstance(b_info, dict) or b_info.get("n_extra", 0) <= 0:
+            continue
+        span_len = b_info.get("span_len", 5.0)
+        Ln = b_info.get("Ln", span_len - 0.6)
+        L_ext = b_info.get("L_extra", Ln * 0.8)
+        n_ext = b_info.get("n_extra", 6)
+        dia_ext = b_info.get("dia_extra", 12)
+        callout = b_info.get("callout", f"{n_ext}Φ{dia_ext}")
+        dir_b = b_info.get("dir", "X")
+        bay_lbl = b_info.get("bay_label", "")
+
+        bx_c = (x_coords[0] + x_coords[-1]) / 2.0
+        by_c = (y_coords[0] + y_coords[-1]) / 2.0
+        for i in range(len(Lx_spans)):
+            for j in range(len(Ly_spans)):
+                if f"X{i+1}" in bay_lbl and f"Y{j+1}" in bay_lbl:
+                    bx_c = (x_coords[i] + x_coords[i+1]) / 2.0
+                    by_c = (y_coords[j] + y_coords[j+1]) / 2.0
+
+        if dir_b == "X":
+            ax_plan.plot([bx_c - L_ext/2.0, bx_c + L_ext/2.0], [by_c, by_c], color="#d97706", lw=3.8, solid_capstyle="round", zorder=6)
+            ax_plan.plot([bx_c - L_ext/2.0, bx_c - L_ext/2.0], [by_c - 0.2, by_c + 0.2], color="#d97706", lw=2.5, zorder=6)
+            ax_plan.plot([bx_c + L_ext/2.0, bx_c + L_ext/2.0], [by_c - 0.2, by_c + 0.2], color="#d97706", lw=2.5, zorder=6)
+            ax_plan.text(
+                bx_c, by_c - 0.40, f"Btm Extra: {callout} (L={L_ext:.2f}m)",
+                ha="center", va="top", fontsize=9.5, fontweight="bold", color="#b45309", zorder=8,
+                bbox=dict(boxstyle="round,pad=0.25", facecolor="#fffbeb", edgecolor="#f59e0b", lw=1.2)
+            )
+        else:
+            ax_plan.plot([bx_c, bx_c], [by_c - L_ext/2.0, by_c + L_ext/2.0], color="#d97706", lw=3.8, solid_capstyle="round", zorder=6)
+            ax_plan.plot([bx_c - 0.2, bx_c + 0.2], [by_c - L_ext/2.0, by_c - L_ext/2.0], color="#d97706", lw=2.5, zorder=6)
+            ax_plan.plot([bx_c - 0.2, bx_c + 0.2], [by_c + L_ext/2.0, by_c + L_ext/2.0], color="#d97706", lw=2.5, zorder=6)
+            ax_plan.text(
+                bx_c + 0.40, by_c, f"Btm Extra: {callout}\n(L={L_ext:.2f}m)",
+                ha="left", va="center", fontsize=9.5, fontweight="bold", color="#b45309", zorder=8,
+                bbox=dict(boxstyle="round,pad=0.25", facecolor="#fffbeb", edgecolor="#f59e0b", lw=1.2)
+            )
+
+    # 8. Cantilever Shawka Rebar (Overhang Zones)
+    for cr in (cant_rft_list or []):
+        side = cr.get("side", "")
+        L_c = cr.get("length", 0.0)
+        tot_L = cr.get("total_bar_length", 3.0)
+        callout = cr.get("rft_callout", "6Φ12/m'")
+
+        if side == "left" and cant_left > 0:
+            cy_mid = (y_slab_min + y_slab_max) / 2.0
+            cx_tip = x_slab_min
+            cx_inner = x_coords[0] + 1.5 * L_c
+            ax_plan.plot([cx_tip, cx_inner], [cy_mid, cy_mid], color="#9333ea", lw=3.5, zorder=6)
+            ax_plan.plot([cx_tip, cx_tip + 0.5 * L_c], [cy_mid - 0.3, cy_mid - 0.3], color="#9333ea", lw=3.0, zorder=6)
+            ax_plan.plot([cx_tip, cx_tip], [cy_mid - 0.3, cy_mid], color="#9333ea", lw=3.0, zorder=6)
+            ax_plan.text(
+                cx_tip + L_c/2.0, cy_mid + 0.45, f"Shawka: {callout}\n(Cut L={tot_L:.2f}m)",
+                ha="center", va="bottom", fontsize=9.5, fontweight="bold", color="#7e22ce", zorder=8,
+                bbox=dict(boxstyle="round,pad=0.25", facecolor="#faf5ff", edgecolor="#a855f7", lw=1.2)
+            )
+        elif side == "top" and cant_top > 0:
+            cx_mid = (x_slab_min + x_slab_max) / 2.0
+            cy_tip = y_slab_max
+            cy_inner = y_coords[-1] - 1.5 * L_c
+            ax_plan.plot([cx_mid, cx_mid], [cy_tip, cy_inner], color="#9333ea", lw=3.5, zorder=6)
+            ax_plan.plot([cx_mid + 0.3, cx_mid + 0.3], [cy_tip, cy_tip - 0.5 * L_c], color="#9333ea", lw=3.0, zorder=6)
+            ax_plan.plot([cx_mid, cx_mid + 0.3], [cy_tip, cy_tip], color="#9333ea", lw=3.0, zorder=6)
+            ax_plan.text(
+                cx_mid + 0.55, cy_tip - L_c/2.0, f"Shawka: {callout}\n(Cut L={tot_L:.2f}m)",
+                ha="left", va="center", fontsize=9.5, fontweight="bold", color="#7e22ce", zorder=8,
+                bbox=dict(boxstyle="round,pad=0.25", facecolor="#faf5ff", edgecolor="#a855f7", lw=1.2)
+            )
+
+    # 9. Perimeter Trim & U-Pins Callout
+    perim_tag_x = x_slab_max - 0.4
+    perim_tag_y = y_slab_min + 0.4
+    ax_plan.text(
+        perim_tag_x, perim_tag_y,
+        "Perimeter Trim: U-Pins Φ10@20cm + 4Φ12 Edge Bars",
+        ha="right", va="bottom", fontsize=9.5, fontweight="bold", color="#475569", zorder=8,
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="#f8fafc", edgecolor="#64748b", lw=1.2)
+    )
+
+    # 10. Dimension Lines
+    dim_y = y_slab_min - dim_offset_bot
+    if cant_left > 0:
+        ax_plan.annotate("", xy=(x_coords[0], dim_y), xytext=(x_slab_min, dim_y), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.4))
+        ax_plan.text((x_slab_min + x_coords[0])/2.0, dim_y - 0.35, f"{cant_left:.2f}m", ha="center", va="top", fontsize=11, fontweight="bold", color="#0f172a")
+    for i, lx in enumerate(Lx_spans):
+        x0, x1 = x_coords[i], x_coords[i+1]
+        ax_plan.annotate("", xy=(x1, dim_y), xytext=(x0, dim_y), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.4))
+        ax_plan.text((x0 + x1)/2.0, dim_y - 0.35, f"{lx:.2f}m", ha="center", va="top", fontsize=11, fontweight="bold", color="#0f172a")
+    if cant_right > 0:
+        ax_plan.annotate("", xy=(x_slab_max, dim_y), xytext=(x_coords[-1], dim_y), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.4))
+        ax_plan.text((x_coords[-1] + x_slab_max)/2.0, dim_y - 0.35, f"{cant_right:.2f}m", ha="center", va="top", fontsize=11, fontweight="bold", color="#0f172a")
+
+    dim_x = x_slab_max + dim_offset_right
+    if cant_bottom > 0:
+        ax_plan.annotate("", xy=(dim_x, y_coords[0]), xytext=(dim_x, y_slab_min), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.4))
+        ax_plan.text(dim_x + 0.35, (y_slab_min + y_coords[0])/2.0, f"{cant_bottom:.2f}m", ha="left", va="center", fontsize=11, fontweight="bold", color="#0f172a")
+    for j, ly in enumerate(Ly_spans):
+        y0, y1 = y_coords[j], y_coords[j+1]
+        ax_plan.annotate("", xy=(dim_x, y1), xytext=(dim_x, y0), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.4))
+        ax_plan.text(dim_x + 0.35, (y0 + y1)/2.0, f"{ly:.2f}m", ha="left", va="center", fontsize=11, fontweight="bold", color="#0f172a")
+    if cant_top > 0:
+        ax_plan.annotate("", xy=(dim_x, y_slab_max), xytext=(dim_x, y_coords[-1]), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.4))
+        ax_plan.text(dim_x + 0.35, (y_coords[-1] + y_slab_max)/2.0, f"{cant_top:.2f}m", ha="left", va="center", fontsize=11, fontweight="bold", color="#0f172a")
+
+    ax_plan.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
+    ax_plan.set_ylim(y_slab_min - margin_bot, y_slab_max + margin_top)
+    ax_plan.set_aspect("equal", adjustable="datalim")
+    ax_plan.axis("off")
+
+    # 11. Engineering Legend Strip below Plan
+    ax_legend.set_facecolor("#ffffff")
+    ax_legend.set_xlim(0, 100)
+    ax_legend.set_ylim(0, 100)
+    ax_legend.axis("off")
+
+    legend_cards = [
+        {
+            "title": "1. BOTTOM MESH (M11 & M22)",
+            "content": f"• M11 (X-dir): {n_mesh_btm} Φ{bottom_mesh_dia}/m'\n• M22 (Y-dir): {n_mesh_btm} Φ{bottom_mesh_dia}/m'\n• Straight continuous bars (Cover=2.5cm)",
+            "bg": "#eff6ff", "border": "#3b82f6",
+        },
+        {
+            "title": "2. TOP BASE MESH (T1 & T2)",
+            "content": f"• T1 & T2 (X & Y): {n_mesh_top} Φ{top_mesh_dia}/m'\n• Shrinkage & crack control mesh\n• Standard 90° down-hooks at slab edge",
+            "bg": "#f0fdf4", "border": "#22c55e",
+        },
+        {
+            "title": "3. COLUMN CAPS (TOP EXTRA)",
+            "content": f"• Extra Top Rebar over high -M columns\n• Extends 0.25Ln each side into col strips\n• Cut Length = 0.50Ln + col width + hooks",
+            "bg": "#fef2f2", "border": "#ef4444",
+        },
+        {
+            "title": "4. BOTTOM EXTRA & SHAWKA",
+            "content": f"• Btm Extra: Centered @ large bays (0.80Ln)\n• Shawka: Main 6Φ12/m' extends 1.5 L_cant\n• U-Pins: Φ10@20cm + 4Φ12 Edge perimeter",
+            "bg": "#fffbeb", "border": "#f59e0b",
+        },
+    ]
+
+    card_w = 23.5
+    card_gap = 1.3
+    card_start = 1.0
+
+    for idx, card in enumerate(legend_cards):
+        cx = card_start + idx * (card_w + card_gap)
+        c_box = FancyBboxPatch(
+            (cx, 4), card_w, 92,
+            boxstyle="round,pad=1.0,rounding_size=3",
+            facecolor=card["bg"], edgecolor=card["border"], lw=1.8,
+        )
+        ax_legend.add_patch(c_box)
+
+        t_bar = FancyBboxPatch(
+            (cx + 0.6, 70), card_w - 1.2, 22,
+            boxstyle="round,pad=0.6,rounding_size=2",
+            facecolor=card["border"], edgecolor="none"
+        )
+        ax_legend.add_patch(t_bar)
+        ax_legend.text(cx + card_w/2.0, 81, card["title"], ha="center", va="center", fontsize=10.5, fontweight="bold", color="#ffffff")
+        ax_legend.text(cx + 1.2, 45, card["content"], ha="left", va="center", fontsize=9.2, color="#1e293b", linespacing=1.35)
+
+    fig.suptitle(
+        f"FLAT SLAB MASTER REINFORCEMENT LAYOUT PLAN (ECP 203) — ts = {ts_cm:.0f} cm\n"
+        f"المسقط الأفقي التنفيذي الشامل لتسليح البلاطة اللاكمرية ومواقع وتفاصيل الحديد",
+        fontsize=16.0, fontweight="bold", color="#0f172a", y=0.985
+    )
+
+    return fig
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  DESIGN & CALCULATION ENGINES
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def ddm_moments(Wu, L_perp, Ln, is_exterior):
+
     """
     Direct Design Method — total static moment and strip distribution (ECP 203).
     """
@@ -2313,6 +4300,20 @@ def calc_As(M_ton_m, width_m, d_cm, Fcu, Fy, ts):
     As_ref   = M_kg_cm / (0.9 * Fy * denom_ref)
     As_min   = 0.0018 * w_cm * ts
     return max(As_ref, As_min)
+
+
+def calc_moment_capacity_btm(As_cm2_per_m, d_cm, Fcu, Fy):
+    """
+    Moment capacity (t.m/m) of bottom mesh reinforcement per unit width (1 m strip).
+    Uses ECP 203 rectangular stress block approach:
+      a  = (As * Fy) / (0.85 * Fcu * b)   with b = 100 cm (per metre width)
+      Mu = 0.9 * Fy * As * (d - a/2)
+    Returns capacity in t.m/m.
+    """
+    As = max(As_cm2_per_m, 0.001)   # cm²/m  (already per-metre)
+    a  = (As * Fy) / (0.85 * Fcu * 100.0)            # stress-block depth [cm], b=100 cm/m
+    M_kg_cm = 0.9 * Fy * As * max(0.1, d_cm - a / 2.0)  # kg.cm per metre width
+    return M_kg_cm / 100_000.0                           # → t.m/m
 
 
 def calculate_punching_shear(columns, Lx_spans, Ly_spans, cantilevers, Wu, d_cm, Fcu):
@@ -2526,9 +4527,9 @@ def calculate_cantilever_reinforcement(cantilevers, Wu, d_cm, Fcu, Fy, ts_cm, ba
     return cant_rft
 
 
-def calculate_boq(Lx_spans, Ly_spans, cantilevers, ts_cm, mesh_btm_n, mesh_btm_dia, mesh_top_n, mesh_top_dia, col_extras, cant_rft_list, btm_extra_spans=None, void_panels=None):
+def calculate_boq(Lx_spans, Ly_spans, cantilevers, ts_cm, mesh_btm_n, mesh_btm_dia, mesh_top_n, mesh_top_dia, col_extras, cant_rft_list, btm_extra_spans=None, void_panels=None, fcu=250):
     """
-    Calculate comprehensive Bill of Quantities (BoQ) for Concrete and Steel,
+    Calculate comprehensive Bill of Quantities (BoQ) for Concrete, Raw Materials, and Steel,
     including per-item details and diameter-based weight summaries.
     """
     cant_L = cantilevers.get("left", 0.0)
@@ -2726,9 +4727,26 @@ def calculate_boq(Lx_spans, Ly_spans, cantilevers, ts_cm, mesh_btm_n, mesh_btm_d
             "apps": apps_str,
         })
 
+    # ── Concrete Raw Materials Calculation (حساب مكونات الخرسانة المسلحة) ─────
+    # Standard ECP 203 proportions: 1 m³ concrete = 0.8 m³ gravel + 0.4 m³ sand + 350 kg cement (7 bags) + 175 L water
+    cement_content_kg_m3 = 350.0 if (fcu is None or fcu <= 250) else (400.0 if fcu >= 300 else 350.0)
+    cement_kg = concrete_vol * cement_content_kg_m3
+    cement_ton = cement_kg / 1000.0
+    cement_bags = int(round(cement_kg / 50.0))
+    gravel_m3 = concrete_vol * 0.80
+    sand_m3 = concrete_vol * 0.40
+    water_liters = concrete_vol * 175.0
+
     return {
         "slab_area_m2": slab_area,
         "concrete_vol_m3": concrete_vol,
+        "cement_kg": cement_kg,
+        "cement_ton": cement_ton,
+        "cement_bags": cement_bags,
+        "cement_content_kg_m3": cement_content_kg_m3,
+        "gravel_m3": gravel_m3,
+        "sand_m3": sand_m3,
+        "water_liters": water_liters,
         "steel_btm_kg": steel_btm_kg,
         "steel_top_kg": steel_top_kg,
         "steel_col_extra_kg": steel_col_extra_kg,
@@ -2935,8 +4953,7 @@ def render():
         unsafe_allow_html=True,
     )
     st.markdown(
-        '<div class="section-header">🟦 Module 1 – Flat Slab Design '
-        '(ECP 203 – Direct Design Method | Dynamic Multi-Span)</div>',
+        '<div class="section-header">🟦 Module 1 – Flat Slab Design (ECP 203) (تصميم البلاطات اللاكمرية)</div>',
         unsafe_allow_html=True,
     )
 
@@ -2945,7 +4962,7 @@ def render():
     cantilevers = {"left": 0.0, "right": 0.0, "bottom": 0.0, "top": 0.0}
 
     # ── ① GEOMETRY INPUTS ────────────────────────────────────────────────────
-    with st.expander("📐 Step 1 — Grid Geometry & Cantilevers", expanded=True):
+    with st.expander("📐 Step 1 — Grid Geometry & Cantilevers (المسافات بين المحاور والكوابيل)", expanded=True):
         col_a, col_b = st.columns(2)
         with col_a:
             n_lx = S.integer_input(
@@ -3001,7 +5018,7 @@ def render():
         )
 
     # ── ② COLUMN, THICKNESS, LOADS, MATERIALS & REBAR OPTIONS ────────────────
-    with st.expander("🧱 Step 2 — Slab Thickness, Column Size, Loads & Rebar Diameters", expanded=True):
+    with st.expander("🧱 Step 2 — Slab Thickness, Column Size, Loads & Rebar (السُمك والأعمدة والأحمال والتسليح)", expanded=True):
         c1, c2, c3, c4 = st.columns(4)
 
         with c1:
@@ -3027,7 +5044,19 @@ def render():
         with c4:
             st.markdown("**🔩 Rebar Diameters (Φ mm)**")
             bottom_mesh_dia = S.selectbox("Bottom Mesh Φ", "slab_bottom_mesh_dia_idx", options=BAR_DIA)
+            n_btm_mesh_usr  = S.number_input(
+                "عدد أسياخ الشبكة السفلية / م'  (Bottom Mesh n)",
+                "slab_n_btm_mesh",
+                min_value=4, max_value=30, step=1,
+                help="عدد الأسياخ لكل متر طولي للشبكة الأساسية السفلية (B1, B2). الحد الأدنى الكودي يُحسب تلقائياً ويُطبَّق إذا كانت القيمة المدخلة أقل منه.",
+            )
             top_mesh_dia    = S.selectbox("Top Mesh Φ",    "slab_top_mesh_dia_idx",    options=BAR_DIA)
+            n_top_mesh_usr  = S.number_input(
+                "عدد أسياخ الشبكة العلوية / م'  (Top Mesh n)",
+                "slab_n_top_mesh",
+                min_value=4, max_value=30, step=1,
+                help="عدد الأسياخ لكل متر طولي للشبكة الأساسية العلوية (T1, T2).",
+            )
             col_extra_dia   = S.selectbox("Col Extra Top Φ","slab_col_extra_dia_idx",  options=BAR_DIA)
             strip_top_extra_dia = S.selectbox("Strip Top Extra Φ", "slab_strip_top_extra_dia_idx", options=BAR_DIA)
             strip_bottom_extra_dia = S.selectbox("Strip Btm Extra Φ", "slab_strip_bottom_extra_dia_idx", options=BAR_DIA)
@@ -3053,16 +5082,11 @@ def render():
     num_floors = int(n_floors) if n_floors and n_floors >= 1 else 1
 
     # ── ④ VERIFICATION SKETCH ────────────────────────────────────────────────
-    st.markdown(
-        '<div class="section-header">🗺️ Structural Geometry Sketch – Verification</div>',
-        unsafe_allow_html=True,
-    )
-
-    # ── ⑤  COLUMN & PANEL / VOID REMOVAL STATE MACHINE ───────────────────────
-    # Keys used in session_state (NOT in cfg — state is session-local but
-    # the confirmed removal lists ARE persisted to cfg / user_settings.json).
+    # الحسابات دائماً تُنفَّذ (خارج الـ expander) لأن img_verif_b64 مطلوب لاحقاً
     _bc_col = bc_s if bc_s else 30
     _tc_col = tc_s if tc_s else 30
+
+
 
     # ── 5a. Geometry-change guard ────────────────────────────────────────────
     # If the user edits spans, the column & panel numbering changes → auto-reset pending.
@@ -3114,15 +5138,20 @@ def render():
     )
     _active_orig_ids = {c["orig_id"] for c in _active_cols}  # IDs available for further removal
 
-    # ── 5d. Draw Verification Sketch (always shown, reflects current state) ──
-    col_w_for_sketch = _bc_col
-    col_d_for_sketch = _tc_col
+    # ── 5d. رسم مخطط التحقق الهندسي (مغلق بشكل افتراضي) ─────────────────────
+    # حساب الصورة دائماً لأن img_verif_b64 مطلوب في التقرير لاحقاً
+    _col_w_sk = _bc_col
+    _col_d_sk = _tc_col
+    _removed_col_objs_sk = [c for c in _all_cols if c["orig_id"] in set(_confirmed_removals)]
+
     fig_verif = generate_flat_slab_sketch(
         Lx_spans, Ly_spans, cantilevers,
         ts_initial=ts_initial if ts_initial is not None else 20,
         n_floors=num_floors,
         bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
+        bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
         top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
+        top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
         col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
         strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
         strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
@@ -3132,8 +5161,8 @@ def render():
         live_load=LL if LL is not None else 0.25,
         flooring_load=SDL if SDL is not None else 0.15,
         wall_load=wall_load if wall_load is not None else 0.50,
-        col_w_cm=col_w_for_sketch,
-        col_d_cm=col_d_for_sketch,
+        col_w_cm=_col_w_sk,
+        col_d_cm=_col_d_sk,
         removed_col_ids=set(_confirmed_removals),
         pending_col_ids=set(st.session_state.get("_fs_pending_snapshot", [])
                             if st.session_state.get("_fs_show_confirm") else _pending_removals),
@@ -3141,76 +5170,67 @@ def render():
         pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", [])
                              if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
     )
-    st.pyplot(fig_verif, use_container_width=True)
     buf_v = io.BytesIO()
     fig_verif.savefig(buf_v, format="png", bbox_inches="tight", dpi=300)
     buf_v.seek(0)
     img_verif_b64 = "data:image/png;base64," + base64.b64encode(buf_v.getvalue()).decode("utf-8")
     buf_v.seek(0)
-    st.download_button(
-        label="📥 Download Structural Geometry Sketch (High-Res PNG)",
-        data=buf_v,
-        file_name="Flat_Slab_Geometry_Verification.png",
-        mime="image/png",
-        use_container_width=True,
-    )
+
+    with st.expander(
+        "🗺️ Structural Geometry Sketch & Verification (مخطط التحقق الهندسي وتوزيع المحاور والأعمدة)",
+        expanded=True,
+    ):
+        st.markdown(
+            '<div class="section-header">🗺️ Structural Geometry Sketch & Verification (مخطط التحقق الهندسي وتوزيع المحاور والأعمدة)</div>',
+            unsafe_allow_html=True,
+        )
+        st.pyplot(fig_verif, use_container_width=True)
+        st.download_button(
+            label="📥 Download Structural Geometry Sketch (High-Res PNG)",
+            data=buf_v,
+            file_name="Flat_Slab_Geometry_Verification.png",
+            mime="image/png",
+            use_container_width=True,
+        )
+
+        # ── ملخص الأبعاد ─────────────────────────────────────────────────────
+        n_total_cols  = (len(Lx_spans) + 1) * (len(Ly_spans) + 1)
+        n_active_cols = len(_active_cols)
+        tot_w_val = sum(Lx_spans) + cant_left + cant_right
+        tot_h_val = sum(Ly_spans) + cant_bottom + cant_top
+        n_p_total  = len(_all_panels)
+        n_p_active = len(_active_panels)
+        n_p_voids  = len(_void_panels)
+        p_val_str  = f"{n_p_active} active / {n_p_total} total" if not n_p_voids else f"{n_p_active} act / {n_p_voids} voids"
+
+        g1, g2, g3, g4 = st.columns(4)
+        with g1:
+            st.markdown(f"""<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:10px 14px;text-align:center;">
+                <div style="font-size:15px;font-weight:600;color:#64748b;margin-bottom:4px;">Total Width (X-dir)</div>
+                <div style="font-size:19.5px;font-weight:700;color:#1e40af;">{tot_w_val:.2f} m</div></div>""",
+                unsafe_allow_html=True)
+        with g2:
+            st.markdown(f"""<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:10px 14px;text-align:center;">
+                <div style="font-size:15px;font-weight:600;color:#64748b;margin-bottom:4px;">Total Height (Y-dir)</div>
+                <div style="font-size:19.5px;font-weight:700;color:#1e40af;">{tot_h_val:.2f} m</div></div>""",
+                unsafe_allow_html=True)
+        with g3:
+            st.markdown(f"""<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:10px 14px;text-align:center;">
+                <div style="font-size:15px;font-weight:600;color:#64748b;margin-bottom:4px;">No. of Columns</div>
+                <div style="font-size:19.5px;font-weight:700;color:#1e40af;">{n_active_cols} active / {n_total_cols} total</div></div>""",
+                unsafe_allow_html=True)
+        with g4:
+            st.markdown(f"""<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:10px 14px;text-align:center;">
+                <div style="font-size:15px;font-weight:600;color:#64748b;margin-bottom:4px;">No. of Panels</div>
+                <div style="font-size:19.5px;font-weight:700;color:#1e40af;">{p_val_str}</div></div>""",
+                unsafe_allow_html=True)
+
     plt.close(fig_verif)
 
-    # ── Geometry summary pills (Unified 1.3x font size: 15px label / 19.5px value) ────
-    n_total_cols  = (len(Lx_spans) + 1) * (len(Ly_spans) + 1)
-    n_active_cols = len(_active_cols)
-    tot_w_val = sum(Lx_spans) + cant_left + cant_right
-    tot_h_val = sum(Ly_spans) + cant_bottom + cant_top
-
-    g1, g2, g3, g4 = st.columns(4)
-    with g1:
-        st.markdown(
-            f"""
-            <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px 14px; text-align:center;">
-                <div style="font-size:15px; font-weight:600; color:#64748b; margin-bottom:4px;">Total Width (X-dir)</div>
-                <div style="font-size:19.5px; font-weight:700; color:#1e40af;">{tot_w_val:.2f} m</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with g2:
-        st.markdown(
-            f"""
-            <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px 14px; text-align:center;">
-                <div style="font-size:15px; font-weight:600; color:#64748b; margin-bottom:4px;">Total Height (Y-dir)</div>
-                <div style="font-size:19.5px; font-weight:700; color:#1e40af;">{tot_h_val:.2f} m</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with g3:
-        st.markdown(
-            f"""
-            <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px 14px; text-align:center;">
-                <div style="font-size:15px; font-weight:600; color:#64748b; margin-bottom:4px;">No. of Columns</div>
-                <div style="font-size:19.5px; font-weight:700; color:#1e40af;">{n_active_cols} active / {n_total_cols} total</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with g4:
-        n_p_total = len(_all_panels)
-        n_p_active = len(_active_panels)
-        n_p_voids = len(_void_panels)
-        p_val_str = f"{n_p_active} active / {n_p_total} total" if not n_p_voids else f"{n_p_active} act / {n_p_voids} voids"
-        st.markdown(
-            f"""
-            <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px 14px; text-align:center;">
-                <div style="font-size:15px; font-weight:600; color:#64748b; margin-bottom:4px;">No. of Panels</div>
-                <div style="font-size:19.5px; font-weight:700; color:#1e40af;">{p_val_str}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
     # ── 5e. Column Removal Panel ─────────────────────────────────────────────
+
     with st.expander(
-        f"🗑️ Column Removal & Re-indexing (تعديل وحذف الأعمدة) "
+        f"🗑️ Column Removal & Re-indexing (تعديل وحذف الأعمدة وتحديث الترقيم) "
         f"{'— ' + str(len(_confirmed_removals)) + ' columns removed' if _confirmed_removals else ''}",
         expanded=bool(st.session_state.get("_fs_show_confirm", False)),
     ):
@@ -3476,7 +5496,7 @@ def render():
         for c in _active_cols
     ])
     with st.expander(
-        f"🏛️ Columns Labeling & Grid Registry "
+        f"🏛️ Columns Labeling & Grid Registry (سجل وجدول إحداثيات ونماذج الأعمدة) "
         f"({len(_active_cols)} active columns — "
         f"{len(_confirmed_removals)} removed)",
         expanded=False,
@@ -3524,12 +5544,24 @@ def render():
     avg_rebar_dia = (bottom_mesh_dia / 10.0)
     d = ts - cov - (avg_rebar_dia / 2.0)
 
-    As_min_req_m = 0.0018 * 100.0 * ts
-    n_mesh_btm = max(5, math.ceil(As_min_req_m / bar_area(bottom_mesh_dia)))
+    As_min_req_m   = 0.0018 * 100.0 * ts
+    n_mesh_btm_min = max(5, math.ceil(As_min_req_m / bar_area(bottom_mesh_dia)))
+
+    # ── الشبكة السفلية: أخذ قيمة المستخدم مع تطبيق الحد الأدنى الكودي ─────────
+    _n_btm_usr = int(n_btm_mesh_usr) if n_btm_mesh_usr else n_mesh_btm_min
+    if _n_btm_usr < n_mesh_btm_min:
+        st.warning(
+            f"⚠️ عدد أسياخ الشبكة السفلية المدخل ({_n_btm_usr} Φ{bottom_mesh_dia}) "
+            f"أقل من الحد الأدنى الكودي (ECP 203: ρ_min = 0.18%) "
+            f"— سيُطبَّق الحد الأدنى تلقائياً: **{n_mesh_btm_min} Φ{bottom_mesh_dia} / m'**"
+        )
+    n_mesh_btm = max(_n_btm_usr, n_mesh_btm_min)
+
     prov_btm_mesh_cm2m = n_mesh_btm * bar_area(bottom_mesh_dia)
     mesh_btm_str = f"{n_mesh_btm} Φ{bottom_mesh_dia} / m'"
 
-    n_mesh_top = 5
+    # ── الشبكة العلوية: قيمة المستخدم مباشرة ────────────────────────────────────
+    n_mesh_top = int(n_top_mesh_usr) if n_top_mesh_usr else 5
     prov_top_mesh_cm2m = n_mesh_top * bar_area(top_mesh_dia)
     mesh_top_str = f"{n_mesh_top} Φ{top_mesh_dia} / m'"
 
@@ -3699,117 +5731,117 @@ def render():
             As_ms_neg_int = calc_As(m["ms_neg_int"], ms_w, d, Fcu, Fy, ts),
         ))
 
-    # 3. Detect and calculate Enlarged Bays in X-direction
-    for j, y in enumerate(y_coords):
-        row_active = [c for c in _active_cols if c["j"] == j]
-        row_active.sort(key=lambda c: c["x"])
-        if len(row_active) >= 2:
-            if j == 0:
-                L_perp = cant_B + Ly_spans[0] / 2.0
-            elif j == n_yj - 1:
-                L_perp = Ly_spans[-1] / 2.0 + cant_T
-            else:
-                L_perp = (Ly_spans[j-1] + Ly_spans[j]) / 2.0
+    # 3. Detect and calculate Bottom Extra Steel per Panel Bay (بين المحاور داخل كل باكية)
+    rem_coords_set = {(c["x"], c["y"]) for c in (_removed_col_objs or [])}
 
-            for k in range(len(row_active) - 1):
-                c_left = row_active[k]
-                c_right = row_active[k+1]
-                span_len = c_right["x"] - c_left["x"]
-                Ln = span_len - bc_m
-                all_Ln.append(Ln)
-                is_enlarged = (c_right["i"] - c_left["i"]) > 1
+    for j in range(len(Ly_calc)):
+        for i in range(len(Lx_calc)):
+            pid = f"P_{i+1}_{j+1}"
+            if pid in _confirmed_voids:
+                continue
 
-                Mo = Wu * L_perp * (Ln ** 2) / 8.0
-                M_pos = (0.50 if is_enlarged else 0.35) * Mo
-                w_cs = min(span_len, L_perp) / 2.0
-                M_cs_pos = 0.60 * M_pos
-                As_cs_req = calc_As(M_cs_pos, w_cs, d, Fcu, Fy, ts)
-                As_cs_m = As_cs_req / w_cs
-                delta_As = max(0.0, As_cs_m - prov_btm_mesh_cm2m)
+            x_l, x_r = x_coords[i], x_coords[i+1]
+            y_b, y_t = y_coords[j], y_coords[j+1]
+            span_lx = Lx_calc[i]
+            span_ly = Ly_calc[j]
+            cx = (x_l + x_r) / 2.0
+            cy = (y_b + y_t) / 2.0
 
-                if delta_As > 0.05 or is_enlarged:
-                    a_bar = bar_area(strip_bottom_extra_dia)
-                    n_b = max(2, math.ceil((delta_As * w_cs) / a_bar)) if delta_As > 0.05 else 0
-                    L_ext = round(0.70 * span_len, 2)
-                    mid_x = (c_left["x"] + c_right["x"]) / 2.0
-                    mid_y = y
-                    item = {
-                        "bay_label": f"Bay {c_left['grid_x']}-{c_right['grid_x']} @ {c_left['grid_y']}",
-                        "dir": "X",
-                        "span_len": span_len,
-                        "Ln": Ln,
-                        "mid_x": mid_x,
-                        "mid_y": mid_y,
-                        "Mo": Mo,
-                        "M_pos": M_pos,
-                        "As_req_m": As_cs_m,
-                        "delta_As": delta_As,
-                        "n_extra": n_b,
-                        "dia_extra": strip_bottom_extra_dia,
-                        "L_extra": L_ext,
-                        "is_enlarged": is_enlarged,
-                        "callout": f"+{n_b} Φ{strip_bottom_extra_dia} (L={L_ext}m)" if n_b > 0 else "Base Mesh OK"
-                    }
-                    if n_b > 0:
-                        btm_extra_spans.append(item)
-                    if is_enlarged:
-                        enlarged_bays_info.append(item)
+            Ln_x = max(0.5, span_lx - bc_m)
+            Ln_y = max(0.5, span_ly - tc_m)
+            all_Ln.extend([Ln_x, Ln_y])
 
-    # 4. Detect and calculate Enlarged Bays in Y-direction
-    for i, x in enumerate(x_coords):
-        col_active = [c for c in _active_cols if c["i"] == i]
-        col_active.sort(key=lambda c: c["y"])
-        if len(col_active) >= 2:
-            if i == 0:
-                L_perp = cant_L + Lx_spans[0] / 2.0
-            elif i == n_xi - 1:
-                L_perp = Lx_spans[-1] / 2.0 + cant_R
-            else:
-                L_perp = (Lx_spans[i-1] + Lx_spans[i]) / 2.0
+            # Check if this panel borders any removed column (enlarged bay)
+            is_enlarged = bool(rem_coords_set.intersection({(x_l, y_b), (x_r, y_b), (x_l, y_t), (x_r, y_t)}))
 
-            for k in range(len(col_active) - 1):
-                c_bot = col_active[k]
-                c_top = col_active[k+1]
-                span_len = c_top["y"] - c_bot["y"]
-                Ln = span_len - tc_m
-                all_Ln.append(Ln)
-                is_enlarged = (c_top["j"] - c_bot["j"]) > 1
+            # X-direction Bending
+            Mo_x = Wu * span_ly * (Ln_x ** 2) / 8.0
+            M_pos_x = (0.50 if is_enlarged else 0.35) * Mo_x
+            w_cs_x = min(span_lx, span_ly) / 2.0
+            M_cs_x = 0.60 * M_pos_x
+            As_cs_req_x = calc_As(M_cs_x, w_cs_x, d, Fcu, Fy, ts)
+            As_cs_m_x = As_cs_req_x / w_cs_x
+            delta_As_cs_x = max(0.0, As_cs_m_x - prov_btm_mesh_cm2m)
 
-                Mo = Wu * L_perp * (Ln ** 2) / 8.0
-                M_pos = (0.50 if is_enlarged else 0.35) * Mo
-                w_cs = min(span_len, L_perp) / 2.0
-                M_cs_pos = 0.60 * M_pos
-                As_cs_req = calc_As(M_cs_pos, w_cs, d, Fcu, Fy, ts)
-                As_cs_m = As_cs_req / w_cs
-                delta_As = max(0.0, As_cs_m - prov_btm_mesh_cm2m)
+            ms_w_x = max(0.1, span_ly - w_cs_x)
+            M_ms_x = 0.40 * M_pos_x
+            As_ms_req_x = calc_As(M_ms_x, ms_w_x, d, Fcu, Fy, ts)
+            As_ms_m_x = As_ms_req_x / ms_w_x
+            delta_As_ms_x = max(0.0, As_ms_m_x - prov_btm_mesh_cm2m)
+            delta_As_x = max(delta_As_cs_x, delta_As_ms_x)
 
-                if delta_As > 0.05 or is_enlarged:
-                    a_bar = bar_area(strip_bottom_extra_dia)
-                    n_b = max(2, math.ceil((delta_As * w_cs) / a_bar)) if delta_As > 0.05 else 0
-                    L_ext = round(0.70 * span_len, 2)
-                    mid_x = x
-                    mid_y = (c_bot["y"] + c_top["y"]) / 2.0
-                    item = {
-                        "bay_label": f"Bay {c_bot['grid_y']}-{c_top['grid_y']} @ {c_bot['grid_x']}",
-                        "dir": "Y",
-                        "span_len": span_len,
-                        "Ln": Ln,
-                        "mid_x": mid_x,
-                        "mid_y": mid_y,
-                        "Mo": Mo,
-                        "M_pos": M_pos,
-                        "As_req_m": As_cs_m,
-                        "delta_As": delta_As,
-                        "n_extra": n_b,
-                        "dia_extra": strip_bottom_extra_dia,
-                        "L_extra": L_ext,
-                        "is_enlarged": is_enlarged,
-                        "callout": f"+{n_b} Φ{strip_bottom_extra_dia} (L={L_ext}m)" if n_b > 0 else "Base Mesh OK"
-                    }
-                    if n_b > 0:
-                        btm_extra_spans.append(item)
-                    if is_enlarged:
-                        enlarged_bays_info.append(item)
+            # Y-direction Bending
+            Mo_y = Wu * span_lx * (Ln_y ** 2) / 8.0
+            M_pos_y = (0.50 if is_enlarged else 0.35) * Mo_y
+            w_cs_y = min(span_lx, span_ly) / 2.0
+            M_cs_y = 0.60 * M_pos_y
+            As_cs_req_y = calc_As(M_cs_y, w_cs_y, d, Fcu, Fy, ts)
+            As_cs_m_y = As_cs_req_y / w_cs_y
+            delta_As_cs_y = max(0.0, As_cs_m_y - prov_btm_mesh_cm2m)
+
+            ms_w_y = max(0.1, span_lx - w_cs_y)
+            M_ms_y = 0.40 * M_pos_y
+            As_ms_req_y = calc_As(M_ms_y, ms_w_y, d, Fcu, Fy, ts)
+            As_ms_m_y = As_ms_req_y / ms_w_y
+            delta_As_ms_y = max(0.0, As_ms_m_y - prov_btm_mesh_cm2m)
+            delta_As_y = max(delta_As_cs_y, delta_As_ms_y)
+
+            # X-direction Bottom Extra Check
+            if delta_As_x > 0.05 or (is_enlarged and span_lx >= span_ly):
+                a_bar = bar_area(strip_bottom_extra_dia)
+                n_b_x = max(2, math.ceil((delta_As_x * span_ly) / a_bar))
+                L_ext_x = round(0.70 * span_lx, 2)
+                item_x = {
+                    "panel_id": pid,
+                    "bay_label": f"Bay X{i+1}-X{i+2} / Y{j+1}-Y{j+2} (X-Dir)",
+                    "dir": "X",
+                    "span_len": span_lx,
+                    "Ln": Ln_x,
+                    "W_bay": span_ly,
+                    "cx": cx,
+                    "cy": cy,
+                    "Mo": Mo_x,
+                    "M_pos": M_pos_x,
+                    "As_req_m": max(As_cs_m_x, As_ms_m_x),
+                    "delta_As": delta_As_x,
+                    "n_extra": n_b_x,
+                    "dia_extra": strip_bottom_extra_dia,
+                    "L_extra": L_ext_x,
+                    "is_enlarged": is_enlarged,
+                    "callout": f"+{n_b_x} Φ{strip_bottom_extra_dia} (X-Dir, L={L_ext_x}m)"
+                }
+                btm_extra_spans.append(item_x)
+                if is_enlarged:
+                    enlarged_bays_info.append(item_x)
+
+            # Y-direction Bottom Extra Check
+            if delta_As_y > 0.05 or (is_enlarged and span_ly > span_lx):
+                a_bar = bar_area(strip_bottom_extra_dia)
+                n_b_y = max(2, math.ceil((delta_As_y * span_lx) / a_bar))
+                L_ext_y = round(0.70 * span_ly, 2)
+                item_y = {
+                    "panel_id": pid,
+                    "bay_label": f"Bay X{i+1}-X{i+2} / Y{j+1}-Y{j+2} (Y-Dir)",
+                    "dir": "Y",
+                    "span_len": span_ly,
+                    "Ln": Ln_y,
+                    "W_bay": span_lx,
+                    "cx": cx,
+                    "cy": cy,
+                    "Mo": Mo_y,
+                    "M_pos": M_pos_y,
+                    "As_req_m": max(As_cs_m_y, As_ms_m_y),
+                    "delta_As": delta_As_y,
+                    "n_extra": n_b_y,
+                    "dia_extra": strip_bottom_extra_dia,
+                    "L_extra": L_ext_y,
+                    "is_enlarged": is_enlarged,
+                    "callout": f"+{n_b_y} Φ{strip_bottom_extra_dia} (Y-Dir, L={L_ext_y}m)"
+                }
+                btm_extra_spans.append(item_y)
+                if is_enlarged and (not (delta_As_x > 0.05 or (is_enlarged and span_lx >= span_ly))):
+                    enlarged_bays_info.append(item_y)
+
 
     # Global max clear span & code minimum thickness
     Ln_max = max(all_Ln) if all_Ln else max(max(Ln_x_all), max(Ln_y_all))
@@ -3823,6 +5855,75 @@ def render():
         col_list, rows_x, rows_y, Lx_calc, Ly_calc, d, Fcu, Fy, ts, prov_top_mesh_cm2m, col_extra_dia, enlarged_bays=enlarged_bays_info
     )
 
+    # 6b. Extra Slab Top Steel in Middle Strips / Panels (الحديد الإضافي العلوي للبلاطة)
+    top_extra_slab_bays = []
+    for j in range(len(Ly_calc)):
+        for i in range(len(Lx_calc)):
+            pid = f"P_{i+1}_{j+1}"
+            if pid in _confirmed_voids:
+                continue
+            x_l, x_r = x_coords[i], x_coords[i+1]
+            y_b, y_t = y_coords[j], y_coords[j+1]
+            span_lx = Lx_calc[i]
+            span_ly = Ly_calc[j]
+            cx = (x_l + x_r) / 2.0
+            cy = (y_b + y_t) / 2.0
+
+            Ln_x = max(0.5, span_lx - bc_m)
+            Ln_y = max(0.5, span_ly - tc_m)
+
+            Mo_x = Wu * span_ly * (Ln_x ** 2) / 8.0
+            M_neg_ms_x = 0.25 * Mo_x
+            w_ms_x = max(0.1, span_ly - min(span_lx, span_ly) / 2.0)
+            As_req_ms_x = calc_As(M_neg_ms_x, w_ms_x, d, Fcu, Fy, ts)
+            As_m_ms_x = As_req_ms_x / w_ms_x
+            delta_As_x = max(0.0, As_m_ms_x - prov_top_mesh_cm2m)
+
+            Mo_y = Wu * span_lx * (Ln_y ** 2) / 8.0
+            M_neg_ms_y = 0.25 * Mo_y
+            w_ms_y = max(0.1, span_lx - min(span_lx, span_ly) / 2.0)
+            As_req_ms_y = calc_As(M_neg_ms_y, w_ms_y, d, Fcu, Fy, ts)
+            As_m_ms_y = As_req_ms_y / w_ms_y
+            delta_As_y = max(0.0, As_m_ms_y - prov_top_mesh_cm2m)
+
+            # X-direction Top Slab Extra Check
+            if delta_As_x > 0.05:
+                a_bar = bar_area(col_extra_dia)
+                n_b_x = max(2, math.ceil((delta_As_x * span_ly) / a_bar))
+                L_ext_x = round(0.60 * span_lx, 2)
+                top_extra_slab_bays.append({
+                    "panel_id": pid,
+                    "bay_label": f"Bay X{i+1}-X{i+2} / Y{j+1}-Y{j+2} (X-Dir)",
+                    "dir": "X",
+                    "span_len": span_lx,
+                    "W_bay": span_ly,
+                    "cx": cx,
+                    "cy": cy,
+                    "n_extra": n_b_x,
+                    "dia_extra": col_extra_dia,
+                    "L_extra": L_ext_x,
+                    "callout": f"+{n_b_x} Φ{col_extra_dia} (X-Dir, L={L_ext_x}m)"
+                })
+
+            # Y-direction Top Slab Extra Check
+            if delta_As_y > 0.05:
+                a_bar = bar_area(col_extra_dia)
+                n_b_y = max(2, math.ceil((delta_As_y * span_lx) / a_bar))
+                L_ext_y = round(0.60 * span_ly, 2)
+                top_extra_slab_bays.append({
+                    "panel_id": pid,
+                    "bay_label": f"Bay X{i+1}-X{i+2} / Y{j+1}-Y{j+2} (Y-Dir)",
+                    "dir": "Y",
+                    "span_len": span_ly,
+                    "W_bay": span_lx,
+                    "cx": cx,
+                    "cy": cy,
+                    "n_extra": n_b_y,
+                    "dia_extra": col_extra_dia,
+                    "L_extra": L_ext_y,
+                    "callout": f"+{n_b_y} Φ{col_extra_dia} (Y-Dir, L={L_ext_y}m)"
+                })
+
     # 7. Cantilever Reinforcement
     cant_rft_list = calculate_cantilever_reinforcement(cantilevers, Wu, d, Fcu, Fy, ts, bottom_mesh_dia)
 
@@ -3832,13 +5933,14 @@ def render():
         n_mesh_btm, bottom_mesh_dia, n_mesh_top, top_mesh_dia,
         top_extra_cols, cant_rft_list, btm_extra_spans=btm_extra_spans,
         void_panels=_all_panels,
+        fcu=Fcu,
     )
 
     # ═════════════════════════════════════════════════════════════════════════
     #  OUTPUT DASHBOARD & RESULTS
     # ═════════════════════════════════════════════════════════════════════════
 
-    st.markdown('<div class="section-header">📊 Design Results Summary & Structural Status</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">📊 Design Results Summary & Structural Status (ملخص نتائج التصميم والحالة الإنشائية)</div>', unsafe_allow_html=True)
 
     # Structural Redesign Summary Banner if columns were removed
     if _confirmed_removals:
@@ -3928,179 +6030,349 @@ def render():
     st.markdown("---")
 
     # ── 📊 1. 2D BENDING MOMENT MATRIX & COLOR CONTOURS (M11 & M22) ─────────
-    st.markdown(
-        '<div class="section-header">📊 1. 2D Bending Moment Matrix & Color Contours (مصفوفة العزوم والمخطط اللوني M11 & M22)</div>',
-        unsafe_allow_html=True,
-    )
-
-    moment_view_mode = S.radio(
-        "👁️ Select Moment View Mode (اختر اتجاه عزم الانحناء للعرض):",
-        "fs_moment_contour_view_mode_idx",
-        options=[
-            "↔️ M11 — X-Direction Moment (عزوم المحور الأفقي)",
-            "↕️ M22 — Y-Direction Moment (عزوم المحور الرأسي)",
-            "🔲 Dual View — Side-by-Side (مقارنة جانبية لكلا الاتجاهين M11 & M22)",
-        ],
-        index=0,
-    )
-
     img_m11_b64 = None
     img_m22_b64 = None
     img_dual_moment_b64 = None
 
-    if "M11" in moment_view_mode and "Dual" not in moment_view_mode:
-        fig_m11 = generate_flat_slab_moment_contour(
-            Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
-            mode="M11",
-            col_w_cm=bc_s, col_d_cm=tc_s,
-            removed_cols=_removed_col_objs,
-            void_panel_ids=set(_confirmed_voids),
-            top_extra_cols=top_extra_cols,
-            btm_extra_spans=btm_extra_spans,
+    with st.expander(
+        "📊 1. 2D Bending Moment Matrix & Color Contours (مصفوفة العزوم والمخطط اللوني M11 & M22)",
+        expanded=False,
+    ):
+        moment_view_mode = S.radio(
+            "👁️ Select Moment View Mode (اختر اتجاه عزم الانحناء للعرض):",
+            "fs_moment_contour_view_mode_idx",
+            options=[
+                "↔️ M11 — X-Direction Moment (عزوم المحور الأفقي)",
+                "↕️ M22 — Y-Direction Moment (عزوم المحور الرأسي)",
+                "🔲 Dual View — Side-by-Side (مقارنة جانبية لكلا الاتجاهين M11 & M22)",
+            ],
+            index=0,
         )
-        st.pyplot(fig_m11, use_container_width=True)
-        buf_m11 = io.BytesIO()
-        fig_m11.savefig(buf_m11, format="png", bbox_inches="tight", dpi=300)
-        buf_m11.seek(0)
-        img_m11_b64 = "data:image/png;base64," + base64.b64encode(buf_m11.getvalue()).decode("utf-8")
-        buf_m11.seek(0)
-        st.download_button(
-            label="📥 Download M11 Moment Contour Plan (High-Res PNG)",
-            data=buf_m11,
-            file_name=f"Flat_Slab_Moment_M11_Contour_Plan_ts{ts:.0f}cm.png",
-            mime="image/png",
-            use_container_width=True,
-        )
-        plt.close(fig_m11)
 
-    elif "M22" in moment_view_mode and "Dual" not in moment_view_mode:
-        fig_m22 = generate_flat_slab_moment_contour(
-            Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
-            mode="M22",
-            col_w_cm=bc_s, col_d_cm=tc_s,
-            removed_cols=_removed_col_objs,
-            void_panel_ids=set(_confirmed_voids),
-            top_extra_cols=top_extra_cols,
-            btm_extra_spans=btm_extra_spans,
-        )
-        st.pyplot(fig_m22, use_container_width=True)
-        buf_m22 = io.BytesIO()
-        fig_m22.savefig(buf_m22, format="png", bbox_inches="tight", dpi=300)
-        buf_m22.seek(0)
-        img_m22_b64 = "data:image/png;base64," + base64.b64encode(buf_m22.getvalue()).decode("utf-8")
-        buf_m22.seek(0)
-        st.download_button(
-            label="📥 Download M22 Moment Contour Plan (High-Res PNG)",
-            data=buf_m22,
-            file_name=f"Flat_Slab_Moment_M22_Contour_Plan_ts{ts:.0f}cm.png",
-            mime="image/png",
-            use_container_width=True,
-        )
-        plt.close(fig_m22)
+        if "M11" in moment_view_mode and "Dual" not in moment_view_mode:
+            fig_m11 = generate_flat_slab_moment_contour(
+                Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+                mode="M11",
+                col_w_cm=bc_s, col_d_cm=tc_s,
+                removed_cols=_removed_col_objs,
+                void_panel_ids=set(_confirmed_voids),
+                top_extra_cols=top_extra_cols,
+                btm_extra_spans=btm_extra_spans,
+            )
+            st.pyplot(fig_m11, use_container_width=True)
+            buf_m11 = io.BytesIO()
+            fig_m11.savefig(buf_m11, format="png", bbox_inches="tight", dpi=300)
+            buf_m11.seek(0)
+            img_m11_b64 = "data:image/png;base64," + base64.b64encode(buf_m11.getvalue()).decode("utf-8")
+            buf_m11.seek(0)
+            st.download_button(
+                label="📥 Download M11 Moment Contour Plan (High-Res PNG)",
+                data=buf_m11,
+                file_name=f"Flat_Slab_Moment_M11_Contour_Plan_ts{ts:.0f}cm.png",
+                mime="image/png",
+                use_container_width=True,
+            )
+            plt.close(fig_m11)
 
-    else:
-        fig_dual = generate_flat_slab_dual_moment_contour(
-            Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
-            col_w_cm=bc_s, col_d_cm=tc_s,
-            removed_cols=_removed_col_objs,
-            void_panel_ids=set(_confirmed_voids),
-        )
-        st.pyplot(fig_dual, use_container_width=True)
-        buf_dual = io.BytesIO()
-        fig_dual.savefig(buf_dual, format="png", bbox_inches="tight", dpi=300)
-        buf_dual.seek(0)
-        img_dual_moment_b64 = "data:image/png;base64," + base64.b64encode(buf_dual.getvalue()).decode("utf-8")
-        buf_dual.seek(0)
-        st.download_button(
-            label="📥 Download Dual Moments (M11 & M22) Plan (High-Res PNG)",
-            data=buf_dual,
-            file_name=f"Flat_Slab_Dual_Moments_M11_M22_ts{ts:.0f}cm.png",
-            mime="image/png",
-            use_container_width=True,
-        )
-        plt.close(fig_dual)
+        elif "M22" in moment_view_mode and "Dual" not in moment_view_mode:
+            fig_m22 = generate_flat_slab_moment_contour(
+                Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+                mode="M22",
+                col_w_cm=bc_s, col_d_cm=tc_s,
+                removed_cols=_removed_col_objs,
+                void_panel_ids=set(_confirmed_voids),
+                top_extra_cols=top_extra_cols,
+                btm_extra_spans=btm_extra_spans,
+            )
+            st.pyplot(fig_m22, use_container_width=True)
+            buf_m22 = io.BytesIO()
+            fig_m22.savefig(buf_m22, format="png", bbox_inches="tight", dpi=300)
+            buf_m22.seek(0)
+            img_m22_b64 = "data:image/png;base64," + base64.b64encode(buf_m22.getvalue()).decode("utf-8")
+            buf_m22.seek(0)
+            st.download_button(
+                label="📥 Download M22 Moment Contour Plan (High-Res PNG)",
+                data=buf_m22,
+                file_name=f"Flat_Slab_Moment_M22_Contour_Plan_ts{ts:.0f}cm.png",
+                mime="image/png",
+                use_container_width=True,
+            )
+            plt.close(fig_m22)
 
-    st.markdown("---")
+        else:
+            fig_dual = generate_flat_slab_dual_moment_contour(
+                Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+                col_w_cm=bc_s, col_d_cm=tc_s,
+                removed_cols=_removed_col_objs,
+                void_panel_ids=set(_confirmed_voids),
+            )
+            st.pyplot(fig_dual, use_container_width=True)
+            buf_dual = io.BytesIO()
+            fig_dual.savefig(buf_dual, format="png", bbox_inches="tight", dpi=300)
+            buf_dual.seek(0)
+            img_dual_moment_b64 = "data:image/png;base64," + base64.b64encode(buf_dual.getvalue()).decode("utf-8")
+            buf_dual.seek(0)
+            st.download_button(
+                label="📥 Download Dual Moments (M11 & M22) Plan (High-Res PNG)",
+                data=buf_dual,
+                file_name=f"Flat_Slab_Dual_Moments_M11_M22_ts{ts:.0f}cm.png",
+                mime="image/png",
+                use_container_width=True,
+            )
+            plt.close(fig_dual)
 
-    # ── 🟢 2. TOP REINFORCEMENT PLAN ─────────────────────────────────────────
-    st.markdown(
-        '<div class="section-header">🟢 2. Top Reinforcement Plan (المخطط الإنشائي للحديد العلوي والإضافي فوق الأعمدة والكوابيل)</div>',
-        unsafe_allow_html=True,
-    )
-    fig_top = generate_flat_slab_top_rft_sketch(
-        Lx_calc, Ly_calc, cantilevers, ts,
-        mesh_top_str, top_extra_cols, cant_rft_list,
-        col_w_cm=bc_s, col_d_cm=tc_s,
-        removed_cols=_removed_col_objs,
-        void_panel_ids=set(_confirmed_voids),
-    )
-    st.pyplot(fig_top, use_container_width=True)
-    buf_top = io.BytesIO()
-    fig_top.savefig(buf_top, format="png", bbox_inches="tight", dpi=300)
-    buf_top.seek(0)
-    img_top_b64 = "data:image/png;base64," + base64.b64encode(buf_top.getvalue()).decode("utf-8")
-    buf_top.seek(0)
-    st.download_button(
-        label="📥 Download Top Reinforcement Plan (High-Res PNG)",
-        data=buf_top,
-        file_name=f"Flat_Slab_Top_Reinforcement_Plan_ts{ts:.0f}cm.png",
-        mime="image/png",
-        use_container_width=True,
-    )
-    plt.close(fig_top)
-
-    st.markdown("---")
-
-    # ── 🔵 3. BOTTOM REINFORCEMENT PLAN ──────────────────────────────────────
-    st.markdown(
-        '<div class="section-header">🔵 3. Bottom Reinforcement Plan (المخطط الإنشائي للحديد السفلي الأساسي والإضافي في الباكيات)</div>',
-        unsafe_allow_html=True,
-    )
-
-    active_btm_extras = [b for b in btm_extra_spans if isinstance(b, dict) and b.get("n_extra", 0) > 0]
-    img_btm_b64 = None
-
-    if active_btm_extras:
-        fig_btm = generate_flat_slab_bottom_rft_sketch(
-            Lx_calc, Ly_calc, cantilevers, ts,
-            mesh_btm_str, btm_extra_spans,
-            col_w_cm=bc_s, col_d_cm=tc_s,
-            removed_cols=_removed_col_objs,
-            void_panel_ids=set(_confirmed_voids),
-        )
-        st.pyplot(fig_btm, use_container_width=True)
-        buf_btm = io.BytesIO()
-        fig_btm.savefig(buf_btm, format="png", bbox_inches="tight", dpi=300)
-        buf_btm.seek(0)
-        img_btm_b64 = "data:image/png;base64," + base64.b64encode(buf_btm.getvalue()).decode("utf-8")
-        buf_btm.seek(0)
-        st.download_button(
-            label="📥 Download Bottom Reinforcement Plan (High-Res PNG)",
-            data=buf_btm,
-            file_name=f"Flat_Slab_Bottom_Reinforcement_Plan_ts{ts:.0f}cm.png",
-            mime="image/png",
-            use_container_width=True,
-        )
-        plt.close(fig_btm)
-    else:
+    # ── 📊 1b. MOMENT DEFICIT CONTOUR (فارق العزوم السفلي) ──────────────────
+    with st.expander(
+        "📊 1b. Moment Deficit Contour — Bottom Steel Coverage (كونتور فارق العزوم: ما يغطيه الحديد السفلي وما يحتاج إضافي)",
+        expanded=False,
+    ):
+        # Info card: show M_cap of the base mesh
+        M_cap_display = calc_moment_capacity_btm(prov_btm_mesh_cm2m, d, Fcu, Fy)
         st.markdown(
             f"""
-            <div style='background:#f0fdf4; border:3px solid #16a34a; border-radius:12px; padding:22px 26px; margin:16px 0; text-align:center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);'>
-                <div style='color:#15803d; font-size:1.55rem; font-weight:800; margin-bottom:10px;'>
-                    ✅ ملاحظة إنشائية: لا حاجة لحديد إضافي سفلي في أي باكية
+            <div style="background:#eff6ff; border:2px solid #3b82f6; border-radius:10px;
+                        padding:14px 20px; margin:10px 0 16px 0; display:flex; gap:32px; flex-wrap:wrap;">
+                <div>
+                    <span style="font-size:13px; font-weight:600; color:#64748b;">Bottom Mesh Provided</span><br>
+                    <span style="font-size:17px; font-weight:700; color:#1e40af;">{mesh_btm_str}</span>
                 </div>
-                <div style='color:#0f172a; font-size:1.2rem; font-weight:700; line-height:1.8;'>
-                    الشبكة السفلية الأساسية المختارة <span style='color:#1d4ed8;'>({mesh_btm_str})</span> تغطي بالكامل جميع عزوم الانحناء الموجبة (+M) بكامل مسطح السقف.<br>
-                    <span style='font-size:1.0rem; color:#475569; font-weight:600;'>مساحة الحديد المتوفرة ({prov_btm_mesh_cm2m:.2f} cm²/m) كافية وآمنة تماماً، ولذلك لا يتطلب المخطط أي تسليح سفلي إضافي.</span>
+                <div>
+                    <span style="font-size:13px; font-weight:600; color:#64748b;">Steel Area (As)</span><br>
+                    <span style="font-size:17px; font-weight:700; color:#1e40af;">{prov_btm_mesh_cm2m:.2f} cm²/m</span>
+                </div>
+                <div>
+                    <span style="font-size:13px; font-weight:600; color:#64748b;">Moment Capacity (M_cap)</span><br>
+                    <span style="font-size:17px; font-weight:700; color:#15803d;">{M_cap_display:.3f} t.m/m</span>
+                </div>
+                <div style="border-left:2px solid #cbd5e1; padding-left:20px;">
+                    <span style="font-size:13px; font-weight:600; color:#64748b;">Deficit = max(0, M_applied − M_cap)</span><br>
+                    <span style="font-size:13px; color:#475569; font-weight:500;">
+                        🟢 Green = No extra steel needed &nbsp;|&nbsp; 🟡→🔴 Coloured = Extra bottom steel required
+                    </span>
                 </div>
             </div>
             """,
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
 
-    st.markdown("---")
+        deficit_view_mode = S.radio(
+            "👁️ Select Deficit View (اختر اتجاه عرض فارق العزوم):",
+            "fs_deficit_contour_view_mode_idx",
+            options=[
+                "↔️ M11 Deficit — X-Direction (فارق عزوم M11 الأفقي)",
+                "↕️ M22 Deficit — Y-Direction (فارق عزوم M22 الرأسي)",
+            ],
+            index=0,
+        )
+
+        if "M11" in deficit_view_mode:
+            _def_mode = "M11"
+        else:
+            _def_mode = "M22"
+
+        fig_deficit = generate_moment_deficit_contour(
+            Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+            prov_btm_mesh_cm2m=prov_btm_mesh_cm2m,
+            d_cm=d,
+            Fcu=Fcu,
+            Fy=Fy,
+            mode=_def_mode,
+            col_w_cm=bc_s,
+            col_d_cm=tc_s,
+            removed_cols=_removed_col_objs,
+            void_panel_ids=set(_confirmed_voids),
+        )
+        st.pyplot(fig_deficit, use_container_width=True)
+        buf_deficit = io.BytesIO()
+        fig_deficit.savefig(buf_deficit, format="png", bbox_inches="tight", dpi=300)
+        buf_deficit.seek(0)
+        st.download_button(
+            label=f"📥 Download Moment Deficit Contour ({_def_mode}) Plan (High-Res PNG)",
+            data=buf_deficit,
+            file_name=f"Flat_Slab_Moment_Deficit_{_def_mode}_ts{ts:.0f}cm.png",
+            mime="image/png",
+            use_container_width=True,
+        )
+        plt.close(fig_deficit)
+
+    # ── 🟢 2. TOP REINFORCEMENT PLAN ─────────────────────────────────────────
+    img_top_b64 = None
+    with st.expander(
+        "🟢 2. Top Reinforcement Plan (المخطط الإنشائي للحديد العلوي والإضافي فوق الأعمدة والكوابيل)",
+        expanded=False,
+    ):
+        fig_top = generate_flat_slab_top_rft_sketch(
+            Lx_calc, Ly_calc, cantilevers, ts,
+            mesh_top_str, top_extra_cols, cant_rft_list,
+            col_w_cm=bc_s, col_d_cm=tc_s,
+            removed_cols=_removed_col_objs,
+            void_panel_ids=set(_confirmed_voids),
+        )
+        st.pyplot(fig_top, use_container_width=True)
+        buf_top = io.BytesIO()
+        fig_top.savefig(buf_top, format="png", bbox_inches="tight", dpi=300)
+        buf_top.seek(0)
+        img_top_b64 = "data:image/png;base64," + base64.b64encode(buf_top.getvalue()).decode("utf-8")
+        buf_top.seek(0)
+        st.download_button(
+            label="📥 Download Top Reinforcement Plan (High-Res PNG)",
+            data=buf_top,
+            file_name=f"Flat_Slab_Top_Reinforcement_Plan_ts{ts:.0f}cm.png",
+            mime="image/png",
+            use_container_width=True,
+        )
+        plt.close(fig_top)
+
+    # ── 🔵 3. BOTTOM REINFORCEMENT PLAN ──────────────────────────────────────
+    active_btm_extras   = [b for b in btm_extra_spans if isinstance(b, dict) and b.get("n_extra", 0) > 0]
+    active_btm_extras_x = [b for b in active_btm_extras if b.get("dir", "X") == "X"]
+    active_btm_extras_y = [b for b in active_btm_extras if b.get("dir", "X") == "Y"]
+    img_btm_b64 = None   # kept for report generator compatibility
+
+    # ── 3a. X-DIRECTION ──────────────────────────────────────────────────────
+    with st.expander(
+        "↔️ 3a. Extra Bottom Steel — X-Direction (الحديد السفلي الإضافي في الاتجاه الأفقي X)",
+        expanded=False,
+    ):
+        if active_btm_extras_x:
+            fig_btm_x = generate_flat_slab_bottom_rft_sketch(
+                Lx_calc, Ly_calc, cantilevers, ts,
+                mesh_btm_str, btm_extra_spans,
+                col_w_cm=bc_s, col_d_cm=tc_s,
+                removed_cols=_removed_col_objs,
+                void_panel_ids=set(_confirmed_voids),
+                direction="X",
+            )
+            st.pyplot(fig_btm_x, use_container_width=True)
+            buf_btm_x = io.BytesIO()
+            fig_btm_x.savefig(buf_btm_x, format="png", bbox_inches="tight", dpi=300)
+            buf_btm_x.seek(0)
+            img_btm_b64 = "data:image/png;base64," + base64.b64encode(buf_btm_x.getvalue()).decode("utf-8")
+            buf_btm_x.seek(0)
+            st.download_button(
+                label="📥 Download X-Direction Extra Bottom Steel Plan (High-Res PNG)",
+                data=buf_btm_x,
+                file_name=f"Flat_Slab_Bottom_Extra_X_ts{ts:.0f}cm.png",
+                mime="image/png",
+                use_container_width=True,
+            )
+            plt.close(fig_btm_x)
+
+            # ── Detail Table for X-direction ──────────────────────────────────
+            st.markdown(
+                "<div style='font-size:14px; font-weight:700; color:#1e3a8a; margin:12px 0 4px 0;'>"
+                "📋 جدول تفاصيل الحديد الإضافي السفلي — الاتجاه الأفقي X</div>",
+                unsafe_allow_html=True,
+            )
+            x_table_rows = []
+            for b in active_btm_extras_x:
+                x_table_rows.append({
+                    "Bay (الباكية)":          b["bay_label"],
+                    "Span L (m)":              f"{b['span_len']:.2f}",
+                    "Ln (m)":                  f"{b['Ln']:.2f}",
+                    "M⁺_pos (t.m)":            f"{b['M_pos']:.2f}",
+                    "As_req (cm²/m)":          f"{b['As_req_m']:.2f}",
+                    "As_prov Mesh (cm²/m)":    f"{prov_btm_mesh_cm2m:.2f}",
+                    "Δ As (cm²/m)":            f"{b['delta_As']:.2f}",
+                    "Extra Bottom Steel":       b["callout"],
+                })
+            st.dataframe(
+                pd.DataFrame(x_table_rows),
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.markdown(
+                f"""
+                <div style='background:#f0fdf4; border:3px solid #16a34a; border-radius:12px;
+                            padding:22px 28px; margin:12px 0; text-align:center;'>
+                    <div style='color:#15803d; font-size:1.45rem; font-weight:900; margin-bottom:8px;'>
+                        ✅ ملاحظة إنشائية — الاتجاه الأفقي X
+                    </div>
+                    <div style='color:#0f172a; font-size:1.15rem; font-weight:800; line-height:1.9;'>
+                        لا حاجة لأي حديد سفلي إضافي في الاتجاه الأفقي X<br>
+                        <span style='font-size:1.0rem; color:#475569; font-weight:600;'>
+                            الشبكة السفلية الأساسية ({mesh_btm_str}) تغطي بالكامل جميع عزوم M11 الموجبة في جميع الباكيات.
+                        </span>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    # ── 3b. Y-DIRECTION ──────────────────────────────────────────────────────
+    with st.expander(
+        "↕️ 3b. Extra Bottom Steel — Y-Direction (الحديد السفلي الإضافي في الاتجاه الرأسي Y)",
+        expanded=False,
+    ):
+        if active_btm_extras_y:
+            fig_btm_y = generate_flat_slab_bottom_rft_sketch(
+                Lx_calc, Ly_calc, cantilevers, ts,
+                mesh_btm_str, btm_extra_spans,
+                col_w_cm=bc_s, col_d_cm=tc_s,
+                removed_cols=_removed_col_objs,
+                void_panel_ids=set(_confirmed_voids),
+                direction="Y",
+            )
+            st.pyplot(fig_btm_y, use_container_width=True)
+            buf_btm_y = io.BytesIO()
+            fig_btm_y.savefig(buf_btm_y, format="png", bbox_inches="tight", dpi=300)
+            buf_btm_y.seek(0)
+            buf_btm_y.seek(0)
+            st.download_button(
+                label="📥 Download Y-Direction Extra Bottom Steel Plan (High-Res PNG)",
+                data=buf_btm_y,
+                file_name=f"Flat_Slab_Bottom_Extra_Y_ts{ts:.0f}cm.png",
+                mime="image/png",
+                use_container_width=True,
+            )
+            plt.close(fig_btm_y)
+
+            # ── Detail Table for Y-direction ──────────────────────────────────
+            st.markdown(
+                "<div style='font-size:14px; font-weight:700; color:#164e63; margin:12px 0 4px 0;'>"
+                "📋 جدول تفاصيل الحديد الإضافي السفلي — الاتجاه الرأسي Y</div>",
+                unsafe_allow_html=True,
+            )
+            y_table_rows = []
+            for b in active_btm_extras_y:
+                y_table_rows.append({
+                    "Bay (الباكية)":          b["bay_label"],
+                    "Span L (m)":              f"{b['span_len']:.2f}",
+                    "Ln (m)":                  f"{b['Ln']:.2f}",
+                    "M⁺_pos (t.m)":            f"{b['M_pos']:.2f}",
+                    "As_req (cm²/m)":          f"{b['As_req_m']:.2f}",
+                    "As_prov Mesh (cm²/m)":    f"{prov_btm_mesh_cm2m:.2f}",
+                    "Δ As (cm²/m)":            f"{b['delta_As']:.2f}",
+                    "Extra Bottom Steel":       b["callout"],
+                })
+            st.dataframe(
+                pd.DataFrame(y_table_rows),
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.markdown(
+                f"""
+                <div style='background:#f0fdf4; border:3px solid #16a34a; border-radius:12px;
+                            padding:22px 28px; margin:12px 0; text-align:center;'>
+                    <div style='color:#15803d; font-size:1.45rem; font-weight:900; margin-bottom:8px;'>
+                        ✅ ملاحظة إنشائية — الاتجاه الرأسي Y
+                    </div>
+                    <div style='color:#0f172a; font-size:1.15rem; font-weight:800; line-height:1.9;'>
+                        لا حاجة لأي حديد سفلي إضافي في الاتجاه الرأسي Y<br>
+                        <span style='font-size:1.0rem; color:#475569; font-weight:600;'>
+                            الشبكة السفلية الأساسية ({mesh_btm_str}) تغطي بالكامل جميع عزوم M22 الموجبة في جميع الباكيات.
+                        </span>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
     # ── 📋 MASTER DESIGN OUTPUT TABLE ────────────────────────────────────────
+
+
     with st.expander("📋 Master Design Output Table (الجدول الملخص الشامل لمخرجات التصميم)", expanded=False):
         btm_extra_labels = [b["bay_label"] + ": " + b["callout"] for b in btm_extra_spans if isinstance(b, dict) and b.get("n_extra", 0) > 0]
 
@@ -4133,6 +6405,439 @@ def render():
             for c in top_extra_cols
         ])
         st.dataframe(extra_df, use_container_width=True, hide_index=True)
+
+    # ── 📐 REBAR BENDING & CURTAILMENT DETAILS ──────────────────────────────────
+    img_bbs_b64 = None
+    with st.expander("📐 Rebar Bending & Curtailment Details (تفريد وتفاصيل حديد تسليح البلاطة ومساحات التغطية)", expanded=False):
+        void_p_list = [{"is_void": True, "area": p["area"]} for p in _all_panels if p["id"] in _confirmed_voids]
+        fig_bbs = generate_flat_slab_rebar_bending_details(
+            Lx_calc, Ly_calc, cantilevers, ts,
+            mesh_btm_n=n_mesh_btm, mesh_btm_dia=bottom_mesh_dia,
+            mesh_top_n=n_mesh_top, mesh_top_dia=top_mesh_dia,
+            col_extras=top_extra_cols,
+            cant_rft_list=cant_rft_list,
+            btm_extra_spans=btm_extra_spans,
+            void_panels=void_p_list,
+            bc_cm=bc_s, tc_cm=tc_s,
+        )
+        st.pyplot(fig_bbs, use_container_width=True)
+
+        buf_bbs = io.BytesIO()
+        fig_bbs.savefig(buf_bbs, format="png", bbox_inches="tight", dpi=300)
+        buf_bbs.seek(0)
+        img_bbs_b64 = "data:image/png;base64," + base64.b64encode(buf_bbs.getvalue()).decode("utf-8")
+        buf_bbs.seek(0)
+
+        st.download_button(
+            label="📥 Download Rebar Bending Schedule & Detailing Plan (High-Res PNG)",
+            data=buf_bbs,
+            file_name=f"Flat_Slab_Rebar_Bending_Curtailment_Details_ts{ts:.0f}cm.png",
+            mime="image/png",
+            use_container_width=True,
+        )
+        plt.close(fig_bbs)
+
+        st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
+
+        # ── KPI Cards for Reinforcement Breakdown ──
+        _cant_L = cantilevers.get("left", 0.0)
+        _cant_R = cantilevers.get("right", 0.0)
+        _cant_B = cantilevers.get("bottom", 0.0)
+        _cant_T = cantilevers.get("top", 0.0)
+        _tot_w = sum(Lx_calc) + _cant_L + _cant_R
+        _tot_h = sum(Ly_calc) + _cant_B + _cant_T
+        _gross_a = _tot_w * _tot_h
+        _void_a = sum(p["area"] for p in void_p_list)
+        _slab_a = max(0.1, _gross_a - _void_a)
+
+        _uw = lambda d: (d ** 2) / 162.0
+
+        # Calculations
+        _n_m11 = int(np.ceil(_tot_h * n_mesh_btm))
+        _L_m11 = _tot_w + 0.30
+        _len_m11 = _n_m11 * _L_m11
+        _wt_m11 = _len_m11 * _uw(bottom_mesh_dia)
+
+        _n_m22 = int(np.ceil(_tot_w * n_mesh_btm))
+        _L_m22 = _tot_h + 0.30
+        _len_m22 = _n_m22 * _L_m22
+        _wt_m22 = _len_m22 * _uw(bottom_mesh_dia)
+
+        _n_top_x = int(np.ceil(_tot_h * n_mesh_top))
+        _n_top_y = int(np.ceil(_tot_w * n_mesh_top))
+        _len_top = (_n_top_x * (_tot_w + 0.20)) + (_n_top_y * (_tot_h + 0.20))
+        _wt_top = _len_top * _uw(top_mesh_dia)
+
+        _act_caps = [ce for ce in top_extra_cols if ce.get("is_needed")]
+        _n_caps = sum(ce.get("n_extra", 0) for ce in _act_caps)
+        _len_caps = sum(ce.get("n_extra", 0) * ce.get("L_extra", 0) for ce in _act_caps)
+        _cap_dia = _act_caps[0].get("dia_extra", 12) if _act_caps else 12
+        _wt_caps = _len_caps * _uw(_cap_dia)
+        _avg_Lx = float(np.mean(Lx_calc)) if Lx_calc else 5.0
+        _avg_Ly = float(np.mean(Ly_calc)) if Ly_calc else 5.0
+        _cap_cov_w = min(_avg_Lx, _avg_Ly) / 2.0
+        _area_caps = len(_act_caps) * (_cap_cov_w ** 2)
+
+        _act_btm_ex = [be for be in (btm_extra_spans or []) if isinstance(be, dict) and be.get("n_extra", 0) > 0]
+        _n_btm_ex = sum(be.get("n_extra", 0) for be in _act_btm_ex)
+        _len_btm_ex = sum(be.get("n_extra", 0) * be.get("L_extra", 4.0) for be in _act_btm_ex)
+        _btm_ex_dia = _act_btm_ex[0].get("dia_extra", 12) if _act_btm_ex else 12
+        _wt_btm_ex = _len_btm_ex * _uw(_btm_ex_dia)
+        _area_btm_ex = sum(be.get("span_len", 5.0) * _avg_Ly for be in _act_btm_ex)
+
+        _tot_cant_bars = 0
+        _len_cant = 0.0
+        _area_cant = 0.0
+        for cr in cant_rft_list:
+            s_len = _tot_w if cr["side"] in ["bottom", "top"] else _tot_h
+            n_c = int(np.ceil(s_len * 6.0))
+            _tot_cant_bars += n_c
+            _len_cant += n_c * cr["total_bar_length"]
+            _area_cant += s_len * cr["length"]
+        _wt_cant = _len_cant * _uw(12)
+
+        _perim = 2.0 * (_tot_w + _tot_h)
+        _n_upins = int(np.ceil(_perim / 0.20))
+        _l_upin = 2.0 * 0.35 + (ts - 5.0) / 100.0
+        _len_upins = _n_upins * _l_upin
+        _wt_upins = _len_upins * _uw(10)
+
+        _n_chairs = int(np.ceil(_slab_a * 1.0))
+        _h_chair = max(0.08, (ts - 5.0 - 4.0) / 100.0)
+        _l_chair = 2 * _h_chair + 0.40
+        _len_chairs = _n_chairs * _l_chair
+        _wt_chairs = _len_chairs * _uw(12)
+
+        tot_all_mesh_t = (_wt_m11 + _wt_m22 + _wt_top) / 1000.0
+        tot_all_caps_t = _wt_caps / 1000.0
+        tot_all_btm_ex_t = _wt_btm_ex / 1000.0
+        tot_all_other_t = (_wt_cant + _wt_upins + _wt_chairs) / 1000.0
+
+        rb1, rb2, rb3, rb4 = st.columns(4)
+        with rb1:
+            st.markdown(
+                f"""
+                <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:10px 14px; text-align:center;">
+                    <div style="font-size:13px; font-weight:600; color:#1e40af; margin-bottom:3px;">حديد شبكات البلاطة (M11 + M22)</div>
+                    <div style="font-size:19px; font-weight:700; color:#1e3a8a;">{tot_all_mesh_t:.3f} Ton</div>
+                    <div style="font-size:11.5px; color:#475569;">سفلي: {(_wt_m11+_wt_m22)/1000.0:.2f}t | علوي: {_wt_top/1000.0:.2f}t</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with rb2:
+            st.markdown(
+                f"""
+                <div style="background:#fef2f2; border:1.5px solid #fca5a5; border-radius:8px; padding:10px 14px; text-align:center;">
+                    <div style="font-size:13px; font-weight:600; color:#b91c1c; margin-bottom:3px;">كابات الأعمدة (Column Caps)</div>
+                    <div style="font-size:19px; font-weight:700; color:#991b1b;">{tot_all_caps_t:.3f} Ton</div>
+                    <div style="font-size:11.5px; color:#475569;">{len(_act_caps)} أعمدة تحتاج كابات ({_n_caps} سيخ)</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with rb3:
+            st.markdown(
+                f"""
+                <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:8px; padding:10px 14px; text-align:center;">
+                    <div style="font-size:13px; font-weight:600; color:#b45309; margin-bottom:3px;">إضافي سفلي بالبحور (Bottom Extra)</div>
+                    <div style="font-size:19px; font-weight:700; color:#92400e;">{tot_all_btm_ex_t:.3f} Ton</div>
+                    <div style="font-size:11.5px; color:#475569;">{len(_act_btm_ex)} باكيات مكبرة ({_n_btm_ex} سيخ)</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with rb4:
+            st.markdown(
+                f"""
+                <div style="background:#faf5ff; border:1.5px solid #d8b4fe; border-radius:8px; padding:10px 14px; text-align:center;">
+                    <div style="font-size:13px; font-weight:600; color:#7e22ce; margin-bottom:3px;">الكوابيل والأطراف والكراسي</div>
+                    <div style="font-size:19px; font-weight:700; color:#581c87;">{tot_all_other_t:.3f} Ton</div>
+                    <div style="font-size:11.5px; color:#475569;">كوابيل: {_wt_cant/1000.0:.2f}t | دبابيس وكراسي: {(_wt_upins+_wt_chairs)/1000.0:.2f}t</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
+
+        # ── Comprehensive BBS Detailed Table ──
+        st.markdown("##### 📋 جدول حصر وتفريد حديد التسليح ومساحات التغطية (Bar Bending & Curtailment Schedule):")
+        bbs_detail_rows = [
+            {
+                "بند التسليح (Rebar Item)": "1. الفرش السفلي الأساسي (M11 Bottom Mesh)",
+                "الاتجاه والموضع (Direction & Zone)": f"الاتجاه الأفقي X (على كامل العرض Wx={_tot_w:.2f}m)",
+                "القطر Φ": f"Φ {bottom_mesh_dia} mm",
+                "العدد (Count)": f"{_n_m11} سيخ ({n_mesh_btm}Φ{bottom_mesh_dia}/m')",
+                "طول القطع (L_cut)": f"{_L_m11:.2f} m'",
+                "المساحة المغطاة (Covered Area)": f"{_slab_a:.1f} m² (كامل مسطح السقف)",
+                "إجمالي الطول (m')": f"{_len_m11:,.1f} m'",
+                "إجمالي الوزن (Ton)": f"{_wt_m11/1000.0:.3f} Ton ({_wt_m11:,.0f} kg)",
+                "المواصفات وتفاصيل التفريد (Detailing Notes)": "أسياخ سفلية مستقيمة تمتد 15 سم داخل خط مراكز الأعمدة الطرفية",
+            },
+            {
+                "بند التسليح (Rebar Item)": "2. الغطاء السفلي الأساسي (M22 Bottom Mesh)",
+                "الاتجاه والموضع (Direction & Zone)": f"الاتجاه الرأسي Y (على كامل الارتفاع Wy={_tot_h:.2f}m)",
+                "القطر Φ": f"Φ {bottom_mesh_dia} mm",
+                "العدد (Count)": f"{_n_m22} سيخ ({n_mesh_btm}Φ{bottom_mesh_dia}/m')",
+                "طول القطع (L_cut)": f"{_L_m22:.2f} m'",
+                "المساحة المغطاة (Covered Area)": f"{_slab_a:.1f} m² (كامل مسطح السقف)",
+                "إجمالي الطول (m')": f"{_len_m22:,.1f} m'",
+                "إجمالي الوزن (Ton)": f"{_wt_m22/1000.0:.3f} Ton ({_wt_m22:,.0f} kg)",
+                "المواصفات وتفاصيل التفريد (Detailing Notes)": "أسياخ سفلية مستقيمة متعامدة على M11 بمسافة وصل L_splice = 50Φ",
+            },
+            {
+                "بند التسليح (Rebar Item)": "3. الشبكة الأساسية العلوية (Top Mesh T1 & T2)",
+                "الاتجاه والموضع (Direction & Zone)": "الاتجاهين X & Y بكامل مسطح البلاطة",
+                "القطر Φ": f"Φ {top_mesh_dia} mm",
+                "العدد (Count)": f"{_n_top_x + _n_top_y} سيخ ({n_mesh_top}Φ{top_mesh_dia}/m')",
+                "طول القطع (L_cut)": f"{(_tot_w+_tot_h)/2.0:.2f} m'",
+                "المساحة المغطاة (Covered Area)": f"{_slab_a:.1f} m² (كامل السطح العلوي)",
+                "إجمالي الطول (m')": f"{_len_top:,.1f} m'",
+                "إجمالي الوزن (Ton)": f"{_wt_top/1000.0:.3f} Ton ({_wt_top:,.0f} kg)",
+                "المواصفات وتفاصيل التفريد (Detailing Notes)": "شبكة علوية انكماشية مع أرجل خطاف 90° عند حواف البلاطة الخارجية",
+            },
+            {
+                "بند التسليح (Rebar Item)": "4. كابات حديد إضافي علوي فوق الأعمدة (Column Caps)",
+                "الاتجاه والموضع (Direction & Zone)": f"شرائح الأعمدة Column Strips (عرض الشريحة ≈ {_cap_cov_w:.2f}m)",
+                "القطر Φ": f"Φ {_cap_dia} mm",
+                "العدد (Count)": f"{_n_caps} سيخ ({len(_act_caps)} أعمدة تحتاج كابات)",
+                "طول القطع (L_cut)": f"{_act_caps[0]['L_extra']:.2f} m'" if _act_caps else "—",
+                "المساحة المغطاة (Covered Area)": f"{_area_caps:.1f} m² (مناطق العزوم السالبة فوق الأعمدة)",
+                "إجمالي الطول (m')": f"{_len_caps:,.1f} m'",
+                "إجمالي الوزن (Ton)": f"{_wt_caps/1000.0:.3f} Ton ({_wt_caps:,.0f} kg)",
+                "المواصفات وتفاصيل التفريد (Detailing Notes)": "تمتد 0.25Ln على جانبي العمود (أو 0.30Ln للطرفي) مع خطاف 90°",
+            },
+            {
+                "بند التسليح (Rebar Item)": "5. حديد إضافي سفلي بالباكيات المكبرة (Bottom Extra)",
+                "الاتجاه والموضع (Direction & Zone)": "شرائح الوسط Middle Strips بالبحور الكبيرة",
+                "القطر Φ": f"Φ {_btm_ex_dia} mm",
+                "العدد (Count)": f"{_n_btm_ex} سيخ ({len(_act_btm_ex)} باكيات)",
+                "طول القطع (L_cut)": f"{_act_btm_ex[0]['L_extra']:.2f} m'" if _act_btm_ex else "—",
+                "المساحة المغطاة (Covered Area)": f"{_area_btm_ex:.1f} m² (مناطق العزوم الموجبة +M)",
+                "إجمالي الطول (m')": f"{_len_btm_ex:,.1f} m'",
+                "إجمالي الوزن (Ton)": f"{_wt_btm_ex/1000.0:.3f} Ton ({_wt_btm_ex:,.0f} kg)",
+                "المواصفات وتفاصيل التفريد (Detailing Notes)": "أسياخ مستقيمة بمنتصف البحر بطول 0.80Ln لمقاومة العزوم الموجبة",
+            },
+            {
+                "بند التسليح (Rebar Item)": "6. شوك وتسليح الكوابيل (Cantilever Shawka)",
+                "الاتجاه والموضع (Direction & Zone)": "أطراف وبلاطات الكوابيل الخارجية",
+                "القطر Φ": "Φ 12 mm",
+                "العدد (Count)": f"{_tot_cant_bars} شوكة (6Φ12/m')",
+                "طول القطع (L_cut)": f"{cant_rft_list[0]['total_bar_length']:.2f} m'" if cant_rft_list else "—",
+                "المساحة المغطاة (Covered Area)": f"{_area_cant:.1f} m² (مسطح الكوابيل)",
+                "إجمالي الطول (m')": f"{_len_cant:,.1f} m'",
+                "إجمالي الوزن (Ton)": f"{_wt_cant/1000.0:.3f} Ton ({_wt_cant:,.0f} kg)",
+                "المواصفات وتفاصيل التفريد (Detailing Notes)": "شوكة علوية تمتد 1.5 L_cant داخل البلاطة + رجل سفلية 0.5 L_cant",
+            },
+            {
+                "بند التسليح (Rebar Item)": "7. أرجل غلق ودبابيس الأطراف (Perimeter U-Pins)",
+                "الاتجاه والموضع (Direction & Zone)": f"محيط البلاطة الحر (P = {_perim:.1f} m')",
+                "القطر Φ": "Φ 10 & Φ 12 mm",
+                "العدد (Count)": f"{_n_upins} دبوس U-Pin (@ 20cm)",
+                "طول القطع (L_cut)": f"{_l_upin:.2f} m'",
+                "المساحة المغطاة (Covered Area)": f"محيط السقف = {_perim:.1f} m'",
+                "إجمالي الطول (m')": f"{_len_upins:,.1f} m'",
+                "إجمالي الوزن (Ton)": f"{_wt_upins/1000.0:.3f} Ton ({_wt_upins:,.0f} kg)",
+                "المواصفات وتفاصيل التفريد (Detailing Notes)": "دبابيس U-Pins لإغلاق أطراف البلاطة + 4 أسياخ طولية 2 علوي و 2 سفلي",
+            },
+            {
+                "بند التسليح (Rebar Item)": "8. كراسي وأوتار حديد التسليح (Rebar Chairs & Spacers)",
+                "الاتجاه والموضع (Direction & Zone)": f"شبكة الكراسي (1 كرسي لكل 1.0 m²)",
+                "القطر Φ": "Φ 12 mm",
+                "العدد (Count)": f"{_n_chairs} كرسي",
+                "طول القطع (L_cut)": f"{_l_chair:.2f} m' (ارتفاع {_h_chair*100:.0f}cm)",
+                "المساحة المغطاة (Covered Area)": f"{_slab_a:.1f} m² (كامل مسطح الرقة العلوية)",
+                "إجمالي الطول (m')": f"{_len_chairs:,.1f} m'",
+                "إجمالي الوزن (Ton)": f"{_wt_chairs/1000.0:.3f} Ton ({_wt_chairs:,.0f} kg)",
+                "المواصفات وتفاصيل التفريد (Detailing Notes)": "كراسي صلب مع أوتار Φ12 لحمل الرقة العلوية وضمان الغطاء الخرساني",
+            },
+        ]
+        st.dataframe(pd.DataFrame(bbs_detail_rows), use_container_width=True, hide_index=True)
+
+    # ── 🗺️ STEEL LAYOUT MASTER FLOOR PLAN ─────────────────────────────────────
+    with st.expander("🗺️ Steel Layout (مسقط أفقي لتسليح البلاطة)", expanded=True):
+        st.markdown(
+            """
+            <style>
+            /* Allow tabs in Steel Layout to wrap titles cleanly and display side-by-side */
+            div[data-testid="stTabs"] button[role="tab"],
+            div[data-baseweb="tab-list"] button {
+                white-space: normal !important;
+                text-align: center !important;
+                height: auto !important;
+                min-height: 48px !important;
+                padding: 6px 12px !important;
+                font-weight: 600 !important;
+                line-height: 1.25 !important;
+                font-size: 0.88rem !important;
+            }
+            div[data-testid="stTabs"] div[role="tablist"],
+            div[data-baseweb="tab-list"] {
+                display: flex !important;
+                flex-wrap: wrap !important;
+                gap: 4px !important;
+            }
+            </style>
+            <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 14px 20px; border-radius: 10px; margin-bottom: 15px; border-left: 5px solid #3b82f6;">
+                <div style="color: #60a5fa; font-weight: bold; font-size: 1.15rem;">📐 المخططات التنفيذية لتسليح البلاطة (Executive Rebar Plans)</div>
+                <div style="color: #cbd5e1; font-size: 0.92rem; margin-top: 4px;">
+                    تم فصل كل طبقة ونوع تسليح في رسم هندسي مستقل عالي الدقة بخط كبير وواضح مع كود الألوان والمواصفات وحصر الأطوال والأوزان في تبويبات متجاورة.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        tab_m1, tab_m2a, tab_m2b, tab_m3a, tab_m3b = st.tabs([
+            "🔴 1. Column Caps (Top Extra)\nكابات وتفريد الإضافي العلوي للأعمدة",
+            "🔶 2A. Bottom Extra (X-Dir)\nالإضافي السفلي وشوك الكوابيل (اتجاه X)",
+            "🔶 2B. Bottom Extra (Y-Dir)\nالإضافي السفلي وشوك الكوابيل (اتجاه Y)",
+            "🔵 3A. Top Slab Extra (X-Dir)\nالرقة العلوية والإضافي العلوي (اتجاه X)",
+            "🔵 3B. Top Slab Extra (Y-Dir)\nالرقة العلوية والإضافي العلوي (اتجاه Y)",
+        ])
+
+        # ── Tab 1: Column Caps
+        with tab_m1:
+            st.markdown("#### 🔴 1. Column Caps Layout (Top Extra) — كابات الحديد الإضافي العلوي فوق الأعمدة (أبعاد ومساحة الشرائح)")
+            fig_cc = generate_flat_slab_column_caps_sketch(
+                Lx_calc, Ly_calc, cantilevers, ts,
+                top_extra_cols=top_extra_cols,
+                col_w_cm=bc_s, col_d_cm=tc_s,
+                removed_cols=_confirmed_removals,
+                void_panel_ids=_confirmed_voids,
+            )
+            st.pyplot(fig_cc, use_container_width=True)
+            buf_cc = io.BytesIO()
+            fig_cc.savefig(buf_cc, format="png", bbox_inches="tight", dpi=300)
+            buf_cc.seek(0)
+            st.download_button(
+                label="📥 Download 1. Column Caps Layout (High-Res PNG)",
+                data=buf_cc,
+                file_name=f"1_Column_Caps_Top_Extra_ts{ts:.0f}cm.png",
+                mime="image/png",
+                use_container_width=True,
+                key="btn_dl_col_caps",
+            )
+            plt.close(fig_cc)
+
+        # ── Tab 2A: Bottom Extra (X-Direction) & Shawka
+        with tab_m2a:
+            st.markdown("#### 🔶 2A. Bottom Extra (X-Direction) & Base Meshes — الحديد الإضافي السفلي وشوك الكوابيل في اتجاه X وشبكات التسليح")
+            fig_bes_x = generate_flat_slab_bottom_extra_shawka_sketch(
+                Lx_calc, Ly_calc, cantilevers, ts,
+                btm_extra_spans=btm_extra_spans,
+                cant_rft_list=cant_rft_list,
+                n_mesh_btm=n_mesh_btm,
+                bottom_mesh_dia=bottom_mesh_dia,
+                n_mesh_top=n_mesh_top,
+                top_mesh_dia=top_mesh_dia,
+                col_w_cm=bc_s, col_d_cm=tc_s,
+                removed_cols=_confirmed_removals,
+                void_panel_ids=_confirmed_voids,
+                direction="X",
+            )
+            st.pyplot(fig_bes_x, use_container_width=True)
+            buf_bes_x = io.BytesIO()
+            fig_bes_x.savefig(buf_bes_x, format="png", bbox_inches="tight", dpi=300)
+            buf_bes_x.seek(0)
+            st.download_button(
+                label="📥 Download 2A. Bottom Extra (X-Direction) Layout (High-Res PNG)",
+                data=buf_bes_x,
+                file_name=f"2A_Bottom_Extra_X_ts{ts:.0f}cm.png",
+                mime="image/png",
+                use_container_width=True,
+                key="btn_dl_btm_extra_x",
+            )
+            plt.close(fig_bes_x)
+
+        # ── Tab 2B: Bottom Extra (Y-Direction) & Shawka
+        with tab_m2b:
+            st.markdown("#### 🔶 2B. Bottom Extra (Y-Direction) & Base Meshes — الحديد الإضافي السفلي وشوك الكوابيل في اتجاه Y وشبكات التسليح")
+            fig_bes_y = generate_flat_slab_bottom_extra_shawka_sketch(
+                Lx_calc, Ly_calc, cantilevers, ts,
+                btm_extra_spans=btm_extra_spans,
+                cant_rft_list=cant_rft_list,
+                n_mesh_btm=n_mesh_btm,
+                bottom_mesh_dia=bottom_mesh_dia,
+                n_mesh_top=n_mesh_top,
+                top_mesh_dia=top_mesh_dia,
+                col_w_cm=bc_s, col_d_cm=tc_s,
+                removed_cols=_confirmed_removals,
+                void_panel_ids=_confirmed_voids,
+                direction="Y",
+            )
+            st.pyplot(fig_bes_y, use_container_width=True)
+            buf_bes_y = io.BytesIO()
+            fig_bes_y.savefig(buf_bes_y, format="png", bbox_inches="tight", dpi=300)
+            buf_bes_y.seek(0)
+            st.download_button(
+                label="📥 Download 2B. Bottom Extra (Y-Direction) Layout (High-Res PNG)",
+                data=buf_bes_y,
+                file_name=f"2B_Bottom_Extra_Y_ts{ts:.0f}cm.png",
+                mime="image/png",
+                use_container_width=True,
+                key="btn_dl_btm_extra_y",
+            )
+            plt.close(fig_bes_y)
+
+        # ── Tab 3A: Top Base Mesh & Extra Slab Top Mesh (X-Direction)
+        with tab_m3a:
+            st.markdown("#### 🔵 3A. Top Base Mesh & Extra Slab Top Mesh (X-Direction) — الرقة العلوية الأساسية والحديد الإضافي العلوي (اتجاه X)")
+            fig_tmes_x = generate_flat_slab_top_mesh_extra_sketch(
+                Lx_calc, Ly_calc, cantilevers, ts,
+                top_extra_slab_bays=top_extra_slab_bays,
+                n_mesh_top=n_mesh_top,
+                top_mesh_dia=top_mesh_dia,
+                n_mesh_btm=n_mesh_btm,
+                bottom_mesh_dia=bottom_mesh_dia,
+                col_w_cm=bc_s, col_d_cm=tc_s,
+                removed_cols=_confirmed_removals,
+                void_panel_ids=_confirmed_voids,
+                direction="X",
+            )
+            st.pyplot(fig_tmes_x, use_container_width=True)
+            buf_tmes_x = io.BytesIO()
+            fig_tmes_x.savefig(buf_tmes_x, format="png", bbox_inches="tight", dpi=300)
+            buf_tmes_x.seek(0)
+            st.download_button(
+                label="📥 Download 3A. Top Slab Extra (X-Direction) Layout (High-Res PNG)",
+                data=buf_tmes_x,
+                file_name=f"3A_Top_Base_Mesh_Extra_Slab_X_ts{ts:.0f}cm.png",
+                mime="image/png",
+                use_container_width=True,
+                key="btn_dl_top_mesh_extra_x",
+            )
+            plt.close(fig_tmes_x)
+
+        # ── Tab 3B: Top Base Mesh & Extra Slab Top Mesh (Y-Direction)
+        with tab_m3b:
+            st.markdown("#### 🔵 3B. Top Base Mesh & Extra Slab Top Mesh (Y-Direction) — الرقة العلوية الأساسية والحديد الإضافي العلوي (اتجاه Y)")
+            fig_tmes_y = generate_flat_slab_top_mesh_extra_sketch(
+                Lx_calc, Ly_calc, cantilevers, ts,
+                top_extra_slab_bays=top_extra_slab_bays,
+                n_mesh_top=n_mesh_top,
+                top_mesh_dia=top_mesh_dia,
+                n_mesh_btm=n_mesh_btm,
+                bottom_mesh_dia=bottom_mesh_dia,
+                col_w_cm=bc_s, col_d_cm=tc_s,
+                removed_cols=_confirmed_removals,
+                void_panel_ids=_confirmed_voids,
+                direction="Y",
+            )
+            st.pyplot(fig_tmes_y, use_container_width=True)
+            buf_tmes_y = io.BytesIO()
+            fig_tmes_y.savefig(buf_tmes_y, format="png", bbox_inches="tight", dpi=300)
+            buf_tmes_y.seek(0)
+            st.download_button(
+                label="📥 Download 3B. Top Slab Extra (Y-Direction) Layout (High-Res PNG)",
+                data=buf_tmes_y,
+                file_name=f"3B_Top_Base_Mesh_Extra_Slab_Y_ts{ts:.0f}cm.png",
+                mime="image/png",
+                use_container_width=True,
+                key="btn_dl_top_mesh_extra_y",
+            )
+            plt.close(fig_tmes_y)
 
     # ── 🏗️ BOTTOM EXTRA REINFORCEMENT IN ENLARGED BAYS ───────────────────────
     if btm_extra_spans:
@@ -4190,6 +6895,510 @@ def render():
                 for c in cant_rft_list
             ])
             st.dataframe(cant_df, use_container_width=True, hide_index=True)
+
+    # ── ⚖️ LOAD SUMMARY ──────────────────────────────────────────────────────
+    with st.expander("⚖️ Load Breakdown (ملخص توزيع وتراكب الأحمال)", expanded=False):
+        ld_df = pd.DataFrame({
+            "Load Component": [
+                "Slab Self-Weight  OW = γc × ts",
+                "Super-Imposed Dead Load  SDL",
+                "Wall Load  WL  (equivalent distributed)",
+                "Total Dead Load  DL = OW + SDL + WL",
+                "Live Load  LL",
+                "Ultimate  Wu = 1.4 DL + 1.6 LL",
+            ],
+            "Value (ton/m²)": [
+                f"{SW:.4f}", f"{SDL:.4f}", f"{WL:.4f}",
+                f"{DL_tot:.4f}", f"{LL:.4f}", f"{Wu:.4f}",
+            ],
+            "Note": [
+                f"Auto: {ts:.0f}cm × {gamma_c} t/m³", "User input", "User input",
+                "OW + SDL + WL", "User input", "ECP 203 Ultimate load combination",
+            ],
+        })
+        st.dataframe(ld_df, use_container_width=True, hide_index=True)
+
+    # ── 📐 DETAILED DDM MOMENTS TABLES ───────────────────────────────────────
+    def render_direction(rows, direction_label):
+        with st.expander(f"📐 Bending Moments & Reinforcement — {direction_label} (عزوم الانحناء والتسليح)", expanded=False):
+            moment_rows = []
+            steel_rows  = []
+
+            for r in rows:
+                sl  = r["span_label"]
+                st_ = r["span_type"]
+                moment_rows += [
+                    [f"{sl}  [{st_}]  Total Static Mo", f"{r['Mo']:.3f}", "—"],
+                    [f"  ↳ Neg. Ext.  (M_neg_ext)", f"{r['M_neg_ext']:.3f}", "—"],
+                    [f"  ↳ Positive   (M_pos)",     f"{r['M_pos']:.3f}",     "—"],
+                    [f"  ↳ Neg. Int.  (M_neg_int)", f"{r['M_neg_int']:.3f}", "—"],
+                    [f"    ↳ Col.Strip neg.ext",  f"{r['cs_neg_ext']:.3f}", f"{r['cs_w']:.2f}"],
+                    [f"    ↳ Mid.Strip neg.ext",  f"{r['ms_neg_ext']:.3f}", f"{r['ms_w']:.2f}"],
+                    [f"    ↳ Col.Strip pos",      f"{r['cs_pos']:.3f}",     f"{r['cs_w']:.2f}"],
+                    [f"    ↳ Mid.Strip pos",      f"{r['ms_pos']:.3f}",     f"{r['ms_w']:.2f}"],
+                    [f"    ↳ Col.Strip neg.int",  f"{r['cs_neg_int']:.3f}", f"{r['cs_w']:.2f}"],
+                    [f"    ↳ Mid.Strip neg.int",  f"{r['ms_neg_int']:.3f}", f"{r['ms_w']:.2f}"],
+                ]
+
+                def steel_entry(label, As_req, w_m):
+                    n, sp, prov, as_m = fmt_steel(As_req, w_m * 100.0, bottom_mesh_dia)
+                    return [
+                        f"{sl} | {label}",
+                        f"{As_req:.2f}",
+                        f"{as_m:.2f}",
+                        f"{n} Φ{bottom_mesh_dia} / m",
+                        f"@ {sp} cm",
+                        f"{prov:.3f}",
+                    ]
+
+                steel_rows += [
+                    steel_entry(f"Col.Strip TOP (neg.ext)  w={r['cs_w']:.1f}m", r["As_cs_neg_ext"], r["cs_w"]),
+                    steel_entry(f"Col.Strip BTM (pos)      w={r['cs_w']:.1f}m", r["As_cs_pos"],     r["cs_w"]),
+                    steel_entry(f"Col.Strip TOP (neg.int)  w={r['cs_w']:.1f}m", r["As_cs_neg_int"], r["cs_w"]),
+                    steel_entry(f"Mid.Strip TOP (neg.ext)  w={r['ms_w']:.1f}m", r["As_ms_neg_ext"], r["ms_w"]),
+                    steel_entry(f"Mid.Strip BTM (pos)      w={r['ms_w']:.1f}m", r["As_ms_pos"],     r["ms_w"]),
+                    steel_entry(f"Mid.Strip TOP (neg.int)  w={r['ms_w']:.1f}m", r["As_ms_neg_int"], r["ms_w"]),
+                ]
+
+            st.dataframe(pd.DataFrame(moment_rows, columns=["Strip / Location", "Moment (ton·m)", "Strip Width (m)"]), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(steel_rows, columns=["Zone", "Total As_req (cm²)", "As/m (cm²/m)", "Bars / meter", "Spacing", "As_prov/m (cm²/m)"]), use_container_width=True, hide_index=True)
+
+    render_direction(rows_x, "X-Direction (spanning across Lx spans)")
+    render_direction(rows_y, "Y-Direction (spanning across Ly spans)")
+
+    # ── 🏛️ COLUMN REACTIONS & MULTI-STOREY LOADS (ردود أفعال وتوزيع أحمال الأعمدة) ────
+    col_reactions_data = []
+    for c in _active_cols:
+        pu_1f = c.get("Pu", 0.0)
+        pu_tot = pu_1f * num_floors
+        atrib = c.get("Atrib_0", 0.0)
+        raw_type = c.get("type", "Interior")
+        col_reactions_data.append({
+            "Column ID": c["id"],
+            "Orig ID": c.get("orig_id", c["id"]),
+            "Grid": f"{c['grid_x']} - {c['grid_y']}",
+            "Location Type": {"Interior": "داخلي (Interior)", "Edge": "طرفي / وسط خارجي (Edge)", "Corner": "ركن (Corner)"}.get(raw_type, raw_type),
+            "Raw Type": raw_type,
+            "Tributary Area (m²)": f"{atrib:.2f}",
+            "Pu (1 Floor) [ton]": f"{pu_1f:.2f}",
+            f"Total Pu ({num_floors} Floors) [ton]": f"{pu_tot:.2f}",
+            "pu_1f_val": pu_1f,
+            "pu_tot_val": pu_tot,
+            "atrib_val": atrib,
+        })
+
+    img_reactions_b64 = None
+    with st.expander(
+        f"🏛️ Column Reactions & Vertical Loads — {num_floors} Floors (ردود أفعال وتوزيع أحمال الأعمدة)",
+        expanded=False,
+    ):
+        fig_reac = generate_flat_slab_reactions_sketch(
+            Lx_calc, Ly_calc, cantilevers, num_floors, Wu,
+            col_reactions_data,
+            col_w_cm=bc_s, col_d_cm=tc_s,
+            removed_cols=_removed_col_objs,
+            void_panel_ids=set(_confirmed_voids),
+        )
+        st.pyplot(fig_reac, use_container_width=True)
+        buf_reac = io.BytesIO()
+        fig_reac.savefig(buf_reac, format="png", bbox_inches="tight", dpi=300)
+        buf_reac.seek(0)
+        img_reactions_b64 = "data:image/png;base64," + base64.b64encode(buf_reac.getvalue()).decode("utf-8")
+        buf_reac.seek(0)
+        st.download_button(
+            label="📥 Download Column Reactions Plan (High-Res PNG)",
+            data=buf_reac,
+            file_name=f"Flat_Slab_Column_Reactions_Plan_{num_floors}Floors.png",
+            mime="image/png",
+            use_container_width=True,
+        )
+        plt.close(fig_reac)
+
+    with st.expander(f"📊 Column Reactions Table — {num_floors} Floors (جدول ردود أفعال وتوزيع أحمال الأعمدة)", expanded=False):
+        reactions_df = pd.DataFrame([
+            {
+                "Column ID": r["Column ID"],
+                "Grid": r["Grid"],
+                "Location Type": r["Location Type"],
+                "Tributary Area (m²)": r["Tributary Area (m²)"],
+                "Pu (1 Floor) [ton]": r["Pu (1 Floor) [ton]"],
+                f"Total Pu ({num_floors} Floors) [ton]": r[f"Total Pu ({num_floors} Floors) [ton]"],
+            }
+            for r in col_reactions_data
+        ])
+        st.dataframe(reactions_df, use_container_width=True, hide_index=True)
+
+    # ── 📊 CLASSIFICATION INTO 3 GOVERNING COLUMN TYPES ──────────────────────
+    with st.expander("📌 Governing Column Loads by Type (أقصى ردود أفعال وتصنيف نماذج الأعمدة)", expanded=False):
+        int_cols = [r for r in col_reactions_data if r["Raw Type"] == "Interior"]
+        edge_cols = [r for r in col_reactions_data if r["Raw Type"] == "Edge"]
+        corner_cols = [r for r in col_reactions_data if r["Raw Type"] == "Corner"]
+
+        max_int = max(int_cols, key=lambda x: x["pu_1f_val"]) if int_cols else None
+        max_edge = max(edge_cols, key=lambda x: x["pu_1f_val"]) if edge_cols else None
+        max_corner = max(corner_cols, key=lambda x: x["pu_1f_val"]) if corner_cols else None
+
+        # Governing summary model table
+        summary_models = []
+        if max_int:
+            summary_models.append({
+                "Column Model (نموذج التصميم)": "C_int (أقصى عمود داخلي)",
+                "Governing Column": f"{max_int['Column ID']} ({max_int['Grid']})",
+                "Location Type": "داخلي (Interior)",
+                "Tributary Area (m²)": f"{max_int['atrib_val']:.2f}",
+                "Pu (1 Floor) [ton]": f"{max_int['pu_1f_val']:.2f}",
+                f"Total Pu ({num_floors} Floors) [ton]": f"{max_int['pu_tot_val']:.2f}",
+            })
+        if max_edge:
+            summary_models.append({
+                "Column Model (نموذج التصميم)": "C_edge (أقصى عمود طرفي)",
+                "Governing Column": f"{max_edge['Column ID']} ({max_edge['Grid']})",
+                "Location Type": "طرفي / وسط خارجي (Edge)",
+                "Tributary Area (m²)": f"{max_edge['atrib_val']:.2f}",
+                "Pu (1 Floor) [ton]": f"{max_edge['pu_1f_val']:.2f}",
+                f"Total Pu ({num_floors} Floors) [ton]": f"{max_edge['pu_tot_val']:.2f}",
+            })
+        if max_corner:
+            summary_models.append({
+                "Column Model (نموذج التصميم)": "C_corner (أقصى عمود ركن)",
+                "Governing Column": f"{max_corner['Column ID']} ({max_corner['Grid']})",
+                "Location Type": "ركن (Corner)",
+                "Tributary Area (m²)": f"{max_corner['atrib_val']:.2f}",
+                "Pu (1 Floor) [ton]": f"{max_corner['pu_1f_val']:.2f}",
+                f"Total Pu ({num_floors} Floors) [ton]": f"{max_corner['pu_tot_val']:.2f}",
+            })
+
+        if summary_models:
+            st.dataframe(pd.DataFrame(summary_models), use_container_width=True, hide_index=True)
+
+    # ── 💾 PERSIST GOVERNING COLUMN LOADS FOR MODULE 2 ─────────────────────────
+    if max_int and max_int.get("pu_1f_val", 0) > 0:
+        S.cfg_set("fs_col_pu_int", float(max_int["pu_1f_val"]))
+    if max_edge and max_edge.get("pu_1f_val", 0) > 0:
+        S.cfg_set("fs_col_pu_edge", float(max_edge["pu_1f_val"]))
+    if max_corner and max_corner.get("pu_1f_val", 0) > 0:
+        S.cfg_set("fs_col_pu_corner", float(max_corner["pu_1f_val"]))
+
+    # ── 🏛️ RECTANGULAR COLUMNS DESIGN FROM FLAT SLAB LOADS ─────────────────────
+    from modules.columns import design_rectangular_column
+
+    col_sf = S.cfg_val("col_Safety_Factor", 1.20)
+    col_b_val = S.cfg_val("col_b", bc_s if bc_s else 30)
+    col_H = S.cfg_val("col_H_clear", 300)
+    col_K_idx = S.cfg_val("col_K_index", 1)
+    K_opts = [0.50, 0.70, 1.00, 1.20, 2.00]
+    col_K = K_opts[col_K_idx] if 0 <= col_K_idx < len(K_opts) else 0.70
+    col_Fcu = S.cfg_val("col_Fcu", Fcu if Fcu else 250)
+    col_Fy = S.cfg_val("col_Fy", Fy if Fy else 4000)
+    col_Fyk = S.cfg_val("col_Fyk", 2400)
+    col_mu = S.cfg_val("col_mu_target", 1.0)
+    phi_opts = [12, 16, 18, 20, 25]
+    col_phi_idx = S.cfg_val("col_Phi_index", 1)
+    col_phi = phi_opts[col_phi_idx] if 0 <= col_phi_idx < len(phi_opts) else 16
+    phi_st_opts = [6, 8, 10]
+    col_phist_idx = S.cfg_val("col_Phi_st_index", 1)
+    col_phi_st = phi_st_opts[col_phist_idx] if 0 <= col_phist_idx < len(phi_st_opts) else 8
+
+    cnt_int = sum(1 for c in _active_cols if c.get("type") == "Interior")
+    cnt_edge = sum(1 for c in _active_cols if c.get("type") == "Edge")
+    cnt_corner = sum(1 for c in _active_cols if c.get("type") == "Corner")
+    tot_active_cols = len(_active_cols)
+    tot_conc_vol_1f = 0.0
+    tot_main_steel_kg_1f = 0.0
+    tot_stirrup_steel_kg_1f = 0.0
+    tot_steel_kg_1f = 0.0
+    tot_ratio_1f = 0.0
+    tot_conc_vol_bld = 0.0
+    tot_steel_ton_bld = 0.0
+    tot_steel_kg_bld = 0.0
+    cement_ton_cols = 0.0
+    cement_bags_cols = 0
+    gravel_m3_cols = 0.0
+    sand_m3_cols = 0.0
+
+    col_designs = []
+    for model_label, col_obj, model_key in [
+        ("C_int (أقصى عمود داخلي)", max_int, "C_int"),
+        ("C_edge (أقصى عمود طرفي)", max_edge, "C_edge"),
+        ("C_corner (أقصى عمود ركن)", max_corner, "C_corner"),
+    ]:
+        if col_obj and col_obj.get("pu_1f_val", 0) > 0:
+            pu_1f = float(col_obj["pu_1f_val"])
+            des = design_rectangular_column(
+                Pu_input=pu_1f,
+                Safety_Factor=col_sf,
+                b=col_b_val,
+                H_clear=col_H,
+                K=col_K,
+                Fcu=col_Fcu,
+                Fy=col_Fy,
+                Fyk=col_Fyk,
+                mu_target=col_mu,
+                Phi=col_phi,
+                Phi_st=col_phi_st,
+            )
+            des["model_label"] = model_label
+            des["model_key"] = model_key
+            des["gov_col"] = f"{col_obj['Column ID']} ({col_obj['Grid']})"
+            des["loc_type"] = col_obj["Location Type"]
+            des["atrib"] = col_obj["atrib_val"]
+            col_designs.append(des)
+
+    if col_designs:
+        with st.expander("🏛️ Rectangular Columns Design (التصميم الإنشائي لنماذج الأعمدة المستطيلة طبقاً لأحمال السقف)", expanded=False):
+            st.markdown(
+                """
+                <div style='background:#f8fafc;border-left:4px solid #1e40af;padding:10px 14px;border-radius:6px;margin-bottom:12px;'>
+                <b>📋 تصميم قطاعات وتسليح نماذج الأعمدة (ECP 203):</b><br>
+                تم أخذ أقصى أحمال رأسية للدور الواحد <code>Pu (1 Floor)</code> لكل نموذج عمود (داخلي C_int، طرفي C_edge، ركن C_corner)
+                وتطبيق معادلات تصميم الأعمدة المستطيلة المعرضة لقوى ضغط محورية ومطابقتها مع اشتراطات الكود المصري.
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            col_designs_table = []
+            for des in col_designs:
+                col_designs_table.append({
+                    "نموذج العمود (Model)": des["model_label"],
+                    "العمود الحاكم (Gov Col)": des["gov_col"],
+                    "حمل الدور Pu_1F (t)": f"{des['Pu_input']:.2f}",
+                    "حمل التصميم Pu_des (t)": f"{des['Pu_ton']:.2f}",
+                    "القطاع المصمم b × t (cm)": f"{des['b']:.0f} × {des['t']:.0f}",
+                    "التسليح الطولي (Main RFT)": f"{des['main_steel_str']} (μ={des['mu_provided']:.2f}%)",
+                    "الكانات (Stirrups / Ties)": des["stirrups_str"],
+                    "سعة التحمل Pu,cap (t)": f"{des['Pu_cap_t']:.2f}",
+                    "نسبة الاستخدام (Util %)": f"{des['util_percent']:.1f} %",
+                    "فحص النحافة والأمان": "✅ Safe" if des["is_safe"] else "⚠️ Review",
+                })
+
+            st.dataframe(pd.DataFrame(col_designs_table), use_container_width=True, hide_index=True)
+
+            st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
+
+            # 3 Detailed Cards for the 3 Column Models
+            d_c1, d_c2, d_c3 = st.columns(3)
+            for des, container, color_border, color_hdr in zip(
+                col_designs,
+                [d_c1, d_c2, d_c3],
+                ["#93c5fd", "#fde68a", "#fecaca"],
+                ["#1e40af", "#b45309", "#b91c1c"]
+            ):
+                with container:
+                    st.markdown(
+                        f"""
+                        <div style="background:#ffffff; border:2px solid {color_border}; border-radius:10px; padding:12px 14px; text-align:center;">
+                            <div style="font-size:15px; font-weight:700; color:{color_hdr}; margin-bottom:6px;">{des['model_label']}</div>
+                            <div style="font-size:13px; color:#475569;">العمود: <b>{des['gov_col']}</b></div>
+                            <div style="font-size:13px; color:#475569;">Pu_1F = <b>{des['Pu_input']:.1f} t</b> (Design = <b>{des['Pu_ton']:.1f} t</b>)</div>
+                            <hr style="margin:8px 0; border:0; border-top:1px solid #e2e8f0;">
+                            <div style="font-size:17px; font-weight:800; color:#0f172a;">{des['b']:.0f} × {des['t']:.0f} cm</div>
+                            <div style="font-size:14px; font-weight:700; color:#991b1b; margin-top:2px;">{des['main_steel_str']} (μ={des['mu_provided']:.2f}%)</div>
+                            <div style="font-size:13px; font-weight:600; color:#166534; margin-top:2px;">{des['stirrups_str']}</div>
+                            <div style="font-size:12px; color:#64748b; margin-top:4px;">Pu,cap = {des['Pu_cap_t']:.1f} t (كفاءة {des['util_percent']:.1f}%)</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+            st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
+            st.markdown("---")
+
+            # ── 📊 حصر كميات الخرسانة والحديد لجميع أعمدة المسقط الإنشائي (Columns BOQ) ──
+            cnt_int = sum(1 for c in _active_cols if c.get("type") == "Interior")
+            cnt_edge = sum(1 for c in _active_cols if c.get("type") == "Edge")
+            cnt_corner = sum(1 for c in _active_cols if c.get("type") == "Corner")
+            tot_active_cols = len(_active_cols)
+
+            st.markdown(
+                f"##### 📊 حصر كميات الخرسانة والحديد لجميع الأعمدة في المسقط الإنشائي "
+                f"({tot_active_cols} عمود: {cnt_int} داخلي + {cnt_edge} طرفي + {cnt_corner} ركن)"
+            )
+
+            des_map = {d["model_key"]: d for d in col_designs}
+            col_boq_rows = []
+            tot_conc_vol_1f = 0.0
+            tot_main_steel_kg_1f = 0.0
+            tot_stirrup_steel_kg_1f = 0.0
+            tot_steel_kg_1f = 0.0
+
+            H_m = col_H / 100.0  # column height in meters
+
+            for m_key, m_label, count in [
+                ("C_int", "C_int (أعمدة داخلية)", cnt_int),
+                ("C_edge", "C_edge (أعمدة طرفية)", cnt_edge),
+                ("C_corner", "C_corner (أعمدة ركن)", cnt_corner),
+            ]:
+                if count > 0 and m_key in des_map:
+                    des = des_map[m_key]
+                    b_cm = des["b"]
+                    t_cm = des["t"]
+                    phi_m = des["Phi"]
+                    n_b = des["n_bars"]
+                    phi_st = des["Phi_st"]
+                    n_st_m = des["n_st_per_m"]
+
+                    # Concrete volume for 1 column and all columns of this type (m³)
+                    vol_1col = (b_cm / 100.0) * (t_cm / 100.0) * H_m
+                    vol_total = vol_1col * count
+
+                    # Main longitudinal rebar: L = H + splice (m)
+                    L_bar = H_m + max(1.0, (50.0 * phi_m) / 1000.0)
+                    unit_w_main = (phi_m ** 2) / 162.0
+                    tot_len_main_1col = n_b * L_bar
+                    w_main_1col = tot_len_main_1col * unit_w_main
+                    tot_w_main = w_main_1col * count
+
+                    # Stirrups / Ties
+                    n_ties_1col = max(5, int(math.ceil(H_m * n_st_m)))
+                    cov_cm = 2.5
+                    tie_perim = 2.0 * (((b_cm - 2.0 * cov_cm) + (t_cm - 2.0 * cov_cm)) / 100.0) + 0.20
+                    unit_w_st = (phi_st ** 2) / 162.0
+                    tot_len_st_1col = n_ties_1col * tie_perim
+                    w_st_1col = tot_len_st_1col * unit_w_st
+                    tot_w_st = w_st_1col * count
+
+                    # Total steel weight & ratio
+                    tot_w_steel = tot_w_main + tot_w_st
+                    ratio_kg_m3 = (tot_w_steel / vol_total) if vol_total > 0 else 0.0
+
+                    tot_conc_vol_1f += vol_total
+                    tot_main_steel_kg_1f += tot_w_main
+                    tot_stirrup_steel_kg_1f += tot_w_st
+                    tot_steel_kg_1f += tot_w_steel
+
+                    col_boq_rows.append({
+                        "نموذج العمود (Model)": m_label,
+                        "العدد في المسقط (Count)": f"{count} عمود",
+                        "القطاع b × t (cm)": f"{b_cm:.0f} × {t_cm:.0f}",
+                        "حجم الخرسانة (m³)": f"{vol_total:.2f} m³",
+                        "التسليح الرئيسي (Main Steel)": f"{n_b}Φ{phi_m} ({tot_w_main:,.1f} kg)",
+                        "الكانات (Stirrups)": f"{n_st_m}Φ{phi_st}/m' ({tot_w_st:,.1f} kg)",
+                        "إجمالي وزن الحديد (Ton)": f"{tot_w_steel/1000.0:.3f} Ton",
+                        "معدل التسليح (kg/m³)": f"{ratio_kg_m3:.1f} kg/m³",
+                    })
+
+            # Total row
+            tot_ratio_1f = (tot_steel_kg_1f / tot_conc_vol_1f) if tot_conc_vol_1f > 0 else 0.0
+            col_boq_rows.append({
+                "نموذج العمود (Model)": "📌 الإجمالي الكلي للأعمدة (1 Floor)",
+                "العدد في المسقط (Count)": f"{tot_active_cols} عمود",
+                "القطاع b × t (cm)": f"ارتفاع H = {H_m:.2f} m",
+                "حجم الخرسانة (m³)": f"{tot_conc_vol_1f:.2f} m³",
+                "التسليح الرئيسي (Main Steel)": f"{tot_main_steel_kg_1f:,.1f} kg ({tot_main_steel_kg_1f/1000.0:.3f} Ton)",
+                "الكانات (Stirrups)": f"{tot_stirrup_steel_kg_1f:,.1f} kg ({tot_stirrup_steel_kg_1f/1000.0:.3f} Ton)",
+                "إجمالي وزن الحديد (Ton)": f"{tot_steel_kg_1f/1000.0:.3f} Ton",
+                "معدل التسليح (kg/m³)": f"{tot_ratio_1f:.1f} kg/m³",
+            })
+
+            # Multi-storey figures
+            tot_conc_vol_bld = tot_conc_vol_1f * num_floors
+            tot_steel_ton_bld = (tot_steel_kg_1f / 1000.0) * num_floors
+            tot_steel_kg_bld = tot_steel_kg_1f * num_floors
+            cement_ton_cols = tot_conc_vol_1f * 0.350
+            cement_bags_cols = int(round(tot_conc_vol_1f * 7.0))
+            gravel_m3_cols = tot_conc_vol_1f * 0.80
+            sand_m3_cols = tot_conc_vol_1f * 0.40
+
+            # ── Summary Metric Panels for Columns BOQ ──
+            cb1, cb2, cb3, cb4 = st.columns(4)
+            with cb1:
+                st.markdown(
+                    f"""
+                    <div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:8px; padding:10px 14px; text-align:center;">
+                        <div style="font-size:14px; font-weight:600; color:#475569; margin-bottom:4px;">إجمالي عدد الأعمدة (Columns Count)</div>
+                        <div style="font-size:20px; font-weight:700; color:#1e40af;">{tot_active_cols} عمود</div>
+                        <div style="font-size:12px; color:#64748b; margin-top:2px;">{cnt_int} داخلي + {cnt_edge} طرفي + {cnt_corner} ركن</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with cb2:
+                st.markdown(
+                    f"""
+                    <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:10px 14px; text-align:center;">
+                        <div style="font-size:14px; font-weight:600; color:#15803d; margin-bottom:4px;">حجم خرسانة الأعمدة (Concrete Vol)</div>
+                        <div style="font-size:20px; font-weight:700; color:#166534;">{tot_conc_vol_1f:.2f} m³</div>
+                        <div style="font-size:12px; color:#64748b; margin-top:2px;">ولـ {num_floors} طابق: {tot_conc_vol_bld:.2f} m³</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with cb3:
+                st.markdown(
+                    f"""
+                    <div style="background:#f5f3ff; border:1.5px solid #c4b5fd; border-radius:8px; padding:10px 14px; text-align:center;">
+                        <div style="font-size:14px; font-weight:600; color:#6d28d9; margin-bottom:4px;">إجمالي وزن حديد الأعمدة (Steel Weight)</div>
+                        <div style="font-size:20px; font-weight:700; color:#5b21b6;">{tot_steel_kg_1f/1000.0:.3f} Ton</div>
+                        <div style="font-size:12px; color:#64748b; margin-top:2px;">{tot_steel_kg_1f:,.1f} kg (ولـ {num_floors} طابق: {tot_steel_ton_bld:.3f} Ton)</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with cb4:
+                st.markdown(
+                    f"""
+                    <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:10px 14px; text-align:center;">
+                        <div style="font-size:14px; font-weight:600; color:#1e40af; margin-bottom:4px;">معدل التسليح للأعمدة (Steel Ratio)</div>
+                        <div style="font-size:20px; font-weight:700; color:#1e3a8a;">{tot_ratio_1f:.1f} kg/m³</div>
+                        <div style="font-size:12px; color:#64748b; margin-top:2px;">متوسط نسبة التسليح لخرسانة الأعمدة</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
+            st.dataframe(pd.DataFrame(col_boq_rows), use_container_width=True, hide_index=True)
+
+            st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
+
+            # ── Concrete Raw Materials Panels for Columns ──
+            st.markdown("###### 🧱 المواد الأولية المطلوبة لصب خرسانة الأعمدة (Concrete Materials for Columns):")
+            cm1, cm2, cm3, cm4 = st.columns(4)
+            with cm1:
+                st.markdown(
+                    f"""
+                    <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:8px 12px; text-align:center;">
+                        <div style="font-size:13px; font-weight:600; color:#1e40af;">كمية الأسمنت للأعمدة</div>
+                        <div style="font-size:18px; font-weight:700; color:#1e3a8a;">{cement_ton_cols:.2f} Ton</div>
+                        <div style="font-size:11.5px; color:#64748b;">{cement_bags_cols} شكارة (بمعدل 350 kg/m³)</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with cm2:
+                st.markdown(
+                    f"""
+                    <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:8px; padding:8px 12px; text-align:center;">
+                        <div style="font-size:13px; font-weight:600; color:#b45309;">كمية الزلط للأعمدة</div>
+                        <div style="font-size:18px; font-weight:700; color:#92400e;">{gravel_m3_cols:.2f} m³</div>
+                        <div style="font-size:11.5px; color:#64748b;">بمعدل 0.80 m³ لكل م³ خرسانة</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with cm3:
+                st.markdown(
+                    f"""
+                    <div style="background:#fef2f2; border:1.5px solid #fecaca; border-radius:8px; padding:8px 12px; text-align:center;">
+                        <div style="font-size:13px; font-weight:600; color:#b91c1c;">كمية الرمل للأعمدة</div>
+                        <div style="font-size:18px; font-weight:700; color:#991b1b;">{sand_m3_cols:.2f} m³</div>
+                        <div style="font-size:11.5px; color:#64748b;">بمعدل 0.40 m³ لكل م³ خرسانة</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with cm4:
+                st.markdown(
+                    f"""
+                    <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:8px 12px; text-align:center;">
+                        <div style="font-size:13px; font-weight:600; color:#15803d;">إجمالي وزن الحديد الكامل</div>
+                        <div style="font-size:18px; font-weight:700; color:#166534;">{tot_steel_kg_1f/1000.0:.3f} Ton</div>
+                        <div style="font-size:11.5px; color:#64748b;">رئيسي: {tot_main_steel_kg_1f/1000.0:.2f}t | كانات: {tot_stirrup_steel_kg_1f/1000.0:.2f}t</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
     # ── 💰 BILL OF QUANTITIES (BOQ) ESTIMATE ─────────────────────────────────
     with st.expander("💰 Material Take-off & BoQ Estimate (جدول حصر الكميات المبدئي)", expanded=False):
@@ -4254,15 +7463,15 @@ def render():
         # ── Table 2: Final Totals by Bar Diameter & Grand Total (جدول إجمالي الكمية لكل قطر والإجمالي العام) ──
         st.markdown("##### 📊 2. جدول إجمالي كميات الحديد لكل قطر والإجمالي الكلي (Total Quantities by Bar Diameter & Grand Total)")
         dia_table_data = []
-        for d in boq.get("by_dia", []):
+        for dia_row in boq.get("by_dia", []):
             dia_table_data.append({
-                "قطر السيخ Φ (Bar Dia)": d["dia_str"],
-                "وزن المتر الطولي (kg/m')": f"{d['unit_w_kg_m']:.3f}",
-                "إجمالي الطول (m')": d["length_str"],
-                "إجمالي الوزن (kg)": d["weight_kg_str"],
-                "إجمالي الوزن (Ton)": d["weight_ton_str"],
-                "النسبة المئوية (%)": d["percent_str"],
-                "الاستخدام الإنشائي في السقف (Applications in Slab)": d["apps"],
+                "قطر السيخ Φ (Bar Dia)": dia_row["dia_str"],
+                "وزن المتر الطولي (kg/m')": f"{dia_row['unit_w_kg_m']:.3f}",
+                "إجمالي الطول (m')": dia_row["length_str"],
+                "إجمالي الوزن (kg)": dia_row["weight_kg_str"],
+                "إجمالي الوزن (Ton)": dia_row["weight_ton_str"],
+                "النسبة المئوية (%)": dia_row.get("percent_str", ""),
+                "الاستخدام الإنشائي في السقف (Applications in Slab)": dia_row.get("apps", "—"),
             })
 
         # Add prominent Grand Total Row
@@ -4278,183 +7487,293 @@ def render():
 
         st.dataframe(pd.DataFrame(dia_table_data), use_container_width=True, hide_index=True)
 
-    # ── ⚖️ LOAD SUMMARY ──────────────────────────────────────────────────────
-    with st.expander("⚖️ Load Breakdown (ملخص توزيع وتراكب الأحمال)", expanded=False):
-        ld_df = pd.DataFrame({
-            "Load Component": [
-                "Slab Self-Weight  OW = γc × ts",
-                "Super-Imposed Dead Load  SDL",
-                "Wall Load  WL  (equivalent distributed)",
-                "Total Dead Load  DL = OW + SDL + WL",
-                "Live Load  LL",
-                "Ultimate  Wu = 1.4 DL + 1.6 LL",
-            ],
-            "Value (ton/m²)": [
-                f"{SW:.4f}", f"{SDL:.4f}", f"{WL:.4f}",
-                f"{DL_tot:.4f}", f"{LL:.4f}", f"{Wu:.4f}",
-            ],
-            "Note": [
-                f"Auto: {ts:.0f}cm × {gamma_c} t/m³", "User input", "User input",
-                "OW + SDL + WL", "User input", "ECP 203 Ultimate load combination",
-            ],
-        })
-        st.dataframe(ld_df, use_container_width=True, hide_index=True)
+        st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
 
-    # ── 📐 DETAILED DDM MOMENTS TABLES ───────────────────────────────────────
-    def render_direction(rows, direction_label):
-        with st.expander(f"📐 Bending Moments & Reinforcement — {direction_label}", expanded=False):
-            moment_rows = []
-            steel_rows  = []
+        # ── Grand Total Rebar Metric Panels (بانيل الإجمالي الكلي لحديد التسليح) ──
+        rc1, rc2, rc3, rc4 = st.columns(4)
+        with rc1:
+            st.markdown(
+                f"""
+                <div style="background:#f5f3ff; border:1.5px solid #c4b5fd; border-radius:8px; padding:10px 14px; text-align:center;">
+                    <div style="font-size:14px; font-weight:600; color:#6d28d9; margin-bottom:4px;">إجمالي وزن الحديد (Total Steel)</div>
+                    <div style="font-size:20px; font-weight:700; color:#5b21b6;">{boq.get('total_steel_ton', 0.0):.3f} Ton</div>
+                    <div style="font-size:12px; color:#475569; margin-top:2px;">{boq.get('total_steel_kg', 0.0):,.1f} kg</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with rc2:
+            st.markdown(
+                f"""
+                <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:10px 14px; text-align:center;">
+                    <div style="font-size:14px; font-weight:600; color:#1e40af; margin-bottom:4px;">إجمالي أطوال الأسياخ (Total Length)</div>
+                    <div style="font-size:20px; font-weight:700; color:#1e3a8a;">{boq.get('total_steel_len_m', 0.0):,.1f} m'</div>
+                    <div style="font-size:12px; color:#475569; margin-top:2px;">مجموع أطوال كافة الأقطار</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with rc3:
+            st.markdown(
+                f"""
+                <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:10px 14px; text-align:center;">
+                    <div style="font-size:14px; font-weight:600; color:#15803d; margin-bottom:4px;">معدل التسليح للخرسانة (Steel Ratio)</div>
+                    <div style="font-size:20px; font-weight:700; color:#166534;">{boq.get('steel_ratio_kg_m3', 0.0):.1f} kg/m³</div>
+                    <div style="font-size:12px; color:#475569; margin-top:2px;">نسبة الحديد لحجم الخرسانة</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with rc4:
+            st.markdown(
+                f"""
+                <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:8px; padding:10px 14px; text-align:center;">
+                    <div style="font-size:14px; font-weight:600; color:#b45309; margin-bottom:4px;">معدل التسليح للمسطح (Per Area)</div>
+                    <div style="font-size:20px; font-weight:700; color:#92400e;">{(boq.get('total_steel_kg', 0.0)/boq['slab_area_m2']) if boq.get('slab_area_m2') else 0:.1f} kg/m²</div>
+                    <div style="font-size:12px; color:#475569; margin-top:2px;">لكل م² من مسطح السقف</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-            for r in rows:
-                sl  = r["span_label"]
-                st_ = r["span_type"]
-                moment_rows += [
-                    [f"{sl}  [{st_}]  Total Static Mo", f"{r['Mo']:.3f}", "—"],
-                    [f"  ↳ Neg. Ext.  (M_neg_ext)", f"{r['M_neg_ext']:.3f}", "—"],
-                    [f"  ↳ Positive   (M_pos)",     f"{r['M_pos']:.3f}",     "—"],
-                    [f"  ↳ Neg. Int.  (M_neg_int)", f"{r['M_neg_int']:.3f}", "—"],
-                    [f"    ↳ Col.Strip neg.ext",  f"{r['cs_neg_ext']:.3f}", f"{r['cs_w']:.2f}"],
-                    [f"    ↳ Mid.Strip neg.ext",  f"{r['ms_neg_ext']:.3f}", f"{r['ms_w']:.2f}"],
-                    [f"    ↳ Col.Strip pos",      f"{r['cs_pos']:.3f}",     f"{r['cs_w']:.2f}"],
-                    [f"    ↳ Mid.Strip pos",      f"{r['ms_pos']:.3f}",     f"{r['ms_w']:.2f}"],
-                    [f"    ↳ Col.Strip neg.int",  f"{r['cs_neg_int']:.3f}", f"{r['cs_w']:.2f}"],
-                    [f"    ↳ Mid.Strip neg.int",  f"{r['ms_neg_int']:.3f}", f"{r['ms_w']:.2f}"],
-                ]
+        st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
 
-                def steel_entry(label, As_req, w_m):
-                    n, sp, prov, as_m = fmt_steel(As_req, w_m * 100.0, bottom_mesh_dia)
-                    return [
-                        f"{sl} | {label}",
-                        f"{As_req:.2f}",
-                        f"{as_m:.2f}",
-                        f"{n} Φ{bottom_mesh_dia} / m",
-                        f"@ {sp} cm",
-                        f"{prov:.3f}",
-                    ]
+        # ── 🧱 3. جدول حصر كميات الخرسانة والمواد الأولية (Concrete & Raw Materials) ──
+        st.markdown("##### 🧱 3. جدول حصر كميات الخرسانة والمواد الأولية (Concrete & Raw Materials Estimate)")
 
-                steel_rows += [
-                    steel_entry(f"Col.Strip TOP (neg.ext)  w={r['cs_w']:.1f}m", r["As_cs_neg_ext"], r["cs_w"]),
-                    steel_entry(f"Col.Strip BTM (pos)      w={r['cs_w']:.1f}m", r["As_cs_pos"],     r["cs_w"]),
-                    steel_entry(f"Col.Strip TOP (neg.int)  w={r['cs_w']:.1f}m", r["As_cs_neg_int"], r["cs_w"]),
-                    steel_entry(f"Mid.Strip TOP (neg.ext)  w={r['ms_w']:.1f}m", r["As_ms_neg_ext"], r["ms_w"]),
-                    steel_entry(f"Mid.Strip BTM (pos)      w={r['ms_w']:.1f}m", r["As_ms_pos"],     r["ms_w"]),
-                    steel_entry(f"Mid.Strip TOP (neg.int)  w={r['ms_w']:.1f}m", r["As_ms_neg_int"], r["ms_w"]),
-                ]
+        mc1, mc2, mc3, mc4 = st.columns(4)
+        with mc1:
+            st.markdown(
+                f"""
+                <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:10px 14px; text-align:center;">
+                    <div style="font-size:14px; font-weight:600; color:#15803d; margin-bottom:4px;">حجم الخرسانة المسلحة (Concrete)</div>
+                    <div style="font-size:20px; font-weight:700; color:#166534;">{boq['concrete_vol_m3']:.2f} m³</div>
+                    <div style="font-size:12px; color:#475569; margin-top:2px;">مسطح {boq['slab_area_m2']:.1f} m² × سمك {ts:.0f} cm</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with mc2:
+            st.markdown(
+                f"""
+                <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:10px 14px; text-align:center;">
+                    <div style="font-size:14px; font-weight:600; color:#1e40af; margin-bottom:4px;">كمية الأسمنت (Cement)</div>
+                    <div style="font-size:20px; font-weight:700; color:#1e3a8a;">{boq['cement_ton']:.2f} Ton</div>
+                    <div style="font-size:12px; color:#475569; margin-top:2px;">{boq['cement_bags']} شكارة ({boq['cement_content_kg_m3']:.0f} kg/m³)</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with mc3:
+            st.markdown(
+                f"""
+                <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:8px; padding:10px 14px; text-align:center;">
+                    <div style="font-size:14px; font-weight:600; color:#b45309;">كمية الزلط (Gravel)</div>
+                    <div style="font-size:20px; font-weight:700; color:#92400e;">{boq['gravel_m3']:.2f} m³</div>
+                    <div style="font-size:12px; color:#475569; margin-top:2px;">بمعدل 0.80 m³ لكل 1 m³ خرسانة</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with mc4:
+            st.markdown(
+                f"""
+                <div style="background:#fef2f2; border:1.5px solid #fecaca; border-radius:8px; padding:10px 14px; text-align:center;">
+                    <div style="font-size:14px; font-weight:600; color:#b91c1c;">كمية الرمل (Sand)</div>
+                    <div style="font-size:20px; font-weight:700; color:#991b1b;">{boq['sand_m3']:.2f} m³</div>
+                    <div style="font-size:12px; color:#475569; margin-top:2px;">بمعدل 0.40 m³ لكل 1 m³ خرسانة</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-            st.dataframe(pd.DataFrame(moment_rows, columns=["Strip / Location", "Moment (ton·m)", "Strip Width (m)"]), use_container_width=True, hide_index=True)
-            st.dataframe(pd.DataFrame(steel_rows, columns=["Zone", "Total As_req (cm²)", "As/m (cm²/m)", "Bars / meter", "Spacing", "As_prov/m (cm²/m)"]), use_container_width=True, hide_index=True)
+        st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
 
-    render_direction(rows_x, "X-Direction (spanning across Lx spans)")
-    render_direction(rows_y, "Y-Direction (spanning across Ly spans)")
-
-    # ── 🏛️ COLUMN REACTIONS & MULTI-STOREY LOADS (ردود أفعال وتوزيع أحمال الأعمدة) ────
-    st.markdown(
-        f'<div class="section-header">🏛️ Column Reactions & Vertical Loads (ردود أفعال وتوزيع أحمال الأعمدة — {num_floors} طوابق)</div>',
-        unsafe_allow_html=True,
-    )
-
-    col_reactions_data = []
-    for c in _active_cols:
-        pu_1f = c.get("Pu", 0.0)
-        pu_tot = pu_1f * num_floors
-        atrib = c.get("Atrib_0", 0.0)
-        raw_type = c.get("type", "Interior")
-        col_reactions_data.append({
-            "Column ID": c["id"],
-            "Orig ID": c.get("orig_id", c["id"]),
-            "Grid": f"{c['grid_x']} - {c['grid_y']}",
-            "Location Type": {"Interior": "داخلي (Interior)", "Edge": "طرفي / وسط خارجي (Edge)", "Corner": "ركن (Corner)"}.get(raw_type, raw_type),
-            "Raw Type": raw_type,
-            "Tributary Area (m²)": f"{atrib:.2f}",
-            "Pu (1 Floor) [ton]": f"{pu_1f:.2f}",
-            f"Total Pu ({num_floors} Floors) [ton]": f"{pu_tot:.2f}",
-            "pu_1f_val": pu_1f,
-            "pu_tot_val": pu_tot,
-            "atrib_val": atrib,
-        })
-
-    # ── Render Visual Column Reactions & Load Plan ───────────────────────────
-    fig_reac = generate_flat_slab_reactions_sketch(
-        Lx_calc, Ly_calc, cantilevers, num_floors, Wu,
-        col_reactions_data,
-        col_w_cm=bc_s, col_d_cm=tc_s,
-        removed_cols=_removed_col_objs,
-        void_panel_ids=set(_confirmed_voids),
-    )
-    st.pyplot(fig_reac, use_container_width=True)
-    buf_reac = io.BytesIO()
-    fig_reac.savefig(buf_reac, format="png", bbox_inches="tight", dpi=300)
-    buf_reac.seek(0)
-    img_reactions_b64 = "data:image/png;base64," + base64.b64encode(buf_reac.getvalue()).decode("utf-8")
-    buf_reac.seek(0)
-    st.download_button(
-        label="📥 Download Column Reactions Plan (High-Res PNG)",
-        data=buf_reac,
-        file_name=f"Flat_Slab_Column_Reactions_Plan_{num_floors}Floors.png",
-        mime="image/png",
-        use_container_width=True,
-    )
-    plt.close(fig_reac)
-
-    st.markdown("---")
-
-    with st.expander(f"📊 Column Reactions Table — {num_floors} Floors (جدول ردود أفعال وتوزيع أحمال الأعمدة)", expanded=False):
-        reactions_df = pd.DataFrame([
+        concrete_mat_df = pd.DataFrame([
             {
-                "Column ID": r["Column ID"],
-                "Grid": r["Grid"],
-                "Location Type": r["Location Type"],
-                "Tributary Area (m²)": r["Tributary Area (m²)"],
-                "Pu (1 Floor) [ton]": r["Pu (1 Floor) [ton]"],
-                f"Total Pu ({num_floors} Floors) [ton]": r[f"Total Pu ({num_floors} Floors) [ton]"],
-            }
-            for r in col_reactions_data
+                "المادة / المكون الإنشائي (Material Component)": "1. الخرسانة المسلحة الجاهزة (Reinforced Concrete Volume)",
+                "الكمية المحسوبة (Quantity)": f"{boq['concrete_vol_m3']:.2f} m³",
+                "الوحدة (Unit)": "متر مكعب (m³)",
+                "معدل الخلط / النسب المعيارية (Mix Proportion / Standard)": f"مسطح البلاطة الصافي: {boq['slab_area_m2']:.1f} m² × سمك {ts:.0f} cm",
+                "ملاحظات التنفيذ والتوريد (Procurement & Site Notes)": f"رتبة الخرسانة المطلوبة Fcu = {Fcu:.0f} kg/cm² (صب بالمضخة Pump)",
+            },
+            {
+                "المادة / المكون الإنشائي (Material Component)": "2. الأسمنت البورتلاندي العادي (Ordinary Portland Cement)",
+                "الكمية المحسوبة (Quantity)": f"{boq['cement_ton']:.2f} Ton ({boq['cement_kg']:,.0f} kg)",
+                "الوحدة (Unit)": "طن (Ton) / شكارة (Bag)",
+                "معدل الخلط / النسب المعيارية (Mix Proportion / Standard)": f"{boq['cement_content_kg_m3']:.0f} kg/m³ ({boq['cement_content_kg_m3']/50:.0f} شكاير / م³ خرسانة)",
+                "ملاحظات التنفيذ والتوريد (Procurement & Site Notes)": f"إجمالي عدد الشكائر: {boq['cement_bags']:,} شكارة (وزن الشكارة 50 كجم)",
+            },
+            {
+                "المادة / المكون الإنشائي (Material Component)": "3. الزلط / الركام الكبير (Gravel / Coarse Aggregate)",
+                "الكمية المحسوبة (Quantity)": f"{boq['gravel_m3']:.2f} m³",
+                "الوحدة (Unit)": "متر مكعب (m³)",
+                "معدل الخلط / النسب المعيارية (Mix Proportion / Standard)": "0.80 m³ زلط لكل 1.0 m³ خرسانة مسلحة",
+                "ملاحظات التنفيذ والتوريد (Procurement & Site Notes)": "زلط نظيف متدرج الحبيبات خالٍ من الشوائب والمواد العضوية",
+            },
+            {
+                "المادة / المكون الإنشائي (Material Component)": "4. الرمل الحرش / الركام الصغير (Clean Coarse Sand)",
+                "الكمية المحسوبة (Quantity)": f"{boq['sand_m3']:.2f} m³",
+                "الوحدة (Unit)": "متر مكعب (m³)",
+                "معدل الخلط / النسب المعيارية (Mix Proportion / Standard)": "0.40 m³ رمل لكل 1.0 m³ خرسانة مسلحة (نصف حجم الزلط)",
+                "ملاحظات التنفيذ والتوريد (Procurement & Site Notes)": "رمل حرش نظيف متدرج خالٍ من الطفلة والأملاح الضارة",
+            },
+            {
+                "المادة / المكون الإنشائي (Material Component)": "5. مياه الخلط التقريبية (Mixing Water)",
+                "الكمية المحسوبة (Quantity)": f"{boq['water_liters']:,.0f} لتر ({boq['water_liters']/1000:.2f} m³)",
+                "الوحدة (Unit)": "لتر (Liters) / متر مكعب (m³)",
+                "معدل الخلط / النسب المعيارية (Mix Proportion / Standard)": f"175 لتر / م³ (نسبة مياه/أسمنت w/c ≈ 0.50)",
+                "ملاحظات التنفيذ والتوريد (Procurement & Site Notes)": "مياه صالحة للشرب وخالية من الشوائب والزيوت",
+            },
         ])
-        st.dataframe(reactions_df, use_container_width=True, hide_index=True)
+        st.dataframe(concrete_mat_df, use_container_width=True, hide_index=True)
 
-    # ── 📊 CLASSIFICATION INTO 3 GOVERNING COLUMN TYPES ──────────────────────
-    with st.expander("📌 أقصى ردود أفعال وتصنيف نماذج الأعمدة (Governing Column Loads by Type)", expanded=False):
-        int_cols = [r for r in col_reactions_data if r["Raw Type"] == "Interior"]
-        edge_cols = [r for r in col_reactions_data if r["Raw Type"] == "Edge"]
-        corner_cols = [r for r in col_reactions_data if r["Raw Type"] == "Corner"]
+    # ── 🏆 FINAL SURVEY FOR COLUMNS & ROOF (الحصر النهائي للسقف والأعمدة) ───────────
+    slab_conc_1f = boq.get("concrete_vol_m3", 0.0)
+    slab_steel_kg_1f = boq.get("total_steel_kg", 0.0)
+    slab_steel_ton_1f = boq.get("total_steel_ton", 0.0)
+    slab_cement_ton_1f = boq.get("cement_ton", 0.0)
+    slab_cement_bags_1f = boq.get("cement_bags", 0)
+    slab_gravel_1f = boq.get("gravel_m3", 0.0)
+    slab_sand_1f = boq.get("sand_m3", 0.0)
+    slab_ratio_1f = boq.get("steel_ratio_kg_m3", 0.0)
 
-        max_int = max(int_cols, key=lambda x: x["pu_1f_val"]) if int_cols else None
-        max_edge = max(edge_cols, key=lambda x: x["pu_1f_val"]) if edge_cols else None
-        max_corner = max(corner_cols, key=lambda x: x["pu_1f_val"]) if corner_cols else None
+    cols_conc_1f = tot_conc_vol_1f
+    cols_steel_kg_1f = tot_steel_kg_1f
+    cols_steel_ton_1f = tot_steel_kg_1f / 1000.0
+    cols_cement_ton_1f = cement_ton_cols
+    cols_cement_bags_1f = cement_bags_cols
+    cols_gravel_1f = gravel_m3_cols
+    cols_sand_1f = sand_m3_cols
+    cols_ratio_1f = tot_ratio_1f
 
-        # Governing summary model table
-        summary_models = []
-        if max_int:
-            summary_models.append({
-                "Column Model (نموذج التصميم)": "C_int (أقصى عمود داخلي)",
-                "Governing Column": f"{max_int['Column ID']} ({max_int['Grid']})",
-                "Location Type": "داخلي (Interior)",
-                "Tributary Area (m²)": f"{max_int['atrib_val']:.2f}",
-                "Pu (1 Floor) [ton]": f"{max_int['pu_1f_val']:.2f}",
-                f"Total Pu ({num_floors} Floors) [ton]": f"{max_int['pu_tot_val']:.2f}",
-            })
-        if max_edge:
-            summary_models.append({
-                "Column Model (نموذج التصميم)": "C_edge (أقصى عمود طرفي)",
-                "Governing Column": f"{max_edge['Column ID']} ({max_edge['Grid']})",
-                "Location Type": "طرفي / وسط خارجي (Edge)",
-                "Tributary Area (m²)": f"{max_edge['atrib_val']:.2f}",
-                "Pu (1 Floor) [ton]": f"{max_edge['pu_1f_val']:.2f}",
-                f"Total Pu ({num_floors} Floors) [ton]": f"{max_edge['pu_tot_val']:.2f}",
-            })
-        if max_corner:
-            summary_models.append({
-                "Column Model (نموذج التصميم)": "C_corner (أقصى عمود ركن)",
-                "Governing Column": f"{max_corner['Column ID']} ({max_corner['Grid']})",
-                "Location Type": "ركن (Corner)",
-                "Tributary Area (m²)": f"{max_corner['atrib_val']:.2f}",
-                "Pu (1 Floor) [ton]": f"{max_corner['pu_1f_val']:.2f}",
-                f"Total Pu ({num_floors} Floors) [ton]": f"{max_corner['pu_tot_val']:.2f}",
-            })
+    comb_conc_1f = slab_conc_1f + cols_conc_1f
+    comb_steel_kg_1f = slab_steel_kg_1f + cols_steel_kg_1f
+    comb_steel_ton_1f = slab_steel_ton_1f + cols_steel_ton_1f
+    comb_cement_ton_1f = slab_cement_ton_1f + cols_cement_ton_1f
+    comb_cement_bags_1f = slab_cement_bags_1f + cols_cement_bags_1f
+    comb_gravel_1f = slab_gravel_1f + cols_gravel_1f
+    comb_sand_1f = slab_sand_1f + cols_sand_1f
+    comb_ratio_1f = (comb_steel_kg_1f / comb_conc_1f) if comb_conc_1f > 0 else 0.0
 
-        if summary_models:
-            st.dataframe(pd.DataFrame(summary_models), use_container_width=True, hide_index=True)
+    # Multi-storey figures
+    comb_conc_bld = comb_conc_1f * num_floors
+    comb_steel_ton_bld = comb_steel_ton_1f * num_floors
+    comb_steel_kg_bld = comb_steel_kg_1f * num_floors
+    comb_cement_ton_bld = comb_cement_ton_1f * num_floors
+    comb_cement_bags_bld = comb_cement_bags_1f * num_floors
+    comb_gravel_bld = comb_gravel_1f * num_floors
+    comb_sand_bld = comb_sand_1f * num_floors
+
+    with st.expander("🏆 Final Survey for Columns & Roof (الحصر النهائي للسقف والأعمدة)", expanded=False):
+        st.markdown(
+            f"""
+            <div style='background:#f8fafc; border-left:4px solid #0284c7; padding:10px 14px; border-radius:6px; margin-bottom:12px;'>
+                <b>📊 الحصر الشامل والنهائي لجميع المواد الإنشائية (Total Material Take-off & Survey):</b><br>
+                يجمع هذا القسم كافة الكميات والمواد المستهلكة في <b>البلاطة اللاكمرية (السقف)</b> بالإضافة إلى <b>كامل الأعمدة الخرسانية ({tot_active_cols} عمود)</b> للدور الواحد ولإجمالي كامل المبنى (<b>{num_floors} طوابق</b>).
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        # ── KPI Summary Cards ──
+        fs_c1, fs_c2, fs_c3, fs_c4 = st.columns(4)
+        with fs_c1:
+            st.markdown(
+                f"""
+                <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:10px 14px; text-align:center;">
+                    <div style="font-size:13px; font-weight:600; color:#15803d; margin-bottom:4px;">إجمالي حجم الخرسانة المسلحة</div>
+                    <div style="font-size:19.5px; font-weight:700; color:#166534;">{comb_conc_1f:.2f} m³</div>
+                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">ولـ {num_floors} طابق: <b>{comb_conc_bld:.2f} m³</b></div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with fs_c2:
+            st.markdown(
+                f"""
+                <div style="background:#f5f3ff; border:1.5px solid #c4b5fd; border-radius:8px; padding:10px 14px; text-align:center;">
+                    <div style="font-size:13px; font-weight:600; color:#6d28d9; margin-bottom:4px;">إجمالي وزن حديد التسليح</div>
+                    <div style="font-size:19.5px; font-weight:700; color:#5b21b6;">{comb_steel_ton_1f:.3f} Ton</div>
+                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">ولـ {num_floors} طابق: <b>{comb_steel_ton_bld:.3f} Ton</b></div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with fs_c3:
+            st.markdown(
+                f"""
+                <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:10px 14px; text-align:center;">
+                    <div style="font-size:13px; font-weight:600; color:#1e40af; margin-bottom:4px;">إجمالي كمية الأسمنت</div>
+                    <div style="font-size:19.5px; font-weight:700; color:#1e3a8a;">{comb_cement_ton_1f:.2f} Ton</div>
+                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">{comb_cement_bags_1f:,} شكارة (ولـ {num_floors} طابق: <b>{comb_cement_ton_bld:.2f} t</b>)</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with fs_c4:
+            st.markdown(
+                f"""
+                <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:8px; padding:10px 14px; text-align:center;">
+                    <div style="font-size:13px; font-weight:600; color:#b45309; margin-bottom:4px;">متوسط معدل التسليح الإجمالي</div>
+                    <div style="font-size:19.5px; font-weight:700; color:#92400e;">{comb_ratio_1f:.1f} kg/m³</div>
+                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">زلط: {comb_gravel_1f:.1f} m³ | رمل: {comb_sand_1f:.1f} m³</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
+
+        # ── Table: إجماليات وتفصيل مواد البلاطات والأعمدة والإجمالي الموحد ──
+        st.markdown("##### 📋 جدول تفصيل وإجماليات المواد لكل عنصر إنشائي (Slab & Columns Materials Breakdown):")
+        elements_breakdown_data = [
+            {
+                "العنصر الإنشائي (Structural Element)": f"1. سقف البلاطة اللاكمرية (Flat Slab ts={ts:.0f}cm)",
+                "حجم الخرسانة (m³)": f"{slab_conc_1f:.2f} m³",
+                "وزن الحديد (Ton)": f"{slab_steel_ton_1f:.3f} Ton",
+                "وزن الحديد (kg)": f"{slab_steel_kg_1f:,.1f} kg",
+                "الأسمنت (Ton)": f"{slab_cement_ton_1f:.2f} Ton",
+                "الأسمنت (شكارة 50kg)": f"{slab_cement_bags_1f:,} شكارة",
+                "الزلط (m³)": f"{slab_gravel_1f:.2f} m³",
+                "الرمل (m³)": f"{slab_sand_1f:.2f} m³",
+                "معدل التسليح (kg/m³)": f"{slab_ratio_1f:.1f} kg/m³",
+            },
+            {
+                "العنصر الإنشائي (Structural Element)": f"2. أعمدة المسقط الإنشائي ({tot_active_cols} عمود)",
+                "حجم الخرسانة (m³)": f"{cols_conc_1f:.2f} m³",
+                "وزن الحديد (Ton)": f"{cols_steel_ton_1f:.3f} Ton",
+                "وزن الحديد (kg)": f"{cols_steel_kg_1f:,.1f} kg",
+                "الأسمنت (Ton)": f"{cols_cement_ton_1f:.2f} Ton",
+                "الأسمنت (شكارة 50kg)": f"{cols_cement_bags_1f:,} شكارة",
+                "الزلط (m³)": f"{cols_gravel_1f:.2f} m³",
+                "الرمل (m³)": f"{cols_sand_1f:.2f} m³",
+                "معدل التسليح (kg/m³)": f"{cols_ratio_1f:.1f} kg/m³",
+            },
+            {
+                "العنصر الإنشائي (Structural Element)": "📌 الإجمالي الموحد للدور الواحد (Total 1 Floor)",
+                "حجم الخرسانة (m³)": f"{comb_conc_1f:.2f} m³",
+                "وزن الحديد (Ton)": f"{comb_steel_ton_1f:.3f} Ton",
+                "وزن الحديد (kg)": f"{comb_steel_kg_1f:,.1f} kg",
+                "الأسمنت (Ton)": f"{comb_cement_ton_1f:.2f} Ton",
+                "الأسمنت (شكارة 50kg)": f"{comb_cement_bags_1f:,} شكارة",
+                "الزلط (m³)": f"{comb_gravel_1f:.2f} m³",
+                "الرمل (m³)": f"{comb_sand_1f:.2f} m³",
+                "معدل التسليح (kg/m³)": f"{comb_ratio_1f:.1f} kg/m³",
+            },
+            {
+                "العنصر الإنشائي (Structural Element)": f"🏢 الإجمالي لكامل المبنى ({num_floors} طوابق)",
+                "حجم الخرسانة (m³)": f"{comb_conc_bld:.2f} m³",
+                "وزن الحديد (Ton)": f"{comb_steel_ton_bld:.3f} Ton",
+                "وزن الحديد (kg)": f"{comb_steel_kg_bld:,.1f} kg",
+                "الأسمنت (Ton)": f"{comb_cement_ton_bld:.2f} Ton",
+                "الأسمنت (شكارة 50kg)": f"{comb_cement_bags_bld:,} شكارة",
+                "الزلط (m³)": f"{comb_gravel_bld:.2f} m³",
+                "الرمل (m³)": f"{comb_sand_bld:.2f} m³",
+                "معدل التسليح (kg/m³)": f"{comb_ratio_1f:.1f} kg/m³",
+            },
+        ]
+        st.dataframe(pd.DataFrame(elements_breakdown_data), use_container_width=True, hide_index=True)
 
     st.markdown("---")
 

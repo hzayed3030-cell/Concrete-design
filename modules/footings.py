@@ -428,12 +428,12 @@ def generate_footing_section_sketch(
 
 def render():
     st.markdown(
-        '<div class="section-header">🪨 Module 3 – Isolated Footing Design (ECP 203)</div>',
+        '<div class="section-header">🪨 Module 3 – Isolated Footing Design (ECP 203) (تصميم القواعد المنفصلة)</div>',
         unsafe_allow_html=True,
     )
 
     # ── INPUTS ──────────────────────────────────────────────────────────────
-    with st.expander("📝 Design Inputs", expanded=True):
+    with st.expander("📝 Design Inputs (مدخلات التصميم والأبعاد والأحمال)", expanded=True):
         c1, c2, c3 = st.columns(3)
 
         with c1:
@@ -589,7 +589,7 @@ def render():
 
     # ── SECTION HEADER ───────────────────────────────────────────────────────
     st.markdown(
-        '<div class="section-header">📊 Design Results & Structural Verification</div>',
+        '<div class="section-header">📊 Design Results & Structural Verification (نتائج التصميم والتحقق الإنشائي)</div>',
         unsafe_allow_html=True,
     )
 
@@ -602,7 +602,7 @@ def render():
     default_B   = int(saved_B)   if saved_B   is not None else int(B_req)
     default_trc = int(saved_trc) if saved_trc is not None else int(t_rc_min_suggested)
 
-    with st.expander("📐 Interactive Footing Sizing Controls (Dynamic Dimensioning)", expanded=True):
+    with st.expander("📐 Interactive Footing Sizing Controls (Dynamic Dimensioning) (التحكم التفاعلي في أبعاد القاعدة)", expanded=True):
         col_L, col_B, col_t = st.columns(3)
 
         with col_L:
@@ -952,7 +952,7 @@ def render():
         )
 
     # ── REINFORCEMENT LAYOUT CARDS ───────────────────────────────────────────
-    with st.expander("🔩 Reinforcement Layout (ECP 203)", expanded=False):
+    with st.expander("🔩 Reinforcement Layout (ECP 203) (مخطط وتفاصيل حديد التسليح)", expanded=False):
         c_long, c_sht = st.columns(2)
         with c_long:
             st.markdown(
@@ -995,7 +995,7 @@ def render():
             )
 
     # ── DETAILED CALCULATION SHEET (TABS) ────────────────────────────────────
-    with st.expander("📋 Detailed Calculation Sheet", expanded=False):
+    with st.expander("📋 Detailed Calculation Sheet (جدول الحسابات التفصيلية الكاملة)", expanded=False):
         tab_geom, tab_conc, tab_rebar = st.tabs([
             "📐 Geometry & Soil Pressures",
             "🧱 Concrete & Shear Checks",

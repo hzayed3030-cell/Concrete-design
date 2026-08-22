@@ -1,6 +1,6 @@
 {
-  "selected_module_idx": 1,
-  "col_Pu_input": 140.0,
+  "selected_module_idx": 0,
+  "col_Pu_input": 155.0,
   "col_Safety_Factor": 1.2,
   "col_b": 30,
   "col_H_clear": 350,
@@ -9,7 +9,7 @@
   "col_Fy": 4000,
   "col_Fyk": 2400,
   "col_mu_target": 1.0,
-  "col_Phi_index": 3,
+  "col_Phi_index": 1,
   "col_Phi_st_index": 1,
   "ftg_bc": 30,
   "ftg_tc": 50,
@@ -39,7 +39,9 @@
   "slab_ts_initial": 20,
   "slab_n_floors": 3,
   "slab_bottom_mesh_dia_idx": 2,
+  "slab_n_btm_mesh": 5,
   "slab_top_mesh_dia_idx": 1,
+  "slab_n_top_mesh": 5,
   "slab_col_extra_dia_idx": 2,
   "slab_strip_top_extra_dia_idx": 2,
   "slab_strip_bottom_extra_dia_idx": 2,
@@ -56,7 +58,7 @@
   "fs_lx_9": 6.0,
   "fs_ly_0": 2.0,
   "fs_ly_1": 4.5,
-  "fs_ly_2": 5.0,
+  "fs_ly_2": 4.3,
   "fs_ly_3": 6.0,
   "fs_ly_4": 6.0,
   "fs_ly_5": 6.0,
@@ -74,5 +76,10 @@
   ],
   "font_size_inputs": 14,
   "font_size_outputs": 14,
-  "fs_moment_contour_view_mode_idx": 2
+  "fs_moment_contour_view_mode_idx": 1,
+  "fs_additional_moment_contour_view_mode_idx": 2,
+  "fs_deficit_contour_view_mode_idx": 0,
+  "fs_col_pu_int": 38.51662499999999,
+  "fs_col_pu_edge": 30.953999999999994,
+  "fs_col_pu_corner": 15.125249999999998
 }

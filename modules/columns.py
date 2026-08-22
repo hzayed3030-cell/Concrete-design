@@ -35,12 +35,13 @@ def draw_rectangular_column_output(
     pu_cap: float = None,
     cover: float = 2.5,
     slender_str: str = "Short Column (λb ≤ 10)",
+    H_clear: float = 300.0,
     save_path: str = None,
 ):
     """
     Renders an engineering design output sheet for a rectangular reinforced concrete column (ECP 203).
-    Creates a structural CAD-like cross-section with rebar & stirrup detailing alongside
-    a comprehensive, high-contrast Design Output Summary Card.
+    Creates a structural CAD-like cross-section alongside a detailed Rebar Bending / Detailing sketch
+    and a comprehensive Design & Quantities Take-off Summary Card.
     Units strictly in: kg, cm, ton, kg/cm² (No Newton / MPa units).
     """
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Helvetica", "sans-serif"]
@@ -66,83 +67,23 @@ def draw_rectangular_column_output(
     n_bars = n_bars or 4
     phi_mm = phi_mm or 16
 
-    # Create Figure with 2 Subplots (Left: Cross-Section, Right: Summary Card)
-    fig = plt.figure(figsize=(12, 7.2), dpi=130, facecolor="#ffffff")
-    gs = fig.add_gridspec(
-        1, 2, width_ratios=[1.05, 1.15], wspace=0.10, left=0.04, right=0.96, top=0.88, bottom=0.07
-    )
-    ax_sec = fig.add_subplot(gs[0, 0])
-    ax_card = fig.add_subplot(gs[0, 1])
+    # ── Detailed Rebar & Quantities Calculations for Detailing ──
+    H_m = float(H_clear) / 100.0
+    L_splice_m = max(1.0, (50.0 * phi_mm) / 1000.0)
+    L_splice_cm = L_splice_m * 100.0
+    L_bar_m = H_m + L_splice_m
+    L_bar_cm = float(H_clear) + L_splice_cm
+    unit_w_main = (phi_mm ** 2) / 162.0
+    tot_len_main_m = n_bars * L_bar_m
+    tot_w_main_kg = tot_len_main_m * unit_w_main
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # 1. LEFT SUBPLOT: COLUMN CROSS-SECTION & DETAILING
-    # ═══════════════════════════════════════════════════════════════════════
-    ax_sec.set_facecolor("#ffffff")
+    b_core = max(b_val - 2 * cover, 1.0)
+    t_core = max(t_val - 2 * cover, 1.0)
+    hook_len_cm = max(8.0, 10.0 * (phi_st_mm / 10.0))
 
-    # Concrete outer rectangle
-    col_rect = patches.Rectangle(
-        (0, 0),
-        b_val,
-        t_val,
-        linewidth=2.8,
-        edgecolor="#0f172a",
-        facecolor="#e6ecf5",
-        zorder=1,
-    )
-    ax_sec.add_patch(col_rect)
-
-    # Core concrete inside ties
-    st_x = cover
-    st_y = cover
-    st_w = max(b_val - 2 * cover, 1.0)
-    st_h = max(t_val - 2 * cover, 1.0)
-
-    core_rect = patches.Rectangle(
-        (st_x, st_y),
-        st_w,
-        st_h,
-        facecolor="#f1f5f9",
-        edgecolor="none",
-        zorder=2,
-    )
-    ax_sec.add_patch(core_rect)
-
-    # Perimeter Stirrup / Ties
-    rounding = min(1.5, cover * 0.6)
-    stirrup_patch = FancyBboxPatch(
-        (st_x, st_y),
-        st_w,
-        st_h,
-        boxstyle=f"round,pad=0,rounding_size={rounding}",
-        linewidth=2.4,
-        edgecolor="#16a34a",  # Vivid Green
-        facecolor="none",
-        zorder=4,
-    )
-    ax_sec.add_patch(stirrup_patch)
-
-    # Stirrup standard 135-degree corner hook (top-left)
-    hook_sz = min(3.5, max(2.2, st_w * 0.15))
-    ax_sec.plot(
-        [st_x, st_x + hook_sz * 0.707],
-        [st_y + st_h, st_y + st_h - hook_sz * 0.707],
-        color="#16a34a",
-        lw=2.4,
-        zorder=5,
-    )
-    ax_sec.plot(
-        [st_x + hook_sz * 0.707, st_x],
-        [st_y + st_h - hook_sz * 0.707, st_y + st_h - hook_sz * 1.15],
-        color="#16a34a",
-        lw=2.4,
-        zorder=5,
-    )
-
-    # Rebar layout calculation
-    bar_radius = max(1.1, min(2.1, (phi_mm / 10.0) * 0.85))
+    # Rebar grid geometry calculation
     offset_x = cover + (phi_mm / 10.0) / 2.0
     offset_y = cover + (phi_mm / 10.0) / 2.0
-
     w_rebar = max(b_val - 2 * offset_x, 1.0)
     h_rebar = max(t_val - 2 * offset_y, 1.0)
 
@@ -161,6 +102,95 @@ def draw_rectangular_column_output(
     xs_b = np.linspace(offset_x, b_val - offset_x, nx)
     ys_d = np.linspace(offset_y, t_val - offset_y, ny)
 
+    # Check if Automatic Stirrup (كانة أوتوماتيك) is required (more than 3 rows in depth: ny > 3 or nx > 3)
+    is_auto_tie = (ny > 3) or (nx > 3)
+
+    if is_auto_tie:
+        # Inner loop geometry
+        if ny >= 4 and nx == 2:
+            t_core_in = max(float(ys_d[-2] - ys_d[1]) + (phi_mm / 10.0), 5.0)
+            b_core_in = b_core
+            L_tie_cm = 2.0 * (b_core + t_core) + 2.0 * (b_core_in + t_core_in) + 4.0 * hook_len_cm
+            tie_type_str = "Automatic 4-Branch Tie (كانة أوتوماتيك)"
+        elif nx >= 3 and ny >= 3:
+            b_core_in = max(float(xs_b[-2] - xs_b[1]) + (phi_mm / 10.0), 5.0)
+            t_core_in = max(float(ys_d[-2] - ys_d[1]) + (phi_mm / 10.0), 5.0)
+            L_tie_cm = 2.0 * (b_core + t_core) + 2.0 * (b_core_in + t_core_in) + 4.0 * hook_len_cm
+            tie_type_str = "Automatic Multi-Branch Tie (كانة أوتوماتيك)"
+        else:
+            t_core_in = t_core * 0.5
+            b_core_in = b_core
+            L_tie_cm = 2.0 * (b_core + t_core) + 2.0 * (b_core_in + t_core_in) + 4.0 * hook_len_cm
+            tie_type_str = "Automatic 4-Branch Tie (كانة أوتوماتيك)"
+    else:
+        t_core_in = 0.0
+        b_core_in = 0.0
+        L_tie_cm = 2.0 * (b_core + t_core) + 2.0 * hook_len_cm
+        tie_type_str = "Closed Box Tie (كانة صندوقية)"
+
+    L_tie_m = L_tie_cm / 100.0
+    n_ties = max(5, int(math.ceil(H_m * n_st_per_m)))
+    unit_w_st = (phi_st_mm ** 2) / 162.0
+    tot_len_st_m = n_ties * L_tie_m
+    tot_w_st_kg = tot_len_st_m * unit_w_st
+
+    tot_steel_kg = tot_w_main_kg + tot_w_st_kg
+    vol_conc_m3 = (b_val / 100.0) * (t_val / 100.0) * H_m
+    steel_ratio = (tot_steel_kg / vol_conc_m3) if vol_conc_m3 > 0 else 0.0
+
+    cement_kg = vol_conc_m3 * 350.0
+    cement_bags = int(round(cement_kg / 50.0))
+    gravel_m3 = vol_conc_m3 * 0.80
+    sand_m3 = vol_conc_m3 * 0.40
+
+    # Create figure: Row 0 has 2 drawings side-by-side across full width, Row 1 has horizontal summary strip
+    fig = plt.figure(figsize=(17.5, 10.0), dpi=140, facecolor="#ffffff")
+    gs = fig.add_gridspec(
+        2, 2, height_ratios=[3.6, 1.55], width_ratios=[1.0, 1.25],
+        wspace=0.10, hspace=0.20, left=0.03, right=0.97, top=0.92, bottom=0.035
+    )
+    ax_sec = fig.add_subplot(gs[0, 0])
+    ax_det = fig.add_subplot(gs[0, 1])
+    ax_strip = fig.add_subplot(gs[1, :])
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # 1. LEFT SUBPLOT: COLUMN CROSS-SECTION & AUTOMATIC TIES
+    # ═══════════════════════════════════════════════════════════════════════
+    ax_sec.set_facecolor("#ffffff")
+
+    # Concrete outer rectangle
+    col_rect = patches.Rectangle(
+        (0, 0), b_val, t_val,
+        linewidth=3.0, edgecolor="#0f172a", facecolor="#e6ecf5", zorder=1,
+    )
+    ax_sec.add_patch(col_rect)
+
+    st_x = cover
+    st_y = cover
+    st_w = b_core
+    st_h = t_core
+
+    core_rect = patches.Rectangle(
+        (st_x, st_y), st_w, st_h,
+        facecolor="#f1f5f9", edgecolor="none", zorder=2,
+    )
+    ax_sec.add_patch(core_rect)
+
+    # Outer perimeter tie
+    rounding = min(1.5, cover * 0.6)
+    stirrup_patch = FancyBboxPatch(
+        (st_x, st_y), st_w, st_h,
+        boxstyle=f"round,pad=0,rounding_size={rounding}",
+        linewidth=2.6, edgecolor="#16a34a", facecolor="none", zorder=4,
+    )
+    ax_sec.add_patch(stirrup_patch)
+
+    hook_sz = min(3.5, max(2.2, st_w * 0.15))
+    ax_sec.plot([st_x, st_x + hook_sz * 0.707], [st_y + st_h, st_y + st_h - hook_sz * 0.707], color="#16a34a", lw=2.6, zorder=5)
+    ax_sec.plot([st_x + hook_sz * 0.707, st_x], [st_y + st_h - hook_sz * 0.707, st_y + st_h - hook_sz * 1.15], color="#16a34a", lw=2.6, zorder=5)
+
+    bar_radius = max(1.15, min(2.2, (phi_mm / 10.0) * 0.90))
+
     rebar_coords = []
     for x in xs_b:
         rebar_coords.append((x, offset_y))
@@ -172,252 +202,280 @@ def draw_rectangular_column_output(
 
     unique_rebars = []
     for pt in rebar_coords:
-        if not any(
-            np.isclose(pt[0], u[0], atol=1e-2) and np.isclose(pt[1], u[1], atol=1e-2)
-            for u in unique_rebars
-        ):
+        if not any(np.isclose(pt[0], u[0], atol=1e-2) and np.isclose(pt[1], u[1], atol=1e-2) for u in unique_rebars):
             unique_rebars.append(pt)
 
-    # Intermediate ties (internal ties / branch ties)
-    if ny >= 4 and nx == 2:
-        for y in ys_d[1:-1]:
-            ax_sec.plot(
-                [st_x, b_val - st_x], [y, y], color="#16a34a", lw=1.8, linestyle="--", zorder=3
+    # Inner Automatic Stirrup loop (drawn when ny > 3 or nx > 3)
+    if is_auto_tie:
+        if ny >= 4 and nx == 2:
+            in_y_min = ys_d[1] - (phi_mm / 10.0) / 2.0 - 0.4
+            in_y_max = ys_d[-2] + (phi_mm / 10.0) / 2.0 + 0.4
+            in_h = in_y_max - in_y_min
+            inner_stirrup = FancyBboxPatch(
+                (st_x + 0.5, in_y_min), st_w - 1.0, in_h,
+                boxstyle=f"round,pad=0,rounding_size={rounding}",
+                linewidth=2.2, edgecolor="#059669", facecolor="#ecfdf5", linestyle="-", zorder=3,
             )
-            ax_sec.plot([st_x, st_x + 1.2], [y, y + 0.8], color="#16a34a", lw=1.8, zorder=3)
-            ax_sec.plot([b_val - st_x, b_val - st_x - 1.2], [y, y - 0.8], color="#16a34a", lw=1.8, zorder=3)
-    elif nx >= 3 and ny >= 3:
-        mid_x = b_val / 2.0
-        mid_y = t_val / 2.0
-        if len(unique_rebars) == 8:
-            d_pts = [
-                (mid_x, offset_y),
-                (b_val - offset_x, mid_y),
-                (mid_x, t_val - offset_y),
-                (offset_x, mid_y),
-                (mid_x, offset_y),
-            ]
-            dx, dy = zip(*d_pts)
-            ax_sec.plot(dx, dy, color="#16a34a", lw=1.8, linestyle="--", zorder=3)
+            ax_sec.add_patch(inner_stirrup)
+            # Inner tie hooks
+            ax_sec.plot([st_x + 0.5, st_x + 0.5 + hook_sz * 0.6], [in_y_min + in_h, in_y_min + in_h - hook_sz * 0.6], color="#059669", lw=2.2, zorder=5)
+            ax_sec.plot([st_x + 0.5 + hook_sz * 0.6, st_x + 0.5], [in_y_min + in_h - hook_sz * 0.6, in_y_min + in_h - hook_sz * 0.9], color="#059669", lw=2.2, zorder=5)
 
-    # Draw Rebars
+        elif nx >= 3 and ny >= 3:
+            in_x_min = xs_b[1] - (phi_mm / 10.0) / 2.0 - 0.4
+            in_x_max = xs_b[-2] + (phi_mm / 10.0) / 2.0 + 0.4
+            in_y_min = ys_d[1] - (phi_mm / 10.0) / 2.0 - 0.4
+            in_y_max = ys_d[-2] + (phi_mm / 10.0) / 2.0 + 0.4
+            inner_stirrup = FancyBboxPatch(
+                (in_x_min, in_y_min), in_x_max - in_x_min, in_y_max - in_y_min,
+                boxstyle=f"round,pad=0,rounding_size={rounding}",
+                linewidth=2.2, edgecolor="#059669", facecolor="#ecfdf5", linestyle="-", zorder=3,
+            )
+            ax_sec.add_patch(inner_stirrup)
+
     for rx, ry in unique_rebars:
-        rebar_circle = Circle(
-            (rx, ry),
-            radius=bar_radius,
-            facecolor="#dc2626",  # Crimson Red
-            edgecolor="#1e293b",
-            linewidth=1.4,
-            zorder=6,
-        )
+        rebar_circle = Circle((rx, ry), radius=bar_radius, facecolor="#dc2626", edgecolor="#1e293b", linewidth=1.5, zorder=6)
         ax_sec.add_patch(rebar_circle)
 
-    # Dimension Lines
-    dim_offset = max(6.0, min(b_val, t_val) * 0.16)
-
-    # Width dimension (b) - Bottom
+    dim_offset = max(7.0, min(b_val, t_val) * 0.18)
     y_dim = -dim_offset
-    ax_sec.plot([0, 0], [0, y_dim - 1.2], color="#94a3b8", lw=1.1, linestyle=":", zorder=2)
-    ax_sec.plot([b_val, b_val], [0, y_dim - 1.2], color="#94a3b8", lw=1.1, linestyle=":", zorder=2)
-    ax_sec.annotate(
-        "",
-        xy=(b_val, y_dim),
-        xytext=(0, y_dim),
-        arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6, shrinkA=0, shrinkB=0),
-    )
-    ax_sec.text(
-        b_val / 2.0,
-        y_dim - 1.4,
-        f"b = {b_disp} cm",
-        ha="center",
-        va="top",
-        fontsize=13,
-        weight="bold",
-        color="#0f172a",
-    )
+    ax_sec.plot([0, 0], [0, y_dim - 1.2], color="#94a3b8", lw=1.2, linestyle=":", zorder=2)
+    ax_sec.plot([b_val, b_val], [0, y_dim - 1.2], color="#94a3b8", lw=1.2, linestyle=":", zorder=2)
+    ax_sec.annotate("", xy=(b_val, y_dim), xytext=(0, y_dim), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.8, shrinkA=0, shrinkB=0))
+    ax_sec.text(b_val / 2.0, y_dim - 1.6, f"b = {b_disp} cm", ha="center", va="top", fontsize=13.5, weight="bold", color="#0f172a")
 
-    # Depth dimension (t) - Left
     x_dim = -dim_offset
-    ax_sec.plot([0, x_dim - 1.2], [0, 0], color="#94a3b8", lw=1.1, linestyle=":", zorder=2)
-    ax_sec.plot([0, x_dim - 1.2], [t_val, t_val], color="#94a3b8", lw=1.1, linestyle=":", zorder=2)
-    ax_sec.annotate(
-        "",
-        xy=(x_dim, t_val),
-        xytext=(x_dim, 0),
-        arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6, shrinkA=0, shrinkB=0),
-    )
-    ax_sec.text(
-        x_dim - 1.4,
-        t_val / 2.0,
-        f"t = {t_disp} cm",
-        ha="right",
-        va="center",
-        rotation=90,
-        fontsize=13,
-        weight="bold",
-        color="#0f172a",
-    )
+    ax_sec.plot([0, x_dim - 1.2], [0, 0], color="#94a3b8", lw=1.2, linestyle=":", zorder=2)
+    ax_sec.plot([0, x_dim - 1.2], [t_val, t_val], color="#94a3b8", lw=1.2, linestyle=":", zorder=2)
+    ax_sec.annotate("", xy=(x_dim, t_val), xytext=(x_dim, 0), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.8, shrinkA=0, shrinkB=0))
+    ax_sec.text(x_dim - 1.6, t_val / 2.0, f"t = {t_disp} cm", ha="right", va="center", rotation=90, fontsize=13.5, weight="bold", color="#0f172a")
 
-    # Leader Callout for Main Steel (Top Right)
     top_right_bar = (b_val - offset_x, t_val - offset_y)
     ax_sec.annotate(
-        f"Main RFT: {main_steel_str}",
-        xy=top_right_bar,
-        xytext=(b_val * 0.45, t_val + dim_offset * 1.05),
+        f"Main: {main_steel_str} ({ny} Rows)", xy=top_right_bar, xytext=(b_val * 0.30, t_val + dim_offset * 1.10),
         arrowprops=dict(arrowstyle="->", color="#dc2626", lw=1.8, connectionstyle="arc3,rad=-0.15"),
-        fontsize=12,
-        weight="bold",
-        color="#991b1b",
-        ha="left",
-        va="bottom",
-        bbox=dict(boxstyle="round,pad=0.38", facecolor="#fee2e2", edgecolor="#ef4444", lw=1.4),
+        fontsize=13, weight="bold", color="#991b1b", ha="left", va="bottom",
+        bbox=dict(boxstyle="round,pad=0.35", facecolor="#fee2e2", edgecolor="#ef4444", lw=1.4),
     )
 
-    # Leader Callout for Stirrups (Top Left)
+    stirrup_label = f"Auto Ties: {n_st_per_m}Φ{phi_st_mm}/m'" if is_auto_tie else f"Ties: {stirrups_str}"
     top_left_stirrup = (st_x + st_w * 0.25, st_y + st_h)
     ax_sec.annotate(
-        f"Stirrups: {stirrups_str}",
-        xy=top_left_stirrup,
-        xytext=(b_val * 0.10, t_val + dim_offset * 1.05),
+        stirrup_label, xy=top_left_stirrup, xytext=(b_val * 0.10, t_val + dim_offset * 1.10),
         arrowprops=dict(arrowstyle="->", color="#16a34a", lw=1.8, connectionstyle="arc3,rad=0.15"),
-        fontsize=11.5,
-        weight="bold",
-        color="#15803d",
-        ha="right",
-        va="bottom",
-        bbox=dict(boxstyle="round,pad=0.38", facecolor="#dcfce7", edgecolor="#22c55e", lw=1.4),
+        fontsize=13, weight="bold", color="#15803d", ha="right", va="bottom",
+        bbox=dict(boxstyle="round,pad=0.35", facecolor="#dcfce7", edgecolor="#22c55e", lw=1.4),
     )
 
-    # Section bounds & aspect
-    pad_left = dim_offset + 12
-    pad_right = max(dim_offset + 16, b_val * 0.5 + 20)
-    pad_y_top = dim_offset * 1.05 + 16
-    pad_y_bot = dim_offset + 8
+    pad_left = dim_offset + 10
+    pad_right = max(dim_offset + 14, b_val * 0.4 + 16)
+    pad_y_top = dim_offset * 1.10 + 16
+    pad_y_bot = dim_offset + 12
     ax_sec.set_xlim(-pad_left, b_val + pad_right)
     ax_sec.set_ylim(-pad_y_bot, t_val + pad_y_top)
     ax_sec.set_aspect("equal", adjustable="box")
     ax_sec.axis("off")
+    sec_title = f"1. COLUMN CROSS-SECTION ({b_disp}×{t_disp} cm — {ny} REBAR ROWS)"
+    ax_sec.text((b_val) / 2.0, -pad_y_bot + 1.2, sec_title, ha="center", va="bottom", fontsize=13.5, weight="bold", color="#0f172a")
 
     # ═══════════════════════════════════════════════════════════════════════
-    # 2. RIGHT SUBPLOT: DESIGN OUTPUT SUMMARY CARD
+    # 2. RIGHT SUBPLOT: REBAR BENDING & AUTOMATIC TIES BBS
     # ═══════════════════════════════════════════════════════════════════════
-    ax_card.set_facecolor("#ffffff")
-    ax_card.axis("off")
-    ax_card.set_xlim(0, 1)
-    ax_card.set_ylim(0, 1)
+    ax_det.set_facecolor("#ffffff")
+    ax_det.axis("off")
+    ax_det.set_xlim(0, 1)
+    ax_det.set_ylim(0, 1)
 
-    # Outer Card Box
-    card_bg = FancyBboxPatch(
-        (0.01, 0.01),
-        0.98,
-        0.98,
-        boxstyle="round,pad=0.03,rounding_size=0.04",
-        linewidth=2.2,
-        edgecolor="#831843",  # Dark Crimson/Maroon border
-        facecolor="#fffdf5",  # Warm ivory/parchment background
-        zorder=1,
+    det_bg = FancyBboxPatch((0.01, 0.01), 0.98, 0.98, boxstyle="round,pad=0.02,rounding_size=0.03", linewidth=2.0, edgecolor="#94a3b8", facecolor="#f8fafc", zorder=1)
+    ax_det.add_patch(det_bg)
+
+    ax_det.text(0.50, 0.945, "2. REBAR BENDING & DETAILING DIAGRAM (BBS)", ha="center", va="center", fontsize=14, weight="bold", color="#0f172a", zorder=3)
+
+    # Sub-section A: Main Rebar
+    rx = 0.14
+    y_bot = 0.56
+    y_col_top = 0.81
+    y_splice_top = 0.90
+
+    ax_det.plot([rx, rx], [y_bot, y_col_top], color="#dc2626", lw=3.4, zorder=4)
+    ax_det.plot([rx, rx + 0.022], [y_col_top, y_col_top + 0.02], color="#dc2626", lw=3.4, zorder=4)
+    ax_det.plot([rx + 0.022, rx + 0.022], [y_col_top + 0.02, y_splice_top], color="#dc2626", lw=3.4, zorder=4)
+    ax_det.plot([rx, rx - 0.045], [y_bot, y_bot], color="#dc2626", lw=3.4, zorder=4)
+
+    ax_det.annotate("", xy=(0.055, y_col_top), xytext=(0.055, y_bot), arrowprops=dict(arrowstyle="<->", color="#475569", lw=1.4))
+    ax_det.text(0.04, (y_bot + y_col_top) / 2, f"H = {H_clear:.0f} cm", ha="right", va="center", fontsize=11, weight="bold", color="#334155", rotation=90)
+
+    ax_det.annotate("", xy=(0.055, y_splice_top), xytext=(0.055, y_col_top), arrowprops=dict(arrowstyle="<->", color="#b91c1c", lw=1.4))
+    ax_det.text(0.04, (y_col_top + y_splice_top) / 2, f"Ld={L_splice_cm:.0f}cm", ha="right", va="center", fontsize=10.5, weight="bold", color="#b91c1c", rotation=90)
+
+    ax_det.text(0.24, 0.86, f"• Main Bar Diameter:  Φ {phi_mm} mm", fontsize=12.5, weight="bold", color="#1e293b", zorder=3)
+    ax_det.text(0.24, 0.79, f"• Total Bars Count:  {n_bars} Bars ({ny} Rows × {nx} Cols)", fontsize=12.5, weight="bold", color="#1e293b", zorder=3)
+    ax_det.text(0.24, 0.72, f"• Cut Length / Bar:  {L_bar_m:.2f} m' ({L_bar_cm:.0f} cm)", fontsize=12.5, weight="bold", color="#991b1b", zorder=3)
+    ax_det.text(0.24, 0.65, f"• Total Steel Length:  {tot_len_main_m:,.1f} m'", fontsize=12, color="#475569", zorder=3)
+    ax_det.text(0.24, 0.58, f"• Total Main Weight:  {tot_w_main_kg:.1f} kg ({tot_w_main_kg/1000.0:.3f} Ton)", fontsize=13, weight="bold", color="#047857", zorder=3)
+
+    ax_det.plot([0.03, 0.97], [0.51, 0.51], color="#cbd5e1", lw=1.4, linestyle="--", zorder=3)
+
+    # Sub-section B: Stirrups (Automatic vs Closed)
+    tie_header = "B. AUTOMATIC 4-BRANCH TIE (ECP 203)" if is_auto_tie else "B. CLOSED STIRRUP TIE"
+    ax_det.text(0.50, 0.47, tie_header, ha="center", va="center", fontsize=13, weight="bold", color="#15803d", zorder=3)
+
+    sx = 0.06
+    sy = 0.08
+    sw = 0.16
+    sh = 0.32
+
+    # Outer tie
+    st_outer = FancyBboxPatch(
+        (sx, sy), sw, sh,
+        boxstyle="round,pad=0,rounding_size=0.015",
+        linewidth=2.6, edgecolor="#16a34a", facecolor="#f0fdf4", zorder=4,
     )
-    ax_card.add_patch(card_bg)
+    ax_det.add_patch(st_outer)
 
-    # Card Title Banner
-    banner = FancyBboxPatch(
-        (0.03, 0.88),
-        0.94,
-        0.09,
-        boxstyle="round,pad=0.02,rounding_size=0.03",
-        linewidth=1.2,
-        edgecolor="#831843",
-        facecolor="#831843",
-        zorder=2,
-    )
-    ax_card.add_patch(banner)
-    ax_card.text(
-        0.50,
-        0.925,
-        "DESIGN OUTPUTS & CAPACITY",
-        ha="center",
-        va="center",
-        fontsize=13.5,
-        weight="bold",
-        color="#ffffff",
-        zorder=3,
-    )
+    # Outer tie hooks
+    ax_det.plot([sx, sx + 0.03], [sy + sh, sy + sh - 0.03], color="#15803d", lw=2.6, zorder=5)
+    ax_det.plot([sx + 0.03, sx], [sy + sh - 0.03, sy + sh - 0.055], color="#15803d", lw=2.6, zorder=5)
 
-    pu_cap_disp = f"{pu_cap:.1f} Tons" if pu_cap is not None else f"{Pu:.1f} Tons"
-    fcu_fy_disp = f"{int(fcu_kg)} / {int(fy_kg)} kg/cm²"
+    if is_auto_tie:
+        # Inner automatic loop
+        sh_in = sh * 0.50
+        sy_in = sy + (sh - sh_in) / 2.0
+        st_inner = FancyBboxPatch(
+            (sx + 0.015, sy_in), sw - 0.03, sh_in,
+            boxstyle="round,pad=0,rounding_size=0.012",
+            linewidth=2.2, edgecolor="#059669", facecolor="#dcfce7", zorder=5,
+        )
+        ax_det.add_patch(st_inner)
+        # Inner tie hooks
+        ax_det.plot([sx + 0.015, sx + 0.015 + 0.025], [sy_in + sh_in, sy_in + sh_in - 0.025], color="#059669", lw=2.2, zorder=6)
+        ax_det.plot([sx + 0.015 + 0.025, sx + 0.015], [sy_in + sh_in - 0.025, sy_in + sh_in - 0.045], color="#059669", lw=2.2, zorder=6)
 
-    rows = [
-        ("Section (b × t)", f"{b_disp} × {t_disp} cm", "#0f172a"),
-        ("Main Steel (RFT)", f"{main_steel_str}", "#991b1b"),
-        ("Stirrups (Ties)", f"{stirrups_str}", "#166534"),
-        ("Design Load (Pu)", f"{Pu:.1f} Tons", "#b45309"),
-        ("Capacity (Pu,cap)", f"{pu_cap_disp}", "#047857"),
-        ("Rebar Ratio (μ)", f"{mu_percent:.2f} %", "#1d4ed8"),
-        ("fcu / fy", f"{fcu_fy_disp}", "#334155"),
-        ("Concrete Cover", f"{cover:.1f} cm", "#334155"),
-        ("Slenderness Check", f"{slender_str.split('–')[0].strip()}", "#1e293b"),
+        ax_det.text(sx + sw / 2, sy - 0.025, f"b'={b_core:.0f}cm", ha="center", va="top", fontsize=11, weight="bold", color="#166534")
+        ax_det.text(sx + sw + 0.012, sy + sh / 2, f"t'={t_core:.0f}cm (In={t_core_in:.0f})", ha="left", va="center", fontsize=10.5, weight="bold", color="#166534", rotation=90)
+    else:
+        ax_det.text(sx + sw / 2, sy - 0.025, f"b' = {b_core:.0f} cm", ha="center", va="top", fontsize=11, weight="bold", color="#166534")
+        ax_det.text(sx + sw + 0.015, sy + sh / 2, f"t' = {t_core:.0f} cm", ha="left", va="center", fontsize=11, weight="bold", color="#166534", rotation=90)
+
+    ax_det.text(0.30, 0.40, f"• Tie Type:  {tie_type_str}", fontsize=12.5, weight="bold", color="#166534", zorder=3)
+    if is_auto_tie:
+        ax_det.text(0.30, 0.33, f"• Tie Dimensions:  Outer {b_core:.0f}×{t_core:.0f} cm | Inner {b_core_in:.0f}×{t_core_in:.0f} cm", fontsize=11.5, color="#334155", zorder=3)
+    else:
+        ax_det.text(0.30, 0.33, f"• Tie Outer Dimensions:  {b_core:.0f} × {t_core:.0f} cm", fontsize=12, color="#475569", zorder=3)
+    ax_det.text(0.30, 0.26, f"• Cut Length / Tie:  {L_tie_cm:.1f} cm ({L_tie_m:.2f} m')", fontsize=12.5, weight="bold", color="#15803d", zorder=3)
+    ax_det.text(0.30, 0.19, f"• Total Ties / Column:  {n_ties} Ties ({n_st_per_m} Φ{phi_st_mm}/m')", fontsize=12, color="#1e293b", zorder=3)
+    ax_det.text(0.30, 0.12, f"• Total Ties Weight:  {tot_w_st_kg:.1f} kg ({tot_w_st_kg/1000.0:.3f} Ton)", fontsize=13, weight="bold", color="#047857", zorder=3)
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # 3. BOTTOM SUBPLOT: DESIGN & TAKEOFF SUMMARY STRIP (FULL WIDTH)
+    # ═══════════════════════════════════════════════════════════════════════
+    ax_strip.set_facecolor("#ffffff")
+    ax_strip.axis("off")
+    ax_strip.set_xlim(0, 1)
+    ax_strip.set_ylim(0, 1)
+
+    strip_bg = FancyBboxPatch((0.005, 0.02), 0.99, 0.96, boxstyle="round,pad=0.015,rounding_size=0.025", linewidth=2.0, edgecolor="#1e3a8a", facecolor="#fffdf5", zorder=1)
+    ax_strip.add_patch(strip_bg)
+
+    ribbon = FancyBboxPatch((0.015, 0.77), 0.97, 0.19, boxstyle="round,pad=0.01,rounding_size=0.015", linewidth=1.2, edgecolor="#1e3a8a", facecolor="#1e3a8a", zorder=2)
+    ax_strip.add_patch(ribbon)
+    ax_strip.text(0.50, 0.865, "DESIGN & QUANTITIES TAKE-OFF SUMMARY STRIP", ha="center", va="center", fontsize=13.5, weight="bold", color="#ffffff", zorder=3)
+
+    cols_data = [
+        {
+            "title": "1. Section & Geometry",
+            "bg": "#f8fafc",
+            "border": "#cbd5e1",
+            "tcolor": "#0f172a",
+            "lines": [
+                f"Section: {b_disp} × {t_disp} cm",
+                f"Height: H = {int(H_clear)} cm",
+                f"Status: {slender_str.split('(')[0].strip()}",
+            ]
+        },
+        {
+            "title": "2. Concrete & Materials",
+            "bg": "#f0fdf4",
+            "border": "#86efac",
+            "tcolor": "#15803d",
+            "lines": [
+                f"Concrete: {vol_conc_m3:.2f} m³",
+                f"Cement: {cement_kg/1000.0:.2f} t ({cement_bags} bags)",
+                f"Gravel: {gravel_m3:.2f}m³ | Sand: {sand_m3:.2f}m³",
+            ]
+        },
+        {
+            "title": "3. Main Rebar (BBS)",
+            "bg": "#fee2e2",
+            "border": "#fca5a5",
+            "tcolor": "#991b1b",
+            "lines": [
+                f"Pattern: {n_bars} Φ {phi_mm} ({ny} rows)",
+                f"Cut: {L_bar_m:.2f} m' (Ld={L_splice_cm:.0f}cm)",
+                f"Weight: {tot_w_main_kg:.1f} kg ({tot_w_main_kg/1000.0:.3f}t)",
+            ]
+        },
+        {
+            "title": "4. Stirrup Ties (BBS)",
+            "bg": "#dcfce7",
+            "border": "#86efac",
+            "tcolor": "#166534",
+            "lines": [
+                f"Type: {'Auto 4-Branch' if is_auto_tie else 'Closed Tie'}",
+                f"Cut: {L_tie_cm:.1f} cm ({n_ties} ties)",
+                f"Weight: {tot_w_st_kg:.1f} kg ({tot_w_st_kg/1000.0:.3f}t)",
+            ]
+        },
+        {
+            "title": "5. Total Steel & Capacity",
+            "bg": "#f5f3ff",
+            "border": "#c4b5fd",
+            "tcolor": "#6d28d9",
+            "lines": [
+                f"Grand Steel: {tot_steel_kg:.1f} kg ({tot_steel_kg/1000.0:.3f}t)",
+                f"Steel Ratio: {steel_ratio:.1f} kg/m³",
+                f"Pu: {Pu:.1f}t / Cap: {pu_cap:.1f}t ({Pu/pu_cap*100:.1f}%)" if pu_cap else f"Pu = {Pu:.1f} t",
+            ]
+        }
     ]
 
-    y_pos = 0.82
-    y_step = 0.082
+    col_w = 0.186
+    col_gap = 0.009
+    start_x = 0.015
+    box_h = 0.68
+    box_y = 0.05
 
-    for idx, (label, val, val_color) in enumerate(rows):
-        if idx % 2 == 0:
-            row_bg = patches.Rectangle(
-                (0.035, y_pos - 0.026),
-                0.93,
-                y_step * 0.90,
-                facecolor="#fef2f2" if idx == 1 else "#f8f9fa",
-                edgecolor="none",
-                zorder=2,
+    for i, c in enumerate(cols_data):
+        cx = start_x + i * (col_w + col_gap)
+        c_box = FancyBboxPatch(
+            (cx, box_y), col_w, box_h,
+            boxstyle="round,pad=0.01,rounding_size=0.015",
+            linewidth=1.4, edgecolor=c["border"], facecolor=c["bg"], zorder=2,
+        )
+        ax_strip.add_patch(c_box)
+
+        # Title
+        ax_strip.text(
+            cx + col_w / 2.0, box_y + box_h - 0.12,
+            c["title"], ha="center", va="center",
+            fontsize=11.5, weight="bold", color=c["tcolor"], zorder=3
+        )
+        # Line divider inside box
+        ax_strip.plot([cx + 0.01, cx + col_w - 0.01], [box_y + box_h - 0.22, box_y + box_h - 0.22], color=c["border"], lw=1.2, zorder=3)
+
+        # Lines
+        y_text = box_y + box_h - 0.35
+        for line in c["lines"]:
+            ax_strip.text(
+                cx + col_w / 2.0, y_text,
+                line, ha="center", va="center",
+                fontsize=10.5, weight="bold", color="#1e293b", zorder=3
             )
-            ax_card.add_patch(row_bg)
+            y_text -= 0.16
 
-        # Label (Left)
-        ax_card.text(
-            0.06,
-            y_pos + 0.010,
-            label,
-            ha="left",
-            va="center",
-            fontsize=12,
-            weight="bold",
-            color="#475569",
-            zorder=3,
-        )
-        # Colon separator
-        ax_card.text(
-            0.48,
-            y_pos + 0.010,
-            ":",
-            ha="center",
-            va="center",
-            fontsize=12,
-            weight="bold",
-            color="#64748b",
-            zorder=3,
-        )
-        # Value (Right)
-        ax_card.text(
-            0.94,
-            y_pos + 0.010,
-            val,
-            ha="right",
-            va="center",
-            fontsize=12.5,
-            weight="bold",
-            color=val_color,
-            zorder=3,
-        )
-        y_pos -= y_step
-
-    # Global Figure Title
     fig.suptitle(
-        f"Column Section Design & Reinforcement Details ({b_disp} × {t_disp} cm)",
-        fontsize=15,
-        weight="bold",
-        y=0.96,
-        color="#0f172a",
+        f"Structural Column Design, Rebar Detailing & Take-off Sheet (b = {b_disp} cm × t = {t_disp} cm — H = {H_m:.2f} m)",
+        fontsize=16.5, weight="bold", y=0.97, color="#0f172a",
     )
 
     if save_path:
@@ -439,16 +497,141 @@ def bar_area_cm2(dia_mm: int) -> float:
     return math.pi * (dia_mm / 10) ** 2 / 4  # mm -> cm
 
 
+def design_rectangular_column(
+    Pu_input: float,
+    Safety_Factor: float = 1.20,
+    b: float = 30.0,
+    H_clear: float = 300.0,
+    K: float = 0.70,
+    Fcu: float = 250.0,
+    Fy: float = 4000.0,
+    Fyk: float = 2400.0,
+    mu_target: float = 1.0,
+    Phi: int = 16,
+    Phi_st: int = 8,
+) -> dict:
+    """
+    Core design engine for a rectangular reinforced concrete column under axial load (ECP 203).
+    Returns a dictionary of all design parameters, reinforcement detailing, and safety checks.
+    """
+    mu = mu_target / 100.0
+
+    # Design load
+    Pu_ton = Pu_input * Safety_Factor
+    Pu_design = Pu_ton * 1000.0  # kg
+
+    # Slenderness check (about shorter axis b)
+    Le = K * H_clear  # cm (effective length)
+    lambda_b = Le / b if b > 0 else 0.0
+
+    if lambda_b <= 10:
+        slender_class = "Short Column  (λb ≤ 10)"
+        slender_ok = True
+    elif lambda_b <= 15:
+        slender_class = "Short Column  (10 < λb ≤ 15)"
+        slender_ok = True
+    else:
+        slender_class = "⚠️  Long (Slender) Column  (λb > 15) – Magnification required"
+        slender_ok = False
+
+    # Required gross area (ECP 203 Eq.)
+    coeff = 0.35 * Fcu * (1.0 - mu) + 0.67 * Fy * mu
+    Ag_req = Pu_design / coeff if coeff > 0 else 0.0  # cm²
+
+    # Required depth t and Column Depth Constraint (t >= b)
+    t_req = Ag_req / b if b > 0 else 0.0
+    t_override_applied = False
+
+    if t_req < b:
+        t_calc = float(b)
+        t_override_applied = True
+    else:
+        t_calc = t_req
+
+    t_design = round_up_to_5(t_calc)
+    if t_design < b:
+        t_design = round_up_to_5(b)
+        t_override_applied = True
+
+    # Actual gross area
+    Ag = b * t_design  # cm²
+
+    # Slenderness about longer axis t
+    lambda_t = Le / t_design if t_design > 0 else 0.0
+
+    # Actual concrete & steel areas
+    Asc_min = max(0.008 * Ag, 4.0 * bar_area_cm2(Phi))  # ECP min 0.8%
+    Asc_max = 0.06 * Ag                                  # ECP max 6%
+    Asc_req = mu * Ag                                    # from target ratio
+
+    Asc_use = max(Asc_req, Asc_min)
+
+    # Number of bars (symmetric, min 4, even)
+    n_bars_raw = Asc_use / bar_area_cm2(Phi) if bar_area_cm2(Phi) > 0 else 4
+    n_bars = max(4, int(math.ceil(n_bars_raw)))
+    if n_bars % 2 != 0:
+        n_bars += 1
+
+    Asc_provided = n_bars * bar_area_cm2(Phi)
+    mu_provided = (Asc_provided / Ag) * 100.0 if Ag > 0 else 0.0  # %
+
+    # Axial capacity check
+    Ac = Ag - Asc_provided
+    Pu_cap = 0.35 * Fcu * Ac + 0.67 * Fy * Asc_provided  # kg
+    Pu_cap_t = Pu_cap / 1000.0                           # ton
+
+    # Stirrup spacing (ECP 203)
+    S_calc = min(15.0 * Phi / 10.0, b, t_design, 20.0)   # cm
+    n_st_per_m = max(5, math.ceil(100.0 / S_calc)) if S_calc > 0 else 5
+
+    util = (Pu_design / Pu_cap * 100.0) if Pu_cap > 0 else 0.0
+    is_safe = util <= 100.0 and slender_ok
+
+    return {
+        "Pu_input": Pu_input,
+        "Safety_Factor": Safety_Factor,
+        "Pu_ton": Pu_ton,
+        "Pu_design_kg": Pu_design,
+        "b": b,
+        "t": t_design,
+        "t_req": t_req,
+        "t_override_applied": t_override_applied,
+        "Ag": Ag,
+        "Ag_req": Ag_req,
+        "Asc_req": Asc_req,
+        "Asc_min": Asc_min,
+        "Asc_use": Asc_use,
+        "mu": mu,
+        "Le": Le,
+        "lambda_b": lambda_b,
+        "lambda_t": lambda_t,
+        "slender_class": slender_class,
+        "slender_ok": slender_ok,
+        "Phi": Phi,
+        "n_bars": n_bars,
+        "main_steel_str": f"{n_bars} Φ {Phi}",
+        "Asc_provided": Asc_provided,
+        "mu_provided": mu_provided,
+        "Phi_st": Phi_st,
+        "n_st_per_m": n_st_per_m,
+        "stirrups_str": f"{n_st_per_m} Φ {Phi_st} / m'",
+        "S_calc": S_calc,
+        "Pu_cap_t": Pu_cap_t,
+        "util_percent": util,
+        "is_safe": is_safe,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Main render function
 # ---------------------------------------------------------------------------
 
 def render():
-    st.markdown('<div class="section-header">🏛️ Module 2 – Rectangular Column Design (ECP 203)</div>',
+    st.markdown('<div class="section-header">🏛️ Module 2 – Rectangular Column Design (ECP 203) (تصميم الأعمدة المستطيلة)</div>',
                 unsafe_allow_html=True)
 
     # ── INPUT FORM ──────────────────────────────────────────────────────────
-    with st.expander("📝 Design Inputs", expanded=True):
+    with st.expander("📝 Design Inputs (مدخلات التصميم والأبعاد والأحمال)", expanded=True):
         col1, col2, col3 = st.columns(3)
 
         with col1:
@@ -517,78 +700,45 @@ def render():
         return
 
     # ── CALCULATION ENGINE ──────────────────────────────────────────────────
-    mu = mu_target / 100.0
+    res = design_rectangular_column(
+        Pu_input=Pu_input,
+        Safety_Factor=Safety_Factor,
+        b=b,
+        H_clear=H_clear,
+        K=K,
+        Fcu=Fcu,
+        Fy=Fy,
+        Fyk=Fyk,
+        mu_target=mu_target,
+        Phi=Phi,
+        Phi_st=Phi_st,
+    )
 
-    # Design load
-    Pu_ton    = Pu_input * Safety_Factor        # ton
-    Pu_design = Pu_ton * 1000                   # kg
-
-    # Slenderness check (about shorter axis b)
-    Le       = K * H_clear                      # cm  (effective length)
-    lambda_b = Le / b
-
-    if lambda_b <= 10:
-        slender_class = "Short Column  (λb ≤ 10)"
-        slender_ok    = True
-    elif lambda_b <= 15:
-        slender_class = "Short Column  (10 < λb ≤ 15)"
-        slender_ok    = True
-    else:
-        slender_class = "⚠️  Long (Slender) Column  (λb > 15) – Magnification required"
-        slender_ok    = False
-
-    # Required gross area (ECP 203 Eq.)
-    coeff  = 0.35 * Fcu * (1 - mu) + 0.67 * Fy * mu
-    Ag_req = Pu_design / coeff                  # cm²
-
-    # Required depth t and Column Depth Constraint (t >= b)
-    t_req = Ag_req / b
-    t_override_applied = False
-
-    if t_req < b:
-        t_calc = float(b)
-        t_override_applied = True
-    else:
-        t_calc = t_req
-
-    t_design = round_up_to_5(t_calc)
-    if t_design < b:
-        t_design = round_up_to_5(b)
-        t_override_applied = True
-
-    # Actual gross area
-    Ag = b * t_design                           # cm²
-
-    # Slenderness about longer axis t
-    lambda_t = Le / t_design
-
-    # Actual concrete & steel areas
-    Asc_min  = max(0.008 * Ag, 4 * bar_area_cm2(Phi))   # ECP min 0.8%
-    Asc_max  = 0.06 * Ag                                  # ECP max 6%
-    Asc_req  = mu * Ag                                    # from target ratio
-
-    Asc_use  = max(Asc_req, Asc_min)
-
-    # Number of bars (symmetric, min 4, even)
-    n_bars_raw = Asc_use / bar_area_cm2(Phi)
-    n_bars     = max(4, int(math.ceil(n_bars_raw)))
-    if n_bars % 2 != 0:
-        n_bars += 1
-
-    Asc_provided = n_bars * bar_area_cm2(Phi)
-    mu_provided  = Asc_provided / Ag * 100     # %
-
-    # Axial capacity check
-    Ac        = Ag - Asc_provided
-    Pu_cap    = 0.35 * Fcu * Ac + 0.67 * Fy * Asc_provided   # kg
-    Pu_cap_t  = Pu_cap / 1000                                  # ton
-
-    # Stirrup spacing (ECP 203)
-    S_calc     = min(15 * Phi / 10, b, t_design, 20)   # cm
-    n_st_per_m = max(5, math.ceil(100 / S_calc))
+    Pu_ton = res["Pu_ton"]
+    Pu_design = res["Pu_design_kg"]
+    t_design = res["t"]
+    t_req = res["t_req"]
+    t_override_applied = res["t_override_applied"]
+    Ag = res["Ag"]
+    Ag_req = res.get("Ag_req", Ag)
+    Le = res["Le"]
+    lambda_b = res["lambda_b"]
+    slender_class = res["slender_class"]
+    slender_ok = res["slender_ok"]
+    Asc_req = res.get("Asc_req", 0.0)
+    Asc_min = res.get("Asc_min", 0.0)
+    Asc_use = res.get("Asc_use", 0.0)
+    Asc_provided = res["Asc_provided"]
+    n_bars = res["n_bars"]
+    mu_provided = res["mu_provided"]
+    mu = res.get("mu", (mu_target / 100.0) if mu_target else 0.01)
+    n_st_per_m = res["n_st_per_m"]
+    S_calc = res["S_calc"]
+    Pu_cap_t = res["Pu_cap_t"]
+    util = res["util_percent"]
 
     # ── OUTPUTS ─────────────────────────────────────────────────────────────
-    st.markdown('<div class="section-header">📊 Design Results</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">📊 Design Results & Structural Checks (نتائج التصميم والفحص الإنشائي)</div>', unsafe_allow_html=True)
 
     if t_override_applied:
         st.info(
@@ -604,7 +754,6 @@ def render():
     )
 
     # Capacity banner
-    util = Pu_design / Pu_cap * 100
     cap_cls = "result-ok" if util <= 100 else "result-fail"
     st.markdown(
         f'<div class="{cap_cls}">Capacity Check: Pu_design = {Pu_ton:.1f} ton | Pu_capacity = {Pu_cap_t:.1f} ton | Utilisation = {util:.1f}%</div>',
@@ -644,6 +793,7 @@ def render():
         pu_cap=Pu_cap_t,
         cover=2.5,
         slender_str=slender_class,
+        H_clear=H_clear,
     )
     st.pyplot(fig, use_container_width=True)
 
@@ -662,10 +812,167 @@ def render():
     )
     plt.close(fig)
 
+    # ── 📊 BAR BENDING SCHEDULE & QUANTITIES TAKE-OFF (حصر وتفريد حديد ومواد العمود) ──
+    H_m_col = H_clear / 100.0
+    L_splice_m_col = max(1.0, (50.0 * Phi) / 1000.0)
+    L_splice_cm_col = L_splice_m_col * 100.0
+    L_bar_m_col = H_m_col + L_splice_m_col
+    unit_w_main_col = (Phi ** 2) / 162.0
+    tot_len_main_m_col = n_bars * L_bar_m_col
+    tot_w_main_kg_col = tot_len_main_m_col * unit_w_main_col
+
+    # Rebar grid calculation
+    offset_x_col = 2.5 + (Phi / 10.0) / 2.0
+    offset_y_col = 2.5 + (Phi / 10.0) / 2.0
+    w_rebar_col = max(b - 2 * offset_x_col, 1.0)
+    h_rebar_col = max(t_design - 2 * offset_y_col, 1.0)
+    if n_bars <= 4:
+        nx_col, ny_col = 2, 2
+    else:
+        perimeter_rebar_col = 2 * (w_rebar_col + h_rebar_col)
+        s_target_col = perimeter_rebar_col / n_bars
+        nx_est_col = int(round(w_rebar_col / s_target_col)) + 1
+        nx_col = max(2, min(nx_est_col, n_bars // 2))
+        ny_col = (n_bars // 2 + 2) - nx_col
+        if ny_col < 2:
+            ny_col = 2
+            nx_col = (n_bars // 2 + 2) - ny_col
+
+    xs_b_col = np.linspace(offset_x_col, b - offset_x_col, nx_col)
+    ys_d_col = np.linspace(offset_y_col, t_design - offset_y_col, ny_col)
+
+    is_auto_tie_col = (ny_col > 3) or (nx_col > 3)
+
+    b_core_col = max(b - 2 * 2.5, 1.0)
+    t_core_col = max(t_design - 2 * 2.5, 1.0)
+    hook_len_cm_col = max(8.0, 10.0 * (Phi_st / 10.0))
+
+    if is_auto_tie_col:
+        if ny_col >= 4 and nx_col == 2:
+            t_core_in_col = max(float(ys_d_col[-2] - ys_d_col[1]) + (Phi / 10.0), 5.0)
+            b_core_in_col = b_core_col
+            L_tie_cm_col = 2.0 * (b_core_col + t_core_col) + 2.0 * (b_core_in_col + t_core_in_col) + 4.0 * hook_len_cm_col
+            tie_item_name = "2. كانات العمود الأوتوماتيك (Automatic 4-Branch Ties)"
+            tie_desc_str = f"{L_tie_cm_col/100.0:.2f} m' (كانة خارجية {2*(b_core_col+t_core_col):.0f}cm + داخلية {2*(b_core_in_col+t_core_in_col):.0f}cm + 4 أقفال {4*hook_len_cm_col:.0f}cm)"
+        elif nx_col >= 3 and ny_col >= 3:
+            b_core_in_col = max(float(xs_b_col[-2] - xs_b_col[1]) + (Phi / 10.0), 5.0)
+            t_core_in_col = max(float(ys_d_col[-2] - ys_d_col[1]) + (Phi / 10.0), 5.0)
+            L_tie_cm_col = 2.0 * (b_core_col + t_core_col) + 2.0 * (b_core_in_col + t_core_in_col) + 4.0 * hook_len_cm_col
+            tie_item_name = "2. كانات العمود الأوتوماتيك (Automatic Multi-Branch Ties)"
+            tie_desc_str = f"{L_tie_cm_col/100.0:.2f} m' (خارجية {2*(b_core_col+t_core_col):.0f}cm + داخلية {2*(b_core_in_col+t_core_in_col):.0f}cm + 4 أقفال {4*hook_len_cm_col:.0f}cm)"
+        else:
+            t_core_in_col = t_core_col * 0.5
+            b_core_in_col = b_core_col
+            L_tie_cm_col = 2.0 * (b_core_col + t_core_col) + 2.0 * (b_core_in_col + t_core_in_col) + 4.0 * hook_len_cm_col
+            tie_item_name = "2. كانات العمود الأوتوماتيك (Automatic 4-Branch Ties)"
+            tie_desc_str = f"{L_tie_cm_col/100.0:.2f} m' (خارجية وداخلية + 4 أقفال {4*hook_len_cm_col:.0f}cm)"
+    else:
+        L_tie_cm_col = 2.0 * (b_core_col + t_core_col) + 2.0 * hook_len_cm_col
+        tie_item_name = "2. كانات العمود المستطيلة (Closed Box Ties)"
+        tie_desc_str = f"{L_tie_cm_col/100.0:.2f} m' (محيط {2*(b_core_col+t_core_col):.0f}cm + قفلين {2*hook_len_cm_col:.0f}cm)"
+
+    L_tie_m_col = L_tie_cm_col / 100.0
+    n_ties_col = max(5, int(math.ceil(H_m_col * n_st_per_m)))
+    unit_w_st_col = (Phi_st ** 2) / 162.0
+    tot_len_st_m_col = n_ties_col * L_tie_m_col
+    tot_w_st_kg_col = tot_len_st_m_col * unit_w_st_col
+
+    tot_steel_kg_col = tot_w_main_kg_col + tot_w_st_kg_col
+    vol_conc_m3_col = (b / 100.0) * (t_design / 100.0) * H_m_col
+    steel_ratio_col = (tot_steel_kg_col / vol_conc_m3_col) if vol_conc_m3_col > 0 else 0.0
+
+    cement_ton_col = vol_conc_m3_col * 0.350
+    cement_bags_col = int(round(vol_conc_m3_col * 7.0))
+    gravel_m3_col = vol_conc_m3_col * 0.80
+    sand_m3_col = vol_conc_m3_col * 0.40
+
+    st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
+    with st.expander("📊 Bar Bending Schedule & BOQ Take-off (جدول حصر وتفريد حديد ومواد العمود)", expanded=True):
+        bbs_rows = [
+            {
+                "بند التسليح (Item)": "1. حديد التسليح الطولي الرئيسي (Main Rebar)",
+                "القطر Φ": f"Φ {Phi} mm",
+                "العدد (Count)": f"{n_bars} أسياخ ({ny_col} صفوف)",
+                "طول القطع للسيخ (m)": f"{L_bar_m_col:.2f} m' (ارتفاع {H_clear:.0f}cm + إشارة {L_splice_cm_col:.0f}cm)",
+                "إجمالي الأطوال (m')": f"{tot_len_main_m_col:,.1f} m'",
+                "وزن المتر (kg/m')": f"{unit_w_main_col:.3f}",
+                "إجمالي الوزن (kg)": f"{tot_w_main_kg_col:,.1f} kg",
+                "إجمالي الوزن (Ton)": f"{tot_w_main_kg_col/1000.0:.3f} Ton",
+            },
+            {
+                "بند التسليح (Item)": tie_item_name,
+                "القطر Φ": f"Φ {Phi_st} mm",
+                "العدد (Count)": f"{n_ties_col} كانة ({n_st_per_m}/m')",
+                "طول القطع للسيخ (m)": tie_desc_str,
+                "إجمالي الأطوال (m')": f"{tot_len_st_m_col:,.1f} m'",
+                "وزن المتر (kg/m')": f"{unit_w_st_col:.3f}",
+                "إجمالي الوزن (kg)": f"{tot_w_st_kg_col:,.1f} kg",
+                "إجمالي الوزن (Ton)": f"{tot_w_st_kg_col/1000.0:.3f} Ton",
+            },
+            {
+                "بند التسليح (Item)": "📌 الإجمالي الكلي لحديد تسليح العمود (Grand Total Steel)",
+                "القطر Φ": "—",
+                "العدد (Count)": f"{n_bars} أسياخ + {n_ties_col} كانة",
+                "طول القطع للسيخ (m)": f"معدل الاستهلاك: {steel_ratio_col:.1f} kg/m³",
+                "إجمالي الأطوال (m')": f"{tot_len_main_m_col + tot_len_st_m_col:,.1f} m'",
+                "وزن المتر (kg/m')": "—",
+                "إجمالي الوزن (kg)": f"{tot_steel_kg_col:,.1f} kg",
+                "إجمالي الوزن (Ton)": f"{tot_steel_kg_col/1000.0:.3f} Ton",
+            },
+        ]
+        st.dataframe(pd.DataFrame(bbs_rows), use_container_width=True, hide_index=True)
+
+        st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
+        cm1, cm2, cm3, cm4 = st.columns(4)
+        with cm1:
+            st.markdown(
+                f"""
+                <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:8px 12px; text-align:center;">
+                    <div style="font-size:13px; font-weight:600; color:#15803d;">حجم خرسانة العمود</div>
+                    <div style="font-size:18px; font-weight:700; color:#166534;">{vol_conc_m3_col:.2f} m³</div>
+                    <div style="font-size:11.5px; color:#64748b;">{b:.0f}×{t_design:.0f} cm × H {H_clear:.0f} cm</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with cm2:
+            st.markdown(
+                f"""
+                <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:8px 12px; text-align:center;">
+                    <div style="font-size:13px; font-weight:600; color:#1e40af;">كمية الأسمنت للعمود</div>
+                    <div style="font-size:18px; font-weight:700; color:#1e3a8a;">{cement_ton_col:.2f} Ton</div>
+                    <div style="font-size:11.5px; color:#64748b;">{cement_bags_col} شكارة (350 kg/m³)</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with cm3:
+            st.markdown(
+                f"""
+                <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:8px; padding:8px 12px; text-align:center;">
+                    <div style="font-size:13px; font-weight:600; color:#b45309;">حجم الزلط والرمل</div>
+                    <div style="font-size:18px; font-weight:700; color:#92400e;">{gravel_m3_col:.2f} m³ | {sand_m3_col:.2f} m³</div>
+                    <div style="font-size:11.5px; color:#64748b;">زلط (0.80) / رمل (0.40) لكل م³</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with cm4:
+            st.markdown(
+                f"""
+                <div style="background:#f5f3ff; border:1.5px solid #c4b5fd; border-radius:8px; padding:8px 12px; text-align:center;">
+                    <div style="font-size:13px; font-weight:600; color:#6d28d9;">معدل التسليح للعمود</div>
+                    <div style="font-size:18px; font-weight:700; color:#5b21b6;">{steel_ratio_col:.1f} kg/m³</div>
+                    <div style="font-size:11.5px; color:#64748b;">إجمالي الحديد: {tot_steel_kg_col:.1f} kg</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
     st.markdown("---")
 
     # Full calculation table
-    st.markdown('<div class="section-header">📋 Detailed Calculation Sheet</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">📋 Detailed Calculation Sheet (جدول الحسابات التفصيلية الكاملة)</div>', unsafe_allow_html=True)
 
     table_data = {
         "Parameter": [
