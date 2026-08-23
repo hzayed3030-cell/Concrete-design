@@ -27,6 +27,8 @@ load_settings()
 from modules.columns   import render as render_columns
 from modules.footings  import render as render_footings
 from modules.flat_slab import render as render_flat_slab
+from modules.steel_bars import render as render_steel_bars
+from modules.concrete_survey import render as render_concrete_survey
 
 # ── CSS Injection: Fixed Unified Typography (14px) ───────────────────────────
 st.markdown(
@@ -34,24 +36,24 @@ st.markdown(
     <style>
     :root {
         /* ═══════════════════════════════════════════════════════════════════════
-           FIXED UNIFIED TYPOGRAPHY (14px Base for Inputs & Outputs)
+           BALANCED COMFORTABLE TYPOGRAPHY (19px Base for Inputs & Outputs)
            ═══════════════════════════════════════════════════════════════════════ */
-        --ecp-modules-base-font-size: 14px;
-        --ecp-input-font-size: 14px;
-        --ecp-output-font-size: 14px;
+        --ecp-modules-base-font-size: 16px;
+        --ecp-input-font-size: 19px;
+        --ecp-output-font-size: 19px;
 
         /* Proportional Scales for Module Output Elements */
-        --ecp-font-size-title: 18px;
-        --ecp-font-size-h1: 18px;
-        --ecp-font-size-h2: 16px;
-        --ecp-font-size-h3: 15px;
-        --ecp-font-size-body: 14px;
-        --ecp-font-size-table-hdr: 14px;
-        --ecp-font-size-table-cell: 14px;
-        --ecp-font-size-small: 13px;
-        --ecp-font-size-caption: 12px;
-        --ecp-font-size-metric-val: 17px;
-        --ecp-font-size-metric-lbl: 13px;
+        --ecp-font-size-title: 25px;
+        --ecp-font-size-h1: 25px;
+        --ecp-font-size-h2: 22px;
+        --ecp-font-size-h3: 20px;
+        --ecp-font-size-body: 18px;
+        --ecp-font-size-table-hdr: 18px;
+        --ecp-font-size-table-cell: 17px;
+        --ecp-font-size-small: 16px;
+        --ecp-font-size-caption: 14px;
+        --ecp-font-size-metric-val: 22px;
+        --ecp-font-size-metric-lbl: 15px;
     }
 
     /* Global Base */
@@ -67,7 +69,7 @@ st.markdown(
         background: linear-gradient(180deg, #1a2340 0%, #0d1726 100%);
     }
     
-    /* Lock all sidebar typography strictly to base module size */
+    /* Sidebar typography */
     [data-testid="stSidebar"],
     [data-testid="stSidebar"] *,
     [data-testid="stSidebar"] p,
@@ -138,12 +140,12 @@ st.markdown(
     }
 
     [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] {
-        margin-bottom: 2px !important;
+        margin-bottom: 3px !important;
         min-height: 0px !important;
     }
     [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] p,
     [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] label {
-        margin-bottom: 0px !important;
+        margin-bottom: 1px !important;
         margin-top: 0px !important;
         line-height: 1.2 !important;
     }
@@ -155,8 +157,8 @@ st.markdown(
         font-size: calc(var(--ecp-input-font-size) * 1.05) !important;
         font-weight: 700 !important;
         line-height: 1.25 !important;
-        margin-top: 3px !important;
-        margin-bottom: 2px !important;
+        margin-top: 4px !important;
+        margin-bottom: 3px !important;
     }
 
     /* Widget Containers Compact Vertical Spacing */
@@ -164,11 +166,11 @@ st.markdown(
     [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] .stSelectbox,
     [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] .stTextInput,
     [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] .stTextArea {
-        margin-bottom: 2px !important;
+        margin-bottom: 3px !important;
         margin-top: 0px !important;
     }
     [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] [data-testid="stVerticalBlock"] {
-        gap: 0.35rem !important;
+        gap: 0.4rem !important;
     }
 
     /* Entered Numbers & Values inside Input Fields */
@@ -182,23 +184,23 @@ st.markdown(
     [data-testid="stMainBlockContainer"] div[data-baseweb="textarea"] textarea,
     [data-testid="stMainBlockContainer"] .stTextArea textarea {
         font-size: var(--ecp-input-font-size) !important;
-        min-height: 32px !important;
+        min-height: 38px !important;
         line-height: 1.3 !important;
-        padding-top: 3px !important;
-        padding-bottom: 3px !important;
+        padding-top: 4px !important;
+        padding-bottom: 4px !important;
     }
 
     /* Stepper Buttons (+ / -) */
     [data-testid="stMainBlockContainer"] button[data-testid="stNumberInputStepUp"],
     [data-testid="stMainBlockContainer"] button[data-testid="stNumberInputStepDown"] {
-        min-height: 15px !important;
-        height: 15px !important;
-        width: calc(var(--ecp-input-font-size) * 1.8) !important;
+        min-height: 18px !important;
+        height: 18px !important;
+        width: calc(var(--ecp-input-font-size) * 1.6) !important;
     }
     [data-testid="stMainBlockContainer"] button[data-testid="stNumberInputStepUp"] svg,
     [data-testid="stMainBlockContainer"] button[data-testid="stNumberInputStepDown"] svg {
-        width: calc(var(--ecp-input-font-size) * 0.75) !important;
-        height: calc(var(--ecp-input-font-size) * 0.75) !important;
+        width: calc(var(--ecp-input-font-size) * 0.70) !important;
+        height: calc(var(--ecp-input-font-size) * 0.70) !important;
     }
 
     /* Dropdown Menus & Select Option Values */
@@ -213,7 +215,7 @@ st.markdown(
         font-size: var(--ecp-input-font-size) !important;
     }
     [data-testid="stMainBlockContainer"] div[data-baseweb="select"] {
-        min-height: calc(var(--ecp-input-font-size) * 2.2) !important;
+        min-height: 38px !important;
     }
 
     /* Radios & Checkboxes */
@@ -224,6 +226,14 @@ st.markdown(
     [data-testid="stMainBlockContainer"] div[data-testid="stCheckbox"] span,
     [data-testid="stMainBlockContainer"] div[data-testid="stCheckbox"] p {
         font-size: var(--ecp-input-font-size) !important;
+    }
+
+    /* Tabs Styling */
+    button[data-baseweb="tab"] p,
+    button[data-baseweb="tab"] div,
+    button[data-baseweb="tab"] span {
+        font-size: 18px !important;
+        font-weight: 700 !important;
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
@@ -245,7 +255,7 @@ st.markdown(
         margin: 14px 0 8px 0;
     }
     [data-testid="stMainBlockContainer"] h1, [data-testid="stMainBlockContainer"] h1 * { font-size: var(--ecp-font-size-h1) !important; font-weight: 700 !important; }
-    [data-testid="stMainBlockContainer"] h2, [data-testid="stMainBlockContainer"] h2 * { font-size: var(--ecp-font-size-h2) !important; font-weight: 600 !important; }
+    [data-testid="stMainBlockContainer"] h2, [data-testid="stMainBlockContainer"] h2 * { font-size: var(--ecp-font-size-h2) !important; font-weight: 700 !important; }
     [data-testid="stMainBlockContainer"] h3, [data-testid="stMainBlockContainer"] h3 * { font-size: var(--ecp-font-size-h3) !important; font-weight: 600 !important; }
     [data-testid="stMainBlockContainer"] h4, [data-testid="stMainBlockContainer"] h4 * { font-size: calc(var(--ecp-output-font-size) * 1.05) !important; font-weight: 600 !important; }
     [data-testid="stMainBlockContainer"] h5, [data-testid="stMainBlockContainer"] h5 * { font-size: var(--ecp-output-font-size) !important; font-weight: 600 !important; }
@@ -293,7 +303,7 @@ st.markdown(
         background: #f0f4ff !important;
         border: 1px solid #c8d4f0 !important;
         border-radius: 8px !important;
-        padding: 6px 10px !important;
+        padding: 7px 11px !important;
         box-sizing: border-box !important;
     }
 
@@ -302,7 +312,7 @@ st.markdown(
     [data-testid="stMainBlockContainer"] [data-testid="stMetricValue"] > div,
     [data-testid="stMainBlockContainer"] div[data-testid="metric-container"] [data-testid="stMetricValue"],
     [data-testid="stMainBlockContainer"] div[data-testid="metric-container"] [data-testid="stMetricValue"] * {
-        font-size: 14px !important;
+        font-size: var(--ecp-font-size-metric-val) !important;
         white-space: normal !important;
         overflow: visible !important;
         line-height: 1.25 !important;
@@ -317,14 +327,14 @@ st.markdown(
     [data-testid="stMainBlockContainer"] div[data-testid="metric-container"] [data-testid="stMetricLabel"] * {
         color: #475569 !important;
         font-weight: 600 !important;
-        font-size: 12px !important;
+        font-size: var(--ecp-font-size-metric-lbl) !important;
         white-space: normal !important;
         line-height: 1.2 !important;
     }
 
     [data-testid="stMainBlockContainer"] [data-testid="stMetricDelta"],
     [data-testid="stMainBlockContainer"] [data-testid="stMetricDelta"] * {
-        font-size: 12px !important;
+        font-size: 15px !important;
     }
 
     /* Result Highlight Cards & Banners */
@@ -357,7 +367,7 @@ st.markdown(
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
-       EXPANDER HEADERS (عناوين الأقسام المطوية / Collapsed Sections) - 18px BOLD with Background
+       EXPANDER HEADERS (عناوين الأقسام المطوية / Collapsed Sections) - 21px BOLD with Background
        ═══════════════════════════════════════════════════════════════════════════ */
     div[data-testid="stExpander"] details summary,
     div[data-testid="stExpander"] summary,
@@ -395,7 +405,7 @@ st.markdown(
     div[data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] p,
     .streamlit-expanderHeader p,
     .streamlit-expanderHeader span {
-        font-size: 18px !important;
+        font-size: 21px !important;
         font-weight: 800 !important;
         line-height: 1.4 !important;
         color: #0f172a !important;
@@ -405,9 +415,9 @@ st.markdown(
     div[data-testid="stExpander"] summary svg,
     .stExpander summary svg,
     details summary svg {
-        width: 17px !important;
-        height: 17px !important;
-        min-width: 17px !important;
+        width: 19px !important;
+        height: 19px !important;
+        min-width: 19px !important;
         fill: currentColor !important;
         stroke: currentColor !important;
         color: #1e40af !important;
@@ -481,9 +491,9 @@ st.markdown(
     (function() {
         try {
             const root = document.documentElement;
-            root.style.setProperty('--ecp-modules-base-font-size', '14px');
-            root.style.setProperty('--ecp-input-font-size', '14px');
-            root.style.setProperty('--ecp-output-font-size', '14px');
+            root.style.setProperty('--ecp-modules-base-font-size', '16px');
+            root.style.setProperty('--ecp-input-font-size', '19px');
+            root.style.setProperty('--ecp-output-font-size', '19px');
         } catch(e) {
             console.warn('Init error:', e);
         }
@@ -499,12 +509,14 @@ with st.sidebar:
     st.markdown("**Egyptian Code of Practice**")
     st.markdown("---")
     module = S_radio(
-        "📂 Select Design Module (اختر موديول التصميم)",
+        "📂 Select Module (اختر موديول التصميم أو المساعد)",
         "selected_module_idx",
         options=[
             "🟦  Module 1 — Flat Slabs (البلاطات اللاكمرية)",
             "🏛️  Module 2 — Rectangular Columns (الأعمدة المستطيلة)",
             "🪨  Module 3 — Isolated Footings (القواعد المنفصلة)",
+            "⚙️  المساعد — اقطار واوزان الحديد (Steel Rebar)",
+            "📊  المساعد — حصر الخرسانات (Concrete Qty. Survey)",
         ],
     )
     st.markdown("---")
@@ -543,8 +555,14 @@ if "Flat Slabs" in module or "Flat" in module:
     render_flat_slab()
 elif "Columns" in module:
     render_columns()
-else:
+elif "Footings" in module or "القواعد" in module:
     render_footings()
+elif "اقطار" in module or "Steel" in module:
+    render_steel_bars()
+elif "حصر" in module or "Survey" in module:
+    render_concrete_survey()
+else:
+    render_flat_slab()
 
 # ── GUARANTEED DISK PERSISTENCE ──────────────────────────────────────────────
 save_settings()

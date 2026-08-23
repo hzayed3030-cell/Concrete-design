@@ -273,6 +273,23 @@ def _get_base_report_css() -> str:
             font-weight: 700;
             color: #0f172a;
             margin-top: 2px;
+            direction: ltr !important;
+            unicode-bidi: isolate !important;
+            text-align: right;
+            display: block;
+        }
+
+        /* BiDi numbers and units isolation */
+        .val-ltr, [dir="ltr"] {
+            direction: ltr !important;
+            unicode-bidi: isolate !important;
+            display: inline-block;
+        }
+
+        .val-cell {
+            direction: ltr !important;
+            unicode-bidi: isolate !important;
+            text-align: center !important;
         }
 
         /* Classification Highlight Cards */
@@ -1151,3 +1168,239 @@ def generate_footing_report_html(
 </html>
 """
     return html_content
+
+
+def generate_column_survey_report_html(
+    project_name: str = "ECP 203 Column Quantity Survey",
+    b: float = 30.0,
+    t: float = 60.0,
+    H: float = 300.0,
+    t_slab: float = 20.0,
+    n_cols: int = 15,
+    n_bars: int = 8,
+    phi_main: int = 16,
+    n_rows: int = 2,
+    tie_type: str = "Automatic",
+    n_st_m: int = 6,
+    phi_st: int = 8,
+    is_top_floor: bool = False,
+    lap_factor: float = 50.0,
+    L_bar_m: float = 4.0,
+    L_bar_cm: float = 400.0,
+    w_main_total_kg: float = 757.0,
+    w_main_total_ton: float = 0.757,
+    L_tie_m: float = 2.4,
+    L_tie_cm: float = 240.0,
+    n_ties_per_col: int = 18,
+    w_st_total_kg: float = 255.0,
+    w_st_total_ton: float = 0.255,
+    vol_col_single_m3: float = 0.54,
+    vol_col_total_m3: float = 8.10,
+    w_steel_total_kg: float = 1012.0,
+    w_steel_total_ton: float = 1.012,
+    steel_rate_kg_m3: float = 124.9,
+    cement_tons: float = 2.84,
+    cement_bags: int = 57,
+    sand_m3: float = 3.24,
+    gravel_m3: float = 6.48,
+    water_liters: float = 1418.0,
+    img_plan_b64: Optional[str] = None,
+    img_elev_b64: Optional[str] = None,
+) -> str:
+    """
+    Generates a print-ready, professional HTML/PDF calculation sheet for the
+    Concrete Column Quantity Survey (Customs module) according to ECP 203.
+    """
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    top_floor_str = "دور أخير (Top Floor)" if is_top_floor else "متكرر (Typical Floor - Overlap Splice)"
+
+    drawings_html = ""
+    if img_plan_b64 and img_elev_b64:
+        drawings_html = f"""
+        <div class="section-title">2. الرسومات الهندسية وتفريد حديد التسليح (Engineering Drawings & BBS)</div>
+        <div class="drawings-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:16px 0;">
+            <div class="drawing-box">
+                <img src="{img_plan_b64}" alt="Column Cross Section" style="max-width:100%; height:auto; border-radius:6px;">
+                <div class="drawing-caption" style="margin-top:6px; font-weight:700; color:#1e3a8a;">Figure 1: مسقط أفقي لقطاع العمود وتوزيع الكانات والأسياخ</div>
+            </div>
+            <div class="drawing-box">
+                <img src="{img_elev_b64}" alt="Column Elevation & BBS" style="max-width:100%; height:auto; border-radius:6px;">
+                <div class="drawing-caption" style="margin-top:6px; font-weight:700; color:#1e3a8a;">Figure 2: قطاع رأسي وتفريد الحديد والوصلات</div>
+            </div>
+        </div>
+        """
+    elif img_plan_b64:
+        drawings_html = f"""
+        <div class="section-title">2. الرسومات الهندسية (Engineering Drawings)</div>
+        <div class="drawing-box" style="margin:16px 0;">
+            <img src="{img_plan_b64}" alt="Column Section" style="max-width:100%; height:auto; border-radius:6px;">
+        </div>
+        """
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>ECP 203 - Concrete Columns Quantity Survey</title>
+    {_get_base_report_css()}
+    <style>
+        .survey-table th {{ background-color: #1e3a8a !important; color:#ffffff !important; font-size:0.92rem; font-weight:bold; }}
+        .survey-table td {{ font-size:0.90rem; padding: 10px 8px; text-align:center; }}
+        .survey-table tr:nth-child(even) {{ background-color: #f8fafc; }}
+        .survey-total-row {{ background-color: #fef08a !important; font-weight:bold; color:#854d0e; font-size:0.95rem !important; border-top: 2px solid #ca8a04; }}
+    </style>
+</head>
+<body>
+
+<div class="report-container">
+
+    <!-- Top Action Bar -->
+    <div class="action-bar no-print">
+        <div style="font-weight:700; font-size:1.05rem;">📊 تقرير حصر خرسانات وحديد الأعمدة — Concrete Columns Quantity Survey</div>
+        <button class="btn-print" onclick="window.print();">🖨️ طباعة التقرير / حفظ كـ PDF (Print / Save as PDF)</button>
+    </div>
+
+    <!-- Report Header -->
+    <div class="report-header">
+        <div class="header-title">
+            <h1>تقرير حصر كميات الخرسانات والحديد للأعمدة (Columns Takeoff Sheet)</h1>
+            <span class="code-badge">الكود المصري لتصميم وتنفيذ المنشآت الخرسانية ECP 203-2018</span>
+        </div>
+        <div class="header-meta">
+            <div><b>المشروع:</b> {project_name}</div>
+            <div><b>تاريخ الحصر:</b> {now_str}</div>
+            <div><b>حالة الدور:</b> {top_floor_str}</div>
+        </div>
+    </div>
+
+    <!-- Section 1: Dimensions & Geometric Specs -->
+    <div class="section-title">1. البيانات الهندسية لقطاع العمود (Column Geometric Specifications)</div>
+    <div class="info-grid">
+        <div class="info-card">
+            <div class="card-lbl">أبعاد القطاع (b × t)</div>
+            <div class="card-val"><span dir="ltr">{b:.0f} × {t:.0f} cm</span></div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">ارتفاع العمود الصافي (H)</div>
+            <div class="card-val"><span dir="ltr">{H:.0f} cm ({H/100:.2f} m)</span></div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">تخانة السقف / الكمرة (ts)</div>
+            <div class="card-val"><span dir="ltr">{t_slab:.0f} cm</span></div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">عدد الأعمدة الإجمالي (N)</div>
+            <div class="card-val" style="color:#1e40af;"><span dir="ltr">{n_cols}</span> عمود</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">التسليح الرئيسي (Main Rebar)</div>
+            <div class="card-val" style="color:#b91c1c;"><span dir="ltr">{n_bars} Φ {phi_main} mm [{n_rows} Rows]</span></div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">نوع وتوزيع الكانات (Stirrup Ties)</div>
+            <div class="card-val" style="color:#15803d;"><span dir="ltr">{n_st_m} Φ {phi_st} / m'</span> | {tie_type.split(' ')[0]}</div>
+        </div>
+    </div>
+
+
+    {drawings_html}
+
+    <!-- Section 3: Takeoff Breakdown Table -->
+    <div class="section-title">3. جدول حصر وتفريد حديد التسليح والخرسانة (Detailed Takeoff Breakdown)</div>
+    <table class="survey-table">
+        <thead>
+            <tr>
+                <th style="text-align:right;">البند / Component</th>
+                <th>القطاع / المواصفة</th>
+                <th>العدد</th>
+                <th>طول الإفراد</th>
+                <th>إجمالي الطول (m')</th>
+                <th style="background-color:#1d4ed8 !important;">الوزن / الحجم الإجمالي</th>
+                <th>ملاحظات</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="font-weight:bold; text-align:right;">1. الخرسانة المسلحة للأعمدة</td>
+                <td class="val-cell"><span dir="ltr">{b:.0f} × {t:.0f} × {H:.0f} cm</span></td>
+                <td style="font-weight:bold;"><span dir="ltr">{n_cols}</span> عمود</td>
+                <td class="val-cell"><span dir="ltr">H = {H/100:.2f} m ({H:.0f} cm)</span></td>
+                <td class="val-cell"><span dir="ltr">{n_cols * (H/100):.1f} m'</span></td>
+                <td class="val-cell" style="font-weight:bold; color:#1e40af; background:#eff6ff;"><span dir="ltr">{vol_col_total_m3:.2f} m³</span></td>
+                <td style="font-size:0.85rem; color:#64748b;">حجم العمود = <span dir="ltr">{vol_col_single_m3:.3f} m³</span></td>
+            </tr>
+            <tr>
+                <td style="font-weight:bold; text-align:right;">2. حديد التسليح الرئيسي</td>
+                <td class="val-cell" style="font-weight:bold; color:#b91c1c;"><span dir="ltr">{n_bars} Φ {phi_main} mm [{n_rows} Rows]</span></td>
+                <td style="font-weight:bold;"><span dir="ltr">{n_cols * n_bars}</span> سيخ</td>
+                <td class="val-cell"><span dir="ltr">{L_bar_m:.2f} m ({L_bar_cm:.0f} cm)</span></td>
+                <td class="val-cell"><span dir="ltr">{n_cols * n_bars * L_bar_m:.1f} m'</span></td>
+                <td class="val-cell" style="font-weight:bold; color:#b91c1c; background:#fef2f2;"><span dir="ltr">{w_main_total_kg:.1f} kg ({w_main_total_ton:.3f} Ton)</span></td>
+                <td style="font-size:0.85rem; color:#64748b;">ارتفاع <span dir="ltr">{H:.0f}cm</span> + سقف <span dir="ltr">{t_slab:.0f}cm</span> + وصلة <span dir="ltr">({lap_factor:.0f}Φ)</span></td>
+            </tr>
+            <tr>
+                <td style="font-weight:bold; text-align:right;">3. حديد الكانات</td>
+                <td class="val-cell" style="font-weight:bold; color:#15803d;"><span dir="ltr">{tie_type.split(' ')[0]} - Φ{phi_st} mm</span></td>
+                <td style="font-weight:bold;"><span dir="ltr">{n_cols * n_ties_per_col}</span> كانة (<span dir="ltr">{n_ties_per_col}</span>/عمود)</td>
+                <td class="val-cell"><span dir="ltr">{L_tie_m:.2f} m ({L_tie_cm:.0f} cm)</span></td>
+                <td class="val-cell"><span dir="ltr">{n_cols * n_ties_per_col * L_tie_m:.1f} m'</span></td>
+                <td class="val-cell" style="font-weight:bold; color:#15803d; background:#f0fdf4;"><span dir="ltr">{w_st_total_kg:.1f} kg ({w_st_total_ton:.3f} Ton)</span></td>
+                <td style="font-size:0.85rem; color:#64748b;">كثافة <span dir="ltr">{n_st_m} Φ{phi_st}/m'</span> (أبعاد <span dir="ltr">{b-2*2.5:.0f}×{t-2*2.5:.0f} cm</span>)</td>
+            </tr>
+            <tr class="survey-total-row">
+                <td style="text-align:right; font-size:1.0rem;">✅ الإجمالي العام لحديد التسليح</td>
+                <td class="val-cell"><span dir="ltr">Φ{phi_main} + Φ{phi_st}</span></td>
+                <td>—</td>
+                <td>—</td>
+                <td class="val-cell"><span dir="ltr">{n_cols * n_bars * L_bar_m + n_cols * n_ties_per_col * L_tie_m:.1f} m'</span></td>
+                <td class="val-cell" style="font-size:1.05rem; color:#854d0e;"><span dir="ltr">{w_steel_total_kg:.1f} kg ({w_steel_total_ton:.3f} Ton)</span></td>
+                <td>معدل الحديد = <span dir="ltr">{steel_rate_kg_m3:.1f} kg/m³</span></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- Section 4: Concrete Mix Materials -->
+    <div class="section-title">4. تقدير كميات مواد الخلطة الخرسانية للأعمدة (Concrete Mix Estimation)</div>
+    <div class="info-grid">
+        <div class="info-card">
+            <div class="card-lbl">الأسمنت (350 kg/m³)</div>
+            <div class="card-val"><span dir="ltr">{cement_tons:.2f} Ton</span> ({cement_bags} شكارة)</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">الرمل النظيف (0.40 m³/m³)</div>
+            <div class="card-val"><span dir="ltr">{sand_m3:.2f} m³</span></div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">السن / الزلط (0.80 m³/m³)</div>
+            <div class="card-val"><span dir="ltr">{gravel_m3:.2f} m³</span></div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">مياه الخلط الصالحة (W/C=0.50)</div>
+            <div class="card-val"><span dir="ltr">{water_liters:.0f} L</span> (<span dir="ltr">{water_liters/1000:.2f} m³</span>)</div>
+        </div>
+    </div>
+
+    <!-- Sign-off Block -->
+    <div class="signature-block">
+        <div class="sig-box">
+            <div class="sig-title">مهندس الحصر والكميات (QS Engineer):</div>
+            <div style="margin-top:20px; color:#94a3b8;">التوقيع: ___________________</div>
+        </div>
+        <div class="sig-box">
+            <div class="sig-title">المراجعة والاعتماد (Reviewer):</div>
+            <div style="margin-top:20px; color:#94a3b8;">التوقيع: ___________________</div>
+        </div>
+        <div class="sig-box">
+            <div class="sig-title">اعتماد الاستشاري (Consultant):</div>
+            <div style="margin-top:20px; color:#94a3b8;">الختم والتاريخ: ______________</div>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>
+
+"""
+    return html_content
+
