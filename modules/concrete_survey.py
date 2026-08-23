@@ -17,6 +17,12 @@ import matplotlib.patches as patches
 from matplotlib.patches import FancyBboxPatch, Circle
 import streamlit as st
 import pandas as pd
+from modules.settings import (
+    load_settings,
+    save_settings,
+    cfg_val,
+    cfg_set,
+)
 from modules.report_generator import (
     generate_column_survey_report_html,
     html_to_pdf_bytes,
@@ -721,12 +727,16 @@ def draw_column_vertical_elevation(
 
 def render() -> None:
     st.markdown(
-        "<h2 style='color:#1e3a8a; margin-bottom:4px;'>"
-        "📊 حصر الخرسانات — Concrete Qty. Survey"
-        "</h2>"
-        "<p style='color:#64748b; font-size:13px; margin-top:0;'>"
-        "حساب حجوم العناصر الخرسانية وتقدير كميات مواد الخلطة وحديد التسليح (ECP 203)"
-        "</p>",
+        """
+        <div style="background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); color: #ffffff !important; padding: 4px 14px; border-radius: 6px; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; border-left: 4px solid #60a5fa; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.15);">
+            <div style="font-size: 17px; font-weight: 800; color: #ffffff !important;">
+                📊 حصر الخرسانات — Concrete Qty. Survey
+            </div>
+            <div style="color: rgba(255, 255, 255, 0.85) !important; font-size: 12px; font-weight: 500;">
+                حساب الحجوم ومواد الخلطة والحديد (ECP 203)
+            </div>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
@@ -738,44 +748,42 @@ def render() -> None:
     ])
 
     # ────────────────────────────────────────────────────────────────────────
-    # TAB 1 — CUSTOMS: CONCRETE COLUMNS QUANTITY SURVEY
+        # TAB 1 — CUSTOMS: CONCRETE COLUMNS QUANTITY SURVEY
     # ────────────────────────────────────────────────────────────────────────
     with tab_customs:
-        st.markdown("## 🏛️ Concrete columns quantity survey (حصر أعمدة خرسانية)")
-        st.caption("أدخل بيانات قطاع العمود وارتفاعه وتخانة البلاطة لحساب أطوال الأسياخ وأوزان الحديد وحجم الخرسانة مع المساقط الهندسية.")
-
         cover_cm = 2.5
 
         # Framed Inputs Container (برواز بلون هندسي مميز ومتقن للمدخلات)
         with st.container(border=True):
+
             st.markdown(
                 """
                 <style>
                 /* Distinctive Custom Colored Frame for Inputs */
                 div[data-testid="stVerticalBlockBorderWrapper"]:has(.cs-inputs-header-badge) {
                     border: 2.5px solid #2563eb !important;
-                    border-radius: 14px !important;
+                    border-radius: 10px !important;
                     background: linear-gradient(180deg, #ffffff 0%, #f8faff 100%) !important;
-                    padding: 20px 22px !important;
-                    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.12) !important;
+                    padding: 10px 14px !important;
+                    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.10) !important;
                 }
                 div[data-testid="stVerticalBlockBorderWrapper"]:has(.cs-inputs-header-badge):hover {
                     border-color: #1d4ed8 !important;
-                    box-shadow: 0 8px 26px rgba(37, 99, 235, 0.18) !important;
+                    box-shadow: 0 6px 18px rgba(37, 99, 235, 0.15) !important;
                 }
                 /* Increase label font size by 1.25x (عناوين المدخلات) */
                 div[data-testid="stVerticalBlockBorderWrapper"]:has(.cs-inputs-header-badge) label p {
                     font-size: 1.15rem !important;
                     font-weight: 700 !important;
                     color: #0f172a !important;
-                    line-height: 1.35 !important;
+                    line-height: 1.30 !important;
                 }
                 /* Increase input values/numbers font size by 1.25x (قيم المدخلات) */
                 div[data-testid="stVerticalBlockBorderWrapper"]:has(.cs-inputs-header-badge) input {
                     font-size: 1.22rem !important;
                     font-weight: 800 !important;
                     color: #1e3a8a !important;
-                    padding: 8px 12px !important;
+                    padding: 6px 10px !important;
                 }
                 /* Increase selectbox and radio text font size by 1.25x */
                 div[data-testid="stVerticalBlockBorderWrapper"]:has(.cs-inputs-header-badge) div[data-baseweb="select"] span {
@@ -789,72 +797,103 @@ def render() -> None:
                 </style>
                 <div class="cs-inputs-header-badge" style="
                     background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
-                    color: #ffffff;
-                    padding: 14px 22px;
-                    border-radius: 10px;
+                    color: #ffffff !important;
+                    padding: 4px 12px;
+                    border-radius: 6px;
                     font-weight: 800;
-                    font-size: 22px;
-                    margin-bottom: 18px;
+                    font-size: 15px;
+                    margin-bottom: 8px;
                     display: flex;
                     align-items: center;
                     justify-content: space-between;
-                    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.22);
-                    border-left: 6px solid #60a5fa;
+                    border-left: 4px solid #60a5fa;
                 ">
-                    <div style="display:flex; align-items:center; gap:12px;">
-                        <span style="font-size:26px;">📥</span>
-                        <span>مدخلات قطاع وتسليح العمود الخرساني (Column Geometry & Reinforcement Inputs)</span>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-size:16px;">📥</span>
+                        <span style="color:#ffffff !important;">مدخلات قطاعات وتسليح نماذج الأعمدة (Multi-Column Types Survey Inputs)</span>
                     </div>
-                    <span style="background: rgba(255,255,255,0.22); color:#ffffff; padding: 5px 14px; border-radius: 20px; font-size: 15px; font-weight: 700; border: 1px solid rgba(255,255,255,0.35);">
-                        الكود المصري ECP 203
+                    <span style="background: rgba(255,255,255,0.22); color:#ffffff !important; padding: 1px 8px; border-radius: 12px; font-size: 11.5px; font-weight: 700;">
+                        ECP 203
                     </span>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
-            # Row 1: Dimensions & Count
-            col_in1, col_in2, col_in3, col_in4, col_in5 = st.columns(5)
+            # ── SECTION A: COMMON PROJECT / FLOOR PARAMETERS ──
+            st.markdown("<div style=\'font-size:14.5px; font-weight:800; color:#1e3a8a; margin-bottom:4px;\'>📌 1. المدخلات العامة المشتركة لسقف/دور المشروع (Shared Floor & Project Specs)</div>", unsafe_allow_html=True)
+            
+            # Persistent Defaults from user_settings.json
+            def_n_types = int(cfg_val("cs_n_types", 2))
+            def_col_h = float(cfg_val("cs_col_h", 300.0))
+            def_t_slab = float(cfg_val("cs_t_slab", 20.0))
+            def_is_top_floor_idx = int(cfg_val("cs_is_top_floor_idx", 0))
+            def_lap_factor_idx = int(cfg_val("cs_lap_factor_idx", 2))
+            def_n_st_m = int(cfg_val("cs_n_st_m", 6))
+            def_phi_st_idx = int(cfg_val("cs_phi_st_idx", 1))
 
-
-
-            with col_in1:
-                t_slab_in = st.number_input(
-                    "تخانة البلاطة والكمرات (cm)",
-                    min_value=5.0, max_value=200.0, value=20.0, step=1.0,
-                    help="تخانة البلاطة أو سقوط الكمرة أعلى العمود الخرساني (Default 20 cm)",
-                    key="cs_t_slab",
+            col_g1, col_g2, col_g3, col_g4 = st.columns(4)
+            with col_g1:
+                n_types_in = st.number_input(
+                    "عدد أنواع / نماذج الأعمدة بالمشروع",
+                    min_value=1, max_value=15, value=def_n_types, step=1,
+                    help="إجمالي عدد النماذج المختلفة للأعمدة بالمشروع (مثل: C1، C2، C3...)",
+                    key="cs_n_types",
                 )
-            with col_in2:
-                col_b_in = st.number_input(
-                    "عرض العمود b (cm)",
-                    min_value=15.0, max_value=300.0, value=30.0, step=5.0,
-                    help="عرض قطاع العمود الخرساني (Default 30 cm)",
-                    key="cs_col_b",
-                )
-            with col_in3:
-                col_t_in = st.number_input(
-                    "طول العمود t (cm)",
-                    min_value=20.0, max_value=500.0, value=60.0, step=5.0,
-                    help="طول أو عمق قطاع العمود الخرساني (Default 60 cm)",
-                    key="cs_col_t",
-                )
-            with col_in4:
+            with col_g2:
                 col_h_in = st.number_input(
-                    "ارتفاع العمود H (cm)",
-                    min_value=50.0, max_value=2000.0, value=300.0, step=10.0,
+                    "ارتفاع العمود الصافي H (cm)",
+                    min_value=50.0, max_value=2000.0, value=def_col_h, step=10.0,
                     help="ارتفاع العمود الخالص الصافي من وش الخرسانة لبطنية السقف (Default 300 cm)",
                     key="cs_col_h",
                 )
-            with col_in5:
-                n_cols_in = st.number_input(
-                    "عدد الأعمدة (N)",
-                    min_value=1, max_value=10000, value=15, step=1,
-                    help="إجمالي عدد الأعمدة المراد حصرها بنفس القطاع (Default 15)",
-                    key="cs_n_cols",
+            with col_g3:
+                t_slab_in = st.number_input(
+                    "تخانة البلاطة والكمرات (cm)",
+                    min_value=5.0, max_value=200.0, value=def_t_slab, step=1.0,
+                    help="تخانة البلاطة أو سقوط الكمرة أعلى العمود الخرساني (Default 20 cm)",
+                    key="cs_t_slab",
+                )
+            with col_g4:
+                is_top_floor_sel = st.radio(
+                    "عمود دور أخير؟ (Top Floor)",
+                    options=["No (متكرر / وصلة Llap)", "Yes (دور أخير / جنش Lhook)"],
+                    index=max(0, min(def_is_top_floor_idx, 1)),
+                    horizontal=True,
+                    help="إذا كانت No يتم حساب وصلة Llap أعلى البلاطة، وإذا كانت Yes يتم حساب جنش/رجل أعلى البلاطة",
+                    key="cs_is_top_floor",
                 )
 
-            # ── ECP 203 Column Rebar Grid & Rows Calculation ──
+            col_g5, col_g6, col_g7 = st.columns(3)
+            with col_g5:
+                lap_factor_sel = st.selectbox(
+                    "معامل طول الوصلة / الجنش (Llap)",
+                    options=[40, 45, 50, 60],
+                    index=max(0, min(def_lap_factor_idx, 3)),
+                    format_func=lambda x: f"{x} Φ",
+                    help="طول الوصلة طبقا للكود المصري من 40 إلى 50 مرة القطر (Default 50Φ)",
+                    key="cs_lap_factor",
+                )
+            with col_g6:
+                n_st_m = st.number_input(
+                    "عدد الكانات في المتر (كثافة الكانات)",
+                    min_value=4, max_value=15, value=def_n_st_m, step=1,
+                    help="عدد الكانات بالمتر الطولي لارتفاع العمود (Default 6/m')",
+                    key="cs_n_st_m",
+                )
+            with col_g7:
+                phi_st = st.selectbox(
+                    "قطر حديد الكانات (mm)",
+                    options=[6, 8, 10, 12],
+                    index=max(0, min(def_phi_st_idx, 3)),
+                    format_func=lambda d: f"Φ{d} mm",
+                    help="قطر أسياخ الكانات (Default 8 mm)",
+                    key="cs_phi_st",
+                )
+
+            st.markdown("<hr style=\'margin:10px 0 8px 0; border:none; border-top:1px dashed #cbd5e1;\'>", unsafe_allow_html=True)
+
+            # ── ECP 203 Column Rebar Grid & Rows Calculation Helper ──
             def _calc_ecp_rows(b_val, t_val, nb, phi, cov=2.5):
                 off_x = cov + (phi / 10.0) / 2.0
                 off_y = cov + (phi / 10.0) / 2.0
@@ -877,302 +916,532 @@ def render() -> None:
                 sx_d = w_reb / max(nx_d - 1, 1)
                 return ny_d, nx_d, sy_d, sx_d
 
-            # Pre-calculate or fetch current main bars
-            current_nb_val = st.session_state.get("cs_n_bars", 8)
-            current_b_val = st.session_state.get("cs_col_b", 30.0)
-            current_t_val = st.session_state.get("cs_col_t", 60.0)
-            current_phi_val = st.session_state.get("cs_phi_main", 16)
+            # ── SECTION B: PER-COLUMN TYPE SPECIFIC INPUTS ──
+            st.markdown("<div style=\'font-size:14.5px; font-weight:800; color:#1e3a8a; margin-bottom:6px;\'>🏛️ 2. مدخلات وتفاصيل نماذج الأعمدة (Per-Column Model Details)</div>", unsafe_allow_html=True)
 
-            designed_ny, designed_nx, designed_sy, designed_sx = _calc_ecp_rows(
-                current_b_val, current_t_val, current_nb_val, current_phi_val, cover_cm
-            )
+            type_tabs = st.tabs([f"🏛️ نموذج C{i+1}" for i in range(int(n_types_in))])
+            col_inputs = []
 
-            # Auto-update session state for n_rows & tie_type if parameters change
-            design_key_tuple = (current_b_val, current_t_val, current_nb_val, current_phi_val)
-            if st.session_state.get("_last_design_key") != design_key_tuple:
-                st.session_state["_last_design_key"] = design_key_tuple
-                if current_nb_val < 8:
-                    st.session_state["cs_n_rows"] = 3 if current_nb_val == 6 else (2 if current_nb_val <= 4 else min(3, designed_ny))
-                    st.session_state["cs_tie_type"] = "Box (كانة صندوقية)"
-                else:
-                    st.session_state["cs_n_rows"] = designed_ny
-                    if designed_ny > 3:
-                        st.session_state["cs_tie_type"] = "Automatic (كانة أوتوماتيك)"
-                    else:
-                        st.session_state["cs_tie_type"] = "Box (كانة صندوقية)"
+            for idx in range(int(n_types_in)):
+                with type_tabs[idx]:
+                    # Persistent defaults per column type from user_settings.json
+                    def_fallback_name = f"C{idx+1}"
+                    def_fallback_b = 30.0
+                    def_fallback_t = 60.0 if idx == 0 else (50.0 if idx == 1 else (70.0 if idx == 2 else 60.0 + (idx - 3) * 10.0))
+                    def_fallback_ncols = 10 if idx == 0 else (8 if idx == 1 else (6 if idx == 2 else 5))
+                    def_fallback_nb = 8 if idx == 0 else (6 if idx == 1 else (10 if idx == 2 else 8))
+                    def_fallback_phi_idx = 3  # 16 mm
 
-            def _on_n_bars_change():
-                nb = st.session_state.get("cs_n_bars", 8)
-                if nb < 8:
-                    st.session_state["cs_n_rows"] = 3 if nb == 6 else (2 if nb <= 4 else 3)
-                    st.session_state["cs_tie_type"] = "Box (كانة صندوقية)"
-                else:
-                    ny_calc, _, _, _ = _calc_ecp_rows(
-                        st.session_state.get("cs_col_b", 30.0),
-                        st.session_state.get("cs_col_t", 60.0),
-                        nb,
-                        st.session_state.get("cs_phi_main", 16),
-                        cover_cm,
-                    )
-                    st.session_state["cs_n_rows"] = ny_calc
-                    if ny_calc > 3:
-                        st.session_state["cs_tie_type"] = "Automatic (كانة أوتوماتيك)"
-                    else:
-                        st.session_state["cs_tie_type"] = "Box (كانة صندوقية)"
+                    def_name = str(cfg_val(f"cs_name_{idx}", def_fallback_name))
+                    def_b = float(cfg_val(f"cs_b_{idx}", def_fallback_b))
+                    def_t = float(cfg_val(f"cs_t_{idx}", def_fallback_t))
+                    def_ncols = int(cfg_val(f"cs_ncols_{idx}", def_fallback_ncols))
+                    def_nb = int(cfg_val(f"cs_nb_{idx}", def_fallback_nb))
+                    def_phi_idx = int(cfg_val(f"cs_phi_idx_{idx}", def_fallback_phi_idx))
 
-            def _on_n_rows_change():
-                current_rows = st.session_state.get("cs_n_rows", 2)
-                nb = st.session_state.get("cs_n_bars", 8)
-                if nb < 8:
-                    st.session_state["cs_tie_type"] = "Box (كانة صندوقية)"
-                elif current_rows > 3:
-                    st.session_state["cs_tie_type"] = "Automatic (كانة أوتوماتيك)"
-                else:
-                    st.session_state["cs_tie_type"] = "Box (كانة صندوقية)"
+                    r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(4)
+                    with r1_c1:
+                        c_name_in = st.text_input(
+                            "اسم / رمز النموذج",
+                            value=def_name,
+                            key=f"cs_name_{idx}",
+                            help="اسم نموذج العمود مثل: C1, C2, ع1, ع2...",
+                        )
+                    with r1_c2:
+                        c_b_in = st.number_input(
+                            "عرض العمود b (cm)",
+                            min_value=15.0, max_value=300.0,
+                            value=def_b,
+                            step=5.0,
+                            key=f"cs_b_{idx}",
+                        )
+                    with r1_c3:
+                        c_t_in = st.number_input(
+                            "طول العمود t (cm)",
+                            min_value=20.0, max_value=500.0,
+                            value=def_t,
+                            step=5.0,
+                            key=f"cs_t_{idx}",
+                        )
+                    with r1_c4:
+                        c_ncols_in = st.number_input(
+                            "عدد الأعمدة من هذا النموذج (N)",
+                            min_value=1, max_value=10000,
+                            value=def_ncols,
+                            step=1,
+                            key=f"cs_ncols_{idx}",
+                        )
 
-            # Row 2: Main Rebar & Rows
-            col_in6, col_in7, col_in8, col_in9 = st.columns(4)
-            with col_in6:
-                n_main_bars = st.number_input(
-                    "عدد أسياخ الحديد الرئيسي",
-                    min_value=4, max_value=100, value=8, step=2,
-                    help="إجمالي عدد أسياخ التسليح الطولي للعمود (إذا كان أقل من 8 أسياخ يتم تعيين الكانات إلى Box وتحديد 3 صفوف تلقائياً)",
-                    key="cs_n_bars",
-                    on_change=_on_n_bars_change,
-                )
-            with col_in7:
-                phi_main_bars = st.selectbox(
-                    "قطر الحديد الرئيسي (mm)",
-                    options=[10, 12, 14, 16, 18, 20, 22, 25, 28, 32],
-                    index=3,  # 16 mm default
-                    format_func=lambda d: f"Φ{d} mm",
-                    help="قطر أسياخ التسليح الطولي (Default 16 mm)",
-                    key="cs_phi_main",
-                )
+                    # Dynamic ECP rows and tie-type rules
+                    cur_nb = st.session_state.get(f"cs_nb_{idx}", def_nb)
+                    cur_phi = st.session_state.get(f"cs_phi_{idx}", 16)
+                    ny_d, nx_d, sy_d, sx_d = _calc_ecp_rows(c_b_in, c_t_in, cur_nb, cur_phi, cover_cm)
 
-            with col_in8:
-                n_rows_in = st.number_input(
-                    f"عدد صفوف الحديد (تصميم: {designed_ny} صفوف)",
-                    min_value=2, max_value=20, value=st.session_state.get("cs_n_rows", designed_ny), step=1,
-                    help=f"محسوب تلقائياً طبقاً لتصميم العمود (ECP 203): {designed_ny} صفوف × {designed_nx} أعمدة أسياخ (المسافة S = {designed_sy:.1f} cm ≤ 25 cm)",
-                    key="cs_n_rows",
-                    on_change=_on_n_rows_change,
-                )
-            with col_in9:
-                if "cs_tie_type" not in st.session_state:
-                    st.session_state["cs_tie_type"] = "Box (كانة صندوقية)" if n_main_bars < 8 or n_rows_in <= 3 else "Automatic (كانة أوتوماتيك)"
+                    def_nrows = int(cfg_val(f"cs_nrows_{idx}", ny_d))
+                    def_tietype_idx = int(cfg_val(f"cs_tietype_idx_{idx}", 0 if cur_nb < 8 else (1 if ny_d > 3 else 0)))
 
-                tie_type_choice = st.selectbox(
-                    "نوع الكانات",
-                    options=["Box (كانة صندوقية)", "Automatic (كانة أوتوماتيك)"],
-                    help="نوع الكانات: إذا كان عدد الأسياخ أقل من 8 يتغير تلقائياً إلى Box، وإذا زاد عدد الصفوف عن 3 يتغير تلقائياً إلى Automatic مع إمكانية التعديل اليدوي",
-                    key="cs_tie_type",
-                )
+                    design_key_i = (c_b_in, c_t_in, cur_nb, cur_phi)
+                    if st.session_state.get(f"_last_key_{idx}") != design_key_i:
+                        st.session_state[f"_last_key_{idx}"] = design_key_i
+                        if cur_nb < 8:
+                            st.session_state[f"cs_nrows_{idx}"] = 3 if cur_nb == 6 else (2 if cur_nb <= 4 else min(3, ny_d))
+                            st.session_state[f"cs_tietype_{idx}"] = "Box (كانة صندوقية)"
+                        else:
+                            st.session_state[f"cs_nrows_{idx}"] = ny_d
+                            if ny_d > 3:
+                                st.session_state[f"cs_tietype_{idx}"] = "Automatic (كانة أوتوماتيك)"
+                            else:
+                                st.session_state[f"cs_tietype_{idx}"] = "Box (كانة صندوقية)"
 
+                    r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4)
+                    with r2_c1:
+                        c_nb_in = st.number_input(
+                            "عدد أسياخ الحديد الرئيسي",
+                            min_value=4, max_value=100,
+                            value=def_nb,
+                            step=2,
+                            key=f"cs_nb_{idx}",
+                            help="إذا كان أقل من 8 أسياخ يتم تعيين الكانات إلى Box وتحديد 3/2 صفوف تلقائياً",
+                        )
+                    with r2_c2:
+                        phi_opts_list = [10, 12, 14, 16, 18, 20, 22, 25, 28, 32]
+                        c_phi_in = st.selectbox(
+                            "قطر الحديد الرئيسي (mm)",
+                            options=phi_opts_list,
+                            index=max(0, min(def_phi_idx, len(phi_opts_list) - 1)),
+                            format_func=lambda d: f"Φ{d} mm",
+                            key=f"cs_phi_{idx}",
+                        )
+                    with r2_c3:
+                        c_nrows_in = st.number_input(
+                            f"عدد صفوف الحديد (تصميم: {ny_d} صفوف)",
+                            min_value=2, max_value=20,
+                            value=st.session_state.get(f"cs_nrows_{idx}", def_nrows),
+                            step=1,
+                            key=f"cs_nrows_{idx}",
+                            help=f"محسوب تلقائياً (ECP 203): {ny_d} صفوف × {nx_d} أعمدة (S = {sy_d:.1f} cm ≤ 25 cm)",
+                        )
+                    with r2_c4:
+                        tie_opts_list = ["Box (كانة صندوقية)", "Automatic (كانة أوتوماتيك)"]
+                        if f"cs_tietype_{idx}" not in st.session_state:
+                            st.session_state[f"cs_tietype_{idx}"] = tie_opts_list[max(0, min(def_tietype_idx, 1))]
 
+                        c_tietype_in = st.selectbox(
+                            "نوع الكانات",
+                            options=tie_opts_list,
+                            index=max(0, min(def_tietype_idx, 1)),
+                            key=f"cs_tietype_{idx}",
+                            help="إذا كان أقل من 8 أسياخ يتغير تلقائياً إلى Box، وإذا زاد عدد الصفوف عن 3 يتغير تلقائياً إلى Automatic",
+                        )
 
-
-            # Row 3: Stirrup details & Top floor check
-            col_in10, col_in11, col_in12, col_in13 = st.columns(4)
-            with col_in10:
-                n_st_m = st.number_input(
-                    "عدد الكانات في المتر",
-                    min_value=4, max_value=15, value=6, step=1,
-                    help="عدد الكانات بالمتر الطولي لارتفاع العمود (Default 6/m')",
-                    key="cs_n_st_m",
-                )
-            with col_in11:
-                phi_st = st.selectbox(
-                    "قطر حديد الكانات (mm)",
-                    options=[6, 8, 10, 12],
-                    index=1,  # 8 mm default
-                    format_func=lambda d: f"Φ{d} mm",
-                    help="قطر أسياخ الكانات (Default 8 mm)",
-                    key="cs_phi_st",
-                )
-            with col_in12:
-                is_top_floor_sel = st.radio(
-                    "عمود دور أخير؟ (Top Floor)",
-                    options=["No (متكرر / ليس دور أخير)", "Yes (دور أخير)"],
-                    index=0,
-                    horizontal=True,
-                    help="إذا كانت No يتم حساب وصلة Llap أعلى البلاطة، وإذا كانت Yes يتم حساب جنش/رجل أعلى البلاطة",
-                    key="cs_is_top_floor",
-                )
-            with col_in13:
-                lap_factor_sel = st.selectbox(
-                    "معامل طول الوصلة / الجنش (Llap)",
-                    options=[40, 45, 50, 60],
-                    index=2,  # 50 default
-                    format_func=lambda x: f"{x} Φ ({lap_factor_sel_cm:.0f} cm)" if 'lap_factor_sel_cm' in locals() else f"{x} Φ",
-                    help="طول الوصلة طبقا للكود المصري من 40 إلى 50 مرة القطر (Default 50Φ)",
-                    key="cs_lap_factor",
-                )
+                    col_inputs.append({
+                        "index": idx,
+                        "name": c_name_in or f"C{idx+1}",
+                        "b": c_b_in,
+                        "t": c_t_in,
+                        "n_cols": int(c_ncols_in),
+                        "n_bars": int(c_nb_in),
+                        "phi_main": int(c_phi_in),
+                        "n_rows": int(c_nrows_in),
+                        "tie_type": c_tietype_in,
+                    })
 
         st.markdown("---")
 
+        # ── Auto-persist all current inputs to user_settings.json on change ──
+        lap_opts_list = [40, 45, 50, 60]
+        st_dia_opts_list = [6, 8, 10, 12]
+        phi_main_opts_list = [10, 12, 14, 16, 18, 20, 22, 25, 28, 32]
+        tie_opts_list = ["Box (كانة صندوقية)", "Automatic (كانة أوتوماتيك)"]
+
+        cfg_updates = {
+            "cs_n_types": int(n_types_in),
+            "cs_col_h": float(col_h_in),
+            "cs_t_slab": float(t_slab_in),
+            "cs_is_top_floor_idx": 1 if "yes" in is_top_floor_sel.lower() else 0,
+            "cs_lap_factor_idx": lap_opts_list.index(lap_factor_sel) if lap_factor_sel in lap_opts_list else 2,
+            "cs_n_st_m": int(n_st_m),
+            "cs_phi_st_idx": st_dia_opts_list.index(phi_st) if phi_st in st_dia_opts_list else 1,
+        }
+        for idx, c in enumerate(col_inputs):
+            cfg_updates[f"cs_name_{idx}"] = str(c["name"])
+            cfg_updates[f"cs_b_{idx}"] = float(c["b"])
+            cfg_updates[f"cs_t_{idx}"] = float(c["t"])
+            cfg_updates[f"cs_ncols_{idx}"] = int(c["n_cols"])
+            cfg_updates[f"cs_nb_{idx}"] = int(c["n_bars"])
+            cfg_updates[f"cs_phi_idx_{idx}"] = phi_main_opts_list.index(c["phi_main"]) if c["phi_main"] in phi_main_opts_list else 3
+            cfg_updates[f"cs_nrows_{idx}"] = int(c["n_rows"])
+            cfg_updates[f"cs_tietype_idx_{idx}"] = tie_opts_list.index(c["tie_type"]) if c["tie_type"] in tie_opts_list else 0
+
+        if "cfg" not in st.session_state:
+            load_settings()
+        has_cfg_changes = False
+        for k, v in cfg_updates.items():
+            if st.session_state["cfg"].get(k) != v:
+                st.session_state["cfg"][k] = v
+                has_cfg_changes = True
+        if has_cfg_changes:
+            save_settings()
+
         # ────────────────────────────────────────────────────────────────────
-        # COMPUTATIONS & CALCULATIONS
+        # COMPUTATIONS & MULTI-MODEL SURVEY ENGINE
         # ────────────────────────────────────────────────────────────────────
         is_top = "yes" in is_top_floor_sel.lower()
         cover_cm = 2.5
-        L_lap_calc_cm = (lap_factor_sel * phi_main_bars) / 10.0
-        L_hook_calc_cm = max(25.0, (lap_factor_sel * phi_main_bars) / 10.0)
 
-        # 1. Main Rebar Length & Weight
-        if not is_top:
-            # H_col + t_slab + Llap
-            L_bar_single_cm = col_h_in + t_slab_in + L_lap_calc_cm
-        else:
-            # H_col + (t_slab - cover) + Lhook
-            L_bar_single_cm = col_h_in + (t_slab_in - cover_cm) + L_hook_calc_cm
+        col_results = []
+        for c in col_inputs:
+            c_b = c["b"]
+            c_t = c["t"]
+            c_nc = c["n_cols"]
+            c_nb = c["n_bars"]
+            c_phi = c["phi_main"]
+            c_nr = c["n_rows"]
+            c_tie = c["tie_type"]
+            c_name = c["name"]
 
-        L_bar_single_m = L_bar_single_cm / 100.0
-        w_main_unit_kgm = (phi_main_bars ** 2) / 162.0
-        w_main_per_col_kg = n_main_bars * L_bar_single_m * w_main_unit_kgm
-        w_main_total_kg = w_main_per_col_kg * n_cols_in
-        w_main_total_ton = w_main_total_kg / 1000.0
+            # Splice / Hook length
+            c_L_lap_cm = (lap_factor_sel * c_phi) / 10.0
+            c_L_hook_cm = max(25.0, (lap_factor_sel * c_phi) / 10.0)
 
-        # 2. Stirrups Length & Weight
-        b_core_calc = max(col_b_in - 2.0 * cover_cm, 1.0)
-        t_core_calc = max(col_t_in - 2.0 * cover_cm, 1.0)
-        hook_len_tie_cm = max(8.0, 10.0 * (phi_st / 10.0))
+            # 1. Main Rebar Length & Weight
+            if not is_top:
+                c_L_bar_single_cm = col_h_in + t_slab_in + c_L_lap_cm
+            else:
+                c_L_bar_single_cm = col_h_in + (t_slab_in - cover_cm) + c_L_hook_cm
 
-        is_auto_tie_calc = "auto" in tie_type_choice.lower() or "أوتوماتيك" in tie_type_choice
+            c_L_bar_single_m = c_L_bar_single_cm / 100.0
+            c_w_main_unit = (c_phi ** 2) / 162.0
+            c_w_main_single_kg = c_nb * c_L_bar_single_m * c_w_main_unit
+            c_w_main_total_kg = c_w_main_single_kg * c_nc
+            c_w_main_total_ton = c_w_main_total_kg / 1000.0
 
-        if is_auto_tie_calc:
-            # Inner tie addition
-            t_core_in_calc = max(t_core_calc * 0.5, 5.0)
-            b_core_in_calc = b_core_calc
-            L_tie_single_cm = 2.0 * (b_core_calc + t_core_calc) + 2.0 * (b_core_in_calc + t_core_in_calc) + 4.0 * hook_len_tie_cm
-        else:
-            L_tie_single_cm = 2.0 * (b_core_calc + t_core_calc) + 2.0 * hook_len_tie_cm
+            # 2. Stirrups Length & Weight
+            c_b_core = max(c_b - 2.0 * cover_cm, 1.0)
+            c_t_core = max(c_t - 2.0 * cover_cm, 1.0)
+            c_hook_len = max(8.0, 10.0 * (phi_st / 10.0))
 
-        L_tie_single_m = L_tie_single_cm / 100.0
-        n_ties_per_col = max(3, int(math.ceil((col_h_in / 100.0) * n_st_m)))
-        w_st_unit_kgm = (phi_st ** 2) / 162.0
-        w_st_per_col_kg = n_ties_per_col * L_tie_single_m * w_st_unit_kgm
-        w_st_total_kg = w_st_per_col_kg * n_cols_in
-        w_st_total_ton = w_st_total_kg / 1000.0
+            is_auto_tie = "auto" in c_tie.lower() or "أوتوماتيك" in c_tie
+            if is_auto_tie:
+                c_t_core_in = max(c_t_core * 0.5, 5.0)
+                c_b_core_in = c_b_core
+                c_L_tie_single_cm = 2.0 * (c_b_core + c_t_core) + 2.0 * (c_b_core_in + c_t_core_in) + 4.0 * c_hook_len
+            else:
+                c_L_tie_single_cm = 2.0 * (c_b_core + c_t_core) + 2.0 * c_hook_len
 
-        # 3. Concrete Volume & Grand Totals
-        vol_col_single_m3 = (col_b_in / 100.0) * (col_t_in / 100.0) * (col_h_in / 100.0)
-        vol_col_total_m3 = vol_col_single_m3 * n_cols_in
+            c_L_tie_single_m = c_L_tie_single_cm / 100.0
+            c_n_ties_per_col = max(3, int(math.ceil((col_h_in / 100.0) * n_st_m)))
+            c_w_st_unit = (phi_st ** 2) / 162.0
+            c_w_st_single_kg = c_n_ties_per_col * c_L_tie_single_m * c_w_st_unit
+            c_w_st_total_kg = c_w_st_single_kg * c_nc
+            c_w_st_total_ton = c_w_st_total_kg / 1000.0
 
-        w_steel_total_kg = w_main_total_kg + w_st_total_kg
-        w_steel_total_ton = w_steel_total_kg / 1000.0
-        steel_rate_kg_m3 = (w_steel_total_kg / vol_col_total_m3) if vol_col_total_m3 > 0 else 0.0
+            # 3. Concrete Volume & Combined Steel Weight
+            c_vol_single_m3 = (c_b / 100.0) * (c_t / 100.0) * (col_h_in / 100.0)
+            c_vol_total_m3 = c_vol_single_m3 * c_nc
+            c_w_steel_total_kg = c_w_main_total_kg + c_w_st_total_kg
+            c_w_steel_total_ton = c_w_steel_total_kg / 1000.0
+            c_steel_rate = (c_w_steel_total_kg / c_vol_total_m3) if c_vol_total_m3 > 0 else 0.0
 
-        st.markdown("#### 📐 المخطط الإنشائي المتكامل وتفريد التسليح (Structural Drawings & BBS Detailing)")
+            col_results.append({
+                "index": c["index"],
+                "name": c_name,
+                "b": c_b,
+                "t": c_t,
+                "n_cols": c_nc,
+                "n_bars": c_nb,
+                "phi_main": c_phi,
+                "n_rows": c_nr,
+                "tie_type": c_tie,
+                "L_bar_cm": c_L_bar_single_cm,
+                "L_bar_m": c_L_bar_single_m,
+                "w_main_total_kg": c_w_main_total_kg,
+                "w_main_total_ton": c_w_main_total_ton,
+                "n_ties_per_col": c_n_ties_per_col,
+                "L_tie_cm": c_L_tie_single_cm,
+                "L_tie_m": c_L_tie_single_m,
+                "w_st_total_kg": c_w_st_total_kg,
+                "w_st_total_ton": c_w_st_total_ton,
+                "vol_col_single_m3": c_vol_single_m3,
+                "vol_col_total_m3": c_vol_total_m3,
+                "w_steel_total_kg": c_w_steel_total_kg,
+                "w_steel_total_ton": c_w_steel_total_ton,
+                "steel_rate_kg_m3": c_steel_rate,
+            })
 
-        fig_unified = draw_column_unified_sheet(
-            b_cm=col_b_in,
-            t_cm=col_t_in,
-            H_col_cm=col_h_in,
-            t_slab_cm=t_slab_in,
-            n_bars=n_main_bars,
-            phi_mm=phi_main_bars,
-            phi_st_mm=phi_st,
-            n_st_per_m=n_st_m,
-            is_top_floor=is_top,
-            lap_factor=lap_factor_sel,
-            tie_type=tie_type_choice,
-            n_rows=n_rows_in,
-            cover=cover_cm,
-        )
-        st.pyplot(fig_unified, use_container_width=True)
-
+        # Combined Project Totals across all column types
+        total_cols_all = sum(r["n_cols"] for r in col_results)
+        total_vol_all = sum(r["vol_col_total_m3"] for r in col_results)
+        total_w_main_kg_all = sum(r["w_main_total_kg"] for r in col_results)
+        total_w_main_ton_all = total_w_main_kg_all / 1000.0
+        total_w_st_kg_all = sum(r["w_st_total_kg"] for r in col_results)
+        total_w_st_ton_all = total_w_st_kg_all / 1000.0
+        total_w_steel_kg_all = total_w_main_kg_all + total_w_st_kg_all
+        total_w_steel_ton_all = total_w_steel_kg_all / 1000.0
+        overall_steel_rate = (total_w_steel_kg_all / total_vol_all) if total_vol_all > 0 else 0.0
 
         # ────────────────────────────────────────────────────────────────────
-        # BOTTOM PANEL: DETAILED QUANTITY TAKEOFF RESULTS
+        # INTEGRATED CAD DRAWINGS & BBS VISUALIZER FOR ALL COLUMN TYPES
         # ────────────────────────────────────────────────────────────────────
-        st.markdown("---")
-        st.markdown("### 📊 لوحة نتائج حصر الخرسانات والحديد (Quantity Takeoff Panel)")
-
-        # Summary Metric Cards
-        p_m1, p_m2, p_m3, p_m4, p_m5 = st.columns(5)
-        p_m1.metric("إجمالي حجم الخرسانة", f"{vol_col_total_m3:.2f} m³", f"للعمود: {vol_col_single_m3:.3f} m³")
-        p_m2.metric("إجمالي الحديد الرئيسي", f"{w_main_total_ton:.3f} Ton", f"{w_main_total_kg:.1f} kg")
-        p_m3.metric("إجمالي حديد الكانات", f"{w_st_total_ton:.3f} Ton", f"{w_st_total_kg:.1f} kg")
-        p_m4.metric("إجمالي وزن الحديد الكلي", f"{w_steel_total_ton:.3f} Ton", f"{w_steel_total_kg:.1f} kg")
-        p_m5.metric("معدل استهلاك الحديد", f"{steel_rate_kg_m3:.1f} kg/m³")
-
-        # Detailed Breakdown Table with High-Visibility Large Typography (1.25x Enlarged)
         st.markdown(
-            """
-            <div style="font-size: 24px; font-weight: 800; color: #1e3a8a; margin: 20px 0 12px 0; display: flex; align-items: center; gap: 10px;">
-                <span>📋 جدول تفصيلي بحصر الكميات والحديد (Takeoff Breakdown)</span>
+            f"""
+            <div style="background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); color: #ffffff !important; padding: 10px 18px; border-radius: 8px; font-size: 18px; font-weight: 800; margin: 16px 0 12px 0; display: flex; align-items: center; justify-content: space-between; border-left: 5px solid #60a5fa;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 20px;">📐</span>
+                    <span style="color: #ffffff !important;">المخططات الإنشائية وتفريد التسليح لجميع نماذج الأعمدة ({len(col_results)} نماذج)</span>
+                </div>
+                <span style="background: rgba(255,255,255,0.22); color: #ffffff !important; padding: 3px 10px; border-radius: 12px; font-size: 13px; font-weight: 700;">
+                    رسومات تنفيذية تفصيلية لكل نموذج
+                </span>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
+        all_drawings = []
+        for idx, r in enumerate(col_results):
+            fig_i = draw_column_unified_sheet(
+                b_cm=r["b"],
+                t_cm=r["t"],
+                H_col_cm=col_h_in,
+                t_slab_cm=t_slab_in,
+                n_bars=r["n_bars"],
+                phi_mm=r["phi_main"],
+                phi_st_mm=phi_st,
+                n_st_per_m=n_st_m,
+                is_top_floor=is_top,
+                lap_factor=lap_factor_sel,
+                tie_type=r["tie_type"],
+                n_rows=r["n_rows"],
+                cover=cover_cm,
+            )
+            b64_i = fig_to_base64(fig_i)
+            all_drawings.append({
+                "fig": fig_i,
+                "img_b64": b64_i,
+                "name": r["name"],
+                "b": r["b"],
+                "t": r["t"],
+                "n_bars": r["n_bars"],
+                "phi_main": r["phi_main"],
+            })
+
+        view_mode_col1, view_mode_col2 = st.columns([2, 1])
+        with view_mode_col1:
+            draw_view_mode = st.radio(
+                "طريقة استعراض الرسومات الهندسية:",
+                options=["📑 استعراض بنظام التبويبات (Tabs لكل نموذج)", "📜 عرض رسومات كافة النماذج معاً"],
+                index=0,
+                horizontal=True,
+                key="cs_draw_view_mode",
+            )
+        with view_mode_col2:
+            st.caption(f"يتوفر رسم تنفيذي وتفريد تسليح مستقل لكل نموذج من نماذج الأعمدة الـ {len(col_results)}.")
+
+        if "تبويبات" in draw_view_mode:
+            draw_tabs = st.tabs([f"🏛️ مخطط نموذج {d['name']} ({d['b']:.0f}×{d['t']:.0f} cm)" for d in all_drawings])
+            for i, d in enumerate(all_drawings):
+                with draw_tabs[i]:
+                    st.markdown(
+                        f"<div style='font-size:16px; font-weight:800; color:#1e3a8a; margin:4px 0 8px 0;'>🏛️ المخطط الإنشائي وتفريد التسليح لنموذج: <span style='color:#2563eb;'>{d['name']}</span> (<span dir='ltr'>{d['b']:.0f}×{d['t']:.0f} cm | {d['n_bars']}Φ{d['phi_main']} mm</span>)</div>",
+                        unsafe_allow_html=True,
+                    )
+                    st.pyplot(d["fig"], use_container_width=True)
+        else:
+            for i, d in enumerate(all_drawings):
+                st.markdown(
+                    f"""
+                    <div style='background:#f1f5f9; border-right:4px solid #2563eb; padding:8px 12px; margin:16px 0 8px 0; border-radius:4px; font-size:16px; font-weight:800; color:#0f172a; display:flex; justify-content:space-between; align-items:center;'>
+                        <span>🏛️ المخطط الإنشائي وتفريد التسليح لنموذج: <b style="color:#1e40af;">{d['name']}</b></span>
+                        <span dir="ltr" style="font-size:14px; font-weight:700; color:#475569;">{d['b']:.0f} × {d['t']:.0f} cm | {d['n_bars']} Φ {d['phi_main']} mm</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                st.pyplot(d["fig"], use_container_width=True)
+
+        # ────────────────────────────────────────────────────────────────────
+        # BOTTOM PANEL: DETAILED QUANTITY TAKEOFF RESULTS
+        # ────────────────────────────────────────────────────────────────────
+        st.markdown("---")
+        st.markdown("### 📊 لوحة نتائج حصر الخرسانات والحديد الإجمالية (Quantity Takeoff Panel)")
+
+        # Summary Metric Cards
+        p_m1, p_m2, p_m3, p_m4, p_m5 = st.columns(5)
+        p_m1.metric("إجمالي حجم الخرسانة", f"{total_vol_all:.2f} m³", f"{len(col_results)} نماذج ({total_cols_all} عمود)")
+        p_m2.metric("إجمالي الحديد الرئيسي", f"{total_w_main_ton_all:.3f} Ton", f"{total_w_main_kg_all:.1f} kg")
+        p_m3.metric("إجمالي حديد الكانات", f"{total_w_st_ton_all:.3f} Ton", f"{total_w_st_kg_all:.1f} kg")
+        p_m4.metric("إجمالي وزن الحديد الكلي", f"{total_w_steel_ton_all:.3f} Ton", f"{total_w_steel_kg_all:.1f} kg")
+        p_m5.metric("معدل استهلاك الحديد", f"{overall_steel_rate:.1f} kg/m³")
+
+        # Detailed Breakdown Table with High-Visibility Large Typography (1.25x Enlarged)
+        st.markdown(
+            f"""
+            <div style="background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); color: #ffffff !important; padding: 14px 22px; border-radius: 10px; font-size: 24px; font-weight: 800; margin: 20px 0 14px 0; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.22); border-left: 6px solid #60a5fa;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <span style="font-size: 26px;">📋</span>
+                    <span style="color: #ffffff !important; font-weight: 800;">جدول تفصيلي بحصر الكميات والحديد لجميع نماذج الأعمدة ({len(col_results)} نماذج)</span>
+                </div>
+                <span style="background: rgba(255,255,255,0.22); color: #ffffff !important; padding: 5px 14px; border-radius: 20px; font-size: 15px; font-weight: 700; border: 1px solid rgba(255,255,255,0.35);">
+                    إجمالي {total_cols_all} عمود
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Build dynamic rows for each column model and diameter aggregation
+        takeoff_rows_html = ""
+        total_steel_linear_all = 0.0
+        rebar_by_dia = {}
+
+        for m_idx, r in enumerate(col_results, 1):
+            c_name = r["name"]
+            c_b = r["b"]
+            c_t = r["t"]
+            c_nc = r["n_cols"]
+            c_nb = r["n_bars"]
+            c_phi = r["phi_main"]
+            c_nr = r["n_rows"]
+            c_tie = r["tie_type"].split(' ')[0]
+            c_L_bar_m = r["L_bar_m"]
+            c_L_bar_cm = r["L_bar_cm"]
+            c_w_main_kg = r["w_main_total_kg"]
+            c_w_main_ton = r["w_main_total_ton"]
+            c_n_ties = r["n_ties_per_col"]
+            c_L_tie_m = r["L_tie_m"]
+            c_L_tie_cm = r["L_tie_cm"]
+            c_w_st_kg = r["w_st_total_kg"]
+            c_w_st_ton = r["w_st_total_ton"]
+            c_vol_single = r["vol_col_single_m3"]
+            c_vol_total = r["vol_col_total_m3"]
+
+            c_main_lin = c_nc * c_nb * c_L_bar_m
+            c_st_lin = c_nc * c_n_ties * c_L_tie_m
+            total_steel_linear_all += (c_main_lin + c_st_lin)
+
+            # Aggregate by diameter
+            # 1. Main bars
+            if c_phi not in rebar_by_dia:
+                rebar_by_dia[c_phi] = {"phi": c_phi, "total_len_m": 0.0, "total_w_kg": 0.0, "main_pieces": 0, "tie_pieces": 0, "desc": []}
+            rebar_by_dia[c_phi]["total_len_m"] += c_main_lin
+            rebar_by_dia[c_phi]["total_w_kg"] += c_w_main_kg
+            rebar_by_dia[c_phi]["main_pieces"] += (c_nc * c_nb)
+            rebar_by_dia[c_phi]["desc"].append(f"رئيسي {c_name} ({c_nc * c_nb} سيخ)")
+
+            # 2. Stirrups
+            if phi_st not in rebar_by_dia:
+                rebar_by_dia[phi_st] = {"phi": phi_st, "total_len_m": 0.0, "total_w_kg": 0.0, "main_pieces": 0, "tie_pieces": 0, "desc": []}
+            rebar_by_dia[phi_st]["total_len_m"] += c_st_lin
+            rebar_by_dia[phi_st]["total_w_kg"] += c_w_st_kg
+            rebar_by_dia[phi_st]["tie_pieces"] += (c_nc * c_n_ties)
+            rebar_by_dia[phi_st]["desc"].append(f"كانات {c_name} ({c_nc * c_n_ties} كانة)")
+
+            takeoff_rows_html += f"""
+            <tr style="background:#f8fafc; font-size:24px; text-align:center;">
+                <td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:800; text-align:right; color:#1e3a8a;">{m_idx}.1. خرسانة مسلحة ({c_name})</td>
+                <td style="padding:14px 14px; border:1px solid #cbd5e1; font-weight:800; color:#1e3a8a; font-size:25px;"><span dir="ltr">{c_b:.0f} × {c_t:.0f} cm</span></td>
+                <td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:800; color:#1e3a8a;"><span dir="ltr">{c_nc}</span> عمود</td>
+                <td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:800; color:#1e3a8a; background:#eff6ff; font-size:26px;"><span dir="ltr">{c_vol_total:.2f} m³</span></td>
+                <td style="padding:14px 16px; border:1px solid #cbd5e1; font-size:21px; color:#475569;">حجم العمود = <span dir="ltr">{c_vol_single:.3f} m³</span> (صافي <span dir="ltr">H={col_h_in/100:.2f}m</span>)</td>
+            </tr>
+            <tr style="background:#ffffff; font-size:24px; text-align:center;">
+                <td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:800; text-align:right; color:#b91c1c;">{m_idx}.2. تسليح رئيسي ({c_name})</td>
+                <td style="padding:14px 14px; border:1px solid #cbd5e1; color:#b91c1c; font-weight:800; font-size:25px;"><span dir="ltr">{c_nb} Φ{c_phi} mm [{c_nr} Rows]</span></td>
+                <td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:800; color:#b91c1c;"><span dir="ltr">{c_nc * c_nb}</span> سيخ</td>
+                <td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:800; color:#991b1b; background:#fef2f2; font-size:26px;"><span dir="ltr">{c_w_main_kg:.1f} kg</span><br><span style="font-size:22px; color:#b91c1c;" dir="ltr">({c_w_main_ton:.3f} Ton)</span></td>
+                <td style="padding:14px 16px; border:1px solid #cbd5e1; font-size:21px; color:#475569;">طول السيخ = <span dir="ltr">{c_L_bar_m:.2f}m</span> (ارتفاع <span dir="ltr">{col_h_in:.0f}</span> + سقف <span dir="ltr">{t_slab_in:.0f}</span> + وصلة <span dir="ltr">{lap_factor_sel:.0f}Φ</span>)</td>
+            </tr>
+            <tr style="background:#f8fafc; font-size:24px; text-align:center;">
+                <td style="padding:14px 16px; border:1px solid #cbd5e1; border-bottom:3px solid #334155 !important; font-weight:800; text-align:right; color:#15803d;">{m_idx}.3. حديد الكانات ({c_name})</td>
+                <td style="padding:14px 14px; border:1px solid #cbd5e1; border-bottom:3px solid #334155 !important; color:#15803d; font-weight:800; font-size:25px;"><span dir="ltr">{c_tie} - Φ{phi_st} mm</span></td>
+                <td style="padding:14px 12px; border:1px solid #cbd5e1; border-bottom:3px solid #334155 !important; font-weight:800; color:#15803d;"><span dir="ltr">{c_nc * c_n_ties}</span> كانة <br><span style="font-size:20px;" dir="ltr">({c_n_ties}/عمود)</span></td>
+                <td style="padding:14px 16px; border:1px solid #cbd5e1; border-bottom:3px solid #334155 !important; font-weight:800; color:#15803d; background:#f0fdf4; font-size:26px;"><span dir="ltr">{c_w_st_kg:.1f} kg</span><br><span style="font-size:22px; color:#15803d;" dir="ltr">({c_w_st_ton:.3f} Ton)</span></td>
+                <td style="padding:14px 16px; border:1px solid #cbd5e1; border-bottom:3px solid #334155 !important; font-size:21px; color:#475569;">طول الكانة = <span dir="ltr">{c_L_tie_m:.2f}m</span> (كثافة <span dir="ltr">{n_st_m} Φ{phi_st}/m'</span> | كانة <span dir="ltr">{c_b-2*cover_cm:.0f}×{c_t-2*cover_cm:.0f} cm</span>)</td>
+            </tr>
+            """
+
+        # Generate rows for each diameter breakdown
+        dia_rows_html = ""
+        total_pieces_all = 0
+        for phi_key in sorted(rebar_by_dia.keys()):
+            d_info = rebar_by_dia[phi_key]
+            d_phi = d_info["phi"]
+            d_len_m = d_info["total_len_m"]
+            d_w_kg = d_info["total_w_kg"]
+            d_w_ton = d_w_kg / 1000.0
+            d_w_per_m = (d_phi**2) / 162.0
+            
+            p_parts = []
+            tot_p = 0
+            if d_info["main_pieces"] > 0:
+                p_parts.append(f"{d_info['main_pieces']} سيخ")
+                tot_p += d_info["main_pieces"]
+            if d_info["tie_pieces"] > 0:
+                p_parts.append(f"{d_info['tie_pieces']} كانة")
+                tot_p += d_info["tie_pieces"]
+            total_pieces_all += tot_p
+            
+            role_label = "رئيسي + كانات" if (d_info["main_pieces"] > 0 and d_info["tie_pieces"] > 0) else ("تسليح رئيسي" if d_info["main_pieces"] > 0 else "حديد كانات")
+            pieces_str = " + ".join(p_parts)
+            desc_str = " | ".join(d_info["desc"])
+
+            dia_rows_html += f"""
+            <tr style="background:#fffbeb; font-size:24px; text-align:center;">
+                <td style="padding:13px 16px; border:1px solid #cbd5e1; font-weight:800; text-align:right; color:#b45309;">🔹 حديد تسليح <span dir="ltr">Φ{d_phi} mm</span> ({role_label})</td>
+                <td style="padding:13px 14px; border:1px solid #cbd5e1; font-weight:800; color:#b45309; font-size:23px;"><span dir="ltr">{d_w_per_m:.3f} kg/m'</span> (وزن المتر)</td>
+                <td style="padding:13px 12px; border:1px solid #cbd5e1; font-weight:800; color:#b45309;"><span dir="ltr">{pieces_str}</span><br><span style="font-size:20px;" dir="ltr">({d_len_m:.1f} m')</span></td>
+                <td style="padding:13px 16px; border:1px solid #cbd5e1; font-weight:800; color:#92400e; background:#fef3c7; font-size:26px;"><span dir="ltr">{d_w_kg:.1f} kg</span><br><span style="font-size:21px; color:#b45309;" dir="ltr">({d_w_ton:.3f} Ton)</span></td>
+                <td style="padding:13px 16px; border:1px solid #cbd5e1; font-size:20px; color:#475569;">{desc_str}</td>
+            </tr>
+            """
+
         takeoff_html = f"""
-        <div style="overflow-x:auto; margin-top:10px; margin-bottom:20px;">
-        <table style="width:100%; border-collapse:collapse; font-size:25px; font-family:'Segoe UI', Tahoma, sans-serif; background:#ffffff; border:2.5px solid #94a3b8; border-radius:10px; box-shadow:0 3px 8px rgba(0,0,0,0.08);">
-            <thead>
-                <tr style="background:#1e3a8a; color:#ffffff; font-size:26px; font-weight:800; text-align:center;">
-                    <th style="padding:16px 16px; border:1px solid #3b82f6; text-align:right;">البند / Component</th>
-                    <th style="padding:16px 14px; border:1px solid #3b82f6;">القطاع / المواصفة</th>
-                    <th style="padding:16px 12px; border:1px solid #3b82f6;">العدد</th>
-                    <th style="padding:16px 14px; border:1px solid #3b82f6;">طول الإفراد</th>
-                    <th style="padding:16px 14px; border:1px solid #3b82f6;">إجمالي الطول</th>
-                    <th style="padding:16px 16px; border:1px solid #3b82f6; background:#1d4ed8;">الوزن / الحجم الإجمالي</th>
-                    <th style="padding:16px 16px; border:1px solid #3b82f6;">ملاحظات</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr style="background:#f8fafc; font-size:24px; text-align:center;">
-                    <td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:800; text-align:right; color:#0f172a;">1. الخرسانة المسلحة للأعمدة</td>
-                    <td style="padding:14px 14px; border:1px solid #cbd5e1; font-weight:700;"><span dir="ltr">{col_b_in:.0f}×{col_t_in:.0f}×{col_h_in:.0f} cm</span></td>
-                    <td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:800; color:#1e3a8a;">{n_cols_in} عمود</td>
-                    <td style="padding:14px 14px; border:1px solid #cbd5e1;"><span dir="ltr">H = {col_h_in/100:.2f} m</span></td>
-                    <td style="padding:14px 14px; border:1px solid #cbd5e1; font-weight:700;"><span dir="ltr">{n_cols_in * (col_h_in/100):.1f} m'</span></td>
-                    <td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:800; color:#1e3a8a; background:#eff6ff; font-size:26px;"><span dir="ltr">{vol_col_total_m3:.2f} m³</span></td>
-                    <td style="padding:14px 16px; border:1px solid #cbd5e1; font-size:21px; color:#475569;">حجم العمود = <span dir="ltr">{vol_col_single_m3:.3f} m³</span></td>
-                </tr>
-                <tr style="background:#ffffff; font-size:24px; text-align:center;">
-                    <td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:800; text-align:right; color:#0f172a;">2. حديد التسليح الرئيسي</td>
-                    <td style="padding:14px 14px; border:1px solid #cbd5e1; color:#b91c1c; font-weight:800; font-size:25px;"><span dir="ltr">{n_main_bars} Φ{phi_main_bars} mm [{n_rows_in} Rows]</span></td>
-                    <td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:800; color:#b91c1c;">{n_cols_in * n_main_bars} سيخ</td>
-                    <td style="padding:14px 14px; border:1px solid #cbd5e1; font-weight:700;"><span dir="ltr">{L_bar_single_m:.2f} m ({L_bar_single_cm:.0f} cm)</span></td>
-                    <td style="padding:14px 14px; border:1px solid #cbd5e1; font-weight:700;"><span dir="ltr">{n_cols_in * n_main_bars * L_bar_single_m:.1f} m'</span></td>
-                    <td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:800; color:#991b1b; background:#fef2f2; font-size:26px;"><span dir="ltr">{w_main_total_kg:.1f} kg</span><br><span style="font-size:22px; color:#b91c1c;" dir="ltr">({w_main_total_ton:.3f} Ton)</span></td>
-                    <td style="padding:14px 16px; border:1px solid #cbd5e1; font-size:21px; color:#475569;">ارتفاع <span dir="ltr">{col_h_in:.0f}cm</span> + سقف <span dir="ltr">{t_slab_in:.0f}cm</span> + وصلة <span dir="ltr">({lap_factor_sel:.0f}Φ)</span></td>
-                </tr>
-                <tr style="background:#f8fafc; font-size:24px; text-align:center;">
-                    <td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:800; text-align:right; color:#0f172a;">3. حديد الكانات</td>
-                    <td style="padding:14px 14px; border:1px solid #cbd5e1; color:#15803d; font-weight:800; font-size:25px;"><span dir="ltr">{tie_type_choice.split(' ')[0]} - Φ{phi_st} mm</span></td>
-                    <td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:800; color:#15803d;">{n_cols_in * n_ties_per_col} كانة <br><span style="font-size:20px;">({n_ties_per_col}/عمود)</span></td>
-                    <td style="padding:14px 14px; border:1px solid #cbd5e1; font-weight:700;"><span dir="ltr">{L_tie_single_m:.2f} m ({L_tie_single_cm:.0f} cm)</span></td>
-                    <td style="padding:14px 14px; border:1px solid #cbd5e1; font-weight:700;"><span dir="ltr">{n_cols_in * n_ties_per_col * L_tie_single_m:.1f} m'</span></td>
-                    <td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:800; color:#15803d; background:#f0fdf4; font-size:26px;"><span dir="ltr">{w_st_total_kg:.1f} kg</span><br><span style="font-size:22px; color:#15803d;" dir="ltr">({w_st_total_ton:.3f} Ton)</span></td>
-                    <td style="padding:14px 16px; border:1px solid #cbd5e1; font-size:21px; color:#475569;">كثافة <span dir="ltr">{n_st_m} Φ{phi_st}/m'</span> (أبعاد <span dir="ltr">{col_b_in-2*cover_cm:.0f}×{col_t_in-2*cover_cm:.0f} cm</span>)</td>
-                </tr>
-                <tr style="background:#fefce8; font-size:25px; font-weight:800; text-align:center; border-top:3px solid #ca8a04;">
-                    <td style="padding:16px 16px; border:1px solid #cbd5e1; color:#854d0e; text-align:right; font-size:26px;">✅ الإجمالي العام لحديد التسليح</td>
-                    <td style="padding:16px 14px; border:1px solid #cbd5e1; color:#854d0e;"><span dir="ltr">Φ{phi_main_bars} + Φ{phi_st}</span></td>
-                    <td style="padding:16px 12px; border:1px solid #cbd5e1; color:#854d0e;">—</td>
-                    <td style="padding:16px 14px; border:1px solid #cbd5e1; color:#854d0e;">—</td>
-                    <td style="padding:16px 14px; border:1px solid #cbd5e1; color:#854d0e; font-weight:800;"><span dir="ltr">{n_cols_in * n_main_bars * L_bar_single_m + n_cols_in * n_ties_per_col * L_tie_single_m:.1f} m'</span></td>
-                    <td style="padding:16px 16px; border:1px solid #cbd5e1; color:#854d0e; background:#fef08a; font-size:28px; font-weight:800;"><span dir="ltr">{w_steel_total_kg:.1f} kg</span><br><span style="font-size:24px;" dir="ltr">({w_steel_total_ton:.3f} Ton)</span></td>
-                    <td style="padding:16px 16px; border:1px solid #cbd5e1; color:#854d0e; font-size:24px; font-weight:800;">معدل الحديد = <span dir="ltr">{steel_rate_kg_m3:.1f} kg/m³</span></td>
-                </tr>
-            </tbody>
-        </table>
-        </div>
-        """
-        st.markdown(takeoff_html, unsafe_allow_html=True)
+<div style="overflow-x:auto; margin-top:10px; margin-bottom:20px;">
+<table style="width:100%; border-collapse:collapse; font-size:25px; font-family:'Segoe UI', Tahoma, sans-serif; background:#ffffff; border:3px solid #1e3a8a; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,0.10);">
+<thead>
+<tr style="background:#1e3a8a; color:#ffffff; font-size:26px; font-weight:800; text-align:center;">
+<th style="padding:16px 16px; border:1px solid #3b82f6; text-align:right;">البند / Component</th>
+<th style="padding:16px 14px; border:1px solid #3b82f6;">مقاس العمود / المواصفة</th>
+<th style="padding:16px 12px; border:1px solid #3b82f6;">العدد</th>
+<th style="padding:16px 16px; border:1px solid #3b82f6; background:#1d4ed8;">الوزن / الحجم الإجمالي</th>
+<th style="padding:16px 16px; border:1px solid #3b82f6;">ملاحظات</th>
+</tr>
+</thead>
+<tbody>
+{takeoff_rows_html}
+<tr style="background:#eff6ff; font-size:24px; font-weight:800; text-align:center;">
+<td style="padding:15px 16px; border:1px solid #cbd5e1; border-top:3px solid #334155 !important; color:#1e3a8a; text-align:right; font-size:25px;">🔷 إجمالي الخرسانة المسلحة ({len(col_results)} نماذج)</td>
+<td style="padding:15px 14px; border:1px solid #cbd5e1; border-top:3px solid #334155 !important; color:#1e3a8a;">كافة قطاعات الأعمدة</td>
+<td style="padding:15px 12px; border:1px solid #cbd5e1; border-top:3px solid #334155 !important; color:#1e3a8a; font-weight:800;"><span dir="ltr">{total_cols_all}</span> عمود</td>
+<td style="padding:15px 16px; border:1px solid #cbd5e1; border-top:3px solid #334155 !important; color:#1e40af; background:#dbeafe; font-size:27px; font-weight:800;"><span dir="ltr">{total_vol_all:.2f} m³</span></td>
+<td style="padding:15px 16px; border:1px solid #cbd5e1; border-top:3px solid #334155 !important; color:#475569; font-size:22px;">إجمالي حجم خرسانة الأعمدة بالمشروع</td>
+</tr>
+{dia_rows_html}
+<tr style="background:#fefce8; font-size:25px; font-weight:800; text-align:center;">
+<td style="padding:16px 16px; border:1px solid #cbd5e1; border-top:3px solid #ca8a04 !important; color:#854d0e; text-align:right; font-size:26px;">✅ الإجمالي العام لحديد التسليح (كافة النماذج)</td>
+<td style="padding:16px 14px; border:1px solid #cbd5e1; border-top:3px solid #ca8a04 !important; color:#854d0e;">رئيسي + كانات (كافة الأقطار)</td>
+<td style="padding:16px 12px; border:1px solid #cbd5e1; border-top:3px solid #ca8a04 !important; color:#854d0e; font-weight:800;"><span dir="ltr">{total_pieces_all}</span> قطعة<br><span style="font-size:20px;" dir="ltr">({total_steel_linear_all:.1f} m')</span></td>
+<td style="padding:16px 16px; border:1px solid #cbd5e1; border-top:3px solid #ca8a04 !important; color:#854d0e; background:#fef08a; font-size:28px; font-weight:800;"><span dir="ltr">{total_w_steel_kg_all:.1f} kg</span><br><span style="font-size:24px;" dir="ltr">({total_w_steel_ton_all:.3f} Ton)</span></td>
+<td style="padding:16px 16px; border:1px solid #cbd5e1; border-top:3px solid #ca8a04 !important; color:#854d0e; font-size:24px; font-weight:800;">معدل الحديد الكلي = <span dir="ltr">{overall_steel_rate:.1f} kg/m³</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+"""
+        clean_takeoff_html = "\n".join(line.strip() for line in takeoff_html.splitlines() if line.strip())
+        if hasattr(st, "html"):
+            st.html(clean_takeoff_html)
+        else:
+            st.markdown(clean_takeoff_html, unsafe_allow_html=True)
 
-
-
-        # Materials estimation for columns
-        with st.expander("🧪 تقدير مواد الخلطة لخرسانة الأعمدة (أسمنت، رمل، سن، ماء)"):
-            c_cement_tons = (vol_col_total_m3 * 350.0) / 1000.0
-            c_cement_bags = int(round((vol_col_total_m3 * 350.0) / 50.0))
-            c_sand_m3 = vol_col_total_m3 * 0.40
-            c_gravel_m3 = vol_col_total_m3 * 0.80
-            c_water_liters = vol_col_total_m3 * 350.0 * 0.50
+        # Materials estimation for all columns
+        with st.expander(f"🧪 تقدير مواد الخلطة لخرسانة الأعمدة ({total_vol_all:.2f} m³ لكافة النماذج)"):
+            c_cement_tons = (total_vol_all * 350.0) / 1000.0
+            c_cement_bags = int(round((total_vol_all * 350.0) / 50.0))
+            c_sand_m3 = total_vol_all * 0.40
+            c_gravel_m3 = total_vol_all * 0.80
+            c_water_liters = total_vol_all * 350.0 * 0.50
 
             mat_c1, mat_c2, mat_c3, mat_c4 = st.columns(4)
             mat_c1.metric("أسمنت (350 kg/m³)", f"{c_cement_tons:.2f} طن", f"{c_cement_bags} شكارة")
@@ -1181,60 +1450,65 @@ def render() -> None:
             mat_c4.metric("مياه صالحة (W/C=0.50)", f"{c_water_liters:.0f} لتر")
 
         # ────────────────────────────────────────────────────────────────────
-        # SAVE & PRINT ACTIONS SECTION (حفظ وطباعة النتائج)
+        # SAVE & PRINT ACTIONS SECTION (حفظ وطباعة النتائج لجميع النماذج)
         # ────────────────────────────────────────────────────────────────────
         st.markdown("---")
         st.markdown("### 🖨️ حفظ وطباعة نتائج الحصر (Save & Print Reports)")
 
-        img_unified_b64 = fig_to_base64(fig_unified)
+        first_draw_b64 = all_drawings[0]["img_b64"] if all_drawings else None
 
         col_survey_html = generate_column_survey_report_html(
-            project_name="حصر أعمدة خرسانية (Column Takeoff)",
-            b=col_b_in,
-            t=col_t_in,
+            project_name=f"حصر أعمدة خرسانية ({len(col_results)} نماذج — {total_cols_all} عمود)",
+            b=col_results[0]["b"],
+            t=col_results[0]["t"],
             H=col_h_in,
             t_slab=t_slab_in,
-            n_cols=n_cols_in,
-            n_bars=n_main_bars,
-            phi_main=phi_main_bars,
-            n_rows=n_rows_in,
-            tie_type=tie_type_choice,
+            n_cols=total_cols_all,
+            n_bars=col_results[0]["n_bars"],
+            phi_main=col_results[0]["phi_main"],
+            n_rows=col_results[0]["n_rows"],
+            tie_type=col_results[0]["tie_type"],
             n_st_m=n_st_m,
             phi_st=phi_st,
             is_top_floor=is_top,
             lap_factor=lap_factor_sel,
-            L_bar_m=L_bar_single_m,
-            L_bar_cm=L_bar_single_cm,
-            w_main_total_kg=w_main_total_kg,
-            w_main_total_ton=w_main_total_ton,
-            L_tie_m=L_tie_single_m,
-            L_tie_cm=L_tie_single_cm,
-            n_ties_per_col=n_ties_per_col,
-            w_st_total_kg=w_st_total_kg,
-            w_st_total_ton=w_st_total_ton,
-            vol_col_single_m3=vol_col_single_m3,
-            vol_col_total_m3=vol_col_total_m3,
-            w_steel_total_kg=w_steel_total_kg,
-            w_steel_total_ton=w_steel_total_ton,
-            steel_rate_kg_m3=steel_rate_kg_m3,
+            L_bar_m=col_results[0]["L_bar_m"],
+            L_bar_cm=col_results[0]["L_bar_cm"],
+            w_main_total_kg=total_w_main_kg_all,
+            w_main_total_ton=total_w_main_ton_all,
+            L_tie_m=col_results[0]["L_tie_m"],
+            L_tie_cm=col_results[0]["L_tie_cm"],
+            n_ties_per_col=col_results[0]["n_ties_per_col"],
+            w_st_total_kg=total_w_st_kg_all,
+            w_st_total_ton=total_w_st_ton_all,
+            vol_col_single_m3=col_results[0]["vol_col_single_m3"],
+            vol_col_total_m3=total_vol_all,
+            w_steel_total_kg=total_w_steel_kg_all,
+            w_steel_total_ton=total_w_steel_ton_all,
+            steel_rate_kg_m3=overall_steel_rate,
             cement_tons=c_cement_tons,
             cement_bags=c_cement_bags,
             sand_m3=c_sand_m3,
             gravel_m3=c_gravel_m3,
             water_liters=c_water_liters,
-            img_plan_b64=img_unified_b64,
+            img_plan_b64=first_draw_b64,
             img_elev_b64=None,
+            col_results=col_results,
+            drawings_list=all_drawings,
         )
 
         pdf_bytes = html_to_pdf_bytes(col_survey_html)
 
-        # CSV export data
-        export_df = pd.DataFrame([
-            {"البند": "الخرسانة المسلحة للأعمدة", "القطاع": f"{col_b_in:.0f}×{col_t_in:.0f}×{col_h_in:.0f} cm", "العدد": n_cols_in, "طول الإفراد (m)": f"{col_h_in/100:.2f}", "إجمالي الطول (m')": f"{n_cols_in * (col_h_in/100):.1f}", "الحجم/الوزن": f"{vol_col_total_m3:.2f} m³", "الوحدة": "متر مكعب m³"},
-            {"البند": "حديد التسليح الرئيسي", "القطاع": f"{n_main_bars} Φ{phi_main_bars} mm", "العدد": n_cols_in * n_main_bars, "طول الإفراد (m)": f"{L_bar_single_m:.2f}", "إجمالي الطول (m')": f"{n_cols_in * n_main_bars * L_bar_single_m:.1f}", "الحجم/الوزن": f"{w_main_total_kg:.1f} kg ({w_main_total_ton:.3f} Ton)", "الوحدة": "كجم / طن"},
-            {"البند": "حديد الكانات", "القطاع": f"{tie_type_choice.split(' ')[0]} Φ{phi_st} mm", "العدد": n_cols_in * n_ties_per_col, "طول الإفراد (m)": f"{L_tie_single_m:.2f}", "إجمالي الطول (m')": f"{n_cols_in * n_ties_per_col * L_tie_single_m:.1f}", "الحجم/الوزن": f"{w_st_total_kg:.1f} kg ({w_st_total_ton:.3f} Ton)", "الوحدة": "كجم / طن"},
-            {"البند": "الإجمالي العام للحديد", "القطاع": f"رئيسي Φ{phi_main_bars} + كانات Φ{phi_st}", "العدد": "-", "طول الإفراد (m)": "-", "إجمالي الطول (m')": f"{n_cols_in * n_main_bars * L_bar_single_m + n_cols_in * n_ties_per_col * L_tie_single_m:.1f}", "الحجم/الوزن": f"{w_steel_total_kg:.1f} kg ({w_steel_total_ton:.3f} Ton)", "الوحدة": "كجم / طن"},
-        ])
+        # CSV export data for all column types
+        export_rows = []
+        for r in col_results:
+            c_name = r["name"]
+            export_rows.append({"النموذج": c_name, "البند": f"خرسانة مسلحة ({c_name})", "القطاع": f"{r['b']:.0f}×{r['t']:.0f}×{col_h_in:.0f} cm", "العدد": r['n_cols'], "طول الإفراد (m)": f"{col_h_in/100:.2f}", "إجمالي الطول (m')": f"{r['n_cols'] * (col_h_in/100):.1f}", "الحجم/الوزن": f"{r['vol_col_total_m3']:.2f} m³", "الوحدة": "متر مكعب m³"})
+            export_rows.append({"النموذج": c_name, "البند": f"حديد رئيسي ({c_name})", "القطاع": f"{r['n_bars']} Φ{r['phi_main']} mm", "العدد": r['n_cols'] * r['n_bars'], "طول الإفراد (m)": f"{r['L_bar_m']:.2f}", "إجمالي الطول (m')": f"{r['n_cols'] * r['n_bars'] * r['L_bar_m']:.1f}", "الحجم/الوزن": f"{r['w_main_total_kg']:.1f} kg ({r['w_main_total_ton']:.3f} Ton)", "الوحدة": "كجم / طن"})
+            export_rows.append({"النموذج": c_name, "البند": f"حديد كانات ({c_name})", "القطاع": f"{r['tie_type'].split(' ')[0]} Φ{phi_st} mm", "العدد": r['n_cols'] * r['n_ties_per_col'], "طول الإفراد (m)": f"{r['L_tie_m']:.2f}", "إجمالي الطول (m')": f"{r['n_cols'] * r['n_ties_per_col'] * r['L_tie_m']:.1f}", "الحجم/الوزن": f"{r['w_st_total_kg']:.1f} kg ({r['w_st_total_ton']:.3f} Ton)", "الوحدة": "كجم / طن"})
+        export_rows.append({"النموذج": "الإجمالي العام", "البند": "الإجمالي العام لكافة النماذج", "القطاع": f"{len(col_results)} نماذج", "العدد": total_cols_all, "طول الإفراد (m)": "-", "إجمالي الطول (m')": f"{total_steel_linear_all:.1f}", "الحجم/الوزن": f"{total_w_steel_kg_all:.1f} kg ({total_w_steel_ton_all:.3f} Ton) خرسانة: {total_vol_all:.2f} m³", "الوحدة": "كجم / طن / م³"})
+
+        export_df = pd.DataFrame(export_rows)
         csv_data = export_df.to_csv(index=False).encode('utf-8-sig')
 
         b_c1, b_c2, b_c3 = st.columns(3)
@@ -1242,37 +1516,38 @@ def render() -> None:
             st.download_button(
                 label="🌐 حفظ وطباعة التقرير (HTML / Print)",
                 data=col_survey_html,
-                file_name=f"Concrete_Columns_Takeoff_{col_b_in:.0f}x{col_t_in:.0f}cm.html",
+                file_name=f"Concrete_Columns_Takeoff_{len(col_results)}_Models_{total_cols_all}Cols.html",
                 mime="text/html",
                 use_container_width=True,
-                help="حفظ تقرير الحصر كملف ويب جاهز للطباعة الفورية بضغطة زر واحدة",
+                help="حفظ تقرير الحصر الشامل لكافة نماذج الأعمدة كملف ويب جاهز للطباعة الفورية",
             )
         with b_c2:
             if pdf_bytes:
                 st.download_button(
                     label="📕 حفظ التقرير كـ PDF (مباشر)",
                     data=pdf_bytes,
-                    file_name=f"Concrete_Columns_Takeoff_{col_b_in:.0f}x{col_t_in:.0f}cm.pdf",
+                    file_name=f"Concrete_Columns_Takeoff_{len(col_results)}_Models_{total_cols_all}Cols.pdf",
                     mime="application/pdf",
                     use_container_width=True,
-                    help="تصدير مذكرة الحصر بصيغة PDF الرسمية للطباعة والأرشفة",
+                    help="تصدير مذكرة الحصر الرسمية الشاملة بصيغة PDF للطباعة والأرشفة",
                 )
             else:
                 st.download_button(
-                    label="📕 حفظ كـ PDF (عبر المتصفح)",
+                    label="🌐 فتح التقرير للطباعة وحفظ PDF",
                     data=col_survey_html,
-                    file_name=f"Concrete_Columns_Takeoff_{col_b_in:.0f}x{col_t_in:.0f}cm.html",
+                    file_name=f"Concrete_Columns_Takeoff_{len(col_results)}_Models_{total_cols_all}Cols.html",
                     mime="text/html",
                     use_container_width=True,
+                    help="افتح ملف التقرير واضغط Ctrl+P للطباعة كـ PDF",
                 )
         with b_c3:
             st.download_button(
-                label="📊 تصدير جدول الحصر (Excel / CSV)",
+                label="📊 تصدير البيانات إلى Excel / CSV",
                 data=csv_data,
-                file_name=f"Concrete_Columns_Takeoff_{col_b_in:.0f}x{col_t_in:.0f}cm.csv",
+                file_name=f"Concrete_Columns_Takeoff_{len(col_results)}_Models_{total_cols_all}Cols.csv",
                 mime="text/csv",
                 use_container_width=True,
-                help="تصدير جدول الكميات إلى ملف CSV متوافق مع Excel",
+                help="تصدير جدول الحصر الشامل لجميع النماذج كملف CSV متوافق مع Excel",
             )
 
 
@@ -1287,19 +1562,19 @@ def render() -> None:
             f_col1, f_col2 = st.columns(2)
             with f_col1:
                 st.markdown("**القواعد العادية (Plain Concrete - PC)**")
-                pc_l = st.number_input("متوسط الطول L (m)", min_value=0.0, value=2.20, step=0.10, key="surv_pc_l")
-                pc_b = st.number_input("متوسط العرض B (m)", min_value=0.0, value=2.00, step=0.10, key="surv_pc_b")
-                pc_t = st.number_input("السماكة t (m)", min_value=0.0, value=0.30, step=0.05, key="surv_pc_t")
-                pc_n = st.number_input("عدد القواعد العادية", min_value=0, value=12, step=1, key="surv_pc_n")
+                pc_l = st.number_input("متوسط الطول L (m)", min_value=0.0, value=float(cfg_val("surv_pc_l", 2.20)), step=0.10, key="surv_pc_l")
+                pc_b = st.number_input("متوسط العرض B (m)", min_value=0.0, value=float(cfg_val("surv_pc_b", 2.00)), step=0.10, key="surv_pc_b")
+                pc_t = st.number_input("السماكة t (m)", min_value=0.0, value=float(cfg_val("surv_pc_t", 0.30)), step=0.05, key="surv_pc_t")
+                pc_n = st.number_input("عدد القواعد العادية", min_value=0, value=int(cfg_val("surv_pc_n", 12)), step=1, key="surv_pc_n")
                 pc_vol = pc_l * pc_b * pc_t * pc_n
                 st.markdown(f"**حجم خرسانة عادية:** `{pc_vol:.2f} m³`")
 
             with f_col2:
                 st.markdown("**القواعد المسلحة (Reinforced Concrete - RC)**")
-                rc_l = st.number_input("متوسط الطول L (m)", min_value=0.0, value=1.80, step=0.10, key="surv_rc_l")
-                rc_b = st.number_input("متوسط العرض B (m)", min_value=0.0, value=1.60, step=0.10, key="surv_rc_b")
-                rc_t = st.number_input("السماكة t (m)", min_value=0.0, value=0.60, step=0.05, key="surv_rc_t")
-                rc_n = st.number_input("عدد القواعد المسلحة", min_value=0, value=12, step=1, key="surv_rc_n")
+                rc_l = st.number_input("متوسط الطول L (m)", min_value=0.0, value=float(cfg_val("surv_rc_l", 1.80)), step=0.10, key="surv_rc_l")
+                rc_b = st.number_input("متوسط العرض B (m)", min_value=0.0, value=float(cfg_val("surv_rc_b", 1.60)), step=0.10, key="surv_rc_b")
+                rc_t = st.number_input("السماكة t (m)", min_value=0.0, value=float(cfg_val("surv_rc_t", 0.60)), step=0.05, key="surv_rc_t")
+                rc_n = st.number_input("عدد القواعد المسلحة", min_value=0, value=int(cfg_val("surv_rc_n", 12)), step=1, key="surv_rc_n")
                 rc_vol = rc_l * rc_b * rc_t * rc_n
                 st.markdown(f"**حجم خرسانة مسلحة:** `{rc_vol:.2f} m³`")
 

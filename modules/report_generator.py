@@ -1206,16 +1206,44 @@ def generate_column_survey_report_html(
     water_liters: float = 1418.0,
     img_plan_b64: Optional[str] = None,
     img_elev_b64: Optional[str] = None,
+    col_results: Optional[List[Dict[str, Any]]] = None,
+    drawings_list: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """
     Generates a print-ready, professional HTML/PDF calculation sheet for the
     Concrete Column Quantity Survey (Customs module) according to ECP 203.
+    Supports single or multiple column types and renders drawings for every column model.
     """
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     top_floor_str = "دور أخير (Top Floor)" if is_top_floor else "متكرر (Typical Floor - Overlap Splice)"
 
     drawings_html = ""
-    if img_plan_b64 and img_elev_b64:
+    if drawings_list and len(drawings_list) > 0:
+        drawings_cards = ""
+        for idx, d in enumerate(drawings_list, 1):
+            d_name = d.get("name", f"C{idx}")
+            d_b = d.get("b", 30.0)
+            d_t = d.get("t", 60.0)
+            d_nb = d.get("n_bars", 8)
+            d_phi = d.get("phi_main", 16)
+            d_img = d.get("img_b64", "")
+            if d_img:
+                drawings_cards += f"""
+                <div class="drawing-card" style="margin: 18px 0 24px 0; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 12px; background: #ffffff; box-shadow: 0 2px 6px rgba(0,0,0,0.05); page-break-inside: avoid;">
+                    <div style="font-size: 1.02rem; font-weight: 800; color: #1e3a8a; margin-bottom: 8px; text-align: right; border-bottom: 2px solid #3b82f6; padding-bottom: 4px; display:flex; justify-content:space-between; align-items:center;">
+                        <span>📐 مخطط وتفريد تسليح نموذج: <b style="color:#2563eb;">{d_name}</b></span>
+                        <span style="font-size:0.90rem; color:#475569;" dir="ltr">{d_b:.0f} × {d_t:.0f} cm | {d_nb} Φ {d_phi} mm</span>
+                    </div>
+                    <div style="text-align: center;">
+                        <img src="{d_img}" alt="CAD Drawing {d_name}" style="max-width: 100%; height: auto; border-radius: 6px;">
+                    </div>
+                </div>
+                """
+        drawings_html = f"""
+        <div class="section-title">2. المخططات الإنشائية وتفريد التسليح لجميع نماذج الأعمدة ({len(drawings_list)} نماذج)</div>
+        {drawings_cards}
+        """
+    elif img_plan_b64 and img_elev_b64:
         drawings_html = f"""
         <div class="section-title">2. الرسومات الهندسية وتفريد حديد التسليح (Engineering Drawings & BBS)</div>
         <div class="drawings-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:16px 0;">
@@ -1231,10 +1259,276 @@ def generate_column_survey_report_html(
         """
     elif img_plan_b64:
         drawings_html = f"""
-        <div class="section-title">2. الرسومات الهندسية (Engineering Drawings)</div>
-        <div class="drawing-box" style="margin:16px 0;">
-            <img src="{img_plan_b64}" alt="Column Section" style="max-width:100%; height:auto; border-radius:6px;">
+        <div class="section-title">2. المخطط الإنشائي المتكامل وتفريد التسليح (Structural Drawings & BBS Detailing)</div>
+        <div class="drawing-box" style="margin:16px 0; text-align:center;">
+            <img src="{img_plan_b64}" alt="Unified CAD Drawing" style="max-width:100%; height:auto; border-radius:8px; border:1px solid #cbd5e1; box-shadow:0 3px 8px rgba(0,0,0,0.06);">
         </div>
+        """
+
+    # Multi-Type or Single Type Rendering Logic
+    if col_results and len(col_results) > 0:
+        total_cols_count = sum(r.get("n_cols", 0) for r in col_results)
+        total_vol_all = sum(r.get("vol_col_total_m3", 0.0) for r in col_results)
+        total_w_main_kg_all = sum(r.get("w_main_total_kg", 0.0) for r in col_results)
+        total_w_st_kg_all = sum(r.get("w_st_total_kg", 0.0) for r in col_results)
+        total_w_steel_kg_all = total_w_main_kg_all + total_w_st_kg_all
+        total_w_steel_ton_all = total_w_steel_kg_all / 1000.0
+        overall_rate = (total_w_steel_kg_all / total_vol_all) if total_vol_all > 0 else 0.0
+
+        # Section 1: Geometric Specs for Multi-Type
+        specs_rows = ""
+        for r in col_results:
+            c_name = r.get("name", "C")
+            c_b = r.get("b", 30.0)
+            c_t = r.get("t", 60.0)
+            c_nc = r.get("n_cols", 1)
+            c_nb = r.get("n_bars", 8)
+            c_phi = r.get("phi_main", 16)
+            c_nr = r.get("n_rows", 2)
+            c_tie = r.get("tie_type", "Box").split(' ')[0]
+            specs_rows += f"""
+            <tr>
+                <td style="font-weight:800; color:#1e3a8a; text-align:right;">{c_name}</td>
+                <td class="val-cell"><span dir="ltr">{c_b:.0f} × {c_t:.0f} cm</span></td>
+                <td class="val-cell" style="font-weight:700;"><span dir="ltr">{c_nc}</span> عمود</td>
+                <td class="val-cell"><span dir="ltr">H = {H/100:.2f} m ({H:.0f} cm)</span></td>
+                <td class="val-cell"><span dir="ltr">ts = {t_slab:.0f} cm</span></td>
+                <td class="val-cell" style="color:#b91c1c; font-weight:700;"><span dir="ltr">{c_nb} Φ {c_phi} mm [{c_nr} Rows]</span></td>
+                <td class="val-cell" style="color:#15803d; font-weight:700;"><span dir="ltr">{n_st_m} Φ {phi_st}/m'</span> | {c_tie}</td>
+            </tr>
+            """
+
+        section1_html = f"""
+        <div class="section-title">1. البيانات الهندسية لقطاعات ونماذج الأعمدة ({len(col_results)} نماذج — إجمالي {total_cols_count} عمود)</div>
+        <table class="survey-table" style="margin-bottom:16px;">
+            <thead>
+                <tr>
+                    <th style="text-align:right;">النموذج</th>
+                    <th>أبعاد القطاع (b × t)</th>
+                    <th>العدد</th>
+                    <th>الارتفاع الصافي</th>
+                    <th>سقوط السقف</th>
+                    <th>التسليح الرئيسي</th>
+                    <th>الكانات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {specs_rows}
+            </tbody>
+        </table>
+        """
+
+        # Section 3: Takeoff Breakdown Table for Multi-Type
+        takeoff_body_rows = ""
+        total_steel_linear_m = 0.0
+        item_counter = 1
+        rebar_by_dia_rg = {}
+
+        for r in col_results:
+            c_name = r.get("name", f"C{item_counter}")
+            c_b = r.get("b", 30.0)
+            c_t = r.get("t", 60.0)
+            c_nc = r.get("n_cols", 1)
+            c_nb = r.get("n_bars", 8)
+            c_phi = r.get("phi_main", 16)
+            c_nr = r.get("n_rows", 4)
+            c_tie = r.get("tie_type", "Automatic").split(' ')[0]
+            c_L_bar_m = r.get("L_bar_m", 4.0)
+            c_L_bar_cm = r.get("L_bar_cm", 400.0)
+            c_w_main_kg = r.get("w_main_total_kg", 0.0)
+            c_w_main_ton = r.get("w_main_total_ton", 0.0)
+            c_n_ties = r.get("n_ties_per_col", 18)
+            c_L_tie_m = r.get("L_tie_m", 2.0)
+            c_L_tie_cm = r.get("L_tie_cm", 200.0)
+            c_w_st_kg = r.get("w_st_total_kg", 0.0)
+            c_w_st_ton = r.get("w_st_total_ton", 0.0)
+            c_vol_single = r.get("vol_col_single_m3", 0.0)
+            c_vol_total = r.get("vol_col_total_m3", 0.0)
+
+            c_main_linear = c_nc * c_nb * c_L_bar_m
+            c_st_linear = c_nc * c_n_ties * c_L_tie_m
+            total_steel_linear_m += (c_main_linear + c_st_linear)
+
+            # Aggregate by diameter
+            if c_phi not in rebar_by_dia_rg:
+                rebar_by_dia_rg[c_phi] = {"phi": c_phi, "total_len_m": 0.0, "total_w_kg": 0.0, "main_pieces": 0, "tie_pieces": 0, "desc": []}
+            rebar_by_dia_rg[c_phi]["total_len_m"] += c_main_linear
+            rebar_by_dia_rg[c_phi]["total_w_kg"] += c_w_main_kg
+            rebar_by_dia_rg[c_phi]["main_pieces"] += (c_nc * c_nb)
+            rebar_by_dia_rg[c_phi]["desc"].append(f"رئيسي {c_name} ({c_nc * c_nb} سيخ)")
+
+            if phi_st not in rebar_by_dia_rg:
+                rebar_by_dia_rg[phi_st] = {"phi": phi_st, "total_len_m": 0.0, "total_w_kg": 0.0, "main_pieces": 0, "tie_pieces": 0, "desc": []}
+            rebar_by_dia_rg[phi_st]["total_len_m"] += c_st_linear
+            rebar_by_dia_rg[phi_st]["total_w_kg"] += c_w_st_kg
+            rebar_by_dia_rg[phi_st]["tie_pieces"] += (c_nc * c_n_ties)
+            rebar_by_dia_rg[phi_st]["desc"].append(f"كانات {c_name} ({c_nc * c_n_ties} كانة)")
+
+            takeoff_body_rows += f"""
+            <tr style="background:#f8fafc;">
+                <td style="font-weight:bold; text-align:right; color:#1e3a8a;">{item_counter}.1. خرسانة مسلحة ({c_name})</td>
+                <td class="val-cell" style="font-weight:bold; color:#1e3a8a;"><span dir="ltr">{c_b:.0f} × {c_t:.0f} cm</span></td>
+                <td style="font-weight:bold;"><span dir="ltr">{c_nc}</span> عمود</td>
+                <td class="val-cell" style="font-weight:bold; color:#1e40af; background:#eff6ff;"><span dir="ltr">{c_vol_total:.2f} m³</span></td>
+                <td style="font-size:0.85rem; color:#64748b;">حجم العمود = <span dir="ltr">{c_vol_single:.3f} m³</span> (صافي <span dir="ltr">H={H/100:.2f}m</span>)</td>
+            </tr>
+            <tr>
+                <td style="font-weight:bold; text-align:right; color:#b91c1c;">{item_counter}.2. تسليح رئيسي ({c_name})</td>
+                <td class="val-cell" style="font-weight:bold; color:#b91c1c;"><span dir="ltr">{c_nb} Φ {c_phi} mm [{c_nr} Rows]</span></td>
+                <td style="font-weight:bold;"><span dir="ltr">{c_nc * c_nb}</span> سيخ</td>
+                <td class="val-cell" style="font-weight:bold; color:#b91c1c; background:#fef2f2;"><span dir="ltr">{c_w_main_kg:.1f} kg ({c_w_main_ton:.3f} Ton)</span></td>
+                <td style="font-size:0.85rem; color:#64748b;">طول السيخ = <span dir="ltr">{c_L_bar_m:.2f}m</span> (ارتفاع <span dir="ltr">{H:.0f}</span> + سقف <span dir="ltr">{t_slab:.0f}</span> + وصلة <span dir="ltr">{lap_factor:.0f}Φ</span>)</td>
+            </tr>
+            <tr style="background:#f8fafc;">
+                <td style="font-weight:bold; text-align:right; color:#15803d; border-bottom:3px solid #334155 !important;">{item_counter}.3. كانات ({c_name})</td>
+                <td class="val-cell" style="font-weight:bold; color:#15803d; border-bottom:3px solid #334155 !important;"><span dir="ltr">{c_tie} - Φ{phi_st} mm</span></td>
+                <td style="font-weight:bold; border-bottom:3px solid #334155 !important;"><span dir="ltr">{c_nc * c_n_ties}</span> كانة (<span dir="ltr">{c_n_ties}/عمود)</span></td>
+                <td class="val-cell" style="font-weight:bold; color:#15803d; background:#f0fdf4; border-bottom:3px solid #334155 !important;"><span dir="ltr">{c_w_st_kg:.1f} kg ({c_w_st_ton:.3f} Ton)</span></td>
+                <td style="font-size:0.85rem; color:#64748b; border-bottom:3px solid #334155 !important;">طول الكانة = <span dir="ltr">{c_L_tie_m:.2f}m</span> (كثافة <span dir="ltr">{n_st_m} Φ{phi_st}/m'</span> | كانة <span dir="ltr">{c_b-2*2.5:.0f}×{c_t-2*2.5:.0f} cm</span>)</td>
+            </tr>
+            """
+            item_counter += 1
+
+        # Build diameter breakdown rows for report
+        dia_rows_report = ""
+        total_pieces_report = 0
+        for phi_key in sorted(rebar_by_dia_rg.keys()):
+            d_info = rebar_by_dia_rg[phi_key]
+            d_phi = d_info["phi"]
+            d_len_m = d_info["total_len_m"]
+            d_w_kg = d_info["total_w_kg"]
+            d_w_ton = d_w_kg / 1000.0
+            d_w_per_m = (d_phi**2) / 162.0
+            
+            p_parts = []
+            tot_p = 0
+            if d_info["main_pieces"] > 0:
+                p_parts.append(f"{d_info['main_pieces']} سيخ")
+                tot_p += d_info["main_pieces"]
+            if d_info["tie_pieces"] > 0:
+                p_parts.append(f"{d_info['tie_pieces']} كانة")
+                tot_p += d_info["tie_pieces"]
+            total_pieces_report += tot_p
+            
+            role_label = "رئيسي + كانات" if (d_info["main_pieces"] > 0 and d_info["tie_pieces"] > 0) else ("تسليح رئيسي" if d_info["main_pieces"] > 0 else "حديد كانات")
+            pieces_str = " + ".join(p_parts)
+            desc_str = " | ".join(d_info["desc"])
+
+            dia_rows_report += f"""
+            <tr style="background:#fffbeb;">
+                <td style="font-weight:bold; text-align:right; color:#b45309;">🔹 حديد تسليح <span dir="ltr">Φ{d_phi} mm</span> ({role_label})</td>
+                <td class="val-cell" style="font-weight:bold; color:#b45309;"><span dir="ltr">{d_w_per_m:.3f} kg/m'</span></td>
+                <td style="font-weight:bold; color:#b45309;"><span dir="ltr">{pieces_str}</span> (<span dir="ltr">{d_len_m:.1f} m'</span>)</td>
+                <td class="val-cell" style="font-weight:bold; color:#92400e; background:#fef3c7;"><span dir="ltr">{d_w_kg:.1f} kg ({d_w_ton:.3f} Ton)</span></td>
+                <td style="font-size:0.85rem; color:#64748b;">{desc_str}</td>
+            </tr>
+            """
+
+        takeoff_table_html = f"""
+        <table class="survey-table">
+            <thead>
+                <tr>
+                    <th style="text-align:right;">البند / Component</th>
+                    <th>مقاس العمود / المواصفة</th>
+                    <th>العدد</th>
+                    <th style="background-color:#1d4ed8 !important;">الوزن / الحجم الإجمالي</th>
+                    <th>ملاحظات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {takeoff_body_rows}
+                <tr style="background:#eff6ff !important; font-weight:bold; color:#1e3a8a; font-size:0.95rem; border-top:2px solid #3b82f6;">
+                    <td style="text-align:right; font-weight:bold;">🔷 إجمالي الخرسانة المسلحة ({len(col_results)} نماذج)</td>
+                    <td class="val-cell">كافة قطاعات الأعمدة</td>
+                    <td class="val-cell" style="font-weight:bold;"><span dir="ltr">{total_cols_count}</span> عمود</td>
+                    <td class="val-cell" style="font-weight:bold; color:#1e40af; background:#dbeafe;"><span dir="ltr">{total_vol_all:.2f} m³</span></td>
+                    <td style="font-size:0.85rem; color:#475569;">إجمالي خرسانة الأعمدة بالمشروع</td>
+                </tr>
+                {dia_rows_report}
+                <tr class="survey-total-row">
+                    <td style="text-align:right; font-size:1.02rem;">✅ الإجمالي العام لحديد التسليح (كافة النماذج)</td>
+                    <td class="val-cell">رئيسي + كانات (كافة الأقطار)</td>
+                    <td><span dir="ltr">{total_pieces_report}</span> قطعة (<span dir="ltr">{total_steel_linear_m:.1f} m'</span>)</td>
+                    <td class="val-cell" style="font-size:1.08rem; color:#854d0e;"><span dir="ltr">{total_w_steel_kg_all:.1f} kg ({total_w_steel_ton_all:.3f} Ton)</span></td>
+                    <td>معدل الحديد الكلي = <span dir="ltr">{overall_rate:.1f} kg/m³</span></td>
+                </tr>
+            </tbody>
+        </table>
+        """
+    else:
+        # Fallback to single column type
+        section1_html = f"""
+        <div class="section-title">1. البيانات الهندسية لقطاع العمود (Column Geometric Specifications)</div>
+        <div class="info-grid">
+            <div class="info-card">
+                <div class="card-lbl">أبعاد القطاع (b × t)</div>
+                <div class="card-val"><span dir="ltr">{b:.0f} × {t:.0f} cm</span></div>
+            </div>
+            <div class="info-card">
+                <div class="card-lbl">ارتفاع العمود الصافي (H)</div>
+                <div class="card-val"><span dir="ltr">{H:.0f} cm ({H/100:.2f} m)</span></div>
+            </div>
+            <div class="info-card">
+                <div class="card-lbl">تخانة السقف / الكمرة (ts)</div>
+                <div class="card-val"><span dir="ltr">{t_slab:.0f} cm</span></div>
+            </div>
+            <div class="info-card">
+                <div class="card-lbl">عدد الأعمدة الإجمالي (N)</div>
+                <div class="card-val" style="color:#1e40af;"><span dir="ltr">{n_cols}</span> عمود</div>
+            </div>
+            <div class="info-card">
+                <div class="card-lbl">التسليح الرئيسي (Main Rebar)</div>
+                <div class="card-val" style="color:#b91c1c;"><span dir="ltr">{n_bars} Φ {phi_main} mm [{n_rows} Rows]</span></div>
+            </div>
+            <div class="info-card">
+                <div class="card-lbl">نوع وتوزيع الكانات (Stirrup Ties)</div>
+                <div class="card-val" style="color:#15803d;"><span dir="ltr">{n_st_m} Φ {phi_st} / m'</span> | {tie_type.split(' ')[0]}</div>
+            </div>
+        </div>
+        """
+
+        takeoff_table_html = f"""
+        <table class="survey-table">
+            <thead>
+                <tr>
+                    <th style="text-align:right;">البند / Component</th>
+                    <th>مقاس العمود / المواصفة</th>
+                    <th>العدد</th>
+                    <th style="background-color:#1d4ed8 !important;">الوزن / الحجم الإجمالي</th>
+                    <th>ملاحظات</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="font-weight:bold; text-align:right;">1. الخرسانة المسلحة للأعمدة</td>
+                    <td class="val-cell" style="font-weight:bold; color:#1e3a8a;"><span dir="ltr">{b:.0f} × {t:.0f} cm</span></td>
+                    <td style="font-weight:bold;"><span dir="ltr">{n_cols}</span> عمود</td>
+                    <td class="val-cell" style="font-weight:bold; color:#1e40af; background:#eff6ff;"><span dir="ltr">{vol_col_total_m3:.2f} m³</span></td>
+                    <td style="font-size:0.85rem; color:#64748b;">حجم العمود = <span dir="ltr">{vol_col_single_m3:.3f} m³</span> (صافي <span dir="ltr">H={H/100:.2f}m</span>)</td>
+                </tr>
+                <tr>
+                    <td style="font-weight:bold; text-align:right;">2. حديد التسليح الرئيسي</td>
+                    <td class="val-cell" style="font-weight:bold; color:#b91c1c;"><span dir="ltr">{n_bars} Φ {phi_main} mm [{n_rows} Rows]</span></td>
+                    <td style="font-weight:bold;"><span dir="ltr">{n_cols * n_bars}</span> سيخ</td>
+                    <td class="val-cell" style="font-weight:bold; color:#b91c1c; background:#fef2f2;"><span dir="ltr">{w_main_total_kg:.1f} kg ({w_main_total_ton:.3f} Ton)</span></td>
+                    <td style="font-size:0.85rem; color:#64748b;">طول السيخ = <span dir="ltr">{L_bar_m:.2f}m</span> (ارتفاع <span dir="ltr">{H:.0f}</span> + سقف <span dir="ltr">{t_slab:.0f}</span> + وصلة <span dir="ltr">{lap_factor:.0f}Φ</span>)</td>
+                </tr>
+                <tr>
+                    <td style="font-weight:bold; text-align:right;">3. حديد الكانات</td>
+                    <td class="val-cell" style="font-weight:bold; color:#15803d;"><span dir="ltr">{tie_type.split(' ')[0]} - Φ{phi_st} mm</span></td>
+                    <td style="font-weight:bold;"><span dir="ltr">{n_cols * n_ties_per_col}</span> كانة (<span dir="ltr">{n_ties_per_col}</span>/عمود)</td>
+                    <td class="val-cell" style="font-weight:bold; color:#15803d; background:#f0fdf4;"><span dir="ltr">{w_st_total_kg:.1f} kg ({w_st_total_ton:.3f} Ton)</span></td>
+                    <td style="font-size:0.85rem; color:#64748b;">طول الكانة = <span dir="ltr">{L_tie_m:.2f}m</span> (كثافة <span dir="ltr">{n_st_m} Φ{phi_st}/m'</span> | كانة <span dir="ltr">{b-2*2.5:.0f}×{t-2*2.5:.0f} cm</span>)</td>
+                </tr>
+                <tr class="survey-total-row">
+                    <td style="text-align:right; font-size:1.0rem;">✅ الإجمالي العام لحديد التسليح</td>
+                    <td class="val-cell"><span dir="ltr">Φ{phi_main} + Φ{phi_st}</span></td>
+                    <td>—</td>
+                    <td class="val-cell" style="font-size:1.05rem; color:#854d0e;"><span dir="ltr">{w_steel_total_kg:.1f} kg ({w_steel_total_ton:.3f} Ton)</span></td>
+                    <td>معدل الحديد = <span dir="ltr">{steel_rate_kg_m3:.1f} kg/m³</span></td>
+                </tr>
+            </tbody>
+        </table>
         """
 
     html_content = f"""<!DOCTYPE html>
@@ -1273,91 +1567,14 @@ def generate_column_survey_report_html(
         </div>
     </div>
 
-    <!-- Section 1: Dimensions & Geometric Specs -->
-    <div class="section-title">1. البيانات الهندسية لقطاع العمود (Column Geometric Specifications)</div>
-    <div class="info-grid">
-        <div class="info-card">
-            <div class="card-lbl">أبعاد القطاع (b × t)</div>
-            <div class="card-val"><span dir="ltr">{b:.0f} × {t:.0f} cm</span></div>
-        </div>
-        <div class="info-card">
-            <div class="card-lbl">ارتفاع العمود الصافي (H)</div>
-            <div class="card-val"><span dir="ltr">{H:.0f} cm ({H/100:.2f} m)</span></div>
-        </div>
-        <div class="info-card">
-            <div class="card-lbl">تخانة السقف / الكمرة (ts)</div>
-            <div class="card-val"><span dir="ltr">{t_slab:.0f} cm</span></div>
-        </div>
-        <div class="info-card">
-            <div class="card-lbl">عدد الأعمدة الإجمالي (N)</div>
-            <div class="card-val" style="color:#1e40af;"><span dir="ltr">{n_cols}</span> عمود</div>
-        </div>
-        <div class="info-card">
-            <div class="card-lbl">التسليح الرئيسي (Main Rebar)</div>
-            <div class="card-val" style="color:#b91c1c;"><span dir="ltr">{n_bars} Φ {phi_main} mm [{n_rows} Rows]</span></div>
-        </div>
-        <div class="info-card">
-            <div class="card-lbl">نوع وتوزيع الكانات (Stirrup Ties)</div>
-            <div class="card-val" style="color:#15803d;"><span dir="ltr">{n_st_m} Φ {phi_st} / m'</span> | {tie_type.split(' ')[0]}</div>
-        </div>
-    </div>
-
+    <!-- Section 1 -->
+    {section1_html}
 
     {drawings_html}
 
     <!-- Section 3: Takeoff Breakdown Table -->
     <div class="section-title">3. جدول حصر وتفريد حديد التسليح والخرسانة (Detailed Takeoff Breakdown)</div>
-    <table class="survey-table">
-        <thead>
-            <tr>
-                <th style="text-align:right;">البند / Component</th>
-                <th>القطاع / المواصفة</th>
-                <th>العدد</th>
-                <th>طول الإفراد</th>
-                <th>إجمالي الطول (m')</th>
-                <th style="background-color:#1d4ed8 !important;">الوزن / الحجم الإجمالي</th>
-                <th>ملاحظات</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td style="font-weight:bold; text-align:right;">1. الخرسانة المسلحة للأعمدة</td>
-                <td class="val-cell"><span dir="ltr">{b:.0f} × {t:.0f} × {H:.0f} cm</span></td>
-                <td style="font-weight:bold;"><span dir="ltr">{n_cols}</span> عمود</td>
-                <td class="val-cell"><span dir="ltr">H = {H/100:.2f} m ({H:.0f} cm)</span></td>
-                <td class="val-cell"><span dir="ltr">{n_cols * (H/100):.1f} m'</span></td>
-                <td class="val-cell" style="font-weight:bold; color:#1e40af; background:#eff6ff;"><span dir="ltr">{vol_col_total_m3:.2f} m³</span></td>
-                <td style="font-size:0.85rem; color:#64748b;">حجم العمود = <span dir="ltr">{vol_col_single_m3:.3f} m³</span></td>
-            </tr>
-            <tr>
-                <td style="font-weight:bold; text-align:right;">2. حديد التسليح الرئيسي</td>
-                <td class="val-cell" style="font-weight:bold; color:#b91c1c;"><span dir="ltr">{n_bars} Φ {phi_main} mm [{n_rows} Rows]</span></td>
-                <td style="font-weight:bold;"><span dir="ltr">{n_cols * n_bars}</span> سيخ</td>
-                <td class="val-cell"><span dir="ltr">{L_bar_m:.2f} m ({L_bar_cm:.0f} cm)</span></td>
-                <td class="val-cell"><span dir="ltr">{n_cols * n_bars * L_bar_m:.1f} m'</span></td>
-                <td class="val-cell" style="font-weight:bold; color:#b91c1c; background:#fef2f2;"><span dir="ltr">{w_main_total_kg:.1f} kg ({w_main_total_ton:.3f} Ton)</span></td>
-                <td style="font-size:0.85rem; color:#64748b;">ارتفاع <span dir="ltr">{H:.0f}cm</span> + سقف <span dir="ltr">{t_slab:.0f}cm</span> + وصلة <span dir="ltr">({lap_factor:.0f}Φ)</span></td>
-            </tr>
-            <tr>
-                <td style="font-weight:bold; text-align:right;">3. حديد الكانات</td>
-                <td class="val-cell" style="font-weight:bold; color:#15803d;"><span dir="ltr">{tie_type.split(' ')[0]} - Φ{phi_st} mm</span></td>
-                <td style="font-weight:bold;"><span dir="ltr">{n_cols * n_ties_per_col}</span> كانة (<span dir="ltr">{n_ties_per_col}</span>/عمود)</td>
-                <td class="val-cell"><span dir="ltr">{L_tie_m:.2f} m ({L_tie_cm:.0f} cm)</span></td>
-                <td class="val-cell"><span dir="ltr">{n_cols * n_ties_per_col * L_tie_m:.1f} m'</span></td>
-                <td class="val-cell" style="font-weight:bold; color:#15803d; background:#f0fdf4;"><span dir="ltr">{w_st_total_kg:.1f} kg ({w_st_total_ton:.3f} Ton)</span></td>
-                <td style="font-size:0.85rem; color:#64748b;">كثافة <span dir="ltr">{n_st_m} Φ{phi_st}/m'</span> (أبعاد <span dir="ltr">{b-2*2.5:.0f}×{t-2*2.5:.0f} cm</span>)</td>
-            </tr>
-            <tr class="survey-total-row">
-                <td style="text-align:right; font-size:1.0rem;">✅ الإجمالي العام لحديد التسليح</td>
-                <td class="val-cell"><span dir="ltr">Φ{phi_main} + Φ{phi_st}</span></td>
-                <td>—</td>
-                <td>—</td>
-                <td class="val-cell"><span dir="ltr">{n_cols * n_bars * L_bar_m + n_cols * n_ties_per_col * L_tie_m:.1f} m'</span></td>
-                <td class="val-cell" style="font-size:1.05rem; color:#854d0e;"><span dir="ltr">{w_steel_total_kg:.1f} kg ({w_steel_total_ton:.3f} Ton)</span></td>
-                <td>معدل الحديد = <span dir="ltr">{steel_rate_kg_m3:.1f} kg/m³</span></td>
-            </tr>
-        </tbody>
-    </table>
+    {takeoff_table_html}
 
     <!-- Section 4: Concrete Mix Materials -->
     <div class="section-title">4. تقدير كميات مواد الخلطة الخرسانية للأعمدة (Concrete Mix Estimation)</div>
@@ -1379,6 +1596,7 @@ def generate_column_survey_report_html(
             <div class="card-val"><span dir="ltr">{water_liters:.0f} L</span> (<span dir="ltr">{water_liters/1000:.2f} m³</span>)</div>
         </div>
     </div>
+
 
     <!-- Sign-off Block -->
     <div class="signature-block">
