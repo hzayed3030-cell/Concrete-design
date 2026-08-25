@@ -5,6 +5,14 @@ Reinforced Concrete Engineering Dashboard
 Run with:  streamlit run app.py
 """
 
+import os
+import sys
+
+# Ensure root directory is always first in sys.path regardless of CMD working directory
+app_dir = os.path.dirname(os.path.abspath(__file__))
+if app_dir not in sys.path:
+    sys.path.insert(0, app_dir)
+
 import streamlit as st
 
 st.set_page_config(
@@ -549,6 +557,38 @@ with st.sidebar:
     if st.button("🔄 Reset to Standard ECP Defaults", use_container_width=True):
         reset_settings()
         st.rerun()
+
+    # ── Standalone EXE Download Button ───────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 💻 Standalone App (ملف تنفيذي)")
+    
+    exe_filename = "ECP203_Dashboard.exe"
+    exe_candidates = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist", exe_filename),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), exe_filename),
+        os.path.join(os.getcwd(), "dist", exe_filename),
+        os.path.join(os.getcwd(), exe_filename),
+    ]
+    
+    exe_file_path = None
+    for cand in exe_candidates:
+        if os.path.exists(cand):
+            exe_file_path = cand
+            break
+            
+    if exe_file_path and os.path.exists(exe_file_path):
+        with open(exe_file_path, "rb") as f:
+            exe_data = f.read()
+        st.download_button(
+            label="📥 Get EXE file",
+            data=exe_data,
+            file_name=exe_filename,
+            mime="application/vnd.microsoft.portable-executable",
+            use_container_width=True,
+            help="تحميل البرنامج كملف تنفيذي مستقل يعمل بدون الحاجة لتثبيت بايثون",
+        )
+    else:
+        st.info("⚠️ ملف الـ EXE غير موجود في مجلد dist.")
 
 # ── MODULE ROUTING ───────────────────────────────────────────────────────────
 if "Flat Slabs" in module or "Flat" in module:

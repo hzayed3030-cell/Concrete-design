@@ -1176,6 +1176,7 @@ def generate_column_survey_report_html(
     t: float = 60.0,
     H: float = 300.0,
     t_slab: float = 20.0,
+    fcu: float = 350.0,
     n_cols: int = 15,
     n_bars: int = 8,
     phi_main: int = 16,
@@ -1208,31 +1209,50 @@ def generate_column_survey_report_html(
     img_elev_b64: Optional[str] = None,
     col_results: Optional[List[Dict[str, Any]]] = None,
     drawings_list: Optional[List[Dict[str, Any]]] = None,
+    slab_results: Optional[List[Dict[str, Any]]] = None,
+    slab_drawings_list: Optional[List[Dict[str, Any]]] = None,
+    pricing_data: Optional[Dict[str, Any]] = None,
+    owner_name: Optional[str] = None,
 ) -> str:
     """
     Generates a print-ready, professional HTML/PDF calculation sheet for the
-    Concrete Column Quantity Survey (Customs module) according to ECP 203.
-    Supports single or multiple column types and renders drawings for every column model.
+    Concrete Column & Flat Slab Quantity Survey with Material Pricing (Customs module) according to ECP 203.
     """
     now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     top_floor_str = "دور أخير (Top Floor)" if is_top_floor else "متكرر (Typical Floor - Overlap Splice)"
 
+    owner_html = ""
+    if owner_name and str(owner_name).strip():
+        owner_html = f"""<div style="font-size: 1.05rem; font-weight: 700; color: #1e3a8a; margin: 4px 0 6px 0;"><b>اسم المالك:</b> <span style="color:#0f172a; font-weight: 800;">{str(owner_name).strip()}</span></div>"""
+
     drawings_html = ""
-    if drawings_list and len(drawings_list) > 0:
+    combined_drawings = list(drawings_list or [])
+    if slab_drawings_list:
+        combined_drawings.extend(slab_drawings_list)
+
+    if combined_drawings and len(combined_drawings) > 0:
         drawings_cards = ""
-        for idx, d in enumerate(drawings_list, 1):
-            d_name = d.get("name", f"C{idx}")
+        for idx, d in enumerate(combined_drawings, 1):
+            d_name = d.get("name", f"Model {idx}")
             d_b = d.get("b", 30.0)
             d_t = d.get("t", 60.0)
             d_nb = d.get("n_bars", 8)
             d_phi = d.get("phi_main", 16)
             d_img = d.get("img_b64", "")
+            d_is_slab = "lx" in d
+            if d_is_slab:
+                d_desc = f"{d.get('lx', 10):.1f} × {d.get('ly', 8):.1f} m | ts = {d.get('ts', 20):.0f} cm"
+                d_label = f"📐 مخطط وتفريد تسليح بلاطة مسطحة: <b style='color:#059669;'>{d_name}</b>"
+            else:
+                d_desc = f"{d_b:.0f} × {d_t:.0f} cm | {d_nb} Φ {d_phi} mm"
+                d_label = f"📐 مخطط وتفريد تسليح نموذج عمود: <b style='color:#2563eb;'>{d_name}</b>"
+
             if d_img:
                 drawings_cards += f"""
                 <div class="drawing-card" style="margin: 18px 0 24px 0; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 12px; background: #ffffff; box-shadow: 0 2px 6px rgba(0,0,0,0.05); page-break-inside: avoid;">
                     <div style="font-size: 1.02rem; font-weight: 800; color: #1e3a8a; margin-bottom: 8px; text-align: right; border-bottom: 2px solid #3b82f6; padding-bottom: 4px; display:flex; justify-content:space-between; align-items:center;">
-                        <span>📐 مخطط وتفريد تسليح نموذج: <b style="color:#2563eb;">{d_name}</b></span>
-                        <span style="font-size:0.90rem; color:#475569;" dir="ltr">{d_b:.0f} × {d_t:.0f} cm | {d_nb} Φ {d_phi} mm</span>
+                        <span>{d_label}</span>
+                        <span style="font-size:0.90rem; color:#475569;" dir="ltr">{d_desc}</span>
                     </div>
                     <div style="text-align: center;">
                         <img src="{d_img}" alt="CAD Drawing {d_name}" style="max-width: 100%; height: auto; border-radius: 6px;">
@@ -1240,22 +1260,8 @@ def generate_column_survey_report_html(
                 </div>
                 """
         drawings_html = f"""
-        <div class="section-title">2. المخططات الإنشائية وتفريد التسليح لجميع نماذج الأعمدة ({len(drawings_list)} نماذج)</div>
+        <div class="section-title">2. المخططات الإنشائية وتفريد التسليح للعناصر ({len(combined_drawings)} نماذج ومخططات)</div>
         {drawings_cards}
-        """
-    elif img_plan_b64 and img_elev_b64:
-        drawings_html = f"""
-        <div class="section-title">2. الرسومات الهندسية وتفريد حديد التسليح (Engineering Drawings & BBS)</div>
-        <div class="drawings-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:16px 0;">
-            <div class="drawing-box">
-                <img src="{img_plan_b64}" alt="Column Cross Section" style="max-width:100%; height:auto; border-radius:6px;">
-                <div class="drawing-caption" style="margin-top:6px; font-weight:700; color:#1e3a8a;">Figure 1: مسقط أفقي لقطاع العمود وتوزيع الكانات والأسياخ</div>
-            </div>
-            <div class="drawing-box">
-                <img src="{img_elev_b64}" alt="Column Elevation & BBS" style="max-width:100%; height:auto; border-radius:6px;">
-                <div class="drawing-caption" style="margin-top:6px; font-weight:700; color:#1e3a8a;">Figure 2: قطاع رأسي وتفريد الحديد والوصلات</div>
-            </div>
-        </div>
         """
     elif img_plan_b64:
         drawings_html = f"""
@@ -1265,18 +1271,22 @@ def generate_column_survey_report_html(
         </div>
         """
 
-    # Multi-Type or Single Type Rendering Logic
-    if col_results and len(col_results) > 0:
-        total_cols_count = sum(r.get("n_cols", 0) for r in col_results)
-        total_vol_all = sum(r.get("vol_col_total_m3", 0.0) for r in col_results)
-        total_w_main_kg_all = sum(r.get("w_main_total_kg", 0.0) for r in col_results)
-        total_w_st_kg_all = sum(r.get("w_st_total_kg", 0.0) for r in col_results)
-        total_w_steel_kg_all = total_w_main_kg_all + total_w_st_kg_all
-        total_w_steel_ton_all = total_w_steel_kg_all / 1000.0
-        overall_rate = (total_w_steel_kg_all / total_vol_all) if total_vol_all > 0 else 0.0
+    # Multi-Type or Single Type Rendering Logic for Columns
+    total_cols_count = sum(r.get("n_cols", 0) for r in col_results) if col_results else n_cols
+    total_vol_all = sum(r.get("vol_col_total_m3", r.get("vol_m3", 0.0)) for r in col_results) if col_results else vol_col_total_m3
+    total_w_main_kg_all = sum(r.get("w_main_total_kg", r.get("w_main_kg", 0.0)) for r in col_results) if col_results else w_main_total_kg
+    total_w_st_kg_all = sum(r.get("w_st_total_kg", r.get("w_tie_col_kg", 0.0)) for r in col_results) if col_results else w_st_total_kg
+    total_w_steel_kg_all = total_w_main_kg_all + total_w_st_kg_all
+    total_w_steel_ton_all = total_w_steel_kg_all / 1000.0
+    overall_rate = (total_w_steel_kg_all / total_vol_all) if total_vol_all > 0 else 0.0
 
-        # Section 1: Geometric Specs for Multi-Type
-        specs_rows = ""
+    specs_rows = ""
+    takeoff_body_rows = ""
+    total_steel_linear_m = 0.0
+    item_counter = 1
+    rebar_by_dia_rg = {}
+
+    if col_results and len(col_results) > 0:
         for r in col_results:
             c_name = r.get("name", "C")
             c_b = r.get("b", 30.0)
@@ -1298,41 +1308,6 @@ def generate_column_survey_report_html(
             </tr>
             """
 
-        section1_html = f"""
-        <div class="section-title">1. البيانات الهندسية لقطاعات ونماذج الأعمدة ({len(col_results)} نماذج — إجمالي {total_cols_count} عمود)</div>
-        <table class="survey-table" style="margin-bottom:16px;">
-            <thead>
-                <tr>
-                    <th style="text-align:right;">النموذج</th>
-                    <th>أبعاد القطاع (b × t)</th>
-                    <th>العدد</th>
-                    <th>الارتفاع الصافي</th>
-                    <th>سقوط السقف</th>
-                    <th>التسليح الرئيسي</th>
-                    <th>الكانات</th>
-                </tr>
-            </thead>
-            <tbody>
-                {specs_rows}
-            </tbody>
-        </table>
-        """
-
-        # Section 3: Takeoff Breakdown Table for Multi-Type
-        takeoff_body_rows = ""
-        total_steel_linear_m = 0.0
-        item_counter = 1
-        rebar_by_dia_rg = {}
-
-        for r in col_results:
-            c_name = r.get("name", f"C{item_counter}")
-            c_b = r.get("b", 30.0)
-            c_t = r.get("t", 60.0)
-            c_nc = r.get("n_cols", 1)
-            c_nb = r.get("n_bars", 8)
-            c_phi = r.get("phi_main", 16)
-            c_nr = r.get("n_rows", 4)
-            c_tie = r.get("tie_type", "Automatic").split(' ')[0]
             c_L_bar_m = r.get("L_bar_m", 4.0)
             c_L_bar_cm = r.get("L_bar_cm", 400.0)
             c_w_main_kg = r.get("w_main_total_kg", 0.0)
@@ -1345,197 +1320,454 @@ def generate_column_survey_report_html(
             c_vol_single = r.get("vol_col_single_m3", 0.0)
             c_vol_total = r.get("vol_col_total_m3", 0.0)
 
-            c_main_linear = c_nc * c_nb * c_L_bar_m
-            c_st_linear = c_nc * c_n_ties * c_L_tie_m
-            total_steel_linear_m += (c_main_linear + c_st_linear)
-
-            # Aggregate by diameter
-            if c_phi not in rebar_by_dia_rg:
-                rebar_by_dia_rg[c_phi] = {"phi": c_phi, "total_len_m": 0.0, "total_w_kg": 0.0, "main_pieces": 0, "tie_pieces": 0, "desc": []}
-            rebar_by_dia_rg[c_phi]["total_len_m"] += c_main_linear
-            rebar_by_dia_rg[c_phi]["total_w_kg"] += c_w_main_kg
-            rebar_by_dia_rg[c_phi]["main_pieces"] += (c_nc * c_nb)
-            rebar_by_dia_rg[c_phi]["desc"].append(f"رئيسي {c_name} ({c_nc * c_nb} سيخ)")
-
-            if phi_st not in rebar_by_dia_rg:
-                rebar_by_dia_rg[phi_st] = {"phi": phi_st, "total_len_m": 0.0, "total_w_kg": 0.0, "main_pieces": 0, "tie_pieces": 0, "desc": []}
-            rebar_by_dia_rg[phi_st]["total_len_m"] += c_st_linear
-            rebar_by_dia_rg[phi_st]["total_w_kg"] += c_w_st_kg
-            rebar_by_dia_rg[phi_st]["tie_pieces"] += (c_nc * c_n_ties)
-            rebar_by_dia_rg[phi_st]["desc"].append(f"كانات {c_name} ({c_nc * c_n_ties} كانة)")
+            foot_rep_tag = f" + رجل <span dir='ltr'>{r.get('L_foot_cm', 0):.0f}cm</span>" if r.get("L_foot_cm", 0) > 0 else ""
+            top_rep_tag = f"جنش <span dir='ltr'>{((lap_factor * c_phi) / 10.0):.0f}cm</span>" if is_top_floor else f"وصلة <span dir='ltr'>{lap_factor:.0f}Φ</span>"
 
             takeoff_body_rows += f"""
             <tr style="background:#f8fafc;">
                 <td style="font-weight:bold; text-align:right; color:#1e3a8a;">{item_counter}.1. خرسانة مسلحة ({c_name})</td>
                 <td class="val-cell" style="font-weight:bold; color:#1e3a8a;"><span dir="ltr">{c_b:.0f} × {c_t:.0f} cm</span></td>
-                <td style="font-weight:bold;"><span dir="ltr">{c_nc}</span> عمود</td>
+                <td class="val-cell" style="font-weight:bold;"><span dir="ltr">{c_nc}</span> عمود</td>
+                <td class="val-cell" style="font-weight:bold;"><span dir="ltr">{c_nc}</span> صبة</td>
+                <td class="val-cell"><span dir="ltr">H = {H/100:.2f} m</span></td>
                 <td class="val-cell" style="font-weight:bold; color:#1e40af; background:#eff6ff;"><span dir="ltr">{c_vol_total:.2f} m³</span></td>
                 <td style="font-size:0.85rem; color:#64748b;">حجم العمود = <span dir="ltr">{c_vol_single:.3f} m³</span> (صافي <span dir="ltr">H={H/100:.2f}m</span>)</td>
             </tr>
             <tr>
                 <td style="font-weight:bold; text-align:right; color:#b91c1c;">{item_counter}.2. تسليح رئيسي ({c_name})</td>
                 <td class="val-cell" style="font-weight:bold; color:#b91c1c;"><span dir="ltr">{c_nb} Φ {c_phi} mm [{c_nr} Rows]</span></td>
-                <td style="font-weight:bold;"><span dir="ltr">{c_nc * c_nb}</span> سيخ</td>
+                <td class="val-cell"><span dir="ltr">{c_nc}</span> عمود</td>
+                <td class="val-cell" style="font-weight:bold; color:#b91c1c;"><span dir="ltr">{c_nc * c_nb}</span> قطعة<br><span style="font-size:0.75rem; color:#991b1b;" dir="ltr">({c_nb} قطعة/عمود)</span></td>
+                <td class="val-cell" style="font-weight:bold; color:#15803d;"><span dir="ltr">{c_L_bar_m:.2f} m'</span> ({c_L_bar_cm:.0f} cm)</td>
                 <td class="val-cell" style="font-weight:bold; color:#b91c1c; background:#fef2f2;"><span dir="ltr">{c_w_main_kg:.1f} kg ({c_w_main_ton:.3f} Ton)</span></td>
-                <td style="font-size:0.85rem; color:#64748b;">طول السيخ = <span dir="ltr">{c_L_bar_m:.2f}m</span> (ارتفاع <span dir="ltr">{H:.0f}</span> + سقف <span dir="ltr">{t_slab:.0f}</span> + وصلة <span dir="ltr">{lap_factor:.0f}Φ</span>)</td>
+                <td style="font-size:0.85rem; color:#64748b;">طول السيخ = <span dir="ltr">{c_L_bar_m:.2f}m</span> (ارتفاع <span dir="ltr">{H:.0f}</span> + سقف <span dir="ltr">{t_slab:.0f}</span> + {top_rep_tag}{foot_rep_tag})</td>
             </tr>
             <tr style="background:#f8fafc;">
                 <td style="font-weight:bold; text-align:right; color:#15803d; border-bottom:3px solid #334155 !important;">{item_counter}.3. كانات ({c_name})</td>
                 <td class="val-cell" style="font-weight:bold; color:#15803d; border-bottom:3px solid #334155 !important;"><span dir="ltr">{c_tie} - Φ{phi_st} mm</span></td>
-                <td style="font-weight:bold; border-bottom:3px solid #334155 !important;"><span dir="ltr">{c_nc * c_n_ties}</span> كانة (<span dir="ltr">{c_n_ties}/عمود)</span></td>
+                <td class="val-cell" style="border-bottom:3px solid #334155 !important;"><span dir="ltr">{c_nc}</span> عمود</td>
+                <td class="val-cell" style="font-weight:bold; color:#15803d; border-bottom:3px solid #334155 !important;"><span dir="ltr">{c_nc * c_n_ties}</span> قطعة<br><span style="font-size:0.75rem; color:#166534;" dir="ltr">({c_n_ties} كانة/عمود)</span></td>
+                <td class="val-cell" style="font-weight:bold; color:#15803d; border-bottom:3px solid #334155 !important;"><span dir="ltr">{c_L_tie_m:.2f} m'</span> ({c_L_tie_cm:.0f} cm)</td>
                 <td class="val-cell" style="font-weight:bold; color:#15803d; background:#f0fdf4; border-bottom:3px solid #334155 !important;"><span dir="ltr">{c_w_st_kg:.1f} kg ({c_w_st_ton:.3f} Ton)</span></td>
                 <td style="font-size:0.85rem; color:#64748b; border-bottom:3px solid #334155 !important;">طول الكانة = <span dir="ltr">{c_L_tie_m:.2f}m</span> (كثافة <span dir="ltr">{n_st_m} Φ{phi_st}/m'</span> | كانة <span dir="ltr">{c_b-2*2.5:.0f}×{c_t-2*2.5:.0f} cm</span>)</td>
             </tr>
             """
             item_counter += 1
 
-        # Build diameter breakdown rows for report
-        dia_rows_report = ""
-        total_pieces_report = 0
-        for phi_key in sorted(rebar_by_dia_rg.keys()):
-            d_info = rebar_by_dia_rg[phi_key]
-            d_phi = d_info["phi"]
-            d_len_m = d_info["total_len_m"]
-            d_w_kg = d_info["total_w_kg"]
-            d_w_ton = d_w_kg / 1000.0
-            d_w_per_m = (d_phi**2) / 162.0
-            
-            p_parts = []
-            tot_p = 0
-            if d_info["main_pieces"] > 0:
-                p_parts.append(f"{d_info['main_pieces']} سيخ")
-                tot_p += d_info["main_pieces"]
-            if d_info["tie_pieces"] > 0:
-                p_parts.append(f"{d_info['tie_pieces']} كانة")
-                tot_p += d_info["tie_pieces"]
-            total_pieces_report += tot_p
-            
-            role_label = "رئيسي + كانات" if (d_info["main_pieces"] > 0 and d_info["tie_pieces"] > 0) else ("تسليح رئيسي" if d_info["main_pieces"] > 0 else "حديد كانات")
-            pieces_str = " + ".join(p_parts)
-            desc_str = " | ".join(d_info["desc"])
+    # Flat Slabs Section in HTML
+    slab_specs_html = ""
+    slab_takeoff_rows = ""
+    total_slabs_vol_rep = 0.0
+    total_slabs_steel_kg_rep = 0.0
 
-            dia_rows_report += f"""
-            <tr style="background:#fffbeb;">
-                <td style="font-weight:bold; text-align:right; color:#b45309;">🔹 حديد تسليح <span dir="ltr">Φ{d_phi} mm</span> ({role_label})</td>
-                <td class="val-cell" style="font-weight:bold; color:#b45309;"><span dir="ltr">{d_w_per_m:.3f} kg/m'</span></td>
-                <td style="font-weight:bold; color:#b45309;"><span dir="ltr">{pieces_str}</span> (<span dir="ltr">{d_len_m:.1f} m'</span>)</td>
-                <td class="val-cell" style="font-weight:bold; color:#92400e; background:#fef3c7;"><span dir="ltr">{d_w_kg:.1f} kg ({d_w_ton:.3f} Ton)</span></td>
-                <td style="font-size:0.85rem; color:#64748b;">{desc_str}</td>
+    if slab_results and len(slab_results) > 0:
+        slab_specs_body = ""
+        for s in slab_results:
+            s_name = s.get("name", "S1")
+            s_lx = s.get("lx", 10.0)
+            s_ly = s.get("ly", 8.0)
+            s_ts = s.get("ts", 20.0)
+            s_n_rep = s.get("n_rep", 1)
+            s_fcu = s.get("fcu", 350.0)
+            s_vol = s.get("vol_total_m3", 0.0)
+            s_w_st = s.get("w_steel_total_kg", 0.0)
+            s_nb_bx = s.get("nb_bx", 6)
+            s_phi_bx = s.get("phi_bx", 12)
+            s_nb_by = s.get("nb_by", 6)
+            s_phi_by = s.get("phi_by", 12)
+            s_nb_tx = s.get("nb_tx", 6)
+            s_phi_tx = s.get("phi_tx", 10)
+            s_nb_ty = s.get("nb_ty", 6)
+            s_phi_ty = s.get("phi_ty", 10)
+
+            total_slabs_vol_rep += s_vol
+            total_slabs_steel_kg_rep += s_w_st
+
+            slab_specs_body += f"""
+            <tr>
+                <td style="font-weight:bold; color:#065f46; text-align:right;">{s_name} ({s_n_rep} تكرار)</td>
+                <td class="val-cell"><span dir="ltr">{s_lx:.2f} × {s_ly:.2f} m</span></td>
+                <td class="val-cell"><span dir="ltr">{s_ts:.0f} cm</span></td>
+                <td class="val-cell"><span dir="ltr">{s_fcu:.0f} kg/m³</span></td>
+                <td class="val-cell" style="color:#1d4ed8; font-weight:bold;"><span dir="ltr">{s_nb_bx}Φ{s_phi_bx}/m' (X) + {s_nb_by}Φ{s_phi_by}/m' (Y)</span></td>
+                <td class="val-cell" style="color:#15803d; font-weight:bold;"><span dir="ltr">{s_nb_tx}Φ{s_phi_tx}/m' (X) + {s_nb_ty}Φ{s_phi_ty}/m' (Y)</span></td>
+                <td class="val-cell" style="font-weight:bold; color:#065f46; background:#f0fdf4;"><span dir="ltr">{s_vol:.2f} m³</span></td>
+                <td class="val-cell" style="font-weight:bold; color:#92400e; background:#fffbeb;"><span dir="ltr">{s_w_st:.1f} kg</span></td>
             </tr>
             """
 
-        takeoff_table_html = f"""
-        <table class="survey-table">
+            # Flat slab rebar takeoff rows
+            s_n_bx = s.get("n_runs_bx", 0) * s_n_rep
+            s_n_by = s.get("n_runs_by", 0) * s_n_rep
+            s_n_tx = s.get("n_runs_tx", 0) * s_n_rep
+            s_n_ty = s.get("n_runs_ty", 0) * s_n_rep
+
+            slab_takeoff_rows += f"""
+            <tr style="background:#f0fdf4;">
+                <td style="font-weight:bold; text-align:right; color:#065f46;">{item_counter}.1. خرسانة مسلحة ({s_name})</td>
+                <td class="val-cell" style="font-weight:bold; color:#065f46;"><span dir="ltr">{s_lx:.2f}×{s_ly:.2f} m (ts={s_ts:.0f}cm)</span></td>
+                <td class="val-cell" style="font-weight:bold;"><span dir="ltr">{s_n_rep}</span> بلاطة</td>
+                <td class="val-cell" style="font-weight:bold;"><span dir="ltr">{s_n_rep}</span> مسطح</td>
+                <td class="val-cell"><span dir="ltr">ts = {s_ts:.0f} cm</span></td>
+                <td class="val-cell" style="font-weight:bold; color:#065f46; background:#dcfce7;"><span dir="ltr">{s_vol:.2f} m³</span></td>
+                <td style="font-size:0.85rem; color:#64748b;">مسطح = <span dir="ltr">{s_lx*s_ly:.1f} m²</span> للبلاطة الواحدة</td>
+            </tr>
+            <tr>
+                <td style="font-weight:bold; text-align:right; color:#1d4ed8;">{item_counter}.2. شبكة سفلية ({s_name})</td>
+                <td class="val-cell" style="color:#1d4ed8; font-weight:bold;"><span dir="ltr">{s_nb_bx}Φ{s_phi_bx} (X) + {s_nb_by}Φ{s_phi_by} (Y)</span></td>
+                <td class="val-cell"><span dir="ltr">{s_n_rep}</span> بلاطة</td>
+                <td class="val-cell" style="font-weight:bold; color:#1d4ed8;"><span dir="ltr">{s_n_bx + s_n_by}</span> قطعة<br><span style="font-size:0.78rem; color:#1e40af;" dir="ltr">(X={s_n_bx}, Y={s_n_by})</span></td>
+                <td class="val-cell" style="font-weight:bold; color:#15803d;"><span dir="ltr">X={s.get('L_cut_bx',0):.2f}m, Y={s.get('L_cut_by',0):.2f}m</span></td>
+                <td class="val-cell" style="font-weight:bold; color:#1d4ed8; background:#eff6ff;"><span dir="ltr">{s.get('w_bx_kg',0)+s.get('w_by_kg',0):.1f} kg</span></td>
+                <td style="font-size:0.85rem; color:#64748b;">سفلي X (<span dir="ltr">{s.get('w_bx_kg',0):.1f}kg</span>) + سفلي Y (<span dir="ltr">{s.get('w_by_kg',0):.1f}kg</span>)</td>
+            </tr>
+            <tr style="background:#f0fdf4;">
+                <td style="font-weight:bold; text-align:right; color:#15803d; border-bottom:1px solid #cbd5e1 !important;">{item_counter}.3. شبكة علوية وكراسي ({s_name})</td>
+                <td class="val-cell" style="color:#15803d; font-weight:bold; border-bottom:1px solid #cbd5e1 !important;"><span dir="ltr">{s_nb_tx}Φ{s_phi_tx} (X) + {s_nb_ty}Φ{s_phi_ty} (Y)</span></td>
+                <td class="val-cell" style="border-bottom:1px solid #cbd5e1 !important;"><span dir="ltr">{s_n_rep}</span> بلاطة</td>
+                <td class="val-cell" style="font-weight:bold; color:#15803d; border-bottom:1px solid #cbd5e1 !important;"><span dir="ltr">{s_n_tx + s_n_ty + s.get('n_chairs',0)}</span> قطعة<br><span style="font-size:0.78rem; color:#166534;" dir="ltr">(X={s_n_tx}, Y={s_n_ty} + {s.get('n_chairs',0)} كرسي)</span></td>
+                <td class="val-cell" style="font-weight:bold; color:#15803d; border-bottom:1px solid #cbd5e1 !important;"><span dir="ltr">X={s.get('L_cut_tx',0):.2f}m, Y={s.get('L_cut_ty',0):.2f}m</span></td>
+                <td class="val-cell" style="font-weight:bold; color:#15803d; background:#dcfce7; border-bottom:1px solid #cbd5e1 !important;"><span dir="ltr">{s.get('w_tx_kg',0)+s.get('w_ty_kg',0)+s.get('w_chairs_kg',0):.1f} kg</span></td>
+                <td style="font-size:0.85rem; color:#64748b; border-bottom:1px solid #cbd5e1 !important;">علوي X+Y (<span dir="ltr">{s.get('w_tx_kg',0)+s.get('w_ty_kg',0):.1f}kg</span>) + كراسي (<span dir="ltr">{s.get('w_chairs_kg',0):.1f}kg</span>)</td>
+            </tr>
+            """
+
+            if s.get("top_add_models_res"):
+                for m_i, tm in enumerate(s.get("top_add_models_res", []), 1):
+                    if tm["w_total_kg"] > 0:
+                        tot_pcs_x = tm["n_runs_x"] * tm["n_zones"] * s_n_rep
+                        tot_pcs_y = tm["n_runs_y"] * tm["n_zones"] * s_n_rep
+                        tot_pcs = tot_pcs_x + tot_pcs_y
+                        slab_takeoff_rows += f"""
+                        <tr style="background:#fffbeb;">
+                            <td style="font-weight:bold; text-align:right; color:#b45309; border-bottom:1px solid #cbd5e1 !important;">{item_counter}.4.{m_i}. إضافي علوي [{tm['name']}] ({s_name})</td>
+                            <td class="val-cell" style="color:#b45309; font-weight:bold; border-bottom:1px solid #cbd5e1 !important;"><span dir="ltr">X={tm['nx']:.0f}Φ{tm['phi']}/م' + Y={tm['ny']:.0f}Φ{tm['phi']}/م' ({tm['n_zones']} مناطق)</span></td>
+                            <td class="val-cell" style="border-bottom:1px solid #cbd5e1 !important;"><span dir="ltr">{s_n_rep}</span> بلاطة</td>
+                            <td class="val-cell" style="font-weight:bold; color:#b45309; border-bottom:1px solid #cbd5e1 !important;"><span dir="ltr">{tot_pcs}</span> قطعة<br><span style="font-size:0.78rem; color:#92400e;" dir="ltr">(X={tot_pcs_x}, Y={tot_pcs_y})</span></td>
+                            <td class="val-cell" style="font-weight:bold; color:#b45309; border-bottom:1px solid #cbd5e1 !important;"><span dir="ltr">Lx={tm['lx']:.2f}m, Ly={tm['ly']:.2f}m</span></td>
+                            <td class="val-cell" style="font-weight:bold; color:#b45309; background:#fef3c7; border-bottom:1px solid #cbd5e1 !important;"><span dir="ltr">{tm['w_total_kg']:.1f} kg</span></td>
+                            <td style="font-size:0.85rem; color:#64748b; border-bottom:1px solid #cbd5e1 !important;">علوي X: <span dir="ltr">{tot_pcs_x} قطعة ({tm['w_x_kg']:.1f}kg)</span> + علوي Y: <span dir="ltr">{tot_pcs_y} قطعة ({tm['w_y_kg']:.1f}kg)</span></td>
+                        </tr>
+                        """
+            elif s.get("w_top_add_kg", 0.0) > 0:
+                n_tax_x = s.get('n_runs_x', 0) * s_n_rep
+                n_tax_y = s.get('n_runs_y', 0) * s_n_rep
+                n_tax_tot = n_tax_x + n_tax_y
+                w_tax_tot = s.get("w_top_add_kg", 0.0)
+                slab_takeoff_rows += f"""
+                <tr style="background:#fffbeb;">
+                    <td style="font-weight:bold; text-align:right; color:#b45309; border-bottom:1px solid #cbd5e1 !important;">{item_counter}.4. حديد إضافي علوي ({s_name})</td>
+                    <td class="val-cell" style="color:#b45309; font-weight:bold; border-bottom:1px solid #cbd5e1 !important;"><span dir="ltr">X={s.get('nx',0):.0f}Φ{s.get('phi_top_add',12)}/م' + Y={s.get('ny',0):.0f}Φ{s.get('phi_top_add',12)}/م'</span></td>
+                    <td class="val-cell" style="border-bottom:1px solid #cbd5e1 !important;"><span dir="ltr">{s_n_rep}</span> بلاطة</td>
+                    <td class="val-cell" style="font-weight:bold; color:#b45309; border-bottom:1px solid #cbd5e1 !important;"><span dir="ltr">{n_tax_tot}</span> قطعة<br><span style="font-size:0.78rem; color:#92400e;" dir="ltr">(X={n_tax_x}, Y={n_tax_y})</span></td>
+                    <td class="val-cell" style="font-weight:bold; color:#b45309; border-bottom:1px solid #cbd5e1 !important;"><span dir="ltr">Lx={s.get('add_top_lx',0):.2f}m, Ly={s.get('add_top_ly',0):.2f}m</span></td>
+                    <td class="val-cell" style="font-weight:bold; color:#b45309; background:#fef3c7; border-bottom:1px solid #cbd5e1 !important;"><span dir="ltr">{w_tax_tot:.1f} kg</span></td>
+                    <td style="font-size:0.85rem; color:#64748b; border-bottom:1px solid #cbd5e1 !important;">إضافي علوي X (<span dir="ltr">{s.get('w_top_add_x_kg',0):.1f}kg</span>) + إضافي علوي Y (<span dir="ltr">{s.get('w_top_add_y_kg',0):.1f}kg</span>)</td>
+                </tr>
+                """
+
+            if s.get("btm_add_models_res"):
+                for m_i, bm in enumerate(s.get("btm_add_models_res", []), 1):
+                    if bm["w_total_kg"] > 0:
+                        tot_pcs_x = bm["n_runs_x"] * bm["n_zones"] * s_n_rep
+                        tot_pcs_y = bm["n_runs_y"] * bm["n_zones"] * s_n_rep
+                        tot_pcs = tot_pcs_x + tot_pcs_y
+                        slab_takeoff_rows += f"""
+                        <tr style="background:#fffbeb;">
+                            <td style="font-weight:bold; text-align:right; color:#b45309; border-bottom:2px solid #065f46 !important;">{item_counter}.5.{m_i}. إضافي سفلي [{bm['name']}] ({s_name})</td>
+                            <td class="val-cell" style="color:#b45309; font-weight:bold; border-bottom:2px solid #065f46 !important;"><span dir="ltr">X={bm['nx']:.0f}Φ{bm['phi']}/م' + Y={bm['ny']:.0f}Φ{bm['phi']}/م' ({bm['n_zones']} مناطق)</span></td>
+                            <td class="val-cell" style="border-bottom:2px solid #065f46 !important;"><span dir="ltr">{s_n_rep}</span> بلاطة</td>
+                            <td class="val-cell" style="font-weight:bold; color:#b45309; border-bottom:2px solid #065f46 !important;"><span dir="ltr">{tot_pcs}</span> قطعة<br><span style="font-size:0.78rem; color:#92400e;" dir="ltr">(X={tot_pcs_x}, Y={tot_pcs_y})</span></td>
+                            <td class="val-cell" style="font-weight:bold; color:#b45309; border-bottom:2px solid #065f46 !important;"><span dir="ltr">Lx={bm['lx']:.2f}m, Ly={bm['ly']:.2f}m</span></td>
+                            <td class="val-cell" style="font-weight:bold; color:#b45309; background:#fef3c7; border-bottom:2px solid #065f46 !important;"><span dir="ltr">{bm['w_total_kg']:.1f} kg</span></td>
+                            <td style="font-size:0.85rem; color:#64748b; border-bottom:2px solid #065f46 !important;">سفلي X: <span dir="ltr">{tot_pcs_x} قطعة ({bm['w_x_kg']:.1f}kg)</span> + سفلي Y: <span dir="ltr">{tot_pcs_y} قطعة ({bm['w_y_kg']:.1f}kg)</span></td>
+                        </tr>
+                        """
+            elif s.get("w_btm_add_kg", 0.0) > 0:
+                n_bax_x = s.get('n_runs_x', 0) * s_n_rep
+                n_bax_y = s.get('n_runs_y', 0) * s_n_rep
+                n_bax_tot = n_bax_x + n_bax_y
+                w_bax_tot = s.get("w_btm_add_kg", 0.0)
+                slab_takeoff_rows += f"""
+                <tr style="background:#fffbeb;">
+                    <td style="font-weight:bold; text-align:right; color:#b45309; border-bottom:2px solid #065f46 !important;">{item_counter}.5. حديد إضافي سفلي ({s_name})</td>
+                    <td class="val-cell" style="color:#b45309; font-weight:bold; border-bottom:2px solid #065f46 !important;"><span dir="ltr">X={s.get('nx',0):.0f}Φ{s.get('phi_btm_add',12)}/م' + Y={s.get('ny',0):.0f}Φ{s.get('phi_btm_add',12)}/م'</span></td>
+                    <td class="val-cell" style="border-bottom:2px solid #065f46 !important;"><span dir="ltr">{s_n_rep}</span> بلاطة</td>
+                    <td class="val-cell" style="font-weight:bold; color:#b45309; border-bottom:2px solid #065f46 !important;"><span dir="ltr">{n_bax_tot}</span> قطعة<br><span style="font-size:0.78rem; color:#92400e;" dir="ltr">(X={n_bax_x}, Y={n_bax_y})</span></td>
+                    <td class="val-cell" style="font-weight:bold; color:#b45309; border-bottom:2px solid #065f46 !important;"><span dir="ltr">Lx={s.get('add_btm_lx',0):.2f}m, Ly={s.get('add_btm_ly',0):.2f}m</span></td>
+                    <td class="val-cell" style="font-weight:bold; color:#b45309; background:#fef3c7; border-bottom:2px solid #065f46 !important;"><span dir="ltr">{w_bax_tot:.1f} kg</span></td>
+                    <td style="font-size:0.85rem; color:#64748b; border-bottom:2px solid #065f46 !important;">إضافي سفلي X (<span dir="ltr">{s.get('w_btm_add_x_kg',0):.1f}kg</span>) + إضافي سفلي Y (<span dir="ltr">{s.get('w_btm_add_y_kg',0):.1f}kg</span>)</td>
+                </tr>
+                """
+
+            item_counter += 1
+
+        slab_specs_html = f"""
+        <div class="section-title" style="background:#065f46; margin-top:20px;">1.2. البيانات الهندسية للبلاطات المسطحة Flat Slabs ({len(slab_results)} نماذج — إجمالي {total_slabs_vol_rep:.2f} m³)</div>
+        <table class="survey-table" style="margin-bottom:16px;">
             <thead>
-                <tr>
-                    <th style="text-align:right;">البند / Component</th>
-                    <th>مقاس العمود / المواصفة</th>
+                <tr style="background:#065f46 !important;">
+                    <th style="text-align:right;">النموذج</th>
+                    <th>الأبعاد (Lx × Ly)</th>
+                    <th>التخانة ts</th>
                     <th>العدد</th>
-                    <th style="background-color:#1d4ed8 !important;">الوزن / الحجم الإجمالي</th>
-                    <th>ملاحظات</th>
+                    <th>الشبكة السفلية</th>
+                    <th>الشبكة العلوية</th>
+                    <th>الحجم الإجمالي</th>
                 </tr>
             </thead>
             <tbody>
-                {takeoff_body_rows}
-                <tr style="background:#eff6ff !important; font-weight:bold; color:#1e3a8a; font-size:0.95rem; border-top:2px solid #3b82f6;">
-                    <td style="text-align:right; font-weight:bold;">🔷 إجمالي الخرسانة المسلحة ({len(col_results)} نماذج)</td>
-                    <td class="val-cell">كافة قطاعات الأعمدة</td>
-                    <td class="val-cell" style="font-weight:bold;"><span dir="ltr">{total_cols_count}</span> عمود</td>
-                    <td class="val-cell" style="font-weight:bold; color:#1e40af; background:#dbeafe;"><span dir="ltr">{total_vol_all:.2f} m³</span></td>
-                    <td style="font-size:0.85rem; color:#475569;">إجمالي خرسانة الأعمدة بالمشروع</td>
-                </tr>
-                {dia_rows_report}
-                <tr class="survey-total-row">
-                    <td style="text-align:right; font-size:1.02rem;">✅ الإجمالي العام لحديد التسليح (كافة النماذج)</td>
-                    <td class="val-cell">رئيسي + كانات (كافة الأقطار)</td>
-                    <td><span dir="ltr">{total_pieces_report}</span> قطعة (<span dir="ltr">{total_steel_linear_m:.1f} m'</span>)</td>
-                    <td class="val-cell" style="font-size:1.08rem; color:#854d0e;"><span dir="ltr">{total_w_steel_kg_all:.1f} kg ({total_w_steel_ton_all:.3f} Ton)</span></td>
-                    <td>معدل الحديد الكلي = <span dir="ltr">{overall_rate:.1f} kg/m³</span></td>
-                </tr>
+                {slab_specs_body}
             </tbody>
         </table>
-        """
-    else:
-        # Fallback to single column type
-        section1_html = f"""
-        <div class="section-title">1. البيانات الهندسية لقطاع العمود (Column Geometric Specifications)</div>
-        <div class="info-grid">
-            <div class="info-card">
-                <div class="card-lbl">أبعاد القطاع (b × t)</div>
-                <div class="card-val"><span dir="ltr">{b:.0f} × {t:.0f} cm</span></div>
-            </div>
-            <div class="info-card">
-                <div class="card-lbl">ارتفاع العمود الصافي (H)</div>
-                <div class="card-val"><span dir="ltr">{H:.0f} cm ({H/100:.2f} m)</span></div>
-            </div>
-            <div class="info-card">
-                <div class="card-lbl">تخانة السقف / الكمرة (ts)</div>
-                <div class="card-val"><span dir="ltr">{t_slab:.0f} cm</span></div>
-            </div>
-            <div class="info-card">
-                <div class="card-lbl">عدد الأعمدة الإجمالي (N)</div>
-                <div class="card-val" style="color:#1e40af;"><span dir="ltr">{n_cols}</span> عمود</div>
-            </div>
-            <div class="info-card">
-                <div class="card-lbl">التسليح الرئيسي (Main Rebar)</div>
-                <div class="card-val" style="color:#b91c1c;"><span dir="ltr">{n_bars} Φ {phi_main} mm [{n_rows} Rows]</span></div>
-            </div>
-            <div class="info-card">
-                <div class="card-lbl">نوع وتوزيع الكانات (Stirrup Ties)</div>
-                <div class="card-val" style="color:#15803d;"><span dir="ltr">{n_st_m} Φ {phi_st} / m'</span> | {tie_type.split(' ')[0]}</div>
-            </div>
-        </div>
         """
 
-        takeoff_table_html = f"""
-        <table class="survey-table">
+    # Combine totals
+    grand_vol_concrete = total_vol_all + total_slabs_vol_rep
+    grand_steel_kg = total_w_steel_kg_all + total_slabs_steel_kg_rep
+    grand_steel_ton = grand_steel_kg / 1000.0
+    grand_steel_rate = (grand_steel_kg / grand_vol_concrete) if grand_vol_concrete > 0 else 0.0
+
+    # Pricing Table HTML
+    pricing_table_html = ""
+    c_grand_tot = 0.0
+    if pricing_data:
+        p_steel = pricing_data.get("price_steel", 40000.0)
+        p_cement = pricing_data.get("price_cement", 4000.0)
+        p_gravel = pricing_data.get("price_gravel", 600.0)
+        p_sand = pricing_data.get("price_sand", 200.0)
+        p_labor = pricing_data.get("price_labor", 2000.0)
+        tot_cement_cols = (total_vol_all * fcu / 1000.0)
+        tot_cement_slabs = sum(s.get("vol_total_m3", 0.0) * s.get("fcu", fcu) / 1000.0 for s in slab_results)
+        tot_cement_ton = tot_cement_cols + tot_cement_slabs
+
+        # Cost breakdown per element
+        c_steel_cols = (total_w_steel_kg_all / 1000.0) * p_steel
+        c_cement_cols = tot_cement_cols * p_cement
+        c_gravel_cols = (total_vol_all * 0.80) * p_gravel
+        c_sand_cols = (total_vol_all * 0.40) * p_sand
+        c_labor_cols = total_vol_all * p_labor
+        cost_cols_tot = c_steel_cols + c_cement_cols + c_gravel_cols + c_sand_cols + c_labor_cols
+        rate_cols_per_m3 = (cost_cols_tot / total_vol_all) if total_vol_all > 0 else 0.0
+
+        c_steel_cols_m3 = (c_steel_cols / total_vol_all) if total_vol_all > 0 else 0.0
+        c_cement_cols_m3 = (c_cement_cols / total_vol_all) if total_vol_all > 0 else 0.0
+        c_gravel_cols_m3 = (c_gravel_cols / total_vol_all) if total_vol_all > 0 else 0.0
+        c_sand_cols_m3 = (c_sand_cols / total_vol_all) if total_vol_all > 0 else 0.0
+
+        c_steel_slabs = (total_slabs_steel_kg_rep / 1000.0) * p_steel
+        c_cement_slabs = tot_cement_slabs * p_cement
+        c_gravel_slabs = (total_slabs_vol_rep * 0.80) * p_gravel
+        c_sand_slabs = (total_slabs_vol_rep * 0.40) * p_sand
+        c_labor_slabs = total_slabs_vol_rep * p_labor
+        cost_slabs_tot = c_steel_slabs + c_cement_slabs + c_gravel_slabs + c_sand_slabs + c_labor_slabs
+        rate_slabs_per_m3 = (cost_slabs_tot / total_slabs_vol_rep) if total_slabs_vol_rep > 0 else 0.0
+
+        c_steel_slabs_m3 = (c_steel_slabs / total_slabs_vol_rep) if total_slabs_vol_rep > 0 else 0.0
+        c_cement_slabs_m3 = (c_cement_slabs / total_slabs_vol_rep) if total_slabs_vol_rep > 0 else 0.0
+        c_gravel_slabs_m3 = (c_gravel_slabs / total_slabs_vol_rep) if total_slabs_vol_rep > 0 else 0.0
+        c_sand_slabs_m3 = (c_sand_slabs / total_slabs_vol_rep) if total_slabs_vol_rep > 0 else 0.0
+
+        c_steel_tot = grand_steel_ton * p_steel
+        c_cement_tot = tot_cement_ton * p_cement
+        c_gravel_tot = (grand_vol_concrete * 0.80) * p_gravel
+        c_sand_tot = (grand_vol_concrete * 0.40) * p_sand
+        c_labor_tot = grand_vol_concrete * p_labor
+        c_grand_tot = c_steel_tot + c_cement_tot + c_gravel_tot + c_sand_tot + c_labor_tot
+        cost_per_m3_all_inclusive = (c_grand_tot / grand_vol_concrete) if grand_vol_concrete > 0 else 0.0
+
+        pricing_table_html = f"""
+        <div class="section-title" style="background:#b45309; margin-top:24px;">4. جدول المقايسة المالية التقديرية وحصر أسعار المواد والمصنعيات (Bill of Quantities & Prices)</div>
+        <table class="survey-table" style="margin-bottom:20px;">
             <thead>
-                <tr>
-                    <th style="text-align:right;">البند / Component</th>
-                    <th>مقاس العمود / المواصفة</th>
-                    <th>العدد</th>
-                    <th style="background-color:#1d4ed8 !important;">الوزن / الحجم الإجمالي</th>
-                    <th>ملاحظات</th>
+                <tr style="background:#b45309 !important;">
+                    <th style="text-align:right;">م</th>
+                    <th style="text-align:right;">البند بمواصفاته الفنية</th>
+                    <th>الوحدة</th>
+                    <th>الكمية المحصورة</th>
+                    <th>سعر البند (ج.م)</th>
+                    <th style="background:#92400e !important;">إجمالي السعر (ج.م)</th>
+                    <th>ملاحظات وتفاصيل الحساب</th>
                 </tr>
             </thead>
             <tbody>
-                <tr>
-                    <td style="font-weight:bold; text-align:right;">1. الخرسانة المسلحة للأعمدة</td>
-                    <td class="val-cell" style="font-weight:bold; color:#1e3a8a;"><span dir="ltr">{b:.0f} × {t:.0f} cm</span></td>
-                    <td style="font-weight:bold;"><span dir="ltr">{n_cols}</span> عمود</td>
-                    <td class="val-cell" style="font-weight:bold; color:#1e40af; background:#eff6ff;"><span dir="ltr">{vol_col_total_m3:.2f} m³</span></td>
-                    <td style="font-size:0.85rem; color:#64748b;">حجم العمود = <span dir="ltr">{vol_col_single_m3:.3f} m³</span> (صافي <span dir="ltr">H={H/100:.2f}m</span>)</td>
+                <tr style="background:#f8fafc;">
+                    <td style="font-weight:bold;">1</td>
+                    <td style="font-weight:bold; text-align:right; color:#1e3a8a;">خرسانة مسلحة للأعمدة الخرسانية (شاملة المواد والمصنعيات)</td>
+                    <td class="val-cell">متر مكعب (m³)</td>
+                    <td class="val-cell" style="font-weight:bold; color:#1e3a8a;"><span dir="ltr">{total_vol_all:.2f} m³</span></td>
+                    <td class="val-cell" style="font-weight:bold; color:#1e3a8a;"><span dir="ltr">{rate_cols_per_m3:,.2f}</span></td>
+                    <td class="val-cell" style="font-weight:bold; color:#1e3a8a; background:#eff6ff;"><span dir="ltr">{cost_cols_tot:,.2f} ج.م</span></td>
+                    <td style="font-size:0.85rem; color:#64748b;">حديد: <span dir="ltr">{c_steel_cols_m3:,.0f}</span> + أسمنت: <span dir="ltr">{c_cement_cols_m3:,.0f}</span> + سن: <span dir="ltr">{c_gravel_cols_m3:,.0f}</span> + رمل: <span dir="ltr">{c_sand_cols_m3:,.0f}</span> + مصنعية: <span dir="ltr">{p_labor:,.0f}</span> ج.م/م³</td>
                 </tr>
-                <tr>
-                    <td style="font-weight:bold; text-align:right;">2. حديد التسليح الرئيسي</td>
-                    <td class="val-cell" style="font-weight:bold; color:#b91c1c;"><span dir="ltr">{n_bars} Φ {phi_main} mm [{n_rows} Rows]</span></td>
-                    <td style="font-weight:bold;"><span dir="ltr">{n_cols * n_bars}</span> سيخ</td>
-                    <td class="val-cell" style="font-weight:bold; color:#b91c1c; background:#fef2f2;"><span dir="ltr">{w_main_total_kg:.1f} kg ({w_main_total_ton:.3f} Ton)</span></td>
-                    <td style="font-size:0.85rem; color:#64748b;">طول السيخ = <span dir="ltr">{L_bar_m:.2f}m</span> (ارتفاع <span dir="ltr">{H:.0f}</span> + سقف <span dir="ltr">{t_slab:.0f}</span> + وصلة <span dir="ltr">{lap_factor:.0f}Φ</span>)</td>
+                <tr style="background:#f0fdf4;">
+                    <td style="font-weight:bold;">2</td>
+                    <td style="font-weight:bold; text-align:right; color:#065f46;">خرسانة مسلحة للبلاطات المسطحة Flat Slabs (شاملة المواد والمصنعيات)</td>
+                    <td class="val-cell">متر مكعب (m³)</td>
+                    <td class="val-cell" style="font-weight:bold; color:#065f46;"><span dir="ltr">{total_slabs_vol_rep:.2f} m³</span></td>
+                    <td class="val-cell" style="font-weight:bold; color:#065f46;"><span dir="ltr">{rate_slabs_per_m3:,.2f}</span></td>
+                    <td class="val-cell" style="font-weight:bold; color:#065f46; background:#dcfce7;"><span dir="ltr">{cost_slabs_tot:,.2f} ج.م</span></td>
+                    <td style="font-size:0.85rem; color:#64748b;">حديد: <span dir="ltr">{c_steel_slabs_m3:,.0f}</span> + أسمنت: <span dir="ltr">{c_cement_slabs_m3:,.0f}</span> + سن: <span dir="ltr">{c_gravel_slabs_m3:,.0f}</span> + رمل: <span dir="ltr">{c_sand_slabs_m3:,.0f}</span> + مصنعية: <span dir="ltr">{p_labor:,.0f}</span> ج.م/م³</td>
                 </tr>
-                <tr>
-                    <td style="font-weight:bold; text-align:right;">3. حديد الكانات</td>
-                    <td class="val-cell" style="font-weight:bold; color:#15803d;"><span dir="ltr">{tie_type.split(' ')[0]} - Φ{phi_st} mm</span></td>
-                    <td style="font-weight:bold;"><span dir="ltr">{n_cols * n_ties_per_col}</span> كانة (<span dir="ltr">{n_ties_per_col}</span>/عمود)</td>
-                    <td class="val-cell" style="font-weight:bold; color:#15803d; background:#f0fdf4;"><span dir="ltr">{w_st_total_kg:.1f} kg ({w_st_total_ton:.3f} Ton)</span></td>
-                    <td style="font-size:0.85rem; color:#64748b;">طول الكانة = <span dir="ltr">{L_tie_m:.2f}m</span> (كثافة <span dir="ltr">{n_st_m} Φ{phi_st}/m'</span> | كانة <span dir="ltr">{b-2*2.5:.0f}×{t-2*2.5:.0f} cm</span>)</td>
+                <tr style="background:#fffbeb; font-weight:bold; color:#b45309; border-top:2px solid #ca8a04;">
+                    <td style="font-weight:bold;">3</td>
+                    <td style="font-weight:bold; text-align:right;">إجمالي توريد حديد التسليح للمشروع (أعمدة + بلاطات)</td>
+                    <td class="val-cell">طن (Ton)</td>
+                    <td class="val-cell" style="font-weight:bold;"><span dir="ltr">{grand_steel_ton:.3f} Ton</span></td>
+                    <td class="val-cell" style="font-weight:bold;"><span dir="ltr">{p_steel:,.2f}</span></td>
+                    <td class="val-cell" style="font-weight:bold; color:#92400e; background:#fef3c7;"><span dir="ltr">{c_steel_tot:,.2f} ج.م</span></td>
+                    <td style="font-size:0.85rem;">إجمالي {grand_steel_kg:,.1f} kg (أعمدة <span dir="ltr">{total_w_steel_kg_all/1000.0:.3f}T</span> + بلاطات <span dir="ltr">{total_slabs_steel_kg_rep/1000.0:.3f}T</span>)</td>
                 </tr>
-                <tr class="survey-total-row">
-                    <td style="text-align:right; font-size:1.0rem;">✅ الإجمالي العام لحديد التسليح</td>
-                    <td class="val-cell"><span dir="ltr">Φ{phi_main} + Φ{phi_st}</span></td>
-                    <td>—</td>
-                    <td class="val-cell" style="font-size:1.05rem; color:#854d0e;"><span dir="ltr">{w_steel_total_kg:.1f} kg ({w_steel_total_ton:.3f} Ton)</span></td>
-                    <td>معدل الحديد = <span dir="ltr">{steel_rate_kg_m3:.1f} kg/m³</span></td>
+                <tr style="background:#fffbeb;">
+                    <td style="font-weight:bold;">4</td>
+                    <td style="font-weight:bold; text-align:right; color:#78350f;">إجمالي توريد الأسمنت البورتلاندي العادي للمشروع</td>
+                    <td class="val-cell">طن (Ton)</td>
+                    <td class="val-cell"><span dir="ltr">{tot_cement_ton:.2f} Ton</span></td>
+                    <td class="val-cell" style="font-weight:bold;"><span dir="ltr">{p_cement:,.2f}</span></td>
+                    <td class="val-cell" style="font-weight:bold; color:#78350f;"><span dir="ltr">{c_cement_tot:,.2f} ج.م</span></td>
+                    <td style="font-size:0.85rem; color:#64748b;">إجمالي <span dir="ltr">{round(tot_cement_ton * 20.0)}</span> شكارة 50kg (أعمدة <span dir="ltr">{tot_cement_cols:.2f}T</span> + بلاطات <span dir="ltr">{tot_cement_slabs:.2f}T</span>)</td>
+                </tr>
+                <tr style="background:#fffbeb;">
+                    <td style="font-weight:bold;">5</td>
+                    <td style="font-weight:bold; text-align:right; color:#78350f;">إجمالي توريد السن / الزلط المتدرج النظيف للخرسانة</td>
+                    <td class="val-cell">متر مكعب (m³)</td>
+                    <td class="val-cell"><span dir="ltr">{grand_vol_concrete * 0.80:.2f} m³</span></td>
+                    <td class="val-cell" style="font-weight:bold;"><span dir="ltr">{p_gravel:,.2f}</span></td>
+                    <td class="val-cell" style="font-weight:bold; color:#78350f;"><span dir="ltr">{c_gravel_tot:,.2f} ج.م</span></td>
+                    <td style="font-size:0.85rem; color:#64748b;">نسبة زلط <span dir="ltr">0.80 m³/m³</span> خرسانة مسلحة</td>
+                </tr>
+                <tr style="background:#fffbeb;">
+                    <td style="font-weight:bold;">6</td>
+                    <td style="font-weight:bold; text-align:right; color:#78350f;">إجمالي توريد الرمل الحرش النظيف للخرسانة</td>
+                    <td class="val-cell">متر مكعب (m³)</td>
+                    <td class="val-cell"><span dir="ltr">{grand_vol_concrete * 0.40:.2f} m³</span></td>
+                    <td class="val-cell" style="font-weight:bold;"><span dir="ltr">{p_sand:,.2f}</span></td>
+                    <td class="val-cell" style="font-weight:bold; color:#78350f;"><span dir="ltr">{c_sand_tot:,.2f} ج.م</span></td>
+                    <td style="font-size:0.85rem; color:#64748b;">نسبة رمل <span dir="ltr">0.40 m³/m³</span> خرسانة مسلحة</td>
+                </tr>
+                <tr style="background:#fffbeb;">
+                    <td style="font-weight:bold;">7</td>
+                    <td style="font-weight:bold; text-align:right; color:#78350f;">إجمالي مصنعيات الصب والحدادة والنجارة والتشغيل</td>
+                    <td class="val-cell">متر مكعب (m³)</td>
+                    <td class="val-cell"><span dir="ltr">{grand_vol_concrete:.2f} m³</span></td>
+                    <td class="val-cell" style="font-weight:bold;"><span dir="ltr">{p_labor:,.2f}</span></td>
+                    <td class="val-cell" style="font-weight:bold; color:#78350f;"><span dir="ltr">{c_labor_tot:,.2f} ج.م</span></td>
+                    <td style="font-size:0.85rem; color:#64748b;">تنفيذ وتشغيل متكامل لكافة مسطحات المشروع</td>
+                </tr>
+                <tr style="background:#fef08a !important; font-weight:bold; color:#854d0e; font-size:1.05rem; border-top:3px solid #ca8a04;">
+                    <td colspan="2" style="text-align:right; font-weight:bold; font-size:1.05rem;">★ الإجمالي المالي العام الشامل للمشروع (Grand Total Budget)</td>
+                    <td class="val-cell" style="font-weight:bold;">مشروع شامل (L.S)</td>
+                    <td class="val-cell" style="font-weight:bold;"><span dir="ltr">{grand_vol_concrete:.2f} m³ خرسانة</span></td>
+                    <td class="val-cell" style="font-weight:bold;">-</td>
+                    <td class="val-cell" style="font-weight:900; font-size:1.15rem; color:#92400e;"><span dir="ltr">{c_grand_tot:,.2f} EGP</span></td>
+                    <td style="font-weight:bold; font-size:0.92rem;">شامل كافة المواد والمصنعيات بالكامل (متوسط <span dir="ltr">{cost_per_m3_all_inclusive:,.1f} ج.م/م³</span>)</td>
                 </tr>
             </tbody>
         </table>
+        """
+
+    section1_html = f"""
+    <div class="section-title">1. البيانات الهندسية لقطاعات ونماذج الأعمدة ({len(col_results or [])} نماذج — إجمالي {total_cols_count} عمود)</div>
+    <table class="survey-table" style="margin-bottom:16px;">
+        <thead>
+            <tr>
+                <th style="text-align:right;">النموذج</th>
+                <th>أبعاد القطاع (b × t)</th>
+                <th>العدد</th>
+                <th>الارتفاع الصافي</th>
+                <th>سقوط السقف</th>
+                <th>التسليح الرئيسي</th>
+                <th>الكانات</th>
+            </tr>
+        </thead>
+        <tbody>
+            {specs_rows}
+        </tbody>
+    </table>
+    {slab_specs_html}
+    """
+
+    takeoff_table_html = f"""
+    <table class="survey-table">
+        <thead>
+            <tr>
+                <th style="text-align:right;">البند / Component</th>
+                <th>القطاع / المقاس / المواصفة</th>
+                <th>العدد</th>
+                <th>عدد القطع (Pieces)</th>
+                <th>طول القطع (Cut Length)</th>
+                <th style="background-color:#1d4ed8 !important;">الوزن / الحجم الإجمالي</th>
+                <th>ملاحظات الحصر والتفريد</th>
+            </tr>
+        </thead>
+        <tbody>
+            {takeoff_body_rows}
+            {slab_takeoff_rows}
+            <tr style="background:#eff6ff !important; font-weight:bold; color:#1e3a8a; font-size:0.95rem; border-top:2px solid #3b82f6;">
+                <td style="text-align:right; font-weight:bold;">🔷 إجمالي الخرسانة المسلحة الكلية (أعمدة + بلاطات)</td>
+                <td class="val-cell">كافة العناصر الخرسانية</td>
+                <td class="val-cell" style="font-weight:bold;"><span dir="ltr">{total_cols_count} عمود + {len(slab_results or [])} بلاطة</span></td>
+                <td class="val-cell" style="font-weight:bold;">-</td>
+                <td class="val-cell">-</td>
+                <td class="val-cell" style="font-weight:bold; color:#1e40af; background:#dbeafe;"><span dir="ltr">{grand_vol_concrete:.2f} m³</span></td>
+                <td style="font-size:0.85rem; color:#475569;">أعمدة: <span dir="ltr">{total_vol_all:.2f} m³</span> | بلاطات: <span dir="ltr">{total_slabs_vol_rep:.2f} m³</span></td>
+            </tr>
+            <tr class="survey-total-row">
+                <td style="text-align:right; font-size:1.02rem;">✅ الإجمالي العام لحديد التسليح بالمشروع (أعمدة + بلاطات)</td>
+                <td class="val-cell">كافة الأقطار والشبكات</td>
+                <td class="val-cell">-</td>
+                <td class="val-cell" style="font-weight:bold; font-size:1.05rem;">-</td>
+                <td class="val-cell">-</td>
+                <td class="val-cell" style="font-size:1.08rem; color:#854d0e;"><span dir="ltr">{grand_steel_kg:,.1f} kg ({grand_steel_ton:.3f} Ton)</span></td>
+                <td>معدل استهلاك الحديد الكلي = <span dir="ltr">{grand_steel_rate:.1f} kg/m³</span></td>
+            </tr>
+        </tbody>
+    </table>
+    """
+
+    grand_cement_t = (grand_vol_concrete * fcu) / 1000.0
+    grand_cement_b = int(round((grand_vol_concrete * fcu) / 50.0))
+    grand_sand_v = grand_vol_concrete * 0.40
+    grand_gravel_v = grand_vol_concrete * 0.80
+    grand_water_l = grand_vol_concrete * fcu * 0.50
+
+    tot_area_slabs_rep = sum(s.get("area_total_m2", s.get("lx", 10.0) * s.get("ly", 8.0) * s.get("n_rep", 1)) for s in (slab_results or [])) if slab_results else 0.0
+    cost_per_m2_slab_rep = (c_grand_tot / tot_area_slabs_rep) if (pricing_data and tot_area_slabs_rep > 0) else 0.0
+
+    slabs_cost_m2_note_html = ""
+    if slab_results and len(slab_results) > 0 and tot_area_slabs_rep > 0 and pricing_data:
+        slabs_names_str = " + ".join(f"{s.get('name', 'S')}" for s in slab_results)
+        slabs_areas_str = " + ".join(f"{s.get('name', 'S')} ({s.get('area_total_m2', s.get('lx',10.0)*s.get('ly',8.0)*s.get('n_rep',1)):.1f} m²)" for s in slab_results)
+        slabs_cost_m2_note_html = f"""
+        <div style="background:#0f172a; border:2px solid #6366f1; border-radius:10px; padding:16px 20px; margin-top:20px; margin-bottom:20px; color:#ffffff;">
+            <div style="font-size:1.05rem; font-weight:bold; color:#a5b4fc; margin-bottom:12px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid rgba(165,180,252,0.3); padding-bottom:8px;">
+                <div>📌 <b>ملاحظة مالية هامة وحساب متوسط تكلفة المتر المسطح (Cost per Square Meter Note)</b></div>
+                <span style="font-size:0.85rem; background:rgba(99,102,241,0.3); padding:3px 12px; border-radius:10px;">{len(slab_results)} نماذج بلاطات ({slabs_names_str})</span>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:14px;">
+                <div style="background:rgba(255,255,255,0.05); padding:12px 14px; border-radius:8px; border-right:4px solid #f59e0b;">
+                    <div style="font-size:0.82rem; color:#cbd5e1; font-weight:bold;">★ الإجمالي المالي العام الشامل للمشروع:</div>
+                    <div style="font-size:1.25rem; font-weight:bold; color:#fbbf24;" dir="ltr">{c_grand_tot:,.2f} EGP</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.05); padding:12px 14px; border-radius:8px; border-right:4px solid #10b981;">
+                    <div style="font-size:0.82rem; color:#cbd5e1; font-weight:bold;">📐 إجمالي مسطح نماذج البلاطات ({slabs_names_str}):</div>
+                    <div style="font-size:1.25rem; font-weight:bold; color:#34d399;" dir="ltr">{tot_area_slabs_rep:,.2f} m²</div>
+                    <div style="font-size:0.75rem; color:#a7f3d0; margin-top:2px;">{slabs_areas_str}</div>
+                </div>
+                <div style="background:rgba(56,189,248,0.15); padding:12px 14px; border-radius:8px; border-right:4px solid #38bdf8; border:1px solid rgba(56,189,248,0.3);">
+                    <div style="font-size:0.82rem; color:#ffffff; font-weight:bold;">💰 تكلفة المتر المسطح بالجنيه (Cost / m²):</div>
+                    <div style="font-size:1.35rem; font-weight:bold; color:#38bdf8;" dir="ltr">{cost_per_m2_slab_rep:,.2f} ج.م / م²</div>
+                    <div style="font-size:0.75rem; color:#e0f2fe; margin-top:2px;">= ({c_grand_tot:,.0f} ج.م ÷ {tot_area_slabs_rep:,.1f} م²)</div>
+                </div>
+            </div>
+        </div>
         """
 
     html_content = f"""<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>ECP 203 - Concrete Columns Quantity Survey</title>
+    <title>ECP 203 - Concrete Survey & BOQ Report</title>
     {_get_base_report_css()}
     <style>
         .survey-table th {{ background-color: #1e3a8a !important; color:#ffffff !important; font-size:0.92rem; font-weight:bold; }}
@@ -1550,20 +1782,22 @@ def generate_column_survey_report_html(
 
     <!-- Top Action Bar -->
     <div class="action-bar no-print">
-        <div style="font-weight:700; font-size:1.05rem;">📊 تقرير حصر خرسانات وحديد الأعمدة — Concrete Columns Quantity Survey</div>
+        <div style="font-weight:700; font-size:1.05rem;">📊 تقرير حصر الخرسانات وحديد التسليح والمقايسة المالية — Concrete Takeoff & BOQ</div>
         <button class="btn-print" onclick="window.print();">🖨️ طباعة التقرير / حفظ كـ PDF (Print / Save as PDF)</button>
     </div>
 
     <!-- Report Header -->
     <div class="report-header">
         <div class="header-title">
-            <h1>تقرير حصر كميات الخرسانات والحديد للأعمدة (Columns Takeoff Sheet)</h1>
-            <span class="code-badge">الكود المصري لتصميم وتنفيذ المنشآت الخرسانية ECP 203-2018</span>
+            <h1 style="font-size: 1.28rem; font-weight: 800; color: #0f172a; margin-bottom: 4px; line-height: 1.35;">تقرير حصر كميات الخرسانات والحديد والمقايسة المالية (Takeoff & BOQ Sheet)</h1>
+            {owner_html}
+            <span class="code-badge" style="font-size: 0.82rem; margin-top: 4px;">الكود المصري لتصميم وتنفيذ المنشآت الخرسانية ECP 203-2018</span>
         </div>
         <div class="header-meta">
             <div><b>المشروع:</b> {project_name}</div>
             <div><b>تاريخ الحصر:</b> {now_str}</div>
             <div><b>حالة الدور:</b> {top_floor_str}</div>
+            <div><b>إجهاد الخرسانة fcu:</b> <span dir="ltr">{fcu:.0f} kg/cm²</span></div>
         </div>
     </div>
 
@@ -1576,27 +1810,30 @@ def generate_column_survey_report_html(
     <div class="section-title">3. جدول حصر وتفريد حديد التسليح والخرسانة (Detailed Takeoff Breakdown)</div>
     {takeoff_table_html}
 
-    <!-- Section 4: Concrete Mix Materials -->
-    <div class="section-title">4. تقدير كميات مواد الخلطة الخرسانية للأعمدة (Concrete Mix Estimation)</div>
+    {pricing_table_html}
+
+    <!-- Section 5: Concrete Mix Materials -->
+    <div class="section-title">5. تقدير كميات مواد الخلطة الخرسانية الإجمالية للمشروع (Concrete Mix Estimation)</div>
     <div class="info-grid">
         <div class="info-card">
-            <div class="card-lbl">الأسمنت (350 kg/m³)</div>
-            <div class="card-val"><span dir="ltr">{cement_tons:.2f} Ton</span> ({cement_bags} شكارة)</div>
+            <div class="card-lbl">الأسمنت ({fcu:.0f} kg/m³)</div>
+            <div class="card-val"><span dir="ltr">{grand_cement_t:.2f} Ton</span> ({grand_cement_b} شكارة)</div>
         </div>
         <div class="info-card">
             <div class="card-lbl">الرمل النظيف (0.40 m³/m³)</div>
-            <div class="card-val"><span dir="ltr">{sand_m3:.2f} m³</span></div>
+            <div class="card-val"><span dir="ltr">{grand_sand_v:.2f} m³</span></div>
         </div>
         <div class="info-card">
             <div class="card-lbl">السن / الزلط (0.80 m³/m³)</div>
-            <div class="card-val"><span dir="ltr">{gravel_m3:.2f} m³</span></div>
+            <div class="card-val"><span dir="ltr">{grand_gravel_v:.2f} m³</span></div>
         </div>
         <div class="info-card">
             <div class="card-lbl">مياه الخلط الصالحة (W/C=0.50)</div>
-            <div class="card-val"><span dir="ltr">{water_liters:.0f} L</span> (<span dir="ltr">{water_liters/1000:.2f} m³</span>)</div>
+            <div class="card-val"><span dir="ltr">{grand_water_l:.0f} L</span> (<span dir="ltr">{grand_water_l/1000:.2f} m³</span>)</div>
         </div>
     </div>
 
+    {slabs_cost_m2_note_html}
 
     <!-- Sign-off Block -->
     <div class="signature-block">

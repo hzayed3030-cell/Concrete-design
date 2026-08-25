@@ -19,10 +19,14 @@ Strategy
 
 import json
 import os
+import sys
 import streamlit as st
 
 # ── Path to the persistent settings file ────────────────────────────────────
-SETTINGS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "user_settings.json")
+if getattr(sys, "frozen", False):
+    SETTINGS_FILE = os.path.join(os.path.dirname(sys.executable), "user_settings.json")
+else:
+    SETTINGS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "user_settings.json")
 
 # ── Factory / ECP 203 Default Values ────────────────────────────────────────
 ECP_DEFAULTS: dict = {
@@ -92,9 +96,41 @@ ECP_DEFAULTS: dict = {
     "fs_cant_bottom": 0.0,
     "fs_cant_top":    0.0,
 
-    # Column removal registry (list of original column IDs removed by user, e.g. ["C3", "C7"])
-    "fs_removed_cols": [],
-    "fs_void_panels": [],
+    # Customs Module – Concrete Survey, Flat Slabs & Material Prices
+    "cs_n_types": 2,
+    "cs_col_h": 300.0,
+    "cs_t_slab": 20.0,
+    "cs_fcu": 350.0,
+    "cs_fs_n_slabs": 1,
+    "cs_fs_ts": 20.0,
+    "cs_fs_fcu": 350.0,
+    "cs_fs_phi_btm": 12,
+    "cs_fs_nb_btm": 6,
+    "cs_fs_phi_top": 10,
+    "cs_fs_nb_top": 6,
+    "cs_fs_phi_btm_x": 12,
+    "cs_fs_phi_btm_y": 12,
+    "cs_fs_nb_btm_x": 6,
+    "cs_fs_nb_btm_y": 6,
+    "cs_fs_phi_top_x": 10,
+    "cs_fs_phi_top_y": 10,
+    "cs_fs_nb_top_x": 6,
+    "cs_fs_nb_top_y": 6,
+    "cs_fs_phi_top_add": 12,
+    "cs_fs_add_top_lx": 3.0,
+    "cs_fs_add_top_ly": 2.5,
+    "cs_fs_n_top_add_x": 0,
+    "cs_fs_n_top_add_y": 0,
+    "cs_fs_phi_btm_add": 12,
+    "cs_fs_add_btm_lx": 4.0,
+    "cs_fs_add_btm_ly": 3.0,
+    "cs_fs_n_btm_add_x": 0,
+    "cs_fs_n_btm_add_y": 0,
+    "cs_price_steel": 40000.0,
+    "cs_price_cement": 4000.0,
+    "cs_price_gravel": 600.0,
+    "cs_price_sand": 200.0,
+    "cs_price_labor": 2000.0,
 
     # Typography / Fixed Font Sizes (in pixels)
     "font_size_inputs":  14,       # Inputs & labels (14px)
