@@ -69,6 +69,7 @@ from modules.footings  import render as render_footings
 from modules.flat_slab import render as render_flat_slab
 from modules.steel_bars import render as render_steel_bars
 from modules.concrete_survey import render as render_concrete_survey
+from modules.ground_slab import render as render_ground_slab
 
 # ── CSS Injection: Fixed Unified Typography (14px) ───────────────────────────
 st.markdown(
@@ -954,6 +955,21 @@ def render_top_profile_bar():
     st.markdown("<div style='margin-bottom:6px;'></div>", unsafe_allow_html=True)
 
 
+def get_github_repo_url():
+    try:
+        res = subprocess.run(["git", "config", "--get", "remote.origin.url"], cwd=app_dir, capture_output=True, text=True)
+        url = (res.stdout or "").strip()
+        if url.endswith(".git"):
+            url = url[:-4]
+        if url.startswith("git@github.com:"):
+            url = "https://github.com/" + url[len("git@github.com:"):]
+        if not url:
+            url = "https://github.com/hzayed3030-cell/Concrete-design"
+        return url
+    except Exception:
+        return "https://github.com/hzayed3030-cell/Concrete-design"
+
+
 def render_profile_manager():
     """Start Screen: Ultra-Compact High-Density Dark Mode Projects Dashboard."""
     projects = get_all_projects()
@@ -1015,7 +1031,7 @@ def render_profile_manager():
     )
 
     # ── Global Actions Toolbar (Compact) ────────────────────────────────────
-    g1, g2, g3, g4 = st.columns([1.2, 1.2, 1.4, 1.4])
+    g1, g2, g3, g4, g5 = st.columns([1.1, 1.1, 1.3, 1.3, 1.3])
     with g1:
         if st.button("➕ مشروع جديد", use_container_width=True, type="primary", key="btn_global_new"):
             st.session_state["show_create_profile_form"] = not st.session_state.get("show_create_profile_form", False)
@@ -1044,6 +1060,9 @@ def render_profile_manager():
             st.session_state["show_create_profile_form"] = False
             st.session_state["show_import_profile_form"] = False
             st.rerun()
+    with g5:
+        gh_url = get_github_repo_url()
+        st.link_button("🌐 Explore git hub", gh_url, use_container_width=True)
 
     # ── Update GitHub Form & Verification ──────────────────────────────────
     if st.session_state.get("show_git_update_form", False):
@@ -1392,54 +1411,27 @@ def render_profile_manager():
 current_nav = st.session_state.get("nav_view", "profile_manager")
 
 if current_nav == "profile_manager":
-    # ── SIDEBAR: Projects Manager Mode (no design-module selectors) ──────────
-    with st.sidebar:
-        st.markdown(
-            """
-            <div class="sidebar-profile-mgr-badge"></div>
-            <div style="font-size:30px; font-weight:900; margin-bottom:4px;">📁 ECP 203 Projects</div>
-            <div style="font-size:24px; font-weight:700; color:#94a3b8; margin-bottom:10px;">إدارة وتصميم المشاريع</div>
-            <hr style="margin:8px 0 14px 0;">
-            """,
-            unsafe_allow_html=True,
-        )
-
-        active_p_side = get_active_project_name()
-        all_p_side = get_all_projects()
-
-        card_html = (
-            f'<div style="background:rgba(59,130,246,0.1); border:2px solid #3b82f6; border-radius:10px; padding:14px 16px; margin-bottom:16px;">'
-            f'<div style="font-size:24px; color:#94a3b8;">🟢 المشروع النشط حالياً:</div>'
-            f'<div style="font-size:30px; font-weight:800; color:#60a5fa; margin:4px 0;">{active_p_side}</div>'
-            f'<div style="font-size:24px; color:#94a3b8; margin-top:8px;">📊 إجمالي: <b>{len(all_p_side)}</b> مشاريع</div>'
-            f'</div>'
-        )
-        st.markdown(card_html, unsafe_allow_html=True)
-
-        if st.button("➕ إنشاء مشروع جديد", use_container_width=True, type="primary", key="sb_new_profile"):
-            st.session_state["show_create_profile_form"] = not st.session_state.get("show_create_profile_form", False)
-            st.session_state["show_import_profile_form"] = False
-            st.rerun()
-
-        if st.button("📥 استيراد ملف JSON", use_container_width=True, key="sb_import_profile"):
-            st.session_state["show_import_profile_form"] = not st.session_state.get("show_import_profile_form", False)
-            st.session_state["show_create_profile_form"] = False
-            st.rerun()
-
-        all_projects_json_sb = export_all_projects_json()
-        st.download_button(
-            label="📤 تصدير الكل (Backup)",
-            data=all_projects_json_sb,
-            file_name="ECP203_All_Projects_Backup.json",
-            mime="application/json",
-            use_container_width=True,
-            key="sb_backup_all",
-        )
-
-        st.markdown("---")
-        st.markdown("<div style='font-size:18px;'>Code: <b>ECP 203-2018</b></div>", unsafe_allow_html=True)
-        st.markdown("<div style='font-size:18px;'>Units: <b>ton · kg · cm · kg/cm²</b></div>", unsafe_allow_html=True)
-
+    # ── FULL SCREEN: Projects Manager Mode (Sidebar completely hidden to prevent repetition) ──
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] {
+            display: none !important;
+        }
+        [data-testid="stSidebarCollapsedControl"] {
+            display: none !important;
+        }
+        section.main > div.block-container {
+            max-width: 98% !important;
+            padding-top: 1rem !important;
+            padding-bottom: 2rem !important;
+            padding-left: 2rem !important;
+            padding-right: 2rem !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     render_profile_manager()
 
 else:
@@ -1476,6 +1468,7 @@ else:
                 "🟦  Module 1 — Flat Slabs (البلاطات اللاكمرية)",
                 "🏛️  Module 2 — Rectangular Columns (الأعمدة المستطيلة)",
                 "🪸  Module 3 — Isolated Footings (القواعد المنفصلة)",
+                "🏗️  Module 4 — Ground Slabs (البلاطات الأرضية)",
                 "⚙️  المساعد — اقطار واوزان الحديد (Steel Rebar)",
                 "📊  المساعد — حصر الخرسانات (Concrete Qty. Survey)",
             ],
@@ -1530,10 +1523,12 @@ else:
 
     if "Flat Slabs" in module or "Flat" in module:
         render_flat_slab()
-    elif "Columns" in module:
+    elif "Columns" in module or "الأعمدة" in module:
         render_columns()
     elif "Footings" in module or "القواعد" in module:
         render_footings()
+    elif "Ground Slabs" in module or "الأرضية" in module:
+        render_ground_slab()
     elif "اقطار" in module or "Steel" in module:
         render_steel_bars()
     elif "حصر" in module or "Survey" in module:

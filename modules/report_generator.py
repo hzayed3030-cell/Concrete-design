@@ -1858,3 +1858,179 @@ def generate_column_survey_report_html(
 """
     return html_content
 
+
+
+def generate_ground_slab_report_html(
+    res: dict,
+    project_name: str = "ECP 203 Ground Slab Design (Slab on Grade)",
+    img_plan_b64: Optional[str] = None,
+    img_detail_b64: Optional[str] = None,
+) -> str:
+    """
+    Generates a print-ready, professional HTML/PDF calculation sheet for Ground Slabs (Slab on Grade)
+    according to ECP 203-2018 and ACI 360R.
+    """
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    
+    html_content = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>{project_name} - Ground Slab Design</title>
+    {_get_base_report_css()}
+    <style>
+        .sog-table th {{ background-color: #1e3a8a !important; color:#ffffff !important; font-size:0.92rem; font-weight:bold; }}
+        .sog-table td {{ font-size:0.90rem; padding: 10px 8px; text-align:center; }}
+        .sog-table tr:nth-child(even) {{ background-color: #f8fafc; }}
+    </style>
+</head>
+<body>
+
+<div class="report-container">
+
+    <!-- Top Action Bar -->
+    <div class="action-bar no-print">
+        <div style="font-weight:700; font-size:1.05rem;">📊 {project_name} — Slab on Grade Calculation Sheet</div>
+        <button class="btn-print" onclick="window.print();">🖨️ طباعة التقرير / حفظ كـ PDF (Print / Save as PDF)</button>
+    </div>
+
+    <!-- Report Header -->
+    <div class="report-header">
+        <div class="header-title">
+            <h1 style="font-size: 1.45rem; font-weight: 900; color: #0f172a; margin-bottom: 4px; line-height: 1.35;">{project_name}</h1>
+            <div style="font-size:1.10rem; font-weight:bold; color:#2563eb; margin:2px 0;">مذكرة الحسابات والتصميم الإنشائي للبلاطات الأرضية (Slab on Grade / Ground Slab)</div>
+            <span class="code-badge" style="font-size: 0.82rem; margin-top: 4px;">الكود المصري ECP 203-2018 · كود الأساسات · ACI 360R / PCA</span>
+        </div>
+        <div class="header-meta">
+            <div><b>تاريخ التصميم:</b> {now_str}</div>
+            <div><b>أبعاد الصالة:</b> {res['Lx_m']:.1f} × {res['Ly_m']:.1f} m</div>
+            <div><b>سمك البلاطة:</b> {res['ts_cm']:.0f} cm</div>
+            <div><b>إجهاد الخرسانة fcu:</b> <span dir="ltr">{res['fcu_kg_cm2']:.0f} kg/cm²</span></div>
+        </div>
+    </div>
+
+    <!-- Section 1: Design Parameters -->
+    <div class="section-title">1. مدخلات التصميم والخصائص الهندسية والجيوتقنية (Design Parameters & Loads)</div>
+    <div class="info-grid">
+        <div class="info-card">
+            <div class="card-lbl">أبعاد البلاطة والمساحة (Lx × Ly)</div>
+            <div class="card-val"><span dir="ltr">{res['Lx_m']:.1f} × {res['Ly_m']:.1f} m</span> ({res['total_area_m2']:.1f} m²)</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">سمك البلاطة والغطاء (ts & Cover)</div>
+            <div class="card-val"><span dir="ltr">ts = {res['ts_cm']:.0f} cm</span> (Cover = {res['cover_cm']:.1f} cm)</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">معامل رد فعل التربة (ks)</div>
+            <div class="card-val"><span dir="ltr">{res['ks_kg_cm3']:.1f} kg/cm³</span> (q_all = {res['q_all_kg_cm2']:.1f} kg/cm²)</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">الأحمال المركزة والموزعة</div>
+            <div class="card-val"><span dir="ltr">P_wheel={res['p_wheel_ton']:.1f}t | P_post={res['p_post_ton']:.1f}t | LL={res['w_ll_ton_m2']:.1f}t/m²</span></div>
+        </div>
+    </div>
+
+    <!-- Section 2: Drawings -->
+    <div class="section-title">2. المخططات الهندسية وتفاصيل فواصل التحكم والانكماش (CAD Drawings & Joint Details)</div>
+    <div style="display:flex; flex-direction:column; gap:16px; margin:16px 0;">
+        {f'<div class="drawing-box" style="text-align:center;"><img src="{img_plan_b64}" alt="Ground Slab 2D Plan" style="max-width:100%; border-radius:8px; border:1px solid #cbd5e1;"></div>' if img_plan_b64 else ''}
+        {f'<div class="drawing-box" style="text-align:center;"><img src="{img_detail_b64}" alt="Joint Detail" style="max-width:100%; border-radius:8px; border:1px solid #cbd5e1;"></div>' if img_detail_b64 else ''}
+    </div>
+
+    <!-- Section 3: Verification Checks -->
+    <div class="section-title">3. نتائج الفحوصات الإنشائية والجيوتقنية (Structural & Geotechnical Verification)</div>
+    <table class="data-table sog-table" style="width:100%; border-collapse:collapse; margin-top:8px;">
+        <thead>
+            <tr>
+                <th style="text-align:right;">بند التحقق الهندسي (Item)</th>
+                <th>القيمة الفعلية (Actual)</th>
+                <th>القيمة المسموحة (Allowable)</th>
+                <th>نسبة الكفاءة (Ratio)</th>
+                <th>الحالة والنتيجة (Status)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="text-align:right; font-weight:bold;">1. إجهادات الانحناء (Westergaard Flexural Stress)</td>
+                <td><span dir="ltr">{res['sigma_act_flexure']:.2f} kg/cm²</span></td>
+                <td><span dir="ltr">{res['sigma_all_flexure']:.2f} kg/cm²</span></td>
+                <td><span dir="ltr">{res['ratio_flexure']*100:.1f}%</span></td>
+                <td style="font-weight:bold; color:{'#15803d' if res['is_flexure_safe'] else '#b91c1c'};">{'✅ SAFE' if res['is_flexure_safe'] else '⚠️ UNSAFE'}</td>
+            </tr>
+            <tr>
+                <td style="text-align:right; font-weight:bold;">2. القص الثاقب لأرجل الأرفف (Punching Shear)</td>
+                <td><span dir="ltr">{res['qup_post_kg_cm2']:.2f} kg/cm²</span></td>
+                <td><span dir="ltr">{res['qcu_punching_kg_cm2']:.2f} kg/cm²</span></td>
+                <td><span dir="ltr">{res['ratio_punching']*100:.1f}%</span></td>
+                <td style="font-weight:bold; color:{'#15803d' if res['is_punching_safe'] else '#b91c1c'};">{'✅ SAFE' if res['is_punching_safe'] else '⚠️ UNSAFE'}</td>
+            </tr>
+            <tr>
+                <td style="text-align:right; font-weight:bold;">3. ضغط التربة المباشر (Subgrade Contact Pressure)</td>
+                <td><span dir="ltr">{res['q_total_act_kg_cm2']:.2f} kg/cm²</span></td>
+                <td><span dir="ltr">{res['q_all_kg_cm2']:.2f} kg/cm²</span></td>
+                <td><span dir="ltr">{res['ratio_soil']*100:.1f}%</span></td>
+                <td style="font-weight:bold; color:{'#15803d' if res['is_soil_safe'] else '#b91c1c'};">{'✅ SAFE' if res['is_soil_safe'] else '⚠️ UNSAFE'}</td>
+            </tr>
+            <tr>
+                <td style="text-align:right; font-weight:bold;">4. تسليح الانكماش والحرارة (Shrinkage Rebar Mesh)</td>
+                <td><span dir="ltr">{res['As_provided_cm2_m']:.2f} cm²/m'</span></td>
+                <td><span dir="ltr">Min {res['As_required_cm2_m']:.2f} cm²/m'</span></td>
+                <td><span dir="ltr">{(res['As_required_cm2_m']/res['As_provided_cm2_m'])*100:.1f}%</span></td>
+                <td style="font-weight:bold; color:{'#15803d' if res['is_rebar_safe'] else '#b91c1c'};">{'✅ SAFE' if res['is_rebar_safe'] else '⚠️ UNSAFE'}</td>
+            </tr>
+            <tr>
+                <td style="text-align:right; font-weight:bold;">5. مسافات فواصل الانكماش (Joint Spacing Ratio)</td>
+                <td><span dir="ltr">{max(res['actual_bay_lx'], res['actual_bay_ly']):.2f} m</span></td>
+                <td><span dir="ltr">Max {res['max_rec_joint_spacing_m']:.2f} m</span></td>
+                <td><span dir="ltr">{(max(res['actual_bay_lx'], res['actual_bay_ly'])/res['max_rec_joint_spacing_m'])*100:.1f}%</span></td>
+                <td style="font-weight:bold; color:{'#15803d' if (max(res['actual_bay_lx'], res['actual_bay_ly']) <= res['max_rec_joint_spacing_m']) else '#b91c1c'};">{'✅ SAFE' if (max(res['actual_bay_lx'], res['actual_bay_ly']) <= res['max_rec_joint_spacing_m']) else '⚠️ UNSAFE'}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- Section 4: BOQ Breakdown Table -->
+    <div class="section-title">4. جدول حصر الكميات والمقايسة المادية (Takeoff & BOQ Breakdown)</div>
+    <table class="data-table sog-table" style="width:100%; border-collapse:collapse; margin-top:8px;">
+        <thead>
+            <tr>
+                <th style="width:40px;">م</th>
+                <th style="text-align:right;">بند الأعمال (Item)</th>
+                <th>المواصفة الفنية (Specifications)</th>
+                <th>الكمية (Qty)</th>
+                <th>الوحدة (Unit)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td>1</td><td style="text-align:right; font-weight:bold;">خرسانة مسلحة للبلاطة الأرضية</td><td>fcu={res['fcu_kg_cm2']:.0f} kg/cm² (ts={res['ts_cm']:.0f} cm)</td><td><span dir="ltr">{res['concrete_vol_m3']:.2f}</span></td><td>m³</td></tr>
+            <tr><td>2</td><td style="text-align:right; font-weight:bold;">حديد تسليح شبكات الانكماش</td><td>{res['mesh_type']} (Φ{res['phi_mesh_mm']} @ {res['spacing_mesh_cm']:.0f} cm)</td><td><span dir="ltr">{res['total_mesh_weight_ton']:.3f}</span></td><td>Ton</td></tr>
+            <tr><td>3</td><td style="text-align:right; font-weight:bold;">أسياخ دواول نقل القص الملساء</td><td>Φ{res['dowel_phi_mm']} mm (L={res['dowel_len_cm']:.0f} cm @ {res['dowel_spacing_cm']:.0f} cm)</td><td><span dir="ltr">{res['total_dowel_weight_ton']:.3f} ({res['total_dowels_count']} سيخ)</span></td><td>Ton</td></tr>
+            <tr><td>4</td><td style="text-align:right; font-weight:bold;">إجمالي حديد التسليح والدواول</td><td>معدل التسليح = {res['steel_rate_kg_m3']:.1f} kg/m³</td><td><span dir="ltr">{res['total_steel_weight_ton']:.3f}</span></td><td>Ton</td></tr>
+            <tr><td>5</td><td style="text-align:right; font-weight:bold;">قطع فواصل الانكماش بالمنشار</td><td>عمق القطع = {res['saw_cut_depth_cm']:.1f} cm</td><td><span dir="ltr">{res['total_joint_length_m']:.1f}</span></td><td>m'</td></tr>
+            <tr><td>6</td><td style="text-align:right; font-weight:bold;">مادة ملء وحقن الفواصل المرنة</td><td>Polyurethane Elastomeric Sealant</td><td><span dir="ltr">{res['total_joint_length_m']:.1f}</span></td><td>m'</td></tr>
+            <tr><td>7</td><td style="text-align:right; font-weight:bold;">عازل رطوبة بولي إيثيلين (PE)</td><td>Heavy-duty 500 Micron Polyethylene Sheet</td><td><span dir="ltr">{res['vapor_barrier_m2']:.1f}</span></td><td>m²</td></tr>
+            <tr><td>8</td><td style="text-align:right; font-weight:bold;">طبقة إحلال من الحصى المتدرج المدموك</td><td>سمك الطبقة = {res['subbase_vol_m3'] / res['total_area_m2'] * 100:.0f} cm (Compaction >= 98%)</td><td><span dir="ltr">{res['subbase_vol_m3']:.2f}</span></td><td>m³</td></tr>
+        </tbody>
+    </table>
+
+    <!-- Sign-off Block -->
+    <div class="signature-block">
+        <div class="sig-box">
+            <div class="sig-title">مهندس التصميم الإنشائي (Structural Engineer):</div>
+            <div style="margin-top:20px; color:#94a3b8;">التوقيع: ___________________</div>
+        </div>
+        <div class="sig-box">
+            <div class="sig-title">المراجعة والاعتماد (Reviewer):</div>
+            <div style="margin-top:20px; color:#94a3b8;">التوقيع: ___________________</div>
+        </div>
+        <div class="sig-box">
+            <div class="sig-title">اعتماد الاستشاري (Consultant):</div>
+            <div style="margin-top:20px; color:#94a3b8;">الختم والتاريخ: ______________</div>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>
+"""
+    return html_content

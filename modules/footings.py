@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.patches import FancyBboxPatch, Circle, Polygon
 from modules import settings as S
+from modules import ground_slab
 
 
 def round_up_to_5(v):
@@ -1227,3 +1228,4 @@ def render():
         f"Long Steel: **{n_long} Φ{Phi}** @ {sp_long:.1f} cm ({n_m_long} Φ{Phi}/m over B) | "
         f"Short Steel: **{n_sht} Φ{Phi}** @ {sp_sht:.1f} cm ({n_m_sht} Φ{Phi}/m over L)."
     )
+

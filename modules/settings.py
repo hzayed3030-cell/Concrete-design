@@ -143,7 +143,31 @@ ECP_DEFAULTS: dict = {
     "cs_price_sand": 200.0,
     "cs_price_labor": 2000.0,
     "cs_project_name": "مشروع حصر خرسانات ومقايسة مالية",
-    "cs_owner_name": "",
+    # Module – Ground Slab (Slab on Grade - SOG)
+    "gs_lx":                   30.0,     # Total length in meters
+    "gs_ly":                   20.0,     # Total width in meters
+    "gs_ts":                   20.0,     # Slab thickness in cm
+    "gs_cover":                4.0,      # Clear cover in cm
+    "gs_fcu":                  300.0,    # fcu in kg/cm²
+    "gs_fy":                   4200.0,   # fy in kg/cm² (420 N/mm²)
+    "gs_ks":                   5.0,      # Modulus of subgrade reaction in kg/cm³
+    "gs_q_all":                1.5,      # Allowable soil bearing capacity in kg/cm²
+    "gs_h_base":               20.0,     # Subbase gravel layer thickness in cm
+    "gs_w_ll":                 2.5,      # Uniform live load in ton/m²
+    "gs_p_wheel":              4.0,      # Forklift wheel point load in ton
+    "gs_wheel_b":              20.0,     # Wheel contact width in cm
+    "gs_wheel_l":              25.0,     # Wheel contact length in cm
+    "gs_p_post":               3.5,      # Rack post point load in ton
+    "gs_post_bp":              15.0,     # Post base plate width in cm
+    "gs_post_tp":              15.0,     # Post base plate length in cm
+    "gs_rebar_mesh_type":      "شبكة علوية وسفلية (Double Mesh)",
+    "gs_phi_mesh":             10,       # Rebar mesh diameter in mm
+    "gs_mesh_spacing":         20.0,     # Rebar mesh spacing in cm
+    "gs_joint_spacing_x":      4.5,      # Contraction joint spacing in X (m)
+    "gs_joint_spacing_y":      4.5,      # Contraction joint spacing in Y (m)
+    "gs_dowel_phi":            20,       # Dowel bar diameter in mm
+    "gs_dowel_len":            45.0,     # Dowel bar length in cm
+    "gs_dowel_spacing":        30.0,     # Dowel bar spacing in cm
 
     # Typography / Fixed Font Sizes (in pixels)
     "font_size_inputs":  14,
@@ -988,13 +1012,31 @@ def integer_input(label: str, cfg_key: str, **kwargs):
     return val
 
 
-def selectbox(label: str, cfg_key: str, options: list, **kwargs):
+def selectbox(label: str, cfg_key=None, options=None, **kwargs):
     """
     Drop-in replacement for st.selectbox that persists the index.
+    Robustly handles (label, cfg_key, options) or (label, options, cfg_key).
     """
+    if options is None and "options" in kwargs:
+        options = kwargs.pop("options")
+    if cfg_key is None and "cfg_key" in kwargs:
+        cfg_key = kwargs.pop("cfg_key")
+
+    if isinstance(cfg_key, (list, tuple)) and isinstance(options, str):
+        cfg_key, options = options, cfg_key
+    elif isinstance(cfg_key, (list, tuple)) and options is None:
+        options = cfg_key
+        cfg_key = f"sb_{abs(hash(label))}"
+
+    if not isinstance(cfg_key, str):
+        cfg_key = str(cfg_key)
+    if options is None:
+        options = []
+    options = list(options)
+
     widget_key = f"w_{cfg_key}"
     saved_index = cfg_val(cfg_key)
-    if saved_index is not None:
+    if saved_index is not None and len(options) > 0:
         try:
             saved_index = max(0, min(int(saved_index), len(options) - 1))
             kwargs["index"] = saved_index
@@ -1018,13 +1060,31 @@ def selectbox(label: str, cfg_key: str, options: list, **kwargs):
     return res
 
 
-def radio(label: str, cfg_key: str, options: list, **kwargs):
+def radio(label: str, cfg_key=None, options=None, **kwargs):
     """
     Drop-in replacement for st.radio that persists the index.
+    Robustly handles (label, cfg_key, options) or (label, options, cfg_key).
     """
+    if options is None and "options" in kwargs:
+        options = kwargs.pop("options")
+    if cfg_key is None and "cfg_key" in kwargs:
+        cfg_key = kwargs.pop("cfg_key")
+
+    if isinstance(cfg_key, (list, tuple)) and isinstance(options, str):
+        cfg_key, options = options, cfg_key
+    elif isinstance(cfg_key, (list, tuple)) and options is None:
+        options = cfg_key
+        cfg_key = f"rad_{abs(hash(label))}"
+
+    if not isinstance(cfg_key, str):
+        cfg_key = str(cfg_key)
+    if options is None:
+        options = []
+    options = list(options)
+
     widget_key = f"w_{cfg_key}"
     saved_index = cfg_val(cfg_key)
-    if saved_index is not None:
+    if saved_index is not None and len(options) > 0:
         try:
             saved_index = max(0, min(int(saved_index), len(options) - 1))
             kwargs["index"] = saved_index
