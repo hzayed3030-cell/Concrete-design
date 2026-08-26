@@ -7,6 +7,9 @@ Run with:  streamlit run app.py
 
 import os
 import sys
+import subprocess
+import shutil
+import datetime
 
 # Ensure root directory is always first in sys.path regardless of CMD working directory
 app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -956,6 +959,11 @@ def render_profile_manager():
     projects = get_all_projects()
     active_name = get_active_project_name()
 
+    if st.session_state.get("git_push_success_msg"):
+        st.success(st.session_state["git_push_success_msg"])
+        st.balloons()
+        del st.session_state["git_push_success_msg"]
+
     # ── Centered Distinctive Header Banner (White Text on Dark Background) ──
     st.markdown(
         f"""
@@ -1007,16 +1015,18 @@ def render_profile_manager():
     )
 
     # ── Global Actions Toolbar (Compact) ────────────────────────────────────
-    g1, g2, g3 = st.columns([1.3, 1.3, 1.6])
+    g1, g2, g3, g4 = st.columns([1.2, 1.2, 1.4, 1.4])
     with g1:
         if st.button("➕ مشروع جديد", use_container_width=True, type="primary", key="btn_global_new"):
             st.session_state["show_create_profile_form"] = not st.session_state.get("show_create_profile_form", False)
             st.session_state["show_import_profile_form"] = False
+            st.session_state["show_git_update_form"] = False
             st.rerun()
     with g2:
         if st.button("📥 استيراد JSON", use_container_width=True, key="btn_global_import"):
             st.session_state["show_import_profile_form"] = not st.session_state.get("show_import_profile_form", False)
             st.session_state["show_create_profile_form"] = False
+            st.session_state["show_git_update_form"] = False
             st.rerun()
     with g3:
         all_projects_json = export_all_projects_json()
@@ -1028,6 +1038,103 @@ def render_profile_manager():
             use_container_width=True,
             key="btn_global_backup",
         )
+    with g4:
+        if st.button("🚀 Update git hub", use_container_width=True, key="btn_global_github_sync"):
+            st.session_state["show_git_update_form"] = not st.session_state.get("show_git_update_form", False)
+            st.session_state["show_create_profile_form"] = False
+            st.session_state["show_import_profile_form"] = False
+            st.rerun()
+
+    # ── Update GitHub Form & Verification ──────────────────────────────────
+    if st.session_state.get("show_git_update_form", False):
+        col_git_pad1, col_git_center, col_git_pad2 = st.columns([0.6, 6.8, 0.6])
+        with col_git_center:
+            with st.container(border=True):
+                # 1. Check for dist / build directories
+                dist_dirs = [d for d in ["dist", "build", "built"] if os.path.exists(os.path.join(app_dir, d))]
+                if dist_dirs:
+                    st.markdown(
+                        f"""
+                        <div style="background: rgba(239, 68, 68, 0.15); border: 2px solid #ef4444; border-radius: 10px; padding: 14px 18px; color: #fecaca; margin-bottom: 12px; box-shadow: 0 4px 16px rgba(239, 68, 68, 0.25);">
+                            <div style="color: #f87171; font-weight: 900; font-size: 1.15rem; display:flex; align-items:center; gap:8px;">
+                                <span>⛔</span> تم رفض الرفع إلى GitHub (الحجم كبير لوجود مجلدات dist / build)
+                            </div>
+                            <div style="font-size: 0.95rem; margin-top: 8px; line-height: 1.5; color: #ffffff;">
+                                تم اكتشاف وجود فهارس بناء وتوزيع (<b>{' / '.join(dist_dirs)}</b>) في المجلد الرئيسي للمشروع.<br>
+                                تم رفض عملية الرفع لتفادي تجاوز سعة المستودع ورفع ملفات ضخمة غير مرغوبة إلى GitHub.<br>
+                                <b>الحل:</b> يرجى حذف مجلدات <code>dist</code> أو <code>build</code> أولاً ثم إعادة المحاولة.
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    cg1, cg2 = st.columns([2, 1])
+                    with cg1:
+                        if st.button("🗑️ حذف مجلدات dist و build والمتابعة فوراً", use_container_width=True, type="primary", key="btn_clean_dist_build"):
+                            for d in dist_dirs:
+                                shutil.rmtree(os.path.join(app_dir, d), ignore_errors=True)
+                            st.success("تم حذف مجلدات البناء بنجاح.")
+                            st.rerun()
+                    with cg2:
+                        if st.button("❌ إلغاء", use_container_width=True, key="btn_cancel_dist_error"):
+                            st.session_state["show_git_update_form"] = False
+                            st.rerun()
+                else:
+                    st.markdown(
+                        """
+                        <div style="background: linear-gradient(135deg, #0b1329 0%, #1e293b 50%, #0b1329 100%); border: 2px solid #38bdf8; border-radius: 10px; padding: 14px 18px; margin-bottom: 12px; box-shadow: 0 4px 16px rgba(56, 189, 248, 0.2);">
+                            <div style="display:flex; align-items:center; gap:8px; font-weight:900; font-size:1.15rem; color:#38bdf8;">
+                                <span>🚀</span> تأكيد رفع التحديثات إلى مستودع GitHub (Update git hub)
+                            </div>
+                            <div style="color:#cbd5e1; font-size:0.92rem; margin-top:6px; line-height: 1.4;">
+                                سيتم حفظ كافة الملفات والتعديلات وإرسالها إلى مستودع GitHub الرئيسي عبر الأوامر (<code>git add .</code> ⬅️ <code>git commit</code> ⬅️ <code>git push</code>).
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    commit_msg = st.text_input(
+                        "اسم التعديل (Commit Message):",
+                        value=f"Update project - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                        placeholder="اكتب وصف التعديل الذي سيظهر بعد علامات التنصيص في أمر commit...",
+                        key="input_git_commit_msg",
+                        help="اسم ورسالة التعديل التي ستسجل في سجل Git و GitHub بعد علامات التنصيص -m \"...\"",
+                    )
+                    col_gbtn1, col_gbtn2 = st.columns([2, 1])
+                    with col_gbtn1:
+                        if st.button("🚀 تأكيد ورفع التحديثات إلى GitHub", use_container_width=True, type="primary", key="btn_exec_git_push"):
+                            # Final safety check
+                            cur_dist_dirs = [d for d in ["dist", "build", "built"] if os.path.exists(os.path.join(app_dir, d))]
+                            if cur_dist_dirs:
+                                st.error("⛔ تم رفض الرفع لوجود مجلدات dist أو build!")
+                            else:
+                                with st.spinner("⏳ جاري رفع التحديثات إلى GitHub... (git add . ; git commit ; git push)"):
+                                    msg_final = commit_msg.strip() if commit_msg and commit_msg.strip() else "Update project files"
+                                    # git add .
+                                    subprocess.run(["git", "add", "."], cwd=app_dir, capture_output=True, text=True)
+                                    # git commit -m
+                                    res_commit = subprocess.run(["git", "commit", "-m", msg_final], cwd=app_dir, capture_output=True, text=True)
+                                    # git push
+                                    res_push = subprocess.run(["git", "push"], cwd=app_dir, capture_output=True, text=True)
+
+                                    if res_push.returncode == 0:
+                                        st.session_state["git_push_success_msg"] = f"✅ تم رفع وتحديث المشروع إلى GitHub بنجاح! باسم التعديل: «{msg_final}»"
+                                        st.session_state["show_git_update_form"] = False
+                                        st.rerun()
+                                    else:
+                                        err_text = (res_push.stderr or res_push.stdout or "").strip()
+                                        if "Everything up-to-date" in err_text or "nothing to commit" in (res_commit.stdout or ""):
+                                            st.session_state["git_push_success_msg"] = "✅ تم التحقق: المستودع متزامن مع GitHub بالفعل ولا توجد تعديلات جديدة للرفع (Everything up-to-date)."
+                                            st.session_state["show_git_update_form"] = False
+                                            st.rerun()
+                                        else:
+                                            st.error(f"❌ حدث خطأ أثناء الرفع إلى GitHub:\n\n{err_text}")
+                    with col_gbtn2:
+                        if st.button("❌ إلغاء", use_container_width=True, key="btn_cancel_git_form"):
+                            st.session_state["show_git_update_form"] = False
+                            st.rerun()
+
+        st.markdown("<hr style='margin: 10px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 
     # ── Create New Project Form (Centered & Compact Cyan Theme) ──────────
     if st.session_state.get("show_create_profile_form", False):

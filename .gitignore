@@ -1,7 +1,12 @@
 build/
 dist/
+built/
 *.exe
 *.pkg
 *.spec
+*.rar
+*.zip
+*.7z
 __pycache__/
+*.pyc
 .venv/
