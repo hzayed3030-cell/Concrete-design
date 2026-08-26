@@ -803,10 +803,11 @@ def render():
     buf.seek(0)
     img_col_b64 = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("utf-8")
     buf.seek(0)
+    prefix = S.get_safe_profile_filename_prefix()
     st.download_button(
         label="📥 Download Column Structural Drawing Sheet (High-Res PNG)",
         data=buf,
-        file_name=f"Column_Section_{b}x{t_design}cm.png",
+        file_name=f"{prefix}Column_Section_{b}x{t_design}cm.png",
         mime="image/png",
         use_container_width=True,
     )
@@ -1106,10 +1107,11 @@ def render():
             unsafe_allow_html=True
         )
     with c_save2:
+        prefix = S.get_safe_profile_filename_prefix()
         st.download_button(
             label="🌐 Save Calculation Sheet (HTML)",
             data=col_report_html,
-            file_name=f"ECP203_Column_Calculation_Sheet_{b}x{t_design}cm.html",
+            file_name=f"{prefix}ECP203_Column_Calculation_Sheet_{b}x{t_design}cm.html",
             mime="text/html",
             use_container_width=True,
         )
@@ -1117,7 +1119,7 @@ def render():
             st.download_button(
                 label="📕 Save as PDF (مباشر)",
                 data=pdf_bytes,
-                file_name=f"ECP203_Column_Calculation_Sheet_{b}x{t_design}cm.pdf",
+                file_name=f"{prefix}ECP203_Column_Calculation_Sheet_{b}x{t_design}cm.pdf",
                 mime="application/pdf",
                 use_container_width=True,
             )

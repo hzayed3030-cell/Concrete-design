@@ -1767,7 +1767,7 @@ def generate_column_survey_report_html(
 <html lang="ar" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>ECP 203 - Concrete Survey & BOQ Report</title>
+    <title>{project_name} - ECP 203</title>
     {_get_base_report_css()}
     <style>
         .survey-table th {{ background-color: #1e3a8a !important; color:#ffffff !important; font-size:0.92rem; font-weight:bold; }}
@@ -1782,19 +1782,18 @@ def generate_column_survey_report_html(
 
     <!-- Top Action Bar -->
     <div class="action-bar no-print">
-        <div style="font-weight:700; font-size:1.05rem;">📊 تقرير حصر الخرسانات وحديد التسليح والمقايسة المالية — Concrete Takeoff & BOQ</div>
+        <div style="font-weight:700; font-size:1.05rem;">📊 {project_name}</div>
         <button class="btn-print" onclick="window.print();">🖨️ طباعة التقرير / حفظ كـ PDF (Print / Save as PDF)</button>
     </div>
 
     <!-- Report Header -->
     <div class="report-header">
         <div class="header-title">
-            <h1 style="font-size: 1.28rem; font-weight: 800; color: #0f172a; margin-bottom: 4px; line-height: 1.35;">تقرير حصر كميات الخرسانات والحديد والمقايسة المالية (Takeoff & BOQ Sheet)</h1>
+            <h1 style="font-size: 1.45rem; font-weight: 900; color: #0f172a; margin-bottom: 4px; line-height: 1.35;">{project_name}</h1>
             {owner_html}
             <span class="code-badge" style="font-size: 0.82rem; margin-top: 4px;">الكود المصري لتصميم وتنفيذ المنشآت الخرسانية ECP 203-2018</span>
         </div>
         <div class="header-meta">
-            <div><b>المشروع:</b> {project_name}</div>
             <div><b>تاريخ الحصر:</b> {now_str}</div>
             <div><b>حالة الدور:</b> {top_floor_str}</div>
             <div><b>إجهاد الخرسانة fcu:</b> <span dir="ltr">{fcu:.0f} kg/cm²</span></div>

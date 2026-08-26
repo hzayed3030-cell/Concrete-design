@@ -3495,29 +3495,36 @@ def generate_flat_slab_deflection_contour_sketch(
                 v_mask = (X_m >= px0) & (X_m <= px1) & (Y_m >= py0) & (Y_m <= py1)
                 Delta_field[v_mask] = np.nan
 
+    # ── Check if any panel is unsafe ──
+    has_unsafe = any(not p["is_safe"] for p in deflection_results)
+
     delta_all_sample = deflection_results[0].get("delta_all (mm)", 20.0) if deflection_results else 20.0
     delta_max = float(np.nanmax(Delta_field)) if np.any(~np.isnan(Delta_field)) else delta_all_sample
     delta_levels_max = max(delta_all_sample * 1.30, delta_max * 1.05)
     levels = np.linspace(0.0, max(5.0, delta_levels_max), 40)
 
-    # 2. Filled 2D Contour Map
-    cmap_def = "coolwarm"   # Blue (low deflection) -> Yellow/Orange -> Red (high deflection)
-    cs = ax_plan.contourf(X_m, Y_m, Delta_field, levels=levels, cmap=cmap_def, extend="max", zorder=1, alpha=0.88)
+    if has_unsafe:
+        # ── UNSAFE CASE: Draw 2D Filled Deflection Contour Map & Colorbar ──
+        cmap_def = "coolwarm"   # Blue (low deflection) -> Yellow/Orange -> Red (high deflection)
+        cs = ax_plan.contourf(X_m, Y_m, Delta_field, levels=levels, cmap=cmap_def, extend="max", zorder=1, alpha=0.88)
 
-    # Line Contours
-    line_levels = np.linspace(0.0, delta_levels_max, 14)
-    cs_lines = ax_plan.contour(X_m, Y_m, Delta_field, levels=line_levels, colors="#334155", linewidths=0.75, alpha=0.45, zorder=2)
-    ax_plan.clabel(cs_lines, inline=True, fontsize=10.0, fmt="%.1f", colors="#0f172a")
+        # Line Contours
+        line_levels = np.linspace(0.0, delta_levels_max, 14)
+        cs_lines = ax_plan.contour(X_m, Y_m, Delta_field, levels=line_levels, colors="#334155", linewidths=0.75, alpha=0.45, zorder=2)
+        ax_plan.clabel(cs_lines, inline=True, fontsize=10.0, fmt="%.1f", colors="#0f172a")
 
-    # Iso-contour for allowable limit
-    if delta_all_sample < delta_levels_max:
-        ax_plan.contour(X_m, Y_m, Delta_field, levels=[delta_all_sample], colors="#b91c1c", linewidths=2.6, linestyles="-.", zorder=3)
+        # Iso-contour for allowable limit
+        if delta_all_sample < delta_levels_max:
+            ax_plan.contour(X_m, Y_m, Delta_field, levels=[delta_all_sample], colors="#b91c1c", linewidths=2.6, linestyles="-.", zorder=3)
 
-    # Colorbar
-    cbar_ax = fig.add_axes([0.955, 0.32, 0.015, 0.56])
-    cbar = fig.colorbar(cs, cax=cbar_ax)
-    cbar.set_label("Total Long-Term Deflection Δ (mm) | الترخيم الكلي طويل المدى", fontsize=13.5, weight="bold", labelpad=12)
-    cbar.ax.tick_params(labelsize=11.5)
+        # Colorbar
+        cbar_ax = fig.add_axes([0.955, 0.32, 0.015, 0.56])
+        cbar = fig.colorbar(cs, cax=cbar_ax)
+        cbar.set_label("Total Long-Term Deflection Δ (mm) | الترخيم الكلي طويل المدى", fontsize=13.5, weight="bold", labelpad=12)
+        cbar.ax.tick_params(labelsize=11.5)
+    else:
+        # ── SAFE CASE: Clean Plan (No Contours, No Colorbar) ──
+        ax_plan.add_patch(patches.Rectangle((x_slab_min, y_slab_min), slab_w, slab_h, lw=0, facecolor="#f8fafc", zorder=1))
 
     # Slab boundary
     ax_plan.add_patch(patches.Rectangle((x_slab_min, y_slab_min), slab_w, slab_h, lw=3.2, edgecolor="#0f172a", facecolor="none", zorder=4))
@@ -3602,25 +3609,28 @@ def generate_flat_slab_deflection_contour_sketch(
             )
             ax_plan.text(
                 xm, ym, callout_str,
-                ha="center", va="center", fontsize=10.0, fontweight="bold",
+                ha="center", va="center", fontsize=10.5, fontweight="bold",
                 color="#15803d", zorder=10,
-                bbox=dict(boxstyle="round,pad=0.38", facecolor="#ffffff", edgecolor="#16a34a", lw=1.8, alpha=0.96)
+                bbox=dict(boxstyle="round,pad=0.45", facecolor="#ffffff", edgecolor="#16a34a", lw=2.0, alpha=0.98)
             )
         else:
             unsafe_count += 1
+            ratio_pct = ((d_long / max(0.01, d_all)) - 1.0) * 100.0
             callout_str = (
-                f"🚨 {pid} ({lbl}) — UNSAFE\n"
+                f"🚨 {pid} ({lbl}) — غير آمن (UNSAFE)\n"
                 f"Δact = {d_long:.1f} mm > Δall = {d_all:.1f} mm\n"
+                f"تجاوز الترخيم المسموح: +{ratio_pct:.1f}%\n"
                 f"───────────────────────────────\n"
                 f"💡 المعالجة المطلوبة (ECP 203):\n"
                 f"• زيادة السُمك: ts ≥ {ts_req:.0f} cm (+{ts_inc:.0f}cm)\n"
-                f"• أو إضافة سقوط (Drop Panel) أو تسليح ضغط"
+                f"• أو إضافة سقوط عمود (Drop Panel)\n"
+                f"• أو إضافة تسليح ضغط (As' Compression)"
             )
             ax_plan.text(
                 xm, ym, callout_str,
                 ha="center", va="center", fontsize=11.0, fontweight="bold",
-                color="#991b1b", zorder=11,
-                bbox=dict(boxstyle="round,pad=0.45", facecolor="#fef2f2", edgecolor="#ef4444", lw=2.4)
+                color="#7f1d1d", zorder=12,
+                bbox=dict(boxstyle="round,pad=0.55", facecolor="#fee2e2", edgecolor="#dc2626", lw=3.0)
             )
 
     ax_plan.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
@@ -3633,35 +3643,58 @@ def generate_flat_slab_deflection_contour_sketch(
     ax_legend.set_ylim(0, 100)
     ax_legend.axis("off")
 
-    banner_color = "#fef2f2" if unsafe_count > 0 else "#f8fafc"
-    banner_border = "#ef4444" if unsafe_count > 0 else "#cbd5e1"
-    title_color = "#991b1b" if unsafe_count > 0 else "#1e3a8a"
+    if has_unsafe:
+        banner_color = "#fef2f2"
+        banner_border = "#ef4444"
+        title_color = "#991b1b"
+        main_legend_title = "🚨 SLAB DEFLECTION 2D CONTOUR & SERVICEABILITY WARNING (ECP 203)"
+        legend_text = (
+            f"• Total Bays: {len(deflection_results)} Panels  |  ✅ Safe Panels: {safe_count}  |  🚨 Exceeds Limit: {unsafe_count}\n"
+            f"• Design Parameters: fcu = {Fcu:.0f} kg/cm²  |  Slab ts = {ts_cm:.0f} cm  |  Service Load Ws = {DL_tot+LL:.2f} t/m² (DL = {DL_tot:.2f}, LL = {LL:.2f})\n"
+            f"• معيار الأمان في الترخيم: الحد الأقصى المسموح يحسب لكل باكية بناءً على بحرها الصافي (Δall = Ln / 250).\n"
+            f"• الباكيات المحددة بالمربع الأحمر (Δact > Δall): تتطلب زيادة سُمك البلاطة ts أو إضافة سقوط عمود (Drop Panel) أو تسليح ضغط."
+        )
+    else:
+        banner_color = "#f0fdf4"
+        banner_border = "#22c55e"
+        title_color = "#15803d"
+        main_legend_title = "✅ SLAB DEFLECTION VERIFICATION — ALL BAYS ARE SAFE (ECP 203)"
+        legend_text = (
+            f"• Total Bays: {len(deflection_results)} Panels  |  ✅ All Panels Safe (100% Safe)  |  🚨 Exceeds Limit: 0\n"
+            f"• Design Parameters: fcu = {Fcu:.0f} kg/cm²  |  Slab ts = {ts_cm:.0f} cm  |  Service Load Ws = {DL_tot+LL:.2f} t/m² (DL = {DL_tot:.2f}, LL = {LL:.2f})\n"
+            f"• معيار الأمان في الترخيم: الحد الأقصى المسموح يحسب لكل باكية بناءً على بحرها الصافي (Δall = Ln / 250).\n"
+            f"• النتيجة: جميع باكيات السقف آمنة تماماً ولا تعاني من أي ترخيم حرج ولا تتطلب رسم كونتور تحذيري."
+        )
 
     c_box = FancyBboxPatch((1, 3), 98, 94, boxstyle="round,pad=1.0,rounding_size=3", facecolor=banner_color, edgecolor=banner_border, lw=2.5)
     ax_legend.add_patch(c_box)
-    ax_legend.text(2.5, 76, f"SLAB DEFLECTION 2D CONTOUR & SERVICEABILITY VERIFICATION (ECP 203)", fontsize=17.5, fontweight="bold", color=title_color)
-
-    legend_text = (
-        f"• Total Bays: {len(deflection_results)} Panels  |  ✅ Safe Panels: {safe_count}  |  🚨 Exceeds Limit: {unsafe_count}\n"
-        f"• Design Parameters: fcu = {Fcu:.0f} kg/cm²  |  Slab ts = {ts_cm:.0f} cm  |  Service Load Ws = {DL_tot+LL:.2f} t/m² (DL = {DL_tot:.2f}, LL = {LL:.2f})\n"
-        f"• معيار الأمان في الترخيم: الحد الأقصى المسموح يحسب لكل باكية بناءً على بحرها الصافي (Δall = Ln / 250).\n"
-        f"• الباكيات الحمراء (Δact > Δall): غير آمنة وتتطلب زيادة سُمك البلاطة ts أو إضافة سقوط عمود (Drop Panel) أو تسليح ضغط."
-    )
+    ax_legend.text(2.5, 76, main_legend_title, fontsize=17.0, fontweight="bold", color=title_color)
     ax_legend.text(2.5, 22, legend_text, fontsize=12.5, fontweight="bold", color="#1e293b", linespacing=1.45)
 
-    # ── LARGE BLACK BOX FOR ALLOWABLE DEFLECTION (مربع كبير باللون الأسود مرة واحدة فقط) ──
+    # ── LARGE BLACK BOX FOR ALLOWABLE DEFLECTION ──
     def_black_box = FancyBboxPatch((64, 8), 34, 84, boxstyle="round,pad=0.8,rounding_size=3", facecolor="#090d16", edgecolor="#334155", lw=3.0)
     ax_legend.add_patch(def_black_box)
     ax_legend.text(81.0, 78, "🛡️ أقصى ترخيم مسموح به (ECP 203)", fontsize=12.0, fontweight="bold", color="#94a3b8", ha="center")
     ax_legend.text(81.0, 54, "Δall = Ln / 250", fontsize=20.0, fontweight="black", color="#facc15", ha="center")
-    ax_legend.text(81.0, 34, f"نطاق الحدود: {min_d_all:.1f} ~ {max_d_all:.1f} mm", fontsize=12.5, fontweight="bold", color="#38bdf8", ha="center")
-    ax_legend.text(81.0, 16, "يحسب الحد المسموح لكل باكية بحسب بحرها الصافي Ln", fontsize=10.0, color="#94a3b8", ha="center")
+    if has_unsafe:
+        ax_legend.text(81.0, 34, f"نطاق الحدود: {min_d_all:.1f} ~ {max_d_all:.1f} mm", fontsize=12.5, fontweight="bold", color="#f87171", ha="center")
+        ax_legend.text(81.0, 16, "🚨 توجد باكيات تتجاوز الحد المسموح", fontsize=10.5, color="#ef4444", fontweight="bold", ha="center")
+    else:
+        ax_legend.text(81.0, 34, f"نطاق الحدود: {min_d_all:.1f} ~ {max_d_all:.1f} mm", fontsize=12.5, fontweight="bold", color="#4ade80", ha="center")
+        ax_legend.text(81.0, 16, "✅ جميع الباكيات محققة لحدود الأمان", fontsize=10.5, color="#22c55e", fontweight="bold", ha="center")
 
-    fig.suptitle(
-        f"SLAB LONG-TERM DEFLECTION 2D CONTOUR MAP (Δact) — ts = {ts_cm:.0f} cm\n"
-        f"مخطط كونتور ترخيم البلاطة اللاكمرية — مقارنة الترخيم الفعلي Δact بالحد الأقصى المسموح (Δall = Ln / 250 لكل باكية)",
-        fontsize=16.5, fontweight="bold", color="#0f172a", y=0.985
-    )
+    if has_unsafe:
+        fig.suptitle(
+            f"SLAB LONG-TERM DEFLECTION 2D CONTOUR MAP (Δact) — ts = {ts_cm:.0f} cm\n"
+            f"مخطط كونتور ترخيم البلاطة اللاكمرية — الباكيات المحددة بالمربع الأحمر غير آمنة وتتجاوز الحد المسموح (Δact > Δall)",
+            fontsize=16.5, fontweight="bold", color="#991b1b", y=0.985
+        )
+    else:
+        fig.suptitle(
+            f"SLAB DEFLECTION VERIFICATION (ALL BAYS SAFE) — ts = {ts_cm:.0f} cm\n"
+            f"فحص سهم الانحناء — جميع الباكيات آمنة ومحققة لحدود الكود المصري ECP 203 (Δact ≤ Δall)",
+            fontsize=16.5, fontweight="bold", color="#15803d", y=0.985
+        )
     return fig
 
 
@@ -5703,12 +5736,64 @@ def render():
         unsafe_allow_html=True,
     )
 
+    active_profile_name = S.get_active_profile_name()
+    prefix = S.get_safe_profile_filename_prefix()
+
+    # Determine mode: Run (view/presentations) vs Edit (inputs open)
+    fs_mode = st.session_state.get("fs_mode", "edit")
+    is_run_mode = (fs_mode == "run")
+    inputs_expanded = not is_run_mode
+
+    # Mode Indicator & Quick Mode Switcher Banner
+    c_mb1, c_mb2 = st.columns([4, 1.5])
+    with c_mb1:
+        if is_run_mode:
+            st.markdown(
+                """
+                <div style="background:#f0fdf4; border:1.5px solid #22c55e; border-radius:8px; padding:8px 14px; color:#15803d; font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px;">
+                    <span>🚀 <b>وضع التشغيل والرسم (Run Mode):</b> يتم عرض المخططات الإنشائية والنتائج والرسومات مباشرة بالأبعاد المحفوظة.</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                """
+                <div style="background:#eff6ff; border:1.5px solid #3b82f6; border-radius:8px; padding:8px 14px; color:#1e40af; font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px;">
+                    <span>✏️ <b>وضع تعديل المدخلات (Edit Mode):</b> شاشة المدخلات مفتوحة لتعديل الأبعاد والمقاسات والأحمال وحفظها تلقائياً.</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    with c_mb2:
+        if is_run_mode:
+            if st.button("✏️ تعديل المدخلات (Edit)", use_container_width=True, help="الانتقال لوضع تعديل الأبعاد والمقاسات"):
+                st.session_state["fs_mode"] = "edit"
+                st.rerun()
+        else:
+            if st.button("🚀 إخفاء للمخططات (Run)", use_container_width=True, help="الانتقال لوضع التشغيل وعرض الرسومات مباشرة"):
+                st.session_state["fs_mode"] = "run"
+                st.rerun()
+
     Lx_spans = []
     Ly_spans = []
     cantilevers = {"left": 0.0, "right": 0.0, "bottom": 0.0, "top": 0.0}
 
     # ── ① GEOMETRY INPUTS ────────────────────────────────────────────────────
-    with st.expander("📐 Step 1 — Grid Geometry & Cantilevers (المسافات بين المحاور والكوابيل)", expanded=True):
+    with st.expander(f"📐 Step 1 — Grid Geometry & Cantilevers (اسم المشروع والمحاور والكوابيل) — [ {active_profile_name} ]", expanded=inputs_expanded):
+        col_fs_pad1, col_fs_center, col_fs_pad2 = st.columns([0.6, 6.8, 0.6])
+        with col_fs_center:
+            cur_p_name = S.text_input(
+                "اسم المشروع (Project Name)",
+                "cs_project_name",
+                help="يمكنك تعديل اسم المشروع وتغييره مباشرة لهذا المشروع المحفوظ.",
+            )
+            if cur_p_name and cur_p_name.strip() and cur_p_name.strip() != active_profile_name:
+                if S.rename_project(active_profile_name, cur_p_name.strip()):
+                    st.rerun()
+
+        st.markdown("---")
+
         col_a, col_b = st.columns(2)
         with col_a:
             n_lx = S.integer_input(
@@ -5764,7 +5849,7 @@ def render():
         )
 
     # ── ② COLUMN, THICKNESS, LOADS, MATERIALS & REBAR OPTIONS ────────────────
-    with st.expander("🧱 Step 2 — Slab Thickness, Column Size, Loads & Rebar (السُمك والأعمدة والأحمال والتسليح)", expanded=True):
+    with st.expander("🧱 Step 2 — Slab Thickness, Column Size, Loads & Rebar (السُمك والأعمدة والأحمال والتسليح)", expanded=inputs_expanded):
         c1, c2, c3, c4 = st.columns(4)
 
         with c1:
@@ -5934,7 +6019,7 @@ def render():
         st.download_button(
             label="📥 Download Structural Geometry Sketch (High-Res PNG)",
             data=buf_v,
-            file_name="Flat_Slab_Geometry_Verification.png",
+            file_name=f"{prefix}Flat_Slab_Geometry_Verification.png",
             mime="image/png",
             use_container_width=True,
         )
@@ -5951,24 +6036,24 @@ def render():
 
         g1, g2, g3, g4 = st.columns(4)
         with g1:
-            st.markdown(f"""<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:10px 14px;text-align:center;">
-                <div style="font-size:15px;font-weight:600;color:#64748b;margin-bottom:4px;">Total Width (X-dir)</div>
-                <div style="font-size:19.5px;font-weight:700;color:#1e40af;">{tot_w_val:.2f} m</div></div>""",
+            st.markdown(f"""<div class="ecp-metric-box">
+                <div class="ecp-metric-lbl">Total Width (X-dir)</div>
+                <div class="ecp-metric-val">{tot_w_val:.2f} m</div></div>""",
                 unsafe_allow_html=True)
         with g2:
-            st.markdown(f"""<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:10px 14px;text-align:center;">
-                <div style="font-size:15px;font-weight:600;color:#64748b;margin-bottom:4px;">Total Height (Y-dir)</div>
-                <div style="font-size:19.5px;font-weight:700;color:#1e40af;">{tot_h_val:.2f} m</div></div>""",
+            st.markdown(f"""<div class="ecp-metric-box">
+                <div class="ecp-metric-lbl">Total Height (Y-dir)</div>
+                <div class="ecp-metric-val">{tot_h_val:.2f} m</div></div>""",
                 unsafe_allow_html=True)
         with g3:
-            st.markdown(f"""<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:10px 14px;text-align:center;">
-                <div style="font-size:15px;font-weight:600;color:#64748b;margin-bottom:4px;">No. of Columns</div>
-                <div style="font-size:19.5px;font-weight:700;color:#1e40af;">{n_active_cols} active / {n_total_cols} total</div></div>""",
+            st.markdown(f"""<div class="ecp-metric-box">
+                <div class="ecp-metric-lbl">No. of Columns</div>
+                <div class="ecp-metric-val">{n_active_cols} active / {n_total_cols} total</div></div>""",
                 unsafe_allow_html=True)
         with g4:
-            st.markdown(f"""<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:10px 14px;text-align:center;">
-                <div style="font-size:15px;font-weight:600;color:#64748b;margin-bottom:4px;">No. of Panels</div>
-                <div style="font-size:19.5px;font-weight:700;color:#1e40af;">{p_val_str}</div></div>""",
+            st.markdown(f"""<div class="ecp-metric-box">
+                <div class="ecp-metric-lbl">No. of Panels</div>
+                <div class="ecp-metric-val">{p_val_str}</div></div>""",
                 unsafe_allow_html=True)
 
     plt.close(fig_verif)
@@ -6739,9 +6824,9 @@ def render():
     with m1:
         st.markdown(
             f"""
-            <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px 14px; text-align:center;">
-                <div style="font-size:15px; font-weight:600; color:#64748b; margin-bottom:4px;">Adopted ts</div>
-                <div style="font-size:19.5px; font-weight:700; color:#1e40af;">{ts:.0f} cm</div>
+            <div class="ecp-metric-box">
+                <div class="ecp-metric-lbl">Adopted ts</div>
+                <div class="ecp-metric-val">{ts:.0f} cm</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -6749,9 +6834,9 @@ def render():
     with m2:
         st.markdown(
             f"""
-            <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px 14px; text-align:center;">
-                <div style="font-size:15px; font-weight:600; color:#64748b; margin-bottom:4px;">Effective Depth d</div>
-                <div style="font-size:19.5px; font-weight:700; color:#1e40af;">{d:.1f} cm</div>
+            <div class="ecp-metric-box">
+                <div class="ecp-metric-lbl">Effective Depth d</div>
+                <div class="ecp-metric-val">{d:.1f} cm</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -6759,9 +6844,9 @@ def render():
     with m3:
         st.markdown(
             f"""
-            <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px 14px; text-align:center;">
-                <div style="font-size:15px; font-weight:600; color:#64748b; margin-bottom:4px;">Ultimate Load Wu</div>
-                <div style="font-size:19.5px; font-weight:700; color:#1e40af;">{Wu:.3f} t/m²</div>
+            <div class="ecp-metric-box">
+                <div class="ecp-metric-lbl">Ultimate Load Wu</div>
+                <div class="ecp-metric-val">{Wu:.3f} t/m²</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -6769,9 +6854,9 @@ def render():
     with m4:
         st.markdown(
             f"""
-            <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px 14px; text-align:center;">
-                <div style="font-size:15px; font-weight:600; color:#64748b; margin-bottom:4px;">Bottom Mesh (B1,B2)</div>
-                <div style="font-size:19.5px; font-weight:700; color:#1e40af;">{mesh_btm_str}</div>
+            <div class="ecp-metric-box">
+                <div class="ecp-metric-lbl">Bottom Mesh (B1,B2)</div>
+                <div class="ecp-metric-val">{mesh_btm_str}</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -6779,9 +6864,9 @@ def render():
     with m5:
         st.markdown(
             f"""
-            <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px 14px; text-align:center;">
-                <div style="font-size:15px; font-weight:600; color:#64748b; margin-bottom:4px;">Top Mesh (T1,T2)</div>
-                <div style="font-size:19.5px; font-weight:700; color:#1e40af;">{mesh_top_str}</div>
+            <div class="ecp-metric-box">
+                <div class="ecp-metric-lbl">Top Mesh (T1,T2)</div>
+                <div class="ecp-metric-val">{mesh_top_str}</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -6789,9 +6874,9 @@ def render():
     with m6:
         st.markdown(
             f"""
-            <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px 14px; text-align:center;">
-                <div style="font-size:15px; font-weight:600; color:#64748b; margin-bottom:4px;">Punching Check</div>
-                <div style="font-size:19.5px; font-weight:700; color:{punching_color};">{punching_str}</div>
+            <div class="ecp-metric-box">
+                <div class="ecp-metric-lbl">Punching Check</div>
+                <div class="ecp-metric-val" style="color:{punching_color};">{punching_str}</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -6840,7 +6925,7 @@ def render():
             st.download_button(
                 label="📥 Download M11 Moment Contour Plan (High-Res PNG)",
                 data=buf_m11,
-                file_name=f"Flat_Slab_Moment_M11_Contour_Plan_ts{ts:.0f}cm.png",
+                file_name=f"{prefix}Flat_Slab_Moment_M11_Contour_Plan_ts{ts:.0f}cm.png",
                 mime="image/png",
                 use_container_width=True,
             )
@@ -6865,7 +6950,7 @@ def render():
             st.download_button(
                 label="📥 Download M22 Moment Contour Plan (High-Res PNG)",
                 data=buf_m22,
-                file_name=f"Flat_Slab_Moment_M22_Contour_Plan_ts{ts:.0f}cm.png",
+                file_name=f"{prefix}Flat_Slab_Moment_M22_Contour_Plan_ts{ts:.0f}cm.png",
                 mime="image/png",
                 use_container_width=True,
             )
@@ -6939,7 +7024,7 @@ def render():
         st.download_button(
             label=f"📥 Download Moment Deficit Contour ({_def_mode}) Plan (High-Res PNG)",
             data=buf_deficit,
-            file_name=f"Flat_Slab_Moment_Deficit_{_def_mode}_ts{ts:.0f}cm.png",
+            file_name=f"{prefix}Flat_Slab_Moment_Deficit_{_def_mode}_ts{ts:.0f}cm.png",
             mime="image/png",
             use_container_width=True,
         )
@@ -7147,7 +7232,7 @@ def render():
             st.download_button(
                 label="📥 Download 1. Column Caps Layout (High-Res PNG)",
                 data=buf_cc,
-                file_name=f"1_Column_Caps_Top_Extra_ts{ts:.0f}cm.png",
+                file_name=f"{prefix}1_Column_Caps_Top_Extra_ts{ts:.0f}cm.png",
                 mime="image/png",
                 use_container_width=True,
                 key="btn_dl_col_caps",
@@ -7177,7 +7262,7 @@ def render():
             st.download_button(
                 label="📥 Download 2A. Bottom Extra (X-Direction) Layout (High-Res PNG)",
                 data=buf_bes_x,
-                file_name=f"2A_Bottom_Extra_X_ts{ts:.0f}cm.png",
+                file_name=f"{prefix}2A_Bottom_Extra_X_ts{ts:.0f}cm.png",
                 mime="image/png",
                 use_container_width=True,
                 key="btn_dl_btm_extra_x",
@@ -7207,7 +7292,7 @@ def render():
             st.download_button(
                 label="📥 Download 2B. Bottom Extra (Y-Direction) Layout (High-Res PNG)",
                 data=buf_bes_y,
-                file_name=f"2B_Bottom_Extra_Y_ts{ts:.0f}cm.png",
+                file_name=f"{prefix}2B_Bottom_Extra_Y_ts{ts:.0f}cm.png",
                 mime="image/png",
                 use_container_width=True,
                 key="btn_dl_btm_extra_y",
@@ -7236,7 +7321,7 @@ def render():
             st.download_button(
                 label="📥 Download 3A. Top Slab Extra (X-Direction) Layout (High-Res PNG)",
                 data=buf_tmes_x,
-                file_name=f"3A_Top_Base_Mesh_Extra_Slab_X_ts{ts:.0f}cm.png",
+                file_name=f"{prefix}3A_Top_Base_Mesh_Extra_Slab_X_ts{ts:.0f}cm.png",
                 mime="image/png",
                 use_container_width=True,
                 key="btn_dl_top_mesh_extra_x",
@@ -7265,7 +7350,7 @@ def render():
             st.download_button(
                 label="📥 Download 3B. Top Slab Extra (Y-Direction) Layout (High-Res PNG)",
                 data=buf_tmes_y,
-                file_name=f"3B_Top_Base_Mesh_Extra_Slab_Y_ts{ts:.0f}cm.png",
+                file_name=f"{prefix}3B_Top_Base_Mesh_Extra_Slab_Y_ts{ts:.0f}cm.png",
                 mime="image/png",
                 use_container_width=True,
                 key="btn_dl_top_mesh_extra_y",
@@ -7286,10 +7371,11 @@ def render():
         buf_def = io.BytesIO()
         fig_def.savefig(buf_def, format="png", bbox_inches="tight", dpi=300)
         buf_def.seek(0)
+        def_dl_label = "📥 Download Deflection Warning 2D Contour Plan (High-Res PNG)" if not all_deflection_safe else "📥 Download Deflection Verification 2D Plan (High-Res PNG)"
         st.download_button(
-            label="📥 Download Deflection Verification 2D Contour Plan (High-Res PNG)",
+            label=def_dl_label,
             data=buf_def,
-            file_name=f"Flat_Slab_Deflection_Check_ts{ts:.0f}cm.png",
+            file_name=f"{prefix}Flat_Slab_Deflection_Check_ts{ts:.0f}cm.png",
             mime="image/png",
             use_container_width=True,
             key="btn_dl_deflection_contour",
@@ -7338,7 +7424,7 @@ def render():
         st.download_button(
             label="📥 Download Punching Shear Verification Plan (High-Res PNG)",
             data=buf_punch,
-            file_name=f"Flat_Slab_Punching_Shear_Check_ts{ts:.0f}cm.png",
+            file_name=f"{prefix}Flat_Slab_Punching_Shear_Check_ts{ts:.0f}cm.png",
             mime="image/png",
             use_container_width=True,
         )
@@ -7494,7 +7580,7 @@ def render():
         st.download_button(
             label="📥 Download Column Reactions Plan (High-Res PNG)",
             data=buf_reac,
-            file_name=f"Flat_Slab_Column_Reactions_Plan_{num_floors}Floors.png",
+            file_name=f"{prefix}Flat_Slab_Column_Reactions_Plan_{num_floors}Floors.png",
             mime="image/png",
             use_container_width=True,
         )
@@ -8355,7 +8441,7 @@ def render():
         st.download_button(
             label="🌐 Save Calculation Sheet (HTML)",
             data=report_html,
-            file_name=f"ECP203_Flat_Slab_Calculation_Sheet_ts{ts:.0f}cm_{num_floors}Floors.html",
+            file_name=f"{prefix}ECP203_Flat_Slab_Calculation_Sheet_ts{ts:.0f}cm_{num_floors}Floors.html",
             mime="text/html",
             use_container_width=True,
         )
@@ -8363,7 +8449,7 @@ def render():
             st.download_button(
                 label="📕 Save as PDF (مباشر)",
                 data=pdf_bytes,
-                file_name=f"ECP203_Flat_Slab_Calculation_Sheet_ts{ts:.0f}cm_{num_floors}Floors.pdf",
+                file_name=f"{prefix}ECP203_Flat_Slab_Calculation_Sheet_ts{ts:.0f}cm_{num_floors}Floors.pdf",
                 mime="application/pdf",
                 use_container_width=True,
             )

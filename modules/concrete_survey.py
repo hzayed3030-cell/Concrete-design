@@ -27,6 +27,8 @@ from modules.settings import (
     save_settings,
     cfg_val,
     cfg_set,
+    text_input,
+    get_safe_profile_filename_prefix,
 )
 from modules.report_generator import (
     generate_column_survey_report_html,
@@ -1269,6 +1271,15 @@ def render() -> None:
         unsafe_allow_html=True,
     )
 
+    # ── Project Info Panel (اسم المشروع في بانيل مميز بالمنتصف) ─────────────
+    col_p_pad1, col_p_center, col_p_pad2 = st.columns([0.6, 6.8, 0.6])
+    with col_p_center:
+        project_name_in = text_input(
+            "اسم المشروع (Project Name)",
+            cfg_key="cs_project_name",
+            help="اسم المشروع الذي سيظهر في ترويسة تقارير الطباعة وملفات الـ PDF وبطاقة المشروع",
+        )
+
     # Global Styling for ALL tabs across the module
     st.markdown(
         """
@@ -1384,24 +1395,7 @@ def render() -> None:
             )
 
             # ── SECTION A: COMMON PROJECT / FLOOR PARAMETERS ──
-            st.markdown("<div style=\'font-size:14.5px; font-weight:800; color:#1e3a8a; margin-bottom:4px;\'>📌 1. المدخلات العامة المشتركة لسقف/دور المشروع (Shared Floor & Project Specs)</div>", unsafe_allow_html=True)
-            
-            col_meta1, col_meta2 = st.columns([1, 1])
-            with col_meta1:
-                project_name_in = st.text_input(
-                    "اسم المشروع (Project Name)",
-                    value=str(cfg_val("cs_project_name", "مشروع حصر خرسانات ومقايسة مالية")),
-                    help="اسم المشروع الذي سيظهر في ترويسة تقارير الطباعة وملفات الـ PDF",
-                    key="cs_project_name",
-                )
-            with col_meta2:
-                owner_name_in = st.text_input(
-                    "اسم المالك (Owner / Client Name)",
-                    value=str(cfg_val("cs_owner_name", "")),
-                    placeholder="أدخل اسم مالك المشروع هنا...",
-                    help="اسم المالك أو العميل الذي سيظهر في ترويسة تقارير الطباعة وملفات الـ PDF أسفل عنوان التقرير",
-                    key="cs_owner_name",
-                )
+            st.markdown("<div style='font-size:14.5px; font-weight:800; color:#1e3a8a; margin-bottom:4px;'>📌 1. المدخلات العامة المشتركة لسقف/دور المشروع (Shared Floor & Project Specs)</div>", unsafe_allow_html=True)
 
             # Persistent Defaults from user_settings.json
             def_n_types = int(cfg_val("cs_n_types", 2))
@@ -1948,6 +1942,13 @@ def render() -> None:
                             <span>🔼 مدخلات نماذج الحديد الإضافي العلوي — (بالمتر الطولي /م') (Top Additional Rebar /m')</span>
                             <span style='font-size:11.5px; color:#15803d; font-weight:700;'>المدخلات بالمتر الطولي (أسياخ / م') لشريحة أبعادها (Lx × Ly) — ضع 0 في حال عدم الحاجة</span>
                         </div>
+                        <div style='background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%); border: 2.5px solid #eab308; border-radius: 8px; padding: 10px 16px; margin: 6px 0 10px 0; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 8px rgba(234, 179, 8, 0.18);'>
+                            <span style='font-size: 24px;'>💡</span>
+                            <div>
+                                <span style='color: #854d0e; font-size: 17px; font-weight: 900;'>ملاحظة هامة (NOTE):</span>
+                                <span style='color: #713f12; font-size: 17px; font-weight: 800; margin-right: 6px;'>يتم ادخال جميع المساحات التي تحتاج الي حديد علوي اضافي بالتتابع</span>
+                            </div>
+                        </div>
                         """,
                         unsafe_allow_html=True,
                     )
@@ -2004,6 +2005,13 @@ def render() -> None:
                         <div style='background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); color:#1e40af; font-size:13.5px; font-weight:800; padding:7px 14px; border-radius:6px; border-left:4px solid #2563eb; margin:14px 0 6px 0; display:flex; justify-content:space-between; align-items:center; border:1px solid #bfdbfe;'>
                             <span>🔽 مدخلات نماذج الحديد الإضافي السفلي — (بالمتر الطولي /م') (Bottom Additional Rebar /m')</span>
                             <span style='font-size:11.5px; color:#1d4ed8; font-weight:700;'>المدخلات بالمتر الطولي (أسياخ / م') لشريحة أبعادها (Lx × Ly) — ضع 0 في حال عدم الحاجة</span>
+                        </div>
+                        <div style='background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%); border: 2.5px solid #eab308; border-radius: 8px; padding: 10px 16px; margin: 6px 0 10px 0; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 8px rgba(234, 179, 8, 0.18);'>
+                            <span style='font-size: 24px;'>💡</span>
+                            <div>
+                                <span style='color: #854d0e; font-size: 17px; font-weight: 900;'>ملاحظة هامة (NOTE):</span>
+                                <span style='color: #713f12; font-size: 17px; font-weight: 800; margin-right: 6px;'>يتم ادخال جميع المساحات التي تحتاج الي حديد سفلي اضافي بالتتابع</span>
+                            </div>
                         </div>
                         """,
                         unsafe_allow_html=True,
@@ -2817,10 +2825,11 @@ def render() -> None:
                         buf_draw_tab = io.BytesIO()
                         d["fig"].savefig(buf_draw_tab, format="png", bbox_inches="tight", dpi=300)
                         buf_draw_tab.seek(0)
+                        prefix = get_safe_profile_filename_prefix()
                         st.download_button(
                             label=f"📥 Download Drawing {d['name']} (High-Res PNG)",
                             data=buf_draw_tab,
-                            file_name=f"ECP203_CAD_Drawing_{d['name']}.png",
+                            file_name=f"{prefix}ECP203_CAD_Drawing_{d['name']}.png",
                             mime="image/png",
                             use_container_width=True,
                             key=f"cs_btn_dl_tab_{i}_{d['name']}",
@@ -2873,10 +2882,11 @@ def render() -> None:
                     buf_draw_list = io.BytesIO()
                     d["fig"].savefig(buf_draw_list, format="png", bbox_inches="tight", dpi=300)
                     buf_draw_list.seek(0)
+                    prefix = get_safe_profile_filename_prefix()
                     st.download_button(
                         label=f"📥 Download Drawing {d['name']} (High-Res PNG)",
                         data=buf_draw_list,
-                        file_name=f"ECP203_CAD_Drawing_{d['name']}.png",
+                        file_name=f"{prefix}ECP203_CAD_Drawing_{d['name']}.png",
                         mime="image/png",
                         use_container_width=True,
                         key=f"cs_btn_dl_list_{i}_{d['name']}",
@@ -3490,7 +3500,6 @@ def render() -> None:
 
         col_survey_html = generate_column_survey_report_html(
             project_name=project_name_in,
-            owner_name=owner_name_in,
             b=col_results[0]["b"],
             t=col_results[0]["t"],
             H=col_h_in,
@@ -3596,10 +3605,11 @@ def render() -> None:
                 unsafe_allow_html=True,
             )
         with c_save2:
+            prefix = get_safe_profile_filename_prefix()
             st.download_button(
                 label="🌐 Save Calculation Sheet (HTML)",
                 data=col_survey_html,
-                file_name=f"ECP203_Concrete_Survey_Takeoff_BOQ_{len(col_results)}Cols_{len(slab_results)}Slabs.html",
+                file_name=f"{prefix}ECP203_Concrete_Survey_Takeoff_BOQ_{len(col_results)}Cols_{len(slab_results)}Slabs.html",
                 mime="text/html",
                 use_container_width=True,
                 key="cs_btn_save_html",
@@ -3608,7 +3618,7 @@ def render() -> None:
                 st.download_button(
                     label="📕 Save as PDF (مباشر)",
                     data=pdf_bytes,
-                    file_name=f"ECP203_Concrete_Survey_Takeoff_BOQ_{len(col_results)}Cols_{len(slab_results)}Slabs.pdf",
+                    file_name=f"{prefix}ECP203_Concrete_Survey_Takeoff_BOQ_{len(col_results)}Cols_{len(slab_results)}Slabs.pdf",
                     mime="application/pdf",
                     use_container_width=True,
                     key="cs_btn_save_pdf",
@@ -3617,7 +3627,7 @@ def render() -> None:
                 st.download_button(
                     label="🌐 فتح للطباعة وحفظ PDF",
                     data=col_survey_html,
-                    file_name=f"ECP203_Concrete_Survey_Takeoff_BOQ_{len(col_results)}Cols_{len(slab_results)}Slabs.html",
+                    file_name=f"{prefix}ECP203_Concrete_Survey_Takeoff_BOQ_{len(col_results)}Cols_{len(slab_results)}Slabs.html",
                     mime="text/html",
                     use_container_width=True,
                     key="cs_btn_save_html_print",
@@ -3625,7 +3635,7 @@ def render() -> None:
             st.download_button(
                 label="📊 Export Data to Excel / CSV",
                 data=csv_data,
-                file_name=f"ECP203_Concrete_Survey_Takeoff_BOQ_{len(col_results)}Cols_{len(slab_results)}Slabs.csv",
+                file_name=f"{prefix}ECP203_Concrete_Survey_Takeoff_BOQ_{len(col_results)}Cols_{len(slab_results)}Slabs.csv",
                 mime="text/csv",
                 use_container_width=True,
                 key="cs_btn_save_csv",

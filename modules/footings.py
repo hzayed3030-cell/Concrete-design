@@ -897,11 +897,12 @@ def render():
     c_p1, c_p2 = st.columns([3, 1])
     with c_p1:
         st.caption("📐 **المسقط الأفقي:** يوضح أبعاد القاعدة المسلحة (L × B)، ورفرفة العادية، ومحاور الأعمدة، وتوزيع حديد الفرش والغطاء والمسافات البينية بدقة عالية وخطوط واضحة.")
+    prefix = S.get_safe_profile_filename_prefix()
     with c_p2:
         st.download_button(
             label="📥 Download Plan View (PNG)",
             data=img_plan_bytes,
-            file_name=f"ECP203_Footing_Plan_{L}x{B}cm.png",
+            file_name=f"{prefix}ECP203_Footing_Plan_{L}x{B}cm.png",
             mime="image/png",
             use_container_width=True,
             key="dl_plan_sketch",
@@ -945,7 +946,7 @@ def render():
         st.download_button(
             label="📥 Download Section Elevation (PNG)",
             data=img_sec_bytes,
-            file_name=f"ECP203_Footing_Section_{L}x{B}cm.png",
+            file_name=f"{prefix}ECP203_Footing_Section_{L}x{B}cm.png",
             mime="image/png",
             use_container_width=True,
             key="dl_sec_sketch",
@@ -1201,10 +1202,11 @@ def render():
             unsafe_allow_html=True
         )
     with c_save2:
+        prefix = S.get_safe_profile_filename_prefix()
         st.download_button(
             label="🌐 Save Calculation Sheet (HTML)",
             data=footing_report_html,
-            file_name=f"ECP203_Footing_Calculation_Sheet_{L}x{B}cm.html",
+            file_name=f"{prefix}ECP203_Footing_Calculation_Sheet_{L}x{B}cm.html",
             mime="text/html",
             use_container_width=True,
         )
@@ -1212,7 +1214,7 @@ def render():
             st.download_button(
                 label="📕 Save as PDF (مباشر)",
                 data=pdf_bytes,
-                file_name=f"ECP203_Footing_Calculation_Sheet_{L}x{B}cm.pdf",
+                file_name=f"{prefix}ECP203_Footing_Calculation_Sheet_{L}x{B}cm.pdf",
                 mime="application/pdf",
                 use_container_width=True,
             )
