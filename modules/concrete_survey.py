@@ -35,6 +35,7 @@ from modules.report_generator import (
     html_to_pdf_bytes,
     fig_to_base64,
 )
+from modules.table_styler import render_styled_table, get_styled_table_html
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1116,49 +1117,35 @@ if hasattr(st, "dialog"):
             pass
 
         # Build table rows for all affected models
-        rows_html = ""
+        warning_rows = []
         user_val = short_models[0]["user_cut_m"] if short_models else 0.0
         for m in short_models:
-            rows_html += f"""
-            <tr style="border-bottom:1px solid #fee2e2; text-align:center; font-size:15px;">
-                <td style="padding:10px 12px; font-weight:800; color:#1e3a8a; text-align:right;">🏛️ نموذج ({m['name']})</td>
-                <td style="padding:10px 8px; font-weight:700; color:#475569;"><span dir="ltr">Φ{m.get('phi', 16)} mm</span></td>
-                <td style="padding:10px 8px; font-weight:800; color:#b91c1c; background:#fef2f2;"><span dir="ltr">{m['user_cut_m']:.2f} m'</span></td>
-                <td style="padding:10px 8px; font-weight:800; color:#15803d; background:#f0fdf4;"><span dir="ltr">{m['calc_cut_m']:.2f} m'</span></td>
-                <td style="padding:10px 12px; font-weight:900; color:#dc2626; background:#fee2e2;"><span dir="ltr">-{m['diff_cm']:.0f} cm</span> (عجز {m['diff_cm']/100:.2f}م)</td>
-            </tr>
-            """
+            warning_rows.append({
+                "نموذج العمود": f"🏛️ نموذج ({m['name']})",
+                "القطر": f"Φ{m.get('phi', 16)} mm",
+                "طول القطع المدخل": f"{m['user_cut_m']:.2f} m'",
+                "المطلوب بالكود": f"{m['calc_cut_m']:.2f} m'",
+                "مقدار النقص والعجز": f"-{m['diff_cm']:.0f} cm (عجز {m['diff_cm']/100:.2f}م)",
+            })
 
         st.markdown(
             f"""
-            <div style="background:#fef2f2; border:2px solid #ef4444; border-right:8px solid #dc2626; padding:14px 16px; border-radius:10px; margin-bottom:12px; box-shadow:0 4px 14px rgba(220,38,38,0.15);">
-                <div style="font-size:19px; font-weight:800; color:#991b1b; margin-bottom:6px; display:flex; align-items:center; gap:8px;">
-                    <span style="font-size:24px;">🚨</span>
+            <div style="background:linear-gradient(135deg, #450a0a 0%, #1e1b4b 100%); border:2px solid #ef4444; border-right:8px solid #dc2626; padding:16px 20px; border-radius:12px; margin-bottom:14px; box-shadow:0 6px 25px rgba(220,38,38,0.30);">
+                <div style="font-size:21px; font-weight:900; color:#fca5a5; margin-bottom:6px; display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:26px;">🚨</span>
                     <span>صفارة إنذار: طول السيخ المختار أقل من الكود لـ ({len(short_models)}) نماذج أعمدة!</span>
                 </div>
-                <div style="font-size:15px; color:#7f1d1d; line-height:1.6;">
-                    لقد قمت باختيار طول تقطيع موحد <b style="color:#b91c1c; font-size:17px;" dir="ltr">{user_val:.2f} m'</b>، وهو <b>أقل من الحد الأدنى المطلوب هندسياً</b> طبقاً للكود المصري (ECP 203) في النماذج الموضحة بالجدول أدناه:
+                <div style="font-size:16px; color:#fecaca; line-height:1.6;">
+                    لقد قمت باختيار طول تقطيع موحد <b style="color:#ffffff; font-size:18px;" dir="ltr">{user_val:.2f} m'</b>، وهو <b style="color:#f87171;">أقل من الحد الأدنى المطلوب هندسياً</b> طبقاً للكود المصري (ECP 203) في النماذج الموضحة بالجدول أدناه:
                 </div>
-            </div>
-
-            <div style="overflow-x:auto; margin-bottom:12px;">
-                <table style="width:100%; border-collapse:collapse; background:#ffffff; border:2px solid #f87171; border-radius:8px; font-size:15px;">
-                    <thead>
-                        <tr style="background:#dc2626; color:#ffffff; font-weight:800; text-align:center; font-size:15px;">
-                            <th style="padding:10px 12px; text-align:right;">نموذج العمود</th>
-                            <th style="padding:10px 8px;">القطر</th>
-                            <th style="padding:10px 8px;">طول القطع المدخل</th>
-                            <th style="padding:10px 8px;">المطلوب بالكود</th>
-                            <th style="padding:10px 12px; background:#b91c1c;">مقدار النقص والعجز</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {rows_html}
-                    </tbody>
-                </table>
             </div>
             """,
             unsafe_allow_html=True,
+        )
+        render_styled_table(
+            warning_rows,
+            accent_border_color="#ef4444",
+            col_colors=["#ffffff", "#38bdf8", "#f87171", "#4ade80", "#f87171"],
         )
         st.warning("⚠️ تنبيه هندسي: تقليل طول السيخ عن الحد المحسوب سيؤدي إلى نقص مباشر في طول وصلة التراكب (L_lap) أو الأشاير طبقاً لـ ECP 203.")
         st.markdown("<div style='font-size:15.5px; font-weight:700; color:#1e293b; margin-bottom:12px;'>هل ترغب في الاستمرار واعتماد هذا الطول المخصص لكافة النماذج على مسؤوليتك؟</div>", unsafe_allow_html=True)
@@ -1258,16 +1245,7 @@ if hasattr(st, "dialog"):
 
 def render() -> None:
     st.markdown(
-        """
-        <div style="background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); color: #ffffff !important; padding: 4px 14px; border-radius: 6px; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; border-left: 4px solid #60a5fa; box-shadow: 0 2px 6px rgba(37, 99, 235, 0.15);">
-            <div style="font-size: 17px; font-weight: 800; color: #ffffff !important;">
-                📊 حصر الخرسانات — Concrete Qty. Survey
-            </div>
-            <div style="color: rgba(255, 255, 255, 0.85) !important; font-size: 12px; font-weight: 500;">
-                حساب الحجوم ومواد الخلطة والحديد (ECP 203)
-            </div>
-        </div>
-        """,
+        '<div class="section-header">📊 Module 6 – Concrete Quantity Survey & Take-off (ECP 203)</div>',
         unsafe_allow_html=True,
     )
 
@@ -1335,28 +1313,27 @@ def render() -> None:
                 <style>
                 /* Distinctive Custom Colored Frame for Inputs */
                 div[data-testid="stVerticalBlockBorderWrapper"]:has(.cs-inputs-header-badge) {
-                    border: 2.5px solid #2563eb !important;
+                    border: 2px solid #38bdf8 !important;
                     border-radius: 10px !important;
-                    background: linear-gradient(180deg, #ffffff 0%, #f8faff 100%) !important;
+                    background: linear-gradient(180deg, #0b1329 0%, #1e293b 100%) !important;
                     padding: 10px 14px !important;
-                    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.10) !important;
+                    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.40) !important;
                 }
                 div[data-testid="stVerticalBlockBorderWrapper"]:has(.cs-inputs-header-badge):hover {
-                    border-color: #1d4ed8 !important;
-                    box-shadow: 0 6px 18px rgba(37, 99, 235, 0.15) !important;
+                    border-color: #60a5fa !important;
+                    box-shadow: 0 6px 18px rgba(56, 189, 248, 0.25) !important;
                 }
                 /* Increase label font size by 1.25x (عناوين المدخلات) */
                 div[data-testid="stVerticalBlockBorderWrapper"]:has(.cs-inputs-header-badge) label p {
                     font-size: 1.15rem !important;
                     font-weight: 700 !important;
-                    color: #0f172a !important;
+                    color: #fde047 !important;
                     line-height: 1.30 !important;
                 }
                 /* Increase input values/numbers font size by 1.25x (قيم المدخلات) */
                 div[data-testid="stVerticalBlockBorderWrapper"]:has(.cs-inputs-header-badge) input {
                     font-size: 1.22rem !important;
                     font-weight: 800 !important;
-                    color: #1e3a8a !important;
                     padding: 6px 10px !important;
                 }
                 /* Increase selectbox and radio text font size by 1.25x */
@@ -1369,26 +1346,9 @@ def render() -> None:
                     font-weight: 700 !important;
                 }
                 </style>
-                <div class="cs-inputs-header-badge" style="
-                    background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
-                    color: #ffffff !important;
-                    padding: 4px 12px;
-                    border-radius: 6px;
-                    font-weight: 800;
-                    font-size: 15px;
-                    margin-bottom: 8px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                    border-left: 4px solid #60a5fa;
-                ">
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <span style="font-size:16px;">📥</span>
-                        <span style="color:#ffffff !important;">مدخلات قطاعات وتسليح نماذج الأعمدة (Multi-Column Types Survey Inputs)</span>
-                    </div>
-                    <span style="background: rgba(255,255,255,0.22); color:#ffffff !important; padding: 1px 8px; border-radius: 12px; font-size: 11.5px; font-weight: 700;">
-                        ECP 203
-                    </span>
+                <div class="cs-inputs-header-badge input-section-header" style="margin-bottom: 12px;">
+                    <span style="font-size:24px;">📥</span>
+                    <span>مدخلات قطاعات وتسليح نماذج الأعمدة (Multi-Column Types Survey Inputs)</span>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -3269,39 +3229,39 @@ def render() -> None:
             """
 
         takeoff_html = f"""
-<div style="overflow-x:auto; margin-top:10px; margin-bottom:20px;">
-<table style="width:100%; border-collapse:collapse; font-size:25px; font-family:'Segoe UI', Tahoma, sans-serif; background:#ffffff; border:3px solid #1e3a8a; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,0.10);">
+<div style="overflow-x:auto; border:2px solid rgba(56, 189, 248, 0.45); border-radius:12px; box-shadow:0 6px 25px rgba(0,0,0,0.50); margin:12px 0 24px 0;">
+<table style="width:100%; border-collapse:collapse; background:#0b1329; font-family:'Segoe UI', Tahoma, sans-serif;">
 <thead>
-<tr style="background:#1e3a8a; color:#ffffff; font-size:25px; font-weight:800; text-align:center;">
-<th style="padding:15px 16px; border:1px solid #3b82f6; text-align:right;">البند / Component</th>
-<th style="padding:15px 12px; border:1px solid #3b82f6;">القطاع / المواصفة</th>
-<th style="padding:15px 10px; border:1px solid #3b82f6;">عدد العناصر</th>
-<th style="padding:15px 10px; border:1px solid #3b82f6; background:#1e40af;">عدد القطع (Pieces)</th>
-<th style="padding:15px 10px; border:1px solid #3b82f6; background:#1e40af;">طول القطع (Cut Length)</th>
-<th style="padding:15px 14px; border:1px solid #3b82f6; background:#1d4ed8;">الوزن / الحجم الإجمالي</th>
-<th style="padding:15px 16px; border:1px solid #3b82f6;">ملاحظات الحصر والتفريد</th>
+<tr style="background:linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-bottom:2.5px solid #38bdf8; text-align:center;">
+<th style="padding:15px 16px; color:#38bdf8; font-weight:900; font-size:18px; text-align:right;">البند / Component</th>
+<th style="padding:15px 12px; color:#38bdf8; font-weight:900; font-size:18px;">القطاع / المواصفة</th>
+<th style="padding:15px 10px; color:#38bdf8; font-weight:900; font-size:18px;">عدد العناصر</th>
+<th style="padding:15px 10px; color:#38bdf8; font-weight:900; font-size:18px;">عدد القطع (Pieces)</th>
+<th style="padding:15px 10px; color:#38bdf8; font-weight:900; font-size:18px;">طول القطع (Cut Length)</th>
+<th style="padding:15px 14px; color:#fbbf24; font-weight:900; font-size:18px;">الوزن / الحجم الإجمالي</th>
+<th style="padding:15px 16px; color:#cbd5e1; font-weight:900; font-size:18px;">ملاحظات الحصر والتفريد</th>
 </tr>
 </thead>
 <tbody>
 {takeoff_rows_html}
-<tr style="background:#eff6ff; font-size:24px; font-weight:800; text-align:center;">
-<td style="padding:15px 16px; border:1px solid #cbd5e1; border-top:3px solid #334155 !important; color:#1e3a8a; text-align:right; font-size:24px;">🔷 إجمالي الخرسانة المسلحة الكلية (أعمدة + بلاطات)</td>
-<td style="padding:15px 12px; border:1px solid #cbd5e1; border-top:3px solid #334155 !important; color:#1e3a8a;">كافة قطاعات الأعمدة والأسقف</td>
-<td style="padding:15px 10px; border:1px solid #cbd5e1; border-top:3px solid #334155 !important; color:#1e3a8a; font-weight:800;"><span dir="ltr">{total_cols_all} عمود + {total_slabs_count} بلاطة</span></td>
-<td style="padding:15px 10px; border:1px solid #cbd5e1; border-top:3px solid #334155 !important; color:#1e3a8a; font-weight:800;">-</td>
-<td style="padding:15px 10px; border:1px solid #cbd5e1; border-top:3px solid #334155 !important; color:#1e3a8a;">-</td>
-<td style="padding:15px 14px; border:1px solid #cbd5e1; border-top:3px solid #334155 !important; color:#1e40af; background:#dbeafe; font-size:26px; font-weight:800;"><span dir="ltr">{grand_vol_concrete_all:.2f} m³</span></td>
-<td style="padding:15px 16px; border:1px solid #cbd5e1; border-top:3px solid #334155 !important; color:#475569; font-size:21px;">أعمدة: <span dir="ltr">{total_vol_all:.2f} m³</span> | بلاطات: <span dir="ltr">{total_vol_slabs_all:.2f} m³</span></td>
+<tr style="background:linear-gradient(90deg, rgba(30, 58, 138, 0.45) 0%, rgba(15, 23, 42, 0.75) 100%); border-top:2.5px solid #38bdf8; border-bottom:2.5px solid #38bdf8; font-size:18px; font-weight:800; text-align:center;">
+<td style="padding:15px 16px; color:#38bdf8; text-align:right; font-weight:900;">🔷 إجمالي الخرسانة المسلحة الكلية (أعمدة + بلاطات)</td>
+<td style="padding:15px 12px; color:#ffffff;">كافة قطاعات الأعمدة والأسقف</td>
+<td style="padding:15px 10px; color:#38bdf8; font-weight:800;"><span dir="ltr">{total_cols_all} عمود + {total_slabs_count} بلاطة</span></td>
+<td style="padding:15px 10px; color:#cbd5e1;">-</td>
+<td style="padding:15px 10px; color:#cbd5e1;">-</td>
+<td style="padding:15px 14px; color:#38bdf8; font-size:20px; font-weight:900;"><span dir="ltr">{grand_vol_concrete_all:.2f} m³</span></td>
+<td style="padding:15px 16px; color:#cbd5e1; font-size:16px;">أعمدة: <span dir="ltr">{total_vol_all:.2f} m³</span> | بلاطات: <span dir="ltr">{total_vol_slabs_all:.2f} m³</span></td>
 </tr>
 {dia_rows_html}
-<tr style="background:#fefce8; font-size:25px; font-weight:800; text-align:center;">
-<td style="padding:16px 16px; border:1px solid #cbd5e1; border-top:3px solid #ca8a04 !important; color:#854d0e; text-align:right; font-size:25px;">✅ الإجمالي العام لحديد التسليح بالمشروع (أعمدة + بلاطات)</td>
-<td style="padding:16px 12px; border:1px solid #cbd5e1; border-top:3px solid #ca8a04 !important; color:#854d0e;">رئيسي + كانات + شبكات سفلية وعلوية</td>
-<td style="padding:16px 10px; border:1px solid #cbd5e1; border-top:3px solid #ca8a04 !important; color:#854d0e; font-weight:800;">كافة العناصر</td>
-<td style="padding:16px 10px; border:1px solid #cbd5e1; border-top:3px solid #ca8a04 !important; color:#854d0e; font-weight:900; font-size:27px;"><span dir="ltr">{total_pieces_all}</span> قطعة</td>
-<td style="padding:16px 10px; border:1px solid #cbd5e1; border-top:3px solid #ca8a04 !important; color:#854d0e; font-weight:800;"><span dir="ltr">{total_steel_linear_all:.1f} m'</span></td>
-<td style="padding:16px 14px; border:1px solid #cbd5e1; border-top:3px solid #ca8a04 !important; color:#854d0e; background:#fef08a; font-size:27px; font-weight:800;"><span dir="ltr">{grand_w_steel_kg_all:,.1f} kg</span><br><span style="font-size:23px;" dir="ltr">({grand_w_steel_ton_all:.3f} Ton)</span></td>
-<td style="padding:16px 16px; border:1px solid #cbd5e1; border-top:3px solid #ca8a04 !important; color:#854d0e; font-size:23px; font-weight:800;">معدل الحديد الكلي = <span dir="ltr">{grand_overall_steel_rate:.1f} kg/m³</span></td>
+<tr style="background:linear-gradient(90deg, rgba(161, 98, 7, 0.35) 0%, rgba(15, 23, 42, 0.85) 100%); border-top:2.5px solid #ca8a04; border-bottom:2.5px solid #ca8a04; font-size:18px; font-weight:900; text-align:center;">
+<td style="padding:16px 16px; color:#fbbf24; text-align:right; font-weight:900;">✅ الإجمالي العام لحديد التسليح بالمشروع (أعمدة + بلاطات)</td>
+<td style="padding:16px 12px; color:#ffffff;">رئيسي + كانات + شبكات سفلية وعلوية</td>
+<td style="padding:16px 10px; color:#fbbf24; font-weight:800;">كافة العناصر</td>
+<td style="padding:16px 10px; color:#fbbf24; font-weight:900; font-size:19px;"><span dir="ltr">{total_pieces_all}</span> قطعة</td>
+<td style="padding:16px 10px; color:#38bdf8; font-weight:800;"><span dir="ltr">{total_steel_linear_all:.1f} m'</span></td>
+<td style="padding:16px 14px; color:#fbbf24; font-size:20px; font-weight:900;"><span dir="ltr">{grand_w_steel_kg_all:,.1f} kg</span><br><span style="font-size:17px; color:#fde047;" dir="ltr">({grand_w_steel_ton_all:.3f} Ton)</span></td>
+<td style="padding:16px 16px; color:#38bdf8; font-size:17px; font-weight:800;">معدل الحديد الكلي = <span dir="ltr">{grand_overall_steel_rate:.1f} kg/m³</span></td>
 </tr>
 </tbody>
 </table>
@@ -3316,12 +3276,12 @@ def render() -> None:
         # ── 2. COMPREHENSIVE BILL OF QUANTITIES & MATERIAL PRICES TABLE ──
         st.markdown(
             f"""
-            <div style="background: linear-gradient(135deg, #b45309 0%, #d97706 100%); color: #ffffff !important; padding: 14px 22px; border-radius: 10px; font-size: 24px; font-weight: 800; margin: 26px 0 14px 0; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 4px 12px rgba(217, 119, 6, 0.22); border-left: 6px solid #fde047;">
+            <div style="background: linear-gradient(135deg, #78350f 0%, #1e1b4b 100%); color: #ffffff !important; padding: 14px 22px; border-radius: 12px; font-size: 22px; font-weight: 800; margin: 26px 0 14px 0; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 6px 25px rgba(217, 119, 6, 0.25); border: 2px solid rgba(245, 158, 11, 0.45); border-left: 6px solid #fbbf24;">
                 <div style="display: flex; align-items: center; gap: 12px;">
                     <span style="font-size: 26px;">💰</span>
                     <span style="color: #ffffff !important; font-weight: 800;">جدول مقايسة الأسعار وحصر تكاليف المواد والمصنعيات (Bill of Quantities & Pricing Table)</span>
                 </div>
-                <span style="background: rgba(255,255,255,0.22); color: #ffffff !important; padding: 5px 14px; border-radius: 20px; font-size: 15px; font-weight: 700; border: 1px solid rgba(255,255,255,0.35);">
+                <span style="background: rgba(251, 191, 36, 0.20); color: #fbbf24 !important; padding: 6px 16px; border-radius: 20px; font-size: 16px; font-weight: 800; border: 1.5px solid #fbbf24;">
                     إجمالي التكلفة: {cost_grand_total:,.2f} EGP
                 </span>
             </div>
@@ -3330,90 +3290,90 @@ def render() -> None:
         )
 
         pricing_html = f"""
-<div style="overflow-x:auto; margin-top:10px; margin-bottom:20px;">
-<table style="width:100%; border-collapse:collapse; font-size:25px; font-family:'Segoe UI', Tahoma, sans-serif; background:#ffffff; border:3px solid #b45309; border-radius:10px; box-shadow:0 4px 12px rgba(0,0,0,0.10);">
+<div style="overflow-x:auto; border:2px solid rgba(245, 158, 11, 0.45); border-radius:12px; box-shadow:0 6px 25px rgba(0,0,0,0.50); margin:12px 0 24px 0;">
+<table style="width:100%; border-collapse:collapse; background:#0b1329; font-family:'Segoe UI', Tahoma, sans-serif;">
 <thead>
-<tr style="background:#b45309; color:#ffffff; font-size:25px; font-weight:800; text-align:center;">
-<th style="padding:15px 12px; border:1px solid #f59e0b; width:50px;">م</th>
-<th style="padding:15px 16px; border:1px solid #f59e0b; text-align:right;">البند بمواصفاته الفنية</th>
-<th style="padding:15px 12px; border:1px solid #f59e0b;">الوحدة</th>
-<th style="padding:15px 14px; border:1px solid #f59e0b;">الكمية المحصورة</th>
-<th style="padding:15px 14px; border:1px solid #f59e0b; background:#d97706;">سعر البند (ج.م)</th>
-<th style="padding:15px 16px; border:1px solid #f59e0b; background:#92400e;">إجمالي السعر (ج.م)</th>
-<th style="padding:15px 16px; border:1px solid #f59e0b;">ملاحظات وتفاصيل الحساب</th>
+<tr style="background:linear-gradient(135deg, #451a03 0%, #0f172a 100%); border-bottom:2.5px solid #f59e0b; text-align:center;">
+<th style="padding:15px 12px; color:#fbbf24; font-weight:900; font-size:18px; width:50px;">م</th>
+<th style="padding:15px 16px; color:#38bdf8; font-weight:900; font-size:18px; text-align:right;">البند بمواصفاته الفنية</th>
+<th style="padding:15px 12px; color:#38bdf8; font-weight:900; font-size:18px;">الوحدة</th>
+<th style="padding:15px 14px; color:#38bdf8; font-weight:900; font-size:18px;">الكمية المحصورة</th>
+<th style="padding:15px 14px; color:#fbbf24; font-weight:900; font-size:18px;">سعر البند (ج.م)</th>
+<th style="padding:15px 16px; color:#fbbf24; font-weight:900; font-size:18px;">إجمالي السعر (ج.م)</th>
+<th style="padding:15px 16px; color:#cbd5e1; font-weight:900; font-size:18px;">ملاحظات وتفاصيل الحساب</th>
 </tr>
 </thead>
 <tbody>
-<tr style="background:#f8fafc; font-size:24px; text-align:center;">
-<td style="padding:14px 10px; border:1px solid #cbd5e1; font-weight:800;">1</td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:800; text-align:right; color:#1e3a8a;">خرسانة مسلحة للأعمدة الخرسانية (شاملة المواد والمصنعيات)</td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:700; color:#1e3a8a;">متر مكعب (m³)</td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:800; color:#1e3a8a; background:#eff6ff;"><span dir="ltr">{total_vol_all:.2f} m³</span></td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:900; color:#1e3a8a; background:#eff6ff;"><span dir="ltr">{rate_cols_per_m3:,.2f}</span></td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:900; color:#1e3a8a; background:#eff6ff; font-size:25px;"><span dir="ltr">{cost_cols_total:,.2f} ج.م</span></td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-size:20px; color:#475569;">حديد: <span dir="ltr">{cost_steel_cols_m3:,.0f}</span> + أسمنت: <span dir="ltr">{cost_cement_cols_m3:,.0f}</span> + سن: <span dir="ltr">{cost_gravel_cols_m3:,.0f}</span> + رمل: <span dir="ltr">{cost_sand_cols_m3:,.0f}</span> + مصنعية: <span dir="ltr">{price_labor_in:,.0f}</span> ج.م/م³</td>
+<tr style="background:rgba(15, 23, 42, 0.75); border-bottom:1.5px solid rgba(148, 163, 184, 0.25); font-size:17px; text-align:center;">
+<td style="padding:14px 10px; font-weight:800; color:#fbbf24;">1</td>
+<td style="padding:14px 16px; font-weight:800; text-align:right; color:#ffffff;">خرسانة مسلحة للأعمدة الخرسانية (شاملة المواد والمصنعيات)</td>
+<td style="padding:14px 12px; font-weight:700; color:#a5f3fc;">متر مكعب (m³)</td>
+<td style="padding:14px 12px; font-weight:900; color:#38bdf8;"><span dir="ltr">{total_vol_all:.2f} m³</span></td>
+<td style="padding:14px 12px; font-weight:900; color:#fbbf24;"><span dir="ltr">{rate_cols_per_m3:,.2f}</span></td>
+<td style="padding:14px 16px; font-weight:900; color:#fbbf24; font-size:19px;"><span dir="ltr">{cost_cols_total:,.2f} ج.م</span></td>
+<td style="padding:14px 16px; font-size:15px; color:#cbd5e1;">حديد: <span dir="ltr">{cost_steel_cols_m3:,.0f}</span> + أسمنت: <span dir="ltr">{cost_cement_cols_m3:,.0f}</span> + سن: <span dir="ltr">{cost_gravel_cols_m3:,.0f}</span> + رمل: <span dir="ltr">{cost_sand_cols_m3:,.0f}</span> + مصنعية: <span dir="ltr">{price_labor_in:,.0f}</span> ج.م/م³</td>
 </tr>
-<tr style="background:#f0fdf4; font-size:24px; text-align:center;">
-<td style="padding:14px 10px; border:1px solid #cbd5e1; font-weight:800;">2</td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:800; text-align:right; color:#065f46;">خرسانة مسلحة للبلاطات المسطحة Flat Slabs (شاملة المواد والمصنعيات)</td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:700; color:#065f46;">متر مكعب (m³)</td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:800; color:#065f46; background:#dcfce7;"><span dir="ltr">{total_vol_slabs_all:.2f} m³</span></td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:900; color:#065f46; background:#dcfce7;"><span dir="ltr">{rate_slabs_per_m3:,.2f}</span></td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:900; color:#065f46; background:#dcfce7; font-size:25px;"><span dir="ltr">{cost_slabs_total:,.2f} ج.م</span></td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-size:20px; color:#475569;">حديد: <span dir="ltr">{cost_steel_slabs_m3:,.0f}</span> + أسمنت: <span dir="ltr">{cost_cement_slabs_m3:,.0f}</span> + سن: <span dir="ltr">{cost_gravel_slabs_m3:,.0f}</span> + رمل: <span dir="ltr">{cost_sand_slabs_m3:,.0f}</span> + مصنعية: <span dir="ltr">{price_labor_in:,.0f}</span> ج.م/م³</td>
+<tr style="background:rgba(30, 41, 59, 0.75); border-bottom:1.5px solid rgba(148, 163, 184, 0.25); font-size:17px; text-align:center;">
+<td style="padding:14px 10px; font-weight:800; color:#fbbf24;">2</td>
+<td style="padding:14px 16px; font-weight:800; text-align:right; color:#ffffff;">خرسانة مسلحة للبلاطات المسطحة Flat Slabs (شاملة المواد والمصنعيات)</td>
+<td style="padding:14px 12px; font-weight:700; color:#a5f3fc;">متر مكعب (m³)</td>
+<td style="padding:14px 12px; font-weight:900; color:#38bdf8;"><span dir="ltr">{total_vol_slabs_all:.2f} m³</span></td>
+<td style="padding:14px 12px; font-weight:900; color:#fbbf24;"><span dir="ltr">{rate_slabs_per_m3:,.2f}</span></td>
+<td style="padding:14px 16px; font-weight:900; color:#fbbf24; font-size:19px;"><span dir="ltr">{cost_slabs_total:,.2f} ج.م</span></td>
+<td style="padding:14px 16px; font-size:15px; color:#cbd5e1;">حديد: <span dir="ltr">{cost_steel_slabs_m3:,.0f}</span> + أسمنت: <span dir="ltr">{cost_cement_slabs_m3:,.0f}</span> + سن: <span dir="ltr">{cost_gravel_slabs_m3:,.0f}</span> + رمل: <span dir="ltr">{cost_sand_slabs_m3:,.0f}</span> + مصنعية: <span dir="ltr">{price_labor_in:,.0f}</span> ج.م/م³</td>
 </tr>
-<tr style="background:#fffbeb; font-size:24px; text-align:center; font-weight:800; border-top:2px solid #ca8a04;">
-<td style="padding:14px 10px; border:1px solid #cbd5e1; color:#b45309;">3</td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; text-align:right; color:#b45309;">إجمالي توريد حديد التسليح للمشروع (أعمدة + بلاطات)</td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; color:#b45309; font-weight:700;">طن (Ton)</td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; color:#b45309; background:#fef3c7;"><span dir="ltr">{grand_w_steel_ton_all:.3f} Ton</span></td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:900; color:#b45309; background:#fef3c7;"><span dir="ltr">{price_steel_in:,.2f}</span></td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:900; color:#92400e; background:#fef3c7; font-size:26px;"><span dir="ltr">{cost_steel_total:,.2f} ج.م</span></td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-size:20px; color:#475569;">إجمالي {grand_w_steel_kg_all:,.1f} kg (أعمدة <span dir="ltr">{total_w_steel_ton_all:.3f}T</span> + بلاطات <span dir="ltr">{total_w_slabs_steel_ton:.3f}T</span>)</td>
+<tr style="background:rgba(15, 23, 42, 0.75); border-bottom:1.5px solid rgba(148, 163, 184, 0.25); font-size:17px; text-align:center;">
+<td style="padding:14px 10px; font-weight:800; color:#fbbf24;">3</td>
+<td style="padding:14px 16px; font-weight:800; text-align:right; color:#ffffff;">إجمالي توريد حديد التسليح للمشروع (أعمدة + بلاطات)</td>
+<td style="padding:14px 12px; color:#a5f3fc; font-weight:700;">طن (Ton)</td>
+<td style="padding:14px 12px; color:#38bdf8; font-weight:900;"><span dir="ltr">{grand_w_steel_ton_all:.3f} Ton</span></td>
+<td style="padding:14px 12px; font-weight:900; color:#fbbf24;"><span dir="ltr">{price_steel_in:,.2f}</span></td>
+<td style="padding:14px 16px; font-weight:900; color:#fbbf24; font-size:19px;"><span dir="ltr">{cost_steel_total:,.2f} ج.م</span></td>
+<td style="padding:14px 16px; font-size:15px; color:#cbd5e1;">إجمالي {grand_w_steel_kg_all:,.1f} kg (أعمدة <span dir="ltr">{total_w_steel_ton_all:.3f}T</span> + بلاطات <span dir="ltr">{total_w_slabs_steel_ton:.3f}T</span>)</td>
 </tr>
-<tr style="background:#fffbeb; font-size:24px; text-align:center;">
-<td style="padding:14px 10px; border:1px solid #cbd5e1; font-weight:800; color:#78350f;">4</td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:800; text-align:right; color:#78350f;">إجمالي توريد الأسمنت البورتلاندي العادي للمشروع</td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:700; color:#78350f;">طن (Ton)</td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:800; color:#78350f;"><span dir="ltr">{grand_cement_tons:.2f} Ton</span></td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:900; color:#78350f; background:#fef3c7;"><span dir="ltr">{price_cement_in:,.2f}</span></td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:900; color:#78350f; background:#fef3c7; font-size:25px;"><span dir="ltr">{cost_cement_total:,.2f} ج.م</span></td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-size:20px; color:#475569;">إجمالي <span dir="ltr">{grand_cement_bags}</span> شكارة 50kg (أعمدة <span dir="ltr">{cement_cols_tons:.2f}T</span> + بلاطات <span dir="ltr">{cement_slabs_tons:.2f}T</span>)</td>
+<tr style="background:rgba(30, 41, 59, 0.75); border-bottom:1.5px solid rgba(148, 163, 184, 0.25); font-size:17px; text-align:center;">
+<td style="padding:14px 10px; font-weight:800; color:#fbbf24;">4</td>
+<td style="padding:14px 16px; font-weight:800; text-align:right; color:#ffffff;">إجمالي توريد الأسمنت البورتلاندي العادي للمشروع</td>
+<td style="padding:14px 12px; font-weight:700; color:#a5f3fc;">طن (Ton)</td>
+<td style="padding:14px 12px; font-weight:900; color:#38bdf8;"><span dir="ltr">{grand_cement_tons:.2f} Ton</span></td>
+<td style="padding:14px 12px; font-weight:900; color:#fbbf24;"><span dir="ltr">{price_cement_in:,.2f}</span></td>
+<td style="padding:14px 16px; font-weight:900; color:#fbbf24; font-size:19px;"><span dir="ltr">{cost_cement_total:,.2f} ج.م</span></td>
+<td style="padding:14px 16px; font-size:15px; color:#cbd5e1;">إجمالي <span dir="ltr">{grand_cement_bags}</span> شكارة 50kg (أعمدة <span dir="ltr">{cement_cols_tons:.2f}T</span> + بلاطات <span dir="ltr">{cement_slabs_tons:.2f}T</span>)</td>
 </tr>
-<tr style="background:#fffbeb; font-size:24px; text-align:center;">
-<td style="padding:14px 10px; border:1px solid #cbd5e1; font-weight:800; color:#78350f;">5</td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:800; text-align:right; color:#78350f;">إجمالي توريد السن / الزلط المتدرج النظيف للخرسانة</td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:700; color:#78350f;">متر مكعب (m³)</td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:800; color:#78350f;"><span dir="ltr">{grand_gravel_m3:.2f} m³</span></td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:900; color:#78350f; background:#fef3c7;"><span dir="ltr">{price_gravel_in:,.2f}</span></td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:900; color:#78350f; background:#fef3c7; font-size:25px;"><span dir="ltr">{cost_gravel_total:,.2f} ج.م</span></td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-size:20px; color:#475569;">نسبة زلط <span dir="ltr">0.80 m³/m³</span> خرسانة مسلحة</td>
+<tr style="background:rgba(15, 23, 42, 0.75); border-bottom:1.5px solid rgba(148, 163, 184, 0.25); font-size:17px; text-align:center;">
+<td style="padding:14px 10px; font-weight:800; color:#fbbf24;">5</td>
+<td style="padding:14px 16px; font-weight:800; text-align:right; color:#ffffff;">إجمالي توريد السن / الزلط المتدرج النظيف للخرسانة</td>
+<td style="padding:14px 12px; font-weight:700; color:#a5f3fc;">متر مكعب (m³)</td>
+<td style="padding:14px 12px; font-weight:900; color:#38bdf8;"><span dir="ltr">{grand_gravel_m3:.2f} m³</span></td>
+<td style="padding:14px 12px; font-weight:900; color:#fbbf24;"><span dir="ltr">{price_gravel_in:,.2f}</span></td>
+<td style="padding:14px 16px; font-weight:900; color:#fbbf24; font-size:19px;"><span dir="ltr">{cost_gravel_total:,.2f} ج.م</span></td>
+<td style="padding:14px 16px; font-size:15px; color:#cbd5e1;">نسبة زلط <span dir="ltr">0.80 m³/m³</span> خرسانة مسلحة</td>
 </tr>
-<tr style="background:#fffbeb; font-size:24px; text-align:center;">
-<td style="padding:14px 10px; border:1px solid #cbd5e1; font-weight:800; color:#78350f;">6</td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:800; text-align:right; color:#78350f;">إجمالي توريد الرمل الحرش النظيف للخرسانة</td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:700; color:#78350f;">متر مكعب (m³)</td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:800; color:#78350f;"><span dir="ltr">{grand_sand_m3:.2f} m³</span></td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:900; color:#78350f; background:#fef3c7;"><span dir="ltr">{price_sand_in:,.2f}</span></td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:900; color:#78350f; background:#fef3c7; font-size:25px;"><span dir="ltr">{cost_sand_total:,.2f} ج.م</span></td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-size:20px; color:#475569;">نسبة رمل <span dir="ltr">0.40 m³/m³</span> خرسانة مسلحة</td>
+<tr style="background:rgba(30, 41, 59, 0.75); border-bottom:1.5px solid rgba(148, 163, 184, 0.25); font-size:17px; text-align:center;">
+<td style="padding:14px 10px; font-weight:800; color:#fbbf24;">6</td>
+<td style="padding:14px 16px; font-weight:800; text-align:right; color:#ffffff;">إجمالي توريد الرمل الحرش النظيف للخرسانة</td>
+<td style="padding:14px 12px; font-weight:700; color:#a5f3fc;">متر مكعب (m³)</td>
+<td style="padding:14px 12px; font-weight:900; color:#38bdf8;"><span dir="ltr">{grand_sand_m3:.2f} m³</span></td>
+<td style="padding:14px 12px; font-weight:900; color:#fbbf24;"><span dir="ltr">{price_sand_in:,.2f}</span></td>
+<td style="padding:14px 16px; font-weight:900; color:#fbbf24; font-size:19px;"><span dir="ltr">{cost_sand_total:,.2f} ج.م</span></td>
+<td style="padding:14px 16px; font-size:15px; color:#cbd5e1;">نسبة رمل <span dir="ltr">0.40 m³/m³</span> خرسانة مسلحة</td>
 </tr>
-<tr style="background:#fffbeb; font-size:24px; text-align:center;">
-<td style="padding:14px 10px; border:1px solid #cbd5e1; font-weight:800; color:#78350f;">7</td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:800; text-align:right; color:#78350f;">إجمالي مصنعيات الصب والحدادة والنجارة والتشغيل</td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:700; color:#78350f;">متر مكعب (m³)</td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:800; color:#78350f;"><span dir="ltr">{grand_vol_concrete_all:.2f} m³</span></td>
-<td style="padding:14px 12px; border:1px solid #cbd5e1; font-weight:900; color:#78350f; background:#fef3c7;"><span dir="ltr">{price_labor_in:,.2f}</span></td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-weight:900; color:#78350f; background:#fef3c7; font-size:25px;"><span dir="ltr">{cost_labor_total:,.2f} ج.م</span></td>
-<td style="padding:14px 16px; border:1px solid #cbd5e1; font-size:20px; color:#475569;">تنفيذ وتشغيل متكامل لكافة الأعمدة والبلاطات</td>
+<tr style="background:rgba(15, 23, 42, 0.75); border-bottom:1.5px solid rgba(148, 163, 184, 0.25); font-size:17px; text-align:center;">
+<td style="padding:14px 10px; font-weight:800; color:#fbbf24;">7</td>
+<td style="padding:14px 16px; font-weight:800; text-align:right; color:#ffffff;">إجمالي مصنعيات الصب والحدادة والنجارة والتشغيل</td>
+<td style="padding:14px 12px; font-weight:700; color:#a5f3fc;">متر مكعب (m³)</td>
+<td style="padding:14px 12px; font-weight:900; color:#38bdf8;"><span dir="ltr">{grand_vol_concrete_all:.2f} m³</span></td>
+<td style="padding:14px 12px; font-weight:900; color:#fbbf24;"><span dir="ltr">{price_labor_in:,.2f}</span></td>
+<td style="padding:14px 16px; font-weight:900; color:#fbbf24; font-size:19px;"><span dir="ltr">{cost_labor_total:,.2f} ج.م</span></td>
+<td style="padding:14px 16px; font-size:15px; color:#cbd5e1;">تنفيذ وتشغيل متكامل لكافة الأعمدة والبلاطات</td>
 </tr>
-<tr style="background:#fef08a; font-size:26px; font-weight:900; text-align:center; border-top:3px solid #ca8a04;">
-<td colspan="2" style="padding:16px 16px; border:1px solid #cbd5e1; color:#854d0e; text-align:right; font-size:26px;">★ الإجمالي المالي العام الشامل للمشروع (Grand Total Estimated Budget)</td>
-<td style="padding:16px 12px; border:1px solid #cbd5e1; color:#854d0e; font-weight:800;">مشروع شامل (L.S)</td>
-<td style="padding:16px 14px; border:1px solid #cbd5e1; color:#854d0e;"><span dir="ltr">{grand_vol_concrete_all:.2f} m³ خرسانة</span></td>
-<td style="padding:16px 14px; border:1px solid #cbd5e1; color:#854d0e; font-weight:900;">-</td>
-<td style="padding:16px 16px; border:1px solid #cbd5e1; color:#92400e; background:#fde047; font-size:28px; font-weight:900;"><span dir="ltr">{cost_grand_total:,.2f} EGP</span></td>
-<td style="padding:16px 16px; border:1px solid #cbd5e1; color:#854d0e; font-size:22px; font-weight:800;">شامل كافة المواد والمصنعيات بالكامل (متوسط <span dir="ltr">{cost_per_m3_all_inclusive:,.1f} ج.م/م³</span>)</td>
+<tr style="background:linear-gradient(90deg, rgba(161, 98, 7, 0.40) 0%, rgba(15, 23, 42, 0.85) 100%); border-top:2.5px solid #ca8a04; border-bottom:2.5px solid #ca8a04; font-size:19px; font-weight:900; text-align:center;">
+<td colspan="2" style="padding:16px 16px; color:#fbbf24; text-align:right; font-size:20px;">★ الإجمالي المالي العام الشامل للمشروع (Grand Total Estimated Budget)</td>
+<td style="padding:16px 12px; color:#a5f3fc; font-weight:800;">مشروع شامل (L.S)</td>
+<td style="padding:16px 14px; color:#38bdf8;"><span dir="ltr">{grand_vol_concrete_all:.2f} m³ خرسانة</span></td>
+<td style="padding:16px 14px; color:#cbd5e1; font-weight:900;">-</td>
+<td style="padding:16px 16px; color:#fde047; font-size:22px; font-weight:900;"><span dir="ltr">{cost_grand_total:,.2f} EGP</span></td>
+<td style="padding:16px 16px; color:#38bdf8; font-size:16px; font-weight:800;">شامل كافة المواد والمصنعيات بالكامل (متوسط <span dir="ltr">{cost_per_m3_all_inclusive:,.1f} ج.م/م³</span>)</td>
 </tr>
 </tbody>
 </table>
@@ -3756,7 +3716,7 @@ def render() -> None:
             {"البند / Element": "المجموع الكلي للخرسانة المسلحة (Total RC)", "النوع": "مسلحة (RC)", "الحجم (m³)": f"{total_rc_elements:.2f}"},
             {"البند / Element": "الإجمالي العام لكافة الخرسانات (Grand Total)", "النوع": "الكل (All)", "الحجم (m³)": f"{total_all:.2f}"},
         ])
-        st.dataframe(breakdown_df, use_container_width=True, hide_index=True)
+        render_styled_table(breakdown_df)
 
     # ────────────────────────────────────────────────────────────────────────
     # TAB 3 — Custom Takeoff Table (Dynamic Rows)
@@ -3850,7 +3810,7 @@ def render() -> None:
                     "صافي الحجم (m³)": f"{net_v:.2f}",
                 })
 
-            st.dataframe(pd.DataFrame(table_summary), use_container_width=True, hide_index=True)
+            render_styled_table(table_summary)
 
             k1, k2, k3 = st.columns(3)
             k1.metric("إجمالي خرسانة عادية (PC)", f"{tot_pc_custom:.2f} m³")
@@ -3939,7 +3899,7 @@ def render() -> None:
             {"المادة": "🪨 السن / الزلط (Gravel/Coarse Agg.)", "الكمية": f"{tot_gravel_m3:.2f}", "الوحدة": "متر مكعب (m³)", "ملاحظات": f"{gravel_ratio:.2f} m³/m³"},
             {"المادة": "💧 مياه الخلط الصالحة (Water)", "الكمية": f"{tot_water_liters:.0f} لتر ({tot_water_liters/1000:.2f} m³)", "الوحدة": "لتر / m³", "ملاحظات": f"W/C = {water_ratio:.2f}"},
         ]
-        st.dataframe(pd.DataFrame(mat_summary), use_container_width=True, hide_index=True)
+        render_styled_table(mat_summary)
 
         res1, res2, res3, res4 = st.columns(4)
         res1.metric("إجمالي الأسمنت", f"{tot_cement_tons:.2f} Ton", f"{tot_cement_bags:.0f} شكارة")

@@ -1,5 +1,5 @@
 {
-  "selected_module_idx": 3,
+  "selected_module_idx": 0,
   "apartment_name": "حصر دور السطح وغرفة السطح - نهائي",
   "col_Pu_input": 155.0,
   "col_Safety_Factor": 1.2,
@@ -334,5 +334,9 @@
   "cs_fs_btm_add_ly_2_0": 5.0,
   "cs_fs_btm_add_nx_2_0": 0,
   "cs_fs_btm_add_ny_2_0": 0,
-  "cs_fs_btm_add_nz_2_0": 1
+  "cs_fs_btm_add_nz_2_0": 1,
+  "enabled_modules": [
+    0,
+    1
+  ]
 }

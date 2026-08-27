@@ -46,6 +46,9 @@ from modules.settings import (
     export_project_json,
     export_all_projects_json,
     import_project_json,
+    ALL_MODULES,
+    get_project_enabled_modules,
+    set_project_enabled_modules,
     # Aliases for backward compatibility
     get_all_profiles,
     get_active_profile_name,
@@ -157,7 +160,7 @@ st.markdown(
        1. FORM INPUT CONTROLS: LABELS, TITLES, & ENTERED NUMBERS
        ═══════════════════════════════════════════════════════════════════════════ */
     
-    /* Input Labels */
+    /* Input Labels (Light Yellow for Dark Mode) */
     [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"],
     [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] *,
     [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] label,
@@ -171,13 +174,22 @@ st.markdown(
     [data-testid="stMainBlockContainer"] .stTextInput label *,
     [data-testid="stMainBlockContainer"] .stTextArea label,
     [data-testid="stMainBlockContainer"] .stTextArea label *,
-    [data-testid="stMainBlockContainer"] .stRadio label,
-    [data-testid="stMainBlockContainer"] .stRadio label *,
-    [data-testid="stMainBlockContainer"] .stCheckbox label,
-    [data-testid="stMainBlockContainer"] .stCheckbox label * {
+    [data-testid="stMainBlockContainer"] .stRadio > label,
+    [data-testid="stMainBlockContainer"] .stRadio > label *,
+    [data-testid="stMainBlockContainer"] .stRadio [data-testid="stWidgetLabel"] *,
+    [data-testid="stMainBlockContainer"] .stCheckbox > label,
+    [data-testid="stMainBlockContainer"] .stCheckbox > label *,
+    [data-testid="stMainBlockContainer"] .stCheckbox [data-testid="stWidgetLabel"] *,
+    [data-testid="stMainBlockContainer"] .stSlider label,
+    [data-testid="stMainBlockContainer"] .stSlider label *,
+    [data-testid="stMainBlockContainer"] .stFileUploader label,
+    [data-testid="stMainBlockContainer"] .stFileUploader label *,
+    [data-testid="stMainBlockContainer"] .stMultiSelect label,
+    [data-testid="stMainBlockContainer"] .stMultiSelect label * {
         font-size: var(--ecp-input-font-size) !important;
-        font-weight: 600 !important;
+        font-weight: 700 !important;
         line-height: 1.25 !important;
+        color: #fde047 !important; /* Elegant light yellow */
     }
 
     [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] {
@@ -189,6 +201,7 @@ st.markdown(
         margin-bottom: 1px !important;
         margin-top: 0px !important;
         line-height: 1.2 !important;
+        color: #fde047 !important;
     }
 
     /* Input Sub-headers & Section Labels inside Input Groups */
@@ -281,7 +294,30 @@ st.markdown(
        2. GENERAL UI, RESULTS, TITLES & TABLES
        ═══════════════════════════════════════════════════════════════════════════ */
     
-    /* Section & Output Headers */
+    /* Distinctive Centered Input Section Header (Golden Amber Theme) */
+    [data-testid="stMainBlockContainer"] .input-section-header,
+    [data-testid="stMainBlockContainer"] .input-section-header * {
+        font-size: var(--ecp-font-size-h2) !important;
+        font-weight: 900 !important;
+        line-height: 1.35 !important;
+    }
+    [data-testid="stMainBlockContainer"] .input-section-header {
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #0f172a 100%) !important;
+        color: #fbbf24 !important;
+        border: 2px solid #fbbf24 !important;
+        border-radius: 12px !important;
+        padding: 12px 20px !important;
+        margin: 14px 0 12px 0 !important;
+        text-align: center !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+        gap: 12px !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 18px rgba(251, 191, 36, 0.25) !important;
+        text-shadow: 0 0 12px rgba(251, 191, 36, 0.4) !important;
+    }
+
+    /* Section & Output Headers (Blue / Navy Theme) */
     [data-testid="stMainBlockContainer"] .section-header,
     [data-testid="stMainBlockContainer"] .section-header * {
         font-size: var(--ecp-font-size-h3) !important;
@@ -925,6 +961,19 @@ st.markdown(
 
 # ── PROJECT MANAGEMENT & NAVIGATION HELPERS ─────────────────────────────────
 
+def render_custom_html(html_str: str) -> None:
+    """Render HTML safely without markdown indentation or pre-code issues."""
+    clean_lines = [
+        line.strip() for line in html_str.splitlines()
+        if line.strip() and not line.strip().startswith("<!--")
+    ]
+    clean_html = "".join(clean_lines)
+    if hasattr(st, "html"):
+        st.html(clean_html)
+    else:
+        st.markdown(clean_html, unsafe_allow_html=True)
+
+
 def render_top_profile_bar():
     """Top navigation banner displayed when viewing design modules."""
     active_pname = get_active_project_name()
@@ -932,27 +981,32 @@ def render_top_profile_bar():
     if active_pname not in all_projects and all_projects:
         active_pname = all_projects[0]
 
-    c_hdr1, c_hdr2, c_hdr3 = st.columns([4, 2, 2])
-    with c_hdr1:
-        st.markdown(
-            f"""<div style="background:rgba(30,41,59,0.07); border:1px solid rgba(30,41,59,0.15); border-radius:8px; padding:6px 14px; display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                <span style="font-size:15px; font-weight:700;">📁 المشروع النشط:</span>
-                <span style="font-size:17px; font-weight:800; color:#2563eb;">{active_pname}</span>
-            </div>""",
-            unsafe_allow_html=True,
-        )
-    with c_hdr2:
-        if st.button("🏠 إدارة المشاريع", use_container_width=True, key="top_bar_projects"):
+    render_custom_html(
+        f"""
+        <div style="background: linear-gradient(135deg, #0b1329 0%, #1e293b 50%, #0b1329 100%); border: 1.5px solid rgba(56, 189, 248, 0.45); border-radius: 12px; padding: 12px 20px; margin-bottom: 14px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45), 0 0 15px rgba(56, 189, 248, 0.12); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                <span style="font-size: 26px; filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.5));">🏗️</span>
+                <div style="display: flex; flex-direction: column;">
+                    <div style="font-size: 13px; font-weight: 700; color: #94a3b8;">المشروع الإنشائي النشط حالياً:</div>
+                    <div style="font-size: 20px; font-weight: 900; color: #38bdf8; text-shadow: 0 0 10px rgba(56, 189, 248, 0.35);">📁 {active_pname}</div>
+                </div>
+                <span style="background: rgba(34, 197, 94, 0.20); color: #4ade80; border: 1.5px solid #22c55e; padding: 4px 14px; border-radius: 20px; font-size: 13px; font-weight: 800; box-shadow: 0 0 10px rgba(34, 197, 94, 0.25);">🟢 متزامن ونشط</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: #cbd5e1; font-weight: 700;">
+                <span style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); padding: 5px 14px; border-radius: 8px; color: #38bdf8;">📐 ECP 203-2018</span>
+                <span style="background: rgba(251, 191, 36, 0.15); border: 1px solid rgba(251, 191, 36, 0.35); padding: 5px 14px; border-radius: 8px; color: #fbbf24;">⚖️ ton · m · cm</span>
+            </div>
+        </div>
+        """
+    )
+
+    c_btn1, _pad = st.columns([2.2, 7.8])
+    with c_btn1:
+        if st.button("🏠 شاشة إدارة المشاريع (Projects)", use_container_width=True, key="top_bar_projects"):
             st.session_state["nav_view"] = "profile_manager"
             st.rerun()
-    with c_hdr3:
-        fs_mode = st.session_state.get("fs_mode", "run")
-        mode_label = "✏️ وضع التعديل" if fs_mode == "edit" else "🚀 وضع التشغيل"
-        if st.button(mode_label, use_container_width=True, key="top_bar_mode_toggle"):
-            st.session_state["fs_mode"] = "edit" if fs_mode == "run" else "run"
-            st.rerun()
 
-    st.markdown("<div style='margin-bottom:6px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
 
 
 def get_github_repo_url():
@@ -980,8 +1034,8 @@ def render_profile_manager():
         st.balloons()
         del st.session_state["git_push_success_msg"]
 
-    # ── Centered Distinctive Header Banner (White Text on Dark Background) ──
-    st.markdown(
+    # ── Centered Distinctive Header Banner ──
+    render_custom_html(
         f"""
         <div style="
             background: linear-gradient(135deg, #0b1329 0%, #1e293b 50%, #0b1329 100%);
@@ -1026,8 +1080,7 @@ def render_profile_manager():
                 حفظ وتصميم ومتابعة المشاريع الإنشائية — <span style="color: #ffffff; font-weight: 900;">ECP 203</span>
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
     # ── Global Actions Toolbar (Compact) ────────────────────────────────────
@@ -1226,32 +1279,43 @@ def render_profile_manager():
                 )
                 st.markdown('</div>', unsafe_allow_html=True)
 
-                col_tmpl, col_btns = st.columns([1.5, 1])
+                col_tmpl, col_mods = st.columns([1.1, 1.9])
                 with col_tmpl:
                     template_options = ["مشروع جديد (ECP Defaults)"] + [f"نسخ الأبعاد من: {p}" for p in projects.keys()]
                     selected_tmpl = st.selectbox("بدء من:", options=template_options, key="input_new_project_template")
-                with col_btns:
-                    st.markdown("<div style='margin-top: 24px;'></div>", unsafe_allow_html=True)
-                    cs1, cs2 = st.columns(2)
-                    with cs1:
-                        if st.button("✅ حفظ وتفعيل", use_container_width=True, type="primary"):
-                            if new_p_name.strip():
-                                copy_src = None
-                                if "نسخ الأبعاد من: " in selected_tmpl:
-                                    copy_src = selected_tmpl.replace("نسخ الأبعاد من: ", "").strip()
-                                created_name = create_project(new_p_name.strip(), copy_from=copy_src)
-                                st.session_state["show_create_profile_form"] = False
-                                st.session_state["nav_view"] = "module"
-                                st.session_state["fs_mode"] = "edit"
-                                st.session_state["selected_module_idx"] = 0
-                                st.success(f"تم إنشاء وتفعيل المشروع: {created_name}")
-                                st.rerun()
-                            else:
-                                st.error("يرجى إدخال اسم صحيح.")
-                    with cs2:
-                        if st.button("❌ إلغاء", use_container_width=True, key="btn_cancel_create"):
+                with col_mods:
+                    new_proj_selected_mods = st.multiselect(
+                        "🎛️ الموديولات المتاحة في الداشبورد لهذا المشروع:",
+                        options=[m["name"] for m in ALL_MODULES],
+                        default=[m["name"] for m in ALL_MODULES],
+                        key="input_new_project_modules",
+                        help="حدد الموديولات التي ترغب في ظهورها فقط في القائمة الجانبية (مثلاً موديول واحد أو موديولين)",
+                    )
+
+                cs1, cs2, _ = st.columns([1.2, 1.0, 3.8])
+                with cs1:
+                    if st.button("✅ حفظ وتفعيل", use_container_width=True, type="primary"):
+                        if new_p_name.strip():
+                            copy_src = None
+                            if "نسخ الأبعاد من: " in selected_tmpl:
+                                copy_src = selected_tmpl.replace("نسخ الأبعاد من: ", "").strip()
+                            created_name = create_project(new_p_name.strip(), copy_from=copy_src)
+                            # Save chosen enabled modules
+                            sel_indices = [m["idx"] for m in ALL_MODULES if m["name"] in new_proj_selected_mods]
+                            if not sel_indices:
+                                sel_indices = [0]
+                            set_project_enabled_modules(created_name, sel_indices)
                             st.session_state["show_create_profile_form"] = False
+                            st.session_state["nav_view"] = "module"
+                            st.session_state["selected_module_idx"] = sel_indices[0]
+                            st.success(f"تم إنشاء وتفعيل المشروع: {created_name}")
                             st.rerun()
+                        else:
+                            st.error("يرجى إدخال اسم صحيح.")
+                with cs2:
+                    if st.button("❌ إلغاء", use_container_width=True, key="btn_cancel_create"):
+                        st.session_state["show_create_profile_form"] = False
+                        st.rerun()
 
         st.markdown("<hr style='margin: 10px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 
@@ -1334,6 +1398,7 @@ def render_profile_manager():
         safe_pname = get_safe_project_filename_prefix(pname)
         project_json_str = export_project_json(pname)
         p_updated = summary.get("updated_at", "-")
+        enabled_mods = get_project_enabled_modules(pname)
 
         if is_active:
             card_border = "1.5px solid #38bdf8"
@@ -1348,11 +1413,18 @@ def render_profile_manager():
             title_color = "#f1f5f9"
             badge_html = """<span style="background: rgba(148, 163, 184, 0.12); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.25); padding: 2px 7px; border-radius: 6px; font-size: 12px; font-weight: 700;">📁 محفوظ</span>"""
 
+        if len(enabled_mods) < len(ALL_MODULES):
+            short_names = ", ".join([ALL_MODULES[i]["short"] for i in enabled_mods if i in range(len(ALL_MODULES))])
+            custom_badge_html = f"""<span style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.35); padding: 2px 7px; border-radius: 6px; font-size: 12px; font-weight: 700;">🎛️ {short_names}</span>"""
+        else:
+            custom_badge_html = ""
+
         row_html = f"""<div style="background: {card_bg}; border: {card_border}; {card_shadow} border-radius: 8px; padding: 8px 14px; margin-bottom: 4px;">
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                     <span style="font-size: 18px; font-weight: 800; color: {title_color};">📁 {pname}</span>
                     {badge_html}
+                    {custom_badge_html}
                 </div>
                 <div style="font-size: 13px; color: #94a3b8; font-weight: 600;">
                     <span>🕒 آخر تعديل:</span>
@@ -1360,10 +1432,10 @@ def render_profile_manager():
                 </div>
             </div>
         </div>"""
-        st.markdown(row_html, unsafe_allow_html=True)
+        render_custom_html(row_html)
 
-        # Action buttons — compact & only 'تشغيل' with file tools
-        b1, b2, b3, b4, _pad = st.columns([1.1, 1.0, 0.8, 0.5, 5.8])
+        # Action buttons — Run, Modules Config, JSON Export, Clone, Delete
+        b1, b2, b3, b4, b5, _pad = st.columns([1.1, 1.2, 1.0, 0.8, 0.5, 4.6])
         with b1:
             if st.button(
                 "🚀 تشغيل",
@@ -1373,10 +1445,22 @@ def render_profile_manager():
             ):
                 set_active_project(pname)
                 st.session_state["nav_view"] = "module"
-                st.session_state["selected_module_idx"] = 0
-                st.session_state["fs_mode"] = "run"
+                saved_mod = summary.get("module_idx", 0)
+                target_mod = saved_mod if saved_mod in enabled_mods else enabled_mods[0]
+                st.session_state["selected_module_idx"] = target_mod
                 st.rerun()
         with b2:
+            is_mod_open = st.session_state.get(f"_show_mod_config_{pname}", False)
+            btn_mod_label = "🔼 إخفاء" if is_mod_open else "🎛️ موديولات"
+            if st.button(
+                btn_mod_label,
+                key=f"btn_mod_cfg_{pname}",
+                use_container_width=True,
+                help=f"تخصيص الموديولات المتاحة لمشروع {pname}",
+            ):
+                st.session_state[f"_show_mod_config_{pname}"] = not is_mod_open
+                st.rerun()
+        with b3:
             st.download_button(
                 label="📤 تصدير JSON",
                 data=project_json_str,
@@ -1385,7 +1469,7 @@ def render_profile_manager():
                 key=f"btn_exp_{pname}",
                 use_container_width=True,
             )
-        with b3:
+        with b4:
             if st.button(
                 "📋 نسخ",
                 key=f"btn_dup_{pname}",
@@ -1394,7 +1478,7 @@ def render_profile_manager():
                 new_cloned = duplicate_project(pname)
                 st.success(f"تم نسخ المشروع: {new_cloned}")
                 st.rerun()
-        with b4:
+        with b5:
             if st.button(
                 "🗑️",
                 key=f"btn_del_{pname}",
@@ -1403,6 +1487,70 @@ def render_profile_manager():
             ):
                 st.session_state["_profile_to_delete"] = pname
                 st.rerun()
+
+        # ── Interactive Module Customizer Drawer ─────────────────────────────
+        if st.session_state.get(f"_show_mod_config_{pname}", False):
+            with st.container(border=True):
+                cur_enabled = get_project_enabled_modules(pname)
+
+                with st.form(key=f"form_mod_config_{pname}"):
+                    # Top Row with Info Banner + Submit Save Button
+                    col_head_info, col_head_save = st.columns([5.4, 1.6])
+                    with col_head_info:
+                        st.markdown(
+                            f"""
+                            <div style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); border: 1.5px solid #818cf8; border-radius: 8px; padding: 8px 14px;">
+                                <div style="font-weight: 800; font-size: 16px; color: #ffffff; display: flex; align-items: center; gap: 8px;">
+                                    <span>🎛️</span> تخصيص الموديولات المتاحة لمشروع: <b style="color: #38bdf8;">«{pname}»</b>
+                                </div>
+                                <div style="font-size: 13px; color: #cbd5e1; margin-top: 2px;">
+                                    اختر الموديولات التي ترغب في إظهارها في القائمة الجانبية لهذا المشروع، وسيتم إخفاء باقي الموديولات غير المحددة.
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                    with col_head_save:
+                        st.markdown("<div style='margin-top: 6px;'></div>", unsafe_allow_html=True)
+                        submit_save = st.form_submit_button("💾 حفظ التخصيص", type="primary", use_container_width=True)
+
+                    st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
+
+                    # Row 1: Module 1, Module 2, Module 3
+                    r1_col1, r1_col2, r1_col3 = st.columns(3)
+                    with r1_col1:
+                        c0 = st.checkbox(ALL_MODULES[0]["name"], value=(0 in cur_enabled))
+                    with r1_col2:
+                        c1 = st.checkbox(ALL_MODULES[1]["name"], value=(1 in cur_enabled))
+                    with r1_col3:
+                        c2 = st.checkbox(ALL_MODULES[2]["name"], value=(2 in cur_enabled))
+
+                    # Row 2: Module 4, Module 5, Module 6
+                    r2_col1, r2_col2, r2_col3 = st.columns(3)
+                    with r2_col1:
+                        c3 = st.checkbox(ALL_MODULES[3]["name"], value=(3 in cur_enabled))
+                    with r2_col2:
+                        c4 = st.checkbox(ALL_MODULES[4]["name"], value=(4 in cur_enabled))
+                    with r2_col3:
+                        c5 = st.checkbox(ALL_MODULES[5]["name"], value=(5 in cur_enabled))
+
+                    if submit_save:
+                        chosen_mods = [idx for idx, checked in enumerate([c0, c1, c2, c3, c4, c5]) if checked]
+                        if not chosen_mods:
+                            st.warning("⚠️ يرجى اختيار موديول واحد على الأقل.")
+                        else:
+                            set_project_enabled_modules(pname, chosen_mods)
+                            st.session_state[f"_show_mod_config_{pname}"] = False
+                            st.rerun()
+
+                # Close button
+                c_close, _ = st.columns([1.5, 8.5])
+                with c_close:
+                    if st.button("❌ إغلاق بدون حفظ", key=f"btn_close_mods_{pname}", use_container_width=True):
+                        st.session_state[f"_show_mod_config_{pname}"] = False
+                        st.rerun()
+
+            st.markdown("<hr style='margin:6px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 
         st.markdown("<div style='margin-bottom: 4px;'></div>", unsafe_allow_html=True)
 
@@ -1437,9 +1585,15 @@ if current_nav == "profile_manager":
 else:
     # ── SIDEBAR: Design Modules Dashboard Mode ─────────────────────────────
     with st.sidebar:
-        st.markdown("## 🏗️ ECP 203 Dashboard")
-        st.markdown("**Egyptian Code of Practice**")
-        st.markdown("---")
+        render_custom_html(
+            """
+            <div style="background: linear-gradient(135deg, #0b1329 0%, #1e293b 100%); border: 1.5px solid rgba(56, 189, 248, 0.45); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.4);">
+                <div style="font-size: 26px; margin-bottom: 4px;">🏗️</div>
+                <div style="font-size: 19px; font-weight: 900; color: #38bdf8; letter-spacing: 0.5px;">ECP 203 DASHBOARD</div>
+                <div style="font-size: 12.5px; color: #94a3b8; font-weight: 600; margin-top: 2px;">الكود المصري للمنشآت الخرسانية</div>
+            </div>
+            """
+        )
 
         active_project_sidebar = get_active_project_name()
         all_projects_dict = get_all_projects()
@@ -1448,12 +1602,13 @@ else:
             active_project_sidebar = all_projects_list[0]
 
         mod_card_html = (
-            f'<div style="background:rgba(255,255,255,0.08); padding:10px 12px; border-radius:8px; border:1px solid rgba(255,255,255,0.15); margin-bottom:10px;">'
-            f'<div style="font-size:13px; color:#94a3b8;">📁 المشروع النشط:</div>'
-            f'<div style="font-size:18px; font-weight:800; color:#60a5fa;">{active_project_sidebar}</div>'
+            f'<div style="background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding:12px 14px; border-radius:10px; border:1.5px solid #38bdf8; margin-bottom:12px; box-shadow:0 0 14px rgba(56,189,248,0.25);">'
+            f'<div style="font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:2px;">📁 المشروع الإنشائي النشط:</div>'
+            f'<div style="font-size:19px; font-weight:900; color:#38bdf8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{active_project_sidebar}</div>'
+            f'<div style="margin-top:6px; font-size:12px; color:#4ade80; display:flex; align-items:center; gap:6px;"><span>🟢</span><span>متزامن ونشط</span></div>'
             f'</div>'
         )
-        st.markdown(mod_card_html, unsafe_allow_html=True)
+        render_custom_html(mod_card_html)
 
         if st.button("🏠 شاشة إدارة المشاريع (Projects)", use_container_width=True):
             st.session_state["nav_view"] = "profile_manager"
@@ -1461,18 +1616,40 @@ else:
 
         st.markdown("---")
 
-        module = S_radio(
-            "📂 Select Module (اختر موديول التصميم أو المساعد)",
-            "selected_module_idx",
-            options=[
-                "🟦  Module 1 — Flat Slabs (البلاطات اللاكمرية)",
-                "🏛️  Module 2 — Rectangular Columns (الأعمدة المستطيلة)",
-                "🪸  Module 3 — Isolated Footings (القواعد المنفصلة)",
-                "🏗️  Module 4 — Ground Slabs (البلاطات الأرضية)",
-                "⚙️  المساعد — اقطار واوزان الحديد (Steel Rebar)",
-                "📊  المساعد — حصر الخرسانات (Concrete Qty. Survey)",
-            ],
+        # Load enabled modules for this specific active project
+        proj_enabled_indices = get_project_enabled_modules(active_project_sidebar)
+        project_module_options = [
+            ALL_MODULES[i]["name"] for i in proj_enabled_indices if i in range(len(ALL_MODULES))
+        ]
+        if not project_module_options:
+            project_module_options = [ALL_MODULES[0]["name"]]
+            proj_enabled_indices = [0]
+
+        # Determine current active selection
+        raw_saved_idx = int(cfg_val("selected_module_idx", proj_enabled_indices[0]))
+        if raw_saved_idx not in proj_enabled_indices:
+            raw_saved_idx = proj_enabled_indices[0]
+            cfg_set("selected_module_idx", raw_saved_idx)
+
+        default_radio_idx = 0
+        for opt_i, mod_i in enumerate(proj_enabled_indices):
+            if mod_i == raw_saved_idx:
+                default_radio_idx = opt_i
+                break
+
+        selected_module_name = st.radio(
+            "📂 Select Design Module / Engineering Module:",
+            options=project_module_options,
+            index=default_radio_idx,
+            key=f"sb_mod_radio_{active_project_sidebar}",
         )
+
+        # Sync the selected module global index back to cfg
+        for m in ALL_MODULES:
+            if m["name"] == selected_module_name:
+                cfg_set("selected_module_idx", m["idx"])
+                break
+        module = selected_module_name
         st.markdown("---")
 
         st.markdown("<small>Units: **ton · kg · cm · kg/cm²**</small>", unsafe_allow_html=True)
@@ -1529,9 +1706,9 @@ else:
         render_footings()
     elif "Ground Slabs" in module or "الأرضية" in module:
         render_ground_slab()
-    elif "اقطار" in module or "Steel" in module:
+    elif "Steel Rebar" in module or "Steel" in module or "اقطار" in module:
         render_steel_bars()
-    elif "حصر" in module or "Survey" in module:
+    elif "Quantity Survey" in module or "Survey" in module or "حصر" in module:
         render_concrete_survey()
     else:
         render_flat_slab()

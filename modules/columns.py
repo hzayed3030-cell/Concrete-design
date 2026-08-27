@@ -12,6 +12,7 @@ from matplotlib.patches import FancyBboxPatch, Circle
 import streamlit as st
 import pandas as pd
 from modules import settings as S
+from modules.table_styler import render_styled_table
 
 
 # ---------------------------------------------------------------------------
@@ -631,7 +632,16 @@ def render():
                 unsafe_allow_html=True)
 
     # ── INPUT FORM ──────────────────────────────────────────────────────────
-    with st.expander("📝 Design Inputs (مدخلات التصميم والأبعاد والأحمال)", expanded=True):
+    st.markdown(
+        """
+        <div class="input-section-header">
+            <span style="font-size: 26px;">📥</span>
+            <span>مدخلات التصميم والأبعاد والأحمال الإنشائية للعمود (Column Design Inputs & Loads)</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    with st.expander("📝 تفاصيل مدخلات وأبعاد العمود (Click to Expand / Collapse)", expanded=True):
         col1, col2, col3 = st.columns(3)
 
         with col1:
@@ -921,7 +931,7 @@ def render():
                 "إجمالي الوزن (Ton)": f"{tot_steel_kg_col/1000.0:.3f} Ton",
             },
         ]
-        st.dataframe(pd.DataFrame(bbs_rows), use_container_width=True, hide_index=True)
+        render_styled_table(bbs_rows)
 
         st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
         cm1, cm2, cm3, cm4 = st.columns(4)
@@ -1062,8 +1072,7 @@ def render():
         ],
     }
 
-    df = pd.DataFrame(table_data)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    render_styled_table(table_data)
 
     # ── 💾 SAVE & EXPORT COMPLETE CALCULATION SHEET ────────────────────────────
     st.markdown("---")

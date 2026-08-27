@@ -26,6 +26,7 @@ import matplotlib.pyplot as plt
 import streamlit as st
 import pandas as pd
 from modules import settings as S
+from modules.table_styler import render_styled_table
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -5739,48 +5740,22 @@ def render():
     active_profile_name = S.get_active_profile_name()
     prefix = S.get_safe_profile_filename_prefix()
 
-    # Determine mode: Run (view/presentations) vs Edit (inputs open)
-    fs_mode = st.session_state.get("fs_mode", "edit")
-    is_run_mode = (fs_mode == "run")
-    inputs_expanded = not is_run_mode
-
-    # Mode Indicator & Quick Mode Switcher Banner
-    c_mb1, c_mb2 = st.columns([4, 1.5])
-    with c_mb1:
-        if is_run_mode:
-            st.markdown(
-                """
-                <div style="background:#f0fdf4; border:1.5px solid #22c55e; border-radius:8px; padding:8px 14px; color:#15803d; font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px;">
-                    <span>🚀 <b>وضع التشغيل والرسم (Run Mode):</b> يتم عرض المخططات الإنشائية والنتائج والرسومات مباشرة بالأبعاد المحفوظة.</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(
-                """
-                <div style="background:#eff6ff; border:1.5px solid #3b82f6; border-radius:8px; padding:8px 14px; color:#1e40af; font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px;">
-                    <span>✏️ <b>وضع تعديل المدخلات (Edit Mode):</b> شاشة المدخلات مفتوحة لتعديل الأبعاد والمقاسات والأحمال وحفظها تلقائياً.</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-    with c_mb2:
-        if is_run_mode:
-            if st.button("✏️ تعديل المدخلات (Edit)", use_container_width=True, help="الانتقال لوضع تعديل الأبعاد والمقاسات"):
-                st.session_state["fs_mode"] = "edit"
-                st.rerun()
-        else:
-            if st.button("🚀 إخفاء للمخططات (Run)", use_container_width=True, help="الانتقال لوضع التشغيل وعرض الرسومات مباشرة"):
-                st.session_state["fs_mode"] = "run"
-                st.rerun()
-
     Lx_spans = []
     Ly_spans = []
     cantilevers = {"left": 0.0, "right": 0.0, "bottom": 0.0, "top": 0.0}
 
-    # ── ① GEOMETRY INPUTS ────────────────────────────────────────────────────
-    with st.expander(f"📐 Step 1 — Grid Geometry & Cantilevers (اسم المشروع والمحاور والكوابيل) — [ {active_profile_name} ]", expanded=inputs_expanded):
+    # ── ① INPUTS MAIN HEADER & GEOMETRY INPUTS ───────────────────────────────
+    st.markdown(
+        """
+        <div class="input-section-header">
+            <span style="font-size: 26px;">📥</span>
+            <span>مدخلات وأبعاد ومواصفات السقف والأحمال (Flat Slab Design & Geometry Inputs)</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    with st.expander(f"📐 Step 1 — Grid Geometry & Cantilevers (اسم المشروع والمحاور والكوابيل) — [ {active_profile_name} ]", expanded=True):
         col_fs_pad1, col_fs_center, col_fs_pad2 = st.columns([0.6, 6.8, 0.6])
         with col_fs_center:
             cur_p_name = S.text_input(
@@ -5849,7 +5824,7 @@ def render():
         )
 
     # ── ② COLUMN, THICKNESS, LOADS, MATERIALS & REBAR OPTIONS ────────────────
-    with st.expander("🧱 Step 2 — Slab Thickness, Column Size, Loads & Rebar (السُمك والأعمدة والأحمال والتسليح)", expanded=inputs_expanded):
+    with st.expander("🧱 Step 2 — Slab Thickness, Column Size, Loads & Rebar (السُمك والأعمدة والأحمال والتسليح)", expanded=True):
         c1, c2, c3, c4 = st.columns(4)
 
         with c1:
@@ -6332,7 +6307,7 @@ def render():
         f"{len(_confirmed_removals)} removed)",
         expanded=False,
     ):
-        st.dataframe(_registry_df, use_container_width=True, hide_index=True)
+        render_styled_table(_registry_df)
         if _confirmed_removals:
             st.info(
                 f"🔴 **Removed columns (original IDs):** "
@@ -7056,7 +7031,7 @@ def render():
             ["8. Perimeter & Edge RFT", "U-Loops Φ10 @ 20 cm + 2Φ12 Top/Btm", "Placed along all free slab perimeter boundaries"],
             ["9. Estimated Steel Weight", f"{boq['total_steel_ton']:.2f} Ton", f"Reinforcement Ratio: {boq['steel_ratio_kg_m3']:.1f} kg/m³"],
         ]
-        st.dataframe(pd.DataFrame(master_summary, columns=["Design Item", "Design Output / Value", "Engineering Notes & Code Reference"]), use_container_width=True, hide_index=True)
+        render_styled_table(master_summary, headers=["Design Item", "Design Output / Value", "Engineering Notes & Code Reference"])
 
     # ── 📊 BENDING MOMENTS & REINFORCEMENT SCHEDULES (Collapsed Section) ─────
     with st.expander("📊 جداول حصر وتوزيع العزوم وحديد التسليح (Bending Moments & Steel Design Schedules)", expanded=False):
@@ -7101,7 +7076,7 @@ def render():
                         "طول الامتداد والتفريد L_ext (m)": f"{c['L_extra']:.2f} m",
                         "حالة التسليح": "🚨 يتطلب حديد إضافي علوي",
                     })
-                st.dataframe(pd.DataFrame(top_table_rows), use_container_width=True, hide_index=True)
+                render_styled_table(top_table_rows)
             else:
                 st.markdown(
                     f"""
@@ -7131,7 +7106,7 @@ def render():
                         "طول التقطيع والتفريد L_cut (m)": bx["L_cut"],
                         "حالة التسليح": "🚨 يتطلب حديد إضافي سفلي",
                     })
-                st.dataframe(pd.DataFrame(btm_x_table_rows), use_container_width=True, hide_index=True)
+                render_styled_table(btm_x_table_rows)
             else:
                 st.markdown(
                     f"""
@@ -7161,7 +7136,7 @@ def render():
                         "طول التقطيع والتفريد L_cut (m)": by["L_cut"],
                         "حالة التسليح": "🚨 يتطلب حديد إضافي سفلي",
                     })
-                st.dataframe(pd.DataFrame(btm_y_table_rows), use_container_width=True, hide_index=True)
+                render_styled_table(btm_y_table_rows)
             else:
                 st.markdown(
                     f"""
@@ -7402,7 +7377,7 @@ def render():
             }
             for p in deflection_results
         ])
-        st.dataframe(def_df, use_container_width=True, hide_index=True)
+        render_styled_table(def_df)
 
         if not all_deflection_safe:
             st.warning("⚠️ **تنبيه إنشائي (Deflection Warning)**: بعض بحور وباكيات السقف تتجاوز سهم الانحناء المسموح كودياً (Δact > Δall). يُنصح بزيادة سُمك البلاطة $t_s$ أو إضافة سقوط عمود (Drop Panel) أو إضافة تسليح ضغط.")
@@ -7446,7 +7421,7 @@ def render():
             }
             for p in punching_results
         ])
-        st.dataframe(punch_df, use_container_width=True, hide_index=True)
+        render_styled_table(punch_df)
 
         if not all_safe:
             st.warning("⚠️ **تنبيه إنشائي**: بعض الأعمدة غير آمنة في القص الثاقب (qup > qcup). يُنصح بزيادة سُمك البلاطة $t_s$ أو إضافة سقوط عمود (Drop Panel) أو كانات قص (Studs).")
@@ -7466,7 +7441,7 @@ def render():
                 }
                 for c in cant_rft_list
             ])
-            st.dataframe(cant_df, use_container_width=True, hide_index=True)
+            render_styled_table(cant_df)
 
     # ── ⚖️ LOAD SUMMARY ──────────────────────────────────────────────────────
     with st.expander("⚖️ Load Breakdown (ملخص توزيع وتراكب الأحمال)", expanded=False):
@@ -7488,7 +7463,7 @@ def render():
                 "OW + SDL + WL", "User input", "ECP 203 Ultimate load combination",
             ],
         })
-        st.dataframe(ld_df, use_container_width=True, hide_index=True)
+        render_styled_table(ld_df)
 
     # ── 📐 DETAILED DDM MOMENTS TABLES ───────────────────────────────────────
     def render_direction(rows, direction_label):
@@ -7532,8 +7507,8 @@ def render():
                     steel_entry(f"Mid.Strip TOP (neg.int)  w={r['ms_w']:.1f}m", r["As_ms_neg_int"], r["ms_w"]),
                 ]
 
-            st.dataframe(pd.DataFrame(moment_rows, columns=["Strip / Location", "Moment (ton·m)", "Strip Width (m)"]), use_container_width=True, hide_index=True)
-            st.dataframe(pd.DataFrame(steel_rows, columns=["Zone", "Total As_req (cm²)", "As/m (cm²/m)", "Bars / meter", "Spacing", "As_prov/m (cm²/m)"]), use_container_width=True, hide_index=True)
+            render_styled_table(moment_rows, headers=["Strip / Location", "Moment (ton·m)", "Strip Width (m)"])
+            render_styled_table(steel_rows, headers=["Zone", "Total As_req (cm²)", "As/m (cm²/m)", "Bars / meter", "Spacing", "As_prov/m (cm²/m)"])
 
     render_direction(rows_x, "X-Direction (spanning across Lx spans)")
     render_direction(rows_y, "Y-Direction (spanning across Ly spans)")
@@ -7598,7 +7573,7 @@ def render():
             }
             for r in col_reactions_data
         ])
-        st.dataframe(reactions_df, use_container_width=True, hide_index=True)
+        render_styled_table(reactions_df)
 
     # ── 📊 CLASSIFICATION INTO 3 GOVERNING COLUMN TYPES ──────────────────────
     with st.expander("📌 Governing Column Loads by Type (أقصى ردود أفعال وتصنيف نماذج الأعمدة)", expanded=False):
@@ -7641,7 +7616,7 @@ def render():
             })
 
         if summary_models:
-            st.dataframe(pd.DataFrame(summary_models), use_container_width=True, hide_index=True)
+            render_styled_table(summary_models)
 
     # ── 💾 PERSIST GOVERNING COLUMN LOADS FOR MODULE 2 ─────────────────────────
     if max_int and max_int.get("pu_1f_val", 0) > 0:
@@ -7744,7 +7719,7 @@ def render():
                     "فحص النحافة والأمان": "✅ Safe" if des["is_safe"] else "⚠️ Review",
                 })
 
-            st.dataframe(pd.DataFrame(col_designs_table), use_container_width=True, hide_index=True)
+            render_styled_table(col_designs_table)
 
             st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
 
@@ -7920,7 +7895,7 @@ def render():
                 )
 
             st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
-            st.dataframe(pd.DataFrame(col_boq_rows), use_container_width=True, hide_index=True)
+            render_styled_table(col_boq_rows)
 
             st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
 
@@ -8028,7 +8003,7 @@ def render():
                 "إجمالي الطول (Total Length)": item["length_str"],
                 "المواصفات والملاحظات الإنشائية (Specification / Detailing Notes)": item["spec"],
             })
-        st.dataframe(pd.DataFrame(items_table_data), use_container_width=True, hide_index=True)
+        render_styled_table(items_table_data)
 
         st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
 
@@ -8057,7 +8032,7 @@ def render():
             "الاستخدام الإنشائي في السقف (Applications in Slab)": f"معدل الاستهلاك: {boq.get('steel_ratio_kg_m3', 0.0):.1f} kg/m³ خرسانة",
         })
 
-        st.dataframe(pd.DataFrame(dia_table_data), use_container_width=True, hide_index=True)
+        render_styled_table(dia_table_data)
 
         st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
 
@@ -8198,7 +8173,7 @@ def render():
                 "ملاحظات التنفيذ والتوريد (Procurement & Site Notes)": "مياه صالحة للشرب وخالية من الشوائب والزيوت",
             },
         ])
-        st.dataframe(concrete_mat_df, use_container_width=True, hide_index=True)
+        render_styled_table(concrete_mat_df)
 
     # ── 🏆 FINAL SURVEY FOR COLUMNS & ROOF (الحصر النهائي للسقف والأعمدة) ───────────
     slab_conc_1f = boq.get("concrete_vol_m3", 0.0)
@@ -8345,7 +8320,7 @@ def render():
                 "معدل التسليح (kg/m³)": f"{comb_ratio_1f:.1f} kg/m³",
             },
         ]
-        st.dataframe(pd.DataFrame(elements_breakdown_data), use_container_width=True, hide_index=True)
+        render_styled_table(elements_breakdown_data)
 
     st.markdown("---")
 

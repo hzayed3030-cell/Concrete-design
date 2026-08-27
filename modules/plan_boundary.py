@@ -15,6 +15,7 @@ import streamlit as st
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.patches import Polygon, FancyBboxPatch, Circle, Arc
+from modules.table_styler import render_styled_table
 
 # ── Preset Floor Plan Geometry Definitions ───────────────────────────────────
 
@@ -577,4 +578,4 @@ def render():
                 "Length (m)": f"{seg_len:.2f} m",
                 "Direction": "Horizontal (X)" if abs(dy) < 0.01 else ("Vertical (Y)" if abs(dx) < 0.01 else "Diagonal / Sloped"),
             })
-        st.dataframe(pd.DataFrame(v_rows), use_container_width=True, hide_index=True)
+        render_styled_table(v_rows)

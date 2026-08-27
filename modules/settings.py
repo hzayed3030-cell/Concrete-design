@@ -355,13 +355,16 @@ def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
     save_profiles_data(pdata)
 
     st.session_state["_active_profile_name"] = profile_name
-    
+
     # Merge target profile's data with defaults
     new_cfg = dict(ECP_DEFAULTS)
     profile_cfg = profiles[profile_name].get("data", {})
     for k, v in profile_cfg.items():
         new_cfg[k] = v
     new_cfg["apartment_name"] = profile_name
+    # IMPORTANT: enabled_modules must NEVER live in cfg/session_state.
+    # It is managed exclusively via set/get_project_enabled_modules in profiles.json.
+    new_cfg.pop("enabled_modules", None)
     st.session_state["cfg"] = new_cfg
     st.session_state["_settings_loaded_from_file"] = True
 
@@ -369,7 +372,13 @@ def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
         _clear_widget_cache()
 
 
-def create_project(project_name: str, owner_name: str = "", copy_from: str = None, description: str = "") -> str:
+def create_project(
+    project_name: str,
+    owner_name: str = "",
+    copy_from: str = None,
+    description: str = "",
+    enabled_modules: list = None,
+) -> str:
     """Create a new project with clean defaults or cloned from an existing project."""
     name = (project_name or "").strip()
     if not name:
@@ -399,6 +408,15 @@ def create_project(project_name: str, owner_name: str = "", copy_from: str = Non
             description = f"نسخة من {copy_from}"
     else:
         new_data = dict(ECP_DEFAULTS)
+
+    # Apply enabled_modules if provided or inherited
+    if enabled_modules is not None and isinstance(enabled_modules, list):
+        valid_mods = [int(i) for i in enabled_modules if int(i) in range(len(ALL_MODULES))]
+        new_data["enabled_modules"] = sorted(list(set(valid_mods))) if valid_mods else [0]
+    elif copy_from and copy_from in profiles and "enabled_modules" in src_data:
+        new_data["enabled_modules"] = src_data["enabled_modules"]
+    elif "enabled_modules" not in new_data:
+        new_data["enabled_modules"] = [m["idx"] for m in ALL_MODULES]
 
     new_data["apartment_name"] = name
     new_data["cs_project_name"] = name
@@ -507,37 +525,169 @@ def duplicate_project(source_name: str, new_name: str = None) -> str:
 duplicate_profile = duplicate_project
 
 
+# ── PROJECT MODULE CUSTOMIZATION DEFINITIONS & HELPERS ───────────────────────
+ALL_MODULES = [
+    {"idx": 0, "key": "flat_slab", "name": "🟦 Module 1 — Flat Slabs", "short": "Module 1"},
+    {"idx": 1, "key": "columns", "name": "🏛️ Module 2 — Rectangular Columns", "short": "Module 2"},
+    {"idx": 2, "key": "footings", "name": "🪸 Module 3 — Isolated Footings", "short": "Module 3"},
+    {"idx": 3, "key": "ground_slab", "name": "🏗️ Module 4 — Ground Slabs", "short": "Module 4"},
+    {"idx": 4, "key": "steel_bars", "name": "⚙️ Module 5 — Steel Rebar Diameters & Weights", "short": "Module 5"},
+    {"idx": 5, "key": "concrete_survey", "name": "📊 Module 6 — Concrete Quantity Survey", "short": "Module 6"},
+]
+
+
+def get_project_enabled_modules(project_name: str) -> list:
+    """
+    Return list of enabled module indices (0..5) for the given project.
+    Defaults to all modules [0, 1, 2, 3, 4, 5] if not specifically configured.
+    """
+    profiles = get_all_projects()
+    pinfo = profiles.get(project_name, {})
+    data = pinfo.get("data", {}) if pinfo else {}
+    enabled = data.get("enabled_modules", None)
+    if isinstance(enabled, list) and len(enabled) > 0:
+        valid_indices = [
+            int(i) for i in enabled
+            if isinstance(i, (int, float, str)) and str(i).isdigit() and int(i) in range(len(ALL_MODULES))
+        ]
+        if valid_indices:
+            return sorted(list(set(valid_indices)))
+    return [m["idx"] for m in ALL_MODULES]
+
+
+def set_project_enabled_modules(project_name: str, enabled_indices: list) -> bool:
+    """
+    Save enabled module indices for a project into profiles.json.
+    """
+    pdata = load_profiles_data()
+    profiles = pdata.get("profiles", {})
+    if project_name not in profiles:
+        return False
+
+    valid_indices = sorted(list(set([
+        int(i) for i in enabled_indices if int(i) in range(len(ALL_MODULES))
+    ])))
+    if not valid_indices:
+        valid_indices = [0]  # Ensure at least one module is active
+
+    if "data" not in profiles[project_name]:
+        profiles[project_name]["data"] = {}
+    profiles[project_name]["data"]["enabled_modules"] = valid_indices
+    profiles[project_name]["updated_at"] = _get_now_str()
+    return save_profiles_data(pdata)
+
+
 def get_project_summary(project_name: str) -> dict:
     """
     Extract geometric & design summary metrics for a project
     to render on the project management cards.
+    Accurately detects whether the project is in Flat Slab, Concrete Survey, or Ground Slab mode.
     """
     profiles = get_all_projects()
     pinfo = profiles.get(project_name, {})
     data = pinfo.get("data", {}) if pinfo else {}
 
-    n_lx = int(data.get("fs_n_lx", 2))
-    n_ly = int(data.get("fs_n_ly", 2))
+    mod_idx = int(data.get("selected_module_idx", 0))
 
-    lx_spans = [float(data.get(f"fs_lx_{i}", 6.0)) for i in range(n_lx)]
-    ly_spans = [float(data.get(f"fs_ly_{j}", 6.0)) for j in range(n_ly)]
+    if mod_idx == 5:
+        # ── Module 6: Concrete Survey & Takeoff (حصر الخرسانات) ──
+        n_col_types = int(data.get("cs_n_types", 1))
+        n_cols_active = sum(int(data.get(f"cs_ncols_{i}", 0)) for i in range(n_col_types))
+        n_cols_total = n_cols_active
 
-    c_left = float(data.get("fs_cant_left", 0.0))
-    c_right = float(data.get("fs_cant_right", 0.0))
-    c_btm = float(data.get("fs_cant_bottom", 0.0))
-    c_top = float(data.get("fs_cant_top", 0.0))
+        n_slabs = int(data.get("cs_fs_n_slabs", 1))
+        slab_areas = []
+        for i in range(n_slabs):
+            slx = float(data.get(f"cs_fs_lx_{i}", 0.0))
+            sly = float(data.get(f"cs_fs_ly_{i}", 0.0))
+            srep = int(data.get(f"cs_fs_n_rep_{i}", 1))
+            slab_areas.append(slx * sly * srep)
+        area = sum(slab_areas) if slab_areas else 0.0
+        total_w = float(data.get("cs_fs_lx_0", 0.0))
+        total_h = float(data.get("cs_fs_ly_0", 0.0))
+        n_lx = n_slabs
+        n_ly = 1
+        ts = float(data.get("cs_fs_ts", data.get("cs_t_slab", 20.0)))
+        floors = 1
+        module_name = "Concrete Quantity Survey"
 
-    total_w = sum(lx_spans) + c_left + c_right
-    total_h = sum(ly_spans) + c_btm + c_top
-    area = total_w * total_h
+    elif mod_idx == 3:
+        # ── Module 4: Ground Slab (البلاطات الأرضية) ──
+        total_w = float(data.get("gs_lx", 30.0))
+        total_h = float(data.get("gs_ly", 20.0))
+        area = total_w * total_h
+        n_cols_active = 0
+        n_cols_total = 0
+        n_lx = 1
+        n_ly = 1
+        ts = float(data.get("gs_ts", 20.0))
+        floors = 1
+        module_name = "Ground Slabs"
 
-    n_cols_total = (n_lx + 1) * (n_ly + 1)
-    removed_cols = data.get("fs_removed_cols", [])
-    n_cols_active = n_cols_total - len(removed_cols) if isinstance(removed_cols, list) else n_cols_total
+    elif mod_idx == 1:
+        # ── Module 2: Rectangular Columns ──
+        total_w = 0.0
+        total_h = 0.0
+        area = 0.0
+        n_cols_active = 1
+        n_cols_total = 1
+        n_lx = 1
+        n_ly = 1
+        ts = 0.0
+        floors = 1
+        module_name = "Rectangular Columns"
 
-    ts = float(data.get("slab_ts_initial", 20.0))
-    floors = int(data.get("slab_n_floors", 1))
-    
+    elif mod_idx == 2:
+        # ── Module 3: Isolated Footings ──
+        total_w = 0.0
+        total_h = 0.0
+        area = 0.0
+        n_cols_active = 1
+        n_cols_total = 1
+        n_lx = 1
+        n_ly = 1
+        ts = 0.0
+        floors = 1
+        module_name = "Isolated Footings"
+
+    elif mod_idx == 4:
+        # ── Tool: Steel Rebar ──
+        total_w = 0.0
+        total_h = 0.0
+        area = 0.0
+        n_cols_active = 0
+        n_cols_total = 0
+        n_lx = 1
+        n_ly = 1
+        ts = 0.0
+        floors = 1
+        module_name = "Steel Rebar"
+
+    else:
+        # ── Module 1: Flat Slabs & General Grid ──
+        n_lx = int(data.get("fs_n_lx", 2))
+        n_ly = int(data.get("fs_n_ly", 2))
+
+        lx_spans = [float(data.get(f"fs_lx_{i}", 6.0)) for i in range(n_lx)]
+        ly_spans = [float(data.get(f"fs_ly_{j}", 6.0)) for j in range(n_ly)]
+
+        c_left = float(data.get("fs_cant_left", 0.0))
+        c_right = float(data.get("fs_cant_right", 0.0))
+        c_btm = float(data.get("fs_cant_bottom", 0.0))
+        c_top = float(data.get("fs_cant_top", 0.0))
+
+        total_w = sum(lx_spans) + c_left + c_right
+        total_h = sum(ly_spans) + c_btm + c_top
+        area = total_w * total_h
+
+        n_cols_total = (n_lx + 1) * (n_ly + 1)
+        removed_cols = data.get("fs_removed_cols", [])
+        n_cols_active = n_cols_total - len(removed_cols) if isinstance(removed_cols, list) else n_cols_total
+
+        ts = float(data.get("slab_ts_initial", 20.0))
+        floors = int(data.get("slab_n_floors", 1))
+        module_name = "Flat Slabs"
+
     # Project name is the project's primary identity
     p_name = pinfo.get("name", project_name)
     owner_name = str(data.get("cs_owner_name", "")).strip()
@@ -558,6 +708,8 @@ def get_project_summary(project_name: str) -> dict:
         "n_cols_total": n_cols_total,
         "ts": ts,
         "floors": floors,
+        "module_idx": mod_idx,
+        "module_name": module_name,
     }
 
 get_profile_summary = get_project_summary
@@ -833,6 +985,16 @@ def save_settings() -> None:
         }
 
     clean_cfg = {k: _sanitize_for_json(v) for k, v in cfg.items()}
+
+    # CRITICAL: enabled_modules must NEVER be written from cfg — it is managed exclusively
+    # via set_project_enabled_modules. Always pull it from the already-saved JSON value.
+    # First strip it from clean_cfg (in case it leaked into cfg somehow)
+    clean_cfg.pop("enabled_modules", None)
+    # Then restore the authoritative JSON value if it exists
+    existing_data = profiles[active_name].get("data", {})
+    if "enabled_modules" in existing_data:
+        clean_cfg["enabled_modules"] = existing_data["enabled_modules"]
+
     profiles[active_name]["data"] = clean_cfg
     profiles[active_name]["updated_at"] = _get_now_str()
     pdata["profiles"] = profiles

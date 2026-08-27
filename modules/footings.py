@@ -16,6 +16,7 @@ import matplotlib.patches as patches
 from matplotlib.patches import FancyBboxPatch, Circle, Polygon
 from modules import settings as S
 from modules import ground_slab
+from modules.table_styler import render_styled_table
 
 
 def round_up_to_5(v):
@@ -434,7 +435,16 @@ def render():
     )
 
     # ── INPUTS ──────────────────────────────────────────────────────────────
-    with st.expander("📝 Design Inputs (مدخلات التصميم والأبعاد والأحمال)", expanded=True):
+    st.markdown(
+        """
+        <div class="input-section-header">
+            <span style="font-size: 26px;">📥</span>
+            <span>مدخلات تصميم القاعدة والتربة والأحمال (Footing Design Inputs & Soil Parameters)</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    with st.expander("📝 تفاصيل مدخلات القاعدة والتربة (Click to Expand / Collapse)", expanded=True):
         c1, c2, c3 = st.columns(3)
 
         with c1:
@@ -1067,7 +1077,7 @@ def render():
                     "(B − bc) / 2",
                 ],
             })
-            st.dataframe(df_geom, use_container_width=True, hide_index=True)
+            render_styled_table(df_geom)
 
         with tab_conc:
             df_conc = pd.DataFrame({
@@ -1091,11 +1101,11 @@ def render():
                     "10 cm (Non-structural)",
                     f"{tau_p_allow:.3f} kg/cm²",
                     f"{b0:.1f} cm",
-                    f"{tau_p_act:.3f} kg/cm² (util = {(tau_p_act/tau_p_allow)*100:.1f}%) {'✅' if p_ok else '❌'}",
+                    f"{tau_p_act:.3f} kg/cm² (util = {(tau_p_act/tau_p_allow)*100:.1f}%) {'✅ SAFE' if p_ok else '❌ UNSAFE'}",
                     f"{tau_1_allow:.3f} kg/cm²",
-                    f"{tau_1_long:.3f} kg/cm² (util = {(tau_1_long/tau_1_allow)*100:.1f}%) {'✅' if tau_1_long <= tau_1_allow else '❌'}",
-                    f"{tau_1_sht:.3f} kg/cm²  (util = {(tau_1_sht/tau_1_allow)*100:.1f}%) {'✅' if tau_1_sht <= tau_1_allow else '❌'}",
-                    f"{tau_1_act:.3f} kg/cm² {'✅' if s_ok else '❌'}",
+                    f"{tau_1_long:.3f} kg/cm² (util = {(tau_1_long/tau_1_allow)*100:.1f}%) {'✅ SAFE' if tau_1_long <= tau_1_allow else '❌ UNSAFE'}",
+                    f"{tau_1_sht:.3f} kg/cm²  (util = {(tau_1_sht/tau_1_allow)*100:.1f}%) {'✅ SAFE' if tau_1_sht <= tau_1_allow else '❌ UNSAFE'}",
+                    f"{tau_1_act:.3f} kg/cm² {'✅ SAFE' if s_ok else '❌ UNSAFE'}",
                     f"{d_min_suggested:.1f} cm",
                     f"{t_rc_min_suggested} cm (rounded up 5 cm)",
                     f"{t_rc} cm",
@@ -1117,7 +1127,7 @@ def render():
                     "t_rc − cover − Φ/2",
                 ],
             })
-            st.dataframe(df_conc, use_container_width=True, hide_index=True)
+            render_styled_table(df_conc)
 
         with tab_rebar:
             df_rebar = pd.DataFrame({
@@ -1158,7 +1168,7 @@ def render():
                     "(L − 2×cover) / (n_sht − 1)",
                 ],
             })
-            st.dataframe(df_rebar, use_container_width=True, hide_index=True)
+            render_styled_table(df_rebar)
 
     # ── 💾 SAVE & EXPORT COMPLETE CALCULATION SHEET ────────────────────────────
     st.markdown("---")

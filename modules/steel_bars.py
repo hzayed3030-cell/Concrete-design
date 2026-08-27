@@ -12,6 +12,7 @@ Displays:
 import math
 import streamlit as st
 import pandas as pd
+from modules.table_styler import render_styled_table
 
 # ── Bar data (diameter mm, weight kg/m, area cm²) ───────────────────────────
 BARS = [
@@ -54,12 +55,7 @@ def _weight_per_m(d_mm: float) -> float:
 # ── Main render ──────────────────────────────────────────────────────────────
 def render() -> None:
     st.markdown(
-        "<h2 style='color:#1e3a8a; margin-bottom:4px;'>"
-        "⚙️ اقطار وأوزان الحديد"
-        "</h2>"
-        "<p style='color:#64748b; font-size:13px; margin-top:0;'>"
-        "Steel Reinforcement — Diameters, Weights &amp; Areas (ECP 203 / ISO 6935)"
-        "</p>",
+        '<div class="section-header">⚙️ Module 5 – Steel Rebar Diameters, Weights & Areas (ECP 203)</div>',
         unsafe_allow_html=True,
     )
 
@@ -91,14 +87,7 @@ def render() -> None:
             })
 
         df = pd.DataFrame(rows)
-        st.dataframe(
-            df,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "القطر Ø (mm)": st.column_config.NumberColumn(format="%d mm"),
-            },
-        )
+        render_styled_table(df)
 
         st.caption(
             "الكثافة المستخدمة: **7,850 kg/m³**  |  "
@@ -112,62 +101,72 @@ def render() -> None:
                 {"الدرجة / Grade": g, "حد الخضوع Fy (kg/cm²)": fy}
                 for g, fy in GRADES.items()
             ]
-            st.dataframe(pd.DataFrame(g_rows), use_container_width=True, hide_index=True)
+            render_styled_table(g_rows)
 
         # Areas per metre for multiple bars
         with st.expander("📐 مساحة (n) بار / متر طولي  |  As (n bars/m) Table"):
             counts = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12]
             area_rows = []
             for b in BARS:
-                row = {"Ø (mm)": b["dia_mm"]}
+                row = {"Ø (mm)": f"Ø {b['dia_mm']}"}
                 for n in counts:
                     row[f"{n} bars (cm²/m)"] = f"{b['area_cm2'] * n:.3f}"
                 area_rows.append(row)
-            st.dataframe(pd.DataFrame(area_rows), use_container_width=True, hide_index=True)
+            render_styled_table(area_rows)
 
     # ────────────────────────────────────────────────────────────────────────
     # TAB 2 — Single-Bar Calculator
     # ────────────────────────────────────────────────────────────────────────
     with tab_calc:
-        st.markdown("#### حاسبة وزن الحديد  |  Weight Calculator")
-        st.caption("أدخل القطر والعدد والطول لحساب الوزن الكلي والمساحة الكلية.")
+        st.markdown(
+            """
+            <div class="input-section-header">
+                <span style="font-size: 24px;">📥</span>
+                <span>بيانات ومدخلات حساب حديد التسليح (Rebar Input Parameters)</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.caption("أدخل القطر والعدد وطول السيخ لحساب الوزن الكلي والمساحة الكلية ومعدل الاستهلاك.")
 
         c1, c2, c3 = st.columns(3)
         with c1:
             dia_sel = st.selectbox(
-                "القطر Ø (mm)",
+                "📏 قطر السيخ Ø (mm)",
                 options=DIAMETERS,
                 format_func=lambda d: f"Ø{d} mm",
                 key="sb_dia",
             )
         with c2:
             n_bars = st.number_input(
-                "عدد الأسياخ  |  No. of Bars",
+                "🔢 عدد الأسياخ (n) | No. of Bars",
                 min_value=1, max_value=10_000, value=10, step=1,
                 key="sb_n",
             )
         with c3:
             length_m = st.number_input(
-                "الطول (m)  |  Length per Bar",
+                "📐 طول السيخ الواحد L (m) | Length per Bar",
                 min_value=0.01, max_value=1_000.0, value=12.0, step=0.5,
                 key="sb_len",
             )
 
         bar      = BAR_MAP[dia_sel]
+        a_bar    = bar["area_cm2"]
         w_single = bar["weight_kgm"] * length_m
         w_total  = w_single * n_bars
         a_total  = bar["area_cm2"] * n_bars
 
         st.markdown("---")
-        r1, r2, r3, r4 = st.columns(4)
-        r1.metric("وزن سيخ واحد  (kg)",  f"{w_single:.3f}")
-        r2.metric("الوزن الكلي  (kg)",   f"{w_total:.2f}")
-        r3.metric("الوزن الكلي  (ton)",  f"{w_total / 1000:.4f}")
-        r4.metric("مساحة كلية  (cm²)",   f"{a_total:.3f}")
+        r1, r2, r3, r4, r5 = st.columns(5)
+        r1.metric("وزن سيخ واحد  (kg)",     f"{w_single:.3f}")
+        r2.metric("الوزن الكلي  (kg)",      f"{w_total:.2f}")
+        r3.metric("الوزن الكلي  (ton)",     f"{w_total / 1000:.4f}")
+        r4.metric("مساحة مقطع السيخ (cm²)", f"{a_bar:.3f}")
+        r5.metric("المساحة الكلية  (cm²)",   f"{a_total:.3f}")
 
         st.info(
-            f"**Ø{dia_sel} mm** — {n_bars} سيخ × {length_m} m  →  "
-            f"الوزن = **{w_total:.2f} kg** = **{w_total/1000:.4f} ton**"
+            f"**Ø{dia_sel} mm** (مساحة السيخ $A_s$ = **{a_bar:.3f} cm²**) — {n_bars} سيخ × {length_m} m  →  "
+            f"الوزن = **{w_total:.2f} kg** = **{w_total/1000:.4f} ton** | المساحة الكلية = **{a_total:.3f} cm²**"
         )
 
     # ────────────────────────────────────────────────────────────────────────
@@ -177,9 +176,17 @@ def render() -> None:
         pass  # handled above
 
     with tab_multi:
-        st.markdown("#### حاسبة متعددة الأقطار  |  Multi-Diameter Weight Calculator")
+        st.markdown(
+            """
+            <div class="input-section-header">
+                <span style="font-size: 24px;">📥</span>
+                <span>جدول بنود ومدخلات حديد التسليح المتعددة (Multi-Diameter Rebar Input Schedule)</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         st.caption(
-            "أضف أسطرًا بأقطار وأعداد وأطوال مختلفة، وستحسب التطبيق الوزن الكلي لكل سطر والمجموع."
+            "أضف بنود حديد التسليح بأقطار وأعداد وأطوال مختلفة لحساب الأوزان والمساحات لكل بند والإجمالي العام."
         )
 
         # Session state init
@@ -198,11 +205,26 @@ def render() -> None:
                 {"dia": 16, "n": 10, "length": 12.0, "desc": ""}
             ]
 
-        col_add, col_clr, _ = st.columns([1, 1, 4])
-        col_add.button("➕ إضافة سطر", on_click=_add_row, use_container_width=True)
-        col_clr.button("🗑️ مسح الكل",  on_click=_clear_rows, use_container_width=True)
+        col_add, col_clr, _ = st.columns([1.2, 1.2, 3.6])
+        col_add.button("➕ إضافة بند تسليح", on_click=_add_row, use_container_width=True)
+        col_clr.button("🗑️ مسح الجدول",  on_click=_clear_rows, use_container_width=True)
 
-        st.markdown("")
+        st.markdown(
+            """
+            <div style="background:linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border:1px solid rgba(56, 189, 248, 0.35); border-radius:8px 8px 0 0; padding:10px 14px; margin-top:14px;">
+                <div style="font-weight:900; font-size:15px; color:#38bdf8;">📋 تفاصيل مدخلات وبنود التسليح (Rebar Items Input Table):</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Header titles row above dynamic input boxes
+        h_desc, h_dia, h_n, h_len, h_del = st.columns([3, 1.5, 1, 1.5, 0.5])
+        h_desc.markdown("<div style='font-size:14.5px; font-weight:800; color:#38bdf8; text-align:right; padding:4px 0;'>📝 وصف البند / العنصر</div>", unsafe_allow_html=True)
+        h_dia.markdown("<div style='font-size:14.5px; font-weight:800; color:#38bdf8; text-align:center; padding:4px 0;'>📏 قطر السيخ Ø</div>", unsafe_allow_html=True)
+        h_n.markdown("<div style='font-size:14.5px; font-weight:800; color:#38bdf8; text-align:center; padding:4px 0;'>🔢 العدد (n)</div>", unsafe_allow_html=True)
+        h_len.markdown("<div style='font-size:14.5px; font-weight:800; color:#38bdf8; text-align:center; padding:4px 0;'>📐 الطول L (m)</div>", unsafe_allow_html=True)
+        h_del.markdown("<div style='font-size:14.5px; font-weight:800; color:#f87171; text-align:center; padding:4px 0;'>حذف</div>", unsafe_allow_html=True)
 
         rows_data = st.session_state["sb_rows"]
         to_delete = []
@@ -213,7 +235,7 @@ def render() -> None:
                 rows_data[i]["desc"] = st.text_input(
                     f"وصف / Desc #{i+1}", value=row["desc"],
                     key=f"mb_desc_{i}", label_visibility="collapsed",
-                    placeholder="وصف البند (اختياري)…",
+                    placeholder=f"بند #{i+1} (مثال: أشاير أعمدة دور أرضي)",
                 )
             with c_dia:
                 rows_data[i]["dia"] = st.selectbox(
@@ -273,7 +295,7 @@ def render() -> None:
             "المساحة الكلية (cm²)": f"{total_a:.3f}",
         })
 
-        st.dataframe(pd.DataFrame(result_rows), use_container_width=True, hide_index=True)
+        render_styled_table(result_rows)
 
         m1, m2, m3 = st.columns(3)
         m1.metric("إجمالي الوزن (kg)",  f"{total_kg:.2f}")

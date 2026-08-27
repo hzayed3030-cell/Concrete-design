@@ -540,6 +540,15 @@ def render():
     ])
 
     with tab1:
+        st.markdown(
+            """
+            <div class="input-section-header">
+                <span style="font-size: 26px;">📥</span>
+                <span>مدخلات ومواصفات البلاطة الأرضية والتربة والأحمال (Ground Slab Design Inputs)</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         if st.session_state.get("_show_gs_help_panel", False):
             st.markdown(
                 """
