@@ -49,6 +49,14 @@ from modules.settings import (
     ALL_MODULES,
     get_project_enabled_modules,
     set_project_enabled_modules,
+    # Module soft-delete / restore / creation validation
+    check_module_dependencies,
+    validate_new_project_module_selection,
+    play_warning_sound,
+    play_system_delete_blocked_sound,
+    get_deleted_modules_trash,
+    soft_delete_module,
+    restore_module,
     # Aliases for backward compatibility
     get_all_profiles,
     get_active_profile_name,
@@ -95,9 +103,8 @@ st.markdown(
         --ecp-font-size-table-hdr: 18px;
         --ecp-font-size-table-cell: 17px;
         --ecp-font-size-small: 16px;
-        --ecp-font-size-caption: 14px;
-        --ecp-font-size-metric-val: 22px;
-        --ecp-font-size-metric-lbl: 15px;
+        --ecp-font-size-metric-val: 18px;
+        --ecp-font-size-metric-lbl: 13px;
     }
 
     /* Global Base */
@@ -354,12 +361,12 @@ st.markdown(
     [data-testid="stMainBlockContainer"] div[data-testid="stDataFrame"] *,
     [data-testid="stMainBlockContainer"] .stDataFrame,
     [data-testid="stMainBlockContainer"] .stDataFrame *,
-    [data-testid="stMainBlockContainer"] table,
-    [data-testid="stMainBlockContainer"] table *,
-    [data-testid="stMainBlockContainer"] table th,
-    [data-testid="stMainBlockContainer"] table th *,
-    [data-testid="stMainBlockContainer"] table td,
-    [data-testid="stMainBlockContainer"] table td *,
+    [data-testid="stMainBlockContainer"] table:not(.ecp-styled-dark-table),
+    [data-testid="stMainBlockContainer"] table:not(.ecp-styled-dark-table) *,
+    [data-testid="stMainBlockContainer"] table:not(.ecp-styled-dark-table) th,
+    [data-testid="stMainBlockContainer"] table:not(.ecp-styled-dark-table) th *,
+    [data-testid="stMainBlockContainer"] table:not(.ecp-styled-dark-table) td,
+    [data-testid="stMainBlockContainer"] table:not(.ecp-styled-dark-table) td *,
     [data-testid="stMainBlockContainer"] div[data-testid="glide-cell"],
     [data-testid="stMainBlockContainer"] div[data-testid="glide-cell"] *,
     [data-testid="stMainBlockContainer"] .dvn-scroller,
@@ -368,8 +375,8 @@ st.markdown(
         line-height: 1.4 !important;
     }
 
-    [data-testid="stMainBlockContainer"] table th,
-    [data-testid="stMainBlockContainer"] table th * {
+    [data-testid="stMainBlockContainer"] table:not(.ecp-styled-dark-table) th,
+    [data-testid="stMainBlockContainer"] table:not(.ecp-styled-dark-table) th * {
         font-size: var(--ecp-font-size-table-hdr) !important;
         font-weight: 700 !important;
     }
@@ -429,18 +436,30 @@ st.markdown(
         line-height: 1.45;
     }
 
-    /* Alerts & Notifications */
-    [data-testid="stMainBlockContainer"] .stAlert {
+    /* Alerts & Notifications - Right-to-Left Arabic Support */
+    [data-testid="stMainBlockContainer"] .stAlert,
+    [data-testid="stMainBlockContainer"] div[data-testid="stAlert"],
+    div[data-testid="stAlert"] {
+        direction: rtl !important;
+        text-align: right !important;
         padding: calc(var(--ecp-output-font-size) * 0.4) calc(var(--ecp-output-font-size) * 0.75) !important;
-        border-radius: 6px !important;
+        border-radius: 8px !important;
+        unicode-bidi: isolate !important;
     }
     [data-testid="stMainBlockContainer"] .stAlert p,
     [data-testid="stMainBlockContainer"] .stAlert span,
     [data-testid="stMainBlockContainer"] .stAlert div,
     [data-testid="stMainBlockContainer"] .stAlert li,
-    [data-testid="stMainBlockContainer"] .stAlert strong {
+    [data-testid="stMainBlockContainer"] .stAlert strong,
+    div[data-testid="stAlert"] p,
+    div[data-testid="stAlert"] span,
+    div[data-testid="stAlert"] div,
+    div[data-testid="stAlert"] strong {
+        direction: rtl !important;
+        text-align: right !important;
         font-size: var(--ecp-output-font-size) !important;
-        line-height: 1.4 !important;
+        line-height: 1.6 !important;
+        unicode-bidi: isolate !important;
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
@@ -607,20 +626,22 @@ st.markdown(
     .ecp-metric-box {
         background: #f8fafc;
         border: 1.5px solid #cbd5e1;
-        border-radius: 10px;
-        padding: 12px 16px;
+        border-radius: 8px;
+        padding: 8px 10px;
         text-align: center;
     }
     .ecp-metric-lbl {
-        font-size: 26px;
-        font-weight: 600;
+        font-size: 13px !important;
+        font-weight: 700 !important;
         color: #64748b;
-        margin-bottom: 4px;
+        margin-bottom: 2px !important;
+        line-height: 1.25 !important;
     }
     .ecp-metric-val {
-        font-size: 36px;
-        font-weight: 700;
+        font-size: 18px !important;
+        font-weight: 800 !important;
         color: #1e40af;
+        line-height: 1.2 !important;
     }
 
     /* Double font sizes for all interactive widgets in Profile Manager View */
@@ -974,6 +995,14 @@ def render_custom_html(html_str: str) -> None:
         st.markdown(clean_html, unsafe_allow_html=True)
 
 
+def render_delete_alarm_beep() -> None:
+    """
+    Centralized Delete Blocked Alarm:
+    Invokes the multi-layer play_warning_sound() mechanism across browser and host OS.
+    """
+    play_warning_sound()
+
+
 def render_top_profile_bar():
     """Top navigation banner displayed when viewing design modules."""
     active_pname = get_active_project_name()
@@ -1087,7 +1116,9 @@ def render_profile_manager():
     g1, g2, g3, g4, g5 = st.columns([1.1, 1.1, 1.3, 1.3, 1.3])
     with g1:
         if st.button("➕ مشروع جديد", use_container_width=True, type="primary", key="btn_global_new"):
-            st.session_state["show_create_profile_form"] = not st.session_state.get("show_create_profile_form", False)
+            is_open = st.session_state.get("show_create_profile_form", False)
+            st.session_state["show_create_profile_form"] = not is_open
+            st.session_state["_new_proj_step"] = 1
             st.session_state["show_import_profile_form"] = False
             st.session_state["show_git_update_form"] = False
             st.rerun()
@@ -1208,9 +1239,9 @@ def render_profile_manager():
 
         st.markdown("<hr style='margin: 10px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 
-    # ── Create New Project Form (Centered & Compact Cyan Theme) ──────────
+    # ── Create New Project Form (Enhanced 2-Step Workflow with Dependency Validation) ──
     if st.session_state.get("show_create_profile_form", False):
-        col_cf_pad1, col_cf_center, col_cf_pad2 = st.columns([0.6, 6.8, 0.6])
+        col_cf_pad1, col_cf_center, col_cf_pad2 = st.columns([0.5, 7.0, 0.5])
         with col_cf_center:
             with st.container(border=True):
                 st.markdown(
@@ -1218,7 +1249,7 @@ def render_profile_manager():
                     <style>
                     div.new-project-box div[data-testid="stTextInput"] label,
                     div.new-project-box div[data-testid="stTextInput"] label p {
-                        font-size: 1.60rem !important;
+                        font-size: 1.40rem !important;
                         font-weight: 900 !important;
                         color: #fbbf24 !important;
                         line-height: 1.2 !important;
@@ -1229,7 +1260,7 @@ def render_profile_manager():
                         text-shadow: 0 0 12px rgba(251, 191, 36, 0.45) !important;
                     }
                     div.new-project-box div[data-testid="stTextInput"] input {
-                        font-size: 1.65rem !important;
+                        font-size: 1.45rem !important;
                         font-weight: 900 !important;
                         color: #38bdf8 !important;
                         background: #080f1d !important;
@@ -1254,7 +1285,7 @@ def render_profile_manager():
                             border-radius: 8px;
                             font-weight: 900;
                             font-size: 18px;
-                            margin-bottom: 14px;
+                            margin-bottom: 12px;
                             display: flex;
                             align-items: center;
                             justify-content: center;
@@ -1263,59 +1294,200 @@ def render_profile_manager():
                             box-shadow: 0 0 16px rgba(251, 191, 36, 0.35);
                         ">
                             <span style="font-size: 24px;">✨</span>
-                            <span style="color: #ffffff !important; font-size: 20px; font-weight: 900;">إنشاء مشروع إنشائي جديد (New Project)</span>
+                            <span style="color: #ffffff !important; font-size: 20px; font-weight: 900;">إنشاء مشروع إنشائي جديد — New Project</span>
                         </div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
 
-                st.markdown('<div class="new-project-box">', unsafe_allow_html=True)
-                new_p_name = st.text_input(
-                    "اسم المشروع (Project Name)",
-                    value=f"مشروع {len(projects) + 1}",
-                    placeholder="أدخل اسم المشروع (مثلاً: حصر الخرسانات، برج النور...)",
-                    key="input_new_project_name",
-                )
-                st.markdown('</div>', unsafe_allow_html=True)
+                # Track workflow step (Step 1: Selection & Check, Step 2: Confirmation & Default Values)
+                curr_step = st.session_state.get("_new_proj_step", 1)
 
-                col_tmpl, col_mods = st.columns([1.1, 1.9])
-                with col_tmpl:
-                    template_options = ["مشروع جديد (ECP Defaults)"] + [f"نسخ الأبعاد من: {p}" for p in projects.keys()]
-                    selected_tmpl = st.selectbox("بدء من:", options=template_options, key="input_new_project_template")
-                with col_mods:
-                    new_proj_selected_mods = st.multiselect(
-                        "🎛️ الموديولات المتاحة في الداشبورد لهذا المشروع:",
-                        options=[m["name"] for m in ALL_MODULES],
-                        default=[m["name"] for m in ALL_MODULES],
-                        key="input_new_project_modules",
-                        help="حدد الموديولات التي ترغب في ظهورها فقط في القائمة الجانبية (مثلاً موديول واحد أو موديولين)",
+                if curr_step == 1:
+                    # ── Step 1: Project Name & Module Selection ──────────────────────
+                    st.markdown('<div class="new-project-box">', unsafe_allow_html=True)
+                    new_p_name = st.text_input(
+                        "اسم المشروع الجديد (Project Name):",
+                        value=st.session_state.get("_new_proj_saved_name", f"مشروع {len(projects) + 1}"),
+                        placeholder="أدخل اسم المشروع (مثلاً: حصر الخرسانات، برج النور...)",
+                        key="input_new_project_name",
+                    )
+                    st.session_state["_new_proj_saved_name"] = new_p_name
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+                    st.markdown(
+                        """
+                        <div style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); border: 1.5px solid #818cf8; border-radius: 10px; padding: 12px 18px; margin: 10px 0 12px 0;">
+                            <div style="font-weight: 900; font-size: 17px; color: #ffffff; display: flex; align-items: center; gap: 8px;">
+                                <span>🎛️</span> New Project – Select Modules (تحديد الموديولات للمشروع الجديد)
+                            </div>
+                            <div style="font-size: 14px; color: #cbd5e1; margin-top: 4px; font-weight: 600;">
+                                Please select the Modules you want to open in this new Project. (يرجى اختيار الموديولات التي ترغب في تفعيلها وفتحها في هذا المشروع الجديد).
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
                     )
 
-                cs1, cs2, _ = st.columns([1.2, 1.0, 3.8])
-                with cs1:
-                    if st.button("✅ حفظ وتفعيل", use_container_width=True, type="primary"):
-                        if new_p_name.strip():
-                            copy_src = None
-                            if "نسخ الأبعاد من: " in selected_tmpl:
-                                copy_src = selected_tmpl.replace("نسخ الأبعاد من: ", "").strip()
-                            created_name = create_project(new_p_name.strip(), copy_from=copy_src)
-                            # Save chosen enabled modules
-                            sel_indices = [m["idx"] for m in ALL_MODULES if m["name"] in new_proj_selected_mods]
-                            if not sel_indices:
-                                sel_indices = [0]
-                            set_project_enabled_modules(created_name, sel_indices)
-                            st.session_state["show_create_profile_form"] = False
-                            st.session_state["nav_view"] = "module"
-                            st.session_state["selected_module_idx"] = sel_indices[0]
-                            st.success(f"تم إنشاء وتفعيل المشروع: {created_name}")
+                    # Quick Select / Deselect Toolbar
+                    c_sel_all, c_desel_all, _ = st.columns([1.5, 1.8, 4.7])
+                    with c_sel_all:
+                        if st.button("☑️ تحديد الكل", key="btn_new_proj_sel_all", use_container_width=True):
+                            for m in ALL_MODULES:
+                                st.session_state[f"chk_new_proj_{m['idx']}"] = True
                             st.rerun()
-                        else:
-                            st.error("يرجى إدخال اسم صحيح.")
-                with cs2:
-                    if st.button("❌ إلغاء", use_container_width=True, key="btn_cancel_create"):
-                        st.session_state["show_create_profile_form"] = False
-                        st.rerun()
+                    with c_desel_all:
+                        if st.button("🔄 إلغاء تحديد الكل", key="btn_new_proj_desel_all", use_container_width=True):
+                            for m in ALL_MODULES:
+                                st.session_state[f"chk_new_proj_{m['idx']}"] = False
+                            st.rerun()
+
+                    # Grid of Module Checkboxes
+                    grid_del_cols = 3
+                    del_cols = st.columns(grid_del_cols)
+                    selected_module_indices = []
+
+                    for ci, mod in enumerate(ALL_MODULES):
+                        default_val = st.session_state.get(f"chk_new_proj_{mod['idx']}", True)
+                        with del_cols[ci % grid_del_cols]:
+                            is_checked = st.checkbox(
+                                mod["name"],
+                                value=default_val,
+                                key=f"chk_new_proj_{mod['idx']}",
+                            )
+                            if is_checked:
+                                selected_module_indices.append(mod["idx"])
+
+                    # ── Live Dependency Validation ─────────────────────────────
+                    is_valid_sel, sel_violations = validate_new_project_module_selection(selected_module_indices)
+
+                    if not is_valid_sel:
+                        violation_items_html = "".join([
+                            f"""<li style="margin: 6px 0; color: #ffffff; font-size: 15px;">
+                                ⚠️ <b>{v.get('message', '')}</b>
+                                {f"<div style='color: #fecaca; font-size: 13px; margin-top: 2px;'>🔗 طبيعة الاعتمادية: {v['relationship']}</div>" if 'relationship' in v else ''}
+                            </li>"""
+                            for v in sel_violations
+                        ])
+
+                        st.markdown(
+                            f"""
+                            <div style="background: linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #3f0a0a 100%); border: 2.5px solid #ef4444; border-radius: 12px; padding: 16px 20px; margin: 14px 0 10px 0; box-shadow: 0 6px 25px rgba(239, 68, 68, 0.40);">
+                                <div style="color: #ffffff; font-weight: 900; font-size: 18px; display: flex; align-items: center; gap: 10px; border-bottom: 1.5px solid rgba(239, 68, 68, 0.6); padding-bottom: 8px;">
+                                    <span style="font-size: 24px;">⛔</span>
+                                    <span>اختيار الموديولات غير مسموح — MODULE SELECTION NOT ALLOWED</span>
+                                </div>
+                                <div style="margin-top: 10px;">
+                                    <ul style="margin: 0; padding-right: 20px; list-style: disc;">
+                                        {violation_items_html}
+                                    </ul>
+                                </div>
+                                <div style="color: #fef08a; font-size: 13.5px; font-weight: 700; margin-top: 10px; background: rgba(0, 0, 0, 0.35); padding: 8px 12px; border-radius: 6px; border-right: 4px solid #fef08a;">
+                                    ℹ️ <b>تعليمات الارتباط الهندسي:</b> يرجى اختيار الموديولات المرتبطة معاً أو إلغاء اختيارهما معاً (Please select both Modules or deselect both Modules).
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                    # Action Buttons in Step 1
+                    c_next, c_cancel, _ = st.columns([1.8, 1.2, 5.0])
+                    with c_next:
+                        btn_next_disabled = not is_valid_sel or not new_p_name.strip()
+                        if st.button(
+                            "➡️ متابعة والتأكيد (Next)",
+                            type="primary",
+                            use_container_width=True,
+                            disabled=btn_next_disabled,
+                            help="انتقل إلى شاشة تأكيد الموديولات وبدء المشروع" if not btn_next_disabled else "يرجى تصحيح اختيار الموديولات وإدخال اسم المشروع أولاً",
+                        ):
+                            st.session_state["_new_proj_selected_indices"] = selected_module_indices
+                            st.session_state["_new_proj_step"] = 2
+                            st.rerun()
+                    with c_cancel:
+                        if st.button("❌ إلغاء", key="btn_cancel_step1", use_container_width=True):
+                            st.session_state["show_create_profile_form"] = False
+                            st.session_state["_new_proj_step"] = 1
+                            st.rerun()
+
+                elif curr_step == 2:
+                    # ── Step 2: Confirmation & Default Values Initialization ────────
+                    p_name_final = st.session_state.get("_new_proj_saved_name", f"مشروع {len(projects) + 1}").strip()
+                    chosen_indices = st.session_state.get("_new_proj_selected_indices", [0])
+
+                    # 1. New Project Confirmation Card
+                    selected_mods_html = "".join([
+                        f"""<li style="margin: 4px 0; color: #ffffff; font-size: 15px; display: flex; align-items: center; gap: 8px;">
+                            <span style="color: #4ade80; font-size: 17px;">✓</span>
+                            <span>{m['name']}</span>
+                        </li>"""
+                        for m in ALL_MODULES if m["idx"] in chosen_indices
+                    ])
+
+                    st.markdown(
+                        f"""
+                        <div style="background: linear-gradient(135deg, #064e3b 0%, #065f46 100%); border: 2px solid #34d399; border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; box-shadow: 0 4px 20px rgba(52, 211, 153, 0.25);">
+                            <div style="font-weight: 900; font-size: 19px; color: #ffffff; display: flex; align-items: center; gap: 10px; border-bottom: 1.5px solid rgba(52, 211, 153, 0.4); padding-bottom: 8px;">
+                                <span style="font-size: 22px;">📋</span>
+                                <span>New Project Confirmation (تأكيد إنشاء المشروع)</span>
+                            </div>
+                            <div style="color: #d1fae5; font-size: 16px; font-weight: 700; margin: 10px 0 6px 0;">
+                                اسم المشروع: <b style="color: #fef08a; font-size: 18px;">«{p_name_final}»</b>
+                            </div>
+                            <div style="color: #ffffff; font-size: 14.5px; font-weight: 600; margin-bottom: 8px;">
+                                The following Modules will be opened in the new Project (الموديولات التي سيتم فتحها وتفعيلها في المشروع):
+                            </div>
+                            <div style="background: rgba(0, 0, 0, 0.25); border-radius: 8px; padding: 10px 16px;">
+                                <ul style="margin: 0; padding: 0; list-style: none;">
+                                    {selected_mods_html}
+                                </ul>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                    # 2. Explanatory Message about Default Values (⚠️ New Modules Initialization)
+                    st.markdown(
+                        """
+                        <div style="background: linear-gradient(135deg, #0c2d48 0%, #145da0 100%); border: 2px solid #38bdf8; border-radius: 12px; padding: 18px 22px; margin-bottom: 16px; box-shadow: 0 4px 20px rgba(56, 189, 248, 0.25);">
+                            <div style="color: #38bdf8; font-weight: 900; font-size: 18px; display: flex; align-items: center; gap: 10px; border-bottom: 1.5px solid rgba(56, 189, 248, 0.4); padding-bottom: 8px;">
+                                <span style="font-size: 22px;">⚠️</span>
+                                <span>New Modules Initialization (بدء الموديولات بالقيم الافتراضية)</span>
+                            </div>
+                            <div style="color: #f0f9ff; font-size: 14.5px; line-height: 1.7; margin-top: 10px; font-weight: 500;">
+                                <p style="margin: 4px 0;">• <b>The selected Modules will be opened with their initial default values and recommended starting parameters provided by the system.</b></p>
+                                <p style="margin: 4px 0; color: #bae6fd;">• <i>These are only default/initial values and do not represent final project inputs or design results.</i></p>
+                                <p style="margin: 4px 0;">• <b>After entering the actual project inputs, the Modules will perform the required calculations and design according to the applicable design code (ECP 203), calculation procedures, and design steps implemented in the system.</b></p>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                    # Action Buttons in Step 2
+                    c_create, c_back, c_cancel2, _ = st.columns([2.2, 1.6, 1.2, 3.0])
+                    with c_create:
+                        if st.button("🚀 إنشاء المشروع وتفعيله (Create Project)", type="primary", use_container_width=True, key="btn_confirm_create_proj"):
+                            # Clean Creation: strictly using ECP_DEFAULTS (copy_from=None)
+                            created_name = create_project(p_name_final, copy_from=None, enabled_modules=chosen_indices)
+                            set_project_enabled_modules(created_name, chosen_indices)
+                            st.session_state["show_create_profile_form"] = False
+                            st.session_state["_new_proj_step"] = 1
+                            st.session_state["nav_view"] = "module"
+                            st.session_state["selected_module_idx"] = chosen_indices[0]
+                            st.success(f"✅ تم إنشاء وتفعيل المشروع الجديد «{created_name}» بنجاح!")
+                            st.rerun()
+                    with c_back:
+                        if st.button("↩️ تعديل الاختيار (Back)", use_container_width=True, key="btn_back_step1"):
+                            st.session_state["_new_proj_step"] = 1
+                            st.rerun()
+                    with c_cancel2:
+                        if st.button("❌ إلغاء", key="btn_cancel_step2", use_container_width=True):
+                            st.session_state["show_create_profile_form"] = False
+                            st.session_state["_new_proj_step"] = 1
+                            st.rerun()
 
         st.markdown("<hr style='margin: 10px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 
@@ -1356,25 +1528,37 @@ def render_profile_manager():
                     st.rerun()
         st.markdown("<hr style='margin:6px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 
-    # ── Delete Confirmation Dialog ─────────────────────────────────────────
+    # ── Delete Confirmation Dialog (ENLARGED + WARNING BEEP) ───────────────
     if st.session_state.get("_profile_to_delete"):
         del_target = st.session_state["_profile_to_delete"]
+        # Trigger warning sound for project delete dialog
+        play_warning_sound()
         st.markdown(
-            f"""<div style="background: rgba(239, 68, 68, 0.15); border: 1.5px solid #ef4444; border-radius: 8px; padding: 10px 16px; margin: 8px 0 10px 0;">
-                <div style="color: #f87171; font-weight: 800; font-size: 18px;">⚠️ تأكيد حذف المشروع</div>
-                <div style="font-size: 16px; color: #f1f5f9; margin-top: 4px;">هل أنت متأكد من حذف المشروع <b>«{del_target}»</b> وجميع بياناته؟</div>
-            </div>""",
+            f"""
+            <div style="background: linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #3f0a0a 100%); border: 3.5px solid #ef4444; border-radius: 14px; padding: 22px 26px; margin: 12px 0 16px 0; box-shadow: 0 10px 35px rgba(239, 68, 68, 0.45);">
+                <div style="color: #ffffff; font-weight: 900; font-size: 24px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; border-bottom: 2px solid rgba(239, 68, 68, 0.6); padding-bottom: 10px;">
+                    <span style="font-size: 32px;">⚠️</span>
+                    <span>تأكيد حذف المشروع بالكامل — DELETE PROJECT CONFIRMATION</span>
+                </div>
+                <div style="font-size: 18px; color: #fee2e2; font-weight: 700; line-height: 1.6; margin-bottom: 12px;">
+                    هل أنت متأكد تماماً من رغبتك في حذف المشروع <b style="color: #fef08a; font-size: 21px; text-decoration: underline;">«{del_target}»</b> وجميع بياناته وموديولاته؟
+                </div>
+                <div style="background: rgba(0, 0, 0, 0.35); border: 1.5px solid rgba(254, 202, 202, 0.25); border-radius: 8px; padding: 10px 16px; color: #fca5a5; font-size: 15px; font-weight: 700;">
+                    🚨 <b>تحذير:</b> سيتم حذف ملفات المشروع وجميع الحسابات والتصميمات الخاصة به بشكل نهائي.
+                </div>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
-        cd1, cd2, _ = st.columns([1.4, 1.4, 5])
+        cd1, cd2, _ = st.columns([1.6, 1.6, 4.8])
         with cd1:
-            if st.button("🗑️ تأكيد الحذف", use_container_width=True, type="primary"):
+            if st.button("🗑️ نعم، احذف المشروع", key=f"btn_confirm_del_proj_{del_target}", use_container_width=True, type="primary"):
                 delete_project(del_target)
                 st.session_state["_profile_to_delete"] = None
-                st.success(f"تم حذف «{del_target}».")
+                st.success(f"✅ تم حذف المشروع «{del_target}» بنجاح.")
                 st.rerun()
         with cd2:
-            if st.button("❌ تراجع", use_container_width=True):
+            if st.button("❌ تراجع / إلغاء", key=f"btn_cancel_del_proj_{del_target}", use_container_width=True):
                 st.session_state["_profile_to_delete"] = None
                 st.rerun()
         st.markdown("<hr style='margin:6px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
@@ -1434,8 +1618,11 @@ def render_profile_manager():
         </div>"""
         render_custom_html(row_html)
 
-        # Action buttons — Run, Modules Config, JSON Export, Clone, Delete
-        b1, b2, b3, b4, b5, _pad = st.columns([1.1, 1.2, 1.0, 0.8, 0.5, 4.6])
+        # Action buttons — Run, Modules Config, Delete Module, Restore Module, JSON Export, Clone, Delete Project
+        trash_for_pname = get_deleted_modules_trash(pname)
+        has_trash = len(trash_for_pname) > 0
+
+        b1, b2, b3, b4, b5, b6, b7, _pad = st.columns([1.1, 1.15, 1.05, 1.05, 0.95, 0.8, 0.45, 2.4])
         with b1:
             if st.button(
                 "🚀 تشغيل",
@@ -1459,8 +1646,43 @@ def render_profile_manager():
                 help=f"تخصيص الموديولات المتاحة لمشروع {pname}",
             ):
                 st.session_state[f"_show_mod_config_{pname}"] = not is_mod_open
+                # Close other drawers for this project
+                st.session_state[f"_show_delete_mod_{pname}"] = False
+                st.session_state[f"_show_restore_mod_{pname}"] = False
                 st.rerun()
         with b3:
+            is_del_mod_open = st.session_state.get(f"_show_delete_mod_{pname}", False)
+            btn_del_mod_label = "🔼 إخفاء" if is_del_mod_open else "🗑️ حذف موديول"
+            if st.button(
+                btn_del_mod_label,
+                key=f"btn_delete_mod_{pname}",
+                use_container_width=True,
+                help=f"حذف (soft delete) موديول من مشروع {pname} مع إمكانية الاستعادة لاحقاً",
+            ):
+                st.session_state[f"_show_delete_mod_{pname}"] = not is_del_mod_open
+                # Close other drawers for this project
+                st.session_state[f"_show_mod_config_{pname}"] = False
+                st.session_state[f"_show_restore_mod_{pname}"] = False
+                # Clear any pending dialogs for this project
+                st.session_state.pop(f"_mod_to_delete_{pname}", None)
+                st.session_state.pop(f"_dep_warning_{pname}", None)
+                st.rerun()
+        with b4:
+            is_restore_open = st.session_state.get(f"_show_restore_mod_{pname}", False)
+            btn_restore_label = "🔼 إخفاء" if is_restore_open else "♻️ استعادة"
+            if st.button(
+                btn_restore_label,
+                key=f"btn_restore_mod_{pname}",
+                use_container_width=True,
+                help=f"استعادة موديول محذوف في مشروع {pname}" if has_trash else "لا توجد موديولات محذوفة في هذا المشروع",
+                disabled=not has_trash,
+            ):
+                st.session_state[f"_show_restore_mod_{pname}"] = not is_restore_open
+                st.session_state[f"_show_mod_config_{pname}"] = False
+                st.session_state[f"_show_delete_mod_{pname}"] = False
+                st.rerun()
+
+        with b5:
             st.download_button(
                 label="📤 تصدير JSON",
                 data=project_json_str,
@@ -1469,7 +1691,7 @@ def render_profile_manager():
                 key=f"btn_exp_{pname}",
                 use_container_width=True,
             )
-        with b4:
+        with b6:
             if st.button(
                 "📋 نسخ",
                 key=f"btn_dup_{pname}",
@@ -1478,20 +1700,25 @@ def render_profile_manager():
                 new_cloned = duplicate_project(pname)
                 st.success(f"تم نسخ المشروع: {new_cloned}")
                 st.rerun()
-        with b5:
+        with b7:
             if st.button(
                 "🗑️",
                 key=f"btn_del_{pname}",
                 use_container_width=True,
                 help=f"حذف مشروع {pname}",
             ):
+                play_warning_sound()
                 st.session_state["_profile_to_delete"] = pname
                 st.rerun()
 
-        # ── Interactive Module Customizer Drawer ─────────────────────────────
+        # ── Interactive Module Customizer Drawer (Hide/Show) ─────────────────
         if st.session_state.get(f"_show_mod_config_{pname}", False):
             with st.container(border=True):
                 cur_enabled = get_project_enabled_modules(pname)
+                cur_trash = get_deleted_modules_trash(pname)
+                deleted_indices = [int(k) for k in cur_trash.keys()]
+                # Available modules that are currently active (NOT in trash)
+                avail_mods = [m for m in ALL_MODULES if m["idx"] not in deleted_indices]
 
                 with st.form(key=f"form_mod_config_{pname}"):
                     # Top Row with Info Banner + Submit Save Button
@@ -1516,27 +1743,24 @@ def render_profile_manager():
 
                     st.markdown("<div style='margin-top: 8px;'></div>", unsafe_allow_html=True)
 
-                    # Row 1: Module 1, Module 2, Module 3
-                    r1_col1, r1_col2, r1_col3 = st.columns(3)
-                    with r1_col1:
-                        c0 = st.checkbox(ALL_MODULES[0]["name"], value=(0 in cur_enabled))
-                    with r1_col2:
-                        c1 = st.checkbox(ALL_MODULES[1]["name"], value=(1 in cur_enabled))
-                    with r1_col3:
-                        c2 = st.checkbox(ALL_MODULES[2]["name"], value=(2 in cur_enabled))
-
-                    # Row 2: Module 4, Module 5, Module 6
-                    r2_col1, r2_col2, r2_col3 = st.columns(3)
-                    with r2_col1:
-                        c3 = st.checkbox(ALL_MODULES[3]["name"], value=(3 in cur_enabled))
-                    with r2_col2:
-                        c4 = st.checkbox(ALL_MODULES[4]["name"], value=(4 in cur_enabled))
-                    with r2_col3:
-                        c5 = st.checkbox(ALL_MODULES[5]["name"], value=(5 in cur_enabled))
+                    # Dynamically render checkboxes ONLY for available (non-deleted) modules
+                    checkbox_results = {}
+                    if avail_mods:
+                        grid_num_cols = min(len(avail_mods), 3)
+                        grid_cols = st.columns(grid_num_cols)
+                        for ci, mod in enumerate(avail_mods):
+                            with grid_cols[ci % grid_num_cols]:
+                                checkbox_results[mod["idx"]] = st.checkbox(
+                                    mod["name"],
+                                    value=(mod["idx"] in cur_enabled),
+                                    key=f"chk_mod_cfg_{pname}_{mod['idx']}",
+                                )
+                    else:
+                        st.info("ℹ️ جميع الموديولات في هذا المشروع محذوفة. يمكنك استعادتها من زر ♻️ استعادة.")
 
                     if submit_save:
-                        chosen_mods = [idx for idx, checked in enumerate([c0, c1, c2, c3, c4, c5]) if checked]
-                        if not chosen_mods:
+                        chosen_mods = [idx for idx, checked in checkbox_results.items() if checked]
+                        if not chosen_mods and avail_mods:
                             st.warning("⚠️ يرجى اختيار موديول واحد على الأقل.")
                         else:
                             set_project_enabled_modules(pname, chosen_mods)
@@ -1552,7 +1776,241 @@ def render_profile_manager():
 
             st.markdown("<hr style='margin:6px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 
+
+        # ── Delete Module Drawer ─────────────────────────────────────────────
+        if st.session_state.get(f"_show_delete_mod_{pname}", False):
+            with st.container(border=True):
+                cur_enabled_del = get_project_enabled_modules(pname)
+                cur_trash_del = get_deleted_modules_trash(pname)
+                deleted_idxs_del = [int(k) for k in cur_trash_del.keys()]
+                # Show ALL modules regardless of visibility (enabled/hidden) — only exclude already-deleted ones
+                deletable_mods = [m for m in ALL_MODULES if m["idx"] not in deleted_idxs_del]
+
+                st.markdown(
+                    f"""
+                    <div style="background: linear-gradient(135deg, #3b0f0f 0%, #7f1d1d 100%); border: 1.5px solid #ef4444; border-radius: 8px; padding: 8px 14px; margin-bottom: 10px;">
+                        <div style="font-weight: 800; font-size: 16px; color: #ffffff; display: flex; align-items: center; gap: 8px;">
+                            <span>🗑️</span> حذف موديول (Soft Delete) — مشروع: <b style="color: #fca5a5;">«{pname}»</b>
+                        </div>
+                        <div style="font-size: 13px; color: #fecaca; margin-top: 2px;">
+                            يتم فحص الارتباطات الهندسية أولاً. لا يمكن حذف الموديول إلا في حال عدم وجود أي موديول نشط يعتمد عليه.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                if not deletable_mods:
+                    st.info("✅ لا توجد موديولات نشطة يمكن حذفها في هذا المشروع.")
+                else:
+                    pending_del_idx = st.session_state.get(f"_mod_to_delete_{pname}", None)
+                    dep_warning = st.session_state.get(f"_dep_warning_{pname}", None)
+
+                    # ── Step 1: Module Selector Grid ─────────────────────────────
+                    if pending_del_idx is None and dep_warning is None:
+                        st.markdown(
+                            "<div style='font-size: 14px; color: #cbd5e1; margin-bottom: 8px; font-weight: 600;'>اختر الموديول الذي تريد حذفه:</div>",
+                            unsafe_allow_html=True,
+                        )
+                        grid_del_cols = min(len(deletable_mods), 3)
+                        del_cols = st.columns(grid_del_cols)
+                        for ci, mod in enumerate(deletable_mods):
+                            with del_cols[ci % grid_del_cols]:
+                                if st.button(
+                                    f"🗑️ {mod['name']}",
+                                    key=f"btn_pick_del_{pname}_{mod['idx']}",
+                                    use_container_width=True,
+                                ):
+                                    # Always trigger warning sound upon picking any module to delete
+                                    play_warning_sound()
+                                    # Dependency check
+                                    deps = check_module_dependencies(pname, mod["idx"])
+                                    if deps:
+                                        st.session_state[f"_dep_warning_{pname}"] = {
+                                            "module_idx": mod["idx"],
+                                            "module_name": mod["name"],
+                                            "deps": deps,
+                                        }
+                                    else:
+                                        st.session_state[f"_mod_to_delete_{pname}"] = mod["idx"]
+                                    st.rerun()
+
+                    # ── Step 2a: No-dependency Confirmation Dialog (ENLARGED + WARNING BEEP) ───
+                    elif pending_del_idx is not None and dep_warning is None:
+                        mod_info_del = next((m for m in ALL_MODULES if m["idx"] == pending_del_idx), None)
+                        mod_name_del = mod_info_del["name"] if mod_info_del else f"Module {pending_del_idx}"
+
+                        # Play warning sound on confirmation dialog render
+                        play_warning_sound()
+
+                        st.markdown(
+                            f"""
+                            <div style="background: linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #3f0a0a 100%); border: 3.5px solid #ef4444; border-radius: 14px; padding: 22px 26px; margin: 10px 0 14px 0; box-shadow: 0 10px 35px rgba(239, 68, 68, 0.45);">
+                                <div style="color: #ffffff; font-weight: 900; font-size: 24px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; border-bottom: 2px solid rgba(239, 68, 68, 0.6); padding-bottom: 10px;">
+                                    <span style="font-size: 32px;">🗑️</span>
+                                    <span>تأكيد حذف الموديول — DELETE MODEL CONFIRMATION</span>
+                                </div>
+                                <div style="color: #fee2e2; font-size: 18px; font-weight: 700; line-height: 1.6; margin-bottom: 12px;">
+                                    هل أنت متأكد تماماً من رغبتك في حذف الموديول <b style="color: #fef08a; font-size: 21px; text-decoration: underline;">«{mod_name_del}»</b> من مشروع <b>«{pname}»</b>؟
+                                </div>
+                                <div style="background: rgba(0, 0, 0, 0.35); border: 1.5px solid rgba(254, 202, 202, 0.25); border-radius: 8px; padding: 10px 16px; color: #86efac; font-size: 15px; font-weight: 700;">
+                                    ✅ <b>الحفظ الآمن:</b> سيتم حفظ نسخة كاملة من جميع مدخلات وبيانات الموديول (Snapshot) ويمكنك استعادتها في أي وقت عبر زر ♻️ استعادة.
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                        cd1, cd2, _ = st.columns([1.6, 1.6, 4.8])
+                        with cd1:
+                            if st.button("🗑️ تأكيد حذف الموديول", key=f"btn_confirm_del_mod_{pname}", type="primary", use_container_width=True):
+                                ok = soft_delete_module(pname, pending_del_idx)
+                                st.session_state.pop(f"_mod_to_delete_{pname}", None)
+                                st.session_state[f"_show_delete_mod_{pname}"] = False
+                                if ok:
+                                    st.success(f"✅ تم حذف الموديول «{mod_name_del}» وحفظ بياناته. يمكن استعادته عبر زر ♻️ استعادة.")
+                                else:
+                                    st.error("❌ فشل حذف الموديول. يرجى المحاولة مرة أخرى.")
+                                st.rerun()
+                        with cd2:
+                            if st.button("❌ تراجع / إلغاء", key=f"btn_cancel_del_mod_{pname}", use_container_width=True):
+                                st.session_state.pop(f"_mod_to_delete_{pname}", None)
+                                st.rerun()
+
+                    # ── Step 2b: Large Dependency Warning Dialog (DELETION REJECTED & BLOCKED) ───
+                    elif dep_warning is not None:
+                        dw_mod_idx = dep_warning["module_idx"]
+                        dw_mod_name = dep_warning["module_name"]
+                        dw_deps = dep_warning["deps"]
+
+                        # Play audible warning alarm immediately on dialog render
+                        play_warning_sound()
+
+                        dep_list_html = "".join([
+                            f"""<li style="margin: 8px 0; color: #ffffff; font-size: 16px;">
+                                <b style="color: #fef08a; font-size: 17px;">{d['name']}</b>
+                                <div style="color: #cbd5e1; font-size: 14px; margin-top: 2px;">🔗 طبيعة الارتباط: {d['relationship']}</div>
+                            </li>"""
+                            for d in dw_deps
+                        ])
+
+                        warning_dialog_html = f"""
+                        <div style="background: linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #3f0a0a 100%); border: 3.5px solid #ef4444; border-radius: 14px; padding: 22px 26px; margin: 10px 0; box-shadow: 0 10px 35px rgba(239, 68, 68, 0.45);">
+                            <div style="color: #ffffff; font-weight: 900; font-size: 23px; margin-bottom: 14px; display: flex; align-items: center; gap: 12px; border-bottom: 2px solid rgba(239, 68, 68, 0.6); padding-bottom: 12px;">
+                                <span style="font-size: 32px;">🚫</span>
+                                <span style="letter-spacing: 0.5px;">عملية الحذف مرفوضة تماماً — DELETE NOT ALLOWED</span>
+                            </div>
+                            
+                            <div style="color: #fee2e2; font-size: 17px; font-weight: 700; line-height: 1.6; margin-bottom: 16px;">
+                                لا يمكن حذف الموديول <b style="color: #fef08a; font-size: 19px; text-decoration: underline;">«{dw_mod_name}»</b> لوجود ارتباطات واعتماديات هندسية نشطة تمنع حذفه.
+                            </div>
+
+                            <div style="background: rgba(0, 0, 0, 0.40); border: 1.5px solid rgba(254, 202, 202, 0.3); border-radius: 10px; padding: 16px 20px; margin-bottom: 18px;">
+                                <div style="color: #fef08a; font-size: 16px; font-weight: 800; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+                                    <span>⚠️</span> الموديولات المرتبطة التي تمنع الحذف ({len(dw_deps)} موديول):
+                                </div>
+                                <ul style="margin: 0; padding-right: 24px; list-style: disc;">
+                                    {dep_list_html}
+                                </ul>
+                            </div>
+
+                            <div style="color: #fca5a5; font-size: 15px; font-weight: 700; background: rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 12px 16px; border-right: 5px solid #ef4444; line-height: 1.5;">
+                                ℹ️ <b>تعليمات فك الارتباط:</b> لحذف هذا الموديول، يجب أولاً إزالة الارتباط أو حذف الموديولات التابعة المذكورة أعلاه.
+                            </div>
+                        </div>
+                        """
+                        render_custom_html(warning_dialog_html)
+
+                        # ONLY ONE BUTTON: OK / Dismiss (No "Delete Anyway"!)
+                        cd_ok, _ = st.columns([2.5, 7.5])
+                        with cd_ok:
+                            if st.button("✅ فهمت ذلك / حسناً (OK)", key=f"btn_dep_ok_{pname}", type="primary", use_container_width=True):
+                                st.session_state.pop(f"_dep_warning_{pname}", None)
+                                st.rerun()
+
+                # Close Delete Drawer button
+                c_close_del, _ = st.columns([1.8, 8.2])
+                with c_close_del:
+                    if st.button("❌ إغلاق", key=f"btn_close_del_mod_{pname}", use_container_width=True):
+                        st.session_state[f"_show_delete_mod_{pname}"] = False
+                        st.session_state.pop(f"_mod_to_delete_{pname}", None)
+                        st.session_state.pop(f"_dep_warning_{pname}", None)
+                        st.rerun()
+
+            st.markdown("<hr style='margin:6px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
+
+
+        # ── Restore Module Drawer ────────────────────────────────────────────
+        if st.session_state.get(f"_show_restore_mod_{pname}", False):
+            with st.container(border=True):
+                trash_restore = get_deleted_modules_trash(pname)
+
+                st.markdown(
+                    f"""
+                    <div style="background: linear-gradient(135deg, #052e16 0%, #14532d 100%); border: 1.5px solid #4ade80; border-radius: 8px; padding: 8px 14px; margin-bottom: 10px;">
+                        <div style="font-weight: 800; font-size: 16px; color: #ffffff; display: flex; align-items: center; gap: 8px;">
+                            <span>♻️</span> استعادة موديول محذوف — مشروع: <b style="color: #86efac;">«{pname}»</b>
+                        </div>
+                        <div style="font-size: 13px; color: #bbf7d0; margin-top: 2px;">
+                            سيتم استعادة الموديول وجميع بياناته وإعداداته كما كانت قبل الحذف.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                if not trash_restore:
+                    st.info("✅ لا توجد موديولات محذوفة يمكن استعادتها في هذا المشروع.")
+                else:
+                    st.markdown(
+                        "<div style='font-size: 14px; color: #cbd5e1; margin-bottom: 8px; font-weight: 600;'>الموديولات المحذوفة المتاحة للاستعادة:</div>",
+                        unsafe_allow_html=True,
+                    )
+                    for mod_idx_str, trash_entry in trash_restore.items():
+                        mod_idx_int = int(mod_idx_str)
+                        t_name = trash_entry.get("module_name", f"Module {mod_idx_str}")
+                        t_date = trash_entry.get("deleted_at", "—")
+                        t_snap_count = len(trash_entry.get("snapshot", {}))
+
+                        rc1, rc2 = st.columns([5, 1.6])
+                        with rc1:
+                            st.markdown(
+                                f"""
+                                <div style="background: rgba(74, 222, 128, 0.08); border: 1px solid rgba(74, 222, 128, 0.3); border-radius: 6px; padding: 8px 12px; margin-bottom: 4px;">
+                                    <div style="color: #4ade80; font-weight: 700; font-size: 14px;">{t_name}</div>
+                                    <div style="color: #94a3b8; font-size: 12px; margin-top: 2px;">
+                                        🕒 حُذف في: {t_date} &nbsp;|&nbsp; 💾 {t_snap_count} قيمة محفوظة في الـ snapshot
+                                    </div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+                        with rc2:
+                            st.markdown("<div style='margin-top: 4px;'></div>", unsafe_allow_html=True)
+                            if st.button(
+                                "♻️ استعادة",
+                                key=f"btn_do_restore_{pname}_{mod_idx_str}",
+                                use_container_width=True,
+                                type="primary",
+                            ):
+                                ok, msg = restore_module(pname, mod_idx_int)
+                                st.session_state[f"_show_restore_mod_{pname}"] = False
+                                if ok:
+                                    st.success(f"✅ {msg}")
+                                else:
+                                    st.error(f"❌ {msg}")
+                                st.rerun()
+
+                # Close Restore Drawer button
+                c_close_res, _ = st.columns([1.8, 8.2])
+                with c_close_res:
+                    if st.button("❌ إغلاق", key=f"btn_close_restore_mod_{pname}", use_container_width=True):
+                        st.session_state[f"_show_restore_mod_{pname}"] = False
+                        st.rerun()
+
+            st.markdown("<hr style='margin:6px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
+
         st.markdown("<div style='margin-bottom: 4px;'></div>", unsafe_allow_html=True)
+
 
 
 # ── MAIN EXECUTION & SIDEBAR CONDITIONAL ROUTING ──────────────────────────────

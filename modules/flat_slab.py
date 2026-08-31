@@ -12,6 +12,7 @@ Axis Conventions:
 Units: ton, m, kg, cm, kg/cm²
 """
 
+import os
 import io
 import base64
 import math
@@ -23,6 +24,8 @@ from matplotlib.patches import FancyBboxPatch, Circle
 import matplotlib.colors as mcolors
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection, Line3DCollection
 import streamlit as st
 import pandas as pd
 from modules import settings as S
@@ -134,6 +137,7 @@ def _compute_effective_spans(Lx_spans, Ly_spans, removed_ij_set):
     return eff_Lx, eff_Ly, active_xi, active_yj, full_x_removed, full_y_removed, ddm_warning
 
 
+@st.cache_data(show_spinner=False)
 def get_flat_slab_columns(Lx_spans, Ly_spans, bc_cm=30, tc_cm=30, removed_ids=None):
     """
     Generate structured registry of columns C1, C2, ...
@@ -223,6 +227,7 @@ def get_flat_slab_columns(Lx_spans, Ly_spans, bc_cm=30, tc_cm=30, removed_ids=No
     return active_columns, all_columns, eff_Lx, eff_Ly, ddm_warning
 
 
+@st.cache_data(show_spinner=False)
 def get_flat_slab_panels(Lx_spans, Ly_spans, void_ids=None):
     """
     Generate structured registry of panels/bays P(1,1), P(1,2), ...
@@ -349,7 +354,7 @@ def generate_flat_slab_sketch(
     slab_h = y_slab_max - y_slab_min
 
     # Dual Subplot: Left (Structural Plan ~73%), Right (Data Card ~27%)
-    fig = plt.figure(figsize=(16.5, 8.8), dpi=130, facecolor="#ffffff")
+    fig = plt.figure(figsize=(16.5, 8.8), dpi=100, facecolor="#ffffff")
     gs = fig.add_gridspec(1, 2, width_ratios=[1.82, 0.68], wspace=0.08, left=0.03, right=0.97, top=0.90, bottom=0.06)
     ax_plan = fig.add_subplot(gs[0, 0])
     ax_card = fig.add_subplot(gs[0, 1])
@@ -512,7 +517,7 @@ def generate_flat_slab_sketch(
 
 
     # Span Dimensions (Lx along Bottom)
-    dim_offset_bot = max(1.0, slab_h * 0.10)
+    dim_offset_bot = max(1.2, slab_h * 0.10)
     y_dim_lx = y_slab_min - dim_offset_bot
     for i, lx in enumerate(Lx_spans):
         mid_x = (x_coords[i] + x_coords[i + 1]) / 2.0
@@ -527,8 +532,21 @@ def generate_flat_slab_sketch(
             color="#0f172a", fontsize=12, weight="bold", ha="center", va="top"
         )
 
+    # Total Overall X-Dimension (Line 2)
+    y_dim_tot = y_dim_lx - 1.1
+    ax_plan.annotate(
+        "", xy=(x_slab_max, y_dim_tot), xytext=(x_slab_min, y_dim_tot),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=1.8, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_slab_min, x_slab_min], [y_dim_tot - 0.25, y_dim_tot + 0.25], color="#1e3a8a", lw=1.6)
+    ax_plan.plot([x_slab_max, x_slab_max], [y_dim_tot - 0.25, y_dim_tot + 0.25], color="#1e3a8a", lw=1.6)
+    ax_plan.text(
+        (x_slab_min + x_slab_max) / 2.0, y_dim_tot - 0.35, f"Total Lx = {slab_w:.2f} m",
+        color="#1e3a8a", fontsize=12.5, weight="bold", ha="center", va="top"
+    )
+
     # Span Dimensions (Ly along Right)
-    dim_offset_right = max(1.0, slab_w * 0.10)
+    dim_offset_right = max(1.2, slab_w * 0.10)
     x_dim_ly = x_slab_max + dim_offset_right
     for j, ly in enumerate(Ly_spans):
         mid_y = (y_coords[j] + y_coords[j + 1]) / 2.0
@@ -543,6 +561,19 @@ def generate_flat_slab_sketch(
             color="#0f172a", fontsize=12, weight="bold", ha="left", va="center"
         )
 
+    # Total Overall Y-Dimension (Line 2)
+    x_dim_tot = x_dim_ly + 1.1
+    ax_plan.annotate(
+        "", xy=(x_dim_tot, y_slab_max), xytext=(x_dim_tot, y_slab_min),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=1.8, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_dim_tot - 0.25, x_dim_tot + 0.25], [y_slab_min, y_slab_min], color="#1e3a8a", lw=1.6)
+    ax_plan.plot([x_dim_tot - 0.25, x_dim_tot + 0.25], [y_slab_max, y_slab_max], color="#1e3a8a", lw=1.6)
+    ax_plan.text(
+        x_dim_tot + 0.35, (y_slab_min + y_slab_max) / 2.0, f"Total Ly = {slab_h:.2f} m",
+        color="#1e3a8a", fontsize=12.5, weight="bold", ha="left", va="center", rotation=270
+    )
+
     # Cantilever annotations
     cant_style = dict(color="#1d4ed8", fontsize=10.5, ha="center", va="center", weight="bold")
     if cant_left > 0:
@@ -556,9 +587,9 @@ def generate_flat_slab_sketch(
 
     # Bounds & Aspect
     margin_left = offset_grid_left + bubble_radius * 2 + 0.6
-    margin_right = dim_offset_right + 1.4
+    margin_right = dim_offset_right + 3.0
     margin_top = offset_grid_top + bubble_radius * 2 + 0.6
-    margin_bot = dim_offset_bot + 1.0
+    margin_bot = dim_offset_bot + 2.8
     ax_plan.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
     ax_plan.set_ylim(y_slab_min - margin_bot, y_slab_max + margin_top)
     ax_plan.set_aspect("equal", adjustable="box")
@@ -712,9 +743,9 @@ def generate_flat_slab_top_rft_sketch(
     dim_offset_right = max(1.5, slab_w * 0.08)
 
     margin_left = offset_grid_left + bubble_radius * 2 + 0.6
-    margin_right = dim_offset_right + 1.2
+    margin_right = dim_offset_right + 3.0
     margin_top = offset_grid_top + bubble_radius * 2 + 0.6
-    margin_bot = dim_offset_bot + 1.2
+    margin_bot = dim_offset_bot + 2.8
 
     total_w = slab_w + margin_left + margin_right
     total_h = slab_h + margin_top + margin_bot
@@ -730,7 +761,7 @@ def generate_flat_slab_top_rft_sketch(
     plan_ratio = (fig_h - legend_h - 1.0) / fig_h
     legend_ratio = legend_h / fig_h
 
-    fig = plt.figure(figsize=(fig_w, fig_h), dpi=150, facecolor="#ffffff")
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=100, facecolor="#ffffff")
     gs = fig.add_gridspec(
         2, 1,
         height_ratios=[plan_ratio, legend_ratio],
@@ -882,6 +913,19 @@ def generate_flat_slab_top_rft_sketch(
             color="#0f172a", fontsize=16.5, weight="bold", ha="center", va="top"
         )
 
+    # Total Overall X-Dimension (Line 2)
+    y_dim_tot = y_dim_lx - 1.2
+    ax_plan.annotate(
+        "", xy=(x_slab_max, y_dim_tot), xytext=(x_slab_min, y_dim_tot),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=2.4, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_slab_min, x_slab_min], [y_dim_tot - 0.35, y_dim_tot + 0.35], color="#1e3a8a", lw=1.8)
+    ax_plan.plot([x_slab_max, x_slab_max], [y_dim_tot - 0.35, y_dim_tot + 0.35], color="#1e3a8a", lw=1.8)
+    ax_plan.text(
+        (x_slab_min + x_slab_max) / 2.0, y_dim_tot - 0.45, f"Total Lx = {slab_w:.2f} m",
+        color="#1e3a8a", fontsize=17.0, weight="bold", ha="center", va="top"
+    )
+
     # Span Dimensions (Ly along Right)
     dim_offset_right = max(1.6, slab_w * 0.10)
     x_dim_ly = x_slab_max + dim_offset_right
@@ -897,6 +941,19 @@ def generate_flat_slab_top_rft_sketch(
             x_dim_ly + 0.45, mid_y, f"{ly:.2f} m",
             color="#0f172a", fontsize=16.5, weight="bold", ha="left", va="center"
         )
+
+    # Total Overall Y-Dimension (Line 2)
+    x_dim_tot = x_dim_ly + 1.2
+    ax_plan.annotate(
+        "", xy=(x_dim_tot, y_slab_max), xytext=(x_dim_tot, y_slab_min),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=2.4, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_dim_tot - 0.35, x_dim_tot + 0.35], [y_slab_min, y_slab_min], color="#1e3a8a", lw=1.8)
+    ax_plan.plot([x_dim_tot - 0.35, x_dim_tot + 0.35], [y_slab_max, y_slab_max], color="#1e3a8a", lw=1.8)
+    ax_plan.text(
+        x_dim_tot + 0.45, (y_slab_min + y_slab_max) / 2.0, f"Total Ly = {slab_h:.2f} m",
+        color="#1e3a8a", fontsize=17.0, weight="bold", ha="left", va="center", rotation=270
+    )
 
     # Cantilever Callouts (with clean non-overlapping leaders)
     for cant in cant_rft_list:
@@ -1055,9 +1112,9 @@ def generate_flat_slab_bottom_rft_sketch(
     dim_offset_right = max(1.5, slab_w * 0.08)
 
     margin_left = offset_grid_left + bubble_radius * 2 + 0.6
-    margin_right = dim_offset_right + 1.2
+    margin_right = dim_offset_right + 3.0
     margin_top = offset_grid_top + bubble_radius * 2 + 0.6
-    margin_bot = dim_offset_bot + 1.2
+    margin_bot = dim_offset_bot + 2.8
 
     total_w = slab_w + margin_left + margin_right
     total_h = slab_h + margin_top + margin_bot
@@ -1073,7 +1130,7 @@ def generate_flat_slab_bottom_rft_sketch(
     plan_ratio = (fig_h - legend_h - 1.0) / fig_h
     legend_ratio = legend_h / fig_h
 
-    fig = plt.figure(figsize=(fig_w, fig_h), dpi=150, facecolor="#ffffff")
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=100, facecolor="#ffffff")
     gs = fig.add_gridspec(
         2, 1,
         height_ratios=[plan_ratio, legend_ratio],
@@ -1251,6 +1308,19 @@ def generate_flat_slab_bottom_rft_sketch(
             color="#0f172a", fontsize=16.5, weight="bold", ha="center", va="top"
         )
 
+    # Total Overall X-Dimension (Line 2)
+    y_dim_tot = y_dim_lx - 1.2
+    ax_plan.annotate(
+        "", xy=(x_slab_max, y_dim_tot), xytext=(x_slab_min, y_dim_tot),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=2.4, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_slab_min, x_slab_min], [y_dim_tot - 0.35, y_dim_tot + 0.35], color="#1e3a8a", lw=1.8)
+    ax_plan.plot([x_slab_max, x_slab_max], [y_dim_tot - 0.35, y_dim_tot + 0.35], color="#1e3a8a", lw=1.8)
+    ax_plan.text(
+        (x_slab_min + x_slab_max) / 2.0, y_dim_tot - 0.45, f"Total Lx = {slab_w:.2f} m",
+        color="#1e3a8a", fontsize=17.0, weight="bold", ha="center", va="top"
+    )
+
     # Span Dimensions (Ly along Right)
     dim_offset_right = max(1.6, slab_w * 0.10)
     x_dim_ly = x_slab_max + dim_offset_right
@@ -1266,6 +1336,19 @@ def generate_flat_slab_bottom_rft_sketch(
             x_dim_ly + 0.45, mid_y, f"{ly:.2f} m",
             color="#0f172a", fontsize=16.5, weight="bold", ha="left", va="center"
         )
+
+    # Total Overall Y-Dimension (Line 2)
+    x_dim_tot = x_dim_ly + 1.2
+    ax_plan.annotate(
+        "", xy=(x_dim_tot, y_slab_max), xytext=(x_dim_tot, y_slab_min),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=2.4, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_dim_tot - 0.35, x_dim_tot + 0.35], [y_slab_min, y_slab_min], color="#1e3a8a", lw=1.8)
+    ax_plan.plot([x_dim_tot - 0.35, x_dim_tot + 0.35], [y_slab_max, y_slab_max], color="#1e3a8a", lw=1.8)
+    ax_plan.text(
+        x_dim_tot + 0.45, (y_slab_min + y_slab_max) / 2.0, f"Total Ly = {slab_h:.2f} m",
+        color="#1e3a8a", fontsize=17.0, weight="bold", ha="left", va="center", rotation=270
+    )
 
     ax_plan.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
     ax_plan.set_ylim(y_slab_min - margin_bot, y_slab_max + margin_top)
@@ -1373,9 +1456,9 @@ def generate_flat_slab_reactions_sketch(
     dim_offset_right = max(1.5, slab_w * 0.08)
 
     margin_left = offset_grid_left + bubble_radius * 2 + 0.6
-    margin_right = dim_offset_right + 1.2
+    margin_right = dim_offset_right + 3.0
     margin_top = offset_grid_top + bubble_radius * 2 + 0.6
-    margin_bot = dim_offset_bot + 1.2
+    margin_bot = dim_offset_bot + 2.8
 
     total_w = slab_w + margin_left + margin_right
     total_h = slab_h + margin_top + margin_bot
@@ -1391,7 +1474,7 @@ def generate_flat_slab_reactions_sketch(
     plan_ratio = (fig_h - legend_h - 1.0) / fig_h
     legend_ratio = legend_h / fig_h
 
-    fig = plt.figure(figsize=(fig_w, fig_h), dpi=150, facecolor="#ffffff")
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=100, facecolor="#ffffff")
     gs = fig.add_gridspec(
         2, 1,
         height_ratios=[plan_ratio, legend_ratio],
@@ -1567,6 +1650,19 @@ def generate_flat_slab_reactions_sketch(
             color="#0f172a", fontsize=16.5, weight="bold", ha="center", va="top"
         )
 
+    # Total Overall X-Dimension (Line 2)
+    y_dim_tot = y_dim_lx - 1.2
+    ax_plan.annotate(
+        "", xy=(x_slab_max, y_dim_tot), xytext=(x_slab_min, y_dim_tot),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=2.4, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_slab_min, x_slab_min], [y_dim_tot - 0.35, y_dim_tot + 0.35], color="#1e3a8a", lw=1.8)
+    ax_plan.plot([x_slab_max, x_slab_max], [y_dim_tot - 0.35, y_dim_tot + 0.35], color="#1e3a8a", lw=1.8)
+    ax_plan.text(
+        (x_slab_min + x_slab_max) / 2.0, y_dim_tot - 0.45, f"Total Lx = {slab_w:.2f} m",
+        color="#1e3a8a", fontsize=17.0, weight="bold", ha="center", va="top"
+    )
+
     # Span Dimensions (Ly along Right)
     dim_offset_right = max(1.6, slab_w * 0.10)
     x_dim_ly = x_slab_max + dim_offset_right
@@ -1582,6 +1678,19 @@ def generate_flat_slab_reactions_sketch(
             x_dim_ly + 0.45, mid_y, f"{ly:.2f} m",
             color="#0f172a", fontsize=16.5, weight="bold", ha="left", va="center"
         )
+
+    # Total Overall Y-Dimension (Line 2)
+    x_dim_tot = x_dim_ly + 1.2
+    ax_plan.annotate(
+        "", xy=(x_dim_tot, y_slab_max), xytext=(x_dim_tot, y_slab_min),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=2.4, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_dim_tot - 0.35, x_dim_tot + 0.35], [y_slab_min, y_slab_min], color="#1e3a8a", lw=1.8)
+    ax_plan.plot([x_dim_tot - 0.35, x_dim_tot + 0.35], [y_slab_max, y_slab_max], color="#1e3a8a", lw=1.8)
+    ax_plan.text(
+        x_dim_tot + 0.45, (y_slab_min + y_slab_max) / 2.0, f"Total Ly = {slab_h:.2f} m",
+        color="#1e3a8a", fontsize=17.0, weight="bold", ha="left", va="center", rotation=270
+    )
 
     ax_plan.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
     ax_plan.set_ylim(y_slab_min - margin_bot, y_slab_max + margin_top)
@@ -1864,9 +1973,9 @@ def generate_flat_slab_moment_contour(
     dim_offset_right = max(1.5, slab_w * 0.08)
 
     margin_left = offset_grid_left + bubble_radius * 2 + 0.6
-    margin_right = dim_offset_right + 1.2
+    margin_right = dim_offset_right + 3.0
     margin_top = offset_grid_top + bubble_radius * 2 + 0.6
-    margin_bot = dim_offset_bot + 1.2
+    margin_bot = dim_offset_bot + 2.8
 
     total_w = slab_w + margin_left + margin_right
     total_h = slab_h + margin_top + margin_bot
@@ -1882,7 +1991,7 @@ def generate_flat_slab_moment_contour(
     plan_ratio = (fig_h - legend_h - 1.0) / fig_h
     legend_ratio = legend_h / fig_h
 
-    fig = plt.figure(figsize=(fig_w, fig_h), dpi=150, facecolor="#ffffff")
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=100, facecolor="#ffffff")
     gs = fig.add_gridspec(
         2, 1,
         height_ratios=[plan_ratio, legend_ratio],
@@ -2057,6 +2166,19 @@ def generate_flat_slab_moment_contour(
             color="#0f172a", fontsize=16.5, weight="bold", ha="center", va="top"
         )
 
+    # Total Overall X-Dimension (Line 2)
+    y_dim_tot = y_dim_lx - 1.2
+    ax_plan.annotate(
+        "", xy=(x_slab_max, y_dim_tot), xytext=(x_slab_min, y_dim_tot),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=2.4, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_slab_min, x_slab_min], [y_dim_tot - 0.35, y_dim_tot + 0.35], color="#1e3a8a", lw=1.8)
+    ax_plan.plot([x_slab_max, x_slab_max], [y_dim_tot - 0.35, y_dim_tot + 0.35], color="#1e3a8a", lw=1.8)
+    ax_plan.text(
+        (x_slab_min + x_slab_max) / 2.0, y_dim_tot - 0.45, f"Total Lx = {slab_w:.2f} m",
+        color="#1e3a8a", fontsize=17.0, weight="bold", ha="center", va="top"
+    )
+
     # Span Dimensions (Ly along Right)
     dim_offset_right = max(1.6, slab_w * 0.10)
     x_dim_ly = x_slab_max + dim_offset_right
@@ -2072,6 +2194,19 @@ def generate_flat_slab_moment_contour(
             x_dim_ly + 0.45, mid_y, f"{ly:.2f} m",
             color="#0f172a", fontsize=16.5, weight="bold", ha="left", va="center"
         )
+
+    # Total Overall Y-Dimension (Line 2)
+    x_dim_tot = x_dim_ly + 1.2
+    ax_plan.annotate(
+        "", xy=(x_dim_tot, y_slab_max), xytext=(x_dim_tot, y_slab_min),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=2.4, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_dim_tot - 0.35, x_dim_tot + 0.35], [y_slab_min, y_slab_min], color="#1e3a8a", lw=1.8)
+    ax_plan.plot([x_dim_tot - 0.35, x_dim_tot + 0.35], [y_slab_max, y_slab_max], color="#1e3a8a", lw=1.8)
+    ax_plan.text(
+        x_dim_tot + 0.45, (y_slab_min + y_slab_max) / 2.0, f"Total Ly = {slab_h:.2f} m",
+        color="#1e3a8a", fontsize=17.0, weight="bold", ha="left", va="center", rotation=270
+    )
 
     ax_plan.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
     ax_plan.set_ylim(y_slab_min - margin_bot, y_slab_max + margin_top)
@@ -2200,7 +2335,7 @@ def generate_flat_slab_dual_moment_contour(
     total_w = slab_w + margin_left + margin_right
     total_h = slab_h + margin_top + margin_bot
 
-    fig = plt.figure(figsize=(32.0, 16.0), dpi=140, facecolor="#ffffff")
+    fig = plt.figure(figsize=(32.0, 16.0), dpi=100, facecolor="#ffffff")
     gs = fig.add_gridspec(1, 2, wspace=0.10, left=0.03, right=0.97, top=0.92, bottom=0.06)
 
     modes = [("M11", M11, "↔ X-Direction (Spans M11)", gs[0, 0]),
@@ -2357,9 +2492,9 @@ def generate_moment_deficit_contour(
     dim_offset_right = max(1.5, slab_w * 0.08)
 
     margin_left  = offset_grid_left + bubble_radius * 2 + 0.6
-    margin_right = dim_offset_right + 1.2
+    margin_right = dim_offset_right + 3.0
     margin_top   = offset_grid_top  + bubble_radius * 2 + 0.6
-    margin_bot   = dim_offset_bot   + 1.2
+    margin_bot   = dim_offset_bot   + 2.8
 
     total_w = slab_w + margin_left + margin_right
     total_h = slab_h + margin_top  + margin_bot
@@ -2375,7 +2510,7 @@ def generate_moment_deficit_contour(
     plan_ratio   = (fig_h - legend_h - 1.0) / fig_h
     legend_ratio = legend_h / fig_h
 
-    fig = plt.figure(figsize=(fig_w, fig_h), dpi=150, facecolor="#ffffff")
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=100, facecolor="#ffffff")
     gs  = fig.add_gridspec(
         2, 1,
         height_ratios=[plan_ratio, legend_ratio],
@@ -2614,6 +2749,19 @@ def generate_moment_deficit_contour(
         ax_plan.plot([x_coords[i+1], x_coords[i+1]], [y_dim_lx - 0.35, y_dim_lx + 0.35], color="#0f172a", lw=1.8)
         ax_plan.text(mid_x, y_dim_lx - 0.45, f"{lx:.2f} m", color="#0f172a", fontsize=16.5, weight="bold", ha="center", va="top")
 
+    # Total Overall X-Dimension (Line 2)
+    y_dim_tot = y_dim_lx - 1.2
+    ax_plan.annotate(
+        "", xy=(x_slab_max, y_dim_tot), xytext=(x_slab_min, y_dim_tot),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=2.4, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_slab_min, x_slab_min], [y_dim_tot - 0.35, y_dim_tot + 0.35], color="#1e3a8a", lw=1.8)
+    ax_plan.plot([x_slab_max, x_slab_max], [y_dim_tot - 0.35, y_dim_tot + 0.35], color="#1e3a8a", lw=1.8)
+    ax_plan.text(
+        (x_slab_min + x_slab_max) / 2.0, y_dim_tot - 0.45, f"Total Lx = {slab_w:.2f} m",
+        color="#1e3a8a", fontsize=17.0, weight="bold", ha="center", va="top"
+    )
+
     dim_offset_right_plot = max(1.6, slab_w * 0.10)
     x_dim_ly = x_slab_max + dim_offset_right_plot
     for j, ly in enumerate(Ly_spans):
@@ -2623,6 +2771,19 @@ def generate_moment_deficit_contour(
         ax_plan.plot([x_dim_ly - 0.35, x_dim_ly + 0.35], [y_coords[j],   y_coords[j]],   color="#0f172a", lw=1.8)
         ax_plan.plot([x_dim_ly - 0.35, x_dim_ly + 0.35], [y_coords[j+1], y_coords[j+1]], color="#0f172a", lw=1.8)
         ax_plan.text(x_dim_ly + 0.45, mid_y, f"{ly:.2f} m", color="#0f172a", fontsize=16.5, weight="bold", ha="left", va="center")
+
+    # Total Overall Y-Dimension (Line 2)
+    x_dim_tot = x_dim_ly + 1.2
+    ax_plan.annotate(
+        "", xy=(x_dim_tot, y_slab_max), xytext=(x_dim_tot, y_slab_min),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=2.4, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_dim_tot - 0.35, x_dim_tot + 0.35], [y_slab_min, y_slab_min], color="#1e3a8a", lw=1.8)
+    ax_plan.plot([x_dim_tot - 0.35, x_dim_tot + 0.35], [y_slab_max, y_slab_max], color="#1e3a8a", lw=1.8)
+    ax_plan.text(
+        x_dim_tot + 0.45, (y_slab_min + y_slab_max) / 2.0, f"Total Ly = {slab_h:.2f} m",
+        color="#1e3a8a", fontsize=17.0, weight="bold", ha="left", va="center", rotation=270
+    )
 
     ax_plan.set_xlim(x_slab_min - margin_left,  x_slab_max + margin_right)
     ax_plan.set_ylim(y_slab_min - margin_bot,   y_slab_max + margin_top)
@@ -2799,7 +2960,7 @@ def generate_flat_slab_rebar_bending_details(
     wt_chairs = tot_chair_len * uw(12)
 
     # Create 8-panel grid figure (4 rows x 2 columns)
-    fig, axes = plt.subplots(4, 2, figsize=(18, 20), dpi=140)
+    fig, axes = plt.subplots(4, 2, figsize=(18, 20), dpi=100)
     fig.patch.set_facecolor("#ffffff")
 
     plt.subplots_adjust(left=0.04, right=0.96, top=0.945, bottom=0.025, hspace=0.36, wspace=0.20)
@@ -3079,9 +3240,9 @@ def generate_flat_slab_column_caps_sketch(
     dim_offset_right = max(1.8, slab_w * 0.09)
 
     margin_left = offset_grid_left + bubble_radius * 2 + 0.8
-    margin_right = dim_offset_right + 1.5
+    margin_right = dim_offset_right + 3.0
     margin_top = offset_grid_top + bubble_radius * 2 + 0.8
-    margin_bot = dim_offset_bot + 1.5
+    margin_bot = dim_offset_bot + 2.8
 
     total_w = slab_w + margin_left + margin_right
     total_h = slab_h + margin_top + margin_bot
@@ -3094,7 +3255,7 @@ def generate_flat_slab_column_caps_sketch(
     fig_w = max(22.0, min(34.0, target_plan_w + 1.6))
     fig_h = max(18.0, min(32.0, target_plan_h + legend_h + 1.0))
 
-    fig = plt.figure(figsize=(fig_w, fig_h), dpi=140)
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
     fig.patch.set_facecolor("#ffffff")
 
     plan_ratio = (fig_h - legend_h - 0.8) / fig_h
@@ -3218,6 +3379,19 @@ def generate_flat_slab_column_caps_sketch(
         ax_plan.annotate("", xy=(x_slab_max, dim_y), xytext=(x_coords[-1], dim_y), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
         ax_plan.text((x_coords[-1] + x_slab_max)/2.0, dim_y - 0.4, f"{cant_right:.2f}m", ha="center", va="top", fontsize=13, fontweight="bold", color="#0f172a")
 
+    # Total Overall X-Dimension (Line 2)
+    y_dim_tot = dim_y - 1.2
+    ax_plan.annotate(
+        "", xy=(x_slab_max, y_dim_tot), xytext=(x_slab_min, y_dim_tot),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=1.8, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_slab_min, x_slab_min], [y_dim_tot - 0.25, y_dim_tot + 0.25], color="#1e3a8a", lw=1.6)
+    ax_plan.plot([x_slab_max, x_slab_max], [y_dim_tot - 0.25, y_dim_tot + 0.25], color="#1e3a8a", lw=1.6)
+    ax_plan.text(
+        (x_slab_min + x_slab_max) / 2.0, y_dim_tot - 0.38, f"Total Lx = {slab_w:.2f} m",
+        color="#1e3a8a", fontsize=13, weight="bold", ha="center", va="top"
+    )
+
     dim_x = x_slab_max + dim_offset_right
     if cant_bottom > 0:
         ax_plan.annotate("", xy=(dim_x, y_coords[0]), xytext=(dim_x, y_slab_min), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
@@ -3229,6 +3403,19 @@ def generate_flat_slab_column_caps_sketch(
     if cant_top > 0:
         ax_plan.annotate("", xy=(dim_x, y_slab_max), xytext=(dim_x, y_coords[-1]), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
         ax_plan.text(dim_x + 0.4, (y_coords[-1] + y_slab_max)/2.0, f"{cant_top:.2f}m", ha="left", va="center", fontsize=13, fontweight="bold", color="#0f172a")
+
+    # Total Overall Y-Dimension (Line 2)
+    x_dim_tot = dim_x + 1.2
+    ax_plan.annotate(
+        "", xy=(x_dim_tot, y_slab_max), xytext=(x_dim_tot, y_slab_min),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=1.8, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_dim_tot - 0.25, x_dim_tot + 0.25], [y_slab_min, y_slab_min], color="#1e3a8a", lw=1.6)
+    ax_plan.plot([x_dim_tot - 0.25, x_dim_tot + 0.25], [y_slab_max, y_slab_max], color="#1e3a8a", lw=1.6)
+    ax_plan.text(
+        x_dim_tot + 0.38, (y_slab_min + y_slab_max) / 2.0, f"Total Ly = {slab_h:.2f} m",
+        color="#1e3a8a", fontsize=13, weight="bold", ha="left", va="center", rotation=270
+    )
 
     ax_plan.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
     ax_plan.set_ylim(y_slab_min - margin_bot, y_slab_max + margin_top)
@@ -3257,6 +3444,7 @@ def generate_flat_slab_column_caps_sketch(
 
 
 # ── DEFLECTION CALCULATION (ECP 203) ──────────────────────────────────────
+@st.cache_data(show_spinner=False)
 def calculate_flat_slab_deflections(
     Lx_spans,
     Ly_spans,
@@ -3269,10 +3457,19 @@ def calculate_flat_slab_deflections(
     void_panel_ids=None,
     col_w_cm=30,
     col_d_cm=30,
+    prov_btm_mesh_cm2m=0.0,
+    prov_top_mesh_cm2m=0.0,
+    all_panels_x_design=None,
+    all_panels_y_design=None,
+    top_extra_cols=None,
 ):
     """
-    Computes short-term and long-term (creep & shrinkage) deflections for all bays
-    in accordance with ECP 203 Clause 4.3.1 (Branson effective inertia method).
+    Computes short-term (instantaneous) and long-term (creep & shrinkage) deflections for all bays
+    in strict accordance with ECP 203 Clause 4.3.1 (Branson effective transformed inertia method),
+    utilizing the full actual approved slab reinforcement:
+      - As_total = Bottom Basic Mesh + Extra Bottom Bars in midspan (tension steel for Icr & Ie).
+      - A's = Top Basic Mesh (compression steel in midspan for creep factor lambda = xi / (1 + 50*mu')).
+      - Top column caps and column ties influence on end rotational stiffness.
     """
     panels_def = []
     _voids = set(void_panel_ids) if void_panel_ids else set()
@@ -3288,7 +3485,10 @@ def calculate_flat_slab_deflections(
     n_y = len(Ly_spans)
 
     fcu_mpa = Fcu * 0.0980665
-    Ec_t_m2 = 4400.0 * math.sqrt(max(10.0, fcu_mpa)) * 100.0   # t/m2
+    Ec_mpa = 4400.0 * math.sqrt(max(10.0, fcu_mpa))
+    Ec_t_m2 = Ec_mpa * 100.0   # t/m2
+    Es_mpa = 200000.0
+    n_modular = max(6.0, min(15.0, Es_mpa / max(100.0, Ec_mpa)))
     fctr_t_m2 = 0.60 * math.sqrt(max(10.0, fcu_mpa)) * 100.0   # t/m2
 
     ts_m = ts_cm / 100.0
@@ -3297,13 +3497,26 @@ def calculate_flat_slab_deflections(
     Mcr = (fctr_t_m2 * Ig_m4) / yt_m                           # t.m/m
 
     Ws = DL_tot + LL                                           # Service load (t/m2)
-    DL_ratio = min(1.0, max(0.4, DL_tot / max(0.1, Ws)))
-
-    alpha_creep = 2.0
-    lambda_long = 1.0 + alpha_creep * DL_ratio                 # Total multiplier for long-term deflection
+    DL_ratio = min(1.0, max(0.4, (DL_tot + 0.25 * LL) / max(0.1, Ws)))
 
     bc_m = col_w_cm / 100.0
     tc_m = col_d_cm / 100.0
+    d_prime_cm = 2.5
+
+    # Index bottom extra steel by panel_id
+    extra_x_map = {}
+    if all_panels_x_design:
+        for item in all_panels_x_design:
+            pid = item.get("panel_id")
+            if pid:
+                extra_x_map[pid] = item
+
+    extra_y_map = {}
+    if all_panels_y_design:
+        for item in all_panels_y_design:
+            pid = item.get("panel_id")
+            if pid:
+                extra_y_map[pid] = item
 
     for j in range(n_y):
         for i in range(n_x):
@@ -3338,34 +3551,70 @@ def calculate_flat_slab_deflections(
 
             Ms_pos = (Ws * (Ln_critical ** 2)) / m_denom       # t.m/m
 
-            Icr = 0.35 * Ig_m4
+            # ── 1. Actual Reinforcement Areas for this Bay ──
+            item_x = extra_x_map.get(pid, {})
+            item_y = extra_y_map.get(pid, {})
+            delta_as_x = item_x.get("delta_As", 0.0) if item_x.get("is_needed", False) else 0.0
+            delta_as_y = item_y.get("delta_As", 0.0) if item_y.get("is_needed", False) else 0.0
+            delta_as_max = max(delta_as_x, delta_as_y)
+
+            base_btm_cm2m = max(3.93, prov_btm_mesh_cm2m) if prov_btm_mesh_cm2m > 0 else 5.65
+            As_btm_tot = base_btm_cm2m + delta_as_max
+            As_top_comp = max(2.50, prov_top_mesh_cm2m) if prov_top_mesh_cm2m > 0 else 3.93
+
+            # ── 2. Transformed Cracked Section Neutral Axis x & Icr ──
+            A_q = 50.0  # b / 2 for b = 100 cm
+            B_q = n_modular * As_btm_tot + (n_modular - 1.0) * As_top_comp
+            C_q = -(n_modular * As_btm_tot * d_cm + (n_modular - 1.0) * As_top_comp * d_prime_cm)
+            disc = max(0.0, B_q**2 - 4.0 * A_q * C_q)
+            x_na_cm = (-B_q + math.sqrt(disc)) / (2.0 * A_q)
+            x_na_cm = max(1.0, min(d_cm - 1.0, x_na_cm))
+
+            # Icr in cm4/m -> m4/m
+            Icr_cm4 = (100.0 * (x_na_cm**3) / 3.0) + (n_modular - 1.0) * As_top_comp * ((x_na_cm - d_prime_cm)**2) + n_modular * As_btm_tot * ((d_cm - x_na_cm)**2)
+            Icr_m4 = Icr_cm4 * 1e-8
+
+            # ── 3. Branson Effective Inertia Ie (ECP 203) ──
             if Ms_pos <= Mcr:
                 Ie = Ig_m4
                 cracked = False
             else:
                 cracked = True
                 ratio_cr = (Mcr / max(0.01, Ms_pos)) ** 3
-                Ie = max(Icr, min(Ig_m4, ratio_cr * Ig_m4 + (1.0 - ratio_cr) * Icr))
+                Ie = max(Icr_m4, min(Ig_m4, ratio_cr * Ig_m4 + (1.0 - ratio_cr) * Icr_m4))
 
+            # ── 4. Creep & Shrinkage Multiplier lambda (ECP 203 Clause 4.3.1.2) ──
+            mu_prime = As_top_comp / (100.0 * d_cm)
+            xi_factor = 2.0  # 5 years sustained duration
+            lambda_creep = xi_factor / (1.0 + 50.0 * mu_prime)
+
+            # ── 5. Deflection Computations ──
             delta_st_m = (kd * Ws * (Ln_critical ** 4)) / max(1.0, Ec_t_m2 * Ie)
             delta_st_mm = delta_st_m * 1000.0
-            delta_long_mm = delta_st_mm * lambda_long
+            delta_long_inc_mm = delta_st_mm * lambda_creep * DL_ratio
+            delta_long_tot_mm = delta_st_mm + delta_long_inc_mm
 
-            delta_all_mm = (Ln_critical * 1000.0) / 250.0
-            ratio = delta_long_mm / max(0.1, delta_all_mm)
-            is_safe = ratio <= 1.0
+            delta_all_total_mm = (Ln_critical * 1000.0) / 250.0
+            delta_all_inc_mm = (Ln_critical * 1000.0) / 480.0
+
+            ratio_tot = delta_long_tot_mm / max(0.1, delta_all_total_mm)
+            is_safe = (delta_long_tot_mm <= delta_all_total_mm) and (delta_long_inc_mm <= delta_all_inc_mm)
 
             if not is_safe:
-                ts_req_est = ts_cm * ((delta_long_mm / delta_all_mm) ** (1.0 / 3.0))
+                ts_req_est = ts_cm * ((delta_long_tot_mm / delta_all_total_mm) ** (1.0 / 3.0))
                 ts_req_cm = max(ts_cm + 2.0, math.ceil(ts_req_est / 2.0) * 2.0)
                 ts_inc_cm = ts_req_cm - ts_cm
+                advisory_txt = f"يُوصى بزيادة سُمك البلاطة إلى {ts_req_cm:.0f} cm (+{ts_inc_cm:.0f} cm) أو تكثيف حديد الشد السفلي وحديد الضغط العلوي."
             else:
                 ts_req_cm = ts_cm
                 ts_inc_cm = 0
+                advisory_txt = "سهم الانحناء آمن وضمن الحدود الكودية المسموحة ✅"
+
+            rebar_sum = f"As={As_btm_tot:.2f} cm² (شد سفلي) | A's={As_top_comp:.2f} cm² (ضغط علوي)"
 
             panels_def.append({
                 "Panel ID": pid,
-                "Bay Label": f"Bay ({i+1}, {j+1})",
+                "Bay Label": f"Bay X{i+1}-X{i+2} / Y{j+1}-Y{j+2}",
                 "Location Type": ptype,
                 "x_mid": x_mid,
                 "y_mid": y_mid,
@@ -3376,22 +3625,508 @@ def calculate_flat_slab_deflections(
                 "span_x": span_x,
                 "span_y": span_y,
                 "Ln (m)": Ln_critical,
+                "ts (cm)": ts_cm,
+                "d (cm)": d_cm,
                 "Ws (t/m²)": Ws,
-                "Mcr (t.m/m)": Mcr,
                 "Ms_pos (t.m/m)": Ms_pos,
+                "Mcr (t.m/m)": Mcr,
+                "As_btm (cm²/m)": As_btm_tot,
+                "As_top (cm²/m)": As_top_comp,
+                "x_na (cm)": x_na_cm,
+                "Ig (m⁴/m)": Ig_m4,
+                "Icr (m⁴/m)": Icr_m4,
+                "Ie (m⁴/m)": Ie,
                 "Is_Cracked": cracked,
                 "Ie/Ig": Ie / Ig_m4,
+                "mu_prime": mu_prime,
+                "lambda_creep": lambda_creep,
                 "delta_st (mm)": delta_st_mm,
-                "delta_long (mm)": delta_long_mm,
-                "delta_all (mm)": delta_all_mm,
-                "Ratio": ratio,
+                "delta_long_inc (mm)": delta_long_inc_mm,
+                "delta_long (mm)": delta_long_tot_mm,
+                "delta_all (mm)": delta_all_total_mm,
+                "delta_all_inc (mm)": delta_all_inc_mm,
+                "Ratio": ratio_tot,
                 "is_safe": is_safe,
                 "ts_req_cm": int(ts_req_cm),
                 "ts_inc_cm": int(ts_inc_cm),
                 "Status": "✅ Safe (ضمن الحدود)" if is_safe else "🚨 Exceeds Limit (يتجاوز المسموح)",
+                "rebar_sum": rebar_sum,
+                "advisory": advisory_txt,
             })
 
     return panels_def
+
+
+# ── DEFLECTION OPTIMIZATION & REBAR SOLVER (ECP 203) ──────────────────────────
+@st.cache_data(show_spinner=False)
+def compute_single_bay_deflection(
+    As_btm_cm2m,
+    As_top_cm2m,
+    ts_cm,
+    d_cm,
+    Ln_m,
+    Ws_tm2,
+    DL_ratio,
+    kd,
+    m_denom,
+    Fcu,
+    d_prime_cm=2.5,
+):
+    """
+    Computes instantaneous and long-term deflection for a single slab bay
+    given specific tension (As) and compression (A's) reinforcement areas.
+    """
+    fcu_mpa = Fcu * 0.0980665
+    Ec_mpa = 4400.0 * math.sqrt(max(10.0, fcu_mpa))
+    Ec_t_m2 = Ec_mpa * 100.0
+    Es_mpa = 200000.0
+    n_modular = max(6.0, min(15.0, Es_mpa / max(100.0, Ec_mpa)))
+    fctr_t_m2 = 0.60 * math.sqrt(max(10.0, fcu_mpa)) * 100.0
+
+    ts_m = ts_cm / 100.0
+    Ig_m4 = (1.0 * (ts_m ** 3)) / 12.0
+    yt_m = ts_m / 2.0
+    Mcr = (fctr_t_m2 * Ig_m4) / yt_m
+
+    Ms_pos = (Ws_tm2 * (Ln_m ** 2)) / m_denom
+
+    # Transformed neutral axis
+    A_q = 50.0
+    B_q = n_modular * As_btm_cm2m + (n_modular - 1.0) * As_top_cm2m
+    C_q = -(n_modular * As_btm_cm2m * d_cm + (n_modular - 1.0) * As_top_cm2m * d_prime_cm)
+    disc = max(0.0, B_q**2 - 4.0 * A_q * C_q)
+    x_na_cm = (-B_q + math.sqrt(disc)) / (2.0 * A_q)
+    x_na_cm = max(1.0, min(d_cm - 0.5, x_na_cm))
+
+    Icr_cm4 = (100.0 * (x_na_cm**3) / 3.0) + (n_modular - 1.0) * As_top_cm2m * ((x_na_cm - d_prime_cm)**2) + n_modular * As_btm_cm2m * ((d_cm - x_na_cm)**2)
+    Icr_m4 = Icr_cm4 * 1e-8
+
+    if Ms_pos <= Mcr:
+        Ie = Ig_m4
+        cracked = False
+    else:
+        cracked = True
+        ratio_cr = (Mcr / max(0.01, Ms_pos)) ** 3
+        Ie = max(Icr_m4, min(Ig_m4, ratio_cr * Ig_m4 + (1.0 - ratio_cr) * Icr_m4))
+
+    mu_prime = As_top_cm2m / (100.0 * d_cm)
+    lambda_creep = 2.0 / (1.0 + 50.0 * mu_prime)
+
+    delta_st_m = (kd * Ws_tm2 * (Ln_m ** 4)) / max(1.0, Ec_t_m2 * Ie)
+    delta_st_mm = delta_st_m * 1000.0
+    delta_long_inc_mm = delta_st_mm * lambda_creep * DL_ratio
+    delta_long_tot_mm = delta_st_mm + delta_long_inc_mm
+
+    return {
+        "delta_st_mm": delta_st_mm,
+        "delta_long_inc_mm": delta_long_inc_mm,
+        "delta_tot_mm": delta_long_tot_mm,
+        "Ie_m4": Ie,
+        "Icr_m4": Icr_m4,
+        "x_na_cm": x_na_cm,
+        "lambda_creep": lambda_creep,
+        "mu_prime": mu_prime,
+    }
+
+
+@st.cache_data(show_spinner=False)
+def solve_deflection_optimization(
+    panel_dict,
+    DL_tot,
+    LL,
+    Fcu,
+    target_ratio=0.98,
+):
+    """
+    Iteratively solves for the required reinforcement to satisfy Delta_total <= Delta_allowable
+    under two distinct engineering options:
+      - Option 1: Intensifying Bottom Tension Steel (As_btm)
+      - Option 2: Increasing Top Compression Steel (A's_top) at midspan
+    """
+    ts_cm = panel_dict["ts (cm)"]
+    d_cm = panel_dict["d (cm)"]
+    Ln_m = panel_dict["Ln (m)"]
+    Ws_tm2 = panel_dict["Ws (t/m²)"]
+    DL_ratio = min(1.0, max(0.4, (DL_tot + 0.25 * LL) / max(0.1, Ws_tm2)))
+
+    ptype = panel_dict["Location Type"]
+    if "Corner" in ptype:
+        kd, m_denom = 0.0105, 14.0
+    elif "Edge" in ptype:
+        kd, m_denom = 0.0090, 15.0
+    else:
+        kd, m_denom = 0.0075, 18.0
+
+    delta_allow = (Ln_m * 1000.0) / 250.0
+    target_delta = delta_allow * target_ratio
+
+    As_curr = panel_dict["As_btm (cm²/m)"]
+    As_prime_curr = panel_dict["As_top (cm²/m)"]
+    delta_curr = panel_dict["delta_long (mm)"]
+
+    # ── Option 1: Increase As_btm (Tension Steel) ──
+    low_as, high_as = As_curr, max(As_curr * 6.0, 60.0)
+    As_req = high_as
+    for _ in range(50):
+        mid_as = (low_as + high_as) / 2.0
+        res = compute_single_bay_deflection(mid_as, As_prime_curr, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu)
+        if res["delta_tot_mm"] <= target_delta:
+            As_req = mid_as
+            high_as = mid_as
+        else:
+            low_as = mid_as
+
+    delta_As_req = max(0.0, As_req - As_curr)
+    dia_candidates = [12, 14, 16, 18]
+    best_opt1 = None
+    for dia in dia_candidates:
+        abar = (math.pi * (dia / 10.0)**2) / 4.0
+        nb = max(2, math.ceil(delta_As_req / abar)) if delta_As_req > 0.05 else 0
+        if 2 <= nb <= 8:
+            as_prop = As_curr + nb * abar
+            res_p = compute_single_bay_deflection(as_prop, As_prime_curr, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu)
+            best_opt1 = {
+                "dia": dia,
+                "n_bars": nb,
+                "As_added": nb * abar,
+                "As_prop": as_prop,
+                "config": f"+ {nb} Φ{dia}/m (إضافي سفلي)" if nb > 0 else "التسليح الحالي كافٍ",
+                "delta_tot": res_p["delta_tot_mm"],
+                "is_safe": res_p["delta_tot_mm"] <= delta_allow,
+            }
+            break
+
+    if not best_opt1:
+        dia = 16
+        abar = (math.pi * (dia / 10.0)**2) / 4.0
+        nb = max(2, math.ceil(delta_As_req / abar)) if delta_As_req > 0.05 else 0
+        as_prop = As_curr + nb * abar
+        res_p = compute_single_bay_deflection(as_prop, As_prime_curr, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu)
+        best_opt1 = {
+            "dia": dia,
+            "n_bars": nb,
+            "As_added": nb * abar,
+            "As_prop": as_prop,
+            "config": f"+ {nb} Φ{dia}/m (إضافي سفلي)" if nb > 0 else "التسليح الحالي كافٍ",
+            "delta_tot": res_p["delta_tot_mm"],
+            "is_safe": res_p["delta_tot_mm"] <= delta_allow,
+        }
+
+    # ── Option 2: Increase A's (Top Compression Steel) ──
+    low_asp, high_asp = As_prime_curr, max(As_prime_curr * 8.0, 50.0)
+    As_prime_req = high_asp
+    opt2_feasible = False
+    for _ in range(50):
+        mid_asp = (low_asp + high_asp) / 2.0
+        res = compute_single_bay_deflection(As_curr, mid_asp, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu)
+        if res["delta_tot_mm"] <= target_delta:
+            As_prime_req = mid_asp
+            high_asp = mid_asp
+            opt2_feasible = True
+        else:
+            low_asp = mid_asp
+
+    best_opt2 = None
+    if opt2_feasible:
+        for dia in [10, 12, 14, 16]:
+            abar = (math.pi * (dia / 10.0)**2) / 4.0
+            nb = math.ceil(As_prime_req / abar)
+            if 5 <= nb <= 10:
+                as_prop = nb * abar
+                res_p = compute_single_bay_deflection(As_curr, as_prop, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu)
+                best_opt2 = {
+                    "dia": dia,
+                    "n_bars": nb,
+                    "As_prime_prop": as_prop,
+                    "config": f"{nb} Φ{dia}/m (تكثيف الشبكة العلوية)",
+                    "delta_tot": res_p["delta_tot_mm"],
+                    "is_safe": res_p["delta_tot_mm"] <= delta_allow,
+                    "feasible": True,
+                }
+                break
+
+    if not best_opt2:
+        as_prop = max(As_prime_curr, As_prime_req)
+        nb = max(5, math.ceil(as_prop / 2.01))
+        res_p = compute_single_bay_deflection(As_curr, as_prop, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu)
+        best_opt2 = {
+            "dia": 16,
+            "n_bars": nb,
+            "As_prime_prop": as_prop,
+            "config": f"{nb} Φ16/m (تكثيف حديد الضغط العلوي)",
+            "delta_tot": res_p["delta_tot_mm"],
+            "is_safe": res_p["delta_tot_mm"] <= delta_allow,
+            "feasible": opt2_feasible,
+        }
+
+    return {
+        "panel_id": panel_dict["Panel ID"],
+        "bay_label": panel_dict["Bay Label"],
+        "Ln_m": Ln_m,
+        "ts_cm": ts_cm,
+        "d_cm": d_cm,
+        "delta_allow_mm": delta_allow,
+        "delta_curr_mm": delta_curr,
+        "As_curr": As_curr,
+        "As_prime_curr": As_prime_curr,
+        "opt1": best_opt1,
+        "opt2": best_opt2,
+    }
+
+
+def generate_deflection_optimization_curves_sketch(
+    panel_dict,
+    opt_res,
+    DL_tot,
+    LL,
+    Fcu,
+):
+    """
+    Plots the Deflection Reduction Curves:
+      - Curve 1: Delta_total vs. Bottom Tension Steel (As_btm)
+      - Curve 2: Delta_total vs. Top Compression Steel (A's_top)
+      - Reference Line: Delta_allowable (Ln / 250)
+    """
+    plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
+
+    fig, ax = plt.subplots(figsize=(14, 7.5), dpi=100)
+    fig.patch.set_facecolor("#0b1329")
+    ax.set_facecolor("#0f172a")
+
+    ts_cm = panel_dict["ts (cm)"]
+    d_cm = panel_dict["d (cm)"]
+    Ln_m = panel_dict["Ln (m)"]
+    Ws_tm2 = panel_dict["Ws (t/m²)"]
+    DL_ratio = min(1.0, max(0.4, (DL_tot + 0.25 * LL) / max(0.1, Ws_tm2)))
+
+    ptype = panel_dict["Location Type"]
+    if "Corner" in ptype:
+        kd, m_denom = 0.0105, 14.0
+    elif "Edge" in ptype:
+        kd, m_denom = 0.0090, 15.0
+    else:
+        kd, m_denom = 0.0075, 18.0
+
+    delta_allow = (Ln_m * 1000.0) / 250.0
+    As_curr = panel_dict["As_btm (cm²/m)"]
+    Asp_curr = panel_dict["As_top (cm²/m)"]
+
+    # 1. As_btm sweep (with Asp fixed at current)
+    as_range = np.linspace(max(2.0, As_curr * 0.7), max(As_curr * 3.5, 30.0), 60)
+    delta_as_curve = [
+        compute_single_bay_deflection(a, Asp_curr, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu)["delta_tot_mm"]
+        for a in as_range
+    ]
+
+    # 2. Asp sweep (with As fixed at current)
+    asp_range = np.linspace(max(1.5, Asp_curr * 0.7), max(Asp_curr * 6.0, 30.0), 60)
+    delta_asp_curve = [
+        compute_single_bay_deflection(As_curr, ap, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu)["delta_tot_mm"]
+        for ap in asp_range
+    ]
+
+    # Plot Curves
+    ax.plot(as_range, delta_as_curve, color="#38bdf8", lw=3.2, label=r"Option 1: Increasing Bottom Tension Steel ($A_s$)", zorder=4)
+    ax.plot(asp_range, delta_asp_curve, color="#a855f7", lw=3.2, linestyle="-.", label=r"Option 2: Increasing Top Compression Steel ($A'_s$)", zorder=4)
+
+    # Plot Allowable Deflection Line
+    ax.axhline(delta_allow, color="#ef4444", lw=2.4, linestyle="--", label=f"Allowable Limit Δall = Ln/250 ({delta_allow:.2f} mm)", zorder=5)
+
+    # Current State Point
+    cur_delta = panel_dict["delta_long (mm)"]
+    ax.scatter([As_curr], [cur_delta], color="#fbbf24", s=140, edgecolor="#ffffff", lw=2.2, zorder=6, label=f"Current State: As={As_curr:.2f} cm², Δ={cur_delta:.2f} mm")
+    ax.annotate(
+        f" Current State\n Δ = {cur_delta:.2f} mm",
+        (As_curr, cur_delta),
+        textcoords="offset points",
+        xytext=(15, 12),
+        fontsize=11,
+        fontweight="bold",
+        color="#fbbf24",
+        bbox=dict(boxstyle="round,pad=0.3", fc="#1e293b", ec="#fbbf24", lw=1.5),
+        arrowprops=dict(arrowstyle="->", color="#fbbf24", lw=1.5)
+    )
+
+    # Option 1 Target Point
+    opt1 = opt_res.get("opt1")
+    if opt1 and opt1.get("As_prop"):
+        as_t = opt1["As_prop"]
+        del_t = opt1["delta_tot"]
+        ax.scatter([as_t], [del_t], color="#22c55e", s=150, marker="o", edgecolor="#ffffff", lw=2.2, zorder=6)
+        ax.annotate(
+            f" Option 1 Target (Safe [OK])\n As = {as_t:.2f} cm² ({opt1['config']})\n Δ = {del_t:.2f} mm",
+            (as_t, del_t),
+            textcoords="offset points",
+            xytext=(-140, 25),
+            fontsize=10.5,
+            fontweight="bold",
+            color="#4ade80",
+            bbox=dict(boxstyle="round,pad=0.35", fc="#064e3b", ec="#22c55e", lw=1.8),
+            arrowprops=dict(arrowstyle="->", color="#22c55e", lw=1.6)
+        )
+
+    # Option 2 Target Point
+    opt2 = opt_res.get("opt2")
+    if opt2 and opt2.get("As_prime_prop") and opt2.get("is_safe"):
+        asp_t = opt2["As_prime_prop"]
+        del_t2 = opt2["delta_tot"]
+        ax.scatter([asp_t], [del_t2], color="#c084fc", s=150, marker="s", edgecolor="#ffffff", lw=2.2, zorder=6)
+        ax.annotate(
+            f" Option 2 Target (Safe [OK])\n A's = {asp_t:.2f} cm² ({opt2['config']})\n Δ = {del_t2:.2f} mm",
+            (asp_t, del_t2),
+            textcoords="offset points",
+            xytext=(15, -45),
+            fontsize=10.5,
+            fontweight="bold",
+            color="#d8b4fe",
+            bbox=dict(boxstyle="round,pad=0.35", fc="#3b0764", ec="#a855f7", lw=1.8),
+            arrowprops=dict(arrowstyle="->", color="#a855f7", lw=1.6)
+        )
+
+    # Grid & Styling
+    ax.grid(True, linestyle=":", alpha=0.35, color="#94a3b8")
+    ax.set_xlabel(r"Reinforcement Area $A_s$ or $A'_s$ (cm²/m) — مساحة حديد التسليح في المتر", fontsize=13, fontweight="bold", color="#e2e8f0", labelpad=10)
+    ax.set_ylabel(r"Total Long-Term Deflection $\Delta_{total}$ (mm) — سهم الانحناء طويل الأمد", fontsize=13, fontweight="bold", color="#e2e8f0", labelpad=10)
+    ax.set_title(
+        f"Deflection Optimization Curves — {panel_dict['Panel ID']} ({panel_dict['Bay Label']})\nمنحنيات المعالجة الذكية لسهم الانحناء بتكثيف حديد الشد أو حديد الضغط",
+        fontsize=14.5,
+        fontweight="bold",
+        color="#38bdf8",
+        pad=16,
+    )
+    ax.tick_params(colors="#cbd5e1", labelsize=11)
+    for spine in ax.spines.values():
+        spine.set_color("#334155")
+        spine.set_linewidth(1.5)
+
+    ax.legend(facecolor="#1e293b", edgecolor="#38bdf8", fontsize=11, labelcolor="#f8fafc", loc="upper right")
+    plt.tight_layout()
+    return fig
+
+
+def generate_deflection_rebar_cross_section_sketch(
+    panel_dict,
+    opt_res,
+):
+    """
+    Draws an engineering Cross-Section detail of the Flat Slab midspan showing:
+      - Concrete slab geometry (ts, d, cover)
+      - Top compression mesh + added compression bars (Option 2)
+      - Bottom tension mesh + extra tension bars (Option 1)
+      - Callouts and technical rebar annotations.
+    """
+    plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
+
+    fig, ax = plt.subplots(figsize=(15, 8.5), dpi=100)
+    fig.patch.set_facecolor("#ffffff")
+    ax.set_facecolor("#f8fafc")
+
+    ts_cm = panel_dict["ts (cm)"]
+    d_cm = panel_dict["d (cm)"]
+    cover_cm = ts_cm - d_cm
+
+    b_width = 100.0
+    h_height = ts_cm
+
+    # 1. Draw Concrete Section (1m width)
+    rect_conc = patches.Rectangle(
+        (0, 0), b_width, h_height,
+        facecolor="#e2e8f0", edgecolor="#1e293b", lw=3.0, zorder=1
+    )
+    ax.add_patch(rect_conc)
+    ax.add_patch(patches.Rectangle((0, 0), b_width, h_height, facecolor="none", edgecolor="#cbd5e1", hatch="//", lw=0, zorder=2))
+
+    # 2. Rebar Positions
+    y_top = ts_cm - cover_cm
+    y_btm = cover_cm
+
+    opt1 = opt_res.get("opt1", {})
+    nb_opt1 = opt1.get("n_bars", 4)
+
+    opt2 = opt_res.get("opt2", {})
+    nb_opt2 = opt2.get("n_bars", 6)
+
+    # Base top mesh bars
+    base_top_x = np.linspace(10, 90, 5)
+    for bx in base_top_x:
+        ax.scatter([bx], [y_top], s=120, color="#64748b", edgecolor="#0f172a", lw=1.8, zorder=5)
+
+    # Base bottom mesh bars
+    base_btm_x = np.linspace(10, 90, 5)
+    for bx in base_btm_x:
+        ax.scatter([bx], [y_btm], s=130, color="#1e3a8a", edgecolor="#0f172a", lw=1.8, zorder=5)
+
+    # Extra bottom tension bars (Option 1)
+    if nb_opt1 > 0:
+        extra_btm_x = np.linspace(18, 82, nb_opt1)
+        for ex in extra_btm_x:
+            ax.scatter([ex], [y_btm + 1.2], s=150, color="#22c55e", edgecolor="#0f172a", lw=2.2, zorder=6)
+
+    # Added top compression bars (Option 2)
+    if nb_opt2 > 5:
+        added_nb = nb_opt2 - 5
+        extra_top_x = np.linspace(20, 80, added_nb)
+        for ex in extra_top_x:
+            ax.scatter([ex], [y_top - 1.2], s=140, color="#a855f7", edgecolor="#0f172a", lw=2.2, zorder=6)
+
+    ax.plot([4, 96], [y_top, y_top], color="#94a3b8", lw=1.5, linestyle=":", zorder=3)
+    ax.plot([4, 96], [y_btm, y_btm], color="#94a3b8", lw=1.5, linestyle=":", zorder=3)
+
+    # 3. Dimension Lines
+    ax.annotate("", xy=(-6, 0), xytext=(-6, ts_cm), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=2.0))
+    ax.text(-8.5, ts_cm/2.0, f"ts = {ts_cm:.0f} cm", fontsize=12.5, fontweight="bold", color="#0f172a", ha="right", va="center", rotation=90)
+
+    ax.annotate("", xy=(b_width + 6, cover_cm), xytext=(b_width + 6, ts_cm), arrowprops=dict(arrowstyle="<->", color="#1e40af", lw=2.0))
+    ax.text(b_width + 8.5, (ts_cm + cover_cm)/2.0, f"d = {d_cm:.1f} cm", fontsize=12.5, fontweight="bold", color="#1e40af", ha="left", va="center", rotation=90)
+
+    ax.annotate("", xy=(0, -4), xytext=(b_width, -4), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=2.0))
+    ax.text(b_width/2.0, -6.5, "1.0 Meter Unit Strip Width (b = 100 cm)", fontsize=12.5, fontweight="bold", color="#0f172a", ha="center", va="top")
+
+    # 4. Callouts
+    opt1_text = f"Option 1 (Tension Rebar):\n{opt1.get('config', 'Extra Bottom Rebars')}\nAs,total = {opt1.get('As_prop', 0):.2f} cm²/m"
+    ax.annotate(
+        opt1_text,
+        xy=(50, y_btm + 1.2),
+        xytext=(50, y_btm - 12),
+        fontsize=11,
+        fontweight="bold",
+        color="#15803d",
+        ha="center",
+        bbox=dict(boxstyle="round,pad=0.4", fc="#dcfce7", ec="#22c55e", lw=1.8),
+        arrowprops=dict(arrowstyle="->", color="#16a34a", lw=2.0)
+    )
+
+    opt2_text = f"Option 2 (Compression Rebar):\n{opt2.get('config', 'Top Compression Mesh')}\nA's,total = {opt2.get('As_prime_prop', 0):.2f} cm²/m"
+    ax.annotate(
+        opt2_text,
+        xy=(50, y_top - 1.2),
+        xytext=(50, y_top + 8),
+        fontsize=11,
+        fontweight="bold",
+        color="#7e22ce",
+        ha="center",
+        bbox=dict(boxstyle="round,pad=0.4", fc="#f3e8ff", ec="#a855f7", lw=1.8),
+        arrowprops=dict(arrowstyle="->", color="#9333ea", lw=2.0)
+    )
+
+    ax.text(2, y_top + 1.5, f"Top Mesh ({panel_dict['As_top (cm²/m)']:.2f} cm²/m)", fontsize=10, fontweight="bold", color="#475569")
+    ax.text(2, y_btm - 2.5, f"Bottom Mesh ({panel_dict['As_btm (cm²/m)']:.2f} cm²/m)", fontsize=10, fontweight="bold", color="#1e3a8a")
+
+    ax.set_xlim(-20, b_width + 20)
+    ax.set_ylim(-18, ts_cm + 16)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    ax.set_title(
+        f"Detailed Midspan Cross Section & Rebar Arrangement — {panel_dict['Panel ID']} ({panel_dict['Bay Label']})\nقطاع هندسي تفصيلي لتوزيع حديد الشد والضغط بمنتصف البحر للباكية",
+        fontsize=14,
+        fontweight="bold",
+        color="#0f172a",
+        pad=18
+    )
+
+    plt.tight_layout()
+    return fig
 
 
 # ── DEFLECTION 2D CONTOUR SKETCH ───────────────────────────────────────────
@@ -3435,13 +4170,13 @@ def generate_flat_slab_deflection_contour_sketch(
     bubble_radius = max(0.50, min(slab_w, slab_h) * 0.038)
     offset_grid_top = max(2.2, slab_h * 0.11)
     offset_grid_left = max(2.2, slab_w * 0.11)
-    dim_offset_bot = max(2.0, slab_h * 0.11)
+    dim_offset_bot = max(1.8, slab_h * 0.09)
     dim_offset_right = max(1.8, slab_w * 0.09)
 
     margin_left = offset_grid_left + bubble_radius * 2 + 0.8
-    margin_right = dim_offset_right + 1.5
+    margin_right = dim_offset_right + 3.2
     margin_top = offset_grid_top + bubble_radius * 2 + 0.8
-    margin_bot = dim_offset_bot + 1.5
+    margin_bot = dim_offset_bot + 3.0
 
     total_w = slab_w + margin_left + margin_right
     total_h = slab_h + margin_top + margin_bot
@@ -3454,7 +4189,7 @@ def generate_flat_slab_deflection_contour_sketch(
     fig_w = max(24.0, min(36.0, target_plan_w + 1.8))
     fig_h = max(18.0, min(34.0, target_plan_h + legend_h + 1.0))
 
-    fig = plt.figure(figsize=(fig_w, fig_h), dpi=140)
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
     fig.patch.set_facecolor("#ffffff")
 
     plan_ratio = (fig_h - legend_h - 0.8) / fig_h
@@ -3633,6 +4368,79 @@ def generate_flat_slab_deflection_contour_sketch(
                 color="#7f1d1d", zorder=12,
                 bbox=dict(boxstyle="round,pad=0.55", facecolor="#fee2e2", edgecolor="#dc2626", lw=3.0)
             )
+    # ── Span & Total Dimensions (X & Y Directions) ───────────────────────────
+    dim_color = "#0f172a"
+    dim_lw = 1.6
+    tick_sz = 0.25
+    fs_dim = 12.5
+
+    # 1. Bottom Dimensions (X-Direction: Cantilevers & Spans)
+    dim_y1 = y_slab_min - dim_offset_bot
+    dim_y2 = dim_y1 - 1.2 if (len(Lx_spans) > 1 or cant_left > 0 or cant_right > 0) else dim_y1
+
+    # Left Cantilever dimension
+    if cant_left > 0:
+        ax_plan.annotate("", xy=(x_coords[0], dim_y1), xytext=(x_slab_min, dim_y1), arrowprops=dict(arrowstyle="<->", color=dim_color, lw=dim_lw, shrinkA=0, shrinkB=0))
+        ax_plan.plot([x_slab_min, x_slab_min], [dim_y1 - tick_sz, dim_y1 + tick_sz], color=dim_color, lw=1.3)
+        ax_plan.plot([x_coords[0], x_coords[0]], [dim_y1 - tick_sz, dim_y1 + tick_sz], color=dim_color, lw=1.3)
+        ax_plan.text((x_slab_min + x_coords[0]) / 2.0, dim_y1 - 0.35, f"{cant_left:.2f} m", ha="center", va="top", fontsize=fs_dim, fontweight="bold", color=dim_color)
+
+    # Spans dimensions
+    for i, lx in enumerate(Lx_spans):
+        x0, x1 = x_coords[i], x_coords[i + 1]
+        mid_x = (x0 + x1) / 2.0
+        ax_plan.annotate("", xy=(x1, dim_y1), xytext=(x0, dim_y1), arrowprops=dict(arrowstyle="<->", color=dim_color, lw=dim_lw, shrinkA=0, shrinkB=0))
+        ax_plan.plot([x0, x0], [dim_y1 - tick_sz, dim_y1 + tick_sz], color=dim_color, lw=1.3)
+        ax_plan.plot([x1, x1], [dim_y1 - tick_sz, dim_y1 + tick_sz], color=dim_color, lw=1.3)
+        ax_plan.text(mid_x, dim_y1 - 0.35, f"{lx:.2f} m", ha="center", va="top", fontsize=fs_dim, fontweight="bold", color=dim_color)
+
+    # Right Cantilever dimension
+    if cant_right > 0:
+        ax_plan.annotate("", xy=(x_slab_max, dim_y1), xytext=(x_coords[-1], dim_y1), arrowprops=dict(arrowstyle="<->", color=dim_color, lw=dim_lw, shrinkA=0, shrinkB=0))
+        ax_plan.plot([x_coords[-1], x_coords[-1]], [dim_y1 - tick_sz, dim_y1 + tick_sz], color=dim_color, lw=1.3)
+        ax_plan.plot([x_slab_max, x_slab_max], [dim_y1 - tick_sz, dim_y1 + tick_sz], color=dim_color, lw=1.3)
+        ax_plan.text((x_coords[-1] + x_slab_max) / 2.0, dim_y1 - 0.35, f"{cant_right:.2f} m", ha="center", va="top", fontsize=fs_dim, fontweight="bold", color=dim_color)
+
+    # Total Overall X-Dimension (Line 2)
+    if len(Lx_spans) > 1 or cant_left > 0 or cant_right > 0:
+        ax_plan.annotate("", xy=(x_slab_max, dim_y2), xytext=(x_slab_min, dim_y2), arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=1.8, shrinkA=0, shrinkB=0))
+        ax_plan.plot([x_slab_min, x_slab_min], [dim_y2 - tick_sz*1.2, dim_y2 + tick_sz*1.2], color="#1e3a8a", lw=1.6)
+        ax_plan.plot([x_slab_max, x_slab_max], [dim_y2 - tick_sz*1.2, dim_y2 + tick_sz*1.2], color="#1e3a8a", lw=1.6)
+        ax_plan.text((x_slab_min + x_slab_max) / 2.0, dim_y2 - 0.38, f"Total Lx = {slab_w:.2f} m", ha="center", va="top", fontsize=fs_dim + 0.5, fontweight="black", color="#1e3a8a")
+
+    # 2. Right Dimensions (Y-Direction: Cantilevers & Spans)
+    dim_x1 = x_slab_max + dim_offset_right
+    dim_x2 = dim_x1 + 1.2 if (len(Ly_spans) > 1 or cant_bottom > 0 or cant_top > 0) else dim_x1
+
+    # Bottom Cantilever dimension
+    if cant_bottom > 0:
+        ax_plan.annotate("", xy=(dim_x1, y_coords[0]), xytext=(dim_x1, y_slab_min), arrowprops=dict(arrowstyle="<->", color=dim_color, lw=dim_lw, shrinkA=0, shrinkB=0))
+        ax_plan.plot([dim_x1 - tick_sz, dim_x1 + tick_sz], [y_slab_min, y_slab_min], color=dim_color, lw=1.3)
+        ax_plan.plot([dim_x1 - tick_sz, dim_x1 + tick_sz], [y_coords[0], y_coords[0]], color=dim_color, lw=1.3)
+        ax_plan.text(dim_x1 + 0.35, (y_slab_min + y_coords[0]) / 2.0, f"{cant_bottom:.2f} m", ha="left", va="center", fontsize=fs_dim, fontweight="bold", color=dim_color)
+
+    # Spans dimensions
+    for j, ly in enumerate(Ly_spans):
+        y0, y1 = y_coords[j], y_coords[j + 1]
+        mid_y = (y0 + y1) / 2.0
+        ax_plan.annotate("", xy=(dim_x1, y1), xytext=(dim_x1, y0), arrowprops=dict(arrowstyle="<->", color=dim_color, lw=dim_lw, shrinkA=0, shrinkB=0))
+        ax_plan.plot([dim_x1 - tick_sz, dim_x1 + tick_sz], [y0, y0], color=dim_color, lw=1.3)
+        ax_plan.plot([dim_x1 - tick_sz, dim_x1 + tick_sz], [y1, y1], color=dim_color, lw=1.3)
+        ax_plan.text(dim_x1 + 0.35, mid_y, f"{ly:.2f} m", ha="left", va="center", fontsize=fs_dim, fontweight="bold", color=dim_color)
+
+    # Top Cantilever dimension
+    if cant_top > 0:
+        ax_plan.annotate("", xy=(dim_x1, y_slab_max), xytext=(dim_x1, y_coords[-1]), arrowprops=dict(arrowstyle="<->", color=dim_color, lw=dim_lw, shrinkA=0, shrinkB=0))
+        ax_plan.plot([dim_x1 - tick_sz, dim_x1 + tick_sz], [y_coords[-1], y_coords[-1]], color=dim_color, lw=1.3)
+        ax_plan.plot([dim_x1 - tick_sz, dim_x1 + tick_sz], [y_slab_max, y_slab_max], color=dim_color, lw=1.3)
+        ax_plan.text(dim_x1 + 0.35, (y_coords[-1] + y_slab_max) / 2.0, f"{cant_top:.2f} m", ha="left", va="center", fontsize=fs_dim, fontweight="bold", color=dim_color)
+
+    # Total Overall Y-Dimension (Line 2)
+    if len(Ly_spans) > 1 or cant_bottom > 0 or cant_top > 0:
+        ax_plan.annotate("", xy=(dim_x2, y_slab_max), xytext=(dim_x2, y_slab_min), arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=1.8, shrinkA=0, shrinkB=0))
+        ax_plan.plot([dim_x2 - tick_sz*1.2, dim_x2 + tick_sz*1.2], [y_slab_min, y_slab_min], color="#1e3a8a", lw=1.6)
+        ax_plan.plot([dim_x2 - tick_sz*1.2, dim_x2 + tick_sz*1.2], [y_slab_max, y_slab_max], color="#1e3a8a", lw=1.6)
+        ax_plan.text(dim_x2 + 0.38, (y_slab_min + y_slab_max) / 2.0, f"Total Ly = {slab_h:.2f} m", ha="left", va="center", fontsize=fs_dim + 0.5, fontweight="black", color="#1e3a8a", rotation=270)
 
     ax_plan.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
     ax_plan.set_ylim(y_slab_min - margin_bot, y_slab_max + margin_top)
@@ -3743,9 +4551,9 @@ def generate_flat_slab_punching_shear_sketch(
     dim_offset_right = max(1.8, slab_w * 0.09)
 
     margin_left = offset_grid_left + bubble_radius * 2 + 0.8
-    margin_right = dim_offset_right + 1.5
+    margin_right = dim_offset_right + 3.0
     margin_top = offset_grid_top + bubble_radius * 2 + 0.8
-    margin_bot = dim_offset_bot + 1.5
+    margin_bot = dim_offset_bot + 2.8
 
     total_w = slab_w + margin_left + margin_right
     total_h = slab_h + margin_top + margin_bot
@@ -3758,7 +4566,7 @@ def generate_flat_slab_punching_shear_sketch(
     fig_w = max(24.0, min(36.0, target_plan_w + 1.8))
     fig_h = max(18.0, min(34.0, target_plan_h + legend_h + 1.0))
 
-    fig = plt.figure(figsize=(fig_w, fig_h), dpi=140)
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
     fig.patch.set_facecolor("#ffffff")
 
     plan_ratio = (fig_h - legend_h - 0.8) / fig_h
@@ -3863,17 +4671,67 @@ def generate_flat_slab_punching_shear_sketch(
         ax_plan.text(x_left_ext, y, f"X{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=8)
 
     # Dimensions
+    dim_y = y_slab_min - dim_offset_bot
+    if cant_left > 0:
+        ax_plan.annotate("", xy=(x_coords[0], dim_y), xytext=(x_slab_min, dim_y), arrowprops=dict(arrowstyle="<->", color="#1e293b", lw=2.0, shrinkA=0, shrinkB=0), zorder=6)
+        ax_plan.plot([x_slab_min, x_slab_min], [dim_y - 0.25, dim_y + 0.25], color="#1e293b", lw=1.6)
+        ax_plan.plot([x_coords[0], x_coords[0]], [dim_y - 0.25, dim_y + 0.25], color="#1e293b", lw=1.6)
+        ax_plan.text((x_slab_min + x_coords[0]) / 2.0, dim_y - 0.35, f"{cant_left:.2f} m", color="#1e293b", fontsize=13, weight="bold", ha="center", va="top", zorder=7)
     for i in range(len(Lx_spans)):
         x0, x1 = x_coords[i], x_coords[i+1]
-        y_d = y_slab_min - dim_offset_bot
-        ax_plan.annotate("", xy=(x0, y_d), xytext=(x1, y_d), arrowprops=dict(arrowstyle="<->", color="#1e293b", lw=2.2, shrinkA=0, shrinkB=0), zorder=6)
-        ax_plan.text((x0 + x1)/2.0, y_d + 0.25, f"{Lx_spans[i]:.2f} m", color="#1e293b", fontsize=14, weight="bold", ha="center", va="bottom", zorder=7)
+        ax_plan.annotate("", xy=(x0, dim_y), xytext=(x1, dim_y), arrowprops=dict(arrowstyle="<->", color="#1e293b", lw=2.2, shrinkA=0, shrinkB=0), zorder=6)
+        ax_plan.plot([x0, x0], [dim_y - 0.25, dim_y + 0.25], color="#1e293b", lw=1.6)
+        ax_plan.plot([x1, x1], [dim_y - 0.25, dim_y + 0.25], color="#1e293b", lw=1.6)
+        ax_plan.text((x0 + x1)/2.0, dim_y - 0.35, f"{Lx_spans[i]:.2f} m", color="#1e293b", fontsize=13.5, weight="bold", ha="center", va="top", zorder=7)
+    if cant_right > 0:
+        ax_plan.annotate("", xy=(x_slab_max, dim_y), xytext=(x_coords[-1], dim_y), arrowprops=dict(arrowstyle="<->", color="#1e293b", lw=2.0, shrinkA=0, shrinkB=0), zorder=6)
+        ax_plan.plot([x_coords[-1], x_coords[-1]], [dim_y - 0.25, dim_y + 0.25], color="#1e293b", lw=1.6)
+        ax_plan.plot([x_slab_max, x_slab_max], [dim_y - 0.25, dim_y + 0.25], color="#1e293b", lw=1.6)
+        ax_plan.text((x_coords[-1] + x_slab_max) / 2.0, dim_y - 0.35, f"{cant_right:.2f} m", color="#1e293b", fontsize=13, weight="bold", ha="center", va="top", zorder=7)
 
+    # Total Overall X-Dimension (Line 2)
+    y_dim_tot = dim_y - 1.2
+    ax_plan.annotate(
+        "", xy=(x_slab_max, y_dim_tot), xytext=(x_slab_min, y_dim_tot),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=2.4, shrinkA=0, shrinkB=0), zorder=6
+    )
+    ax_plan.plot([x_slab_min, x_slab_min], [y_dim_tot - 0.35, y_dim_tot + 0.35], color="#1e3a8a", lw=1.8)
+    ax_plan.plot([x_slab_max, x_slab_max], [y_dim_tot - 0.35, y_dim_tot + 0.35], color="#1e3a8a", lw=1.8)
+    ax_plan.text(
+        (x_slab_min + x_slab_max) / 2.0, y_dim_tot - 0.45, f"Total Lx = {slab_w:.2f} m",
+        color="#1e3a8a", fontsize=14.5, weight="bold", ha="center", va="top", zorder=7
+    )
+
+    dim_x = x_slab_max + dim_offset_right
+    if cant_bottom > 0:
+        ax_plan.annotate("", xy=(dim_x, y_coords[0]), xytext=(dim_x, y_slab_min), arrowprops=dict(arrowstyle="<->", color="#1e293b", lw=2.0, shrinkA=0, shrinkB=0), zorder=6)
+        ax_plan.plot([dim_x - 0.25, dim_x + 0.25], [y_slab_min, y_slab_min], color="#1e293b", lw=1.6)
+        ax_plan.plot([dim_x - 0.25, dim_x + 0.25], [y_coords[0], y_coords[0]], color="#1e293b", lw=1.6)
+        ax_plan.text(dim_x + 0.35, (y_slab_min + y_coords[0]) / 2.0, f"{cant_bottom:.2f} m", color="#1e293b", fontsize=13, weight="bold", ha="left", va="center", zorder=7)
     for j in range(len(Ly_spans)):
         y0, y1 = y_coords[j], y_coords[j+1]
-        x_d = x_slab_max + dim_offset_right
-        ax_plan.annotate("", xy=(x_d, y0), xytext=(x_d, y1), arrowprops=dict(arrowstyle="<->", color="#1e293b", lw=2.2, shrinkA=0, shrinkB=0), zorder=6)
-        ax_plan.text(x_d + 0.25, (y0 + y1)/2.0, f"{Ly_spans[j]:.2f} m", color="#1e293b", fontsize=14, weight="bold", ha="left", va="center", rotation=90, zorder=7)
+        ax_plan.annotate("", xy=(dim_x, y0), xytext=(dim_x, y1), arrowprops=dict(arrowstyle="<->", color="#1e293b", lw=2.2, shrinkA=0, shrinkB=0), zorder=6)
+        ax_plan.plot([dim_x - 0.25, dim_x + 0.25], [y0, y0], color="#1e293b", lw=1.6)
+        ax_plan.plot([dim_x - 0.25, dim_x + 0.25], [y1, y1], color="#1e293b", lw=1.6)
+        ax_plan.text(dim_x + 0.35, (y0 + y1)/2.0, f"{Ly_spans[j]:.2f} m", color="#1e293b", fontsize=13.5, weight="bold", ha="left", va="center", rotation=90, zorder=7)
+    if cant_top > 0:
+        ax_plan.annotate("", xy=(dim_x, y_slab_max), xytext=(dim_x, y_coords[-1]), arrowprops=dict(arrowstyle="<->", color="#1e293b", lw=2.0, shrinkA=0, shrinkB=0), zorder=6)
+        ax_plan.plot([dim_x - 0.25, dim_x + 0.25], [y_coords[-1], y_coords[-1]], color="#1e293b", lw=1.6)
+        ax_plan.plot([dim_x - 0.25, dim_x + 0.25], [y_slab_max, y_slab_max], color="#1e293b", lw=1.6)
+        ax_plan.text(dim_x + 0.35, (y_coords[-1] + y_slab_max) / 2.0, f"{cant_top:.2f} m", color="#1e293b", fontsize=13, weight="bold", ha="left", va="center", zorder=7)
+
+    # Total Overall Y-Dimension (Line 2)
+    x_dim_tot = dim_x + 1.2
+    ax_plan.annotate(
+        "", xy=(x_dim_tot, y_slab_max), xytext=(x_dim_tot, y_slab_min),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=2.4, shrinkA=0, shrinkB=0), zorder=6
+    )
+    ax_plan.plot([x_dim_tot - 0.35, x_dim_tot + 0.35], [y_slab_min, y_slab_min], color="#1e3a8a", lw=1.8)
+    ax_plan.plot([x_dim_tot - 0.35, x_dim_tot + 0.35], [y_slab_max, y_slab_max], color="#1e3a8a", lw=1.8)
+    ax_plan.text(
+        x_dim_tot + 0.45, (y_slab_min + y_slab_max) / 2.0, f"Total Ly = {slab_h:.2f} m",
+        color="#1e3a8a", fontsize=14.5, weight="bold", ha="left", va="center", rotation=270, zorder=7
+    )
 
     d_m = d_cm / 100.0
     col_w_m = max(col_w_cm / 100.0, slab_w * 0.040)
@@ -3968,10 +4826,10 @@ def generate_flat_slab_punching_shear_sketch(
             n_studs = max(8, int(math.ceil(n_legs / 4.0) * 4))
 
             callout_str = (
-                f"🚨 {cid} — UNSAFE PUNCHING\n"
+                f"{cid} — UNSAFE PUNCHING\n"
                 f"Qup = {qup:.2f} kg/cm² (> Qcup)\n"
-                f"────────────────────────\n"
-                f"💡 المعالجة المطلوبة (ECP 203):\n"
+                f"------------------------\n"
+                f"المعالجة المطلوبة (ECP 203):\n"
                 f"• كانات قص: + {n_studs} Φ10 / عمود\n"
                 f"• أو زيادة السُمك: ts ≥ {ts_req:.0f} cm (+{ts_inc:.0f}cm)"
             )
@@ -4009,7 +4867,7 @@ def generate_flat_slab_punching_shear_sketch(
     ax_legend.text(2.5, 76, f"PUNCHING SHEAR 2D CONTOUR & STRESS VERIFICATION (ECP 203)", fontsize=17.5, fontweight="bold", color=title_color)
 
     legend_text = (
-        f"• Total Columns: {len(punching_results)} Cols  |  ✅ Safe Columns: {safe_count}  |  🚨 Unsafe Columns: {unsafe_count}\n"
+        f"• Total Columns: {len(punching_results)} Cols  |  Safe Columns: {safe_count}  |  Unsafe Columns: {unsafe_count}\n"
         f"• Design Parameters: fcu = {Fcu:.0f} kg/cm²  |  Slab ts = {ts_cm:.0f} cm  |  Effective Depth d = {d_cm:.1f} cm  |  Wu = {Wu:.2f} t/m²\n"
         f"• خريطة الكونتور توضح تركيز وتدرج إجهادات القص الثاقب Qup حول الأعمدة (تدرج من الأصفر إلى الأحمر الداكن).\n"
         f"• الأعمدة الحمراء (Qup > Qcup): غير آمنة وموضح أعلاها كانات القص المطلوبة (Shear Studs) أو سُمك الخرسانة البديل."
@@ -4019,7 +4877,7 @@ def generate_flat_slab_punching_shear_sketch(
     # ── LARGE BLACK BOX FOR QCUP (مربع كبير باللون الأسود مرة واحدة فقط) ───────
     qcup_black_box = FancyBboxPatch((64, 8), 34, 84, boxstyle="round,pad=0.8,rounding_size=3", facecolor="#090d16", edgecolor="#334155", lw=3.0)
     ax_legend.add_patch(qcup_black_box)
-    ax_legend.text(81.0, 78, "🛡️ أقصى إجهاد خرسانة مسموح (ECP 203)", fontsize=12.0, fontweight="bold", color="#94a3b8", ha="center")
+    ax_legend.text(81.0, 78, "أقصى إجهاد خرسانة مسموح (ECP 203)", fontsize=12.0, fontweight="bold", color="#94a3b8", ha="center")
     ax_legend.text(81.0, 50, f"Qcup = {qcup_sample:.2f}", fontsize=22.0, fontweight="black", color="#facc15", ha="center")
     ax_legend.text(81.0, 24, f"kg/cm² ({qcup_sample*0.09807:.2f} MPa)", fontsize=13.0, fontweight="bold", color="#38bdf8", ha="center")
 
@@ -4028,6 +4886,712 @@ def generate_flat_slab_punching_shear_sketch(
         f"مخطط كونتور إجهادات القص الثاقب Qup للأعمدة — أقصى إجهاد خرسانة مسموح به للتصميم Qcup = {qcup_sample:.2f} kg/cm²",
         fontsize=16.5, fontweight="bold", color="#0f172a", y=0.985
     )
+    return fig
+
+
+def generate_punching_stirrups_detail_sketch(
+    col_id,
+    p_info,
+    col_w_cm,
+    col_d_cm,
+    d_cm,
+    ts_cm,
+    Fcu,
+    Fy=4000,
+    stirrup_dia_mm=10,
+):
+    """
+    Generate high-precision structural detailing drawing according to ECP 203:
+    1. Plan View: Punching critical perimeters (d/2 & outer), stirrup strips in X & Y directions with total strip lengths.
+    2. Specifications Schedule Panel: Complete technical parameters, rebar diameter, spacing, legs, Ast, and strip lengths.
+    3. Cross-Section Elevation View: Slab thickness ts, depth d, closed stirrups with hooks, top/bottom mesh, hanger bars, and spacing dimensions.
+    """
+    plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
+
+    design = design_punching_shear_stirrups(
+        p_info.get("Pu (ton)", 40.0),
+        col_w_cm,
+        col_d_cm,
+        p_info.get("Location Type", "Interior"),
+        ts_cm,
+        d_cm,
+        Fcu,
+        Fy,
+        stirrup_dia_mm=stirrup_dia_mm,
+    )
+
+    ctype = design["ctype"]
+    bc = design["bc_cm"]
+    tc = design["tc_cm"]
+    d = d_cm
+    ts = ts_cm
+    s_cm = design["s_cm"]
+    s0_cm = design.get("s0_cm", s_cm / 2.0)
+    n_rows = design["n_rows"]
+    row_positions = design["row_positions_cm"]
+    x_stirrup_ext = design["x_stirrup_ext_cm"]
+    n_legs = design["n_legs_per_row"]
+    total_legs = design["total_legs"]
+
+    # Calculate Total Strip Lengths in X and Y
+    if ctype == "Corner":
+        L_strip_x = bc + x_stirrup_ext
+        L_strip_y = tc + x_stirrup_ext
+        strip_dir_desc = "X & Y Directions (Corner Arms)"
+    elif ctype == "Edge":
+        L_strip_x = bc + 2.0 * x_stirrup_ext
+        L_strip_y = tc + x_stirrup_ext
+        strip_dir_desc = "X & Y Directions (Edge T-Strip)"
+    else:  # Interior
+        L_strip_x = bc + 2.0 * x_stirrup_ext
+        L_strip_y = tc + 2.0 * x_stirrup_ext
+        strip_dir_desc = "Orthogonal Both Directions (X & Y)"
+
+    fig = plt.figure(figsize=(19, 13), dpi=100)
+    fig.patch.set_facecolor("#ffffff")
+
+    # GridSpec: Top row (Plan View Left, Specs Box Right), Bottom row (Slab Cross-Section Elevation)
+    gs = fig.add_gridspec(2, 2, height_ratios=[1.30, 0.90], width_ratios=[1.20, 0.88],
+                           hspace=0.32, wspace=0.18, left=0.05, right=0.95, top=0.92, bottom=0.06)
+
+    ax_plan = fig.add_subplot(gs[0, 0])
+    ax_spec = fig.add_subplot(gs[0, 1])
+    ax_sec  = fig.add_subplot(gs[1, :])
+
+    ax_plan.set_facecolor("#f8fafc")
+    ax_spec.set_facecolor("#090d16")
+    ax_sec.set_facecolor("#f8fafc")
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # ── 1. PLAN VIEW ─────────────────────────────────────────────────────────
+    # ═════════════════════════════════════════════════════════════════════════
+    c_x0, c_x1 = -bc / 2.0, bc / 2.0
+    c_y0, c_y1 = -tc / 2.0, tc / 2.0
+
+    # Draw Stirrup Strip Highlight Bands
+    strip_w_x = L_strip_x
+    strip_h_x = tc + 6.0
+    strip_w_y = bc + 6.0
+    strip_h_y = L_strip_y
+
+    ax_plan.add_patch(patches.Rectangle(
+        (-strip_w_x / 2.0, -strip_h_x / 2.0), strip_w_x, strip_h_x,
+        facecolor="#dbeafe", edgecolor="#3b82f6", lw=1.8, linestyle="--", alpha=0.50, zorder=2,
+        label=f"X-Direction Stirrup Strip (L_strip,X = {L_strip_x:.1f} cm)"
+    ))
+
+    ax_plan.add_patch(patches.Rectangle(
+        (-strip_w_y / 2.0, -strip_h_y / 2.0), strip_w_y, strip_h_y,
+        facecolor="#fef3c7", edgecolor="#f59e0b", lw=1.8, linestyle="--", alpha=0.45, zorder=2,
+        label=f"Y-Direction Stirrup Strip (L_strip,Y = {L_strip_y:.1f} cm)"
+    ))
+
+    # Critical Perimeter @ d/2
+    crit_w = bc + (d if ctype == "Interior" else (d * 0.75 if ctype == "Edge" else d * 0.5))
+    crit_h = tc + (d if ctype == "Interior" else (d * 0.75 if ctype == "Edge" else d * 0.5))
+    ax_plan.add_patch(patches.Rectangle(
+        (-crit_w / 2.0, -crit_h / 2.0), crit_w, crit_h,
+        facecolor="none", edgecolor="#ea580c", lw=2.4, linestyle=":", zorder=4,
+        label=f"1st Critical Perimeter @ d/2 ({crit_w:.1f}×{crit_h:.1f} cm)"
+    ))
+
+    # Outer Safe Perimeter
+    x_crit = design["x_crit_cm"]
+    ext_w = bc + 2.0 * x_crit
+    ext_h = tc + 2.0 * x_crit
+    ax_plan.add_patch(patches.Rectangle(
+        (-ext_w / 2.0, -ext_h / 2.0), ext_w, ext_h,
+        facecolor="none", edgecolor="#059669", lw=2.0, linestyle="-.", zorder=3,
+        label=f"Outer Safe Perimeter bo,ext ({ext_w:.1f}×{ext_h:.1f} cm)"
+    ))
+
+    # Draw Stirrup Concentric Rows & Vertical Branches
+    row_colors = ["#dc2626", "#ea580c", "#2563eb", "#7c3aed", "#0891b2"]
+    leg_x_all, leg_y_all = [], []
+
+    for r_idx, r_offset in enumerate(row_positions):
+        rw = bc + 2.0 * r_offset
+        rh = tc + 2.0 * r_offset
+        rx0, ry0 = -rw / 2.0, -rh / 2.0
+        r_color = row_colors[r_idx % len(row_colors)]
+
+        r_rect = patches.Rectangle((rx0, ry0), rw, rh, facecolor="none", edgecolor=r_color, lw=2.0, zorder=5)
+        ax_plan.add_patch(r_rect)
+
+        # Distribute stirrup legs along perimeter
+        legs_x = max(2, int(round(n_legs * (bc / (bc + tc)) / 2.0)))
+        legs_y = max(2, (n_legs - 2 * legs_x) // 2)
+
+        xs_tb = [rx0 + (k + 0.5) * (rw / legs_x) for k in range(legs_x)]
+        for x_pos in xs_tb:
+            leg_x_all.extend([x_pos, x_pos])
+            leg_y_all.extend([ry0, ry0 + rh])
+
+        ys_lr = [ry0 + (k + 0.5) * (rh / legs_y) for k in range(legs_y)]
+        for y_pos in ys_lr:
+            leg_x_all.extend([rx0, rx0 + rw])
+            leg_y_all.extend([y_pos, y_pos])
+
+    if leg_x_all:
+        ax_plan.scatter(leg_x_all, leg_y_all, s=55, color="#b91c1c", edgecolor="#ffffff", lw=1.5, zorder=7,
+                        label=f"Stirrup Vertical Legs ({n_legs} legs/row, Φ{stirrup_dia_mm})")
+
+    # Column Box
+    col_patch = patches.Rectangle((c_x0, c_y0), bc, tc, facecolor="#1e293b", edgecolor="#0f172a", lw=3.0, zorder=8, hatch="///")
+    ax_plan.add_patch(col_patch)
+    ax_plan.text(0, 0, f"{col_id}\n{bc:.0f}×{tc:.0f} cm", ha="center", va="center", color="#f8fafc", fontsize=12.5, weight="bold", zorder=9)
+
+    # Column Dimensions
+    dim_y_c = c_y0 - 3.5
+    ax_plan.annotate("", xy=(c_x0, dim_y_c), xytext=(c_x1, dim_y_c), arrowprops=dict(arrowstyle="<->", color="#1e293b", lw=1.8, shrinkA=0, shrinkB=0))
+    ax_plan.text(0, dim_y_c - 1.2, f"a = {bc:.0f} cm", ha="center", va="top", fontsize=10, weight="bold", color="#1e293b")
+
+    dim_x_c = c_x1 + 3.5
+    ax_plan.annotate("", xy=(dim_x_c, c_y0), xytext=(dim_x_c, c_y1), arrowprops=dict(arrowstyle="<->", color="#1e293b", lw=1.8, shrinkA=0, shrinkB=0))
+    ax_plan.text(dim_x_c + 1.2, 0, f"b = {tc:.0f} cm", ha="left", va="center", rotation=90, fontsize=10, weight="bold", color="#1e293b")
+
+    # Strip Total Lengths Annotations
+    dim_y_strip = -strip_h_y / 2.0 - 7.0
+    ax_plan.annotate("", xy=(-L_strip_x / 2.0, dim_y_strip), xytext=(L_strip_x / 2.0, dim_y_strip),
+                     arrowprops=dict(arrowstyle="<->", color="#2563eb", lw=2.2, shrinkA=0, shrinkB=0))
+    ax_plan.text(0, dim_y_strip - 1.5, f"Total Strip Length in X-Dir = {L_strip_x:.1f} cm",
+                 ha="center", va="top", fontsize=10.5, weight="bold", color="#1d4ed8",
+                 bbox=dict(boxstyle="round,pad=0.25", facecolor="#eff6ff", edgecolor="#3b82f6", lw=1.2))
+
+    dim_x_strip = strip_w_x / 2.0 + 7.0
+    ax_plan.annotate("", xy=(dim_x_strip, -L_strip_y / 2.0), xytext=(dim_x_strip, L_strip_y / 2.0),
+                     arrowprops=dict(arrowstyle="<->", color="#b45309", lw=2.2, shrinkA=0, shrinkB=0))
+    ax_plan.text(dim_x_strip + 1.5, 0, f"Total Strip Length in Y-Dir = {L_strip_y:.1f} cm",
+                 ha="left", va="center", rotation=90, fontsize=10.5, weight="bold", color="#b45309",
+                 bbox=dict(boxstyle="round,pad=0.25", facecolor="#fefce8", edgecolor="#f59e0b", lw=1.2))
+
+    # Stirrup Spacing Annotation
+    if len(row_positions) >= 2:
+        s_y1 = c_y1 + row_positions[0]
+        s_y2 = c_y1 + row_positions[1]
+        ax_plan.annotate("", xy=(-0.5, s_y1), xytext=(-0.5, s_y2),
+                         arrowprops=dict(arrowstyle="<->", color="#dc2626", lw=1.8, shrinkA=0, shrinkB=0))
+        ax_plan.text(-1.8, (s_y1 + s_y2)/2.0, f"s = {s_cm:.1f} cm", ha="right", va="center", fontsize=9.5, weight="bold", color="#dc2626")
+
+    max_p_ext = max(L_strip_x, L_strip_y, ext_w, ext_h) * 0.65 + 14.0
+    ax_plan.set_xlim(-max_p_ext, max_p_ext + 8.0)
+    ax_plan.set_ylim(-max_p_ext - 8.0, max_p_ext + 6.0)
+    ax_plan.set_aspect("equal", adjustable="box")
+    ax_plan.axis("off")
+    ax_plan.set_title(f"(A) PLAN VIEW: Punching Zone & Stirrup Strips — Column {col_id}", fontsize=13, weight="bold", color="#0f172a", pad=10)
+    ax_plan.legend(loc="upper right", fontsize=8.5, framealpha=0.95, facecolor="#ffffff", edgecolor="#cbd5e1")
+
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # ── 2. SPECIFICATIONS & SCHEDULE PANEL ───────────────────────────────────
+    # ═════════════════════════════════════════════════════════════════════════
+    ax_spec.set_xlim(0, 100)
+    ax_spec.set_ylim(0, 100)
+    ax_spec.axis("off")
+
+    c_box = FancyBboxPatch((2, 2), 96, 96, boxstyle="round,pad=1.0,rounding_size=3.0",
+                           facecolor="#090d16", edgecolor="#3b82f6", lw=2.2)
+    ax_spec.add_patch(c_box)
+
+    t_y = 94.0
+    ax_spec.text(50.0, t_y, f"PUNCHING SHEAR & STIRRUPS SPECIFICATIONS (ECP 203)", ha="center", va="top",
+                 fontsize=11.5, weight="bold", color="#38bdf8")
+
+    t_y -= 7.5
+    ax_spec.plot([6, 94], [t_y, t_y], color="#334155", lw=1.5)
+
+    specs = [
+        ("Column ID & Location", f"{col_id} ({ctype} Column)"),
+        ("Column Section a x b", f"{bc:.0f} x {tc:.0f} cm"),
+        ("Slab Thickness ts / Depth d", f"ts = {ts:.0f} cm | d = {d:.1f} cm"),
+        ("Design Axial Load Pu", f"{design['Pu_ton']:.2f} ton ({design['Pu_kN']:.1f} kN)"),
+        ("Actual Shear Stress qu", f"{design['qu_kgcm2']:.2f} kg/cm² ({design['qu_mpa']:.2f} MPa)"),
+        ("Concrete Cap. qcup", f"{design['qcup_kgcm2']:.2f} kg/cm² ({design['qcup_mpa']:.2f} MPa)"),
+        ("Max Shear Limit qu,max", f"{design['qu_max_kgcm2']:.2f} kg/cm² ({design['qu_max_mpa']:.2f} MPa)"),
+        ("-----------------------------", "-----------------------------"),
+        ("Stirrup Layout Direction", f"{strip_dir_desc}"),
+        ("Stirrup Diameter", f"Φ{stirrup_dia_mm} mm (High-Tensile Steel)"),
+        ("Row Spacing s", f"{s_cm:.1f} cm (<= d/2 = {d/2:.1f} cm <= 15cm)"),
+        ("Distance to 1st Stirrup s0", f"{s0_cm:.1f} cm (<= d/4 = {d/4:.1f} cm)"),
+        ("Number of Rows (N_rows)", f"{n_rows} concentric rows / arm"),
+        ("Vertical Legs per Row (n)", f"{n_legs} vertical branches / row"),
+        ("Total Column Stirrup Legs", f"{total_legs} vertical legs total"),
+        ("Required Stirrup Area Ast,req", f"{design['Ast_req_mm2']:.1f} mm² ({design['Ast_req_cm2']:.2f} cm²)"),
+        ("Provided Stirrup Area Ast,prov", f"{design['Ast_prov_mm2']:.1f} mm² ({design['Ast_prov_mm2']/100:.2f} cm²)"),
+        ("Total X-Strip Length (L_strip,X)", f"{L_strip_x:.1f} cm"),
+        ("Total Y-Strip Length (L_strip,Y)", f"{L_strip_y:.1f} cm"),
+        ("Outer Safe Perimeter bo,ext", f"{design['bo_ext_cm']:.1f} cm"),
+    ]
+
+    t_y -= 4.0
+    for label, val in specs:
+        if label.startswith("---"):
+            ax_spec.plot([6, 94], [t_y, t_y], color="#475569", lw=1.2)
+            t_y -= 3.5
+            continue
+        ax_spec.text(6.0, t_y, label, fontsize=8.8, weight="bold", color="#94a3b8", ha="left", va="center")
+        ax_spec.text(94.0, t_y, val, fontsize=9.0, weight="bold", color="#f8fafc" if "Total" not in label and "Direction" not in label else "#facc15", ha="right", va="center")
+        t_y -= 4.2
+
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # ── 3. CROSS-SECTION ELEVATION VIEW ──────────────────────────────────────
+    # ═════════════════════════════════════════════════════════════════════════
+    sec_w = L_strip_x + 55.0
+    ax_sec.set_xlim(-sec_w / 2.0, sec_w / 2.0)
+    ax_sec.set_ylim(-16.0, ts + 24.0)
+    ax_sec.set_aspect("equal", adjustable="box")
+    ax_sec.axis("off")
+
+    # Slab concrete body
+    slab_rect = patches.Rectangle((-sec_w / 2.0, 0), sec_w, ts, facecolor="#f1f5f9", edgecolor="#334155", lw=2.4, zorder=1)
+    ax_sec.add_patch(slab_rect)
+
+    # Column concrete body below slab
+    col_sec_patch = patches.Rectangle((-bc / 2.0, -12.0), bc, 12.0, facecolor="#1e293b", edgecolor="#0f172a", lw=2.4, zorder=2, hatch="///")
+    ax_sec.add_patch(col_sec_patch)
+    ax_sec.text(0, -6.0, f"COLUMN {col_id}\n{bc:.0f}×{tc:.0f} cm", ha="center", va="center", color="#f8fafc", fontsize=10.5, weight="bold", zorder=3)
+
+    # Longitudinal Slab Rebar: Top Mesh & Bottom Mesh
+    cover = 2.5
+    top_bar_y = ts - cover
+    btm_bar_y = cover
+
+    ax_sec.plot([-sec_w / 2.0 + 2.0, sec_w / 2.0 - 2.0], [top_bar_y, top_bar_y], color="#475569", lw=2.6, zorder=3)
+    ax_sec.plot([-sec_w / 2.0 + 2.0, sec_w / 2.0 - 2.0], [btm_bar_y, btm_bar_y], color="#475569", lw=2.6, zorder=3)
+
+    # Top & bottom transversal dots
+    n_mesh_dots = int(sec_w / 12.0)
+    mesh_xs = [-sec_w / 2.0 + 4.0 + k * 12.0 for k in range(n_mesh_dots)]
+    for mx in mesh_xs:
+        ax_sec.scatter([mx], [top_bar_y - 1.2], s=25, color="#334155", zorder=4)
+        ax_sec.scatter([mx], [btm_bar_y + 1.2], s=25, color="#334155", zorder=4)
+
+    # Draw Closed Stirrups on Left & Right Sides of the column
+    stirrup_h = ts - 2.0 * cover
+    stirrup_w_sec = 2.2
+
+    # Stirrup x positions on both sides
+    stirrup_xs_right = [bc / 2.0 + r_pos for r_pos in row_positions]
+    stirrup_xs_left  = [-bc / 2.0 - r_pos for r_pos in row_positions]
+
+    all_stirrup_sec_xs = stirrup_xs_left + stirrup_xs_right
+    for sx in all_stirrup_sec_xs:
+        st_box = FancyBboxPatch((sx - stirrup_w_sec / 2.0, btm_bar_y), stirrup_w_sec, stirrup_h,
+                                boxstyle="round,pad=0.2,rounding_size=0.6",
+                                facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=6)
+        ax_sec.add_patch(st_box)
+
+        # Hanger Rebars inside the stirrup corners (Top & Bottom)
+        ax_sec.scatter([sx - 0.5, sx + 0.5], [top_bar_y - 0.6, top_bar_y - 0.6], s=32, color="#1e3a8a", zorder=7)
+        ax_sec.scatter([sx - 0.5, sx + 0.5], [btm_bar_y + 0.6, btm_bar_y + 0.6], s=32, color="#1e3a8a", zorder=7)
+
+    # Section Dimension Lines:
+    # 1. Slab Thickness ts
+    dim_ts_x = -sec_w / 2.0 + 6.0
+    ax_sec.annotate("", xy=(dim_ts_x, 0), xytext=(dim_ts_x, ts),
+                    arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=2.0, shrinkA=0, shrinkB=0))
+    ax_sec.text(dim_ts_x - 1.5, ts / 2.0, f"ts = {ts:.0f} cm\n(d = {d:.1f} cm)", ha="right", va="center", fontsize=10, weight="bold", color="#0f172a")
+
+    # 2. Spacing s and s0 on Right Side
+    if len(stirrup_xs_right) >= 1:
+        ax_sec.annotate("", xy=(bc / 2.0, ts + 3.0), xytext=(stirrup_xs_right[0], ts + 3.0),
+                        arrowprops=dict(arrowstyle="<->", color="#d97706", lw=1.8, shrinkA=0, shrinkB=0))
+        ax_sec.text((bc / 2.0 + stirrup_xs_right[0]) / 2.0, ts + 4.5, f"s0={s0_cm:.1f}cm", ha="center", va="bottom", fontsize=9.0, weight="bold", color="#d97706")
+
+    if len(stirrup_xs_right) >= 2:
+        for i in range(len(stirrup_xs_right) - 1):
+            x_a, x_b = stirrup_xs_right[i], stirrup_xs_right[i+1]
+            ax_sec.annotate("", xy=(x_a, ts + 3.0), xytext=(x_b, ts + 3.0),
+                            arrowprops=dict(arrowstyle="<->", color="#dc2626", lw=1.8, shrinkA=0, shrinkB=0))
+            ax_sec.text((x_a + x_b) / 2.0, ts + 4.5, f"s={s_cm:.1f}cm", ha="center", va="bottom", fontsize=9.0, weight="bold", color="#dc2626")
+
+    # Total Strip Extent Lext dimension (Right Side)
+    if stirrup_xs_right:
+        ax_sec.annotate("", xy=(bc / 2.0, ts + 10.0), xytext=(stirrup_xs_right[-1], ts + 10.0),
+                        arrowprops=dict(arrowstyle="<->", color="#2563eb", lw=2.2, shrinkA=0, shrinkB=0))
+        ax_sec.text((bc / 2.0 + stirrup_xs_right[-1]) / 2.0, ts + 11.5, f"Lext = {x_stirrup_ext:.1f} cm ({n_rows} Stirrups @ {s_cm:.0f} cm)",
+                    ha="center", va="bottom", fontsize=10, weight="bold", color="#1d4ed8",
+                    bbox=dict(boxstyle="round,pad=0.2", facecolor="#eff6ff", edgecolor="#3b82f6", lw=1.2))
+
+    # Callouts pointing to Stirrups and Hanger bars
+    if stirrup_xs_left:
+        target_sx = stirrup_xs_left[0]
+        ax_sec.annotate(
+            f"Closed Stirrups (كانات مغلقة)\nΦ{stirrup_dia_mm} mm @ {s_cm:.1f} cm ({n_rows} stirrups / arm)",
+            xy=(target_sx, ts / 2.0), xytext=(target_sx - 20.0, ts + 8.0),
+            arrowprops=dict(facecolor="#dc2626", edgecolor="#dc2626", arrowstyle="->", lw=1.8),
+            fontsize=9.8, weight="bold", color="#991b1b", ha="right", va="center",
+            bbox=dict(boxstyle="round,pad=0.35", facecolor="#fef2f2", edgecolor="#ef4444", lw=1.4)
+        )
+
+        ax_sec.annotate(
+            "Top & Bottom Hanger Bars (2Φ10 أسياخ تعليق)",
+            xy=(target_sx, top_bar_y), xytext=(target_sx - 18.0, -8.0),
+            arrowprops=dict(facecolor="#1e3a8a", edgecolor="#1e3a8a", arrowstyle="->", lw=1.6),
+            fontsize=9.5, weight="bold", color="#1e3a8a", ha="right", va="center",
+            bbox=dict(boxstyle="round,pad=0.35", facecolor="#eff6ff", edgecolor="#3b82f6", lw=1.4)
+        )
+
+    ax_sec.set_title(f"(B) CROSS-SECTION ELEVATION: Slab ts = {ts:.0f} cm & Stirrups Arrangement (القطاع الرأسي والتسليح)",
+                     fontsize=13, weight="bold", color="#0f172a", pad=8)
+
+    fig.suptitle(
+        f"ECP 203 PUNCHING SHEAR REINFORCEMENT & STIRRUPS DETAILING — COLUMN {col_id}",
+        fontsize=16, weight="bold", color="#0f172a", y=0.985
+    )
+
+    return fig
+
+
+def generate_punching_stirrups_3d_sketch(
+    col_id,
+    p_info,
+    col_w_cm,
+    col_d_cm,
+    d_cm,
+    ts_cm,
+    Fcu,
+    Fy=4000,
+    stirrup_dia_mm=10,
+):
+    """
+    Generate 3D Isometric structural BIM-like visualization of punching shear stirrup cages:
+    - 3D Concrete Slab slice (semi-transparent volume with top/bottom mesh representation)
+    - 3D Column shaft below slab with vertical rebars extending upward and column ties
+    - 3D Closed Stirrups hoops in X and Y directions with 135-degree hook bends
+    - 3D Longitudinal Top and Bottom Hanger Rebars (4Φ10)
+    - 3D Critical shear perimeter wireframe at d/2
+    - 3D Dimensions, strip lengths (L_strip,X & L_strip,Y), spacing s and s0
+    - Complete technical detailing schedule panel on the right
+    """
+    plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
+
+    design = design_punching_shear_stirrups(
+        p_info.get("Pu (ton)", 40.0),
+        col_w_cm,
+        col_d_cm,
+        p_info.get("Location Type", "Interior"),
+        ts_cm,
+        d_cm,
+        Fcu,
+        Fy,
+        stirrup_dia_mm=stirrup_dia_mm,
+    )
+
+    ctype = design["ctype"]
+    bc = design["bc_cm"]
+    tc = design["tc_cm"]
+    d = d_cm
+    ts = ts_cm
+    s_cm = design["s_cm"]
+    s0_cm = design.get("s0_cm", s_cm / 2.0)
+    n_rows = max(2, design["n_rows"]) if not design["is_safe"] else 3
+    row_positions = design["row_positions_cm"] if design["row_positions_cm"] else [s0_cm + k * s_cm for k in range(n_rows)]
+    x_stirrup_ext = design["x_stirrup_ext_cm"] if design["x_stirrup_ext_cm"] > 0 else (row_positions[-1] if row_positions else d)
+    n_legs = max(8, design["n_legs_per_row"])
+    total_legs = design["total_legs"] if design["total_legs"] > 0 else n_legs * n_rows
+
+    if ctype == "Corner":
+        L_strip_x = bc + x_stirrup_ext
+        L_strip_y = tc + x_stirrup_ext
+        strip_dir_desc = "X & Y Directions (Corner Arms)"
+    elif ctype == "Edge":
+        L_strip_x = bc + 2.0 * x_stirrup_ext
+        L_strip_y = tc + x_stirrup_ext
+        strip_dir_desc = "X & Y Directions (Edge T-Strip)"
+    else:
+        L_strip_x = bc + 2.0 * x_stirrup_ext
+        L_strip_y = tc + 2.0 * x_stirrup_ext
+        strip_dir_desc = "Orthogonal Both Directions (X & Y)"
+
+    fig = plt.figure(figsize=(22, 13), dpi=100)
+    fig.patch.set_facecolor("#ffffff")
+
+    # GridSpec: 3D View (Left, large) + Specifications Panel (Right)
+    gs = fig.add_gridspec(1, 2, width_ratios=[1.60, 0.85], wspace=0.06, left=0.01, right=0.99, top=0.93, bottom=0.03)
+    ax_3d = fig.add_subplot(gs[0, 0], projection="3d")
+    ax_spec = fig.add_subplot(gs[0, 1])
+
+    ax_3d.set_facecolor("#ffffff")
+    ax_spec.set_facecolor("#090d16")
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # ── 1. 3D STRUCTURAL & REINFORCEMENT MODEL ───────────────────────────────
+    # ═════════════════════════════════════════════════════════════════════════
+    cover = 2.5
+    z_bot = cover
+    z_top = ts - cover
+
+    slab_w_x = max(L_strip_x + 24.0, bc + 2.0 * d + 32.0)
+    slab_w_y = max(L_strip_y + 24.0, tc + 2.0 * d + 32.0)
+    col_h_below = 22.0
+    col_reb_ext = 15.0
+
+    # 1.1 Slab 3D Semi-transparent Box
+    x0_s, x1_s = -slab_w_x / 2.0, slab_w_x / 2.0
+    y0_s, y1_s = -slab_w_y / 2.0, slab_w_y / 2.0
+    z0_s, z1_s = 0.0, ts
+
+    slab_faces = [
+        [[x0_s, y0_s, z0_s], [x1_s, y0_s, z0_s], [x1_s, y1_s, z0_s], [x0_s, y1_s, z0_s]],
+        [[x0_s, y0_s, z1_s], [x1_s, y0_s, z1_s], [x1_s, y1_s, z1_s], [x0_s, y1_s, z1_s]],
+        [[x0_s, y0_s, z0_s], [x1_s, y0_s, z0_s], [x1_s, y0_s, z1_s], [x0_s, y0_s, z1_s]],
+        [[x0_s, y1_s, z0_s], [x1_s, y1_s, z0_s], [x1_s, y1_s, z1_s], [x0_s, y1_s, z1_s]],
+        [[x0_s, y0_s, z0_s], [x0_s, y1_s, z0_s], [x0_s, y1_s, z1_s], [x0_s, y0_s, z1_s]],
+        [[x1_s, y0_s, z0_s], [x1_s, y1_s, z0_s], [x1_s, y1_s, z1_s], [x1_s, y0_s, z1_s]],
+    ]
+    slab_poly = Poly3DCollection(slab_faces, facecolor="#f8fafc", edgecolor="#94a3b8", alpha=0.08, lw=1.2, linestyle="--")
+    ax_3d.add_collection3d(slab_poly)
+
+    # 1.2 Column 3D Solid Box (Below Slab)
+    x0_c, x1_c = -bc / 2.0, bc / 2.0
+    y0_c, y1_c = -tc / 2.0, tc / 2.0
+    z0_c, z1_c = -col_h_below, 0.0
+
+    col_faces = [
+        [[x0_c, y0_c, z0_c], [x1_c, y0_c, z0_c], [x1_c, y1_c, z0_c], [x0_c, y1_c, z0_c]],
+        [[x0_c, y0_c, z0_c], [x1_c, y0_c, z0_c], [x1_c, y0_c, z1_c], [x0_c, y0_c, z1_c]],
+        [[x0_c, y1_c, z0_c], [x1_c, y1_c, z0_c], [x1_c, y1_c, z1_c], [x0_c, y1_c, z1_c]],
+        [[x0_c, y0_c, z0_c], [x0_c, y1_c, z0_c], [x0_c, y1_c, z1_c], [x0_c, y0_c, z1_c]],
+        [[x1_c, y0_c, z0_c], [x1_c, y1_c, z0_c], [x1_c, y1_c, z1_c], [x1_c, y0_c, z1_c]],
+    ]
+    col_poly = Poly3DCollection(col_faces, facecolor="#1e293b", edgecolor="#0f172a", alpha=0.92, lw=2.0)
+    ax_3d.add_collection3d(col_poly)
+    ax_3d.plot([x0_c, x1_c, x1_c, x0_c, x0_c], [y0_c, y0_c, y1_c, y1_c, y0_c], [0, 0, 0, 0, 0], color="#0f172a", lw=2.4)
+
+    # Column Vertical Rebar extending through slab and upward
+    c_reb_x = [x0_c + 2.5, x1_c - 2.5]
+    c_reb_y = [y0_c + 2.5, y1_c - 2.5]
+    for rx in c_reb_x:
+        for ry in c_reb_y:
+            ax_3d.plot([rx, rx], [ry, ry], [-col_h_below, ts + col_reb_ext], color="#334155", lw=3.2, zorder=6)
+
+    if bc >= 40:
+        for ry in c_reb_y:
+            ax_3d.plot([0, 0], [ry, ry], [-col_h_below, ts + col_reb_ext], color="#334155", lw=3.0, zorder=6)
+    if tc >= 40:
+        for rx in c_reb_x:
+            ax_3d.plot([rx, rx], [0, 0], [-col_h_below, ts + col_reb_ext], color="#334155", lw=3.0, zorder=6)
+
+    # Column Ties (كانات العمود)
+    for tz in [-18.0, -10.0, -2.0, ts / 2.0]:
+        ax_3d.plot([x0_c+2.0, x1_c-2.0, x1_c-2.0, x0_c+2.0, x0_c+2.0],
+                   [y0_c+2.0, y0_c+2.0, y1_c-2.0, y1_c-2.0, y0_c+2.0],
+                   [tz, tz, tz, tz, tz], color="#475569", lw=2.0, zorder=6)
+
+    # 1.3 Critical Shear Perimeter at d/2 (3D Wireframe)
+    crit_w = bc + (d if ctype == "Interior" else (d * 0.75 if ctype == "Edge" else d * 0.5))
+    crit_h = tc + (d if ctype == "Interior" else (d * 0.75 if ctype == "Edge" else d * 0.5))
+    x0_cr, x1_cr = -crit_w / 2.0, crit_w / 2.0
+    y0_cr, y1_cr = -crit_h / 2.0, crit_h / 2.0
+
+    for z_lvl in [0.0, ts]:
+        ax_3d.plot([x0_cr, x1_cr, x1_cr, x0_cr, x0_cr],
+                   [y0_cr, y0_cr, y1_cr, y1_cr, y0_cr],
+                   [z_lvl, z_lvl, z_lvl, z_lvl, z_lvl],
+                   color="#ea580c", lw=2.2, linestyle=":", zorder=5)
+
+    for px, py in [(x0_cr, y0_cr), (x1_cr, y0_cr), (x1_cr, y1_cr), (x0_cr, y1_cr)]:
+        ax_3d.plot([px, px], [py, py], [0, ts], color="#ea580c", lw=1.6, linestyle=":", alpha=0.7)
+
+    # 1.4 Stirrup Cages in X-Direction & Y-Direction
+    cage_b_x = min(tc, 26.0)
+    cage_b_y = min(bc, 26.0)
+
+    # X-Direction Arms
+    x_offsets = []
+    if ctype in ("Interior", "Edge"):
+        x_offsets.extend([x1_c + r for r in row_positions])
+        x_offsets.extend([x0_c - r for r in row_positions])
+    elif ctype == "Corner":
+        x_offsets.extend([x1_c + r for r in row_positions])
+
+    for sx in x_offsets:
+        y_a, y_b = -cage_b_x / 2.0, cage_b_x / 2.0
+        pts = [
+            [sx, y_a, z_bot],
+            [sx, y_b, z_bot],
+            [sx, y_b, z_top],
+            [sx, y_a, z_top],
+            [sx, y_a, z_bot],
+        ]
+        ax_3d.plot([p[0] for p in pts], [p[1] for p in pts], [p[2] for p in pts],
+                   color="#dc2626", lw=3.2, zorder=10)
+        # Hook bends at top corners
+        ax_3d.plot([sx, sx], [y_a, y_a + 2.5], [z_top, z_top - 2.5], color="#dc2626", lw=2.6)
+        ax_3d.plot([sx, sx], [y_b, y_b - 2.5], [z_top, z_top - 2.5], color="#dc2626", lw=2.6)
+
+    # Y-Direction Arms
+    y_offsets = []
+    if ctype in ("Interior",):
+        y_offsets.extend([y1_c + r for r in row_positions])
+        y_offsets.extend([y0_c - r for r in row_positions])
+    elif ctype in ("Edge", "Corner"):
+        y_offsets.extend([y1_c + r for r in row_positions])
+
+    for sy in y_offsets:
+        x_a, x_b = -cage_b_y / 2.0, cage_b_y / 2.0
+        pts = [
+            [x_a, sy, z_bot],
+            [x_b, sy, z_bot],
+            [x_b, sy, z_top],
+            [x_a, sy, z_top],
+            [x_a, sy, z_bot],
+        ]
+        ax_3d.plot([p[0] for p in pts], [p[1] for p in pts], [p[2] for p in pts],
+                   color="#ea580c", lw=3.2, zorder=10)
+        # Hook bends
+        ax_3d.plot([x_a, x_a + 2.5], [sy, sy], [z_top, z_top - 2.5], color="#ea580c", lw=2.6)
+        ax_3d.plot([x_b, x_b - 2.5], [sy, sy], [z_top, z_top - 2.5], color="#ea580c", lw=2.6)
+
+    # 1.5 3D Longitudinal Hanger Bars (4 أسياخ تعليق لكل شريط)
+    x_min_bar = -L_strip_x / 2.0 - 2.5
+    x_max_bar = L_strip_x / 2.0 + 2.5
+    for hy in [-cage_b_x / 2.0 + 0.5, cage_b_x / 2.0 - 0.5]:
+        for hz in [z_bot + 0.5, z_top - 0.5]:
+            ax_3d.plot([x_min_bar, x_max_bar], [hy, hy], [hz, hz],
+                       color="#2563eb", lw=3.4, zorder=8)
+
+    y_min_bar = -L_strip_y / 2.0 - 2.5
+    y_max_bar = L_strip_y / 2.0 + 2.5
+    for hx in [-cage_b_y / 2.0 + 0.5, cage_b_y / 2.0 - 0.5]:
+        for hz in [z_bot + 0.5, z_top - 0.5]:
+            ax_3d.plot([hx, hx], [y_min_bar, y_max_bar], [hz, hz],
+                       color="#2563eb", lw=3.4, zorder=8)
+
+    # 1.6 Slab Base Mesh lines (شبكة تسليح البلاطة السفلية)
+    for mx in np.linspace(x0_s + 4.0, x1_s - 4.0, 9):
+        ax_3d.plot([mx, mx], [y0_s + 2.0, y1_s - 2.0], [z_bot - 0.5, z_bot - 0.5], color="#94a3b8", lw=1.4, alpha=0.45)
+    for my in np.linspace(y0_s + 4.0, y1_s - 4.0, 9):
+        ax_3d.plot([x0_s + 2.0, x1_s - 2.0], [my, my], [z_bot - 0.5, z_bot - 0.5], color="#94a3b8", lw=1.4, alpha=0.45)
+
+    # 1.7 3D Labels & Dimensions (Clean, Non-overlapping, Prominent)
+    # Column dimension banner in front of column face
+    ax_3d.text(0, y0_c - 14.0, -col_h_below * 0.6, f"COLUMN {col_id}\n{bc:.0f}×{tc:.0f} cm",
+               ha="center", va="center", color="#f8fafc", fontsize=12, weight="bold",
+               bbox=dict(boxstyle="round,pad=0.4", facecolor="#0f172a", edgecolor="#38bdf8", lw=2.0))
+
+    # Slab Thickness dimension arrow on front-left side
+    dim_x_slab = x0_s - 6.0
+    dim_y_slab = y0_s + 10.0
+    ax_3d.plot([dim_x_slab, dim_x_slab], [dim_y_slab, dim_y_slab], [0, ts], color="#0f172a", lw=2.6)
+    ax_3d.text(dim_x_slab - 3.0, dim_y_slab, ts / 2.0, f"ts = {ts:.0f} cm\n(d = {d:.1f} cm)",
+               ha="right", va="center", color="#0f172a", fontsize=11, weight="bold")
+
+    # Spacing s and s0 annotations in 3D (Elevated clearly above cages)
+    if len(row_positions) >= 2:
+        x_r0 = x1_c + row_positions[0]
+        x_r1 = x1_c + row_positions[1]
+        y_ann = cage_b_x / 2.0 + 8.0
+        ax_3d.plot([x_r0, x_r1], [y_ann, y_ann], [z_top + 3.0, z_top + 3.0], color="#dc2626", lw=2.4)
+        ax_3d.text((x_r0 + x_r1) / 2.0, y_ann, z_top + 6.0, f"s = {s_cm:.1f} cm",
+                   ha="center", va="bottom", color="#b91c1c", fontsize=11.5, weight="bold",
+                   bbox=dict(boxstyle="round,pad=0.25", facecolor="#fef2f2", edgecolor="#ef4444", lw=1.4))
+
+    if len(row_positions) >= 1:
+        x_c_face = x1_c
+        x_r0 = x1_c + row_positions[0]
+        y_ann0 = -cage_b_x / 2.0 - 8.0
+        ax_3d.plot([x_c_face, x_r0], [y_ann0, y_ann0], [z_top + 3.0, z_top + 3.0], color="#d97706", lw=2.4)
+        ax_3d.text((x_c_face + x_r0) / 2.0, y_ann0, z_top + 6.0, f"s0 = {s0_cm:.1f} cm",
+                   ha="center", va="bottom", color="#b45309", fontsize=11, weight="bold",
+                   bbox=dict(boxstyle="round,pad=0.25", facecolor="#fffbeb", edgecolor="#f59e0b", lw=1.4))
+
+    # Total Strip Lengths Banners (Positioned cleanly outside the slab)
+    ax_3d.text(0, -slab_w_y / 2.0 - 10.0, ts + 4.0, f"Total Strip Length (X-Dir) = {L_strip_x:.1f} cm",
+               ha="center", va="bottom", color="#1d4ed8", fontsize=12, weight="bold",
+               bbox=dict(boxstyle="round,pad=0.35", facecolor="#eff6ff", edgecolor="#3b82f6", lw=1.6))
+
+    ax_3d.text(slab_w_x / 2.0 + 10.0, 0, ts + 4.0, f"Total Strip Length (Y-Dir) = {L_strip_y:.1f} cm",
+               ha="left", va="center", color="#b45309", fontsize=12, weight="bold",
+               bbox=dict(boxstyle="round,pad=0.35", facecolor="#fefce8", edgecolor="#f59e0b", lw=1.6))
+
+    # 3D View Settings & Camera
+    ax_3d.view_init(elev=28, azim=-48)
+    max_range = max(slab_w_x, slab_w_y) / 2.0 + 6.0
+    ax_3d.set_xlim(-max_range, max_range)
+    ax_3d.set_ylim(-max_range, max_range)
+    ax_3d.set_zlim(-col_h_below - 4.0, ts + col_reb_ext + 8.0)
+
+    ax_3d.set_xlabel("X (cm)", fontsize=10.5, weight="bold", labelpad=-3)
+    ax_3d.set_ylabel("Y (cm)", fontsize=10.5, weight="bold", labelpad=-3)
+    ax_3d.set_zlabel("Z (cm)", fontsize=10.5, weight="bold", labelpad=-3)
+    ax_3d.set_title(f"3D ISOMETRIC VIEW: Punching Shear Stirrups Cages — Column {col_id}",
+                    fontsize=15, weight="bold", color="#0f172a", pad=16)
+
+    # 3D Custom Legend
+    custom_lines = [
+        plt.Line2D([0], [0], color="#dc2626", lw=3.4),
+        plt.Line2D([0], [0], color="#ea580c", lw=3.4),
+        plt.Line2D([0], [0], color="#2563eb", lw=3.4),
+        plt.Line2D([0], [0], color="#ea580c", lw=2.4, linestyle=":"),
+        plt.Line2D([0], [0], color="#1e293b", lw=3.4),
+    ]
+    ax_3d.legend(custom_lines, [
+        f"X-Dir Closed Stirrups (Φ{stirrup_dia_mm} @ {s_cm:.0f} cm)",
+        f"Y-Dir Closed Stirrups (Φ{stirrup_dia_mm} @ {s_cm:.0f} cm)",
+        f"Top & Bottom Hanger Bars (4Φ10 Rebars)",
+        f"1st Critical Perimeter @ d/2 ({crit_w:.0f}×{crit_h:.0f} cm)",
+        f"Column Shaft & Vertical Bars ({bc:.0f}×{tc:.0f} cm)",
+    ], loc="upper left", fontsize=9.5, framealpha=0.96, facecolor="#ffffff", edgecolor="#cbd5e1")
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # ── 2. 3D TECHNICAL SPECIFICATIONS & SCHEDULE PANEL ──────────────────────
+    # ═════════════════════════════════════════════════════════════════════════
+    ax_spec.set_xlim(0, 100)
+    ax_spec.set_ylim(0, 100)
+    ax_spec.axis("off")
+
+    c_box = FancyBboxPatch((2, 2), 96, 96, boxstyle="round,pad=1.0,rounding_size=3.0",
+                           facecolor="#090d16", edgecolor="#3b82f6", lw=2.2)
+    ax_spec.add_patch(c_box)
+
+    t_y = 94.0
+    ax_spec.text(50.0, t_y, f"3D STIRRUPS DETAILING SCHEDULE (ECP 203)", ha="center", va="top",
+                 fontsize=12.0, weight="bold", color="#38bdf8")
+
+    t_y -= 7.5
+    ax_spec.plot([6, 94], [t_y, t_y], color="#334155", lw=1.5)
+
+    specs = [
+        ("Column ID & Type", f"{col_id} ({ctype} Column)"),
+        ("Column Section a x b", f"{bc:.0f} x {tc:.0f} cm"),
+        ("Slab Thickness ts / Depth d", f"ts = {ts:.0f} cm | d = {d:.1f} cm"),
+        ("Design Axial Load Pu", f"{design['Pu_ton']:.2f} ton ({design['Pu_kN']:.1f} kN)"),
+        ("Actual Shear Stress qu", f"{design['qu_kgcm2']:.2f} kg/cm² ({design['qu_mpa']:.2f} MPa)"),
+        ("Concrete Resistance qcup", f"{design['qcup_kgcm2']:.2f} kg/cm² ({design['qcup_mpa']:.2f} MPa)"),
+        ("Max Allowable qu,max", f"{design['qu_max_kgcm2']:.2f} kg/cm² ({design['qu_max_mpa']:.2f} MPa)"),
+        ("-----------------------------", "-----------------------------"),
+        ("Stirrup 3D Cages Layout", f"{strip_dir_desc}"),
+        ("Stirrup Diameter (القطر)", f"Φ{stirrup_dia_mm} mm (High-Tensile Steel)"),
+        ("Spacing between cages s", f"{s_cm:.1f} cm (<= d/2 = {d/2:.1f} cm <= 15cm)"),
+        ("First Stirrup Distance s0", f"{s0_cm:.1f} cm (<= d/4 = {d/4:.1f} cm)"),
+        ("Number of Stirrup Rows", f"{n_rows} rows / arm ({row_positions})"),
+        ("Vertical Legs per Cage (n)", f"{n_legs} vertical branches / row"),
+        ("Total Column Stirrup Legs", f"{total_legs} vertical branches total"),
+        ("Top/Bottom Hanger Rebar", f"4Φ10 (أسياخ تعليق وتثبيت الكانات)"),
+        ("Required Steel Area Ast,req", f"{design['Ast_req_mm2']:.1f} mm² ({design['Ast_req_cm2']:.2f} cm²)"),
+        ("Provided Steel Area Ast,prov", f"{design['Ast_prov_mm2']:.1f} mm² ({design['Ast_prov_mm2']/100:.2f} cm²)"),
+        ("Total X-Strip Length (L_strip,X)", f"{L_strip_x:.1f} cm"),
+        ("Total Y-Strip Length (L_strip,Y)", f"{L_strip_y:.1f} cm"),
+    ]
+
+    t_y -= 4.0
+    for label, val in specs:
+        if label.startswith("---"):
+            ax_spec.plot([6, 94], [t_y, t_y], color="#475569", lw=1.2)
+            t_y -= 3.5
+            continue
+        ax_spec.text(6.0, t_y, label, fontsize=9.0, weight="bold", color="#94a3b8", ha="left", va="center")
+        ax_spec.text(94.0, t_y, val, fontsize=9.2, weight="bold", color="#f8fafc" if "Total" not in label and "Cages" not in label else "#facc15", ha="right", va="center")
+        t_y -= 4.2
+
+    fig.suptitle(
+        f"ECP 203 3D PUNCHING SHEAR STIRRUPS ISOMETRIC DETAILING — COLUMN {col_id}",
+        fontsize=16.5, weight="bold", color="#0f172a", y=0.985
+    )
+
     return fig
 
 
@@ -4070,9 +5634,9 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
     dim_offset_right = max(1.8, slab_w * 0.09)
 
     margin_left = offset_grid_left + bubble_radius * 2 + 0.8
-    margin_right = dim_offset_right + 1.5
+    margin_right = dim_offset_right + 3.0
     margin_top = offset_grid_top + bubble_radius * 2 + 0.8
-    margin_bot = dim_offset_bot + 1.5
+    margin_bot = dim_offset_bot + 2.8
 
     total_w = slab_w + margin_left + margin_right
     total_h = slab_h + margin_top + margin_bot
@@ -4085,7 +5649,7 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
     fig_w = max(22.0, min(34.0, target_plan_w + 1.6))
     fig_h = max(18.0, min(32.0, target_plan_h + legend_h + 1.0))
 
-    fig = plt.figure(figsize=(fig_w, fig_h), dpi=140)
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
     fig.patch.set_facecolor("#ffffff")
 
     plan_ratio = (fig_h - legend_h - 0.8) / fig_h
@@ -4303,6 +5867,19 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
         ax_plan.annotate("", xy=(x_slab_max, dim_y), xytext=(x_coords[-1], dim_y), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
         ax_plan.text((x_coords[-1] + x_slab_max)/2.0, dim_y - 0.4, f"{cant_right:.2f}m", ha="center", va="top", fontsize=13, fontweight="bold", color="#0f172a")
 
+    # Total Overall X-Dimension (Line 2)
+    y_dim_tot = dim_y - 1.2
+    ax_plan.annotate(
+        "", xy=(x_slab_max, y_dim_tot), xytext=(x_slab_min, y_dim_tot),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=1.8, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_slab_min, x_slab_min], [y_dim_tot - 0.25, y_dim_tot + 0.25], color="#1e3a8a", lw=1.6)
+    ax_plan.plot([x_slab_max, x_slab_max], [y_dim_tot - 0.25, y_dim_tot + 0.25], color="#1e3a8a", lw=1.6)
+    ax_plan.text(
+        (x_slab_min + x_slab_max) / 2.0, y_dim_tot - 0.38, f"Total Lx = {slab_w:.2f} m",
+        color="#1e3a8a", fontsize=13, weight="bold", ha="center", va="top"
+    )
+
     dim_x = x_slab_max + dim_offset_right
     if cant_bottom > 0:
         ax_plan.annotate("", xy=(dim_x, y_coords[0]), xytext=(dim_x, y_slab_min), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
@@ -4314,6 +5891,19 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
     if cant_top > 0:
         ax_plan.annotate("", xy=(dim_x, y_slab_max), xytext=(dim_x, y_coords[-1]), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
         ax_plan.text(dim_x + 0.4, (y_coords[-1] + y_slab_max)/2.0, f"{cant_top:.2f}m", ha="left", va="center", fontsize=13, fontweight="bold", color="#0f172a")
+
+    # Total Overall Y-Dimension (Line 2)
+    x_dim_tot = dim_x + 1.2
+    ax_plan.annotate(
+        "", xy=(x_dim_tot, y_slab_max), xytext=(x_dim_tot, y_slab_min),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=1.8, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_dim_tot - 0.25, x_dim_tot + 0.25], [y_slab_min, y_slab_min], color="#1e3a8a", lw=1.6)
+    ax_plan.plot([x_dim_tot - 0.25, x_dim_tot + 0.25], [y_slab_max, y_slab_max], color="#1e3a8a", lw=1.6)
+    ax_plan.text(
+        x_dim_tot + 0.38, (y_slab_min + y_slab_max) / 2.0, f"Total Ly = {slab_h:.2f} m",
+        color="#1e3a8a", fontsize=13, weight="bold", ha="left", va="center", rotation=270
+    )
 
     ax_plan.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
     ax_plan.set_ylim(y_slab_min - margin_bot, y_slab_max + margin_top)
@@ -4406,9 +5996,9 @@ def generate_flat_slab_top_mesh_extra_sketch(
     dim_offset_right = max(1.8, slab_w * 0.09)
 
     margin_left = offset_grid_left + bubble_radius * 2 + 0.8
-    margin_right = dim_offset_right + 1.5
+    margin_right = dim_offset_right + 3.0
     margin_top = offset_grid_top + bubble_radius * 2 + 0.8
-    margin_bot = dim_offset_bot + 1.5
+    margin_bot = dim_offset_bot + 2.8
 
     total_w = slab_w + margin_left + margin_right
     total_h = slab_h + margin_top + margin_bot
@@ -4421,7 +6011,7 @@ def generate_flat_slab_top_mesh_extra_sketch(
     fig_w = max(22.0, min(34.0, target_plan_w + 1.6))
     fig_h = max(18.0, min(32.0, target_plan_h + legend_h + 1.0))
 
-    fig = plt.figure(figsize=(fig_w, fig_h), dpi=140)
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
     fig.patch.set_facecolor("#ffffff")
 
     plan_ratio = (fig_h - legend_h - 0.8) / fig_h
@@ -4581,6 +6171,19 @@ def generate_flat_slab_top_mesh_extra_sketch(
         ax_plan.annotate("", xy=(x_slab_max, dim_y), xytext=(x_coords[-1], dim_y), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
         ax_plan.text((x_coords[-1] + x_slab_max)/2.0, dim_y - 0.4, f"{cant_right:.2f}m", ha="center", va="top", fontsize=13, fontweight="bold", color="#0f172a")
 
+    # Total Overall X-Dimension (Line 2)
+    y_dim_tot = dim_y - 1.2
+    ax_plan.annotate(
+        "", xy=(x_slab_max, y_dim_tot), xytext=(x_slab_min, y_dim_tot),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=1.8, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_slab_min, x_slab_min], [y_dim_tot - 0.25, y_dim_tot + 0.25], color="#1e3a8a", lw=1.6)
+    ax_plan.plot([x_slab_max, x_slab_max], [y_dim_tot - 0.25, y_dim_tot + 0.25], color="#1e3a8a", lw=1.6)
+    ax_plan.text(
+        (x_slab_min + x_slab_max) / 2.0, y_dim_tot - 0.38, f"Total Lx = {slab_w:.2f} m",
+        color="#1e3a8a", fontsize=13, weight="bold", ha="center", va="top"
+    )
+
     dim_x = x_slab_max + dim_offset_right
     if cant_bottom > 0:
         ax_plan.annotate("", xy=(dim_x, y_coords[0]), xytext=(dim_x, y_slab_min), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
@@ -4592,6 +6195,19 @@ def generate_flat_slab_top_mesh_extra_sketch(
     if cant_top > 0:
         ax_plan.annotate("", xy=(dim_x, y_slab_max), xytext=(dim_x, y_coords[-1]), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6))
         ax_plan.text(dim_x + 0.4, (y_coords[-1] + y_slab_max)/2.0, f"{cant_top:.2f}m", ha="left", va="center", fontsize=13, fontweight="bold", color="#0f172a")
+
+    # Total Overall Y-Dimension (Line 2)
+    x_dim_tot = dim_x + 1.2
+    ax_plan.annotate(
+        "", xy=(x_dim_tot, y_slab_max), xytext=(x_dim_tot, y_slab_min),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=1.8, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_dim_tot - 0.25, x_dim_tot + 0.25], [y_slab_min, y_slab_min], color="#1e3a8a", lw=1.6)
+    ax_plan.plot([x_dim_tot - 0.25, x_dim_tot + 0.25], [y_slab_max, y_slab_max], color="#1e3a8a", lw=1.6)
+    ax_plan.text(
+        x_dim_tot + 0.38, (y_slab_min + y_slab_max) / 2.0, f"Total Ly = {slab_h:.2f} m",
+        color="#1e3a8a", fontsize=13, weight="bold", ha="left", va="center", rotation=270
+    )
 
     ax_plan.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
     ax_plan.set_ylim(y_slab_min - margin_bot, y_slab_max + margin_top)
@@ -4696,9 +6312,9 @@ def generate_flat_slab_master_steel_layout_sketch(
     dim_offset_right = max(1.5, slab_w * 0.08)
 
     margin_left = offset_grid_left + bubble_radius * 2 + 0.6
-    margin_right = dim_offset_right + 1.2
+    margin_right = dim_offset_right + 3.0
     margin_top = offset_grid_top + bubble_radius * 2 + 0.6
-    margin_bot = dim_offset_bot + 1.2
+    margin_bot = dim_offset_bot + 2.8
 
     total_w = slab_w + margin_left + margin_right
     total_h = slab_h + margin_top + margin_bot
@@ -4714,7 +6330,7 @@ def generate_flat_slab_master_steel_layout_sketch(
     plan_ratio = (fig_h - legend_h - 1.0) / fig_h
     legend_ratio = legend_h / fig_h
 
-    fig = plt.figure(figsize=(fig_w, fig_h), dpi=140)
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
     fig.patch.set_facecolor("#ffffff")
 
     gs = gridspec.GridSpec(
@@ -4948,6 +6564,19 @@ def generate_flat_slab_master_steel_layout_sketch(
         ax_plan.annotate("", xy=(x_slab_max, dim_y), xytext=(x_coords[-1], dim_y), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.4))
         ax_plan.text((x_coords[-1] + x_slab_max)/2.0, dim_y - 0.35, f"{cant_right:.2f}m", ha="center", va="top", fontsize=11, fontweight="bold", color="#0f172a")
 
+    # Total Overall X-Dimension (Line 2)
+    y_dim_tot = dim_y - 1.1
+    ax_plan.annotate(
+        "", xy=(x_slab_max, y_dim_tot), xytext=(x_slab_min, y_dim_tot),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=1.8, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_slab_min, x_slab_min], [y_dim_tot - 0.25, y_dim_tot + 0.25], color="#1e3a8a", lw=1.6)
+    ax_plan.plot([x_slab_max, x_slab_max], [y_dim_tot - 0.25, y_dim_tot + 0.25], color="#1e3a8a", lw=1.6)
+    ax_plan.text(
+        (x_slab_min + x_slab_max) / 2.0, y_dim_tot - 0.35, f"Total Lx = {slab_w:.2f} m",
+        color="#1e3a8a", fontsize=12.0, weight="bold", ha="center", va="top"
+    )
+
     dim_x = x_slab_max + dim_offset_right
     if cant_bottom > 0:
         ax_plan.annotate("", xy=(dim_x, y_coords[0]), xytext=(dim_x, y_slab_min), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.4))
@@ -4959,6 +6588,19 @@ def generate_flat_slab_master_steel_layout_sketch(
     if cant_top > 0:
         ax_plan.annotate("", xy=(dim_x, y_slab_max), xytext=(dim_x, y_coords[-1]), arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.4))
         ax_plan.text(dim_x + 0.35, (y_coords[-1] + y_slab_max)/2.0, f"{cant_top:.2f}m", ha="left", va="center", fontsize=11, fontweight="bold", color="#0f172a")
+
+    # Total Overall Y-Dimension (Line 2)
+    x_dim_tot = dim_x + 1.1
+    ax_plan.annotate(
+        "", xy=(x_dim_tot, y_slab_max), xytext=(x_dim_tot, y_slab_min),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=1.8, shrinkA=0, shrinkB=0)
+    )
+    ax_plan.plot([x_dim_tot - 0.25, x_dim_tot + 0.25], [y_slab_min, y_slab_min], color="#1e3a8a", lw=1.6)
+    ax_plan.plot([x_dim_tot - 0.25, x_dim_tot + 0.25], [y_slab_max, y_slab_max], color="#1e3a8a", lw=1.6)
+    ax_plan.text(
+        x_dim_tot + 0.35, (y_slab_min + y_slab_max) / 2.0, f"Total Ly = {slab_h:.2f} m",
+        color="#1e3a8a", fontsize=12.0, weight="bold", ha="left", va="center", rotation=270
+    )
 
     ax_plan.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
     ax_plan.set_ylim(y_slab_min - margin_bot, y_slab_max + margin_top)
@@ -5029,6 +6671,7 @@ def generate_flat_slab_master_steel_layout_sketch(
 #  DESIGN & CALCULATION ENGINES
 # ═══════════════════════════════════════════════════════════════════════════════
 
+@st.cache_data(show_spinner=False)
 def ddm_moments(Wu, L_perp, Ln, is_exterior):
 
     """
@@ -5059,6 +6702,7 @@ def ddm_moments(Wu, L_perp, Ln, is_exterior):
     )
 
 
+@st.cache_data(show_spinner=False)
 def calc_As(M_ton_m, width_m, d_cm, Fcu, Fy, ts):
     """
     Required steel area (cm²) for the full strip width.
@@ -5078,6 +6722,7 @@ def calc_As(M_ton_m, width_m, d_cm, Fcu, Fy, ts):
     return max(As_ref, As_min)
 
 
+@st.cache_data(show_spinner=False)
 def calc_moment_capacity_btm(As_cm2_per_m, d_cm, Fcu, Fy):
     """
     Moment capacity (t.m/m) of bottom mesh reinforcement per unit width (1 m strip).
@@ -5092,7 +6737,198 @@ def calc_moment_capacity_btm(As_cm2_per_m, d_cm, Fcu, Fy):
     return M_kg_cm / 100_000.0                           # → t.m/m
 
 
-def calculate_punching_shear(columns, Lx_spans, Ly_spans, cantilevers, Wu, d_cm, Fcu):
+@st.cache_data(show_spinner=False)
+def design_punching_shear_stirrups(
+    Pu_ton,
+    bc_cm,
+    tc_cm,
+    ctype,
+    ts_cm,
+    d_cm,
+    Fcu_kgcm2,
+    Fy_kgcm2=4000,
+    stirrup_dia_mm=10,
+):
+    """
+    Detailed punching shear verification and stirrups auto-design according to ECP 203.
+    """
+    fcu_mpa = Fcu_kgcm2 / 10.0
+    fy_mpa = Fy_kgcm2 / 10.0
+    fyst_mpa = min(fy_mpa, 400.0)
+
+    a_mm = bc_cm * 10.0
+    b_mm = tc_cm * 10.0
+    ts_mm = ts_cm * 10.0
+    d_mm = d_cm * 10.0
+
+    Pu_N = Pu_ton * 1000.0 * 9.80665
+    Pu_kg = Pu_ton * 1000.0
+
+    if ctype == "Corner":
+        beta = 1.50
+        bo_cm = (bc_cm + d_cm / 2.0) + (tc_cm + d_cm / 2.0)
+        alpha_s = 2.0
+    elif ctype == "Edge":
+        beta = 1.30
+        bo_cm = (bc_cm + d_cm) + 2.0 * (tc_cm + d_cm / 2.0)
+        alpha_s = 3.0
+    else:  # Interior
+        beta = 1.15
+        bo_cm = 2.0 * (bc_cm + d_cm) + 2.0 * (tc_cm + d_cm)
+        alpha_s = 4.0
+
+    bo_mm = bo_cm * 10.0
+
+    qu_mpa = (beta * Pu_N) / (bo_mm * d_mm)
+    qu_kgcm2 = (beta * Pu_kg) / (bo_cm * d_cm)
+
+    gamma_c = 1.5
+    sqrt_term = math.sqrt(fcu_mpa / gamma_c)
+
+    qcup1_mpa = 0.8 * (alpha_s * d_mm / bo_mm + 0.2) * sqrt_term
+    ratio_ab = min(a_mm, b_mm) / max(a_mm, b_mm)
+    qcup2_mpa = 0.316 * (0.5 + ratio_ab) * sqrt_term
+    qcup3_mpa = 0.316 * sqrt_term
+    qcup_mpa = min(qcup1_mpa, qcup2_mpa, qcup3_mpa, 1.70)
+    qcup_kgcm2 = qcup_mpa * 10.0
+
+    qu_max_mpa = min(0.45 * sqrt_term, 2.12)
+    qu_max_kgcm2 = qu_max_mpa * 10.0
+
+    stress_ratio = qu_mpa / qcup_mpa
+    is_safe = stress_ratio <= 1.0
+
+    if is_safe:
+        status_code = "SAFE"
+        advisory_case = 0
+        advisory_msg = "العمود آمن تماماً في القص الثاقب بمقاومة الخرسانة بمفردها (qu <= qcup)."
+    elif ts_mm < 250.0:
+        status_code = "UNSAFE_THICKNESS"
+        advisory_case = 1
+        advisory_msg = (
+            f"العمود غير آمن (qu = {qu_mpa:.2f} MPa > qcup = {qcup_mpa:.2f} MPa). "
+            f"الكود المصري (ECP 203) يمنع صراحةً استخدام كانات القص الثاقب لسمك بلاطة أقل من 250 مم "
+            f"(السمك الحالي {ts_cm:.0f} سم = {ts_mm:.0f} مم). "
+            f"التوصية: رفع سمك البلاطة إلى ts >= 250 mm أو تنفيذ سقوط عمود (Drop Panel)."
+        )
+    elif qu_mpa > qu_max_mpa:
+        status_code = "UNSAFE_MAX_EXCEEDED"
+        advisory_case = 2
+        advisory_msg = (
+            f"العمود غير آمن للغاية (qu = {qu_mpa:.2f} MPa > qu,max = {qu_max_mpa:.2f} MPa). "
+            f"الإجهاد الفعلي يتجاوز الحد الأقصى المطلق لمقاومة الخرسانة المسلحة بالكانات (0.45*sqrt(fcu/1.5) <= 2.12 MPa). "
+            f"التوصية: الكانات بمفردها لا تكفي! يجب زيادة أبعاد مقطع العمود (a x b) أو تنفيذ سقوط (Drop Panel) أو تاج عمود (Column Head)."
+        )
+    else:
+        status_code = "UNSAFE_STIRRUPS_FEASIBLE"
+        advisory_case = 3
+        advisory_msg = (
+            f"العمود غير آمن بالخرسانة وحدها (qu = {qu_mpa:.2f} MPa > qcup = {qcup_mpa:.2f} MPa)، "
+            f"ولكن الشروط مستوفاة لاستخدام كانات القص الثاقب (ts = {ts_cm:.0f} سم >= 25 سم و qu <= qu,max = {qu_max_mpa:.2f} MPa). "
+            f"التوصية: يمكن الاستمرار بنفس تخانة البلاطة الحالية عبر تسليح منطقة العمود بكانات القص الثاقب الموضحة بالتفصيل."
+        )
+
+    qc_stirrups_mpa = 0.5 * qcup_mpa
+    qsu_mpa = max(0.0, qu_mpa - qc_stirrups_mpa)
+
+    s_mm = min(math.floor(d_mm / 2.0), 150.0)
+    s_cm = s_mm / 10.0
+
+    gamma_s = 1.15
+    f_yd_mpa = fyst_mpa / gamma_s
+    Ast_req_mm2 = (qsu_mpa * bo_mm * s_mm) / f_yd_mpa
+    Ast_req_cm2 = Ast_req_mm2 / 100.0
+
+    A_phi_mm2 = math.pi * (stirrup_dia_mm ** 2) / 4.0
+
+    if is_safe:
+        n_legs_per_row = 0
+        n_legs_calc = 0
+    else:
+        n_legs_calc = math.ceil(Ast_req_mm2 / A_phi_mm2)
+        if ctype == "Corner":
+            min_legs = 4
+        elif ctype == "Edge":
+            min_legs = 6
+        else:
+            min_legs = 8
+        n_legs_per_row = max(min_legs, n_legs_calc)
+        if ctype == "Interior":
+            n_legs_per_row = int(math.ceil(n_legs_per_row / 4.0) * 4)
+        else:
+            n_legs_per_row = int(math.ceil(n_legs_per_row / 2.0) * 2)
+
+    Ast_prov_mm2 = n_legs_per_row * A_phi_mm2
+
+    bo_ext_mm = (beta * Pu_N) / (qcup_mpa * d_mm)
+    bo_ext_cm = bo_ext_mm / 10.0
+
+    if ctype == "Corner":
+        x_crit_mm = max(d_mm / 2.0, (bo_ext_mm - (a_mm + b_mm)) / 2.0)
+    elif ctype == "Edge":
+        x_crit_mm = max(d_mm / 2.0, (bo_ext_mm - (2.0 * a_mm + b_mm)) / 4.0)
+    else:
+        x_crit_mm = max(d_mm / 2.0, (bo_ext_mm - 2.0 * (a_mm + b_mm)) / 8.0)
+
+    x_crit_cm = x_crit_mm / 10.0
+    x_stirrup_ext_mm = max(d_mm / 2.0, x_crit_mm - d_mm / 2.0)
+    x_stirrup_ext_cm = x_stirrup_ext_mm / 10.0
+
+    s0_mm = min(s_mm / 2.0, d_mm / 4.0)
+
+    if is_safe:
+        n_rows = 0
+        row_positions_cm = []
+    else:
+        n_rows = max(2, int(math.ceil((x_stirrup_ext_mm - s0_mm) / s_mm)) + 1)
+        row_positions_cm = [round((s0_mm + k * s_mm) / 10.0, 2) for k in range(n_rows)]
+
+    total_legs_all_rows = n_legs_per_row * n_rows
+
+    zone_w_cm = bc_cm + 2.0 * (row_positions_cm[-1] if row_positions_cm else d_cm / 2.0)
+    zone_h_cm = tc_cm + 2.0 * (row_positions_cm[-1] if row_positions_cm else d_cm / 2.0)
+
+    return {
+        "Pu_ton": Pu_ton,
+        "Pu_kN": Pu_N / 1000.0,
+        "bc_cm": bc_cm,
+        "tc_cm": tc_cm,
+        "ctype": ctype,
+        "beta": beta,
+        "bo_cm": bo_cm,
+        "bo_mm": bo_mm,
+        "qu_mpa": qu_mpa,
+        "qu_kgcm2": qu_kgcm2,
+        "qcup_mpa": qcup_mpa,
+        "qcup_kgcm2": qcup_kgcm2,
+        "qu_max_mpa": qu_max_mpa,
+        "qu_max_kgcm2": qu_max_kgcm2,
+        "stress_ratio": stress_ratio,
+        "is_safe": is_safe,
+        "status_code": status_code,
+        "advisory_case": advisory_case,
+        "advisory_msg": advisory_msg,
+        "stirrup_dia_mm": stirrup_dia_mm,
+        "s_cm": s_cm,
+        "s_mm": s_mm,
+        "s0_cm": s0_mm / 10.0,
+        "Ast_req_mm2": Ast_req_mm2,
+        "Ast_req_cm2": Ast_req_cm2,
+        "Ast_prov_mm2": Ast_prov_mm2,
+        "n_legs_per_row": n_legs_per_row,
+        "n_rows": n_rows,
+        "total_legs": total_legs_all_rows,
+        "row_positions_cm": row_positions_cm,
+        "bo_ext_cm": bo_ext_cm,
+        "x_crit_cm": x_crit_cm,
+        "x_stirrup_ext_cm": x_stirrup_ext_cm,
+        "zone_w_cm": zone_w_cm,
+        "zone_h_cm": zone_h_cm,
+    }
+
+
+@st.cache_data(show_spinner=False)
+def calculate_punching_shear(columns, Lx_spans, Ly_spans, cantilevers, Wu, d_cm, Fcu, Fy=4000, ts_cm=20.0):
     """
     Check punching shear capacity for every column (ECP 203).
     Returns list of detailed dicts.
@@ -5132,45 +6968,53 @@ def calculate_punching_shear(columns, Lx_spans, Ly_spans, cantilevers, Wu, d_cm,
             Atrib = ltx * lty
             Pu = Wu * Atrib
 
-        Pu_kg = Pu * 1000.0
+        des = design_punching_shear_stirrups(
+            Pu_ton=Pu,
+            bc_cm=bc,
+            tc_cm=tc,
+            ctype=ctype,
+            ts_cm=ts_cm,
+            d_cm=d_cm,
+            Fcu_kgcm2=Fcu,
+            Fy_kgcm2=Fy,
+            stirrup_dia_mm=10,
+        )
 
-        if ctype == "Corner":
-            beta = 1.50
-            bo = (bc + d_cm / 2.0) + (tc + d_cm / 2.0)
-            alpha_s = 2.0
-        elif ctype == "Edge":
-            beta = 1.30
-            if i == 0 or i >= n_x:
-                bo = 2.0 * (bc + d_cm / 2.0) + (tc + d_cm)
-            else:
-                bo = (bc + d_cm) + 2.0 * (tc + d_cm / 2.0)
-            alpha_s = 3.0
+        qup = des["qu_kgcm2"]
+        qcup = des["qcup_kgcm2"]
+        ratio = des["stress_ratio"]
+        is_safe = des["is_safe"]
+
+        if is_safe:
+            status_str = "✅ Safe (آمن)"
+        elif des["advisory_case"] == 1:
+            status_str = "⚠️ Unsafe (ts < 25cm)"
+        elif des["advisory_case"] == 2:
+            status_str = "🚨 Unsafe (qu > qu,max)"
         else:
-            beta = 1.15
-            bo = 2.0 * (bc + d_cm) + 2.0 * (tc + d_cm)
-            alpha_s = 4.0
-
-        qup = (beta * Pu_kg) / (bo * d_cm)
-
-        qcup1 = 0.815 * math.sqrt(Fcu / 1.5)
-        qcup2 = 0.8 * (alpha_s * d_cm / bo + 0.2) * math.sqrt(Fcu / 1.5) * (math.sqrt(10) * 0.316)
-        qcup3 = 0.316 * (0.5 + min(bc, tc) / max(bc, tc)) * math.sqrt(Fcu / 1.5) * math.sqrt(10)
-        qcup = min(qcup1, qcup2, qcup3, 17.0)
-
-        ratio = qup / qcup
-        is_safe = ratio <= 1.0
+            status_str = "⚠️ Unsafe (Stirrups Feasible)"
 
         results.append({
             "Column ID": col["id"],
             "Grid": f"{col['grid_x']} - {col['grid_y']}",
             "Location Type": ctype,
+            "Location Type Ar": "ركن (Corner)" if ctype == "Corner" else ("طرفي (Edge)" if ctype == "Edge" else "داخلي (Interior)"),
+            "Section (cm)": f"{bc:.0f} × {tc:.0f}",
             "Pu (ton)": Pu,
-            "bo (cm)": bo,
+            "Pu (kN)": des["Pu_kN"],
+            "bo (cm)": des["bo_cm"],
             "qup (kg/cm²)": qup,
+            "qu (MPa)": des["qu_mpa"],
             "qcup (kg/cm²)": qcup,
+            "qcup (MPa)": des["qcup_mpa"],
+            "qu_max (kg/cm²)": des["qu_max_kgcm2"],
+            "qu_max (MPa)": des["qu_max_mpa"],
             "Ratio": ratio,
-            "Status": "✅ Safe" if is_safe else "⚠️ Unsafe (Needs Drop / Studs)",
+            "Status": status_str,
             "is_safe": is_safe,
+            "advisory_case": des["advisory_case"],
+            "advisory_msg": des["advisory_msg"],
+            "stirrups_design": des,
             "x": col.get("x", 0.0),
             "y": col.get("y", 0.0),
             "bc": bc,
@@ -5179,6 +7023,7 @@ def calculate_punching_shear(columns, Lx_spans, Ly_spans, cantilevers, Wu, d_cm,
     return results
 
 
+@st.cache_data(show_spinner=False)
 def calculate_extra_top_steel_at_columns(
     columns,
     rows_x,
@@ -5276,6 +7121,7 @@ def calculate_extra_top_steel_at_columns(
     return col_extras
 
 
+@st.cache_data(show_spinner=False)
 def calculate_cantilever_reinforcement(cantilevers, Wu, d_cm, Fcu, Fy, ts_cm, bar_dia_mm=12):
     """
     Calculate Shawka top reinforcement for all cantilevers.
@@ -5307,6 +7153,7 @@ def calculate_cantilever_reinforcement(cantilevers, Wu, d_cm, Fcu, Fy, ts_cm, ba
     return cant_rft
 
 
+@st.cache_data(show_spinner=False)
 def calculate_boq(Lx_spans, Ly_spans, cantilevers, ts_cm, mesh_btm_n, mesh_btm_dia, mesh_top_n, mesh_top_dia, col_extras, cant_rft_list, btm_extra_spans=None, void_panels=None, fcu=250):
     """
     Calculate comprehensive Bill of Quantities (BoQ) for Concrete, Raw Materials, and Steel,
@@ -5755,7 +7602,7 @@ def render():
         unsafe_allow_html=True,
     )
 
-    with st.expander(f"📐 Step 1 — Grid Geometry & Cantilevers (اسم المشروع والمحاور والكوابيل) — [ {active_profile_name} ]", expanded=True):
+    with st.expander(f"📐 Step 1 — Grid Geometry & Cantilevers (اسم المشروع والمحاور والكوابيل) — [ {active_profile_name} ]", expanded=False):
         col_fs_pad1, col_fs_center, col_fs_pad2 = st.columns([0.6, 6.8, 0.6])
         with col_fs_center:
             cur_p_name = S.text_input(
@@ -5824,7 +7671,7 @@ def render():
         )
 
     # ── ② COLUMN, THICKNESS, LOADS, MATERIALS & REBAR OPTIONS ────────────────
-    with st.expander("🧱 Step 2 — Slab Thickness, Column Size, Loads & Rebar (السُمك والأعمدة والأحمال والتسليح)", expanded=True):
+    with st.expander("🧱 Step 2 — Slab Thickness, Column Size, Loads & Rebar (السُمك والأعمدة والأحمال والتسليح)", expanded=False):
         c1, c2, c3, c4 = st.columns(4)
 
         with c1:
@@ -5942,46 +7789,11 @@ def render():
         Lx_spans, Ly_spans, bc_cm=_bc_col, tc_cm=_tc_col,
         removed_ids=set(_confirmed_removals),
     )
-    _active_orig_ids = {c["orig_id"] for c in _active_cols}  # IDs available for further removal
-
-    # ── 5d. رسم مخطط التحقق الهندسي (مغلق بشكل افتراضي) ─────────────────────
-    # حساب الصورة دائماً لأن img_verif_b64 مطلوب في التقرير لاحقاً
     _col_w_sk = _bc_col
     _col_d_sk = _tc_col
     _removed_col_objs_sk = [c for c in _all_cols if c["orig_id"] in set(_confirmed_removals)]
 
-    fig_verif = generate_flat_slab_sketch(
-        Lx_spans, Ly_spans, cantilevers,
-        ts_initial=ts_initial if ts_initial is not None else 20,
-        n_floors=num_floors,
-        bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
-        bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
-        top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
-        top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
-        col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
-        strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
-        strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
-        concrete_cover=cov if cov is not None else 1.5,
-        fcu=Fcu if Fcu is not None else 250,
-        fy=Fy if Fy is not None else 4000,
-        live_load=LL if LL is not None else 0.25,
-        flooring_load=SDL if SDL is not None else 0.15,
-        wall_load=wall_load if wall_load is not None else 0.50,
-        col_w_cm=_col_w_sk,
-        col_d_cm=_col_d_sk,
-        removed_col_ids=set(_confirmed_removals),
-        pending_col_ids=set(st.session_state.get("_fs_pending_snapshot", [])
-                            if st.session_state.get("_fs_show_confirm") else _pending_removals),
-        void_panel_ids=set(_confirmed_voids),
-        pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", [])
-                             if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
-    )
-    buf_v = io.BytesIO()
-    fig_verif.savefig(buf_v, format="png", bbox_inches="tight", dpi=300)
-    buf_v.seek(0)
-    img_verif_b64 = "data:image/png;base64," + base64.b64encode(buf_v.getvalue()).decode("utf-8")
-    buf_v.seek(0)
-
+    img_verif_b64 = None
     with st.expander(
         "🗺️ Structural Geometry Sketch & Verification (مخطط التحقق الهندسي وتوزيع المحاور والأعمدة)",
         expanded=True,
@@ -5990,14 +7802,47 @@ def render():
             '<div class="section-header">🗺️ Structural Geometry Sketch & Verification (مخطط التحقق الهندسي وتوزيع المحاور والأعمدة)</div>',
             unsafe_allow_html=True,
         )
-        st.pyplot(fig_verif, use_container_width=True)
+        fig_verif = generate_flat_slab_sketch(
+            Lx_spans, Ly_spans, cantilevers,
+            ts_initial=ts_initial if ts_initial is not None else 20,
+            n_floors=num_floors,
+            bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
+            bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
+            top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
+            top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
+            col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
+            strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
+            strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
+            concrete_cover=cov if cov is not None else 1.5,
+            fcu=Fcu if Fcu is not None else 250,
+            fy=Fy if Fy is not None else 4000,
+            live_load=LL if LL is not None else 0.25,
+            flooring_load=SDL if SDL is not None else 0.15,
+            wall_load=wall_load if wall_load is not None else 0.50,
+            col_w_cm=_col_w_sk,
+            col_d_cm=_col_d_sk,
+            removed_col_ids=set(_confirmed_removals),
+            pending_col_ids=set(st.session_state.get("_fs_pending_snapshot", [])
+                                if st.session_state.get("_fs_show_confirm") else _pending_removals),
+            void_panel_ids=set(_confirmed_voids),
+            pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", [])
+                                 if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
+        )
+        st.pyplot(fig_verif, clear_figure=True, use_container_width=True)
+        buf_v = io.BytesIO()
+        fig_verif.savefig(buf_v, format="png", bbox_inches="tight", dpi=180)
+        buf_v.seek(0)
+        img_verif_b64 = "data:image/png;base64," + base64.b64encode(buf_v.getvalue()).decode("utf-8")
+        buf_v.seek(0)
         st.download_button(
             label="📥 Download Structural Geometry Sketch (High-Res PNG)",
             data=buf_v,
             file_name=f"{prefix}Flat_Slab_Geometry_Verification.png",
             mime="image/png",
             use_container_width=True,
+            key="btn_dl_geom_verif_sketch",
         )
+        plt.close(fig_verif)
 
         # ── ملخص الأبعاد ─────────────────────────────────────────────────────
         n_total_cols  = (len(Lx_spans) + 1) * (len(Ly_spans) + 1)
@@ -6672,16 +8517,8 @@ def render():
     Ln_max = max(all_Ln) if all_Ln else max(max(Ln_x_all), max(Ln_y_all))
     ts_code_min = max(15.0, Ln_max * 100.0 / 32.0)
 
-    # 4b. Long-term Deflection Calculation (ECP 203)
-    deflection_results = calculate_flat_slab_deflections(
-        Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, DL_tot, LL,
-        void_panel_ids=set(_confirmed_voids),
-        col_w_cm=bc_s, col_d_cm=tc_s,
-    )
-    all_deflection_safe = all(p["is_safe"] for p in deflection_results)
-
     # 5. Punching Shear Check
-    punching_results = calculate_punching_shear(col_list, Lx_calc, Ly_calc, cantilevers, Wu, d, Fcu)
+    punching_results = calculate_punching_shear(col_list, Lx_calc, Ly_calc, cantilevers, Wu, d, Fcu, Fy=Fy, ts_cm=ts)
 
     # 6. Top Extra Steel at Columns (with enlarged bay influence)
     top_extra_cols = calculate_extra_top_steel_at_columns(
@@ -6760,6 +8597,19 @@ def render():
     # 7. Cantilever Reinforcement
     cant_rft_list = calculate_cantilever_reinforcement(cantilevers, Wu, d, Fcu, Fy, ts, bottom_mesh_dia)
 
+    # 7b. Comprehensive Long-term Deflection Calculation (ECP 203) using full actual rebar
+    deflection_results = calculate_flat_slab_deflections(
+        Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, DL_tot, LL,
+        void_panel_ids=set(_confirmed_voids),
+        col_w_cm=bc_s, col_d_cm=tc_s,
+        prov_btm_mesh_cm2m=prov_btm_mesh_cm2m,
+        prov_top_mesh_cm2m=prov_top_mesh_cm2m,
+        all_panels_x_design=all_panels_x_design,
+        all_panels_y_design=all_panels_y_design,
+        top_extra_cols=top_extra_cols,
+    )
+    all_deflection_safe = all(p["is_safe"] for p in deflection_results)
+
     # 8. Bill of Quantities (BoQ)
     boq = calculate_boq(
         Lx_calc, Ly_calc, cantilevers, ts,
@@ -6779,13 +8629,15 @@ def render():
     if _confirmed_removals:
         st.markdown(
             f"""
-            <div style='background:#f0fdf4;border:2px solid #22c55e;padding:12px 18px;border-radius:8px;margin-bottom:14px;'>
-            <h4 style='color:#15803d;margin:0 0 6px 0;'>🔄 تم إعادة التصميم الإنشائي وتحديث التسليح بعد إزالة الأعمدة</h4>
-            <b>الأعمدة المحذوفة:</b> {', '.join(sorted(_confirmed_removals, key=lambda c: int(c[1:])))}<br>
-            • <b>أقصى بحر خالص (Ln,max):</b> {Ln_max:.2f} m (الحد الأدنى لسمك البلاطة: {ts_code_min:.1f} cm).<br>
-            • <b>إعادة توزيع الأحمال:</b> تم ترحيل أحمال الأعمدة المحذوفة إلى الأعمدة المجاورة المحيطة وتحديث فحص القص الثاقب (Punching Shear).<br>
-            • <b>الحديد الإضافي السفلي (Bottom Extra):</b> تم توليد وحساب التسليح الإضافي السفلي للباكيات المكبرة لتغطية عزوم الانحناء الموجبة (+M).<br>
-            • <b>الحديد الإضافي العلوي (Top Extra):</b> تم زيادة التسليح الإضافي العلوي فوق الأعمدة الحاملة للباكيات المكبرة.
+            <div dir="rtl" style="background:rgba(34, 197, 94, 0.14); border:2px solid #22c55e; padding:14px 18px; border-radius:10px; margin-bottom:14px; text-align:right;">
+                <div style="font-size:16px; font-weight:800; color:#4ade80; margin-bottom:6px;">🔄 تم إعادة التصميم الإنشائي وتحديث التسليح بعد إزالة الأعمدة</div>
+                <div style="font-size:14.5px; color:#ffffff; line-height:1.7;">
+                    <b>الأعمدة المحذوفة:</b> {', '.join(sorted(_confirmed_removals, key=lambda c: int(c[1:])))}<br>
+                    • <b>أقصى بحر خالص (Ln,max):</b> {Ln_max:.2f} m (الحد الأدنى لسمك البلاطة: {ts_code_min:.1f} cm).<br>
+                    • <b>إعادة توزيع الأحمال:</b> تم ترحيل أحمال الأعمدة المحذوفة إلى الأعمدة المجاورة المحيطة وتحديث فحص القص الثاقب (Punching Shear).<br>
+                    • <b>الحديد الإضافي السفلي (Bottom Extra):</b> تم توليد وحساب التسليح الإضافي السفلي للباكيات المكبرة لتغطية عزوم الانحناء الموجبة (+M).<br>
+                    • <b>الحديد الإضافي العلوي (Top Extra):</b> تم زيادة التسليح الإضافي العلوي فوق الأعمدة الحاملة للباكيات المكبرة.
+                </div>
             </div>
             """,
             unsafe_allow_html=True
@@ -6858,7 +8710,555 @@ def render():
         )
 
     if ts < ts_code_min:
-        st.warning(f"⚠️ **ملاحظة إنشائية على السُمك بعد إزالة الأعمدة**: السُمك المحدد ({ts:.0f} cm) أقل من الحد الأدنى الموصى به لمقاومة الترخيم للبحر الأكبر ($L_n/32 = {ts_code_min:.1f}\\text{{ cm}}$). يرجى زيادة سُمك البلاطة أو فحص الترخيم (Long-Term Deflection).")
+        st.markdown(
+            f"""
+            <div dir="rtl" style="background:rgba(245, 158, 11, 0.14); border:2px solid #f59e0b; border-radius:10px; padding:14px 18px; margin:14px 0; text-align:right;">
+                <div style="font-size:15.5px; font-weight:800; color:#fbbf24; display:flex; align-items:center; gap:8px;">
+                    ⚠️ ملاحظة إنشائية على سُمك البلاطة بعد إزالة الأعمدة
+                </div>
+                <div style="margin-top:6px; font-size:14.5px; color:#ffffff; line-height:1.7;">
+                    السُمك المحدد الحالي (<b>{ts:.0f} cm</b>) أقل من الحد الأدنى الموصى به لمقاومة الترخيم للبحر الأكبر (<b>Ln/32 = {ts_code_min:.1f} cm</b>).
+                    <br>💡 <b>التوصية التنفيذية:</b> يرجى زيادة سُمك البلاطة إلى <b>ts ≥ {math.ceil(ts_code_min):.0f} cm</b> أو فحص سهم الانحناء طويل المدى (Long-Term Deflection).
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("---")
+
+    # ── 🥊 PUNCHING SHEAR VERIFICATION & REINFORCEMENT ENGINE ────────────────
+    with st.expander("🥊 Punching Shear Check (فحص القص الثاقب وتصميم كانات القص لجميع الأعمدة)", expanded=False):
+        # 1. Summary Metrics Header
+        safe_cols_count = sum(1 for p in punching_results if p["is_safe"])
+        unsafe_cols_count = len(punching_results) - safe_cols_count
+        max_ratio = max((p["Ratio"] for p in punching_results), default=0.0)
+        qcup_ref_val = punching_results[0].get("qcup (kg/cm²)", 10.5) if punching_results else 10.5
+        qcup_ref_mpa = punching_results[0].get("qcup (MPa)", 1.05) if punching_results else 1.05
+        qu_max_ref_val = punching_results[0].get("qu_max (kg/cm²)", 21.2) if punching_results else 21.2
+        qu_max_ref_mpa = punching_results[0].get("qu_max (MPa)", 2.12) if punching_results else 2.12
+
+        col_met1, col_met2, col_met3, col_met4, col_met5 = st.columns(5)
+        with col_met1:
+            st.markdown(
+                f"""
+                <div class="ecp-metric-box">
+                    <div class="ecp-metric-lbl">Total Columns</div>
+                    <div class="ecp-metric-val" style="color:#60a5fa;">{len(punching_results)} Cols</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with col_met2:
+            st.markdown(
+                f"""
+                <div class="ecp-metric-box">
+                    <div class="ecp-metric-lbl">Safe Columns</div>
+                    <div class="ecp-metric-val" style="color:#16a34a;">{safe_cols_count} Cols</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with col_met3:
+            st.markdown(
+                f"""
+                <div class="ecp-metric-box">
+                    <div class="ecp-metric-lbl">Unsafe Columns</div>
+                    <div class="ecp-metric-val" style="color:{'#dc2626' if unsafe_cols_count > 0 else '#16a34a'};">{unsafe_cols_count} Cols</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with col_met4:
+            st.markdown(
+                f"""
+                <div class="ecp-metric-box">
+                    <div class="ecp-metric-lbl">Concrete Cap. (qcup)</div>
+                    <div class="ecp-metric-val" style="color:#60a5fa;">{qcup_ref_val:.2f} <span style="font-size:12px;">kg/cm² ({qcup_ref_mpa:.2f} MPa)</span></div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with col_met5:
+            st.markdown(
+                f"""
+                <div class="ecp-metric-box">
+                    <div class="ecp-metric-lbl">Max Limit (qu,max)</div>
+                    <div class="ecp-metric-val" style="color:#fbbf24;">{qu_max_ref_val:.2f} <span style="font-size:12px;">kg/cm² ({qu_max_ref_mpa:.2f} MPa)</span></div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
+
+        # 2. 2D Punching Shear Plan Contour & Reference Photo
+        tab_punch_plan, tab_punch_photo = st.tabs([
+            "📐 مخطط التحقق من القص الثاقب على كامل السقف (Punching Verification Plan)",
+            "صورة توضيحية",
+        ])
+
+        with tab_punch_plan:
+            fig_punch = generate_flat_slab_punching_shear_sketch(
+                Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, Wu,
+                punching_results,
+                col_w_cm=bc_s, col_d_cm=tc_s,
+                removed_cols=_removed_col_objs,
+                void_panel_ids=set(_confirmed_voids),
+            )
+            st.pyplot(fig_punch, clear_figure=True, use_container_width=True)
+
+            buf_punch = io.BytesIO()
+            fig_punch.savefig(buf_punch, format="png", bbox_inches="tight", dpi=180)
+            buf_punch.seek(0)
+            st.download_button(
+                label="📥 Download Punching Shear Verification Plan (High-Res PNG)",
+                data=buf_punch,
+                file_name=f"{prefix}Flat_Slab_Punching_Shear_Check_ts{ts:.0f}cm.png",
+                mime="image/png",
+                use_container_width=True,
+                key="btn_dl_punching_contour",
+            )
+            plt.close(fig_punch)
+
+        with tab_punch_photo:
+            st.markdown(
+                """
+                <div dir="rtl" style="background:#0f172a; border:1.8px solid #3b82f6; border-radius:10px; padding:14px 18px; margin-bottom:14px; text-align:right;">
+                    <div style="font-size:16.5px; font-weight:800; color:#38bdf8; margin-bottom:4px;">
+                        📸 صورة توضيحية من الموقع: تنفيذ كانات القص الثاقب (Shear punching stirrups)
+                    </div>
+                    <div style="font-size:13.5px; color:#cbd5e1; line-height:1.7;">
+                        توضح الصورة أدناه التطبيق العملي والتنفيذي لرص كانات القص الثاقب (Punching Shear Stirrups) على الطبيعة في البلاطات اللاكمرية (Flat Slabs) حول الأعمدة وفقاً لاشتراطات الكود المصري <b>ECP 203</b>، حيث يتم ترتيب الكانات في أشرطة متعامدة مع أسياخ التعليق العلوية والسفلية (Hanger Rebars) لضمان ثبات القفص ومقاومة إجهادات الاختراق بكفاءة تامة.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            site_img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "shear_punching_stirrups.jpg")
+            if not os.path.exists(site_img_path):
+                site_img_path = os.path.join("assets", "shear_punching_stirrups.jpg")
+
+            if os.path.exists(site_img_path):
+                st.image(
+                    site_img_path,
+                    caption="Shear punching stirrups — تنفيذ وتوزيع كانات القص الثاقب وأسياخ التعليق حول العمود في الموقع",
+                    use_container_width=True,
+                )
+                with open(site_img_path, "rb") as f_img:
+                    img_bytes = f_img.read()
+                st.download_button(
+                    label="📥 Download Reference Photo (Shear punching stirrups)",
+                    data=img_bytes,
+                    file_name="Shear_punching_stirrups_Site_Reference.jpg",
+                    mime="image/jpeg",
+                    use_container_width=True,
+                    key="btn_dl_punch_site_photo_top",
+                )
+            else:
+                st.warning("⚠️ تعذر العثور على ملف الصورة التوضيحية في مسار assets/shear_punching_stirrups.jpg")
+
+        st.markdown("<div style='margin-bottom:18px;'></div>", unsafe_allow_html=True)
+
+        # 3. Summary Table: Punching Shear Verification Table
+        st.markdown(
+            """
+            <div style="font-size:18px; font-weight:800; color:#f8fafc; margin-bottom:4px; display:flex; align-items:center; gap:8px;">
+                📋 جدول التحقق من إجهادات القص الثاقب ومؤشرات الأمان (Punching Shear Verification Summary)
+            </div>
+            <div style="font-size:13px; color:#94a3b8; margin-bottom:12px;">
+                نتائج فحص إجهادات القص الثاقب والتحقق الكودي ومؤشرات الأمان لكافة الأعمدة طبقاً لـ ECP 203
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        punch_df = pd.DataFrame([
+            {
+                "Column ID": p["Column ID"],
+                "Grid": p["Grid"],
+                "Type": p.get("Location Type Ar", p["Location Type"]),
+                "Section a×b (cm)": p.get("Section (cm)", f"{bc_s:.0f} × {tc_s:.0f}"),
+                "Pu (ton)": f"{p['Pu (ton)']:.2f}",
+                "Pu (kN)": f"{p.get('Pu (kN)', p['Pu (ton)']*9.81):.1f}",
+                "bo (cm)": f"{p['bo (cm)']:.1f}",
+                "qu (kg/cm² [MPa])": f"{p['qup (kg/cm²)']:.2f} [{p.get('qu (MPa)', p['qup (kg/cm²)']*0.098):.2f}]",
+                "qcup (kg/cm² [MPa])": f"{p['qcup (kg/cm²)']:.2f} [{p.get('qcup (MPa)', p['qcup (kg/cm²)']*0.098):.2f}]",
+                "qu,max (kg/cm² [MPa])": f"{p.get('qu_max (kg/cm²)', qu_max_ref_val):.2f} [{p.get('qu_max (MPa)', qu_max_ref_mpa):.2f}]",
+                "Stress Ratio (qu/qcup)": f"{p['Ratio']:.2f}",
+                "Status": p["Status"],
+            }
+            for p in punching_results
+        ])
+        render_styled_table(punch_df, font_size_override=10.5)
+
+        st.markdown("<div style='margin-bottom:18px;'></div>", unsafe_allow_html=True)
+
+        # 4. Actionable Advisory Cards (رسائل التوصيات التنفيذية على الشاشة)
+        unsafe_cols = [p for p in punching_results if not p["is_safe"]]
+        if unsafe_cols:
+            st.markdown(
+                """
+                <div dir="rtl" style="font-size:18px; font-weight:800; color:#f8fafc; margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+                    🛡️ بطاقات التوصيات الإنشائية والتنفيذية (Actionable Advisory Cards — ECP 203)
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            case1_cols = [p for p in unsafe_cols if p.get("advisory_case") == 1]
+            case2_cols = [p for p in unsafe_cols if p.get("advisory_case") == 2]
+            case3_cols = [p for p in unsafe_cols if p.get("advisory_case") == 3]
+
+            if case1_cols:
+                names_c1 = ", ".join([f"<b>{p['Column ID']}</b> ({p['Grid']})" for p in case1_cols])
+                st.markdown(
+                    f"""
+                    <div dir="rtl" style="background:rgba(239, 68, 68, 0.14); border:2px solid #ef4444; border-radius:10px; padding:16px 20px; margin-bottom:14px; text-align:right;">
+                        <div style="font-size:16px; font-weight:800; color:#f87171; display:flex; align-items:center; gap:8px;">
+                            ⚠️ تحذير صريح: منع استخدام كانات القص الثاقب (Stirrups) لسُمك بلاطة أقل من 250 مم (ECP 203 بند 6-3-4)
+                        </div>
+                        <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.7;">
+                            ينص الكود المصري لتصميم وتنفيذ المنشآت الخرسانية صراحةً على أن <b>سُمك البلاطة الأدنى المسموح به لاستخدام كانات القص الثاقب هو 250 مم (25 سم)</b> (السُمك الحالي <b>{ts:.0f} سم = {ts*10:.0f} مم</b>).
+                            <br>📌 <b>الأعمدة غير الآمنة المتأثرة:</b> {names_c1}
+                            <br>💡 <b>التوصية التنفيذية:</b> رفع سُمك البلاطة إلى <b>ts ≥ 25 سم (250 مم)</b>، أو تنفيذ <b>سقوط للأعمدة (Drop Panel)</b> بسقوط لا يقل عن 5 سم وأبعاد لا تقل عن سدس البحر.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            if case2_cols:
+                names_c2 = ", ".join([f"<b>{p['Column ID']}</b> ({p['Grid']})" for p in case2_cols])
+                st.markdown(
+                    f"""
+                    <div dir="rtl" style="background:rgba(220, 38, 38, 0.16); border:2px solid #ef4444; border-radius:10px; padding:16px 20px; margin-bottom:14px; text-align:right;">
+                        <div style="font-size:16px; font-weight:800; color:#fca5a5; display:flex; align-items:center; gap:8px;">
+                            🚨 تنبيه حرج: تجاوز الحد الأقصى المطلق لمقاومة الخرسانة مع الحديد (qu &gt; qu,max = 0.45√(fcu/γc) ≤ 2.12 N/mm²)
+                        </div>
+                        <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.7;">
+                            الإجهاد الفعلي الواقع على هذه الأعمدة يتجاوز أقصى مقاومة كودية مسموح بها للقطاع الخرساني حتى في حالة تسليحه بالكانات (<b>qu,max = {qu_max_ref_mpa:.2f} MPa = {qu_max_ref_val:.2f} kg/cm²</b>). الكانات بمفردها غير كافية هندسياً لمنع انهيار الخرسانة بالضغط والقص.
+                            <br>📌 <b>الأعمدة المتأثرة:</b> {names_c2}
+                            <br>💡 <b>التوصية التنفيذية:</b> وجوب <b>زيادة أبعاد مقطع العمود (a × b)</b> لزيادة المحيط الحرج $b_o$، أو عمل <b>سقوط عمود (Drop Panel)</b>، أو عمل <b>تاج عمود (Column Head)</b>.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            if case3_cols:
+                names_c3 = ", ".join([f"<b>{p['Column ID']}</b> ({p['Grid']})" for p in case3_cols])
+                st.markdown(
+                    f"""
+                    <div dir="rtl" style="background:rgba(34, 197, 94, 0.14); border:2px solid #22c55e; border-radius:10px; padding:16px 20px; margin-bottom:14px; text-align:right;">
+                        <div style="font-size:16px; font-weight:800; color:#4ade80; display:flex; align-items:center; gap:8px;">
+                            💡 توصية تنفيذية: إمكانية تثبيت سُمك البلاطة الحالي وتسليح الأعمدة بكانات القص الثاقب (Stirrups Feasible)
+                        </div>
+                        <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.7;">
+                            الاشتراطات الكودية مستوفاة بالكامل لاستخدام كانات القص الثاقب (<b>ts = {ts:.0f} سم ≥ 25 سم</b> و <b>qu ≤ qu,max</b>). يمكن للمهندس الإنشائي الحفاظ على تخانة السقف الحالية وتوفير تكاليف الخرسانة عبر تسليح منطقة العمود بكانات القص الثاقب الموضحة بالتفصيل أدناه.
+                            <br>📌 <b>الأعمدة المؤهلة للتسليح بالكانات:</b> {names_c3}
+                            <br>⚙️ يمكنك اختيار العمود من القائمة أدناه لمعاينة وحساب كانات القص ومخطط الـ Detailing التفصيلي.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.markdown(
+                """
+                <div dir="rtl" style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.18) 0%, rgba(16, 185, 129, 0.10) 100%); border: 2.2px solid #22c55e; border-radius: 12px; padding: 18px 24px; margin-bottom: 16px; text-align: right; box-shadow: 0 4px 16px rgba(34, 197, 94, 0.15);">
+                    <div style="font-size: 18px; font-weight: 900; color: #4ade80; display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                        ✅ جميع الأعمدة آمنة تماماً في القص الثاقب بمقاومة الخرسانة بمفردها (qu ≤ qcup)
+                    </div>
+                    <div style="font-size: 16px; font-weight: 700; color: #ffffff; line-height: 1.75;">
+                        مقاومة الخرسانة بمفردها كافية لتحمل إجهادات القص الثاقب دون الحاجة لزيادة سُمك البلاطة أو إضافة سقوط (Drop Panel) أو كانات قص ثاقب (Stirrups).
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("<div style='margin-bottom:18px;'></div>", unsafe_allow_html=True)
+
+        # 5. Stirrups Auto-Design & Detail Visual Reinforcement Plan (يُعرض فقط في حالة وجود أعمدة غير آمنة تحتاج لكانات)
+        if unsafe_cols:
+            st.markdown(
+                """
+                <div dir="rtl" style="font-size:18px; font-weight:800; color:#f8fafc; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                    ⚙️ تصميم كانات القص الثاقب والمخطط التفصيلي (Stirrups Auto-Design & Detailing Plan)
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            col_opts = [p["Column ID"] for p in unsafe_cols]
+            if "fs_punching_detail_col_sel" in st.session_state and st.session_state["fs_punching_detail_col_sel"] not in col_opts:
+                st.session_state["fs_punching_detail_col_sel"] = col_opts[0]
+
+            c_sel1, c_sel2 = st.columns([2, 1])
+            with c_sel1:
+                sel_col_id = st.selectbox(
+                    "🔍 اختر العمود المطلوب تسليحه بالكانات (Select Unsafe Column):",
+                    options=col_opts,
+                    index=0,
+                    key="fs_punching_detail_col_sel",
+                )
+            with c_sel2:
+                sel_stirrup_dia = st.radio(
+                    "📏 قطر كانات القص الثاقب المقترح:",
+                    options=[10, 12],
+                    index=0,
+                    format_func=lambda d: f"Φ{d} mm (كانات قطر {d} مم)",
+                    horizontal=True,
+                    key="fs_punching_stirrup_dia_radio",
+                )
+
+            # Retrieve selected column details
+            sel_col_data = next((p for p in unsafe_cols if p["Column ID"] == sel_col_id), unsafe_cols[0])
+            col_w_val = sel_col_data.get("bc", bc_s)
+            col_d_val = sel_col_data.get("tc", tc_s)
+
+            # Recalculate stirrup design with chosen diameter
+            sel_design = design_punching_shear_stirrups(
+                Pu_ton=sel_col_data.get("Pu (ton)", 40.0),
+                bc_cm=col_w_val,
+                tc_cm=col_d_val,
+                ctype=sel_col_data.get("Location Type", "Interior"),
+                ts_cm=ts,
+                d_cm=d,
+                Fcu_kgcm2=Fcu,
+                Fy_kgcm2=Fy,
+                stirrup_dia_mm=sel_stirrup_dia,
+            )
+
+            # Calculate Total Strip Lengths for Selected Column
+            sel_ctype = sel_col_data.get("Location Type", "Interior")
+            sel_x_ext = sel_design["x_stirrup_ext_cm"]
+            if sel_ctype == "Corner":
+                L_strip_x_val = col_w_val + sel_x_ext
+                L_strip_y_val = col_d_val + sel_x_ext
+            elif sel_ctype == "Edge":
+                L_strip_x_val = col_w_val + 2.0 * sel_x_ext
+                L_strip_y_val = col_d_val + sel_x_ext
+            else:
+                L_strip_x_val = col_w_val + 2.0 * sel_x_ext
+                L_strip_y_val = col_d_val + 2.0 * sel_x_ext
+
+            # Parameter Cards Grid (2 rows x 3 columns)
+            c_p1, c_p2, c_p3 = st.columns(3)
+            with c_p1:
+                st.markdown(
+                    f"""
+                    <div style="background:#1e293b; border:1.5px solid #334155; border-radius:8px; padding:8px 10px; text-align:center;">
+                        <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-bottom:2px;">مساحة الكانات المطلوبة (Ast,req)</div>
+                        <div style="font-size:15.5px; font-weight:800; color:#60a5fa;">
+                            {sel_design['Ast_req_mm2']:.1f} mm² <span style="font-size:11px; color:#94a3b8;">({sel_design['Ast_req_cm2']:.2f} cm²)</span>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with c_p2:
+                st.markdown(
+                    f"""
+                    <div style="background:#1e293b; border:1.5px solid #334155; border-radius:8px; padding:8px 10px; text-align:center;">
+                        <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-bottom:2px;">المسافة بين الكانات (s ≤ d/2)</div>
+                        <div style="font-size:15.5px; font-weight:800; color:#60a5fa;">
+                            {sel_design['s_cm']:.1f} cm <span style="font-size:11px; color:#94a3b8;">(أول كانة s0 = {sel_design['s0_cm']:.1f} cm)</span>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with c_p3:
+                st.markdown(
+                    f"""
+                    <div style="background:#1e293b; border:1.5px solid #334155; border-radius:8px; padding:8px 10px; text-align:center;">
+                        <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-bottom:2px;">عدد الصفوف وإجمالي الأفرع</div>
+                        <div style="font-size:15.5px; font-weight:800; color:#60a5fa;">
+                            {sel_design['n_rows']} صفوف <span style="font-size:11px; color:#94a3b8;">(إجمالي {sel_design['total_legs']} فرع Φ{sel_stirrup_dia})</span>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
+
+            c_p4, c_p5, c_p6 = st.columns(3)
+            with c_p4:
+                st.markdown(
+                    f"""
+                    <div style="background:#1e293b; border:1.5px solid #334155; border-radius:8px; padding:8px 10px; text-align:center;">
+                        <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-bottom:2px;">طول شريحة الكانات اتجاه X (L_strip,X)</div>
+                        <div style="font-size:15.5px; font-weight:800; color:#facc15;">
+                            {L_strip_x_val:.1f} cm <span style="font-size:11px; color:#94a3b8;">(امتداد {sel_x_ext:.1f} cm)</span>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with c_p5:
+                st.markdown(
+                    f"""
+                    <div style="background:#1e293b; border:1.5px solid #334155; border-radius:8px; padding:8px 10px; text-align:center;">
+                        <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-bottom:2px;">طول شريحة الكانات اتجاه Y (L_strip,Y)</div>
+                        <div style="font-size:15.5px; font-weight:800; color:#facc15;">
+                            {L_strip_y_val:.1f} cm <span style="font-size:11px; color:#94a3b8;">(امتداد {sel_x_ext:.1f} cm)</span>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with c_p6:
+                st.markdown(
+                    f"""
+                    <div style="background:#1e293b; border:1.5px solid #334155; border-radius:8px; padding:8px 10px; text-align:center;">
+                        <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-bottom:2px;">اتجاه شريط الكانات (Stirrup Layout)</div>
+                        <div style="font-size:14.5px; font-weight:800; color:#4ade80;">
+                            في الاتجاهين (X & Y) <span style="font-size:11px; color:#94a3b8;">(Orthogonal)</span>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
+
+            # 6. Detailed Drawings for Selected Column: 2D Plan & Cross Section + 3D Isometric View + Site Reference Photo
+            tab_2d_det, tab_3d_det, tab_photo_det = st.tabs([
+                "📐 المسقط الأفقي والقطاع الرأسي (2D Plan & Elevation Detail)",
+                "🧊 النموذج ثلاثي الأبعاد لرص الكانات (3D Isometric Cages Model)",
+                "صورة توضيحية",
+            ])
+
+            with tab_2d_det:
+                fig_det = generate_punching_stirrups_detail_sketch(
+                    sel_col_id,
+                    sel_col_data,
+                    col_w_cm=col_w_val,
+                    col_d_cm=col_d_val,
+                    d_cm=d,
+                    ts_cm=ts,
+                    Fcu=Fcu,
+                    Fy=Fy,
+                    stirrup_dia_mm=sel_stirrup_dia,
+                )
+                st.pyplot(fig_det, clear_figure=True, use_container_width=True)
+
+                buf_det = io.BytesIO()
+                fig_det.savefig(buf_det, format="png", bbox_inches="tight", dpi=180)
+                buf_det.seek(0)
+                st.download_button(
+                    label=f"📥 Download 2D Detailing Plan & Elevation — Column {sel_col_id} (High-Res PNG)",
+                    data=buf_det,
+                    file_name=f"{prefix}Punching_Shear_2D_Detailing_{sel_col_id}_ts{ts:.0f}cm.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key=f"btn_dl_punch_detail_2d_{sel_col_id}",
+                )
+                plt.close(fig_det)
+
+            with tab_3d_det:
+                fig_3d = generate_punching_stirrups_3d_sketch(
+                    sel_col_id,
+                    sel_col_data,
+                    col_w_cm=col_w_val,
+                    col_d_cm=col_d_val,
+                    d_cm=d,
+                    ts_cm=ts,
+                    Fcu=Fcu,
+                    Fy=Fy,
+                    stirrup_dia_mm=sel_stirrup_dia,
+                )
+                st.pyplot(fig_3d, clear_figure=True, use_container_width=True)
+
+                buf_3d = io.BytesIO()
+                fig_3d.savefig(buf_3d, format="png", bbox_inches="tight", dpi=180)
+                buf_3d.seek(0)
+                st.download_button(
+                    label=f"📥 Download 3D Isometric Detailing Model — Column {sel_col_id} (High-Res PNG)",
+                    data=buf_3d,
+                    file_name=f"{prefix}Punching_Shear_3D_Detailing_{sel_col_id}_ts{ts:.0f}cm.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key=f"btn_dl_punch_detail_3d_{sel_col_id}",
+                )
+                plt.close(fig_3d)
+
+            with tab_photo_det:
+                st.markdown(
+                    """
+                    <div dir="rtl" style="background:#0f172a; border:1.8px solid #3b82f6; border-radius:10px; padding:14px 18px; margin-bottom:14px; text-align:right;">
+                        <div style="font-size:16.5px; font-weight:800; color:#38bdf8; margin-bottom:4px;">
+                            📸 صورة توضيحية من الموقع: تنفيذ كانات القص الثاقب (Shear punching stirrups)
+                        </div>
+                        <div style="font-size:13.5px; color:#cbd5e1; line-height:1.7;">
+                            توضح الصورة أدناه التطبيق العملي والتنفيذي لرص كانات القص الثاقب (Punching Shear Stirrups) على الطبيعة في البلاطات اللاكمرية (Flat Slabs) حول الأعمدة وفقاً لاشتراطات الكود المصري <b>ECP 203</b>، حيث يتم ترتيب الكانات في أشرطة متعامدة مع أسياخ التعليق العلوية والسفلية (Hanger Rebars) لضمان ثبات القفص ومقاومة إجهادات الاختراق بكفاءة تامة.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                site_img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "shear_punching_stirrups.jpg")
+                if not os.path.exists(site_img_path):
+                    site_img_path = os.path.join("assets", "shear_punching_stirrups.jpg")
+
+                if os.path.exists(site_img_path):
+                    st.image(
+                        site_img_path,
+                        caption="Shear punching stirrups — تنفيذ وتوزيع كانات القص الثاقب وأسياخ التعليق حول العمود في الموقع",
+                        use_container_width=True,
+                    )
+                    with open(site_img_path, "rb") as f_img:
+                        img_bytes = f_img.read()
+                    st.download_button(
+                        label="📥 Download Reference Photo (Shear punching stirrups)",
+                        data=img_bytes,
+                        file_name="Shear_punching_stirrups_Site_Reference.jpg",
+                        mime="image/jpeg",
+                        use_container_width=True,
+                        key=f"btn_dl_punch_site_photo_{sel_col_id}",
+                    )
+                else:
+                    st.warning("⚠️ تعذر العثور على ملف الصورة التوضيحية في مسار assets/shear_punching_stirrups.jpg")
+        else:
+            st.markdown(
+                """
+                <div dir="rtl" style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.14) 0%, rgba(16, 185, 129, 0.08) 100%); border: 2px solid #22c55e; border-radius: 10px; padding: 16px 20px; margin-top: 10px; margin-bottom: 14px; text-align: right;">
+                    <div style="font-size: 16.5px; font-weight: 800; color: #4ade80; display: flex; align-items: center; gap: 8px;">
+                        ✅ لا توجد أعمدة تحتاج إلى كانات لدعم قوة الاختراق (Punching Shear)
+                    </div>
+                    <div style="margin-top: 6px; font-size: 14.5px; color: #ffffff; line-height: 1.7;">
+                        جميع أعمدة السقف آمنة تماماً في القص الثاقب بمقاومة الخرسانة بمفردها (<b>qu ≤ qcup</b>)، ولا توجد أي أعمدة تتطلب إضافة كانات قص ثاقب (Stirrups) أو عمل سقوط (Drop Panel).
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            with st.expander("📸 صورة توضيحية لتنفيذ كانات القص الثاقب (Shear punching stirrups)", expanded=False):
+                site_img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "shear_punching_stirrups.jpg")
+                if not os.path.exists(site_img_path):
+                    site_img_path = os.path.join("assets", "shear_punching_stirrups.jpg")
+
+                if os.path.exists(site_img_path):
+                    st.image(
+                        site_img_path,
+                        caption="Shear punching stirrups — تنفيذ وتوزيع كانات القص الثاقب وأسياخ التعليق حول العمود في الموقع",
+                        use_container_width=True,
+                    )
+                    with open(site_img_path, "rb") as f_img:
+                        img_bytes = f_img.read()
+                    st.download_button(
+                        label="📥 Download Reference Photo (Shear punching stirrups)",
+                        data=img_bytes,
+                        file_name="Shear_punching_stirrups_Site_Reference.jpg",
+                        mime="image/jpeg",
+                        use_container_width=True,
+                        key="btn_dl_punch_site_photo_all_safe",
+                    )
 
     st.markdown("---")
 
@@ -6891,9 +9291,9 @@ def render():
                 top_extra_cols=top_extra_cols,
                 btm_extra_spans=btm_extra_spans,
             )
-            st.pyplot(fig_m11, use_container_width=True)
+            st.pyplot(fig_m11, clear_figure=True, use_container_width=True)
             buf_m11 = io.BytesIO()
-            fig_m11.savefig(buf_m11, format="png", bbox_inches="tight", dpi=300)
+            fig_m11.savefig(buf_m11, format="png", bbox_inches="tight", dpi=180)
             buf_m11.seek(0)
             img_m11_b64 = "data:image/png;base64," + base64.b64encode(buf_m11.getvalue()).decode("utf-8")
             buf_m11.seek(0)
@@ -6916,9 +9316,9 @@ def render():
                 top_extra_cols=top_extra_cols,
                 btm_extra_spans=btm_extra_spans,
             )
-            st.pyplot(fig_m22, use_container_width=True)
+            st.pyplot(fig_m22, clear_figure=True, use_container_width=True)
             buf_m22 = io.BytesIO()
-            fig_m22.savefig(buf_m22, format="png", bbox_inches="tight", dpi=300)
+            fig_m22.savefig(buf_m22, format="png", bbox_inches="tight", dpi=180)
             buf_m22.seek(0)
             img_m22_b64 = "data:image/png;base64," + base64.b64encode(buf_m22.getvalue()).decode("utf-8")
             buf_m22.seek(0)
@@ -6940,23 +9340,23 @@ def render():
         M_cap_display = calc_moment_capacity_btm(prov_btm_mesh_cm2m, d, Fcu, Fy)
         st.markdown(
             f"""
-            <div style="background:#eff6ff; border:2px solid #3b82f6; border-radius:10px;
+            <div style="background:#1e293b; border:2px solid #3b82f6; border-radius:10px;
                         padding:14px 20px; margin:10px 0 16px 0; display:flex; gap:32px; flex-wrap:wrap;">
                 <div>
-                    <span style="font-size:13px; font-weight:600; color:#64748b;">Bottom Mesh Provided</span><br>
-                    <span style="font-size:17px; font-weight:700; color:#1e40af;">{mesh_btm_str}</span>
+                    <span style="font-size:13px; font-weight:600; color:#94a3b8;">Bottom Mesh Provided</span><br>
+                    <span style="font-size:17px; font-weight:700; color:#60a5fa;">{mesh_btm_str}</span>
                 </div>
                 <div>
-                    <span style="font-size:13px; font-weight:600; color:#64748b;">Steel Area (As)</span><br>
-                    <span style="font-size:17px; font-weight:700; color:#1e40af;">{prov_btm_mesh_cm2m:.2f} cm²/m</span>
+                    <span style="font-size:13px; font-weight:600; color:#94a3b8;">Steel Area (As)</span><br>
+                    <span style="font-size:17px; font-weight:700; color:#60a5fa;">{prov_btm_mesh_cm2m:.2f} cm²/m</span>
                 </div>
                 <div>
-                    <span style="font-size:13px; font-weight:600; color:#64748b;">Moment Capacity (M_cap)</span><br>
-                    <span style="font-size:17px; font-weight:700; color:#15803d;">{M_cap_display:.3f} t.m/m</span>
+                    <span style="font-size:13px; font-weight:600; color:#94a3b8;">Moment Capacity (M_cap)</span><br>
+                    <span style="font-size:17px; font-weight:700; color:#4ade80;">{M_cap_display:.3f} t.m/m</span>
                 </div>
-                <div style="border-left:2px solid #cbd5e1; padding-left:20px;">
-                    <span style="font-size:13px; font-weight:600; color:#64748b;">Deficit = max(0, M_applied − M_cap)</span><br>
-                    <span style="font-size:13px; color:#475569; font-weight:500;">
+                <div style="border-left:2px solid #475569; padding-left:20px;">
+                    <span style="font-size:13px; font-weight:600; color:#94a3b8;">Deficit = max(0, M_applied − M_cap)</span><br>
+                    <span style="font-size:13px; color:#f8fafc; font-weight:500;">
                         🟢 Green = No extra steel needed &nbsp;|&nbsp; 🟡→🔴 Coloured = Extra bottom steel required
                     </span>
                 </div>
@@ -6992,9 +9392,9 @@ def render():
             removed_cols=_removed_col_objs,
             void_panel_ids=set(_confirmed_voids),
         )
-        st.pyplot(fig_deficit, use_container_width=True)
+        st.pyplot(fig_deficit, clear_figure=True, use_container_width=True)
         buf_deficit = io.BytesIO()
-        fig_deficit.savefig(buf_deficit, format="png", bbox_inches="tight", dpi=300)
+        fig_deficit.savefig(buf_deficit, format="png", bbox_inches="tight", dpi=180)
         buf_deficit.seek(0)
         st.download_button(
             label=f"📥 Download Moment Deficit Contour ({_def_mode}) Plan (High-Res PNG)",
@@ -7149,7 +9549,7 @@ def render():
                 )
 
     # ── 🗺️ STEEL LAYOUT MASTER FLOOR PLAN ─────────────────────────────────────
-    with st.expander("🗺️ Steel Layout (مسقط أفقي لتسليح البلاطة)", expanded=True):
+    with st.expander("🗺️ Steel Layout (مسقط أفقي لتسليح البلاطة)", expanded=False):
         st.markdown(
             """
             <style>
@@ -7200,9 +9600,9 @@ def render():
                 removed_cols=_confirmed_removals,
                 void_panel_ids=_confirmed_voids,
             )
-            st.pyplot(fig_cc, use_container_width=True)
+            st.pyplot(fig_cc, clear_figure=True, use_container_width=True)
             buf_cc = io.BytesIO()
-            fig_cc.savefig(buf_cc, format="png", bbox_inches="tight", dpi=300)
+            fig_cc.savefig(buf_cc, format="png", bbox_inches="tight", dpi=180)
             buf_cc.seek(0)
             st.download_button(
                 label="📥 Download 1. Column Caps Layout (High-Res PNG)",
@@ -7230,9 +9630,9 @@ def render():
                 void_panel_ids=_confirmed_voids,
                 direction="X",
             )
-            st.pyplot(fig_bes_x, use_container_width=True)
+            st.pyplot(fig_bes_x, clear_figure=True, use_container_width=True)
             buf_bes_x = io.BytesIO()
-            fig_bes_x.savefig(buf_bes_x, format="png", bbox_inches="tight", dpi=300)
+            fig_bes_x.savefig(buf_bes_x, format="png", bbox_inches="tight", dpi=180)
             buf_bes_x.seek(0)
             st.download_button(
                 label="📥 Download 2A. Bottom Extra (X-Direction) Layout (High-Res PNG)",
@@ -7260,9 +9660,9 @@ def render():
                 void_panel_ids=_confirmed_voids,
                 direction="Y",
             )
-            st.pyplot(fig_bes_y, use_container_width=True)
+            st.pyplot(fig_bes_y, clear_figure=True, use_container_width=True)
             buf_bes_y = io.BytesIO()
-            fig_bes_y.savefig(buf_bes_y, format="png", bbox_inches="tight", dpi=300)
+            fig_bes_y.savefig(buf_bes_y, format="png", bbox_inches="tight", dpi=180)
             buf_bes_y.seek(0)
             st.download_button(
                 label="📥 Download 2B. Bottom Extra (Y-Direction) Layout (High-Res PNG)",
@@ -7289,9 +9689,9 @@ def render():
                 void_panel_ids=_confirmed_voids,
                 direction="X",
             )
-            st.pyplot(fig_tmes_x, use_container_width=True)
+            st.pyplot(fig_tmes_x, clear_figure=True, use_container_width=True)
             buf_tmes_x = io.BytesIO()
-            fig_tmes_x.savefig(buf_tmes_x, format="png", bbox_inches="tight", dpi=300)
+            fig_tmes_x.savefig(buf_tmes_x, format="png", bbox_inches="tight", dpi=180)
             buf_tmes_x.seek(0)
             st.download_button(
                 label="📥 Download 3A. Top Slab Extra (X-Direction) Layout (High-Res PNG)",
@@ -7318,9 +9718,9 @@ def render():
                 void_panel_ids=_confirmed_voids,
                 direction="Y",
             )
-            st.pyplot(fig_tmes_y, use_container_width=True)
+            st.pyplot(fig_tmes_y, clear_figure=True, use_container_width=True)
             buf_tmes_y = io.BytesIO()
-            fig_tmes_y.savefig(buf_tmes_y, format="png", bbox_inches="tight", dpi=300)
+            fig_tmes_y.savefig(buf_tmes_y, format="png", bbox_inches="tight", dpi=180)
             buf_tmes_y.seek(0)
             st.download_button(
                 label="📥 Download 3B. Top Slab Extra (Y-Direction) Layout (High-Res PNG)",
@@ -7331,100 +9731,6 @@ def render():
                 key="btn_dl_top_mesh_extra_y",
             )
             plt.close(fig_tmes_y)
-
-    # ── 📉 DEFLECTION & SERVICEABILITY VERIFICATION ──────────────────────────
-    with st.expander("📉 Deflection Check (فحص سهم الانحناء والترخيم طويل المدى)", expanded=False):
-        fig_def = generate_flat_slab_deflection_contour_sketch(
-            Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, DL_tot, LL,
-            deflection_results,
-            col_w_cm=bc_s, col_d_cm=tc_s,
-            removed_cols=_removed_col_objs,
-            void_panel_ids=set(_confirmed_voids),
-        )
-        st.pyplot(fig_def, use_container_width=True)
-
-        buf_def = io.BytesIO()
-        fig_def.savefig(buf_def, format="png", bbox_inches="tight", dpi=300)
-        buf_def.seek(0)
-        def_dl_label = "📥 Download Deflection Warning 2D Contour Plan (High-Res PNG)" if not all_deflection_safe else "📥 Download Deflection Verification 2D Plan (High-Res PNG)"
-        st.download_button(
-            label=def_dl_label,
-            data=buf_def,
-            file_name=f"{prefix}Flat_Slab_Deflection_Check_ts{ts:.0f}cm.png",
-            mime="image/png",
-            use_container_width=True,
-            key="btn_dl_deflection_contour",
-        )
-        plt.close(fig_def)
-
-        st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
-
-        def_df = pd.DataFrame([
-            {
-                "Panel ID": p["Panel ID"],
-                "Bay Location": p["Bay Label"],
-                "Type": p["Location Type"],
-                "Span Ln (m)": f"{p['Ln (m)']:.2f} m",
-                "Service Load Ws (t/m²)": f"{p['Ws (t/m²)']:.2f}",
-                "Ms (t·m/m)": f"{p['Ms_pos (t.m/m)']:.2f}",
-                "Mcr (t·m/m)": f"{p['Mcr (t.m/m)']:.2f}",
-                "Section State": "تشريخ (Cracked)" if p["Is_Cracked"] else "غير مشرخ (Uncracked)",
-                "Short-Term δst (mm)": f"{p['delta_st (mm)']:.2f} mm",
-                "Long-Term Δtotal (mm)": f"{p['delta_long (mm)']:.2f} mm",
-                "Allowable Limit Δall (mm)": f"{p['delta_all (mm)']:.2f} mm (Ln/250)",
-                "Ratio (Δ/Δall)": f"{p['Ratio']:.2f}",
-                "Status": p["Status"],
-            }
-            for p in deflection_results
-        ])
-        render_styled_table(def_df)
-
-        if not all_deflection_safe:
-            st.warning("⚠️ **تنبيه إنشائي (Deflection Warning)**: بعض بحور وباكيات السقف تتجاوز سهم الانحناء المسموح كودياً (Δact > Δall). يُنصح بزيادة سُمك البلاطة $t_s$ أو إضافة سقوط عمود (Drop Panel) أو إضافة تسليح ضغط.")
-
-    # ── 🥊 PUNCHING SHEAR VERIFICATION ───────────────────────────────────────
-    with st.expander("🥊 Punching Shear Check (فحص القص الثاقب لجميع الأعمدة)", expanded=False):
-        fig_punch = generate_flat_slab_punching_shear_sketch(
-            Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, Wu,
-            punching_results,
-            col_w_cm=bc_s, col_d_cm=tc_s,
-            removed_cols=_removed_col_objs,
-            void_panel_ids=set(_confirmed_voids),
-        )
-        st.pyplot(fig_punch, use_container_width=True)
-
-        buf_punch = io.BytesIO()
-        fig_punch.savefig(buf_punch, format="png", bbox_inches="tight", dpi=300)
-        buf_punch.seek(0)
-        st.download_button(
-            label="📥 Download Punching Shear Verification Plan (High-Res PNG)",
-            data=buf_punch,
-            file_name=f"{prefix}Flat_Slab_Punching_Shear_Check_ts{ts:.0f}cm.png",
-            mime="image/png",
-            use_container_width=True,
-        )
-        plt.close(fig_punch)
-
-        st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
-
-        punch_df = pd.DataFrame([
-            {
-                "Column ID": p["Column ID"],
-                "Grid": p["Grid"],
-                "Type": p["Location Type"],
-                "Pu (ton)": f"{p['Pu (ton)']:.2f}",
-                "bo (cm)": f"{p['bo (cm)']:.1f}",
-                "qup (kg/cm²)": f"{p['qup (kg/cm²)']:.2f}",
-                "qcup (kg/cm²)": f"{p['qcup (kg/cm²)']:.2f}",
-                "Stress Ratio (qup/qcup)": f"{p['Ratio']:.2f}",
-                "Status": p["Status"],
-            }
-            for p in punching_results
-        ])
-        render_styled_table(punch_df)
-
-        if not all_safe:
-            st.warning("⚠️ **تنبيه إنشائي**: بعض الأعمدة غير آمنة في القص الثاقب (qup > qcup). يُنصح بزيادة سُمك البلاطة $t_s$ أو إضافة سقوط عمود (Drop Panel) أو كانات قص (Studs).")
 
     # ── 🦅 CANTILEVER REINFORCEMENT ──────────────────────────────────────────
     if cant_rft_list:
@@ -7546,9 +9852,9 @@ def render():
             removed_cols=_removed_col_objs,
             void_panel_ids=set(_confirmed_voids),
         )
-        st.pyplot(fig_reac, use_container_width=True)
+        st.pyplot(fig_reac, clear_figure=True, use_container_width=True)
         buf_reac = io.BytesIO()
-        fig_reac.savefig(buf_reac, format="png", bbox_inches="tight", dpi=300)
+        fig_reac.savefig(buf_reac, format="png", bbox_inches="tight", dpi=180)
         buf_reac.seek(0)
         img_reactions_b64 = "data:image/png;base64," + base64.b64encode(buf_reac.getvalue()).decode("utf-8")
         buf_reac.seek(0)
@@ -7946,6 +10252,250 @@ def render():
                     """,
                     unsafe_allow_html=True,
                 )
+
+    # ── 📉 FINAL DEFLECTION VERIFICATION (ECP 203) ───────────────────────────
+    with st.expander("📉 Final Deflection Verification (التحقق الإنشائي النهائي من سهم الانحناء والترخيم طويل الأمد)", expanded=False):
+        # 1. UI Confirmation Banner
+        st.markdown(
+            """
+            <div dir="rtl" style="background:#0f172a; border:2px solid #3b82f6; border-radius:10px; padding:16px 20px; margin-bottom:14px; text-align:right;">
+                <div style="font-size:16.5px; font-weight:800; color:#38bdf8; display:flex; align-items:center; gap:8px;">
+                    ℹ️ التحقق الإنشائي النهائي من سهم الانحناء طويل الأمد (Long-Term Cracked Deflection Check)
+                </div>
+                <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.8;">
+                    تم التحقق من سهم الانحناء طويل الأمد (Long-Term Cracked Deflection) بالاعتماد الفعلي على كامل شبكات التسليح المعتمدة بالبلاطة: <b>الشبكة السفلية الأساسية + الحديد الإضافي السفلي بمنتصف البحر (As,total)</b> لحساب عمق محور الخمول x وعزم القصور الذاتي المشرخ Icr ورفع الجساءة الفعالة Ie (Branson's Formula)، مع <b>الشبكة العلوية كحديد ضغط (Compression Rebars A's)</b> لتخفيض معامل الزحف والانكماش طويل الأمد λ وفقاً للكود المصري ECP 203 [λ = ξ / (1 + 50μ')]، و<b>حديد الكابات العلوية فوق الأعمدة</b> لضمان جساءة ومنع دوران الأطراف.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # 2. 2D Deflection Heatmap / Plan
+        fig_def = generate_flat_slab_deflection_contour_sketch(
+            Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, DL_tot, LL,
+            deflection_results,
+            col_w_cm=bc_s, col_d_cm=tc_s,
+            removed_cols=_removed_col_objs,
+            void_panel_ids=set(_confirmed_voids),
+        )
+        st.pyplot(fig_def, clear_figure=True, use_container_width=True)
+
+        buf_def = io.BytesIO()
+        fig_def.savefig(buf_def, format="png", bbox_inches="tight", dpi=180)
+        buf_def.seek(0)
+        def_dl_label = "📥 Download Deflection Warning 2D Contour Plan (High-Res PNG)" if not all_deflection_safe else "📥 Download Deflection Verification 2D Plan (High-Res PNG)"
+        st.download_button(
+            label=def_dl_label,
+            data=buf_def,
+            file_name=f"{prefix}Flat_Slab_Deflection_Check_ts{ts:.0f}cm.png",
+            mime="image/png",
+            use_container_width=True,
+            key="btn_dl_deflection_contour_final",
+        )
+        plt.close(fig_def)
+
+        st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
+
+        # 3. Comprehensive Verification Summary Table
+        st.markdown(
+            """
+            <div style="font-size:18px; font-weight:800; color:#f8fafc; margin-bottom:4px; display:flex; align-items:center; gap:8px;">
+                📋 جدول التحقق التفصيلي من سهم الانحناء والجساءة الفعالة لكافة الباكيات (ECP 203)
+            </div>
+            <div style="font-size:13px; color:#94a3b8; margin-bottom:12px;">
+                فحص الترخيم اللحظي والترخيم طويل الأمد والجساءة الفعالة بالاعتماد على كامل حديد التسليح الفعلي
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        def_df = pd.DataFrame([
+            {
+                "Panel ID": p["Panel ID"],
+                "Bay Location": p["Bay Label"],
+                "Type": p["Location Type"],
+                "Ln (m)": f"{p['Ln (m)']:.2f} m",
+                "ts / d (cm)": f"{p['ts (cm)']:.0f} / {p['d (cm)']:.1f}",
+                "As_btm (cm²/m)": f"{p['As_btm (cm²/m)']:.2f}",
+                "A's_top (cm²/m)": f"{p['As_top (cm²/m)']:.2f}",
+                "x_na (cm)": f"{p['x_na (cm)']:.2f}",
+                "Mcr (t·m/m)": f"{p['Mcr (t.m/m)']:.2f}",
+                "Ms (t·m/m)": f"{p['Ms_pos (t.m/m)']:.2f}",
+                "Ie/Ig": f"{p['Ie/Ig']:.2f}",
+                "λ (Creep)": f"{p['lambda_creep']:.2f}",
+                "δst (mm)": f"{p['delta_st (mm)']:.2f}",
+                "Δtotal (mm)": f"{p['delta_long (mm)']:.2f}",
+                "Δallow (mm)": f"{p['delta_all (mm)']:.2f} (Ln/250)",
+                "Ratio": f"{p['Ratio']:.2f}",
+                "Status": p["Status"],
+            }
+            for p in deflection_results
+        ])
+        render_styled_table(def_df, font_size_override=10.5)
+
+        # 4. Recommendations & Status Advisories
+        if not all_deflection_safe:
+            unsafe_panels = [p for p in deflection_results if not p["is_safe"]]
+            names_unsafe_p = ", ".join([f"<b>{p['Panel ID']}</b> ({p['Bay Label']})" for p in unsafe_panels])
+            st.markdown(
+                f"""
+                <div dir="rtl" style="background:rgba(239, 68, 68, 0.14); border:2px solid #ef4444; border-radius:10px; padding:16px 20px; margin-top:14px; margin-bottom:14px; text-align:right;">
+                    <div style="font-size:16px; font-weight:800; color:#f87171; display:flex; align-items:center; gap:8px;">
+                        ⚠️ تنبيه إنشائي: تجاوز سهم الانحناء المسموح به كودياً في بعض الباكيات (Deflection Exceeded)
+                    </div>
+                    <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.8;">
+                        • <b>الباكيات المتأثرة:</b> {names_unsafe_p}<br>
+                        • <b>السبب الإنشائي:</b> سهم الانحناء طويل المدى بعد 5 سنوات يتجاوز الحد الأقصى المسموح (<b>Δtotal &gt; Δall = Ln/250</b>).<br>
+                        💡 <b>التوصيات الإنشائية والتنفيذية قبل حصر الكميات:</b><br>
+                        1. <b>زيادة سُمك البلاطة (ts):</b> يُوصى برفع السُمك من {ts:.0f} cm إلى تخانة أكبر لرفع عزم القصور الذاتي Ig و Ie بالتكعيب.<br>
+                        2. <b>تكثيف الحديد الإضافي السفلي (As,btm):</b> زيادة مساحة حديد الشد بمنتصف البحر لتقليل عمق الشروخ ورفع Icr.<br>
+                        3. <b>زيادة الشبكة العلوية (A's - Compression Rebars):</b> لتقليل معامل الزحف والانكماش طويل الأمد λ طبقاً للشرط الكودي λ = 2.0 / (1 + 50μ').
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        # 5. 💡 Deflection Optimization Engine & Rebar Alternatives (موديول المعالجة الذكية لسهم الانحناء وبدائل التسليح)
+        st.markdown("<div style='margin-top:18px; margin-bottom:12px;'></div>", unsafe_allow_html=True)
+        with st.expander("💡 موديول المعالجة الذكية لسهم الانحناء وبدائل التسليح (Deflection Optimization Engine & Rebar Alternatives)", expanded=False):
+            unsafe_panels = [p for p in deflection_results if not p.get("is_safe", True)]
+
+            if not unsafe_panels:
+                st.markdown(
+                    """
+                    <div dir="rtl" style="background:#0f172a; border:2px solid #22c55e; border-radius:10px; padding:18px 22px; text-align:right; margin-bottom:10px;">
+                        <div style="font-size:17.5px; font-weight:800; color:#22c55e; display:flex; align-items:center; gap:8px;">
+                            ✅ جميع بلاطات السقف آمنة تماماً من ناحية سهم الانحناء (All Panels are Safe from Deflection)
+                        </div>
+                        <div style="margin-top:8px; font-size:14px; color:#f8fafc; line-height:1.8;">
+                            • <b>حالة الأمان الكودية:</b> كافة الباكيات تحقق حدود الأمان لسهم الانحناء الكلي طويل المدى (<b>Δtotal ≤ Δall = Ln/250</b>) طبقاً لاشتراطات الكود المصري ECP 203.<br>
+                            • <b>النتيجة الهندسية:</b> سُمك البلاطة الحالي وتسليح الشبكات كافيان ومحققان للجساءة المطلوبة، ولا توجد أي باكية حرجة تتطلب تشغيل خوارزمية المعالجة الذكية أو تكثيف بدائل التسليح.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    """
+                    <div dir="rtl" style="background:#0f172a; border:1.8px solid #38bdf8; border-radius:10px; padding:14px 18px; margin-bottom:14px; text-align:right;">
+                        <div style="font-size:16.5px; font-weight:800; color:#38bdf8; margin-bottom:4px;">
+                            🎯 المعالجة الذكية لسهم الانحناء وتثبيت سُمك البلاطة (ts) دون عمل سقوط (Drop Panel)
+                        </div>
+                        <div style="font-size:13.5px; color:#cbd5e1; line-height:1.7;">
+                            يقوم هذا الموديول بحل معادلات سهم الانحناء والجساءة الفعالة (Branson) ومعامل الزحف الكودي (ECP 203) عكسياً (Iterative Inverse Solver) لتقديم بديلين منفصلين للتسليح يحققان الأمان الكامل (<b>Δtotal ≤ Ln/250</b>) مع تثبيت سُمك السقف الحالي:
+                            <br>• <b>البديل الأول:</b> تكثيف حديد الشد السفلي الإضافي (Extra Bottom Tension Steel As) لرفع الجساءة Icr و Ie.
+                            <br>• <b>البديل الثاني:</b> زيادة حديد الضغط العلوي في منتصف البحر (Top Compression Steel A's) لتخفيض معامل الزحف والانكماش λ.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                # Panel selector for optimization (showing ONLY unsafe panels)
+                unsafe_panel_options = [
+                    f"🚨 {p['Panel ID']} — {p['Bay Label']} ({p['Location Type']}) [Δact={p['delta_long (mm)']:.1f} mm > Δall={p['delta_all (mm)']:.1f} mm (+{((p['delta_long (mm)']/max(0.01, p['delta_all (mm)']))-1.0)*100:.0f}%)]"
+                    for p in unsafe_panels
+                ]
+
+                sel_unsafe_idx = st.selectbox(
+                    "🎯 اختر الباكية غير الآمنة لتشغيل المعالجة الذكية وحساب بدائل التسليح:",
+                    options=range(len(unsafe_panels)),
+                    format_func=lambda i: unsafe_panel_options[i],
+                    index=0,
+                    key="sel_opt_def_panel_idx",
+                )
+                sel_panel_data = unsafe_panels[sel_unsafe_idx]
+
+                # Solve optimization
+                opt_res = solve_deflection_optimization(sel_panel_data, DL_tot, LL, Fcu)
+
+                # Comparison Table Header
+                st.markdown(
+                    """
+                    <div style="font-size:17px; font-weight:800; color:#f8fafc; margin-top:14px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+                        📋 جدول مقارنة بدائل التسليح المقترحة والنتائج المتوقعة (Optimization Summary Table)
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                # Format rows
+                opt1_data = opt_res["opt1"]
+                opt2_data = opt_res["opt2"]
+
+                inc_pct_opt1 = ((opt1_data["As_prop"] - opt_res["As_curr"]) / max(0.1, opt_res["As_curr"])) * 100.0 if opt1_data else 0.0
+                inc_pct_opt2 = ((opt2_data["As_prime_prop"] - opt_res["As_prime_curr"]) / max(0.1, opt_res["As_prime_curr"])) * 100.0 if opt2_data else 0.0
+
+                opt_table_data = [
+                    {
+                        "مسار الحل (Solution Option)": "1️⃣ البديل الأول (تكثيف حديد الشد السفلي)",
+                        "نوع التسليح المعدل (Modified Rebar)": "حديد الشد السفلي الإضافي (Extra Bottom Tension Steel As)",
+                        "التسليح الحالي (Current)": f"{opt_res['As_curr']:.2f} cm²/m ({opt_res['As_curr']*100:.0f} mm²/m)",
+                        "التسليح المقترح الجديد (Proposed)": f"{opt1_data['As_prop']:.2f} cm²/m ({opt1_data['config']})",
+                        "نسبة الزيادة (% Inc)": f"+{inc_pct_opt1:.1f} %",
+                        "سهم الانحناء المتوقع (Expected Δtotal)": f"{opt1_data['delta_tot']:.2f} mm",
+                        "الحد المسموح (Δall)": f"{opt_res['delta_allow_mm']:.2f} mm (Ln/250)",
+                        "حالة الأمان الجديدة (New Status)": "✅ Safe (آمن ومحقق للكود)" if opt1_data["is_safe"] else "⚠️ يحتاج زيادة السُمك",
+                    },
+                    {
+                        "مسار الحل (Solution Option)": "2️⃣ البديل الثاني (زيادة حديد الضغط العلوي)",
+                        "نوع التسليح المعدل (Modified Rebar)": "حديد الضغط العلوي بمنتصف البحر (Compression Steel A's)",
+                        "التسليح الحالي (Current)": f"{opt_res['As_prime_curr']:.2f} cm²/m ({opt_res['As_prime_curr']*100:.0f} mm²/m)",
+                        "التسليح المقترح الجديد (Proposed)": f"{opt2_data['As_prime_prop']:.2f} cm²/m ({opt2_data['config']})",
+                        "نسبة الزيادة (% Inc)": f"+{inc_pct_opt2:.1f} %",
+                        "سهم الانحناء المتوقع (Expected Δtotal)": f"{opt2_data['delta_tot']:.2f} mm",
+                        "الحد المسموح (Δall)": f"{opt_res['delta_allow_mm']:.2f} mm (Ln/250)",
+                        "حالة الأمان الجديدة (New Status)": "✅ Safe (آمن ومحقق للكود)" if opt2_data["is_safe"] else "⚠️ يحتاج دمج مع حديد الشد",
+                    }
+                ]
+                render_styled_table(opt_table_data, font_size_override=10.5)
+
+                st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
+
+                # Tabs for Curves & Cross-Section
+                tab_opt_c, tab_opt_s = st.tabs([
+                    "📈 المنحنى البياني لسهم الانحناء ومساحة الحديد (Deflection vs. Steel Area Curves)",
+                    "📐 القطاع الهندسي التفصيلي للبلاطة بمنتصف البحر (Cross Section Detail)",
+                ])
+
+                with tab_opt_c:
+                    fig_opt_curve = generate_deflection_optimization_curves_sketch(
+                        sel_panel_data, opt_res, DL_tot, LL, Fcu
+                    )
+                    st.pyplot(fig_opt_curve, clear_figure=True, use_container_width=True)
+
+                    buf_opt_c = io.BytesIO()
+                    fig_opt_curve.savefig(buf_opt_c, format="png", bbox_inches="tight", dpi=180)
+                    buf_opt_c.seek(0)
+                    st.download_button(
+                        label=f"📥 Download Deflection Optimization Curves — Panel {sel_panel_data['Panel ID']} (High-Res PNG)",
+                        data=buf_opt_c,
+                        file_name=f"{prefix}Deflection_Optimization_Curves_{sel_panel_data['Panel ID']}.png",
+                        mime="image/png",
+                        use_container_width=True,
+                        key=f"btn_dl_def_opt_curve_{sel_panel_data['Panel ID']}",
+                    )
+                    plt.close(fig_opt_curve)
+
+                with tab_opt_s:
+                    fig_opt_sec = generate_deflection_rebar_cross_section_sketch(
+                        sel_panel_data, opt_res
+                    )
+                    st.pyplot(fig_opt_sec, clear_figure=True, use_container_width=True)
+
+                    buf_opt_s = io.BytesIO()
+                    fig_opt_sec.savefig(buf_opt_s, format="png", bbox_inches="tight", dpi=180)
+                    buf_opt_s.seek(0)
+                    st.download_button(
+                        label=f"📥 Download Midspan Cross-Section Detail — Panel {sel_panel_data['Panel ID']} (High-Res PNG)",
+                        data=buf_opt_s,
+                        file_name=f"{prefix}Deflection_Midspan_Section_{sel_panel_data['Panel ID']}.png",
+                        mime="image/png",
+                        use_container_width=True,
+                        key=f"btn_dl_def_opt_sec_{sel_panel_data['Panel ID']}",
+                    )
+                    plt.close(fig_opt_sec)
 
     # ── 💰 BILL OF QUANTITIES (BOQ) ESTIMATE ─────────────────────────────────
     with st.expander("💰 Material Take-off & BoQ Estimate (جدول حصر الكميات المبدئي)", expanded=False):
@@ -8401,11 +10951,11 @@ def render():
     with c_save1:
         st.markdown(
             f"""
-            <div style='background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:14px 16px;'>
-                <div style='font-weight:700; color:#1e293b; font-size:1.0rem;'>
+            <div style='background:#1e293b; border:1px solid #334155; border-radius:8px; padding:14px 16px;'>
+                <div style='font-weight:700; color:#f8fafc; font-size:1.0rem;'>
                     📄 ملف المذكرة الحسابية الهندسية الشاملة (ECP 203 Calculation Sheet)
                 </div>
-                <div style='font-size:0.88rem; color:#64748b; margin-top:2px;'>
+                <div style='font-size:0.88rem; color:#cbd5e1; margin-top:2px;'>
                     يتضمن جميع المدخلات، والمخططات الهندسية عالية الدقة، وفحوصات القص الثاقب، وردود أفعال وتصنيفات الأعمدة لـ <b>{num_floors} طوابق</b>، وحصر الكميات.
                 </div>
             </div>

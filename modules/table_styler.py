@@ -41,44 +41,44 @@ def _is_status_cell(val_str: str) -> bool:
 def _format_status_badge(val_str: str, font_size_px: float) -> str:
     """Format status text into a glowing neon pill badge."""
     s = val_str.strip()
-    badge_fs = max(12.0, font_size_px * 0.95)
-    pad_v = max(3.0, font_size_px * 0.22)
-    pad_h = max(8.0, font_size_px * 0.65)
+    badge_fs = max(8.5, font_size_px * 0.90)
+    pad_v = max(2.0, font_size_px * 0.20)
+    pad_h = max(5.0, font_size_px * 0.60)
 
     # Safe / Pass / Compliant
     if any(k in s for k in ["SAFE", "Safe", "آمن", "مطابق", "✅", "Pass", "OK"]):
         return (
-            f'<span style="background: rgba(34, 197, 94, 0.20); color: #4ade80; '
-            f'border: 1.8px solid #22c55e; padding: {pad_v:.0f}px {pad_h:.0f}px; '
-            f'border-radius: 8px; font-size: {badge_fs:.1f}px; font-weight: 900; '
-            f'display: inline-block; white-space: nowrap; box-shadow: 0 0 10px rgba(34,197,94,0.25);">'
+            f'<span style="background: rgba(34, 197, 94, 0.20) !important; color: #4ade80 !important; '
+            f'border: 1.5px solid #22c55e !important; padding: {pad_v:.0f}px {pad_h:.0f}px !important; '
+            f'border-radius: 6px !important; font-size: {badge_fs:.1f}px !important; font-weight: 900 !important; '
+            f'display: inline-block !important; white-space: nowrap !important; box-shadow: 0 0 8px rgba(34,197,94,0.25) !important;">'
             f'{s}</span>'
         )
     # Unsafe / Fail / Critical
     elif any(k in s for k in ["UNSAFE", "Unsafe", "غير آمن", "تجاوز", "❌", "Fail", "🚨"]):
         return (
-            f'<span style="background: rgba(239, 68, 68, 0.20); color: #f87171; '
-            f'border: 1.8px solid #ef4444; padding: {pad_v:.0f}px {pad_h:.0f}px; '
-            f'border-radius: 8px; font-size: {badge_fs:.1f}px; font-weight: 900; '
-            f'display: inline-block; white-space: nowrap; box-shadow: 0 0 10px rgba(239,68,68,0.25);">'
+            f'<span style="background: rgba(239, 68, 68, 0.20) !important; color: #f87171 !important; '
+            f'border: 1.5px solid #ef4444 !important; padding: {pad_v:.0f}px {pad_h:.0f}px !important; '
+            f'border-radius: 6px !important; font-size: {badge_fs:.1f}px !important; font-weight: 900 !important; '
+            f'display: inline-block !important; white-space: nowrap !important; box-shadow: 0 0 8px rgba(239,68,68,0.25) !important;">'
             f'{s}</span>'
         )
     # Warning / Review
     elif any(k in s for k in ["⚠️", "Review", "تنبيه", "تحذير", "Warn"]):
         return (
-            f'<span style="background: rgba(245, 158, 11, 0.20); color: #fbbf24; '
-            f'border: 1.8px solid #f59e0b; padding: {pad_v:.0f}px {pad_h:.0f}px; '
-            f'border-radius: 8px; font-size: {badge_fs:.1f}px; font-weight: 900; '
-            f'display: inline-block; white-space: nowrap; box-shadow: 0 0 10px rgba(245,158,11,0.25);">'
+            f'<span style="background: rgba(245, 158, 11, 0.20) !important; color: #fbbf24 !important; '
+            f'border: 1.5px solid #f59e0b !important; padding: {pad_v:.0f}px {pad_h:.0f}px !important; '
+            f'border-radius: 6px !important; font-size: {badge_fs:.1f}px !important; font-weight: 900 !important; '
+            f'display: inline-block !important; white-space: nowrap !important; box-shadow: 0 0 8px rgba(245,158,11,0.25) !important;">'
             f'{s}</span>'
         )
     # Neutral Info
     else:
         return (
-            f'<span style="background: rgba(56, 189, 248, 0.18); color: #38bdf8; '
-            f'border: 1.8px solid #38bdf8; padding: {pad_v:.0f}px {pad_h:.0f}px; '
-            f'border-radius: 8px; font-size: {badge_fs:.1f}px; font-weight: 900; '
-            f'display: inline-block; white-space: nowrap;">'
+            f'<span style="background: rgba(56, 189, 248, 0.18) !important; color: #38bdf8 !important; '
+            f'border: 1.5px solid #38bdf8 !important; padding: {pad_v:.0f}px {pad_h:.0f}px !important; '
+            f'border-radius: 6px !important; font-size: {badge_fs:.1f}px !important; font-weight: 900 !important; '
+            f'display: inline-block !important; white-space: nowrap !important;">'
             f'{s}</span>'
         )
 
@@ -131,42 +131,42 @@ def get_styled_table_html(
 
     # ── Adaptive Typography & Padding based on column count ─────────────────
     if font_size_override is not None:
-        fs_hdr = font_size_override + 2.0
+        fs_hdr = font_size_override + 1.2
         fs_cell = font_size_override
-        fs_num = font_size_override + 1.0
-        pad_v = max(7, int(font_size_override * 0.65))
-        pad_h = max(8, int(font_size_override * 0.85))
+        fs_num = font_size_override + 0.5
+        pad_v = max(3, int(font_size_override * 0.45))
+        pad_h = max(5, int(font_size_override * 0.65))
     elif num_cols <= 3:
-        fs_hdr = 22.0
-        fs_cell = 20.0
-        fs_num = 22.0
-        pad_v = 15
-        pad_h = 18
-    elif num_cols <= 5:
         fs_hdr = 20.0
         fs_cell = 18.0
         fs_num = 20.0
         pad_v = 13
         pad_h = 16
-    elif num_cols <= 7:
-        fs_hdr = 17.5
+    elif num_cols <= 5:
+        fs_hdr = 18.0
         fs_cell = 16.0
-        fs_num = 17.0
+        fs_num = 18.0
         pad_v = 11
         pad_h = 14
-    elif num_cols <= 9:
-        fs_hdr = 15.5
+    elif num_cols <= 7:
+        fs_hdr = 16.0
         fs_cell = 14.5
-        fs_num = 15.0
+        fs_num = 15.5
         pad_v = 9
-        pad_h = 11
-    else:
-        # 10 or more columns (e.g. As multi-bar tables)
-        fs_hdr = 14.0
+        pad_h = 12
+    elif num_cols <= 9:
+        fs_hdr = 14.5
         fs_cell = 13.0
-        fs_num = 13.5
+        fs_num = 14.0
         pad_v = 7
-        pad_h = 8
+        pad_h = 10
+    else:
+        # 10 or more columns (e.g. Punching & Deflection verification tables)
+        fs_hdr = 12.0
+        fs_cell = 11.0
+        fs_num = 11.5
+        pad_v = 5
+        pad_h = 7
 
     # ── Default Column Alignments & Colors ───────────────────────────────────
     if not col_alignments or len(col_alignments) != num_cols:
@@ -190,6 +190,8 @@ def get_styled_table_html(
                 header_colors.append("#4ade80")
             elif any(k in h_str for k in ["allow", "مسموح", "note", "ref", "مرجع", "سعر", "price"]):
                 header_colors.append("#fbbf24")
+            elif ("δ" in h_str or "delta" in h_str or "δ" in h_str) and ("tot" in h_str or "long" in h_str or "كلي" in h_str):
+                header_colors.append("#ffffff")
             elif i == 0 and any(k in h_str for k in ["#", "م", "no"]):
                 header_colors.append("#fbbf24")
             else:
@@ -203,15 +205,15 @@ def get_styled_table_html(
         align = alignments[i]
         c_color = header_colors[i]
         hdr_ths.append(
-            f'<th style="padding: {pad_v + 3}px {pad_h}px; font-size: {fs_hdr:.1f}px; '
-            f'font-weight: 900; color: {c_color}; text-align: {align}; white-space: normal;">'
+            f'<th style="padding: {pad_v + 3}px {pad_h}px !important; font-size: {fs_hdr:.1f}px !important; '
+            f'font-weight: 900 !important; color: {c_color} !important; text-align: {align} !important; white-space: normal !important; line-height: 1.3 !important;">'
             f'{h}</th>'
         )
 
     thead_html = (
         '<thead>'
-        f'<tr style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); '
-        f'border-bottom: 2.5px solid {accent_border_color};">'
+        f'<tr style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%) !important; '
+        f'border-bottom: 2.5px solid {accent_border_color} !important;">'
         + "".join(hdr_ths) +
         '</tr>'
         '</thead>'
@@ -237,7 +239,7 @@ def get_styled_table_html(
             if _is_status_cell(val_str) and len(val_str) < 60:
                 cell_content = _format_status_badge(val_str, fs_cell)
                 tds.append(
-                    f'<td style="padding: {pad_v}px {pad_h}px; text-align: center; vertical-align: middle;">'
+                    f'<td style="padding: {pad_v}px {pad_h}px !important; text-align: center !important; vertical-align: middle !important;">'
                     f'{cell_content}</td>'
                 )
             elif is_tot:
@@ -245,36 +247,46 @@ def get_styled_table_html(
                 text_color = "#fbbf24" if c_idx == 0 else ("#38bdf8" if _is_numeric_or_measurement(val_str) else "#ffffff")
                 dir_attr = ' dir="ltr"' if _is_numeric_or_measurement(val_str) else ''
                 tds.append(
-                    f'<td style="padding: {pad_v + 2}px {pad_h}px; font-size: {fs_num:.1f}px; '
-                    f'font-weight: 900; color: {text_color}; text-align: {align}; vertical-align: middle;"{dir_attr}>'
+                    f'<td style="padding: {pad_v + 2}px {pad_h}px !important; font-size: {fs_num:.1f}px !important; '
+                    f'font-weight: 900 !important; color: {text_color} !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.3 !important;"{dir_attr}>'
                     f'{val_str}</td>'
                 )
             elif c_idx == 0 and align == "right":
                 # Primary text / parameter column
                 tds.append(
-                    f'<td style="padding: {pad_v}px {pad_h}px; font-size: {fs_cell:.1f}px; '
-                    f'font-weight: 800; color: #ffffff; text-align: {align}; vertical-align: middle;">'
+                    f'<td style="padding: {pad_v}px {pad_h}px !important; font-size: {fs_cell:.1f}px !important; '
+                    f'font-weight: 800 !important; color: #ffffff !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.3 !important;">'
                     f'{val_str}</td>'
                 )
             elif _is_numeric_or_measurement(val_str):
                 # Numeric / Result / Dimension column
-                num_color = "#38bdf8"
+                h_name = str(hdr_list[c_idx]).lower()
+                if ("δ" in h_name or "delta" in h_name or "δ" in h_name) and ("tot" in h_name or "long" in h_name or "كلي" in h_name):
+                    num_color = "#ffffff"
+                else:
+                    num_color = "#38bdf8"
                 tds.append(
-                    f'<td style="padding: {pad_v}px {pad_h}px; font-size: {fs_num:.1f}px; '
-                    f'font-weight: 900; color: {num_color}; text-align: {align}; vertical-align: middle;" dir="ltr">'
+                    f'<td style="padding: {pad_v}px {pad_h}px !important; font-size: {fs_num:.1f}px !important; '
+                    f'font-weight: 900 !important; color: {num_color} !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.3 !important;" dir="ltr">'
                     f'{val_str}</td>'
                 )
             else:
                 # Standard secondary text / code reference / notes
-                text_color = "#fbbf24" if any(k in str(hdr_list[c_idx]).lower() for k in ["allow", "مسموح", "ref", "مرجع"]) else "#cbd5e1"
+                h_name = str(hdr_list[c_idx]).lower()
+                if ("δ" in h_name or "delta" in h_name or "δ" in h_name) and ("tot" in h_name or "long" in h_name or "كلي" in h_name):
+                    text_color = "#ffffff"
+                elif any(k in h_name for k in ["allow", "مسموح", "ref", "مرجع"]):
+                    text_color = "#fbbf24"
+                else:
+                    text_color = "#cbd5e1"
                 tds.append(
-                    f'<td style="padding: {pad_v}px {pad_h}px; font-size: {fs_cell:.1f}px; '
-                    f'font-weight: 700; color: {text_color}; text-align: {align}; vertical-align: middle;">'
+                    f'<td style="padding: {pad_v}px {pad_h}px !important; font-size: {fs_cell:.1f}px !important; '
+                    f'font-weight: 700 !important; color: {text_color} !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.3 !important;">'
                     f'{val_str}</td>'
                 )
 
         tbody_trs.append(
-            f'<tr style="background: {bg_row}; {border_row}">'
+            f'<tr style="background: {bg_row} !important; {border_row}">'
             + "".join(tds) +
             '</tr>'
         )
@@ -282,10 +294,10 @@ def get_styled_table_html(
     tbody_html = '<tbody>' + "".join(tbody_trs) + '</tbody>'
 
     full_html = (
-        f'<div style="overflow-x: auto; border: 2px solid rgba(56, 189, 248, 0.45); '
+        f'<div class="ecp-custom-table-container" style="overflow-x: auto; border: 2px solid rgba(56, 189, 248, 0.45); '
         f'border-radius: 12px; box-shadow: 0 6px 25px rgba(0, 0, 0, 0.50); margin: {container_margin};">'
-        '<table style="width: 100%; border-collapse: collapse; background: #0b1329; '
-        'font-family: \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif;">'
+        '<table class="ecp-styled-dark-table" style="width: 100% !important; border-collapse: collapse !important; background: #0b1329 !important; '
+        'font-family: \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif !important;">'
         + thead_html + tbody_html +
         '</table>'
         '</div>'

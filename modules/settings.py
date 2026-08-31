@@ -22,6 +22,11 @@ import json
 import os
 import re
 import sys
+import io
+import wave
+import struct
+import math
+import base64
 from datetime import datetime
 import streamlit as st
 
@@ -362,9 +367,12 @@ def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
     for k, v in profile_cfg.items():
         new_cfg[k] = v
     new_cfg["apartment_name"] = profile_name
-    # IMPORTANT: enabled_modules must NEVER live in cfg/session_state.
-    # It is managed exclusively via set/get_project_enabled_modules in profiles.json.
-    new_cfg.pop("enabled_modules", None)
+
+    # Ensure deleted_modules_trash and enabled_modules are explicitly present in session
+    trash = profile_cfg.get("deleted_modules_trash", {})
+    new_cfg["deleted_modules_trash"] = trash
+    new_cfg["enabled_modules"] = get_project_enabled_modules(profile_name)
+
     st.session_state["cfg"] = new_cfg
     st.session_state["_settings_loaded_from_file"] = True
 
@@ -539,42 +547,62 @@ ALL_MODULES = [
 def get_project_enabled_modules(project_name: str) -> list:
     """
     Return list of enabled module indices (0..5) for the given project.
-    Defaults to all modules [0, 1, 2, 3, 4, 5] if not specifically configured.
+    Strictly excludes any module currently present in deleted_modules_trash.
+    Defaults to all non-deleted modules if not specifically configured.
     """
     profiles = get_all_projects()
     pinfo = profiles.get(project_name, {})
     data = pinfo.get("data", {}) if pinfo else {}
+
+    trash = data.get("deleted_modules_trash", {})
+    deleted_indices = [int(k) for k in trash.keys()] if isinstance(trash, dict) else []
+    available_indices = [m["idx"] for m in ALL_MODULES if m["idx"] not in deleted_indices]
+
+    if not available_indices:
+        return []
+
     enabled = data.get("enabled_modules", None)
     if isinstance(enabled, list) and len(enabled) > 0:
         valid_indices = [
             int(i) for i in enabled
-            if isinstance(i, (int, float, str)) and str(i).isdigit() and int(i) in range(len(ALL_MODULES))
+            if isinstance(i, (int, float, str)) and str(i).isdigit() and int(i) in available_indices
         ]
         if valid_indices:
             return sorted(list(set(valid_indices)))
-    return [m["idx"] for m in ALL_MODULES]
+
+    return available_indices
 
 
 def set_project_enabled_modules(project_name: str, enabled_indices: list) -> bool:
     """
     Save enabled module indices for a project into profiles.json.
+    Guarantees that deleted modules (in deleted_modules_trash) can NEVER be re-enabled.
     """
     pdata = load_profiles_data()
     profiles = pdata.get("profiles", {})
     if project_name not in profiles:
         return False
 
+    project_data = profiles[project_name].get("data", {})
+    trash = project_data.get("deleted_modules_trash", {})
+    deleted_indices = [int(k) for k in trash.keys()] if isinstance(trash, dict) else []
+    available_indices = [m["idx"] for m in ALL_MODULES if m["idx"] not in deleted_indices]
+
     valid_indices = sorted(list(set([
-        int(i) for i in enabled_indices if int(i) in range(len(ALL_MODULES))
+        int(i) for i in enabled_indices if int(i) in available_indices
     ])))
-    if not valid_indices:
-        valid_indices = [0]  # Ensure at least one module is active
+    if not valid_indices and available_indices:
+        valid_indices = [available_indices[0]]
 
     if "data" not in profiles[project_name]:
         profiles[project_name]["data"] = {}
     profiles[project_name]["data"]["enabled_modules"] = valid_indices
     profiles[project_name]["updated_at"] = _get_now_str()
-    return save_profiles_data(pdata)
+
+    ok = save_profiles_data(pdata)
+    if ok and project_name == get_active_project_name() and "cfg" in st.session_state:
+        st.session_state["cfg"]["enabled_modules"] = valid_indices
+    return ok
 
 
 def get_project_summary(project_name: str) -> dict:
@@ -938,6 +966,12 @@ def load_settings() -> None:
 
         cfg["apartment_name"] = active_name
         cfg["cs_project_name"] = active_name
+
+        # Ensure deleted_modules_trash and enabled_modules are strictly synced
+        trash = profile_data.get("deleted_modules_trash", {})
+        cfg["deleted_modules_trash"] = trash
+        cfg["enabled_modules"] = get_project_enabled_modules(active_name)
+
         st.session_state["_settings_loaded_from_file"] = True
     else:
         st.session_state["_settings_loaded_from_file"] = False
@@ -950,6 +984,7 @@ def save_settings() -> None:
     """
     Write st.session_state["cfg"] into active project inside profiles.json immediately.
     Guarantees instant persistence on widget modification and keeps Project Name synced.
+    Never overwrites or drops enabled_modules or deleted_modules_trash.
     """
     cfg = st.session_state.get("cfg", {})
     if not cfg:
@@ -986,14 +1021,21 @@ def save_settings() -> None:
 
     clean_cfg = {k: _sanitize_for_json(v) for k, v in cfg.items()}
 
-    # CRITICAL: enabled_modules must NEVER be written from cfg — it is managed exclusively
-    # via set_project_enabled_modules. Always pull it from the already-saved JSON value.
-    # First strip it from clean_cfg (in case it leaked into cfg somehow)
+    # CRITICAL: enabled_modules and deleted_modules_trash must NEVER be overwritten with stale cfg values.
+    # Pull authoritative values from existing_data in profiles.json if they exist.
     clean_cfg.pop("enabled_modules", None)
-    # Then restore the authoritative JSON value if it exists
+    clean_cfg.pop("deleted_modules_trash", None)
+
     existing_data = profiles[active_name].get("data", {})
     if "enabled_modules" in existing_data:
         clean_cfg["enabled_modules"] = existing_data["enabled_modules"]
+    elif "enabled_modules" in cfg:
+        clean_cfg["enabled_modules"] = cfg["enabled_modules"]
+
+    if "deleted_modules_trash" in existing_data:
+        clean_cfg["deleted_modules_trash"] = existing_data["deleted_modules_trash"]
+    elif "deleted_modules_trash" in cfg:
+        clean_cfg["deleted_modules_trash"] = cfg["deleted_modules_trash"]
 
     profiles[active_name]["data"] = clean_cfg
     profiles[active_name]["updated_at"] = _get_now_str()
@@ -1002,6 +1044,7 @@ def save_settings() -> None:
 
     ok = save_profiles_data(pdata)
     st.session_state["_last_save_ok"] = ok
+
 
     # Also keep user_settings.json in sync for legacy compatibility
     try:
@@ -1306,3 +1349,487 @@ def checkbox(label: str, cfg_key: str, **kwargs):
         st.session_state["cfg"][cfg_key] = res
         save_settings()
     return res
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  MODULE SOFT-DELETE / RESTORE SYSTEM
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Key prefixes/patterns that belong to each module.
+# Used to snapshot a module's data before soft-deleting it.
+MODULE_DATA_KEY_PREFIXES = {
+    0: [  # Flat Slabs
+        "fs_n_lx", "fs_n_ly",
+        "fs_lx_", "fs_ly_",
+        "fs_cant_left", "fs_cant_right", "fs_cant_bottom", "fs_cant_top",
+        "fs_removed_cols", "fs_void_panels",
+        "fs_col_pu_int", "fs_col_pu_edge", "fs_col_pu_corner",
+        "slab_bc", "slab_tc", "slab_SDL", "slab_wall_load", "slab_LL",
+        "slab_gamma_c", "slab_Fcu", "slab_Fy", "slab_cover",
+        "slab_ts_initial", "slab_n_floors",
+        "slab_bottom_mesh_dia_idx", "slab_n_btm_mesh",
+        "slab_top_mesh_dia_idx", "slab_n_top_mesh",
+        "slab_col_extra_dia_idx", "slab_strip_top_extra_dia_idx",
+        "slab_strip_bottom_extra_dia_idx", "slab_Phi_index",
+    ],
+    1: [  # Rectangular Columns
+        "col_Pu_input", "col_Safety_Factor", "col_b", "col_H_clear",
+        "col_K_index", "col_Fcu", "col_Fy", "col_Fyk",
+        "col_mu_target", "col_Phi_index", "col_Phi_st_index",
+    ],
+    2: [  # Isolated Footings
+        "ftg_bc", "ftg_tc", "ftg_Pu", "ftg_Wf_est", "ftg_q_all",
+        "ftg_Df", "ftg_gamma_soil", "ftg_Fcu", "ftg_Fy", "ftg_cover",
+        "ftg_Phi_index", "ftg_L_override", "ftg_B_override", "ftg_trc_override",
+    ],
+    3: [  # Ground Slabs
+        "gs_lx", "gs_ly", "gs_ts", "gs_cover", "gs_fcu", "gs_fy",
+        "gs_ks", "gs_q_all", "gs_h_base", "gs_w_ll", "gs_p_wheel",
+        "gs_wheel_b", "gs_wheel_l", "gs_p_post", "gs_post_bp", "gs_post_tp",
+        "gs_rebar_mesh_type", "gs_phi_mesh", "gs_mesh_spacing",
+        "gs_joint_spacing_x", "gs_joint_spacing_y",
+        "gs_dowel_phi", "gs_dowel_len", "gs_dowel_spacing",
+    ],
+    4: [  # Steel Rebar — no persistent data keys
+    ],
+    5: [  # Concrete Survey — 100% Standalone Data Keys
+        "cs_n_types", "cs_col_h", "cs_t_slab", "cs_fcu",
+        "cs_fs_n_slabs", "cs_fs_ts", "cs_fs_fcu",
+        "cs_fs_phi_btm", "cs_fs_nb_btm", "cs_fs_phi_top", "cs_fs_nb_top",
+        "cs_fs_phi_btm_x", "cs_fs_phi_btm_y", "cs_fs_nb_btm_x", "cs_fs_nb_btm_y",
+        "cs_fs_phi_top_x", "cs_fs_phi_top_y", "cs_fs_nb_top_x", "cs_fs_nb_top_y",
+        "cs_fs_phi_top_add", "cs_fs_add_top_lx", "cs_fs_add_top_ly",
+        "cs_fs_n_top_add_x", "cs_fs_n_top_add_y",
+        "cs_fs_phi_btm_add", "cs_fs_add_btm_lx", "cs_fs_add_btm_ly",
+        "cs_fs_n_btm_add_x", "cs_fs_n_btm_add_y",
+        "cs_price_steel", "cs_price_cement", "cs_price_gravel",
+        "cs_price_sand", "cs_price_labor",
+        "cs_project_name", "cs_owner_name",
+        # Dynamic per-column-type, per-slab, and elements takeoff keys
+        "cs_", "surv_", "custom_takeoff_rows",
+    ],
+}
+
+# Dependency map: which modules DEPEND ON a given module.
+# Bidirectional & Functional Module Dependency Map
+# Key = module index; Value = list of (linked_idx, relationship_description)
+# Module 1 (Flat Slab) and Module 2 (Columns) have a direct, mutual BIDIRECTIONAL dependency.
+# Module 3 (Footings) depends on Module 2 (Columns).
+# Module 4, 5, 6 (Ground Slabs, Steel Rebar, Quantity Survey) are 100% standalone.
+FUNCTIONAL_DEPENDENCIES: dict[int, list] = {
+    0: [  # Module 1 — Flat Slabs (البلاطات اللاكمرية) -> Requires Columns (1)
+        (1, "مرتبط بنماذج وتصميم الأعمدة: يغذي الأعمدة بالأحمال المحسوبة وتعتمد بحور السقف والقص الثاقب عليها"),
+    ],
+    1: [  # Module 2 — Columns (الأعمدة المستطيلة) -> Requires Flat Slabs (0)
+        (0, "مرتبط بالألواح المسطحة: يستقبل أحمال الأعمدة المحسوبة من السقف وتعتمد عليها قطاعات الأعمدة للقص الثاقب"),
+    ],
+    2: [  # Module 3 — Footings (القواعد المنفصلة) -> Requires Columns (1)
+        (1, "مرتبط بالأعمدة: يستقبل أبعاد قطاعات الأعمدة وأحمالها لتصميم القواعد"),
+    ],
+    3: [],  # Module 4 — Ground Slabs: Standalone
+    4: [],  # Module 5 — Steel Rebar: Standalone
+    5: [],  # Module 6 — Concrete Quantity Survey: 100% Standalone
+}
+
+
+def validate_new_project_module_selection(selected_indices: list) -> tuple[bool, list[dict]]:
+    """
+    Validates a list of selected module indices for a NEW project.
+    Enforces functional engineering dependencies:
+      - If module A is selected, any required module B must also be selected.
+      - If module A requires B and B is missing, produces a clear violation.
+      - Standalone modules (e.g. Concrete Quantity Survey) have 0 dependencies and can be selected alone.
+    Returns:
+      (is_valid: bool, violations: list[dict])
+      where each violation dict contains:
+        {"module_a_idx": int, "module_a_name": str, "module_b_idx": int, "module_b_name": str,
+         "relationship": str, "message": str}
+    """
+    if not selected_indices:
+        return False, [{"message": "يرجى اختيار موديول واحد على الأقل للمشروع الجديد."}]
+
+    selected_set = set(int(i) for i in selected_indices if int(i) in range(len(ALL_MODULES)))
+    if not selected_set:
+        return False, [{"message": "يرجى اختيار موديول واحد على الأقل للمشروع الجديد."}]
+
+    violations = []
+    seen_pairs = set()
+
+    for midx in selected_set:
+        # Check forward dependencies
+        forward_deps = FUNCTIONAL_DEPENDENCIES.get(midx, [])
+        for dep_idx, relationship in forward_deps:
+            if dep_idx not in selected_set:
+                pair_key = tuple(sorted([midx, dep_idx]))
+                if pair_key not in seen_pairs:
+                    seen_pairs.add(pair_key)
+                    m_a = next((m for m in ALL_MODULES if m["idx"] == midx), None)
+                    m_b = next((m for m in ALL_MODULES if m["idx"] == dep_idx), None)
+                    name_a = m_a["name"] if m_a else f"Module {midx}"
+                    name_b = m_b["name"] if m_b else f"Module {dep_idx}"
+                    violations.append({
+                        "module_a_idx": midx,
+                        "module_a_name": name_a,
+                        "module_b_idx": dep_idx,
+                        "module_b_name": name_b,
+                        "relationship": relationship,
+                        "message": f"الموديول «{name_a}» والموديول «{name_b}» مرتبطان هندسياً ويجب اختيارهما معاً في المشروع الجديد.",
+                    })
+
+    is_valid = len(violations) == 0
+    return is_valid, violations
+
+
+def get_module_data_keys(project_data: dict, module_idx: int) -> dict:
+    """
+    Extract all data keys belonging to a specific module from a project's data dict.
+    Returns a dict {key: value} snapshot of that module's data.
+    Uses prefix matching to capture dynamic keys (e.g. cs_name_0, fs_lx_0..9).
+    """
+    if module_idx not in MODULE_DATA_KEY_PREFIXES:
+        return {}
+
+    prefixes = MODULE_DATA_KEY_PREFIXES[module_idx]
+    snapshot = {}
+
+    for key, value in project_data.items():
+        # Skip system keys that must never be snapshotted
+        if key in ("enabled_modules", "deleted_modules_trash",
+                   "apartment_name", "cs_project_name", "selected_module_idx"):
+            continue
+        for prefix in prefixes:
+            if key == prefix or (prefix.endswith("_") and key.startswith(prefix)):
+                snapshot[key] = value
+                break
+
+    return snapshot
+
+
+def check_module_dependencies(project_name: str, module_idx: int) -> list:
+    """
+    Check which active (non-deleted) modules are linked to module_idx within a project.
+    Performs a strict BIDIRECTIONAL scan (forward + reverse linkages).
+    Returns a list of dicts:
+        [{"idx": int, "name": str, "relationship": str}, ...]
+    Only returns dependencies for modules that currently exist in the project (not deleted).
+    Applies universally across all projects and all models/modules.
+    """
+    trash = get_deleted_modules_trash(project_name)
+    deleted_indices = [int(k) for k in trash.keys()] if isinstance(trash, dict) else []
+
+    # Available (non-deleted) modules in the project
+    available_indices = [m["idx"] for m in ALL_MODULES if m["idx"] not in deleted_indices]
+
+    # If the target module itself is not in available_indices or already deleted, return empty
+    if module_idx not in available_indices or module_idx in deleted_indices:
+        return []
+
+    dependent_modules = []
+    seen_deps = set()
+
+    # 1. Forward dependencies: modules that module_idx explicitly declares a relationship with
+    forward_deps = FUNCTIONAL_DEPENDENCIES.get(module_idx, [])
+    for dep_idx, relationship in forward_deps:
+        if dep_idx != module_idx and dep_idx in available_indices and dep_idx not in deleted_indices:
+            if dep_idx not in seen_deps:
+                seen_deps.add(dep_idx)
+                dep_info = next((m for m in ALL_MODULES if m["idx"] == dep_idx), None)
+                dep_name = dep_info["name"] if dep_info else f"Module {dep_idx}"
+                dependent_modules.append({
+                    "idx": dep_idx,
+                    "name": dep_name,
+                    "relationship": relationship,
+                })
+
+    # 2. Reverse dependencies: other non-deleted modules that declare a relationship with module_idx
+    for other_idx, other_deps in FUNCTIONAL_DEPENDENCIES.items():
+        if other_idx != module_idx and other_idx in available_indices and other_idx not in deleted_indices:
+            for target_idx, rel in other_deps:
+                if target_idx == module_idx and other_idx not in seen_deps:
+                    seen_deps.add(other_idx)
+                    dep_info = next((m for m in ALL_MODULES if m["idx"] == other_idx), None)
+                    dep_name = dep_info["name"] if dep_info else f"Module {other_idx}"
+                    dependent_modules.append({
+                        "idx": other_idx,
+                        "name": dep_name,
+                        "relationship": rel,
+                    })
+
+    return dependent_modules
+
+
+def get_deleted_modules_trash(project_name: str) -> dict:
+    """
+    Return the deleted_modules_trash dict for a project.
+    Structure: {str(module_idx): {"deleted_at": str, "module_idx": int,
+                                   "module_name": str, "snapshot": dict}}
+    Returns empty dict if no modules have been deleted.
+    """
+    profiles = get_all_projects()
+    pinfo = profiles.get(project_name, {})
+    data = pinfo.get("data", {}) if pinfo else {}
+    trash = data.get("deleted_modules_trash", {})
+    return trash if isinstance(trash, dict) else {}
+
+
+def generate_alarm_wav_bytes() -> bytes:
+    """Generates a loud, high-contrast double-beep WAV buffer in memory."""
+    buf = io.BytesIO()
+    with wave.open(buf, 'wb') as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(22050)
+
+        # Tone 1: 850 Hz for 0.14s (loud alert tone)
+        n1 = int(22050 * 0.14)
+        for i in range(n1):
+            env = 1.0 - (i / n1) * 0.3
+            val = int(32767.0 * 0.85 * env * math.sin(2.0 * math.pi * 850.0 * (i / 22050.0)))
+            wav_file.writeframesraw(struct.pack('<h', val))
+
+        # Pause 0.04s
+        np = int(22050 * 0.04)
+        for i in range(np):
+            wav_file.writeframesraw(struct.pack('<h', 0))
+
+        # Tone 2: 550 Hz for 0.20s (secondary warning tone)
+        n2 = int(22050 * 0.20)
+        for i in range(n2):
+            env = 1.0 - (i / n2) * 0.35
+            val = int(32767.0 * 0.90 * env * math.sin(2.0 * math.pi * 550.0 * (i / 22050.0)))
+            wav_file.writeframesraw(struct.pack('<h', val))
+
+    return buf.getvalue()
+
+
+ALARM_WAV_BYTES: bytes = generate_alarm_wav_bytes()
+ALARM_WAV_B64: str = base64.b64encode(ALARM_WAV_BYTES).decode('ascii')
+
+
+def play_warning_sound() -> None:
+    """
+    Centralized, Multi-Layer Warning Sound mechanism for ANY blocked delete across the application.
+    Executes complementary audio layers without displaying any UI player controls:
+      Layer 1: Browser iframe HTML5 Web Audio API synthesis + invisible audio element via components.html
+      Layer 2: Native Host OS System Sound (winsound on Windows)
+    """
+    # ── Layer 1: Browser Frontend Sound (Completely Invisible) ──────────────
+    try:
+        import streamlit.components.v1 as components
+        js_code = f"""
+        <html>
+        <head><meta charset="utf-8"></head>
+        <body style="margin:0;padding:0;overflow:hidden;background:transparent;">
+        <audio autoplay style="display:none;" src="data:audio/wav;base64,{ALARM_WAV_B64}"></audio>
+        <script>
+        (function() {{
+            try {{
+                var AudioCtx = window.AudioContext || window.webkitAudioContext || (window.parent && (window.parent.AudioContext || window.parent.webkitAudioContext));
+                if (AudioCtx) {{
+                    var ctx = new AudioCtx();
+                    if (ctx.state === 'suspended') {{ ctx.resume(); }}
+                    var now = ctx.currentTime;
+                    var osc1 = ctx.createOscillator();
+                    var gain1 = ctx.createGain();
+                    osc1.type = 'sawtooth';
+                    osc1.frequency.setValueAtTime(850, now);
+                    gain1.gain.setValueAtTime(0.50, now);
+                    gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.14);
+                    osc1.connect(gain1);
+                    gain1.connect(ctx.destination);
+                    osc1.start(now);
+                    osc1.stop(now + 0.14);
+
+                    var osc2 = ctx.createOscillator();
+                    var gain2 = ctx.createGain();
+                    osc2.type = 'sawtooth';
+                    osc2.frequency.setValueAtTime(550, now + 0.18);
+                    gain2.gain.setValueAtTime(0.55, now + 0.18);
+                    gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.38);
+                    osc2.connect(gain2);
+                    gain2.connect(ctx.destination);
+                    osc2.start(now + 0.18);
+                    osc2.stop(now + 0.38);
+                }}
+            }} catch(e) {{}}
+        }})();
+        </script>
+        </body>
+        </html>
+        """
+        components.html(js_code, height=0, width=0)
+    except Exception:
+        pass
+
+    # ── Layer 3: Native Host OS Hardware Alert Sound ────────────────────────
+    try:
+        import winsound
+        winsound.MessageBeep(winsound.MB_ICONHAND)
+        try:
+            winsound.Beep(850, 140)
+            winsound.Beep(550, 200)
+        except Exception:
+            pass
+    except Exception:
+        try:
+            sys.stdout.write('\a')
+            sys.stdout.flush()
+        except Exception:
+            pass
+
+
+play_system_delete_blocked_sound = play_warning_sound
+
+
+def soft_delete_module(project_name: str, module_idx: int) -> bool:
+    """
+    Soft-delete a module from a project:
+      0. BACKEND SECURITY: Enforce zero-dependency rule (strictly blocks delete if dependencies exist).
+      1. Snapshot all module-specific data keys into deleted_modules_trash.
+      2. Remove the module index from enabled_modules.
+      3. Switch selected_module_idx to a remaining active module if needed.
+      4. Atomically persist to profiles.json.
+
+    Returns True on success, False on failure / blocked.
+    """
+    # ── 0. Strict Backend Enforcement: Block Deletion if Dependencies Exist ──
+    deps = check_module_dependencies(project_name, module_idx)
+    if deps:
+        # Emit centralized warning sound & reject deletion
+        play_warning_sound()
+        return False
+
+    pdata = load_profiles_data()
+    profiles = pdata.get("profiles", {})
+    if project_name not in profiles:
+        return False
+
+    pinfo = profiles[project_name]
+    project_data = pinfo.get("data", {})
+
+
+    # ── 1. Build snapshot ────────────────────────────────────────────────────
+    snapshot = get_module_data_keys(project_data, module_idx)
+
+    # ── 2. Record in trash ───────────────────────────────────────────────────
+    trash = project_data.get("deleted_modules_trash", {})
+    if not isinstance(trash, dict):
+        trash = {}
+
+    mod_info = next((m for m in ALL_MODULES if m["idx"] == module_idx), None)
+    mod_name = mod_info["name"] if mod_info else f"Module {module_idx}"
+
+    trash[str(module_idx)] = {
+        "deleted_at": _get_now_str(),
+        "module_idx": module_idx,
+        "module_name": mod_name,
+        "snapshot": snapshot,
+    }
+    project_data["deleted_modules_trash"] = trash
+
+    # ── 3. Remove from enabled_modules ───────────────────────────────────────
+    curr_enabled = project_data.get("enabled_modules", [m["idx"] for m in ALL_MODULES])
+    if not isinstance(curr_enabled, list):
+        curr_enabled = [m["idx"] for m in ALL_MODULES]
+
+    deleted_str_keys = set(trash.keys())
+    new_enabled = [i for i in curr_enabled if i != module_idx and str(i) not in deleted_str_keys]
+    if not new_enabled:
+        remaining = [m["idx"] for m in ALL_MODULES if str(m["idx"]) not in deleted_str_keys]
+        new_enabled = [remaining[0]] if remaining else []
+    project_data["enabled_modules"] = new_enabled
+
+    # ── 4. Redirect selected_module_idx if the deleted one was active ────────
+    if int(project_data.get("selected_module_idx", 0)) == module_idx:
+        project_data["selected_module_idx"] = new_enabled[0] if new_enabled else 0
+
+    pinfo["data"] = project_data
+    pinfo["updated_at"] = _get_now_str()
+    profiles[project_name] = pinfo
+    pdata["profiles"] = profiles
+
+    ok = save_profiles_data(pdata)
+
+    # If deleting from the active project, immediately sync session state
+    if ok and project_name == get_active_project_name():
+        cfg = st.session_state.get("cfg", {})
+        cfg["enabled_modules"] = new_enabled
+        cfg["deleted_modules_trash"] = trash
+        if int(st.session_state.get("selected_module_idx", 0)) == module_idx:
+            fallback_idx = new_enabled[0] if new_enabled else 0
+            st.session_state["selected_module_idx"] = fallback_idx
+            cfg["selected_module_idx"] = fallback_idx
+        st.session_state["cfg"] = cfg
+        _clear_widget_cache()
+
+    return ok
+
+
+def restore_module(project_name: str, module_idx: int) -> tuple:
+    """
+    Restore a soft-deleted module:
+      1. Find the module's snapshot in deleted_modules_trash.
+      2. Re-apply snapshot data keys back into project data.
+      3. Add module index back to enabled_modules.
+      4. Remove module from trash.
+      5. Atomically persist to profiles.json.
+
+    Returns (success: bool, message: str).
+    """
+    pdata = load_profiles_data()
+    profiles = pdata.get("profiles", {})
+    if project_name not in profiles:
+        return False, f"المشروع «{project_name}» غير موجود."
+
+    pinfo = profiles[project_name]
+    project_data = pinfo.get("data", {})
+    trash = project_data.get("deleted_modules_trash", {})
+
+    if not isinstance(trash, dict) or str(module_idx) not in trash:
+        mod_info = next((m for m in ALL_MODULES if m["idx"] == module_idx), None)
+        mod_name = mod_info["name"] if mod_info else f"Module {module_idx}"
+        return False, f"الموديول «{mod_name}» غير موجود في قائمة المحذوفات."
+
+    trash_entry = trash[str(module_idx)]
+    snapshot = trash_entry.get("snapshot", {})
+
+    # ── 1. Re-apply snapshot data ─────────────────────────────────────────────
+    for key, value in snapshot.items():
+        project_data[key] = value
+
+    # ── 2. Remove from trash FIRST so get_project_enabled_modules sees it as restored
+    del trash[str(module_idx)]
+    project_data["deleted_modules_trash"] = trash
+
+    # ── 3. Add back to enabled_modules ───────────────────────────────────────
+    enabled = project_data.get("enabled_modules", [])
+    if not isinstance(enabled, list):
+        enabled = []
+    if module_idx not in enabled:
+        enabled.append(module_idx)
+    enabled = sorted(list(set([int(i) for i in enabled if str(i) not in trash])))
+    project_data["enabled_modules"] = enabled
+
+    pinfo["data"] = project_data
+    pinfo["updated_at"] = _get_now_str()
+    profiles[project_name] = pinfo
+    pdata["profiles"] = profiles
+
+    ok = save_profiles_data(pdata)
+
+    # Sync active project session state if needed
+    if ok and project_name == get_active_project_name():
+        cfg = st.session_state.get("cfg", {})
+        for key, value in snapshot.items():
+            cfg[key] = value
+        cfg["enabled_modules"] = enabled
+        cfg["deleted_modules_trash"] = trash
+        st.session_state["cfg"] = cfg
+        _clear_widget_cache()
+
+    mod_info = next((m for m in ALL_MODULES if m["idx"] == module_idx), None)
+    mod_name = mod_info["name"] if mod_info else f"Module {module_idx}"
+    if ok:
+        return True, f"تم استعادة الموديول «{mod_name}» وبياناته بنجاح."
+    return False, "فشل حفظ البيانات على القرص."
+

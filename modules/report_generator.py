@@ -584,17 +584,23 @@ def generate_flat_slab_report_html(
     # Build Punching Shear Table HTML
     punching_rows = ""
     for p in punching_results:
-        status_color = "#16a34a" if "Safe" in p.get("Status", "") else "#dc2626"
+        is_p_safe = "Safe" in p.get("Status", "")
+        status_color = "#16a34a" if is_p_safe else "#dc2626"
+        s_des = p.get("stirrups_design", {})
+        stirrup_summary = f"{s_des.get('n_legs_per_row', 0)} Φ{s_des.get('stirrup_dia_mm', 10)} @ {s_des.get('s_cm', 10):.0f}cm ({s_des.get('n_rows', 0)} rows)" if not is_p_safe and s_des.get("Ast_req_mm2", 0) > 0 else "—"
         punching_rows += f"""
         <tr>
             <td><b>{p.get('Column ID', '')}</b></td>
             <td>{p.get('Grid', '')}</td>
             <td>{p.get('Location Type', '')}</td>
+            <td>{p.get('Section (cm)', '30 × 30')}</td>
             <td>{p.get('Pu (ton)', 0.0):.2f}</td>
             <td>{p.get('bo (cm)', 0.0):.1f}</td>
             <td>{p.get('qup (kg/cm²)', 0.0):.2f}</td>
             <td>{p.get('qcup (kg/cm²)', 0.0):.2f}</td>
+            <td>{p.get('qu_max (kg/cm²)', 21.2):.2f}</td>
             <td>{p.get('Ratio', 0.0):.2f}</td>
+            <td>{stirrup_summary}</td>
             <td style="color:{status_color}; font-weight:bold;">{p.get('Status', '')}</td>
         </tr>
         """
@@ -605,11 +611,14 @@ def generate_flat_slab_report_html(
                 <th>Column ID</th>
                 <th>Grid</th>
                 <th>Type</th>
+                <th>Section (cm)</th>
                 <th>Pu (ton)</th>
                 <th>bo (cm)</th>
-                <th>qup (kg/cm²)</th>
+                <th>qu (kg/cm²)</th>
                 <th>qcup (kg/cm²)</th>
-                <th>qup / qcup</th>
+                <th>qu,max (kg/cm²)</th>
+                <th>Ratio</th>
+                <th>Stirrups Design (ECP 203)</th>
                 <th>Status</th>
             </tr>
         </thead>
