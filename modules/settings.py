@@ -91,6 +91,7 @@ ECP_DEFAULTS: dict = {
     "slab_cover":                  1.5,      # Net concrete cover in cm (15 mm)
     "slab_ts_initial":             20,       # Initial thickness in cm
     "slab_n_floors":               1,        # Number of floors for column load calculation
+    "slab_col_safety_factor":      1.10,     # Factor of safety & Columns weight for vertical load calculation
     "slab_bottom_mesh_dia_idx":    2,        # index into BAR_DIA -> 12mm
     "slab_n_btm_mesh":             5,        # number of bars per meter for bottom base mesh
     "slab_top_mesh_dia_idx":       1,        # index into BAR_DIA -> 10mm

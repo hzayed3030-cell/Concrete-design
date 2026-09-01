@@ -396,21 +396,20 @@ def generate_flat_slab_sketch(
     _voids = set(void_panel_ids) if void_panel_ids else set()
     _pending_voids = set(pending_void_ids) if pending_void_ids else set()
     all_panels = get_flat_slab_panels(Lx_spans, Ly_spans, _voids)
-
     for p in all_panels:
         if p["is_void"]:
-            # Confirmed Void (Grey with diagonal crossed X lines)
+            # Confirmed Void (White background with red border and diagonal dashed X lines)
             v_rect = patches.Rectangle(
                 (p["x1"], p["y1"]), p["Lx"], p["Ly"],
-                linewidth=2.0, edgecolor="#64748b", facecolor="#cbd5e1", zorder=2
+                linewidth=2.2, edgecolor="#ef4444", facecolor="#ffffff", zorder=2
             )
             ax_plan.add_patch(v_rect)
-            ax_plan.plot([p["x1"], p["x2"]], [p["y1"], p["y2"]], color="#64748b", linestyle="--", linewidth=1.8, zorder=2)
-            ax_plan.plot([p["x1"], p["x2"]], [p["y2"], p["y1"]], color="#64748b", linestyle="--", linewidth=1.8, zorder=2)
+            ax_plan.plot([p["x1"], p["x2"]], [p["y1"], p["y2"]], color="#ef4444", linestyle="--", linewidth=1.8, zorder=2)
+            ax_plan.plot([p["x1"], p["x2"]], [p["y2"], p["y1"]], color="#ef4444", linestyle="--", linewidth=1.8, zorder=2)
             ax_plan.text(
                 p["mid_x"], p["mid_y"], f"VOID (منور)\n{p['area']:.1f} m²",
-                ha="center", va="center", fontsize=11.5, weight="bold", color="#0f172a",
-                bbox=dict(boxstyle="round,pad=0.3", facecolor="#f1f5f9", edgecolor="#64748b", lw=1.5),
+                ha="center", va="center", fontsize=11.5, weight="bold", color="#b91c1c",
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.5),
                 zorder=3
             )
         elif p["id"] in _pending_voids:
@@ -812,15 +811,15 @@ def generate_flat_slab_top_rft_sketch(
         if p["is_void"]:
             v_rect = patches.Rectangle(
                 (p["x1"], p["y1"]), p["Lx"], p["Ly"],
-                linewidth=2.4, edgecolor="#64748b", facecolor="#cbd5e1", zorder=2
+                linewidth=2.4, edgecolor="#ef4444", facecolor="#ffffff", zorder=2
             )
             ax_plan.add_patch(v_rect)
-            ax_plan.plot([p["x1"], p["x2"]], [p["y1"], p["y2"]], color="#64748b", linestyle="--", linewidth=2.0, zorder=2)
-            ax_plan.plot([p["x1"], p["x2"]], [p["y2"], p["y1"]], color="#64748b", linestyle="--", linewidth=2.0, zorder=2)
+            ax_plan.plot([p["x1"], p["x2"]], [p["y1"], p["y2"]], color="#ef4444", linestyle="--", linewidth=2.0, zorder=2)
+            ax_plan.plot([p["x1"], p["x2"]], [p["y2"], p["y1"]], color="#ef4444", linestyle="--", linewidth=2.0, zorder=2)
             ax_plan.text(
                 p["mid_x"], p["mid_y"], f"VOID (منور)\n{p['area']:.1f} m²",
-                ha="center", va="center", fontsize=15.0, weight="bold", color="#0f172a",
-                bbox=dict(boxstyle="round,pad=0.35", facecolor="#f1f5f9", edgecolor="#64748b", lw=1.8),
+                ha="center", va="center", fontsize=15.0, weight="bold", color="#b91c1c",
+                bbox=dict(boxstyle="round,pad=0.35", facecolor="#ffffff", edgecolor="#ef4444", lw=1.8),
                 zorder=4
             )
 
@@ -1181,15 +1180,15 @@ def generate_flat_slab_bottom_rft_sketch(
         if p["is_void"]:
             v_rect = patches.Rectangle(
                 (p["x1"], p["y1"]), p["Lx"], p["Ly"],
-                linewidth=2.4, edgecolor="#64748b", facecolor="#cbd5e1", zorder=2
+                linewidth=2.4, edgecolor="#ef4444", facecolor="#ffffff", zorder=2
             )
             ax_plan.add_patch(v_rect)
-            ax_plan.plot([p["x1"], p["x2"]], [p["y1"], p["y2"]], color="#64748b", linestyle="--", linewidth=2.0, zorder=2)
-            ax_plan.plot([p["x1"], p["x2"]], [p["y2"], p["y1"]], color="#64748b", linestyle="--", linewidth=2.0, zorder=2)
+            ax_plan.plot([p["x1"], p["x2"]], [p["y1"], p["y2"]], color="#ef4444", linestyle="--", linewidth=2.0, zorder=2)
+            ax_plan.plot([p["x1"], p["x2"]], [p["y2"], p["y1"]], color="#ef4444", linestyle="--", linewidth=2.0, zorder=2)
             ax_plan.text(
                 p["mid_x"], p["mid_y"], f"VOID (منور)\n{p['area']:.1f} m²",
-                ha="center", va="center", fontsize=15.0, weight="bold", color="#0f172a",
-                bbox=dict(boxstyle="round,pad=0.35", facecolor="#f1f5f9", edgecolor="#64748b", lw=1.8),
+                ha="center", va="center", fontsize=15.0, weight="bold", color="#b91c1c",
+                bbox=dict(boxstyle="round,pad=0.35", facecolor="#ffffff", edgecolor="#ef4444", lw=1.8),
                 zorder=4
             )
 
@@ -1419,6 +1418,7 @@ def generate_flat_slab_reactions_sketch(
     col_d_cm=50,
     removed_cols=None,
     void_panel_ids=None,
+    col_sf=1.10,
 ):
     """
     Renders an engineering layout plan showing column tributary areas,
@@ -1524,15 +1524,15 @@ def generate_flat_slab_reactions_sketch(
         if p["is_void"]:
             v_rect = patches.Rectangle(
                 (p["x1"], p["y1"]), p["Lx"], p["Ly"],
-                linewidth=2.4, edgecolor="#64748b", facecolor="#cbd5e1", zorder=2
+                linewidth=2.4, edgecolor="#ef4444", facecolor="#ffffff", zorder=2
             )
             ax_plan.add_patch(v_rect)
-            ax_plan.plot([p["x1"], p["x2"]], [p["y1"], p["y2"]], color="#64748b", linestyle="--", linewidth=2.0, zorder=2)
-            ax_plan.plot([p["x1"], p["x2"]], [p["y2"], p["y1"]], color="#64748b", linestyle="--", linewidth=2.0, zorder=2)
+            ax_plan.plot([p["x1"], p["x2"]], [p["y1"], p["y2"]], color="#ef4444", linestyle="--", linewidth=2.0, zorder=2)
+            ax_plan.plot([p["x1"], p["x2"]], [p["y2"], p["y1"]], color="#ef4444", linestyle="--", linewidth=2.0, zorder=2)
             ax_plan.text(
                 p["mid_x"], p["mid_y"], f"VOID (منور)\n{p['area']:.1f} m²",
-                ha="center", va="center", fontsize=15.0, weight="bold", color="#0f172a",
-                bbox=dict(boxstyle="round,pad=0.35", facecolor="#f1f5f9", edgecolor="#64748b", lw=1.8),
+                ha="center", va="center", fontsize=15.0, weight="bold", color="#b91c1c",
+                bbox=dict(boxstyle="round,pad=0.35", facecolor="#ffffff", edgecolor="#ef4444", lw=1.8),
                 zorder=4
             )
 
@@ -1714,7 +1714,7 @@ def generate_flat_slab_reactions_sketch(
         ("INTERIOR COLUMNS\n(أعمدة داخلية)", "Full interior tributary area\nMaximum vertical load capacity", "#15803d", "#dcfce7", "#16a34a"),
         ("EDGE COLUMNS\n(أعمدة طرفية / وسط خارجي)", "Half-span spandrel tributary area\nSubject to edge unbalanced moment", "#1e40af", "#dbeafe", "#2563eb"),
         ("CORNER COLUMNS\n(أعمدة أركان)", "Quarter-span corner tributary area\nSubject to biaxial corner moments", "#c2410c", "#ffedd5", "#ea580c"),
-        ("TRIBUTARY FORMULAS\n(معادلات توزيع الأحمال)", f"Total Pu = Pu(1 Floor) × {num_floors} Floors\nPu = Tributary Area × Wu ({Wu:.3f} t/m²)", "#0f172a", "#f1f5f9", "#64748b"),
+        ("TRIBUTARY FORMULAS\n(معادلات توزيع الأحمال)", f"Total Pu = Pu(1 Floor) × {num_floors} Floors\nPu = Atrib × Wu × F.S (F.S = {col_sf:.2f})", "#0f172a", "#f1f5f9", "#64748b"),
     ]
 
     x_box_w = 0.235
@@ -2058,14 +2058,14 @@ def generate_flat_slab_moment_contour(
                 x1, x2 = x_coords[i], x_coords[i+1]
                 y1, y2 = y_coords[j], y_coords[j+1]
                 lx, ly = x2 - x1, y2 - y1
-                v_rect = patches.Rectangle((x1, y1), lx, ly, linewidth=2.2, edgecolor="#475569", facecolor="#cbd5e1", zorder=4)
+                v_rect = patches.Rectangle((x1, y1), lx, ly, linewidth=2.2, edgecolor="#ef4444", facecolor="#ffffff", zorder=4)
                 ax_plan.add_patch(v_rect)
-                ax_plan.plot([x1, x2], [y1, y2], color="#475569", linestyle="--", linewidth=1.8, zorder=4)
-                ax_plan.plot([x1, x2], [y2, y1], color="#475569", linestyle="--", linewidth=1.8, zorder=4)
+                ax_plan.plot([x1, x2], [y1, y2], color="#ef4444", linestyle="--", linewidth=1.8, zorder=4)
+                ax_plan.plot([x1, x2], [y2, y1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=4)
                 ax_plan.text(
                     (x1 + x2) / 2.0, (y1 + y2) / 2.0, f"VOID (منور)\n{lx*ly:.1f} m²",
-                    ha="center", va="center", fontsize=14.0, weight="bold", color="#0f172a",
-                    bbox=dict(boxstyle="round,pad=0.32", facecolor="#f1f5f9", edgecolor="#64748b", lw=1.6),
+                    ha="center", va="center", fontsize=13.0, weight="bold", color="#b91c1c",
+                    bbox=dict(boxstyle="round,pad=0.32", facecolor="#ffffff", edgecolor="#ef4444", lw=1.6),
                     zorder=5
                 )
 
@@ -2377,11 +2377,11 @@ def generate_flat_slab_dual_moment_contour(
                     x1, x2 = x_coords[i], x_coords[i+1]
                     y1, y2 = y_coords[j], y_coords[j+1]
                     lx, ly = x2 - x1, y2 - y1
-                    v_rect = patches.Rectangle((x1, y1), lx, ly, linewidth=2.0, edgecolor="#475569", facecolor="#cbd5e1", zorder=4)
+                    v_rect = patches.Rectangle((x1, y1), lx, ly, linewidth=2.0, edgecolor="#ef4444", facecolor="#ffffff", zorder=4)
                     ax.add_patch(v_rect)
-                    ax.plot([x1, x2], [y1, y2], color="#475569", linestyle="--", linewidth=1.6, zorder=4)
-                    ax.plot([x1, x2], [y2, y1], color="#475569", linestyle="--", linewidth=1.6, zorder=4)
-                    ax.text((x1 + x2)/2.0, (y1 + y2)/2.0, "VOID", ha="center", va="center", fontsize=12.0, weight="bold", color="#0f172a", zorder=5)
+                    ax.plot([x1, x2], [y1, y2], color="#ef4444", linestyle="--", linewidth=1.6, zorder=4)
+                    ax.plot([x1, x2], [y2, y1], color="#ef4444", linestyle="--", linewidth=1.6, zorder=4)
+                    ax.text((x1 + x2)/2.0, (y1 + y2)/2.0, "VOID", ha="center", va="center", fontsize=10.5, weight="bold", color="#b91c1c", bbox=dict(boxstyle="round,pad=0.25", facecolor="#ffffff", edgecolor="#ef4444", lw=1.2), zorder=5)
 
         # Grid lines & bubbles
         for idx, x in enumerate(x_coords):
@@ -2617,14 +2617,14 @@ def generate_moment_deficit_contour(
                 lx, ly = x2 - x1, y2 - y1
                 ax_plan.add_patch(patches.Rectangle(
                     (x1, y1), lx, ly,
-                    linewidth=2.2, edgecolor="#475569", facecolor="#cbd5e1", zorder=5,
+                    linewidth=2.2, edgecolor="#ef4444", facecolor="#ffffff", zorder=5,
                 ))
-                ax_plan.plot([x1, x2], [y1, y2], color="#475569", linestyle="--", linewidth=1.8, zorder=5)
-                ax_plan.plot([x1, x2], [y2, y1], color="#475569", linestyle="--", linewidth=1.8, zorder=5)
+                ax_plan.plot([x1, x2], [y1, y2], color="#ef4444", linestyle="--", linewidth=1.8, zorder=5)
+                ax_plan.plot([x1, x2], [y2, y1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=5)
                 ax_plan.text(
-                    (x1 + x2) / 2.0, (y1 + y2) / 2.0, f"VOID\n{lx*ly:.1f} m²",
-                    ha="center", va="center", fontsize=13, weight="bold", color="#0f172a",
-                    bbox=dict(boxstyle="round,pad=0.3", facecolor="#f1f5f9", edgecolor="#64748b", lw=1.5),
+                    (x1 + x2) / 2.0, (y1 + y2) / 2.0, f"VOID (منور)\n{lx*ly:.1f} m²",
+                    ha="center", va="center", fontsize=12.0, weight="bold", color="#b91c1c",
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.5),
                     zorder=6,
                 )
 
@@ -3276,9 +3276,11 @@ def generate_flat_slab_column_caps_sketch(
                 px0, px1 = x_coords[i], x_coords[i+1]
                 py0, py1 = y_coords[j], y_coords[j+1]
                 pw, ph = px1 - px0, py1 - py0
-                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#f1f5f9", edgecolor="#ef4444", lw=2.2, hatch="//", zorder=2)
+                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=2)
                 ax_plan.add_patch(v_rect)
-                ax_plan.text(px0 + pw/2, py0 + ph/2, "OPENING / VOID", ha="center", va="center", fontsize=13, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.4", facecolor="#fee2e2", edgecolor="#ef4444", lw=1.5))
+                ax_plan.plot([px0, px1], [py0, py1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
+                ax_plan.plot([px0, px1], [py1, py0], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
+                ax_plan.text(px0 + pw/2, py0 + ph/2, "VOID\n(منور)", ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4))
 
     for idx, x in enumerate(x_coords):
         y_top_ext = y_slab_max + offset_grid_top
@@ -3729,19 +3731,96 @@ def compute_single_bay_deflection(
     }
 
 
+def get_ecp_mu_max(fcu_kgcm2, fy_kgcm2):
+    """
+    Computes mu_max according to ECP 203 limit states design.
+    """
+    fcu_kg = max(100.0, float(fcu_kgcm2))
+    fy_kg  = max(1000.0, float(fy_kgcm2))
+    # ECP 203: c_max / d = (2/3) * (6000 / (6000 + fy / 1.15))
+    c_max_over_d = (2.0 / 3.0) * (6000.0 / (6000.0 + (fy_kg / 1.15)))
+    # mu_max = (0.67 * (fcu / 1.5) * 0.8 * (c_max/d)) / (fy / 1.15)
+    mu_max = (0.67 * (fcu_kg / 1.5) * 0.8 * c_max_over_d) / (fy_kg / 1.15)
+    return mu_max
+
+
+def get_ecp_as_max(fcu_kgcm2, fy_kgcm2, d_cm, b_cm=100.0):
+    """
+    Computes As_max (cm²/m) = mu_max * b * d to ensure ductile failure.
+    """
+    mu_max = get_ecp_mu_max(fcu_kgcm2, fy_kgcm2)
+    return mu_max * b_cm * d_cm
+
+
+def calc_recommended_slab_thickness(
+    Ln_m,
+    Ws_tm2,
+    DL_tot,
+    LL,
+    kd,
+    m_denom,
+    Fcu,
+    Fy,
+    current_ts_cm,
+    delta_allow_mm,
+    target_ratio=0.98,
+):
+    """
+    Iteratively computes the recommended minimum slab thickness ts_rec (cm)
+    that satisfies Delta_total <= Delta_allowable * target_ratio.
+    """
+    target_delta = delta_allow_mm * target_ratio
+    ts_start = int(current_ts_cm) + 1
+    best_ts = ts_start + 12
+
+    for test_ts in range(ts_start, ts_start + 35):
+        d_test = max(10.0, test_ts - 2.5)
+        delta_ts_m = (test_ts - current_ts_cm) / 100.0
+        ws_test = Ws_tm2 + 2.5 * delta_ts_m
+        dl_tot_test = DL_tot + 2.5 * delta_ts_m
+        dl_ratio_test = min(1.0, max(0.4, (dl_tot_test + 0.25 * LL) / max(0.1, ws_test)))
+
+        # Check with basic standard rebar (e.g. 5 phi 12 btm, 5 phi 10 top)
+        res = compute_single_bay_deflection(
+            As_btm_cm2m=5.65,
+            As_top_cm2m=3.93,
+            ts_cm=test_ts,
+            d_cm=d_test,
+            Ln_m=Ln_m,
+            Ws_tm2=ws_test,
+            DL_ratio=dl_ratio_test,
+            kd=kd,
+            m_denom=m_denom,
+            Fcu=Fcu,
+        )
+        if res["delta_tot_mm"] <= target_delta:
+            best_ts = test_ts
+            break
+
+    best_ts_even = int(math.ceil(best_ts / 2.0) * 2.0)
+    best_ts_even = max(int(current_ts_cm) + 2, best_ts_even)
+    return best_ts_even
+
+
 @st.cache_data(show_spinner=False)
 def solve_deflection_optimization(
     panel_dict,
     DL_tot,
     LL,
     Fcu,
+    Fy=4000,
     target_ratio=0.98,
 ):
     """
-    Iteratively solves for the required reinforcement to satisfy Delta_total <= Delta_allowable
-    under two distinct engineering options:
-      - Option 1: Intensifying Bottom Tension Steel (As_btm)
-      - Option 2: Increasing Top Compression Steel (A's_top) at midspan
+    Automated Rebar Optimization & Advisory Engine for Deflection (ECP 203).
+    Strictly applies:
+      - As_max = mu_max * b * d (Ductile Failure Constraint).
+      - Rebar count bounds: 5 <= n <= 10 bars/m (clear spacing >= 100 mm).
+      - Max bar diameter: Phi_max = min(16, floor(ts)) mm for residential slabs.
+      - Ascending diameter auto-selection: Phi 10 -> Phi 12 -> Phi 16 mm.
+      - Solves Alternative 1 (Bottom Tension Steel As_btm) & Alternative 2 (Top Compression Steel A's).
+      - If no alternative satisfies Delta_total <= Delta_allowable within limits, returns failure status
+        with recommended slab thickness ts_rec.
     """
     ts_cm = panel_dict["ts (cm)"]
     d_cm = panel_dict["d (cm)"]
@@ -3764,100 +3843,110 @@ def solve_deflection_optimization(
     As_prime_curr = panel_dict["As_top (cm²/m)"]
     delta_curr = panel_dict["delta_long (mm)"]
 
-    # ── Option 1: Increase As_btm (Tension Steel) ──
-    low_as, high_as = As_curr, max(As_curr * 6.0, 60.0)
-    As_req = high_as
-    for _ in range(50):
-        mid_as = (low_as + high_as) / 2.0
-        res = compute_single_bay_deflection(mid_as, As_prime_curr, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu)
-        if res["delta_tot_mm"] <= target_delta:
-            As_req = mid_as
-            high_as = mid_as
-        else:
-            low_as = mid_as
+    # 1. Hard Constraints
+    mu_max = get_ecp_mu_max(Fcu, Fy)
+    As_max = get_ecp_as_max(Fcu, Fy, d_cm, b_cm=100.0)
+    max_dia_allowed = min(16, int(ts_cm))   # Code constraint: <= ts/10 and max 16mm
+    available_dias = [d for d in [10, 12, 16] if d <= max_dia_allowed]
+    if not available_dias:
+        available_dias = [10]
 
-    delta_As_req = max(0.0, As_req - As_curr)
-    dia_candidates = [12, 14, 16, 18]
+    # 2. Alternative 1: Increasing Bottom Tension Steel (As_btm)
     best_opt1 = None
-    for dia in dia_candidates:
-        abar = (math.pi * (dia / 10.0)**2) / 4.0
-        nb = max(2, math.ceil(delta_As_req / abar)) if delta_As_req > 0.05 else 0
-        if 2 <= nb <= 8:
-            as_prop = As_curr + nb * abar
-            res_p = compute_single_bay_deflection(as_prop, As_prime_curr, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu)
-            best_opt1 = {
-                "dia": dia,
-                "n_bars": nb,
-                "As_added": nb * abar,
-                "As_prop": as_prop,
-                "config": f"+ {nb} Φ{dia}/m (إضافي سفلي)" if nb > 0 else "التسليح الحالي كافٍ",
-                "delta_tot": res_p["delta_tot_mm"],
-                "is_safe": res_p["delta_tot_mm"] <= delta_allow,
-            }
+    for dia in available_dias:
+        abar = bar_area(dia)
+        for nb in range(5, 11):  # 5 to 10 bars/m
+            as_prop = nb * abar
+            # Hard constraint: As <= As_max
+            if as_prop > As_max:
+                continue
+            # Must provide at least current capacity
+            if as_prop < As_curr * 0.95:
+                continue
+
+            res_p = compute_single_bay_deflection(
+                as_prop, As_prime_curr, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu
+            )
+            if res_p["delta_tot_mm"] <= target_delta:
+                best_opt1 = {
+                    "dia": dia,
+                    "n_bars": nb,
+                    "As_prop": as_prop,
+                    "As_added": max(0.0, as_prop - As_curr),
+                    "config": f"{nb} Φ{dia}/m (تسليح سفلي رئيسي)",
+                    "delta_tot": res_p["delta_tot_mm"],
+                    "is_safe": True,
+                    "feasible": True,
+                    "As_max": As_max,
+                }
+                break
+        if best_opt1 is not None:
             break
 
-    if not best_opt1:
-        dia = 16
-        abar = (math.pi * (dia / 10.0)**2) / 4.0
-        nb = max(2, math.ceil(delta_As_req / abar)) if delta_As_req > 0.05 else 0
-        as_prop = As_curr + nb * abar
-        res_p = compute_single_bay_deflection(as_prop, As_prime_curr, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu)
+    if best_opt1 is None:
         best_opt1 = {
-            "dia": dia,
-            "n_bars": nb,
-            "As_added": nb * abar,
-            "As_prop": as_prop,
-            "config": f"+ {nb} Φ{dia}/m (إضافي سفلي)" if nb > 0 else "التسليح الحالي كافٍ",
-            "delta_tot": res_p["delta_tot_mm"],
-            "is_safe": res_p["delta_tot_mm"] <= delta_allow,
+            "dia": available_dias[-1],
+            "n_bars": 10,
+            "As_prop": 10 * bar_area(available_dias[-1]),
+            "As_added": 0.0,
+            "config": f"تجاوز الحد الأقصى (10 Φ{available_dias[-1]}/م أو As_max)",
+            "delta_tot": compute_single_bay_deflection(
+                min(As_max, 10 * bar_area(available_dias[-1])), As_prime_curr, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu
+            )["delta_tot_mm"],
+            "is_safe": False,
+            "feasible": False,
+            "As_max": As_max,
         }
 
-    # ── Option 2: Increase A's (Top Compression Steel) ──
-    low_asp, high_asp = As_prime_curr, max(As_prime_curr * 8.0, 50.0)
-    As_prime_req = high_asp
-    opt2_feasible = False
-    for _ in range(50):
-        mid_asp = (low_asp + high_asp) / 2.0
-        res = compute_single_bay_deflection(As_curr, mid_asp, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu)
-        if res["delta_tot_mm"] <= target_delta:
-            As_prime_req = mid_asp
-            high_asp = mid_asp
-            opt2_feasible = True
-        else:
-            low_asp = mid_asp
-
+    # 3. Alternative 2: Increasing Top Compression Steel (A's_top)
     best_opt2 = None
-    if opt2_feasible:
-        for dia in [10, 12, 14, 16]:
-            abar = (math.pi * (dia / 10.0)**2) / 4.0
-            nb = math.ceil(As_prime_req / abar)
-            if 5 <= nb <= 10:
-                as_prop = nb * abar
-                res_p = compute_single_bay_deflection(As_curr, as_prop, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu)
+    for dia in available_dias:
+        abar = bar_area(dia)
+        for nb in range(5, 11):  # 5 to 10 bars/m
+            as_prime_prop = nb * abar
+            if as_prime_prop < As_prime_curr * 0.95:
+                continue
+
+            res_p = compute_single_bay_deflection(
+                As_curr, as_prime_prop, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu
+            )
+            if res_p["delta_tot_mm"] <= target_delta:
                 best_opt2 = {
                     "dia": dia,
                     "n_bars": nb,
-                    "As_prime_prop": as_prop,
-                    "config": f"{nb} Φ{dia}/m (تكثيف الشبكة العلوية)",
+                    "As_prime_prop": as_prime_prop,
+                    "config": f"{nb} Φ{dia}/m (حديد ضغط علوي)",
                     "delta_tot": res_p["delta_tot_mm"],
-                    "is_safe": res_p["delta_tot_mm"] <= delta_allow,
+                    "is_safe": True,
                     "feasible": True,
+                    "mu_prime": res_p["mu_prime"],
+                    "lambda_creep": res_p["lambda_creep"],
                 }
                 break
+        if best_opt2 is not None:
+            break
 
-    if not best_opt2:
-        as_prop = max(As_prime_curr, As_prime_req)
-        nb = max(5, math.ceil(as_prop / 2.01))
-        res_p = compute_single_bay_deflection(As_curr, as_prop, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu)
+    if best_opt2 is None:
         best_opt2 = {
-            "dia": 16,
-            "n_bars": nb,
-            "As_prime_prop": as_prop,
-            "config": f"{nb} Φ16/m (تكثيف حديد الضغط العلوي)",
-            "delta_tot": res_p["delta_tot_mm"],
-            "is_safe": res_p["delta_tot_mm"] <= delta_allow,
-            "feasible": opt2_feasible,
+            "dia": available_dias[-1],
+            "n_bars": 10,
+            "As_prime_prop": 10 * bar_area(available_dias[-1]),
+            "config": f"تجاوز الحد الأقصى (10 Φ{available_dias[-1]}/م)",
+            "delta_tot": compute_single_bay_deflection(
+                As_curr, 10 * bar_area(available_dias[-1]), ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu
+            )["delta_tot_mm"],
+            "is_safe": False,
+            "feasible": False,
         }
+
+    any_safe = best_opt1["is_safe"] or best_opt2["is_safe"]
+    all_failed = not any_safe
+
+    # Recommended minimum thickness calculation
+    ts_rec = calc_recommended_slab_thickness(
+        Ln_m, Ws_tm2, DL_tot, LL, kd, m_denom, Fcu, Fy, ts_cm, delta_allow, target_ratio
+    )
+    ts_inc = ts_rec - int(ts_cm)
 
     return {
         "panel_id": panel_dict["Panel ID"],
@@ -3869,8 +3958,16 @@ def solve_deflection_optimization(
         "delta_curr_mm": delta_curr,
         "As_curr": As_curr,
         "As_prime_curr": As_prime_curr,
+        "As_max": As_max,
+        "mu_max": mu_max,
+        "max_dia_allowed": max_dia_allowed,
+        "available_dias": available_dias,
         "opt1": best_opt1,
         "opt2": best_opt2,
+        "any_safe": any_safe,
+        "all_failed": all_failed,
+        "ts_rec_cm": ts_rec,
+        "ts_inc_cm": ts_inc,
     }
 
 
@@ -3883,9 +3980,9 @@ def generate_deflection_optimization_curves_sketch(
 ):
     """
     Plots the Deflection Reduction Curves:
-      - Curve 1: Delta_total vs. Bottom Tension Steel (As_btm)
-      - Curve 2: Delta_total vs. Top Compression Steel (A's_top)
-      - Reference Line: Delta_allowable (Ln / 250)
+      - Curve 1: Delta_total vs. Bottom Tension Steel (As_btm) with As_max limit indicator.
+      - Curve 2: Delta_total vs. Top Compression Steel (A's_top).
+      - Reference Line: Delta_allowable (Ln / 250).
     """
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
 
@@ -3910,9 +4007,11 @@ def generate_deflection_optimization_curves_sketch(
     delta_allow = (Ln_m * 1000.0) / 250.0
     As_curr = panel_dict["As_btm (cm²/m)"]
     Asp_curr = panel_dict["As_top (cm²/m)"]
+    As_max = opt_res.get("As_max", As_curr * 3.0)
 
     # 1. As_btm sweep (with Asp fixed at current)
-    as_range = np.linspace(max(2.0, As_curr * 0.7), max(As_curr * 3.5, 30.0), 60)
+    as_max_sweep = max(As_max * 1.15, As_curr * 3.0, 30.0)
+    as_range = np.linspace(max(2.0, As_curr * 0.7), as_max_sweep, 60)
     delta_as_curve = [
         compute_single_bay_deflection(a, Asp_curr, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu)["delta_tot_mm"]
         for a in as_range
@@ -3926,11 +4025,14 @@ def generate_deflection_optimization_curves_sketch(
     ]
 
     # Plot Curves
-    ax.plot(as_range, delta_as_curve, color="#38bdf8", lw=3.2, label=r"Option 1: Increasing Bottom Tension Steel ($A_s$)", zorder=4)
-    ax.plot(asp_range, delta_asp_curve, color="#a855f7", lw=3.2, linestyle="-.", label=r"Option 2: Increasing Top Compression Steel ($A'_s$)", zorder=4)
+    ax.plot(as_range, delta_as_curve, color="#38bdf8", lw=3.2, label=r"Option 1: Bottom Tension Steel ($A_s$)", zorder=4)
+    ax.plot(asp_range, delta_asp_curve, color="#a855f7", lw=3.2, linestyle="-.", label=r"Option 2: Top Compression Steel ($A'_s$)", zorder=4)
 
     # Plot Allowable Deflection Line
     ax.axhline(delta_allow, color="#ef4444", lw=2.4, linestyle="--", label=f"Allowable Limit Δall = Ln/250 ({delta_allow:.2f} mm)", zorder=5)
+
+    # Plot As_max Limit Vertical Line (ECP 203 Ductile Failure Limit)
+    ax.axvline(As_max, color="#f97316", lw=2.0, linestyle=":", label=f"ECP 203 As_max Limit ({As_max:.2f} cm²/m)", zorder=5)
 
     # Current State Point
     cur_delta = panel_dict["delta_long (mm)"]
@@ -3948,13 +4050,13 @@ def generate_deflection_optimization_curves_sketch(
     )
 
     # Option 1 Target Point
-    opt1 = opt_res.get("opt1")
-    if opt1 and opt1.get("As_prop"):
+    opt1 = opt_res.get("opt1", {})
+    if opt1.get("is_safe"):
         as_t = opt1["As_prop"]
         del_t = opt1["delta_tot"]
         ax.scatter([as_t], [del_t], color="#22c55e", s=150, marker="o", edgecolor="#ffffff", lw=2.2, zorder=6)
         ax.annotate(
-            f" Option 1 Target (Safe [OK])\n As = {as_t:.2f} cm² ({opt1['config']})\n Δ = {del_t:.2f} mm",
+            f" Option 1 Target (Safe ✅)\n As = {as_t:.2f} cm² ({opt1['config']})\n Δ = {del_t:.2f} mm",
             (as_t, del_t),
             textcoords="offset points",
             xytext=(-140, 25),
@@ -3966,13 +4068,13 @@ def generate_deflection_optimization_curves_sketch(
         )
 
     # Option 2 Target Point
-    opt2 = opt_res.get("opt2")
-    if opt2 and opt2.get("As_prime_prop") and opt2.get("is_safe"):
+    opt2 = opt_res.get("opt2", {})
+    if opt2.get("is_safe"):
         asp_t = opt2["As_prime_prop"]
         del_t2 = opt2["delta_tot"]
         ax.scatter([asp_t], [del_t2], color="#c084fc", s=150, marker="s", edgecolor="#ffffff", lw=2.2, zorder=6)
         ax.annotate(
-            f" Option 2 Target (Safe [OK])\n A's = {asp_t:.2f} cm² ({opt2['config']})\n Δ = {del_t2:.2f} mm",
+            f" Option 2 Target (Safe ✅)\n A's = {asp_t:.2f} cm² ({opt2['config']})\n Δ = {del_t2:.2f} mm",
             (asp_t, del_t2),
             textcoords="offset points",
             xytext=(15, -45),
@@ -3988,7 +4090,7 @@ def generate_deflection_optimization_curves_sketch(
     ax.set_xlabel(r"Reinforcement Area $A_s$ or $A'_s$ (cm²/m) — مساحة حديد التسليح في المتر", fontsize=13, fontweight="bold", color="#e2e8f0", labelpad=10)
     ax.set_ylabel(r"Total Long-Term Deflection $\Delta_{total}$ (mm) — سهم الانحناء طويل الأمد", fontsize=13, fontweight="bold", color="#e2e8f0", labelpad=10)
     ax.set_title(
-        f"Deflection Optimization Curves — {panel_dict['Panel ID']} ({panel_dict['Bay Label']})\nمنحنيات المعالجة الذكية لسهم الانحناء بتكثيف حديد الشد أو حديد الضغط",
+        f"Deflection Optimization Curves — {panel_dict['Panel ID']} ({panel_dict['Bay Label']})\nمنحنيات المعالجة الذكية لسهم الانحناء بتكثيف حديد الشد أو حديد الضغط وفقاً للكود المصري ECP 203",
         fontsize=14.5,
         fontweight="bold",
         color="#38bdf8",
@@ -3999,7 +4101,7 @@ def generate_deflection_optimization_curves_sketch(
         spine.set_color("#334155")
         spine.set_linewidth(1.5)
 
-    ax.legend(facecolor="#1e293b", edgecolor="#38bdf8", fontsize=11, labelcolor="#f8fafc", loc="upper right")
+    ax.legend(facecolor="#1e293b", edgecolor="#38bdf8", fontsize=10.5, labelcolor="#f8fafc", loc="upper right")
     plt.tight_layout()
     return fig
 
@@ -4041,31 +4143,32 @@ def generate_deflection_rebar_cross_section_sketch(
     y_btm = cover_cm
 
     opt1 = opt_res.get("opt1", {})
-    nb_opt1 = opt1.get("n_bars", 4)
+    nb_opt1 = opt1.get("n_bars", 5) if opt1.get("is_safe") else 0
+    dia_opt1 = opt1.get("dia", 12)
 
     opt2 = opt_res.get("opt2", {})
-    nb_opt2 = opt2.get("n_bars", 6)
+    nb_opt2 = opt2.get("n_bars", 5) if opt2.get("is_safe") else 0
+    dia_opt2 = opt2.get("dia", 10)
 
-    # Base top mesh bars
+    # Base top mesh bars (5 bars)
     base_top_x = np.linspace(10, 90, 5)
     for bx in base_top_x:
         ax.scatter([bx], [y_top], s=120, color="#64748b", edgecolor="#0f172a", lw=1.8, zorder=5)
 
-    # Base bottom mesh bars
+    # Base bottom mesh bars (5 bars)
     base_btm_x = np.linspace(10, 90, 5)
     for bx in base_btm_x:
         ax.scatter([bx], [y_btm], s=130, color="#1e3a8a", edgecolor="#0f172a", lw=1.8, zorder=5)
 
     # Extra bottom tension bars (Option 1)
     if nb_opt1 > 0:
-        extra_btm_x = np.linspace(18, 82, nb_opt1)
+        extra_btm_x = np.linspace(12, 88, nb_opt1)
         for ex in extra_btm_x:
             ax.scatter([ex], [y_btm + 1.2], s=150, color="#22c55e", edgecolor="#0f172a", lw=2.2, zorder=6)
 
     # Added top compression bars (Option 2)
-    if nb_opt2 > 5:
-        added_nb = nb_opt2 - 5
-        extra_top_x = np.linspace(20, 80, added_nb)
+    if nb_opt2 > 0:
+        extra_top_x = np.linspace(14, 86, nb_opt2)
         for ex in extra_top_x:
             ax.scatter([ex], [y_top - 1.2], s=140, color="#a855f7", edgecolor="#0f172a", lw=2.2, zorder=6)
 
@@ -4083,31 +4186,33 @@ def generate_deflection_rebar_cross_section_sketch(
     ax.text(b_width/2.0, -6.5, "1.0 Meter Unit Strip Width (b = 100 cm)", fontsize=12.5, fontweight="bold", color="#0f172a", ha="center", va="top")
 
     # 4. Callouts
-    opt1_text = f"Option 1 (Tension Rebar):\n{opt1.get('config', 'Extra Bottom Rebars')}\nAs,total = {opt1.get('As_prop', 0):.2f} cm²/m"
-    ax.annotate(
-        opt1_text,
-        xy=(50, y_btm + 1.2),
-        xytext=(50, y_btm - 12),
-        fontsize=11,
-        fontweight="bold",
-        color="#15803d",
-        ha="center",
-        bbox=dict(boxstyle="round,pad=0.4", fc="#dcfce7", ec="#22c55e", lw=1.8),
-        arrowprops=dict(arrowstyle="->", color="#16a34a", lw=2.0)
-    )
+    if opt1.get("is_safe"):
+        opt1_text = f"Option 1 (Tension Rebar):\n{opt1.get('config', '')}\nAs,total = {opt1.get('As_prop', 0):.2f} cm²/m ≤ As_max"
+        ax.annotate(
+            opt1_text,
+            xy=(50, y_btm + 1.2),
+            xytext=(50, y_btm - 12),
+            fontsize=11,
+            fontweight="bold",
+            color="#15803d",
+            ha="center",
+            bbox=dict(boxstyle="round,pad=0.4", fc="#dcfce7", ec="#22c55e", lw=1.8),
+            arrowprops=dict(arrowstyle="->", color="#16a34a", lw=2.0)
+        )
 
-    opt2_text = f"Option 2 (Compression Rebar):\n{opt2.get('config', 'Top Compression Mesh')}\nA's,total = {opt2.get('As_prime_prop', 0):.2f} cm²/m"
-    ax.annotate(
-        opt2_text,
-        xy=(50, y_top - 1.2),
-        xytext=(50, y_top + 8),
-        fontsize=11,
-        fontweight="bold",
-        color="#7e22ce",
-        ha="center",
-        bbox=dict(boxstyle="round,pad=0.4", fc="#f3e8ff", ec="#a855f7", lw=1.8),
-        arrowprops=dict(arrowstyle="->", color="#9333ea", lw=2.0)
-    )
+    if opt2.get("is_safe"):
+        opt2_text = f"Option 2 (Compression Rebar):\n{opt2.get('config', '')}\nA's,total = {opt2.get('As_prime_prop', 0):.2f} cm²/m"
+        ax.annotate(
+            opt2_text,
+            xy=(50, y_top - 1.2),
+            xytext=(50, y_top + 8),
+            fontsize=11,
+            fontweight="bold",
+            color="#7e22ce",
+            ha="center",
+            bbox=dict(boxstyle="round,pad=0.4", fc="#f3e8ff", ec="#a855f7", lw=1.8),
+            arrowprops=dict(arrowstyle="->", color="#9333ea", lw=2.0)
+        )
 
     ax.text(2, y_top + 1.5, f"Top Mesh ({panel_dict['As_top (cm²/m)']:.2f} cm²/m)", fontsize=10, fontweight="bold", color="#475569")
     ax.text(2, y_btm - 2.5, f"Bottom Mesh ({panel_dict['As_btm (cm²/m)']:.2f} cm²/m)", fontsize=10, fontweight="bold", color="#1e3a8a")
@@ -4118,7 +4223,7 @@ def generate_deflection_rebar_cross_section_sketch(
     ax.axis("off")
 
     ax.set_title(
-        f"Detailed Midspan Cross Section & Rebar Arrangement — {panel_dict['Panel ID']} ({panel_dict['Bay Label']})\nقطاع هندسي تفصيلي لتوزيع حديد الشد والضغط بمنتصف البحر للباكية",
+        f"Detailed Midspan Cross Section & Rebar Arrangement — {panel_dict['Panel ID']} ({panel_dict['Bay Label']})\nقطاع هندسي تفصيلي لتوزيع حديد الشد والضغط بمنتصف البحر للباكية (ECP 203)",
         fontsize=14,
         fontweight="bold",
         color="#0f172a",
@@ -4283,9 +4388,11 @@ def generate_flat_slab_deflection_contour_sketch(
                 px0, px1 = x_coords[i], x_coords[i+1]
                 py0, py1 = y_coords[j], y_coords[j+1]
                 pw, ph = px1 - px0, py1 - py0
-                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#f8fafc", edgecolor="#ef4444", lw=2.2, hatch="//", zorder=5)
+                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=5)
                 ax_plan.add_patch(v_rect)
-                ax_plan.text(px0 + pw/2, py0 + ph/2, "OPENING / VOID", ha="center", va="center", fontsize=13, fontweight="bold", color="#b91c1c", zorder=6, bbox=dict(boxstyle="round,pad=0.4", facecolor="#fee2e2", edgecolor="#ef4444", lw=1.5))
+                ax_plan.plot([px0, px1], [py0, py1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=5)
+                ax_plan.plot([px0, px1], [py1, py0], color="#ef4444", linestyle="--", linewidth=1.8, zorder=5)
+                ax_plan.text(px0 + pw/2, py0 + ph/2, "VOID\n(منور)", ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=6, bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4))
 
     # Grid lines & bubbles
     for idx, x in enumerate(x_coords):
@@ -4651,9 +4758,11 @@ def generate_flat_slab_punching_shear_sketch(
                 px0, px1 = x_coords[i], x_coords[i+1]
                 py0, py1 = y_coords[j], y_coords[j+1]
                 pw, ph = px1 - px0, py1 - py0
-                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#f8fafc", edgecolor="#ef4444", lw=2.2, hatch="//", zorder=5)
+                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=5)
                 ax_plan.add_patch(v_rect)
-                ax_plan.text(px0 + pw/2, py0 + ph/2, "OPENING / VOID", ha="center", va="center", fontsize=13, fontweight="bold", color="#b91c1c", zorder=6, bbox=dict(boxstyle="round,pad=0.4", facecolor="#fee2e2", edgecolor="#ef4444", lw=1.5))
+                ax_plan.plot([px0, px1], [py0, py1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=5)
+                ax_plan.plot([px0, px1], [py1, py0], color="#ef4444", linestyle="--", linewidth=1.8, zorder=5)
+                ax_plan.text(px0 + pw/2, py0 + ph/2, "VOID\n(منور)", ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=6, bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4))
 
     # Grid lines & bubbles
     for idx, x in enumerate(x_coords):
@@ -5672,9 +5781,11 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
                 px0, px1 = x_coords[i], x_coords[i+1]
                 py0, py1 = y_coords[j], y_coords[j+1]
                 pw, ph = px1 - px0, py1 - py0
-                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#f1f5f9", edgecolor="#ef4444", lw=2.2, hatch="//", zorder=2)
+                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=2)
                 ax_plan.add_patch(v_rect)
-                ax_plan.text(px0 + pw/2, py0 + ph/2, "OPENING / VOID", ha="center", va="center", fontsize=13, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.4", facecolor="#fee2e2", edgecolor="#ef4444", lw=1.5))
+                ax_plan.plot([px0, px1], [py0, py1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
+                ax_plan.plot([px0, px1], [py1, py0], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
+                ax_plan.text(px0 + pw/2, py0 + ph/2, "VOID\n(منور)", ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4))
 
     # Grids & Bubbles
     for idx, x in enumerate(x_coords):
@@ -6034,9 +6145,11 @@ def generate_flat_slab_top_mesh_extra_sketch(
                 px0, px1 = x_coords[i], x_coords[i+1]
                 py0, py1 = y_coords[j], y_coords[j+1]
                 pw, ph = px1 - px0, py1 - py0
-                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#f1f5f9", edgecolor="#ef4444", lw=2.2, hatch="//", zorder=2)
+                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=2)
                 ax_plan.add_patch(v_rect)
-                ax_plan.text(px0 + pw/2, py0 + ph/2, "OPENING / VOID", ha="center", va="center", fontsize=13, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.4", facecolor="#fee2e2", edgecolor="#ef4444", lw=1.5))
+                ax_plan.plot([px0, px1], [py0, py1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
+                ax_plan.plot([px0, px1], [py1, py0], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
+                ax_plan.text(px0 + pw/2, py0 + ph/2, "VOID\n(منور)", ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4))
 
     # Grids & Bubbles
     for idx, x in enumerate(x_coords):
@@ -6360,11 +6473,11 @@ def generate_flat_slab_master_steel_layout_sketch(
                 px0, px1 = x_coords[i], x_coords[i+1]
                 py0, py1 = y_coords[j], y_coords[j+1]
                 pw, ph = px1 - px0, py1 - py0
-                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#f1f5f9", edgecolor="#ef4444", lw=2.0, hatch="//", zorder=2)
+                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=2)
                 ax_plan.add_patch(v_rect)
-                ax_plan.plot([px0, px1], [py0, py1], color="#ef4444", lw=1.5, ls="--", zorder=3)
-                ax_plan.plot([px0, px1], [py1, py0], color="#ef4444", lw=1.5, ls="--", zorder=3)
-                ax_plan.text(px0 + pw/2, py0 + ph/2, "OPENING / VOID", ha="center", va="center", fontsize=11, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.3", facecolor="#fee2e2", edgecolor="#ef4444", lw=1.2))
+                ax_plan.plot([px0, px1], [py0, py1], color="#ef4444", lw=1.8, ls="--", zorder=3)
+                ax_plan.plot([px0, px1], [py1, py0], color="#ef4444", lw=1.8, ls="--", zorder=3)
+                ax_plan.text(px0 + pw/2, py0 + ph/2, "VOID\n(منور)", ha="center", va="center", fontsize=11.5, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.3))
 
     # 3. Grid Lines & Bubbles
     for idx, x in enumerate(x_coords):
@@ -7680,6 +7793,12 @@ def render():
             tc_s = S.number_input("Col. Depth tc (cm)", "slab_tc", min_value=None, step=5)
             ts_initial = S.number_input("Initial Slab ts (cm)", "slab_ts_initial", min_value=12, max_value=80, step=1)
             n_floors = S.integer_input("No. of Floors (عدد الأدوار)", "slab_n_floors", min_value=1, max_value=100)
+            col_sf = S.number_input(
+                "Factor of safety & Columns weight (معامل أمان ووزن الأعمدة)",
+                "slab_col_safety_factor",
+                min_value=1.00, max_value=2.00, step=0.05,
+                help="معامل أمان إضافي لتغطية الوزن الذاتي لأعمدة الأدوار وعزوم اللامركزية الصغرى (القيمة الافتراضية 1.10 = إضافة 10%).",
+            )
 
         with c2:
             st.markdown("**⚖️ Surface Loads (ton/m²)**")
@@ -7714,6 +7833,46 @@ def render():
             strip_top_extra_dia = S.selectbox("Strip Top Extra Φ", "slab_strip_top_extra_dia_idx", options=BAR_DIA)
             strip_bottom_extra_dia = S.selectbox("Strip Btm Extra Φ", "slab_strip_bottom_extra_dia_idx", options=BAR_DIA)
 
+    # ── ⚖️ LOAD BREAKDOWN (مراجعة وتراكب الأحمال قبل بدء التصميم) ─────────────
+    _ts_preview = float(ts_initial) if ts_initial is not None and ts_initial > 0 else 20.0
+    _gamma_c_preview = float(gamma_c) if gamma_c is not None and gamma_c > 0 else 2.5
+    _sdl_preview = float(SDL) if SDL is not None and SDL >= 0 else 0.0
+    _wl_preview = float(wall_load) if wall_load is not None and wall_load >= 0 else 0.0
+    _ll_preview = float(LL) if LL is not None and LL >= 0 else 0.0
+
+    _sw_preview = _gamma_c_preview * (_ts_preview / 100.0)
+    _dl_tot_preview = _sw_preview + _sdl_preview + _wl_preview
+    _wu_preview = 1.4 * _dl_tot_preview + 1.6 * _ll_preview
+
+    with st.expander("⚖️ Load Breakdown & Combinations (ملخص وتجميع الأحمال التصميمية للسقف)", expanded=False):
+        ld_df_preview = pd.DataFrame({
+            "Load Component (مكون الحمل)": [
+                "1. Slab Self-Weight (الوزن الذاتي للبلاطة)  OW = γc × ts",
+                "2. Super-Imposed Dead Load (التشطيبات والأرضيات)  SDL",
+                "3. Wall Load (أحمال القواطيع والحوائط)  WL",
+                "4. Total Dead Load (إجمالي الحمل الميت)  DL = OW + SDL + WL",
+                "5. Live Load (الحمل الحي التشغيلي)  LL",
+                "6. Ultimate Design Load (الحمل التصميمي الأقصى)  Wu = 1.4 DL + 1.6 LL",
+            ],
+            "Value (ton/m²)": [
+                f"{_sw_preview:.4f} t/m²",
+                f"{_sdl_preview:.4f} t/m²",
+                f"{_wl_preview:.4f} t/m²",
+                f"{_dl_tot_preview:.4f} t/m²",
+                f"{_ll_preview:.4f} t/m²",
+                f"{_wu_preview:.4f} t/m²",
+            ],
+            "Calculation Formula & Code Reference (المعادلة والملاحظات الإنشائية)": [
+                f"حساب تلقائي: {_ts_preview:.0f} cm × {_gamma_c_preview:.2f} t/m³",
+                "مدخل من المستخدم (User Input)",
+                "مدخل من المستخدم (User Input)",
+                "OW + SDL + WL (مجموع الأحمال الدائمة)",
+                "مدخل من المستخدم (User Input)",
+                "تراكب الأحمال الأقصى طبقاً للكود المصري ECP 203",
+            ],
+        })
+        render_styled_table(ld_df_preview)
+
     # ── ③ INPUT VALIDATION ───────────────────────────────────────────────────
     errs = []
     if bc_s is None or bc_s <= 0:         errs.append(f"Column Width bc must be > 0 (got {bc_s}).")
@@ -7733,6 +7892,7 @@ def render():
     if any(ly <= 0 for ly in Ly_spans):   errs.append("All Ly spans must be > 0.")
 
     num_floors = int(n_floors) if n_floors and n_floors >= 1 else 1
+    col_sf_val = float(col_sf) if col_sf is not None and col_sf >= 1.0 else 1.10
 
     # ── ④ VERIFICATION SKETCH ────────────────────────────────────────────────
     # الحسابات دائماً تُنفَّذ (خارج الـ expander) لأن img_verif_b64 مطلوب لاحقاً
@@ -8276,7 +8436,7 @@ def render():
             col_atrib += cant_R * cant_T
 
         c["Atrib_0"] = max(0.0, col_atrib)
-        c["Pu_0"] = Wu * c["Atrib_0"]
+        c["Pu_0"] = Wu * c["Atrib_0"] * col_sf_val
         c["Pu"] = c["Pu_0"]
 
     # If columns were removed, transfer their load to surviving active columns
@@ -9749,28 +9909,6 @@ def render():
             ])
             render_styled_table(cant_df)
 
-    # ── ⚖️ LOAD SUMMARY ──────────────────────────────────────────────────────
-    with st.expander("⚖️ Load Breakdown (ملخص توزيع وتراكب الأحمال)", expanded=False):
-        ld_df = pd.DataFrame({
-            "Load Component": [
-                "Slab Self-Weight  OW = γc × ts",
-                "Super-Imposed Dead Load  SDL",
-                "Wall Load  WL  (equivalent distributed)",
-                "Total Dead Load  DL = OW + SDL + WL",
-                "Live Load  LL",
-                "Ultimate  Wu = 1.4 DL + 1.6 LL",
-            ],
-            "Value (ton/m²)": [
-                f"{SW:.4f}", f"{SDL:.4f}", f"{WL:.4f}",
-                f"{DL_tot:.4f}", f"{LL:.4f}", f"{Wu:.4f}",
-            ],
-            "Note": [
-                f"Auto: {ts:.0f}cm × {gamma_c} t/m³", "User input", "User input",
-                "OW + SDL + WL", "User input", "ECP 203 Ultimate load combination",
-            ],
-        })
-        render_styled_table(ld_df)
-
     # ── 📐 DETAILED DDM MOMENTS TABLES ───────────────────────────────────────
     def render_direction(rows, direction_label):
         with st.expander(f"📐 Bending Moments & Reinforcement — {direction_label} (عزوم الانحناء والتسليح)", expanded=False):
@@ -9851,6 +9989,7 @@ def render():
             col_w_cm=bc_s, col_d_cm=tc_s,
             removed_cols=_removed_col_objs,
             void_panel_ids=set(_confirmed_voids),
+            col_sf=col_sf_val,
         )
         st.pyplot(fig_reac, clear_figure=True, use_container_width=True)
         buf_reac = io.BytesIO()
@@ -9880,6 +10019,7 @@ def render():
             for r in col_reactions_data
         ])
         render_styled_table(reactions_df)
+        st.caption(f"ℹ️ الأحمال المحورية $P_u$ تشمل معامل الأمان ووزن الأعمدة (Factor of Safety & Columns Weight = **{col_sf_val:.2f}**).")
 
     # ── 📊 CLASSIFICATION INTO 3 GOVERNING COLUMN TYPES ──────────────────────
     with st.expander("📌 Governing Column Loads by Type (أقصى ردود أفعال وتصنيف نماذج الأعمدة)", expanded=False):
@@ -9975,11 +10115,12 @@ def render():
         ("C_edge (أقصى عمود طرفي)", max_edge, "C_edge"),
         ("C_corner (أقصى عمود ركن)", max_corner, "C_corner"),
     ]:
-        if col_obj and col_obj.get("pu_1f_val", 0) > 0:
+        if col_obj and col_obj.get("pu_tot_val", 0) > 0:
+            pu_tot = float(col_obj["pu_tot_val"])
             pu_1f = float(col_obj["pu_1f_val"])
             des = design_rectangular_column(
-                Pu_input=pu_1f,
-                Safety_Factor=col_sf,
+                Pu_input=pu_tot,
+                Safety_Factor=1.0,
                 b=col_b_val,
                 H_clear=col_H,
                 K=col_K,
@@ -9995,16 +10136,45 @@ def render():
             des["gov_col"] = f"{col_obj['Column ID']} ({col_obj['Grid']})"
             des["loc_type"] = col_obj["Location Type"]
             des["atrib"] = col_obj["atrib_val"]
+            des["pu_1f"] = pu_1f
+            des["pu_tot"] = pu_tot
             col_designs.append(des)
 
+    # Design calculation for all individual columns
+    indiv_col_designs = []
+    for r in col_reactions_data:
+        r_pu_tot = float(r["pu_tot_val"])
+        r_pu_1f = float(r["pu_1f_val"])
+        if r_pu_tot > 0:
+            r_des = design_rectangular_column(
+                Pu_input=r_pu_tot,
+                Safety_Factor=1.0,
+                b=col_b_val,
+                H_clear=col_H,
+                K=col_K,
+                Fcu=col_Fcu,
+                Fy=col_Fy,
+                Fyk=col_Fyk,
+                mu_target=col_mu,
+                Phi=col_phi,
+                Phi_st=col_phi_st,
+            )
+            r_des["col_id"] = r["Column ID"]
+            r_des["grid"] = r["Grid"]
+            r_des["loc_type"] = r["Location Type"]
+            r_des["atrib"] = r["atrib_val"]
+            r_des["pu_1f"] = r_pu_1f
+            r_des["pu_tot"] = r_pu_tot
+            indiv_col_designs.append(r_des)
+
     if col_designs:
-        with st.expander("🏛️ Rectangular Columns Design (التصميم الإنشائي لنماذج الأعمدة المستطيلة طبقاً لأحمال السقف)", expanded=False):
+        with st.expander(f"🏛️ Rectangular Columns Design — {num_floors} Floors (التصميم الإنشائي لنماذج الأعمدة المستطيلة)", expanded=False):
             st.markdown(
-                """
+                f"""
                 <div style='background:#f8fafc;border-left:4px solid #1e40af;padding:10px 14px;border-radius:6px;margin-bottom:12px;'>
-                <b>📋 تصميم قطاعات وتسليح نماذج الأعمدة (ECP 203):</b><br>
-                تم أخذ أقصى أحمال رأسية للدور الواحد <code>Pu (1 Floor)</code> لكل نموذج عمود (داخلي C_int، طرفي C_edge، ركن C_corner)
-                وتطبيق معادلات تصميم الأعمدة المستطيلة المعرضة لقوى ضغط محورية ومطابقتها مع اشتراطات الكود المصري.
+                <b>📋 تصميم قطاعات وتسليح نماذج الأعمدة (ECP 203 — Direct Axial Design):</b><br>
+                يتم تصميم قطاعات الأعمدة بناءً على أقصى حمل كلي لعدد <b>{num_floors} طابق</b> <code>Total Pu ({num_floors} Floors)</code> لكل نموذج عمود 
+                (داخلي C_int، طرفي C_edge، ركن C_corner) وفقاً لمساحة التأثير وموقع العمود في المسقط الإنشائي.
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -10015,8 +10185,8 @@ def render():
                 col_designs_table.append({
                     "نموذج العمود (Model)": des["model_label"],
                     "العمود الحاكم (Gov Col)": des["gov_col"],
-                    "حمل الدور Pu_1F (t)": f"{des['Pu_input']:.2f}",
-                    "حمل التصميم Pu_des (t)": f"{des['Pu_ton']:.2f}",
+                    "حمل الدور Pu_1F (t)": f"{des['pu_1f']:.2f}",
+                    f"حمل التصميم الكلي ({num_floors}F) [ton]": f"{des['pu_tot']:.2f}",
                     "القطاع المصمم b × t (cm)": f"{des['b']:.0f} × {des['t']:.0f}",
                     "التسليح الطولي (Main RFT)": f"{des['main_steel_str']} (μ={des['mu_provided']:.2f}%)",
                     "الكانات (Stirrups / Ties)": des["stirrups_str"],
@@ -10043,7 +10213,7 @@ def render():
                         <div style="background:#ffffff; border:2px solid {color_border}; border-radius:10px; padding:12px 14px; text-align:center;">
                             <div style="font-size:15px; font-weight:700; color:{color_hdr}; margin-bottom:6px;">{des['model_label']}</div>
                             <div style="font-size:13px; color:#475569;">العمود: <b>{des['gov_col']}</b></div>
-                            <div style="font-size:13px; color:#475569;">Pu_1F = <b>{des['Pu_input']:.1f} t</b> (Design = <b>{des['Pu_ton']:.1f} t</b>)</div>
+                            <div style="font-size:13px; color:#475569;">Pu_1F = <b>{des['pu_1f']:.1f} t</b> (Total {num_floors}F = <b>{des['pu_tot']:.1f} t</b>)</div>
                             <hr style="margin:8px 0; border:0; border-top:1px solid #e2e8f0;">
                             <div style="font-size:17px; font-weight:800; color:#0f172a;">{des['b']:.0f} × {des['t']:.0f} cm</div>
                             <div style="font-size:14px; font-weight:700; color:#991b1b; margin-top:2px;">{des['main_steel_str']} (μ={des['mu_provided']:.2f}%)</div>
@@ -10053,6 +10223,26 @@ def render():
                         """,
                         unsafe_allow_html=True,
                     )
+
+            # Optional view: Detailed Design Table for ALL Individual Columns
+            if indiv_col_designs:
+                with st.expander(f"📋 Individual Columns Schedule — Detailed Design for All {len(indiv_col_designs)} Columns (جدول تصميم كافة أعمدة السقف)", expanded=False):
+                    indiv_table = []
+                    for ides in indiv_col_designs:
+                        indiv_table.append({
+                            "Column ID": ides["col_id"],
+                            "Grid": ides["grid"],
+                            "Location Type": ides["loc_type"],
+                            "Atrib (m²)": f"{ides['atrib']:.2f}",
+                            "Pu (1F) [ton]": f"{ides['pu_1f']:.2f}",
+                            f"Total Pu ({num_floors}F) [ton]": f"{ides['pu_tot']:.2f}",
+                            "Design Section b × t (cm)": f"{ides['b']:.0f} × {ides['t']:.0f}",
+                            "Main Rebar": f"{ides['main_steel_str']} (μ={ides['mu_provided']:.2f}%)",
+                            "Ties / Stirrups": ides["stirrups_str"],
+                            "Pu,cap (ton)": f"{ides['Pu_cap_t']:.2f}",
+                            "Util %": f"{ides['util_percent']:.1f} %",
+                        })
+                    render_styled_table(indiv_table)
 
             st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
             st.markdown("---")
@@ -10408,413 +10598,285 @@ def render():
                 sel_panel_data = unsafe_panels[sel_unsafe_idx]
 
                 # Solve optimization
-                opt_res = solve_deflection_optimization(sel_panel_data, DL_tot, LL, Fcu)
+                opt_res = solve_deflection_optimization(sel_panel_data, DL_tot, LL, Fcu, Fy=Fy)
 
-                # Comparison Table Header
-                st.markdown(
+                if opt_res.get("all_failed", False):
+                    # ── FAILURE ALERT: Trigger Audio Beep & Mandatory Slab Thickness Alert ──
+                    audio_beep_html = """
+                    <script>
+                    (function() {
+                        try {
+                            var AudioContext = window.AudioContext || window.webkitAudioContext;
+                            if (!AudioContext) return;
+                            var ctx = new AudioContext();
+                            function playBeep(freq, start, duration) {
+                                var osc = ctx.createOscillator();
+                                var gain = ctx.createGain();
+                                osc.type = 'sawtooth';
+                                osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+                                gain.gain.setValueAtTime(0.22, ctx.currentTime + start);
+                                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
+                                osc.connect(gain);
+                                gain.connect(ctx.destination);
+                                osc.start(ctx.currentTime + start);
+                                osc.stop(ctx.currentTime + start + duration);
+                            }
+                            playBeep(880, 0.05, 0.22);
+                            playBeep(880, 0.35, 0.22);
+                            playBeep(1175, 0.70, 0.45);
+                        } catch(e) {
+                            console.error("Audio beep error:", e);
+                        }
+                    })();
+                    </script>
                     """
-                    <div style="font-size:17px; font-weight:800; color:#f8fafc; margin-top:14px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-                        📋 جدول مقارنة بدائل التسليح المقترحة والنتائج المتوقعة (Optimization Summary Table)
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                    st.components.v1.html(audio_beep_html, height=0)
 
-                # Format rows
-                opt1_data = opt_res["opt1"]
-                opt2_data = opt_res["opt2"]
+                    st.markdown(
+                        f"""
+                        <div dir="rtl" style="background:linear-gradient(135deg, rgba(239, 68, 68, 0.22) 0%, rgba(185, 28, 28, 0.38) 100%); border:2.5px solid #ef4444; border-radius:12px; padding:20px 24px; margin-top:14px; margin-bottom:18px; text-align:right; box-shadow:0 8px 24px rgba(239, 68, 68, 0.25);">
+                            <div style="font-size:18.5px; font-weight:900; color:#fee2e2; display:flex; align-items:center; gap:10px;">
+                                🚨 تنبيه إنشائي: لا يوجد بديل عن زيادة تخانة البلاطة المسلحة لمقاومة الـ deflection
+                            </div>
+                            <div style="margin-top:12px; font-size:14.5px; color:#ffffff; line-height:1.9;">
+                                • <b>سبب عدم جدوى زيادة التسليح:</b> وصل حديد الشد للحد الأقصى الكودي <b>As_max = {opt_res['As_max']:.2f} cm²/m</b> (لضمان الانهيار الممطول ومنع الانهيار القصيف)، وتجاوز عدد الأسياخ الحد التنفيذي (10 أسياخ/متر لقطر Φ16 مم)، ومع ذلك ما زال سهم الانحناء غير آمن (<b>Δtotal = {opt_res['delta_curr_mm']:.2f} mm &gt; Δall = {opt_res['delta_allow_mm']:.2f} mm</b>).<br>
+                                • <b>الحل الهندسي الإلزامي الموصى به:</b> زيادة سُمك البلاطة الخرسانية فوراً إلى <b>ts,recommended = {opt_res['ts_rec_cm']} cm</b> (بزيادة <b>+{opt_res['ts_inc_cm']} cm</b> عن السُمك الحالي {ts:.0f} cm) لرفع الجساءة الفعالة بالتكعيب وتحقيق الأمان الكامل لسهم الانحناء طبقاً للكود المصري ECP 203.
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
-                inc_pct_opt1 = ((opt1_data["As_prop"] - opt_res["As_curr"]) / max(0.1, opt_res["As_curr"])) * 100.0 if opt1_data else 0.0
-                inc_pct_opt2 = ((opt2_data["As_prime_prop"] - opt_res["As_prime_curr"]) / max(0.1, opt_res["As_prime_curr"])) * 100.0 if opt2_data else 0.0
-
-                opt_table_data = [
-                    {
-                        "مسار الحل (Solution Option)": "1️⃣ البديل الأول (تكثيف حديد الشد السفلي)",
-                        "نوع التسليح المعدل (Modified Rebar)": "حديد الشد السفلي الإضافي (Extra Bottom Tension Steel As)",
-                        "التسليح الحالي (Current)": f"{opt_res['As_curr']:.2f} cm²/m ({opt_res['As_curr']*100:.0f} mm²/m)",
-                        "التسليح المقترح الجديد (Proposed)": f"{opt1_data['As_prop']:.2f} cm²/m ({opt1_data['config']})",
-                        "نسبة الزيادة (% Inc)": f"+{inc_pct_opt1:.1f} %",
-                        "سهم الانحناء المتوقع (Expected Δtotal)": f"{opt1_data['delta_tot']:.2f} mm",
-                        "الحد المسموح (Δall)": f"{opt_res['delta_allow_mm']:.2f} mm (Ln/250)",
-                        "حالة الأمان الجديدة (New Status)": "✅ Safe (آمن ومحقق للكود)" if opt1_data["is_safe"] else "⚠️ يحتاج زيادة السُمك",
-                    },
-                    {
-                        "مسار الحل (Solution Option)": "2️⃣ البديل الثاني (زيادة حديد الضغط العلوي)",
-                        "نوع التسليح المعدل (Modified Rebar)": "حديد الضغط العلوي بمنتصف البحر (Compression Steel A's)",
-                        "التسليح الحالي (Current)": f"{opt_res['As_prime_curr']:.2f} cm²/m ({opt_res['As_prime_curr']*100:.0f} mm²/m)",
-                        "التسليح المقترح الجديد (Proposed)": f"{opt2_data['As_prime_prop']:.2f} cm²/m ({opt2_data['config']})",
-                        "نسبة الزيادة (% Inc)": f"+{inc_pct_opt2:.1f} %",
-                        "سهم الانحناء المتوقع (Expected Δtotal)": f"{opt2_data['delta_tot']:.2f} mm",
-                        "الحد المسموح (Δall)": f"{opt_res['delta_allow_mm']:.2f} mm (Ln/250)",
-                        "حالة الأمان الجديدة (New Status)": "✅ Safe (آمن ومحقق للكود)" if opt2_data["is_safe"] else "⚠️ يحتاج دمج مع حديد الشد",
-                    }
-                ]
-                render_styled_table(opt_table_data, font_size_override=10.5)
-
-                st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
-
-                # Tabs for Curves & Cross-Section
-                tab_opt_c, tab_opt_s = st.tabs([
-                    "📈 المنحنى البياني لسهم الانحناء ومساحة الحديد (Deflection vs. Steel Area Curves)",
-                    "📐 القطاع الهندسي التفصيلي للبلاطة بمنتصف البحر (Cross Section Detail)",
-                ])
-
-                with tab_opt_c:
+                    # Display curves tab to visualize the As_max constraint
                     fig_opt_curve = generate_deflection_optimization_curves_sketch(
                         sel_panel_data, opt_res, DL_tot, LL, Fcu
                     )
                     st.pyplot(fig_opt_curve, clear_figure=True, use_container_width=True)
-
-                    buf_opt_c = io.BytesIO()
-                    fig_opt_curve.savefig(buf_opt_c, format="png", bbox_inches="tight", dpi=180)
-                    buf_opt_c.seek(0)
-                    st.download_button(
-                        label=f"📥 Download Deflection Optimization Curves — Panel {sel_panel_data['Panel ID']} (High-Res PNG)",
-                        data=buf_opt_c,
-                        file_name=f"{prefix}Deflection_Optimization_Curves_{sel_panel_data['Panel ID']}.png",
-                        mime="image/png",
-                        use_container_width=True,
-                        key=f"btn_dl_def_opt_curve_{sel_panel_data['Panel ID']}",
-                    )
                     plt.close(fig_opt_curve)
 
-                with tab_opt_s:
-                    fig_opt_sec = generate_deflection_rebar_cross_section_sketch(
-                        sel_panel_data, opt_res
+                else:
+                    # ── SUCCESS: Organized Comparison Table & Engineering Visualizations ──
+                    st.markdown(
+                        """
+                        <div style="font-size:17px; font-weight:800; color:#f8fafc; margin-top:14px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+                            📋 جدول مقارنة بدائل التسليح المعتمدة والنتائج المتوقعة (Optimization Summary Table)
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
                     )
-                    st.pyplot(fig_opt_sec, clear_figure=True, use_container_width=True)
 
-                    buf_opt_s = io.BytesIO()
-                    fig_opt_sec.savefig(buf_opt_s, format="png", bbox_inches="tight", dpi=180)
-                    buf_opt_s.seek(0)
-                    st.download_button(
-                        label=f"📥 Download Midspan Cross-Section Detail — Panel {sel_panel_data['Panel ID']} (High-Res PNG)",
-                        data=buf_opt_s,
-                        file_name=f"{prefix}Deflection_Midspan_Section_{sel_panel_data['Panel ID']}.png",
-                        mime="image/png",
-                        use_container_width=True,
-                        key=f"btn_dl_def_opt_sec_{sel_panel_data['Panel ID']}",
-                    )
-                    plt.close(fig_opt_sec)
+                    # Format rows
+                    opt1_data = opt_res["opt1"]
+                    opt2_data = opt_res["opt2"]
 
-    # ── 💰 BILL OF QUANTITIES (BOQ) ESTIMATE ─────────────────────────────────
-    with st.expander("💰 Material Take-off & BoQ Estimate (جدول حصر الكميات المبدئي)", expanded=False):
-        bq1, bq2, bq3, bq4 = st.columns(4)
-        with bq1:
-            st.markdown(
-                f"""
-                <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:15px; font-weight:600; color:#64748b; margin-bottom:4px;">Total Slab Area</div>
-                    <div style="font-size:19.5px; font-weight:700; color:#1e40af;">{boq['slab_area_m2']:.1f} m²</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        with bq2:
-            st.markdown(
-                f"""
-                <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:15px; font-weight:600; color:#64748b; margin-bottom:4px;">Concrete Volume</div>
-                    <div style="font-size:19.5px; font-weight:700; color:#1e40af;">{boq['concrete_vol_m3']:.2f} m³</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        with bq3:
-            st.markdown(
-                f"""
-                <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:15px; font-weight:600; color:#64748b; margin-bottom:4px;">Total Steel Weight</div>
-                    <div style="font-size:19.5px; font-weight:700; color:#1e40af;">{boq['total_steel_ton']:.2f} Ton</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        with bq4:
-            st.markdown(
-                f"""
-                <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:15px; font-weight:600; color:#64748b; margin-bottom:4px;">Steel Ratio</div>
-                    <div style="font-size:19.5px; font-weight:700; color:#1e40af;">{boq['steel_ratio_kg_m3']:.1f} kg/m³</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
+                    opt_table_data = []
+                    if opt1_data:
+                        inc_pct_opt1 = ((opt1_data["As_prop"] - opt_res["As_curr"]) / max(0.1, opt_res["As_curr"])) * 100.0
+                        opt_table_data.append({
+                            "مسار الحل (Solution Option)": "1️⃣ البديل الأول (تكثيف حديد الشد السفلي)",
+                            "نوع التسليح المعدل (Modified Rebar)": "حديد الشد السفلي الإضافي (Extra Bottom Tension Steel As)",
+                            "القطر المختار Φ": f"Φ {opt1_data['dia']} mm",
+                            "عدد الأسياخ / متر": f"{opt1_data['n_bars']} أسياخ / م",
+                            "مساحة التسليح الكلية": f"{opt1_data['As_prop']:.2f} cm²/m",
+                            "سهم الانحناء المتوقع (Δtotal)": f"{opt1_data['delta_tot']:.2f} mm",
+                            "الحد المسموح (Δall)": f"{opt_res['delta_allow_mm']:.2f} mm (Ln/250)",
+                            "حالة الأمان (Safety Status)": "✅ Safe (آمن ومحقق للكود)" if opt1_data["is_safe"] else "❌ غير محقق للحدود",
+                        })
 
-        # ── Table 1: Detailed Items Breakdown (جدول حصر بنود حديد التسليح والمواد) ──
-        st.markdown("##### 📋 1. جدول حصر بنود حديد التسليح والمواد (Reinforcement & Material Breakdown)")
-        items_table_data = []
-        for item in boq.get("items", []):
-            items_table_data.append({
-                "بند حديد التسليح / المادة (Material Component)": item["item_name"],
-                "قطر الحديد Φ (Bar Dia)": item["dia_str"],
-                "الكمية (Quantity)": item["qty_str"],
-                "إجمالي الطول (Total Length)": item["length_str"],
-                "المواصفات والملاحظات الإنشائية (Specification / Detailing Notes)": item["spec"],
-            })
-        render_styled_table(items_table_data)
+                    if opt2_data:
+                        inc_pct_opt2 = ((opt2_data["As_prime_prop"] - opt_res["As_prime_curr"]) / max(0.1, opt_res["As_prime_curr"])) * 100.0
+                        opt_table_data.append({
+                            "مسار الحل (Solution Option)": "2️⃣ البديل الثاني (زيادة حديد الضغط العلوي)",
+                            "نوع التسليح المعدل (Modified Rebar)": "حديد الضغط العلوي بمنتصف البحر (Compression Steel A's)",
+                            "القطر المختار Φ": f"Φ {opt2_data['dia']} mm",
+                            "عدد الأسياخ / متر": f"{opt2_data['n_bars']} أسياخ / م",
+                            "مساحة التسليح الكلية": f"{opt2_data['As_prime_prop']:.2f} cm²/m",
+                            "سهم الانحناء المتوقع (Δtotal)": f"{opt2_data['delta_tot']:.2f} mm",
+                            "الحد المسموح (Δall)": f"{opt_res['delta_allow_mm']:.2f} mm (Ln/250)",
+                            "حالة الأمان (Safety Status)": "✅ Safe (آمن ومحقق للكود)" if opt2_data["is_safe"] else "❌ غير محقق للحدود",
+                        })
 
-        st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
+                    render_styled_table(opt_table_data, font_size_override=10.5)
 
-        # ── Table 2: Final Totals by Bar Diameter & Grand Total (جدول إجمالي الكمية لكل قطر والإجمالي العام) ──
-        st.markdown("##### 📊 2. جدول إجمالي كميات الحديد لكل قطر والإجمالي الكلي (Total Quantities by Bar Diameter & Grand Total)")
-        dia_table_data = []
-        for dia_row in boq.get("by_dia", []):
-            dia_table_data.append({
-                "قطر السيخ Φ (Bar Dia)": dia_row["dia_str"],
-                "وزن المتر الطولي (kg/m')": f"{dia_row['unit_w_kg_m']:.3f}",
-                "إجمالي الطول (m')": dia_row["length_str"],
-                "إجمالي الوزن (kg)": dia_row["weight_kg_str"],
-                "إجمالي الوزن (Ton)": dia_row["weight_ton_str"],
-                "النسبة المئوية (%)": dia_row.get("percent_str", ""),
-                "الاستخدام الإنشائي في السقف (Applications in Slab)": dia_row.get("apps", "—"),
-            })
+                    st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
 
-        # Add prominent Grand Total Row
-        dia_table_data.append({
-            "قطر السيخ Φ (Bar Dia)": "📌 الإجمالي الكلي لحديد التسليح (Grand Total Rebar)",
-            "وزن المتر الطولي (kg/m')": "—",
-            "إجمالي الطول (m')": f"{boq.get('total_steel_len_m', 0.0):,.1f} m'",
-            "إجمالي الوزن (kg)": f"{boq.get('total_steel_kg', 0.0):,.1f} kg",
-            "إجمالي الوزن (Ton)": f"{boq.get('total_steel_ton', 0.0):.3f} Ton",
-            "النسبة المئوية (%)": "100.0 %",
-            "الاستخدام الإنشائي في السقف (Applications in Slab)": f"معدل الاستهلاك: {boq.get('steel_ratio_kg_m3', 0.0):.1f} kg/m³ خرسانة",
-        })
+                    # Tabs for Curves & Cross-Section
+                    tab_opt_c, tab_opt_s = st.tabs([
+                        "📈 المنحنى البياني لسهم الانحناء ومساحة الحديد (Deflection vs. Steel Area Curves)",
+                        "📐 القطاع الهندسي التفصيلي للبلاطة بمنتصف البحر (Cross Section Detail)",
+                    ])
 
-        render_styled_table(dia_table_data)
+                    with tab_opt_c:
+                        fig_opt_curve = generate_deflection_optimization_curves_sketch(
+                            sel_panel_data, opt_res, DL_tot, LL, Fcu
+                        )
+                        st.pyplot(fig_opt_curve, clear_figure=True, use_container_width=True)
 
-        st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
+                        buf_opt_c = io.BytesIO()
+                        fig_opt_curve.savefig(buf_opt_c, format="png", bbox_inches="tight", dpi=180)
+                        buf_opt_c.seek(0)
+                        st.download_button(
+                            label=f"📥 Download Deflection Optimization Curves — Panel {sel_panel_data['Panel ID']} (High-Res PNG)",
+                            data=buf_opt_c,
+                            file_name=f"{prefix}Deflection_Optimization_Curves_{sel_panel_data['Panel ID']}.png",
+                            mime="image/png",
+                            use_container_width=True,
+                            key=f"btn_dl_def_opt_curve_{sel_panel_data['Panel ID']}",
+                        )
+                        plt.close(fig_opt_curve)
 
-        # ── Grand Total Rebar Metric Panels (بانيل الإجمالي الكلي لحديد التسليح) ──
-        rc1, rc2, rc3, rc4 = st.columns(4)
-        with rc1:
-            st.markdown(
-                f"""
-                <div style="background:#f5f3ff; border:1.5px solid #c4b5fd; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:14px; font-weight:600; color:#6d28d9; margin-bottom:4px;">إجمالي وزن الحديد (Total Steel)</div>
-                    <div style="font-size:20px; font-weight:700; color:#5b21b6;">{boq.get('total_steel_ton', 0.0):.3f} Ton</div>
-                    <div style="font-size:12px; color:#475569; margin-top:2px;">{boq.get('total_steel_kg', 0.0):,.1f} kg</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        with rc2:
-            st.markdown(
-                f"""
-                <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:14px; font-weight:600; color:#1e40af; margin-bottom:4px;">إجمالي أطوال الأسياخ (Total Length)</div>
-                    <div style="font-size:20px; font-weight:700; color:#1e3a8a;">{boq.get('total_steel_len_m', 0.0):,.1f} m'</div>
-                    <div style="font-size:12px; color:#475569; margin-top:2px;">مجموع أطوال كافة الأقطار</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        with rc3:
-            st.markdown(
-                f"""
-                <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:14px; font-weight:600; color:#15803d; margin-bottom:4px;">معدل التسليح للخرسانة (Steel Ratio)</div>
-                    <div style="font-size:20px; font-weight:700; color:#166534;">{boq.get('steel_ratio_kg_m3', 0.0):.1f} kg/m³</div>
-                    <div style="font-size:12px; color:#475569; margin-top:2px;">نسبة الحديد لحجم الخرسانة</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        with rc4:
-            st.markdown(
-                f"""
-                <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:14px; font-weight:600; color:#b45309; margin-bottom:4px;">معدل التسليح للمسطح (Per Area)</div>
-                    <div style="font-size:20px; font-weight:700; color:#92400e;">{(boq.get('total_steel_kg', 0.0)/boq['slab_area_m2']) if boq.get('slab_area_m2') else 0:.1f} kg/m²</div>
-                    <div style="font-size:12px; color:#475569; margin-top:2px;">لكل م² من مسطح السقف</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+                    with tab_opt_s:
+                        fig_opt_sec = generate_deflection_rebar_cross_section_sketch(
+                            sel_panel_data, opt_res
+                        )
+                        st.pyplot(fig_opt_sec, clear_figure=True, use_container_width=True)
 
-        st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
+                        buf_opt_s = io.BytesIO()
+                        fig_opt_sec.savefig(buf_opt_s, format="png", bbox_inches="tight", dpi=180)
+                        buf_opt_s.seek(0)
+                        st.download_button(
+                            label=f"📥 Download Midspan Cross-Section Detail — Panel {sel_panel_data['Panel ID']} (High-Res PNG)",
+                            data=buf_opt_s,
+                            file_name=f"{prefix}Deflection_Midspan_Section_{sel_panel_data['Panel ID']}.png",
+                            mime="image/png",
+                            use_container_width=True,
+                            key=f"btn_dl_def_opt_sec_{sel_panel_data['Panel ID']}",
+                        )
+                        plt.close(fig_opt_sec)
+    # ── 📊 الحصر التقريبي للكميات — APPROXIMATE QUANTITY SURVEY ──────────────
+    # 1. Slab Quantities (السقف)
+    slab_area_val    = boq.get("slab_area_m2", 0.0)
+    slab_conc_val    = boq.get("concrete_vol_m3", 0.0)
+    slab_steel_kg    = boq.get("total_steel_kg", 0.0)
+    slab_steel_ton   = boq.get("total_steel_ton", 0.0)
+    slab_cement_ton  = boq.get("cement_ton", 0.0)
+    slab_cement_bags = boq.get("cement_bags", 0)
+    slab_gravel_val  = boq.get("gravel_m3", 0.0)
+    slab_sand_val    = boq.get("sand_m3", 0.0)
+    slab_ratio_val   = boq.get("steel_ratio_kg_m3", 0.0)
 
-        # ── 🧱 3. جدول حصر كميات الخرسانة والمواد الأولية (Concrete & Raw Materials) ──
-        st.markdown("##### 🧱 3. جدول حصر كميات الخرسانة والمواد الأولية (Concrete & Raw Materials Estimate)")
+    # 2. Columns Quantities (الأعمدة لجميع الأدوار)
+    cols_conc_1f_val      = tot_conc_vol_1f
+    cols_steel_kg_1f_val  = tot_steel_kg_1f
+    cols_steel_ton_1f_val = tot_steel_kg_1f / 1000.0
 
-        mc1, mc2, mc3, mc4 = st.columns(4)
-        with mc1:
-            st.markdown(
-                f"""
-                <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:14px; font-weight:600; color:#15803d; margin-bottom:4px;">حجم الخرسانة المسلحة (Concrete)</div>
-                    <div style="font-size:20px; font-weight:700; color:#166534;">{boq['concrete_vol_m3']:.2f} m³</div>
-                    <div style="font-size:12px; color:#475569; margin-top:2px;">مسطح {boq['slab_area_m2']:.1f} m² × سمك {ts:.0f} cm</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        with mc2:
-            st.markdown(
-                f"""
-                <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:14px; font-weight:600; color:#1e40af; margin-bottom:4px;">كمية الأسمنت (Cement)</div>
-                    <div style="font-size:20px; font-weight:700; color:#1e3a8a;">{boq['cement_ton']:.2f} Ton</div>
-                    <div style="font-size:12px; color:#475569; margin-top:2px;">{boq['cement_bags']} شكارة ({boq['cement_content_kg_m3']:.0f} kg/m³)</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        with mc3:
-            st.markdown(
-                f"""
-                <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:14px; font-weight:600; color:#b45309;">كمية الزلط (Gravel)</div>
-                    <div style="font-size:20px; font-weight:700; color:#92400e;">{boq['gravel_m3']:.2f} m³</div>
-                    <div style="font-size:12px; color:#475569; margin-top:2px;">بمعدل 0.80 m³ لكل 1 m³ خرسانة</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        with mc4:
-            st.markdown(
-                f"""
-                <div style="background:#fef2f2; border:1.5px solid #fecaca; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:14px; font-weight:600; color:#b91c1c;">كمية الرمل (Sand)</div>
-                    <div style="font-size:20px; font-weight:700; color:#991b1b;">{boq['sand_m3']:.2f} m³</div>
-                    <div style="font-size:12px; color:#475569; margin-top:2px;">بمعدل 0.40 m³ لكل 1 m³ خرسانة</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+    cols_conc_tot_val      = cols_conc_1f_val * num_floors
+    cols_steel_kg_tot_val  = cols_steel_kg_1f_val * num_floors
+    cols_steel_ton_tot_val = cols_steel_ton_1f_val * num_floors
+    cols_cement_tot_ton    = (cols_conc_tot_val * 350.0) / 1000.0
+    cols_cement_tot_bags   = int(round(cols_cement_tot_ton * 1000.0 / 50.0))
+    cols_gravel_tot_val    = cols_conc_tot_val * 0.80
+    cols_sand_tot_val      = cols_conc_tot_val * 0.40
+    cols_ratio_val         = (cols_steel_kg_tot_val / cols_conc_tot_val) if cols_conc_tot_val > 0 else 0.0
 
-        st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
+    # 3. Grand Total Quantities (السقف + الأعمدة)
+    grand_conc_val      = slab_conc_val + cols_conc_tot_val
+    grand_steel_kg_val  = slab_steel_kg + cols_steel_kg_tot_val
+    grand_steel_ton_val = slab_steel_ton + cols_steel_ton_tot_val
+    grand_cement_ton    = slab_cement_ton + cols_cement_tot_ton
+    grand_cement_bags   = slab_cement_bags + cols_cement_tot_bags
+    grand_gravel_val    = slab_gravel_val + cols_gravel_tot_val
+    grand_sand_val      = slab_sand_val + cols_sand_tot_val
+    grand_ratio_val     = (grand_steel_kg_val / grand_conc_val) if grand_conc_val > 0 else 0.0
 
-        concrete_mat_df = pd.DataFrame([
-            {
-                "المادة / المكون الإنشائي (Material Component)": "1. الخرسانة المسلحة الجاهزة (Reinforced Concrete Volume)",
-                "الكمية المحسوبة (Quantity)": f"{boq['concrete_vol_m3']:.2f} m³",
-                "الوحدة (Unit)": "متر مكعب (m³)",
-                "معدل الخلط / النسب المعيارية (Mix Proportion / Standard)": f"مسطح البلاطة الصافي: {boq['slab_area_m2']:.1f} m² × سمك {ts:.0f} cm",
-                "ملاحظات التنفيذ والتوريد (Procurement & Site Notes)": f"رتبة الخرسانة المطلوبة Fcu = {Fcu:.0f} kg/cm² (صب بالمضخة Pump)",
-            },
-            {
-                "المادة / المكون الإنشائي (Material Component)": "2. الأسمنت البورتلاندي العادي (Ordinary Portland Cement)",
-                "الكمية المحسوبة (Quantity)": f"{boq['cement_ton']:.2f} Ton ({boq['cement_kg']:,.0f} kg)",
-                "الوحدة (Unit)": "طن (Ton) / شكارة (Bag)",
-                "معدل الخلط / النسب المعيارية (Mix Proportion / Standard)": f"{boq['cement_content_kg_m3']:.0f} kg/m³ ({boq['cement_content_kg_m3']/50:.0f} شكاير / م³ خرسانة)",
-                "ملاحظات التنفيذ والتوريد (Procurement & Site Notes)": f"إجمالي عدد الشكائر: {boq['cement_bags']:,} شكارة (وزن الشكارة 50 كجم)",
-            },
-            {
-                "المادة / المكون الإنشائي (Material Component)": "3. الزلط / الركام الكبير (Gravel / Coarse Aggregate)",
-                "الكمية المحسوبة (Quantity)": f"{boq['gravel_m3']:.2f} m³",
-                "الوحدة (Unit)": "متر مكعب (m³)",
-                "معدل الخلط / النسب المعيارية (Mix Proportion / Standard)": "0.80 m³ زلط لكل 1.0 m³ خرسانة مسلحة",
-                "ملاحظات التنفيذ والتوريد (Procurement & Site Notes)": "زلط نظيف متدرج الحبيبات خالٍ من الشوائب والمواد العضوية",
-            },
-            {
-                "المادة / المكون الإنشائي (Material Component)": "4. الرمل الحرش / الركام الصغير (Clean Coarse Sand)",
-                "الكمية المحسوبة (Quantity)": f"{boq['sand_m3']:.2f} m³",
-                "الوحدة (Unit)": "متر مكعب (m³)",
-                "معدل الخلط / النسب المعيارية (Mix Proportion / Standard)": "0.40 m³ رمل لكل 1.0 m³ خرسانة مسلحة (نصف حجم الزلط)",
-                "ملاحظات التنفيذ والتوريد (Procurement & Site Notes)": "رمل حرش نظيف متدرج خالٍ من الطفلة والأملاح الضارة",
-            },
-            {
-                "المادة / المكون الإنشائي (Material Component)": "5. مياه الخلط التقريبية (Mixing Water)",
-                "الكمية المحسوبة (Quantity)": f"{boq['water_liters']:,.0f} لتر ({boq['water_liters']/1000:.2f} m³)",
-                "الوحدة (Unit)": "لتر (Liters) / متر مكعب (m³)",
-                "معدل الخلط / النسب المعيارية (Mix Proportion / Standard)": f"175 لتر / م³ (نسبة مياه/أسمنت w/c ≈ 0.50)",
-                "ملاحظات التنفيذ والتوريد (Procurement & Site Notes)": "مياه صالحة للشرب وخالية من الشوائب والزيوت",
-            },
-        ])
-        render_styled_table(concrete_mat_df)
+    # 4. Detailed Diameter Breakdown (Slab, Columns & Combined)
+    all_dias_set = set()
+    slab_dia_map = {}
+    for d_row in boq.get("by_dia", []):
+        d_val = d_row.get("dia_mm") or d_row.get("dia")
+        if d_val:
+            all_dias_set.add(d_val)
+            slab_dia_map[d_val] = {
+                "weight_kg": d_row.get("weight_kg", 0.0),
+                "weight_ton": d_row.get("weight_ton", 0.0),
+                "apps": d_row.get("apps", "—"),
+            }
 
-    # ── 🏆 FINAL SURVEY FOR COLUMNS & ROOF (الحصر النهائي للسقف والأعمدة) ───────────
-    slab_conc_1f = boq.get("concrete_vol_m3", 0.0)
-    slab_steel_kg_1f = boq.get("total_steel_kg", 0.0)
-    slab_steel_ton_1f = boq.get("total_steel_ton", 0.0)
-    slab_cement_ton_1f = boq.get("cement_ton", 0.0)
-    slab_cement_bags_1f = boq.get("cement_bags", 0)
-    slab_gravel_1f = boq.get("gravel_m3", 0.0)
-    slab_sand_1f = boq.get("sand_m3", 0.0)
-    slab_ratio_1f = boq.get("steel_ratio_kg_m3", 0.0)
+    cols_dia_map = {}
+    if 'des_map' in locals() and des_map:
+        for m_key, des_item in des_map.items():
+            cnt = cnt_int if m_key == "C_int" else (cnt_edge if m_key == "C_edge" else cnt_corner)
+            if cnt > 0:
+                phi_m = des_item["Phi"]
+                phi_st = des_item["Phi_st"]
+                all_dias_set.add(phi_m)
+                all_dias_set.add(phi_st)
 
-    cols_conc_1f = tot_conc_vol_1f
-    cols_steel_kg_1f = tot_steel_kg_1f
-    cols_steel_ton_1f = tot_steel_kg_1f / 1000.0
-    cols_cement_ton_1f = cement_ton_cols
-    cols_cement_bags_1f = cement_bags_cols
-    cols_gravel_1f = gravel_m3_cols
-    cols_sand_1f = sand_m3_cols
-    cols_ratio_1f = tot_ratio_1f
+                H_m_col = col_H / 100.0
+                L_bar_col = H_m_col + max(1.0, (50.0 * phi_m) / 1000.0)
+                unit_w_m = (phi_m ** 2) / 162.0
+                wt_main_bld = des_item["n_bars"] * L_bar_col * unit_w_m * cnt * num_floors
 
-    comb_conc_1f = slab_conc_1f + cols_conc_1f
-    comb_steel_kg_1f = slab_steel_kg_1f + cols_steel_kg_1f
-    comb_steel_ton_1f = slab_steel_ton_1f + cols_steel_ton_1f
-    comb_cement_ton_1f = slab_cement_ton_1f + cols_cement_ton_1f
-    comb_cement_bags_1f = slab_cement_bags_1f + cols_cement_bags_1f
-    comb_gravel_1f = slab_gravel_1f + cols_gravel_1f
-    comb_sand_1f = slab_sand_1f + cols_sand_1f
-    comb_ratio_1f = (comb_steel_kg_1f / comb_conc_1f) if comb_conc_1f > 0 else 0.0
+                n_ties_col = max(5, int(math.ceil(H_m_col * des_item["n_st_per_m"])))
+                tie_perim_col = 2.0 * (((des_item["b"] - 5.0) + (des_item["t"] - 5.0)) / 100.0) + 0.20
+                unit_w_st = (phi_st ** 2) / 162.0
+                wt_st_bld = n_ties_col * tie_perim_col * unit_w_st * cnt * num_floors
 
-    # Multi-storey figures
-    comb_conc_bld = comb_conc_1f * num_floors
-    comb_steel_ton_bld = comb_steel_ton_1f * num_floors
-    comb_steel_kg_bld = comb_steel_kg_1f * num_floors
-    comb_cement_ton_bld = comb_cement_ton_1f * num_floors
-    comb_cement_bags_bld = comb_cement_bags_1f * num_floors
-    comb_gravel_bld = comb_gravel_1f * num_floors
-    comb_sand_bld = comb_sand_1f * num_floors
+                if phi_m not in cols_dia_map:
+                    cols_dia_map[phi_m] = {"weight_kg": 0.0, "apps": "تسليح طولي رئيسي للأعمدة (Main Column Rebar)"}
+                cols_dia_map[phi_m]["weight_kg"] += wt_main_bld
 
-    with st.expander("🏆 Final Survey for Columns & Roof (الحصر النهائي للسقف والأعمدة)", expanded=False):
+                if phi_st not in cols_dia_map:
+                    cols_dia_map[phi_st] = {"weight_kg": 0.0, "apps": "كانات وأطواق الأعمدة (Column Stirrup Ties)"}
+                cols_dia_map[phi_st]["weight_kg"] += wt_st_bld
+
+    with st.expander("📊 الحصر التقريبي للكميات (Approximate Quantity survey)", expanded=False):
         st.markdown(
             f"""
-            <div style='background:#f8fafc; border-left:4px solid #0284c7; padding:10px 14px; border-radius:6px; margin-bottom:12px;'>
-                <b>📊 الحصر الشامل والنهائي لجميع المواد الإنشائية (Total Material Take-off & Survey):</b><br>
-                يجمع هذا القسم كافة الكميات والمواد المستهلكة في <b>البلاطة اللاكمرية (السقف)</b> بالإضافة إلى <b>كامل الأعمدة الخرسانية ({tot_active_cols} عمود)</b> للدور الواحد ولإجمالي كامل المبنى (<b>{num_floors} طوابق</b>).
+            <div style="background:#f8fafc; border-left:4px solid #1e40af; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
+                <div style="font-size:1.0rem; font-weight:800; color:#1e3a8a;">
+                    📋 جدول الحصر الشامل لكميات ومواد السقف والأعمدة والإجمالي الكلي:
+                </div>
+                <div style="font-size:0.9rem; color:#475569; margin-top:3px;">
+                    حصر دقيق لكميات الخرسانة المسلحة، والحديد (لكل قطر وإجمالي)، والأسمنت، والزلط، والرمل لسقف البلاطة اللاكمرية ولأعمدة المبنى بالكامل لعدد <b>{num_floors} طوابق</b>.
+                </div>
             </div>
             """,
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
 
         # ── KPI Summary Cards ──
-        fs_c1, fs_c2, fs_c3, fs_c4 = st.columns(4)
-        with fs_c1:
+        kpi_c1, kpi_c2, kpi_c3, kpi_c4 = st.columns(4)
+        with kpi_c1:
             st.markdown(
                 f"""
                 <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:10px 14px; text-align:center;">
                     <div style="font-size:13px; font-weight:600; color:#15803d; margin-bottom:4px;">إجمالي حجم الخرسانة المسلحة</div>
-                    <div style="font-size:19.5px; font-weight:700; color:#166534;">{comb_conc_1f:.2f} m³</div>
-                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">ولـ {num_floors} طابق: <b>{comb_conc_bld:.2f} m³</b></div>
+                    <div style="font-size:20px; font-weight:800; color:#166534;">{grand_conc_val:.2f} m³</div>
+                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">سقف: {slab_conc_val:.1f} m³ │ أعمدة: {cols_conc_tot_val:.1f} m³</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-        with fs_c2:
+        with kpi_c2:
             st.markdown(
                 f"""
                 <div style="background:#f5f3ff; border:1.5px solid #c4b5fd; border-radius:8px; padding:10px 14px; text-align:center;">
                     <div style="font-size:13px; font-weight:600; color:#6d28d9; margin-bottom:4px;">إجمالي وزن حديد التسليح</div>
-                    <div style="font-size:19.5px; font-weight:700; color:#5b21b6;">{comb_steel_ton_1f:.3f} Ton</div>
-                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">ولـ {num_floors} طابق: <b>{comb_steel_ton_bld:.3f} Ton</b></div>
+                    <div style="font-size:20px; font-weight:800; color:#5b21b6;">{grand_steel_ton_val:.3f} Ton</div>
+                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">سقف: {slab_steel_ton:.2f} t │ أعمدة: {cols_steel_ton_tot_val:.2f} t</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-        with fs_c3:
+        with kpi_c3:
             st.markdown(
                 f"""
                 <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:10px 14px; text-align:center;">
                     <div style="font-size:13px; font-weight:600; color:#1e40af; margin-bottom:4px;">إجمالي كمية الأسمنت</div>
-                    <div style="font-size:19.5px; font-weight:700; color:#1e3a8a;">{comb_cement_ton_1f:.2f} Ton</div>
-                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">{comb_cement_bags_1f:,} شكارة (ولـ {num_floors} طابق: <b>{comb_cement_ton_bld:.2f} t</b>)</div>
+                    <div style="font-size:20px; font-weight:800; color:#1e3a8a;">{grand_cement_ton:.2f} Ton</div>
+                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">{grand_cement_bags:,} شكارة (50 كجم)</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-        with fs_c4:
+        with kpi_c4:
             st.markdown(
                 f"""
                 <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:13px; font-weight:600; color:#b45309; margin-bottom:4px;">متوسط معدل التسليح الإجمالي</div>
-                    <div style="font-size:19.5px; font-weight:700; color:#92400e;">{comb_ratio_1f:.1f} kg/m³</div>
-                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">زلط: {comb_gravel_1f:.1f} m³ | رمل: {comb_sand_1f:.1f} m³</div>
+                    <div style="font-size:13px; font-weight:600; color:#b45309; margin-bottom:4px;">متوسط معدل التسليح</div>
+                    <div style="font-size:20px; font-weight:800; color:#92400e;">{grand_ratio_val:.1f} kg/m³</div>
+                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">زلط: {grand_gravel_val:.1f} m³ │ رمل: {grand_sand_val:.1f} m³</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -10822,55 +10884,116 @@ def render():
 
         st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
 
-        # ── Table: إجماليات وتفصيل مواد البلاطات والأعمدة والإجمالي الموحد ──
-        st.markdown("##### 📋 جدول تفصيل وإجماليات المواد لكل عنصر إنشائي (Slab & Columns Materials Breakdown):")
-        elements_breakdown_data = [
+        # ── Table 1: Main Materials Quantity Survey Table ──
+        st.markdown("##### 📋 1. جدول الحصر التقريبي العام للكميات والمواد الإنشائية (General Quantity Survey Table)")
+        
+        # ── Prominent Advisory Banner directly below Table 1 title ──
+        st.markdown(
+            """
+            <div style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 2.5px solid #f59e0b; border-radius: 10px; padding: 14px 20px; margin-top: 8px; margin-bottom: 16px; text-align: center; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.20);">
+                <div style="font-size: 1.18rem; font-weight: 800; color: #92400e; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                    <span style="font-size: 1.45rem;">⚠️</span>
+                    <span>تنبيه وإرشاد هندسي هام:</span>
+                </div>
+                <div style="font-size: 1.12rem; font-weight: 800; color: #b45309; margin-top: 6px; line-height: 1.7;">
+                    إن هذه الحسابات استرشادية طبقاً للتصميم، يرجى استخدام موديول حصر الكميات لإدخال الكميات التي سيتم التنفيذ طبقاً لها على أرض الواقع.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        main_survey_data = [
             {
-                "العنصر الإنشائي (Structural Element)": f"1. سقف البلاطة اللاكمرية (Flat Slab ts={ts:.0f}cm)",
-                "حجم الخرسانة (m³)": f"{slab_conc_1f:.2f} m³",
-                "وزن الحديد (Ton)": f"{slab_steel_ton_1f:.3f} Ton",
-                "وزن الحديد (kg)": f"{slab_steel_kg_1f:,.1f} kg",
-                "الأسمنت (Ton)": f"{slab_cement_ton_1f:.2f} Ton",
-                "الأسمنت (شكارة 50kg)": f"{slab_cement_bags_1f:,} شكارة",
-                "الزلط (m³)": f"{slab_gravel_1f:.2f} m³",
-                "الرمل (m³)": f"{slab_sand_1f:.2f} m³",
-                "معدل التسليح (kg/m³)": f"{slab_ratio_1f:.1f} kg/m³",
+                "البند / المكون الإنشائي (Item / Material)": "1. حجم الخرسانة المسلحة (Reinforced Concrete Volume)",
+                "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_conc_val:.2f} m³",
+                f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_conc_tot_val:.2f} m³",
+                "الإجمالي الشامل (Grand Total)": f"{grand_conc_val:.2f} m³",
+                "الوحدة (Unit)": "متر مكعب (m³)",
+                "الملاحظات والمواصفات (Notes & Specs)": f"مسطح السقف الصافي {slab_area_val:.1f} m² × سمك {ts:.0f} cm + كامل الأعمدة ({tot_active_cols} عمود)",
             },
             {
-                "العنصر الإنشائي (Structural Element)": f"2. أعمدة المسقط الإنشائي ({tot_active_cols} عمود)",
-                "حجم الخرسانة (m³)": f"{cols_conc_1f:.2f} m³",
-                "وزن الحديد (Ton)": f"{cols_steel_ton_1f:.3f} Ton",
-                "وزن الحديد (kg)": f"{cols_steel_kg_1f:,.1f} kg",
-                "الأسمنت (Ton)": f"{cols_cement_ton_1f:.2f} Ton",
-                "الأسمنت (شكارة 50kg)": f"{cols_cement_bags_1f:,} شكارة",
-                "الزلط (m³)": f"{cols_gravel_1f:.2f} m³",
-                "الرمل (m³)": f"{cols_sand_1f:.2f} m³",
-                "معدل التسليح (kg/m³)": f"{cols_ratio_1f:.1f} kg/m³",
+                "البند / المكون الإنشائي (Item / Material)": "2. إجمالي وزن حديد التسليح (Total Reinforcement Steel)",
+                "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
+                f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
+                "الإجمالي الشامل (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
+                "الوحدة (Unit)": "طن (Ton) / كجم (kg)",
+                "الملاحظات والمواصفات (Notes & Specs)": f"شامل الشبكة الأساسية والإضافي والكوابيل + حديد الأعمدة والكانات (تفصيل الأقطار بالجدول 2)",
             },
             {
-                "العنصر الإنشائي (Structural Element)": "📌 الإجمالي الموحد للدور الواحد (Total 1 Floor)",
-                "حجم الخرسانة (m³)": f"{comb_conc_1f:.2f} m³",
-                "وزن الحديد (Ton)": f"{comb_steel_ton_1f:.3f} Ton",
-                "وزن الحديد (kg)": f"{comb_steel_kg_1f:,.1f} kg",
-                "الأسمنت (Ton)": f"{comb_cement_ton_1f:.2f} Ton",
-                "الأسمنت (شكارة 50kg)": f"{comb_cement_bags_1f:,} شكارة",
-                "الزلط (m³)": f"{comb_gravel_1f:.2f} m³",
-                "الرمل (m³)": f"{comb_sand_1f:.2f} m³",
-                "معدل التسليح (kg/m³)": f"{comb_ratio_1f:.1f} kg/m³",
+                "البند / المكون الإنشائي (Item / Material)": "3. كمية الأسمنت البورتلاندي (Portland Cement)",
+                "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_cement_ton:.2f} Ton ({slab_cement_bags:,} شكارة)",
+                f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_cement_tot_ton:.2f} Ton ({cols_cement_tot_bags:,} شكارة)",
+                "الإجمالي الشامل (Grand Total)": f"{grand_cement_ton:.2f} Ton ({grand_cement_bags:,} شكارة)",
+                "الوحدة (Unit)": "طن (Ton) / شكارة",
+                "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 350 كجم أسمنت (7 شكاير وزن 50 كجم) لكل 1.0 m³ خرسانة مسلحة",
             },
             {
-                "العنصر الإنشائي (Structural Element)": f"🏢 الإجمالي لكامل المبنى ({num_floors} طوابق)",
-                "حجم الخرسانة (m³)": f"{comb_conc_bld:.2f} m³",
-                "وزن الحديد (Ton)": f"{comb_steel_ton_bld:.3f} Ton",
-                "وزن الحديد (kg)": f"{comb_steel_kg_bld:,.1f} kg",
-                "الأسمنت (Ton)": f"{comb_cement_ton_bld:.2f} Ton",
-                "الأسمنت (شكارة 50kg)": f"{comb_cement_bags_bld:,} شكارة",
-                "الزلط (m³)": f"{comb_gravel_bld:.2f} m³",
-                "الرمل (m³)": f"{comb_sand_bld:.2f} m³",
-                "معدل التسليح (kg/m³)": f"{comb_ratio_1f:.1f} kg/m³",
+                "البند / المكون الإنشائي (Item / Material)": "4. كمية الزلط / الركام الكبير (Gravel / Coarse Aggregate)",
+                "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_gravel_val:.2f} m³",
+                f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_gravel_tot_val:.2f} m³",
+                "الإجمالي الشامل (Grand Total)": f"{grand_gravel_val:.2f} m³",
+                "الوحدة (Unit)": "متر مكعب (m³)",
+                "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.80 m³ زلط متدرج ونظيف لكل 1.0 m³ خرسانة مسلحة",
+            },
+            {
+                "البند / المكون الإنشائي (Item / Material)": "5. كمية الرمل الحرش / الركام الصغير (Clean Sand)",
+                "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_sand_val:.2f} m³",
+                f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_sand_tot_val:.2f} m³",
+                "الإجمالي الشامل (Grand Total)": f"{grand_sand_val:.2f} m³",
+                "الوحدة (Unit)": "متر مكعب (m³)",
+                "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.40 m³ رمل حرش نظيف لكل 1.0 m³ خرسانة مسلحة (نصف حجم الزلط)",
+            },
+            {
+                "البند / المكون الإنشائي (Item / Material)": "6. معدل استهلاك الحديد (Steel Consumption Ratio)",
+                "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_ratio_val:.1f} kg/m³",
+                f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_ratio_val:.1f} kg/m³",
+                "الإجمالي الشامل (Grand Total)": f"{grand_ratio_val:.1f} kg/m³",
+                "الوحدة (Unit)": "كجم / م³ خرسانة",
+                "الملاحظات والمواصفات (Notes & Specs)": f"معدل التسليح للمسطح بالسقف: {(slab_steel_kg/slab_area_val) if slab_area_val else 0:.1f} kg/m²",
             },
         ]
-        render_styled_table(elements_breakdown_data)
+        render_styled_table(main_survey_data)
+        st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
+
+        # ── Table 2: Detailed Steel Reinforcement by Bar Diameter (جدول تفصيل حديد التسليح لكل قطر) ──
+        st.markdown("##### 🔩 2. جدول تفصيل أوزان حديد التسليح لكل قطر والإجمالي الكلي (Steel Breakdown by Bar Diameter)")
+        dia_table_rows = []
+        for d in sorted(all_dias_set):
+            s_kg = slab_dia_map.get(d, {}).get("weight_kg", 0.0)
+            s_ton = s_kg / 1000.0
+            c_kg = cols_dia_map.get(d, {}).get("weight_kg", 0.0)
+            c_ton = c_kg / 1000.0
+            t_kg = s_kg + c_kg
+            t_ton = t_kg / 1000.0
+            pct = (t_kg / max(0.001, grand_steel_kg_val)) * 100.0
+
+            sources_list = []
+            if s_kg > 0:
+                sources_list.append(f"السقف: {slab_dia_map[d].get('apps', '—')}")
+            if c_kg > 0:
+                sources_list.append(f"الأعمدة: {cols_dia_map[d].get('apps', '—')}")
+
+            dia_table_rows.append({
+                "قطر السيخ Φ (Bar Dia)": f"Φ {d} mm",
+                "وزن المتر الطولي (kg/m')": f"{(d**2)/162.0:.4f} kg/m'",
+                "حديد السقف (Slab Steel)": f"{s_ton:.3f} Ton ({s_kg:,.1f} kg)" if s_kg > 0 else "—",
+                f"حديد الأعمدة ({num_floors}F)": f"{c_ton:.3f} Ton ({c_kg:,.1f} kg)" if c_kg > 0 else "—",
+                "الإجمالي الكلي (Grand Total)": f"{t_ton:.3f} Ton ({t_kg:,.1f} kg)",
+                "النسبة (%)": f"{pct:.1f} %",
+                "مواقع الاستخدام في المشروع (Applications)": " │ ".join(sources_list) if sources_list else "—",
+            })
+
+        dia_table_rows.append({
+            "قطر السيخ Φ (Bar Dia)": "📌 TOTAL STEEL (إجمالي حديد التسليح بالكامل)",
+            "وزن المتر الطولي (kg/m')": "—",
+            "حديد السقف (Slab Steel)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
+            f"حديد الأعمدة ({num_floors}F)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
+            "الإجمالي الكلي (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
+            "النسبة (%)": "100.0 %",
+            "مواقع الاستخدام في المشروع (Applications)": f"متوسط استهلاك المشروع بالكامل: {grand_ratio_val:.1f} kg/m³ خرسانة",
+        })
+        render_styled_table(dia_table_rows)
 
     st.markdown("---")
 
