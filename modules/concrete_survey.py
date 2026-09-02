@@ -1221,7 +1221,7 @@ if hasattr(st, "dialog"):
                     <span>صفارة إنذار: إجهاد الخرسانة المدخل أقل من الحد القياسي ({fcu_val:.0f} kg/cm²)!</span>
                 </div>
                 <div style="font-size:15.5px; color:#7f1d1d; line-height:1.7;">
-                    لقد قمت بإدخال إجهاد خرسانة <b style="color:#b91c1c; font-size:18px;" dir="ltr">{fcu_val:.0f} kg/cm²</b>، وهو <b>أقل من الإجهاد القياسي للخرسانة المسلحة</b> <b style="color:#15803d; font-size:18px;" dir="ltr">(350 kg/cm² — 35 MPa)</b>.<br>
+                    لقد قمت بإدخال إجهاد خرسانة <b style="color:#b91c1c; font-size:18px;" dir="ltr">{fcu_val:.0f} kg/cm²</b>، وهو <b>أقل من الإجهاد القياسي للخرسانة المسلحة</b> <b style="color:#15803d; font-size:18px;" dir="ltr">(350 kg/cm²)</b>.<br>
                     <span style="color:#991b1b; font-weight:700;">💡 تنبيه: تقليل رتبة الخرسانة يقلل من مقاومة الضغط للأعمدة الخرسانية ويتطلب زيادة قطاعات الأعمدة أو زيادة نسبة حديد التسليح لتعويض نقص المقاومة طبقاً لـ ECP 203.</span>
                 </div>
             </div>

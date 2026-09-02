@@ -77,6 +77,30 @@ ECP_DEFAULTS: dict = {
     "ftg_B_override":    None,
     "ftg_trc_override":  None,
 
+    # Module 7 – Two-Column Footings (Isolated or Combined)
+    "tcf_P1":           80.0,       # ton – Service load Column 1
+    "tcf_P2":           120.0,      # ton – Service load Column 2
+    "tcf_c1":           40,         # cm – Column 1 dim parallel to link axis
+    "tcf_b1":           40,         # cm – Column 1 dim perpendicular
+    "tcf_c2":           50,         # cm – Column 2 dim parallel to link axis
+    "tcf_b2":           40,         # cm – Column 2 dim perpendicular
+    "tcf_S":            4.0,        # m  – Center-to-center spacing
+    "tcf_q_net":        1.5,        # kg/cm² – Net allowable soil bearing capacity
+    "tcf_Fcu":          250,        # kg/cm² – Concrete characteristic strength
+    "tcf_Fy":           4000,       # kg/cm² – Steel yield strength
+    "tcf_cover":        7,          # cm – Concrete cover
+    "tcf_Phi_index":    1,          # index into [12, 16, 18, 22, 25] -> 16mm
+    # Override dimensions (computed at runtime, None = use auto)
+    "tcf_L1_ov":        None,
+    "tcf_B1_ov":        None,
+    "tcf_t1_ov":        None,
+    "tcf_L2_ov":        None,
+    "tcf_B2_ov":        None,
+    "tcf_t2_ov":        None,
+    "tcf_Lc_ov":        None,
+    "tcf_Bc_ov":        None,
+    "tcf_tc_ov":        None,
+
     # Module 3 – Flat Slabs (dynamic multi-span)
     "fs_n_lx":           2,
     "fs_n_ly":           2,
@@ -245,6 +269,25 @@ def _migrate_user_settings_if_needed() -> dict:
     return initial_profiles
 
 
+def _sanitize_tcf_values(pdata_dict: dict) -> bool:
+    """Sanitize Module 7 legacy keys if needed."""
+    if not isinstance(pdata_dict, dict):
+        return False
+    modified = False
+    # Legacy key migrations (lowercase to uppercase)
+    if "tcf_fcu" in pdata_dict:
+        val = pdata_dict.pop("tcf_fcu")
+        if "tcf_Fcu" not in pdata_dict:
+            pdata_dict["tcf_Fcu"] = val if (val and val >= 100) else 250
+        modified = True
+    if "tcf_fy" in pdata_dict:
+        val = pdata_dict.pop("tcf_fy")
+        if "tcf_Fy" not in pdata_dict:
+            pdata_dict["tcf_Fy"] = val if (val and val >= 1000) else 4000
+        modified = True
+    return modified
+
+
 def load_profiles_data() -> dict:
     """Read profiles.json from disk, migrating or creating if missing."""
     if not os.path.exists(PROFILES_FILE):
@@ -258,6 +301,30 @@ def load_profiles_data() -> dict:
             if "active_profile" not in data or data["active_profile"] not in data["profiles"]:
                 first_name = list(data["profiles"].keys())[0]
                 data["active_profile"] = first_name
+
+            # Auto-enable newly added modules (e.g. Module 7 idx 6) and sanitize units across all existing projects
+            modified = False
+            for pname, pinfo in data["profiles"].items():
+                pdata_dict = pinfo.get("data", {}) if isinstance(pinfo, dict) else {}
+                trash = pdata_dict.get("deleted_modules_trash", {})
+                deleted_indices = [int(k) for k in trash.keys()] if isinstance(trash, dict) else []
+
+                # Sanitize old kN/MPa/mm units in tcf_ keys if present
+                if _sanitize_tcf_values(pdata_dict):
+                    modified = True
+
+                if "enabled_modules" in pdata_dict and isinstance(pdata_dict["enabled_modules"], list):
+                    curr_enabled = list(pdata_dict["enabled_modules"])
+                    for mod in ALL_MODULES:
+                        midx = mod["idx"]
+                        if midx not in deleted_indices and midx not in curr_enabled:
+                            curr_enabled.append(midx)
+                            modified = True
+                    pdata_dict["enabled_modules"] = sorted(curr_enabled)
+
+            if modified:
+                save_profiles_data(data)
+
             return data
     except Exception:
         pass
@@ -341,13 +408,27 @@ def get_active_profile() -> dict:
 
 
 def _clear_widget_cache():
-    """Clear Streamlit widget cache so loaded profile values refresh cleanly."""
-    keys_to_del = [
-        k for k in list(st.session_state.keys())
-        if k.startswith("w_") or k.startswith("_fs_") or k.startswith("w_cs_") or k.startswith("btn_")
-    ]
+    """
+    Comprehensively clear Streamlit widget session state and calculation caches
+    so loaded project values refresh cleanly without cross-project state leakage.
+    Uses strict whitelist approach: preserves ONLY system keys and wipes all widget/temp keys.
+    """
+    preserve_keys = {
+        "_active_profile_name",
+        "cfg",
+        "_settings_loaded_from_file",
+        "_last_save_ok",
+        "nav_view",
+    }
+    keys_to_del = [k for k in list(st.session_state.keys()) if k not in preserve_keys]
     for k in keys_to_del:
         del st.session_state[k]
+
+    # Clear calculation caches so that previous project calculations are never reused
+    try:
+        st.cache_data.clear()
+    except Exception:
+        pass
 
 
 def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
@@ -368,6 +449,7 @@ def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
     for k, v in profile_cfg.items():
         new_cfg[k] = v
     new_cfg["apartment_name"] = profile_name
+    new_cfg["cs_project_name"] = profile_name
 
     # Ensure deleted_modules_trash and enabled_modules are explicitly present in session
     trash = profile_cfg.get("deleted_modules_trash", {})
@@ -542,6 +624,7 @@ ALL_MODULES = [
     {"idx": 3, "key": "ground_slab", "name": "🏗️ Module 4 — Ground Slabs", "short": "Module 4"},
     {"idx": 4, "key": "steel_bars", "name": "⚙️ Module 5 — Steel Rebar Diameters & Weights", "short": "Module 5"},
     {"idx": 5, "key": "concrete_survey", "name": "📊 Module 6 — Concrete Quantity Survey", "short": "Module 6"},
+    {"idx": 6, "key": "two_col_footings", "name": "🏗️ Module 7 — Combined Footing Design", "short": "Module 7"},
 ]
 
 
@@ -950,20 +1033,6 @@ def load_settings() -> None:
         profile_data = profiles[active_name].get("data", {})
         for k, v in profile_data.items():
             cfg[k] = v
-
-        # If user has set a custom project name inside data, ensure it is the active project identity
-        stored_proj = str(cfg.get("cs_project_name", "")).strip()
-        if stored_proj and stored_proj != "مشروع حصر خرسانات ومقايسة مالية":
-            if stored_proj != active_name and stored_proj not in profiles:
-                pinfo = profiles.pop(active_name)
-                pinfo["name"] = stored_proj
-                pinfo["data"]["apartment_name"] = stored_proj
-                pinfo["data"]["cs_project_name"] = stored_proj
-                profiles[stored_proj] = pinfo
-                active_name = stored_proj
-                pdata["active_profile"] = active_name
-                pdata["profiles"] = profiles
-                save_profiles_data(pdata)
 
         cfg["apartment_name"] = active_name
         cfg["cs_project_name"] = active_name
@@ -1409,6 +1478,13 @@ MODULE_DATA_KEY_PREFIXES = {
         # Dynamic per-column-type, per-slab, and elements takeoff keys
         "cs_", "surv_", "custom_takeoff_rows",
     ],
+    6: [  # Two-Column Footings (Isolated or Combined)
+        "tcf_P1", "tcf_P2", "tcf_c1", "tcf_b1", "tcf_c2", "tcf_b2",
+        "tcf_S", "tcf_q_net", "tcf_Fcu", "tcf_Fy", "tcf_cover", "tcf_Phi_index",
+        "tcf_L1_ov", "tcf_B1_ov", "tcf_t1_ov",
+        "tcf_L2_ov", "tcf_B2_ov", "tcf_t2_ov",
+        "tcf_Lc_ov", "tcf_Bc_ov", "tcf_tc_ov",
+    ],
 }
 
 # Dependency map: which modules DEPEND ON a given module.
@@ -1416,7 +1492,7 @@ MODULE_DATA_KEY_PREFIXES = {
 # Key = module index; Value = list of (linked_idx, relationship_description)
 # Module 1 (Flat Slab) and Module 2 (Columns) have a direct, mutual BIDIRECTIONAL dependency.
 # Module 3 (Footings) depends on Module 2 (Columns).
-# Module 4, 5, 6 (Ground Slabs, Steel Rebar, Quantity Survey) are 100% standalone.
+# Module 4, 5, 6, 7 (Ground Slabs, Steel Rebar, Quantity Survey, Two-Column Footings) are 100% standalone.
 FUNCTIONAL_DEPENDENCIES: dict[int, list] = {
     0: [  # Module 1 — Flat Slabs (البلاطات اللاكمرية) -> Requires Columns (1)
         (1, "مرتبط بنماذج وتصميم الأعمدة: يغذي الأعمدة بالأحمال المحسوبة وتعتمد بحور السقف والقص الثاقب عليها"),
@@ -1430,6 +1506,7 @@ FUNCTIONAL_DEPENDENCIES: dict[int, list] = {
     3: [],  # Module 4 — Ground Slabs: Standalone
     4: [],  # Module 5 — Steel Rebar: Standalone
     5: [],  # Module 6 — Concrete Quantity Survey: 100% Standalone
+    6: [],  # Module 7 — Two-Column Footings: Standalone
 }
 
 

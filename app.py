@@ -81,6 +81,7 @@ from modules.flat_slab import render as render_flat_slab
 from modules.steel_bars import render as render_steel_bars
 from modules.concrete_survey import render as render_concrete_survey
 from modules.ground_slab import render as render_ground_slab
+from modules.two_col_footings import render as render_two_col_footings
 
 # ── CSS Injection: Fixed Unified Typography (14px) ───────────────────────────
 st.markdown(
@@ -2160,7 +2161,9 @@ else:
         render_flat_slab()
     elif "Columns" in module or "الأعمدة" in module:
         render_columns()
-    elif "Footings" in module or "القواعد" in module:
+    elif "Combined" in module or "Two-Column" in module or "Two" in module or "Module 7" in module:
+        render_two_col_footings()
+    elif "Footings" in module or "Isolated" in module or "القواعد" in module:
         render_footings()
     elif "Ground Slabs" in module or "الأرضية" in module:
         render_ground_slab()

@@ -4988,7 +4988,7 @@ def generate_flat_slab_punching_shear_sketch(
     ax_legend.add_patch(qcup_black_box)
     ax_legend.text(81.0, 78, "أقصى إجهاد خرسانة مسموح (ECP 203)", fontsize=12.0, fontweight="bold", color="#94a3b8", ha="center")
     ax_legend.text(81.0, 50, f"Qcup = {qcup_sample:.2f}", fontsize=22.0, fontweight="black", color="#facc15", ha="center")
-    ax_legend.text(81.0, 24, f"kg/cm² ({qcup_sample*0.09807:.2f} MPa)", fontsize=13.0, fontweight="bold", color="#38bdf8", ha="center")
+    ax_legend.text(81.0, 24, f"kg/cm²", fontsize=13.0, fontweight="bold", color="#38bdf8", ha="center")
 
     fig.suptitle(
         f"PUNCHING SHEAR 2D CONTOUR MAP (Qup) — ts = {ts_cm:.0f} cm  |  ALLOWABLE LIMIT: Qcup = {qcup_sample:.2f} kg/cm²\n"
@@ -5213,10 +5213,10 @@ def generate_punching_stirrups_detail_sketch(
         ("Column ID & Location", f"{col_id} ({ctype} Column)"),
         ("Column Section a x b", f"{bc:.0f} x {tc:.0f} cm"),
         ("Slab Thickness ts / Depth d", f"ts = {ts:.0f} cm | d = {d:.1f} cm"),
-        ("Design Axial Load Pu", f"{design['Pu_ton']:.2f} ton ({design['Pu_kN']:.1f} kN)"),
-        ("Actual Shear Stress qu", f"{design['qu_kgcm2']:.2f} kg/cm² ({design['qu_mpa']:.2f} MPa)"),
-        ("Concrete Cap. qcup", f"{design['qcup_kgcm2']:.2f} kg/cm² ({design['qcup_mpa']:.2f} MPa)"),
-        ("Max Shear Limit qu,max", f"{design['qu_max_kgcm2']:.2f} kg/cm² ({design['qu_max_mpa']:.2f} MPa)"),
+        ("Design Axial Load Pu", f"{design['Pu_ton']:.2f} ton"),
+        ("Actual Shear Stress qu", f"{design['qu_kgcm2']:.2f} kg/cm²"),
+        ("Concrete Cap. qcup", f"{design['qcup_kgcm2']:.2f} kg/cm²"),
+        ("Max Shear Limit qu,max", f"{design['qu_max_kgcm2']:.2f} kg/cm²"),
         ("-----------------------------", "-----------------------------"),
         ("Stirrup Layout Direction", f"{strip_dir_desc}"),
         ("Stirrup Diameter", f"Φ{stirrup_dia_mm} mm (High-Tensile Steel)"),
@@ -5667,10 +5667,10 @@ def generate_punching_stirrups_3d_sketch(
         ("Column ID & Type", f"{col_id} ({ctype} Column)"),
         ("Column Section a x b", f"{bc:.0f} x {tc:.0f} cm"),
         ("Slab Thickness ts / Depth d", f"ts = {ts:.0f} cm | d = {d:.1f} cm"),
-        ("Design Axial Load Pu", f"{design['Pu_ton']:.2f} ton ({design['Pu_kN']:.1f} kN)"),
-        ("Actual Shear Stress qu", f"{design['qu_kgcm2']:.2f} kg/cm² ({design['qu_mpa']:.2f} MPa)"),
-        ("Concrete Resistance qcup", f"{design['qcup_kgcm2']:.2f} kg/cm² ({design['qcup_mpa']:.2f} MPa)"),
-        ("Max Allowable qu,max", f"{design['qu_max_kgcm2']:.2f} kg/cm² ({design['qu_max_mpa']:.2f} MPa)"),
+        ("Design Axial Load Pu", f"{design['Pu_ton']:.2f} ton"),
+        ("Actual Shear Stress qu", f"{design['qu_kgcm2']:.2f} kg/cm²"),
+        ("Concrete Resistance qcup", f"{design['qcup_kgcm2']:.2f} kg/cm²"),
+        ("Max Allowable qu,max", f"{design['qu_max_kgcm2']:.2f} kg/cm²"),
         ("-----------------------------", "-----------------------------"),
         ("Stirrup 3D Cages Layout", f"{strip_dir_desc}"),
         ("Stirrup Diameter (القطر)", f"Φ{stirrup_dia_mm} mm (High-Tensile Steel)"),
@@ -6919,25 +6919,25 @@ def design_punching_shear_stirrups(
         status_code = "UNSAFE_THICKNESS"
         advisory_case = 1
         advisory_msg = (
-            f"العمود غير آمن (qu = {qu_mpa:.2f} MPa > qcup = {qcup_mpa:.2f} MPa). "
-            f"الكود المصري (ECP 203) يمنع صراحةً استخدام كانات القص الثاقب لسمك بلاطة أقل من 250 مم "
-            f"(السمك الحالي {ts_cm:.0f} سم = {ts_mm:.0f} مم). "
-            f"التوصية: رفع سمك البلاطة إلى ts >= 250 mm أو تنفيذ سقوط عمود (Drop Panel)."
+            f"العمود غير آمن (qu = {qu_kgcm2:.2f} kg/cm² > qcup = {qcup_kgcm2:.2f} kg/cm²). "
+            f"الكود المصري (ECP 203) يمنع صراحةً استخدام كانات القص الثاقب لسمك بلاطة أقل من 25 سم "
+            f"(السمك الحالي {ts_cm:.0f} سم). "
+            f"التوصية: رفع سمك البلاطة إلى ts >= 25 cm أو تنفيذ سقوط عمود (Drop Panel)."
         )
-    elif qu_mpa > qu_max_mpa:
+    elif qu_kgcm2 > qu_max_kgcm2:
         status_code = "UNSAFE_MAX_EXCEEDED"
         advisory_case = 2
         advisory_msg = (
-            f"العمود غير آمن للغاية (qu = {qu_mpa:.2f} MPa > qu,max = {qu_max_mpa:.2f} MPa). "
-            f"الإجهاد الفعلي يتجاوز الحد الأقصى المطلق لمقاومة الخرسانة المسلحة بالكانات (0.45*sqrt(fcu/1.5) <= 2.12 MPa). "
+            f"العمود غير آمن للغاية (qu = {qu_kgcm2:.2f} kg/cm² > qu,max = {qu_max_kgcm2:.2f} kg/cm²). "
+            f"الإجهاد الفعلي يتجاوز الحد الأقصى المطلق لمقاومة الخرسانة المسلحة بالكانات (0.45*sqrt(Fcu/1.5)). "
             f"التوصية: الكانات بمفردها لا تكفي! يجب زيادة أبعاد مقطع العمود (a x b) أو تنفيذ سقوط (Drop Panel) أو تاج عمود (Column Head)."
         )
     else:
         status_code = "UNSAFE_STIRRUPS_FEASIBLE"
         advisory_case = 3
         advisory_msg = (
-            f"العمود غير آمن بالخرسانة وحدها (qu = {qu_mpa:.2f} MPa > qcup = {qcup_mpa:.2f} MPa)، "
-            f"ولكن الشروط مستوفاة لاستخدام كانات القص الثاقب (ts = {ts_cm:.0f} سم >= 25 سم و qu <= qu,max = {qu_max_mpa:.2f} MPa). "
+            f"العمود غير آمن بالخرسانة وحدها (qu = {qu_kgcm2:.2f} kg/cm² > qcup = {qcup_kgcm2:.2f} kg/cm²)، "
+            f"ولكن الشروط مستوفاة لاستخدام كانات القص الثاقب (ts = {ts_cm:.0f} سم >= 25 سم و qu <= qu,max = {qu_max_kgcm2:.2f} kg/cm²). "
             f"التوصية: يمكن الاستمرار بنفس تخانة البلاطة الحالية عبر تسليح منطقة العمود بكانات القص الثاقب الموضحة بالتفصيل."
         )
 
@@ -8934,7 +8934,7 @@ def render():
                 f"""
                 <div class="ecp-metric-box">
                     <div class="ecp-metric-lbl">Concrete Cap. (qcup)</div>
-                    <div class="ecp-metric-val" style="color:#60a5fa;">{qcup_ref_val:.2f} <span style="font-size:12px;">kg/cm² ({qcup_ref_mpa:.2f} MPa)</span></div>
+                    <div class="ecp-metric-val" style="color:#60a5fa;">{qcup_ref_val:.2f} <span style="font-size:12px;">kg/cm²</span></div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -8944,7 +8944,7 @@ def render():
                 f"""
                 <div class="ecp-metric-box">
                     <div class="ecp-metric-lbl">Max Limit (qu,max)</div>
-                    <div class="ecp-metric-val" style="color:#fbbf24;">{qu_max_ref_val:.2f} <span style="font-size:12px;">kg/cm² ({qu_max_ref_mpa:.2f} MPa)</span></div>
+                    <div class="ecp-metric-val" style="color:#fbbf24;">{qu_max_ref_val:.2f} <span style="font-size:12px;">kg/cm²</span></div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -9040,11 +9040,10 @@ def render():
                 "Type": p.get("Location Type Ar", p["Location Type"]),
                 "Section a×b (cm)": p.get("Section (cm)", f"{bc_s:.0f} × {tc_s:.0f}"),
                 "Pu (ton)": f"{p['Pu (ton)']:.2f}",
-                "Pu (kN)": f"{p.get('Pu (kN)', p['Pu (ton)']*9.81):.1f}",
                 "bo (cm)": f"{p['bo (cm)']:.1f}",
-                "qu (kg/cm² [MPa])": f"{p['qup (kg/cm²)']:.2f} [{p.get('qu (MPa)', p['qup (kg/cm²)']*0.098):.2f}]",
-                "qcup (kg/cm² [MPa])": f"{p['qcup (kg/cm²)']:.2f} [{p.get('qcup (MPa)', p['qcup (kg/cm²)']*0.098):.2f}]",
-                "qu,max (kg/cm² [MPa])": f"{p.get('qu_max (kg/cm²)', qu_max_ref_val):.2f} [{p.get('qu_max (MPa)', qu_max_ref_mpa):.2f}]",
+                "qu (kg/cm²)": f"{p['qup (kg/cm²)']:.2f}",
+                "qcup (kg/cm²)": f"{p['qcup (kg/cm²)']:.2f}",
+                "qu,max (kg/cm²)": f"{p.get('qu_max (kg/cm²)', qu_max_ref_val):.2f}",
                 "Stress Ratio (qu/qcup)": f"{p['Ratio']:.2f}",
                 "Status": p["Status"],
             }
@@ -9094,10 +9093,10 @@ def render():
                     f"""
                     <div dir="rtl" style="background:rgba(220, 38, 38, 0.16); border:2px solid #ef4444; border-radius:10px; padding:16px 20px; margin-bottom:14px; text-align:right;">
                         <div style="font-size:16px; font-weight:800; color:#fca5a5; display:flex; align-items:center; gap:8px;">
-                            🚨 تنبيه حرج: تجاوز الحد الأقصى المطلق لمقاومة الخرسانة مع الحديد (qu &gt; qu,max = 0.45√(fcu/γc) ≤ 2.12 N/mm²)
+                            🚨 تنبيه حرج: تجاوز الحد الأقصى المطلق لمقاومة الخرسانة مع الحديد (qu &gt; qu,max)
                         </div>
                         <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.7;">
-                            الإجهاد الفعلي الواقع على هذه الأعمدة يتجاوز أقصى مقاومة كودية مسموح بها للقطاع الخرساني حتى في حالة تسليحه بالكانات (<b>qu,max = {qu_max_ref_mpa:.2f} MPa = {qu_max_ref_val:.2f} kg/cm²</b>). الكانات بمفردها غير كافية هندسياً لمنع انهيار الخرسانة بالضغط والقص.
+                            الإجهاد الفعلي الواقع على هذه الأعمدة يتجاوز أقصى مقاومة كودية مسموح بها للقطاع الخرساني حتى في حالة تسليحه بالكانات (<b>qu,max = {qu_max_ref_val:.2f} kg/cm²</b>). الكانات بمفردها غير كافية هندسياً لمنع انهيار الخرسانة بالضغط والقص.
                             <br>📌 <b>الأعمدة المتأثرة:</b> {names_c2}
                             <br>💡 <b>التوصية التنفيذية:</b> وجوب <b>زيادة أبعاد مقطع العمود (a × b)</b> لزيادة المحيط الحرج $b_o$، أو عمل <b>سقوط عمود (Drop Panel)</b>، أو عمل <b>تاج عمود (Column Head)</b>.
                         </div>

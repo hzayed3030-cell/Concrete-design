@@ -615,7 +615,7 @@ def render():
                             <br>• <b style="color: #fbbf24; font-size: 22px;">اشتراطات الكود المصري ECP 203:</b> <span style="font-size: 18px; color: #ffffff;">العناصر الملامسة للتربة وعوازل الرطوبة تتطلب غطاءً صافياً لا يقل عن 4.0 سم لحماية التسليح من التآكل والأملاح الأرضية.</span>
                         </li>
                         <li style="margin-bottom: 18px;">
-                            <b style="color: #38bdf8; font-size: 24px;">رتبة الخرسانة fcu (القيمة الافتراضية = 300 kg/cm² = 30 MPa):</b>
+                            <b style="color: #38bdf8; font-size: 24px;">رتبة الخرسانة fcu (القيمة الافتراضية = 300 kg/cm²):</b>
                             <br>• <b style="color: #fbbf24; font-size: 22px;">مقاومة البري والشد:</b> <span style="font-size: 18px; color: #ffffff;">الموصى به للأرضيات الصناعية (300 – 350 كجم/سم²) لضمان مقاومة عالية للبري والاحتكاك السطحي (Abrasion) وتحقيق إجهاد شد انحناء عالي fctr = 0.6√fcu.</span>
                         </li>
                         <li>
