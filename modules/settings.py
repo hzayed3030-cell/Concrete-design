@@ -1434,6 +1434,8 @@ MODULE_DATA_KEY_PREFIXES = {
         "fs_cant_left", "fs_cant_right", "fs_cant_bottom", "fs_cant_top",
         "fs_removed_cols", "fs_void_panels",
         "fs_col_pu_int", "fs_col_pu_edge", "fs_col_pu_corner",
+        "fs_col_tot_pu_int", "fs_col_tot_pu_edge", "fs_col_tot_pu_corner",
+        "fs_building_columns", "fs_col_b", "fs_col_c", "fs_Lx_spans", "fs_Ly_spans",
         "slab_bc", "slab_tc", "slab_SDL", "slab_wall_load", "slab_LL",
         "slab_gamma_c", "slab_Fcu", "slab_Fy", "slab_cover",
         "slab_ts_initial", "slab_n_floors",

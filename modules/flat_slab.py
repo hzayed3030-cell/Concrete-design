@@ -7954,89 +7954,91 @@ def render():
     _removed_col_objs_sk = [c for c in _all_cols if c["orig_id"] in set(_confirmed_removals)]
 
     img_verif_b64 = None
-    with st.expander(
+    exp_geom = st.expander(
         "🗺️ Structural Geometry Sketch & Verification (مخطط التحقق الهندسي وتوزيع المحاور والأعمدة)",
-        expanded=True,
-    ):
-        st.markdown(
-            '<div class="section-header">🗺️ Structural Geometry Sketch & Verification (مخطط التحقق الهندسي وتوزيع المحاور والأعمدة)</div>',
-            unsafe_allow_html=True,
-        )
-        fig_verif = generate_flat_slab_sketch(
-            Lx_spans, Ly_spans, cantilevers,
-            ts_initial=ts_initial if ts_initial is not None else 20,
-            n_floors=num_floors,
-            bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
-            bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
-            top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
-            top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
-            col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
-            strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
-            strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
-            concrete_cover=cov if cov is not None else 1.5,
-            fcu=Fcu if Fcu is not None else 250,
-            fy=Fy if Fy is not None else 4000,
-            live_load=LL if LL is not None else 0.25,
-            flooring_load=SDL if SDL is not None else 0.15,
-            wall_load=wall_load if wall_load is not None else 0.50,
-            col_w_cm=_col_w_sk,
-            col_d_cm=_col_d_sk,
-            removed_col_ids=set(_confirmed_removals),
-            pending_col_ids=set(st.session_state.get("_fs_pending_snapshot", [])
-                                if st.session_state.get("_fs_show_confirm") else _pending_removals),
-            void_panel_ids=set(_confirmed_voids),
-            pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", [])
-                                 if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
-        )
-        st.pyplot(fig_verif, clear_figure=True, use_container_width=True)
-        buf_v = io.BytesIO()
-        fig_verif.savefig(buf_v, format="png", bbox_inches="tight", dpi=180)
-        buf_v.seek(0)
-        img_verif_b64 = "data:image/png;base64," + base64.b64encode(buf_v.getvalue()).decode("utf-8")
-        buf_v.seek(0)
-        st.download_button(
-            label="📥 Download Structural Geometry Sketch (High-Res PNG)",
-            data=buf_v,
-            file_name=f"{prefix}Flat_Slab_Geometry_Verification.png",
-            mime="image/png",
-            use_container_width=True,
-            key="btn_dl_geom_verif_sketch",
-        )
-        plt.close(fig_verif)
+        expanded=False,
+        key=f"{prefix}exp_geom_verif",
+        on_change="rerun",
+    )
+    with exp_geom:
+        if exp_geom.open:
+            st.markdown(
+                '<div class="section-header">🗺️ Structural Geometry Sketch & Verification (مخطط التحقق الهندسي وتوزيع المحاور والأعمدة)</div>',
+                unsafe_allow_html=True,
+            )
+            fig_verif = generate_flat_slab_sketch(
+                Lx_spans, Ly_spans, cantilevers,
+                ts_initial=ts_initial if ts_initial is not None else 20,
+                n_floors=num_floors,
+                bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
+                bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
+                top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
+                top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
+                col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
+                strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
+                strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
+                concrete_cover=cov if cov is not None else 1.5,
+                fcu=Fcu if Fcu is not None else 250,
+                fy=Fy if Fy is not None else 4000,
+                live_load=LL if LL is not None else 0.25,
+                flooring_load=SDL if SDL is not None else 0.15,
+                wall_load=wall_load if wall_load is not None else 0.50,
+                col_w_cm=_col_w_sk,
+                col_d_cm=_col_d_sk,
+                removed_col_ids=set(_confirmed_removals),
+                pending_col_ids=set(st.session_state.get("_fs_pending_snapshot", [])
+                                    if st.session_state.get("_fs_show_confirm") else _pending_removals),
+                void_panel_ids=set(_confirmed_voids),
+                pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", [])
+                                     if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
+            )
+            st.pyplot(fig_verif, clear_figure=True, use_container_width=True)
+            buf_v = io.BytesIO()
+            fig_verif.savefig(buf_v, format="png", bbox_inches="tight", dpi=180)
+            buf_v.seek(0)
+            img_verif_b64 = "data:image/png;base64," + base64.b64encode(buf_v.getvalue()).decode("utf-8")
+            buf_v.seek(0)
+            st.download_button(
+                label="📥 Download Structural Geometry Sketch (High-Res PNG)",
+                data=buf_v,
+                file_name=f"{prefix}Flat_Slab_Geometry_Verification.png",
+                mime="image/png",
+                use_container_width=True,
+                key="btn_dl_geom_verif_sketch",
+            )
+            plt.close(fig_verif)
 
-        # ── ملخص الأبعاد ─────────────────────────────────────────────────────
-        n_total_cols  = (len(Lx_spans) + 1) * (len(Ly_spans) + 1)
-        n_active_cols = len(_active_cols)
-        tot_w_val = sum(Lx_spans) + cant_left + cant_right
-        tot_h_val = sum(Ly_spans) + cant_bottom + cant_top
-        n_p_total  = len(_all_panels)
-        n_p_active = len(_active_panels)
-        n_p_voids  = len(_void_panels)
-        p_val_str  = f"{n_p_active} active / {n_p_total} total" if not n_p_voids else f"{n_p_active} act / {n_p_voids} voids"
+            # ── ملخص الأبعاد ─────────────────────────────────────────────────────
+            n_total_cols  = (len(Lx_spans) + 1) * (len(Ly_spans) + 1)
+            n_active_cols = len(_active_cols)
+            tot_w_val = sum(Lx_spans) + cant_left + cant_right
+            tot_h_val = sum(Ly_spans) + cant_bottom + cant_top
+            n_p_total  = len(_all_panels)
+            n_p_active = len(_active_panels)
+            n_p_voids  = len(_void_panels)
+            p_val_str  = f"{n_p_active} active / {n_p_total} total" if not n_p_voids else f"{n_p_active} act / {n_p_voids} voids"
 
-        g1, g2, g3, g4 = st.columns(4)
-        with g1:
-            st.markdown(f"""<div class="ecp-metric-box">
-                <div class="ecp-metric-lbl">Total Width (X-dir)</div>
-                <div class="ecp-metric-val">{tot_w_val:.2f} m</div></div>""",
-                unsafe_allow_html=True)
-        with g2:
-            st.markdown(f"""<div class="ecp-metric-box">
-                <div class="ecp-metric-lbl">Total Height (Y-dir)</div>
-                <div class="ecp-metric-val">{tot_h_val:.2f} m</div></div>""",
-                unsafe_allow_html=True)
-        with g3:
-            st.markdown(f"""<div class="ecp-metric-box">
-                <div class="ecp-metric-lbl">No. of Columns</div>
-                <div class="ecp-metric-val">{n_active_cols} active / {n_total_cols} total</div></div>""",
-                unsafe_allow_html=True)
-        with g4:
-            st.markdown(f"""<div class="ecp-metric-box">
-                <div class="ecp-metric-lbl">No. of Panels</div>
-                <div class="ecp-metric-val">{p_val_str}</div></div>""",
-                unsafe_allow_html=True)
-
-    plt.close(fig_verif)
+            g1, g2, g3, g4 = st.columns(4)
+            with g1:
+                st.markdown(f"""<div class="ecp-metric-box">
+                    <div class="ecp-metric-lbl">Total Width (X-dir)</div>
+                    <div class="ecp-metric-val">{tot_w_val:.2f} m</div></div>""",
+                    unsafe_allow_html=True)
+            with g2:
+                st.markdown(f"""<div class="ecp-metric-box">
+                    <div class="ecp-metric-lbl">Total Height (Y-dir)</div>
+                    <div class="ecp-metric-val">{tot_h_val:.2f} m</div></div>""",
+                    unsafe_allow_html=True)
+            with g3:
+                st.markdown(f"""<div class="ecp-metric-box">
+                    <div class="ecp-metric-lbl">No. of Columns</div>
+                    <div class="ecp-metric-val">{n_active_cols} active / {n_total_cols} total</div></div>""",
+                    unsafe_allow_html=True)
+            with g4:
+                st.markdown(f"""<div class="ecp-metric-box">
+                    <div class="ecp-metric-lbl">No. of Panels</div>
+                    <div class="ecp-metric-val">{p_val_str}</div></div>""",
+                    unsafe_allow_html=True)
 
     # ── 5e. Column Removal Panel ─────────────────────────────────────────────
 
@@ -8888,395 +8890,65 @@ def render():
     st.markdown("---")
 
     # ── 🥊 PUNCHING SHEAR VERIFICATION & REINFORCEMENT ENGINE ────────────────
-    with st.expander("🥊 Punching Shear Check (فحص القص الثاقب وتصميم كانات القص لجميع الأعمدة)", expanded=False):
-        # 1. Summary Metrics Header
-        safe_cols_count = sum(1 for p in punching_results if p["is_safe"])
-        unsafe_cols_count = len(punching_results) - safe_cols_count
-        max_ratio = max((p["Ratio"] for p in punching_results), default=0.0)
-        qcup_ref_val = punching_results[0].get("qcup (kg/cm²)", 10.5) if punching_results else 10.5
-        qcup_ref_mpa = punching_results[0].get("qcup (MPa)", 1.05) if punching_results else 1.05
-        qu_max_ref_val = punching_results[0].get("qu_max (kg/cm²)", 21.2) if punching_results else 21.2
-        qu_max_ref_mpa = punching_results[0].get("qu_max (MPa)", 2.12) if punching_results else 2.12
+    exp_punch = st.expander("🥊 Punching Shear Check (فحص القص الثاقب وتصميم كانات القص لجميع الأعمدة)", expanded=False, key=f"{prefix}exp_punch", on_change="rerun")
+    with exp_punch:
+        if exp_punch.open:
+            # 1. Summary Metrics Header
+            safe_cols_count = sum(1 for p in punching_results if p["is_safe"])
+            unsafe_cols_count = len(punching_results) - safe_cols_count
+            max_ratio = max((p["Ratio"] for p in punching_results), default=0.0)
+            qcup_ref_val = punching_results[0].get("qcup (kg/cm²)", 10.5) if punching_results else 10.5
+            qcup_ref_mpa = punching_results[0].get("qcup (MPa)", 1.05) if punching_results else 1.05
+            qu_max_ref_val = punching_results[0].get("qu_max (kg/cm²)", 21.2) if punching_results else 21.2
+            qu_max_ref_mpa = punching_results[0].get("qu_max (MPa)", 2.12) if punching_results else 2.12
 
-        col_met1, col_met2, col_met3, col_met4, col_met5 = st.columns(5)
-        with col_met1:
-            st.markdown(
-                f"""
-                <div class="ecp-metric-box">
-                    <div class="ecp-metric-lbl">Total Columns</div>
-                    <div class="ecp-metric-val" style="color:#60a5fa;">{len(punching_results)} Cols</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        with col_met2:
-            st.markdown(
-                f"""
-                <div class="ecp-metric-box">
-                    <div class="ecp-metric-lbl">Safe Columns</div>
-                    <div class="ecp-metric-val" style="color:#16a34a;">{safe_cols_count} Cols</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        with col_met3:
-            st.markdown(
-                f"""
-                <div class="ecp-metric-box">
-                    <div class="ecp-metric-lbl">Unsafe Columns</div>
-                    <div class="ecp-metric-val" style="color:{'#dc2626' if unsafe_cols_count > 0 else '#16a34a'};">{unsafe_cols_count} Cols</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        with col_met4:
-            st.markdown(
-                f"""
-                <div class="ecp-metric-box">
-                    <div class="ecp-metric-lbl">Concrete Cap. (qcup)</div>
-                    <div class="ecp-metric-val" style="color:#60a5fa;">{qcup_ref_val:.2f} <span style="font-size:12px;">kg/cm²</span></div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        with col_met5:
-            st.markdown(
-                f"""
-                <div class="ecp-metric-box">
-                    <div class="ecp-metric-lbl">Max Limit (qu,max)</div>
-                    <div class="ecp-metric-val" style="color:#fbbf24;">{qu_max_ref_val:.2f} <span style="font-size:12px;">kg/cm²</span></div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
-
-        # 2. 2D Punching Shear Plan Contour & Reference Photo
-        tab_punch_plan, tab_punch_photo = st.tabs([
-            "📐 مخطط التحقق من القص الثاقب على كامل السقف (Punching Verification Plan)",
-            "صورة توضيحية",
-        ])
-
-        with tab_punch_plan:
-            fig_punch = generate_flat_slab_punching_shear_sketch(
-                Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, Wu,
-                punching_results,
-                col_w_cm=bc_s, col_d_cm=tc_s,
-                removed_cols=_removed_col_objs,
-                void_panel_ids=set(_confirmed_voids),
-            )
-            st.pyplot(fig_punch, clear_figure=True, use_container_width=True)
-
-            buf_punch = io.BytesIO()
-            fig_punch.savefig(buf_punch, format="png", bbox_inches="tight", dpi=180)
-            buf_punch.seek(0)
-            st.download_button(
-                label="📥 Download Punching Shear Verification Plan (High-Res PNG)",
-                data=buf_punch,
-                file_name=f"{prefix}Flat_Slab_Punching_Shear_Check_ts{ts:.0f}cm.png",
-                mime="image/png",
-                use_container_width=True,
-                key="btn_dl_punching_contour",
-            )
-            plt.close(fig_punch)
-
-        with tab_punch_photo:
-            st.markdown(
-                """
-                <div dir="rtl" style="background:#0f172a; border:1.8px solid #3b82f6; border-radius:10px; padding:14px 18px; margin-bottom:14px; text-align:right;">
-                    <div style="font-size:16.5px; font-weight:800; color:#38bdf8; margin-bottom:4px;">
-                        📸 صورة توضيحية من الموقع: تنفيذ كانات القص الثاقب (Shear punching stirrups)
-                    </div>
-                    <div style="font-size:13.5px; color:#cbd5e1; line-height:1.7;">
-                        توضح الصورة أدناه التطبيق العملي والتنفيذي لرص كانات القص الثاقب (Punching Shear Stirrups) على الطبيعة في البلاطات اللاكمرية (Flat Slabs) حول الأعمدة وفقاً لاشتراطات الكود المصري <b>ECP 203</b>، حيث يتم ترتيب الكانات في أشرطة متعامدة مع أسياخ التعليق العلوية والسفلية (Hanger Rebars) لضمان ثبات القفص ومقاومة إجهادات الاختراق بكفاءة تامة.
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            site_img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "shear_punching_stirrups.jpg")
-            if not os.path.exists(site_img_path):
-                site_img_path = os.path.join("assets", "shear_punching_stirrups.jpg")
-
-            if os.path.exists(site_img_path):
-                st.image(
-                    site_img_path,
-                    caption="Shear punching stirrups — تنفيذ وتوزيع كانات القص الثاقب وأسياخ التعليق حول العمود في الموقع",
-                    use_container_width=True,
-                )
-                with open(site_img_path, "rb") as f_img:
-                    img_bytes = f_img.read()
-                st.download_button(
-                    label="📥 Download Reference Photo (Shear punching stirrups)",
-                    data=img_bytes,
-                    file_name="Shear_punching_stirrups_Site_Reference.jpg",
-                    mime="image/jpeg",
-                    use_container_width=True,
-                    key="btn_dl_punch_site_photo_top",
-                )
-            else:
-                st.warning("⚠️ تعذر العثور على ملف الصورة التوضيحية في مسار assets/shear_punching_stirrups.jpg")
-
-        st.markdown("<div style='margin-bottom:18px;'></div>", unsafe_allow_html=True)
-
-        # 3. Summary Table: Punching Shear Verification Table
-        st.markdown(
-            """
-            <div style="font-size:18px; font-weight:800; color:#f8fafc; margin-bottom:4px; display:flex; align-items:center; gap:8px;">
-                📋 جدول التحقق من إجهادات القص الثاقب ومؤشرات الأمان (Punching Shear Verification Summary)
-            </div>
-            <div style="font-size:13px; color:#94a3b8; margin-bottom:12px;">
-                نتائج فحص إجهادات القص الثاقب والتحقق الكودي ومؤشرات الأمان لكافة الأعمدة طبقاً لـ ECP 203
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        punch_df = pd.DataFrame([
-            {
-                "Column ID": p["Column ID"],
-                "Grid": p["Grid"],
-                "Type": p.get("Location Type Ar", p["Location Type"]),
-                "Section a×b (cm)": p.get("Section (cm)", f"{bc_s:.0f} × {tc_s:.0f}"),
-                "Pu (ton)": f"{p['Pu (ton)']:.2f}",
-                "bo (cm)": f"{p['bo (cm)']:.1f}",
-                "qu (kg/cm²)": f"{p['qup (kg/cm²)']:.2f}",
-                "qcup (kg/cm²)": f"{p['qcup (kg/cm²)']:.2f}",
-                "qu,max (kg/cm²)": f"{p.get('qu_max (kg/cm²)', qu_max_ref_val):.2f}",
-                "Stress Ratio (qu/qcup)": f"{p['Ratio']:.2f}",
-                "Status": p["Status"],
-            }
-            for p in punching_results
-        ])
-        render_styled_table(punch_df, font_size_override=10.5)
-
-        st.markdown("<div style='margin-bottom:18px;'></div>", unsafe_allow_html=True)
-
-        # 4. Actionable Advisory Cards (رسائل التوصيات التنفيذية على الشاشة)
-        unsafe_cols = [p for p in punching_results if not p["is_safe"]]
-        if unsafe_cols:
-            st.markdown(
-                """
-                <div dir="rtl" style="font-size:18px; font-weight:800; color:#f8fafc; margin-bottom:10px; display:flex; align-items:center; gap:8px;">
-                    🛡️ بطاقات التوصيات الإنشائية والتنفيذية (Actionable Advisory Cards — ECP 203)
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            case1_cols = [p for p in unsafe_cols if p.get("advisory_case") == 1]
-            case2_cols = [p for p in unsafe_cols if p.get("advisory_case") == 2]
-            case3_cols = [p for p in unsafe_cols if p.get("advisory_case") == 3]
-
-            if case1_cols:
-                names_c1 = ", ".join([f"<b>{p['Column ID']}</b> ({p['Grid']})" for p in case1_cols])
+            col_met1, col_met2, col_met3, col_met4, col_met5 = st.columns(5)
+            with col_met1:
                 st.markdown(
                     f"""
-                    <div dir="rtl" style="background:rgba(239, 68, 68, 0.14); border:2px solid #ef4444; border-radius:10px; padding:16px 20px; margin-bottom:14px; text-align:right;">
-                        <div style="font-size:16px; font-weight:800; color:#f87171; display:flex; align-items:center; gap:8px;">
-                            ⚠️ تحذير صريح: منع استخدام كانات القص الثاقب (Stirrups) لسُمك بلاطة أقل من 250 مم (ECP 203 بند 6-3-4)
-                        </div>
-                        <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.7;">
-                            ينص الكود المصري لتصميم وتنفيذ المنشآت الخرسانية صراحةً على أن <b>سُمك البلاطة الأدنى المسموح به لاستخدام كانات القص الثاقب هو 250 مم (25 سم)</b> (السُمك الحالي <b>{ts:.0f} سم = {ts*10:.0f} مم</b>).
-                            <br>📌 <b>الأعمدة غير الآمنة المتأثرة:</b> {names_c1}
-                            <br>💡 <b>التوصية التنفيذية:</b> رفع سُمك البلاطة إلى <b>ts ≥ 25 سم (250 مم)</b>، أو تنفيذ <b>سقوط للأعمدة (Drop Panel)</b> بسقوط لا يقل عن 5 سم وأبعاد لا تقل عن سدس البحر.
-                        </div>
+                    <div class="ecp-metric-box">
+                        <div class="ecp-metric-lbl">Total Columns</div>
+                        <div class="ecp-metric-val" style="color:#60a5fa;">{len(punching_results)} Cols</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-
-            if case2_cols:
-                names_c2 = ", ".join([f"<b>{p['Column ID']}</b> ({p['Grid']})" for p in case2_cols])
+            with col_met2:
                 st.markdown(
                     f"""
-                    <div dir="rtl" style="background:rgba(220, 38, 38, 0.16); border:2px solid #ef4444; border-radius:10px; padding:16px 20px; margin-bottom:14px; text-align:right;">
-                        <div style="font-size:16px; font-weight:800; color:#fca5a5; display:flex; align-items:center; gap:8px;">
-                            🚨 تنبيه حرج: تجاوز الحد الأقصى المطلق لمقاومة الخرسانة مع الحديد (qu &gt; qu,max)
-                        </div>
-                        <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.7;">
-                            الإجهاد الفعلي الواقع على هذه الأعمدة يتجاوز أقصى مقاومة كودية مسموح بها للقطاع الخرساني حتى في حالة تسليحه بالكانات (<b>qu,max = {qu_max_ref_val:.2f} kg/cm²</b>). الكانات بمفردها غير كافية هندسياً لمنع انهيار الخرسانة بالضغط والقص.
-                            <br>📌 <b>الأعمدة المتأثرة:</b> {names_c2}
-                            <br>💡 <b>التوصية التنفيذية:</b> وجوب <b>زيادة أبعاد مقطع العمود (a × b)</b> لزيادة المحيط الحرج $b_o$، أو عمل <b>سقوط عمود (Drop Panel)</b>، أو عمل <b>تاج عمود (Column Head)</b>.
-                        </div>
+                    <div class="ecp-metric-box">
+                        <div class="ecp-metric-lbl">Safe Columns</div>
+                        <div class="ecp-metric-val" style="color:#16a34a;">{safe_cols_count} Cols</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-
-            if case3_cols:
-                names_c3 = ", ".join([f"<b>{p['Column ID']}</b> ({p['Grid']})" for p in case3_cols])
+            with col_met3:
                 st.markdown(
                     f"""
-                    <div dir="rtl" style="background:rgba(34, 197, 94, 0.14); border:2px solid #22c55e; border-radius:10px; padding:16px 20px; margin-bottom:14px; text-align:right;">
-                        <div style="font-size:16px; font-weight:800; color:#4ade80; display:flex; align-items:center; gap:8px;">
-                            💡 توصية تنفيذية: إمكانية تثبيت سُمك البلاطة الحالي وتسليح الأعمدة بكانات القص الثاقب (Stirrups Feasible)
-                        </div>
-                        <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.7;">
-                            الاشتراطات الكودية مستوفاة بالكامل لاستخدام كانات القص الثاقب (<b>ts = {ts:.0f} سم ≥ 25 سم</b> و <b>qu ≤ qu,max</b>). يمكن للمهندس الإنشائي الحفاظ على تخانة السقف الحالية وتوفير تكاليف الخرسانة عبر تسليح منطقة العمود بكانات القص الثاقب الموضحة بالتفصيل أدناه.
-                            <br>📌 <b>الأعمدة المؤهلة للتسليح بالكانات:</b> {names_c3}
-                            <br>⚙️ يمكنك اختيار العمود من القائمة أدناه لمعاينة وحساب كانات القص ومخطط الـ Detailing التفصيلي.
-                        </div>
+                    <div class="ecp-metric-box">
+                        <div class="ecp-metric-lbl">Unsafe Columns</div>
+                        <div class="ecp-metric-val" style="color:{'#dc2626' if unsafe_cols_count > 0 else '#16a34a'};">{unsafe_cols_count} Cols</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-        else:
-            st.markdown(
-                """
-                <div dir="rtl" style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.18) 0%, rgba(16, 185, 129, 0.10) 100%); border: 2.2px solid #22c55e; border-radius: 12px; padding: 18px 24px; margin-bottom: 16px; text-align: right; box-shadow: 0 4px 16px rgba(34, 197, 94, 0.15);">
-                    <div style="font-size: 18px; font-weight: 900; color: #4ade80; display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-                        ✅ جميع الأعمدة آمنة تماماً في القص الثاقب بمقاومة الخرسانة بمفردها (qu ≤ qcup)
-                    </div>
-                    <div style="font-size: 16px; font-weight: 700; color: #ffffff; line-height: 1.75;">
-                        مقاومة الخرسانة بمفردها كافية لتحمل إجهادات القص الثاقب دون الحاجة لزيادة سُمك البلاطة أو إضافة سقوط (Drop Panel) أو كانات قص ثاقب (Stirrups).
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        st.markdown("<div style='margin-bottom:18px;'></div>", unsafe_allow_html=True)
-
-        # 5. Stirrups Auto-Design & Detail Visual Reinforcement Plan (يُعرض فقط في حالة وجود أعمدة غير آمنة تحتاج لكانات)
-        if unsafe_cols:
-            st.markdown(
-                """
-                <div dir="rtl" style="font-size:18px; font-weight:800; color:#f8fafc; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
-                    ⚙️ تصميم كانات القص الثاقب والمخطط التفصيلي (Stirrups Auto-Design & Detailing Plan)
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            col_opts = [p["Column ID"] for p in unsafe_cols]
-            if "fs_punching_detail_col_sel" in st.session_state and st.session_state["fs_punching_detail_col_sel"] not in col_opts:
-                st.session_state["fs_punching_detail_col_sel"] = col_opts[0]
-
-            c_sel1, c_sel2 = st.columns([2, 1])
-            with c_sel1:
-                sel_col_id = st.selectbox(
-                    "🔍 اختر العمود المطلوب تسليحه بالكانات (Select Unsafe Column):",
-                    options=col_opts,
-                    index=0,
-                    key="fs_punching_detail_col_sel",
-                )
-            with c_sel2:
-                sel_stirrup_dia = st.radio(
-                    "📏 قطر كانات القص الثاقب المقترح:",
-                    options=[10, 12],
-                    index=0,
-                    format_func=lambda d: f"Φ{d} mm (كانات قطر {d} مم)",
-                    horizontal=True,
-                    key="fs_punching_stirrup_dia_radio",
-                )
-
-            # Retrieve selected column details
-            sel_col_data = next((p for p in unsafe_cols if p["Column ID"] == sel_col_id), unsafe_cols[0])
-            col_w_val = sel_col_data.get("bc", bc_s)
-            col_d_val = sel_col_data.get("tc", tc_s)
-
-            # Recalculate stirrup design with chosen diameter
-            sel_design = design_punching_shear_stirrups(
-                Pu_ton=sel_col_data.get("Pu (ton)", 40.0),
-                bc_cm=col_w_val,
-                tc_cm=col_d_val,
-                ctype=sel_col_data.get("Location Type", "Interior"),
-                ts_cm=ts,
-                d_cm=d,
-                Fcu_kgcm2=Fcu,
-                Fy_kgcm2=Fy,
-                stirrup_dia_mm=sel_stirrup_dia,
-            )
-
-            # Calculate Total Strip Lengths for Selected Column
-            sel_ctype = sel_col_data.get("Location Type", "Interior")
-            sel_x_ext = sel_design["x_stirrup_ext_cm"]
-            if sel_ctype == "Corner":
-                L_strip_x_val = col_w_val + sel_x_ext
-                L_strip_y_val = col_d_val + sel_x_ext
-            elif sel_ctype == "Edge":
-                L_strip_x_val = col_w_val + 2.0 * sel_x_ext
-                L_strip_y_val = col_d_val + sel_x_ext
-            else:
-                L_strip_x_val = col_w_val + 2.0 * sel_x_ext
-                L_strip_y_val = col_d_val + 2.0 * sel_x_ext
-
-            # Parameter Cards Grid (2 rows x 3 columns)
-            c_p1, c_p2, c_p3 = st.columns(3)
-            with c_p1:
+            with col_met4:
                 st.markdown(
                     f"""
-                    <div style="background:#1e293b; border:1.5px solid #334155; border-radius:8px; padding:8px 10px; text-align:center;">
-                        <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-bottom:2px;">مساحة الكانات المطلوبة (Ast,req)</div>
-                        <div style="font-size:15.5px; font-weight:800; color:#60a5fa;">
-                            {sel_design['Ast_req_mm2']:.1f} mm² <span style="font-size:11px; color:#94a3b8;">({sel_design['Ast_req_cm2']:.2f} cm²)</span>
-                        </div>
+                    <div class="ecp-metric-box">
+                        <div class="ecp-metric-lbl">Concrete Cap. (qcup)</div>
+                        <div class="ecp-metric-val" style="color:#60a5fa;">{qcup_ref_val:.2f} <span style="font-size:12px;">kg/cm²</span></div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-            with c_p2:
+            with col_met5:
                 st.markdown(
                     f"""
-                    <div style="background:#1e293b; border:1.5px solid #334155; border-radius:8px; padding:8px 10px; text-align:center;">
-                        <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-bottom:2px;">المسافة بين الكانات (s ≤ d/2)</div>
-                        <div style="font-size:15.5px; font-weight:800; color:#60a5fa;">
-                            {sel_design['s_cm']:.1f} cm <span style="font-size:11px; color:#94a3b8;">(أول كانة s0 = {sel_design['s0_cm']:.1f} cm)</span>
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            with c_p3:
-                st.markdown(
-                    f"""
-                    <div style="background:#1e293b; border:1.5px solid #334155; border-radius:8px; padding:8px 10px; text-align:center;">
-                        <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-bottom:2px;">عدد الصفوف وإجمالي الأفرع</div>
-                        <div style="font-size:15.5px; font-weight:800; color:#60a5fa;">
-                            {sel_design['n_rows']} صفوف <span style="font-size:11px; color:#94a3b8;">(إجمالي {sel_design['total_legs']} فرع Φ{sel_stirrup_dia})</span>
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-            st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
-
-            c_p4, c_p5, c_p6 = st.columns(3)
-            with c_p4:
-                st.markdown(
-                    f"""
-                    <div style="background:#1e293b; border:1.5px solid #334155; border-radius:8px; padding:8px 10px; text-align:center;">
-                        <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-bottom:2px;">طول شريحة الكانات اتجاه X (L_strip,X)</div>
-                        <div style="font-size:15.5px; font-weight:800; color:#facc15;">
-                            {L_strip_x_val:.1f} cm <span style="font-size:11px; color:#94a3b8;">(امتداد {sel_x_ext:.1f} cm)</span>
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            with c_p5:
-                st.markdown(
-                    f"""
-                    <div style="background:#1e293b; border:1.5px solid #334155; border-radius:8px; padding:8px 10px; text-align:center;">
-                        <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-bottom:2px;">طول شريحة الكانات اتجاه Y (L_strip,Y)</div>
-                        <div style="font-size:15.5px; font-weight:800; color:#facc15;">
-                            {L_strip_y_val:.1f} cm <span style="font-size:11px; color:#94a3b8;">(امتداد {sel_x_ext:.1f} cm)</span>
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            with c_p6:
-                st.markdown(
-                    f"""
-                    <div style="background:#1e293b; border:1.5px solid #334155; border-radius:8px; padding:8px 10px; text-align:center;">
-                        <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-bottom:2px;">اتجاه شريط الكانات (Stirrup Layout)</div>
-                        <div style="font-size:14.5px; font-weight:800; color:#4ade80;">
-                            في الاتجاهين (X & Y) <span style="font-size:11px; color:#94a3b8;">(Orthogonal)</span>
-                        </div>
+                    <div class="ecp-metric-box">
+                        <div class="ecp-metric-lbl">Max Limit (qu,max)</div>
+                        <div class="ecp-metric-val" style="color:#fbbf24;">{qu_max_ref_val:.2f} <span style="font-size:12px;">kg/cm²</span></div>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -9284,68 +8956,36 @@ def render():
 
             st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
 
-            # 6. Detailed Drawings for Selected Column: 2D Plan & Cross Section + 3D Isometric View + Site Reference Photo
-            tab_2d_det, tab_3d_det, tab_photo_det = st.tabs([
-                "📐 المسقط الأفقي والقطاع الرأسي (2D Plan & Elevation Detail)",
-                "🧊 النموذج ثلاثي الأبعاد لرص الكانات (3D Isometric Cages Model)",
-                "صورة توضيحية",
+            # 2. 2D Punching Shear Plan Contour & Reference Photo
+            tab_punch_plan, tab_punch_photo = st.tabs([
+                "📐 Punching Verification Plan (مخطط التحقق من القص الثاقب على كامل السقف)",
+                "📸 Site Execution Photo (صورة توضيحية لتنفيذ كانات القص)",
             ])
 
-            with tab_2d_det:
-                fig_det = generate_punching_stirrups_detail_sketch(
-                    sel_col_id,
-                    sel_col_data,
-                    col_w_cm=col_w_val,
-                    col_d_cm=col_d_val,
-                    d_cm=d,
-                    ts_cm=ts,
-                    Fcu=Fcu,
-                    Fy=Fy,
-                    stirrup_dia_mm=sel_stirrup_dia,
+            with tab_punch_plan:
+                fig_punch = generate_flat_slab_punching_shear_sketch(
+                    Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, Wu,
+                    punching_results,
+                    col_w_cm=bc_s, col_d_cm=tc_s,
+                    removed_cols=_removed_col_objs,
+                    void_panel_ids=set(_confirmed_voids),
                 )
-                st.pyplot(fig_det, clear_figure=True, use_container_width=True)
+                st.pyplot(fig_punch, clear_figure=True, use_container_width=True)
 
-                buf_det = io.BytesIO()
-                fig_det.savefig(buf_det, format="png", bbox_inches="tight", dpi=180)
-                buf_det.seek(0)
+                buf_punch = io.BytesIO()
+                fig_punch.savefig(buf_punch, format="png", bbox_inches="tight", dpi=180)
+                buf_punch.seek(0)
                 st.download_button(
-                    label=f"📥 Download 2D Detailing Plan & Elevation — Column {sel_col_id} (High-Res PNG)",
-                    data=buf_det,
-                    file_name=f"{prefix}Punching_Shear_2D_Detailing_{sel_col_id}_ts{ts:.0f}cm.png",
+                    label="📥 Download Punching Shear Verification Plan (High-Res PNG)",
+                    data=buf_punch,
+                    file_name=f"{prefix}Flat_Slab_Punching_Shear_Check_ts{ts:.0f}cm.png",
                     mime="image/png",
                     use_container_width=True,
-                    key=f"btn_dl_punch_detail_2d_{sel_col_id}",
+                    key="btn_dl_punching_contour",
                 )
-                plt.close(fig_det)
+                plt.close(fig_punch)
 
-            with tab_3d_det:
-                fig_3d = generate_punching_stirrups_3d_sketch(
-                    sel_col_id,
-                    sel_col_data,
-                    col_w_cm=col_w_val,
-                    col_d_cm=col_d_val,
-                    d_cm=d,
-                    ts_cm=ts,
-                    Fcu=Fcu,
-                    Fy=Fy,
-                    stirrup_dia_mm=sel_stirrup_dia,
-                )
-                st.pyplot(fig_3d, clear_figure=True, use_container_width=True)
-
-                buf_3d = io.BytesIO()
-                fig_3d.savefig(buf_3d, format="png", bbox_inches="tight", dpi=180)
-                buf_3d.seek(0)
-                st.download_button(
-                    label=f"📥 Download 3D Isometric Detailing Model — Column {sel_col_id} (High-Res PNG)",
-                    data=buf_3d,
-                    file_name=f"{prefix}Punching_Shear_3D_Detailing_{sel_col_id}_ts{ts:.0f}cm.png",
-                    mime="image/png",
-                    use_container_width=True,
-                    key=f"btn_dl_punch_detail_3d_{sel_col_id}",
-                )
-                plt.close(fig_3d)
-
-            with tab_photo_det:
+            with tab_punch_photo:
                 st.markdown(
                     """
                     <div dir="rtl" style="background:#0f172a; border:1.8px solid #3b82f6; border-radius:10px; padding:14px 18px; margin-bottom:14px; text-align:right;">
@@ -9359,7 +8999,6 @@ def render():
                     """,
                     unsafe_allow_html=True,
                 )
-
                 site_img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "shear_punching_stirrups.jpg")
                 if not os.path.exists(site_img_path):
                     site_img_path = os.path.join("assets", "shear_punching_stirrups.jpg")
@@ -9378,46 +9017,411 @@ def render():
                         file_name="Shear_punching_stirrups_Site_Reference.jpg",
                         mime="image/jpeg",
                         use_container_width=True,
-                        key=f"btn_dl_punch_site_photo_{sel_col_id}",
+                        key="btn_dl_punch_site_photo_top",
                     )
                 else:
                     st.warning("⚠️ تعذر العثور على ملف الصورة التوضيحية في مسار assets/shear_punching_stirrups.jpg")
-        else:
+
+            st.markdown("<div style='margin-bottom:18px;'></div>", unsafe_allow_html=True)
+
+            # 3. Summary Table: Punching Shear Verification Table
             st.markdown(
                 """
-                <div dir="rtl" style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.14) 0%, rgba(16, 185, 129, 0.08) 100%); border: 2px solid #22c55e; border-radius: 10px; padding: 16px 20px; margin-top: 10px; margin-bottom: 14px; text-align: right;">
-                    <div style="font-size: 16.5px; font-weight: 800; color: #4ade80; display: flex; align-items: center; gap: 8px;">
-                        ✅ لا توجد أعمدة تحتاج إلى كانات لدعم قوة الاختراق (Punching Shear)
-                    </div>
-                    <div style="margin-top: 6px; font-size: 14.5px; color: #ffffff; line-height: 1.7;">
-                        جميع أعمدة السقف آمنة تماماً في القص الثاقب بمقاومة الخرسانة بمفردها (<b>qu ≤ qcup</b>)، ولا توجد أي أعمدة تتطلب إضافة كانات قص ثاقب (Stirrups) أو عمل سقوط (Drop Panel).
-                    </div>
+                <div style="font-size:18px; font-weight:800; color:#f8fafc; margin-bottom:4px; display:flex; align-items:center; gap:8px;">
+                    📋 جدول التحقق من إجهادات القص الثاقب ومؤشرات الأمان (Punching Shear Verification Summary)
+                </div>
+                <div style="font-size:13px; color:#94a3b8; margin-bottom:12px;">
+                    نتائج فحص إجهادات القص الثاقب والتحقق الكودي ومؤشرات الأمان لكافة الأعمدة طبقاً لـ ECP 203
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
-            with st.expander("📸 صورة توضيحية لتنفيذ كانات القص الثاقب (Shear punching stirrups)", expanded=False):
-                site_img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "shear_punching_stirrups.jpg")
-                if not os.path.exists(site_img_path):
-                    site_img_path = os.path.join("assets", "shear_punching_stirrups.jpg")
+            punch_df = pd.DataFrame([
+                {
+                    "Column ID": p["Column ID"],
+                    "Grid": p["Grid"],
+                    "Type": p.get("Location Type Ar", p["Location Type"]),
+                    "Section a×b (cm)": p.get("Section (cm)", f"{bc_s:.0f} × {tc_s:.0f}"),
+                    "Pu (ton)": f"{p['Pu (ton)']:.2f}",
+                    "bo (cm)": f"{p['bo (cm)']:.1f}",
+                    "qu (kg/cm²)": f"{p['qup (kg/cm²)']:.2f}",
+                    "qcup (kg/cm²)": f"{p['qcup (kg/cm²)']:.2f}",
+                    "qu,max (kg/cm²)": f"{p.get('qu_max (kg/cm²)', qu_max_ref_val):.2f}",
+                    "Stress Ratio (qu/qcup)": f"{p['Ratio']:.2f}",
+                    "Status": p["Status"],
+                }
+                for p in punching_results
+            ])
+            render_styled_table(punch_df, font_size_override=10.5)
 
-                if os.path.exists(site_img_path):
-                    st.image(
-                        site_img_path,
-                        caption="Shear punching stirrups — تنفيذ وتوزيع كانات القص الثاقب وأسياخ التعليق حول العمود في الموقع",
-                        use_container_width=True,
+            st.markdown("<div style='margin-bottom:18px;'></div>", unsafe_allow_html=True)
+
+            # 4. Actionable Advisory Cards (رسائل التوصيات التنفيذية على الشاشة)
+            unsafe_cols = [p for p in punching_results if not p["is_safe"]]
+            if unsafe_cols:
+                st.markdown(
+                    """
+                    <div dir="rtl" style="font-size:18px; font-weight:800; color:#f8fafc; margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+                        🛡️ بطاقات التوصيات الإنشائية والتنفيذية (Actionable Advisory Cards — ECP 203)
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                case1_cols = [p for p in unsafe_cols if p.get("advisory_case") == 1]
+                case2_cols = [p for p in unsafe_cols if p.get("advisory_case") == 2]
+                case3_cols = [p for p in unsafe_cols if p.get("advisory_case") == 3]
+
+                if case1_cols:
+                    names_c1 = ", ".join([f"<b>{p['Column ID']}</b> ({p['Grid']})" for p in case1_cols])
+                    st.markdown(
+                        f"""
+                        <div dir="rtl" style="background:rgba(239, 68, 68, 0.14); border:2px solid #ef4444; border-radius:10px; padding:16px 20px; margin-bottom:14px; text-align:right;">
+                            <div style="font-size:16px; font-weight:800; color:#f87171; display:flex; align-items:center; gap:8px;">
+                                ⚠️ تحذير صريح: منع استخدام كانات القص الثاقب (Stirrups) لسُمك بلاطة أقل من 250 مم (ECP 203 بند 6-3-4)
+                            </div>
+                            <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.7;">
+                                ينص الكود المصري لتصميم وتنفيذ المنشآت الخرسانية صراحةً على أن <b>سُمك البلاطة الأدنى المسموح به لاستخدام كانات القص الثاقب هو 250 مم (25 سم)</b> (السُمك الحالي <b>{ts:.0f} سم = {ts*10:.0f} مم</b>).
+                                <br>📌 <b>الأعمدة غير الآمنة المتأثرة:</b> {names_c1}
+                                <br>💡 <b>التوصية التنفيذية:</b> رفع سُمك البلاطة إلى <b>ts ≥ 25 سم (250 مم)</b>، أو تنفيذ <b>سقوط للأعمدة (Drop Panel)</b> بسقوط لا يقل عن 5 سم وأبعاد لا تقل عن سدس البحر.
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
                     )
-                    with open(site_img_path, "rb") as f_img:
-                        img_bytes = f_img.read()
+
+                if case2_cols:
+                    names_c2 = ", ".join([f"<b>{p['Column ID']}</b> ({p['Grid']})" for p in case2_cols])
+                    st.markdown(
+                        f"""
+                        <div dir="rtl" style="background:rgba(220, 38, 38, 0.16); border:2px solid #ef4444; border-radius:10px; padding:16px 20px; margin-bottom:14px; text-align:right;">
+                            <div style="font-size:16px; font-weight:800; color:#fca5a5; display:flex; align-items:center; gap:8px;">
+                                🚨 تنبيه حرج: تجاوز الحد الأقصى المطلق لمقاومة الخرسانة مع الحديد (qu &gt; qu,max)
+                            </div>
+                            <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.7;">
+                                الإجهاد الفعلي الواقع على هذه الأعمدة يتجاوز أقصى مقاومة كودية مسموح بها للقطاع الخرساني حتى في حالة تسليحه بالكانات (<b>qu,max = {qu_max_ref_val:.2f} kg/cm²</b>). الكانات بمفردها غير كافية هندسياً لمنع انهيار الخرسانة بالضغط والقص.
+                                <br>📌 <b>الأعمدة المتأثرة:</b> {names_c2}
+                                <br>💡 <b>التوصية التنفيذية:</b> وجوب <b>زيادة أبعاد مقطع العمود (a × b)</b> لزيادة المحيط الحرج $b_o$، أو عمل <b>سقوط عمود (Drop Panel)</b>، أو عمل <b>تاج عمود (Column Head)</b>.
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                if case3_cols:
+                    names_c3 = ", ".join([f"<b>{p['Column ID']}</b> ({p['Grid']})" for p in case3_cols])
+                    st.markdown(
+                        f"""
+                        <div dir="rtl" style="background:rgba(34, 197, 94, 0.14); border:2px solid #22c55e; border-radius:10px; padding:16px 20px; margin-bottom:14px; text-align:right;">
+                            <div style="font-size:16px; font-weight:800; color:#4ade80; display:flex; align-items:center; gap:8px;">
+                                💡 توصية تنفيذية: إمكانية تثبيت سُمك البلاطة الحالي وتسليح الأعمدة بكانات القص الثاقب (Stirrups Feasible)
+                            </div>
+                            <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.7;">
+                                الاشتراطات الكودية مستوفاة بالكامل لاستخدام كانات القص الثاقب (<b>ts = {ts:.0f} سم ≥ 25 سم</b> و <b>qu ≤ qu,max</b>). يمكن للمهندس الإنشائي الحفاظ على تخانة السقف الحالية وتوفير تكاليف الخرسانة عبر تسليح منطقة العمود بكانات القص الثاقب الموضحة بالتفصيل أدناه.
+                                <br>📌 <b>الأعمدة المؤهلة للتسليح بالكانات:</b> {names_c3}
+                                <br>⚙️ يمكنك اختيار العمود من القائمة أدناه لمعاينة وحساب كانات القص ومخطط الـ Detailing التفصيلي.
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.markdown(
+                    """
+                    <div dir="rtl" style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.18) 0%, rgba(16, 185, 129, 0.10) 100%); border: 2.2px solid #22c55e; border-radius: 12px; padding: 18px 24px; margin-bottom: 16px; text-align: right; box-shadow: 0 4px 16px rgba(34, 197, 94, 0.15);">
+                        <div style="font-size: 18px; font-weight: 900; color: #4ade80; display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+                            ✅ جميع الأعمدة آمنة تماماً في القص الثاقب بمقاومة الخرسانة بمفردها (qu ≤ qcup)
+                        </div>
+                        <div style="font-size: 16px; font-weight: 700; color: #ffffff; line-height: 1.75;">
+                            مقاومة الخرسانة بمفردها كافية لتحمل إجهادات القص الثاقب دون الحاجة لزيادة سُمك البلاطة أو إضافة سقوط (Drop Panel) أو كانات قص ثاقب (Stirrups).
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("<div style='margin-bottom:18px;'></div>", unsafe_allow_html=True)
+
+            # 5. Stirrups Auto-Design & Detail Visual Reinforcement Plan (يُعرض فقط في حالة وجود أعمدة غير آمنة تحتاج لكانات)
+            if unsafe_cols:
+                st.markdown(
+                    """
+                    <div dir="rtl" style="font-size:18px; font-weight:800; color:#f8fafc; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                        ⚙️ تصميم كانات القص الثاقب والمخطط التفصيلي (Stirrups Auto-Design & Detailing Plan)
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                col_opts = [p["Column ID"] for p in unsafe_cols]
+                if "fs_punching_detail_col_sel" in st.session_state and st.session_state["fs_punching_detail_col_sel"] not in col_opts:
+                    st.session_state["fs_punching_detail_col_sel"] = col_opts[0]
+
+                c_sel1, c_sel2 = st.columns([2, 1])
+                with c_sel1:
+                    sel_col_id = st.selectbox(
+                        "🔍 اختر العمود المطلوب تسليحه بالكانات (Select Unsafe Column):",
+                        options=col_opts,
+                        index=0,
+                        key="fs_punching_detail_col_sel",
+                    )
+                with c_sel2:
+                    sel_stirrup_dia = st.radio(
+                        "📏 قطر كانات القص الثاقب المقترح:",
+                        options=[10, 12],
+                        index=0,
+                        format_func=lambda d: f"Φ{d} mm (كانات قطر {d} مم)",
+                        horizontal=True,
+                        key="fs_punching_stirrup_dia_radio",
+                    )
+
+                # Retrieve selected column details
+                sel_col_data = next((p for p in unsafe_cols if p["Column ID"] == sel_col_id), unsafe_cols[0])
+                col_w_val = sel_col_data.get("bc", bc_s)
+                col_d_val = sel_col_data.get("tc", tc_s)
+
+                # Recalculate stirrup design with chosen diameter
+                sel_design = design_punching_shear_stirrups(
+                    Pu_ton=sel_col_data.get("Pu (ton)", 40.0),
+                    bc_cm=col_w_val,
+                    tc_cm=col_d_val,
+                    ctype=sel_col_data.get("Location Type", "Interior"),
+                    ts_cm=ts,
+                    d_cm=d,
+                    Fcu_kgcm2=Fcu,
+                    Fy_kgcm2=Fy,
+                    stirrup_dia_mm=sel_stirrup_dia,
+                )
+
+                # Calculate Total Strip Lengths for Selected Column
+                sel_ctype = sel_col_data.get("Location Type", "Interior")
+                sel_x_ext = sel_design["x_stirrup_ext_cm"]
+                if sel_ctype == "Corner":
+                    L_strip_x_val = col_w_val + sel_x_ext
+                    L_strip_y_val = col_d_val + sel_x_ext
+                elif sel_ctype == "Edge":
+                    L_strip_x_val = col_w_val + 2.0 * sel_x_ext
+                    L_strip_y_val = col_d_val + sel_x_ext
+                else:
+                    L_strip_x_val = col_w_val + 2.0 * sel_x_ext
+                    L_strip_y_val = col_d_val + 2.0 * sel_x_ext
+
+                # Parameter Cards Grid (2 rows x 3 columns)
+                c_p1, c_p2, c_p3 = st.columns(3)
+                with c_p1:
+                    st.markdown(
+                        f"""
+                        <div style="background:#1e293b; border:1.5px solid #334155; border-radius:8px; padding:8px 10px; text-align:center;">
+                            <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-bottom:2px;">مساحة الكانات المطلوبة (Ast,req)</div>
+                            <div style="font-size:15.5px; font-weight:800; color:#60a5fa;">
+                                {sel_design['Ast_req_mm2']:.1f} mm² <span style="font-size:11px; color:#94a3b8;">({sel_design['Ast_req_cm2']:.2f} cm²)</span>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with c_p2:
+                    st.markdown(
+                        f"""
+                        <div style="background:#1e293b; border:1.5px solid #334155; border-radius:8px; padding:8px 10px; text-align:center;">
+                            <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-bottom:2px;">المسافة بين الكانات (s ≤ d/2)</div>
+                            <div style="font-size:15.5px; font-weight:800; color:#60a5fa;">
+                                {sel_design['s_cm']:.1f} cm <span style="font-size:11px; color:#94a3b8;">(أول كانة s0 = {sel_design['s0_cm']:.1f} cm)</span>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with c_p3:
+                    st.markdown(
+                        f"""
+                        <div style="background:#1e293b; border:1.5px solid #334155; border-radius:8px; padding:8px 10px; text-align:center;">
+                            <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-bottom:2px;">عدد الصفوف وإجمالي الأفرع</div>
+                            <div style="font-size:15.5px; font-weight:800; color:#60a5fa;">
+                                {sel_design['n_rows']} صفوف <span style="font-size:11px; color:#94a3b8;">(إجمالي {sel_design['total_legs']} فرع Φ{sel_stirrup_dia})</span>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
+
+                c_p4, c_p5, c_p6 = st.columns(3)
+                with c_p4:
+                    st.markdown(
+                        f"""
+                        <div style="background:#1e293b; border:1.5px solid #334155; border-radius:8px; padding:8px 10px; text-align:center;">
+                            <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-bottom:2px;">طول شريحة الكانات اتجاه X (L_strip,X)</div>
+                            <div style="font-size:15.5px; font-weight:800; color:#facc15;">
+                                {L_strip_x_val:.1f} cm <span style="font-size:11px; color:#94a3b8;">(امتداد {sel_x_ext:.1f} cm)</span>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with c_p5:
+                    st.markdown(
+                        f"""
+                        <div style="background:#1e293b; border:1.5px solid #334155; border-radius:8px; padding:8px 10px; text-align:center;">
+                            <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-bottom:2px;">طول شريحة الكانات اتجاه Y (L_strip,Y)</div>
+                            <div style="font-size:15.5px; font-weight:800; color:#facc15;">
+                                {L_strip_y_val:.1f} cm <span style="font-size:11px; color:#94a3b8;">(امتداد {sel_x_ext:.1f} cm)</span>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with c_p6:
+                    st.markdown(
+                        f"""
+                        <div style="background:#1e293b; border:1.5px solid #334155; border-radius:8px; padding:8px 10px; text-align:center;">
+                            <div style="font-size:11.5px; font-weight:700; color:#cbd5e1; margin-bottom:2px;">اتجاه شريط الكانات (Stirrup Layout)</div>
+                            <div style="font-size:14.5px; font-weight:800; color:#4ade80;">
+                                في الاتجاهين (X & Y) <span style="font-size:11px; color:#94a3b8;">(Orthogonal)</span>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
+
+                # 6. Detailed Drawings for Selected Column: 2D Plan & Cross Section + 3D Isometric View + Site Reference Photo
+                tab_2d_det, tab_3d_det, tab_photo_det = st.tabs([
+                    "📐 2D Plan & Elevation Detail (المسقط الأفقي والقطاع الرأسي)",
+                    "🧊 3D Isometric Cages Model (النموذج ثلاثي الأبعاد لرص الكانات)",
+                    "📸 Site Execution Photo (صورة توضيحية لتنفيذ كانات القص)",
+                ])
+
+                with tab_2d_det:
+                    fig_det = generate_punching_stirrups_detail_sketch(
+                        sel_col_id,
+                        sel_col_data,
+                        col_w_cm=col_w_val,
+                        col_d_cm=col_d_val,
+                        d_cm=d,
+                        ts_cm=ts,
+                        Fcu=Fcu,
+                        Fy=Fy,
+                        stirrup_dia_mm=sel_stirrup_dia,
+                    )
+                    st.pyplot(fig_det, clear_figure=True, use_container_width=True)
+
+                    buf_det = io.BytesIO()
+                    fig_det.savefig(buf_det, format="png", bbox_inches="tight", dpi=180)
+                    buf_det.seek(0)
                     st.download_button(
-                        label="📥 Download Reference Photo (Shear punching stirrups)",
-                        data=img_bytes,
-                        file_name="Shear_punching_stirrups_Site_Reference.jpg",
-                        mime="image/jpeg",
+                        label=f"📥 Download 2D Detailing Plan & Elevation — Column {sel_col_id} (High-Res PNG)",
+                        data=buf_det,
+                        file_name=f"{prefix}Punching_Shear_2D_Detailing_{sel_col_id}_ts{ts:.0f}cm.png",
+                        mime="image/png",
                         use_container_width=True,
-                        key="btn_dl_punch_site_photo_all_safe",
+                        key=f"btn_dl_punch_detail_2d_{sel_col_id}",
                     )
+                    plt.close(fig_det)
+
+                with tab_3d_det:
+                    fig_3d = generate_punching_stirrups_3d_sketch(
+                        sel_col_id,
+                        sel_col_data,
+                        col_w_cm=col_w_val,
+                        col_d_cm=col_d_val,
+                        d_cm=d,
+                        ts_cm=ts,
+                        Fcu=Fcu,
+                        Fy=Fy,
+                        stirrup_dia_mm=sel_stirrup_dia,
+                    )
+                    st.pyplot(fig_3d, clear_figure=True, use_container_width=True)
+
+                    buf_3d = io.BytesIO()
+                    fig_3d.savefig(buf_3d, format="png", bbox_inches="tight", dpi=180)
+                    buf_3d.seek(0)
+                    st.download_button(
+                        label=f"📥 Download 3D Isometric Detailing Model — Column {sel_col_id} (High-Res PNG)",
+                        data=buf_3d,
+                        file_name=f"{prefix}Punching_Shear_3D_Detailing_{sel_col_id}_ts{ts:.0f}cm.png",
+                        mime="image/png",
+                        use_container_width=True,
+                        key=f"btn_dl_punch_detail_3d_{sel_col_id}",
+                    )
+                    plt.close(fig_3d)
+
+                with tab_photo_det:
+                    st.markdown(
+                        """
+                        <div dir="rtl" style="background:#0f172a; border:1.8px solid #3b82f6; border-radius:10px; padding:14px 18px; margin-bottom:14px; text-align:right;">
+                            <div style="font-size:16.5px; font-weight:800; color:#38bdf8; margin-bottom:4px;">
+                                📸 صورة توضيحية من الموقع: تنفيذ كانات القص الثاقب (Shear punching stirrups)
+                            </div>
+                            <div style="font-size:13.5px; color:#cbd5e1; line-height:1.7;">
+                                توضح الصورة أدناه التطبيق العملي والتنفيذي لرص كانات القص الثاقب (Punching Shear Stirrups) على الطبيعة في البلاطات اللاكمرية (Flat Slabs) حول الأعمدة وفقاً لاشتراطات الكود المصري <b>ECP 203</b>، حيث يتم ترتيب الكانات في أشرطة متعامدة مع أسياخ التعليق العلوية والسفلية (Hanger Rebars) لضمان ثبات القفص ومقاومة إجهادات الاختراق بكفاءة تامة.
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                    site_img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "shear_punching_stirrups.jpg")
+                    if not os.path.exists(site_img_path):
+                        site_img_path = os.path.join("assets", "shear_punching_stirrups.jpg")
+
+                    if os.path.exists(site_img_path):
+                        st.image(
+                            site_img_path,
+                            caption="Shear punching stirrups — تنفيذ وتوزيع كانات القص الثاقب وأسياخ التعليق حول العمود في الموقع",
+                            use_container_width=True,
+                        )
+                        with open(site_img_path, "rb") as f_img:
+                            img_bytes = f_img.read()
+                        st.download_button(
+                            label="📥 Download Reference Photo (Shear punching stirrups)",
+                            data=img_bytes,
+                            file_name="Shear_punching_stirrups_Site_Reference.jpg",
+                            mime="image/jpeg",
+                            use_container_width=True,
+                            key=f"btn_dl_punch_site_photo_{sel_col_id}",
+                        )
+                    else:
+                        st.warning("⚠️ تعذر العثور على ملف الصورة التوضيحية في مسار assets/shear_punching_stirrups.jpg")
+            else:
+                st.markdown(
+                    """
+                    <div dir="rtl" style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.14) 0%, rgba(16, 185, 129, 0.08) 100%); border: 2px solid #22c55e; border-radius: 10px; padding: 16px 20px; margin-top: 10px; margin-bottom: 14px; text-align: right;">
+                        <div style="font-size: 16.5px; font-weight: 800; color: #4ade80; display: flex; align-items: center; gap: 8px;">
+                            ✅ لا توجد أعمدة تحتاج إلى كانات لدعم قوة الاختراق (Punching Shear)
+                        </div>
+                        <div style="margin-top: 6px; font-size: 14.5px; color: #ffffff; line-height: 1.7;">
+                            جميع أعمدة السقف آمنة تماماً في القص الثاقب بمقاومة الخرسانة بمفردها (<b>qu ≤ qcup</b>)، ولا توجد أي أعمدة تتطلب إضافة كانات قص ثاقب (Stirrups) أو عمل سقوط (Drop Panel).
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                with st.expander("📸 Shear Punching Stirrups Site Execution (صورة توضيحية لتنفيذ كانات القص الثاقب)", expanded=False):
+                    site_img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "shear_punching_stirrups.jpg")
+                    if not os.path.exists(site_img_path):
+                        site_img_path = os.path.join("assets", "shear_punching_stirrups.jpg")
+
+                    if os.path.exists(site_img_path):
+                        st.image(
+                            site_img_path,
+                            caption="Shear punching stirrups — تنفيذ وتوزيع كانات القص الثاقب وأسياخ التعليق حول العمود في الموقع",
+                            use_container_width=True,
+                        )
+                        with open(site_img_path, "rb") as f_img:
+                            img_bytes = f_img.read()
+                        st.download_button(
+                            label="📥 Download Reference Photo (Shear punching stirrups)",
+                            data=img_bytes,
+                            file_name="Shear_punching_stirrups_Site_Reference.jpg",
+                            mime="image/jpeg",
+                            use_container_width=True,
+                            key="btn_dl_punch_site_photo_all_safe",
+                        )
 
     st.markdown("---")
 
@@ -9426,143 +9430,151 @@ def render():
     img_m22_b64 = None
     img_dual_moment_b64 = None
 
-    with st.expander(
+    exp_mom = st.expander(
         "📊 1. 2D Bending Moment Matrix & Color Contours (مصفوفة العزوم والمخطط اللوني M11 & M22)",
         expanded=False,
-    ):
-        moment_view_mode = S.radio(
-            "👁️ Select Moment View Mode (اختر اتجاه عزم الانحناء للعرض):",
-            "fs_moment_contour_view_mode_idx",
-            options=[
-                "↔️ M11 — X-Direction Moment (عزوم المحور الأفقي)",
-                "↕️ M22 — Y-Direction Moment (عزوم المحور الرأسي)",
-            ],
-            index=0,
-        )
+        key=f"{prefix}exp_moments_contour",
+        on_change="rerun",
+    )
+    with exp_mom:
+        if exp_mom.open:
+            moment_view_mode = S.radio(
+                "👁️ Select Moment View Mode (اختر اتجاه عزم الانحناء للعرض):",
+                "fs_moment_contour_view_mode_idx",
+                options=[
+                    "↔️ M11 — X-Direction Moment (عزوم المحور الأفقي)",
+                    "↕️ M22 — Y-Direction Moment (عزوم المحور الرأسي)",
+                ],
+                index=0,
+            )
 
-        if "M11" in moment_view_mode:
-            fig_m11 = generate_flat_slab_moment_contour(
-                Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
-                mode="M11",
-                col_w_cm=bc_s, col_d_cm=tc_s,
-                removed_cols=_removed_col_objs,
-                void_panel_ids=set(_confirmed_voids),
-                top_extra_cols=top_extra_cols,
-                btm_extra_spans=btm_extra_spans,
-            )
-            st.pyplot(fig_m11, clear_figure=True, use_container_width=True)
-            buf_m11 = io.BytesIO()
-            fig_m11.savefig(buf_m11, format="png", bbox_inches="tight", dpi=180)
-            buf_m11.seek(0)
-            img_m11_b64 = "data:image/png;base64," + base64.b64encode(buf_m11.getvalue()).decode("utf-8")
-            buf_m11.seek(0)
-            st.download_button(
-                label="📥 Download M11 Moment Contour Plan (High-Res PNG)",
-                data=buf_m11,
-                file_name=f"{prefix}Flat_Slab_Moment_M11_Contour_Plan_ts{ts:.0f}cm.png",
-                mime="image/png",
-                use_container_width=True,
-            )
-            plt.close(fig_m11)
+            if "M11" in moment_view_mode:
+                fig_m11 = generate_flat_slab_moment_contour(
+                    Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+                    mode="M11",
+                    col_w_cm=bc_s, col_d_cm=tc_s,
+                    removed_cols=_removed_col_objs,
+                    void_panel_ids=set(_confirmed_voids),
+                    top_extra_cols=top_extra_cols,
+                    btm_extra_spans=btm_extra_spans,
+                )
+                st.pyplot(fig_m11, clear_figure=True, use_container_width=True)
+                buf_m11 = io.BytesIO()
+                fig_m11.savefig(buf_m11, format="png", bbox_inches="tight", dpi=180)
+                buf_m11.seek(0)
+                img_m11_b64 = "data:image/png;base64," + base64.b64encode(buf_m11.getvalue()).decode("utf-8")
+                buf_m11.seek(0)
+                st.download_button(
+                    label="📥 Download M11 Moment Contour Plan (High-Res PNG)",
+                    data=buf_m11,
+                    file_name=f"{prefix}Flat_Slab_Moment_M11_Contour_Plan_ts{ts:.0f}cm.png",
+                    mime="image/png",
+                    use_container_width=True,
+                )
+                plt.close(fig_m11)
 
-        else:
-            fig_m22 = generate_flat_slab_moment_contour(
-                Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
-                mode="M22",
-                col_w_cm=bc_s, col_d_cm=tc_s,
-                removed_cols=_removed_col_objs,
-                void_panel_ids=set(_confirmed_voids),
-                top_extra_cols=top_extra_cols,
-                btm_extra_spans=btm_extra_spans,
-            )
-            st.pyplot(fig_m22, clear_figure=True, use_container_width=True)
-            buf_m22 = io.BytesIO()
-            fig_m22.savefig(buf_m22, format="png", bbox_inches="tight", dpi=180)
-            buf_m22.seek(0)
-            img_m22_b64 = "data:image/png;base64," + base64.b64encode(buf_m22.getvalue()).decode("utf-8")
-            buf_m22.seek(0)
-            st.download_button(
-                label="📥 Download M22 Moment Contour Plan (High-Res PNG)",
-                data=buf_m22,
-                file_name=f"{prefix}Flat_Slab_Moment_M22_Contour_Plan_ts{ts:.0f}cm.png",
-                mime="image/png",
-                use_container_width=True,
-            )
-            plt.close(fig_m22)
+            else:
+                fig_m22 = generate_flat_slab_moment_contour(
+                    Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+                    mode="M22",
+                    col_w_cm=bc_s, col_d_cm=tc_s,
+                    removed_cols=_removed_col_objs,
+                    void_panel_ids=set(_confirmed_voids),
+                    top_extra_cols=top_extra_cols,
+                    btm_extra_spans=btm_extra_spans,
+                )
+                st.pyplot(fig_m22, clear_figure=True, use_container_width=True)
+                buf_m22 = io.BytesIO()
+                fig_m22.savefig(buf_m22, format="png", bbox_inches="tight", dpi=180)
+                buf_m22.seek(0)
+                img_m22_b64 = "data:image/png;base64," + base64.b64encode(buf_m22.getvalue()).decode("utf-8")
+                buf_m22.seek(0)
+                st.download_button(
+                    label="📥 Download M22 Moment Contour Plan (High-Res PNG)",
+                    data=buf_m22,
+                    file_name=f"{prefix}Flat_Slab_Moment_M22_Contour_Plan_ts{ts:.0f}cm.png",
+                    mime="image/png",
+                    use_container_width=True,
+                )
+                plt.close(fig_m22)
 
     # ── 📊 1b. MOMENT DEFICIT CONTOUR (فارق العزوم السفلي) ──────────────────
-    with st.expander(
+    exp_def = st.expander(
         "📊 1b. Moment Deficit Contour — Bottom Steel Coverage (كونتور فارق العزوم: ما يغطيه الحديد السفلي وما يحتاج إضافي)",
         expanded=False,
-    ):
-        # Info card: show M_cap of the base mesh
-        M_cap_display = calc_moment_capacity_btm(prov_btm_mesh_cm2m, d, Fcu, Fy)
-        st.markdown(
-            f"""
-            <div style="background:#1e293b; border:2px solid #3b82f6; border-radius:10px;
-                        padding:14px 20px; margin:10px 0 16px 0; display:flex; gap:32px; flex-wrap:wrap;">
-                <div>
-                    <span style="font-size:13px; font-weight:600; color:#94a3b8;">Bottom Mesh Provided</span><br>
-                    <span style="font-size:17px; font-weight:700; color:#60a5fa;">{mesh_btm_str}</span>
+        key=f"{prefix}exp_deficit_check",
+        on_change="rerun",
+    )
+    with exp_def:
+        if exp_def.open:
+            # Info card: show M_cap of the base mesh
+            M_cap_display = calc_moment_capacity_btm(prov_btm_mesh_cm2m, d, Fcu, Fy)
+            st.markdown(
+                f"""
+                <div style="background:#1e293b; border:2px solid #3b82f6; border-radius:10px;
+                            padding:14px 20px; margin:10px 0 16px 0; display:flex; gap:32px; flex-wrap:wrap;">
+                    <div>
+                        <span style="font-size:13px; font-weight:600; color:#94a3b8;">Bottom Mesh Provided</span><br>
+                        <span style="font-size:17px; font-weight:700; color:#60a5fa;">{mesh_btm_str}</span>
+                    </div>
+                    <div>
+                        <span style="font-size:13px; font-weight:600; color:#94a3b8;">Steel Area (As)</span><br>
+                        <span style="font-size:17px; font-weight:700; color:#60a5fa;">{prov_btm_mesh_cm2m:.2f} cm²/m</span>
+                    </div>
+                    <div>
+                        <span style="font-size:13px; font-weight:600; color:#94a3b8;">Moment Capacity (M_cap)</span><br>
+                        <span style="font-size:17px; font-weight:700; color:#4ade80;">{M_cap_display:.3f} t.m/m</span>
+                    </div>
+                    <div style="border-left:2px solid #475569; padding-left:20px;">
+                        <span style="font-size:13px; font-weight:600; color:#94a3b8;">Deficit = max(0, M_applied − M_cap)</span><br>
+                        <span style="font-size:13px; color:#f8fafc; font-weight:500;">
+                            🟢 Green = No extra steel needed &nbsp;|&nbsp; 🟡→🔴 Coloured = Extra bottom steel required
+                        </span>
+                    </div>
                 </div>
-                <div>
-                    <span style="font-size:13px; font-weight:600; color:#94a3b8;">Steel Area (As)</span><br>
-                    <span style="font-size:17px; font-weight:700; color:#60a5fa;">{prov_btm_mesh_cm2m:.2f} cm²/m</span>
-                </div>
-                <div>
-                    <span style="font-size:13px; font-weight:600; color:#94a3b8;">Moment Capacity (M_cap)</span><br>
-                    <span style="font-size:17px; font-weight:700; color:#4ade80;">{M_cap_display:.3f} t.m/m</span>
-                </div>
-                <div style="border-left:2px solid #475569; padding-left:20px;">
-                    <span style="font-size:13px; font-weight:600; color:#94a3b8;">Deficit = max(0, M_applied − M_cap)</span><br>
-                    <span style="font-size:13px; color:#f8fafc; font-weight:500;">
-                        🟢 Green = No extra steel needed &nbsp;|&nbsp; 🟡→🔴 Coloured = Extra bottom steel required
-                    </span>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+                """,
+                unsafe_allow_html=True,
+            )
 
-        deficit_view_mode = S.radio(
-            "👁️ Select Deficit View (اختر اتجاه عرض فارق العزوم):",
-            "fs_deficit_contour_view_mode_idx",
-            options=[
-                "↔️ M11 Deficit — X-Direction (فارق عزوم M11 الأفقي)",
-                "↕️ M22 Deficit — Y-Direction (فارق عزوم M22 الرأسي)",
-            ],
-            index=0,
-        )
+            deficit_view_mode = S.radio(
+                "👁️ Select Deficit View (اختر اتجاه عرض فارق العزوم):",
+                "fs_deficit_contour_view_mode_idx",
+                options=[
+                    "↔️ M11 Deficit — X-Direction (فارق عزوم M11 الأفقي)",
+                    "↕️ M22 Deficit — Y-Direction (فارق عزوم M22 الرأسي)",
+                ],
+                index=0,
+            )
 
-        if "M11" in deficit_view_mode:
-            _def_mode = "M11"
-        else:
-            _def_mode = "M22"
+            if "M11" in deficit_view_mode:
+                _def_mode = "M11"
+            else:
+                _def_mode = "M22"
 
-        fig_deficit = generate_moment_deficit_contour(
-            Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
-            prov_btm_mesh_cm2m=prov_btm_mesh_cm2m,
-            d_cm=d,
-            Fcu=Fcu,
-            Fy=Fy,
-            mode=_def_mode,
-            col_w_cm=bc_s,
-            col_d_cm=tc_s,
-            removed_cols=_removed_col_objs,
-            void_panel_ids=set(_confirmed_voids),
-        )
-        st.pyplot(fig_deficit, clear_figure=True, use_container_width=True)
-        buf_deficit = io.BytesIO()
-        fig_deficit.savefig(buf_deficit, format="png", bbox_inches="tight", dpi=180)
-        buf_deficit.seek(0)
-        st.download_button(
-            label=f"📥 Download Moment Deficit Contour ({_def_mode}) Plan (High-Res PNG)",
-            data=buf_deficit,
-            file_name=f"{prefix}Flat_Slab_Moment_Deficit_{_def_mode}_ts{ts:.0f}cm.png",
-            mime="image/png",
-            use_container_width=True,
-        )
-        plt.close(fig_deficit)
+            fig_deficit = generate_moment_deficit_contour(
+                Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+                prov_btm_mesh_cm2m=prov_btm_mesh_cm2m,
+                d_cm=d,
+                Fcu=Fcu,
+                Fy=Fy,
+                mode=_def_mode,
+                col_w_cm=bc_s,
+                col_d_cm=tc_s,
+                removed_cols=_removed_col_objs,
+                void_panel_ids=set(_confirmed_voids),
+            )
+            st.pyplot(fig_deficit, clear_figure=True, use_container_width=True)
+            buf_deficit = io.BytesIO()
+            fig_deficit.savefig(buf_deficit, format="png", bbox_inches="tight", dpi=180)
+            buf_deficit.seek(0)
+            st.download_button(
+                label=f"📥 Download Moment Deficit Contour ({_def_mode}) Plan (High-Res PNG)",
+                data=buf_deficit,
+                file_name=f"{prefix}Flat_Slab_Moment_Deficit_{_def_mode}_ts{ts:.0f}cm.png",
+                mime="image/png",
+                use_container_width=True,
+            )
+            plt.close(fig_deficit)
 
     # ── 🟢 2. TOP REINFORCEMENT PLAN (Initialized for exports) ────────────────
     img_top_b64 = None
@@ -9593,7 +9605,7 @@ def render():
         render_styled_table(master_summary, headers=["Design Item", "Design Output / Value", "Engineering Notes & Code Reference"])
 
     # ── 📊 BENDING MOMENTS & REINFORCEMENT SCHEDULES (Collapsed Section) ─────
-    with st.expander("📊 جداول حصر وتوزيع العزوم وحديد التسليح (Bending Moments & Steel Design Schedules)", expanded=False):
+    with st.expander("📊 Bending Moments & Steel Design Schedules (جداول حصر وتوزيع العزوم وحديد التسليح)", expanded=False):
         st.markdown(
             """
             <div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:8px; padding:10px 16px; margin-bottom:14px;">
@@ -9611,9 +9623,9 @@ def render():
         active_btm_y = [by for by in all_panels_y_design if by.get("is_needed", False)]
 
         tab_tbl_top, tab_tbl_btm_x, tab_tbl_btm_y = st.tabs([
-            f"🔴 1. الحديد العلوي الإضافي فوق الأعمدة ({len(active_top_extra)} عمود)",
-            f"↔️ 2. الحديد السفلي الإضافي — اتجاه X ({len(active_btm_x)} باكية)",
-            f"↕️ 3. الحديد السفلي الإضافي — اتجاه Y ({len(active_btm_y)} باكية)",
+            f"🔴 1. Top Extra over Columns ({len(active_top_extra)} Cols) — (الحديد العلوي الإضافي فوق الأعمدة)",
+            f"↔️ 2. Bottom Extra X-Dir ({len(active_btm_x)} Bays) — (الحديد السفلي الإضافي اتجاه X)",
+            f"↕️ 3. Bottom Extra Y-Dir ({len(active_btm_y)} Bays) — (الحديد السفلي الإضافي اتجاه Y)",
         ])
 
         with tab_tbl_top:
@@ -9708,188 +9720,190 @@ def render():
                 )
 
     # ── 🗺️ STEEL LAYOUT MASTER FLOOR PLAN ─────────────────────────────────────
-    with st.expander("🗺️ Steel Layout (مسقط أفقي لتسليح البلاطة)", expanded=False):
-        st.markdown(
-            """
-            <style>
-            /* Allow tabs in Steel Layout to wrap titles cleanly and display side-by-side */
-            div[data-testid="stTabs"] button[role="tab"],
-            div[data-baseweb="tab-list"] button {
-                white-space: normal !important;
-                text-align: center !important;
-                height: auto !important;
-                min-height: 48px !important;
-                padding: 6px 12px !important;
-                font-weight: 600 !important;
-                line-height: 1.25 !important;
-                font-size: 0.88rem !important;
-            }
-            div[data-testid="stTabs"] div[role="tablist"],
-            div[data-baseweb="tab-list"] {
-                display: flex !important;
-                flex-wrap: wrap !important;
-                gap: 4px !important;
-            }
-            </style>
-            <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 14px 20px; border-radius: 10px; margin-bottom: 15px; border-left: 5px solid #3b82f6;">
-                <div style="color: #60a5fa; font-weight: bold; font-size: 1.15rem;">📐 المخططات التنفيذية لتسليح البلاطة (Executive Rebar Plans)</div>
-                <div style="color: #cbd5e1; font-size: 0.92rem; margin-top: 4px;">
-                    تم فصل كل طبقة ونوع تسليح في رسم هندسي مستقل عالي الدقة بخط كبير وواضح مع كود الألوان والمواصفات وحصر الأطوال والأوزان في تبويبات متجاورة.
+    exp_stl = st.expander("🗺️ Steel Layout (مسقط أفقي لتسليح البلاطة)", expanded=False, key=f"{prefix}exp_steel_layout", on_change="rerun")
+    with exp_stl:
+        if exp_stl.open:
+            st.markdown(
+                """
+                <style>
+                /* Allow tabs in Steel Layout to wrap titles cleanly and display side-by-side */
+                div[data-testid="stTabs"] button[role="tab"],
+                div[data-baseweb="tab-list"] button {
+                    white-space: normal !important;
+                    text-align: center !important;
+                    height: auto !important;
+                    min-height: 48px !important;
+                    padding: 6px 12px !important;
+                    font-weight: 600 !important;
+                    line-height: 1.25 !important;
+                    font-size: 0.88rem !important;
+                }
+                div[data-testid="stTabs"] div[role="tablist"],
+                div[data-baseweb="tab-list"] {
+                    display: flex !important;
+                    flex-wrap: wrap !important;
+                    gap: 4px !important;
+                }
+                </style>
+                <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 14px 20px; border-radius: 10px; margin-bottom: 15px; border-left: 5px solid #3b82f6;">
+                    <div style="color: #60a5fa; font-weight: bold; font-size: 1.15rem;">📐 المخططات التنفيذية لتسليح البلاطة (Executive Rebar Plans)</div>
+                    <div style="color: #cbd5e1; font-size: 0.92rem; margin-top: 4px;">
+                        تم فصل كل طبقة ونوع تسليح في رسم هندسي مستقل عالي الدقة بخط كبير وواضح مع كود الألوان والمواصفات وحصر الأطوال والأوزان في تبويبات متجاورة.
+                    </div>
                 </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+                """,
+                unsafe_allow_html=True,
+            )
 
-        tab_m1, tab_m2a, tab_m2b, tab_m3a, tab_m3b = st.tabs([
-            "🔴 1. Column Caps (Top Extra)\nكابات وتفريد الإضافي العلوي للأعمدة",
-            "🔶 2A. Bottom Extra (X-Dir)\nالإضافي السفلي وشوك الكوابيل (اتجاه X)",
-            "🔶 2B. Bottom Extra (Y-Dir)\nالإضافي السفلي وشوك الكوابيل (اتجاه Y)",
-            "🔵 3A. Top Slab Extra (X-Dir)\nالرقة العلوية والإضافي العلوي (اتجاه X)",
-            "🔵 3B. Top Slab Extra (Y-Dir)\nالرقة العلوية والإضافي العلوي (اتجاه Y)",
-        ])
+            tab_m1, tab_m2a, tab_m2b, tab_m3a, tab_m3b = st.tabs([
+                "🔴 1. Column Caps / Top Extra (كابات وتفريد الإضافي العلوي للأعمدة)",
+                "🔶 2A. Bottom Extra X-Dir (الإضافي السفلي وشوك الكوابيل اتجاه X)",
+                "🔶 2B. Bottom Extra Y-Dir (الإضافي السفلي وشوك الكوابيل اتجاه Y)",
+                "🔵 3A. Top Slab Extra X-Dir (الرقة العلوية والإضافي العلوي اتجاه X)",
+                "🔵 3B. Top Slab Extra Y-Dir (الرقة العلوية والإضافي العلوي اتجاه Y)",
+            ])
 
-        # ── Tab 1: Column Caps
-        with tab_m1:
-            st.markdown("#### 🔴 1. Column Caps Layout (Top Extra) — كابات الحديد الإضافي العلوي فوق الأعمدة (أبعاد ومساحة الشرائح)")
-            fig_cc = generate_flat_slab_column_caps_sketch(
-                Lx_calc, Ly_calc, cantilevers, ts,
-                top_extra_cols=top_extra_cols,
-                col_w_cm=bc_s, col_d_cm=tc_s,
-                removed_cols=_confirmed_removals,
-                void_panel_ids=_confirmed_voids,
-            )
-            st.pyplot(fig_cc, clear_figure=True, use_container_width=True)
-            buf_cc = io.BytesIO()
-            fig_cc.savefig(buf_cc, format="png", bbox_inches="tight", dpi=180)
-            buf_cc.seek(0)
-            st.download_button(
-                label="📥 Download 1. Column Caps Layout (High-Res PNG)",
-                data=buf_cc,
-                file_name=f"{prefix}1_Column_Caps_Top_Extra_ts{ts:.0f}cm.png",
-                mime="image/png",
-                use_container_width=True,
-                key="btn_dl_col_caps",
-            )
-            plt.close(fig_cc)
+            # ── Tab 1: Column Caps
+            with tab_m1:
+                st.markdown("#### 🔴 1. Column Caps Layout (Top Extra) — كابات الحديد الإضافي العلوي فوق الأعمدة (أبعاد ومساحة الشرائح)")
+                fig_cc = generate_flat_slab_column_caps_sketch(
+                    Lx_calc, Ly_calc, cantilevers, ts,
+                    top_extra_cols=top_extra_cols,
+                    col_w_cm=bc_s, col_d_cm=tc_s,
+                    removed_cols=_confirmed_removals,
+                    void_panel_ids=_confirmed_voids,
+                )
+                st.pyplot(fig_cc, clear_figure=True, use_container_width=True)
+                buf_cc = io.BytesIO()
+                fig_cc.savefig(buf_cc, format="png", bbox_inches="tight", dpi=180)
+                buf_cc.seek(0)
+                st.download_button(
+                    label="📥 Download 1. Column Caps Layout (High-Res PNG)",
+                    data=buf_cc,
+                    file_name=f"{prefix}1_Column_Caps_Top_Extra_ts{ts:.0f}cm.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key="btn_dl_col_caps",
+                )
+                plt.close(fig_cc)
 
-        # ── Tab 2A: Bottom Extra (X-Direction) & Shawka
-        with tab_m2a:
-            st.markdown("#### 🔶 2A. Bottom Extra (X-Direction) & Base Meshes — الحديد الإضافي السفلي وشوك الكوابيل في اتجاه X وشبكات التسليح")
-            fig_bes_x = generate_flat_slab_bottom_extra_shawka_sketch(
-                Lx_calc, Ly_calc, cantilevers, ts,
-                btm_extra_spans=btm_extra_spans,
-                cant_rft_list=cant_rft_list,
-                n_mesh_btm=n_mesh_btm,
-                bottom_mesh_dia=bottom_mesh_dia,
-                n_mesh_top=n_mesh_top,
-                top_mesh_dia=top_mesh_dia,
-                col_w_cm=bc_s, col_d_cm=tc_s,
-                removed_cols=_confirmed_removals,
-                void_panel_ids=_confirmed_voids,
-                direction="X",
-            )
-            st.pyplot(fig_bes_x, clear_figure=True, use_container_width=True)
-            buf_bes_x = io.BytesIO()
-            fig_bes_x.savefig(buf_bes_x, format="png", bbox_inches="tight", dpi=180)
-            buf_bes_x.seek(0)
-            st.download_button(
-                label="📥 Download 2A. Bottom Extra (X-Direction) Layout (High-Res PNG)",
-                data=buf_bes_x,
-                file_name=f"{prefix}2A_Bottom_Extra_X_ts{ts:.0f}cm.png",
-                mime="image/png",
-                use_container_width=True,
-                key="btn_dl_btm_extra_x",
-            )
-            plt.close(fig_bes_x)
+            # ── Tab 2A: Bottom Extra (X-Direction) & Shawka
+            with tab_m2a:
+                st.markdown("#### 🔶 2A. Bottom Extra (X-Direction) & Base Meshes — الحديد الإضافي السفلي وشوك الكوابيل في اتجاه X وشبكات التسليح")
+                fig_bes_x = generate_flat_slab_bottom_extra_shawka_sketch(
+                    Lx_calc, Ly_calc, cantilevers, ts,
+                    btm_extra_spans=btm_extra_spans,
+                    cant_rft_list=cant_rft_list,
+                    n_mesh_btm=n_mesh_btm,
+                    bottom_mesh_dia=bottom_mesh_dia,
+                    n_mesh_top=n_mesh_top,
+                    top_mesh_dia=top_mesh_dia,
+                    col_w_cm=bc_s, col_d_cm=tc_s,
+                    removed_cols=_confirmed_removals,
+                    void_panel_ids=_confirmed_voids,
+                    direction="X",
+                )
+                st.pyplot(fig_bes_x, clear_figure=True, use_container_width=True)
+                buf_bes_x = io.BytesIO()
+                fig_bes_x.savefig(buf_bes_x, format="png", bbox_inches="tight", dpi=180)
+                buf_bes_x.seek(0)
+                st.download_button(
+                    label="📥 Download 2A. Bottom Extra (X-Direction) Layout (High-Res PNG)",
+                    data=buf_bes_x,
+                    file_name=f"{prefix}2A_Bottom_Extra_X_ts{ts:.0f}cm.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key="btn_dl_btm_extra_x",
+                )
+                plt.close(fig_bes_x)
 
-        # ── Tab 2B: Bottom Extra (Y-Direction) & Shawka
-        with tab_m2b:
-            st.markdown("#### 🔶 2B. Bottom Extra (Y-Direction) & Base Meshes — الحديد الإضافي السفلي وشوك الكوابيل في اتجاه Y وشبكات التسليح")
-            fig_bes_y = generate_flat_slab_bottom_extra_shawka_sketch(
-                Lx_calc, Ly_calc, cantilevers, ts,
-                btm_extra_spans=btm_extra_spans,
-                cant_rft_list=cant_rft_list,
-                n_mesh_btm=n_mesh_btm,
-                bottom_mesh_dia=bottom_mesh_dia,
-                n_mesh_top=n_mesh_top,
-                top_mesh_dia=top_mesh_dia,
-                col_w_cm=bc_s, col_d_cm=tc_s,
-                removed_cols=_confirmed_removals,
-                void_panel_ids=_confirmed_voids,
-                direction="Y",
-            )
-            st.pyplot(fig_bes_y, clear_figure=True, use_container_width=True)
-            buf_bes_y = io.BytesIO()
-            fig_bes_y.savefig(buf_bes_y, format="png", bbox_inches="tight", dpi=180)
-            buf_bes_y.seek(0)
-            st.download_button(
-                label="📥 Download 2B. Bottom Extra (Y-Direction) Layout (High-Res PNG)",
-                data=buf_bes_y,
-                file_name=f"{prefix}2B_Bottom_Extra_Y_ts{ts:.0f}cm.png",
-                mime="image/png",
-                use_container_width=True,
-                key="btn_dl_btm_extra_y",
-            )
-            plt.close(fig_bes_y)
+            # ── Tab 2B: Bottom Extra (Y-Direction) & Shawka
+            with tab_m2b:
+                st.markdown("#### 🔶 2B. Bottom Extra (Y-Direction) & Base Meshes — الحديد الإضافي السفلي وشوك الكوابيل في اتجاه Y وشبكات التسليح")
+                fig_bes_y = generate_flat_slab_bottom_extra_shawka_sketch(
+                    Lx_calc, Ly_calc, cantilevers, ts,
+                    btm_extra_spans=btm_extra_spans,
+                    cant_rft_list=cant_rft_list,
+                    n_mesh_btm=n_mesh_btm,
+                    bottom_mesh_dia=bottom_mesh_dia,
+                    n_mesh_top=n_mesh_top,
+                    top_mesh_dia=top_mesh_dia,
+                    col_w_cm=bc_s, col_d_cm=tc_s,
+                    removed_cols=_confirmed_removals,
+                    void_panel_ids=_confirmed_voids,
+                    direction="Y",
+                )
+                st.pyplot(fig_bes_y, clear_figure=True, use_container_width=True)
+                buf_bes_y = io.BytesIO()
+                fig_bes_y.savefig(buf_bes_y, format="png", bbox_inches="tight", dpi=180)
+                buf_bes_y.seek(0)
+                st.download_button(
+                    label="📥 Download 2B. Bottom Extra (Y-Direction) Layout (High-Res PNG)",
+                    data=buf_bes_y,
+                    file_name=f"{prefix}2B_Bottom_Extra_Y_ts{ts:.0f}cm.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key="btn_dl_btm_extra_y",
+                )
+                plt.close(fig_bes_y)
 
-        # ── Tab 3A: Top Base Mesh & Extra Slab Top Mesh (X-Direction)
-        with tab_m3a:
-            st.markdown("#### 🔵 3A. Top Base Mesh & Extra Slab Top Mesh (X-Direction) — الرقة العلوية الأساسية والحديد الإضافي العلوي (اتجاه X)")
-            fig_tmes_x = generate_flat_slab_top_mesh_extra_sketch(
-                Lx_calc, Ly_calc, cantilevers, ts,
-                top_extra_slab_bays=top_extra_slab_bays,
-                n_mesh_top=n_mesh_top,
-                top_mesh_dia=top_mesh_dia,
-                n_mesh_btm=n_mesh_btm,
-                bottom_mesh_dia=bottom_mesh_dia,
-                col_w_cm=bc_s, col_d_cm=tc_s,
-                removed_cols=_confirmed_removals,
-                void_panel_ids=_confirmed_voids,
-                direction="X",
-            )
-            st.pyplot(fig_tmes_x, clear_figure=True, use_container_width=True)
-            buf_tmes_x = io.BytesIO()
-            fig_tmes_x.savefig(buf_tmes_x, format="png", bbox_inches="tight", dpi=180)
-            buf_tmes_x.seek(0)
-            st.download_button(
-                label="📥 Download 3A. Top Slab Extra (X-Direction) Layout (High-Res PNG)",
-                data=buf_tmes_x,
-                file_name=f"{prefix}3A_Top_Base_Mesh_Extra_Slab_X_ts{ts:.0f}cm.png",
-                mime="image/png",
-                use_container_width=True,
-                key="btn_dl_top_mesh_extra_x",
-            )
-            plt.close(fig_tmes_x)
+            # ── Tab 3A: Top Base Mesh & Extra Slab Top Mesh (X-Direction)
+            with tab_m3a:
+                st.markdown("#### 🔵 3A. Top Base Mesh & Extra Slab Top Mesh (X-Direction) — الرقة العلوية الأساسية والحديد الإضافي العلوي (اتجاه X)")
+                fig_tmes_x = generate_flat_slab_top_mesh_extra_sketch(
+                    Lx_calc, Ly_calc, cantilevers, ts,
+                    top_extra_slab_bays=top_extra_slab_bays,
+                    n_mesh_top=n_mesh_top,
+                    top_mesh_dia=top_mesh_dia,
+                    n_mesh_btm=n_mesh_btm,
+                    bottom_mesh_dia=bottom_mesh_dia,
+                    col_w_cm=bc_s, col_d_cm=tc_s,
+                    removed_cols=_confirmed_removals,
+                    void_panel_ids=_confirmed_voids,
+                    direction="X",
+                )
+                st.pyplot(fig_tmes_x, clear_figure=True, use_container_width=True)
+                buf_tmes_x = io.BytesIO()
+                fig_tmes_x.savefig(buf_tmes_x, format="png", bbox_inches="tight", dpi=180)
+                buf_tmes_x.seek(0)
+                st.download_button(
+                    label="📥 Download 3A. Top Slab Extra (X-Direction) Layout (High-Res PNG)",
+                    data=buf_tmes_x,
+                    file_name=f"{prefix}3A_Top_Base_Mesh_Extra_Slab_X_ts{ts:.0f}cm.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key="btn_dl_top_mesh_extra_x",
+                )
+                plt.close(fig_tmes_x)
 
-        # ── Tab 3B: Top Base Mesh & Extra Slab Top Mesh (Y-Direction)
-        with tab_m3b:
-            st.markdown("#### 🔵 3B. Top Base Mesh & Extra Slab Top Mesh (Y-Direction) — الرقة العلوية الأساسية والحديد الإضافي العلوي (اتجاه Y)")
-            fig_tmes_y = generate_flat_slab_top_mesh_extra_sketch(
-                Lx_calc, Ly_calc, cantilevers, ts,
-                top_extra_slab_bays=top_extra_slab_bays,
-                n_mesh_top=n_mesh_top,
-                top_mesh_dia=top_mesh_dia,
-                n_mesh_btm=n_mesh_btm,
-                bottom_mesh_dia=bottom_mesh_dia,
-                col_w_cm=bc_s, col_d_cm=tc_s,
-                removed_cols=_confirmed_removals,
-                void_panel_ids=_confirmed_voids,
-                direction="Y",
-            )
-            st.pyplot(fig_tmes_y, clear_figure=True, use_container_width=True)
-            buf_tmes_y = io.BytesIO()
-            fig_tmes_y.savefig(buf_tmes_y, format="png", bbox_inches="tight", dpi=180)
-            buf_tmes_y.seek(0)
-            st.download_button(
-                label="📥 Download 3B. Top Slab Extra (Y-Direction) Layout (High-Res PNG)",
-                data=buf_tmes_y,
-                file_name=f"{prefix}3B_Top_Base_Mesh_Extra_Slab_Y_ts{ts:.0f}cm.png",
-                mime="image/png",
-                use_container_width=True,
-                key="btn_dl_top_mesh_extra_y",
-            )
-            plt.close(fig_tmes_y)
+            # ── Tab 3B: Top Base Mesh & Extra Slab Top Mesh (Y-Direction)
+            with tab_m3b:
+                st.markdown("#### 🔵 3B. Top Base Mesh & Extra Slab Top Mesh (Y-Direction) — الرقة العلوية الأساسية والحديد الإضافي العلوي (اتجاه Y)")
+                fig_tmes_y = generate_flat_slab_top_mesh_extra_sketch(
+                    Lx_calc, Ly_calc, cantilevers, ts,
+                    top_extra_slab_bays=top_extra_slab_bays,
+                    n_mesh_top=n_mesh_top,
+                    top_mesh_dia=top_mesh_dia,
+                    n_mesh_btm=n_mesh_btm,
+                    bottom_mesh_dia=bottom_mesh_dia,
+                    col_w_cm=bc_s, col_d_cm=tc_s,
+                    removed_cols=_confirmed_removals,
+                    void_panel_ids=_confirmed_voids,
+                    direction="Y",
+                )
+                st.pyplot(fig_tmes_y, clear_figure=True, use_container_width=True)
+                buf_tmes_y = io.BytesIO()
+                fig_tmes_y.savefig(buf_tmes_y, format="png", bbox_inches="tight", dpi=180)
+                buf_tmes_y.seek(0)
+                st.download_button(
+                    label="📥 Download 3B. Top Slab Extra (Y-Direction) Layout (High-Res PNG)",
+                    data=buf_tmes_y,
+                    file_name=f"{prefix}3B_Top_Base_Mesh_Extra_Slab_Y_ts{ts:.0f}cm.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key="btn_dl_top_mesh_extra_y",
+                )
+                plt.close(fig_tmes_y)
 
     # ── 🦅 CANTILEVER REINFORCEMENT ──────────────────────────────────────────
     if cant_rft_list:
@@ -9978,32 +9992,36 @@ def render():
         })
 
     img_reactions_b64 = None
-    with st.expander(
+    exp_reac = st.expander(
         f"🏛️ Column Reactions & Vertical Loads — {num_floors} Floors (ردود أفعال وتوزيع أحمال الأعمدة)",
         expanded=False,
-    ):
-        fig_reac = generate_flat_slab_reactions_sketch(
-            Lx_calc, Ly_calc, cantilevers, num_floors, Wu,
-            col_reactions_data,
-            col_w_cm=bc_s, col_d_cm=tc_s,
-            removed_cols=_removed_col_objs,
-            void_panel_ids=set(_confirmed_voids),
-            col_sf=col_sf_val,
-        )
-        st.pyplot(fig_reac, clear_figure=True, use_container_width=True)
-        buf_reac = io.BytesIO()
-        fig_reac.savefig(buf_reac, format="png", bbox_inches="tight", dpi=180)
-        buf_reac.seek(0)
-        img_reactions_b64 = "data:image/png;base64," + base64.b64encode(buf_reac.getvalue()).decode("utf-8")
-        buf_reac.seek(0)
-        st.download_button(
-            label="📥 Download Column Reactions Plan (High-Res PNG)",
-            data=buf_reac,
-            file_name=f"{prefix}Flat_Slab_Column_Reactions_Plan_{num_floors}Floors.png",
-            mime="image/png",
-            use_container_width=True,
-        )
-        plt.close(fig_reac)
+        key=f"{prefix}exp_col_reactions",
+        on_change="rerun",
+    )
+    with exp_reac:
+        if exp_reac.open:
+            fig_reac = generate_flat_slab_reactions_sketch(
+                Lx_calc, Ly_calc, cantilevers, num_floors, Wu,
+                col_reactions_data,
+                col_w_cm=bc_s, col_d_cm=tc_s,
+                removed_cols=_removed_col_objs,
+                void_panel_ids=set(_confirmed_voids),
+                col_sf=col_sf_val,
+            )
+            st.pyplot(fig_reac, clear_figure=True, use_container_width=True)
+            buf_reac = io.BytesIO()
+            fig_reac.savefig(buf_reac, format="png", bbox_inches="tight", dpi=180)
+            buf_reac.seek(0)
+            img_reactions_b64 = "data:image/png;base64," + base64.b64encode(buf_reac.getvalue()).decode("utf-8")
+            buf_reac.seek(0)
+            st.download_button(
+                label="📥 Download Column Reactions Plan (High-Res PNG)",
+                data=buf_reac,
+                file_name=f"{prefix}Flat_Slab_Column_Reactions_Plan_{num_floors}Floors.png",
+                mime="image/png",
+                use_container_width=True,
+            )
+            plt.close(fig_reac)
 
     with st.expander(f"📊 Column Reactions Table — {num_floors} Floors (جدول ردود أفعال وتوزيع أحمال الأعمدة)", expanded=False):
         reactions_df = pd.DataFrame([
@@ -10063,13 +10081,63 @@ def render():
         if summary_models:
             render_styled_table(summary_models)
 
-    # ── 💾 PERSIST GOVERNING COLUMN LOADS FOR MODULE 2 ─────────────────────────
+    # ── 💾 PERSIST GOVERNING COLUMN LOADS FOR MODULE 2 & MODULE 7 ─────────────
     if max_int and max_int.get("pu_1f_val", 0) > 0:
-        S.cfg_set("fs_col_pu_int", float(max_int["pu_1f_val"]))
+        pu_int_1f = float(max_int["pu_1f_val"])
+        pu_int_tot = float(max_int["pu_tot_val"])
+        S.cfg_set("fs_col_pu_int", pu_int_1f)
+        S.cfg_set("fs_col_tot_pu_int", pu_int_tot)
+        st.session_state["fs_col_pu_int"] = pu_int_1f
+        st.session_state["fs_col_tot_pu_int"] = pu_int_tot
+        st.session_state["pu_tot_int"] = pu_int_tot
+
     if max_edge and max_edge.get("pu_1f_val", 0) > 0:
-        S.cfg_set("fs_col_pu_edge", float(max_edge["pu_1f_val"]))
+        pu_edge_1f = float(max_edge["pu_1f_val"])
+        pu_edge_tot = float(max_edge["pu_tot_val"])
+        S.cfg_set("fs_col_pu_edge", pu_edge_1f)
+        S.cfg_set("fs_col_tot_pu_edge", pu_edge_tot)
+        st.session_state["fs_col_pu_edge"] = pu_edge_1f
+        st.session_state["fs_col_tot_pu_edge"] = pu_edge_tot
+        st.session_state["pu_tot_edge"] = pu_edge_tot
+        st.session_state["pu_tot_side"] = pu_edge_tot
+
     if max_corner and max_corner.get("pu_1f_val", 0) > 0:
-        S.cfg_set("fs_col_pu_corner", float(max_corner["pu_1f_val"]))
+        pu_corner_1f = float(max_corner["pu_1f_val"])
+        pu_corner_tot = float(max_corner["pu_tot_val"])
+        S.cfg_set("fs_col_pu_corner", pu_corner_1f)
+        S.cfg_set("fs_col_tot_pu_corner", pu_corner_tot)
+        st.session_state["fs_col_pu_corner"] = pu_corner_1f
+        st.session_state["fs_col_tot_pu_corner"] = pu_corner_tot
+        st.session_state["pu_tot_corner"] = pu_corner_tot
+
+    # Export full building columns layout (coordinates, dimensions, loads, types)
+    cols_export = []
+    for c in _active_cols:
+        cols_export.append({
+            "id": c["id"],
+            "orig_id": c.get("orig_id", c["id"]),
+            "grid_x": c.get("grid_x", ""),
+            "grid_y": c.get("grid_y", ""),
+            "type": c.get("type", "Interior"),
+            "x": float(c["x"]),
+            "y": float(c["y"]),
+            "bc": float(c.get("bc", bc_s)),
+            "tc": float(c.get("tc", tc_s)),
+            "pu_1f": float(c.get("Pu", 0.0)),
+            "pu_tot": float(c.get("Pu", 0.0) * num_floors),
+            "atrib": float(c.get("Atrib_0", 0.0)),
+        })
+    st.session_state["fs_building_columns"] = cols_export
+    st.session_state["fs_num_floors"] = num_floors
+    st.session_state["fs_Lx_spans"] = [float(x) for x in Lx_calc]
+    st.session_state["fs_Ly_spans"] = [float(y) for y in Ly_calc]
+    st.session_state["fs_col_b"] = float(bc_s)
+    st.session_state["fs_col_c"] = float(tc_s)
+    S.cfg_set("fs_building_columns", cols_export)
+    S.cfg_set("fs_col_b", float(bc_s))
+    S.cfg_set("fs_col_c", float(tc_s))
+    S.cfg_set("fs_Lx_spans", [float(x) for x in Lx_calc])
+    S.cfg_set("fs_Ly_spans", [float(y) for y in Ly_calc])
 
     # ── 🏛️ RECTANGULAR COLUMNS DESIGN FROM FLAT SLAB LOADS ─────────────────────
     from modules.columns import design_rectangular_column
@@ -10442,306 +10510,602 @@ def render():
                     unsafe_allow_html=True,
                 )
 
-    # ── 📉 FINAL DEFLECTION VERIFICATION (ECP 203) ───────────────────────────
-    with st.expander("📉 Final Deflection Verification (التحقق الإنشائي النهائي من سهم الانحناء والترخيم طويل الأمد)", expanded=False):
-        # 1. UI Confirmation Banner
+    # ── 🪸 BUILDING FOUNDATIONS DESIGN & DYNAMIC TABS (ECP 203) ───────────────
+    from modules.two_col_footings import (
+        design_isolated_footing_model,
+        design_combined_footing_model,
+        check_building_clearances_and_overlaps,
+        draw_foundation_layout_plan,
+    )
+
+    with st.expander(f"🪸 Building Foundations Design — {num_floors} Floors (تصميم أساسات المبنى والقواعد المنفصلة والمشتركة)", expanded=False):
+        # 1. Header / Intro
         st.markdown(
-            """
-            <div dir="rtl" style="background:#0f172a; border:2px solid #3b82f6; border-radius:10px; padding:16px 20px; margin-bottom:14px; text-align:right;">
-                <div style="font-size:16.5px; font-weight:800; color:#38bdf8; display:flex; align-items:center; gap:8px;">
-                    ℹ️ التحقق الإنشائي النهائي من سهم الانحناء طويل الأمد (Long-Term Cracked Deflection Check)
+            f"""
+            <div dir="rtl" style="background:#fff7ed; border:1.5px solid #fed7aa; border-right:7px solid #ea580c; border-radius:10px; padding:18px 22px; margin-bottom:16px; color:#1c1917; line-height:1.9; text-align:right;">
+                <div style="font-size:1.45rem; font-weight:800; color:#9a3412; margin-bottom:10px;">
+                    📋 تصميم وتوحيد نماذج القواعد المسلحة لأساسات المبنى (ECP 203):
                 </div>
-                <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.8;">
-                    تم التحقق من سهم الانحناء طويل الأمد (Long-Term Cracked Deflection) بالاعتماد الفعلي على كامل شبكات التسليح المعتمدة بالبلاطة: <b>الشبكة السفلية الأساسية + الحديد الإضافي السفلي بمنتصف البحر (As,total)</b> لحساب عمق محور الخمول x وعزم القصور الذاتي المشرخ Icr ورفع الجساءة الفعالة Ie (Branson's Formula)، مع <b>الشبكة العلوية كحديد ضغط (Compression Rebars A's)</b> لتخفيض معامل الزحف والانكماش طويل الأمد λ وفقاً للكود المصري ECP 203 [λ = ξ / (1 + 50μ')]، و<b>حديد الكابات العلوية فوق الأعمدة</b> لضمان جساءة ومنع دوران الأطراف.
+                <div style="font-size:1.25rem; font-weight:700; color:#1c1917;">
+                    يتم تصميم وتوحيد نماذج القواعد بناءً على ردود الأفعال القصوى الإجمالية لعدد <span style="font-weight:800; color:#c2410c;">{num_floors} طوابق</span> لكل فئة أعمدة 
+                    (قاعدة ركن <span dir="ltr" style="font-weight:800; color:#c2410c;">F1</span> على أقصى حمل ركن <span dir="ltr" style="font-weight:800; color:#1c1917;">Pu_corner</span>، 
+                    قاعدة جانبية <span dir="ltr" style="font-weight:800; color:#c2410c;">F2</span> على أقصى حمل جانبي <span dir="ltr" style="font-weight:800; color:#1c1917;">Pu_edge</span>، 
+                    وقاعدة داخلية <span dir="ltr" style="font-weight:800; color:#c2410c;">F3</span> على أقصى حمل داخلي <span dir="ltr" style="font-weight:800; color:#1c1917;">Pu_int</span>)، 
+                    مع الفحص الدقيق للمسافات الصافية وتداخل حدود الخرسانة المسلحة وتوليد القواعد المشتركة تلقائياً.
                 </div>
             </div>
             """,
-            unsafe_allow_html=True,
+            unsafe_allow_html=True
         )
 
-        # 2. 2D Deflection Heatmap / Plan
-        fig_def = generate_flat_slab_deflection_contour_sketch(
-            Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, DL_tot, LL,
-            deflection_results,
-            col_w_cm=bc_s, col_d_cm=tc_s,
-            removed_cols=_removed_col_objs,
-            void_panel_ids=set(_confirmed_voids),
-        )
-        st.pyplot(fig_def, clear_figure=True, use_container_width=True)
+        # 2. Controls & Soil Properties
+        ftg_qnet = S.cfg_val("tcf_q_net", 1.5)
+        ftg_fcu = S.cfg_val("tcf_Fcu", col_Fcu if col_Fcu else 250)
+        ftg_fy = S.cfg_val("tcf_Fy", col_Fy if col_Fy else 4000)
+        ftg_cov = S.cfg_val("tcf_cover", 7)
+        phi_opts_ftg = [12, 16, 18, 22, 25]
+        phi_idx_ftg = S.cfg_val("tcf_Phi_index", 1)
+        ftg_phi = phi_opts_ftg[phi_idx_ftg] if 0 <= phi_idx_ftg < len(phi_opts_ftg) else 16
 
-        buf_def = io.BytesIO()
-        fig_def.savefig(buf_def, format="png", bbox_inches="tight", dpi=180)
-        buf_def.seek(0)
-        def_dl_label = "📥 Download Deflection Warning 2D Contour Plan (High-Res PNG)" if not all_deflection_safe else "📥 Download Deflection Verification 2D Plan (High-Res PNG)"
-        st.download_button(
-            label=def_dl_label,
-            data=buf_def,
-            file_name=f"{prefix}Flat_Slab_Deflection_Check_ts{ts:.0f}cm.png",
-            mime="image/png",
-            use_container_width=True,
-            key="btn_dl_deflection_contour_final",
-        )
-        plt.close(fig_def)
+        # Fetch governing loads
+        pu_c_tot = float(max_corner["pu_tot_val"]) if max_corner else 35.0
+        pu_e_tot = float(max_edge["pu_tot_val"]) if max_edge else 70.0
+        pu_i_tot = float(max_int["pu_tot_val"]) if max_int else 125.0
 
-        st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
+        col_c_dim = float(tc_s if tc_s else 50)
+        col_b_dim = float(col_b_val if col_b_val else 30)
 
-        # 3. Comprehensive Verification Summary Table
-        st.markdown(
-            """
-            <div style="font-size:18px; font-weight:800; color:#f8fafc; margin-bottom:4px; display:flex; align-items:center; gap:8px;">
-                📋 جدول التحقق التفصيلي من سهم الانحناء والجساءة الفعالة لكافة الباكيات (ECP 203)
-            </div>
-            <div style="font-size:13px; color:#94a3b8; margin-bottom:12px;">
-                فحص الترخيم اللحظي والترخيم طويل الأمد والجساءة الفعالة بالاعتماد على كامل حديد التسليح الفعلي
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        # Design the 3 Typical Isolated Footing Models
+        F1_model = design_isolated_footing_model("F1", "قاعدة ركن", "C1", pu_c_tot, col_c_dim, col_b_dim, ftg_qnet, ftg_fcu, ftg_fy, ftg_cov, ftg_phi)
+        F2_model = design_isolated_footing_model("F2", "قاعدة جانبية", "C2", pu_e_tot, col_c_dim, col_b_dim, ftg_qnet, ftg_fcu, ftg_fy, ftg_cov, ftg_phi)
+        F3_model = design_isolated_footing_model("F3", "قاعدة داخلية", "C3", pu_i_tot, col_c_dim, col_b_dim, ftg_qnet, ftg_fcu, ftg_fy, ftg_cov, ftg_phi)
 
-        def_df = pd.DataFrame([
-            {
-                "Panel ID": p["Panel ID"],
-                "Bay Location": p["Bay Label"],
-                "Type": p["Location Type"],
-                "Ln (m)": f"{p['Ln (m)']:.2f} m",
-                "ts / d (cm)": f"{p['ts (cm)']:.0f} / {p['d (cm)']:.1f}",
-                "As_btm (cm²/m)": f"{p['As_btm (cm²/m)']:.2f}",
-                "A's_top (cm²/m)": f"{p['As_top (cm²/m)']:.2f}",
-                "x_na (cm)": f"{p['x_na (cm)']:.2f}",
-                "Mcr (t·m/m)": f"{p['Mcr (t.m/m)']:.2f}",
-                "Ms (t·m/m)": f"{p['Ms_pos (t.m/m)']:.2f}",
-                "Ie/Ig": f"{p['Ie/Ig']:.2f}",
-                "λ (Creep)": f"{p['lambda_creep']:.2f}",
-                "δst (mm)": f"{p['delta_st (mm)']:.2f}",
-                "Δtotal (mm)": f"{p['delta_long (mm)']:.2f}",
-                "Δallow (mm)": f"{p['delta_all (mm)']:.2f} (Ln/250)",
-                "Ratio": f"{p['Ratio']:.2f}",
-                "Status": p["Status"],
-            }
-            for p in deflection_results
-        ])
-        render_styled_table(def_df, font_size_override=10.5)
+        ftgs_dict = {
+            "Corner": F1_model,
+            "Edge": F2_model,
+            "Interior": F3_model,
+        }
 
-        # 4. Recommendations & Status Advisories
-        if not all_deflection_safe:
-            unsafe_panels = [p for p in deflection_results if not p["is_safe"]]
-            names_unsafe_p = ", ".join([f"<b>{p['Panel ID']}</b> ({p['Bay Label']})" for p in unsafe_panels])
+        # Build active columns data list for clearance check
+        fs_active_columns = []
+        for c_item in _active_cols:
+            c_type = c_item.get("type", "Interior")
+            pu_val = float(c_item.get("Pu", 0.0) * num_floors)
+            fs_active_columns.append({
+                "id": c_item["id"],
+                "orig_id": c_item.get("orig_id", c_item["id"]),
+                "type": c_type,
+                "x": float(c_item["x"]),
+                "y": float(c_item["y"]),
+                "bc": float(c_item.get("bc", col_b_dim)),
+                "tc": float(c_item.get("tc", col_c_dim)),
+                "pu_tot": pu_val,
+                "grid_x": c_item.get("grid_x", ""),
+                "grid_y": c_item.get("grid_y", ""),
+            })
+
+        overlap_data = check_building_clearances_and_overlaps(fs_active_columns, ftgs_dict)
+        has_overlap_fs = overlap_data["has_overlap"]
+
+        # Combined footings calculation if overlap exists
+        combined_fs_models = []
+        if has_overlap_fs:
+            cf_count = 1
+            for ov_pair in overlap_data["overlapping_pairs"]:
+                cf_res = design_combined_footing_model(
+                    f"comb-{cf_count}",
+                    ov_pair["col_A"],
+                    ov_pair["col_B"],
+                    ov_pair["spacing_m"],
+                    ftg_qnet,
+                    ftg_fcu,
+                    ftg_fy,
+                    ftg_cov,
+                    ftg_phi,
+                )
+                cf_res["overlap_dir"] = ov_pair.get("dir", "X")
+                combined_fs_models.append(cf_res)
+                cf_count += 1
+
+        # Alert Banner
+        if has_overlap_fs:
             st.markdown(
-                f"""
-                <div dir="rtl" style="background:rgba(239, 68, 68, 0.14); border:2px solid #ef4444; border-radius:10px; padding:16px 20px; margin-top:14px; margin-bottom:14px; text-align:right;">
-                    <div style="font-size:16px; font-weight:800; color:#f87171; display:flex; align-items:center; gap:8px;">
-                        ⚠️ تنبيه إنشائي: تجاوز سهم الانحناء المسموح به كودياً في بعض الباكيات (Deflection Exceeded)
+                """
+                <div style="background:#fee2e2; border:2px solid #ef4444; border-radius:10px; padding:14px 20px; margin-bottom:14px;">
+                    <span style="font-size:24px;">🚨</span>
+                    <b style="font-size:18px; color:#991b1b;">تنبيه إنشائي:</b>
+                    <span style="font-size:16px; color:#7f1d1d; font-weight:700;">
+                    القواعد المحددة بالخط الأخضر المتقطع هي قواعد متداخلة (Clearance &lt; 0.15 م)،
+                    وسيتم تصميمها تلقائياً بنظام القواعد المشتركة (Combined Footings).
+                    </span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                """
+                <div style="background:#dcfce7; border:2px solid #22c55e; border-radius:10px; padding:14px 20px; margin-bottom:14px;">
+                    <span style="font-size:24px;">✅</span>
+                    <b style="font-size:18px; color:#166534;">النظام الإنشائي مستقر:</b>
+                    <span style="font-size:16px; color:#14532d; font-weight:700;">
+                    كامل النظام الإنشائي للأساسات مستقر كقواعد منفصلة ولا يوجد أي تداخل خرساني (Clearance &ge; 0.15 م).
+                    </span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        # Footings Detailed Table Tab
+        fs_tab_ftg, = st.tabs([
+            "📋 Footings Detailed Table (جدول تفاصيل وتصميم نماذج القواعد)",
+        ])
+
+        # ── TAB: FOOTINGS DETAILED TABLE (UNIFIED SCHEDULE: ISOLATED + COMBINED) ──
+        with fs_tab_ftg:
+            st.markdown("##### 📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)")
+            unified_rows_fs = []
+            for f in [F1_model, F2_model, F3_model]:
+                pc_L = f["L_cm"] + 40
+                pc_B = f["B_cm"] + 40
+                unified_rows_fs.append({
+                    "نموذج القاعدة (Model)": f["model_name"],
+                    "الأعمدة المرتكزة (Columns)": f["supported_col_str"],
+                    "أقصى حمل تصميمي Pu (ton)": f"{f['Pu_ton']:.2f} ton",
+                    "أبعاد المسلحة R.C. (cm)": f"{f['L_cm']} × {f['B_cm']} × {f['t_cm']}",
+                    "أبعاد العادية P.C. (cm)": f"{pc_L} × {pc_B} × 20 (نظافة)",
+                    "التسليح السفلي (Bottom RFT)": f"فرش: {f['rft_long_str']} | غطاء: {f['rft_short_str']}",
+                    "التسليح العلوي الرئيسي (Top RFT)": "-" if f["t_cm"] < 80 else f["top_rft_str"],
+                    "طول التماسك / الرفارف (Details)": f"Ld = {f['Ld_str']}",
+                    "حالة التحقق الإنشائي (Status)": f["status_str"],
+                })
+
+            if has_overlap_fs:
+                for cf in combined_fs_models:
+                    cf_pc_L = cf["Lc_cm"] + 40
+                    cf_pc_B = cf["Bc_cm"] + 40
+                    unified_rows_fs.append({
+                        "نموذج القاعدة (Model)": f"{cf['name']} (مشتركة)",
+                        "الأعمدة المرتكزة (Columns)": cf["supported_cols"],
+                        "أقصى حمل تصميمي Pu (ton)": f"Ru = {cf['Ru_ton']:.2f} ton",
+                        "أبعاد المسلحة R.C. (cm)": f"{cf['Lc_cm']} × {cf['Bc_cm']} × {cf['tc_cm']}",
+                        "أبعاد العادية P.C. (cm)": f"{cf_pc_L} × {cf_pc_B} × 20 (نظافة)",
+                        "التسليح السفلي (Bottom RFT)": f"طولي: {cf['rft_bot_str']} | عرضي: {cf['rft_trans_str']}",
+                        "التسليح العلوي الرئيسي (Top RFT)": f"علوي رئيسي: {cf['rft_top_str']} (-M={cf['M_top_tm']:.2f} t·m)",
+                        "طول التماسك / الرفارف (Details)": f"رفارف: {cf['overhangs_str']}",
+                        "حالة التحقق الإنشائي (Status)": cf["status_str"],
+                    })
+
+            df_fs_export = pd.DataFrame(unified_rows_fs)
+            render_styled_table(df_fs_export)
+
+            # Export Excel & CSV
+            csv_fs_data = df_fs_export.to_csv(index=False).encode('utf-8-sig')
+            buf_fs_xl = io.BytesIO()
+            with pd.ExcelWriter(buf_fs_xl, engine='openpyxl') as writer:
+                df_fs_export.to_excel(writer, index=False, sheet_name='Footings_Schedule')
+            excel_fs_bytes = buf_fs_xl.getvalue()
+
+            exp_c1, exp_c2 = st.columns(2)
+            with exp_c1:
+                st.download_button(
+                    label="📊 تصدير جدول نماذج القواعد الموحد (Excel .xlsx)",
+                    data=excel_fs_bytes,
+                    file_name=f"{prefix}Unified_Footings_Schedule_{num_floors}Floors.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key=f"{prefix}btn_dl_unified_excel_fs",
+                )
+            with exp_c2:
+                st.download_button(
+                    label="📥 تصدير جدول نماذج القواعد الموحد (CSV)",
+                    data=csv_fs_data,
+                    file_name=f"{prefix}Unified_Footings_Schedule_{num_floors}Floors.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    key=f"{prefix}btn_dl_unified_csv_fs",
+                )
+
+            # Stress checks expander
+            with st.expander("🔍 Isolated Footings Stresses & Design Checks (تفاصيل التحققات الإنشائية والإجهادات لنماذج القواعد المنفصلة)", expanded=False):
+                iso_details_rows = []
+                for f in [F1_model, F2_model, F3_model]:
+                    q_str = f"{f['q_act']:.2f} / {f['q_net']:.2f} kg/cm²"
+                    tau_s_str = f"{f['tau_s']:.2f} / {f['tau_s_allow']:.2f} kg/cm²"
+                    tau_p_str = f"{f['tau_p']:.2f} / {f['tau_p_allow']:.2f} kg/cm²"
+                    dims_str = f"{f['L_cm']} × {f['B_cm']} × {f['t_cm']} cm"
+
+                    iso_details_rows.append({
+                        "نموذج القاعدة": f.get("model_id", f.get("model_name", "F")),
+                        "نوع القاعدة": f.get("model_label", "منفصلة"),
+                        "الأعمدة": f.get("supported_col_str", "-"),
+                        "أقصى حمل Pu": f"{f['Pu_ton']:.2f} ton",
+                        "إجهاد التلامس q_act": q_str,
+                        "إجهاد القص τ_s": tau_s_str,
+                        "إجهاد الثقب τ_p": tau_p_str,
+                        "العزم الأقصى Mu": f"{f['M_L_tm']:.2f} t·m",
+                        "العمق الفعال d": f"{f['d_cm']:.1f} cm",
+                        "أبعاد المسلحة L×B×t": dims_str,
+                        "التحقق الإنشائي": f.get("status_str", "✅ Safe"),
+                    })
+
+                df_iso_table = pd.DataFrame(iso_details_rows)
+                render_styled_table(
+                    df_iso_table,
+                    accent_border_color="#059669",
+                    col_colors=[
+                        "#10b981",  # Emerald for model
+                        "#38bdf8",  # Sky blue for type
+                        "#e2e8f0",  # Light gray for columns
+                        "#facc15",  # Gold for Pu
+                        "#fbbf24",  # Amber for q_act
+                        "#34d399",  # Mint for tau_s
+                        "#fb923c",  # Orange for tau_p
+                        "#e879f9",  # Fuchsia for Mu
+                        "#a78bfa",  # Violet for depth d
+                        "#22d3ee",  # Cyan for dims
+                        "#4ade80",  # Neon green for status
+                    ],
+                )
+
+            if has_overlap_fs:
+                with st.expander("🔍 Combined Footings Moments & Design Details (تفاصيل العزوم والتصميم الإنشائي للقواعد المشتركة)", expanded=False):
+                    comb_details_rows = []
+                    for cf in combined_fs_models:
+                        comb_details_rows.append({
+                            "نموذج القاعدة": cf["name"],
+                            "الأعمدة المرتكزة": cf["supported_cols"],
+                            "المسافة S": f"{cf['S_m']:.2f} m",
+                            "أحمال الأعمدة": f"P1={cf['P1_ton']:.1f} / P2={cf['P2_ton']:.1f} ton",
+                            "الحمل الكلي Ru": f"{cf['Ru_ton']:.2f} ton",
+                            "العزم العلوي (-M)": f"{cf['M_top_tm']:.2f} t·m",
+                            "العزم السفلي (+M)": f"{cf['M_bot_max_tm']:.2f} t·m",
+                            "إجهاد التربة q_act": f"{cf['q_act']:.2f} kg/cm²",
+                            "إجهاد القص τ_s": f"{cf.get('tau_s', 0.0):.2f} kg/cm²",
+                            "أبعاد المسلحة L×B×t": f"{cf['Lc_cm']} × {cf['Bc_cm']} × {cf['tc_cm']} cm",
+                            "التحقق الإنشائي": cf.get("status_str", "✅ Safe"),
+                        })
+
+                    df_cf_table = pd.DataFrame(comb_details_rows)
+                    render_styled_table(
+                        df_cf_table,
+                        accent_border_color="#f59e0b",
+                        col_colors=[
+                            "#f59e0b",  # Amber for model
+                            "#38bdf8",  # Sky blue for columns
+                            "#e2e8f0",  # Light gray for spacing S
+                            "#fb923c",  # Orange for P1/P2
+                            "#facc15",  # Gold for Ru
+                            "#e879f9",  # Fuchsia for -M_top
+                            "#22d3ee",  # Cyan for +M_bot
+                            "#fbbf24",  # Amber for q_act
+                            "#34d399",  # Mint for tau_s
+                            "#a78bfa",  # Violet for dimensions
+                            "#4ade80",  # Neon green for status
+                        ],
+                    )
+
+        # Foundation General Layout Plan expander inside Flat Slab module
+        exp_ftg = st.expander("📐 Foundation Layout Plan Sketch (المسقط الأفقي العام للأساسات وفحص التداخل)", expanded=False, key=f"{prefix}exp_ftg_plan", on_change="rerun")
+        with exp_ftg:
+            if exp_ftg.open:
+                fig_ftg_plan = draw_foundation_layout_plan(fs_active_columns, ftgs_dict, overlap_data, combined_fs_models)
+                st.pyplot(fig_ftg_plan, clear_figure=True, use_container_width=True)
+                buf_fp = io.BytesIO()
+                fig_ftg_plan.savefig(buf_fp, format="png", bbox_inches="tight", dpi=180)
+                buf_fp.seek(0)
+                st.download_button(
+                    label="📥 Download Foundation Layout Plan (High-Res PNG)",
+                    data=buf_fp,
+                    file_name=f"{prefix}Foundation_Layout_Plan_{num_floors}Floors.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key="btn_dl_flat_slab_ftg_plan",
+                )
+                plt.close(fig_ftg_plan)
+
+    # ── 📉 FINAL DEFLECTION VERIFICATION (ECP 203) ───────────────────────────
+    exp_defl = st.expander("📉 Final Deflection Verification (التحقق الإنشائي النهائي من سهم الانحناء والترخيم طويل الأمد)", expanded=False, key=f"{prefix}exp_deflection", on_change="rerun")
+    with exp_defl:
+        if exp_defl.open:
+            # 1. UI Confirmation Banner
+            st.markdown(
+                """
+                <div dir="rtl" style="background:#0f172a; border:2px solid #3b82f6; border-radius:10px; padding:16px 20px; margin-bottom:14px; text-align:right;">
+                    <div style="font-size:16.5px; font-weight:800; color:#38bdf8; display:flex; align-items:center; gap:8px;">
+                        ℹ️ التحقق الإنشائي النهائي من سهم الانحناء طويل الأمد (Long-Term Cracked Deflection Check)
                     </div>
                     <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.8;">
-                        • <b>الباكيات المتأثرة:</b> {names_unsafe_p}<br>
-                        • <b>السبب الإنشائي:</b> سهم الانحناء طويل المدى بعد 5 سنوات يتجاوز الحد الأقصى المسموح (<b>Δtotal &gt; Δall = Ln/250</b>).<br>
-                        💡 <b>التوصيات الإنشائية والتنفيذية قبل حصر الكميات:</b><br>
-                        1. <b>زيادة سُمك البلاطة (ts):</b> يُوصى برفع السُمك من {ts:.0f} cm إلى تخانة أكبر لرفع عزم القصور الذاتي Ig و Ie بالتكعيب.<br>
-                        2. <b>تكثيف الحديد الإضافي السفلي (As,btm):</b> زيادة مساحة حديد الشد بمنتصف البحر لتقليل عمق الشروخ ورفع Icr.<br>
-                        3. <b>زيادة الشبكة العلوية (A's - Compression Rebars):</b> لتقليل معامل الزحف والانكماش طويل الأمد λ طبقاً للشرط الكودي λ = 2.0 / (1 + 50μ').
+                        تم التحقق من سهم الانحناء طويل الأمد (Long-Term Cracked Deflection) بالاعتماد الفعلي على كامل شبكات التسليح المعتمدة بالبلاطة: <b>الشبكة السفلية الأساسية + الحديد الإضافي السفلي بمنتصف البحر (As,total)</b> لحساب عمق محور الخمول x وعزم القصور الذاتي المشرخ Icr ورفع الجساءة الفعالة Ie (Branson's Formula)، مع <b>الشبكة العلوية كحديد ضغط (Compression Rebars A's)</b> لتخفيض معامل الزحف والانكماش طويل الأمد λ وفقاً للكود المصري ECP 203 [λ = ξ / (1 + 50μ')]، و<b>حديد الكابات العلوية فوق الأعمدة</b> لضمان جساءة ومنع دوران الأطراف.
                     </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-        # 5. 💡 Deflection Optimization Engine & Rebar Alternatives (موديول المعالجة الذكية لسهم الانحناء وبدائل التسليح)
-        st.markdown("<div style='margin-top:18px; margin-bottom:12px;'></div>", unsafe_allow_html=True)
-        with st.expander("💡 موديول المعالجة الذكية لسهم الانحناء وبدائل التسليح (Deflection Optimization Engine & Rebar Alternatives)", expanded=False):
-            unsafe_panels = [p for p in deflection_results if not p.get("is_safe", True)]
 
-            if not unsafe_panels:
+            # 2. 2D Deflection Heatmap / Plan
+            fig_def = generate_flat_slab_deflection_contour_sketch(
+                Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, DL_tot, LL,
+                deflection_results,
+                col_w_cm=bc_s, col_d_cm=tc_s,
+                removed_cols=_removed_col_objs,
+                void_panel_ids=set(_confirmed_voids),
+            )
+            st.pyplot(fig_def, clear_figure=True, use_container_width=True)
+
+            buf_def = io.BytesIO()
+            fig_def.savefig(buf_def, format="png", bbox_inches="tight", dpi=180)
+            buf_def.seek(0)
+            def_dl_label = "📥 Download Deflection Warning 2D Contour Plan (High-Res PNG)" if not all_deflection_safe else "📥 Download Deflection Verification 2D Plan (High-Res PNG)"
+            st.download_button(
+                label=def_dl_label,
+                data=buf_def,
+                file_name=f"{prefix}Flat_Slab_Deflection_Check_ts{ts:.0f}cm.png",
+                mime="image/png",
+                use_container_width=True,
+                key="btn_dl_deflection_contour_final",
+            )
+            plt.close(fig_def)
+
+            st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
+
+            # 3. Comprehensive Verification Summary Table
+            st.markdown(
+                """
+                <div style="font-size:18px; font-weight:800; color:#f8fafc; margin-bottom:4px; display:flex; align-items:center; gap:8px;">
+                    📋 جدول التحقق التفصيلي من سهم الانحناء والجساءة الفعالة لكافة الباكيات (ECP 203)
+                </div>
+                <div style="font-size:13px; color:#94a3b8; margin-bottom:12px;">
+                    فحص الترخيم اللحظي والترخيم طويل الأمد والجساءة الفعالة بالاعتماد على كامل حديد التسليح الفعلي
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            def_df = pd.DataFrame([
+                {
+                    "Panel ID": p["Panel ID"],
+                    "Bay Location": p["Bay Label"],
+                    "Type": p["Location Type"],
+                    "Ln (m)": f"{p['Ln (m)']:.2f} m",
+                    "ts / d (cm)": f"{p['ts (cm)']:.0f} / {p['d (cm)']:.1f}",
+                    "As_btm (cm²/m)": f"{p['As_btm (cm²/m)']:.2f}",
+                    "A's_top (cm²/m)": f"{p['As_top (cm²/m)']:.2f}",
+                    "x_na (cm)": f"{p['x_na (cm)']:.2f}",
+                    "Mcr (t·m/m)": f"{p['Mcr (t.m/m)']:.2f}",
+                    "Ms (t·m/m)": f"{p['Ms_pos (t.m/m)']:.2f}",
+                    "Ie/Ig": f"{p['Ie/Ig']:.2f}",
+                    "λ (Creep)": f"{p['lambda_creep']:.2f}",
+                    "δst (mm)": f"{p['delta_st (mm)']:.2f}",
+                    "Δtotal (mm)": f"{p['delta_long (mm)']:.2f}",
+                    "Δallow (mm)": f"{p['delta_all (mm)']:.2f} (Ln/250)",
+                    "Ratio": f"{p['Ratio']:.2f}",
+                    "Status": p["Status"],
+                }
+                for p in deflection_results
+            ])
+            render_styled_table(def_df, font_size_override=10.5)
+
+            # 4. Recommendations & Status Advisories
+            if not all_deflection_safe:
+                unsafe_panels = [p for p in deflection_results if not p["is_safe"]]
+                names_unsafe_p = ", ".join([f"<b>{p['Panel ID']}</b> ({p['Bay Label']})" for p in unsafe_panels])
                 st.markdown(
-                    """
-                    <div dir="rtl" style="background:#0f172a; border:2px solid #22c55e; border-radius:10px; padding:18px 22px; text-align:right; margin-bottom:10px;">
-                        <div style="font-size:17.5px; font-weight:800; color:#22c55e; display:flex; align-items:center; gap:8px;">
-                            ✅ جميع بلاطات السقف آمنة تماماً من ناحية سهم الانحناء (All Panels are Safe from Deflection)
+                    f"""
+                    <div dir="rtl" style="background:rgba(239, 68, 68, 0.14); border:2px solid #ef4444; border-radius:10px; padding:16px 20px; margin-top:14px; margin-bottom:14px; text-align:right;">
+                        <div style="font-size:16px; font-weight:800; color:#f87171; display:flex; align-items:center; gap:8px;">
+                            ⚠️ تنبيه إنشائي: تجاوز سهم الانحناء المسموح به كودياً في بعض الباكيات (Deflection Exceeded)
                         </div>
-                        <div style="margin-top:8px; font-size:14px; color:#f8fafc; line-height:1.8;">
-                            • <b>حالة الأمان الكودية:</b> كافة الباكيات تحقق حدود الأمان لسهم الانحناء الكلي طويل المدى (<b>Δtotal ≤ Δall = Ln/250</b>) طبقاً لاشتراطات الكود المصري ECP 203.<br>
-                            • <b>النتيجة الهندسية:</b> سُمك البلاطة الحالي وتسليح الشبكات كافيان ومحققان للجساءة المطلوبة، ولا توجد أي باكية حرجة تتطلب تشغيل خوارزمية المعالجة الذكية أو تكثيف بدائل التسليح.
+                        <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.8;">
+                            • <b>الباكيات المتأثرة:</b> {names_unsafe_p}<br>
+                            • <b>السبب الإنشائي:</b> سهم الانحناء طويل المدى بعد 5 سنوات يتجاوز الحد الأقصى المسموح (<b>Δtotal &gt; Δall = Ln/250</b>).<br>
+                            💡 <b>التوصيات الإنشائية والتنفيذية قبل حصر الكميات:</b><br>
+                            1. <b>زيادة سُمك البلاطة (ts):</b> يُوصى برفع السُمك من {ts:.0f} cm إلى تخانة أكبر لرفع عزم القصور الذاتي Ig و Ie بالتكعيب.<br>
+                            2. <b>تكثيف الحديد الإضافي السفلي (As,btm):</b> زيادة مساحة حديد الشد بمنتصف البحر لتقليل عمق الشروخ ورفع Icr.<br>
+                            3. <b>زيادة الشبكة العلوية (A's - Compression Rebars):</b> لتقليل معامل الزحف والانكماش طويل الأمد λ طبقاً للشرط الكودي λ = 2.0 / (1 + 50μ').
                         </div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-            else:
-                st.markdown(
-                    """
-                    <div dir="rtl" style="background:#0f172a; border:1.8px solid #38bdf8; border-radius:10px; padding:14px 18px; margin-bottom:14px; text-align:right;">
-                        <div style="font-size:16.5px; font-weight:800; color:#38bdf8; margin-bottom:4px;">
-                            🎯 المعالجة الذكية لسهم الانحناء وتثبيت سُمك البلاطة (ts) دون عمل سقوط (Drop Panel)
-                        </div>
-                        <div style="font-size:13.5px; color:#cbd5e1; line-height:1.7;">
-                            يقوم هذا الموديول بحل معادلات سهم الانحناء والجساءة الفعالة (Branson) ومعامل الزحف الكودي (ECP 203) عكسياً (Iterative Inverse Solver) لتقديم بديلين منفصلين للتسليح يحققان الأمان الكامل (<b>Δtotal ≤ Ln/250</b>) مع تثبيت سُمك السقف الحالي:
-                            <br>• <b>البديل الأول:</b> تكثيف حديد الشد السفلي الإضافي (Extra Bottom Tension Steel As) لرفع الجساءة Icr و Ie.
-                            <br>• <b>البديل الثاني:</b> زيادة حديد الضغط العلوي في منتصف البحر (Top Compression Steel A's) لتخفيض معامل الزحف والانكماش λ.
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+            # 5. 💡 Deflection Optimization Engine & Rebar Alternatives (موديول المعالجة الذكية لسهم الانحناء وبدائل التسليح)
+            st.markdown("<div style='margin-top:18px; margin-bottom:12px;'></div>", unsafe_allow_html=True)
+            with st.expander("💡 Deflection Optimization Engine & Rebar Alternatives (موديول المعالجة الذكية لسهم الانحناء وبدائل التسليح)", expanded=False):
+                unsafe_panels = [p for p in deflection_results if not p.get("is_safe", True)]
 
-                # Panel selector for optimization (showing ONLY unsafe panels)
-                unsafe_panel_options = [
-                    f"🚨 {p['Panel ID']} — {p['Bay Label']} ({p['Location Type']}) [Δact={p['delta_long (mm)']:.1f} mm > Δall={p['delta_all (mm)']:.1f} mm (+{((p['delta_long (mm)']/max(0.01, p['delta_all (mm)']))-1.0)*100:.0f}%)]"
-                    for p in unsafe_panels
-                ]
-
-                sel_unsafe_idx = st.selectbox(
-                    "🎯 اختر الباكية غير الآمنة لتشغيل المعالجة الذكية وحساب بدائل التسليح:",
-                    options=range(len(unsafe_panels)),
-                    format_func=lambda i: unsafe_panel_options[i],
-                    index=0,
-                    key="sel_opt_def_panel_idx",
-                )
-                sel_panel_data = unsafe_panels[sel_unsafe_idx]
-
-                # Solve optimization
-                opt_res = solve_deflection_optimization(sel_panel_data, DL_tot, LL, Fcu, Fy=Fy)
-
-                if opt_res.get("all_failed", False):
-                    # ── FAILURE ALERT: Trigger Audio Beep & Mandatory Slab Thickness Alert ──
-                    audio_beep_html = """
-                    <script>
-                    (function() {
-                        try {
-                            var AudioContext = window.AudioContext || window.webkitAudioContext;
-                            if (!AudioContext) return;
-                            var ctx = new AudioContext();
-                            function playBeep(freq, start, duration) {
-                                var osc = ctx.createOscillator();
-                                var gain = ctx.createGain();
-                                osc.type = 'sawtooth';
-                                osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
-                                gain.gain.setValueAtTime(0.22, ctx.currentTime + start);
-                                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
-                                osc.connect(gain);
-                                gain.connect(ctx.destination);
-                                osc.start(ctx.currentTime + start);
-                                osc.stop(ctx.currentTime + start + duration);
-                            }
-                            playBeep(880, 0.05, 0.22);
-                            playBeep(880, 0.35, 0.22);
-                            playBeep(1175, 0.70, 0.45);
-                        } catch(e) {
-                            console.error("Audio beep error:", e);
-                        }
-                    })();
-                    </script>
-                    """
-                    st.components.v1.html(audio_beep_html, height=0)
-
-                    st.markdown(
-                        f"""
-                        <div dir="rtl" style="background:linear-gradient(135deg, rgba(239, 68, 68, 0.22) 0%, rgba(185, 28, 28, 0.38) 100%); border:2.5px solid #ef4444; border-radius:12px; padding:20px 24px; margin-top:14px; margin-bottom:18px; text-align:right; box-shadow:0 8px 24px rgba(239, 68, 68, 0.25);">
-                            <div style="font-size:18.5px; font-weight:900; color:#fee2e2; display:flex; align-items:center; gap:10px;">
-                                🚨 تنبيه إنشائي: لا يوجد بديل عن زيادة تخانة البلاطة المسلحة لمقاومة الـ deflection
-                            </div>
-                            <div style="margin-top:12px; font-size:14.5px; color:#ffffff; line-height:1.9;">
-                                • <b>سبب عدم جدوى زيادة التسليح:</b> وصل حديد الشد للحد الأقصى الكودي <b>As_max = {opt_res['As_max']:.2f} cm²/m</b> (لضمان الانهيار الممطول ومنع الانهيار القصيف)، وتجاوز عدد الأسياخ الحد التنفيذي (10 أسياخ/متر لقطر Φ16 مم)، ومع ذلك ما زال سهم الانحناء غير آمن (<b>Δtotal = {opt_res['delta_curr_mm']:.2f} mm &gt; Δall = {opt_res['delta_allow_mm']:.2f} mm</b>).<br>
-                                • <b>الحل الهندسي الإلزامي الموصى به:</b> زيادة سُمك البلاطة الخرسانية فوراً إلى <b>ts,recommended = {opt_res['ts_rec_cm']} cm</b> (بزيادة <b>+{opt_res['ts_inc_cm']} cm</b> عن السُمك الحالي {ts:.0f} cm) لرفع الجساءة الفعالة بالتكعيب وتحقيق الأمان الكامل لسهم الانحناء طبقاً للكود المصري ECP 203.
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-                    # Display curves tab to visualize the As_max constraint
-                    fig_opt_curve = generate_deflection_optimization_curves_sketch(
-                        sel_panel_data, opt_res, DL_tot, LL, Fcu
-                    )
-                    st.pyplot(fig_opt_curve, clear_figure=True, use_container_width=True)
-                    plt.close(fig_opt_curve)
-
-                else:
-                    # ── SUCCESS: Organized Comparison Table & Engineering Visualizations ──
+                if not unsafe_panels:
                     st.markdown(
                         """
-                        <div style="font-size:17px; font-weight:800; color:#f8fafc; margin-top:14px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-                            📋 جدول مقارنة بدائل التسليح المعتمدة والنتائج المتوقعة (Optimization Summary Table)
+                        <div dir="rtl" style="background:#0f172a; border:2px solid #22c55e; border-radius:10px; padding:18px 22px; text-align:right; margin-bottom:10px;">
+                            <div style="font-size:17.5px; font-weight:800; color:#22c55e; display:flex; align-items:center; gap:8px;">
+                                ✅ جميع بلاطات السقف آمنة تماماً من ناحية سهم الانحناء (All Panels are Safe from Deflection)
+                            </div>
+                            <div style="margin-top:8px; font-size:14px; color:#f8fafc; line-height:1.8;">
+                                • <b>حالة الأمان الكودية:</b> كافة الباكيات تحقق حدود الأمان لسهم الانحناء الكلي طويل المدى (<b>Δtotal ≤ Δall = Ln/250</b>) طبقاً لاشتراطات الكود المصري ECP 203.<br>
+                                • <b>النتيجة الهندسية:</b> سُمك البلاطة الحالي وتسليح الشبكات كافيان ومحققان للجساءة المطلوبة، ولا توجد أي باكية حرجة تتطلب تشغيل خوارزمية المعالجة الذكية أو تكثيف بدائل التسليح.
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        """
+                        <div dir="rtl" style="background:#0f172a; border:1.8px solid #38bdf8; border-radius:10px; padding:14px 18px; margin-bottom:14px; text-align:right;">
+                            <div style="font-size:16.5px; font-weight:800; color:#38bdf8; margin-bottom:4px;">
+                                🎯 المعالجة الذكية لسهم الانحناء وتثبيت سُمك البلاطة (ts) دون عمل سقوط (Drop Panel)
+                            </div>
+                            <div style="font-size:13.5px; color:#cbd5e1; line-height:1.7;">
+                                يقوم هذا الموديول بحل معادلات سهم الانحناء والجساءة الفعالة (Branson) ومعامل الزحف الكودي (ECP 203) عكسياً (Iterative Inverse Solver) لتقديم بديلين منفصلين للتسليح يحققان الأمان الكامل (<b>Δtotal ≤ Ln/250</b>) مع تثبيت سُمك السقف الحالي:
+                                <br>• <b>البديل الأول:</b> تكثيف حديد الشد السفلي الإضافي (Extra Bottom Tension Steel As) لرفع الجساءة Icr و Ie.
+                                <br>• <b>البديل الثاني:</b> زيادة حديد الضغط العلوي في منتصف البحر (Top Compression Steel A's) لتخفيض معامل الزحف والانكماش λ.
+                            </div>
                         </div>
                         """,
                         unsafe_allow_html=True,
                     )
 
-                    # Format rows
-                    opt1_data = opt_res["opt1"]
-                    opt2_data = opt_res["opt2"]
+                    # Panel selector for optimization (showing ONLY unsafe panels)
+                    unsafe_panel_options = [
+                        f"🚨 {p['Panel ID']} — {p['Bay Label']} ({p['Location Type']}) [Δact={p['delta_long (mm)']:.1f} mm > Δall={p['delta_all (mm)']:.1f} mm (+{((p['delta_long (mm)']/max(0.01, p['delta_all (mm)']))-1.0)*100:.0f}%)]"
+                        for p in unsafe_panels
+                    ]
 
-                    opt_table_data = []
-                    if opt1_data:
-                        inc_pct_opt1 = ((opt1_data["As_prop"] - opt_res["As_curr"]) / max(0.1, opt_res["As_curr"])) * 100.0
-                        opt_table_data.append({
-                            "مسار الحل (Solution Option)": "1️⃣ البديل الأول (تكثيف حديد الشد السفلي)",
-                            "نوع التسليح المعدل (Modified Rebar)": "حديد الشد السفلي الإضافي (Extra Bottom Tension Steel As)",
-                            "القطر المختار Φ": f"Φ {opt1_data['dia']} mm",
-                            "عدد الأسياخ / متر": f"{opt1_data['n_bars']} أسياخ / م",
-                            "مساحة التسليح الكلية": f"{opt1_data['As_prop']:.2f} cm²/m",
-                            "سهم الانحناء المتوقع (Δtotal)": f"{opt1_data['delta_tot']:.2f} mm",
-                            "الحد المسموح (Δall)": f"{opt_res['delta_allow_mm']:.2f} mm (Ln/250)",
-                            "حالة الأمان (Safety Status)": "✅ Safe (آمن ومحقق للكود)" if opt1_data["is_safe"] else "❌ غير محقق للحدود",
-                        })
+                    sel_unsafe_idx = st.selectbox(
+                        "🎯 اختر الباكية غير الآمنة لتشغيل المعالجة الذكية وحساب بدائل التسليح:",
+                        options=range(len(unsafe_panels)),
+                        format_func=lambda i: unsafe_panel_options[i],
+                        index=0,
+                        key="sel_opt_def_panel_idx",
+                    )
+                    sel_panel_data = unsafe_panels[sel_unsafe_idx]
 
-                    if opt2_data:
-                        inc_pct_opt2 = ((opt2_data["As_prime_prop"] - opt_res["As_prime_curr"]) / max(0.1, opt_res["As_prime_curr"])) * 100.0
-                        opt_table_data.append({
-                            "مسار الحل (Solution Option)": "2️⃣ البديل الثاني (زيادة حديد الضغط العلوي)",
-                            "نوع التسليح المعدل (Modified Rebar)": "حديد الضغط العلوي بمنتصف البحر (Compression Steel A's)",
-                            "القطر المختار Φ": f"Φ {opt2_data['dia']} mm",
-                            "عدد الأسياخ / متر": f"{opt2_data['n_bars']} أسياخ / م",
-                            "مساحة التسليح الكلية": f"{opt2_data['As_prime_prop']:.2f} cm²/m",
-                            "سهم الانحناء المتوقع (Δtotal)": f"{opt2_data['delta_tot']:.2f} mm",
-                            "الحد المسموح (Δall)": f"{opt_res['delta_allow_mm']:.2f} mm (Ln/250)",
-                            "حالة الأمان (Safety Status)": "✅ Safe (آمن ومحقق للكود)" if opt2_data["is_safe"] else "❌ غير محقق للحدود",
-                        })
+                    # Solve optimization
+                    opt_res = solve_deflection_optimization(sel_panel_data, DL_tot, LL, Fcu, Fy=Fy)
 
-                    render_styled_table(opt_table_data, font_size_override=10.5)
+                    if opt_res.get("all_failed", False):
+                        # ── FAILURE ALERT: Trigger Audio Beep & Mandatory Slab Thickness Alert ──
+                        audio_beep_html = """
+                        <script>
+                        (function() {
+                            try {
+                                var AudioContext = window.AudioContext || window.webkitAudioContext;
+                                if (!AudioContext) return;
+                                var ctx = new AudioContext();
+                                function playBeep(freq, start, duration) {
+                                    var osc = ctx.createOscillator();
+                                    var gain = ctx.createGain();
+                                    osc.type = 'sawtooth';
+                                    osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+                                    gain.gain.setValueAtTime(0.22, ctx.currentTime + start);
+                                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
+                                    osc.connect(gain);
+                                    gain.connect(ctx.destination);
+                                    osc.start(ctx.currentTime + start);
+                                    osc.stop(ctx.currentTime + start + duration);
+                                }
+                                playBeep(880, 0.05, 0.22);
+                                playBeep(880, 0.35, 0.22);
+                                playBeep(1175, 0.70, 0.45);
+                            } catch(e) {
+                                console.error("Audio beep error:", e);
+                            }
+                        })();
+                        </script>
+                        """
+                        st.components.v1.html(audio_beep_html, height=0)
 
-                    st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
+                        st.markdown(
+                            f"""
+                            <div dir="rtl" style="background:linear-gradient(135deg, rgba(239, 68, 68, 0.22) 0%, rgba(185, 28, 28, 0.38) 100%); border:2.5px solid #ef4444; border-radius:12px; padding:20px 24px; margin-top:14px; margin-bottom:18px; text-align:right; box-shadow:0 8px 24px rgba(239, 68, 68, 0.25);">
+                                <div style="font-size:18.5px; font-weight:900; color:#fee2e2; display:flex; align-items:center; gap:10px;">
+                                    🚨 تنبيه إنشائي: لا يوجد بديل عن زيادة تخانة البلاطة المسلحة لمقاومة الـ deflection
+                                </div>
+                                <div style="margin-top:12px; font-size:14.5px; color:#ffffff; line-height:1.9;">
+                                    • <b>سبب عدم جدوى زيادة التسليح:</b> وصل حديد الشد للحد الأقصى الكودي <b>As_max = {opt_res['As_max']:.2f} cm²/m</b> (لضمان الانهيار الممطول ومنع الانهيار القصيف)، وتجاوز عدد الأسياخ الحد التنفيذي (10 أسياخ/متر لقطر Φ16 مم)، ومع ذلك ما زال سهم الانحناء غير آمن (<b>Δtotal = {opt_res['delta_curr_mm']:.2f} mm &gt; Δall = {opt_res['delta_allow_mm']:.2f} mm</b>).<br>
+                                    • <b>الحل الهندسي الإلزامي الموصى به:</b> زيادة سُمك البلاطة الخرسانية فوراً إلى <b>ts,recommended = {opt_res['ts_rec_cm']} cm</b> (بزيادة <b>+{opt_res['ts_inc_cm']} cm</b> عن السُمك الحالي {ts:.0f} cm) لرفع الجساءة الفعالة بالتكعيب وتحقيق الأمان الكامل لسهم الانحناء طبقاً للكود المصري ECP 203.
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
 
-                    # Tabs for Curves & Cross-Section
-                    tab_opt_c, tab_opt_s = st.tabs([
-                        "📈 المنحنى البياني لسهم الانحناء ومساحة الحديد (Deflection vs. Steel Area Curves)",
-                        "📐 القطاع الهندسي التفصيلي للبلاطة بمنتصف البحر (Cross Section Detail)",
-                    ])
-
-                    with tab_opt_c:
+                        # Display curves tab to visualize the As_max constraint
                         fig_opt_curve = generate_deflection_optimization_curves_sketch(
                             sel_panel_data, opt_res, DL_tot, LL, Fcu
                         )
                         st.pyplot(fig_opt_curve, clear_figure=True, use_container_width=True)
-
-                        buf_opt_c = io.BytesIO()
-                        fig_opt_curve.savefig(buf_opt_c, format="png", bbox_inches="tight", dpi=180)
-                        buf_opt_c.seek(0)
-                        st.download_button(
-                            label=f"📥 Download Deflection Optimization Curves — Panel {sel_panel_data['Panel ID']} (High-Res PNG)",
-                            data=buf_opt_c,
-                            file_name=f"{prefix}Deflection_Optimization_Curves_{sel_panel_data['Panel ID']}.png",
-                            mime="image/png",
-                            use_container_width=True,
-                            key=f"btn_dl_def_opt_curve_{sel_panel_data['Panel ID']}",
-                        )
                         plt.close(fig_opt_curve)
 
-                    with tab_opt_s:
-                        fig_opt_sec = generate_deflection_rebar_cross_section_sketch(
-                            sel_panel_data, opt_res
+                    else:
+                        # ── SUCCESS: Organized Comparison Table & Engineering Visualizations ──
+                        st.markdown(
+                            """
+                            <div style="font-size:17px; font-weight:800; color:#f8fafc; margin-top:14px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+                                📋 جدول مقارنة بدائل التسليح المعتمدة والنتائج المتوقعة (Optimization Summary Table)
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
                         )
-                        st.pyplot(fig_opt_sec, clear_figure=True, use_container_width=True)
 
-                        buf_opt_s = io.BytesIO()
-                        fig_opt_sec.savefig(buf_opt_s, format="png", bbox_inches="tight", dpi=180)
-                        buf_opt_s.seek(0)
-                        st.download_button(
-                            label=f"📥 Download Midspan Cross-Section Detail — Panel {sel_panel_data['Panel ID']} (High-Res PNG)",
-                            data=buf_opt_s,
-                            file_name=f"{prefix}Deflection_Midspan_Section_{sel_panel_data['Panel ID']}.png",
-                            mime="image/png",
-                            use_container_width=True,
-                            key=f"btn_dl_def_opt_sec_{sel_panel_data['Panel ID']}",
-                        )
-                        plt.close(fig_opt_sec)
+                        # Format rows
+                        opt1_data = opt_res["opt1"]
+                        opt2_data = opt_res["opt2"]
+
+                        opt_table_data = []
+                        if opt1_data:
+                            inc_pct_opt1 = ((opt1_data["As_prop"] - opt_res["As_curr"]) / max(0.1, opt_res["As_curr"])) * 100.0
+                            opt_table_data.append({
+                                "مسار الحل (Solution Option)": "1️⃣ البديل الأول (تكثيف حديد الشد السفلي)",
+                                "نوع التسليح المعدل (Modified Rebar)": "حديد الشد السفلي الإضافي (Extra Bottom Tension Steel As)",
+                                "القطر المختار Φ": f"Φ {opt1_data['dia']} mm",
+                                "عدد الأسياخ / متر": f"{opt1_data['n_bars']} أسياخ / م",
+                                "مساحة التسليح الكلية": f"{opt1_data['As_prop']:.2f} cm²/m",
+                                "سهم الانحناء المتوقع (Δtotal)": f"{opt1_data['delta_tot']:.2f} mm",
+                                "الحد المسموح (Δall)": f"{opt_res['delta_allow_mm']:.2f} mm (Ln/250)",
+                                "حالة الأمان (Safety Status)": "✅ Safe (آمن ومحقق للكود)" if opt1_data["is_safe"] else "❌ غير محقق للحدود",
+                            })
+
+                        if opt2_data:
+                            inc_pct_opt2 = ((opt2_data["As_prime_prop"] - opt_res["As_prime_curr"]) / max(0.1, opt_res["As_prime_curr"])) * 100.0
+                            opt_table_data.append({
+                                "مسار الحل (Solution Option)": "2️⃣ البديل الثاني (زيادة حديد الضغط العلوي)",
+                                "نوع التسليح المعدل (Modified Rebar)": "حديد الضغط العلوي بمنتصف البحر (Compression Steel A's)",
+                                "القطر المختار Φ": f"Φ {opt2_data['dia']} mm",
+                                "عدد الأسياخ / متر": f"{opt2_data['n_bars']} أسياخ / م",
+                                "مساحة التسليح الكلية": f"{opt2_data['As_prime_prop']:.2f} cm²/m",
+                                "سهم الانحناء المتوقع (Δtotal)": f"{opt2_data['delta_tot']:.2f} mm",
+                                "الحد المسموح (Δall)": f"{opt_res['delta_allow_mm']:.2f} mm (Ln/250)",
+                                "حالة الأمان (Safety Status)": "✅ Safe (آمن ومحقق للكود)" if opt2_data["is_safe"] else "❌ غير محقق للحدود",
+                            })
+
+                        render_styled_table(opt_table_data, font_size_override=10.5)
+
+                        st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
+
+                        # Tabs for Curves & Cross-Section
+                        tab_opt_c, tab_opt_s = st.tabs([
+                            "📈 Deflection vs. Steel Area Curves (المنحنى البياني لسهم الانحناء ومساحة الحديد)",
+                            "📐 Cross Section Detail (القطاع الهندسي التفصيلي للبلاطة بمنتصف البحر)",
+                        ])
+
+                        with tab_opt_c:
+                            fig_opt_curve = generate_deflection_optimization_curves_sketch(
+                                sel_panel_data, opt_res, DL_tot, LL, Fcu
+                            )
+                            st.pyplot(fig_opt_curve, clear_figure=True, use_container_width=True)
+
+                            buf_opt_c = io.BytesIO()
+                            fig_opt_curve.savefig(buf_opt_c, format="png", bbox_inches="tight", dpi=180)
+                            buf_opt_c.seek(0)
+                            st.download_button(
+                                label=f"📥 Download Deflection Optimization Curves — Panel {sel_panel_data['Panel ID']} (High-Res PNG)",
+                                data=buf_opt_c,
+                                file_name=f"{prefix}Deflection_Optimization_Curves_{sel_panel_data['Panel ID']}.png",
+                                mime="image/png",
+                                use_container_width=True,
+                                key=f"btn_dl_def_opt_curve_{sel_panel_data['Panel ID']}",
+                            )
+                            plt.close(fig_opt_curve)
+
+                        with tab_opt_s:
+                            fig_opt_sec = generate_deflection_rebar_cross_section_sketch(
+                                sel_panel_data, opt_res
+                            )
+                            st.pyplot(fig_opt_sec, clear_figure=True, use_container_width=True)
+
+                            buf_opt_s = io.BytesIO()
+                            fig_opt_sec.savefig(buf_opt_s, format="png", bbox_inches="tight", dpi=180)
+                            buf_opt_s.seek(0)
+                            st.download_button(
+                                label=f"📥 Download Midspan Cross-Section Detail — Panel {sel_panel_data['Panel ID']} (High-Res PNG)",
+                                data=buf_opt_s,
+                                file_name=f"{prefix}Deflection_Midspan_Section_{sel_panel_data['Panel ID']}.png",
+                                mime="image/png",
+                                use_container_width=True,
+                                key=f"btn_dl_def_opt_sec_{sel_panel_data['Panel ID']}",
+                            )
+                            plt.close(fig_opt_sec)
     # ── 📊 الحصر التقريبي للكميات — APPROXIMATE QUANTITY SURVEY ──────────────
     # 1. Slab Quantities (السقف)
     slab_area_val    = boq.get("slab_area_m2", 0.0)
@@ -10768,17 +11132,112 @@ def render():
     cols_sand_tot_val      = cols_conc_tot_val * 0.40
     cols_ratio_val         = (cols_steel_kg_tot_val / cols_conc_tot_val) if cols_conc_tot_val > 0 else 0.0
 
-    # 3. Grand Total Quantities (السقف + الأعمدة)
-    grand_conc_val      = slab_conc_val + cols_conc_tot_val
-    grand_steel_kg_val  = slab_steel_kg + cols_steel_kg_tot_val
-    grand_steel_ton_val = slab_steel_ton + cols_steel_ton_tot_val
-    grand_cement_ton    = slab_cement_ton + cols_cement_tot_ton
-    grand_cement_bags   = slab_cement_bags + cols_cement_tot_bags
-    grand_gravel_val    = slab_gravel_val + cols_gravel_tot_val
-    grand_sand_val      = slab_sand_val + cols_sand_tot_val
-    grand_ratio_val     = (grand_steel_kg_val / grand_conc_val) if grand_conc_val > 0 else 0.0
+    # 3. Foundations Quantities (أساسات المبنى: قواعد منفصلة + قواعد مشتركة)
+    ftgs_conc_rc_val  = 0.0
+    ftgs_conc_pc_val  = 0.0
+    ftgs_steel_kg_val = 0.0
+    ftg_dia_map = {}
 
-    # 4. Detailed Diameter Breakdown (Slab, Columns & Combined)
+    def _add_ftg_dia_entry(phi_val, wt_kg, app_desc):
+        if phi_val not in ftg_dia_map:
+            ftg_dia_map[phi_val] = {"weight_kg": 0.0, "apps": app_desc}
+        ftg_dia_map[phi_val]["weight_kg"] += wt_kg
+
+    if 'fs_active_columns' in locals() and fs_active_columns:
+        ov_col_ids_set = overlap_data.get("overlapping_col_ids", set()) if 'overlap_data' in locals() else set()
+        for col_item in fs_active_columns:
+            cid = col_item["id"]
+            if cid in ov_col_ids_set:
+                continue
+            ctype = col_item.get("type", "Interior")
+            f_model = ftgs_dict.get(ctype, ftgs_dict.get("Interior")) if 'ftgs_dict' in locals() else None
+            if not f_model:
+                continue
+
+            L_m = f_model["L_cm"] / 100.0
+            B_m = f_model["B_cm"] / 100.0
+            t_m = f_model["t_cm"] / 100.0
+            ftgs_conc_rc_val += L_m * B_m * t_m
+
+            # P.C. Blinding Layer (20 cm thick with 20 cm projection)
+            L_pc_m = (f_model["L_cm"] + 40.0) / 100.0
+            B_pc_m = (f_model["B_cm"] + 40.0) / 100.0
+            ftgs_conc_pc_val += L_pc_m * B_pc_m * 0.20
+
+            # Steel: bottom longitudinal & transverse
+            phi_f = f_model.get("Phi", 16)
+            unit_w_f = (phi_f ** 2) / 162.0
+            n_L = max(5, int(math.ceil(B_m * f_model.get("n_bars_L", 5.0))))
+            len_L = L_m - 0.10 + 2.0 * max(0.20, t_m - 0.10)
+            wt_L = n_L * len_L * unit_w_f
+
+            n_B = max(5, int(math.ceil(L_m * f_model.get("n_bars_B", 5.0))))
+            len_B = B_m - 0.10 + 2.0 * max(0.20, t_m - 0.10)
+            wt_B = n_B * len_B * unit_w_f
+
+            isolated_col_steel = wt_L + wt_B
+            ftgs_steel_kg_val += isolated_col_steel
+            _add_ftg_dia_entry(phi_f, isolated_col_steel, "تسليح سفلي لقواعد منفصلة (Isolated Footings)")
+
+        if 'combined_fs_models' in locals() and combined_fs_models:
+            for cf in combined_fs_models:
+                Lc_m = cf["Lc_cm"] / 100.0
+                Bc_m = cf["Bc_cm"] / 100.0
+                tc_m = cf["tc_cm"] / 100.0
+                ftgs_conc_rc_val += Lc_m * Bc_m * tc_m
+
+                # P.C. Blinding for Combined Footings
+                Lc_pc_m = (cf["Lc_cm"] + 40.0) / 100.0
+                Bc_pc_m = (cf["Bc_cm"] + 40.0) / 100.0
+                ftgs_conc_pc_val += Lc_pc_m * Bc_pc_m * 0.20
+
+                # Rebar: Bottom longitudinal
+                phi_bot = cf.get("Phi_mm", 18)
+                unit_w_bot = (phi_bot ** 2) / 162.0
+                n_bot = max(5, int(math.ceil(Bc_m * 6.0)))
+                len_bot = Lc_m - 0.10 + 2.0 * max(0.25, tc_m - 0.10)
+                wt_bot = n_bot * len_bot * unit_w_bot
+
+                # Rebar: Top longitudinal (Negative moment rebar)
+                phi_top = cf.get("Phi_mm", 18)
+                unit_w_top = (phi_top ** 2) / 162.0
+                n_top = max(5, int(math.ceil(Bc_m * 8.0)))
+                len_top = Lc_m - 0.10 + 2.0 * max(0.25, tc_m - 0.10)
+                wt_top = n_top * len_top * unit_w_top
+
+                # Rebar: Transverse steel
+                phi_trans = 16
+                unit_w_trans = (16 ** 2) / 162.0
+                n_trans = max(5, int(math.ceil(Lc_m * 5.0)))
+                len_trans = Bc_m - 0.10 + 2.0 * max(0.25, tc_m - 0.10)
+                wt_trans = n_trans * len_trans * unit_w_trans
+
+                combined_col_steel = wt_bot + wt_top + wt_trans
+                ftgs_steel_kg_val += combined_col_steel
+                _add_ftg_dia_entry(phi_bot, wt_bot, "تسليح سفلي لقواعد مشتركة (Combined Footings)")
+                _add_ftg_dia_entry(phi_top, wt_top, "تسليح علوي رئيسي لقواعد مشتركة (Combined Footings)")
+                _add_ftg_dia_entry(phi_trans, wt_trans, "تسليح عرضي لقواعد مشتركة (Combined Footings)")
+
+    ftgs_steel_ton_val  = ftgs_steel_kg_val / 1000.0
+    ftgs_cement_ton     = (ftgs_conc_rc_val * 350.0 + ftgs_conc_pc_val * 250.0) / 1000.0
+    ftgs_cement_bags    = int(round(ftgs_cement_ton * 1000.0 / 50.0))
+    ftgs_gravel_val     = (ftgs_conc_rc_val + ftgs_conc_pc_val) * 0.80
+    ftgs_sand_val       = (ftgs_conc_rc_val + ftgs_conc_pc_val) * 0.40
+    ftgs_ratio_val      = (ftgs_steel_kg_val / ftgs_conc_rc_val) if ftgs_conc_rc_val > 0 else 0.0
+
+    # 4. Grand Total Quantities (السقف + الأعمدة + الأساسات)
+    grand_conc_rc_val   = slab_conc_val + cols_conc_tot_val + ftgs_conc_rc_val
+    grand_conc_pc_val   = ftgs_conc_pc_val
+    grand_conc_all_val  = grand_conc_rc_val + grand_conc_pc_val
+    grand_steel_kg_val  = slab_steel_kg + cols_steel_kg_tot_val + ftgs_steel_kg_val
+    grand_steel_ton_val = slab_steel_ton + cols_steel_ton_tot_val + ftgs_steel_ton_val
+    grand_cement_ton    = slab_cement_ton + cols_cement_tot_ton + ftgs_cement_ton
+    grand_cement_bags   = slab_cement_bags + cols_cement_tot_bags + ftgs_cement_bags
+    grand_gravel_val    = slab_gravel_val + cols_gravel_tot_val + ftgs_gravel_val
+    grand_sand_val      = slab_sand_val + cols_sand_tot_val + ftgs_sand_val
+    grand_ratio_val     = (grand_steel_kg_val / grand_conc_rc_val) if grand_conc_rc_val > 0 else 0.0
+
+    # 5. Detailed Diameter Breakdown (Slab, Columns & Foundations)
     all_dias_set = set()
     slab_dia_map = {}
     for d_row in boq.get("by_dia", []):
@@ -10819,15 +11278,17 @@ def render():
                     cols_dia_map[phi_st] = {"weight_kg": 0.0, "apps": "كانات وأطواق الأعمدة (Column Stirrup Ties)"}
                 cols_dia_map[phi_st]["weight_kg"] += wt_st_bld
 
-    with st.expander("📊 الحصر التقريبي للكميات (Approximate Quantity survey)", expanded=False):
+    all_dias_set.update(ftg_dia_map.keys())
+
+    with st.expander("📊 Approximate Quantity Survey (الحصر التقريبي للكميات)", expanded=False):
         st.markdown(
             f"""
             <div style="background:#f8fafc; border-left:4px solid #1e40af; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
                 <div style="font-size:1.0rem; font-weight:800; color:#1e3a8a;">
-                    📋 جدول الحصر الشامل لكميات ومواد السقف والأعمدة والإجمالي الكلي:
+                    📋 جدول الحصر الشامل لكميات ومواد السقف والأعمدة والأساسات والإجمالي الكلي للمبنى:
                 </div>
                 <div style="font-size:0.9rem; color:#475569; margin-top:3px;">
-                    حصر دقيق لكميات الخرسانة المسلحة، والحديد (لكل قطر وإجمالي)، والأسمنت، والزلط، والرمل لسقف البلاطة اللاكمرية ولأعمدة المبنى بالكامل لعدد <b>{num_floors} طوابق</b>.
+                    حصر تفصيلي شامل للخرسانة المسلحة والعادية، وحديد التسليح (لكل قطر وإجمالي)، والأسمنت، والزلط، والرمل لسقف البلاطة اللاكمرية، وأعمدة المبنى ({num_floors} طوابق)، وأساسات المبنى بالكامل (القواعد المنفصلة والمشتركة).
                 </div>
             </div>
             """,
@@ -10840,9 +11301,9 @@ def render():
             st.markdown(
                 f"""
                 <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:13px; font-weight:600; color:#15803d; margin-bottom:4px;">إجمالي حجم الخرسانة المسلحة</div>
-                    <div style="font-size:20px; font-weight:800; color:#166534;">{grand_conc_val:.2f} m³</div>
-                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">سقف: {slab_conc_val:.1f} m³ │ أعمدة: {cols_conc_tot_val:.1f} m³</div>
+                    <div style="font-size:13px; font-weight:600; color:#15803d; margin-bottom:4px;">إجمالي حجم الخرسانات</div>
+                    <div style="font-size:20px; font-weight:800; color:#166534;">{grand_conc_all_val:.2f} m³</div>
+                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">مسلحة: {grand_conc_rc_val:.1f} m³ │ عادية: {grand_conc_pc_val:.1f} m³</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -10853,7 +11314,7 @@ def render():
                 <div style="background:#f5f3ff; border:1.5px solid #c4b5fd; border-radius:8px; padding:10px 14px; text-align:center;">
                     <div style="font-size:13px; font-weight:600; color:#6d28d9; margin-bottom:4px;">إجمالي وزن حديد التسليح</div>
                     <div style="font-size:20px; font-weight:800; color:#5b21b6;">{grand_steel_ton_val:.3f} Ton</div>
-                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">سقف: {slab_steel_ton:.2f} t │ أعمدة: {cols_steel_ton_tot_val:.2f} t</div>
+                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">سقف: {slab_steel_ton:.2f}t │ أعمدة: {cols_steel_ton_tot_val:.2f}t │ أساسات: {ftgs_steel_ton_val:.2f}t</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -10873,9 +11334,9 @@ def render():
             st.markdown(
                 f"""
                 <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:13px; font-weight:600; color:#b45309; margin-bottom:4px;">متوسط معدل التسليح</div>
-                    <div style="font-size:20px; font-weight:800; color:#92400e;">{grand_ratio_val:.1f} kg/m³</div>
-                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">زلط: {grand_gravel_val:.1f} m³ │ رمل: {grand_sand_val:.1f} m³</div>
+                    <div style="font-size:13px; font-weight:600; color:#b45309; margin-bottom:4px;">إجمالي الزلط والرمل</div>
+                    <div style="font-size:18px; font-weight:800; color:#92400e;">زلط: {grand_gravel_val:.1f} m³</div>
+                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">رمل: {grand_sand_val:.1f} m³ │ معدل: {grand_ratio_val:.1f} kg/m³</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -10885,8 +11346,7 @@ def render():
 
         # ── Table 1: Main Materials Quantity Survey Table ──
         st.markdown("##### 📋 1. جدول الحصر التقريبي العام للكميات والمواد الإنشائية (General Quantity Survey Table)")
-        
-        # ── Prominent Advisory Banner directly below Table 1 title ──
+
         st.markdown(
             """
             <div style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 2.5px solid #f59e0b; border-radius: 10px; padding: 14px 20px; margin-top: 8px; margin-bottom: 16px; text-align: center; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.20);">
@@ -10904,55 +11364,99 @@ def render():
 
         main_survey_data = [
             {
-                "البند / المكون الإنشائي (Item / Material)": "1. حجم الخرسانة المسلحة (Reinforced Concrete Volume)",
+                "البند / المكون الإنشائي (Item / Material)": "1. حجم الخرسانة المسلحة (Reinforced Concrete R.C.)",
                 "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_conc_val:.2f} m³",
                 f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_conc_tot_val:.2f} m³",
-                "الإجمالي الشامل (Grand Total)": f"{grand_conc_val:.2f} m³",
+                "أساسات المبنى (Foundations)": f"{ftgs_conc_rc_val:.2f} m³",
+                "الإجمالي الشامل (Grand Total)": f"{grand_conc_rc_val:.2f} m³",
                 "الوحدة (Unit)": "متر مكعب (m³)",
-                "الملاحظات والمواصفات (Notes & Specs)": f"مسطح السقف الصافي {slab_area_val:.1f} m² × سمك {ts:.0f} cm + كامل الأعمدة ({tot_active_cols} عمود)",
+                "الملاحظات والمواصفات (Notes & Specs)": f"مسطح السقف الصافي {slab_area_val:.1f} m² + كامل الأعمدة ({tot_active_cols} عمود) + القواعد المسلحة",
             },
             {
-                "البند / المكون الإنشائي (Item / Material)": "2. إجمالي وزن حديد التسليح (Total Reinforcement Steel)",
+                "البند / المكون الإنشائي (Item / Material)": "2. حجم الخرسانة العادية (Plain Concrete P.C.)",
+                "سقف البلاطة اللاكمرية (Flat Slab)": "—",
+                f"أعمدة المبنى ({num_floors} طوابق)": "—",
+                "أساسات المبنى (Foundations)": f"{ftgs_conc_pc_val:.2f} m³",
+                "الإجمالي الشامل (Grand Total)": f"{grand_conc_pc_val:.2f} m³",
+                "الوحدة (Unit)": "متر مكعب (m³)",
+                "الملاحظات والمواصفات (Notes & Specs)": "فرشة نظافة بسمك 20 سم ورفرفة 20 سم أسفل كامل القواعد",
+            },
+            {
+                "البند / المكون الإنشائي (Item / Material)": "3. إجمالي وزن حديد التسليح (Total Reinforcement Steel)",
                 "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
                 f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
+                "أساسات المبنى (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
                 "الإجمالي الشامل (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
                 "الوحدة (Unit)": "طن (Ton) / كجم (kg)",
-                "الملاحظات والمواصفات (Notes & Specs)": f"شامل الشبكة الأساسية والإضافي والكوابيل + حديد الأعمدة والكانات (تفصيل الأقطار بالجدول 2)",
+                "الملاحظات والمواصفات (Notes & Specs)": "شامل شبكات السقف والإضافي + حديد الأعمدة والكانات + تسليح القواعد المنفصلة والمشتركة",
             },
             {
-                "البند / المكون الإنشائي (Item / Material)": "3. كمية الأسمنت البورتلاندي (Portland Cement)",
+                "البند / المكون الإنشائي (Item / Material)": "4. كمية الأسمنت البورتلاندي (Portland Cement)",
                 "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_cement_ton:.2f} Ton ({slab_cement_bags:,} شكارة)",
                 f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_cement_tot_ton:.2f} Ton ({cols_cement_tot_bags:,} شكارة)",
+                "أساسات المبنى (Foundations)": f"{ftgs_cement_ton:.2f} Ton ({ftgs_cement_bags:,} شكارة)",
                 "الإجمالي الشامل (Grand Total)": f"{grand_cement_ton:.2f} Ton ({grand_cement_bags:,} شكارة)",
                 "الوحدة (Unit)": "طن (Ton) / شكارة",
-                "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 350 كجم أسمنت (7 شكاير وزن 50 كجم) لكل 1.0 m³ خرسانة مسلحة",
+                "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 350 كجم/م³ للمسلحة (7 شكاير) و 250 كجم/م³ للعادية (5 شكاير)",
             },
             {
-                "البند / المكون الإنشائي (Item / Material)": "4. كمية الزلط / الركام الكبير (Gravel / Coarse Aggregate)",
+                "البند / المكون الإنشائي (Item / Material)": "5. كمية الزلط / الركام الكبير (Gravel / Coarse Aggregate)",
                 "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_gravel_val:.2f} m³",
                 f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_gravel_tot_val:.2f} m³",
+                "أساسات المبنى (Foundations)": f"{ftgs_gravel_val:.2f} m³",
                 "الإجمالي الشامل (Grand Total)": f"{grand_gravel_val:.2f} m³",
                 "الوحدة (Unit)": "متر مكعب (m³)",
-                "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.80 m³ زلط متدرج ونظيف لكل 1.0 m³ خرسانة مسلحة",
+                "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.80 m³ زلط متدرج ونظيف لكل 1.0 m³ خرسانة (مسلحة وعادية)",
             },
             {
-                "البند / المكون الإنشائي (Item / Material)": "5. كمية الرمل الحرش / الركام الصغير (Clean Sand)",
+                "البند / المكون الإنشائي (Item / Material)": "6. كمية الرمل الحرش / الركام الصغير (Clean Sand)",
                 "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_sand_val:.2f} m³",
                 f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_sand_tot_val:.2f} m³",
+                "أساسات المبنى (Foundations)": f"{ftgs_sand_val:.2f} m³",
                 "الإجمالي الشامل (Grand Total)": f"{grand_sand_val:.2f} m³",
                 "الوحدة (Unit)": "متر مكعب (m³)",
-                "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.40 m³ رمل حرش نظيف لكل 1.0 m³ خرسانة مسلحة (نصف حجم الزلط)",
+                "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.40 m³ رمل حرش نظيف لكل 1.0 m³ خرسانة (نصف حجم الزلط)",
             },
             {
-                "البند / المكون الإنشائي (Item / Material)": "6. معدل استهلاك الحديد (Steel Consumption Ratio)",
+                "البند / المكون الإنشائي (Item / Material)": "7. معدل استهلاك الحديد (Steel Consumption Ratio)",
                 "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_ratio_val:.1f} kg/m³",
                 f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_ratio_val:.1f} kg/m³",
+                "أساسات المبنى (Foundations)": f"{ftgs_ratio_val:.1f} kg/m³",
                 "الإجمالي الشامل (Grand Total)": f"{grand_ratio_val:.1f} kg/m³",
-                "الوحدة (Unit)": "كجم / م³ خرسانة",
-                "الملاحظات والمواصفات (Notes & Specs)": f"معدل التسليح للمسطح بالسقف: {(slab_steel_kg/slab_area_val) if slab_area_val else 0:.1f} kg/m²",
+                "الوحدة (Unit)": "كجم / م³ خرسانة مسلحة",
+                "الملاحظات والمواصفات (Notes & Specs)": "متوسط استهلاك الحديد المسلح لكافة عناصر المبنى",
             },
         ]
         render_styled_table(main_survey_data)
+
+        # Export Excel & CSV buttons for Quantity Survey
+        df_survey_export = pd.DataFrame(main_survey_data)
+        csv_survey_data = df_survey_export.to_csv(index=False).encode('utf-8-sig')
+        buf_surv_xl = io.BytesIO()
+        with pd.ExcelWriter(buf_surv_xl, engine='openpyxl') as writer:
+            df_survey_export.to_excel(writer, index=False, sheet_name='Main_Quantities')
+        excel_surv_bytes = buf_surv_xl.getvalue()
+
+        surv_c1, surv_c2 = st.columns(2)
+        with surv_c1:
+            st.download_button(
+                label="📊 تصدير جدول الحصر العام (Excel .xlsx)",
+                data=excel_surv_bytes,
+                file_name=f"{prefix}General_Quantity_Survey_{num_floors}Floors.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key=f"{prefix}btn_dl_survey_excel",
+            )
+        with surv_c2:
+            st.download_button(
+                label="📥 تصدير جدول الحصر العام (CSV)",
+                data=csv_survey_data,
+                file_name=f"{prefix}General_Quantity_Survey_{num_floors}Floors.csv",
+                mime="text/csv",
+                use_container_width=True,
+                key=f"{prefix}btn_dl_survey_csv",
+            )
+
         st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
 
         # ── Table 2: Detailed Steel Reinforcement by Bar Diameter (جدول تفصيل حديد التسليح لكل قطر) ──
@@ -10963,7 +11467,9 @@ def render():
             s_ton = s_kg / 1000.0
             c_kg = cols_dia_map.get(d, {}).get("weight_kg", 0.0)
             c_ton = c_kg / 1000.0
-            t_kg = s_kg + c_kg
+            f_kg = ftg_dia_map.get(d, {}).get("weight_kg", 0.0)
+            f_ton = f_kg / 1000.0
+            t_kg = s_kg + c_kg + f_kg
             t_ton = t_kg / 1000.0
             pct = (t_kg / max(0.001, grand_steel_kg_val)) * 100.0
 
@@ -10972,12 +11478,15 @@ def render():
                 sources_list.append(f"السقف: {slab_dia_map[d].get('apps', '—')}")
             if c_kg > 0:
                 sources_list.append(f"الأعمدة: {cols_dia_map[d].get('apps', '—')}")
+            if f_kg > 0:
+                sources_list.append(f"الأساسات: {ftg_dia_map[d].get('apps', '—')}")
 
             dia_table_rows.append({
                 "قطر السيخ Φ (Bar Dia)": f"Φ {d} mm",
                 "وزن المتر الطولي (kg/m')": f"{(d**2)/162.0:.4f} kg/m'",
                 "حديد السقف (Slab Steel)": f"{s_ton:.3f} Ton ({s_kg:,.1f} kg)" if s_kg > 0 else "—",
                 f"حديد الأعمدة ({num_floors}F)": f"{c_ton:.3f} Ton ({c_kg:,.1f} kg)" if c_kg > 0 else "—",
+                "حديد الأساسات (Foundations)": f"{f_ton:.3f} Ton ({f_kg:,.1f} kg)" if f_kg > 0 else "—",
                 "الإجمالي الكلي (Grand Total)": f"{t_ton:.3f} Ton ({t_kg:,.1f} kg)",
                 "النسبة (%)": f"{pct:.1f} %",
                 "مواقع الاستخدام في المشروع (Applications)": " │ ".join(sources_list) if sources_list else "—",
@@ -10988,9 +11497,10 @@ def render():
             "وزن المتر الطولي (kg/m')": "—",
             "حديد السقف (Slab Steel)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
             f"حديد الأعمدة ({num_floors}F)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
+            "حديد الأساسات (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
             "الإجمالي الكلي (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
             "النسبة (%)": "100.0 %",
-            "مواقع الاستخدام في المشروع (Applications)": f"متوسط استهلاك المشروع بالكامل: {grand_ratio_val:.1f} kg/m³ خرسانة",
+            "مواقع الاستخدام في المشروع (Applications)": f"متوسط استهلاك المشروع بالكامل: {grand_ratio_val:.1f} kg/m³ خرسانة مسلحة",
         })
         render_styled_table(dia_table_rows)
 
@@ -11003,71 +11513,6 @@ def render():
     )
 
     from modules.report_generator import generate_flat_slab_report_html, html_to_pdf_bytes
-
-    # Ensure moment contour images are generated for the comprehensive report
-    if img_m11_b64 is None and img_dual_moment_b64 is None:
-        _fig_m11_rep = generate_flat_slab_moment_contour(
-            Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
-            mode="M11", col_w_cm=bc_s, col_d_cm=tc_s,
-            removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
-            top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
-        )
-        _buf = io.BytesIO()
-        _fig_m11_rep.savefig(_buf, format="png", bbox_inches="tight", dpi=180)
-        _buf.seek(0)
-        img_m11_b64 = "data:image/png;base64," + base64.b64encode(_buf.getvalue()).decode("utf-8")
-        plt.close(_fig_m11_rep)
-
-    if img_m22_b64 is None and img_dual_moment_b64 is None:
-        _fig_m22_rep = generate_flat_slab_moment_contour(
-            Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
-            mode="M22", col_w_cm=bc_s, col_d_cm=tc_s,
-            removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
-            top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
-        )
-        _buf = io.BytesIO()
-        _fig_m22_rep.savefig(_buf, format="png", bbox_inches="tight", dpi=180)
-        _buf.seek(0)
-        img_m22_b64 = "data:image/png;base64," + base64.b64encode(_buf.getvalue()).decode("utf-8")
-        plt.close(_fig_m22_rep)
-
-    report_html = generate_flat_slab_report_html(
-        project_name="Flat Slab Reinforced Concrete Design (ECP 203)",
-        ts=ts,
-        d=d,
-        num_floors=num_floors,
-        Wu=Wu,
-        Lx_spans=Lx_calc,
-        Ly_spans=Ly_calc,
-        cantilevers=cantilevers,
-        mesh_btm_str=mesh_btm_str,
-        mesh_top_str=mesh_top_str,
-        prov_btm_mesh_cm2m=prov_btm_mesh_cm2m,
-        prov_top_mesh_cm2m=prov_top_mesh_cm2m,
-        Fcu=Fcu,
-        Fy=Fy,
-        SDL=SDL,
-        wall_load=wall_load,
-        LL=LL,
-        bc=bc_s,
-        tc=tc_s,
-        boq=boq,
-        top_extra_cols=top_extra_cols,
-        btm_extra_spans=btm_extra_spans,
-        punching_results=punching_results,
-        all_punching_safe=all_safe,
-        col_reactions_data=col_reactions_data,
-        summary_models=summary_models,
-        img_verif_b64=img_verif_b64,
-        img_top_rft_b64=img_top_b64,
-        img_btm_rft_b64=img_btm_b64,
-        img_reactions_b64=img_reactions_b64,
-        img_m11_b64=img_m11_b64,
-        img_m22_b64=img_m22_b64,
-        img_dual_moment_b64=img_dual_moment_b64,
-    )
-
-    pdf_bytes = html_to_pdf_bytes(report_html)
 
     c_save1, c_save2 = st.columns([3, 1])
     with c_save1:
@@ -11085,24 +11530,75 @@ def render():
             unsafe_allow_html=True
         )
     with c_save2:
-        st.download_button(
-            label="🌐 Save Calculation Sheet (HTML)",
-            data=report_html,
-            file_name=f"{prefix}ECP203_Flat_Slab_Calculation_Sheet_ts{ts:.0f}cm_{num_floors}Floors.html",
-            mime="text/html",
-            use_container_width=True,
-        )
-        if pdf_bytes:
-            st.download_button(
-                label="📕 Save as PDF (مباشر)",
-                data=pdf_bytes,
-                file_name=f"{prefix}ECP203_Flat_Slab_Calculation_Sheet_ts{ts:.0f}cm_{num_floors}Floors.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-            )
+        btn_gen_rep = st.button("📑 إنشاء وتجهيز المذكرة الحسابية", use_container_width=True, key=f"{prefix}btn_gen_calc_sheet")
+        if btn_gen_rep or st.session_state.get(f"{prefix}_has_report"):
+            st.session_state[f"{prefix}_has_report"] = True
+            with st.spinner("جاري إعداد وتجهيز المذكرة الحسابية والمخططات..."): 
+                if img_m11_b64 is None and img_dual_moment_b64 is None:
+                    _fig_m11_rep = generate_flat_slab_moment_contour(
+                        Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+                        mode="M11", col_w_cm=bc_s, col_d_cm=tc_s,
+                        removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
+                        top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
+                    )
+                    _buf = io.BytesIO()
+                    _fig_m11_rep.savefig(_buf, format="png", bbox_inches="tight", dpi=180)
+                    _buf.seek(0)
+                    img_m11_b64 = "data:image/png;base64," + base64.b64encode(_buf.getvalue()).decode("utf-8")
+                    plt.close(_fig_m11_rep)
 
+                if img_m22_b64 is None and img_dual_moment_b64 is None:
+                    _fig_m22_rep = generate_flat_slab_moment_contour(
+                        Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+                        mode="M22", col_w_cm=bc_s, col_d_cm=tc_s,
+                        removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
+                        top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
+                    )
+                    _buf = io.BytesIO()
+                    _fig_m22_rep.savefig(_buf, format="png", bbox_inches="tight", dpi=180)
+                    _buf.seek(0)
+                    img_m22_b64 = "data:image/png;base64," + base64.b64encode(_buf.getvalue()).decode("utf-8")
+                    plt.close(_fig_m22_rep)
+
+                report_html = generate_flat_slab_report_html(
+                    project_name="Flat Slab Reinforced Concrete Design (ECP 203)",
+                    ts=ts, d=d, num_floors=num_floors, Wu=Wu,
+                    Lx_spans=Lx_calc, Ly_spans=Ly_calc, cantilevers=cantilevers,
+                    mesh_btm_str=mesh_btm_str, mesh_top_str=mesh_top_str,
+                    prov_btm_mesh_cm2m=prov_btm_mesh_cm2m, prov_top_mesh_cm2m=prov_top_mesh_cm2m,
+                    Fcu=Fcu, Fy=Fy, SDL=SDL, wall_load=wall_load, LL=LL,
+                    bc=bc_s, tc=tc_s, boq=boq,
+                    top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
+                    punching_results=punching_results, all_punching_safe=all_safe,
+                    col_reactions_data=col_reactions_data, summary_models=summary_models,
+                    img_verif_b64=img_verif_b64, img_top_rft_b64=img_top_b64,
+                    img_btm_rft_b64=img_btm_b64, img_reactions_b64=img_reactions_b64,
+                    img_m11_b64=img_m11_b64, img_m22_b64=img_m22_b64,
+                    img_dual_moment_b64=img_dual_moment_b64,
+                )
+
+                st.download_button(
+                    label="🌐 Save Calculation Sheet (HTML)",
+                    data=report_html,
+                    file_name=f"{prefix}ECP203_Flat_Slab_Calculation_Sheet_ts{ts:.0f}cm_{num_floors}Floors.html",
+                    mime="text/html",
+                    use_container_width=True,
+                )
+
+                if st.button("📕 تحويل وتنزيل PDF", key=f"{prefix}btn_convert_pdf", use_container_width=True):
+                    with st.spinner("جاري تحويل التقرير إلى PDF..."): 
+                        pdf_bytes = html_to_pdf_bytes(report_html)
+                        if pdf_bytes:
+                            st.download_button(
+                                label="📥 اضغط لتحميل ملف PDF المجهز",
+                                data=pdf_bytes,
+                                file_name=f"{prefix}ECP203_Flat_Slab_Calculation_Sheet_ts{ts:.0f}cm_{num_floors}Floors.pdf",
+                                mime="application/pdf",
+                                use_container_width=True,
+                            )
+                        else:
+                            st.warning("تعذر إنشاء ملف PDF تلقائياً، يمكنك حفظ ملف HTML وفتحه للطباعة.")
     st.markdown("---")
-
     # ── Final Info Summary ────────────────────────────────────────────────────
     st.info(
         f"📐 **Design Complete:** Flat Slab ts = {ts:.0f} cm  │  Floors: {num_floors}  │  Bottom Mesh: {mesh_btm_str}  │  "

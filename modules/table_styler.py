@@ -294,7 +294,7 @@ def get_styled_table_html(
     tbody_html = '<tbody>' + "".join(tbody_trs) + '</tbody>'
 
     full_html = (
-        f'<div class="ecp-custom-table-container" style="overflow-x: auto; border: 2px solid rgba(56, 189, 248, 0.45); '
+        f'<div class="ecp-custom-table-container" style="overflow-x: auto; border: 2px solid {accent_border_color}; '
         f'border-radius: 12px; box-shadow: 0 6px 25px rgba(0, 0, 0, 0.50); margin: {container_margin};">'
         '<table class="ecp-styled-dark-table" style="width: 100% !important; border-collapse: collapse !important; background: #0b1329 !important; '
         'font-family: \'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif !important;">'
