@@ -409,18 +409,24 @@ def get_building_columns_data():
             pu_val = float(c.get("pu_tot", 0.0))
             if pu_val <= 0:
                 pu_val = pu_c if c_type == "Corner" else (pu_e if c_type == "Edge" else pu_i)
-            columns.append({
+            col_dict = {
                 "id": c.get("id", "C"),
                 "orig_id": c.get("orig_id", c.get("id", "C")),
                 "type": c_type,
-                "x": float(c.get("x", 0.0)),
-                "y": float(c.get("y", 0.0)),
+                "x": float(c.get("center_x", c.get("x", 0.0))),
+                "y": float(c.get("center_y", c.get("y", 0.0))),
                 "bc": float(c.get("bc", bc)),
                 "tc": float(c.get("tc", tc)),
                 "pu_tot": pu_val,
                 "grid_x": c.get("grid_x", ""),
                 "grid_y": c.get("grid_y", ""),
-            })
+                "grid_x_m": float(c.get("grid_x_m", c.get("x", 0.0))),
+                "grid_y_m": float(c.get("grid_y_m", c.get("y", 0.0))),
+            }
+            for k in ("x_min", "x_max", "y_min", "y_max", "width_m", "height_m"):
+                if k in c:
+                    col_dict[k] = float(c[k])
+            columns.append(col_dict)
         has_imported = True
     else:
         has_imported = False
@@ -438,13 +444,15 @@ def get_building_columns_data():
                     "id": f"C{c_count}",
                     "orig_id": f"C{c_count}",
                     "type": ctype,
-                    "x": x,
-                    "y": y,
-                    "bc": bc,
-                    "tc": tc,
+                    "x": float(x),
+                    "y": float(y),
+                    "bc": float(bc),
+                    "tc": float(tc),
                     "pu_tot": pu,
                     "grid_x": f"Y{i+1}",
                     "grid_y": f"X{j+1}",
+                    "grid_x_m": float(x),
+                    "grid_y_m": float(y),
                 })
                 c_count += 1
 
@@ -595,6 +603,48 @@ def _vdim(ax, x, y1, y2, label, side="right", fs=_DIM_FS, offset=0.18):
             label, ha="left" if side == "right" else "right", va="center",
             rotation=90, fontsize=fs, fontweight="bold", color=_DIM_COLOR)
 
+def _get_grid_axes(columns_list):
+    """
+    Extract clean structural grid coordinates and labels from columns list.
+    Prioritizes explicit grid_x_m / grid_y_m, with fallback clustering of coordinates
+    to prevent shifted/offset columns from generating duplicate or chaotic grid lines.
+    """
+    has_grid_m = any("grid_x_m" in c for c in columns_list)
+    if has_grid_m:
+        unique_xs = sorted(list(set(round(float(c["grid_x_m"]), 3) for c in columns_list if "grid_x_m" in c)))
+        unique_ys = sorted(list(set(round(float(c["grid_y_m"]), 3) for c in columns_list if "grid_y_m" in c)))
+    else:
+        # Fallback: cluster column coordinates within 0.40m tolerance
+        def _cluster(coords, tol=0.40):
+            if not coords:
+                return []
+            sc = sorted(coords)
+            clusters = [[sc[0]]]
+            for val in sc[1:]:
+                if val - clusters[-1][-1] <= tol:
+                    clusters[-1].append(val)
+                else:
+                    clusters.append([val])
+            return sorted([round(sum(cl)/len(cl), 2) for cl in clusters])
+
+        unique_xs = _cluster([c["x"] for c in columns_list])
+        unique_ys = _cluster([c["y"] for c in columns_list])
+
+    label_map_x = {}
+    label_map_y = {}
+    for c in columns_list:
+        gx = c.get("grid_x_m", c.get("x"))
+        gy = c.get("grid_y_m", c.get("y"))
+        if "grid_x" in c and c["grid_x"] and unique_xs:
+            best_x = min(unique_xs, key=lambda u: abs(u - gx))
+            label_map_x[best_x] = c["grid_x"]
+        if "grid_y" in c and c["grid_y"] and unique_ys:
+            best_y = min(unique_ys, key=lambda u: abs(u - gy))
+            label_map_y[best_y] = c["grid_y"]
+
+    return unique_xs, unique_ys, label_map_x, label_map_y
+
+
 def draw_foundation_layout_plan(
     columns_list: list,
     footings_map: dict,
@@ -603,82 +653,103 @@ def draw_foundation_layout_plan(
 ):
     """
     Generate comprehensive Foundation General Layout Plan:
-    - R.C. boundaries at exact positions
+    - Clean structural grid axes (Y1, Y2... and X1, X2...) matching building geometry
     - Intermediate bay dimensions between consecutive grid axes (X & Y)
     - Total dimensions between first and last axis in both directions
-    - Column labels simplified to C1, C2, C3 beside columns in black text
-    - Representative footing for each type has clean dimension lines (L & B)
-    - Footing dimension and thickness boxes placed cleanly at the bottom of the drawing
-    - Clean layout without cluttering Clr lines
+    - Representative footing for each type has clean dimension lines (L & B) with no clash
+    - Representative combined footing dimension lines (drawn once, no duplication)
+    - Footing dimension and thickness schedule table placed cleanly at the bottom
+    - Clean layout without cluttering or overlapping lines
     """
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "sans-serif"]
     fig, ax = plt.subplots(figsize=(16, 13), dpi=160, facecolor="#ffffff")
     ax.set_facecolor("#f8fafc")
 
-    overlapping_ids = overlap_info["overlapping_col_ids"]
+    overlapping_ids = overlap_info.get("overlapping_col_ids", set())
 
-    xs = [c["x"] for c in columns_list]
-    ys = [c["y"] for c in columns_list]
-    min_x, max_x = min(xs), max(xs)
-    min_y, max_y = min(ys), max(ys)
+    # 1. Extract clean structural grid axes and labels (immune to individual column shift/rotation)
+    unique_xs, unique_ys, label_map_x, label_map_y = _get_grid_axes(columns_list)
 
-    unique_xs = sorted(list(set(round(x, 2) for x in xs)))
-    unique_ys = sorted(list(set(round(y, 2) for y in ys)))
-
-    max_ftg_y = max(c["y"] + ((footings_map.get(c["type"], {}).get("B_cm", 200.0) / 200.0)) for c in columns_list)
-    min_ftg_y = min(c["y"] - ((footings_map.get(c["type"], {}).get("B_cm", 200.0) / 200.0)) for c in columns_list)
+    # 2. Compute bounding box for ALL elements (isolated footings + combined footings + grid axes)
     min_ftg_x = min(c["x"] - ((footings_map.get(c["type"], {}).get("L_cm", 200.0) / 200.0)) for c in columns_list)
     max_ftg_x = max(c["x"] + ((footings_map.get(c["type"], {}).get("L_cm", 200.0) / 200.0)) for c in columns_list)
+    min_ftg_y = min(c["y"] - ((footings_map.get(c["type"], {}).get("B_cm", 200.0) / 200.0)) for c in columns_list)
+    max_ftg_y = max(c["y"] + ((footings_map.get(c["type"], {}).get("B_cm", 200.0) / 200.0)) for c in columns_list)
 
-    y_top_base = max_ftg_y + 0.6
-    x_left_base = min_ftg_x - 0.6
-    y_bottom_base = min_ftg_y - 0.6
-    x_right_base = max_ftg_x + 0.6
+    if combined_footings_list:
+        for cf in combined_footings_list:
+            cA = cf["col_a_info"]
+            cB = cf["col_b_info"]
+            Lc_m = cf["Lc_cm"] / 100.0
+            Bc_m = cf["Bc_cm"] / 100.0
+            x1_m = cf["x1_cm"] / 100.0
+            ov_dir = cf.get("overlap_dir", "X")
+            if abs(cB["x"] - cA["x"]) < 0.1 and abs(cB["y"] - cA["y"]) > 0.1:
+                ov_dir = "Y"
+            if ov_dir == "X":
+                c_x0 = cA["x"] - x1_m
+                c_y0 = cA["y"] - Bc_m / 2.0
+                c_w, c_h = Lc_m, Bc_m
+            else:
+                c_x0 = cA["x"] - Bc_m / 2.0
+                c_y0 = cA["y"] - x1_m
+                c_w, c_h = Bc_m, Lc_m
+            min_ftg_x = min(min_ftg_x, c_x0)
+            max_ftg_x = max(max_ftg_x, c_x0 + c_w)
+            min_ftg_y = min(min_ftg_y, c_y0)
+            max_ftg_y = max(max_ftg_y, c_y0 + c_h)
 
-    y_dim1 = y_top_base + 0.6
-    y_dim2 = y_top_base + 1.4
-    y_bubble = y_top_base + 2.2
+    # Base reference offsets for dimensions and bubbles
+    y_top_base = max(max_ftg_y, unique_ys[-1]) + 0.8
+    x_left_base = min(min_ftg_x, unique_xs[0]) - 0.8
+    y_bottom_base = min(min_ftg_y, unique_ys[0]) - 0.8
+    x_right_base = max(max_ftg_x, unique_xs[-1]) + 0.8
 
-    x_dim1 = x_left_base - 0.6
-    x_dim2 = x_left_base - 1.4
-    x_bubble = x_left_base - 2.2
+    y_bubble_center = y_top_base + 2.5
+    x_bubble_center = x_left_base - 2.5
 
-    # 1. Draw Grid lines & Axis bubbles
+    # 3. Draw Grid lines & Axis bubbles
     for idx, gx in enumerate(unique_xs, start=1):
-        ax.plot([gx, gx], [y_bottom_base + 0.3, y_bubble], color="#cbd5e1", ls="--", lw=1.2, zorder=1)
-        ax.text(gx, y_bubble + 0.35, f"Y{idx}", ha="center", va="center", color="#1e293b",
-                fontweight="bold", fontsize=11.0, bbox=dict(boxstyle="circle,pad=0.28", fc="#f8fafc", ec="#475569", lw=1.5))
+        lbl = label_map_x.get(gx, f"Y{idx}")
+        # Grid line extends from y_bottom_base to bubble center
+        ax.plot([gx, gx], [y_bottom_base, y_bubble_center], color="#94a3b8", ls="--", lw=1.2, zorder=1)
+        ax.text(gx, y_bubble_center, lbl, ha="center", va="center", color="#1e293b",
+                fontweight="bold", fontsize=11.5,
+                bbox=dict(boxstyle="circle,pad=0.32", fc="#f8fafc", ec="#334155", lw=1.6), zorder=8)
 
     for idx, gy in enumerate(unique_ys, start=1):
-        ax.plot([x_bubble, x_right_base], [gy, gy], color="#cbd5e1", ls="--", lw=1.2, zorder=1)
-        ax.text(x_bubble - 0.35, gy, f"X{idx}", ha="center", va="center", color="#1e293b",
-                fontweight="bold", fontsize=11.0, bbox=dict(boxstyle="circle,pad=0.28", fc="#f8fafc", ec="#475569", lw=1.5))
+        lbl = label_map_y.get(gy, f"X{idx}")
+        # Grid line extends from bubble center to x_right_base
+        ax.plot([x_bubble_center, x_right_base], [gy, gy], color="#94a3b8", ls="--", lw=1.2, zorder=1)
+        ax.text(x_bubble_center, gy, lbl, ha="center", va="center", color="#1e293b",
+                fontweight="bold", fontsize=11.5,
+                bbox=dict(boxstyle="circle,pad=0.32", fc="#f8fafc", ec="#334155", lw=1.6), zorder=8)
 
-    # 2. Dimensions between vertical grid lines (along X at the top)
+    # 4. Dimensions between vertical grid lines (along X at the top)
     if len(unique_xs) > 1:
         # Intermediate bay spans
         for i in range(len(unique_xs) - 1):
             xa = unique_xs[i]
             xb = unique_xs[i + 1]
             dx = xb - xa
-            _hdim(ax, y_top_base, xa, xb, f"{dx:.2f} m", side="top", fs=9.5, offset=0.6)
+            _hdim(ax, y_top_base, xa, xb, f"{dx:.2f} m", side="top", fs=10.0, offset=0.6, draw_ext=False)
 
         # Total span between first and last vertical axis
         tot_dx = unique_xs[-1] - unique_xs[0]
-        _hdim(ax, y_top_base, unique_xs[0], unique_xs[-1], f"Total L = {tot_dx:.2f} m", side="top", fs=10.5, offset=1.4)
+        _hdim(ax, y_top_base, unique_xs[0], unique_xs[-1], f"Total L = {tot_dx:.2f} m", side="top", fs=11.0, offset=1.4, draw_ext=False)
 
-    # 3. Dimensions between horizontal grid lines (along Y at the left)
+    # 5. Dimensions between horizontal grid lines (along Y at the left)
     if len(unique_ys) > 1:
         # Intermediate bay spans
         for j in range(len(unique_ys) - 1):
             ya = unique_ys[j]
             yb = unique_ys[j + 1]
             dy = yb - ya
-            _vdim(ax, x_left_base, ya, yb, f"{dy:.2f} m", side="left", fs=9.5, offset=0.6)
+            _vdim(ax, x_left_base, ya, yb, f"{dy:.2f} m", side="left", fs=10.0, offset=0.6, draw_ext=False)
 
         # Total span between first and last horizontal axis
         tot_dy = unique_ys[-1] - unique_ys[0]
-        _vdim(ax, x_left_base, unique_ys[0], unique_ys[-1], f"Total B = {tot_dy:.2f} m", side="left", fs=10.5, offset=1.4)
+        _vdim(ax, x_left_base, unique_ys[0], unique_ys[-1], f"Total B = {tot_dy:.2f} m", side="left", fs=11.0, offset=1.4, draw_ext=False)
 
     # Pick exactly one representative column for each footing type (Corner F1, Edge F2, Interior F3)
     rep_types = {"Corner": None, "Edge": None, "Interior": None}
@@ -691,7 +762,7 @@ def draw_foundation_layout_plan(
         if ct in rep_types and rep_types[ct] is None:
             rep_types[ct] = c["id"]
 
-    # 4. Draw footings for NON-OVERLAPPING columns ONLY
+    # 6. Draw footings for NON-OVERLAPPING columns ONLY
     for c in columns_list:
         cid = c["id"]
         if cid in overlapping_ids:
@@ -721,10 +792,10 @@ def draw_foundation_layout_plan(
                 fontsize=10, fontweight="bold", color="#1e3a8a", zorder=4)
 
         if is_rep:
-            _hdim(ax, y0, x0, x0 + L_m, f"L = {ftg['L_cm']} cm", side="bottom", fs=9.0, offset=0.25)
-            _vdim(ax, x0 + L_m, y0, y0 + B_m, f"B = {ftg['B_cm']} cm", side="right", fs=9.0, offset=0.25)
+            _hdim(ax, y0, x0, x0 + L_m, f"L = {ftg['L_cm']} cm", side="bottom", fs=9.0, offset=0.25, draw_ext=True)
+            _vdim(ax, x0 + L_m, y0, y0 + B_m, f"B = {ftg['B_cm']} cm", side="right", fs=9.0, offset=0.25, draw_ext=True)
 
-    # 5. Draw Combined Footings (Dimensions only using dimension lines + clean label, no bulky badge box)
+    # 7. Draw Combined Footings (Dimensions on representative combined footing only)
     if combined_footings_list:
         for cf in combined_footings_list:
             cA = cf["col_a_info"]
@@ -764,23 +835,33 @@ def draw_foundation_layout_plan(
                 zorder=6,
             )
 
-            # Draw outer dimension lines on the combined footing exactly like isolated footings
-            if ov_dir == "X":
-                _hdim(ax, cf_y0, cf_x0, cf_x0 + cf_w, dim_L, side="bottom", fs=8.5, offset=0.25)
-                _vdim(ax, cf_x0 + cf_w, cf_y0, cf_y0 + cf_h, dim_B, side="right", fs=8.5, offset=0.25)
-            else:
-                _vdim(ax, cf_x0 + cf_w, cf_y0, cf_y0 + cf_h, dim_L, side="right", fs=8.5, offset=0.25)
-                _hdim(ax, cf_y0, cf_x0, cf_x0 + cf_w, dim_B, side="bottom", fs=8.5, offset=0.25)
+            # Draw outer dimension lines ONLY on the first representative combined footing to avoid clutter
+            if cf == combined_footings_list[0]:
+                if ov_dir == "X":
+                    _hdim(ax, cf_y0, cf_x0, cf_x0 + cf_w, dim_L, side="bottom", fs=8.5, offset=0.25, draw_ext=True)
+                    _vdim(ax, cf_x0 + cf_w, cf_y0, cf_y0 + cf_h, dim_B, side="right", fs=8.5, offset=0.25, draw_ext=True)
+                else:
+                    _vdim(ax, cf_x0 + cf_w, cf_y0, cf_y0 + cf_h, dim_L, side="right", fs=8.5, offset=0.25, draw_ext=True)
+                    _hdim(ax, cf_y0, cf_x0, cf_x0 + cf_w, dim_B, side="bottom", fs=8.5, offset=0.25, draw_ext=True)
 
-    # 6. Draw column sections and place ONLY C1, C2, C3 beside columns in BLACK text
+    # 8. Draw column sections and place ONLY C1, C2, C3 beside columns in BLACK text
     for c in columns_list:
         cx = c["x"]
         cy = c["y"]
-        col_w_m = c["tc"] / 100.0
-        col_h_m = c["bc"] / 100.0
+        # Use actual x_min/y_min from col_transforms if available (handles offset/rotated columns)
+        if "x_min" in c and "y_min" in c and "width_m" in c and "height_m" in c:
+            col_x0 = c["x_min"]
+            col_y0 = c["y_min"]
+            col_w_m = c["width_m"]
+            col_h_m = c["height_m"]
+        else:
+            col_w_m = c["tc"] / 100.0
+            col_h_m = c["bc"] / 100.0
+            col_x0 = cx - col_w_m / 2.0
+            col_y0 = cy - col_h_m / 2.0
 
         col_rect = patches.Rectangle(
-            (cx - col_w_m / 2.0, cy - col_h_m / 2.0),
+            (col_x0, col_y0),
             col_w_m, col_h_m,
             linewidth=1.5, edgecolor="#0f172a", facecolor="#64748b",
             hatch="//", zorder=6
@@ -790,8 +871,8 @@ def draw_foundation_layout_plan(
         # Show only C1, C2, C3 without column index
         c_tag = "C1" if c["type"] == "Corner" else ("C2" if c["type"] == "Edge" else "C3")
         ax.text(
-            cx + col_w_m / 2.0 + 0.12,
-            cy + col_h_m / 2.0 + 0.05,
+            col_x0 + col_w_m + 0.12,
+            col_y0 + col_h_m + 0.05,
             f"{c_tag}",
             ha="left",
             va="center",
@@ -802,7 +883,7 @@ def draw_foundation_layout_plan(
             bbox=dict(boxstyle="round,pad=0.15", fc="#ffffff", ec="#94a3b8", alpha=0.9),
         )
 
-    # 7. INTEGRATED FOOTINGS SCHEDULE TABLE AT THE BOTTOM (NO CARDS)
+    # 9. INTEGRATED FOOTINGS SCHEDULE TABLE AT THE BOTTOM (NO CARDS)
     f1 = footings_map.get("Corner")
     f2 = footings_map.get("Edge")
     f3 = footings_map.get("Interior")
@@ -835,8 +916,8 @@ def draw_foundation_layout_plan(
             row_colors.append("#f0fdf4")
 
     # Table layout matching grid width
-    x_start = x_bubble
-    total_w = x_right_base - x_bubble
+    x_start = x_bubble_center
+    total_w = x_right_base - x_bubble_center
     cum_w = [0.0]
     for w in col_widths:
         cum_w.append(cum_w[-1] + w * total_w)
@@ -889,8 +970,8 @@ def draw_foundation_layout_plan(
     ax.legend(handles=leg_handles, loc="upper center", bbox_to_anchor=(0.5, -0.04),
               ncol=3, fontsize=9.2, frameon=True, facecolor="#ffffff")
 
-    ax.set_xlim(x_bubble - 1.2, x_right_base + 1.2)
-    ax.set_ylim(bottom_limit, y_bubble + 1.2)
+    ax.set_xlim(x_bubble_center - 1.2, x_right_base + 1.2)
+    ax.set_ylim(bottom_limit, y_bubble_center + 1.2)
     ax.set_aspect("equal")
     ax.axis("off")
     fig.tight_layout()
@@ -904,23 +985,27 @@ _DIM_COLOR = "#334155"
 _DIM_FS = 13
 _ARROW_STYLE = dict(arrowstyle="<->", color="#334155", lw=1.8)
 
-def _hdim(ax, y, x1, x2, label, side="top", fs=_DIM_FS, offset=0.12):
+def _hdim(ax, y, x1, x2, label, side="top", fs=_DIM_FS, offset=0.12, draw_ext=True):
     ym = y + offset if side == "top" else y - offset
-    ax.annotate("", xy=(x1, ym), xytext=(x2, ym), arrowprops=_ARROW_STYLE)
-    ax.plot([x1, x1], [y, ym], color=_DIM_COLOR, lw=1.0, ls="--", alpha=0.6)
-    ax.plot([x2, x2], [y, ym], color=_DIM_COLOR, lw=1.0, ls="--", alpha=0.6)
+    ax.annotate("", xy=(x1, ym), xytext=(x2, ym), arrowprops=_ARROW_STYLE, zorder=5)
+    if draw_ext:
+        ax.plot([x1, x1], [y, ym], color=_DIM_COLOR, lw=0.9, ls="--", alpha=0.5, zorder=4)
+        ax.plot([x2, x2], [y, ym], color=_DIM_COLOR, lw=0.9, ls="--", alpha=0.5, zorder=4)
     ax.text((x1 + x2) / 2, ym + 0.06 * (1 if side == "top" else -1),
             label, ha="center", va="bottom" if side == "top" else "top",
-            fontsize=fs, fontweight="bold", color=_DIM_COLOR)
+            fontsize=fs, fontweight="bold", color=_DIM_COLOR, zorder=6,
+            bbox=dict(boxstyle="square,pad=0.18", fc="#ffffff", ec="none", alpha=0.92))
 
-def _vdim(ax, x, y1, y2, label, side="right", fs=_DIM_FS, offset=0.12):
+def _vdim(ax, x, y1, y2, label, side="right", fs=_DIM_FS, offset=0.12, draw_ext=True):
     xm = x + offset if side == "right" else x - offset
-    ax.annotate("", xy=(xm, y1), xytext=(xm, y2), arrowprops=_ARROW_STYLE)
-    ax.plot([x, xm], [y1, y1], color=_DIM_COLOR, lw=1.0, ls="--", alpha=0.6)
-    ax.plot([x, xm], [y2, y2], color=_DIM_COLOR, lw=1.0, ls="--", alpha=0.6)
+    ax.annotate("", xy=(xm, y1), xytext=(xm, y2), arrowprops=_ARROW_STYLE, zorder=5)
+    if draw_ext:
+        ax.plot([x, xm], [y1, y1], color=_DIM_COLOR, lw=0.9, ls="--", alpha=0.5, zorder=4)
+        ax.plot([x, xm], [y2, y2], color=_DIM_COLOR, lw=0.9, ls="--", alpha=0.5, zorder=4)
     ax.text(xm + 0.06 * (1 if side == "right" else -1), (y1 + y2) / 2,
             label, ha="left" if side == "right" else "right", va="center",
-            rotation=90, fontsize=fs, fontweight="bold", color=_DIM_COLOR)
+            rotation=90, fontsize=fs, fontweight="bold", color=_DIM_COLOR, zorder=6,
+            bbox=dict(boxstyle="square,pad=0.18", fc="#ffffff", ec="none", alpha=0.92))
 
 def _draw_plan(mode, *, S_m, c1_cm, b1_cm, c2_cm, b2_cm,
                L1_cm=None, B1_cm=None, L2_cm=None, B2_cm=None,

@@ -136,6 +136,7 @@ ECP_DEFAULTS: dict = {
     "fs_cant_top":    0.0,
     "fs_removed_cols": [],
     "fs_void_panels": [],
+    "fs_col_transforms": {},
 
     # Customs Module – Concrete Survey, Flat Slabs & Material Prices
     "cs_n_types": 2,
@@ -1042,9 +1043,15 @@ def load_settings() -> None:
         cfg["deleted_modules_trash"] = trash
         cfg["enabled_modules"] = get_project_enabled_modules(active_name)
 
+        if not isinstance(cfg.get("fs_col_transforms"), dict):
+            cfg["fs_col_transforms"] = {}
+
         st.session_state["_settings_loaded_from_file"] = True
     else:
         st.session_state["_settings_loaded_from_file"] = False
+
+    if not isinstance(cfg.get("fs_col_transforms"), dict):
+        cfg["fs_col_transforms"] = {}
 
     st.session_state["cfg"] = cfg
     st.session_state["_active_profile_name"] = active_name

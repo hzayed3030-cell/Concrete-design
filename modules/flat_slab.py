@@ -137,19 +137,131 @@ def _compute_effective_spans(Lx_spans, Ly_spans, removed_ij_set):
     return eff_Lx, eff_Ly, active_xi, active_yj, full_x_removed, full_y_removed, ddm_warning
 
 
+def normalize_col_transform(trans):
+    """
+    Safely normalizes column orientation & shift settings.
+    Guarantees backward compatibility: never raises KeyError.
+    """
+    if not isinstance(trans, dict):
+        trans = {}
+    d = str(trans.get("direction", "اتجاه X")).strip()
+    if "Y" in d or "y" in d:
+        norm_dir = "اتجاه Y"
+    else:
+        norm_dir = "اتجاه X"
+
+    sx = str(trans.get("shift_x", "متمركز على المحور (Centered)")).strip()
+    if "جسم العمود يميناً" in sx or sx.startswith("يمين") or "Right" in sx or "right" in sx:
+        norm_sx = "جسم العمود يميناً (الوجه يسار المحور -6 cm)"
+    elif "جسم العمود يساراً" in sx or sx.startswith("يسار") or "Left" in sx or "left" in sx:
+        norm_sx = "جسم العمود يساراً (الوجه يمين المحور +6 cm)"
+    else:
+        norm_sx = "متمركز على المحور (Centered)"
+
+    sy = str(trans.get("shift_y", "متمركز على المحور (Centered)")).strip()
+    if "جسم العمود لأعلى" in sy or sy.startswith("أعلى") or "Top" in sy or "top" in sy or "Up" in sy or "up" in sy:
+        norm_sy = "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)"
+    elif "جسم العمود لأسفل" in sy or sy.startswith("أسفل") or "Bottom" in sy or "bottom" in sy or "Down" in sy or "down" in sy:
+        norm_sy = "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
+    else:
+        norm_sy = "متمركز على المحور (Centered)"
+
+    return {
+        "direction": norm_dir,
+        "shift_x": norm_sx,
+        "shift_y": norm_sy,
+    }
+
+
+def compute_column_geometry(grid_x, grid_y, bc_cm, tc_cm, trans=None):
+    """
+    Computes exact rectangular geometry and bounds for a column according to ECP standards:
+    - If direction == 'اتجاه X': Width = D, Height = B (D = max(bc, tc), B = min(bc, tc))
+    - If direction == 'اتجاه Y': Width = B, Height = D
+    - Centered: x_min = grid_x - Width/2, y_min = grid_y - Height/2
+    - Right (جسم العمود يميناً): x_min = grid_x - 0.06
+    - Left  (جسم العمود يساراً): x_min = grid_x + 0.06 - Width
+    - Top   (جسم العمود لأعلى): y_min = grid_y - 0.06
+    - Bottom(جسم العمود لأسفل): y_min = grid_y + 0.06 - Height
+    """
+    t = normalize_col_transform(trans)
+    norm_dir = t["direction"]
+    norm_sx  = t["shift_x"]
+    norm_sy  = t["shift_y"]
+
+    D_cm = max(float(bc_cm), float(tc_cm))
+    B_cm = min(float(bc_cm), float(tc_cm))
+
+    if norm_dir == "اتجاه Y":
+        width_cm  = B_cm
+        height_cm = D_cm
+    else:
+        width_cm  = D_cm
+        height_cm = B_cm
+
+    width_m  = width_cm / 100.0
+    height_m = height_cm / 100.0
+    off_m    = 0.06  # 6 cm in meters
+
+    # X bounds
+    if "جسم العمود يميناً" in norm_sx or norm_sx.startswith("يمين") or "Right" in norm_sx or "right" in norm_sx:
+        x_min = grid_x - off_m
+    elif "جسم العمود يساراً" in norm_sx or norm_sx.startswith("يسار") or "Left" in norm_sx or "left" in norm_sx:
+        x_min = grid_x + off_m - width_m
+    else:
+        x_min = grid_x - (width_m / 2.0)
+
+    # Y bounds
+    if "جسم العمود لأعلى" in norm_sy or norm_sy.startswith("أعلى") or "Top" in norm_sy or "top" in norm_sy or "Up" in norm_sy or "up" in norm_sy:
+        y_min = grid_y - off_m
+    elif "جسم العمود لأسفل" in norm_sy or norm_sy.startswith("أسفل") or "Bottom" in norm_sy or "bottom" in norm_sy or "Down" in norm_sy or "down" in norm_sy:
+        y_min = grid_y + off_m - height_m
+    else:
+        y_min = grid_y - (height_m / 2.0)
+
+    x_max = x_min + width_m
+    y_max = y_min + height_m
+    center_x = x_min + (width_m / 2.0)
+    center_y = y_min + (height_m / 2.0)
+
+    return {
+        "direction": norm_dir,
+        "shift_x": norm_sx,
+        "shift_y": norm_sy,
+        "D": D_cm,
+        "B": B_cm,
+        "width_cm": width_cm,
+        "height_cm": height_cm,
+        "width_m": width_m,
+        "height_m": height_m,
+        "bc": width_cm,
+        "tc": height_cm,
+        "grid_x": grid_x,
+        "grid_y": grid_y,
+        "x_min": x_min,
+        "y_min": y_min,
+        "x_max": x_max,
+        "y_max": y_max,
+        "center_x": center_x,
+        "center_y": center_y,
+    }
+
+
 @st.cache_data(show_spinner=False)
-def get_flat_slab_columns(Lx_spans, Ly_spans, bc_cm=30, tc_cm=30, removed_ids=None):
+def get_flat_slab_columns(Lx_spans, Ly_spans, bc_cm=30, tc_cm=30, removed_ids=None, col_transforms=None):
     """
     Generate structured registry of columns C1, C2, ...
     Ordered: left to right (Y axes, i-direction), bottom to top (X axes, j-direction).
 
     Args:
-        Lx_spans:    List of span lengths in X-direction (m).
-        Ly_spans:    List of span lengths in Y-direction (m).
-        bc_cm:       Column width (cm).
-        tc_cm:       Column depth (cm).
-        removed_ids: Optional set/list of column IDs to remove (e.g. {"C3", "C7"}).
-                     IDs refer to the *original* numbering before any removal.
+        Lx_spans:       List of span lengths in X-direction (m).
+        Ly_spans:       List of span lengths in Y-direction (m).
+        bc_cm:          Column width (cm).
+        tc_cm:          Column depth (cm).
+        removed_ids:    Optional set/list of column IDs to remove (e.g. {"C3", "C7"}).
+                        IDs refer to the *original* numbering before any removal.
+        col_transforms: Optional dict mapping column ID (orig_id or id) to its
+                        transform dict: {"direction", "shift_x", "shift_y"}.
 
     Returns:
         active_columns:  List of dicts for remaining columns (re-indexed C1, C2, ...).
@@ -179,17 +291,41 @@ def get_flat_slab_columns(Lx_spans, Ly_spans, bc_cm=30, tc_cm=30, removed_ids=No
             is_edge   = (not is_corner) and (i in (0, n_xi-1) or j in (0, n_yj-1))
             col_type  = "Corner" if is_corner else ("Edge" if is_edge else "Interior")
             orig_id   = f"C{col_count}"
+
+            c_trans = (col_transforms or {}).get(orig_id, {})
+            geom = compute_column_geometry(x, y, bc_cm, tc_cm, c_trans)
+
             all_columns.append({
-                "id":      orig_id,
-                "name":    orig_id,
-                "orig_id": orig_id,
-                "i": i, "j": j,
-                "x": x, "y": y,
-                "grid_x": f"Y{i+1}",
-                "grid_y": f"X{j+1}",
-                "type":   col_type,
-                "bc": bc_cm, "tc": tc_cm,
-                "removed": orig_id in removed_set,
+                "id":        orig_id,
+                "name":      orig_id,
+                "orig_id":   orig_id,
+                "i":         i,
+                "j":         j,
+                "x":         geom["center_x"],
+                "y":         geom["center_y"],
+                "grid_x_m":  x,
+                "grid_y_m":  y,
+                "grid_x":    f"Y{i+1}",
+                "grid_y":    f"X{j+1}",
+                "type":      col_type,
+                "bc":        geom["bc"],
+                "tc":        geom["tc"],
+                "direction": geom["direction"],
+                "shift_x":   geom["shift_x"],
+                "shift_y":   geom["shift_y"],
+                "D":         geom["D"],
+                "B":         geom["B"],
+                "width_cm":  geom["width_cm"],
+                "height_cm": geom["height_cm"],
+                "width_m":   geom["width_m"],
+                "height_m":  geom["height_m"],
+                "x_min":     geom["x_min"],
+                "y_min":     geom["y_min"],
+                "x_max":     geom["x_max"],
+                "y_max":     geom["y_max"],
+                "center_x":  geom["center_x"],
+                "center_y":  geom["center_y"],
+                "removed":   orig_id in removed_set,
             })
             col_count += 1
 
@@ -320,6 +456,7 @@ def generate_flat_slab_sketch(
     pending_col_ids=None,   # set of col IDs selected but not yet confirmed e.g. {"C5"}
     void_panel_ids=None,    # set of panel IDs confirmed as voids e.g. {"P_1_1"}
     pending_void_ids=None,  # set of panel IDs selected as voids for review
+    col_transforms=None,    # dict mapping column ID -> {"direction", "shift_x", "shift_y"}
 ):
     """
     Generate the confirmatory geometric sketch for the flat slab with detailed Data Card.
@@ -353,11 +490,37 @@ def generate_flat_slab_sketch(
     slab_w = x_slab_max - x_slab_min
     slab_h = y_slab_max - y_slab_min
 
-    # Dual Subplot: Left (Structural Plan ~73%), Right (Data Card ~27%)
-    fig = plt.figure(figsize=(16.5, 8.8), dpi=100, facecolor="#ffffff")
-    gs = fig.add_gridspec(1, 2, width_ratios=[1.82, 0.68], wspace=0.08, left=0.03, right=0.97, top=0.90, bottom=0.06)
-    ax_plan = fig.add_subplot(gs[0, 0])
-    ax_card = fig.add_subplot(gs[0, 1])
+    # Grid bubble & dimension offsets calculated upfront to size figure proportionally
+    bubble_radius = max(0.28, min(slab_w, slab_h) * 0.030)
+    offset_grid_top = max(1.0, slab_h * 0.09)
+    offset_grid_left = max(1.0, slab_w * 0.09)
+    dim_offset_bot = max(0.9, slab_h * 0.08)
+    dim_offset_right = max(0.9, slab_w * 0.08)
+
+    margin_left = offset_grid_left + bubble_radius * 2 + 0.3
+    margin_right = dim_offset_right + 1.8
+    margin_top = offset_grid_top + bubble_radius * 2 + 0.3
+    margin_bot = dim_offset_bot + 1.6
+
+    x_lim_min = x_slab_min - margin_left
+    x_lim_max = x_slab_max + margin_right
+    y_lim_min = y_slab_min - margin_bot
+    y_lim_max = y_slab_max + margin_top
+
+    total_data_w = x_lim_max - x_lim_min
+    total_data_h = y_lim_max - y_lim_min
+    aspect = total_data_h / max(total_data_w, 0.001)
+
+    if aspect <= 1.0:
+        fig_w = 14.5
+        fig_h = max(5.5, min(14.5, fig_w * aspect))
+    else:
+        fig_h = 13.0
+        fig_w = max(6.0, min(14.5, fig_h / aspect))
+
+    # Full-width Structural Plan (ax_plan) maximized to full canvas without extra borders
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=110, facecolor="#ffffff")
+    ax_plan = fig.add_subplot(1, 1, 1)
 
     # ── 1. STRUCTURAL GEOMETRY PLAN (ax_plan) ──
     ax_plan.set_facecolor("#ffffff")
@@ -428,11 +591,6 @@ def generate_flat_slab_sketch(
                 zorder=3
             )
 
-    # Grid bubble offsets
-    bubble_radius = max(0.35, min(slab_w, slab_h) * 0.038)
-    offset_grid_top = max(1.5, slab_h * 0.14)
-    offset_grid_left = max(1.5, slab_w * 0.14)
-
     # Vertical Grid Axes (Y1, Y2, ...) with Top CAD Bubbles
     for idx, x in enumerate(x_coords):
         y_top_ext = y_slab_max + offset_grid_top
@@ -487,36 +645,52 @@ def generate_flat_slab_sketch(
         if is_removed:
             # Completely omitted / removed from drawing after confirmation
             continue
-        elif is_pending:
+
+        c_trans = (col_transforms or {}).get(orig_id) or (col_transforms or {}).get(label) or {}
+        geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+        rx = geom["x_min"]
+        ry = geom["y_min"]
+        rw = geom["width_m"]
+        rh = geom["height_m"]
+        cx = geom["center_x"]
+        cy = geom["center_y"]
+
+        if is_pending:
             # Orange dashed border — selected in review stage before confirmation
             col_rect = patches.Rectangle(
-                (x - col_w_m / 2.0, y - col_d_m / 2.0),
-                col_w_m, col_d_m,
-                linewidth=2.5, edgecolor="#f97316", facecolor="#fed7aa",
+                (rx, ry), rw, rh,
+                linewidth=2.2, edgecolor="#f97316", facecolor="#fed7aa",
                 alpha=0.80, zorder=4, linestyle="--"
             )
             ax_plan.add_patch(col_rect)
+            is_right_edge = (info["i"] == len(x_coords) - 1)
+            lbl_x = rx - 0.10 if is_right_edge else rx + rw + 0.10
+            ha_align = "right" if is_right_edge else "left"
             ax_plan.text(
-                x, y, f"{orig_id}\n?",
-                color="#c2410c", fontsize=9.5, weight="bold", ha="center", va="center", zorder=5
+                lbl_x, cy, f"{orig_id} ?",
+                color="#c2410c", fontsize=10, weight="bold", ha=ha_align, va="center",
+                bbox=dict(boxstyle="round,pad=0.20", facecolor="#fff7ed", edgecolor="#ea580c", lw=0.9),
+                zorder=7
             )
         else:
-            # Normal active column
+            # Normal active column — solid concrete hatch with label beside the column
             col_rect = patches.Rectangle(
-                (x - col_w_m / 2.0, y - col_d_m / 2.0),
-                col_w_m, col_d_m,
+                (rx, ry), rw, rh,
                 linewidth=1.5, edgecolor="#0f172a", facecolor="#1e293b", zorder=4
             )
             ax_plan.add_patch(col_rect)
             display_id = label if label else orig_id
+            is_right_edge = (info["i"] == len(x_coords) - 1)
+            lbl_x = rx - 0.10 if is_right_edge else rx + rw + 0.10
+            ha_align = "right" if is_right_edge else "left"
             ax_plan.text(
-                x, y, display_id,
-                color="#facc15", fontsize=11, weight="bold", ha="center", va="center", zorder=5
+                lbl_x, cy, display_id,
+                color="#0f172a", fontsize=11, weight="bold", ha=ha_align, va="center",
+                bbox=dict(boxstyle="round,pad=0.22", facecolor="#ffffff", edgecolor="#475569", lw=0.9, alpha=0.95),
+                zorder=7
             )
 
-
     # Span Dimensions (Lx along Bottom)
-    dim_offset_bot = max(1.2, slab_h * 0.10)
     y_dim_lx = y_slab_min - dim_offset_bot
     for i, lx in enumerate(Lx_spans):
         mid_x = (x_coords[i] + x_coords[i + 1]) / 2.0
@@ -527,25 +701,24 @@ def generate_flat_slab_sketch(
         ax_plan.plot([x_coords[i], x_coords[i]], [y_dim_lx - 0.2, y_dim_lx + 0.2], color="#0f172a", lw=1.3)
         ax_plan.plot([x_coords[i+1], x_coords[i+1]], [y_dim_lx - 0.2, y_dim_lx + 0.2], color="#0f172a", lw=1.3)
         ax_plan.text(
-            mid_x, y_dim_lx - 0.30, f"{lx:.2f} m",
-            color="#0f172a", fontsize=12, weight="bold", ha="center", va="top"
+            mid_x, y_dim_lx - 0.25, f"{lx:.2f} m",
+            color="#0f172a", fontsize=11.5, weight="bold", ha="center", va="top"
         )
 
     # Total Overall X-Dimension (Line 2)
-    y_dim_tot = y_dim_lx - 1.1
+    y_dim_tot = y_dim_lx - 0.85
     ax_plan.annotate(
         "", xy=(x_slab_max, y_dim_tot), xytext=(x_slab_min, y_dim_tot),
         arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=1.8, shrinkA=0, shrinkB=0)
     )
-    ax_plan.plot([x_slab_min, x_slab_min], [y_dim_tot - 0.25, y_dim_tot + 0.25], color="#1e3a8a", lw=1.6)
-    ax_plan.plot([x_slab_max, x_slab_max], [y_dim_tot - 0.25, y_dim_tot + 0.25], color="#1e3a8a", lw=1.6)
+    ax_plan.plot([x_slab_min, x_slab_min], [y_dim_tot - 0.22, y_dim_tot + 0.22], color="#1e3a8a", lw=1.6)
+    ax_plan.plot([x_slab_max, x_slab_max], [y_dim_tot - 0.22, y_dim_tot + 0.22], color="#1e3a8a", lw=1.6)
     ax_plan.text(
-        (x_slab_min + x_slab_max) / 2.0, y_dim_tot - 0.35, f"Total Lx = {slab_w:.2f} m",
-        color="#1e3a8a", fontsize=12.5, weight="bold", ha="center", va="top"
+        (x_slab_min + x_slab_max) / 2.0, y_dim_tot - 0.30, f"Total Lx = {slab_w:.2f} m",
+        color="#1e3a8a", fontsize=12, weight="bold", ha="center", va="top"
     )
 
     # Span Dimensions (Ly along Right)
-    dim_offset_right = max(1.2, slab_w * 0.10)
     x_dim_ly = x_slab_max + dim_offset_right
     for j, ly in enumerate(Ly_spans):
         mid_y = (y_coords[j] + y_coords[j + 1]) / 2.0
@@ -556,21 +729,21 @@ def generate_flat_slab_sketch(
         ax_plan.plot([x_dim_ly - 0.2, x_dim_ly + 0.2], [y_coords[j], y_coords[j]], color="#0f172a", lw=1.3)
         ax_plan.plot([x_dim_ly - 0.2, x_dim_ly + 0.2], [y_coords[j+1], y_coords[j+1]], color="#0f172a", lw=1.3)
         ax_plan.text(
-            x_dim_ly + 0.30, mid_y, f"{ly:.2f} m",
-            color="#0f172a", fontsize=12, weight="bold", ha="left", va="center"
+            x_dim_ly + 0.25, mid_y, f"{ly:.2f} m",
+            color="#0f172a", fontsize=11.5, weight="bold", ha="left", va="center"
         )
 
     # Total Overall Y-Dimension (Line 2)
-    x_dim_tot = x_dim_ly + 1.1
+    x_dim_tot = x_dim_ly + 0.85
     ax_plan.annotate(
         "", xy=(x_dim_tot, y_slab_max), xytext=(x_dim_tot, y_slab_min),
         arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=1.8, shrinkA=0, shrinkB=0)
     )
-    ax_plan.plot([x_dim_tot - 0.25, x_dim_tot + 0.25], [y_slab_min, y_slab_min], color="#1e3a8a", lw=1.6)
-    ax_plan.plot([x_dim_tot - 0.25, x_dim_tot + 0.25], [y_slab_max, y_slab_max], color="#1e3a8a", lw=1.6)
+    ax_plan.plot([x_dim_tot - 0.22, x_dim_tot + 0.22], [y_slab_min, y_slab_min], color="#1e3a8a", lw=1.6)
+    ax_plan.plot([x_dim_tot - 0.22, x_dim_tot + 0.22], [y_slab_max, y_slab_max], color="#1e3a8a", lw=1.6)
     ax_plan.text(
-        x_dim_tot + 0.35, (y_slab_min + y_slab_max) / 2.0, f"Total Ly = {slab_h:.2f} m",
-        color="#1e3a8a", fontsize=12.5, weight="bold", ha="left", va="center", rotation=270
+        x_dim_tot + 0.30, (y_slab_min + y_slab_max) / 2.0, f"Total Ly = {slab_h:.2f} m",
+        color="#1e3a8a", fontsize=12, weight="bold", ha="left", va="center", rotation=270
     )
 
     # Cantilever annotations
@@ -584,17 +757,40 @@ def generate_flat_slab_sketch(
     if cant_top > 0:
         ax_plan.text((x_coords[0] + x_coords[-1]) / 2.0, y_coords[-1] + cant_top / 2.0, f"Cant. {cant_top:.2f}m", **cant_style)
 
-    # Bounds & Aspect
-    margin_left = offset_grid_left + bubble_radius * 2 + 0.6
-    margin_right = dim_offset_right + 3.0
-    margin_top = offset_grid_top + bubble_radius * 2 + 0.6
-    margin_bot = dim_offset_bot + 2.8
-    ax_plan.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
-    ax_plan.set_ylim(y_slab_min - margin_bot, y_slab_max + margin_top)
+    # Bounds & Aspect — maximized without title to give 100% space to geometry
+    ax_plan.set_xlim(x_lim_min, x_lim_max)
+    ax_plan.set_ylim(y_lim_min, y_lim_max)
     ax_plan.set_aspect("equal", adjustable="box")
     ax_plan.axis("off")
 
-    # ── 2. DATA CARD (ax_card) ──
+    fig.tight_layout(pad=0.08)
+    return fig
+
+
+def generate_flat_slab_data_card(
+    ts_initial=20,
+    n_floors=1,
+    bottom_mesh_dia=12,
+    bottom_mesh_n=5,
+    top_mesh_dia=10,
+    top_mesh_n=5,
+    col_extra_dia=12,
+    strip_top_extra_dia=12,
+    strip_bottom_extra_dia=12,
+    concrete_cover=1.5,
+    fcu=250,
+    fy=4000,
+    live_load=0.25,
+    flooring_load=0.15,
+    wall_load=0.50,
+    col_w_cm=30,
+    col_d_cm=30,
+):
+    """
+    Generate the dedicated standalone engineering DATA CARD & DESIGN PARAMETERS figure.
+    """
+    fig = plt.figure(figsize=(7.5, 9.2), dpi=110, facecolor="#ffffff")
+    ax_card = fig.add_subplot(1, 1, 1)
     ax_card.set_facecolor("#ffffff")
     ax_card.axis("off")
     ax_card.set_xlim(0, 1)
@@ -673,17 +869,7 @@ def generate_flat_slab_sketch(
         )
         y_pos -= y_step
 
-    n_cols_total  = len(x_coords) * len(y_coords)
-    n_removed_now = len(_removed)
-    n_active      = n_cols_total - n_removed_now
-    removal_note  = f" | {n_removed_now} Removed → {n_active} Active" if n_removed_now else ""
-    n_voids_now   = len(_voids)
-    void_note     = f" | {n_voids_now} Voids (مناور)" if n_voids_now else ""
-    fig.suptitle(
-        f"Flat Slab — Structural Geometry & Verification Sketch "
-        f"({len(Lx_spans)}×{len(Ly_spans)} Spans | {n_cols_total} Cols{removal_note}{void_note} | {slab_w:.2f}×{slab_h:.2f} m)",
-        fontsize=14, weight="bold", y=0.96, color="#0f172a"
-    )
+    fig.tight_layout(pad=1.0)
     return fig
 
 
@@ -889,13 +1075,20 @@ def generate_flat_slab_top_rft_sketch(
             )
 
         # Column Box
+        col_rx = col_data.get("x_min", x - col_w_m / 2.0)
+        col_ry = col_data.get("y_min", y - col_d_m / 2.0)
+        col_rw = col_data.get("width_m", col_w_m)
+        col_rh = col_data.get("height_m", col_d_m)
+        col_cx = col_data.get("center_x", x)
+        col_cy = col_data.get("center_y", y)
+
         col_box = patches.Rectangle(
-            (x - col_w_m / 2.0, y - col_d_m / 2.0),
-            col_w_m, col_d_m,
+            (col_rx, col_ry),
+            col_rw, col_rh,
             linewidth=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=4
         )
         ax_plan.add_patch(col_box)
-        ax_plan.text(x, y, cid, color="#facc15", fontsize=16.0, ha="center", va="center", weight="bold", zorder=5)
+        ax_plan.text(col_cx, col_cy, cid, color="#facc15", fontsize=16.0, ha="center", va="center", weight="bold", zorder=5)
 
     # Span Dimensions (Lx along Bottom)
     y_dim_lx = y_slab_min - dim_offset_bot
@@ -1072,6 +1265,7 @@ def generate_flat_slab_bottom_rft_sketch(
     removed_cols=None,
     void_panel_ids=None,
     direction="both",   # "X", "Y", or "both"
+    col_transforms=None,
 ):
     """
     Generate the full-width engineering Bottom Reinforcement Drawing (المخطط الإنشائي للحديد السفلي).
@@ -1223,13 +1417,17 @@ def generate_flat_slab_bottom_rft_sketch(
             if (x, y) in rem_coords:
                 continue
             cid = f"C{col_num}"
+            c_trans = (col_transforms or {}).get(cid) or {}
+            geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+            rx, ry = geom["x_min"], geom["y_min"]
+            rw, rh = geom["width_m"], geom["height_m"]
+            cx, cy = geom["center_x"], geom["center_y"]
             col_box = patches.Rectangle(
-                (x - col_w_m / 2.0, y - col_d_m / 2.0),
-                col_w_m, col_d_m,
+                (rx, ry), rw, rh,
                 linewidth=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=4
             )
             ax_plan.add_patch(col_box)
-            ax_plan.text(x, y, cid, color="#facc15", fontsize=16.0, ha="center", va="center", weight="bold", zorder=5)
+            ax_plan.text(cx, cy, cid, color="#facc15", fontsize=16.0, ha="center", va="center", weight="bold", zorder=5)
             col_num += 1
 
     # 🔵 2. BOTTOM EXTRA REBAR IN ENLARGED BAYS (BLUE)
@@ -1587,13 +1785,28 @@ def generate_flat_slab_reactions_sketch(
                 col_edge = "#16a34a"
                 type_name = "Interior"
 
+            if r_info and r_info.get("x_min") is not None:
+                col_rx = r_info["x_min"]
+                col_ry = r_info["y_min"]
+                col_rw = r_info.get("width_m", col_w_m)
+                col_rh = r_info.get("height_m", col_d_m)
+                col_cx = r_info.get("center_x", x)
+                col_cy = r_info.get("center_y", y)
+            else:
+                col_rx = x - col_w_m / 2.0
+                col_ry = y - col_d_m / 2.0
+                col_rw = col_w_m
+                col_rh = col_d_m
+                col_cx = x
+                col_cy = y
+
             col_box = patches.Rectangle(
-                (x - col_w_m / 2.0, y - col_d_m / 2.0),
-                col_w_m, col_d_m,
+                (col_rx, col_ry),
+                col_rw, col_rh,
                 linewidth=2.4, edgecolor="#0f172a", facecolor="#1e293b", zorder=4
             )
             ax_plan.add_patch(col_box)
-            ax_plan.text(x, y, cid, color="#facc15", fontsize=15.0, ha="center", va="center", weight="bold", zorder=5)
+            ax_plan.text(col_cx, col_cy, cid, color="#facc15", fontsize=15.0, ha="center", va="center", weight="bold", zorder=5)
 
             if r_info:
                 pu1 = r_info.get("pu_1f_val", 0.0)
@@ -1927,6 +2140,7 @@ def generate_flat_slab_moment_contour(
     void_panel_ids=None,
     top_extra_cols=None,
     btm_extra_spans=None,
+    col_transforms=None,
 ):
     """
     Renders an engineering 2D Bending Moment Matrix & Color Contour Map (M11 or M22)
@@ -2098,15 +2312,19 @@ def generate_flat_slab_moment_contour(
             if (x, y) in rem_coords:
                 continue
             cid = f"C{col_idx}"
+            c_trans = (col_transforms or {}).get(cid) or {}
+            geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+            rx, ry = geom["x_min"], geom["y_min"]
+            rw, rh = geom["width_m"], geom["height_m"]
+            cx, cy = geom["center_x"], geom["center_y"]
 
             # Column rectangle
             col_box = patches.Rectangle(
-                (x - col_w_m / 2.0, y - col_d_m / 2.0),
-                col_w_m, col_d_m,
+                (rx, ry), rw, rh,
                 linewidth=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=6
             )
             ax_plan.add_patch(col_box)
-            ax_plan.text(x, y, cid, color="#facc15", fontsize=14.5, ha="center", va="center", weight="bold", zorder=7)
+            ax_plan.text(cx, cy, cid, color="#facc15", fontsize=14.5, ha="center", va="center", weight="bold", zorder=7)
 
             # Local peak negative moment value from raw unmasked matrix
             ix = np.argmin(np.abs(x_vec - x))
@@ -2432,6 +2650,7 @@ def generate_moment_deficit_contour(
     col_d_cm=30,
     removed_cols=None,
     void_panel_ids=None,
+    col_transforms=None,
 ):
     """
     Generates a 2D colour-contour map of the MOMENT DEFICIT in the bottom steel.
@@ -2652,11 +2871,17 @@ def generate_moment_deficit_contour(
         for i_idx, x in enumerate(x_coords):
             if (x, y) in rem_coords:
                 continue
+            cid = f"C{col_idx}"
+            c_trans = (col_transforms or {}).get(cid) or {}
+            geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+            rx, ry = geom["x_min"], geom["y_min"]
+            rw, rh = geom["width_m"], geom["height_m"]
+            cx, cy = geom["center_x"], geom["center_y"]
             ax_plan.add_patch(patches.Rectangle(
-                (x - col_w_m / 2.0, y - col_d_m / 2.0), col_w_m, col_d_m,
+                (rx, ry), rw, rh,
                 linewidth=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=6,
             ))
-            ax_plan.text(x, y, f"C{col_idx}", color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=7)
+            ax_plan.text(cx, cy, cid, color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=7)
             col_idx += 1
 
     # ── مربعات العجز على كل بلاطة ──────────────────────────────────────────────
@@ -3210,6 +3435,7 @@ def generate_flat_slab_column_caps_sketch(
     top_extra_cols,
     col_w_cm=30, col_d_cm=30,
     removed_cols=None, void_panel_ids=None,
+    col_transforms=None,
 ):
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
 
@@ -3306,9 +3532,14 @@ def generate_flat_slab_column_caps_sketch(
             if (x, y) in rem_coords:
                 continue
             cid = f"C{col_idx}"
-            col_dict[cid] = (x, y, i_idx, j_idx)
-            ax_plan.add_patch(patches.Rectangle((x - col_w_m / 2.0, y - col_d_m / 2.0), col_w_m, col_d_m, lw=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=8))
-            ax_plan.text(x, y, cid, color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=9)
+            c_trans = (col_transforms or {}).get(cid) or {}
+            geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+            rx, ry = geom["x_min"], geom["y_min"]
+            rw, rh = geom["width_m"], geom["height_m"]
+            cx, cy = geom["center_x"], geom["center_y"]
+            col_dict[cid] = (cx, cy, i_idx, j_idx)
+            ax_plan.add_patch(patches.Rectangle((rx, ry), rw, rh, lw=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=8))
+            ax_plan.text(cx, cy, cid, color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=9)
             col_idx += 1
 
     active_caps_count = 0
@@ -4249,6 +4480,7 @@ def generate_flat_slab_deflection_contour_sketch(
     col_d_cm=30,
     removed_cols=None,
     void_panel_ids=None,
+    col_transforms=None,
 ):
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
 
@@ -4410,17 +4642,25 @@ def generate_flat_slab_deflection_contour_sketch(
         ax_plan.text(x_left_ext, y, f"X{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=8)
 
     # Columns
-    col_w_m = max(col_w_cm / 100.0, slab_w * 0.040)
-    col_d_m = max(col_d_cm / 100.0, slab_h * 0.040)
+    _col_transforms_def = col_transforms or {}
+    _min_col_w = max(col_w_cm / 100.0, slab_w * 0.040)
+    _min_col_d = max(col_d_cm / 100.0, slab_h * 0.040)
     rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
     col_k = 1
     for y in y_coords:
         for x in x_coords:
             if (x, y) in rem_coords:
+                col_k += 1
                 continue
-            cid = f"C{col_k}"
-            ax_plan.add_patch(patches.Rectangle((x - col_w_m / 2.0, y - col_d_m / 2.0), col_w_m, col_d_m, lw=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=8))
-            ax_plan.text(x, y, cid, color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=9)
+            orig_id = f"C{col_k}"
+            c_trans = _col_transforms_def.get(orig_id, {})
+            geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+            rx = max(geom["x_min"], geom["x_max"] - _min_col_w) if geom["width_m"] < _min_col_w else geom["x_min"]
+            ry = max(geom["y_min"], geom["y_max"] - _min_col_d) if geom["height_m"] < _min_col_d else geom["y_min"]
+            rw = max(geom["width_m"], _min_col_w)
+            rh = max(geom["height_m"], _min_col_d)
+            ax_plan.add_patch(patches.Rectangle((rx, ry), rw, rh, lw=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=8))
+            ax_plan.text(geom["center_x"], geom["center_y"], orig_id, color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=9)
             col_k += 1
 
     # Panel Deflection Callout Tags
@@ -4862,8 +5102,11 @@ def generate_flat_slab_punching_shear_sketch(
         bc_val = p.get("bc", col_w_cm)
         tc_val = p.get("tc", col_d_cm)
 
-        crit_w = col_w_m + (d_m if ctype != "Corner" else d_m / 2.0)
-        crit_h = col_d_m + (d_m if ctype != "Corner" else d_m / 2.0)
+        cur_w_m = p.get("width_m", bc_val / 100.0)
+        cur_h_m = p.get("height_m", tc_val / 100.0)
+
+        crit_w = cur_w_m + (d_m if ctype != "Corner" else d_m / 2.0)
+        crit_h = cur_h_m + (d_m if ctype != "Corner" else d_m / 2.0)
         crit_x = cx - crit_w / 2.0
         crit_y = cy - crit_h / 2.0
 
@@ -4893,21 +5136,23 @@ def generate_flat_slab_punching_shear_sketch(
         ))
 
         # Draw column box
+        col_rx = p.get("x_min", cx - cur_w_m / 2.0)
+        col_ry = p.get("y_min", cy - cur_h_m / 2.0)
         ax_plan.add_patch(patches.Rectangle(
-            (cx - col_w_m / 2.0, cy - col_d_m / 2.0), col_w_m, col_d_m,
+            (col_rx, col_ry), cur_w_m, cur_h_m,
             lw=col_lw, edgecolor=col_edge, facecolor=col_face, zorder=8
         ))
 
         # Column text inside box
         if is_safe:
-            ax_plan.text(cx, cy + col_d_m * 0.15, cid, color="#facc15", fontsize=14, ha="center", va="center", weight="bold", zorder=9)
-            ax_plan.text(cx, cy - col_d_m * 0.22, "SAFE", color="#4ade80", fontsize=10.5, ha="center", va="center", weight="bold", zorder=9)
+            ax_plan.text(cx, cy + cur_h_m * 0.15, cid, color="#facc15", fontsize=14, ha="center", va="center", weight="bold", zorder=9)
+            ax_plan.text(cx, cy - cur_h_m * 0.22, "SAFE", color="#4ade80", fontsize=10.5, ha="center", va="center", weight="bold", zorder=9)
         else:
-            ax_plan.text(cx, cy + col_d_m * 0.16, cid, color="#7f1d1d", fontsize=15, ha="center", va="center", weight="bold", zorder=9)
-            ax_plan.text(cx, cy - col_d_m * 0.22, "UNSAFE", color="#b91c1c", fontsize=11, ha="center", va="center", weight="bold", zorder=9)
+            ax_plan.text(cx, cy + cur_h_m * 0.16, cid, color="#7f1d1d", fontsize=15, ha="center", va="center", weight="bold", zorder=9)
+            ax_plan.text(cx, cy - cur_h_m * 0.22, "UNSAFE", color="#b91c1c", fontsize=11, ha="center", va="center", weight="bold", zorder=9)
 
         # Callout Text near the column showing Qup clearly
-        offset_y = col_d_m / 2.0 + 0.55
+        offset_y = cur_h_m / 2.0 + 0.55
         tag_x = cx
         tag_y = cy + offset_y
 
@@ -5713,6 +5958,7 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
     col_w_cm=30, col_d_cm=30,
     removed_cols=None, void_panel_ids=None,
     direction="X",
+    col_transforms=None,
 ):
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
 
@@ -5812,8 +6058,13 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
             if (x, y) in rem_coords:
                 continue
             cid = f"C{col_idx}"
-            ax_plan.add_patch(patches.Rectangle((x - col_w_m / 2.0, y - col_d_m / 2.0), col_w_m, col_d_m, lw=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=8))
-            ax_plan.text(x, y, cid, color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=9)
+            c_trans = (col_transforms or {}).get(cid) or {}
+            geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+            rx, ry = geom["x_min"], geom["y_min"]
+            rw, rh = geom["width_m"], geom["height_m"]
+            cx, cy = geom["center_x"], geom["center_y"]
+            ax_plan.add_patch(patches.Rectangle((rx, ry), rw, rh, lw=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=8))
+            ax_plan.text(cx, cy, cid, color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=9)
             col_idx += 1
 
     # Filter items by direction
@@ -6077,6 +6328,7 @@ def generate_flat_slab_top_mesh_extra_sketch(
     col_w_cm=30, col_d_cm=30,
     removed_cols=None, void_panel_ids=None,
     direction="X",
+    col_transforms=None,
 ):
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
 
@@ -6176,8 +6428,13 @@ def generate_flat_slab_top_mesh_extra_sketch(
             if (x, y) in rem_coords:
                 continue
             cid = f"C{col_idx}"
-            ax_plan.add_patch(patches.Rectangle((x - col_w_m / 2.0, y - col_d_m / 2.0), col_w_m, col_d_m, lw=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=8))
-            ax_plan.text(x, y, cid, color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=9)
+            c_trans = (col_transforms or {}).get(cid) or {}
+            geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+            rx, ry = geom["x_min"], geom["y_min"]
+            rw, rh = geom["width_m"], geom["height_m"]
+            cx, cy = geom["center_x"], geom["center_y"]
+            ax_plan.add_patch(patches.Rectangle((rx, ry), rw, rh, lw=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=8))
+            ax_plan.text(cx, cy, cid, color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=9)
             col_idx += 1
 
     # ── Check Extra Top Slab Reinforcement by Direction ─────────────────────
@@ -6383,6 +6640,7 @@ def generate_flat_slab_master_steel_layout_sketch(
     col_w_cm=30, col_d_cm=30,
     removed_cols=None,
     void_panel_ids=None,
+    col_transforms=None,
 ):
     """
     Generates a master 2D structural floor plan (Steel Layout - مسقط أفقي لتسليح البلاطة)
@@ -6506,12 +6764,17 @@ def generate_flat_slab_master_steel_layout_sketch(
             if (x, y) in rem_coords:
                 continue
             cid = f"C{col_idx}"
-            col_dict[cid] = (x, y, i_idx, j_idx)
+            c_trans = (col_transforms or {}).get(cid) or {}
+            geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+            rx, ry = geom["x_min"], geom["y_min"]
+            rw, rh = geom["width_m"], geom["height_m"]
+            cx, cy = geom["center_x"], geom["center_y"]
+            col_dict[cid] = (cx, cy, i_idx, j_idx)
             ax_plan.add_patch(patches.Rectangle(
-                (x - col_w_m / 2.0, y - col_d_m / 2.0), col_w_m, col_d_m,
+                (rx, ry), rw, rh,
                 linewidth=2.0, edgecolor="#0f172a", facecolor="#1e293b", zorder=8,
             ))
-            ax_plan.text(x, y, cid, color="#facc15", fontsize=11, ha="center", va="center", weight="bold", zorder=9)
+            ax_plan.text(cx, cy, cid, color="#facc15", fontsize=11, ha="center", va="center", weight="bold", zorder=9)
             col_idx += 1
 
     # 5. Base Mesh Indicators (Bottom & Top) in Central Bays
@@ -7130,6 +7393,12 @@ def calculate_punching_shear(columns, Lx_spans, Ly_spans, cantilevers, Wu, d_cm,
             "stirrups_design": des,
             "x": col.get("x", 0.0),
             "y": col.get("y", 0.0),
+            "x_min": col.get("x_min"),
+            "y_min": col.get("y_min"),
+            "x_max": col.get("x_max"),
+            "y_max": col.get("y_max"),
+            "width_m": col.get("width_m", bc / 100.0),
+            "height_m": col.get("height_m", tc / 100.0),
             "bc": bc,
             "tc": tc,
         })
@@ -7230,6 +7499,16 @@ def calculate_extra_top_steel_at_columns(
             "L_extra": L_extra,
             "callout": f"+{n_extra} Φ{extra_dia_mm} (L={L_extra:.2f}m)" if is_needed else "Mesh is Sufficient (الشبكة تكفي)",
             "is_needed": is_needed,
+            "x_min": col.get("x_min"),
+            "y_min": col.get("y_min"),
+            "x_max": col.get("x_max"),
+            "y_max": col.get("y_max"),
+            "width_m": col.get("width_m"),
+            "height_m": col.get("height_m"),
+            "center_x": col.get("center_x", col["x"]),
+            "center_y": col.get("center_y", col["y"]),
+            "bc": col.get("bc"),
+            "tc": col.get("tc"),
         })
     return col_extras
 
@@ -7920,9 +8199,13 @@ def render():
     _confirmed_voids_raw = S.cfg_val("fs_void_panels", [])
     _confirmed_voids_raw = _confirmed_voids_raw if isinstance(_confirmed_voids_raw, list) else []
 
+    _col_transforms = S.cfg_val("fs_col_transforms", {})
+    _col_transforms = _col_transforms if isinstance(_col_transforms, dict) else {}
+
     # Generate all columns (original numbering) to validate persisted IDs
     _all_cols_ref, _, _, _, _ = get_flat_slab_columns(
-        Lx_spans, Ly_spans, bc_cm=_bc_col, tc_cm=_tc_col
+        Lx_spans, Ly_spans, bc_cm=_bc_col, tc_cm=_tc_col,
+        col_transforms=_col_transforms,
     )
     _valid_orig_ids = {c["orig_id"] for c in _all_cols_ref}
     _confirmed_removals = [cid for cid in _confirmed_raw if cid in _valid_orig_ids]
@@ -7948,6 +8231,7 @@ def render():
     _active_cols, _all_cols, _eff_Lx, _eff_Ly, _ddm_warn = get_flat_slab_columns(
         Lx_spans, Ly_spans, bc_cm=_bc_col, tc_cm=_tc_col,
         removed_ids=set(_confirmed_removals),
+        col_transforms=_col_transforms,
     )
     _col_w_sk = _bc_col
     _col_d_sk = _tc_col
@@ -7962,51 +8246,289 @@ def render():
     )
     with exp_geom:
         if exp_geom.open:
-            st.markdown(
-                '<div class="section-header">🗺️ Structural Geometry Sketch & Verification (مخطط التحقق الهندسي وتوزيع المحاور والأعمدة)</div>',
-                unsafe_allow_html=True,
-            )
-            fig_verif = generate_flat_slab_sketch(
-                Lx_spans, Ly_spans, cantilevers,
-                ts_initial=ts_initial if ts_initial is not None else 20,
-                n_floors=num_floors,
-                bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
-                bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
-                top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
-                top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
-                col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
-                strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
-                strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
-                concrete_cover=cov if cov is not None else 1.5,
-                fcu=Fcu if Fcu is not None else 250,
-                fy=Fy if Fy is not None else 4000,
-                live_load=LL if LL is not None else 0.25,
-                flooring_load=SDL if SDL is not None else 0.15,
-                wall_load=wall_load if wall_load is not None else 0.50,
-                col_w_cm=_col_w_sk,
-                col_d_cm=_col_d_sk,
-                removed_col_ids=set(_confirmed_removals),
-                pending_col_ids=set(st.session_state.get("_fs_pending_snapshot", [])
-                                    if st.session_state.get("_fs_show_confirm") else _pending_removals),
-                void_panel_ids=set(_confirmed_voids),
-                pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", [])
-                                     if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
-            )
-            st.pyplot(fig_verif, clear_figure=True, use_container_width=True)
-            buf_v = io.BytesIO()
-            fig_verif.savefig(buf_v, format="png", bbox_inches="tight", dpi=180)
-            buf_v.seek(0)
-            img_verif_b64 = "data:image/png;base64," + base64.b64encode(buf_v.getvalue()).decode("utf-8")
-            buf_v.seek(0)
-            st.download_button(
-                label="📥 Download Structural Geometry Sketch (High-Res PNG)",
-                data=buf_v,
-                file_name=f"{prefix}Flat_Slab_Geometry_Verification.png",
-                mime="image/png",
-                use_container_width=True,
-                key="btn_dl_geom_verif_sketch",
-            )
-            plt.close(fig_verif)
+            col_geom_plan, col_geom_controls = st.columns([3.0, 1.0], gap="medium")
+
+            with col_geom_plan:
+                fig_verif = generate_flat_slab_sketch(
+                    Lx_spans, Ly_spans, cantilevers,
+                    ts_initial=ts_initial if ts_initial is not None else 20,
+                    n_floors=num_floors,
+                    bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
+                    bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
+                    top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
+                    top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
+                    col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
+                    strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
+                    strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
+                    concrete_cover=cov if cov is not None else 1.5,
+                    fcu=Fcu if Fcu is not None else 250,
+                    fy=Fy if Fy is not None else 4000,
+                    live_load=LL if LL is not None else 0.25,
+                    flooring_load=SDL if SDL is not None else 0.15,
+                    wall_load=wall_load if wall_load is not None else 0.50,
+                    col_w_cm=_col_w_sk,
+                    col_d_cm=_col_d_sk,
+                    removed_col_ids=set(_confirmed_removals),
+                    pending_col_ids=set(st.session_state.get("_fs_pending_snapshot", [])
+                                        if st.session_state.get("_fs_show_confirm") else _pending_removals),
+                    void_panel_ids=set(_confirmed_voids),
+                    pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", [])
+                                         if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
+                    col_transforms=_col_transforms,
+                )
+                st.pyplot(fig_verif, clear_figure=True, use_container_width=True)
+                buf_v = io.BytesIO()
+                fig_verif.savefig(buf_v, format="png", bbox_inches="tight", dpi=180)
+                buf_v.seek(0)
+                img_verif_b64 = "data:image/png;base64," + base64.b64encode(buf_v.getvalue()).decode("utf-8")
+                buf_v.seek(0)
+                st.download_button(
+                    label="📥 Download Structural Geometry Sketch (High-Res PNG)",
+                    data=buf_v,
+                    file_name=f"{prefix}Flat_Slab_Geometry_Verification.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key="btn_dl_geom_verif_sketch",
+                )
+                plt.close(fig_verif)
+
+            with col_geom_controls:
+                st.markdown(
+                    """
+                    <style>
+                    /* Scoped ultra-compact styling for Column Orientation & Offsets panel */
+                    div[data-testid="stColumn"]:nth-of-type(2),
+                    .stColumn:nth-of-type(2) {
+                        display: flex !important;
+                        flex-direction: column !important;
+                        height: 100% !important;
+                    }
+
+                    div[data-testid="stColumn"]:nth-of-type(2) > div[data-testid="stVerticalBlock"],
+                    .stColumn:nth-of-type(2) > div[data-testid="stVerticalBlock"] {
+                        display: flex !important;
+                        flex-direction: column !important;
+                        flex: 1 1 auto !important;
+                        height: 100% !important;
+                        justify-content: flex-start !important;
+                    }
+
+                    div[class*="st-key-_fs_col_orientation"],
+                    div[class*="st-key-_fs_dir_widget"],
+                    div[class*="st-key-_fs_sx_widget"],
+                    div[class*="st-key-_fs_sy_widget"],
+                    div[data-testid="stColumn"]:nth-of-type(2) div[data-testid="stSelectbox"],
+                    div[data-testid="column"]:nth-of-type(2) div[data-testid="stSelectbox"] {
+                        margin-bottom: 6px !important;
+                    }
+
+                    /* Light yellow labels for dropdowns (~18px) */
+                    div:has(.fs-col-ctrl-card) label,
+                    div:has(.fs-col-ctrl-card) label p,
+                    div:has(.fs-col-ctrl-card) [data-testid="stWidgetLabel"] p,
+                    div[class*="st-key-_fs_"] label,
+                    div[class*="st-key-_fs_"] label p,
+                    div[data-testid="stColumn"]:nth-of-type(2) div[data-testid="stSelectbox"] label p,
+                    div[data-testid="column"]:nth-of-type(2) div[data-testid="stSelectbox"] label p {
+                        font-size: 18px !important;
+                        font-weight: 800 !important;
+                        color: #eab308 !important; /* Light Yellow */
+                        text-shadow: 0 0 1px #a16207;
+                        margin-bottom: 3px !important;
+                        padding: 0 !important;
+                        line-height: 1.25 !important;
+                    }
+
+                    /* Scaled font size (14.5px) for input box text inside column 2 dropdowns */
+                    div[class*="st-key-_fs_"] input,
+                    div[class*="st-key-_fs_"] .react-aria-Input,
+                    div[class*="st-key-_fs_"] .e1fp86qc1,
+                    div[class*="st-key-_fs_sx_widget"] input,
+                    div[class*="st-key-_fs_sy_widget"] input,
+                    div[class*="st-key-_fs_dir_widget"] input,
+                    div[class*="st-key-_fs_col_orientation_name_select"] input,
+                    div[data-testid="stColumn"]:nth-of-type(2) div[data-testid="stSelectbox"] input,
+                    div[data-testid="stColumn"]:nth-of-type(2) .react-aria-Input,
+                    div[data-testid="stColumn"]:nth-of-type(2) .e1fp86qc1,
+                    div[data-testid="column"]:nth-of-type(2) div[data-testid="stSelectbox"] input,
+                    div[data-testid="column"]:nth-of-type(2) .react-aria-Input,
+                    div[data-testid="column"]:nth-of-type(2) .e1fp86qc1,
+                    div:has(.fs-col-ctrl-card) input,
+                    div:has(.fs-col-ctrl-card) .react-aria-Input,
+                    /* Fallbacks for older BaseWeb versions */
+                    div[class*="st-key-_fs_"] div[data-baseweb="select"] *,
+                    div[data-testid="stColumn"]:nth-of-type(2) div[data-testid="stSelectbox"] div[data-baseweb="select"] * {
+                        font-size: 14.5px !important;
+                        font-weight: 600 !important;
+                        line-height: 1.3 !important;
+                        padding-left: 6px !important;
+                        padding-right: 6px !important;
+                        padding-top: 3px !important;
+                        padding-bottom: 3px !important;
+                    }
+
+                    /* Dropdown popover options list (14.5px to match input boxes) */
+                    div[data-testid="stSelectboxVirtualDropdown"] [role="option"],
+                    div[data-testid="stSelectboxVirtualDropdown"] [role="option"] *,
+                    div[data-testid="stSelectboxVirtualDropdown"] .react-aria-ListBoxItem,
+                    div[data-testid="stSelectboxVirtualDropdown"] .react-aria-ListBoxItem *,
+                    div[data-testid="stSelectboxVirtualDropdown"] .e1fp86qc7,
+                    div[data-testid="stSelectboxVirtualDropdown"] .e1fp86qc7 *,
+                    div[data-testid="stSelectboxVirtualDropdown"] .e1fp86qc8,
+                    div[data-testid="stSelectboxVirtualDropdown"] li,
+                    div[data-testid="stSelectboxVirtualDropdown"] li *,
+                    div[data-baseweb="popover"] ul[role="listbox"] li[role="option"],
+                    div[data-baseweb="popover"] ul[role="listbox"] li[role="option"] *,
+                    li[role="option"],
+                    li[role="option"] * {
+                        font-size: 14.5px !important;
+                        font-weight: 600 !important;
+                        line-height: 1.35 !important;
+                        padding-top: 6px !important;
+                        padding-bottom: 6px !important;
+                        padding-left: 8px !important;
+                        padding-right: 8px !important;
+                    }
+
+
+                    .fs-bottom-panel {
+                        direction: rtl !important;
+                        text-align: right !important;
+                        margin-top: auto !important;
+                        margin-bottom: 65px !important;
+                    }
+
+                    .fs-bottom-panel * {
+                        text-align: right !important;
+                    }
+                    </style>
+                    <div class='fs-col-ctrl-card' style='background:#f8fafc;border:2px solid #3b82f6;padding:10px 12px;border-radius:8px;margin-bottom:8px;'>
+                        <div style='font-size:14px;font-weight:bold;color:#1e3a8a;margin-bottom:4px;'>📐 ضرب وترحيل وتوشية الأعمدة</div>
+                        <div style='font-size:11.5px;color:#334155;line-height:1.4;font-weight:500;'>تحكم فوري وتوشية مع الملاحظة المباشرة على المخطط المقابل.</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                _active_col_names = [c["id"] for c in _active_cols]
+                if not _active_col_names:
+                    st.info("لا توجد أعمدة فعّالة في المسقط الحالي.")
+                else:
+                    _col_transforms_current = S.cfg_val("fs_col_transforms", {})
+                    if not isinstance(_col_transforms_current, dict):
+                        _col_transforms_current = {}
+
+                    selected_col_name = st.selectbox(
+                        "اسم العمود",
+                        options=_active_col_names,
+                        key="_fs_col_orientation_name_select",
+                        help="اختر العمود المراد ضبط ضربه وترحيله من المسقط الأفقي الحالي.",
+                    )
+
+                    _tgt_col = next((c for c in _active_cols if c["id"] == selected_col_name), _active_cols[0])
+                    _tgt_orig_id = _tgt_col["orig_id"]
+
+                    _saved_trans = _col_transforms_current.get(_tgt_orig_id) or _col_transforms_current.get(selected_col_name) or {}
+                    _norm_trans = normalize_col_transform(_saved_trans)
+
+                    DIR_OPTIONS = ['اتجاه X', 'اتجاه Y']
+                    SHIFT_X_OPTIONS = [
+                        'متمركز على المحور (Centered)',
+                        'جسم العمود يميناً (الوجه يسار المحور -6 cm)',
+                        'جسم العمود يساراً (الوجه يمين المحور +6 cm)',
+                    ]
+                    SHIFT_Y_OPTIONS = [
+                        'متمركز على المحور (Centered)',
+                        'جسم العمود لأعلى (الوجه أسفل المحور -6 cm)',
+                        'جسم العمود لأسفل (الوجه أعلى المحور +6 cm)',
+                    ]
+
+                    idx_dir = DIR_OPTIONS.index(_norm_trans["direction"]) if _norm_trans["direction"] in DIR_OPTIONS else 0
+                    idx_sx  = SHIFT_X_OPTIONS.index(_norm_trans["shift_x"]) if _norm_trans["shift_x"] in SHIFT_X_OPTIONS else 0
+                    idx_sy  = SHIFT_Y_OPTIONS.index(_norm_trans["shift_y"]) if _norm_trans["shift_y"] in SHIFT_Y_OPTIONS else 0
+
+                    sel_dir = st.selectbox(
+                        "ضرب العمود",
+                        options=DIR_OPTIONS,
+                        index=idx_dir,
+                        key=f"_fs_dir_widget_{_tgt_orig_id}",
+                        help="اتجاه البعد الأكبر D (موازٍ لمحور X أو لمحور Y).",
+                    )
+
+                    sel_sx = st.selectbox(
+                        "الترحيل الأفقي (X)",
+                        options=SHIFT_X_OPTIONS,
+                        index=idx_sx,
+                        key=f"_fs_sx_widget_{_tgt_orig_id}",
+                        help="الترحيل الأفقي بالنسبة للمحور الرأسي X.",
+                    )
+
+                    sel_sy = st.selectbox(
+                        "الترحيل الرأسي (Y)",
+                        options=SHIFT_Y_OPTIONS,
+                        index=idx_sy,
+                        key=f"_fs_sy_widget_{_tgt_orig_id}",
+                        help="الترحيل الرأسي بالنسبة للمحور الأفقي Y.",
+                    )
+
+                    if sel_dir != _norm_trans["direction"] or sel_sx != _norm_trans["shift_x"] or sel_sy != _norm_trans["shift_y"]:
+                        _updated_map = dict(_col_transforms_current)
+                        _new_data = {
+                            "direction": sel_dir,
+                            "shift_x": sel_sx,
+                            "shift_y": sel_sy,
+                        }
+                        _updated_map[_tgt_orig_id] = _new_data
+                        if selected_col_name != _tgt_orig_id:
+                            _updated_map[selected_col_name] = _new_data
+
+                        st.session_state.setdefault("cfg", {})["fs_col_transforms"] = _updated_map
+                        S.save_settings()
+                        st.rerun()
+
+                    _col_geom_preview = compute_column_geometry(
+                        _tgt_col.get("grid_x_m", _tgt_col.get("x", 0.0)),
+                        _tgt_col.get("grid_y_m", _tgt_col.get("y", 0.0)),
+                        _bc_col, _tc_col,
+                        _norm_trans,
+                    )
+
+                    _sx_val = _norm_trans.get("shift_x", "")
+                    if "جسم العمود يميناً" in _sx_val or _sx_val.startswith("يمين"):
+                        _offset_x_display = "-6 cm"
+                    elif "جسم العمود يساراً" in _sx_val or _sx_val.startswith("يسار"):
+                        _offset_x_display = "+6 cm"
+                    else:
+                        _offset_x_display = "0 cm"
+
+                    _sy_val = _norm_trans.get("shift_y", "")
+                    if "جسم العمود لأعلى" in _sy_val or _sy_val.startswith("أعلى"):
+                        _offset_y_display = "-6 cm"
+                    elif "جسم العمود لأسفل" in _sy_val or _sy_val.startswith("أسفل"):
+                        _offset_y_display = "+6 cm"
+                    else:
+                        _offset_y_display = "0 cm"
+
+                    # Dynamic vertical spacer pushing the lower status panel
+                    st.markdown("<div style='flex:1 1 auto; min-height:25px;'></div>", unsafe_allow_html=True)
+
+                    # Lower status panel raised upwards by 3 lines (~65px)
+                    st.markdown(
+                        f"""
+                        <div class='fs-bottom-panel' dir='rtl' style='direction:rtl;text-align:right;background:#ffffff;border:1.5px solid #cbd5e1;padding:10px 14px;border-radius:8px;margin-top:auto;margin-bottom:65px;box-shadow:0 1px 3px rgba(0,0,0,0.05);'>
+                            <div dir='rtl' style='direction:rtl;text-align:right;font-size:21px;font-weight:bold;color:#0f172a;margin-bottom:6px;line-height:1.4;'>
+                                🏛️ اسم العمود: <span style='color:#1d4ed8;font-size:22px;font-weight:bold;'><bdi dir="ltr">{selected_col_name}</bdi></span> <span style='font-size:15px;font-weight:normal;color:#64748b;'><bdi dir="ltr">({_tgt_col.get('grid_x', '')} - {_tgt_col.get('grid_y', '')})</bdi></span>
+                            </div>
+                            <div dir='rtl' style='direction:rtl;text-align:right;font-size:21px;font-weight:bold;color:#0f172a;margin-bottom:6px;line-height:1.4;'>
+                                📐 قطاع العمود: <span style='color:#0f766e;font-size:22px;font-weight:bold;'><bdi dir="ltr">{_col_geom_preview['width_cm']:.0f} × {_col_geom_preview['height_cm']:.0f} cm</bdi></span>
+                            </div>
+                            <div dir='rtl' style='direction:rtl;text-align:right;font-size:14px;color:#0f172a;font-weight:bold;margin-top:6px;'>
+                                📍 الترحيل عن المحاور: <span style='color:#eab308;text-shadow:0 0 1px #a16207;'><bdi dir="ltr">X = {_offset_x_display}</bdi></span> | <span style='color:#eab308;text-shadow:0 0 1px #a16207;'><bdi dir="ltr">Y = {_offset_y_display}</bdi></span>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
             # ── ملخص الأبعاد ─────────────────────────────────────────────────────
             n_total_cols  = (len(Lx_spans) + 1) * (len(Ly_spans) + 1)
@@ -8113,6 +8635,7 @@ def render():
                 _, _, _trial_Lx, _trial_Ly, _trial_warn = get_flat_slab_columns(
                     Lx_spans, Ly_spans, bc_cm=_bc_col, tc_cm=_tc_col,
                     removed_ids=_trial_removed,
+                    col_transforms=_col_transforms,
                 )
                 if _trial_Lx and _trial_Ly:
                     st.info(
@@ -8179,6 +8702,7 @@ def render():
                     st.session_state["_fs_pending_removals"] = []
                     st.session_state["_fs_show_confirm"]     = False
                     st.rerun()
+
 
     # ── 5f. Panel / Void Removal Expander ─────────────────────────────────────
     with st.expander(
@@ -8295,6 +8819,61 @@ def render():
                     st.session_state["_fs_pending_voids"] = []
                     st.session_state["_fs_show_void_confirm"] = False
                     st.rerun()
+
+    # ── 5g. DATA CARD & DESIGN PARAMETERS ─────────────────────────────────────
+    with st.expander("📋 بطاقة البيانات ومعايير التصميم (DATA CARD & DESIGN PARAMETERS)", expanded=False):
+        st.markdown(
+            '<div class="section-header">📋 بطاقة البيانات ومعايير التصميم الإنشائية (DATA CARD & DESIGN PARAMETERS)</div>',
+            unsafe_allow_html=True,
+        )
+        col_card_fig, col_card_info = st.columns([1.1, 0.9], gap="large")
+        with col_card_fig:
+            fig_card = generate_flat_slab_data_card(
+                ts_initial=ts_initial if ts_initial is not None else 20,
+                n_floors=num_floors,
+                bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
+                bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
+                top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
+                top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
+                col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
+                strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
+                strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
+                concrete_cover=cov if cov is not None else 1.5,
+                fcu=Fcu if Fcu is not None else 250,
+                fy=Fy if Fy is not None else 4000,
+                live_load=LL if LL is not None else 0.25,
+                flooring_load=SDL if SDL is not None else 0.15,
+                wall_load=wall_load if wall_load is not None else 0.50,
+                col_w_cm=_col_w_sk,
+                col_d_cm=_col_d_sk,
+            )
+            st.pyplot(fig_card, clear_figure=True, use_container_width=True)
+            buf_c = io.BytesIO()
+            fig_card.savefig(buf_c, format="png", bbox_inches="tight", dpi=180)
+            buf_c.seek(0)
+            st.download_button(
+                label="📥 Download Data Card (High-Res PNG)",
+                data=buf_c,
+                file_name=f"{prefix}Flat_Slab_Data_Card.png",
+                mime="image/png",
+                key="_fs_btn_dl_datacard",
+                use_container_width=True,
+            )
+        with col_card_info:
+            st.markdown("### 📌 ملخص معايير التصميم (Design Criteria Summary)")
+            render_styled_table(pd.DataFrame([
+                {"Parameter / المعيار": "Concrete Grade (Fcu)", "Value / القيمة": f"{Fcu if Fcu else 250} kg/cm²", "Category": "Materials"},
+                {"Parameter / المعيار": "Steel Yield (Fy)", "Value / القيمة": f"{Fy if Fy else 4000} kg/cm²", "Category": "Materials"},
+                {"Parameter / المعيار": "Concrete Cover (الغلاف الخرساني)", "Value / القيمة": f"{cov if cov else 1.5} cm", "Category": "Materials"},
+                {"Parameter / المعيار": "Initial Slab Thickness (ts)", "Value / القيمة": f"{ts_initial if ts_initial else 20} cm", "Category": "Geometry"},
+                {"Parameter / المعيار": "Number of Floors", "Value / القيمة": f"{num_floors} Floor(s)", "Category": "Geometry"},
+                {"Parameter / المعيار": "Live Load (LL)", "Value / القيمة": f"{LL if LL else 0.25} t/m²", "Category": "Loading"},
+                {"Parameter / المعيار": "Superimposed Dead Load (SDL)", "Value / القيمة": f"{SDL if SDL else 0.15} t/m²", "Category": "Loading"},
+                {"Parameter / المعيار": "Wall Load (WL)", "Value / القيمة": f"{wall_load if wall_load else 0.50} t/m²", "Category": "Loading"},
+                {"Parameter / المعيار": "Bottom Mesh (الرقة السفلية)", "Value / القيمة": f"{int(n_btm_mesh_usr) if n_btm_mesh_usr else 5} Φ {bottom_mesh_dia if bottom_mesh_dia else 12} / m'", "Category": "Reinforcement"},
+                {"Parameter / المعيار": "Top Mesh (الرقة العلوية)", "Value / القيمة": f"{int(n_top_mesh_usr) if n_top_mesh_usr else 5} Φ {top_mesh_dia if top_mesh_dia else 10} / m'", "Category": "Reinforcement"},
+                {"Parameter / المعيار": "Default Column Dimensions", "Value / القيمة": f"{_col_w_sk} cm × {_col_d_sk} cm", "Category": "Columns"},
+            ]))
 
     # ── Columns Registry Table (reflects active columns after removal) ────────
     _registry_df = pd.DataFrame([
@@ -8472,8 +9051,21 @@ def render():
     # 1. Standard DDM span rows for X direction
     Ly_avg = sum(Ly_calc) / len(Ly_calc)
     Lx_avg = sum(Lx_calc) / len(Lx_calc)
-    Ln_x_all = [lx - bc_m for lx in Lx_calc]
-    Ln_y_all = [ly - tc_m for ly in Ly_calc]
+    Ln_x_all = []
+    for i, lx in enumerate(Lx_calc):
+        cols_l = [c for c in _active_cols if c["i"] == i]
+        cols_r = [c for c in _active_cols if c["i"] == i + 1]
+        face_l = max([c["x_max"] for c in cols_l], default=x_coords[i] + bc_m / 2.0)
+        face_r = min([c["x_min"] for c in cols_r], default=x_coords[min(i + 1, len(x_coords) - 1)] - bc_m / 2.0)
+        Ln_x_all.append(max(0.5, face_r - face_l))
+
+    Ln_y_all = []
+    for j, ly in enumerate(Ly_calc):
+        cols_b = [c for c in _active_cols if c["j"] == j]
+        cols_t = [c for c in _active_cols if c["j"] == j + 1]
+        face_b = max([c["y_max"] for c in cols_b], default=y_coords[j] + tc_m / 2.0)
+        face_t = min([c["y_min"] for c in cols_t], default=y_coords[min(j + 1, len(y_coords) - 1)] - tc_m / 2.0)
+        Ln_y_all.append(max(0.5, face_t - face_b))
 
     rows_x = []
     for i, lx in enumerate(Lx_calc):
@@ -8562,8 +9154,18 @@ def render():
             cx = (x_l + x_r) / 2.0
             cy = (y_b + y_t) / 2.0
 
-            Ln_x = max(0.5, span_lx - bc_m)
-            Ln_y = max(0.5, span_ly - tc_m)
+            col_bl = next((c for c in _active_cols if c["i"] == i and c["j"] == j), None)
+            col_br = next((c for c in _active_cols if c["i"] == i + 1 and c["j"] == j), None)
+            col_tl = next((c for c in _active_cols if c["i"] == i and c["j"] == j + 1), None)
+            col_tr = next((c for c in _active_cols if c["i"] == i + 1 and c["j"] == j + 1), None)
+
+            left_x_max = max([c["x_max"] for c in (col_bl, col_tl) if c], default=x_l + bc_m / 2.0)
+            right_x_min = min([c["x_min"] for c in (col_br, col_tr) if c], default=x_r - bc_m / 2.0)
+            Ln_x = max(0.5, right_x_min - left_x_max)
+
+            bot_y_max = max([c["y_max"] for c in (col_bl, col_br) if c], default=y_b + tc_m / 2.0)
+            top_y_min = min([c["y_min"] for c in (col_tl, col_tr) if c], default=y_t - tc_m / 2.0)
+            Ln_y = max(0.5, top_y_min - bot_y_max)
             all_Ln.extend([Ln_x, Ln_y])
 
             # Check if this panel borders any removed column (enlarged bay)
@@ -8701,8 +9303,18 @@ def render():
             cx = (x_l + x_r) / 2.0
             cy = (y_b + y_t) / 2.0
 
-            Ln_x = max(0.5, span_lx - bc_m)
-            Ln_y = max(0.5, span_ly - tc_m)
+            col_bl = next((c for c in _active_cols if c["i"] == i and c["j"] == j), None)
+            col_br = next((c for c in _active_cols if c["i"] == i + 1 and c["j"] == j), None)
+            col_tl = next((c for c in _active_cols if c["i"] == i and c["j"] == j + 1), None)
+            col_tr = next((c for c in _active_cols if c["i"] == i + 1 and c["j"] == j + 1), None)
+
+            left_x_max = max([c["x_max"] for c in (col_bl, col_tl) if c], default=x_l + bc_m / 2.0)
+            right_x_min = min([c["x_min"] for c in (col_br, col_tr) if c], default=x_r - bc_m / 2.0)
+            Ln_x = max(0.5, right_x_min - left_x_max)
+
+            bot_y_max = max([c["y_max"] for c in (col_bl, col_br) if c], default=y_b + tc_m / 2.0)
+            top_y_min = min([c["y_min"] for c in (col_tl, col_tr) if c], default=y_t - tc_m / 2.0)
+            Ln_y = max(0.5, top_y_min - bot_y_max)
 
             Mo_x = Wu * span_ly * (Ln_x ** 2) / 8.0
             M_neg_ms_x = 0.25 * Mo_x
@@ -9457,6 +10069,7 @@ def render():
                     void_panel_ids=set(_confirmed_voids),
                     top_extra_cols=top_extra_cols,
                     btm_extra_spans=btm_extra_spans,
+                    col_transforms=_col_transforms,
                 )
                 st.pyplot(fig_m11, clear_figure=True, use_container_width=True)
                 buf_m11 = io.BytesIO()
@@ -9482,6 +10095,7 @@ def render():
                     void_panel_ids=set(_confirmed_voids),
                     top_extra_cols=top_extra_cols,
                     btm_extra_spans=btm_extra_spans,
+                    col_transforms=_col_transforms,
                 )
                 st.pyplot(fig_m22, clear_figure=True, use_container_width=True)
                 buf_m22 = io.BytesIO()
@@ -9562,6 +10176,7 @@ def render():
                 col_d_cm=tc_s,
                 removed_cols=_removed_col_objs,
                 void_panel_ids=set(_confirmed_voids),
+                col_transforms=_col_transforms,
             )
             st.pyplot(fig_deficit, clear_figure=True, use_container_width=True)
             buf_deficit = io.BytesIO()
@@ -9772,6 +10387,7 @@ def render():
                     col_w_cm=bc_s, col_d_cm=tc_s,
                     removed_cols=_confirmed_removals,
                     void_panel_ids=_confirmed_voids,
+                    col_transforms=_col_transforms,
                 )
                 st.pyplot(fig_cc, clear_figure=True, use_container_width=True)
                 buf_cc = io.BytesIO()
@@ -9802,6 +10418,7 @@ def render():
                     removed_cols=_confirmed_removals,
                     void_panel_ids=_confirmed_voids,
                     direction="X",
+                    col_transforms=_col_transforms,
                 )
                 st.pyplot(fig_bes_x, clear_figure=True, use_container_width=True)
                 buf_bes_x = io.BytesIO()
@@ -9832,6 +10449,7 @@ def render():
                     removed_cols=_confirmed_removals,
                     void_panel_ids=_confirmed_voids,
                     direction="Y",
+                    col_transforms=_col_transforms,
                 )
                 st.pyplot(fig_bes_y, clear_figure=True, use_container_width=True)
                 buf_bes_y = io.BytesIO()
@@ -9861,6 +10479,7 @@ def render():
                     removed_cols=_confirmed_removals,
                     void_panel_ids=_confirmed_voids,
                     direction="X",
+                    col_transforms=_col_transforms,
                 )
                 st.pyplot(fig_tmes_x, clear_figure=True, use_container_width=True)
                 buf_tmes_x = io.BytesIO()
@@ -9890,6 +10509,7 @@ def render():
                     removed_cols=_confirmed_removals,
                     void_panel_ids=_confirmed_voids,
                     direction="Y",
+                    col_transforms=_col_transforms,
                 )
                 st.pyplot(fig_tmes_y, clear_figure=True, use_container_width=True)
                 buf_tmes_y = io.BytesIO()
@@ -9989,6 +10609,14 @@ def render():
             "pu_1f_val": pu_1f,
             "pu_tot_val": pu_tot,
             "atrib_val": atrib,
+            "x_min": c.get("x_min"),
+            "y_min": c.get("y_min"),
+            "x_max": c.get("x_max"),
+            "y_max": c.get("y_max"),
+            "width_m": c.get("width_m"),
+            "height_m": c.get("height_m"),
+            "center_x": c.get("center_x", c.get("x")),
+            "center_y": c.get("center_y", c.get("y")),
         })
 
     img_reactions_b64 = None
@@ -10575,13 +11203,22 @@ def render():
                 "id": c_item["id"],
                 "orig_id": c_item.get("orig_id", c_item["id"]),
                 "type": c_type,
-                "x": float(c_item["x"]),
-                "y": float(c_item["y"]),
+                "x": float(c_item.get("center_x", c_item["x"])),
+                "y": float(c_item.get("center_y", c_item["y"])),
                 "bc": float(c_item.get("bc", col_b_dim)),
                 "tc": float(c_item.get("tc", col_c_dim)),
                 "pu_tot": pu_val,
                 "grid_x": c_item.get("grid_x", ""),
                 "grid_y": c_item.get("grid_y", ""),
+                "grid_x_m": float(c_item.get("grid_x_m", c_item["x"])),
+                "grid_y_m": float(c_item.get("grid_y_m", c_item["y"])),
+                # Actual geometry after col_transforms (shift + rotation)
+                "x_min": float(c_item.get("x_min", c_item.get("center_x", c_item["x"]) - c_item.get("width_m", c_item.get("tc", col_c_dim)/100.0)/2.0)),
+                "x_max": float(c_item.get("x_max", c_item.get("center_x", c_item["x"]) + c_item.get("width_m", c_item.get("tc", col_c_dim)/100.0)/2.0)),
+                "y_min": float(c_item.get("y_min", c_item.get("center_y", c_item["y"]) - c_item.get("height_m", c_item.get("bc", col_b_dim)/100.0)/2.0)),
+                "y_max": float(c_item.get("y_max", c_item.get("center_y", c_item["y"]) + c_item.get("height_m", c_item.get("bc", col_b_dim)/100.0)/2.0)),
+                "width_m": float(c_item.get("width_m", c_item.get("tc", col_c_dim)/100.0)),
+                "height_m": float(c_item.get("height_m", c_item.get("bc", col_b_dim)/100.0)),
             })
 
         overlap_data = check_building_clearances_and_overlaps(fs_active_columns, ftgs_dict)
@@ -10830,6 +11467,7 @@ def render():
                 col_w_cm=bc_s, col_d_cm=tc_s,
                 removed_cols=_removed_col_objs,
                 void_panel_ids=set(_confirmed_voids),
+                col_transforms=_col_transforms,
             )
             st.pyplot(fig_def, clear_figure=True, use_container_width=True)
 
