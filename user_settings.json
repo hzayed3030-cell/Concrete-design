@@ -142,6 +142,40 @@
       "direction": "اتجاه Y",
       "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
       "shift_y": "متمركز على المحور (Centered)"
+    },
+    "C5": {
+      "direction": "اتجاه X",
+      "shift_x": "متمركز على المحور (Centered)",
+      "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)"
+    }
+  },
+  "fs_edge_columns": {
+    "C1": {
+      "is_edge": "Yes",
+      "direction": "Bottom + Left"
+    },
+    "C11": {
+      "is_edge": "Yes",
+      "direction": "Left"
+    },
+    "C20": {
+      "is_edge": "Yes",
+      "direction": "Top + Right"
+    },
+    "C10": {
+      "is_edge": "Yes",
+      "direction": "Bottom + Right",
+      "is_valid": false
+    },
+    "C5": {
+      "is_edge": "Yes",
+      "direction": "Bottom + Right",
+      "is_valid": false
+    },
+    "C6": {
+      "is_edge": "Yes",
+      "direction": "Left",
+      "is_valid": false
     }
   },
   "cs_n_types": 2,
@@ -471,7 +505,7 @@
       "grid_y": "X1",
       "type": "Corner",
       "x": 17.5,
-      "y": 0.0,
+      "y": 0.09,
       "bc": 50.0,
       "tc": 30.0,
       "pu_1f": 3.6073125000000004,

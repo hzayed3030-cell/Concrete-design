@@ -247,8 +247,65 @@ def compute_column_geometry(grid_x, grid_y, bc_cm, tc_cm, trans=None):
     }
 
 
+def validate_edge_column_offset(geom, edge_dir):
+    """
+    Validates if an edge column satisfies the maximum allowed offset of 6 cm
+    beyond the axis in the specified edge direction(s).
+
+    Args:
+        geom (dict): Output of compute_column_geometry.
+        edge_dir (str): One of the 8 edge directions (e.g. 'Right', 'Top + Left', etc.).
+
+    Returns:
+        is_valid (bool): True if all specified directions have offset <= 6.0 cm.
+        errors (list[str]): Warning messages for any direction exceeding 6.0 cm.
+    """
+    if not isinstance(geom, dict) or not edge_dir:
+        return False, []
+
+    ed_str = str(edge_dir).strip()
+    if not ed_str or ed_str.startswith("--"):
+        return False, []
+
+    gx = geom.get("grid_x", 0.0)
+    gy = geom.get("grid_y", 0.0)
+    x_min = geom.get("x_min", 0.0)
+    x_max = geom.get("x_max", 0.0)
+    y_min = geom.get("y_min", 0.0)
+    y_max = geom.get("y_max", 0.0)
+
+    offset_right_cm  = round((x_max - gx) * 100.0, 2)
+    offset_left_cm   = round((gx - x_min) * 100.0, 2)
+    offset_top_cm    = round((y_max - gy) * 100.0, 2)
+    offset_bottom_cm = round((gy - y_min) * 100.0, 2)
+
+    ed_upper = str(edge_dir).strip().upper()
+    has_top    = "TOP" in ed_upper
+    has_bottom = "BOTTOM" in ed_upper
+    has_left   = "LEFT" in ed_upper
+    has_right  = "RIGHT" in ed_upper
+
+    errors = []
+    MAX_ALLOWABLE_CM = 6.001
+
+    if has_top and offset_top_cm > MAX_ALLOWABLE_CM:
+        errors.append("لا يجوز اعتبار هذا العمود عمود جار، لأن المسافة بعد المحور في اتجاه الأعلى أكبر من 6 سم.")
+
+    if has_bottom and offset_bottom_cm > MAX_ALLOWABLE_CM:
+        errors.append("لا يجوز اعتبار هذا العمود عمود جار، لأن المسافة بعد المحور في اتجاه الأسفل أكبر من 6 سم.")
+
+    if has_right and offset_right_cm > MAX_ALLOWABLE_CM:
+        errors.append("لا يجوز اعتبار هذا العمود عمود جار، لأن المسافة بعد المحور في اتجاه اليمين أكبر من 6 سم.")
+
+    if has_left and offset_left_cm > MAX_ALLOWABLE_CM:
+        errors.append("لا يجوز اعتبار هذا العمود عمود جار، لأن المسافة بعد المحور في اتجاه اليسار أكبر من 6 سم.")
+
+    is_valid = len(errors) == 0
+    return is_valid, errors
+
+
 @st.cache_data(show_spinner=False)
-def get_flat_slab_columns(Lx_spans, Ly_spans, bc_cm=30, tc_cm=30, removed_ids=None, col_transforms=None):
+def get_flat_slab_columns(Lx_spans, Ly_spans, bc_cm=30, tc_cm=30, removed_ids=None, col_transforms=None, edge_columns=None):
     """
     Generate structured registry of columns C1, C2, ...
     Ordered: left to right (Y axes, i-direction), bottom to top (X axes, j-direction).
@@ -262,6 +319,8 @@ def get_flat_slab_columns(Lx_spans, Ly_spans, bc_cm=30, tc_cm=30, removed_ids=No
                         IDs refer to the *original* numbering before any removal.
         col_transforms: Optional dict mapping column ID (orig_id or id) to its
                         transform dict: {"direction", "shift_x", "shift_y"}.
+        edge_columns:   Optional dict mapping column ID (orig_id or id) to its
+                        edge definition dict: {"is_edge": "Yes"/"No", "direction": str}.
 
     Returns:
         active_columns:  List of dicts for remaining columns (re-indexed C1, C2, ...).
@@ -295,6 +354,17 @@ def get_flat_slab_columns(Lx_spans, Ly_spans, bc_cm=30, tc_cm=30, removed_ids=No
             c_trans = (col_transforms or {}).get(orig_id, {})
             geom = compute_column_geometry(x, y, bc_cm, tc_cm, c_trans)
 
+            edge_info = (edge_columns or {}).get(orig_id, {})
+            is_edge_req = isinstance(edge_info, dict) and edge_info.get("is_edge") == "Yes"
+            edge_dir_req = edge_info.get("direction", "") if is_edge_req else ""
+            is_edge_col = False
+            edge_dir = ""
+            if is_edge_req and edge_dir_req:
+                is_valid, _ = validate_edge_column_offset(geom, edge_dir_req)
+                if is_valid:
+                    is_edge_col = True
+                    edge_dir = edge_dir_req
+
             all_columns.append({
                 "id":        orig_id,
                 "name":      orig_id,
@@ -325,6 +395,8 @@ def get_flat_slab_columns(Lx_spans, Ly_spans, bc_cm=30, tc_cm=30, removed_ids=No
                 "y_max":     geom["y_max"],
                 "center_x":  geom["center_x"],
                 "center_y":  geom["center_y"],
+                "is_edge_col": is_edge_col,
+                "edge_dir":    edge_dir,
                 "removed":   orig_id in removed_set,
             })
             col_count += 1
@@ -457,6 +529,7 @@ def generate_flat_slab_sketch(
     void_panel_ids=None,    # set of panel IDs confirmed as voids e.g. {"P_1_1"}
     pending_void_ids=None,  # set of panel IDs selected as voids for review
     col_transforms=None,    # dict mapping column ID -> {"direction", "shift_x", "shift_y"}
+    edge_columns=None,      # dict mapping column ID -> {"is_edge": "Yes"/"No", "direction": str}
 ):
     """
     Generate the confirmatory geometric sketch for the flat slab with detailed Data Card.
@@ -689,6 +762,65 @@ def generate_flat_slab_sketch(
                 bbox=dict(boxstyle="round,pad=0.22", facecolor="#ffffff", edgecolor="#475569", lw=0.9, alpha=0.95),
                 zorder=7
             )
+
+        # Highlight edge column faces in pink with hatch lines (Edge Columns / أعمدة الجور)
+        edge_info = (edge_columns or {}).get(orig_id) or (edge_columns or {}).get(label) or {}
+        if isinstance(edge_info, dict) and edge_info.get("is_edge") == "Yes":
+            raw_edge_dir = str(edge_info.get("direction", "")).strip()
+            is_edge_valid, _ = validate_edge_column_offset(geom, raw_edge_dir)
+            if is_edge_valid:
+                ed_dir = raw_edge_dir.upper()
+                has_top    = "TOP" in ed_dir
+                has_bottom = "BOTTOM" in ed_dir
+                has_left   = "LEFT" in ed_dir
+                has_right  = "RIGHT" in ed_dir
+
+                edge_lw = 4.2
+                edge_color = "#db2777"  # Distinct pink / rose for edge column property line
+                tick_len = 0.10
+                tick_step = 0.08
+                tick_lw = 2.0
+
+                # Main solid boundary line
+                if has_top and has_left and not has_bottom and not has_right:
+                    ax_plan.plot([rx + rw, rx, rx], [ry + rh, ry + rh, ry], color=edge_color, lw=edge_lw, solid_capstyle="round", solid_joinstyle="round", zorder=8)
+                elif has_top and has_right and not has_bottom and not has_left:
+                    ax_plan.plot([rx, rx + rw, rx + rw], [ry + rh, ry + rh, ry], color=edge_color, lw=edge_lw, solid_capstyle="round", solid_joinstyle="round", zorder=8)
+                elif has_bottom and has_left and not has_top and not has_right:
+                    ax_plan.plot([rx + rw, rx, rx], [ry, ry, ry + rh], color=edge_color, lw=edge_lw, solid_capstyle="round", solid_joinstyle="round", zorder=8)
+                elif has_bottom and has_right and not has_top and not has_left:
+                    ax_plan.plot([rx, rx + rw, rx + rw], [ry, ry, ry + rh], color=edge_color, lw=edge_lw, solid_capstyle="round", solid_joinstyle="round", zorder=8)
+                else:
+                    if has_top:
+                        ax_plan.plot([rx, rx + rw], [ry + rh, ry + rh], color=edge_color, lw=edge_lw, solid_capstyle="round", zorder=8)
+                    if has_bottom:
+                        ax_plan.plot([rx, rx + rw], [ry, ry], color=edge_color, lw=edge_lw, solid_capstyle="round", zorder=8)
+                    if has_left:
+                        ax_plan.plot([rx, rx], [ry, ry + rh], color=edge_color, lw=edge_lw, solid_capstyle="round", zorder=8)
+                    if has_right:
+                        ax_plan.plot([rx + rw, rx + rw], [ry, ry + rh], color=edge_color, lw=edge_lw, solid_capstyle="round", zorder=8)
+
+                # CAD 45-degree hatch ticks pointing into neighbor space
+                if has_left:
+                    y_curr = ry
+                    while y_curr <= ry + rh + 0.001:
+                        ax_plan.plot([rx, rx - tick_len], [y_curr, y_curr + tick_len], color=edge_color, lw=tick_lw, solid_capstyle="round", zorder=8)
+                        y_curr += tick_step
+                if has_right:
+                    y_curr = ry
+                    while y_curr <= ry + rh + 0.001:
+                        ax_plan.plot([rx + rw, rx + rw + tick_len], [y_curr, y_curr + tick_len], color=edge_color, lw=tick_lw, solid_capstyle="round", zorder=8)
+                        y_curr += tick_step
+                if has_top:
+                    x_curr = rx
+                    while x_curr <= rx + rw + 0.001:
+                        ax_plan.plot([x_curr, x_curr + tick_len], [ry + rh, ry + rh + tick_len], color=edge_color, lw=tick_lw, solid_capstyle="round", zorder=8)
+                        x_curr += tick_step
+                if has_bottom:
+                    x_curr = rx
+                    while x_curr <= rx + rw + 0.001:
+                        ax_plan.plot([x_curr, x_curr + tick_len], [ry, ry - tick_len], color=edge_color, lw=tick_lw, solid_capstyle="round", zorder=8)
+                        x_curr += tick_step
 
     # Span Dimensions (Lx along Bottom)
     y_dim_lx = y_slab_min - dim_offset_bot
@@ -8202,10 +8334,14 @@ def render():
     _col_transforms = S.cfg_val("fs_col_transforms", {})
     _col_transforms = _col_transforms if isinstance(_col_transforms, dict) else {}
 
+    _edge_columns = S.cfg_val("fs_edge_columns", {})
+    _edge_columns = _edge_columns if isinstance(_edge_columns, dict) else {}
+
     # Generate all columns (original numbering) to validate persisted IDs
     _all_cols_ref, _, _, _, _ = get_flat_slab_columns(
         Lx_spans, Ly_spans, bc_cm=_bc_col, tc_cm=_tc_col,
         col_transforms=_col_transforms,
+        edge_columns=_edge_columns,
     )
     _valid_orig_ids = {c["orig_id"] for c in _all_cols_ref}
     _confirmed_removals = [cid for cid in _confirmed_raw if cid in _valid_orig_ids]
@@ -8232,6 +8368,7 @@ def render():
         Lx_spans, Ly_spans, bc_cm=_bc_col, tc_cm=_tc_col,
         removed_ids=set(_confirmed_removals),
         col_transforms=_col_transforms,
+        edge_columns=_edge_columns,
     )
     _col_w_sk = _bc_col
     _col_d_sk = _tc_col
@@ -8275,6 +8412,7 @@ def render():
                     pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", [])
                                          if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
                     col_transforms=_col_transforms,
+                    edge_columns=_edge_columns,
                 )
                 st.pyplot(fig_verif, clear_figure=True, use_container_width=True)
                 buf_v = io.BytesIO()
@@ -8317,6 +8455,8 @@ def render():
                     div[class*="st-key-_fs_dir_widget"],
                     div[class*="st-key-_fs_sx_widget"],
                     div[class*="st-key-_fs_sy_widget"],
+                    div[class*="st-key-_fs_is_edge_widget"],
+                    div[class*="st-key-_fs_edge_dir_widget"],
                     div[data-testid="stColumn"]:nth-of-type(2) div[data-testid="stSelectbox"],
                     div[data-testid="column"]:nth-of-type(2) div[data-testid="stSelectbox"] {
                         margin-bottom: 6px !important;
@@ -8346,6 +8486,8 @@ def render():
                     div[class*="st-key-_fs_sx_widget"] input,
                     div[class*="st-key-_fs_sy_widget"] input,
                     div[class*="st-key-_fs_dir_widget"] input,
+                    div[class*="st-key-_fs_is_edge_widget"] input,
+                    div[class*="st-key-_fs_edge_dir_widget"] input,
                     div[class*="st-key-_fs_col_orientation_name_select"] input,
                     div[data-testid="stColumn"]:nth-of-type(2) div[data-testid="stSelectbox"] input,
                     div[data-testid="stColumn"]:nth-of-type(2) .react-aria-Input,
@@ -8403,8 +8545,8 @@ def render():
                     }
                     </style>
                     <div class='fs-col-ctrl-card' style='background:#f8fafc;border:2px solid #3b82f6;padding:10px 12px;border-radius:8px;margin-bottom:8px;'>
-                        <div style='font-size:14px;font-weight:bold;color:#1e3a8a;margin-bottom:4px;'>📐 ضرب وترحيل وتوشية الأعمدة</div>
-                        <div style='font-size:11.5px;color:#334155;line-height:1.4;font-weight:500;'>تحكم فوري وتوشية مع الملاحظة المباشرة على المخطط المقابل.</div>
+                        <div style='font-size:14px;font-weight:bold;color:#1e3a8a;margin-bottom:4px;'>📐 ضرب وترحيل وتحديد أعمدة الجور</div>
+                        <div style='font-size:11.5px;color:#334155;line-height:1.4;font-weight:500;'>تحكم فوري في ضرب وترحيل وتحديد أوجه الجور (Edge Columns) مع التمييز المباشر باللون البينك المهشر على المخطط.</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -8471,29 +8613,124 @@ def render():
                         help="الترحيل الرأسي بالنسبة للمحور الأفقي Y.",
                     )
 
-                    if sel_dir != _norm_trans["direction"] or sel_sx != _norm_trans["shift_x"] or sel_sy != _norm_trans["shift_y"]:
-                        _updated_map = dict(_col_transforms_current)
-                        _new_data = {
-                            "direction": sel_dir,
-                            "shift_x": sel_sx,
-                            "shift_y": sel_sy,
-                        }
-                        _updated_map[_tgt_orig_id] = _new_data
-                        if selected_col_name != _tgt_orig_id:
-                            _updated_map[selected_col_name] = _new_data
+                    _edge_columns_current = S.cfg_val("fs_edge_columns", {})
+                    if not isinstance(_edge_columns_current, dict):
+                        _edge_columns_current = {}
 
-                        st.session_state.setdefault("cfg", {})["fs_col_transforms"] = _updated_map
-                        S.save_settings()
-                        st.rerun()
+                    _saved_edge = _edge_columns_current.get(_tgt_orig_id) or _edge_columns_current.get(selected_col_name) or {}
+                    if not isinstance(_saved_edge, dict):
+                        _saved_edge = {}
 
+                    _saved_is_edge = _saved_edge.get("is_edge", "No")
+                    if _saved_is_edge not in ["No", "Yes"]:
+                        _saved_is_edge = "No"
+
+                    SELECT_DIR_PLACEHOLDER = "-- اختر اتجاه الجار --"
+                    REAL_EDGE_DIR_OPTIONS = [
+                        "Left",
+                        "Right",
+                        "Top",
+                        "Bottom",
+                        "Top + Left",
+                        "Top + Right",
+                        "Bottom + Left",
+                        "Bottom + Right",
+                    ]
+                    EDGE_DIR_OPTIONS = [SELECT_DIR_PLACEHOLDER] + REAL_EDGE_DIR_OPTIONS
+
+                    _saved_edge_dir = _saved_edge.get("direction", "")
+                    if _saved_edge_dir not in REAL_EDGE_DIR_OPTIONS:
+                        _saved_edge_dir = SELECT_DIR_PLACEHOLDER
+
+                    idx_is_edge = 1 if _saved_is_edge == "Yes" else 0
+                    sel_is_edge = st.selectbox(
+                        "Edge Column?",
+                        options=["No", "Yes"],
+                        index=idx_is_edge,
+                        key=f"_fs_is_edge_widget_{_tgt_orig_id}",
+                        help="تحديد ما إذا كان العمود يعتبر عمود جار (Edge Column) أم لا.",
+                    )
+
+                    sel_edge_dir = _saved_edge_dir
+                    _curr_trans_state = {
+                        "direction": sel_dir,
+                        "shift_x": sel_sx,
+                        "shift_y": sel_sy,
+                    }
                     _col_geom_preview = compute_column_geometry(
                         _tgt_col.get("grid_x_m", _tgt_col.get("x", 0.0)),
                         _tgt_col.get("grid_y_m", _tgt_col.get("y", 0.0)),
                         _bc_col, _tc_col,
-                        _norm_trans,
+                        _curr_trans_state,
                     )
 
-                    _sx_val = _norm_trans.get("shift_x", "")
+                    _is_edge_valid = False
+                    _edge_validation_errors = []
+
+                    if sel_is_edge == "Yes":
+                        idx_edge_dir = EDGE_DIR_OPTIONS.index(_saved_edge_dir) if _saved_edge_dir in EDGE_DIR_OPTIONS else 0
+                        sel_edge_dir = st.selectbox(
+                            "Edge Direction",
+                            options=EDGE_DIR_OPTIONS,
+                            index=idx_edge_dir,
+                            key=f"_fs_edge_dir_widget_{_tgt_orig_id}",
+                            help="اتجاه وجه/أوجه الجار في المسقط بالنسبة لحدود المسقط.",
+                        )
+                        if sel_edge_dir == SELECT_DIR_PLACEHOLDER or sel_edge_dir not in REAL_EDGE_DIR_OPTIONS:
+                            _is_edge_valid = False
+                            st.markdown(
+                                """
+                                <div dir='rtl' style='direction:rtl;text-align:right;background:#eff6ff;border:1.5px solid #3b82f6;color:#1e40af;padding:8px 12px;border-radius:6px;font-size:13px;font-weight:bold;margin-top:6px;margin-bottom:6px;line-height:1.45;'>
+                                    ℹ️ يرجى اختيار اتجاه الجار (Edge Direction) من القائمة أعلاه لتحديد أوجه الجور.
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            _is_edge_valid, _edge_validation_errors = validate_edge_column_offset(_col_geom_preview, sel_edge_dir)
+                            for _err in _edge_validation_errors:
+                                st.markdown(
+                                    f"""
+                                    <div dir='rtl' style='direction:rtl;text-align:right;background:#fef2f2;border:1.5px solid #ef4444;color:#991b1b;padding:8px 12px;border-radius:6px;font-size:13px;font-weight:bold;margin-top:6px;margin-bottom:6px;line-height:1.45;box-shadow:0 1px 2px rgba(239,68,68,0.1);'>
+                                        ⚠️ {_err}
+                                    </div>
+                                    """,
+                                    unsafe_allow_html=True,
+                                )
+
+                    _trans_changed = (sel_dir != _norm_trans["direction"] or sel_sx != _norm_trans["shift_x"] or sel_sy != _norm_trans["shift_y"])
+                    _edge_changed = (sel_is_edge != _saved_is_edge or (sel_is_edge == "Yes" and sel_edge_dir != _saved_edge_dir))
+
+                    if _trans_changed or _edge_changed:
+                        if _trans_changed:
+                            _updated_map = dict(_col_transforms_current)
+                            _new_data = {
+                                "direction": sel_dir,
+                                "shift_x": sel_sx,
+                                "shift_y": sel_sy,
+                            }
+                            _updated_map[_tgt_orig_id] = _new_data
+                            if selected_col_name != _tgt_orig_id:
+                                _updated_map[selected_col_name] = _new_data
+                            st.session_state.setdefault("cfg", {})["fs_col_transforms"] = _updated_map
+
+                        if _edge_changed:
+                            _has_real_dir = (sel_is_edge == "Yes" and sel_edge_dir in REAL_EDGE_DIR_OPTIONS)
+                            _updated_edge_map = dict(_edge_columns_current)
+                            _new_edge_data = {
+                                "is_edge": sel_is_edge,
+                                "direction": sel_edge_dir if _has_real_dir else "",
+                                "is_valid": _is_edge_valid and _has_real_dir,
+                            }
+                            _updated_edge_map[_tgt_orig_id] = _new_edge_data
+                            if selected_col_name != _tgt_orig_id:
+                                _updated_edge_map[selected_col_name] = _new_edge_data
+                            st.session_state.setdefault("cfg", {})["fs_edge_columns"] = _updated_edge_map
+
+                        S.save_settings()
+                        st.rerun()
+
+                    _sx_val = _curr_trans_state.get("shift_x", "")
                     if "جسم العمود يميناً" in _sx_val or _sx_val.startswith("يمين"):
                         _offset_x_display = "-6 cm"
                     elif "جسم العمود يساراً" in _sx_val or _sx_val.startswith("يسار"):
@@ -8501,7 +8738,7 @@ def render():
                     else:
                         _offset_x_display = "0 cm"
 
-                    _sy_val = _norm_trans.get("shift_y", "")
+                    _sy_val = _curr_trans_state.get("shift_y", "")
                     if "جسم العمود لأعلى" in _sy_val or _sy_val.startswith("أعلى"):
                         _offset_y_display = "-6 cm"
                     elif "جسم العمود لأسفل" in _sy_val or _sy_val.startswith("أسفل"):
@@ -8511,6 +8748,33 @@ def render():
 
                     # Dynamic vertical spacer pushing the lower status panel
                     st.markdown("<div style='flex:1 1 auto; min-height:25px;'></div>", unsafe_allow_html=True)
+
+                    _edge_status_html = ""
+                    if sel_is_edge == "Yes":
+                        if sel_edge_dir not in REAL_EDGE_DIR_OPTIONS or sel_edge_dir == SELECT_DIR_PLACEHOLDER:
+                            _edge_status_html = """
+                            <div dir='rtl' style='direction:rtl;text-align:right;font-size:13px;color:#2563eb;font-weight:bold;margin-top:6px;background:#eff6ff;border:1px solid #bfdbfe;padding:5px 10px;border-radius:6px;'>
+                                ⏳ بانتظار اختيار اتجاه الجار (Edge Direction)
+                            </div>
+                            """
+                        elif _is_edge_valid:
+                            _edge_status_html = f"""
+                            <div dir='rtl' style='direction:rtl;text-align:right;font-size:14px;color:#0f172a;font-weight:bold;margin-top:6px;'>
+                                🌸 عمود جار (Edge Column): <span style='color:#db2777;font-weight:800;'><bdi dir="ltr">{sel_edge_dir}</bdi></span> <span style='color:#be185d;font-size:12px;font-weight:600;'>(خط بينك مهشر)</span>
+                            </div>
+                            """
+                        else:
+                            _edge_status_html = f"""
+                            <div dir='rtl' style='direction:rtl;text-align:right;font-size:13px;color:#b91c1c;font-weight:bold;margin-top:6px;background:#fef2f2;border:1px solid #fecaca;padding:5px 10px;border-radius:6px;line-height:1.4;'>
+                                ⚠️ لا يجوز اعتباره عمود جار (تجاوز حد الـ 6 سم في {sel_edge_dir})
+                            </div>
+                            """
+                    else:
+                        _edge_status_html = f"""
+                        <div dir='rtl' style='direction:rtl;text-align:right;font-size:14px;color:#64748b;font-weight:bold;margin-top:6px;'>
+                            ⚪ عمود داخلي (Non-Edge Column)
+                        </div>
+                        """
 
                     # Lower status panel raised upwards by 3 lines (~65px)
                     st.markdown(
@@ -8525,6 +8789,7 @@ def render():
                             <div dir='rtl' style='direction:rtl;text-align:right;font-size:14px;color:#0f172a;font-weight:bold;margin-top:6px;'>
                                 📍 الترحيل عن المحاور: <span style='color:#eab308;text-shadow:0 0 1px #a16207;'><bdi dir="ltr">X = {_offset_x_display}</bdi></span> | <span style='color:#eab308;text-shadow:0 0 1px #a16207;'><bdi dir="ltr">Y = {_offset_y_display}</bdi></span>
                             </div>
+                            {_edge_status_html}
                         </div>
                         """,
                         unsafe_allow_html=True,
@@ -8636,6 +8901,7 @@ def render():
                     Lx_spans, Ly_spans, bc_cm=_bc_col, tc_cm=_tc_col,
                     removed_ids=_trial_removed,
                     col_transforms=_col_transforms,
+                    edge_columns=_edge_columns,
                 )
                 if _trial_Lx and _trial_Ly:
                     st.info(

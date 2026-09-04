@@ -137,6 +137,7 @@ ECP_DEFAULTS: dict = {
     "fs_removed_cols": [],
     "fs_void_panels": [],
     "fs_col_transforms": {},
+    "fs_edge_columns": {},
 
     # Customs Module – Concrete Survey, Flat Slabs & Material Prices
     "cs_n_types": 2,
@@ -1045,6 +1046,8 @@ def load_settings() -> None:
 
         if not isinstance(cfg.get("fs_col_transforms"), dict):
             cfg["fs_col_transforms"] = {}
+        if not isinstance(cfg.get("fs_edge_columns"), dict):
+            cfg["fs_edge_columns"] = {}
 
         st.session_state["_settings_loaded_from_file"] = True
     else:
@@ -1052,6 +1055,8 @@ def load_settings() -> None:
 
     if not isinstance(cfg.get("fs_col_transforms"), dict):
         cfg["fs_col_transforms"] = {}
+    if not isinstance(cfg.get("fs_edge_columns"), dict):
+        cfg["fs_edge_columns"] = {}
 
     st.session_state["cfg"] = cfg
     st.session_state["_active_profile_name"] = active_name
