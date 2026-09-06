@@ -23,6 +23,8 @@ import os
 import re
 import sys
 import io
+import time
+import shutil
 import wave
 import struct
 import math
@@ -37,7 +39,9 @@ else:
     BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
 PROFILES_FILE = os.path.join(BASE_DIR, "profiles.json")
+PROFILES_BAK_FILE = os.path.join(BASE_DIR, "profiles.json.bak")
 SETTINGS_FILE = os.path.join(BASE_DIR, "user_settings.json")
+_PROFILES_CACHE = None
 
 # ── Factory / ECP 203 Default Values ────────────────────────────────────────
 ECP_DEFAULTS: dict = {
@@ -204,6 +208,72 @@ ECP_DEFAULTS: dict = {
     # Typography / Fixed Font Sizes (in pixels)
     "font_size_inputs":  14,
     "font_size_outputs": 14,
+
+    # Module 9 – Strap Footing (قاعدة الجار والشداد)
+    # Primary storage: nested dict "module_9_strap_footing" written to profiles.json.
+    # Standard metric units: ton · kg · cm · m · kg/cm² · ton·m per ECP 203 standards.
+    "module_9_strap_footing": {
+        "S":             5.0,     # m (المسافة المحورية بين الأعمدة)
+        "edge_clearance": 0.0,   # m (المسافة لحد الجار)
+        "a1":            30.0,    # cm (عمق عمود الجار)
+        "b1":            60.0,    # cm (عرض عمود الجار)
+        "a2":            40.0,    # cm (عمق العمود الداخلي)
+        "b2":            50.0,    # cm (عرض العمود الداخلي)
+        "P1_w":          80.0,    # ton (حمل تشغيلي لعمود الجار)
+        "P1_u":          120.0,   # ton (أقصى حمل لعمود الجار)
+        "P2_w":          120.0,   # ton (حمل تشغيلي للعمود الداخلي)
+        "P2_u":          180.0,   # ton (أقصى حمل للعمود الداخلي)
+        "col_weight_factor": 1.00, # معامل وزن الأعمدة (افتراضي = 1.00)
+        "q_all_net":     1.50,    # kg/cm² (إجهاد التربة الصافي المسموح به)
+        "fcu":           250.0,   # kg/cm² (رتبة الخرسانة)
+        "fy":            4000.0,  # kg/cm² (إجهاد خضوع حديد التسليح)
+        "t_pc":          10.0,    # cm (سماكة الخرسانة العادية)
+        "strap_b":       40.0,    # cm (عرض كمرة الشداد)
+        "strap_D":       100.0,   # cm (عمق كمرة الشداد)
+        "L1_override":   2.20,    # m (طول قاعدة الجار المفروض)
+        "B1_ov":         0.0,     # m (0 = تلقائي)
+        "t1_ov":         50.0,    # cm (سماكة قاعدة الجار)
+        "L2_ov":         0.0,     # m (0 = تلقائي)
+        "B2_ov":         0.0,     # m (0 = تلقائي)
+        "t2_ov":         50.0,    # cm (سماكة القاعدة الداخلية)
+        "long_bar_dia":  22,      # mm (قطر الحديد الطولي)
+        "stirrup_dia":   10,      # mm (قطر الكانات)
+        "stirrup_per_m": 5,       # كانات/م (عدد الكانات في المتر)
+        "stirrup_spacing": 20,    # cm (مسافة الكانات)
+        "trans_bar_dia": 16,      # mm (قطر حديد القواعد العرضي)
+        "final_B1":      None,
+        "final_L2":      None,
+        "final_B2":      None,
+        "is_calculated": False,
+    },
+    # Flat aliases kept for backward compatibility with profiles saved before v9
+    "m9_S":              5.0,
+    "m9_edge_clearance": 0.0,
+    "m9_a1":             30.0,
+    "m9_b1":             60.0,
+    "m9_a2":             40.0,
+    "m9_b2":             50.0,
+    "m9_P1_w":           80.0,
+    "m9_P1_u":           120.0,
+    "m9_P2_w":           120.0,
+    "m9_P2_u":           180.0,
+    "m9_q_all_net":      1.50,
+    "m9_fcu":            250.0,
+    "m9_fy":             4000.0,
+    "m9_t_pc":           10.0,
+    "m9_strap_b":        40.0,
+    "m9_strap_D":        100.0,
+    "m9_L1_ov":          2.20,
+    "m9_B1_ov":          0.0,
+    "m9_t1_ov":          50.0,
+    "m9_L2_ov":          0.0,
+    "m9_B2_ov":          0.0,
+    "m9_t2_ov":          50.0,
+    "m9_long_bar_dia":   22,
+    "m9_stirrup_dia":    10,
+    "m9_stirrup_per_m":  5,
+    "m9_stirrup_spacing": 20,
+    "m9_trans_bar_dia":  16,
 }
 
 
@@ -237,6 +307,12 @@ def _migrate_user_settings_if_needed() -> dict:
     - If user_settings.json exists, migrate it as 'flat 1'.
     - Else create default profiles data with 'flat 1'.
     """
+    # STRICT SAFETY GUARD: Never run or overwrite if profiles.json or backup exists!
+    if os.path.exists(PROFILES_FILE) and os.path.getsize(PROFILES_FILE) > 20:
+        return {}
+    if os.path.exists(PROFILES_BAK_FILE) and os.path.getsize(PROFILES_BAK_FILE) > 20:
+        return {}
+
     migrated_data = dict(ECP_DEFAULTS)
     has_old_settings = False
     
@@ -290,60 +366,327 @@ def _sanitize_tcf_values(pdata_dict: dict) -> bool:
     return modified
 
 
+# ── Module 9 state factory & migration helpers ───────────────────────────────
+_M9_CFG_MAP = {
+    # cfg key          : module_9_data key
+    "m9_S":              "S",
+    "m9_edge_clearance": "edge_clearance",
+    "m9_a1":             "a1",
+    "m9_b1":             "b1",
+    "m9_a2":             "a2",
+    "m9_b2":             "b2",
+    "m9_P1_w":           "P1_w",
+    "m9_P1_u":           "P1_u",
+    "m9_P2_w":           "P2_w",
+    "m9_P2_u":           "P2_u",
+    "m9_q_all_net":      "q_all_net",
+    "m9_fcu":            "fcu",
+    "m9_fy":             "fy",
+    "m9_t_pc":           "t_pc",
+    "m9_strap_b":        "strap_b",
+    "m9_strap_D":        "strap_D",
+    "m9_L1_ov":          "L1_override",
+    "m9_B1_ov":          "B1_ov",
+    "m9_t1_ov":          "t1_ov",
+    "m9_L2_ov":          "L2_ov",
+    "m9_B2_ov":          "B2_ov",
+    "m9_t2_ov":          "t2_ov",
+    "m9_long_bar_dia":   "long_bar_dia",
+    "m9_stirrup_dia":    "stirrup_dia",
+    "m9_stirrup_per_m":  "stirrup_per_m",
+    "m9_stirrup_spacing": "stirrup_spacing",
+    "m9_trans_bar_dia":  "trans_bar_dia",
+}
+
+def get_default_module_9_state() -> dict:
+    """
+    Factory returning canonical default schema for module_9_strap_footing.
+    Used for new project initialization and backward compatibility migrations.
+    Units strictly follow ECP 203 metric standard: ton · kg · cm · m · kg/cm² · ton·m
+    """
+    return {
+        "S":             5.0,     # m (المسافة المحورية بين الأعمدة)
+        "edge_clearance": 0.0,   # m (المسافة لحد الجار)
+        "a1":            30.0,    # cm (عمق عمود الجار)
+        "b1":            60.0,    # cm (عرض عمود الجار)
+        "a2":            40.0,    # cm (عمق العمود الداخلي)
+        "b2":            50.0,    # cm (عرض العمود الداخلي)
+        "P1_w":          80.0,    # ton (حمل تشغيلي لعمود الجار)
+        "P1_u":          120.0,   # ton (أقصى حمل لعمود الجار)
+        "P2_w":          120.0,   # ton (حمل تشغيلي للعمود الداخلي)
+        "P2_u":          180.0,   # ton (أقصى حمل للعمود الداخلي)
+        "col_weight_factor": 1.00, # معامل وزن الأعمدة (افتراضي = 1.00)
+        "q_all_net":     1.50,    # kg/cm² (إجهاد التربة الصافي المسموح به)
+        "fcu":           250.0,   # kg/cm² (رتبة الخرسانة)
+        "fy":            4000.0,  # kg/cm² (إجهاد خضوع حديد التسليح)
+        "t_pc":          10.0,    # cm (سماكة الخرسانة العادية)
+        "strap_b":       40.0,    # cm (عرض كمرة الشداد)
+        "strap_D":       100.0,   # cm (عمق كمرة الشداد)
+        "L1_override":   2.20,    # m (طول قاعدة الجار المفروض)
+        "L1_ov":         2.20,
+        "B1_ov":         0.0,     # m (0 = تلقائي)
+        "t1_ov":         50.0,    # cm (سماكة قاعدة الجار)
+        "L2_ov":         0.0,     # m (0 = تلقائي)
+        "B2_ov":         0.0,     # m (0 = تلقائي)
+        "t2_ov":         50.0,    # cm (سماكة القاعدة الداخلية)
+        "long_bar_dia":  22,      # mm (قطر الحديد الطولي)
+        "stirrup_dia":   10,      # mm (قطر الكانات)
+        "stirrup_per_m": 5,       # كانات/م (عدد الكانات في المتر)
+        "stirrup_spacing": 20,    # cm (مسافة الكانات)
+        "trans_bar_dia": 16,      # mm (قطر حديد القواعد العرضي)
+        "final_B1":      None,
+        "final_L2":      None,
+        "final_B2":      None,
+        "is_calculated": False,
+    }
+
+get_default_strap_footing_state = get_default_module_9_state
+_M9_FALLBACK = get_default_module_9_state()
+_M9_NESTED_SCHEMA = get_default_module_9_state()
+
+
+def get_default_project_state(project_name: str = "", owner_name: str = "") -> dict:
+    """Return fresh default project state with all module schemas initialized."""
+    d = dict(ECP_DEFAULTS)
+    d["module_9_strap_footing"] = get_default_module_9_state()
+    if project_name:
+        d["apartment_name"] = project_name
+        d["cs_project_name"] = project_name
+    if owner_name:
+        d["cs_owner_name"] = owner_name
+    return d
+
+init_new_project = get_default_project_state
+
+
+def migrate_module_9_in_project_dict(pdata_dict: dict) -> bool:
+    """
+    Seamless migration patch for backward compatibility:
+    Inspects if 'module_9_strap_footing' exists in project dictionary.
+    If missing (e.g. older project files), appends default schema,
+    migrating any legacy flat m9_* keys.
+    Fills any missing keys if schema was updated.
+    Automatically migrates legacy SI units (kN, MPa, m) to metric (ton, kg, cm, kg/cm²).
+    Returns True if pdata_dict was modified.
+    """
+    if not isinstance(pdata_dict, dict):
+        return False
+
+    modified = False
+    schema = get_default_module_9_state()
+    nested = pdata_dict.get("module_9_strap_footing")
+
+    if not isinstance(nested, dict):
+        nested = dict(schema)
+        # Migrate from any flat keys previously stored
+        for cfg_key, m9_key in _M9_CFG_MAP.items():
+            val = pdata_dict.get(cfg_key)
+            if val is not None:
+                nested[m9_key] = val
+        if "m9_L1_ov" in pdata_dict and pdata_dict["m9_L1_ov"] is not None:
+            nested["L1_override"] = pdata_dict["m9_L1_ov"]
+            nested["L1_ov"] = pdata_dict["m9_L1_ov"]
+        pdata_dict["module_9_strap_footing"] = nested
+        modified = True
+    else:
+        for k, v in schema.items():
+            if k not in nested:
+                nested[k] = v
+                modified = True
+        for cfg_key, m9_key in _M9_CFG_MAP.items():
+            val = pdata_dict.get(cfg_key)
+            if val is not None and m9_key not in nested:
+                nested[m9_key] = val
+                modified = True
+
+    # Automatic Unit Conversion Migration (kN -> ton, MPa -> kg/cm², m -> cm)
+    if nested.get("P1_w", 0) >= 300:
+        nested["P1_w"] = round(float(nested["P1_w"]) / 10.0, 1)
+        nested["P1_u"] = round(float(nested.get("P1_u", 1200.0)) / 10.0, 1)
+        nested["P2_w"] = round(float(nested.get("P2_w", 1200.0)) / 10.0, 1)
+        nested["P2_u"] = round(float(nested.get("P2_u", 1800.0)) / 10.0, 1)
+        modified = True
+    if nested.get("q_all_net", 0) >= 20:
+        nested["q_all_net"] = round(float(nested["q_all_net"]) / 100.0, 2)
+        modified = True
+    if 0 < nested.get("fcu", 0) <= 100:
+        nested["fcu"] = round(float(nested["fcu"]) * 10.0, 0)
+        modified = True
+    if 0 < nested.get("fy", 0) <= 1000:
+        nested["fy"] = round(float(nested["fy"]) * 10.0, 0)
+        modified = True
+    if 0 < nested.get("a1", 0) <= 2.0:
+        nested["a1"] = round(float(nested["a1"]) * 100.0, 0)
+        modified = True
+    if 0 < nested.get("b1", 0) <= 2.0:
+        nested["b1"] = round(float(nested["b1"]) * 100.0, 0)
+        modified = True
+    if 0 < nested.get("a2", 0) <= 2.0:
+        nested["a2"] = round(float(nested["a2"]) * 100.0, 0)
+        modified = True
+    if 0 < nested.get("b2", 0) <= 2.0:
+        nested["b2"] = round(float(nested["b2"]) * 100.0, 0)
+        modified = True
+    if 0 < nested.get("strap_b", 0) <= 2.0:
+        nested["strap_b"] = round(float(nested["strap_b"]) * 100.0, 0)
+        modified = True
+    if 0 < nested.get("strap_D", 0) <= 3.0:
+        nested["strap_D"] = round(float(nested["strap_D"]) * 100.0, 0)
+        modified = True
+    if 0 < nested.get("t_pc", 0) <= 1.0:
+        nested["t_pc"] = round(float(nested["t_pc"]) * 100.0, 0)
+        modified = True
+    if 0 < nested.get("t1_ov", 0) <= 2.0:
+        nested["t1_ov"] = round(float(nested["t1_ov"]) * 100.0, 0)
+        modified = True
+    if 0 < nested.get("t2_ov", 0) <= 2.0:
+        nested["t2_ov"] = round(float(nested["t2_ov"]) * 100.0, 0)
+        modified = True
+    if nested.get("stirrup_spacing", 0) > 50:
+        nested["stirrup_spacing"] = round(float(nested["stirrup_spacing"]) / 10.0, 0)
+        modified = True
+
+    if "stirrup_per_m" not in nested:
+        old_s = float(nested.get("stirrup_spacing", 20.0))
+        if old_s > 0:
+            nested["stirrup_per_m"] = max(4, min(12, int(round(100.0 / old_s))))
+        else:
+            nested["stirrup_per_m"] = 5
+        nested["stirrup_spacing"] = round(100.0 / float(nested["stirrup_per_m"]), 2)
+        modified = True
+    elif "stirrup_spacing" not in nested:
+        nested["stirrup_spacing"] = round(100.0 / float(nested.get("stirrup_per_m", 5)), 2)
+        modified = True
+
+    # Keep aliases synchronized
+    if nested.get("L1_override") is not None:
+        nested["L1_ov"] = nested["L1_override"]
+    elif nested.get("L1_ov") is not None:
+        nested["L1_override"] = nested["L1_ov"]
+
+    # Also keep flat mirror keys in pdata_dict for legacy readers
+    for cfg_key, m9_key in _M9_CFG_MAP.items():
+        if m9_key in nested:
+            pdata_dict[cfg_key] = nested[m9_key]
+
+    return modified
+
+
 def load_profiles_data() -> dict:
-    """Read profiles.json from disk, migrating or creating if missing."""
-    if not os.path.exists(PROFILES_FILE):
-        return _migrate_user_settings_if_needed()
+    """
+    Ultra-resilient read for profiles.json with Windows file-lock retry,
+    automatic backup recovery, and in-memory caching to guarantee zero data loss.
+    """
+    global _PROFILES_CACHE
 
-    try:
-        with open(PROFILES_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if isinstance(data, dict) and "profiles" in data and isinstance(data["profiles"], dict) and data["profiles"]:
-            # Ensure active_profile is valid
-            if "active_profile" not in data or data["active_profile"] not in data["profiles"]:
-                first_name = list(data["profiles"].keys())[0]
-                data["active_profile"] = first_name
+    # If neither primary file nor backup exists, attempt first-time migration
+    if not os.path.exists(PROFILES_FILE) and not os.path.exists(PROFILES_BAK_FILE):
+        migrated = _migrate_user_settings_if_needed()
+        if migrated and isinstance(migrated.get("profiles"), dict) and migrated["profiles"]:
+            _PROFILES_CACHE = migrated
+            return migrated
 
-            # Auto-enable newly added modules (e.g. Module 7 idx 6) and sanitize units across all existing projects
-            modified = False
-            for pname, pinfo in data["profiles"].items():
-                pdata_dict = pinfo.get("data", {}) if isinstance(pinfo, dict) else {}
-                trash = pdata_dict.get("deleted_modules_trash", {})
-                deleted_indices = [int(k) for k in trash.keys()] if isinstance(trash, dict) else []
+    data = None
 
-                # Sanitize old kN/MPa/mm units in tcf_ keys if present
-                if _sanitize_tcf_values(pdata_dict):
+    # 1. Attempt reading PROFILES_FILE with retries (guards against Windows file locking)
+    for attempt in range(5):
+        if os.path.exists(PROFILES_FILE):
+            try:
+                with open(PROFILES_FILE, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
+                    if content:
+                        candidate = json.loads(content)
+                        if isinstance(candidate, dict) and isinstance(candidate.get("profiles"), dict) and len(candidate["profiles"]) > 0:
+                            data = candidate
+                            break
+            except Exception:
+                time.sleep(0.04)
+        else:
+            time.sleep(0.04)
+
+    # 2. If primary file read failed, attempt loading from rolling backup
+    if data is None and os.path.exists(PROFILES_BAK_FILE):
+        try:
+            with open(PROFILES_BAK_FILE, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if content:
+                    candidate = json.loads(content)
+                    if isinstance(candidate, dict) and isinstance(candidate.get("profiles"), dict) and len(candidate["profiles"]) > 0:
+                        data = candidate
+                        # Restore primary file from valid backup
+                        try:
+                            shutil.copy2(PROFILES_BAK_FILE, PROFILES_FILE)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+
+    # 3. If both failed, use in-memory cache if available
+    if data is None and _PROFILES_CACHE is not None and isinstance(_PROFILES_CACHE.get("profiles"), dict) and len(_PROFILES_CACHE["profiles"]) > 0:
+        data = dict(_PROFILES_CACHE)
+
+    # 4. If still None (brand new or unreadable), return fallback without wiping disk
+    if data is None or not isinstance(data.get("profiles"), dict) or not data["profiles"]:
+        if not os.path.exists(PROFILES_FILE):
+            return _migrate_user_settings_if_needed()
+        return {"active_profile": "flat 1", "profiles": {"flat 1": {"name": "flat 1", "data": dict(ECP_DEFAULTS)}}}
+
+    # Ensure active_profile is valid
+    if "active_profile" not in data or data["active_profile"] not in data["profiles"]:
+        first_name = list(data["profiles"].keys())[0]
+        data["active_profile"] = first_name
+
+    # Auto-enable newly added modules and sanitize units across all existing projects
+    modified = False
+    for pname, pinfo in data["profiles"].items():
+        pdata_dict = pinfo.get("data", {}) if isinstance(pinfo, dict) else {}
+        trash = pdata_dict.get("deleted_modules_trash", {})
+        deleted_indices = [int(k) for k in trash.keys()] if isinstance(trash, dict) else []
+
+        # Sanitize old kN/MPa/mm units in tcf_ keys if present
+        if _sanitize_tcf_values(pdata_dict):
+            modified = True
+
+        if "enabled_modules" in pdata_dict and isinstance(pdata_dict["enabled_modules"], list):
+            curr_enabled = list(pdata_dict["enabled_modules"])
+            for mod in ALL_MODULES:
+                midx = mod["idx"]
+                if midx not in deleted_indices and midx not in curr_enabled:
+                    curr_enabled.append(midx)
                     modified = True
+            pdata_dict["enabled_modules"] = sorted(curr_enabled)
 
-                if "enabled_modules" in pdata_dict and isinstance(pdata_dict["enabled_modules"], list):
-                    curr_enabled = list(pdata_dict["enabled_modules"])
-                    for mod in ALL_MODULES:
-                        midx = mod["idx"]
-                        if midx not in deleted_indices and midx not in curr_enabled:
-                            curr_enabled.append(midx)
-                            modified = True
-                    pdata_dict["enabled_modules"] = sorted(curr_enabled)
+        # ── Module 9 backward-compatibility migration ────────────────
+        if migrate_module_9_in_project_dict(pdata_dict):
+            modified = True
 
-            if modified:
-                save_profiles_data(data)
+    if modified:
+        save_profiles_data(data)
 
-            return data
-    except Exception:
-        pass
-
-    return _migrate_user_settings_if_needed()
+    _PROFILES_CACHE = data
+    return data
 
 
 def save_profiles_data(data: dict) -> bool:
-    """Atomic save for profiles.json to prevent corruption."""
+    """
+    Atomic, fail-safe save for profiles.json with automatic backup maintenance,
+    Windows concurrency retry loops, and cache synchronization to prevent data corruption.
+    """
+    global _PROFILES_CACHE
     if not data or not isinstance(data, dict):
         return False
+
+    profiles_dict = data.get("profiles", {})
+    if not isinstance(profiles_dict, dict) or len(profiles_dict) == 0:
+        # Strict protection: NEVER overwrite disk with an empty profiles dict!
+        return False
+
     try:
         clean_data = {
-            "active_profile": str(data.get("active_profile", "flat 1")),
+            "active_profile": str(data.get("active_profile", list(profiles_dict.keys())[0])),
             "profiles": {}
         }
-        for pname, pinfo in data.get("profiles", {}).items():
+        for pname, pinfo in profiles_dict.items():
             clean_data["profiles"][str(pname)] = {
                 "name": str(pinfo.get("name", pname)),
                 "description": str(pinfo.get("description", "")),
@@ -352,7 +695,18 @@ def save_profiles_data(data: dict) -> bool:
                 "data": {str(k): _sanitize_for_json(v) for k, v in pinfo.get("data", {}).items()}
             }
 
-        temp_file = PROFILES_FILE + ".tmp"
+        # 1. Update in-memory cache immediately
+        _PROFILES_CACHE = clean_data
+
+        # 2. Maintain rolling backup before modifying primary file
+        if os.path.exists(PROFILES_FILE) and os.path.getsize(PROFILES_FILE) > 20:
+            try:
+                shutil.copy2(PROFILES_FILE, PROFILES_BAK_FILE)
+            except Exception:
+                pass
+
+        # 3. Atomic write via temp file with Windows retry loop
+        temp_file = PROFILES_FILE + f".tmp_{os.getpid()}"
         with open(temp_file, "w", encoding="utf-8") as f:
             json.dump(clean_data, f, indent=2, ensure_ascii=False)
             f.flush()
@@ -361,10 +715,29 @@ def save_profiles_data(data: dict) -> bool:
             except Exception:
                 pass
 
-        if os.path.exists(PROFILES_FILE):
-            os.replace(temp_file, PROFILES_FILE)
-        else:
-            os.rename(temp_file, PROFILES_FILE)
+        replaced = False
+        for _ in range(5):
+            try:
+                if os.path.exists(PROFILES_FILE):
+                    os.replace(temp_file, PROFILES_FILE)
+                else:
+                    os.rename(temp_file, PROFILES_FILE)
+                replaced = True
+                break
+            except Exception:
+                time.sleep(0.03)
+
+        if not replaced:
+            with open(PROFILES_FILE, "w", encoding="utf-8") as f:
+                json.dump(clean_data, f, indent=2, ensure_ascii=False)
+
+        # Cleanup temp file if it somehow lingers
+        if os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+            except Exception:
+                pass
+
         return True
     except Exception:
         try:
@@ -418,9 +791,13 @@ def _clear_widget_cache():
     preserve_keys = {
         "_active_profile_name",
         "cfg",
+        "current_project",
         "_settings_loaded_from_file",
         "_last_save_ok",
         "nav_view",
+        "in_module",
+        "_app_session_started",
+        "module_9_data",
     }
     keys_to_del = [k for k in list(st.session_state.keys()) if k not in preserve_keys]
     for k in keys_to_del:
@@ -431,6 +808,50 @@ def _clear_widget_cache():
         st.cache_data.clear()
     except Exception:
         pass
+
+
+def _ensure_module9_state(cfg: dict | None = None) -> None:
+    """
+    Build/refresh session_state["module_9_data"] safely:
+    1. Inspects if 'module_9_strap_footing' exists, migrating if missing.
+    2. Populates session_state["module_9_data"] without KeyError.
+    3. Keeps session_state["current_project"] synchronized.
+    """
+    if cfg is None:
+        cfg = st.session_state.get("cfg", {})
+
+    migrate_module_9_in_project_dict(cfg)
+
+    nested = cfg.get("module_9_strap_footing")
+    if not isinstance(nested, dict):
+        nested = get_default_module_9_state()
+        cfg["module_9_strap_footing"] = nested
+
+    # If flat m9_* keys were passed with non-default values, sync them into nested
+    schema_defaults = get_default_module_9_state()
+    for cfg_key, m9_key in _M9_CFG_MAP.items():
+        val = cfg.get(cfg_key)
+        if val is not None and cfg_key in cfg:
+            default_val = schema_defaults.get(m9_key)
+            if val != default_val and nested.get(m9_key) == default_val:
+                nested[m9_key] = val
+    if cfg.get("m9_L1_ov") is not None and cfg["m9_L1_ov"] != 2.20 and nested.get("L1_override") == 2.20:
+        nested["L1_override"] = cfg["m9_L1_ov"]
+        nested["L1_ov"] = cfg["m9_L1_ov"]
+
+    existing = st.session_state.get("module_9_data")
+    if not isinstance(existing, dict) or not existing:
+        st.session_state["module_9_data"] = dict(nested)
+    else:
+        for k, v in nested.items():
+            if k not in existing:
+                existing[k] = v
+        st.session_state["module_9_data"] = existing
+
+    # Keep cfg and current_project synchronized
+    cfg["module_9_strap_footing"] = st.session_state["module_9_data"]
+    st.session_state["current_project"] = cfg
+
 
 
 def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
@@ -447,6 +868,7 @@ def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
 
     # Merge target profile's data with defaults
     new_cfg = dict(ECP_DEFAULTS)
+    new_cfg["module_9_strap_footing"] = get_default_module_9_state()
     profile_cfg = profiles[profile_name].get("data", {})
     for k, v in profile_cfg.items():
         new_cfg[k] = v
@@ -458,11 +880,21 @@ def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
     new_cfg["deleted_modules_trash"] = trash
     new_cfg["enabled_modules"] = get_project_enabled_modules(profile_name)
 
+    migrate_module_9_in_project_dict(new_cfg)
+
     st.session_state["cfg"] = new_cfg
+    st.session_state["current_project"] = new_cfg
     st.session_state["_settings_loaded_from_file"] = True
+
+    # Wipe old Module 9 session data so the new project's values are loaded cleanly
+    st.session_state.pop("module_9_data", None)
+    _ensure_module9_state(new_cfg)
 
     if clear_cache:
         _clear_widget_cache()
+        # Re-inject Module 9 state after cache wipe (clear_cache deletes module_9_data)
+        _ensure_module9_state(new_cfg)
+
 
 
 def create_project(
@@ -501,6 +933,9 @@ def create_project(
             description = f"نسخة من {copy_from}"
     else:
         new_data = dict(ECP_DEFAULTS)
+
+    # Ensure clean isolated default schema for module_9_strap_footing
+    migrate_module_9_in_project_dict(new_data)
 
     # Apply enabled_modules if provided or inherited
     if enabled_modules is not None and isinstance(enabled_modules, list):
@@ -627,6 +1062,7 @@ ALL_MODULES = [
     {"idx": 4, "key": "steel_bars", "name": "⚙️ Module 5 — Steel Rebar Diameters & Weights", "short": "Module 5"},
     {"idx": 5, "key": "concrete_survey", "name": "📊 Module 6 — Concrete Quantity Survey", "short": "Module 6"},
     {"idx": 6, "key": "two_col_footings", "name": "🏗️ Module 7 — Combined Footing Design", "short": "Module 7"},
+    {"idx": 7, "key": "strap_footing", "name": "🔗 Module 9: Reinforced Concrete Strap Footing (قواعد الشدادات - الجار)", "short": "Module 9"},
 ]
 
 
@@ -995,6 +1431,9 @@ def import_project_json(json_content: str, overwrite: bool = False) -> tuple:
         return False, "لم يتم التعرف على بنية ملف المشروع (تأكد من اختيار ملف JSON صالح)."
 
     if imported_count > 0:
+        for p_entry in existing_profiles.values():
+            if isinstance(p_entry, dict) and "data" in p_entry and isinstance(p_entry["data"], dict):
+                migrate_module_9_in_project_dict(p_entry["data"])
         pdata["profiles"] = existing_profiles
         save_profiles_data(pdata)
         set_active_project(pdata.get("active_profile", list(existing_profiles.keys())[0]))
@@ -1058,8 +1497,18 @@ def load_settings() -> None:
     if not isinstance(cfg.get("fs_edge_columns"), dict):
         cfg["fs_edge_columns"] = {}
 
+    migrate_module_9_in_project_dict(cfg)
+
     st.session_state["cfg"] = cfg
+    st.session_state["current_project"] = cfg
     st.session_state["_active_profile_name"] = active_name
+    # Always default to the main projects screen on fresh app startup / new session
+    if "nav_view" not in st.session_state:
+        st.session_state["nav_view"] = "profile_manager"
+    cfg["nav_view"] = "profile_manager"
+    # Ensure Module 9 session state is always populated correctly on app load
+    _ensure_module9_state(cfg)
+
 
 
 def save_settings() -> None:
@@ -1071,6 +1520,25 @@ def save_settings() -> None:
     cfg = st.session_state.get("cfg", {})
     if not cfg:
         return
+
+    # nav_view on disk should always default to profile_manager so app opens to projects screen
+    cfg["nav_view"] = "profile_manager"
+
+    # ── Persist Module 9 data: write nested dict + flat alias mirror ─────────
+    m9 = st.session_state.get("module_9_data", {})
+    if m9:
+        # Primary storage: canonical nested dict
+        nested_snap = {k: v for k, v in m9.items()}
+        cfg["module_9_strap_footing"] = nested_snap
+
+        # Flat alias mirror (backward compat for old readers)
+        for cfg_key, m9_key in _M9_CFG_MAP.items():
+            if m9_key in m9:
+                cfg[cfg_key] = m9[m9_key]
+        # Keep L1_ov in sync with L1_override
+        if "L1_override" in m9:
+            cfg["m9_L1_ov"] = m9["L1_override"]
+    # ── End Module 9 persistence ─────────────────────────────────────────────
 
     active_name = get_active_project_name()
     pdata = load_profiles_data()

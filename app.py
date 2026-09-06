@@ -3,6 +3,7 @@ ECP 203 - Egyptian Code of Practice
 Reinforced Concrete Engineering Dashboard
 ==========================================
 Run with:  streamlit run app.py
+Last Updated: 2026-09-06 (Module 9 Table Styling Refresh)
 """
 
 import os
@@ -82,6 +83,7 @@ from modules.steel_bars import render as render_steel_bars
 from modules.concrete_survey import render as render_concrete_survey
 from modules.ground_slab import render as render_ground_slab
 from modules.two_col_footings import render as render_two_col_footings
+from modules.module_9_strap_footing import render_strap_footing_module
 
 # ── CSS Injection: Fixed Unified Typography (14px) ───────────────────────────
 st.markdown(
@@ -420,6 +422,14 @@ st.markdown(
     [data-testid="stMainBlockContainer"] [data-testid="stMetricDelta"],
     [data-testid="stMainBlockContainer"] [data-testid="stMetricDelta"] * {
         font-size: 15px !important;
+        color: #1d4ed8 !important;
+        font-weight: 600 !important;
+    }
+    [data-testid="stMainBlockContainer"] [data-testid="stMetricDelta"]:has([data-testid*="stMetricDeltaIcon-Up"]) * {
+        color: #16a34a !important;
+    }
+    [data-testid="stMainBlockContainer"] [data-testid="stMetricDelta"]:has([data-testid*="stMetricDeltaIcon-Down"]) * {
+        color: #dc2626 !important;
     }
 
     /* Result Highlight Cards & Banners */
@@ -1034,6 +1044,7 @@ def render_top_profile_bar():
     with c_btn1:
         if st.button("🏠 شاشة إدارة المشاريع (Projects)", use_container_width=True, key="top_bar_projects"):
             st.session_state["nav_view"] = "profile_manager"
+            st.session_state["in_module"] = False
             st.rerun()
 
     st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
@@ -1477,6 +1488,7 @@ def render_profile_manager():
                             st.session_state["show_create_profile_form"] = False
                             st.session_state["_new_proj_step"] = 1
                             st.session_state["nav_view"] = "module"
+                            st.session_state["in_module"] = True
                             st.session_state["selected_module_idx"] = chosen_indices[0]
                             st.success(f"✅ تم إنشاء وتفعيل المشروع الجديد «{created_name}» بنجاح!")
                             st.rerun()
@@ -1633,6 +1645,7 @@ def render_profile_manager():
             ):
                 set_active_project(pname)
                 st.session_state["nav_view"] = "module"
+                st.session_state["in_module"] = True
                 saved_mod = summary.get("module_idx", 0)
                 target_mod = saved_mod if saved_mod in enabled_mods else enabled_mods[0]
                 st.session_state["selected_module_idx"] = target_mod
@@ -2015,7 +2028,21 @@ def render_profile_manager():
 
 
 # ── MAIN EXECUTION & SIDEBAR CONDITIONAL ROUTING ──────────────────────────────
-current_nav = st.session_state.get("nav_view", "profile_manager")
+# 1. Fresh application startup: Default to the Projects Manager screen
+if "_app_session_started" not in st.session_state:
+    st.session_state["_app_session_started"] = True
+    st.session_state["nav_view"] = "profile_manager"
+    st.session_state["in_module"] = False
+
+# 2. Strict Navigation Guard: Once inside a module, modifying ANY input NEVER exits to Projects screen!
+if st.session_state.get("in_module", False) or st.session_state.get("nav_view") == "module":
+    current_nav = "module"
+    st.session_state["nav_view"] = "module"
+    st.session_state["in_module"] = True
+else:
+    current_nav = "profile_manager"
+    st.session_state["nav_view"] = "profile_manager"
+    st.session_state["in_module"] = False
 
 if current_nav == "profile_manager":
     # ── FULL SCREEN: Projects Manager Mode (Sidebar completely hidden to prevent repetition) ──
@@ -2069,8 +2096,9 @@ else:
         )
         render_custom_html(mod_card_html)
 
-        if st.button("🏠 شاشة إدارة المشاريع (Projects)", use_container_width=True):
+        if st.button("🏠 شاشة إدارة المشاريع (Projects)", use_container_width=True, key="sb_btn_projects_mgr"):
             st.session_state["nav_view"] = "profile_manager"
+            st.session_state["in_module"] = False
             st.rerun()
 
         st.markdown("---")
@@ -2163,6 +2191,12 @@ else:
         render_columns()
     elif "Combined" in module or "Two-Column" in module or "Two" in module or "Module 7" in module:
         render_two_col_footings()
+    elif "Strap" in module or "Module 9" in module or "strap_footing" in module or "قواعد الشدادات" in module:
+        try:
+            render_strap_footing_module()
+        except Exception as ex:
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 9: {ex}")
+            st.exception(ex)
     elif "Footings" in module or "Isolated" in module or "القواعد" in module:
         render_footings()
     elif "Ground Slabs" in module or "الأرضية" in module:
