@@ -11410,22 +11410,24 @@ def render():
         design_combined_footing_model,
         check_building_clearances_and_overlaps,
         draw_foundation_layout_plan,
+        classify_and_design_building_foundations,
+        draw_comprehensive_foundation_sketch,
     )
 
-    with st.expander(f"🪸 Building Foundations Design — {num_floors} Floors (تصميم أساسات المبنى والقواعد المنفصلة والمشتركة)", expanded=False):
+    with st.expander(f"🪸 Building Foundations Design — {num_floors} Floors (تصميم أساسات المبنى والقواعد المنفصلة والمشتركة والشدادات)", expanded=False):
         # 1. Header / Intro
         st.markdown(
             f"""
             <div dir="rtl" style="background:#fff7ed; border:1.5px solid #fed7aa; border-right:7px solid #ea580c; border-radius:10px; padding:18px 22px; margin-bottom:16px; color:#1c1917; line-height:1.9; text-align:right;">
                 <div style="font-size:1.45rem; font-weight:800; color:#9a3412; margin-bottom:10px;">
-                    📋 تصميم وتوحيد نماذج القواعد المسلحة لأساسات المبنى (ECP 203):
+                    📋 تصميم وتوحيد وتوزيع نماذج القواعد والشدادات لأساسات المبنى (ECP 203):
                 </div>
                 <div style="font-size:1.25rem; font-weight:700; color:#1c1917;">
-                    يتم تصميم وتوحيد نماذج القواعد بناءً على ردود الأفعال القصوى الإجمالية لعدد <span style="font-weight:800; color:#c2410c;">{num_floors} طوابق</span> لكل فئة أعمدة 
-                    (قاعدة ركن <span dir="ltr" style="font-weight:800; color:#c2410c;">F1</span> على أقصى حمل ركن <span dir="ltr" style="font-weight:800; color:#1c1917;">Pu_corner</span>، 
-                    قاعدة جانبية <span dir="ltr" style="font-weight:800; color:#c2410c;">F2</span> على أقصى حمل جانبي <span dir="ltr" style="font-weight:800; color:#1c1917;">Pu_edge</span>، 
-                    وقاعدة داخلية <span dir="ltr" style="font-weight:800; color:#c2410c;">F3</span> على أقصى حمل داخلي <span dir="ltr" style="font-weight:800; color:#1c1917;">Pu_int</span>)، 
-                    مع الفحص الدقيق للمسافات الصافية وتداخل حدود الخرسانة المسلحة وتوليد القواعد المشتركة تلقائياً.
+                    نظام متكامل لتصميم أساسات المبنى لعدد <span style="font-weight:800; color:#c2410c;">{num_floors} طوابق</span> بناءً على ردود الأفعال القصوى <span dir="ltr">Pu</span> والأحمال التشغيلية <span dir="ltr">Pw = Pu / 1.5</span>:
+                    <br/>• <b>قواعد منفصلة (Module 3):</b> للأعمدة الداخلية والطرفية غير المتصلة بجار طالما لا يوجد تداخل خرساني.
+                    <br/>• <b>قواعد مشتركة (Module 8):</b> تدمج تلقائياً أي قواعد منفصلة متداخلة (خلوص &lt; 0.15 م).
+                    <br/>• <b>قواعد شدادات جانبية (Module 9):</b> لأعمدة الجار الجانبية وتربطها بشداد مع أقرب عمود داخلي.
+                    <br/>• <b>قواعد شدادات ركن مائلة (Module 10):</b> لأعمدة الجار الركن وتربطها بشداد مائل مع العمود الداخلي المقابل.
                 </div>
             </div>
             """,
@@ -11441,26 +11443,23 @@ def render():
         phi_idx_ftg = S.cfg_val("tcf_Phi_index", 1)
         ftg_phi = phi_opts_ftg[phi_idx_ftg] if 0 <= phi_idx_ftg < len(phi_opts_ftg) else 16
 
-        # Fetch governing loads
-        pu_c_tot = float(max_corner["pu_tot_val"]) if max_corner else 35.0
-        pu_e_tot = float(max_edge["pu_tot_val"]) if max_edge else 70.0
-        pu_i_tot = float(max_int["pu_tot_val"]) if max_int else 125.0
-
         col_c_dim = float(tc_s if tc_s else 50)
         col_b_dim = float(col_b_val if col_b_val else 30)
 
-        # Design the 3 Typical Isolated Footing Models
-        F1_model = design_isolated_footing_model("F1", "قاعدة ركن", "C1", pu_c_tot, col_c_dim, col_b_dim, ftg_qnet, ftg_fcu, ftg_fy, ftg_cov, ftg_phi)
-        F2_model = design_isolated_footing_model("F2", "قاعدة جانبية", "C2", pu_e_tot, col_c_dim, col_b_dim, ftg_qnet, ftg_fcu, ftg_fy, ftg_cov, ftg_phi)
-        F3_model = design_isolated_footing_model("F3", "قاعدة داخلية", "C3", pu_i_tot, col_c_dim, col_b_dim, ftg_qnet, ftg_fcu, ftg_fy, ftg_cov, ftg_phi)
+        # 2b. Neighbor Columns Selection
+        auto_nbr_ids = [c["id"] for c in _active_cols if c.get("is_edge_col")]
+        with st.container(border=True):
+            st.markdown("<div style='font-size:16.5px; font-weight:800; color:#1e3a8a; margin-bottom:4px;'>🏘️ تحديد أعمدة الجار بالمشروع (Property-Line / Neighbor Columns Selection)</div>", unsafe_allow_html=True)
+            st.caption("حدد الأعمدة الملاصقة لحدود الجار. يقوم الكود بتصميم أعمدة الجار الجانبية بقواعد شداد متعامدة (Module 9)، وأعمدة الجار الركن بشدادات مائلة (Module 10)، وباقي الأعمدة كقواعد منفصلة (Module 3) أو قواعد مشتركة عند حدوث تداخل (Module 8). في حال تركها فارغة، يُعتبر المشروع بدون جيران وتُصمم كافة القواعد كقواعد منفصلة ومشتركة.")
+            sel_neighbor_ids = st.multiselect(
+                "اختر أعمدة الجار (الملاصقة لحدود الجار):",
+                options=[c["id"] for c in _active_cols],
+                default=auto_nbr_ids,
+                key=f"{prefix}m1_ftg_neighbor_select",
+                help="اختر أعمدة الجار بالمشروع.",
+            )
 
-        ftgs_dict = {
-            "Corner": F1_model,
-            "Edge": F2_model,
-            "Interior": F3_model,
-        }
-
-        # Build active columns data list for clearance check
+        # Build active columns data list
         fs_active_columns = []
         for c_item in _active_cols:
             c_type = c_item.get("type", "Interior")
@@ -11478,108 +11477,80 @@ def render():
                 "grid_y": c_item.get("grid_y", ""),
                 "grid_x_m": float(c_item.get("grid_x_m", c_item["x"])),
                 "grid_y_m": float(c_item.get("grid_y_m", c_item["y"])),
-                # Actual geometry after col_transforms (shift + rotation)
                 "x_min": float(c_item.get("x_min", c_item.get("center_x", c_item["x"]) - c_item.get("width_m", c_item.get("tc", col_c_dim)/100.0)/2.0)),
                 "x_max": float(c_item.get("x_max", c_item.get("center_x", c_item["x"]) + c_item.get("width_m", c_item.get("tc", col_c_dim)/100.0)/2.0)),
                 "y_min": float(c_item.get("y_min", c_item.get("center_y", c_item["y"]) - c_item.get("height_m", c_item.get("bc", col_b_dim)/100.0)/2.0)),
                 "y_max": float(c_item.get("y_max", c_item.get("center_y", c_item["y"]) + c_item.get("height_m", c_item.get("bc", col_b_dim)/100.0)/2.0)),
                 "width_m": float(c_item.get("width_m", c_item.get("tc", col_c_dim)/100.0)),
                 "height_m": float(c_item.get("height_m", c_item.get("bc", col_b_dim)/100.0)),
+                "edge_dir": c_item.get("edge_dir", ""),
             })
 
-        overlap_data = check_building_clearances_and_overlaps(fs_active_columns, ftgs_dict)
-        has_overlap_fs = overlap_data["has_overlap"]
+        # Run Comprehensive Multi-Module Engine
+        ftg_analysis = classify_and_design_building_foundations(
+            active_columns=fs_active_columns,
+            neighbor_col_ids=sel_neighbor_ids,
+            col_b_dim=col_b_dim,
+            col_c_dim=col_c_dim,
+            q_all_net=ftg_qnet,
+            fcu=ftg_fcu,
+            fy=ftg_fy,
+            cov=ftg_cov,
+            phi=ftg_phi,
+            num_floors=num_floors,
+        )
+        st.session_state["fs_ftg_analysis"] = ftg_analysis
+        counts = ftg_analysis["summary_counts"]
 
-        # Combined footings calculation if overlap exists
-        combined_fs_models = []
-        if has_overlap_fs:
-            cf_count = 1
-            for ov_pair in overlap_data["overlapping_pairs"]:
-                cf_res = design_combined_footing_model(
-                    f"comb-{cf_count}",
-                    ov_pair["col_A"],
-                    ov_pair["col_B"],
-                    ov_pair["spacing_m"],
-                    ftg_qnet,
-                    ftg_fcu,
-                    ftg_fy,
-                    ftg_cov,
-                    ftg_phi,
-                )
-                cf_res["overlap_dir"] = ov_pair.get("dir", "X")
-                combined_fs_models.append(cf_res)
-                cf_count += 1
-
-        # Alert Banner
-        if has_overlap_fs:
-            st.markdown(
-                """
-                <div style="background:#fee2e2; border:2px solid #ef4444; border-radius:10px; padding:14px 20px; margin-bottom:14px;">
-                    <span style="font-size:24px;">🚨</span>
-                    <b style="font-size:18px; color:#991b1b;">تنبيه إنشائي:</b>
-                    <span style="font-size:16px; color:#7f1d1d; font-weight:700;">
-                    القواعد المحددة بالخط الأخضر المتقطع هي قواعد متداخلة (Clearance &lt; 0.15 م)،
-                    وسيتم تصميمها تلقائياً بنظام القواعد المشتركة (Combined Footings).
-                    </span>
+        # 3. Executive Report Banner
+        st.markdown(
+            f"""
+            <div dir="rtl" style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%); border: 2px solid #38bdf8; border-radius: 12px; padding: 18px 22px; margin: 12px 0 18px 0; box-shadow: 0 4px 20px rgba(0,0,0,0.35); text-align: right;">
+                <div style="font-size: 18px; font-weight: 900; color: #38bdf8; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                    <span>📋 تقرير توزيع وتصنيف أساسات المبنى الإنشائي (Building Foundations Classification Report)</span>
+                    <span style="font-size: 13.5px; background: #0284c7; color: #ffffff; padding: 4px 12px; border-radius: 6px; font-weight: 800;">إجمالي الأعمدة: {len(fs_active_columns)} عمود</span>
                 </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(
-                """
-                <div style="background:#dcfce7; border:2px solid #22c55e; border-radius:10px; padding:14px 20px; margin-bottom:14px;">
-                    <span style="font-size:24px;">✅</span>
-                    <b style="font-size:18px; color:#166534;">النظام الإنشائي مستقر:</b>
-                    <span style="font-size:16px; color:#14532d; font-weight:700;">
-                    كامل النظام الإنشائي للأساسات مستقر كقواعد منفصلة ولا يوجد أي تداخل خرساني (Clearance &ge; 0.15 م).
-                    </span>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 10px;">
+                    <!-- 1. Isolated Footings -->
+                    <div style="background: rgba(186, 230, 253, 0.12); border: 1.5px solid #38bdf8; border-right: 5px solid #0284c7; border-radius: 8px; padding: 12px 14px;">
+                        <div style="font-size: 15px; font-weight: 800; color: #7dd3fc; margin-bottom: 4px;">🟦 1. القواعد المنفصلة (Module 3)</div>
+                        <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['isolated_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة منفصلة</span></div>
+                        <div style="font-size: 12.5px; color: #cbd5e1; margin-top: 4px; line-height: 1.45;"><b>النماذج:</b> {', '.join(counts['isolated_names']) if counts['isolated_names'] else 'لا يوجد'}</div>
+                    </div>
+                    <!-- 2. Combined Footings -->
+                    <div style="background: rgba(187, 247, 208, 0.12); border: 1.5px solid #4ade80; border-right: 5px solid #16a34a; border-radius: 8px; padding: 12px 14px;">
+                        <div style="font-size: 15px; font-weight: 800; color: #86efac; margin-bottom: 4px;">🟩 2. القواعد المشتركة (Module 8)</div>
+                        <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['combined_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة مشتركة</span></div>
+                        <div style="font-size: 12.5px; color: #cbd5e1; margin-top: 4px; line-height: 1.45;"><b>النماذج:</b> {', '.join(counts['combined_names']) if counts['combined_names'] else 'لا يوجد تداخل خرساني'}</div>
+                    </div>
+                    <!-- 3. Edge Strap Footings -->
+                    <div style="background: rgba(254, 215, 170, 0.12); border: 1.5px solid #fb923c; border-right: 5px solid #ea580c; border-radius: 8px; padding: 12px 14px;">
+                        <div style="font-size: 15px; font-weight: 800; color: #fdba74; margin-bottom: 4px;">🟧 3. قواعد الشدادات الجانبية (Module 9)</div>
+                        <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['edge_strap_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة شداد جانبي</span></div>
+                        <div style="font-size: 12.5px; color: #cbd5e1; margin-top: 4px; line-height: 1.45;"><b>النماذج:</b> {', '.join(counts['edge_strap_names']) if counts['edge_strap_names'] else 'لا توجد أعمدة جار جانبية'}</div>
+                    </div>
+                    <!-- 4. Corner Strap Footings -->
+                    <div style="background: rgba(253, 186, 116, 0.15); border: 1.5px solid #f97316; border-right: 5px solid #c2410c; border-radius: 8px; padding: 12px 14px;">
+                        <div style="font-size: 15px; font-weight: 800; color: #fed7aa; margin-bottom: 4px;">🟪 4. قواعد الشدادات الركن (Module 10)</div>
+                        <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['corner_strap_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة شداد ركن مائل</span></div>
+                        <div style="font-size: 12.5px; color: #cbd5e1; margin-top: 4px; line-height: 1.45;"><b>النماذج:</b> {', '.join(counts['corner_strap_names']) if counts['corner_strap_names'] else 'لا توجد أعمدة جار ركن'}</div>
+                    </div>
                 </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-        # Footings Detailed Table Tab
-        fs_tab_ftg, = st.tabs([
+        # Dynamic Tabs: Detailed Table + Layout Sketch
+        fs_tab_table, fs_tab_sketch = st.tabs([
             "📋 Footings Detailed Table (جدول تفاصيل وتصميم نماذج القواعد)",
+            "🗺️ Foundation Layout Sketch (المسقط الأفقي وتوزيع كافة القواعد والشدادات)",
         ])
 
-        # ── TAB: FOOTINGS DETAILED TABLE (UNIFIED SCHEDULE: ISOLATED + COMBINED) ──
-        with fs_tab_ftg:
+        # ── TAB 1: FOOTINGS DETAILED TABLE (UNIFIED SCHEDULE: ALL 4 TYPES) ──
+        with fs_tab_table:
             st.markdown("##### 📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)")
-            unified_rows_fs = []
-            for f in [F1_model, F2_model, F3_model]:
-                pc_L = f["L_cm"] + 40
-                pc_B = f["B_cm"] + 40
-                unified_rows_fs.append({
-                    "نموذج القاعدة (Model)": f["model_name"],
-                    "الأعمدة المرتكزة (Columns)": f["supported_col_str"],
-                    "أقصى حمل تصميمي Pu (ton)": f"{f['Pu_ton']:.2f} ton",
-                    "أبعاد المسلحة R.C. (cm)": f"{f['L_cm']} × {f['B_cm']} × {f['t_cm']}",
-                    "أبعاد العادية P.C. (cm)": f"{pc_L} × {pc_B} × 20 (نظافة)",
-                    "التسليح السفلي (Bottom RFT)": f"فرش: {f['rft_long_str']} | غطاء: {f['rft_short_str']}",
-                    "التسليح العلوي الرئيسي (Top RFT)": "-" if f["t_cm"] < 80 else f["top_rft_str"],
-                    "طول التماسك / الرفارف (Details)": f"Ld = {f['Ld_str']}",
-                    "حالة التحقق الإنشائي (Status)": f["status_str"],
-                })
-
-            if has_overlap_fs:
-                for cf in combined_fs_models:
-                    cf_pc_L = cf["Lc_cm"] + 40
-                    cf_pc_B = cf["Bc_cm"] + 40
-                    unified_rows_fs.append({
-                        "نموذج القاعدة (Model)": f"{cf['name']} (مشتركة)",
-                        "الأعمدة المرتكزة (Columns)": cf["supported_cols"],
-                        "أقصى حمل تصميمي Pu (ton)": f"Ru = {cf['Ru_ton']:.2f} ton",
-                        "أبعاد المسلحة R.C. (cm)": f"{cf['Lc_cm']} × {cf['Bc_cm']} × {cf['tc_cm']}",
-                        "أبعاد العادية P.C. (cm)": f"{cf_pc_L} × {cf_pc_B} × 20 (نظافة)",
-                        "التسليح السفلي (Bottom RFT)": f"طولي: {cf['rft_bot_str']} | عرضي: {cf['rft_trans_str']}",
-                        "التسليح العلوي الرئيسي (Top RFT)": f"علوي رئيسي: {cf['rft_top_str']} (-M={cf['M_top_tm']:.2f} t·m)",
-                        "طول التماسك / الرفارف (Details)": f"رفارف: {cf['overhangs_str']}",
-                        "حالة التحقق الإنشائي (Status)": cf["status_str"],
-                    })
-
-            df_fs_export = pd.DataFrame(unified_rows_fs)
+            df_fs_export = pd.DataFrame(ftg_analysis["unified_rows"])
             render_styled_table(df_fs_export)
 
             # Export Excel & CSV
@@ -11609,103 +11580,25 @@ def render():
                     key=f"{prefix}btn_dl_unified_csv_fs",
                 )
 
-            # Stress checks expander
-            with st.expander("🔍 Isolated Footings Stresses & Design Checks (تفاصيل التحققات الإنشائية والإجهادات لنماذج القواعد المنفصلة)", expanded=False):
-                iso_details_rows = []
-                for f in [F1_model, F2_model, F3_model]:
-                    q_str = f"{f['q_act']:.2f} / {f['q_net']:.2f} kg/cm²"
-                    tau_s_str = f"{f['tau_s']:.2f} / {f['tau_s_allow']:.2f} kg/cm²"
-                    tau_p_str = f"{f['tau_p']:.2f} / {f['tau_p_allow']:.2f} kg/cm²"
-                    dims_str = f"{f['L_cm']} × {f['B_cm']} × {f['t_cm']} cm"
+        # ── TAB 2: FOUNDATION LAYOUT SKETCH (COLOR-CODED PLAN: ISOLATED, COMBINED, STRAP) ──
+        with fs_tab_sketch:
+            st.markdown("##### 🗺️ المسقط الأفقي العام لأساسات المبنى وتوزيع القواعد والشدادات (Foundation Layout Plan Sketch)")
+            st.caption("مخطط ملون يوضح: 🟦 القواعد المنفصلة (أزرق)، 🟩 القواعد المشتركة (أخضر)، 🟧 قواعد وكمرات الشدادات الجانبية والركنية (برتقالي) مع المحاور والأبعاد.")
+            fig_full_sketch = draw_comprehensive_foundation_sketch(fs_active_columns, ftg_analysis)
+            st.pyplot(fig_full_sketch, clear_figure=True, use_container_width=True)
 
-                    iso_details_rows.append({
-                        "نموذج القاعدة": f.get("model_id", f.get("model_name", "F")),
-                        "نوع القاعدة": f.get("model_label", "منفصلة"),
-                        "الأعمدة": f.get("supported_col_str", "-"),
-                        "أقصى حمل Pu": f"{f['Pu_ton']:.2f} ton",
-                        "إجهاد التلامس q_act": q_str,
-                        "إجهاد القص τ_s": tau_s_str,
-                        "إجهاد الثقب τ_p": tau_p_str,
-                        "العزم الأقصى Mu": f"{f['M_L_tm']:.2f} t·m",
-                        "العمق الفعال d": f"{f['d_cm']:.1f} cm",
-                        "أبعاد المسلحة L×B×t": dims_str,
-                        "التحقق الإنشائي": f.get("status_str", "✅ Safe"),
-                    })
-
-                df_iso_table = pd.DataFrame(iso_details_rows)
-                render_styled_table(
-                    df_iso_table,
-                    accent_border_color="#059669",
-                    col_colors=[
-                        "#10b981",  # Emerald for model
-                        "#38bdf8",  # Sky blue for type
-                        "#e2e8f0",  # Light gray for columns
-                        "#facc15",  # Gold for Pu
-                        "#fbbf24",  # Amber for q_act
-                        "#34d399",  # Mint for tau_s
-                        "#fb923c",  # Orange for tau_p
-                        "#e879f9",  # Fuchsia for Mu
-                        "#a78bfa",  # Violet for depth d
-                        "#22d3ee",  # Cyan for dims
-                        "#4ade80",  # Neon green for status
-                    ],
-                )
-
-            if has_overlap_fs:
-                with st.expander("🔍 Combined Footings Moments & Design Details (تفاصيل العزوم والتصميم الإنشائي للقواعد المشتركة)", expanded=False):
-                    comb_details_rows = []
-                    for cf in combined_fs_models:
-                        comb_details_rows.append({
-                            "نموذج القاعدة": cf["name"],
-                            "الأعمدة المرتكزة": cf["supported_cols"],
-                            "المسافة S": f"{cf['S_m']:.2f} m",
-                            "أحمال الأعمدة": f"P1={cf['P1_ton']:.1f} / P2={cf['P2_ton']:.1f} ton",
-                            "الحمل الكلي Ru": f"{cf['Ru_ton']:.2f} ton",
-                            "العزم العلوي (-M)": f"{cf['M_top_tm']:.2f} t·m",
-                            "العزم السفلي (+M)": f"{cf['M_bot_max_tm']:.2f} t·m",
-                            "إجهاد التربة q_act": f"{cf['q_act']:.2f} kg/cm²",
-                            "إجهاد القص τ_s": f"{cf.get('tau_s', 0.0):.2f} kg/cm²",
-                            "أبعاد المسلحة L×B×t": f"{cf['Lc_cm']} × {cf['Bc_cm']} × {cf['tc_cm']} cm",
-                            "التحقق الإنشائي": cf.get("status_str", "✅ Safe"),
-                        })
-
-                    df_cf_table = pd.DataFrame(comb_details_rows)
-                    render_styled_table(
-                        df_cf_table,
-                        accent_border_color="#f59e0b",
-                        col_colors=[
-                            "#f59e0b",  # Amber for model
-                            "#38bdf8",  # Sky blue for columns
-                            "#e2e8f0",  # Light gray for spacing S
-                            "#fb923c",  # Orange for P1/P2
-                            "#facc15",  # Gold for Ru
-                            "#e879f9",  # Fuchsia for -M_top
-                            "#22d3ee",  # Cyan for +M_bot
-                            "#fbbf24",  # Amber for q_act
-                            "#34d399",  # Mint for tau_s
-                            "#a78bfa",  # Violet for dimensions
-                            "#4ade80",  # Neon green for status
-                        ],
-                    )
-
-        # Foundation General Layout Plan expander inside Flat Slab module
-        exp_ftg = st.expander("📐 Foundation Layout Plan Sketch (المسقط الأفقي العام للأساسات وفحص التداخل)", expanded=False, key=f"{prefix}exp_ftg_plan", on_change="rerun")
-        with exp_ftg:
-            if exp_ftg.open:
-                fig_ftg_plan = draw_foundation_layout_plan(fs_active_columns, ftgs_dict, overlap_data, combined_fs_models)
-                st.pyplot(fig_ftg_plan, clear_figure=True, use_container_width=True)
-                buf_fp = io.BytesIO()
-                fig_ftg_plan.savefig(buf_fp, format="png", bbox_inches="tight", dpi=180)
-                buf_fp.seek(0)
-                st.download_button(
-                    label="📥 Download Foundation Layout Plan (High-Res PNG)",
-                    data=buf_fp,
-                    file_name=f"{prefix}Foundation_Layout_Plan_{num_floors}Floors.png",
-                    mime="image/png",
-                    use_container_width=True,
-                    key="btn_dl_flat_slab_ftg_plan",
-                )
-                plt.close(fig_ftg_plan)
+            buf_fs_sketch = io.BytesIO()
+            fig_full_sketch.savefig(buf_fs_sketch, format="png", bbox_inches="tight", dpi=180)
+            buf_fs_sketch.seek(0)
+            st.download_button(
+                label="📥 Download Foundation Layout Plan Sketch (High-Res PNG)",
+                data=buf_fs_sketch,
+                file_name=f"{prefix}Foundation_Comprehensive_Layout_{num_floors}Floors.png",
+                mime="image/png",
+                use_container_width=True,
+                key=f"{prefix}btn_dl_full_foundation_sketch",
+            )
+            plt.close(fig_full_sketch)
 
     # ── 📉 FINAL DEFLECTION VERIFICATION (ECP 203) ───────────────────────────
     exp_defl = st.expander("📉 Final Deflection Verification (التحقق الإنشائي النهائي من سهم الانحناء والترخيم طويل الأمد)", expanded=False, key=f"{prefix}exp_deflection", on_change="rerun")
@@ -12047,7 +11940,14 @@ def render():
             ftg_dia_map[phi_val] = {"weight_kg": 0.0, "apps": app_desc}
         ftg_dia_map[phi_val]["weight_kg"] += wt_kg
 
-    if 'fs_active_columns' in locals() and fs_active_columns:
+    ftg_analysis_obj = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
+    if ftg_analysis_obj and "quantities" in ftg_analysis_obj:
+        fq = ftg_analysis_obj["quantities"]
+        ftgs_conc_rc_val = float(fq.get("ftgs_conc_rc_val", 0.0))
+        ftgs_conc_pc_val = float(fq.get("ftgs_conc_pc_val", 0.0))
+        ftgs_steel_kg_val = float(fq.get("ftgs_steel_kg_val", 0.0))
+        ftg_dia_map = dict(fq.get("ftg_dia_map", {}))
+    elif 'fs_active_columns' in locals() and fs_active_columns:
         ov_col_ids_set = overlap_data.get("overlapping_col_ids", set()) if 'overlap_data' in locals() else set()
         for col_item in fs_active_columns:
             cid = col_item["id"]

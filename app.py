@@ -84,6 +84,7 @@ from modules.concrete_survey import render as render_concrete_survey
 from modules.ground_slab import render as render_ground_slab
 from modules.two_col_footings import render as render_two_col_footings
 from modules.module_9_strap_footing import render_strap_footing_module
+from modules.module_10_diagonal_strap import render_diagonal_strap_module
 
 # ── CSS Injection: Fixed Unified Typography (14px) ───────────────────────────
 st.markdown(
@@ -2191,6 +2192,12 @@ else:
         render_columns()
     elif "Combined" in module or "Two-Column" in module or "Two" in module or "Module 7" in module:
         render_two_col_footings()
+    elif "Module 10" in module or "diagonal_strap" in module or "ركن" in module or "المائل" in module:
+        try:
+            render_diagonal_strap_module()
+        except Exception as ex:
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 10: {ex}")
+            st.exception(ex)
     elif "Strap" in module or "Module 9" in module or "strap_footing" in module or "قواعد الشدادات" in module:
         try:
             render_strap_footing_module()

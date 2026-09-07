@@ -335,7 +335,8 @@
           4,
           5,
           6,
-          7
+          7,
+          8
         ],
         "deleted_modules_trash": {},
         "tcf_Fcu": 250,
@@ -401,7 +402,41 @@
         "m9_stirrup_dia": 10,
         "m9_stirrup_spacing": 20,
         "m9_trans_bar_dia": 16,
-        "m9_stirrup_per_m": 5
+        "m9_stirrup_per_m": 5,
+        "module_10_diagonal_strap": {
+          "edge_clearance_x": 0.0,
+          "edge_clearance_y": 0.0,
+          "a1": 30.0,
+          "b1": 60.0,
+          "X2": 4.5,
+          "Y2": 3.8,
+          "a2": 40.0,
+          "b2": 50.0,
+          "P1_w": 80.0,
+          "P1_u": 120.0,
+          "P2_w": 120.0,
+          "P2_u": 180.0,
+          "col_weight_factor": 1.0,
+          "q_all_net": 1.5,
+          "fcu": 250.0,
+          "fy": 4000.0,
+          "t_pc": 10.0,
+          "strap_b": 40.0,
+          "strap_D": 170.0,
+          "L1x": 2.95,
+          "L1y": 2.75,
+          "t1": 80.0,
+          "L2x": 2.85,
+          "L2y": 2.85,
+          "t2": 60.0,
+          "long_bar_dia": 22,
+          "stirrup_dia": 10,
+          "stirrup_per_m": 5,
+          "stirrup_spacing": 20.0,
+          "trans_bar_dia": 16,
+          "is_calculated": false,
+          "is_manual_override": false
+        }
       }
     },
     "حصر دور السطح وغرفة السطح - نهائي": {
@@ -754,7 +789,8 @@
           4,
           5,
           6,
-          7
+          7,
+          8
         ],
         "module_9_strap_footing": {
           "S": 5.0,
@@ -817,7 +853,41 @@
         "m9_stirrup_dia": 10,
         "m9_stirrup_spacing": 20,
         "m9_trans_bar_dia": 16,
-        "m9_stirrup_per_m": 5
+        "m9_stirrup_per_m": 5,
+        "module_10_diagonal_strap": {
+          "edge_clearance_x": 0.0,
+          "edge_clearance_y": 0.0,
+          "a1": 30.0,
+          "b1": 60.0,
+          "X2": 4.5,
+          "Y2": 3.8,
+          "a2": 40.0,
+          "b2": 50.0,
+          "P1_w": 80.0,
+          "P1_u": 120.0,
+          "P2_w": 120.0,
+          "P2_u": 180.0,
+          "col_weight_factor": 1.0,
+          "q_all_net": 1.5,
+          "fcu": 250.0,
+          "fy": 4000.0,
+          "t_pc": 10.0,
+          "strap_b": 40.0,
+          "strap_D": 170.0,
+          "L1x": 2.95,
+          "L1y": 2.75,
+          "t1": 80.0,
+          "L2x": 2.85,
+          "L2y": 2.85,
+          "t2": 60.0,
+          "long_bar_dia": 22,
+          "stirrup_dia": 10,
+          "stirrup_per_m": 5,
+          "stirrup_spacing": 20.0,
+          "trans_bar_dia": 16,
+          "is_calculated": false,
+          "is_manual_override": false
+        }
       }
     },
     "هشام - حصر المتكرر غطاء 5 قطر10 مم - الشروق": {
@@ -1134,7 +1204,8 @@
           4,
           5,
           6,
-          7
+          7,
+          8
         ],
         "module_9_strap_footing": {
           "S": 5.0,
@@ -1197,7 +1268,41 @@
         "m9_stirrup_dia": 10,
         "m9_stirrup_spacing": 20,
         "m9_trans_bar_dia": 16,
-        "m9_stirrup_per_m": 5
+        "m9_stirrup_per_m": 5,
+        "module_10_diagonal_strap": {
+          "edge_clearance_x": 0.0,
+          "edge_clearance_y": 0.0,
+          "a1": 30.0,
+          "b1": 60.0,
+          "X2": 4.5,
+          "Y2": 3.8,
+          "a2": 40.0,
+          "b2": 50.0,
+          "P1_w": 80.0,
+          "P1_u": 120.0,
+          "P2_w": 120.0,
+          "P2_u": 180.0,
+          "col_weight_factor": 1.0,
+          "q_all_net": 1.5,
+          "fcu": 250.0,
+          "fy": 4000.0,
+          "t_pc": 10.0,
+          "strap_b": 40.0,
+          "strap_D": 170.0,
+          "L1x": 2.95,
+          "L1y": 2.75,
+          "t1": 80.0,
+          "L2x": 2.85,
+          "L2y": 2.85,
+          "t2": 60.0,
+          "long_bar_dia": 22,
+          "stirrup_dia": 10,
+          "stirrup_per_m": 5,
+          "stirrup_spacing": 20.0,
+          "trans_bar_dia": 16,
+          "is_calculated": false,
+          "is_manual_override": false
+        }
       }
     },
     "حصر دور السطح وغرفة السطح - نهائي (نسخة)": {
@@ -1550,7 +1655,8 @@
           4,
           5,
           6,
-          7
+          7,
+          8
         ],
         "deleted_modules_trash": {},
         "module_9_strap_footing": {
@@ -1614,7 +1720,41 @@
         "m9_stirrup_dia": 10,
         "m9_stirrup_spacing": 20,
         "m9_trans_bar_dia": 16,
-        "m9_stirrup_per_m": 5
+        "m9_stirrup_per_m": 5,
+        "module_10_diagonal_strap": {
+          "edge_clearance_x": 0.0,
+          "edge_clearance_y": 0.0,
+          "a1": 30.0,
+          "b1": 60.0,
+          "X2": 4.5,
+          "Y2": 3.8,
+          "a2": 40.0,
+          "b2": 50.0,
+          "P1_w": 80.0,
+          "P1_u": 120.0,
+          "P2_w": 120.0,
+          "P2_u": 180.0,
+          "col_weight_factor": 1.0,
+          "q_all_net": 1.5,
+          "fcu": 250.0,
+          "fy": 4000.0,
+          "t_pc": 10.0,
+          "strap_b": 40.0,
+          "strap_D": 170.0,
+          "L1x": 2.95,
+          "L1y": 2.75,
+          "t1": 80.0,
+          "L2x": 2.85,
+          "L2y": 2.85,
+          "t2": 60.0,
+          "long_bar_dia": 22,
+          "stirrup_dia": 10,
+          "stirrup_per_m": 5,
+          "stirrup_spacing": 20.0,
+          "trans_bar_dia": 16,
+          "is_calculated": false,
+          "is_manual_override": false
+        }
       }
     },
     "تجربة حذف موديلز": {
@@ -2251,7 +2391,8 @@
           4,
           5,
           6,
-          7
+          7,
+          8
         ],
         "deleted_modules_trash": {},
         "module_9_strap_footing": {
@@ -2315,16 +2456,50 @@
         "m9_stirrup_dia": 10,
         "m9_stirrup_spacing": 20,
         "m9_trans_bar_dia": 16,
-        "m9_stirrup_per_m": 5
+        "m9_stirrup_per_m": 5,
+        "module_10_diagonal_strap": {
+          "edge_clearance_x": 0.0,
+          "edge_clearance_y": 0.0,
+          "a1": 30.0,
+          "b1": 60.0,
+          "X2": 4.5,
+          "Y2": 3.8,
+          "a2": 40.0,
+          "b2": 50.0,
+          "P1_w": 80.0,
+          "P1_u": 120.0,
+          "P2_w": 120.0,
+          "P2_u": 180.0,
+          "col_weight_factor": 1.0,
+          "q_all_net": 1.5,
+          "fcu": 250.0,
+          "fy": 4000.0,
+          "t_pc": 10.0,
+          "strap_b": 40.0,
+          "strap_D": 170.0,
+          "L1x": 2.95,
+          "L1y": 2.75,
+          "t1": 80.0,
+          "L2x": 2.85,
+          "L2y": 2.85,
+          "t2": 60.0,
+          "long_bar_dia": 22,
+          "stirrup_dia": 10,
+          "stirrup_per_m": 5,
+          "stirrup_spacing": 20.0,
+          "trans_bar_dia": 16,
+          "is_calculated": false,
+          "is_manual_override": false
+        }
       }
     },
     "try1": {
       "name": "try1",
       "description": "مشروع try1",
       "created_at": "2026-09-05 19:13",
-      "updated_at": "2026-09-06 16:42",
+      "updated_at": "2026-09-07 15:41",
       "data": {
-        "selected_module_idx": 7,
+        "selected_module_idx": 0,
         "apartment_name": "try1",
         "col_Pu_input": 155.0,
         "col_Safety_Factor": 1.2,
@@ -2638,6 +2813,41 @@
         "m9_stirrup_per_m": 7,
         "m9_stirrup_spacing": 14.29,
         "m9_trans_bar_dia": 18,
+        "module_10_diagonal_strap": {
+          "edge_clearance_x": 0.0,
+          "edge_clearance_y": 0.0,
+          "a1": 30.0,
+          "b1": 60.0,
+          "X2": 4.5,
+          "Y2": 3.8,
+          "a2": 40.0,
+          "b2": 50.0,
+          "P1_u": 80.0,
+          "P2_u": 120.0,
+          "col_weight_factor": 1.0,
+          "P1_w": 53.33,
+          "P2_w": 80.0,
+          "q_all_net": 1.5,
+          "fcu": 300.0,
+          "fy": 4000.0,
+          "t_pc": 10.0,
+          "strap_b": 40.0,
+          "strap_D": 120.0,
+          "L1x": 2.15,
+          "L1y": 2.15,
+          "t1": 60.0,
+          "L2x": 2.35,
+          "L2y": 2.3,
+          "t2": 50.0,
+          "long_bar_dia": 16,
+          "stirrup_dia": 10,
+          "stirrup_per_m": 5,
+          "stirrup_spacing": 20.0,
+          "trans_bar_dia": 16,
+          "is_calculated": true,
+          "is_manual_override": true,
+          "_last_upstream_sig": "0.0_0.0_30.0_60.0_4.5_3.8_40.0_50.0_80.0_120.0_1.0_1.5_300.0_4000.0_10.0_40.0"
+        },
         "cs_owner_name": "",
         "fs_moment_contour_view_mode_idx": 1,
         "fs_additional_moment_contour_view_mode_idx": 2,
@@ -3144,7 +3354,8 @@
           4,
           5,
           6,
-          7
+          7,
+          8
         ],
         "deleted_modules_trash": {}
       }
@@ -3298,7 +3509,8 @@
           4,
           5,
           6,
-          7
+          7,
+          8
         ],
         "module_9_strap_footing": {
           "S": 5.0,
@@ -3361,7 +3573,41 @@
         "m9_stirrup_dia": 10,
         "m9_stirrup_spacing": 20,
         "m9_trans_bar_dia": 16,
-        "m9_stirrup_per_m": 5
+        "m9_stirrup_per_m": 5,
+        "module_10_diagonal_strap": {
+          "edge_clearance_x": 0.0,
+          "edge_clearance_y": 0.0,
+          "a1": 30.0,
+          "b1": 60.0,
+          "X2": 4.5,
+          "Y2": 3.8,
+          "a2": 40.0,
+          "b2": 50.0,
+          "P1_w": 80.0,
+          "P1_u": 120.0,
+          "P2_w": 120.0,
+          "P2_u": 180.0,
+          "col_weight_factor": 1.0,
+          "q_all_net": 1.5,
+          "fcu": 250.0,
+          "fy": 4000.0,
+          "t_pc": 10.0,
+          "strap_b": 40.0,
+          "strap_D": 170.0,
+          "L1x": 2.95,
+          "L1y": 2.75,
+          "t1": 80.0,
+          "L2x": 2.85,
+          "L2y": 2.85,
+          "t2": 60.0,
+          "long_bar_dia": 22,
+          "stirrup_dia": 10,
+          "stirrup_per_m": 5,
+          "stirrup_spacing": 20.0,
+          "trans_bar_dia": 16,
+          "is_calculated": false,
+          "is_manual_override": false
+        }
       }
     },
     "مشروع_اختبار_صوت_كافة_الحذف": {
@@ -3513,7 +3759,8 @@
           4,
           5,
           6,
-          7
+          7,
+          8
         ],
         "module_9_strap_footing": {
           "S": 5.0,
@@ -3576,7 +3823,41 @@
         "m9_stirrup_dia": 10,
         "m9_stirrup_spacing": 20,
         "m9_trans_bar_dia": 16,
-        "m9_stirrup_per_m": 5
+        "m9_stirrup_per_m": 5,
+        "module_10_diagonal_strap": {
+          "edge_clearance_x": 0.0,
+          "edge_clearance_y": 0.0,
+          "a1": 30.0,
+          "b1": 60.0,
+          "X2": 4.5,
+          "Y2": 3.8,
+          "a2": 40.0,
+          "b2": 50.0,
+          "P1_w": 80.0,
+          "P1_u": 120.0,
+          "P2_w": 120.0,
+          "P2_u": 180.0,
+          "col_weight_factor": 1.0,
+          "q_all_net": 1.5,
+          "fcu": 250.0,
+          "fy": 4000.0,
+          "t_pc": 10.0,
+          "strap_b": 40.0,
+          "strap_D": 170.0,
+          "L1x": 2.95,
+          "L1y": 2.75,
+          "t1": 80.0,
+          "L2x": 2.85,
+          "L2y": 2.85,
+          "t2": 60.0,
+          "long_bar_dia": 22,
+          "stirrup_dia": 10,
+          "stirrup_per_m": 5,
+          "stirrup_spacing": 20.0,
+          "trans_bar_dia": 16,
+          "is_calculated": false,
+          "is_manual_override": false
+        }
       }
     },
     "TRY2": {
@@ -3915,7 +4196,8 @@
           4,
           5,
           6,
-          7
+          7,
+          8
         ],
         "deleted_modules_trash": {},
         "module_9_strap_footing": {
@@ -3979,7 +4261,41 @@
         "m9_stirrup_dia": 10,
         "m9_stirrup_spacing": 20,
         "m9_trans_bar_dia": 16,
-        "m9_stirrup_per_m": 5
+        "m9_stirrup_per_m": 5,
+        "module_10_diagonal_strap": {
+          "edge_clearance_x": 0.0,
+          "edge_clearance_y": 0.0,
+          "a1": 30.0,
+          "b1": 60.0,
+          "X2": 4.5,
+          "Y2": 3.8,
+          "a2": 40.0,
+          "b2": 50.0,
+          "P1_w": 80.0,
+          "P1_u": 120.0,
+          "P2_w": 120.0,
+          "P2_u": 180.0,
+          "col_weight_factor": 1.0,
+          "q_all_net": 1.5,
+          "fcu": 250.0,
+          "fy": 4000.0,
+          "t_pc": 10.0,
+          "strap_b": 40.0,
+          "strap_D": 170.0,
+          "L1x": 2.95,
+          "L1y": 2.75,
+          "t1": 80.0,
+          "L2x": 2.85,
+          "L2y": 2.85,
+          "t2": 60.0,
+          "long_bar_dia": 22,
+          "stirrup_dia": 10,
+          "stirrup_per_m": 5,
+          "stirrup_spacing": 20.0,
+          "trans_bar_dia": 16,
+          "is_calculated": false,
+          "is_manual_override": false
+        }
       }
     },
     "حصر غرفة السطح - هشام (نسخة)": {
@@ -4296,7 +4612,8 @@
           4,
           5,
           6,
-          7
+          7,
+          8
         ],
         "deleted_modules_trash": {},
         "module_9_strap_footing": {
@@ -4360,7 +4677,41 @@
         "m9_stirrup_dia": 10,
         "m9_stirrup_spacing": 20,
         "m9_trans_bar_dia": 16,
-        "m9_stirrup_per_m": 5
+        "m9_stirrup_per_m": 5,
+        "module_10_diagonal_strap": {
+          "edge_clearance_x": 0.0,
+          "edge_clearance_y": 0.0,
+          "a1": 30.0,
+          "b1": 60.0,
+          "X2": 4.5,
+          "Y2": 3.8,
+          "a2": 40.0,
+          "b2": 50.0,
+          "P1_w": 80.0,
+          "P1_u": 120.0,
+          "P2_w": 120.0,
+          "P2_u": 180.0,
+          "col_weight_factor": 1.0,
+          "q_all_net": 1.5,
+          "fcu": 250.0,
+          "fy": 4000.0,
+          "t_pc": 10.0,
+          "strap_b": 40.0,
+          "strap_D": 170.0,
+          "L1x": 2.95,
+          "L1y": 2.75,
+          "t1": 80.0,
+          "L2x": 2.85,
+          "L2y": 2.85,
+          "t2": 60.0,
+          "long_bar_dia": 22,
+          "stirrup_dia": 10,
+          "stirrup_per_m": 5,
+          "stirrup_spacing": 20.0,
+          "trans_bar_dia": 16,
+          "is_calculated": false,
+          "is_manual_override": false
+        }
       }
     },
     "مشروع hesham z": {
@@ -4579,7 +4930,8 @@
           4,
           5,
           6,
-          7
+          7,
+          8
         ],
         "deleted_modules_trash": {},
         "module_9_strap_footing": {
@@ -4643,7 +4995,41 @@
         "m9_stirrup_dia": 10,
         "m9_stirrup_spacing": 20,
         "m9_trans_bar_dia": 16,
-        "m9_stirrup_per_m": 5
+        "m9_stirrup_per_m": 5,
+        "module_10_diagonal_strap": {
+          "edge_clearance_x": 0.0,
+          "edge_clearance_y": 0.0,
+          "a1": 30.0,
+          "b1": 60.0,
+          "X2": 4.5,
+          "Y2": 3.8,
+          "a2": 40.0,
+          "b2": 50.0,
+          "P1_w": 80.0,
+          "P1_u": 120.0,
+          "P2_w": 120.0,
+          "P2_u": 180.0,
+          "col_weight_factor": 1.0,
+          "q_all_net": 1.5,
+          "fcu": 250.0,
+          "fy": 4000.0,
+          "t_pc": 10.0,
+          "strap_b": 40.0,
+          "strap_D": 170.0,
+          "L1x": 2.95,
+          "L1y": 2.75,
+          "t1": 80.0,
+          "L2x": 2.85,
+          "L2y": 2.85,
+          "t2": 60.0,
+          "long_bar_dia": 22,
+          "stirrup_dia": 10,
+          "stirrup_per_m": 5,
+          "stirrup_spacing": 20.0,
+          "trans_bar_dia": 16,
+          "is_calculated": false,
+          "is_manual_override": false
+        }
       }
     },
     "All test": {
@@ -5018,7 +5404,8 @@
           4,
           5,
           6,
-          7
+          7,
+          8
         ],
         "deleted_modules_trash": {},
         "module_9_strap_footing": {
@@ -5082,7 +5469,41 @@
         "m9_stirrup_dia": 10,
         "m9_stirrup_spacing": 20,
         "m9_trans_bar_dia": 16,
-        "m9_stirrup_per_m": 5
+        "m9_stirrup_per_m": 5,
+        "module_10_diagonal_strap": {
+          "edge_clearance_x": 0.0,
+          "edge_clearance_y": 0.0,
+          "a1": 30.0,
+          "b1": 60.0,
+          "X2": 4.5,
+          "Y2": 3.8,
+          "a2": 40.0,
+          "b2": 50.0,
+          "P1_w": 80.0,
+          "P1_u": 120.0,
+          "P2_w": 120.0,
+          "P2_u": 180.0,
+          "col_weight_factor": 1.0,
+          "q_all_net": 1.5,
+          "fcu": 250.0,
+          "fy": 4000.0,
+          "t_pc": 10.0,
+          "strap_b": 40.0,
+          "strap_D": 170.0,
+          "L1x": 2.95,
+          "L1y": 2.75,
+          "t1": 80.0,
+          "L2x": 2.85,
+          "L2y": 2.85,
+          "t2": 60.0,
+          "long_bar_dia": 22,
+          "stirrup_dia": 10,
+          "stirrup_per_m": 5,
+          "stirrup_spacing": 20.0,
+          "trans_bar_dia": 16,
+          "is_calculated": false,
+          "is_manual_override": false
+        }
       }
     },
     "Try Comb foot": {
@@ -5261,7 +5682,8 @@
           4,
           5,
           6,
-          7
+          7,
+          8
         ],
         "deleted_modules_trash": {},
         "module_9_strap_footing": {
@@ -5325,7 +5747,41 @@
         "m9_stirrup_dia": 10,
         "m9_stirrup_spacing": 20,
         "m9_trans_bar_dia": 16,
-        "m9_stirrup_per_m": 5
+        "m9_stirrup_per_m": 5,
+        "module_10_diagonal_strap": {
+          "edge_clearance_x": 0.0,
+          "edge_clearance_y": 0.0,
+          "a1": 30.0,
+          "b1": 60.0,
+          "X2": 4.5,
+          "Y2": 3.8,
+          "a2": 40.0,
+          "b2": 50.0,
+          "P1_w": 80.0,
+          "P1_u": 120.0,
+          "P2_w": 120.0,
+          "P2_u": 180.0,
+          "col_weight_factor": 1.0,
+          "q_all_net": 1.5,
+          "fcu": 250.0,
+          "fy": 4000.0,
+          "t_pc": 10.0,
+          "strap_b": 40.0,
+          "strap_D": 170.0,
+          "L1x": 2.95,
+          "L1y": 2.75,
+          "t1": 80.0,
+          "L2x": 2.85,
+          "L2y": 2.85,
+          "t2": 60.0,
+          "long_bar_dia": 22,
+          "stirrup_dia": 10,
+          "stirrup_per_m": 5,
+          "stirrup_spacing": 20.0,
+          "trans_bar_dia": 16,
+          "is_calculated": false,
+          "is_manual_override": false
+        }
       }
     },
     "flat 1": {
@@ -6145,10 +6601,45 @@
           4,
           5,
           6,
-          7
+          7,
+          8
         ],
         "deleted_modules_trash": {},
-        "m9_stirrup_per_m": 5
+        "m9_stirrup_per_m": 5,
+        "module_10_diagonal_strap": {
+          "edge_clearance_x": 0.0,
+          "edge_clearance_y": 0.0,
+          "a1": 30.0,
+          "b1": 60.0,
+          "X2": 4.5,
+          "Y2": 3.8,
+          "a2": 40.0,
+          "b2": 50.0,
+          "P1_w": 80.0,
+          "P1_u": 120.0,
+          "P2_w": 120.0,
+          "P2_u": 180.0,
+          "col_weight_factor": 1.0,
+          "q_all_net": 1.5,
+          "fcu": 250.0,
+          "fy": 4000.0,
+          "t_pc": 10.0,
+          "strap_b": 40.0,
+          "strap_D": 170.0,
+          "L1x": 2.95,
+          "L1y": 2.75,
+          "t1": 80.0,
+          "L2x": 2.85,
+          "L2y": 2.85,
+          "t2": 60.0,
+          "long_bar_dia": 22,
+          "stirrup_dia": 10,
+          "stirrup_per_m": 5,
+          "stirrup_spacing": 20.0,
+          "trans_bar_dia": 16,
+          "is_calculated": false,
+          "is_manual_override": false
+        }
       }
     }
   }
