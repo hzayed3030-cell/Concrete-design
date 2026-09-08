@@ -490,11 +490,59 @@ get_default_diagonal_strap_state = get_default_module_10_state
 _M10_FALLBACK = get_default_module_10_state()
 
 
+def get_default_module_11_state() -> dict:
+    """
+    Factory returning canonical default schema for module_11_ground_beam.
+    Used for new project initialization and backward compatibility migrations.
+    Units strictly follow ECP 203 metric standard: ton · kg · cm · m · kg/cm² · ton·m
+    """
+    return {
+        "level_type": "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)",
+        "support_condition": "Simply Supported (حر من الطرفين)",
+        "L_m": 5.00,             # m (البحر الصافي للكمرة الأرضية)
+        "b_cm": 25.0,            # cm (عرض قطاع الميدة)
+        "t_cm": 60.0,            # cm (العمق التنفيذي المختار)
+        "t_calc_cm": 60.0,       # cm (العمق التصميمي المحسوب)
+        "auto_sync_depth": True, # المزامنة التلقائية مع العمق المحسوب
+        "cover_cm": 4.0,         # cm (الغطاء الخرساني للأساسات)
+        # At Footing Level params
+        "t_footing_cm": 60.0,    # cm (عمق القاعدة المجاورة)
+        "delta_settlement_mm": 10.0, # mm (الهبوط التفاضلي المتوقع)
+        "q_all_soil": 1.50,      # kg/cm² (جهد التربة المسموح به)
+        "soil_contact_type": "Clay / Medium Dense Sand (تربة طينية / رملية متوسطة)",
+        "h_backfill_m": 1.0,     # m (ارتفاع الردم فوق الميدة)
+        "has_wall_at_footing": True,
+        # Wall & Masonry Loads (Both Levels)
+        "has_wall": True,        # يوجد حائط طوب محمل على الميدة
+        "h_wall_m": 3.00,        # m (ارتفاع حائط الدور الأرضي)
+        "t_wall_cm": 12.0,       # cm (سماكة الحائط)
+        "gamma_brick": 1.80,     # ton/m³ (كثافة الطوب والمونة)
+        "w_add_dl": 0.0,         # ton/m (حمل ميت إضافي)
+        "w_add_ll": 0.0,         # ton/m (حمل حي إضافي)
+        # Materials
+        "fcu": 250.0,            # kg/cm² (رتبة الخرسانة)
+        "fy": 4000.0,            # kg/cm² (إجهاد خضوع حديد التسليح الرئيسي)
+        "fy_stirrup": 2400.0,    # kg/cm² (إجهاد خضوع حديد الكانات)
+        # Reinforcement
+        "phi_bot_mm": 16,        # mm (قطر الحديد السفلي)
+        "phi_top_mm": 12,        # mm (قطر الحديد العلوي)
+        "phi_stirrup_mm": 8,     # mm (قطر الكانات)
+        "stirrups_per_m": 6,     # عدد الكانات في المتر
+        "n_stirrup_branches": 2, # عدد فروع الكانة (2 أو 4)
+        "phi_side_mm": 10,       # mm (قطر براندات الانكماش الجانبية)
+        "is_calculated": True,
+    }
+
+get_default_ground_beam_state = get_default_module_11_state
+_M11_FALLBACK = get_default_module_11_state()
+
+
 def get_default_project_state(project_name: str = "", owner_name: str = "") -> dict:
     """Return fresh default project state with all module schemas initialized."""
     d = dict(ECP_DEFAULTS)
     d["module_9_strap_footing"] = get_default_module_9_state()
     d["module_10_diagonal_strap"] = get_default_module_10_state()
+    d["module_11_ground_beam"] = get_default_module_11_state()
     if project_name:
         d["apartment_name"] = project_name
         d["cs_project_name"] = project_name
@@ -503,6 +551,46 @@ def get_default_project_state(project_name: str = "", owner_name: str = "") -> d
     return d
 
 init_new_project = get_default_project_state
+
+
+def migrate_module_11_in_project_dict(pdata_dict: dict) -> bool:
+    """
+    Seamless migration patch for Module 11 (Ground Beam Design & Detailing):
+    Inspects if 'module_11_ground_beam' exists in project dictionary.
+    If missing, appends default schema.
+    Fills any missing keys if schema was updated.
+    Returns True if pdata_dict was modified.
+    """
+    if not isinstance(pdata_dict, dict):
+        return False
+
+    modified = False
+    schema = get_default_module_11_state()
+    nested = pdata_dict.get("module_11_ground_beam")
+
+    if not isinstance(nested, dict):
+        pdata_dict["module_11_ground_beam"] = dict(schema)
+        modified = True
+    else:
+        for k, v in schema.items():
+            if k not in nested:
+                nested[k] = v
+                modified = True
+
+        if float(nested.get("b_cm", 0)) < 15.0:
+            nested["b_cm"] = schema["b_cm"]
+            modified = True
+        if float(nested.get("t_cm", 0)) < 25.0:
+            nested["t_cm"] = schema["t_cm"]
+            modified = True
+        if float(nested.get("L_m", 0)) < 1.0:
+            nested["L_m"] = schema["L_m"]
+            modified = True
+        if float(nested.get("q_all_soil", 1.50)) >= 5.0:
+            nested["q_all_soil"] = round(float(nested["q_all_soil"]) / 10.0, 2)
+            modified = True
+
+    return modified
 
 
 def migrate_module_10_in_project_dict(pdata_dict: dict) -> bool:
@@ -750,6 +838,10 @@ def load_profiles_data() -> dict:
         if migrate_module_10_in_project_dict(pdata_dict):
             modified = True
 
+        # ── Module 11 backward-compatibility migration ───────────────
+        if migrate_module_11_in_project_dict(pdata_dict):
+            modified = True
+
     if modified:
         save_profiles_data(data)
 
@@ -889,6 +981,7 @@ def _clear_widget_cache():
         "_app_session_started",
         "module_9_data",
         "module_10_data",
+        "module_11_data",
     }
     keys_to_del = [k for k in list(st.session_state.keys()) if k not in preserve_keys]
     for k in keys_to_del:
@@ -975,6 +1068,37 @@ def _ensure_module10_state(cfg: dict | None = None) -> None:
     st.session_state["current_project"] = cfg
 
 
+def _ensure_module11_state(cfg: dict | None = None) -> None:
+    """
+    Build/refresh session_state["module_11_data"] safely:
+    1. Inspects if 'module_11_ground_beam' exists, migrating if missing.
+    2. Populates session_state["module_11_data"] without KeyError.
+    3. Keeps session_state["current_project"] synchronized.
+    """
+    if cfg is None:
+        cfg = st.session_state.get("cfg", {})
+
+    migrate_module_11_in_project_dict(cfg)
+
+    nested = cfg.get("module_11_ground_beam")
+    if not isinstance(nested, dict):
+        nested = get_default_module_11_state()
+        cfg["module_11_ground_beam"] = nested
+
+    existing = st.session_state.get("module_11_data")
+    if not isinstance(existing, dict) or not existing:
+        st.session_state["module_11_data"] = dict(nested)
+    else:
+        for k, v in nested.items():
+            if k not in existing:
+                existing[k] = v
+        st.session_state["module_11_data"] = existing
+
+    # Keep cfg and current_project synchronized
+    cfg["module_11_ground_beam"] = st.session_state["module_11_data"]
+    st.session_state["current_project"] = cfg
+
+
 
 def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
     """Switch active profile, load its data into cfg, and clear widget session cache."""
@@ -992,6 +1116,7 @@ def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
     new_cfg = dict(ECP_DEFAULTS)
     new_cfg["module_9_strap_footing"] = get_default_module_9_state()
     new_cfg["module_10_diagonal_strap"] = get_default_module_10_state()
+    new_cfg["module_11_ground_beam"] = get_default_module_11_state()
     profile_cfg = profiles[profile_name].get("data", {})
     for k, v in profile_cfg.items():
         new_cfg[k] = v
@@ -1005,22 +1130,26 @@ def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
 
     migrate_module_9_in_project_dict(new_cfg)
     migrate_module_10_in_project_dict(new_cfg)
+    migrate_module_11_in_project_dict(new_cfg)
 
     st.session_state["cfg"] = new_cfg
     st.session_state["current_project"] = new_cfg
     st.session_state["_settings_loaded_from_file"] = True
 
-    # Wipe old Module 9 & 10 session data so the new project's values are loaded cleanly
+    # Wipe old Module 9, 10 & 11 session data so the new project's values are loaded cleanly
     st.session_state.pop("module_9_data", None)
     st.session_state.pop("module_10_data", None)
+    st.session_state.pop("module_11_data", None)
     _ensure_module9_state(new_cfg)
     _ensure_module10_state(new_cfg)
+    _ensure_module11_state(new_cfg)
 
     if clear_cache:
         _clear_widget_cache()
-        # Re-inject Module 9 & 10 state after cache wipe
+        # Re-inject Module 9, 10 & 11 state after cache wipe
         _ensure_module9_state(new_cfg)
         _ensure_module10_state(new_cfg)
+        _ensure_module11_state(new_cfg)
 
 
 
@@ -1061,9 +1190,10 @@ def create_project(
     else:
         new_data = dict(ECP_DEFAULTS)
 
-    # Ensure clean isolated default schema for module_9_strap_footing & module_10_diagonal_strap
+    # Ensure clean isolated default schema for module_9_strap_footing & module_10_diagonal_strap & module_11_ground_beam
     migrate_module_9_in_project_dict(new_data)
     migrate_module_10_in_project_dict(new_data)
+    migrate_module_11_in_project_dict(new_data)
 
     # Apply enabled_modules if provided or inherited
     if enabled_modules is not None and isinstance(enabled_modules, list):
@@ -1192,6 +1322,7 @@ ALL_MODULES = [
     {"idx": 6, "key": "two_col_footings", "name": "🏗️ Module 7 — Combined Footing Design", "short": "Module 7"},
     {"idx": 7, "key": "strap_footing", "name": "🔗 Module 9: Reinforced Concrete Strap Footing (قواعد الشدادات - الجار)", "short": "Module 9"},
     {"idx": 8, "key": "diagonal_strap_footing", "name": "📐 Module 10: Corner Footing with Diagonal Strap (قاعدة جار ركن بشداد مائل)", "short": "Module 10"},
+    {"idx": 9, "key": "ground_beam", "name": "🧱 Module 11: Ground Beam Design & Detailing (تصميم وتفاصيل الميدات والسملات)", "short": "Module 11"},
 ]
 
 
@@ -1564,6 +1695,7 @@ def import_project_json(json_content: str, overwrite: bool = False) -> tuple:
             if isinstance(p_entry, dict) and "data" in p_entry and isinstance(p_entry["data"], dict):
                 migrate_module_9_in_project_dict(p_entry["data"])
                 migrate_module_10_in_project_dict(p_entry["data"])
+                migrate_module_11_in_project_dict(p_entry["data"])
         pdata["profiles"] = existing_profiles
         save_profiles_data(pdata)
         set_active_project(pdata.get("active_profile", list(existing_profiles.keys())[0]))
@@ -1586,38 +1718,31 @@ set_active_project = set_active_profile
 def load_settings() -> None:
     """
     Read active project from profiles.json → merge into st.session_state["cfg"].
-    Called once per session or on project switch before modules render.
+    Guarantees that every project has completely isolated, independent settings.
+    Never falls back to project 'flat 1' if another project is selected.
+    Loads and normalizes Module 9, 10 & 11 sub-dictionaries cleanly.
     """
-    if "cfg" in st.session_state and st.session_state.get("_settings_loaded_from_file"):
-        return
+    data = load_profiles_data()
+    profiles = data.get("profiles", {})
+    active_name = get_active_project_name()
 
-    pdata = load_profiles_data()
-    active_name = pdata.get("active_profile", "مشروع 1")
-    profiles = pdata.get("profiles", {})
+    if active_name not in profiles:
+        active_name = list(profiles.keys())[0] if profiles else "flat 1"
+        set_active_project(active_name, clear_cache=False)
 
-    if active_name not in profiles and profiles:
-        active_name = list(profiles.keys())[0]
-        pdata["active_profile"] = active_name
+    pinfo = profiles.get(active_name, {})
+    pdata_dict = pinfo.get("data", {}) if pinfo else {}
 
+    # Merge project data over defaults
     cfg = dict(ECP_DEFAULTS)
-    if active_name in profiles:
-        profile_data = profiles[active_name].get("data", {})
-        for k, v in profile_data.items():
-            cfg[k] = v
+    for k, v in pdata_dict.items():
+        cfg[k] = v
 
-        cfg["apartment_name"] = active_name
-        cfg["cs_project_name"] = active_name
+    cfg["apartment_name"] = active_name
+    cfg["cs_project_name"] = active_name
 
-        # Ensure deleted_modules_trash and enabled_modules are strictly synced
-        trash = profile_data.get("deleted_modules_trash", {})
-        cfg["deleted_modules_trash"] = trash
-        cfg["enabled_modules"] = get_project_enabled_modules(active_name)
-
-        if not isinstance(cfg.get("fs_col_transforms"), dict):
-            cfg["fs_col_transforms"] = {}
-        if not isinstance(cfg.get("fs_edge_columns"), dict):
-            cfg["fs_edge_columns"] = {}
-
+    # Set file-loaded flag
+    if pdata_dict:
         st.session_state["_settings_loaded_from_file"] = True
     else:
         st.session_state["_settings_loaded_from_file"] = False
@@ -1629,6 +1754,7 @@ def load_settings() -> None:
 
     migrate_module_9_in_project_dict(cfg)
     migrate_module_10_in_project_dict(cfg)
+    migrate_module_11_in_project_dict(cfg)
 
     st.session_state["cfg"] = cfg
     st.session_state["current_project"] = cfg
@@ -1637,9 +1763,10 @@ def load_settings() -> None:
     if "nav_view" not in st.session_state:
         st.session_state["nav_view"] = "profile_manager"
     cfg["nav_view"] = "profile_manager"
-    # Ensure Module 9 & 10 session state is always populated correctly on app load
+    # Ensure Module 9, 10 & 11 session state is always populated correctly on app load
     _ensure_module9_state(cfg)
     _ensure_module10_state(cfg)
+    _ensure_module11_state(cfg)
 
 
 
@@ -1677,6 +1804,12 @@ def save_settings() -> None:
     if m10:
         cfg["module_10_diagonal_strap"] = {k: v for k, v in m10.items()}
     # ── End Module 10 persistence ────────────────────────────────────────────
+
+    # ── Persist Module 11 data: write nested dict ───────────────────────────
+    m11 = st.session_state.get("module_11_data", {})
+    if m11:
+        cfg["module_11_ground_beam"] = {k: v for k, v in m11.items()}
+    # ── End Module 11 persistence ────────────────────────────────────────────
 
     active_name = get_active_project_name()
     pdata = load_profiles_data()
@@ -2111,6 +2244,9 @@ MODULE_DATA_KEY_PREFIXES = {
     8: [  # Module 10 — Diagonal Strap Footings
         "module_10_diagonal_strap", "m10_",
     ],
+    9: [  # Module 11 — Ground Beam Design & Detailing
+        "module_11_ground_beam", "m11_",
+    ],
 }
 
 # Dependency map: which modules DEPEND ON a given module.
@@ -2118,7 +2254,7 @@ MODULE_DATA_KEY_PREFIXES = {
 # Key = module index; Value = list of (linked_idx, relationship_description)
 # Module 1 (Flat Slab) and Module 2 (Columns) have a direct, mutual BIDIRECTIONAL dependency.
 # Module 3 (Footings) depends on Module 2 (Columns).
-# Module 4, 5, 6, 7, 8, 9 (Ground Slabs, Steel Rebar, Quantity Survey, Two-Column Footings, Strap Footings, Diagonal Strap) are 100% standalone.
+# Module 4, 5, 6, 7, 8, 9, 11 (Ground Slabs, Steel Rebar, Quantity Survey, Two-Column Footings, Strap Footings, Diagonal Strap, Ground Beams) are 100% standalone.
 FUNCTIONAL_DEPENDENCIES: dict[int, list] = {
     0: [  # Module 1 — Flat Slabs (البلاطات اللاكمرية) -> Requires Columns (1)
         (1, "مرتبط بنماذج وتصميم الأعمدة: يغذي الأعمدة بالأحمال المحسوبة وتعتمد بحور السقف والقص الثاقب عليها"),
@@ -2135,6 +2271,7 @@ FUNCTIONAL_DEPENDENCIES: dict[int, list] = {
     6: [],  # Module 7 — Two-Column Footings: Standalone
     7: [],  # Module 9 — Strap Footings: Standalone
     8: [],  # Module 10 — Diagonal Strap Footings: Standalone
+    9: [],  # Module 11 — Ground Beam Design & Detailing: Standalone
 }
 
 

@@ -8382,7 +8382,7 @@ def render():
         on_change="rerun",
     )
     with exp_geom:
-        if exp_geom.open:
+        if st.session_state.get(f"{prefix}exp_geom_verif", False):
             col_geom_plan, col_geom_controls = st.columns([3.0, 1.0], gap="medium")
 
             with col_geom_plan:
@@ -8826,6 +8826,8 @@ def render():
                     <div class="ecp-metric-lbl">No. of Panels</div>
                     <div class="ecp-metric-val">{p_val_str}</div></div>""",
                     unsafe_allow_html=True)
+        else:
+            st.info("💡 انقر لتوسيع هذا القسم وعرض مخطط التحقق الهندسي وتوزيع المحاور والأعمدة.")
 
     # ── 5e. Column Removal Panel ─────────────────────────────────────────────
 
@@ -9087,59 +9089,62 @@ def render():
                     st.rerun()
 
     # ── 5g. DATA CARD & DESIGN PARAMETERS ─────────────────────────────────────
-    with st.expander("📋 بطاقة البيانات ومعايير التصميم (DATA CARD & DESIGN PARAMETERS)", expanded=False):
-        st.markdown(
-            '<div class="section-header">📋 بطاقة البيانات ومعايير التصميم الإنشائية (DATA CARD & DESIGN PARAMETERS)</div>',
-            unsafe_allow_html=True,
-        )
-        col_card_fig, col_card_info = st.columns([1.1, 0.9], gap="large")
-        with col_card_fig:
-            fig_card = generate_flat_slab_data_card(
-                ts_initial=ts_initial if ts_initial is not None else 20,
-                n_floors=num_floors,
-                bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
-                bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
-                top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
-                top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
-                col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
-                strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
-                strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
-                concrete_cover=cov if cov is not None else 1.5,
-                fcu=Fcu if Fcu is not None else 250,
-                fy=Fy if Fy is not None else 4000,
-                live_load=LL if LL is not None else 0.25,
-                flooring_load=SDL if SDL is not None else 0.15,
-                wall_load=wall_load if wall_load is not None else 0.50,
-                col_w_cm=_col_w_sk,
-                col_d_cm=_col_d_sk,
+    with st.expander("📋 بطاقة البيانات ومعايير التصميم (DATA CARD & DESIGN PARAMETERS)", expanded=False, key=f"{prefix}exp_data_card", on_change="rerun"):
+        if st.session_state.get(f"{prefix}exp_data_card", False):
+            st.markdown(
+                '<div class="section-header">📋 بطاقة البيانات ومعايير التصميم الإنشائية (DATA CARD & DESIGN PARAMETERS)</div>',
+                unsafe_allow_html=True,
             )
-            st.pyplot(fig_card, clear_figure=True, use_container_width=True)
-            buf_c = io.BytesIO()
-            fig_card.savefig(buf_c, format="png", bbox_inches="tight", dpi=180)
-            buf_c.seek(0)
-            st.download_button(
-                label="📥 Download Data Card (High-Res PNG)",
-                data=buf_c,
-                file_name=f"{prefix}Flat_Slab_Data_Card.png",
-                mime="image/png",
-                key="_fs_btn_dl_datacard",
-                use_container_width=True,
-            )
-        with col_card_info:
-            st.markdown("### 📌 ملخص معايير التصميم (Design Criteria Summary)")
-            render_styled_table(pd.DataFrame([
-                {"Parameter / المعيار": "Concrete Grade (Fcu)", "Value / القيمة": f"{Fcu if Fcu else 250} kg/cm²", "Category": "Materials"},
-                {"Parameter / المعيار": "Steel Yield (Fy)", "Value / القيمة": f"{Fy if Fy else 4000} kg/cm²", "Category": "Materials"},
-                {"Parameter / المعيار": "Concrete Cover (الغلاف الخرساني)", "Value / القيمة": f"{cov if cov else 1.5} cm", "Category": "Materials"},
-                {"Parameter / المعيار": "Initial Slab Thickness (ts)", "Value / القيمة": f"{ts_initial if ts_initial else 20} cm", "Category": "Geometry"},
-                {"Parameter / المعيار": "Number of Floors", "Value / القيمة": f"{num_floors} Floor(s)", "Category": "Geometry"},
-                {"Parameter / المعيار": "Live Load (LL)", "Value / القيمة": f"{LL if LL else 0.25} t/m²", "Category": "Loading"},
-                {"Parameter / المعيار": "Superimposed Dead Load (SDL)", "Value / القيمة": f"{SDL if SDL else 0.15} t/m²", "Category": "Loading"},
-                {"Parameter / المعيار": "Wall Load (WL)", "Value / القيمة": f"{wall_load if wall_load else 0.50} t/m²", "Category": "Loading"},
-                {"Parameter / المعيار": "Bottom Mesh (الرقة السفلية)", "Value / القيمة": f"{int(n_btm_mesh_usr) if n_btm_mesh_usr else 5} Φ {bottom_mesh_dia if bottom_mesh_dia else 12} / m'", "Category": "Reinforcement"},
-                {"Parameter / المعيار": "Top Mesh (الرقة العلوية)", "Value / القيمة": f"{int(n_top_mesh_usr) if n_top_mesh_usr else 5} Φ {top_mesh_dia if top_mesh_dia else 10} / m'", "Category": "Reinforcement"},
-                {"Parameter / المعيار": "Default Column Dimensions", "Value / القيمة": f"{_col_w_sk} cm × {_col_d_sk} cm", "Category": "Columns"},
-            ]))
+            col_card_fig, col_card_info = st.columns([1.1, 0.9], gap="large")
+            with col_card_fig:
+                fig_card = generate_flat_slab_data_card(
+                    ts_initial=ts_initial if ts_initial is not None else 20,
+                    n_floors=num_floors,
+                    bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
+                    bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
+                    top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
+                    top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
+                    col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
+                    strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
+                    strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
+                    concrete_cover=cov if cov is not None else 1.5,
+                    fcu=Fcu if Fcu is not None else 250,
+                    fy=Fy if Fy is not None else 4000,
+                    live_load=LL if LL is not None else 0.25,
+                    flooring_load=SDL if SDL is not None else 0.15,
+                    wall_load=wall_load if wall_load is not None else 0.50,
+                    col_w_cm=_col_w_sk,
+                    col_d_cm=_col_d_sk,
+                )
+                st.pyplot(fig_card, clear_figure=True, use_container_width=True)
+                buf_c = io.BytesIO()
+                fig_card.savefig(buf_c, format="png", bbox_inches="tight", dpi=180)
+                buf_c.seek(0)
+                st.download_button(
+                    label="📥 Download Data Card (High-Res PNG)",
+                    data=buf_c,
+                    file_name=f"{prefix}Flat_Slab_Data_Card.png",
+                    mime="image/png",
+                    key="_fs_btn_dl_datacard",
+                    use_container_width=True,
+                )
+            with col_card_info:
+                st.markdown("### 📌 ملخص معايير التصميم (Design Criteria Summary)")
+                render_styled_table(pd.DataFrame([
+                    {"Parameter / المعيار": "Concrete Grade (Fcu)", "Value / القيمة": f"{Fcu if Fcu else 250} kg/cm²", "Category": "Materials"},
+                    {"Parameter / المعيار": "Steel Yield (Fy)", "Value / القيمة": f"{Fy if Fy else 4000} kg/cm²", "Category": "Materials"},
+                    {"Parameter / المعيار": "Concrete Cover (الغلاف الخرساني)", "Value / القيمة": f"{cov if cov else 1.5} cm", "Category": "Materials"},
+                    {"Parameter / المعيار": "Initial Slab Thickness (ts)", "Value / القيمة": f"{ts_initial if ts_initial else 20} cm", "Category": "Geometry"},
+                    {"Parameter / المعيار": "Number of Floors", "Value / القيمة": f"{num_floors} Floor(s)", "Category": "Geometry"},
+                    {"Parameter / المعيار": "Live Load (LL)", "Value / القيمة": f"{LL if LL else 0.25} t/m²", "Category": "Loading"},
+                    {"Parameter / المعيار": "Superimposed Dead Load (SDL)", "Value / القيمة": f"{SDL if SDL else 0.15} t/m²", "Category": "Loading"},
+                    {"Parameter / المعيار": "Wall Load (WL)", "Value / القيمة": f"{wall_load if wall_load else 0.50} t/m²", "Category": "Loading"},
+                    {"Parameter / المعيار": "Bottom Mesh (الرقة السفلية)", "Value / القيمة": f"{int(n_btm_mesh_usr) if n_btm_mesh_usr else 5} Φ {bottom_mesh_dia if bottom_mesh_dia else 12} / m'", "Category": "Reinforcement"},
+                    {"Parameter / المعيار": "Top Mesh (الرقة العلوية)", "Value / القيمة": f"{int(n_top_mesh_usr) if n_top_mesh_usr else 5} Φ {top_mesh_dia if top_mesh_dia else 10} / m'", "Category": "Reinforcement"},
+                    {"Parameter / المعيار": "Default Column Dimensions", "Value / القيمة": f"{_col_w_sk} cm × {_col_d_sk} cm", "Category": "Columns"},
+                ]))
+        else:
+            st.info("💡 انقر لتوسيع هذا القسم وعرض بطاقة البيانات والمعايير الإنشائية.")
 
     # ── Columns Registry Table (reflects active columns after removal) ────────
     _registry_df = pd.DataFrame([
@@ -9767,10 +9772,9 @@ def render():
 
     st.markdown("---")
 
-    # ── 🥊 PUNCHING SHEAR VERIFICATION & REINFORCEMENT ENGINE ────────────────
     exp_punch = st.expander("🥊 Punching Shear Check (فحص القص الثاقب وتصميم كانات القص لجميع الأعمدة)", expanded=False, key=f"{prefix}exp_punch", on_change="rerun")
     with exp_punch:
-        if exp_punch.open:
+        if st.session_state.get(f"{prefix}exp_punch", False):
             # 1. Summary Metrics Header
             safe_cols_count = sum(1 for p in punching_results if p["is_safe"])
             unsafe_cols_count = len(punching_results) - safe_cols_count
@@ -10300,6 +10304,8 @@ def render():
                             use_container_width=True,
                             key="btn_dl_punch_site_photo_all_safe",
                         )
+        else:
+            st.info("💡 انقر لتوسيع هذا القسم وعرض نتائج فحص القص الثاقب وتصميم الكانات ونماذج 3D.")
 
     st.markdown("---")
 
@@ -10315,7 +10321,7 @@ def render():
         on_change="rerun",
     )
     with exp_mom:
-        if exp_mom.open:
+        if st.session_state.get(f"{prefix}exp_moments_contour", False):
             moment_view_mode = S.radio(
                 "👁️ Select Moment View Mode (اختر اتجاه عزم الانحناء للعرض):",
                 "fs_moment_contour_view_mode_idx",
@@ -10377,6 +10383,8 @@ def render():
                     use_container_width=True,
                 )
                 plt.close(fig_m22)
+        else:
+            st.info("💡 انقر لتوسيع هذا القسم وعرض مصفوفة العزوم والمخططات اللونية الكنتورية (M11 & M22).")
 
     # ── 📊 1b. MOMENT DEFICIT CONTOUR (فارق العزوم السفلي) ──────────────────
     exp_def = st.expander(
@@ -10386,7 +10394,7 @@ def render():
         on_change="rerun",
     )
     with exp_def:
-        if exp_def.open:
+        if st.session_state.get(f"{prefix}exp_deficit_check", False):
             # Info card: show M_cap of the base mesh
             M_cap_display = calc_moment_capacity_btm(prov_btm_mesh_cm2m, d, Fcu, Fy)
             st.markdown(
@@ -10456,6 +10464,8 @@ def render():
                 use_container_width=True,
             )
             plt.close(fig_deficit)
+        else:
+            st.info("💡 انقر لتوسيع هذا القسم وعرض كونتور فارق العزوم ومناطق الحاجة للحديد الإضافي (Moment Deficit Contour).")
 
     # ── 🟢 2. TOP REINFORCEMENT PLAN (Initialized for exports) ────────────────
     img_top_b64 = None
@@ -10600,10 +10610,9 @@ def render():
                     unsafe_allow_html=True,
                 )
 
-    # ── 🗺️ STEEL LAYOUT MASTER FLOOR PLAN ─────────────────────────────────────
     exp_stl = st.expander("🗺️ Steel Layout (مسقط أفقي لتسليح البلاطة)", expanded=False, key=f"{prefix}exp_steel_layout", on_change="rerun")
     with exp_stl:
-        if exp_stl.open:
+        if st.session_state.get(f"{prefix}exp_steel_layout", False):
             st.markdown(
                 """
                 <style>
@@ -10790,6 +10799,8 @@ def render():
                     key="btn_dl_top_mesh_extra_y",
                 )
                 plt.close(fig_tmes_y)
+        else:
+            st.info("💡 انقر لتوسيع هذا القسم وعرض مساقط ولوحات تفريد تسليح البلاطة (Steel Layout).")
 
     # ── 🦅 CANTILEVER REINFORCEMENT ──────────────────────────────────────────
     if cant_rft_list:
@@ -10856,6 +10867,311 @@ def render():
     render_direction(rows_x, "X-Direction (spanning across Lx spans)")
     render_direction(rows_y, "Y-Direction (spanning across Ly spans)")
 
+    exp_defl = st.expander("📉 Final Deflection Verification (التحقق الإنشائي النهائي من سهم الانحناء والترخيم طويل الأمد)", expanded=False, key=f"{prefix}exp_deflection", on_change="rerun")
+    with exp_defl:
+        if st.session_state.get(f"{prefix}exp_deflection", False):
+            # 1. UI Confirmation Banner
+            st.markdown(
+                """
+                <div dir="rtl" style="background:#0f172a; border:2px solid #3b82f6; border-radius:10px; padding:16px 20px; margin-bottom:14px; text-align:right;">
+                    <div style="font-size:16.5px; font-weight:800; color:#38bdf8; display:flex; align-items:center; gap:8px;">
+                        ℹ️ التحقق الإنشائي النهائي من سهم الانحناء طويل الأمد (Long-Term Cracked Deflection Check)
+                    </div>
+                    <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.8;">
+                        تم التحقق من سهم الانحناء طويل الأمد (Long-Term Cracked Deflection) بالاعتماد الفعلي على كامل شبكات التسليح المعتمدة بالبلاطة: <b>الشبكة السفلية الأساسية + الحديد الإضافي السفلي بمنتصف البحر (As,total)</b> لحساب عمق محور الخمول x وعزم القصور الذاتي المشرخ Icr ورفع الجساءة الفعالة Ie (Branson's Formula)، مع <b>الشبكة العلوية كحديد ضغط (Compression Rebars A's)</b> لتخفيض معامل الزحف والانكماش طويل الأمد λ وفقاً للكود المصري ECP 203 [λ = ξ / (1 + 50μ')]، و<b>حديد الكابات العلوية فوق الأعمدة</b> لضمان جساءة ومنع دوران الأطراف.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # 2. 2D Deflection Heatmap / Plan
+            fig_def = generate_flat_slab_deflection_contour_sketch(
+                Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, DL_tot, LL,
+                deflection_results,
+                col_w_cm=bc_s, col_d_cm=tc_s,
+                removed_cols=_removed_col_objs,
+                void_panel_ids=set(_confirmed_voids),
+                col_transforms=_col_transforms,
+            )
+            st.pyplot(fig_def, clear_figure=True, use_container_width=True)
+
+            buf_def = io.BytesIO()
+            fig_def.savefig(buf_def, format="png", bbox_inches="tight", dpi=180)
+            buf_def.seek(0)
+            def_dl_label = "📥 Download Deflection Warning 2D Contour Plan (High-Res PNG)" if not all_deflection_safe else "📥 Download Deflection Verification 2D Plan (High-Res PNG)"
+            st.download_button(
+                label=def_dl_label,
+                data=buf_def,
+                file_name=f"{prefix}Flat_Slab_Deflection_Check_ts{ts:.0f}cm.png",
+                mime="image/png",
+                use_container_width=True,
+                key="btn_dl_deflection_contour_final",
+            )
+            plt.close(fig_def)
+
+            st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
+
+            # 3. Comprehensive Verification Summary Table
+            st.markdown(
+                """
+                <div style="font-size:18px; font-weight:800; color:#f8fafc; margin-bottom:4px; display:flex; align-items:center; gap:8px;">
+                    📋 جدول التحقق التفصيلي من سهم الانحناء والجساءة الفعالة لكافة الباكيات (ECP 203)
+                </div>
+                <div style="font-size:13px; color:#94a3b8; margin-bottom:12px;">
+                    فحص الترخيم اللحظي والترخيم طويل الأمد والجساءة الفعالة بالاعتماد على كامل حديد التسليح الفعلي
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            def_df = pd.DataFrame([
+                {
+                    "Panel ID": p["Panel ID"],
+                    "Bay Location": p["Bay Label"],
+                    "Type": p["Location Type"],
+                    "Ln (m)": f"{p['Ln (m)']:.2f} m",
+                    "ts / d (cm)": f"{p['ts (cm)']:.0f} / {p['d (cm)']:.1f}",
+                    "As_btm (cm²/m)": f"{p['As_btm (cm²/m)']:.2f}",
+                    "A's_top (cm²/m)": f"{p['As_top (cm²/m)']:.2f}",
+                    "x_na (cm)": f"{p['x_na (cm)']:.2f}",
+                    "Mcr (t·m/m)": f"{p['Mcr (t.m/m)']:.2f}",
+                    "Ms (t·m/m)": f"{p['Ms_pos (t.m/m)']:.2f}",
+                    "Ie/Ig": f"{p['Ie/Ig']:.2f}",
+                    "λ (Creep)": f"{p['lambda_creep']:.2f}",
+                    "δst (mm)": f"{p['delta_st (mm)']:.2f}",
+                    "Δtotal (mm)": f"{p['delta_long (mm)']:.2f}",
+                    "Δallow (mm)": f"{p['delta_all (mm)']:.2f} (Ln/250)",
+                    "Ratio": f"{p['Ratio']:.2f}",
+                    "Status": p["Status"],
+                }
+                for p in deflection_results
+            ])
+            render_styled_table(def_df, font_size_override=10.5)
+
+            # 4. Recommendations & Status Advisories
+            if not all_deflection_safe:
+                unsafe_panels = [p for p in deflection_results if not p["is_safe"]]
+                names_unsafe_p = ", ".join([f"<b>{p['Panel ID']}</b> ({p['Bay Label']})" for p in unsafe_panels])
+                st.markdown(
+                    f"""
+                    <div dir="rtl" style="background:rgba(239, 68, 68, 0.14); border:2px solid #ef4444; border-radius:10px; padding:16px 20px; margin-top:14px; margin-bottom:14px; text-align:right;">
+                        <div style="font-size:16px; font-weight:800; color:#f87171; display:flex; align-items:center; gap:8px;">
+                            ⚠️ تنبيه إنشائي: تجاوز سهم الانحناء المسموح به كودياً في بعض الباكيات (Deflection Exceeded)
+                        </div>
+                        <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.8;">
+                            • <b>الباكيات المتأثرة:</b> {names_unsafe_p}<br>
+                            • <b>السبب الإنشائي:</b> سهم الانحناء طويل المدى بعد 5 سنوات يتجاوز الحد الأقصى المسموح (<b>Δtotal &gt; Δall = Ln/250</b>).<br>
+                            💡 <b>التوصيات الإنشائية والتنفيذية قبل حصر الكميات:</b><br>
+                            1. <b>زيادة سُمك البلاطة (ts):</b> يُوصى برفع السُمك من {ts:.0f} cm إلى تخانة أكبر لرفع عزم القصور الذاتي Ig و Ie بالتكعيب.<br>
+                            2. <b>تكثيف الحديد الإضافي السفلي (As,btm):</b> زيادة مساحة حديد الشد بمنتصف البحر لتقليل عمق الشروخ ورفع Icr.<br>
+                            3. <b>زيادة الشبكة العلوية (A's - Compression Rebars):</b> لتقليل معامل الزحف والانكماش طويل الأمد λ طبقاً للشرط الكودي λ = 2.0 / (1 + 50μ').
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            # 5. 💡 Deflection Optimization Engine & Rebar Alternatives (موديول المعالجة الذكية لسهم الانحناء وبدائل التسليح)
+            st.markdown("<div style='margin-top:18px; margin-bottom:12px;'></div>", unsafe_allow_html=True)
+            with st.expander("💡 Deflection Optimization Engine & Rebar Alternatives (موديول المعالجة الذكية لسهم الانحناء وبدائل التسليح)", expanded=False):
+                unsafe_panels = [p for p in deflection_results if not p.get("is_safe", True)]
+
+                if not unsafe_panels:
+                    st.markdown(
+                        """
+                        <div dir="rtl" style="background:#0f172a; border:2px solid #22c55e; border-radius:10px; padding:18px 22px; text-align:right; margin-bottom:10px;">
+                            <div style="font-size:17.5px; font-weight:800; color:#22c55e; display:flex; align-items:center; gap:8px;">
+                                ✅ جميع بلاطات السقف آمنة تماماً من ناحية سهم الانحناء (All Panels are Safe from Deflection)
+                            </div>
+                            <div style="margin-top:8px; font-size:14px; color:#f8fafc; line-height:1.8;">
+                                • <b>حالة الأمان الكودية:</b> كافة الباكيات تحقق حدود الأمان لسهم الانحناء الكلي طويل المدى (<b>Δtotal ≤ Δall = Ln/250</b>) طبقاً لاشتراطات الكود المصري ECP 203.<br>
+                                • <b>النتيجة الهندسية:</b> سُمك البلاطة الحالي وتسليح الشبكات كافيان ومحققان للجساءة المطلوبة، ولا توجد أي باكية حرجة تتطلب تشغيل خوارزمية المعالجة الذكية أو تكثيف بدائل التسليح.
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        """
+                        <div dir="rtl" style="background:#0f172a; border:1.8px solid #38bdf8; border-radius:10px; padding:14px 18px; margin-bottom:14px; text-align:right;">
+                            <div style="font-size:16.5px; font-weight:800; color:#38bdf8; margin-bottom:4px;">
+                                🎯 المعالجة الذكية لسهم الانحناء وتثبيت سُمك البلاطة (ts) دون عمل سقوط (Drop Panel)
+                            </div>
+                            <div style="font-size:13.5px; color:#cbd5e1; line-height:1.7;">
+                                يقوم هذا الموديول بحل معادلات سهم الانحناء والجساءة الفعالة (Branson) ومعامل الزحف الكودي (ECP 203) عكسياً (Iterative Inverse Solver) لتقديم بديلين منفصلين للتسليح يحققان الأمان الكامل (<b>Δtotal ≤ Ln/250</b>) مع تثبيت سُمك السقف الحالي:
+                                <br>• <b>البديل الأول:</b> تكثيف حديد الشد السفلي الإضافي (Extra Bottom Tension Steel As) لرفع الجساءة Icr و Ie.
+                                <br>• <b>البديل الثاني:</b> زيادة حديد الضغط العلوي في منتصف البحر (Top Compression Steel A's) لتخفيض معامل الزحف والانكماش λ.
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                    # Panel selector for optimization (showing ONLY unsafe panels)
+                    unsafe_panel_options = [
+                        f"🚨 {p['Panel ID']} — {p['Bay Label']} ({p['Location Type']}) [Δact={p['delta_long (mm)']:.1f} mm > Δall={p['delta_all (mm)']:.1f} mm (+{((p['delta_long (mm)']/max(0.01, p['delta_all (mm)']))-1.0)*100:.0f}%)]"
+                        for p in unsafe_panels
+                    ]
+
+                    sel_unsafe_idx = st.selectbox(
+                        "🎯 اختر الباكية غير الآمنة لتشغيل المعالجة الذكية وحساب بدائل التسليح:",
+                        options=range(len(unsafe_panels)),
+                        format_func=lambda i: unsafe_panel_options[i],
+                        index=0,
+                        key="sel_opt_def_panel_idx",
+                    )
+                    sel_panel_data = unsafe_panels[sel_unsafe_idx]
+
+                    # Solve optimization
+                    opt_res = solve_deflection_optimization(sel_panel_data, DL_tot, LL, Fcu, Fy=Fy)
+
+                    if opt_res.get("all_failed", False):
+                        # ── FAILURE ALERT: Trigger Audio Beep & Mandatory Slab Thickness Alert ──
+                        audio_beep_html = """
+                        <script>
+                        (function() {
+                            try {
+                                var AudioContext = window.AudioContext || window.webkitAudioContext;
+                                if (!AudioContext) return;
+                                var ctx = new AudioContext();
+                                function playBeep(freq, start, duration) {
+                                    var osc = ctx.createOscillator();
+                                    var gain = ctx.createGain();
+                                    osc.type = 'sawtooth';
+                                    osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+                                    gain.gain.setValueAtTime(0.22, ctx.currentTime + start);
+                                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
+                                    osc.connect(gain);
+                                    gain.connect(ctx.destination);
+                                    osc.start(ctx.currentTime + start);
+                                    osc.stop(ctx.currentTime + start + duration);
+                                }
+                                playBeep(880, 0.05, 0.22);
+                                playBeep(880, 0.35, 0.22);
+                                playBeep(1175, 0.70, 0.45);
+                            } catch(e) {
+                                console.error("Audio beep error:", e);
+                            }
+                        })();
+                        </script>
+                        """
+                        st.components.v1.html(audio_beep_html, height=0)
+
+                        st.markdown(
+                            f"""
+                            <div dir="rtl" style="background:linear-gradient(135deg, rgba(239, 68, 68, 0.22) 0%, rgba(185, 28, 28, 0.38) 100%); border:2.5px solid #ef4444; border-radius:12px; padding:20px 24px; margin-top:14px; margin-bottom:18px; text-align:right; box-shadow:0 8px 24px rgba(239, 68, 68, 0.25);">
+                                <div style="font-size:18.5px; font-weight:900; color:#fee2e2; display:flex; align-items:center; gap:10px;">
+                                    🚨 تنبيه إنشائي: لا يوجد بديل عن زيادة تخانة البلاطة المسلحة لمقاومة الـ deflection
+                                </div>
+                                <div style="margin-top:12px; font-size:14.5px; color:#ffffff; line-height:1.9;">
+                                    • <b>سبب عدم جدوى زيادة التسليح:</b> وصل حديد الشد للحد الأقصى الكودي <b>As_max = {opt_res['As_max']:.2f} cm²/m</b> (لضمان الانهيار الممطول ومنع الانهيار القصيف)، وتجاوز عدد الأسياخ الحد التنفيذي (10 أسياخ/متر لقطر Φ16 مم)، ومع ذلك ما زال سهم الانحناء غير آمن (<b>Δtotal = {opt_res['delta_curr_mm']:.2f} mm &gt; Δall = {opt_res['delta_allow_mm']:.2f} mm</b>).<br>
+                                    • <b>الحل الهندسي الإلزامي الموصى به:</b> زيادة سُمك البلاطة الخرسانية فوراً إلى <b>ts,recommended = {opt_res['ts_rec_cm']} cm</b> (بزيادة <b>+{opt_res['ts_inc_cm']} cm</b> عن السُمك الحالي {ts:.0f} cm) لرفع الجساءة الفعالة بالتكعيب وتحقيق الأمان الكامل لسهم الانحناء طبقاً للكود المصري ECP 203.
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                        # Display curves tab to visualize the As_max constraint
+                        fig_opt_curve = generate_deflection_optimization_curves_sketch(
+                            sel_panel_data, opt_res, DL_tot, LL, Fcu
+                        )
+                        st.pyplot(fig_opt_curve, clear_figure=True, use_container_width=True)
+                        plt.close(fig_opt_curve)
+
+                    else:
+                        # ── SUCCESS: Organized Comparison Table & Engineering Visualizations ──
+                        st.markdown(
+                            """
+                            <div style="font-size:17px; font-weight:800; color:#f8fafc; margin-top:14px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+                                📋 جدول مقارنة بدائل التسليح المعتمدة والنتائج المتوقعة (Optimization Summary Table)
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                        # Format rows
+                        opt1_data = opt_res["opt1"]
+                        opt2_data = opt_res["opt2"]
+
+                        opt_table_data = []
+                        if opt1_data:
+                            inc_pct_opt1 = ((opt1_data["As_prop"] - opt_res["As_curr"]) / max(0.1, opt_res["As_curr"])) * 100.0
+                            opt_table_data.append({
+                                "مسار الحل (Solution Option)": "1️⃣ البديل الأول (تكثيف حديد الشد السفلي)",
+                                "نوع التسليح المعدل (Modified Rebar)": "حديد الشد السفلي الإضافي (Extra Bottom Tension Steel As)",
+                                "القطر المختار Φ": f"Φ {opt1_data['dia']} mm",
+                                "عدد الأسياخ / متر": f"{opt1_data['n_bars']} أسياخ / م",
+                                "مساحة التسليح الكلية": f"{opt1_data['As_prop']:.2f} cm²/m",
+                                "سهم الانحناء المتوقع (Δtotal)": f"{opt1_data['delta_tot']:.2f} mm",
+                                "الحد المسموح (Δall)": f"{opt_res['delta_allow_mm']:.2f} mm (Ln/250)",
+                                "حالة الأمان (Safety Status)": "✅ Safe (آمن ومحقق للكود)" if opt1_data["is_safe"] else "❌ غير محقق للحدود",
+                            })
+
+                        if opt2_data:
+                            inc_pct_opt2 = ((opt2_data["As_prime_prop"] - opt_res["As_prime_curr"]) / max(0.1, opt_res["As_prime_curr"])) * 100.0
+                            opt_table_data.append({
+                                "مسار الحل (Solution Option)": "2️⃣ البديل الثاني (زيادة حديد الضغط العلوي)",
+                                "نوع التسليح المعدل (Modified Rebar)": "حديد الضغط العلوي بمنتصف البحر (Compression Steel A's)",
+                                "القطر المختار Φ": f"Φ {opt2_data['dia']} mm",
+                                "عدد الأسياخ / متر": f"{opt2_data['n_bars']} أسياخ / م",
+                                "مساحة التسليح الكلية": f"{opt2_data['As_prime_prop']:.2f} cm²/m",
+                                "سهم الانحناء المتوقع (Δtotal)": f"{opt2_data['delta_tot']:.2f} mm",
+                                "الحد المسموح (Δall)": f"{opt_res['delta_allow_mm']:.2f} mm (Ln/250)",
+                                "حالة الأمان (Safety Status)": "✅ Safe (آمن ومحقق للكود)" if opt2_data["is_safe"] else "❌ غير محقق للحدود",
+                            })
+
+                        render_styled_table(opt_table_data, font_size_override=10.5)
+
+                        st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
+
+                        # Tabs for Curves & Cross-Section
+                        tab_opt_c, tab_opt_s = st.tabs([
+                            "📈 Deflection vs. Steel Area Curves (المنحنى البياني لسهم الانحناء ومساحة الحديد)",
+                            "📐 Cross Section Detail (القطاع الهندسي التفصيلي للبلاطة بمنتصف البحر)",
+                        ])
+
+                        with tab_opt_c:
+                            fig_opt_curve = generate_deflection_optimization_curves_sketch(
+                                sel_panel_data, opt_res, DL_tot, LL, Fcu
+                            )
+                            st.pyplot(fig_opt_curve, clear_figure=True, use_container_width=True)
+
+                            buf_opt_c = io.BytesIO()
+                            fig_opt_curve.savefig(buf_opt_c, format="png", bbox_inches="tight", dpi=180)
+                            buf_opt_c.seek(0)
+                            st.download_button(
+                                label=f"📥 Download Deflection Optimization Curves — Panel {sel_panel_data['Panel ID']} (High-Res PNG)",
+                                data=buf_opt_c,
+                                file_name=f"{prefix}Deflection_Optimization_Curves_{sel_panel_data['Panel ID']}.png",
+                                mime="image/png",
+                                use_container_width=True,
+                                key=f"btn_dl_def_opt_curve_{sel_panel_data['Panel ID']}",
+                            )
+                            plt.close(fig_opt_curve)
+
+                        with tab_opt_s:
+                            fig_opt_sec = generate_deflection_rebar_cross_section_sketch(
+                                sel_panel_data, opt_res
+                            )
+                            st.pyplot(fig_opt_sec, clear_figure=True, use_container_width=True)
+
+                            buf_opt_s = io.BytesIO()
+                            fig_opt_sec.savefig(buf_opt_s, format="png", bbox_inches="tight", dpi=180)
+                            buf_opt_s.seek(0)
+                            st.download_button(
+                                label=f"📥 Download Midspan Cross-Section Detail — Panel {sel_panel_data['Panel ID']} (High-Res PNG)",
+                                data=buf_opt_s,
+                                file_name=f"{prefix}Deflection_Midspan_Section_{sel_panel_data['Panel ID']}.png",
+                                mime="image/png",
+                                use_container_width=True,
+                                key=f"btn_dl_def_opt_sec_{sel_panel_data['Panel ID']}",
+                            )
+                            plt.close(fig_opt_sec)
+        else:
+            st.info("💡 انقر لتوسيع هذا القسم وعرض التحقق الإنشائي النهائي من سهم الانحناء طويل الأمد (Deflection Verification).")
+
     # ── 🏛️ COLUMN REACTIONS & MULTI-STOREY LOADS (ردود أفعال وتوزيع أحمال الأعمدة) ────
     col_reactions_data = []
     for c in _active_cols:
@@ -10893,7 +11209,7 @@ def render():
         on_change="rerun",
     )
     with exp_reac:
-        if exp_reac.open:
+        if st.session_state.get(f"{prefix}exp_col_reactions", False):
             fig_reac = generate_flat_slab_reactions_sketch(
                 Lx_calc, Ly_calc, cantilevers, num_floors, Wu,
                 col_reactions_data,
@@ -10916,6 +11232,8 @@ def render():
                 use_container_width=True,
             )
             plt.close(fig_reac)
+        else:
+            st.info("💡 انقر لتوسيع هذا القسم وعرض مخطط ردود أفعال وتوزيع أحمال الأعمدة.")
 
     with st.expander(f"📊 Column Reactions Table — {num_floors} Floors (جدول ردود أفعال وتوزيع أحمال الأعمدة)", expanded=False):
         reactions_df = pd.DataFrame([
@@ -11584,325 +11902,26 @@ def render():
         with fs_tab_sketch:
             st.markdown("##### 🗺️ المسقط الأفقي العام لأساسات المبنى وتوزيع القواعد والشدادات (Foundation Layout Plan Sketch)")
             st.caption("مخطط ملون يوضح: 🟦 القواعد المنفصلة (أزرق)، 🟩 القواعد المشتركة (أخضر)، 🟧 قواعد وكمرات الشدادات الجانبية والركنية (برتقالي) مع المحاور والأبعاد.")
-            fig_full_sketch = draw_comprehensive_foundation_sketch(fs_active_columns, ftg_analysis)
-            st.pyplot(fig_full_sketch, clear_figure=True, use_container_width=True)
+            with st.expander("🖼️ استعراض وتحميل المسقط الأفقي العام للأساسات (Load Foundation Layout Plan)", expanded=False, key=f"{prefix}exp_fs_found_sketch", on_change="rerun"):
+                if st.session_state.get(f"{prefix}exp_fs_found_sketch", False):
+                    fig_full_sketch = draw_comprehensive_foundation_sketch(fs_active_columns, ftg_analysis)
+                    st.pyplot(fig_full_sketch, clear_figure=True, use_container_width=True)
 
-            buf_fs_sketch = io.BytesIO()
-            fig_full_sketch.savefig(buf_fs_sketch, format="png", bbox_inches="tight", dpi=180)
-            buf_fs_sketch.seek(0)
-            st.download_button(
-                label="📥 Download Foundation Layout Plan Sketch (High-Res PNG)",
-                data=buf_fs_sketch,
-                file_name=f"{prefix}Foundation_Comprehensive_Layout_{num_floors}Floors.png",
-                mime="image/png",
-                use_container_width=True,
-                key=f"{prefix}btn_dl_full_foundation_sketch",
-            )
-            plt.close(fig_full_sketch)
-
-    # ── 📉 FINAL DEFLECTION VERIFICATION (ECP 203) ───────────────────────────
-    exp_defl = st.expander("📉 Final Deflection Verification (التحقق الإنشائي النهائي من سهم الانحناء والترخيم طويل الأمد)", expanded=False, key=f"{prefix}exp_deflection", on_change="rerun")
-    with exp_defl:
-        if exp_defl.open:
-            # 1. UI Confirmation Banner
-            st.markdown(
-                """
-                <div dir="rtl" style="background:#0f172a; border:2px solid #3b82f6; border-radius:10px; padding:16px 20px; margin-bottom:14px; text-align:right;">
-                    <div style="font-size:16.5px; font-weight:800; color:#38bdf8; display:flex; align-items:center; gap:8px;">
-                        ℹ️ التحقق الإنشائي النهائي من سهم الانحناء طويل الأمد (Long-Term Cracked Deflection Check)
-                    </div>
-                    <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.8;">
-                        تم التحقق من سهم الانحناء طويل الأمد (Long-Term Cracked Deflection) بالاعتماد الفعلي على كامل شبكات التسليح المعتمدة بالبلاطة: <b>الشبكة السفلية الأساسية + الحديد الإضافي السفلي بمنتصف البحر (As,total)</b> لحساب عمق محور الخمول x وعزم القصور الذاتي المشرخ Icr ورفع الجساءة الفعالة Ie (Branson's Formula)، مع <b>الشبكة العلوية كحديد ضغط (Compression Rebars A's)</b> لتخفيض معامل الزحف والانكماش طويل الأمد λ وفقاً للكود المصري ECP 203 [λ = ξ / (1 + 50μ')]، و<b>حديد الكابات العلوية فوق الأعمدة</b> لضمان جساءة ومنع دوران الأطراف.
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            # 2. 2D Deflection Heatmap / Plan
-            fig_def = generate_flat_slab_deflection_contour_sketch(
-                Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, DL_tot, LL,
-                deflection_results,
-                col_w_cm=bc_s, col_d_cm=tc_s,
-                removed_cols=_removed_col_objs,
-                void_panel_ids=set(_confirmed_voids),
-                col_transforms=_col_transforms,
-            )
-            st.pyplot(fig_def, clear_figure=True, use_container_width=True)
-
-            buf_def = io.BytesIO()
-            fig_def.savefig(buf_def, format="png", bbox_inches="tight", dpi=180)
-            buf_def.seek(0)
-            def_dl_label = "📥 Download Deflection Warning 2D Contour Plan (High-Res PNG)" if not all_deflection_safe else "📥 Download Deflection Verification 2D Plan (High-Res PNG)"
-            st.download_button(
-                label=def_dl_label,
-                data=buf_def,
-                file_name=f"{prefix}Flat_Slab_Deflection_Check_ts{ts:.0f}cm.png",
-                mime="image/png",
-                use_container_width=True,
-                key="btn_dl_deflection_contour_final",
-            )
-            plt.close(fig_def)
-
-            st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
-
-            # 3. Comprehensive Verification Summary Table
-            st.markdown(
-                """
-                <div style="font-size:18px; font-weight:800; color:#f8fafc; margin-bottom:4px; display:flex; align-items:center; gap:8px;">
-                    📋 جدول التحقق التفصيلي من سهم الانحناء والجساءة الفعالة لكافة الباكيات (ECP 203)
-                </div>
-                <div style="font-size:13px; color:#94a3b8; margin-bottom:12px;">
-                    فحص الترخيم اللحظي والترخيم طويل الأمد والجساءة الفعالة بالاعتماد على كامل حديد التسليح الفعلي
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            def_df = pd.DataFrame([
-                {
-                    "Panel ID": p["Panel ID"],
-                    "Bay Location": p["Bay Label"],
-                    "Type": p["Location Type"],
-                    "Ln (m)": f"{p['Ln (m)']:.2f} m",
-                    "ts / d (cm)": f"{p['ts (cm)']:.0f} / {p['d (cm)']:.1f}",
-                    "As_btm (cm²/m)": f"{p['As_btm (cm²/m)']:.2f}",
-                    "A's_top (cm²/m)": f"{p['As_top (cm²/m)']:.2f}",
-                    "x_na (cm)": f"{p['x_na (cm)']:.2f}",
-                    "Mcr (t·m/m)": f"{p['Mcr (t.m/m)']:.2f}",
-                    "Ms (t·m/m)": f"{p['Ms_pos (t.m/m)']:.2f}",
-                    "Ie/Ig": f"{p['Ie/Ig']:.2f}",
-                    "λ (Creep)": f"{p['lambda_creep']:.2f}",
-                    "δst (mm)": f"{p['delta_st (mm)']:.2f}",
-                    "Δtotal (mm)": f"{p['delta_long (mm)']:.2f}",
-                    "Δallow (mm)": f"{p['delta_all (mm)']:.2f} (Ln/250)",
-                    "Ratio": f"{p['Ratio']:.2f}",
-                    "Status": p["Status"],
-                }
-                for p in deflection_results
-            ])
-            render_styled_table(def_df, font_size_override=10.5)
-
-            # 4. Recommendations & Status Advisories
-            if not all_deflection_safe:
-                unsafe_panels = [p for p in deflection_results if not p["is_safe"]]
-                names_unsafe_p = ", ".join([f"<b>{p['Panel ID']}</b> ({p['Bay Label']})" for p in unsafe_panels])
-                st.markdown(
-                    f"""
-                    <div dir="rtl" style="background:rgba(239, 68, 68, 0.14); border:2px solid #ef4444; border-radius:10px; padding:16px 20px; margin-top:14px; margin-bottom:14px; text-align:right;">
-                        <div style="font-size:16px; font-weight:800; color:#f87171; display:flex; align-items:center; gap:8px;">
-                            ⚠️ تنبيه إنشائي: تجاوز سهم الانحناء المسموح به كودياً في بعض الباكيات (Deflection Exceeded)
-                        </div>
-                        <div style="margin-top:8px; font-size:14.5px; color:#ffffff; line-height:1.8;">
-                            • <b>الباكيات المتأثرة:</b> {names_unsafe_p}<br>
-                            • <b>السبب الإنشائي:</b> سهم الانحناء طويل المدى بعد 5 سنوات يتجاوز الحد الأقصى المسموح (<b>Δtotal &gt; Δall = Ln/250</b>).<br>
-                            💡 <b>التوصيات الإنشائية والتنفيذية قبل حصر الكميات:</b><br>
-                            1. <b>زيادة سُمك البلاطة (ts):</b> يُوصى برفع السُمك من {ts:.0f} cm إلى تخانة أكبر لرفع عزم القصور الذاتي Ig و Ie بالتكعيب.<br>
-                            2. <b>تكثيف الحديد الإضافي السفلي (As,btm):</b> زيادة مساحة حديد الشد بمنتصف البحر لتقليل عمق الشروخ ورفع Icr.<br>
-                            3. <b>زيادة الشبكة العلوية (A's - Compression Rebars):</b> لتقليل معامل الزحف والانكماش طويل الأمد λ طبقاً للشرط الكودي λ = 2.0 / (1 + 50μ').
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            # 5. 💡 Deflection Optimization Engine & Rebar Alternatives (موديول المعالجة الذكية لسهم الانحناء وبدائل التسليح)
-            st.markdown("<div style='margin-top:18px; margin-bottom:12px;'></div>", unsafe_allow_html=True)
-            with st.expander("💡 Deflection Optimization Engine & Rebar Alternatives (موديول المعالجة الذكية لسهم الانحناء وبدائل التسليح)", expanded=False):
-                unsafe_panels = [p for p in deflection_results if not p.get("is_safe", True)]
-
-                if not unsafe_panels:
-                    st.markdown(
-                        """
-                        <div dir="rtl" style="background:#0f172a; border:2px solid #22c55e; border-radius:10px; padding:18px 22px; text-align:right; margin-bottom:10px;">
-                            <div style="font-size:17.5px; font-weight:800; color:#22c55e; display:flex; align-items:center; gap:8px;">
-                                ✅ جميع بلاطات السقف آمنة تماماً من ناحية سهم الانحناء (All Panels are Safe from Deflection)
-                            </div>
-                            <div style="margin-top:8px; font-size:14px; color:#f8fafc; line-height:1.8;">
-                                • <b>حالة الأمان الكودية:</b> كافة الباكيات تحقق حدود الأمان لسهم الانحناء الكلي طويل المدى (<b>Δtotal ≤ Δall = Ln/250</b>) طبقاً لاشتراطات الكود المصري ECP 203.<br>
-                                • <b>النتيجة الهندسية:</b> سُمك البلاطة الحالي وتسليح الشبكات كافيان ومحققان للجساءة المطلوبة، ولا توجد أي باكية حرجة تتطلب تشغيل خوارزمية المعالجة الذكية أو تكثيف بدائل التسليح.
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
+                    buf_fs_sketch = io.BytesIO()
+                    fig_full_sketch.savefig(buf_fs_sketch, format="png", bbox_inches="tight", dpi=180)
+                    buf_fs_sketch.seek(0)
+                    st.download_button(
+                        label="📥 Download Foundation Layout Plan Sketch (High-Res PNG)",
+                        data=buf_fs_sketch,
+                        file_name=f"{prefix}Foundation_Comprehensive_Layout_{num_floors}Floors.png",
+                        mime="image/png",
+                        use_container_width=True,
+                        key=f"{prefix}btn_dl_full_foundation_sketch",
                     )
+                    plt.close(fig_full_sketch)
                 else:
-                    st.markdown(
-                        """
-                        <div dir="rtl" style="background:#0f172a; border:1.8px solid #38bdf8; border-radius:10px; padding:14px 18px; margin-bottom:14px; text-align:right;">
-                            <div style="font-size:16.5px; font-weight:800; color:#38bdf8; margin-bottom:4px;">
-                                🎯 المعالجة الذكية لسهم الانحناء وتثبيت سُمك البلاطة (ts) دون عمل سقوط (Drop Panel)
-                            </div>
-                            <div style="font-size:13.5px; color:#cbd5e1; line-height:1.7;">
-                                يقوم هذا الموديول بحل معادلات سهم الانحناء والجساءة الفعالة (Branson) ومعامل الزحف الكودي (ECP 203) عكسياً (Iterative Inverse Solver) لتقديم بديلين منفصلين للتسليح يحققان الأمان الكامل (<b>Δtotal ≤ Ln/250</b>) مع تثبيت سُمك السقف الحالي:
-                                <br>• <b>البديل الأول:</b> تكثيف حديد الشد السفلي الإضافي (Extra Bottom Tension Steel As) لرفع الجساءة Icr و Ie.
-                                <br>• <b>البديل الثاني:</b> زيادة حديد الضغط العلوي في منتصف البحر (Top Compression Steel A's) لتخفيض معامل الزحف والانكماش λ.
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
+                    st.info("💡 انقر لتوسيع هذا القسم وتوليد المسقط الأفقي العام لأساسات المبنى وتوزيع القواعد.")
 
-                    # Panel selector for optimization (showing ONLY unsafe panels)
-                    unsafe_panel_options = [
-                        f"🚨 {p['Panel ID']} — {p['Bay Label']} ({p['Location Type']}) [Δact={p['delta_long (mm)']:.1f} mm > Δall={p['delta_all (mm)']:.1f} mm (+{((p['delta_long (mm)']/max(0.01, p['delta_all (mm)']))-1.0)*100:.0f}%)]"
-                        for p in unsafe_panels
-                    ]
-
-                    sel_unsafe_idx = st.selectbox(
-                        "🎯 اختر الباكية غير الآمنة لتشغيل المعالجة الذكية وحساب بدائل التسليح:",
-                        options=range(len(unsafe_panels)),
-                        format_func=lambda i: unsafe_panel_options[i],
-                        index=0,
-                        key="sel_opt_def_panel_idx",
-                    )
-                    sel_panel_data = unsafe_panels[sel_unsafe_idx]
-
-                    # Solve optimization
-                    opt_res = solve_deflection_optimization(sel_panel_data, DL_tot, LL, Fcu, Fy=Fy)
-
-                    if opt_res.get("all_failed", False):
-                        # ── FAILURE ALERT: Trigger Audio Beep & Mandatory Slab Thickness Alert ──
-                        audio_beep_html = """
-                        <script>
-                        (function() {
-                            try {
-                                var AudioContext = window.AudioContext || window.webkitAudioContext;
-                                if (!AudioContext) return;
-                                var ctx = new AudioContext();
-                                function playBeep(freq, start, duration) {
-                                    var osc = ctx.createOscillator();
-                                    var gain = ctx.createGain();
-                                    osc.type = 'sawtooth';
-                                    osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
-                                    gain.gain.setValueAtTime(0.22, ctx.currentTime + start);
-                                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
-                                    osc.connect(gain);
-                                    gain.connect(ctx.destination);
-                                    osc.start(ctx.currentTime + start);
-                                    osc.stop(ctx.currentTime + start + duration);
-                                }
-                                playBeep(880, 0.05, 0.22);
-                                playBeep(880, 0.35, 0.22);
-                                playBeep(1175, 0.70, 0.45);
-                            } catch(e) {
-                                console.error("Audio beep error:", e);
-                            }
-                        })();
-                        </script>
-                        """
-                        st.components.v1.html(audio_beep_html, height=0)
-
-                        st.markdown(
-                            f"""
-                            <div dir="rtl" style="background:linear-gradient(135deg, rgba(239, 68, 68, 0.22) 0%, rgba(185, 28, 28, 0.38) 100%); border:2.5px solid #ef4444; border-radius:12px; padding:20px 24px; margin-top:14px; margin-bottom:18px; text-align:right; box-shadow:0 8px 24px rgba(239, 68, 68, 0.25);">
-                                <div style="font-size:18.5px; font-weight:900; color:#fee2e2; display:flex; align-items:center; gap:10px;">
-                                    🚨 تنبيه إنشائي: لا يوجد بديل عن زيادة تخانة البلاطة المسلحة لمقاومة الـ deflection
-                                </div>
-                                <div style="margin-top:12px; font-size:14.5px; color:#ffffff; line-height:1.9;">
-                                    • <b>سبب عدم جدوى زيادة التسليح:</b> وصل حديد الشد للحد الأقصى الكودي <b>As_max = {opt_res['As_max']:.2f} cm²/m</b> (لضمان الانهيار الممطول ومنع الانهيار القصيف)، وتجاوز عدد الأسياخ الحد التنفيذي (10 أسياخ/متر لقطر Φ16 مم)، ومع ذلك ما زال سهم الانحناء غير آمن (<b>Δtotal = {opt_res['delta_curr_mm']:.2f} mm &gt; Δall = {opt_res['delta_allow_mm']:.2f} mm</b>).<br>
-                                    • <b>الحل الهندسي الإلزامي الموصى به:</b> زيادة سُمك البلاطة الخرسانية فوراً إلى <b>ts,recommended = {opt_res['ts_rec_cm']} cm</b> (بزيادة <b>+{opt_res['ts_inc_cm']} cm</b> عن السُمك الحالي {ts:.0f} cm) لرفع الجساءة الفعالة بالتكعيب وتحقيق الأمان الكامل لسهم الانحناء طبقاً للكود المصري ECP 203.
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-
-                        # Display curves tab to visualize the As_max constraint
-                        fig_opt_curve = generate_deflection_optimization_curves_sketch(
-                            sel_panel_data, opt_res, DL_tot, LL, Fcu
-                        )
-                        st.pyplot(fig_opt_curve, clear_figure=True, use_container_width=True)
-                        plt.close(fig_opt_curve)
-
-                    else:
-                        # ── SUCCESS: Organized Comparison Table & Engineering Visualizations ──
-                        st.markdown(
-                            """
-                            <div style="font-size:17px; font-weight:800; color:#f8fafc; margin-top:14px; margin-bottom:8px; display:flex; align-items:center; gap:8px;">
-                                📋 جدول مقارنة بدائل التسليح المعتمدة والنتائج المتوقعة (Optimization Summary Table)
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-
-                        # Format rows
-                        opt1_data = opt_res["opt1"]
-                        opt2_data = opt_res["opt2"]
-
-                        opt_table_data = []
-                        if opt1_data:
-                            inc_pct_opt1 = ((opt1_data["As_prop"] - opt_res["As_curr"]) / max(0.1, opt_res["As_curr"])) * 100.0
-                            opt_table_data.append({
-                                "مسار الحل (Solution Option)": "1️⃣ البديل الأول (تكثيف حديد الشد السفلي)",
-                                "نوع التسليح المعدل (Modified Rebar)": "حديد الشد السفلي الإضافي (Extra Bottom Tension Steel As)",
-                                "القطر المختار Φ": f"Φ {opt1_data['dia']} mm",
-                                "عدد الأسياخ / متر": f"{opt1_data['n_bars']} أسياخ / م",
-                                "مساحة التسليح الكلية": f"{opt1_data['As_prop']:.2f} cm²/m",
-                                "سهم الانحناء المتوقع (Δtotal)": f"{opt1_data['delta_tot']:.2f} mm",
-                                "الحد المسموح (Δall)": f"{opt_res['delta_allow_mm']:.2f} mm (Ln/250)",
-                                "حالة الأمان (Safety Status)": "✅ Safe (آمن ومحقق للكود)" if opt1_data["is_safe"] else "❌ غير محقق للحدود",
-                            })
-
-                        if opt2_data:
-                            inc_pct_opt2 = ((opt2_data["As_prime_prop"] - opt_res["As_prime_curr"]) / max(0.1, opt_res["As_prime_curr"])) * 100.0
-                            opt_table_data.append({
-                                "مسار الحل (Solution Option)": "2️⃣ البديل الثاني (زيادة حديد الضغط العلوي)",
-                                "نوع التسليح المعدل (Modified Rebar)": "حديد الضغط العلوي بمنتصف البحر (Compression Steel A's)",
-                                "القطر المختار Φ": f"Φ {opt2_data['dia']} mm",
-                                "عدد الأسياخ / متر": f"{opt2_data['n_bars']} أسياخ / م",
-                                "مساحة التسليح الكلية": f"{opt2_data['As_prime_prop']:.2f} cm²/m",
-                                "سهم الانحناء المتوقع (Δtotal)": f"{opt2_data['delta_tot']:.2f} mm",
-                                "الحد المسموح (Δall)": f"{opt_res['delta_allow_mm']:.2f} mm (Ln/250)",
-                                "حالة الأمان (Safety Status)": "✅ Safe (آمن ومحقق للكود)" if opt2_data["is_safe"] else "❌ غير محقق للحدود",
-                            })
-
-                        render_styled_table(opt_table_data, font_size_override=10.5)
-
-                        st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
-
-                        # Tabs for Curves & Cross-Section
-                        tab_opt_c, tab_opt_s = st.tabs([
-                            "📈 Deflection vs. Steel Area Curves (المنحنى البياني لسهم الانحناء ومساحة الحديد)",
-                            "📐 Cross Section Detail (القطاع الهندسي التفصيلي للبلاطة بمنتصف البحر)",
-                        ])
-
-                        with tab_opt_c:
-                            fig_opt_curve = generate_deflection_optimization_curves_sketch(
-                                sel_panel_data, opt_res, DL_tot, LL, Fcu
-                            )
-                            st.pyplot(fig_opt_curve, clear_figure=True, use_container_width=True)
-
-                            buf_opt_c = io.BytesIO()
-                            fig_opt_curve.savefig(buf_opt_c, format="png", bbox_inches="tight", dpi=180)
-                            buf_opt_c.seek(0)
-                            st.download_button(
-                                label=f"📥 Download Deflection Optimization Curves — Panel {sel_panel_data['Panel ID']} (High-Res PNG)",
-                                data=buf_opt_c,
-                                file_name=f"{prefix}Deflection_Optimization_Curves_{sel_panel_data['Panel ID']}.png",
-                                mime="image/png",
-                                use_container_width=True,
-                                key=f"btn_dl_def_opt_curve_{sel_panel_data['Panel ID']}",
-                            )
-                            plt.close(fig_opt_curve)
-
-                        with tab_opt_s:
-                            fig_opt_sec = generate_deflection_rebar_cross_section_sketch(
-                                sel_panel_data, opt_res
-                            )
-                            st.pyplot(fig_opt_sec, clear_figure=True, use_container_width=True)
-
-                            buf_opt_s = io.BytesIO()
-                            fig_opt_sec.savefig(buf_opt_s, format="png", bbox_inches="tight", dpi=180)
-                            buf_opt_s.seek(0)
-                            st.download_button(
-                                label=f"📥 Download Midspan Cross-Section Detail — Panel {sel_panel_data['Panel ID']} (High-Res PNG)",
-                                data=buf_opt_s,
-                                file_name=f"{prefix}Deflection_Midspan_Section_{sel_panel_data['Panel ID']}.png",
-                                mime="image/png",
-                                use_container_width=True,
-                                key=f"btn_dl_def_opt_sec_{sel_panel_data['Panel ID']}",
-                            )
-                            plt.close(fig_opt_sec)
     # ── 📊 الحصر التقريبي للكميات — APPROXIMATE QUANTITY SURVEY ──────────────
     # 1. Slab Quantities (السقف)
     slab_area_val    = boq.get("slab_area_m2", 0.0)

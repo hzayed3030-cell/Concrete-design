@@ -1,5 +1,5 @@
 {
-  "selected_module_idx": 0,
+  "selected_module_idx": 3,
   "apartment_name": "try1",
   "col_Pu_input": 155.0,
   "col_Safety_Factor": 1.2,
@@ -846,6 +846,39 @@
     4.3
   ],
   "nav_view": "profile_manager",
+  "module_11_ground_beam": {
+    "level_type": "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)",
+    "support_condition": "Simply Supported (حر من الطرفين)",
+    "L_m": 5.0,
+    "b_cm": 25.0,
+    "t_cm": 60.0,
+    "t_calc_cm": 40.0,
+    "auto_sync_depth": true,
+    "cover_cm": 4.0,
+    "t_footing_cm": 60.0,
+    "delta_settlement_mm": 10.0,
+    "q_all_soil": 1.5,
+    "soil_contact_type": "Clay / Medium Dense Sand (تربة طينية / رملية متوسطة)",
+    "h_backfill_m": 1.0,
+    "has_wall_at_footing": true,
+    "h_wall_m": 3.0,
+    "t_wall_cm": 25.0,
+    "gamma_brick": 1.8,
+    "w_add_dl": 0.0,
+    "w_add_ll": 0.0,
+    "fcu": 300.0,
+    "fy": 4000.0,
+    "fy_stirrup": 2400.0,
+    "phi_bot_mm": 16,
+    "phi_top_mm": 12,
+    "phi_stirrup_mm": 8,
+    "stirrups_per_m": 6,
+    "n_stirrup_branches": 2,
+    "phi_side_mm": 10,
+    "is_calculated": true,
+    "n_branches": 2,
+    "has_wall": true
+  },
   "enabled_modules": [
     0,
     1,
@@ -855,7 +888,8 @@
     5,
     6,
     7,
-    8
+    8,
+    9
   ],
   "deleted_modules_trash": {}
 }

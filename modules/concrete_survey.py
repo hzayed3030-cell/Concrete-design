@@ -2634,145 +2634,201 @@ def render() -> None:
         # ────────────────────────────────────────────────────────────────────
         # INTEGRATED CAD DRAWINGS & BBS VISUALIZER (Columns + Flat Slabs)
         # ────────────────────────────────────────────────────────────────────
-        # ────────────────────────────────────────────────────────────────────
-        # INTEGRATED CAD DRAWINGS & BBS VISUALIZER (Columns + Flat Slabs)
-        # ────────────────────────────────────────────────────────────────────
-        all_drawings = []
-        for idx, r in enumerate(col_results):
-            fig_i = draw_column_unified_sheet(
-                b_cm=r["b"],
-                t_cm=r["t"],
-                H_col_cm=col_h_in,
-                t_slab_cm=t_slab_in,
-                n_bars=r["n_bars"],
-                phi_mm=r["phi_main"],
-                phi_st_mm=phi_st,
-                n_st_per_m=n_st_m,
-                is_top_floor=is_top,
-                lap_factor=lap_factor_sel,
-                tie_type=r["tie_type"],
-                n_rows=r["n_rows"],
-                cover=cover_cm,
-                has_footing_dowels=has_footing,
-                L_foot_cm=r.get("L_foot_cm", 25.0 if has_footing else 0.0),
-                L_bar_custom_m=r["L_bar_m"],
-            )
-            b64_i = fig_to_base64(fig_i)
-            all_drawings.append({
-                "type": "column",
-                "fig": fig_i,
-                "img_b64": b64_i,
-                "name": r["name"],
-                "b": r["b"],
-                "t": r["t"],
-                "n_bars": r["n_bars"],
-                "phi_main": r["phi_main"],
-            })
-
-        slab_drawings = []
-        for s_idx, s in enumerate(slab_results):
-            fig_s = draw_flat_slab_survey_sheet(
-                lx_m=s["lx"],
-                ly_m=s["ly"],
-                ts_cm=s["ts"],
-                phi_btm_x=s["phi_bx"],
-                phi_btm_y=s["phi_by"],
-                phi_top_x=s["phi_tx"],
-                phi_top_y=s["phi_ty"],
-                nb_x=s["nb_bx"],
-                nb_y=s["nb_by"],
-                nb_top_x=s["nb_tx"],
-                nb_top_y=s["nb_ty"],
-                name=s["name"],
-                n_rep=s["n_rep"],
-                add_top_lx=s.get("add_top_lx", 0.0),
-                add_top_ly=s.get("add_top_ly", 0.0),
-                n_top_add_x=s.get("n_top_add_x", 0),
-                n_top_add_y=s.get("n_top_add_y", 0),
-                phi_top_add=s.get("phi_top_add", 12),
-                add_btm_lx=s.get("add_btm_lx", 0.0),
-                add_btm_ly=s.get("add_btm_ly", 0.0),
-                n_btm_add_x=s.get("n_btm_add_x", 0),
-                n_btm_add_y=s.get("n_btm_add_y", 0),
-                phi_btm_add=s.get("phi_btm_add", 12),
-                top_add_models=s.get("top_add_models", []),
-                btm_add_models=s.get("btm_add_models", []),
-            )
-            b64_s = fig_to_base64(fig_s)
-            slab_drawings.append({
-                "type": "slab",
-                "fig": fig_s,
-                "img_b64": b64_s,
-                "name": s["name"],
-                "lx": s["lx"],
-                "ly": s["ly"],
-                "ts": s["ts"],
-                "n_rep": s["n_rep"],
-            })
-
-        combined_all_drawings = all_drawings + slab_drawings
-
         with st.expander(
             f"📐 المخططات الإنشائية وتفريد التسليح للعناصر ({len(col_results)} نماذج أعمدة + {len(slab_results)} نماذج بلاطات)",
             expanded=False,
+            key="cs_draw_exp",
+            on_change="rerun",
         ):
-            view_mode_col1, view_mode_col2 = st.columns([2, 1])
-            with view_mode_col1:
-                draw_view_mode = st.radio(
-                    "طريقة استعراض الرسومات الهندسية:",
-                    options=["📑 استعراض بنظام التبويبات (Tabs لكل عنصر)", "📜 عرض كافة الرسومات معاً"],
-                    index=0,
-                    horizontal=True,
-                    key="cs_draw_view_mode",
-                )
-            with view_mode_col2:
-                st.caption(f"يتوفر رسم تنفيذي وتفريد تسليح مستقل لـ {len(col_results)} نماذج أعمدة و {len(slab_results)} نماذج بلاطات.")
+            if st.session_state.get("cs_draw_exp", False):
+                all_drawings = []
+                for idx, r in enumerate(col_results):
+                    fig_i = draw_column_unified_sheet(
+                        b_cm=r["b"],
+                        t_cm=r["t"],
+                        H_col_cm=col_h_in,
+                        t_slab_cm=t_slab_in,
+                        n_bars=r["n_bars"],
+                        phi_mm=r["phi_main"],
+                        phi_st_mm=phi_st,
+                        n_st_per_m=n_st_m,
+                        is_top_floor=is_top,
+                        lap_factor=lap_factor_sel,
+                        tie_type=r["tie_type"],
+                        n_rows=r["n_rows"],
+                        cover=cover_cm,
+                        has_footing_dowels=has_footing,
+                        L_foot_cm=r.get("L_foot_cm", 25.0 if has_footing else 0.0),
+                        L_bar_custom_m=r["L_bar_m"],
+                    )
+                    b64_i = fig_to_base64(fig_i)
+                    all_drawings.append({
+                        "type": "column",
+                        "fig": fig_i,
+                        "img_b64": b64_i,
+                        "name": r["name"],
+                        "b": r["b"],
+                        "t": r["t"],
+                        "n_bars": r["n_bars"],
+                        "phi_main": r["phi_main"],
+                    })
 
-            if "تبويبات" in draw_view_mode:
-                tab_labels = []
-                for d in combined_all_drawings:
-                    if d.get("type") == "column":
-                        tab_labels.append(f"🏛️ عمود {d['name']} ({d['b']:.0f}×{d['t']:.0f} cm)")
-                    else:
-                        tab_labels.append(f"🟦 بلاطة {d['name']} ({d['lx']:.1f}×{d['ly']:.1f} m)")
+                slab_drawings = []
+                for s_idx, s in enumerate(slab_results):
+                    fig_s = draw_flat_slab_survey_sheet(
+                        lx_m=s["lx"],
+                        ly_m=s["ly"],
+                        ts_cm=s["ts"],
+                        phi_btm_x=s["phi_bx"],
+                        phi_btm_y=s["phi_by"],
+                        phi_top_x=s["phi_tx"],
+                        phi_top_y=s["phi_ty"],
+                        nb_x=s["nb_bx"],
+                        nb_y=s["nb_by"],
+                        nb_top_x=s["nb_tx"],
+                        nb_top_y=s["nb_ty"],
+                        name=s["name"],
+                        n_rep=s["n_rep"],
+                        add_top_lx=s.get("add_top_lx", 0.0),
+                        add_top_ly=s.get("add_top_ly", 0.0),
+                        n_top_add_x=s.get("n_top_add_x", 0),
+                        n_top_add_y=s.get("n_top_add_y", 0),
+                        phi_top_add=s.get("phi_top_add", 12),
+                        add_btm_lx=s.get("add_btm_lx", 0.0),
+                        add_btm_ly=s.get("add_btm_ly", 0.0),
+                        n_btm_add_x=s.get("n_btm_add_x", 0),
+                        n_btm_add_y=s.get("n_btm_add_y", 0),
+                        phi_btm_add=s.get("phi_btm_add", 12),
+                        top_add_models=s.get("top_add_models", []),
+                        btm_add_models=s.get("btm_add_models", []),
+                    )
+                    b64_s = fig_to_base64(fig_s)
+                    slab_drawings.append({
+                        "type": "slab",
+                        "fig": fig_s,
+                        "img_b64": b64_s,
+                        "name": s["name"],
+                        "lx": s["lx"],
+                        "ly": s["ly"],
+                        "ts": s["ts"],
+                        "n_rep": s["n_rep"],
+                    })
 
-                draw_tabs = st.tabs(tab_labels)
-                for i, d in enumerate(combined_all_drawings):
-                    with draw_tabs[i]:
+                combined_all_drawings = all_drawings + slab_drawings
+                view_mode_col1, view_mode_col2 = st.columns([2, 1])
+                with view_mode_col1:
+                    draw_view_mode = st.radio(
+                        "طريقة استعراض الرسومات الهندسية:",
+                        options=["📑 استعراض بنظام التبويبات (Tabs لكل عنصر)", "📜 عرض كافة الرسومات معاً"],
+                        index=0,
+                        horizontal=True,
+                        key="cs_draw_view_mode",
+                    )
+                with view_mode_col2:
+                    st.caption(f"يتوفر رسم تنفيذي وتفريد تسليح مستقل لـ {len(col_results)} نماذج أعمدة و {len(slab_results)} نماذج بلاطات.")
+
+                if "تبويبات" in draw_view_mode:
+                    tab_labels = []
+                    for d in combined_all_drawings:
                         if d.get("type") == "column":
-                            header_bg = "linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #2563eb 100%)"
-                            border_col = "#60a5fa"
+                            tab_labels.append(f"🏛️ عمود {d['name']} ({d['b']:.0f}×{d['t']:.0f} cm)")
+                        else:
+                            tab_labels.append(f"🟦 بلاطة {d['name']} ({d['lx']:.1f}×{d['ly']:.1f} m)")
+
+                    draw_tabs = st.tabs(tab_labels)
+                    for i, d in enumerate(combined_all_drawings):
+                        with draw_tabs[i]:
+                            if d.get("type") == "column":
+                                header_bg = "linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #2563eb 100%)"
+                                border_col = "#60a5fa"
+                                icon_str = "🏛️"
+                                tag_str = f"{d['b']:.0f} × {d['t']:.0f} cm &nbsp;|&nbsp; {d['n_bars']} Φ {d['phi_main']} mm"
+                                title_str = f"المخطط الإنشائي وتفريد التسليح لنموذج عمود: <b style='color:#93c5fd; font-size:28px;'>{d['name']}</b>"
+                            else:
+                                header_bg = "linear-gradient(135deg, #065f46 0%, #047857 50%, #059669 100%)"
+                                border_col = "#34d399"
+                                icon_str = "🟦"
+                                tag_str = f"{d['lx']:.1f} × {d['ly']:.1f} m &nbsp;|&nbsp; ts = {d['ts']:.0f} cm"
+                                title_str = f"المخطط الإنشائي وتفريد التسليح لنموذج بلاطة مسطحة: <b style='color:#a7f3d0; font-size:28px;'>{d['name']}</b>"
+
+                            st.markdown(
+                                f"""
+                                <div style="
+                                    background: {header_bg};
+                                    color: #ffffff !important;
+                                    padding: 15px 24px;
+                                    border-radius: 10px;
+                                    font-size: 26px;
+                                    font-weight: 900;
+                                    margin: 8px 0 16px 0;
+                                    display: flex;
+                                    justify-content: space-between;
+                                    align-items: center;
+                                    box-shadow: 0 5px 18px rgba(30, 58, 138, 0.28);
+                                    border-right: 8px solid {border_col};
+                                ">
+                                    <div style="display:flex; align-items:center; gap:12px;">
+                                        <span style="font-size:28px;">{icon_str}</span>
+                                        <span style="color:#ffffff !important;">{title_str}</span>
+                                    </div>
+                                    <span dir="ltr" style="background:rgba(255,255,255,0.22); color:#ffffff !important; padding:6px 18px; border-radius:16px; font-size:20px; font-weight:900; border:1.5px solid rgba(255,255,255,0.40);">
+                                        {tag_str}
+                                    </span>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+                            st.pyplot(d["fig"], use_container_width=True)
+
+                            # High-Res PNG Download Button per Drawing (as in Flat Slab module)
+                            buf_draw_tab = io.BytesIO()
+                            d["fig"].savefig(buf_draw_tab, format="png", bbox_inches="tight", dpi=300)
+                            buf_draw_tab.seek(0)
+                            prefix = get_safe_profile_filename_prefix()
+                            st.download_button(
+                                label=f"📥 Download Drawing {d['name']} (High-Res PNG)",
+                                data=buf_draw_tab,
+                                file_name=f"{prefix}ECP203_CAD_Drawing_{d['name']}.png",
+                                mime="image/png",
+                                use_container_width=True,
+                                key=f"cs_btn_dl_tab_{i}_{d['name']}",
+                            )
+                else:
+                    for i, d in enumerate(combined_all_drawings):
+                        if d.get("type") == "column":
+                            header_bg = "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)"
+                            border_col = "#38bdf8"
                             icon_str = "🏛️"
                             tag_str = f"{d['b']:.0f} × {d['t']:.0f} cm &nbsp;|&nbsp; {d['n_bars']} Φ {d['phi_main']} mm"
-                            title_str = f"المخطط الإنشائي وتفريد التسليح لنموذج عمود: <b style='color:#93c5fd; font-size:28px;'>{d['name']}</b>"
+                            title_str = f"المخطط الإنشائي وتفريد التسليح لنموذج عمود: <b style='color:#67e8f9; font-size:28px;'>{d['name']}</b>"
                         else:
-                            header_bg = "linear-gradient(135deg, #065f46 0%, #047857 50%, #059669 100%)"
+                            header_bg = "linear-gradient(135deg, #064e3b 0%, #047857 100%)"
                             border_col = "#34d399"
                             icon_str = "🟦"
                             tag_str = f"{d['lx']:.1f} × {d['ly']:.1f} m &nbsp;|&nbsp; ts = {d['ts']:.0f} cm"
-                            title_str = f"المخطط الإنشائي وتفريد التسليح لنموذج بلاطة مسطحة: <b style='color:#a7f3d0; font-size:28px;'>{d['name']}</b>"
+                            title_str = f"المخطط الإنشائي وتفريد التسليح لنموذج بلاطة مسطحة: <b style='color:#6ee7b7; font-size:28px;'>{d['name']}</b>"
 
                         st.markdown(
                             f"""
                             <div style="
                                 background: {header_bg};
                                 color: #ffffff !important;
-                                padding: 15px 24px;
+                                padding: 16px 24px;
+                                margin: 22px 0 14px 0;
                                 border-radius: 10px;
                                 font-size: 26px;
                                 font-weight: 900;
-                                margin: 8px 0 16px 0;
                                 display: flex;
                                 justify-content: space-between;
                                 align-items: center;
-                                box-shadow: 0 5px 18px rgba(30, 58, 138, 0.28);
+                                box-shadow: 0 5px 18px rgba(15, 23, 42, 0.30);
                                 border-right: 8px solid {border_col};
                             ">
                                 <div style="display:flex; align-items:center; gap:12px;">
                                     <span style="font-size:28px;">{icon_str}</span>
                                     <span style="color:#ffffff !important;">{title_str}</span>
                                 </div>
-                                <span dir="ltr" style="background:rgba(255,255,255,0.22); color:#ffffff !important; padding:6px 18px; border-radius:16px; font-size:20px; font-weight:900; border:1.5px solid rgba(255,255,255,0.40);">
+                                <span dir="ltr" style="background:rgba(255,255,255,0.20); color:#ffffff !important; padding:6px 18px; border-radius:16px; font-size:20px; font-weight:900; border:1.5px solid rgba(255,255,255,0.35);">
                                     {tag_str}
                                 </span>
                             </div>
@@ -2782,75 +2838,20 @@ def render() -> None:
                         st.pyplot(d["fig"], use_container_width=True)
 
                         # High-Res PNG Download Button per Drawing (as in Flat Slab module)
-                        buf_draw_tab = io.BytesIO()
-                        d["fig"].savefig(buf_draw_tab, format="png", bbox_inches="tight", dpi=300)
-                        buf_draw_tab.seek(0)
+                        buf_draw_list = io.BytesIO()
+                        d["fig"].savefig(buf_draw_list, format="png", bbox_inches="tight", dpi=300)
+                        buf_draw_list.seek(0)
                         prefix = get_safe_profile_filename_prefix()
                         st.download_button(
                             label=f"📥 Download Drawing {d['name']} (High-Res PNG)",
-                            data=buf_draw_tab,
+                            data=buf_draw_list,
                             file_name=f"{prefix}ECP203_CAD_Drawing_{d['name']}.png",
                             mime="image/png",
                             use_container_width=True,
-                            key=f"cs_btn_dl_tab_{i}_{d['name']}",
+                            key=f"cs_btn_dl_list_{i}_{d['name']}",
                         )
             else:
-                for i, d in enumerate(combined_all_drawings):
-                    if d.get("type") == "column":
-                        header_bg = "linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)"
-                        border_col = "#38bdf8"
-                        icon_str = "🏛️"
-                        tag_str = f"{d['b']:.0f} × {d['t']:.0f} cm &nbsp;|&nbsp; {d['n_bars']} Φ {d['phi_main']} mm"
-                        title_str = f"المخطط الإنشائي وتفريد التسليح لنموذج عمود: <b style='color:#67e8f9; font-size:28px;'>{d['name']}</b>"
-                    else:
-                        header_bg = "linear-gradient(135deg, #064e3b 0%, #047857 100%)"
-                        border_col = "#34d399"
-                        icon_str = "🟦"
-                        tag_str = f"{d['lx']:.1f} × {d['ly']:.1f} m &nbsp;|&nbsp; ts = {d['ts']:.0f} cm"
-                        title_str = f"المخطط الإنشائي وتفريد التسليح لنموذج بلاطة مسطحة: <b style='color:#6ee7b7; font-size:28px;'>{d['name']}</b>"
-
-                    st.markdown(
-                        f"""
-                        <div style="
-                            background: {header_bg};
-                            color: #ffffff !important;
-                            padding: 16px 24px;
-                            margin: 22px 0 14px 0;
-                            border-radius: 10px;
-                            font-size: 26px;
-                            font-weight: 900;
-                            display: flex;
-                            justify-content: space-between;
-                            align-items: center;
-                            box-shadow: 0 5px 18px rgba(15, 23, 42, 0.30);
-                            border-right: 8px solid {border_col};
-                        ">
-                            <div style="display:flex; align-items:center; gap:12px;">
-                                <span style="font-size:28px;">{icon_str}</span>
-                                <span style="color:#ffffff !important;">{title_str}</span>
-                            </div>
-                            <span dir="ltr" style="background:rgba(255,255,255,0.20); color:#ffffff !important; padding:6px 18px; border-radius:16px; font-size:20px; font-weight:900; border:1.5px solid rgba(255,255,255,0.35);">
-                                {tag_str}
-                            </span>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                    st.pyplot(d["fig"], use_container_width=True)
-
-                    # High-Res PNG Download Button per Drawing (as in Flat Slab module)
-                    buf_draw_list = io.BytesIO()
-                    d["fig"].savefig(buf_draw_list, format="png", bbox_inches="tight", dpi=300)
-                    buf_draw_list.seek(0)
-                    prefix = get_safe_profile_filename_prefix()
-                    st.download_button(
-                        label=f"📥 Download Drawing {d['name']} (High-Res PNG)",
-                        data=buf_draw_list,
-                        file_name=f"{prefix}ECP203_CAD_Drawing_{d['name']}.png",
-                        mime="image/png",
-                        use_container_width=True,
-                        key=f"cs_btn_dl_list_{i}_{d['name']}",
-                    )
+                st.info("💡 انقر لتوسيع هذا القسم وتوليد المخططات الهندسية وتفريد التسليح لكافة نماذج الأعمدة والأسقف (Lazy Loading).")
 
         # ────────────────────────────────────────────────────────────────────
         # BOTTOM PANEL: SUMMARY METRICS & DETAILED QUANTITY TAKEOFF RESULTS

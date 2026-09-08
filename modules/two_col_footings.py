@@ -2027,22 +2027,25 @@ def _draw_tutorial_sections():
 
 def _render_structural_tutorial():
     st.markdown("---")
-    with st.expander("📚 Combined Footing Structural Tutorial (الدليل الإنشائي والتعليمي للقواعد المشتركة)", expanded=False):
-        t1, t2 = st.tabs([
-            "📈 مخططات العزوم والسلوك الإنشائي (BMD & Structural Behavior)",
-            "🧱 قطاعات وتفاصيل التسليح الكاملة (Full 4-Layer Detailing)",
-        ])
-        with t1:
-            st.markdown("#### 🔍 السلوك الإنشائي ومخططات العزوم (Bending Moments & Mechanics)")
-            fig_bmd = _draw_tutorial_bmd()
-            st.pyplot(fig_bmd, use_container_width=True)
-            plt.close(fig_bmd)
+    with st.expander("📚 Combined Footing Structural Tutorial (الدليل الإنشائي والتعليمي للقواعد المشتركة)", expanded=False, key="m7_tut_exp", on_change="rerun"):
+        if st.session_state.get("m7_tut_exp", False):
+            t1, t2 = st.tabs([
+                "📈 مخططات العزوم والسلوك الإنشائي (BMD & Structural Behavior)",
+                "🧱 قطاعات وتفاصيل التسليح الكاملة (Full 4-Layer Detailing)",
+            ])
+            with t1:
+                st.markdown("#### 🔍 السلوك الإنشائي ومخططات العزوم (Bending Moments & Mechanics)")
+                fig_bmd = _draw_tutorial_bmd()
+                st.pyplot(fig_bmd, use_container_width=True)
+                plt.close(fig_bmd)
 
-        with t2:
-            st.markdown("#### 🧱 المخطط التنفيذي الشامل للطبقات الأربع للتسليح (4-Layer Executive Blueprint)")
-            fig_sec = _draw_tutorial_sections()
-            st.pyplot(fig_sec, use_container_width=True)
-            plt.close(fig_sec)
+            with t2:
+                st.markdown("#### 🧱 المخطط التنفيذي الشامل للطبقات الأربع للتسليح (4-Layer Executive Blueprint)")
+                fig_sec = _draw_tutorial_sections()
+                st.pyplot(fig_sec, use_container_width=True)
+                plt.close(fig_sec)
+        else:
+            st.info("💡 انقر لتوسيع هذا القسم وعرض الدليل الإنشائي والتعليمي لمخططات العزوم وتفاصيل التسليح (4 Layers).")
 
 
 
@@ -2227,28 +2230,25 @@ def render():
             )
 
         # ── 6. FOUNDATION GENERAL LAYOUT PLAN ─────────────────────────────────
-        st.markdown(
-            """
-            <div class="section-header">📐 المسقط الأفقي العام للقواعد وفحص التداخل (Foundation General Layout Plan)</div>
-            """,
-            unsafe_allow_html=True,
-        )
+        with st.expander("📐 المسقط الأفقي العام للقواعد وفحص التداخل (Foundation General Layout Plan)", expanded=False, key="m7_plan_exp", on_change="rerun"):
+            if st.session_state.get("m7_plan_exp", False):
+                fig_plan = draw_foundation_layout_plan(cols_list, footings_map, overlap_res, combined_models)
+                st.pyplot(fig_plan, use_container_width=True)
 
-        fig_plan = draw_foundation_layout_plan(cols_list, footings_map, overlap_res, combined_models)
-        st.pyplot(fig_plan, use_container_width=True)
-
-        buf_p = io.BytesIO()
-        fig_plan.savefig(buf_p, format="png", bbox_inches="tight", dpi=300)
-        buf_p.seek(0)
-        st.download_button(
-            "📥 Download Foundation General Layout Plan (High-Res PNG)",
-            buf_p.getvalue(),
-            file_name="ECP203_Building_Foundations_Plan.png",
-            mime="image/png",
-            use_container_width=True,
-            key="btn_dl_bld_plan",
-        )
-        plt.close(fig_plan)
+                buf_p = io.BytesIO()
+                fig_plan.savefig(buf_p, format="png", bbox_inches="tight", dpi=250)
+                buf_p.seek(0)
+                st.download_button(
+                    "📥 Download Foundation General Layout Plan (High-Res PNG)",
+                    buf_p.getvalue(),
+                    file_name="ECP203_Building_Foundations_Plan.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key="btn_dl_bld_plan",
+                )
+                plt.close(fig_plan)
+            else:
+                st.info("💡 انقر لتوسيع هذا القسم وتوليد المسقط الأفقي العام لأساسات المبنى وفحص التداخل الخرساني (Lazy Loading).")
 
         # ── 7. DYNAMIC STREAMLIT TABS ─────────────────────────────────────────
         st.markdown("---")
@@ -2410,17 +2410,22 @@ def render():
         colA_dict = {"id": "C1", "tc": c1, "bc": b1, "pu_tot": P1 * 1.5}
         colB_dict = {"id": "C2", "tc": c2, "bc": b2, "pu_tot": P2 * 1.5}
 
-        if mode_q == "combined":
-            cf_quick = design_combined_footing_model("comb-1", colA_dict, colB_dict, S_dist, q_net, Fcu, Fy, cover, Phi)
-            fig_q = _draw_plan("combined", S_m=S_dist, c1_cm=c1, b1_cm=b1, c2_cm=c2, b2_cm=b2,
-                               Lc_cm=cf_quick["Lc_cm"], Bc_cm=cf_quick["Bc_cm"],
-                               x1_cm=cf_quick["x1_cm"], x2_cm=cf_quick["x2_cm"])
-        else:
-            fig_q = _draw_plan("isolated", S_m=S_dist, c1_cm=c1, b1_cm=b1, c2_cm=c2, b2_cm=b2,
-                               L1_cm=f1_quick["L_cm"], B1_cm=f1_quick["B_cm"],
-                               L2_cm=f2_quick["L_cm"], B2_cm=f2_quick["B_cm"])
+        exp_quick_plan = st.expander("🖼️ Quick Plan Schematic (المسقط التخطيطي السريع)", expanded=False, key="tcf_quick_plan_exp", on_change="rerun")
+        with exp_quick_plan:
+            if st.session_state.get("tcf_quick_plan_exp", False):
+                if mode_q == "combined":
+                    cf_quick = design_combined_footing_model("comb-1", colA_dict, colB_dict, S_dist, q_net, Fcu, Fy, cover, Phi)
+                    fig_q = _draw_plan("combined", S_m=S_dist, c1_cm=c1, b1_cm=b1, c2_cm=c2, b2_cm=b2,
+                                       Lc_cm=cf_quick["Lc_cm"], Bc_cm=cf_quick["Bc_cm"],
+                                       x1_cm=cf_quick["x1_cm"], x2_cm=cf_quick["x2_cm"])
+                else:
+                    fig_q = _draw_plan("isolated", S_m=S_dist, c1_cm=c1, b1_cm=b1, c2_cm=c2, b2_cm=b2,
+                                       L1_cm=f1_quick["L_cm"], B1_cm=f1_quick["B_cm"],
+                                       L2_cm=f2_quick["L_cm"], B2_cm=f2_quick["B_cm"])
 
-        st.pyplot(fig_q, use_container_width=True)
-        plt.close(fig_q)
+                st.pyplot(fig_q, use_container_width=True)
+                plt.close(fig_q)
+            else:
+                st.info("💡 انقر لعرض المسقط التخطيطي السريع (Quick Plan Schematic).")
 
         _render_structural_tutorial()

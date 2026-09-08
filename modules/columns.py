@@ -781,47 +781,50 @@ def render():
     st.markdown("---")
 
     # ── STRUCTURAL DRAWING & REINFORCEMENT DETAILING ────────────────────────
-    st.markdown('<div class="section-header">🏛️ Column Section Design Sheet (لوحة قطاع وتسليح العمود)</div>', unsafe_allow_html=True)
+    img_col_b64 = None
+    with st.expander("🏛️ Column Section Design Sheet (لوحة قطاع وتسليح العمود)", expanded=False, key="m2_draw_exp", on_change="rerun"):
+        if st.session_state.get("m2_draw_exp", False):
+            main_steel_str = f"{n_bars} Φ {Phi}"
+            stirrups_str   = f"{n_st_per_m} Φ {Phi_st} / m'"
 
-    main_steel_str = f"{n_bars} Φ {Phi}"
-    stirrups_str   = f"{n_st_per_m} Φ {Phi_st} / m'"
+            fig = draw_rectangular_column_output(
+                b=b,
+                t=t_design,
+                main_steel_str=main_steel_str,
+                stirrups_str=stirrups_str,
+                Pu=Pu_ton,
+                fcu=Fcu,
+                fy=Fy,
+                mu_percent=mu_provided,
+                n_bars=n_bars,
+                phi_mm=Phi,
+                phi_st_mm=Phi_st,
+                n_st_per_m=n_st_per_m,
+                s_calc=S_calc,
+                pu_cap=Pu_cap_t,
+                cover=2.5,
+                slender_str=slender_class,
+                H_clear=H_clear,
+            )
+            st.pyplot(fig, use_container_width=True)
 
-    fig = draw_rectangular_column_output(
-        b=b,
-        t=t_design,
-        main_steel_str=main_steel_str,
-        stirrups_str=stirrups_str,
-        Pu=Pu_ton,
-        fcu=Fcu,
-        fy=Fy,
-        mu_percent=mu_provided,
-        n_bars=n_bars,
-        phi_mm=Phi,
-        phi_st_mm=Phi_st,
-        n_st_per_m=n_st_per_m,
-        s_calc=S_calc,
-        pu_cap=Pu_cap_t,
-        cover=2.5,
-        slender_str=slender_class,
-        H_clear=H_clear,
-    )
-    st.pyplot(fig, use_container_width=True)
-
-    # Download button for high-res drawing sheet
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", bbox_inches="tight", dpi=300)
-    buf.seek(0)
-    img_col_b64 = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("utf-8")
-    buf.seek(0)
-    prefix = S.get_safe_profile_filename_prefix()
-    st.download_button(
-        label="📥 Download Column Structural Drawing Sheet (High-Res PNG)",
-        data=buf,
-        file_name=f"{prefix}Column_Section_{b}x{t_design}cm.png",
-        mime="image/png",
-        use_container_width=True,
-    )
-    plt.close(fig)
+            # Download button for high-res drawing sheet
+            buf = io.BytesIO()
+            fig.savefig(buf, format="png", bbox_inches="tight", dpi=250)
+            buf.seek(0)
+            img_col_b64 = "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("utf-8")
+            buf.seek(0)
+            prefix = S.get_safe_profile_filename_prefix()
+            st.download_button(
+                label="📥 Download Column Structural Drawing Sheet (High-Res PNG)",
+                data=buf,
+                file_name=f"{prefix}Column_Section_{b}x{t_design}cm.png",
+                mime="image/png",
+                use_container_width=True,
+            )
+            plt.close(fig)
+        else:
+            st.info("💡 انقر لتوسيع هذا القسم وتوليد المخطط الإنشائي وتفريد تسليح العمود (Lazy Loading).")
 
     # ── 📊 BAR BENDING SCHEDULE & QUANTITIES TAKE-OFF (حصر وتفريد حديد ومواد العمود) ──
     H_m_col = H_clear / 100.0
@@ -1098,8 +1101,6 @@ def render():
         img_col_b64=img_col_b64,
     )
 
-    pdf_bytes = html_to_pdf_bytes(col_report_html)
-
     c_save1, c_save2 = st.columns([3, 1])
     with c_save1:
         st.markdown(
@@ -1124,14 +1125,19 @@ def render():
             mime="text/html",
             use_container_width=True,
         )
-        if pdf_bytes:
-            st.download_button(
-                label="📕 Save as PDF (مباشر)",
-                data=pdf_bytes,
-                file_name=f"{prefix}ECP203_Column_Calculation_Sheet_{b}x{t_design}cm.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-            )
+        if st.button("📕 تحويل وتنزيل PDF", key="btn_convert_pdf_col", use_container_width=True):
+            with st.spinner("جاري تحويل التقرير إلى PDF..."):
+                pdf_bytes = html_to_pdf_bytes(col_report_html)
+                if pdf_bytes:
+                    st.download_button(
+                        label="📥 اضغط لتحميل ملف PDF المجهز",
+                        data=pdf_bytes,
+                        file_name=f"{prefix}ECP203_Column_Calculation_Sheet_{b}x{t_design}cm.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                    )
+                else:
+                    st.warning("تعذر إنشاء ملف PDF تلقائياً، يمكنك حفظ ملف HTML وفتحه للطباعة.")
 
     # Design sketch note
     st.markdown("---")

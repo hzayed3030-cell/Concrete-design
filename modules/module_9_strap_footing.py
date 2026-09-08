@@ -1475,6 +1475,23 @@ def render_strap_footing_module():
     rec = _calc_recommended_dimensions(d)
     _upstream_sig = f"{d.get('S')}_{d.get('edge_clearance')}_{d.get('a1')}_{d.get('b1')}_{d.get('a2')}_{d.get('b2')}_{d.get('P1_u')}_{d.get('P2_u')}_{d.get('col_weight_factor')}_{d.get('q_all_net')}_{d.get('strap_b')}"
 
+    # Handle reset action before widgets are instantiated to prevent StreamlitAPIException
+    if st.session_state.get("_m9_action") == "reset":
+        st.session_state["_m9_action"] = None
+        d["L1"] = rec["L1"]
+        d["B1"] = rec["B1"]
+        d["t1"] = rec["t1"]
+        d["L2"] = rec["L2"]
+        d["B2"] = rec["B2"]
+        d["t2"] = rec["t2"]
+        d["strap_D"] = rec["strap_D"]
+        for wk, k in [
+            ("m9_L1", "L1"), ("m9_B1", "B1"), ("m9_t1", "t1"),
+            ("m9_L2", "L2"), ("m9_B2", "B2"), ("m9_t2", "t2"),
+            ("m9_sD", "strap_D"),
+        ]:
+            st.session_state[wk] = rec[k]
+
     # Auto-populate if first run or upstream design inputs modified
     if d.get("_last_upstream_sig") != _upstream_sig:
         d["_last_upstream_sig"] = _upstream_sig
@@ -1622,19 +1639,7 @@ def render_strap_footing_module():
 
         st.markdown("<div style='margin-top: 6px;'></div>", unsafe_allow_html=True)
         if st.button("🔄 إعادة تعيين الأبعاد للقيم التصميمية المحسوبة تلقائياً (Reset to Auto-Design)", key="m9_btn_reset_dims"):
-            for wk, v in [
-                ("m9_L1", rec["L1"]), ("m9_B1", rec["B1"]), ("m9_t1", rec["t1"]),
-                ("m9_L2", rec["L2"]), ("m9_B2", rec["B2"]), ("m9_t2", rec["t2"]),
-                ("m9_sD", rec["strap_D"]),
-            ]:
-                st.session_state[wk] = v
-            d["L1"] = rec["L1"]
-            d["B1"] = rec["B1"]
-            d["t1"] = rec["t1"]
-            d["L2"] = rec["L2"]
-            d["B2"] = rec["B2"]
-            d["t2"] = rec["t2"]
-            d["strap_D"] = rec["strap_D"]
+            st.session_state["_m9_action"] = "reset"
             st.rerun()
 
     r = _calculate(d)
@@ -1644,11 +1649,14 @@ def render_strap_footing_module():
 
     # ── 4. Dynamic Plan View (Immediately after Inputs & Overrides) ───────────
     st.divider()
-    st.markdown("### 🗺️ المسقط الأفقي الديناميكي — Dynamic Plan View")
-    st.caption("يتحدث المسقط الأفقي تلقائياً ولحظياً لملاحظة تأثير التعديلات في الأبعاد والأحمال.")
-    fig = _draw_plan(d, r)
-    st.pyplot(fig, use_container_width=True)
-    plt.close(fig)
+    with st.expander("🗺️ المسقط الأفقي الديناميكي — Dynamic Plan View", expanded=False, key="m9_plan_exp", on_change="rerun"):
+        if st.session_state.get("m9_plan_exp", False):
+            st.caption("يتحدث المسقط الأفقي تلقائياً ولحظياً لملاحظة تأثير التعديلات في الأبعاد والأحمال.")
+            fig = _draw_plan(d, r)
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)
+        else:
+            st.info("💡 انقر لتوسيع هذا القسم وتوليد المسقط الأفقي الديناميكي للشداد والقواعد (Lazy Loading).")
 
     # ── 5. Soil Stress Verification Result ───────────────────────────────────
     ok1 = r["q_act1"] <= float(d["q_all_net"])
@@ -1986,9 +1994,13 @@ def render_strap_footing_module():
             unsafe_allow_html=True,
         )
         st.caption("يوضح القطاع: سمك القواعد $t_1, t_2$، وعمق الشداد $D_{strap}$، وتفريد الحديد العلوي والسفلي والكانات وبراندات الانكماش وأشاير الأعمدة والمناسيب.")
-        fig_elev = _draw_detailing_elevation(d, r, n_t1, n_t2)
-        st.pyplot(fig_elev, use_container_width=True)
-        plt.close(fig_elev)
+        with st.expander("🖼️ استعراض القطاع الطولي وتفريد التسليح (Longitudinal Detailing Section)", expanded=False, key="m9_elev_exp", on_change="rerun"):
+            if st.session_state.get("m9_elev_exp", False):
+                fig_elev = _draw_detailing_elevation(d, r, n_t1, n_t2)
+                st.pyplot(fig_elev, use_container_width=True)
+                plt.close(fig_elev)
+            else:
+                st.info("💡 انقر لتوسيع هذا القسم وتوليد القطاع الطولي التنفيذي وتفريد حديد الشداد والقواعد (Lazy Loading).")
 
         st.markdown(
             f"""
@@ -2012,9 +2024,13 @@ def render_strap_footing_module():
             unsafe_allow_html=True,
         )
         st.caption("يوضح المسقط: حدود القواعد والشداد والأعمدة، وتوزيع أسياخ التسليح العرضي للقواعد، وكانات الشداد، وخطوط الأبعاد المحورية والنهائية.")
-        fig_det_plan = _draw_detailing_plan(d, r, n_t1, n_t2)
-        st.pyplot(fig_det_plan, use_container_width=True)
-        plt.close(fig_det_plan)
+        with st.expander("🖼️ استعراض المسقط الأفقي الإنشائي وتوزيع التسليح (Plan Detailing & Steel Layout)", expanded=False, key="m9_det_plan_exp", on_change="rerun"):
+            if st.session_state.get("m9_det_plan_exp", False):
+                fig_det_plan = _draw_detailing_plan(d, r, n_t1, n_t2)
+                st.pyplot(fig_det_plan, use_container_width=True)
+                plt.close(fig_det_plan)
+            else:
+                st.info("💡 انقر لتوسيع هذا القسم وتوليد المسقط الأفقي الإنشائي وتوزيع التسليح (Lazy Loading).")
 
         st.markdown(
             f"""
@@ -2038,9 +2054,13 @@ def render_strap_footing_module():
             unsafe_allow_html=True,
         )
         st.caption("يوضح المخطط: منحنى عزوم الانحناء التصميمية لكمرة الشداد وقيمة وموقع أقصى عزم سالب عند نقطة انعدام القص (Zero Shear)، بالإضافة إلى عزوم الرفرفة العرضية للقواعد طبقاً للكود المصري ECP 203.")
-        fig_bmd = _draw_bending_moment_diagram(d, r)
-        st.pyplot(fig_bmd, use_container_width=True)
-        plt.close(fig_bmd)
+        with st.expander("🖼️ استعراض مخطط العزوم الإنشائية (Bending Moment Diagram)", expanded=False, key="m9_bmd_exp", on_change="rerun"):
+            if st.session_state.get("m9_bmd_exp", False):
+                fig_bmd = _draw_bending_moment_diagram(d, r)
+                st.pyplot(fig_bmd, use_container_width=True)
+                plt.close(fig_bmd)
+            else:
+                st.info("💡 انقر لتوسيع هذا القسم وتوليد منحنى ومخطط العزوم الإنشائية (BMD).")
 
         # 4 Summary Metric Columns
         bmd_c1, bmd_c2, bmd_c3, bmd_c4 = st.columns(4)

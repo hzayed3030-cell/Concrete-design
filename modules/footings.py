@@ -872,96 +872,98 @@ def render():
 
     # ── 📐 CAD DRAWINGS & REINFORCEMENT SKETCHES ────────────────────────────
     st.markdown("---")
-    st.markdown(
-        '<div class="section-header">📐 Structural Detailing Sketches (المخططات الإنشائية وتفاصيل التسليح)</div>',
-        unsafe_allow_html=True,
-    )
+    # ── STRUCTURAL DETAILING SKETCHES (LAZY LOADED) ─────────────────────────
+    img_plan_b64 = None
+    img_sec_b64 = None
+    with st.expander("🖼️ Structural Drawings & Reinforcement Detailing (المخططات الإنشائية وتفاصيل التسليح)", expanded=False, key="m3_draw_exp", on_change="rerun"):
+        if st.session_state.get("m3_draw_exp", False):
+            # 1. Plan View Sketch (المسقط الأفقي)
+            st.markdown("#### 1️⃣ المسقط الأفقي للقاعدة الخرسانية المسلحة والعادية (Plan View)")
+            fig_plan = generate_footing_plan_sketch(
+                L_cm=L,
+                B_cm=B,
+                t_rc_cm=t_rc,
+                bc_cm=bc,
+                tc_cm=tc,
+                Phi=Phi,
+                n_long=n_long,
+                n_m_long=n_m_long,
+                sp_long=sp_long,
+                n_sht=n_sht,
+                n_m_sht=n_m_sht,
+                sp_sht=sp_sht,
+                cover_cm=cover,
+                t_pc_cm=10,
+                pc_offset_cm=10,
+            )
+            st.pyplot(fig_plan, use_container_width=True)
 
-    # 1. Plan View Sketch (المسقط الأفقي)
-    st.markdown("#### 1️⃣ المسقط الأفقي للقاعدة الخرسانية المسلحة والعادية (Plan View)")
-    fig_plan = generate_footing_plan_sketch(
-        L_cm=L,
-        B_cm=B,
-        t_rc_cm=t_rc,
-        bc_cm=bc,
-        tc_cm=tc,
-        Phi=Phi,
-        n_long=n_long,
-        n_m_long=n_m_long,
-        sp_long=sp_long,
-        n_sht=n_sht,
-        n_m_sht=n_m_sht,
-        sp_sht=sp_sht,
-        cover_cm=cover,
-        t_pc_cm=10,
-        pc_offset_cm=10,
-    )
-    st.pyplot(fig_plan, use_container_width=True)
+            buf_plan = io.BytesIO()
+            fig_plan.savefig(buf_plan, format="png", bbox_inches="tight", dpi=250)
+            buf_plan.seek(0)
+            img_plan_bytes = buf_plan.getvalue()
+            img_plan_b64 = f"data:image/png;base64,{base64.b64encode(img_plan_bytes).decode('utf-8')}"
+            plt.close(fig_plan)
 
-    buf_plan = io.BytesIO()
-    fig_plan.savefig(buf_plan, format="png", bbox_inches="tight", dpi=300)
-    buf_plan.seek(0)
-    img_plan_bytes = buf_plan.getvalue()
-    img_plan_b64 = f"data:image/png;base64,{base64.b64encode(img_plan_bytes).decode('utf-8')}"
-    plt.close(fig_plan)
+            c_p1, c_p2 = st.columns([3, 1])
+            with c_p1:
+                st.caption("📐 **المسقط الأفقي:** يوضح أبعاد القاعدة المسلحة (L × B)، ورفرفة العادية، ومحاور الأعمدة، وتوزيع حديد الفرش والغطاء والمسافات البينية بدقة عالية وخطوط واضحة.")
+            prefix = S.get_safe_profile_filename_prefix()
+            with c_p2:
+                st.download_button(
+                    label="📥 Download Plan View (PNG)",
+                    data=img_plan_bytes,
+                    file_name=f"{prefix}ECP203_Footing_Plan_{L}x{B}cm.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key="dl_plan_sketch",
+                )
 
-    c_p1, c_p2 = st.columns([3, 1])
-    with c_p1:
-        st.caption("📐 **المسقط الأفقي:** يوضح أبعاد القاعدة المسلحة (L × B)، ورفرفة العادية، ومحاور الأعمدة، وتوزيع حديد الفرش والغطاء والمسافات البينية بدقة عالية وخطوط واضحة.")
-    prefix = S.get_safe_profile_filename_prefix()
-    with c_p2:
-        st.download_button(
-            label="📥 Download Plan View (PNG)",
-            data=img_plan_bytes,
-            file_name=f"{prefix}ECP203_Footing_Plan_{L}x{B}cm.png",
-            mime="image/png",
-            use_container_width=True,
-            key="dl_plan_sketch",
-        )
+            st.markdown("<br>", unsafe_allow_html=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
+            # 2. Section Elevation View Sketch (القطاع الرأسي والتسليح)
+            st.markdown("#### 2️⃣ القطاع الرأسي وتفاصيل التسليح الإنشائي (Section Elevation A-A)")
+            fig_sec = generate_footing_section_sketch(
+                L_cm=L,
+                B_cm=B,
+                t_rc_cm=t_rc,
+                bc_cm=bc,
+                tc_cm=tc,
+                Phi=Phi,
+                n_long=n_long,
+                n_m_long=n_m_long,
+                sp_long=sp_long,
+                n_sht=n_sht,
+                n_m_sht=n_m_sht,
+                sp_sht=sp_sht,
+                cover_cm=cover,
+                Df_m=Df,
+                t_pc_cm=10,
+                pc_offset_cm=10,
+            )
+            st.pyplot(fig_sec, use_container_width=True)
 
-    # 2. Section Elevation View Sketch (القطاع الرأسي والتسليح)
-    st.markdown("#### 2️⃣ القطاع الرأسي وتفاصيل التسليح الإنشائي (Section Elevation A-A)")
-    fig_sec = generate_footing_section_sketch(
-        L_cm=L,
-        B_cm=B,
-        t_rc_cm=t_rc,
-        bc_cm=bc,
-        tc_cm=tc,
-        Phi=Phi,
-        n_long=n_long,
-        n_m_long=n_m_long,
-        sp_long=sp_long,
-        n_sht=n_sht,
-        n_m_sht=n_m_sht,
-        sp_sht=sp_sht,
-        cover_cm=cover,
-        Df_m=Df,
-        t_pc_cm=10,
-        pc_offset_cm=10,
-    )
-    st.pyplot(fig_sec, use_container_width=True)
+            buf_sec = io.BytesIO()
+            fig_sec.savefig(buf_sec, format="png", bbox_inches="tight", dpi=250)
+            buf_sec.seek(0)
+            img_sec_bytes = buf_sec.getvalue()
+            img_sec_b64 = f"data:image/png;base64,{base64.b64encode(img_sec_bytes).decode('utf-8')}"
+            plt.close(fig_sec)
 
-    buf_sec = io.BytesIO()
-    fig_sec.savefig(buf_sec, format="png", bbox_inches="tight", dpi=300)
-    buf_sec.seek(0)
-    img_sec_bytes = buf_sec.getvalue()
-    img_sec_b64 = f"data:image/png;base64,{base64.b64encode(img_sec_bytes).decode('utf-8')}"
-    plt.close(fig_sec)
-
-    c_s1, c_s2 = st.columns([3, 1])
-    with c_s1:
-        st.caption("📐 **القطاع الرأسي (A-A):** يوضح سمك المسلحة (t_rc) والعمق الفعال (d)، وسمك العادية وعمق التأسيس (Df)، مع تفاصيل تفريد حديد الفرش (U-Hooks) والغطاء وأشاير ورقبة العمود وكاناتها.")
-    with c_s2:
-        st.download_button(
-            label="📥 Download Section Elevation (PNG)",
-            data=img_sec_bytes,
-            file_name=f"{prefix}ECP203_Footing_Section_{L}x{B}cm.png",
-            mime="image/png",
-            use_container_width=True,
-            key="dl_sec_sketch",
-        )
+            c_s1, c_s2 = st.columns([3, 1])
+            with c_s1:
+                st.caption("📐 **القطاع الرأسي (A-A):** يوضح سمك المسلحة (t_rc) والعمق الفعال (d)، وسمك العادية وعمق التأسيس (Df)، مع تفاصيل تفريد حديد الفرش (U-Hooks) والغطاء وأشاير ورقبة العمود وكاناتها.")
+            with c_s2:
+                st.download_button(
+                    label="📥 Download Section Elevation (PNG)",
+                    data=img_sec_bytes,
+                    file_name=f"{prefix}ECP203_Footing_Section_{L}x{B}cm.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key="dl_sec_sketch",
+                )
+        else:
+            st.info("💡 انقر لتوسيع هذا القسم وتوليد المخططات الهندسية والمسقط الأفقي والقطاع التنفيذي للقاعدة (Lazy Loading).")
 
     # ── REINFORCEMENT LAYOUT CARDS ───────────────────────────────────────────
     with st.expander("🔩 Reinforcement Layout (ECP 203) (مخطط وتفاصيل حديد التسليح)", expanded=False):
@@ -1195,8 +1197,6 @@ def render():
         img_sec_b64=img_sec_b64,
     )
 
-    pdf_bytes = html_to_pdf_bytes(footing_report_html)
-
     c_save1, c_save2 = st.columns([3, 1])
     with c_save1:
         st.markdown(
@@ -1221,14 +1221,19 @@ def render():
             mime="text/html",
             use_container_width=True,
         )
-        if pdf_bytes:
-            st.download_button(
-                label="📕 Save as PDF (مباشر)",
-                data=pdf_bytes,
-                file_name=f"{prefix}ECP203_Footing_Calculation_Sheet_{L}x{B}cm.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-            )
+        if st.button("📕 تحويل وتنزيل PDF", key="btn_convert_pdf_foot", use_container_width=True):
+            with st.spinner("جاري تحويل التقرير إلى PDF..."):
+                pdf_bytes = html_to_pdf_bytes(footing_report_html)
+                if pdf_bytes:
+                    st.download_button(
+                        label="📥 اضغط لتحميل ملف PDF المجهز",
+                        data=pdf_bytes,
+                        file_name=f"{prefix}ECP203_Footing_Calculation_Sheet_{L}x{B}cm.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                    )
+                else:
+                    st.warning("تعذر إنشاء ملف PDF تلقائياً، يمكنك حفظ ملف HTML وفتحه للطباعة.")
 
     # ── EXECUTIVE DESIGN SUMMARY ─────────────────────────────────────────────
     st.markdown("---")

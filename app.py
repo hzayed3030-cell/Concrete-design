@@ -85,6 +85,7 @@ from modules.ground_slab import render as render_ground_slab
 from modules.two_col_footings import render as render_two_col_footings
 from modules.module_9_strap_footing import render_strap_footing_module
 from modules.module_10_diagonal_strap import render_diagonal_strap_module
+from modules.module_11_ground_beam import render_ground_beam_module
 
 # ── CSS Injection: Fixed Unified Typography (14px) ───────────────────────────
 st.markdown(
@@ -1024,7 +1025,7 @@ def render_top_profile_bar():
 
     render_custom_html(
         f"""
-        <div style="background: linear-gradient(135deg, #0b1329 0%, #1e293b 50%, #0b1329 100%); border: 1.5px solid rgba(56, 189, 248, 0.45); border-radius: 12px; padding: 12px 20px; margin-bottom: 14px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45), 0 0 15px rgba(56, 189, 248, 0.12); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+        <div style="background: linear-gradient(135deg, #0b1329 0%, #1e293b 50%, #0b1329 100%); border: 1.5px solid rgba(56, 189, 248, 0.45); border-radius: 12px; padding: 12px 20px; margin-bottom: 6px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45), 0 0 15px rgba(56, 189, 248, 0.12); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
             <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
                 <span style="font-size: 26px; filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.5));">🏗️</span>
                 <div style="display: flex; flex-direction: column;">
@@ -1040,15 +1041,6 @@ def render_top_profile_bar():
         </div>
         """
     )
-
-    c_btn1, _pad = st.columns([2.2, 7.8])
-    with c_btn1:
-        if st.button("🏠 شاشة إدارة المشاريع (Projects)", use_container_width=True, key="top_bar_projects"):
-            st.session_state["nav_view"] = "profile_manager"
-            st.session_state["in_module"] = False
-            st.rerun()
-
-    st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
 
 
 def get_github_repo_url():
@@ -2197,6 +2189,12 @@ else:
             render_diagonal_strap_module()
         except Exception as ex:
             st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 10: {ex}")
+            st.exception(ex)
+    elif "Module 11" in module or "ground_beam" in module or "الميدات" in module or "السملات" in module:
+        try:
+            render_ground_beam_module()
+        except Exception as ex:
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 11: {ex}")
             st.exception(ex)
     elif "Strap" in module or "Module 9" in module or "strap_footing" in module or "قواعد الشدادات" in module:
         try:

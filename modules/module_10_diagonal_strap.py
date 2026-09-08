@@ -1564,11 +1564,14 @@ def render_diagonal_strap_module():
 
     # ── 3. Dynamic Interactive Plan View ──────────────────────────────────────
     st.divider()
-    st.markdown("### 🗺️ المسقط الأفقي الديناميكي اللحظي — Dynamic Plan View")
-    st.caption("يتحدث المسقط الأفقي لحظياً وفورياً مع أي تعديل في الإحداثيات أو الأبعاد أو الأحمال لمتابعة التموضع الهندسي الدقيق.")
-    fig = _draw_plan(d, r)
-    st.pyplot(fig, use_container_width=True)
-    plt.close(fig)
+    with st.expander("🗺️ المسقط الأفقي الديناميكي اللحظي — Dynamic Plan View", expanded=False, key="m10_plan_exp", on_change="rerun"):
+        if st.session_state.get("m10_plan_exp", False):
+            st.caption("يتحدث المسقط الأفقي لحظياً وفورياً مع أي تعديل في الإحداثيات أو الأبعاد أو الأحمال لمتابعة التموضع الهندسي الدقيق.")
+            fig = _draw_plan(d, r)
+            st.pyplot(fig, use_container_width=True)
+            plt.close(fig)
+        else:
+            st.info("💡 انقر لتوسيع هذا القسم وتوليد المسقط الأفقي الديناميكي لقاعدة الركن والشداد المائل (Lazy Loading).")
 
     # ── 4. Soil Stress Verification Result ───────────────────────────────────
     if ok1 and ok2:
@@ -1866,9 +1869,13 @@ def render_diagonal_strap_module():
             unsafe_allow_html=True,
         )
         st.caption("يوضح القطاع: سمك القواعد $t_1, t_2$ وعمق الشداد $D_{strap}$ وتفريد الحديد العلوي والسفلي والكانات والبراندات وأشاير الأعمدة.")
-        fig_elev = _draw_detailing_elevation(d, r, n_t1_x, n_t2_x)
-        st.pyplot(fig_elev, use_container_width=True)
-        plt.close(fig_elev)
+        with st.expander("🖼️ استعراض القطاع الطولي وتفريد التسليح (Longitudinal Detailing Section)", expanded=False, key="m10_elev_exp", on_change="rerun"):
+            if st.session_state.get("m10_elev_exp", False):
+                fig_elev = _draw_detailing_elevation(d, r, n_t1_x, n_t2_x)
+                st.pyplot(fig_elev, use_container_width=True)
+                plt.close(fig_elev)
+            else:
+                st.info("💡 انقر لتوسيع هذا القسم وتوليد القطاع الطولي للشداد المائل وقاعدة الركن (Lazy Loading).")
 
         st.markdown(
             f"""
@@ -1892,9 +1899,13 @@ def render_diagonal_strap_module():
             unsafe_allow_html=True,
         )
         st.caption("يوضح المسقط: حدود قاعدتي الركن والداخلية، والشداد المائل، وشبكات التسليح في الاتجاهين وكانات الشداد.")
-        fig_plan = _draw_detailing_plan(d, r, n_t1_x, n_t2_x)
-        st.pyplot(fig_plan, use_container_width=True)
-        plt.close(fig_plan)
+        with st.expander("🖼️ استعراض المسقط الأفقي الإنشائي وتوزيع التسليح (Plan Detailing & Steel Layout)", expanded=False, key="m10_det_plan_exp", on_change="rerun"):
+            if st.session_state.get("m10_det_plan_exp", False):
+                fig_plan = _draw_detailing_plan(d, r, n_t1_x, n_t2_x)
+                st.pyplot(fig_plan, use_container_width=True)
+                plt.close(fig_plan)
+            else:
+                st.info("💡 انقر لتوسيع هذا القسم وتوليد المسقط الأفقي الإنشائي وتوزيع التسليح (Lazy Loading).")
 
         st.markdown(
             f"""
@@ -1917,9 +1928,13 @@ def render_diagonal_strap_module():
             unsafe_allow_html=True,
         )
         st.caption("يوضح المخطط: منحنى عزوم الانحناء التصميمية وقوى القص وموقع أقصى عزم سالب عند نقطة انعدام القص (Zero Shear).")
-        fig_bmd = _draw_bending_moment_diagram(d, r)
-        st.pyplot(fig_bmd, use_container_width=True)
-        plt.close(fig_bmd)
+        with st.expander("🖼️ استعراض مخطط العزوم الإنشائية (Bending Moment Diagram)", expanded=False, key="m10_bmd_exp", on_change="rerun"):
+            if st.session_state.get("m10_bmd_exp", False):
+                fig_bmd = _draw_bending_moment_diagram(d, r)
+                st.pyplot(fig_bmd, use_container_width=True)
+                plt.close(fig_bmd)
+            else:
+                st.info("💡 انقر لتوسيع هذا القسم وتوليد منحنى ومخطط العزوم وقوى القص الإنشائية (BMD).")
 
         bmd_c1, bmd_c2, bmd_c3, bmd_c4 = st.columns(4)
         with bmd_c1:

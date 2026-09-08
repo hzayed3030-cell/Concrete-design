@@ -532,11 +532,103 @@ def render():
                         use_container_width=True,
                     )
 
-    tab1, tab2, tab3, tab4 = st.tabs([
+    st.markdown(
+        """
+        <style>
+        /* 2-Row Layout for Ground Slab Tabs: 3 tabs on Row 1, 2 tabs on Row 2 */
+        div[data-testid="stTabs"] > div:first-child {
+            overflow: visible !important;
+        }
+        div[data-testid="stTabs"] [data-baseweb="tab-list"],
+        div[data-testid="stTabs"] div[role="tablist"] {
+            display: flex !important;
+            flex-wrap: wrap !important;
+            gap: 10px !important;
+            width: 100% !important;
+            overflow: visible !important;
+            padding-bottom: 8px !important;
+        }
+
+        /* Hide default underline highlight & border */
+        div[data-testid="stTabs"] [data-baseweb="tab-highlight"],
+        div[data-testid="stTabs"] [data-baseweb="tab-border"] {
+            display: none !important;
+        }
+
+        /* Base styling for all tabs */
+        div[data-testid="stTabs"] button[role="tab"] {
+            height: auto !important;
+            min-height: 48px !important;
+            padding: 10px 16px !important;
+            border-radius: 10px !important;
+            border: 1.5px solid #334155 !important;
+            background: #0f172a !important;
+            text-align: center !important;
+            justify-content: center !important;
+            align-items: center !important;
+            transition: all 0.2s ease !important;
+        }
+
+        /* First row: 3 tabs */
+        div[data-testid="stTabs"] button[role="tab"]:nth-of-type(1),
+        div[data-testid="stTabs"] button[role="tab"]:nth-of-type(2),
+        div[data-testid="stTabs"] button[role="tab"]:nth-of-type(3) {
+            flex: 1 1 calc(33.333% - 10px) !important;
+            max-width: calc(33.333% - 10px) !important;
+            box-sizing: border-box !important;
+        }
+
+        /* Second row: remaining 2 tabs */
+        div[data-testid="stTabs"] button[role="tab"]:nth-of-type(4),
+        div[data-testid="stTabs"] button[role="tab"]:nth-of-type(5) {
+            flex: 1 1 calc(50% - 10px) !important;
+            max-width: calc(50% - 10px) !important;
+            box-sizing: border-box !important;
+        }
+
+        /* Text styling inside tabs */
+        div[data-testid="stTabs"] button[role="tab"] p,
+        div[data-testid="stTabs"] button[role="tab"] span {
+            font-size: 16px !important;
+            font-weight: 800 !important;
+            color: #94a3b8 !important;
+            white-space: normal !important;
+            text-align: center !important;
+            line-height: 1.4 !important;
+        }
+
+        /* Active tab state */
+        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+            background: linear-gradient(135deg, #0284c7 0%, #1e3a8a 100%) !important;
+            border: 2px solid #38bdf8 !important;
+            box-shadow: 0 4px 16px rgba(56, 189, 248, 0.35) !important;
+        }
+        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] p,
+        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] span {
+            color: #ffffff !important;
+            font-weight: 900 !important;
+        }
+
+        /* Hover state */
+        div[data-testid="stTabs"] button[role="tab"]:hover {
+            border-color: #38bdf8 !important;
+            background: #1e293b !important;
+        }
+        div[data-testid="stTabs"] button[role="tab"]:hover p,
+        div[data-testid="stTabs"] button[role="tab"]:hover span {
+            color: #f1f5f9 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📐 1. المدخلات والأحمال والتربة (Inputs & Soil)",
         "⚙️ 2. فحص الإجهادات والقص (Analysis & Checks)",
         "🔗 3. تصميم الفواصل والدواول (Joints & Dowels)",
         "📊 4. المخططات والكميات (CAD Drawings & BOQ)",
+        "⚖️ 5. وزن حديد البلاطة (Weight of Steel in Slab)",
     ])
 
     with tab1:
@@ -918,33 +1010,39 @@ def render():
     with tab4:
         st.markdown("### 📐 المخططات الهندسية وجدول حصر الكميات (CAD Drawings & BOQ)")
 
-        b64_plan, b64_detail = generate_ground_slab_plan_and_detail_sketches(res)
+        b64_plan = None
+        b64_detail = None
+        with st.expander("🖼️ استعراض المخططات الهندسية وتفاصيل الفواصل (2D Floor Plan & Joint Detailing)", expanded=False, key="gs_draw_exp", on_change="rerun"):
+            if st.session_state.get("gs_draw_exp", False):
+                b64_plan, b64_detail = generate_ground_slab_plan_and_detail_sketches(res)
 
-        st.markdown("#### 1. المسقط الأفقي العام للبلاطة والفواصل وتمركز الأحمال (2D Floor Plan)")
-        st.image(f"data:image/png;base64,{b64_plan}", use_container_width=True)
+                st.markdown("#### 1. المسقط الأفقي العام للبلاطة والفواصل وتمركز الأحمال (2D Floor Plan)")
+                st.image(f"data:image/png;base64,{b64_plan}", use_container_width=True)
 
-        col_d1, col_d2 = st.columns(2)
-        with col_d1:
-            st.download_button(
-                "📥 تحميل المسقط الأفقي (Download 2D Plan PNG)",
-                data=base64.b64decode(b64_plan),
-                file_name=f"Ground_Slab_2D_Plan_{res['Lx_m']:.0f}x{res['Ly_m']:.0f}m_ts{res['ts_cm']:.0f}cm.png",
-                mime="image/png",
-                use_container_width=True,
-            )
+                col_d1, col_d2 = st.columns(2)
+                with col_d1:
+                    st.download_button(
+                        "📥 تحميل المسقط الأفقي (Download 2D Plan PNG)",
+                        data=base64.b64decode(b64_plan),
+                        file_name=f"Ground_Slab_2D_Plan_{res['Lx_m']:.0f}x{res['Ly_m']:.0f}m_ts{res['ts_cm']:.0f}cm.png",
+                        mime="image/png",
+                        use_container_width=True,
+                    )
 
-        st.markdown("---")
-        st.markdown("#### 2. قطاع تفصيلي في فاصل الانكماش والدواول (Contraction Joint & Dowel Detail)")
-        st.image(f"data:image/png;base64,{b64_detail}", use_container_width=True)
+                st.markdown("---")
+                st.markdown("#### 2. قطاع تفصيلي في فاصل الانكماش والدواول (Contraction Joint & Dowel Detail)")
+                st.image(f"data:image/png;base64,{b64_detail}", use_container_width=True)
 
-        with col_d2:
-            st.download_button(
-                "📥 تحميل تفصيلة الفاصل (Download Joint Detail PNG)",
-                data=base64.b64decode(b64_detail),
-                file_name=f"Ground_Slab_Joint_Detail_ts{res['ts_cm']:.0f}cm.png",
-                mime="image/png",
-                use_container_width=True,
-            )
+                with col_d2:
+                    st.download_button(
+                        "📥 تحميل تفصيلة الفاصل (Download Joint Detail PNG)",
+                        data=base64.b64decode(b64_detail),
+                        file_name=f"Ground_Slab_Joint_Detail_ts{res['ts_cm']:.0f}cm.png",
+                        mime="image/png",
+                        use_container_width=True,
+                    )
+            else:
+                st.info("💡 انقر لتوسيع هذا القسم وتوليد المخططات الهندسية والمسقط الأفقي العام وتفاصيل فواصل البلاطة الأرضية (Lazy Loading).")
 
         st.markdown("---")
         st.markdown("### 📋 جدول حصر الكميات والمقايسة المادية (Takeoff & BOQ Breakdown)")
@@ -1001,8 +1099,8 @@ def render():
         active_proj = S.get_active_profile_name() if hasattr(S, "get_active_profile_name") else "Ground Slab Design"
         prefix = S.get_safe_profile_filename_prefix()
 
-        img_plan_url = f"data:image/png;base64,{b64_plan}"
-        img_detail_url = f"data:image/png;base64,{b64_detail}"
+        img_plan_url = f"data:image/png;base64,{b64_plan}" if b64_plan else None
+        img_detail_url = f"data:image/png;base64,{b64_detail}" if b64_detail else None
 
         sog_html = generate_ground_slab_report_html(
             res=res,
@@ -1010,7 +1108,6 @@ def render():
             img_plan_b64=img_plan_url,
             img_detail_b64=img_detail_url,
         )
-        pdf_bytes = html_to_pdf_bytes(sog_html)
 
         cs1, cs2 = st.columns([3, 1])
         with cs1:
@@ -1033,12 +1130,382 @@ def render():
                 mime="text/html",
                 use_container_width=True,
             )
-            if pdf_bytes:
-                st.download_button(
-                    "📕 Save as PDF (مباشر)",
-                    data=pdf_bytes,
-                    file_name=f"{prefix}Ground_Slab_Report_{res['Lx_m']:.0f}x{res['Ly_m']:.0f}m_ts{res['ts_cm']:.0f}cm.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
+            if st.button("📕 تحويل وتنزيل PDF", key="btn_convert_pdf_gs", use_container_width=True):
+                with st.spinner("جاري تحويل التقرير إلى PDF..."):
+                    pdf_bytes = html_to_pdf_bytes(sog_html)
+                    if pdf_bytes:
+                        st.download_button(
+                            "📥 اضغط لتحميل ملف PDF المجهز",
+                            data=pdf_bytes,
+                            file_name=f"{prefix}Ground_Slab_Report_{res['Lx_m']:.0f}x{res['Ly_m']:.0f}m_ts{res['ts_cm']:.0f}cm.pdf",
+                            mime="application/pdf",
+                            use_container_width=True,
+                        )
+                    else:
+                        st.warning("تعذر إنشاء ملف PDF تلقائياً، يمكنك حفظ ملف HTML وفتحه للطباعة.")
+
+    # ══════════════════════════════════════════════════════════════════════
+    # ⚖️ TAB 5: WEIGHT OF STEEL IN SLAB (حساب وزن واستهلاك حديد البلاطة)
+    # ══════════════════════════════════════════════════════════════════════
+    with tab5:
+        st.markdown(
+            """
+            <div class="input-section-header">
+                <span style="font-size: 26px;">⚖️</span>
+                <span>حساب وزن واستهلاك حديد التسليح في البلاطة (Weight of Steel in Slab)</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            """
+            <div style="background: rgba(30, 41, 59, 0.6); border: 1px solid #38bdf8; border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; font-size: 15px; color: #e2e8f0; line-height: 1.8;">
+                💡 <b>المدخلات:</b> اختيار أقطار التسليح طبقا للكود المصري (Ø)، ويتم حساب وزن المتر الطولي تلقائياً (Weight/L.M = Φ² / 162 kg/m)، وإدخال عدد الأسياخ في المتر المربع (No. of Bars/ M2)، وسماكة البلاطة بالمتر، ونسبة الهالك والوصلات (Waste & Overlap %).<br>
+                📊 <b>المخرجات:</b> وزن كل طبقة، إجمالي وزن المتر المربع (الصافي والإجمالي مع الهالك)، ومعدل استهلاك المتر المكعب (Net & Gross)، وإجمالي طن التوريد لكامل مساحة الصالة (BOQ).
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Egyptian Code Standard Diameters (ECP 203)
+        ECP_DIAMETERS = [0, 6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 28, 32]
+
+        def _calc_wlm(d):
+            return round((d ** 2) / 162.0, 2) if d > 0 else 0.0
+
+        def _on_sw_dia_change(k_dia, k_wlm):
+            d = st.session_state.get(k_dia, 0)
+            st.session_state[k_wlm] = _calc_wlm(d)
+
+        # Quick action controls
+        c_act1, c_act2, c_act3 = st.columns([1.2, 1.2, 1.6])
+        with c_act1:
+            if st.button("🔄 ضبط القيم الافتراضية (Default)", key="btn_reset_steel_calc", use_container_width=True):
+                st.session_state["gs_sw_dia_1"] = 12
+                st.session_state["gs_sw_wlm_1"] = _calc_wlm(12)
+                st.session_state["gs_sw_nb_1"] = 7
+                st.session_state["gs_sw_dia_2"] = 12
+                st.session_state["gs_sw_wlm_2"] = _calc_wlm(12)
+                st.session_state["gs_sw_nb_2"] = 7
+                st.session_state["gs_sw_dia_3"] = 10
+                st.session_state["gs_sw_wlm_3"] = _calc_wlm(10)
+                st.session_state["gs_sw_nb_3"] = 5
+                st.session_state["gs_sw_dia_4"] = 16
+                st.session_state["gs_sw_wlm_4"] = _calc_wlm(16)
+                st.session_state["gs_sw_nb_4"] = 6
+                st.session_state["gs_sw_thk_m"] = 0.15
+                st.session_state["gs_sw_waste_pct"] = 5.0
+                st.rerun()
+
+        with c_act2:
+            current_ts_m = round(res["ts_cm"] / 100.0, 2)
+            if st.button(f"🔗 مزامنة سُمك الموديول ({current_ts_m:.2f} m)", key="btn_sync_thk_steel_calc", use_container_width=True):
+                st.session_state["gs_sw_thk_m"] = current_ts_m
+                st.rerun()
+
+        with c_act3:
+            st.markdown(
+                """
+                <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid #3b82f6; border-radius: 8px; padding: 7px 12px; text-align: center; font-size: 13px; color: #93c5fd; font-weight: 700;">
+                    📐 الكود المصري ECP: وزن المتر = Φ² / 162 kg/m
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        # Session state initialization
+        if "gs_sw_dia_1" not in st.session_state or st.session_state["gs_sw_dia_1"] not in ECP_DIAMETERS:
+            st.session_state["gs_sw_dia_1"] = 12
+        if "gs_sw_wlm_1" not in st.session_state:
+            st.session_state["gs_sw_wlm_1"] = _calc_wlm(st.session_state["gs_sw_dia_1"])
+        if "gs_sw_nb_1" not in st.session_state:
+            st.session_state["gs_sw_nb_1"] = 7
+        else:
+            try:
+                st.session_state["gs_sw_nb_1"] = int(round(float(st.session_state["gs_sw_nb_1"])))
+            except Exception:
+                st.session_state["gs_sw_nb_1"] = 7
+
+        if "gs_sw_dia_2" not in st.session_state or st.session_state["gs_sw_dia_2"] not in ECP_DIAMETERS:
+            st.session_state["gs_sw_dia_2"] = 12
+        if "gs_sw_wlm_2" not in st.session_state:
+            st.session_state["gs_sw_wlm_2"] = _calc_wlm(st.session_state["gs_sw_dia_2"])
+        if "gs_sw_nb_2" not in st.session_state:
+            st.session_state["gs_sw_nb_2"] = 7
+        else:
+            try:
+                st.session_state["gs_sw_nb_2"] = int(round(float(st.session_state["gs_sw_nb_2"])))
+            except Exception:
+                st.session_state["gs_sw_nb_2"] = 7
+
+        if "gs_sw_dia_3" not in st.session_state or st.session_state["gs_sw_dia_3"] not in ECP_DIAMETERS:
+            st.session_state["gs_sw_dia_3"] = 10
+        if "gs_sw_wlm_3" not in st.session_state:
+            st.session_state["gs_sw_wlm_3"] = _calc_wlm(st.session_state["gs_sw_dia_3"])
+        if "gs_sw_nb_3" not in st.session_state:
+            st.session_state["gs_sw_nb_3"] = 5
+        else:
+            try:
+                st.session_state["gs_sw_nb_3"] = int(round(float(st.session_state["gs_sw_nb_3"])))
+            except Exception:
+                st.session_state["gs_sw_nb_3"] = 5
+
+        if "gs_sw_dia_4" not in st.session_state or st.session_state["gs_sw_dia_4"] not in ECP_DIAMETERS:
+            st.session_state["gs_sw_dia_4"] = 16
+        if "gs_sw_wlm_4" not in st.session_state:
+            st.session_state["gs_sw_wlm_4"] = _calc_wlm(st.session_state["gs_sw_dia_4"])
+        if "gs_sw_nb_4" not in st.session_state:
+            st.session_state["gs_sw_nb_4"] = 6
+        else:
+            try:
+                st.session_state["gs_sw_nb_4"] = int(round(float(st.session_state["gs_sw_nb_4"])))
+            except Exception:
+                st.session_state["gs_sw_nb_4"] = 6
+
+        if "gs_sw_thk_m" not in st.session_state:
+            st.session_state["gs_sw_thk_m"] = 0.15
+        if "gs_sw_waste_pct" not in st.session_state:
+            st.session_state["gs_sw_waste_pct"] = 5.0
+
+        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+        st.markdown("#### ✍️ إدخال بيانات الطبقات الأربع (Rebar Layers Inputs — الخانات باللون الأسود)")
+
+        # Table header for input row
+        st.markdown(
+            """
+            <div style="display: grid; grid-template-columns: 2.0fr 1.4fr 1.3fr 1.3fr 1.5fr; gap: 12px; background: #0f172a; border: 1.5px solid #334155; padding: 12px 16px; border-radius: 8px; margin-bottom: 8px; font-weight: 900; font-size: 15px; color: #ef4444; text-align: center;">
+                <div style="text-align: right; color: #ffffff;">طبقة التسليح (Layer)</div>
+                <div>Steel Dia. (Ø) [mm] ↓</div>
+                <div style="color: #cbd5e1;">Weight/L.M [kg/m] 🔒</div>
+                <div>No. of Bars/ M2 ↓</div>
+                <div style="color: #ffffff;">Weight of These bars [kg/m²]</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        layer_definitions = [
+            ("1st Layer (short)", "gs_sw_dia_1", "gs_sw_nb_1", "#ef4444"),
+            ("2nd Layer (Long)", "gs_sw_dia_2", "gs_sw_nb_2", "#ef4444"),
+            ("3rd Layer (short)", "gs_sw_dia_3", "gs_sw_nb_3", "#ef4444"),
+            ("4th Layer (Long)", "gs_sw_dia_4", "gs_sw_nb_4", "#ef4444"),
+        ]
+
+        calc_rows = []
+        for label, k_dia, k_nb, color in layer_definitions:
+            r_c1, r_c2, r_c3, r_c4, r_c5 = st.columns([2.0, 1.4, 1.3, 1.3, 1.5])
+            with r_c1:
+                st.markdown(f"<div style='padding-top: 8px; font-weight: 900; color: {color}; font-size: 16px;'>{label}</div>", unsafe_allow_html=True)
+            with r_c2:
+                dia_val = st.selectbox(
+                    f"Ø {label}",
+                    options=ECP_DIAMETERS,
+                    format_func=lambda d: "— بدون (0) —" if d == 0 else f"Φ {d} mm",
+                    key=k_dia,
+                    label_visibility="collapsed",
                 )
+            wlm_val = _calc_wlm(dia_val)
+            with r_c3:
+                st.markdown(
+                    f"""
+                    <div style="padding-top: 8px; padding-bottom: 6px; font-weight: 800; color: #94a3b8; font-size: 17px; text-align: center; background: rgba(15, 23, 42, 0.6); border-radius: 6px; border: 1px solid #334155;" title="وزن قياسي ثابت غير قابل للتعديل (الكود المصري: Φ² / 162)">
+                        {wlm_val:.2f} <span style="font-size: 12px; color: #64748b;">kg/m</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with r_c4:
+                nb_val = st.number_input(
+                    f"NB {label}",
+                    min_value=0,
+                    max_value=50,
+                    step=1,
+                    key=k_nb,
+                    label_visibility="collapsed",
+                )
+
+            row_wt = round(wlm_val * nb_val, 2)
+            with r_c5:
+                st.markdown(f"<div style='padding-top: 8px; font-weight: 900; color: #ffffff; font-size: 18px; text-align: center; background: rgba(30,41,59,0.7); border-radius: 6px; padding-bottom: 6px; border: 1px solid #475569;'>{row_wt:.2f} <span style='font-size: 13px; color: #94a3b8;'>kg/m²</span></div>", unsafe_allow_html=True)
+
+            calc_rows.append({
+                "label": label,
+                "dia": dia_val,
+                "wlm": wlm_val,
+                "nb": nb_val,
+                "wt": row_wt,
+            })
+
+        total_weight_1m2 = round(sum(r["wt"] for r in calc_rows), 2)
+
+        # Footer Total Row directly below Weight of These bars
+        st.markdown("<div style='margin-top: 6px;'></div>", unsafe_allow_html=True)
+        r_tot_c1, r_tot_c2 = st.columns([6.0, 1.5])
+        with r_tot_c1:
+            st.markdown(
+                """
+                <div style="background: rgba(15, 23, 42, 0.85); border: 1.5px solid #3b82f6; border-radius: 8px; padding: 10px 16px; font-weight: 900; font-size: 16px; color: #60a5fa; display: flex; justify-content: space-between; align-items: center;">
+                    <span>📐 كمية حديد التسليح في المتر المسطح (Total Steel in 1 M²):</span>
+                    <span style="font-size: 13px; color: #94a3b8; font-weight: 600;">(مجموع أوزان الطبقات الأربع)</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with r_tot_c2:
+            st.markdown(
+                f"""
+                <div style="background: linear-gradient(135deg, #1d4ed8, #1e293b); border: 2px solid #3b82f6; border-radius: 8px; padding: 8px 10px; text-align: center; font-weight: 900; font-size: 21px; color: #ffffff; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);">
+                    {total_weight_1m2:.2f} <span style="font-size: 13px; color: #bfdbfe; font-weight: 800;">kg/m²</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("<div style='margin-top: 14px;'></div>", unsafe_allow_html=True)
+        col_inp_p1, col_inp_p2 = st.columns(2)
+        with col_inp_p1:
+            st.markdown(
+                """
+                <div style='font-weight: 900; font-size: 16px; color: #ef4444; margin-bottom: 6px;'>
+                    📏 سماكة البلاطة بالمتر — Slab Thickness (m) ↓
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            thk_m_val = st.number_input(
+                "Slab Thickness (m)",
+                min_value=0.03,
+                max_value=3.0,
+                step=0.01,
+                format="%.2f",
+                key="gs_sw_thk_m",
+                label_visibility="collapsed",
+            )
+
+        with col_inp_p2:
+            st.markdown(
+                """
+                <div style='font-weight: 900; font-size: 16px; color: #ef4444; margin-bottom: 6px;'>
+                    🔄 نسبة الهالك والوصلات — Waste & Overlap (%) ↓
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            waste_pct = st.number_input(
+                "Waste & Overlap (%)",
+                min_value=0.0,
+                max_value=25.0,
+                step=0.5,
+                format="%.1f",
+                key="gs_sw_waste_pct",
+                label_visibility="collapsed",
+            )
+
+        # ── Net Calculations (الصافي النظري) ──
+        net_weight_1m2 = total_weight_1m2
+        net_steel_1m3 = round(net_weight_1m2 / max(0.01, thk_m_val), 2)
+        slab_area_total = res["Lx_m"] * res["Ly_m"]
+        net_steel_ton = round((net_weight_1m2 * slab_area_total) / 1000.0, 2)
+
+        # ── Gross Calculations with Waste & Overlap (الفعلي للتوريد والشراء) ──
+        waste_factor = 1.0 + (waste_pct / 100.0)
+        gross_weight_1m2 = round(net_weight_1m2 * waste_factor, 2)
+        gross_steel_1m3 = round(gross_weight_1m2 / max(0.01, thk_m_val), 2)
+        gross_steel_ton = round((gross_weight_1m2 * slab_area_total) / 1000.0, 2)
+        waste_weight_1m2 = round(gross_weight_1m2 - net_weight_1m2, 2)
+
+        st.markdown("---")
+        st.markdown("### 📊 لوحة نتائج وحسابات استهلاك الحديد (Steel Reinforcement Results)")
+
+        # Hero highlight card for Total Steel Weight in 1 M3
+        st.markdown(
+            f"""
+            <div dir="rtl" style="
+                background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+                border: 2.5px solid #eab308;
+                border-radius: 12px;
+                padding: 18px 24px;
+                margin-bottom: 20px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                box-shadow: 0 8px 24px rgba(234, 179, 8, 0.18);
+            ">
+                <div>
+                    <div style="font-size: 20px; font-weight: 800; color: #fde047; margin-bottom: 6px;">
+                        🏆 معدل استهلاك الحديد الفعلي للتوريد في المتر المكعب (Gross Steel in 1 M³)
+                    </div>
+                    <div style="font-size: 14px; color: #cbd5e1; line-height: 1.7;">
+                        شامل نسبة الهالك والوصلات <b>+{waste_pct:.1f}%</b> (الصافي النظري بدون هالك: <span style="color:#38bdf8; font-weight:700;">{net_steel_1m3:.2f} kg/m³</span>).
+                        <br>محسوب لسماكة البلاطة المطلوبة: <b>{thk_m_val:.2f} m</b>.
+                    </div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="
+                        background: #ffff00;
+                        color: #000000;
+                        font-size: 30px;
+                        font-weight: 900;
+                        padding: 10px 24px;
+                        border-radius: 10px;
+                        border: 2px solid #ca8a04;
+                        box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+                    " dir="ltr">
+                        {gross_steel_1m3:.2f} <span style="font-size: 17px; font-weight: 800;">kg/m³</span>
+                    </div>
+                    <div style="font-size: 12px; color: #94a3b8; margin-top: 5px; font-weight: 600;">
+                        الصافي النظري: {net_steel_1m3:.2f} kg/m³
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # 4 Summary Metric Panels
+        c_sum1, c_sum2, c_sum3, c_sum4 = st.columns(4)
+        c_sum1.metric(
+            "⚖️ وزن المتر المربع (Gross)",
+            f"{gross_weight_1m2:.2f} kg/m²",
+            f"الصافي: {net_weight_1m2:.2f} kg/m²",
+            delta_color="off",
+        )
+        c_sum2.metric(
+            "🔄 نسبة الهالك والوصلات",
+            f"{waste_pct:.1f}%",
+            f"+{waste_weight_1m2:.2f} kg/m² إضافي",
+        )
+        c_sum3.metric(
+            "🏗️ استهلاك المتر المكعب (Gross)",
+            f"{gross_steel_1m3:.2f} kg/m³",
+            f"الصافي: {net_steel_1m3:.2f} kg/m³",
+            delta_color="off",
+        )
+        c_sum4.metric(
+            "📦 إجمالي حديد الصالة (BOQ)",
+            f"{gross_steel_ton:.2f} Ton",
+            f"الصافي: {net_steel_ton:.2f} Ton",
+            delta_color="off",
+        )
+
+        # Per-layer Breakdown Cards
+        st.markdown("<div style='margin-top: 14px;'></div>", unsafe_allow_html=True)
+        st.markdown("##### 📌 تفصيل الأوزان ونسب كل طبقة تسليح (Layer Breakdown):")
+        l_cols = st.columns(4)
+        for idx, (col_item, row_data) in enumerate(zip(l_cols, calc_rows)):
+            pct_layer = (row_data["wt"] / max(0.01, total_weight_1m2)) * 100.0
+            dia_txt = "بدون تسليح" if row_data['dia'] == 0 else f"{int(row_data['nb'])} Φ {row_data['dia']} mm"
+            with col_item:
+                st.markdown(
+                    f"""
+                    <div style="background: rgba(15, 23, 42, 0.7); border: 1.5px solid #334155; border-radius: 10px; padding: 14px 16px; text-align: center;">
+                        <div style="font-weight: 800; font-size: 15px; color: #38bdf8; margin-bottom: 4px;">{row_data['label']}</div>
+                        <div style="font-size: 22px; font-weight: 900; color: #ffffff;">{row_data['wt']:.2f} <span style="font-size: 14px; color: #94a3b8;">kg/m²</span></div>
+                        <div style="font-size: 13px; color: #fbbf24; margin-top: 4px;">{dia_txt} ({pct_layer:.1f}%)</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
 

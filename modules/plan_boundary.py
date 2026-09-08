@@ -478,15 +478,15 @@ def render():
             "has_arch": False,
         }
 
-    fig_cad, gross_area, outer_perim, total_w, total_h = generate_cad_boundary_sketch(
-        geom_data,
-        wall_thickness=wall_thk_cm / 100.0,
-        show_labels=show_lbls,
-        show_dimensions=show_dims,
-        show_title_block=show_tb,
-        project_name=project_name,
-        engineer_name=engineer_name,
-    )
+    raw_v = geom_data["vertices"]
+    if raw_v[0] != raw_v[-1]:
+        raw_v = raw_v + [raw_v[0]]
+    gross_area = calculate_polygon_area(raw_v)
+    outer_perim = calculate_polygon_perimeter(raw_v)
+    xs = [p[0] for p in raw_v]
+    ys = [p[1] for p in raw_v]
+    total_w = max(xs) - min(xs)
+    total_h = max(ys) - min(ys)
 
     m1, m2, m3, m4 = st.columns(4)
     with m1:
@@ -508,57 +508,76 @@ def render():
 
     with tab1:
         st.markdown("#### 📐 Executive CAD Printable Drawing — اللوحة التنفيذية الجاهزة للطباعة")
-        st.pyplot(fig_cad, use_container_width=True)
+        exp_cad = st.expander("📐 View High-Resolution Vector CAD Plan (المخطط التنفيذي)", expanded=False, key="pb_cad_exp", on_change="rerun")
+        with exp_cad:
+            if st.session_state.get("pb_cad_exp", False):
+                fig_cad, _, _, _, _ = generate_cad_boundary_sketch(
+                    geom_data,
+                    wall_thickness=wall_thk_cm / 100.0,
+                    show_labels=show_lbls,
+                    show_dimensions=show_dims,
+                    show_title_block=show_tb,
+                    project_name=project_name,
+                    engineer_name=engineer_name,
+                )
+                st.pyplot(fig_cad, use_container_width=True)
 
-        col_dl1, col_dl2 = st.columns(2)
-        with col_dl1:
-            buf_png = io.BytesIO()
-            fig_cad.savefig(buf_png, format="png", bbox_inches="tight", dpi=300)
-            buf_png.seek(0)
-            st.download_button(
-                label="📥 Download High-Resolution CAD Plan (PNG 300 DPI)",
-                data=buf_png,
-                file_name=f"CAD_Plan_{project_name.replace(' ', '_')}.png",
-                mime="image/png",
-                use_container_width=True,
-            )
+                col_dl1, col_dl2 = st.columns(2)
+                with col_dl1:
+                    buf_png = io.BytesIO()
+                    fig_cad.savefig(buf_png, format="png", bbox_inches="tight", dpi=300)
+                    buf_png.seek(0)
+                    st.download_button(
+                        label="📥 Download High-Resolution CAD Plan (PNG 300 DPI)",
+                        data=buf_png,
+                        file_name=f"CAD_Plan_{project_name.replace(' ', '_')}.png",
+                        mime="image/png",
+                        use_container_width=True,
+                    )
 
-        with col_dl2:
-            dxf_text = generate_dxf_content(geom_data["vertices"], title=project_name)
-            st.download_button(
-                label="📁 Download AutoCAD DXF File (فتح مباشر في الأوتوكاد)",
-                data=dxf_text,
-                file_name=f"CAD_Plan_{project_name.replace(' ', '_')}.dxf",
-                mime="application/dxf",
-                use_container_width=True,
-            )
-        plt.close(fig_cad)
+                with col_dl2:
+                    dxf_text = generate_dxf_content(geom_data["vertices"], title=project_name)
+                    st.download_button(
+                        label="📁 Download AutoCAD DXF File (فتح مباشر في الأوتوكاد)",
+                        data=dxf_text,
+                        file_name=f"CAD_Plan_{project_name.replace(' ', '_')}.dxf",
+                        mime="application/dxf",
+                        use_container_width=True,
+                    )
+                plt.close(fig_cad)
+            else:
+                st.info("💡 انقر لتوليد وعرض المخطط الهندسي التنفيذي عالي الدقة وتنزيل ملفات CAD و DXF.")
 
     with tab2:
         st.markdown("#### 🖼️ Visual Comparison: Original Scan vs. Clean Vector CAD Drawing")
-        col_img1, col_img2 = st.columns(2)
-        with col_img1:
-            st.markdown("**Original Architectural Scan (المسقط المعماري الأصلي):**")
-            if uploaded_file is not None:
-                st.image(uploaded_file, caption="Uploaded Plan Image", use_container_width=True)
-            else:
-                sample_img_path = r"C:\Users\HZayed\.gemini\antigravity\brain\75b5cdab-001b-48f0-8870-7d2846f7efbe\.user_uploaded\media_1787408418724.jpg"
-                try:
-                    st.image(sample_img_path, caption="Uploaded Floor Plan Scan (المسقط المعماري المرفوع)", use_container_width=True)
-                except Exception:
-                    st.info("Uploaded reference image available in user directory.")
+        exp_cmp = st.expander("🖼️ View Boundary Comparison & Overlay (المقارنة البصرية)", expanded=False, key="pb_cmp_exp", on_change="rerun")
+        with exp_cmp:
+            if st.session_state.get("pb_cmp_exp", False):
+                col_img1, col_img2 = st.columns(2)
+                with col_img1:
+                    st.markdown("**Original Architectural Scan (المسقط المعماري الأصلي):**")
+                    if uploaded_file is not None:
+                        st.image(uploaded_file, caption="Uploaded Plan Image", use_container_width=True)
+                    else:
+                        sample_img_path = r"C:\Users\HZayed\.gemini\antigravity\brain\75b5cdab-001b-48f0-8870-7d2846f7efbe\.user_uploaded\media_1787408418724.jpg"
+                        try:
+                            st.image(sample_img_path, caption="Uploaded Floor Plan Scan (المسقط المعماري المرفوع)", use_container_width=True)
+                        except Exception:
+                            st.info("Uploaded reference image available in user directory.")
 
-        with col_img2:
-            st.markdown("**Clean Reconstructed Vector Boundary (المسقط الهندسي بعد الاستخراج والمطابقة):**")
-            fig_cmp, _, _, _, _ = generate_cad_boundary_sketch(
-                geom_data,
-                wall_thickness=wall_thk_cm / 100.0,
-                show_labels=True,
-                show_dimensions=True,
-                show_title_block=False,
-            )
-            st.pyplot(fig_cmp, use_container_width=True)
-            plt.close(fig_cmp)
+                with col_img2:
+                    st.markdown("**Clean Reconstructed Vector Boundary (المسقط الهندسي بعد الاستخراج والمطابقة):**")
+                    fig_cmp, _, _, _, _ = generate_cad_boundary_sketch(
+                        geom_data,
+                        wall_thickness=wall_thk_cm / 100.0,
+                        show_labels=True,
+                        show_dimensions=True,
+                        show_title_block=False,
+                    )
+                    st.pyplot(fig_cmp, use_container_width=True)
+                    plt.close(fig_cmp)
+            else:
+                st.info("💡 انقر لمقارنة المسقط المعماري الأصلي مع المسقط الهندسي المستخرج.")
 
     with tab3:
         st.markdown("#### 📋 Outer Boundary Vertices & Segment Schedule (جدول إحداثيات وأطوال أضلاع المبنى)")
