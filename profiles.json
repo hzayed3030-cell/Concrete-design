@@ -2825,7 +2825,7 @@
       "name": "try1",
       "description": "مشروع try1",
       "created_at": "2026-09-05 19:13",
-      "updated_at": "2026-09-12 22:56",
+      "updated_at": "2026-09-13 00:28",
       "data": {
         "selected_module_idx": 10,
         "apartment_name": "try1",
@@ -3069,7 +3069,10 @@
           "col_removed": [],
           "col_dirs": {},
           "col_shifted": {},
-          "wall_thickness": {},
+          "wall_thickness": {
+            "0,2,1,2": 25,
+            "0,1,0,2": 25
+          },
           "wall_removed": [],
           "default_wall_height": 3.0,
           "wall_heights": {},
@@ -3179,6 +3182,25 @@
                 "is_preview": false,
                 "has_conflict": false,
                 "id": "win_25"
+              },
+              {
+                "kind": "win",
+                "wk": [
+                  0,
+                  0,
+                  1,
+                  0
+                ],
+                "name": "W1-1",
+                "type_label": "W1",
+                "w_m": 1.0,
+                "h_m": 1.2,
+                "pos_m": 2.0,
+                "sill_m": 0.9,
+                "removed": false,
+                "is_preview": false,
+                "has_conflict": false,
+                "id": "win_26"
               }
             ],
             "0,1,1,1": [
@@ -3191,6 +3213,48 @@
                 "pos_m": 1.2,
                 "sill_m": 0.9,
                 "removed": true
+              }
+            ],
+            "1,0,1,1": [
+              {
+                "kind": "win",
+                "wk": [
+                  1,
+                  0,
+                  1,
+                  1
+                ],
+                "name": "W1-2",
+                "type_label": "W1",
+                "w_m": 1.0,
+                "h_m": 1.2,
+                "pos_m": 0.7,
+                "sill_m": 0.9,
+                "removed": false,
+                "is_preview": false,
+                "has_conflict": false,
+                "id": "win_27"
+              }
+            ],
+            "1,0,2,0": [
+              {
+                "kind": "win",
+                "wk": [
+                  1,
+                  0,
+                  2,
+                  0
+                ],
+                "name": "W1-2",
+                "type_label": "W1",
+                "w_m": 1.0,
+                "h_m": 1.2,
+                "pos_m": 2.75,
+                "sill_m": 0.9,
+                "removed": true,
+                "is_preview": false,
+                "has_conflict": false,
+                "id": "win_28"
               }
             ]
           },
@@ -3264,7 +3328,7 @@
               }
             ]
           },
-          "next_op_id": 26,
+          "next_op_id": 29,
           "window_types": [
             {
               "id": "wt_1",
@@ -3325,6 +3389,9 @@
             ],
             "0,1,1,1": [
               "أعلى",
+              "أسفل"
+            ],
+            "0,2,1,2": [
               "أسفل"
             ]
           }

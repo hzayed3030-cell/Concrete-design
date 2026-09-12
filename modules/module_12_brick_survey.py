@@ -96,6 +96,10 @@ def _init_state():
         st.session_state["m12_show_conflict_modal"] = False
     if "m12_conflict_errors" not in st.session_state:
         st.session_state["m12_conflict_errors"] = []
+    if "m12_openings_keep_expanded" not in st.session_state:
+        st.session_state["m12_openings_keep_expanded"] = False
+    if "m12_commit_success_msg" not in st.session_state:
+        st.session_state["m12_commit_success_msg"] = None
 
 def _safe_idx(key, max_len):
     """التحقق الآمن من الفهرس في session_state ومنع تعارض الأنواع (str مع int)."""
@@ -952,12 +956,10 @@ def _find_first_available_opening_pos(wk, op_type, w_m, h_m, leaf_dir=None):
 
 def _render_opening_conflict_banner():
     """
-    عرض رسالة تنبيه التعارض المكاني والهندسي أسفل الرسم مباشرة (خارج مساحة الرسم)
-    لكي يظل موضع الشباك أو الباب المؤقت واضحاً تماماً على اللوحة الرسومية دون أي حجب:
+    عرض رسالة تنبيه التعارض المكاني والهندسي بصورة مضغوطة وأنيقة فوق شاشة المدخلات:
     - تشغيل تنبيه صوتي فوري (Audio Warning / Beep Alert).
-    - عرض صندوق تحذيري بارز أسفل الرسم يوضح أسباب التعارض.
-    - يحتوي على زر تأكيد (OK).
-    - عند ضغط OK: يتم إغلاق الرسالة، وحذف الكائن المؤقت بالكامل من الذاكرة والـ Canvas (Destroy / Rollback)، وإعادة النظام للاستعداد.
+    - صندوق تحذيري مدمج بدون إهدار رأسي يعرض تفاصيل التعارض.
+    - زر إغلاق التنبيه مع بقاء الكائن المؤقت في مكانه على الرسم بانتظار تعديل البعد.
     """
     play_warning_sound()
     errors = st.session_state.get("m12_conflict_errors", [])
@@ -965,37 +967,85 @@ def _render_opening_conflict_banner():
     op_kind_ar = "شباك" if preview.get("kind") == "win" else "باب"
     op_name = preview.get("name") or ("W_new" if preview.get("kind") == "win" else "D_new")
 
+    err_items = "".join([f"<li style='margin-bottom:2px;'>{e}</li>" for e in errors])
+
     st.markdown(
-        f"""<div style='background:linear-gradient(135deg,#FFEBEE,#FFCDD2);border:2.5px solid #D32F2F;
-        border-radius:10px;padding:14px 18px;margin:12px 0 14px 0;box-shadow:0 4px 12px rgba(211,47,47,0.25);' dir='rtl'>
-        <div style='color:#B71C1C;font-size:1.18rem;font-weight:900;margin-bottom:8px;display:flex;align-items:center;gap:10px;'>
-            <span style='font-size:1.4rem;'>🚨</span>
-            <span>تنبيه تعارض مكاني وهندسي / Spatial Conflict Alert ({op_kind_ar}: {op_name})</span>
+        f"""<div style='background:linear-gradient(135deg,#FFF5F5,#FFEBEE);border:1.8px solid #E53935;
+        border-radius:8px;padding:8px 12px;margin:4px 0 8px 0;box-shadow:0 2px 6px rgba(229,57,53,0.18);' dir='rtl'>
+        <div style='color:#B71C1C;font-size:0.95rem;font-weight:900;margin-bottom:4px;display:flex;align-items:center;justify-content:space-between;gap:8px;'>
+            <div style='display:flex;align-items:center;gap:6px;'>
+                <span style='font-size:1.15rem;'>🚨</span>
+                <span>تنبيه تعارض مكاني وهندسي / Spatial Conflict Alert ({op_kind_ar}: {op_name})</span>
+            </div>
+            <span style='background:#FFCDD2;color:#B71C1C;font-size:0.75rem;padding:2px 8px;border-radius:10px;font-weight:bold;'>تعارض مكاني</span>
         </div>
-        <p style='color:#7F0000;font-size:0.95rem;margin:0 0 10px 0;font-weight:700;'>
-            ⚠️ تم رصد تعارض في الإحداثيات أو تجاوز لحدود الحائط (يظهر الكائن المؤقت بوضوح باللون الأحمر المتقطع ⚠️ على الرسم أعلاه). لا يمكن تثبيت وإسقاط العنصر للأسباب التالية:
+        <p style='color:#7F0000;font-size:0.83rem;margin:0 0 4px 0;font-weight:700;'>
+            ⚠️ تم رصد تعارض في الإحداثيات أو تجاوز لحدود الحائط (يظهر الكائن المؤقت بوضوح باللون الأحمر المتقطع ⚠️ على الرسم):
         </p>
-        <ul style='color:#B71C1C;font-size:0.95rem;font-weight:700;margin:0;padding-right:24px;line-height:1.75;'>
-        """ + "".join([f"<li style='margin-bottom:4px;'>{e}</li>" for e in errors]) + """
+        <ul style='color:#B71C1C;font-size:0.83rem;font-weight:700;margin:0 0 6px 0;padding-right:20px;line-height:1.4;'>
+            {err_items}
         </ul>
-        <div style='background:#FFF3E0;border:1.5px solid #FF9800;border-radius:8px;padding:10px 14px;margin-top:12px;color:#E65100;font-size:0.90rem;font-weight:600;' dir='rtl'>
-            ℹ️ عند الضغط على زر <b>موافق (OK)</b> أدناه، سيتم تراجع وحذف الكائن المؤقت وإعادة ضبط الموضع لموضع متاح هندسياً (Destroy / Rollback).
+        <div style='color:#616161;font-size:0.78rem;font-weight:600;margin-top:2px;'>
+            ℹ️ يبقى {op_kind_ar} المؤقت في مكانه على الرسم؛ اضغط زر الإغلاق ثم عدّل قيمة "بعد بداية {op_kind_ar} عن بداية الحائط" أدناه.
         </div>
         </div>""",
         unsafe_allow_html=True
     )
 
-    if st.button("✅ موافق (OK) — تراجع وحذف الكائن المؤقت وإعادة النظام للاستعداد", type="primary", use_container_width=True, key="m12_modal_conflict_confirm_ok"):
-        wk = preview.get("wk")
-        if wk:
-            p_kind = preview.get("kind", "win")
-            off_key = f"m12_add_new_{p_kind}_offset_{wk[0]}_{wk[1]}_{wk[2]}_{wk[3]}"
-            avail_pos = _find_first_available_opening_pos(wk, p_kind, preview.get("w_m", 1.0), preview.get("h_m", 1.2), leaf_dir=preview.get("leaf_dir"))
-            if avail_pos is not None:
-                st.session_state.setdefault("m12_pending_offsets", {})[off_key] = avail_pos
-        st.session_state["m12_preview_opening"] = None
+    if st.button("❌ إغلاق التنبيه", key="m12_conflict_dismiss_btn", type="primary", use_container_width=True, help="إغلاق التنبيه مع بقاء العنصر المؤقت في مكانه على الرسم بانتظار تعديل البعد"):
         st.session_state["m12_show_conflict_modal"] = False
         st.session_state["m12_conflict_errors"] = []
+        st.session_state["m12_openings_keep_expanded"] = True
+
+        # ضمان بقاء الفتحة المؤقتة ومطابقة كافة مدخلاتها في التشغيل القادم قبل إنشاء الـ widgets
+        if preview and preview.get("wk"):
+            preview["has_conflict"] = True
+            preview["is_preview"] = True
+            st.session_state["m12_preview_opening"] = preview
+            st.session_state["m12_sync_preview_on_next_run"] = True
+
+        st.rerun()
+
+def _render_opening_commit_success_banner(info: dict):
+    """
+    عرض رسالة تأكيد خضراء عند اعتماد وتثبيت الشباك أو الباب:
+    - خلفية خضراء واضحة مع إشعار التثبيت النهائي.
+    - عرض رسالة التثبيت المطلوبة:
+      "انه تم تثبيت مكان الشباك/الباب في المكان المحدد ، ولا يمكن تحريكة الان ، يمكن حذف فقط من قسم الحذف"
+    - زر 'غلق التنبيه' للعودة إلى الشاشة السابقة (قسم إسقاط وتحريك الشبابيك والأبواب).
+    """
+    kind = info.get("kind", "win")
+    kind_ar = info.get("kind_ar", "الشباك" if kind == "win" else "الباب")
+    name = info.get("name", "")
+    wall_label = info.get("wall_label", "")
+    pos_m = float(info.get("pos_m", 0.0))
+    w_m = float(info.get("w_m", 1.0))
+    h_m = float(info.get("h_m", 1.2))
+    msg_text = info.get("msg", f"انه تم تثبيت مكان {kind_ar} في المكان المحدد ، ولا يمكن تحريكة الان ، يمكن حذف فقط من قسم الحذف")
+
+    st.markdown(
+        f"""<div style='background:linear-gradient(135deg,#E8F5E9,#C8E6C9);border:2px solid #2E7D32;
+        border-radius:10px;padding:14px 18px;margin:6px 0 14px 0;box-shadow:0 3px 10px rgba(46,125,50,0.18);' dir='rtl'>
+        <div style='color:#1B5E20;font-size:1.02rem;font-weight:900;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:8px;'>
+            <div style='display:flex;align-items:center;gap:6px;'>
+                <span style='font-size:1.3rem;'>✅</span>
+                <span>تم تثبيت وإسقاط {kind_ar} بنجاح ({name})</span>
+            </div>
+            <span style='background:#A5D6A7;color:#1B5E20;font-size:0.78rem;padding:3px 10px;border-radius:12px;font-weight:bold;'>تثبيت نهائي</span>
+        </div>
+        <p style='color:#1B5E20;font-size:0.92rem;margin:0 0 10px 0;font-weight:800;line-height:1.5;'>
+            {msg_text}
+        </p>
+        <div style='background:rgba(255,255,255,0.75);border-radius:6px;padding:8px 12px;font-size:0.83rem;color:#1B5E20;font-weight:700;margin-bottom:4px;line-height:1.6;'>
+            📍 <b>الحائط:</b> {wall_label} &nbsp;|&nbsp; 📏 <b>الموضع:</b> {pos_m:.2f}م من بداية الحائط &nbsp;|&nbsp; 📐 <b>الأبعاد:</b> {w_m:.2f}م عرض × {h_m:.2f}م ارتفاع
+        </div>
+        </div>""",
+        unsafe_allow_html=True
+    )
+
+    if st.button("غلق التنبيه", key="m12_commit_dismiss_btn", type="primary", use_container_width=True, help="العودة إلى شاشة إسقاط الشبابيك والأبواب"):
+        st.session_state["m12_commit_success_msg"] = None
+        st.session_state["m12_openings_keep_expanded"] = True
         st.rerun()
 
 def _get_all_deleted_openings():
@@ -2181,22 +2231,75 @@ def _section_openings():
     wm = _get_wall_name_map()
     _ensure_opening_names()
 
+    # ── عرض شاشة التأكيد الخضراء عند اعتماد وتثبيت الفتحة ──
+    success_info = st.session_state.get("m12_commit_success_msg")
+    if success_info:
+        _render_opening_commit_success_banner(success_info)
+        return
+
+    # ── مزامنة التبويب النشط واختيار الحائط مع كائن المعاينة المؤقت قبل إنشاء الـ widgets ──
+    curr_prev = st.session_state.get("m12_preview_opening")
+    if st.session_state.pop("m12_sync_preview_on_next_run", False) and curr_prev and curr_prev.get("wk"):
+        p_kind = curr_prev.get("kind")
+        p_wk = curr_prev.get("wk")
+        p_pos = float(curr_prev.get("pos_m", 0.0))
+        if p_kind == "door":
+            st.session_state["m12_openings_active_tab"] = "🚪 أبواب"
+            st.session_state["m12_door_preview_disabled"] = False
+            if p_wk in active:
+                st.session_state["m12_openings_door_wall_sel"] = active.index(p_wk)
+            d_key = f"m12_add_new_door_offset_{p_wk[0]}_{p_wk[1]}_{p_wk[2]}_{p_wk[3]}"
+            st.session_state[d_key] = p_pos
+            st.session_state.setdefault("m12_pending_offsets", {})[d_key] = p_pos
+        else:
+            st.session_state["m12_openings_active_tab"] = "🪟 شبابيك"
+            st.session_state["m12_win_preview_disabled"] = False
+            if p_wk in active:
+                st.session_state["m12_openings_win_wall_sel"] = active.index(p_wk)
+            w_key = f"m12_add_new_win_offset_{p_wk[0]}_{p_wk[1]}_{p_wk[2]}_{p_wk[3]}"
+            st.session_state[w_key] = p_pos
+            st.session_state.setdefault("m12_pending_offsets", {})[w_key] = p_pos
+    elif curr_prev and curr_prev.get("kind") == "door":
+        if "m12_openings_active_tab" not in st.session_state:
+            st.session_state["m12_openings_active_tab"] = "🚪 أبواب"
+    elif curr_prev and curr_prev.get("kind") == "win":
+        if "m12_openings_active_tab" not in st.session_state:
+            st.session_state["m12_openings_active_tab"] = "🪟 شبابيك"
+
+    tab_options = ["🪟 شبابيك", "🚪 أبواب"]
+    current_tab = st.session_state.get("m12_openings_active_tab", "🪟 شبابيك")
+    if current_tab not in tab_options:
+        current_tab = "🪟 شبابيك"
+    tab_idx = tab_options.index(current_tab)
+
     op_mode = st.radio(
         "اختر نوع العنصر المعماري المراد إسقاطه أو تعديله:",
-        options=["🪟 شبابيك", "🚪 أبواب"],
+        options=tab_options,
+        index=tab_idx,
         horizontal=True,
         key="m12_openings_active_tab"
     )
+
+    # ── رسالة تنبيه تعارض مكاني وهندسي بصورة مضغوطة فوق شاشة المدخلات ──
+    if st.session_state.get("m12_show_conflict_modal"):
+        _render_opening_conflict_banner()
 
     if op_mode == "🪟 شبابيك":
         if not active:
             st.info("لا توجد حوائط نشطة لإضافة أو تعديل الشبابيك.")
             st.session_state["m12_preview_opening"] = None
         else:
+            def_w_idx = 0
+            if curr_prev and curr_prev.get("kind") == "win" and curr_prev.get("wk") in active:
+                def_w_idx = active.index(curr_prev["wk"])
+                if "m12_openings_win_wall_sel" not in st.session_state:
+                    st.session_state["m12_openings_win_wall_sel"] = def_w_idx
+
             _safe_idx("m12_openings_win_wall_sel", len(active))
             sel_w = st.selectbox(
                 "اختر الحائط لعرض وإضافة الشبابيك:",
                 options=range(len(active)),
+                index=st.session_state.get("m12_openings_win_wall_sel", def_w_idx),
                 format_func=lambda k: _wall_display_label(active[k], cm, wm),
                 key="m12_openings_win_wall_sel"
             )
@@ -2246,8 +2349,11 @@ def _section_openings():
                 st.session_state[offset_key] = st.session_state["m12_pending_offsets"].pop(offset_key)
 
             if offset_key not in st.session_state:
-                suggested_pos = _find_first_available_opening_pos(wk, "win", init_w_preview, init_h_preview)
-                st.session_state[offset_key] = suggested_pos if suggested_pos is not None else round(max(0.0, (wlen - init_w_preview) / 2.0), 2)
+                if curr_prev and curr_prev.get("kind") == "win" and curr_prev.get("wk") == wk:
+                    st.session_state[offset_key] = float(curr_prev.get("pos_m", 0.0))
+                else:
+                    suggested_pos = _find_first_available_opening_pos(wk, "win", init_w_preview, init_h_preview)
+                    st.session_state[offset_key] = suggested_pos if suggested_pos is not None else round(max(0.0, (wlen - init_w_preview) / 2.0), 2)
 
             default_new_win_pos = float(st.session_state.get(offset_key, (wlen - init_w_preview) / 2.0))
             default_new_win_pos = max(0.0, min(float(wlen), default_new_win_pos))
@@ -2279,6 +2385,8 @@ def _section_openings():
             if st.session_state.get("m12_win_preview_sig") != win_sig:
                 st.session_state["m12_win_preview_disabled"] = False
                 st.session_state["m12_win_preview_sig"] = win_sig
+                st.session_state["m12_show_conflict_modal"] = False
+                st.session_state["m12_conflict_errors"] = []
 
             is_win_disabled = bool(st.session_state.get("m12_win_preview_disabled", False))
 
@@ -2341,13 +2449,23 @@ def _section_openings():
                         st.session_state["m12_win_preview_sig"] = None
                         st.session_state["m12_show_conflict_modal"] = False
                         st.session_state["m12_conflict_errors"] = []
+                        st.session_state["m12_openings_keep_expanded"] = True
                         _resequence_openings()
                         # حفظ موضع المؤشر للموضع التالي المتاح هندسياً للتشغيل القادم
                         next_wpos = _find_first_available_opening_pos(wk, "win", init_w_preview, init_h_preview)
                         if next_wpos is not None:
                             st.session_state.setdefault("m12_pending_offsets", {})[offset_key] = next_wpos
                         save_settings()
-                        st.success(f"✅ تم اعتماد وإسقاط الشباك {new_wname} بنجاح على الحائط.")
+                        st.session_state["m12_commit_success_msg"] = {
+                            "kind": "win",
+                            "kind_ar": "الشباك",
+                            "name": new_wname,
+                            "wall_label": _wall_display_label(wk, cm, wm),
+                            "pos_m": float(new_win_offset),
+                            "w_m": float(init_w_preview),
+                            "h_m": float(init_h_preview),
+                            "msg": "انه تم تثبيت مكان الشباك في المكان المحدد ، ولا يمكن تحريكة الان ، يمكن حذف فقط من قسم الحذف"
+                        }
                         st.rerun()
                     else:
                         # الحالة الثانية: التعارض (Conflict / Out of Bounds Detected)
@@ -2356,6 +2474,7 @@ def _section_openings():
                         st.session_state["m12_win_preview_disabled"] = False
                         st.session_state["m12_conflict_errors"] = conflict_errs
                         st.session_state["m12_show_conflict_modal"] = True
+                        st.session_state["m12_openings_keep_expanded"] = True
                         play_warning_sound()
                         st.rerun()
 
@@ -2366,10 +2485,12 @@ def _section_openings():
                         st.session_state["m12_preview_opening"] = None
                         st.session_state["m12_show_conflict_modal"] = False
                         st.session_state["m12_conflict_errors"] = []
+                        st.session_state["m12_openings_keep_expanded"] = True
                         st.rerun()
                 else:
                     if st.button("👁️ إظهار الشباك المؤقت", key=f"m12_restore_win_preview_{wk[0]}_{wk[1]}_{wk[2]}_{wk[3]}", type="secondary", use_container_width=True, help="إعادة إظهار الشباك المؤقت على الرسم"):
                         st.session_state["m12_win_preview_disabled"] = False
+                        st.session_state["m12_openings_keep_expanded"] = True
                         st.rerun()
 
             active_wins = [w for w in wl if not w.get("removed", False)]
@@ -2435,10 +2556,17 @@ def _section_openings():
             st.info("لا توجد حوائط نشطة لإضافة أو تعديل الأبواب.")
             st.session_state["m12_preview_opening"] = None
         else:
+            def_d_idx = 0
+            if curr_prev and curr_prev.get("kind") == "door" and curr_prev.get("wk") in active:
+                def_d_idx = active.index(curr_prev["wk"])
+                if "m12_openings_door_wall_sel" not in st.session_state:
+                    st.session_state["m12_openings_door_wall_sel"] = def_d_idx
+
             _safe_idx("m12_openings_door_wall_sel", len(active))
             sel_d = st.selectbox(
                 "اختر الحائط لعرض وإضافة الأبواب:",
                 options=range(len(active)),
+                index=st.session_state.get("m12_openings_door_wall_sel", def_d_idx),
                 format_func=lambda k: _wall_display_label(active[k], cm, wm),
                 key="m12_openings_door_wall_sel"
             )
@@ -2509,8 +2637,11 @@ def _section_openings():
                 st.session_state[d_offset_key] = st.session_state["m12_pending_offsets"].pop(d_offset_key)
 
             if d_offset_key not in st.session_state:
-                suggested_dpos = _find_first_available_opening_pos(wk, "door", init_dw_preview, init_dh_preview, leaf_dir=new_door_leaf)
-                st.session_state[d_offset_key] = suggested_dpos if suggested_dpos is not None else round(max(0.0, (wlen - init_dw_preview) / 2.0), 2)
+                if curr_prev and curr_prev.get("kind") == "door" and curr_prev.get("wk") == wk:
+                    st.session_state[d_offset_key] = float(curr_prev.get("pos_m", 0.0))
+                else:
+                    suggested_dpos = _find_first_available_opening_pos(wk, "door", init_dw_preview, init_dh_preview, leaf_dir=new_door_leaf)
+                    st.session_state[d_offset_key] = suggested_dpos if suggested_dpos is not None else round(max(0.0, (wlen - init_dw_preview) / 2.0), 2)
 
             default_new_door_pos = float(st.session_state.get(d_offset_key, (wlen - init_dw_preview) / 2.0))
             default_new_door_pos = max(0.0, min(float(wlen), default_new_door_pos))
@@ -2543,6 +2674,8 @@ def _section_openings():
             if st.session_state.get("m12_door_preview_sig") != door_sig:
                 st.session_state["m12_door_preview_disabled"] = False
                 st.session_state["m12_door_preview_sig"] = door_sig
+                st.session_state["m12_show_conflict_modal"] = False
+                st.session_state["m12_conflict_errors"] = []
 
             is_door_disabled = bool(st.session_state.get("m12_door_preview_disabled", False))
 
@@ -2605,13 +2738,23 @@ def _section_openings():
                         st.session_state["m12_door_preview_sig"] = None
                         st.session_state["m12_show_conflict_modal"] = False
                         st.session_state["m12_conflict_errors"] = []
+                        st.session_state["m12_openings_keep_expanded"] = True
                         _resequence_openings()
                         # حفظ موضع المؤشر للموضع التالي المتاح هندسياً للتشغيل القادم
                         next_dpos = _find_first_available_opening_pos(wk, "door", init_dw_preview, init_dh_preview, leaf_dir=new_door_leaf)
                         if next_dpos is not None:
                             st.session_state.setdefault("m12_pending_offsets", {})[d_offset_key] = next_dpos
                         save_settings()
-                        st.success(f"✅ تم اعتماد وإسقاط الباب {new_dname} بنجاح على الحائط.")
+                        st.session_state["m12_commit_success_msg"] = {
+                            "kind": "door",
+                            "kind_ar": "الباب",
+                            "name": new_dname,
+                            "wall_label": _wall_display_label(wk, cm, wm),
+                            "pos_m": float(new_door_offset),
+                            "w_m": float(init_dw_preview),
+                            "h_m": float(init_dh_preview),
+                            "msg": "انه تم تثبيت مكان الباب في المكان المحدد ، ولا يمكن تحريكة الان ، يمكن حذف فقط من قسم الحذف"
+                        }
                         st.rerun()
                     else:
                         preview_door["has_conflict"] = True
@@ -2619,6 +2762,7 @@ def _section_openings():
                         st.session_state["m12_door_preview_disabled"] = False
                         st.session_state["m12_conflict_errors"] = test_derr
                         st.session_state["m12_show_conflict_modal"] = True
+                        st.session_state["m12_openings_keep_expanded"] = True
                         play_warning_sound()
                         st.rerun()
 
@@ -2629,10 +2773,12 @@ def _section_openings():
                         st.session_state["m12_preview_opening"] = None
                         st.session_state["m12_show_conflict_modal"] = False
                         st.session_state["m12_conflict_errors"] = []
+                        st.session_state["m12_openings_keep_expanded"] = True
                         st.rerun()
                 else:
                     if st.button("👁️ إظهار الباب المؤقت", key=f"m12_restore_door_preview_{wk[0]}_{wk[1]}_{wk[2]}_{wk[3]}", type="secondary", use_container_width=True, help="إعادة إظهار الباب المؤقت على الرسم"):
                         st.session_state["m12_door_preview_disabled"] = False
+                        st.session_state["m12_openings_keep_expanded"] = True
                         st.rerun()
 
             active_doors = [d for d in dl if not d.get("removed", False)]
@@ -3668,100 +3814,94 @@ def _section_survey():
 
     # بطاقة الملخص التنفيذي للحصر (الأرقام المطلوبة كخطوط مباشرة وواضحة)
     st.markdown(
-        f"""
-        <div style='background-color:#ffffff;border:1.5px solid #cbd5e1;border-radius:10px;padding:16px 20px;margin-bottom:16px;box-shadow:0 2px 5px rgba(0,0,0,0.04);' dir='rtl'>
-            <div style='display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #e2e8f0;padding-bottom:10px;margin-bottom:12px;'>
-                <div style='font-weight:bold;font-size:1.05rem;color:#0f172a;display:flex;align-items:center;gap:8px;'>
-                    <span>📋</span>
-                    <span>الملخص الهندسي لحصر أعمال المباني والخامات (طبقاً للكود المصري ECP)</span>
-                </div>
-                <span style='background-color:#eff6ff;color:#1d4ed8;font-size:0.80rem;font-weight:bold;padding:3px 10px;border-radius:20px;border:1px solid #bfdbfe;'>
-                    حسابات دقيقة للمواد
-                </span>
+        f"""<div style='background-color:#ffffff;border:1.5px solid #cbd5e1;border-radius:10px;padding:16px 20px;margin-bottom:16px;box-shadow:0 2px 5px rgba(0,0,0,0.04);' dir='rtl'>
+        <div style='display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #e2e8f0;padding-bottom:10px;margin-bottom:12px;'>
+            <div style='font-weight:bold;font-size:1.05rem;color:#0f172a;display:flex;align-items:center;gap:8px;'>
+                <span>📋</span>
+                <span>الملخص الهندسي لحصر أعمال المباني والخامات (طبقاً للكود المصري ECP)</span>
             </div>
-            <div style='display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;'>
-                <div style='background-color:#fff7ed;border-right:4px solid #f97316;padding:10px 14px;border-radius:6px;'>
-                    <div style='font-size:0.82rem;color:#7c2d12;font-weight:bold;'>1️⃣ إجمالي مسطح طوب 12 سم (شامل الفتحات):</div>
-                    <div style='font-size:1.25rem;font-weight:bold;color:#c2410c;margin-top:4px;'>{g12:.3f} <span style='font-size:0.85rem;font-weight:normal;'>م² مسطح</span></div>
-                </div>
-                <div style='background-color:#f0fdf4;border-right:4px solid #16a34a;padding:10px 14px;border-radius:6px;'>
-                    <div style='font-size:0.82rem;color:#14532d;font-weight:bold;'>2️⃣ مساحة فتحات الأبواب والشبابيك:</div>
-                    <div style='font-size:1.25rem;font-weight:bold;color:#15803d;margin-top:4px;'>{op12:.3f} <span style='font-size:0.85rem;font-weight:normal;'>م² (لحوائط 12سم)</span> &nbsp;<span style='font-size:0.75rem;color:#4b5563;'>(الإجمالي العام: {total_openings:.3f} م²)</span></div>
-                </div>
-                <div style='background-color:#eff6ff;border-right:4px solid #2563eb;padding:10px 14px;border-radius:6px;'>
-                    <div style='font-size:0.82rem;color:#1e3a8a;font-weight:bold;'>3️⃣ صافي إجمالي مسطح طوب 12 سم:</div>
-                    <div style='font-size:1.25rem;font-weight:bold;color:#1d4ed8;margin-top:4px;'>{n12:.3f} <span style='font-size:0.85rem;font-weight:normal;'>م² مسطح صافي</span></div>
-                </div>
-                <div style='background-color:#fdf2f8;border-right:4px solid #db2777;padding:10px 14px;border-radius:6px;'>
-                    <div style='font-size:0.82rem;color:#831843;font-weight:bold;'>4️⃣ صافي إجمالي مكعب طوب 25 سم:</div>
-                    <div style='font-size:1.25rem;font-weight:bold;color:#be185d;margin-top:4px;'>{v25:.3f} <span style='font-size:0.85rem;font-weight:normal;'>م³ مكعب صافي</span></div>
-                </div>
+            <span style='background-color:#eff6ff;color:#1d4ed8;font-size:0.80rem;font-weight:bold;padding:3px 10px;border-radius:20px;border:1px solid #bfdbfe;'>
+                حسابات دقيقة للمواد
+            </span>
+        </div>
+        <div style='display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;'>
+            <div style='background-color:#fff7ed;border-right:4px solid #f97316;padding:10px 14px;border-radius:6px;'>
+                <div style='font-size:0.82rem;color:#7c2d12;font-weight:bold;'>1️⃣ إجمالي مسطح طوب 12 سم (شامل الفتحات):</div>
+                <div style='font-size:1.25rem;font-weight:bold;color:#c2410c;margin-top:4px;'>{g12:.3f} <span style='font-size:0.85rem;font-weight:normal;'>م² مسطح</span></div>
             </div>
-            <div style='margin-top:12px;background:linear-gradient(to left, #f8fafc, #f1f5f9);border:1px solid #cbd5e1;border-radius:8px;padding:12px 16px;display:flex;align-items:center;justify-content:space-around;flex-wrap:wrap;gap:16px;'>
-                <div style='display:flex;align-items:center;gap:10px;'>
-                    <span style='font-size:1.5rem;'>🏜️</span>
-                    <div>
-                        <div style='font-size:0.80rem;color:#475569;font-weight:bold;'>5️⃣ إجمالي الرمل المطلوب للمباني (شامل 5% هالك):</div>
-                        <div style='font-size:1.2rem;font-weight:bold;color:#0f172a;'>{sand_total:.2f} <span style='font-size:0.85rem;'>م³</span></div>
-                    </div>
-                </div>
-                <div style='height:36px;width:1px;background-color:#cbd5e1;'></div>
-                <div style='display:flex;align-items:center;gap:10px;'>
-                    <span style='font-size:1.5rem;'>🏗️</span>
-                    <div>
-                        <div style='font-size:0.80rem;color:#475569;font-weight:bold;'>5️⃣ إجمالي الأسمنت المطلوب (محتوى 350 كجم/م³):</div>
-                        <div style='font-size:1.2rem;font-weight:bold;color:#0f172a;'>{cement_tons:.2f} <span style='font-size:0.85rem;'>طن</span> &nbsp;<span style='font-size:0.88rem;color:#2563eb;'>({cement_bags} شكارة سعة 50 كجم)</span></div>
-                    </div>
-                </div>
-                <div style='height:36px;width:1px;background-color:#cbd5e1;'></div>
-                <div style='display:flex;align-items:center;gap:10px;'>
-                    <span style='font-size:1.5rem;'>🧱</span>
-                    <div>
-                        <div style='font-size:0.80rem;color:#475569;font-weight:bold;'>عدد الطوب المطلوب ({brick_type_display} | {brick_size_display} | مونة {mortar_v}سم):</div>
-                        <div style='font-size:1.2rem;font-weight:bold;color:#0f172a;'>{bricks_total:,} <span style='font-size:0.85rem;'>وحدة طوب</span></div>
-                    </div>
-                </div>
-
+            <div style='background-color:#f0fdf4;border-right:4px solid #16a34a;padding:10px 14px;border-radius:6px;'>
+                <div style='font-size:0.82rem;color:#14532d;font-weight:bold;'>2️⃣ مساحة فتحات الأبواب والشبابيك:</div>
+                <div style='font-size:1.25rem;font-weight:bold;color:#15803d;margin-top:4px;'>{op12:.3f} <span style='font-size:0.85rem;font-weight:normal;'>م² (لحوائط 12سم)</span> &nbsp;<span style='font-size:0.75rem;color:#4b5563;'>(الإجمالي العام: {total_openings:.3f} م²)</span></div>
+            </div>
+            <div style='background-color:#eff6ff;border-right:4px solid #2563eb;padding:10px 14px;border-radius:6px;'>
+                <div style='font-size:0.82rem;color:#1e3a8a;font-weight:bold;'>3️⃣ صافي إجمالي مسطح طوب 12 سم:</div>
+                <div style='font-size:1.25rem;font-weight:bold;color:#1d4ed8;margin-top:4px;'>{n12:.3f} <span style='font-size:0.85rem;font-weight:normal;'>م² مسطح صافي</span></div>
+            </div>
+            <div style='background-color:#fdf2f8;border-right:4px solid #db2777;padding:10px 14px;border-radius:6px;'>
+                <div style='font-size:0.82rem;color:#831843;font-weight:bold;'>4️⃣ صافي إجمالي مكعب طوب 25 سم:</div>
+                <div style='font-size:1.25rem;font-weight:bold;color:#be185d;margin-top:4px;'>{v25:.3f} <span style='font-size:0.85rem;font-weight:normal;'>م³ مكعب صافي</span></div>
             </div>
         </div>
-        """,
+        <div style='margin-top:12px;background:linear-gradient(to left, #f8fafc, #f1f5f9);border:1px solid #cbd5e1;border-radius:8px;padding:12px 16px;display:flex;align-items:center;justify-content:space-around;flex-wrap:wrap;gap:16px;'>
+            <div style='display:flex;align-items:center;gap:10px;'>
+                <span style='font-size:1.5rem;'>🏜️</span>
+                <div>
+                    <div style='font-size:0.80rem;color:#475569;font-weight:bold;'>5️⃣ إجمالي الرمل المطلوب للمباني (شامل 5% هالك):</div>
+                    <div style='font-size:1.2rem;font-weight:bold;color:#0f172a;'>{sand_total:.2f} <span style='font-size:0.85rem;'>م³</span></div>
+                </div>
+            </div>
+            <div style='height:36px;width:1px;background-color:#cbd5e1;'></div>
+            <div style='display:flex;align-items:center;gap:10px;'>
+                <span style='font-size:1.5rem;'>🏗️</span>
+                <div>
+                    <div style='font-size:0.80rem;color:#475569;font-weight:bold;'>5️⃣ إجمالي الأسمنت المطلوب (محتوى 350 كجم/م³):</div>
+                    <div style='font-size:1.2rem;font-weight:bold;color:#0f172a;'>{cement_tons:.2f} <span style='font-size:0.85rem;'>طن</span> &nbsp;<span style='font-size:0.88rem;color:#2563eb;'>({cement_bags} شكارة سعة 50 كجم)</span></div>
+                </div>
+            </div>
+            <div style='height:36px;width:1px;background-color:#cbd5e1;'></div>
+            <div style='display:flex;align-items:center;gap:10px;'>
+                <span style='font-size:1.5rem;'>🧱</span>
+                <div>
+                    <div style='font-size:0.80rem;color:#475569;font-weight:bold;'>عدد الطوب المطلوب ({brick_type_display} | {brick_size_display} | مونة {mortar_v}سم):</div>
+                    <div style='font-size:1.2rem;font-weight:bold;color:#0f172a;'>{bricks_total:,} <span style='font-size:0.85rem;'>وحدة طوب</span></div>
+                </div>
+            </div>
+        </div>
+    </div>""",
         unsafe_allow_html=True
     )
 
     # 6. رسالة توضيحية لطريقة حساب كمية الرمل والأسمنت طبقاً للكود المصري
     with st.expander("💡 6️⃣ رسالة توضيحية: طريقة حساب كميات الرمل والأسمنت طبقاً للكود المصري وأصول التنفيذ", expanded=False):
         st.markdown(
-            f"""
-            <div style='line-height:1.8;font-size:0.88rem;color:#1e293b;' dir='rtl'>
-                <p><b>استندت الحسابات التقديرية لكميات المونة ومواد البناء إلى المواصفات الفنية لبنود الأعمال بالكود المصري للبناء وأصول الصناعة:</b></p>
-                <ol style='padding-right:20px;margin-bottom:12px;'>
-                    <li>
-                        <b>أعمال مباني طوب سمك 12 سم (نصف طوبة):</b>
-                        <br>• تُحصر هندسياً بالمتر المسطح (م²).
-                        <br>• المساحة الصافية = المساحة الإجمالية للمسقط مطروحاً منها مساحة فتحات الأبواب والشبابيك.
-                        <br>• معدل استهلاك الرمل لمونة البناء = <b>0.025 م³ رمل</b> لكل 1 م² مسطح مباني.
-                        <br>• حساب عدد الطوب = يُحسب بدقة هندسية لكل حائط استناداً إلى المقاس المختار (<b>{brick_type_display} | {brick_size_display}</b>) وفاصل مونة <b>{mortar_v} سم</b>.
-                    </li>
-                    <li style='margin-top:8px;'>
-                        <b>أعمال مباني طوب سمك 25 سم (طوبة كاملة):</b>
-                        <br>• تُحصر هندسياً بالمتر المكعب (م³ = المساحة الصافية × 0.25 م).
-                        <br>• معدل استهلاك الرمل لمونة البناء = <b>0.200 م³ رمل</b> لكل 1 م³ مكعب مباني (نسبة العراميس والمداميك).
-                        <br>• حساب عدد الطوب = يُحسب بدقة هندسية لكل حائط استناداً إلى المقاس المختار (<b>{brick_type_display} | {brick_size_display}</b>) وفاصل مونة <b>{mortar_v} سم</b>.
-                    </li>
-
-                    <li style='margin-top:8px;'>
-                        <b>نسبة خلط الأسمنت في مونة البناء (طبقاً لاشتراطات الكود المصري):</b>
-                        <br>• نسبة الخلط القياسية لمونة ربط الطوب هي <b>350 كجم أسمنت بورتلاندي عادي لكل 1 م³ رمل</b> نظيف متدرج (ما يعادل <b>7 شكاير أسمنت</b> زنة 50 كجم لكل متر مكعب رمل).
-                        <br>• إجمالي وزن الأسمنت (كجم) = حجم الرمل الإجمالي (م³) × 350 كجم.
-                        <br>• وزن الأسمنت بالطن = الأسمنت (كجم) ÷ 1000، وعدد الشكاير = سقف تقريبي (الأسمنت كجم ÷ 50).
-                    </li>
-                    <li style='margin-top:8px;'>
-                        <b>معامل الهالك والتشغيل (Waste Allowance):</b>
-                        <br>• تم احتساب نسبة هالك قدرها <b>5%</b> مضافة إلى كميات الرمل والأسمنت لتعويض الفواقد الطبيعية أثناء التشوين والخلط والتشغيل في الموقع.
-                    </li>
-                </ol>
-            </div>
-            """,
+            f"""<div style='line-height:1.8;font-size:0.88rem;color:#1e293b;' dir='rtl'>
+            <p><b>استندت الحسابات التقديرية لكميات المونة ومواد البناء إلى المواصفات الفنية لبنود الأعمال بالكود المصري للبناء وأصول الصناعة:</b></p>
+            <ol style='padding-right:20px;margin-bottom:12px;'>
+                <li>
+                    <b>أعمال مباني طوب سمك 12 سم (نصف طوبة):</b>
+                    <br>• تُحصر هندسياً بالمتر المسطح (م²).
+                    <br>• المساحة الصافية = المساحة الإجمالية للمسقط مطروحاً منها مساحة فتحات الأبواب والشبابيك.
+                    <br>• معدل استهلاك الرمل لمونة البناء = <b>0.025 م³ رمل</b> لكل 1 م² مسطح مباني.
+                    <br>• حساب عدد الطوب = يُحسب بدقة هندسية لكل حائط استناداً إلى المقاس المختار (<b>{brick_type_display} | {brick_size_display}</b>) وفاصل مونة <b>{mortar_v} سم</b>.
+                </li>
+                <li style='margin-top:8px;'>
+                    <b>أعمال مباني طوب سمك 25 سم (طوبة كاملة):</b>
+                    <br>• تُحصر هندسياً بالمتر المكعب (م³ = المساحة الصافية × 0.25 م).
+                    <br>• معدل استهلاك الرمل لمونة البناء = <b>0.200 م³ رمل</b> لكل 1 م³ مكعب مباني (نسبة العراميس والمداميك).
+                    <br>• حساب عدد الطوب = يُحسب بدقة هندسية لكل حائط استناداً إلى المقاس المختار (<b>{brick_type_display} | {brick_size_display}</b>) وفاصل مونة <b>{mortar_v} سم</b>.
+                </li>
+                <li style='margin-top:8px;'>
+                    <b>نسبة خلط الأسمنت في مونة البناء (طبقاً لاشتراطات الكود المصري):</b>
+                    <br>• نسبة الخلط القياسية لمونة ربط الطوب هي <b>350 كجم أسمنت بورتلاندي عادي لكل 1 م³ رمل</b> نظيف متدرج (ما يعادل <b>7 شكاير أسمنت</b> زنة 50 كجم لكل متر مكعب رمل).
+                    <br>• إجمالي وزن الأسمنت (كجم) = حجم الرمل الإجمالي (م³) × 350 كجم.
+                    <br>• وزن الأسمنت بالطن = الأسمنت (كجم) ÷ 1000، وعدد الشكاير = سقف تقريبي (الأسمنت كجم ÷ 50).
+                </li>
+                <li style='margin-top:8px;'>
+                    <b>معامل الهالك والتشغيل (Waste Allowance):</b>
+                    <br>• تم احتساب نسبة هالك قدرها <b>5%</b> مضافة إلى كميات الرمل والأسمنت لتعويض الفواقد الطبيعية أثناء التشوين والخلط والتشغيل في الموقع.
+                </li>
+            </ol>
+        </div>""",
             unsafe_allow_html=True
         )
 
@@ -3953,16 +4093,17 @@ def render_brick_survey_module():
             </div>
         </div>""",unsafe_allow_html=True)
 
+    is_openings_exp = bool(st.session_state.get("m12_openings_keep_expanded", False) or st.session_state.get("m12_show_conflict_modal", False) or st.session_state.get("m12_commit_success_msg"))
     lc,rc=st.columns([0.82,1.65],gap="medium")
     with lc:
-        with st.expander("1️⃣ شبكة المحاور",expanded=True): _section_axes()
+        with st.expander("1️⃣ شبكة المحاور",expanded=(not is_openings_exp)): _section_axes()
         with st.expander("2️⃣ الأعمدة",expanded=False): _section_columns()
         with st.expander("3️⃣ الحوائط",expanded=False): _section_walls()
         with st.expander("4️⃣ نماذج الفتحات (Types)",expanded=False): _section_opening_types()
-        with st.expander("5️⃣ إسقاط وتحريك الشبابيك والأبواب",expanded=False): _section_openings()
+        with st.expander("5️⃣ إسقاط وتحريك الشبابيك والأبواب",expanded=is_openings_exp): _section_openings()
         with st.expander("6️⃣ حذف واستعادة الشبابيك والابواب",expanded=False): _section_delete_restore_openings()
         with st.expander("7️⃣ بيانات الطوب (BOQ)",expanded=False): _section_brick_type()
-        with st.expander("8️⃣ تحديد حوائط المحارة",expanded=True): _section_plaster_walls()
+        with st.expander("8️⃣ تحديد حوائط المحارة",expanded=False): _section_plaster_walls()
 
     with rc:
         st.markdown("<h4 style='margin:0 0 4px;'>📐 المسقط الأفقي</h4>",unsafe_allow_html=True)
@@ -3996,16 +4137,11 @@ def render_brick_survey_module():
                     st.session_state["m12_preview_opening"] = None
                     st.rerun()
 
-        # ── رسالة تنبيه تعارض مكاني وهندسي أسفل الرسم مباشرة (خارج مساحة الرسم) ──
-        if st.session_state.get("m12_show_conflict_modal"):
-            _render_opening_conflict_banner()
-
         all_conflicts = _get_all_opening_conflicts()
         if all_conflicts and not st.session_state.get("m12_show_conflict_modal"):
             _render_big_warning(all_conflicts)
     st.divider()
-    st.markdown("<h4 style='color:#555;margin-bottom:6px;'>9️⃣ جدول الحصر النهائي</h4>",unsafe_allow_html=True)
-
-    _section_survey()
+    with st.expander("9️⃣ جدول الحصر النهائي", expanded=False):
+        _section_survey()
     save_settings()
 
