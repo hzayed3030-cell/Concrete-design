@@ -1032,7 +1032,7 @@ def render_diagonal_strap_module():
     st.markdown(
         """
         <style>
-        /* ── Module 10 Inputs Typography ── */
+        /* ── Module 10 Inputs Typography (75% Compact Scale) ── */
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] [data-testid="stWidgetLabel"],
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] [data-testid="stWidgetLabel"] *,
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] [data-testid="stWidgetLabel"] label,
@@ -1050,10 +1050,10 @@ def render_diagonal_strap_module():
         div[data-testid="stWidgetLabel"] label,
         div[data-testid="stWidgetLabel"] label p,
         div[data-testid="stWidgetLabel"] label span {
-            font-size: 17px !important;
+            font-size: 13px !important;
             font-weight: 700 !important;
-            line-height: 1.25 !important;
-            margin-bottom: 2px !important;
+            line-height: 1.15 !important;
+            margin-bottom: 1px !important;
             padding-bottom: 0px !important;
             color: #facc15 !important;
             letter-spacing: 0.1px !important;
@@ -1069,10 +1069,10 @@ def render_diagonal_strap_module():
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] div[data-baseweb="select"] *,
         div[data-testid="stExpander"] input,
         div[data-testid="stExpander"] div[data-baseweb="input"] input {
-            font-size: 17px !important;
-            min-height: 35px !important;
-            height: 35px !important;
-            line-height: 35px !important;
+            font-size: 13px !important;
+            min-height: 28px !important;
+            height: 28px !important;
+            line-height: 28px !important;
         }
 
         div[data-testid="stExpander"] div[data-baseweb="input"]:focus-within {
@@ -1087,19 +1087,19 @@ def render_diagonal_strap_module():
         }
 
         .m10-hdr {
-            font-size: 19px !important;
+            font-size: 14.25px !important;
             font-weight: 900 !important;
             color: #38bdf8 !important;
-            margin-bottom: 8px !important;
+            margin-bottom: 6px !important;
             border-bottom: 1.5px solid rgba(56, 189, 248, 0.4) !important;
-            padding-bottom: 4px !important;
+            padding-bottom: 3px !important;
         }
         .m10-subhdr {
-            font-size: 16px !important;
+            font-size: 12px !important;
             font-weight: 800 !important;
             color: #a78bfa !important;
-            margin-top: 6px !important;
-            margin-bottom: 3px !important;
+            margin-top: 4px !important;
+            margin-bottom: 2px !important;
         }
         </style>
         """,
@@ -1113,7 +1113,7 @@ def render_diagonal_strap_module():
     )
 
     # ── 1. Inputs (Design Inputs) ─────────────────────────────────────────────
-    with st.expander("📐 المدخلات التصميمية والإحداثيات — Design Inputs & Coordinates", expanded=True):
+    with st.expander("📐 Design Inputs & Coordinates (المدخلات التصميمية والإحداثيات)", expanded=True):
         c_geo, c_load, c_mat = st.columns([1.4, 0.8, 0.8])
 
         with c_geo:
@@ -1361,7 +1361,7 @@ def render_diagonal_strap_module():
                 st.session_state[wk] = rec[k]
 
     # ── 2. Executive Design Dimensions & Controls ──────────────────────────────
-    with st.expander("📐 نواتج التصميم والأبعاد التنفيذية — Design Dimensions & Overrides", expanded=True):
+    with st.expander("📐 Design Dimensions & Overrides (نواتج التصميم والأبعاد التنفيذية)", expanded=True):
         st.caption("💡 نواتج التصميم الهندسية الآمنة تظهر مباشرة في خانات الإدخال أدناه، وعند قيامك بأي تعديل يدوي يتم فوراً ولحظياً إعادة الحساب وإجراء كافة الفحوصات الإنشائية والإفادة بحالة الأمان.")
         if is_override:
             st.info("✏️ **وضع التعديل اليدوي للأبعاد (Manual Override Mode):** يتم الآن استخدام الأبعاد المخصصة يدوياً، ويقوم الموديول بإعادة الحساب اللحظي وإجراء كافة الاختبارات الإنشائية فوراً للتأكد من أمان التصميم.")
@@ -1564,7 +1564,7 @@ def render_diagonal_strap_module():
 
     # ── 3. Dynamic Interactive Plan View ──────────────────────────────────────
     st.divider()
-    with st.expander("🗺️ المسقط الأفقي الديناميكي اللحظي — Dynamic Plan View", expanded=False, key="m10_plan_exp", on_change="rerun"):
+    with st.expander("🗺️ Dynamic Plan View (المسقط الأفقي الديناميكي اللحظي)", expanded=False, key="m10_plan_exp", on_change="rerun"):
         if st.session_state.get("m10_plan_exp", False):
             st.caption("يتحدث المسقط الأفقي لحظياً وفورياً مع أي تعديل في الإحداثيات أو الأبعاد أو الأحمال لمتابعة التموضع الهندسي الدقيق.")
             fig = _draw_plan(d, r)
@@ -1721,33 +1721,8 @@ def render_diagonal_strap_module():
         })
 
     if failed_checks:
-        audio_buzzer_html = """
-        <script>
-        (function() {
-            try {
-                var AudioCtx = window.AudioContext || window.webkitAudioContext || (window.parent && (window.parent.AudioContext || window.parent.webkitAudioContext));
-                if (!AudioCtx) return;
-                var ctx = new AudioCtx();
-                if (ctx.state === 'suspended') { ctx.resume(); }
-                function beep(freq, start, duration, type) {
-                    var osc = ctx.createOscillator();
-                    var gain = ctx.createGain();
-                    osc.type = type || 'sawtooth';
-                    osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
-                    gain.gain.setValueAtTime(0.25, ctx.currentTime + start);
-                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
-                    osc.connect(gain);
-                    gain.connect(ctx.destination);
-                    osc.start(ctx.currentTime + start);
-                    osc.stop(ctx.currentTime + start + duration);
-                }
-                beep(880, 0.05, 0.22, 'sawtooth');
-                beep(1175, 0.35, 0.35, 'square');
-            } catch(e) {}
-        })();
-        </script>
-        """
-        st.components.v1.html(audio_buzzer_html, height=0)
+        from modules.settings import play_warning_sound
+        play_warning_sound()
 
         alert_items_html = "".join([
             f"""
@@ -1857,10 +1832,10 @@ def render_diagonal_strap_module():
     )
 
     det_tab1, det_tab2, det_tab3, det_tab4 = st.tabs([
-        "🔍 القطاع الطولي وتفريد التسليح (Longitudinal Section)",
-        "📐 المسقط الأفقي الإنشائي (Plan Detailing)",
-        "📈 مخطط العزوم الإنشائية (Bending Moment Diagram)",
-        "📊 جدول حصر الكميات والمواد (Quantity Survey)",
+        "🔍 Longitudinal Section (القطاع الطولي وتفريد التسليح)",
+        "📐 Plan Detailing (المسقط الأفقي الإنشائي)",
+        "📈 Bending Moment Diagram (مخطط العزوم الإنشائية)",
+        "📊 Quantity Survey (جدول حصر الكميات والمواد)",
     ])
 
     with det_tab1:
@@ -1869,7 +1844,7 @@ def render_diagonal_strap_module():
             unsafe_allow_html=True,
         )
         st.caption("يوضح القطاع: سمك القواعد $t_1, t_2$ وعمق الشداد $D_{strap}$ وتفريد الحديد العلوي والسفلي والكانات والبراندات وأشاير الأعمدة.")
-        with st.expander("🖼️ استعراض القطاع الطولي وتفريد التسليح (Longitudinal Detailing Section)", expanded=False, key="m10_elev_exp", on_change="rerun"):
+        with st.expander("🖼️ Longitudinal Detailing Section (استعراض القطاع الطولي وتفريد التسليح)", expanded=False, key="m10_elev_exp", on_change="rerun"):
             if st.session_state.get("m10_elev_exp", False):
                 fig_elev = _draw_detailing_elevation(d, r, n_t1_x, n_t2_x)
                 st.pyplot(fig_elev, use_container_width=True)
@@ -1899,7 +1874,7 @@ def render_diagonal_strap_module():
             unsafe_allow_html=True,
         )
         st.caption("يوضح المسقط: حدود قاعدتي الركن والداخلية، والشداد المائل، وشبكات التسليح في الاتجاهين وكانات الشداد.")
-        with st.expander("🖼️ استعراض المسقط الأفقي الإنشائي وتوزيع التسليح (Plan Detailing & Steel Layout)", expanded=False, key="m10_det_plan_exp", on_change="rerun"):
+        with st.expander("🖼️ Plan Detailing & Steel Layout (استعراض المسقط الأفقي الإنشائي وتوزيع التسليح)", expanded=False, key="m10_det_plan_exp", on_change="rerun"):
             if st.session_state.get("m10_det_plan_exp", False):
                 fig_plan = _draw_detailing_plan(d, r, n_t1_x, n_t2_x)
                 st.pyplot(fig_plan, use_container_width=True)
@@ -1928,7 +1903,7 @@ def render_diagonal_strap_module():
             unsafe_allow_html=True,
         )
         st.caption("يوضح المخطط: منحنى عزوم الانحناء التصميمية وقوى القص وموقع أقصى عزم سالب عند نقطة انعدام القص (Zero Shear).")
-        with st.expander("🖼️ استعراض مخطط العزوم الإنشائية (Bending Moment Diagram)", expanded=False, key="m10_bmd_exp", on_change="rerun"):
+        with st.expander("🖼️ Bending Moment Diagram (استعراض مخطط العزوم الإنشائية)", expanded=False, key="m10_bmd_exp", on_change="rerun"):
             if st.session_state.get("m10_bmd_exp", False):
                 fig_bmd = _draw_bending_moment_diagram(d, r)
                 st.pyplot(fig_bmd, use_container_width=True)

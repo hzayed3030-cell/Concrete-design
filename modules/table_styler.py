@@ -99,7 +99,7 @@ def get_styled_table_html(
     col_colors: list = None,
     accent_border_color: str = "#38bdf8",
     font_size_override: float = None,
-    container_margin: str = "12px 0 20px 0",
+    container_margin: str = "8px 0 14px 0",
 ) -> str:
     """
     Generate dark luxury HTML string for a table adhering to Module 4 ground design.
@@ -129,44 +129,44 @@ def get_styled_table_html(
     if num_cols == 0:
         return ""
 
-    # ── Adaptive Typography & Padding based on column count ─────────────────
+    # ── Adaptive Typography & Padding based on column count (75% Scale) ───────
     if font_size_override is not None:
-        fs_hdr = font_size_override + 1.2
+        fs_hdr = font_size_override + 1.0
         fs_cell = font_size_override
         fs_num = font_size_override + 0.5
-        pad_v = max(3, int(font_size_override * 0.45))
-        pad_h = max(5, int(font_size_override * 0.65))
+        pad_v = max(2, int(font_size_override * 0.40))
+        pad_h = max(4, int(font_size_override * 0.55))
     elif num_cols <= 3:
-        fs_hdr = 20.0
-        fs_cell = 18.0
-        fs_num = 20.0
-        pad_v = 13
-        pad_h = 16
-    elif num_cols <= 5:
-        fs_hdr = 18.0
-        fs_cell = 16.0
-        fs_num = 18.0
-        pad_v = 11
-        pad_h = 14
-    elif num_cols <= 7:
-        fs_hdr = 16.0
-        fs_cell = 14.5
-        fs_num = 15.5
-        pad_v = 9
+        fs_hdr = 15.0
+        fs_cell = 13.5
+        fs_num = 15.0
+        pad_v = 8
         pad_h = 12
-    elif num_cols <= 9:
-        fs_hdr = 14.5
-        fs_cell = 13.0
-        fs_num = 14.0
+    elif num_cols <= 5:
+        fs_hdr = 13.5
+        fs_cell = 12.0
+        fs_num = 13.5
         pad_v = 7
         pad_h = 10
-    else:
-        # 10 or more columns (e.g. Punching & Deflection verification tables)
+    elif num_cols <= 7:
         fs_hdr = 12.0
         fs_cell = 11.0
         fs_num = 11.5
+        pad_v = 6
+        pad_h = 9
+    elif num_cols <= 9:
+        fs_hdr = 11.0
+        fs_cell = 10.0
+        fs_num = 10.5
         pad_v = 5
-        pad_h = 7
+        pad_h = 8
+    else:
+        # 10 or more columns (e.g. Punching & Deflection verification tables)
+        fs_hdr = 9.5
+        fs_cell = 8.5
+        fs_num = 9.0
+        pad_v = 4
+        pad_h = 6
 
     # ── Default Column Alignments & Colors ───────────────────────────────────
     if not col_alignments or len(col_alignments) != num_cols:

@@ -532,106 +532,147 @@ def render():
                         use_container_width=True,
                     )
 
-    st.markdown(
-        """
-        <style>
-        /* 2-Row Layout for Ground Slab Tabs: 3 tabs on Row 1, 2 tabs on Row 2 */
-        div[data-testid="stTabs"] > div:first-child {
-            overflow: visible !important;
-        }
-        div[data-testid="stTabs"] [data-baseweb="tab-list"],
-        div[data-testid="stTabs"] div[role="tablist"] {
-            display: flex !important;
-            flex-wrap: wrap !important;
-            gap: 10px !important;
-            width: 100% !important;
-            overflow: visible !important;
-            padding-bottom: 8px !important;
-        }
+    # ── 💡 HELP & TECHNICAL GUIDE PANEL ───────────────────────────────────────
+    if st.session_state.get("_show_gs_help_panel", False):
+        st.markdown(
+            """
+            <style>
+            [data-testid="stExpander"] details summary p {
+                font-size: 15px !important;
+                font-weight: 900 !important;
+                color: #38bdf8 !important;
+                line-height: 1.35 !important;
+            }
+            [data-testid="stExpander"] details summary svg {
+                width: 15px !important;
+                height: 15px !important;
+            }
+            </style>
+            <div style='margin-top: 10px;'></div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-        /* Hide default underline highlight & border */
-        div[data-testid="stTabs"] [data-baseweb="tab-highlight"],
-        div[data-testid="stTabs"] [data-baseweb="tab-border"] {
-            display: none !important;
-        }
+        with st.expander("🌍 1. Subgrade & Base Properties (خواص التربة وطبقة الإحلال) — [اضغط للتفاصيل]", expanded=True):
+            st.markdown(
+                """
+                <div dir="rtl" style="text-align: right; font-size: 18px; line-height: 2.1; color: #ffffff; padding: 8px 12px;">
+                <ul style="padding-right: 22px; list-style-type: square;">
+                    <li style="margin-bottom: 18px;">
+                        <b style="color: #38bdf8; font-size: 24px;">معامل رد فعل التربة ks (القيمة الافتراضية = 5.0 kg/cm³):</b>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">المدلول الفيزيائي والهندسي:</b> <span style="font-size: 18px; color: #ffffff;">يمثل الصلابة الزنبركية لفرشة التأسيس (Spring Stiffness = ΔP / Δδ) ويقاس باختبار التحميل باللوح (Plate Load Test بقطر 75 سم).</span>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">لماذا تم اختيار 5.0 kg/cm³ تحديداً؟</b> <span style="font-size: 18px; color: #ffffff;">هي القيمة الوسطية الآمنة والشائعة لمعظم المواقع التي تم تسويتها مع فرش طبقة إحلال مدموكة.</span>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">القيم الحقلية المرجعية حسب نوع التربة:</b>
+                        <br>&nbsp;&nbsp;&nbsp;&nbsp;▫️ <span style="font-size: 18px; color: #cbd5e1;">تربة طينية رخوة:</span> <b style="font-size: 18px; color: #f87171;">1.5 – 3.0 kg/cm³</b>
+                        <br>&nbsp;&nbsp;&nbsp;&nbsp;▫️ <span style="font-size: 18px; color: #cbd5e1;">تربة رملية مدموكة / طمي:</span> <b style="font-size: 18px; color: #fbbf24;">3.5 – 5.5 kg/cm³</b>
+                        <br>&nbsp;&nbsp;&nbsp;&nbsp;▫️ <span style="font-size: 18px; color: #cbd5e1;">طبقة إحلال من كسر الحصى والسن المدموك ≥ 98%:</span> <b style="font-size: 18px; color: #4ade80;">6.0 – 10.0 kg/cm³</b>
+                    </li>
+                    <li style="margin-bottom: 18px;">
+                        <b style="color: #38bdf8; font-size: 24px;">إجهاد التأسيس المسموح للتربة q_all (القيمة الافتراضية = 1.50 kg/cm² = 15 ton/m²):</b>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">المدلول الهندسي والتطبيقي:</b> <span style="font-size: 18px; color: #ffffff;">قدرة التحمل الآمنة السائدة في تقارير أبحاث التربة للأراضي الصناعية لضمان عدم حدوث قص أو هبوط زائد تحت الأحمال الكلية.</span>
+                    </li>
+                    <li>
+                        <b style="color: #38bdf8; font-size: 24px;">سمك طبقة الإحلال / الأساس الحصوي h_base (القيمة الافتراضية = 20.0 cm):</b>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">الوظيفة الإنشائية:</b> <span style="font-size: 18px; color: #ffffff;">طبقة سن متدرجة مدموكة جيداً لتسوية الموقع، وقطع صعود الرطوبة والمياه الجوفية، ورفع قيمة ks الفعالة وتوزيع الإجهادات المركزة.</span>
+                    </li>
+                </ul>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-        /* Base styling for all tabs */
-        div[data-testid="stTabs"] button[role="tab"] {
-            height: auto !important;
-            min-height: 48px !important;
-            padding: 10px 16px !important;
-            border-radius: 10px !important;
-            border: 1.5px solid #334155 !important;
-            background: #0f172a !important;
-            text-align: center !important;
-            justify-content: center !important;
-            align-items: center !important;
-            transition: all 0.2s ease !important;
-        }
+        with st.expander("📐 2. Geometry & Materials (أبعاد البلاطة والمواد الإنشائية) — [اضغط للتفاصيل]", expanded=False):
+            st.markdown(
+                """
+                <div dir="rtl" style="text-align: right; font-size: 18px; line-height: 2.1; color: #ffffff; padding: 8px 12px;">
+                <ul style="padding-right: 22px; list-style-type: square;">
+                    <li style="margin-bottom: 18px;">
+                        <b style="color: #38bdf8; font-size: 24px;">أبعاد الصالة Lx × Ly (القيمة الافتراضية = 30 × 20 م):</b>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">الهدف التخطيطي:</b> <span style="font-size: 18px; color: #ffffff;">المساحة النمطية للجمالونات والمستودعات المتوسطة (600 م²)، وتستخدم لتقسيم الباكيات وحساب كميات الخرسانة والحديد.</span>
+                    </li>
+                    <li style="margin-bottom: 18px;">
+                        <b style="color: #38bdf8; font-size: 24px;">سمك البلاطة الخرسانية ts (القيمة الافتراضية = 20.0 cm):</b>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">الكفاءة الإنشائية:</b> <span style="font-size: 18px; color: #ffffff;">السمك القياسي للأرضيات الصناعية (15 – 25 سم). يوفر عزم عطالة ممتاز (ts³ في معادلة ويسترجارد) لمنع الشروخ وضمان أمان القص الثاقب.</span>
+                    </li>
+                    <li style="margin-bottom: 18px;">
+                        <b style="color: #38bdf8; font-size: 24px;">الغطاء الخرساني الصافي Cover (القيمة الافتراضية = 4.0 cm):</b>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">اشتراطات الكود المصري ECP 203:</b> <span style="font-size: 18px; color: #ffffff;">العناصر الملامسة للتربة وعوازل الرطوبة تتطلب غطاءً صافياً لا يقل عن 4.0 سم لحماية التسليح من التآكل والأملاح الأرضية.</span>
+                    </li>
+                    <li style="margin-bottom: 18px;">
+                        <b style="color: #38bdf8; font-size: 24px;">رتبة الخرسانة fcu (القيمة الافتراضية = 300 kg/cm²):</b>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">مقاومة البري والشد:</b> <span style="font-size: 18px; color: #ffffff;">الموصى به للأرضيات الصناعية (300 – 350 كجم/سم²) لضمان مقاومة عالية للبري والاحتكاك السطحي (Abrasion) وتحقيق إجهاد شد انحناء عالي fctr = 0.6√fcu.</span>
+                    </li>
+                    <li>
+                        <b style="color: #38bdf8; font-size: 24px;">إجهاد خضوع الحديد fy (القيمة الافتراضية = 4200 kg/cm²):</b>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">نوعية الصلب:</b> <span style="font-size: 18px; color: #ffffff;">الرتبة القياسية عالية المقاومة (St 420/500) لتحمل قوى الشد الناتجة عن سحب التربة أثناء الانكماش بأعلى كفاءة اقتصادية.</span>
+                    </li>
+                </ul>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-        /* First row: 3 tabs */
-        div[data-testid="stTabs"] button[role="tab"]:nth-of-type(1),
-        div[data-testid="stTabs"] button[role="tab"]:nth-of-type(2),
-        div[data-testid="stTabs"] button[role="tab"]:nth-of-type(3) {
-            flex: 1 1 calc(33.333% - 10px) !important;
-            max-width: calc(33.333% - 10px) !important;
-            box-sizing: border-box !important;
-        }
+        with st.expander("🚛 3. Design Loads (الأحمال التشغيلية وحمولات المعدات) — [اضغط للتفاصيل]", expanded=False):
+            st.markdown(
+                """
+                <div dir="rtl" style="text-align: right; font-size: 18px; line-height: 2.1; color: #ffffff; padding: 8px 12px;">
+                <ul style="padding-right: 22px; list-style-type: square;">
+                    <li style="margin-bottom: 18px;">
+                        <b style="color: #38bdf8; font-size: 24px;">الحمل الحي الموزع بانتظام w_LL (القيمة الافتراضية = 2.5 ton/m²):</b>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">نطاق التغطية:</b> <span style="font-size: 18px; color: #ffffff;">يغطي حمولات التخزين العام، الممرات، وتوزيع البضائع في المصانع والمستودعات المتوسطة.</span>
+                    </li>
+                    <li style="margin-bottom: 18px;">
+                        <b style="color: #38bdf8; font-size: 24px;">حمولة عجلة الرافعة الشوكية P_wheel (القيمة الافتراضية = 4.0 ton):</b>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">تحليل أوزان المعدات:</b> <span style="font-size: 18px; color: #ffffff;">الرافعة الشوكية القياسية (حمولة 2.5 – 3.0 طن) تنقل حوالي 80% إلى 85% من وزنها الإجمالي مع الحمولة إلى المحور الأمامي، فيكون نصيب العجلة الواحدة 3.5 – 4.5 طن كحمل نقطي ديناميكي.</span>
+                    </li>
+                    <li style="margin-bottom: 18px;">
+                        <b style="color: #38bdf8; font-size: 24px;">بصمة تلامس إطار العجلة bw × lw (القيمة الافتراضية = 20 × 25 cm):</b>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">المساحة التلامسية:</b> <span style="font-size: 18px; color: #ffffff;">المساحة الواقعية لبصمة الإطار المطاطي (500 سم²) وتستخدم لحساب نصف القطر المكافئ a في معادلات ويسترجارد.</span>
+                    </li>
+                    <li style="margin-bottom: 18px;">
+                        <b style="color: #38bdf8; font-size: 24px;">حمولة رجل أرفف التخزين P_post (القيمة الافتراضية = 3.5 ton):</b>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">التركيز النقطي والقص:</b> <span style="font-size: 18px; color: #ffffff;">الحمل النقطي المركز النازل من أرجل أرفف التخزين المرتفعة (Pallet Racking بارتفاع 4 – 6 م)، وهو المسبب الرئيسي للقص الثاقب (Punching).</span>
+                    </li>
+                    <li>
+                        <b style="color: #38bdf8; font-size: 24px;">أبعاد لوح التثبيت bp × tp (القيمة الافتراضية = 15 × 15 cm):</b>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">تفصيلة القاعدة:</b> <span style="font-size: 18px; color: #ffffff;">أبعاد اللوح الفولاذي السفلي (Base Plate) لرجل الرف المثبت بمسامير في الخرسانة.</span>
+                    </li>
+                </ul>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-        /* Second row: remaining 2 tabs */
-        div[data-testid="stTabs"] button[role="tab"]:nth-of-type(4),
-        div[data-testid="stTabs"] button[role="tab"]:nth-of-type(5) {
-            flex: 1 1 calc(50% - 10px) !important;
-            max-width: calc(50% - 10px) !important;
-            box-sizing: border-box !important;
-        }
+        with st.expander("🔗 4. Joints & Reinforcement (فواصل الانكماش والدواول والتسليح) — [اضغط للتفاصيل]", expanded=False):
+            st.markdown(
+                """
+                <div dir="rtl" style="text-align: right; font-size: 18px; line-height: 2.1; color: #ffffff; padding: 8px 12px;">
+                <ul style="padding-right: 22px; list-style-type: square;">
+                    <li style="margin-bottom: 18px;">
+                        <b style="color: #38bdf8; font-size: 24px;">مسافات الفواصل Ljx × Ljy (القيمة الافتراضية = 4.5 × 4.5 م):</b>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">القاعدة الكودية الذهبية:</b> <span style="font-size: 18px; color: #ffffff;">المسافة بين الفواصل لا تزيد عن 24 إلى 30 ضعف السمك (24 × 0.20 = 4.80 م). اختيار 4.5 م يضمن منع الشروخ العشوائية مع نسبة طول لعرض ≤ 1.25.</span>
+                    </li>
+                    <li style="margin-bottom: 18px;">
+                        <b style="color: #38bdf8; font-size: 24px;">عمق قطع الفاصل بالمنشار (Saw-Cut Depth = ts / 4 = 5.0 cm):</b>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">آلية العمل:</b> <span style="font-size: 18px; color: #ffffff;">لعمل مستوى ضعف متعمد (Weakened Plane) يشرخ تحته خط مستقيم ذاتياً مع بقاء التعشيق الركامي في الأسفل.</span>
+                    </li>
+                    <li style="margin-bottom: 18px;">
+                        <b style="color: #38bdf8; font-size: 24px;">شبك التسليح (Double Mesh Φ 10 mm @ 20 cm):</b>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">مقاومة الانكماش:</b> <span style="font-size: 18px; color: #ffffff;">يعطي مساحة مقطع As = 3.93 سم²/م' يفوق الحد الأدنى للكود المصري (0.15% b ts) ويقاوم قوى سحب التربة (Subgrade Drag).</span>
+                    </li>
+                    <li>
+                        <b style="color: #38bdf8; font-size: 24px;">أسياخ الدواول (Smooth Dowels Φ 20 mm @ 30 cm c/c, L = 45 cm):</b>
+                        <br>• <b style="color: #fbbf24; font-size: 22px;">نقل القص الرأسي:</b> <span style="font-size: 18px; color: #ffffff;">أسياخ ملساء تنقل القص رأسياً وتمنع فرق الهبوط (Faulting) مع السماح بالحركة الأفقية بفضل جراب التمدد البلاستيكي أو دهان الشحم.</span>
+                    </li>
+                </ul>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        st.markdown("---")
 
-        /* Text styling inside tabs */
-        div[data-testid="stTabs"] button[role="tab"] p,
-        div[data-testid="stTabs"] button[role="tab"] span {
-            font-size: 16px !important;
-            font-weight: 800 !important;
-            color: #94a3b8 !important;
-            white-space: normal !important;
-            text-align: center !important;
-            line-height: 1.4 !important;
-        }
-
-        /* Active tab state */
-        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-            background: linear-gradient(135deg, #0284c7 0%, #1e3a8a 100%) !important;
-            border: 2px solid #38bdf8 !important;
-            box-shadow: 0 4px 16px rgba(56, 189, 248, 0.35) !important;
-        }
-        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] p,
-        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] span {
-            color: #ffffff !important;
-            font-weight: 900 !important;
-        }
-
-        /* Hover state */
-        div[data-testid="stTabs"] button[role="tab"]:hover {
-            border-color: #38bdf8 !important;
-            background: #1e293b !important;
-        }
-        div[data-testid="stTabs"] button[role="tab"]:hover p,
-        div[data-testid="stTabs"] button[role="tab"]:hover span {
-            color: #f1f5f9 !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "📐 1. المدخلات والأحمال والتربة (Inputs & Soil)",
-        "⚙️ 2. فحص الإجهادات والقص (Analysis & Checks)",
-        "🔗 3. تصميم الفواصل والدواول (Joints & Dowels)",
-        "📊 4. المخططات والكميات (CAD Drawings & BOQ)",
-        "⚖️ 5. وزن حديد البلاطة (Weight of Steel in Slab)",
-    ])
-
-    with tab1:
+    # ── 📐 SECTION 1: SLAB INPUTS, GEOMETRY, SOIL & LOADS ───────────────────────
+    with st.expander("📐 1. Slab Inputs, Soil & Loads (المدخلات الإنشائية والأحمال والتربة)", expanded=True):
         st.markdown(
             """
             <div class="input-section-header">
@@ -641,150 +682,6 @@ def render():
             """,
             unsafe_allow_html=True,
         )
-        if st.session_state.get("_show_gs_help_panel", False):
-            st.markdown(
-                """
-                <style>
-                [data-testid="stExpander"] details summary p {
-                    font-size: 20px !important;
-                    font-weight: 900 !important;
-                    color: #38bdf8 !important;
-                    line-height: 1.5 !important;
-                }
-                [data-testid="stExpander"] details summary svg {
-                    width: 20px !important;
-                    height: 20px !important;
-                }
-                </style>
-                <div style='margin-top: 10px;'></div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            with st.expander("🌍 1. خواص التربة وطبقة الإحلال (Subgrade & Base Properties) — [اضغط للتفاصيل]", expanded=True):
-                st.markdown(
-                    """
-                    <div dir="rtl" style="text-align: right; font-size: 18px; line-height: 2.1; color: #ffffff; padding: 8px 12px;">
-                    <ul style="padding-right: 22px; list-style-type: square;">
-                        <li style="margin-bottom: 18px;">
-                            <b style="color: #38bdf8; font-size: 24px;">معامل رد فعل التربة ks (القيمة الافتراضية = 5.0 kg/cm³):</b>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">المدلول الفيزيائي والهندسي:</b> <span style="font-size: 18px; color: #ffffff;">يمثل الصلابة الزنبركية لفرشة التأسيس (Spring Stiffness = ΔP / Δδ) ويقاس باختبار التحميل باللوح (Plate Load Test بقطر 75 سم).</span>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">لماذا تم اختيار 5.0 kg/cm³ تحديداً؟</b> <span style="font-size: 18px; color: #ffffff;">هي القيمة الوسطية الآمنة والشائعة لمعظم المواقع التي تم تسويتها مع فرش طبقة إحلال مدموكة.</span>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">القيم الحقلية المرجعية حسب نوع التربة:</b>
-                            <br>&nbsp;&nbsp;&nbsp;&nbsp;▫️ <span style="font-size: 18px; color: #cbd5e1;">تربة طينية رخوة:</span> <b style="font-size: 18px; color: #f87171;">1.5 – 3.0 kg/cm³</b>
-                            <br>&nbsp;&nbsp;&nbsp;&nbsp;▫️ <span style="font-size: 18px; color: #cbd5e1;">تربة رملية مدموكة / طمي:</span> <b style="font-size: 18px; color: #fbbf24;">3.5 – 5.5 kg/cm³</b>
-                            <br>&nbsp;&nbsp;&nbsp;&nbsp;▫️ <span style="font-size: 18px; color: #cbd5e1;">طبقة إحلال من كسر الحصى والسن المدموك ≥ 98%:</span> <b style="font-size: 18px; color: #4ade80;">6.0 – 10.0 kg/cm³</b>
-                        </li>
-                        <li style="margin-bottom: 18px;">
-                            <b style="color: #38bdf8; font-size: 24px;">إجهاد التأسيس المسموح للتربة q_all (القيمة الافتراضية = 1.50 kg/cm² = 15 ton/m²):</b>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">المدلول الهندسي والتطبيقي:</b> <span style="font-size: 18px; color: #ffffff;">قدرة التحمل الآمنة السائدة في تقارير أبحاث التربة للأراضي الصناعية لضمان عدم حدوث قص أو هبوط زائد تحت الأحمال الكلية.</span>
-                        </li>
-                        <li>
-                            <b style="color: #38bdf8; font-size: 24px;">سمك طبقة الإحلال / الأساس الحصوي h_base (القيمة الافتراضية = 20.0 cm):</b>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">الوظيفة الإنشائية:</b> <span style="font-size: 18px; color: #ffffff;">طبقة سن متدرجة مدموكة جيداً لتسوية الموقع، وقطع صعود الرطوبة والمياه الجوفية، ورفع قيمة ks الفعالة وتوزيع الإجهادات المركزة.</span>
-                        </li>
-                    </ul>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-            with st.expander("📐 2. أبعاد البلاطة والمواد الإنشائية (Geometry & Materials) — [اضغط للتفاصيل]", expanded=False):
-                st.markdown(
-                    """
-                    <div dir="rtl" style="text-align: right; font-size: 18px; line-height: 2.1; color: #ffffff; padding: 8px 12px;">
-                    <ul style="padding-right: 22px; list-style-type: square;">
-                        <li style="margin-bottom: 18px;">
-                            <b style="color: #38bdf8; font-size: 24px;">أبعاد الصالة Lx × Ly (القيمة الافتراضية = 30 × 20 م):</b>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">الهدف التخطيطي:</b> <span style="font-size: 18px; color: #ffffff;">المساحة النمطية للجمالونات والمستودعات المتوسطة (600 م²)، وتستخدم لتقسيم الباكيات وحساب كميات الخرسانة والحديد.</span>
-                        </li>
-                        <li style="margin-bottom: 18px;">
-                            <b style="color: #38bdf8; font-size: 24px;">سمك البلاطة الخرسانية ts (القيمة الافتراضية = 20.0 cm):</b>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">الكفاءة الإنشائية:</b> <span style="font-size: 18px; color: #ffffff;">السمك القياسي للأرضيات الصناعية (15 – 25 سم). يوفر عزم عطالة ممتاز (ts³ في معادلة ويسترجارد) لمنع الشروخ وضمان أمان القص الثاقب.</span>
-                        </li>
-                        <li style="margin-bottom: 18px;">
-                            <b style="color: #38bdf8; font-size: 24px;">الغطاء الخرساني الصافي Cover (القيمة الافتراضية = 4.0 cm):</b>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">اشتراطات الكود المصري ECP 203:</b> <span style="font-size: 18px; color: #ffffff;">العناصر الملامسة للتربة وعوازل الرطوبة تتطلب غطاءً صافياً لا يقل عن 4.0 سم لحماية التسليح من التآكل والأملاح الأرضية.</span>
-                        </li>
-                        <li style="margin-bottom: 18px;">
-                            <b style="color: #38bdf8; font-size: 24px;">رتبة الخرسانة fcu (القيمة الافتراضية = 300 kg/cm²):</b>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">مقاومة البري والشد:</b> <span style="font-size: 18px; color: #ffffff;">الموصى به للأرضيات الصناعية (300 – 350 كجم/سم²) لضمان مقاومة عالية للبري والاحتكاك السطحي (Abrasion) وتحقيق إجهاد شد انحناء عالي fctr = 0.6√fcu.</span>
-                        </li>
-                        <li>
-                            <b style="color: #38bdf8; font-size: 24px;">إجهاد خضوع الحديد fy (القيمة الافتراضية = 4200 kg/cm²):</b>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">نوعية الصلب:</b> <span style="font-size: 18px; color: #ffffff;">الرتبة القياسية عالية المقاومة (St 420/500) لتحمل قوى الشد الناتجة عن سحب التربة أثناء الانكماش بأعلى كفاءة اقتصادية.</span>
-                        </li>
-                    </ul>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-            with st.expander("🚛 3. الأحمال التشغيلية وحمولات المعدات (Design Loads) — [اضغط للتفاصيل]", expanded=False):
-                st.markdown(
-                    """
-                    <div dir="rtl" style="text-align: right; font-size: 18px; line-height: 2.1; color: #ffffff; padding: 8px 12px;">
-                    <ul style="padding-right: 22px; list-style-type: square;">
-                        <li style="margin-bottom: 18px;">
-                            <b style="color: #38bdf8; font-size: 24px;">الحمل الحي الموزع بانتظام w_LL (القيمة الافتراضية = 2.5 ton/m²):</b>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">نطاق التغطية:</b> <span style="font-size: 18px; color: #ffffff;">يغطي حمولات التخزين العام، الممرات، وتوزيع البضائع في المصانع والمستودعات المتوسطة.</span>
-                        </li>
-                        <li style="margin-bottom: 18px;">
-                            <b style="color: #38bdf8; font-size: 24px;">حمولة عجلة الرافعة الشوكية P_wheel (القيمة الافتراضية = 4.0 ton):</b>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">تحليل أوزان المعدات:</b> <span style="font-size: 18px; color: #ffffff;">الرافعة الشوكية القياسية (حمولة 2.5 – 3.0 طن) تنقل حوالي 80% إلى 85% من وزنها الإجمالي مع الحمولة إلى المحور الأمامي، فيكون نصيب العجلة الواحدة 3.5 – 4.5 طن كحمل نقطي ديناميكي.</span>
-                        </li>
-                        <li style="margin-bottom: 18px;">
-                            <b style="color: #38bdf8; font-size: 24px;">بصمة تلامس إطار العجلة bw × lw (القيمة الافتراضية = 20 × 25 cm):</b>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">المساحة التلامسية:</b> <span style="font-size: 18px; color: #ffffff;">المساحة الواقعية لبصمة الإطار المطاطي (500 سم²) وتستخدم لحساب نصف القطر المكافئ a في معادلات ويسترجارد.</span>
-                        </li>
-                        <li style="margin-bottom: 18px;">
-                            <b style="color: #38bdf8; font-size: 24px;">حمولة رجل أرفف التخزين P_post (القيمة الافتراضية = 3.5 ton):</b>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">التركيز النقطي والقص:</b> <span style="font-size: 18px; color: #ffffff;">الحمل النقطي المركز النازل من أرجل أرفف التخزين المرتفعة (Pallet Racking بارتفاع 4 – 6 م)، وهو المسبب الرئيسي للقص الثاقب (Punching).</span>
-                        </li>
-                        <li>
-                            <b style="color: #38bdf8; font-size: 24px;">أبعاد لوح التثبيت bp × tp (القيمة الافتراضية = 15 × 15 cm):</b>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">تفصيلة القاعدة:</b> <span style="font-size: 18px; color: #ffffff;">أبعاد اللوح الفولاذي السفلي (Base Plate) لرجل الرف المثبت بمسامير في الخرسانة.</span>
-                        </li>
-                    </ul>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-            with st.expander("🔗 4. فواصل الانكماش والدواول والتسليح (Joints & Reinforcement) — [اضغط للتفاصيل]", expanded=False):
-                st.markdown(
-                    """
-                    <div dir="rtl" style="text-align: right; font-size: 18px; line-height: 2.1; color: #ffffff; padding: 8px 12px;">
-                    <ul style="padding-right: 22px; list-style-type: square;">
-                        <li style="margin-bottom: 18px;">
-                            <b style="color: #38bdf8; font-size: 24px;">مسافات الفواصل Ljx × Ljy (القيمة الافتراضية = 4.5 × 4.5 م):</b>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">القاعدة الكودية الذهبية:</b> <span style="font-size: 18px; color: #ffffff;">المسافة بين الفواصل لا تزيد عن 24 إلى 30 ضعف السمك (24 × 0.20 = 4.80 م). اختيار 4.5 م يضمن منع الشروخ العشوائية مع نسبة طول لعرض ≤ 1.25.</span>
-                        </li>
-                        <li style="margin-bottom: 18px;">
-                            <b style="color: #38bdf8; font-size: 24px;">عمق قطع الفاصل بالمنشار (Saw-Cut Depth = ts / 4 = 5.0 cm):</b>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">آلية العمل:</b> <span style="font-size: 18px; color: #ffffff;">لعمل مستوى ضعف متعمد (Weakened Plane) يشرخ تحته خط مستقيم ذاتياً مع بقاء التعشيق الركامي في الأسفل.</span>
-                        </li>
-                        <li style="margin-bottom: 18px;">
-                            <b style="color: #38bdf8; font-size: 24px;">شبك التسليح (Double Mesh Φ 10 mm @ 20 cm):</b>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">مقاومة الانكماش:</b> <span style="font-size: 18px; color: #ffffff;">يعطي مساحة مقطع As = 3.93 سم²/م' يفوق الحد الأدنى للكود المصري (0.15% b ts) ويقاوم قوى سحب التربة (Subgrade Drag).</span>
-                        </li>
-                        <li>
-                            <b style="color: #38bdf8; font-size: 24px;">أسياخ الدواول (Smooth Dowels Φ 20 mm @ 30 cm c/c, L = 45 cm):</b>
-                            <br>• <b style="color: #fbbf24; font-size: 22px;">نقل القص الرأسي:</b> <span style="font-size: 18px; color: #ffffff;">أسياخ ملساء تنقل القص رأسياً وتمنع فرق الهبوط (Faulting) مع السماح بالحركة الأفقية بفضل جراب التمدد البلاستيكي أو دهان الشحم.</span>
-                        </li>
-                    </ul>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-        st.markdown("---")
-        st.markdown("<div style='margin-bottom: 8px;'></div>", unsafe_allow_html=True)
-
-        # ══════════════════════════════════════════════════════════════════════
-        # 📐 DESIGN INPUTS SECTION (SEPARATE BELOW HELP)
-        # ══════════════════════════════════════════════════════════════════════
-        st.markdown("### 📝 حقول إدخال بيانات المشروع والأبعاد والتربة والأحمال")
 
         c1, c2 = st.columns(2)
         with c1:
@@ -818,7 +715,17 @@ def render():
             with col_ps2:
                 post_tp_in = S.number_input("طول بليت الركيزة (cm):", "gs_post_tp", min_value=5.0, max_value=50.0, step=1.0)
 
-    with tab3:
+    # ── 🔗 SECTION 2: JOINTS, DOWEL BARS & REINFORCEMENT MESH ───────────────────
+    with st.expander("🔗 2. Joints, Dowel Bars & Rebar Mesh (تصميم الفواصل والدواول وشبك التسليح)", expanded=True):
+        st.markdown(
+            """
+            <div class="input-section-header">
+                <span style="font-size: 26px;">🔗</span>
+                <span>مواصفات وتصميم فواصل الانكماش وأسياخ الدواول وشبك التسليح (Joints, Dowels & Mesh)</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         cj1, cj2 = st.columns(2)
         with cj1:
             st.markdown("#### 🔗 فواصل الانكماش والتحكم (Contraction Joints)")
@@ -867,7 +774,8 @@ def render():
         dowel_spacing_cm=float(dowel_sp_in),
     )
 
-    with tab2:
+    # ── ⚙️ SECTION 3: STRUCTURAL ANALYSIS & SAFETY CHECKS ───────────────────────
+    with st.expander("⚙️ 3. Analysis & Safety Checks (نتائج التحليل الإنشائي وفحص الإجهادات والقص)", expanded=True):
         st.markdown("### 📊 نتائج الفحوصات الإنشائية والجيوتقنية (Structural & Soil Verification)")
 
         k1, k2, k3, k4 = st.columns(4)
@@ -1007,13 +915,20 @@ def render():
         )
         st.markdown(checks_html_table, unsafe_allow_html=True)
 
-    with tab4:
+    # ── 📊 SECTION 4: CAD DRAWINGS, BOQ & CALCULATION SHEET ─────────────────────
+    with st.expander("📊 4. CAD Drawings, BOQ & Calculation Sheet (المخططات الهندسية وجدول حصر الكميات والمذكرة)", expanded=True):
         st.markdown("### 📐 المخططات الهندسية وجدول حصر الكميات (CAD Drawings & BOQ)")
 
         b64_plan = None
         b64_detail = None
-        with st.expander("🖼️ استعراض المخططات الهندسية وتفاصيل الفواصل (2D Floor Plan & Joint Detailing)", expanded=False, key="gs_draw_exp", on_change="rerun"):
-            if st.session_state.get("gs_draw_exp", False):
+        with st.container(border=True):
+            st.markdown("<div style='font-size:17px; font-weight:800; color:#38bdf8; margin-bottom:8px;'>🖼️ استعراض المخططات الهندسية وتفاصيل الفواصل (2D Floor Plan & Joint Detailing)</div>", unsafe_allow_html=True)
+            show_drawings = st.checkbox(
+                "توليد وعرض المخططات الهندسية عالية الدقة (Render 2D CAD Blueprints)",
+                value=st.session_state.get("gs_draw_show", True),
+                key="gs_draw_show",
+            )
+            if show_drawings:
                 b64_plan, b64_detail = generate_ground_slab_plan_and_detail_sketches(res)
 
                 st.markdown("#### 1. المسقط الأفقي العام للبلاطة والفواصل وتمركز الأحمال (2D Floor Plan)")
@@ -1042,7 +957,7 @@ def render():
                         use_container_width=True,
                     )
             else:
-                st.info("💡 انقر لتوسيع هذا القسم وتوليد المخططات الهندسية والمسقط الأفقي العام وتفاصيل فواصل البلاطة الأرضية (Lazy Loading).")
+                st.info("💡 حدد المربع أعلاه لتوليد المخططات الهندسية والمسقط الأفقي العام وتفاصيل فواصل البلاطة الأرضية.")
 
         st.markdown("---")
         st.markdown("### 📋 جدول حصر الكميات والمقايسة المادية (Takeoff & BOQ Breakdown)")
@@ -1144,10 +1059,8 @@ def render():
                     else:
                         st.warning("تعذر إنشاء ملف PDF تلقائياً، يمكنك حفظ ملف HTML وفتحه للطباعة.")
 
-    # ══════════════════════════════════════════════════════════════════════
-    # ⚖️ TAB 5: WEIGHT OF STEEL IN SLAB (حساب وزن واستهلاك حديد البلاطة)
-    # ══════════════════════════════════════════════════════════════════════
-    with tab5:
+    # ── ⚖️ SECTION 5: WEIGHT OF STEEL IN SLAB ──────────────────────────────────
+    with st.expander("⚖️ 5. Weight of Steel in Slab Calculation (حساب وتفصيل وزن واستهلاك حديد البلاطة)", expanded=True):
         st.markdown(
             """
             <div class="input-section-header">

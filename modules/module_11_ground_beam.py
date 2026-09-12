@@ -1044,10 +1044,10 @@ def render_ground_beam_module():
 
     # ── TABS: Detailing Drawings, Elevation, Tables, BBS ──────────────────────
     tab_sec, tab_elev, tab_tables, tab_bbs = st.tabs([
-        "📐 القطاع العرضي التنفيذي (Sec. A-A)",
-        "📏 المسقط الطولي والعزوم والقص (Sec. Long-1)",
-        "📋 جداول الحسابات والتحقق الإنشائي (ECP 203)",
-        "📊 جدول تفريد وحصر كميات الحديد (BBS & BOQ)"
+        "📐 Sec. A-A Blueprint (القطاع العرضي التنفيذي)",
+        "📏 Sec. Long-1 Blueprint (المسقط الطولي والعزوم والقص)",
+        "📋 ECP 203 Calculation Tables (جداول الحسابات والتحقق الإنشائي)",
+        "📊 BBS & BOQ Schedule (جدول تفريد وحصر كميات الحديد)",
     ])
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -1056,7 +1056,7 @@ def render_ground_beam_module():
     with tab_sec:
         c_drw, c_info = st.columns([1.8, 1.2])
         with c_drw:
-            with st.expander("🖼️ عرض لوحة القطاع العرضي (Sec. A-A Blueprint)", expanded=False, key="m11_sec_exp", on_change="rerun"):
+            with st.expander("🖼️ Sec. A-A Blueprint (عرض لوحة القطاع العرضي)", expanded=False, key="m11_sec_exp", on_change="rerun"):
                 if st.session_state.get("m11_sec_exp", False):
                     fig_sec = draw_ground_beam_cross_section(res)
                     st.pyplot(fig_sec, clear_figure=True, use_container_width=True)
@@ -1106,7 +1106,7 @@ def render_ground_beam_module():
     #  TAB 2: LONGITUDINAL ELEVATION & DIAGRAMS
     # ═══════════════════════════════════════════════════════════════════════════
     with tab_elev:
-        with st.expander("🖼️ عرض المسقط الطولي والمخططات (Longitudinal Elevation Blueprint)", expanded=False, key="m11_elev_exp", on_change="rerun"):
+        with st.expander("🖼️ Longitudinal Elevation Blueprint (عرض المسقط الطولي والمخططات)", expanded=False, key="m11_elev_exp", on_change="rerun"):
             if st.session_state.get("m11_elev_exp", False):
                 fig_elev = draw_ground_beam_longitudinal_elevation(res)
                 st.pyplot(fig_elev, clear_figure=True, use_container_width=True)

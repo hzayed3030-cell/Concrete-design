@@ -16,6 +16,7 @@ import os
 import io
 import base64
 import math
+import functools
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
@@ -247,18 +248,21 @@ def compute_column_geometry(grid_x, grid_y, bc_cm, tc_cm, trans=None):
     }
 
 
-def validate_edge_column_offset(geom, edge_dir):
+def validate_edge_column_offset(geom, edge_dir, slab_bounds=None):
     """
-    Validates if an edge column satisfies the maximum allowed offset of 6 cm
-    beyond the axis in the specified edge direction(s).
+    Validates if an edge column satisfies:
+    1. The neighbor direction faces OUTWARDS towards the outer boundary of the floor plan (Left, Right, Top, Bottom)
+       and does NOT point inwards into the interior slab bays of the building.
+    2. The maximum allowed offset beyond the axis does not exceed 6 cm in the specified neighbor direction(s).
 
     Args:
         geom (dict): Output of compute_column_geometry.
         edge_dir (str): One of the 8 edge directions (e.g. 'Right', 'Top + Left', etc.).
+        slab_bounds (dict, optional): Dict with 'min_x', 'max_x', 'min_y', 'max_y', and optional cantilevers.
 
     Returns:
-        is_valid (bool): True if all specified directions have offset <= 6.0 cm.
-        errors (list[str]): Warning messages for any direction exceeding 6.0 cm.
+        is_valid (bool): True if outward boundary check and 6.0 cm offset check pass.
+        errors (list[str]): Warning messages explaining why the direction cannot be selected as a neighbor column.
     """
     if not isinstance(geom, dict) or not edge_dir:
         return False, []
@@ -286,22 +290,165 @@ def validate_edge_column_offset(geom, edge_dir):
     has_right  = "RIGHT" in ed_upper
 
     errors = []
+
+    # ── 1. فحص هل الاتجاه يطل على حدود المسقط الخارجية أم يتجه لداخل المساحة ──
+    sb = slab_bounds
+    if sb is None:
+        if "slab_bounds" in geom and isinstance(geom["slab_bounds"], dict):
+            sb = geom["slab_bounds"]
+        elif hasattr(st, "session_state"):
+            sb = st.session_state.get("_fs_current_slab_bounds")
+
+    if isinstance(sb, dict):
+        min_x = sb.get("min_x")
+        max_x = sb.get("max_x")
+        min_y = sb.get("min_y")
+        max_y = sb.get("max_y")
+        cant_left = float(sb.get("cant_left", 0.0) or 0.0)
+        cant_right = float(sb.get("cant_right", 0.0) or 0.0)
+        cant_bottom = float(sb.get("cant_bottom", 0.0) or 0.0)
+        cant_top = float(sb.get("cant_top", 0.0) or 0.0)
+
+        TOL = 0.05  # سماحية 5 سم للمطابقة الهندسية للمحاور
+
+        if has_left:
+            if min_x is not None and gx > min_x + TOL:
+                errors.append("لا يجوز اختيار اتجاه (Left / يسار) كعمود جار: لأن هذا الاتجاه يتجه إلى داخل حدود مساحة المسقط الأفقي (يوجد بحر بلاطة داخلي لليسار).")
+            elif cant_left > TOL:
+                errors.append(f"لا يجوز اختيار اتجاه (Left / يسار) كعمود جار: لوجود كابولي (بروز بلاطة) جهة اليسار بمقدار {cant_left:.2f} م يقع العمود داخله.")
+
+        if has_right:
+            if max_x is not None and gx < max_x - TOL:
+                errors.append("لا يجوز اختيار اتجاه (Right / يمين) كعمود جار: لأن هذا الاتجاه يتجه إلى داخل حدود مساحة المسقط الأفقي (يوجد بحر بلاطة داخلي لليمين).")
+            elif cant_right > TOL:
+                errors.append(f"لا يجوز اختيار اتجاه (Right / يمين) كعمود جار: لوجود كابولي (بروز بلاطة) جهة اليمين بمقدار {cant_right:.2f} م يقع العمود داخله.")
+
+        if has_bottom:
+            if min_y is not None and gy > min_y + TOL:
+                errors.append("لا يجوز اختيار اتجاه (Bottom / أسفل) كعمود جار: لأن هذا الاتجاه يتجه إلى داخل حدود مساحة المسقط الأفقي (يوجد بحر بلاطة داخلي للأسفل).")
+            elif cant_bottom > TOL:
+                errors.append(f"لا يجوز اختيار اتجاه (Bottom / أسفل) كعمود جار: لوجود كابولي (بروز بلاطة) جهة الأسفل بمقدار {cant_bottom:.2f} م يقع العمود داخله.")
+
+        if has_top:
+            if max_y is not None and gy < max_y - TOL:
+                errors.append("لا يجوز اختيار اتجاه (Top / أعلى) كعمود جار: لأن هذا الاتجاه يتجه إلى داخل حدود مساحة المسقط الأفقي (يوجد بحر بلاطة داخلي للأعلى).")
+            elif cant_top > TOL:
+                errors.append(f"لا يجوز اختيار اتجاه (Top / أعلى) كعمود جار: لوجود كابولي (بروز بلاطة) جهة الأعلى بمقدار {cant_top:.2f} م يقع العمود داخله.")
+
+    # ── 2. فحص ألا يتجاوز بروز وجه العمود عن المحور 6 سم (فقط في حال كان الاتجاه خارجياً) ──
     MAX_ALLOWABLE_CM = 6.001
 
-    if has_top and offset_top_cm > MAX_ALLOWABLE_CM:
-        errors.append("لا يجوز اعتبار هذا العمود عمود جار، لأن المسافة بعد المحور في اتجاه الأعلى أكبر من 6 سم.")
+    if has_top and offset_top_cm > MAX_ALLOWABLE_CM and not any("أعلى" in e for e in errors):
+        errors.append(f"لا يجوز اعتبار هذا العمود عمود جار: لأن المسافة بعد المحور في اتجاه الأعلى ({offset_top_cm:.1f} سم) أكبر من 6 سم.")
 
-    if has_bottom and offset_bottom_cm > MAX_ALLOWABLE_CM:
-        errors.append("لا يجوز اعتبار هذا العمود عمود جار، لأن المسافة بعد المحور في اتجاه الأسفل أكبر من 6 سم.")
+    if has_bottom and offset_bottom_cm > MAX_ALLOWABLE_CM and not any("أسفل" in e for e in errors):
+        errors.append(f"لا يجوز اعتبار هذا العمود عمود جار: لأن المسافة بعد المحور في اتجاه الأسفل ({offset_bottom_cm:.1f} سم) أكبر من 6 سم.")
 
-    if has_right and offset_right_cm > MAX_ALLOWABLE_CM:
-        errors.append("لا يجوز اعتبار هذا العمود عمود جار، لأن المسافة بعد المحور في اتجاه اليمين أكبر من 6 سم.")
+    if has_right and offset_right_cm > MAX_ALLOWABLE_CM and not any("اليمين" in e for e in errors):
+        errors.append(f"لا يجوز اعتبار هذا العمود عمود جار: لأن المسافة بعد المحور في اتجاه اليمين ({offset_right_cm:.1f} سم) أكبر من 6 سم.")
 
-    if has_left and offset_left_cm > MAX_ALLOWABLE_CM:
-        errors.append("لا يجوز اعتبار هذا العمود عمود جار، لأن المسافة بعد المحور في اتجاه اليسار أكبر من 6 سم.")
+    if has_left and offset_left_cm > MAX_ALLOWABLE_CM and not any("اليسار" in e for e in errors):
+        errors.append(f"لا يجوز اعتبار هذا العمود عمود جار: لأن المسافة بعد المحور في اتجاه اليسار ({offset_left_cm:.1f} سم) أكبر من 6 سم.")
 
     is_valid = len(errors) == 0
     return is_valid, errors
+
+
+# ── Centralized Unified Warning Whistle (2550 Hz with 36 Hz Trill) ─────────
+play_sharp_whistle_alert = S.play_warning_sound
+
+
+def is_edge_column_verified(col_id, geom=None, edge_columns=None, alt_id=None, slab_bounds=None):
+    """
+    Returns True if the column is configured as a neighbor/edge column (is_edge == 'Yes')
+    and satisfies the edge offset verification rules and outer boundary limits.
+    """
+    if not edge_columns or not isinstance(edge_columns, dict):
+        return False
+    info = edge_columns.get(col_id) or (edge_columns.get(alt_id) if alt_id else None) or {}
+    if not isinstance(info, dict) or info.get("is_edge") != "Yes":
+        return False
+    raw_dir = str(info.get("direction", "")).strip()
+    if geom is not None and isinstance(geom, dict):
+        valid, _ = validate_edge_column_offset(geom, raw_dir, slab_bounds=slab_bounds)
+        return valid
+    return info.get("is_valid", False)
+
+
+def draw_neighbor_edge_strip(ax, rx, ry, rw, rh, raw_edge_dir, edge_color="#db2777", zorder=8):
+    """
+    Draws the distinct pink boundary line and doubled 45-degree CAD hatch ticks
+    along the neighbor/property boundary faces of the column.
+    """
+    if not raw_edge_dir:
+        return
+    ed_dir = str(raw_edge_dir).upper()
+    has_top = "TOP" in ed_dir
+    has_bottom = "BOTTOM" in ed_dir
+    has_left = "LEFT" in ed_dir
+    has_right = "RIGHT" in ed_dir
+
+    edge_lw = 3.6
+    # Scaled to 70% of current size per user request (length 0.14m, step 0.084m, lw 2.5):
+    tick_len = 0.14
+    tick_step = 0.084
+    tick_lw = 2.5
+
+    # Main solid boundary line
+    if has_top and has_left and not has_bottom and not has_right:
+        ax.plot([rx + rw, rx, rx], [ry + rh, ry + rh, ry], color=edge_color, lw=edge_lw, solid_capstyle="round", solid_joinstyle="round", zorder=zorder)
+    elif has_top and has_right and not has_bottom and not has_left:
+        ax.plot([rx, rx + rw, rx + rw], [ry + rh, ry + rh, ry], color=edge_color, lw=edge_lw, solid_capstyle="round", solid_joinstyle="round", zorder=zorder)
+    elif has_bottom and has_left and not has_top and not has_right:
+        ax.plot([rx + rw, rx, rx], [ry, ry, ry + rh], color=edge_color, lw=edge_lw, solid_capstyle="round", solid_joinstyle="round", zorder=zorder)
+    elif has_bottom and has_right and not has_top and not has_left:
+        ax.plot([rx, rx + rw, rx + rw], [ry, ry, ry + rh], color=edge_color, lw=edge_lw, solid_capstyle="round", solid_joinstyle="round", zorder=zorder)
+    else:
+        if has_top:
+            ax.plot([rx, rx + rw], [ry + rh, ry + rh], color=edge_color, lw=edge_lw, solid_capstyle="round", zorder=zorder)
+        if has_bottom:
+            ax.plot([rx, rx + rw], [ry, ry], color=edge_color, lw=edge_lw, solid_capstyle="round", zorder=zorder)
+        if has_left:
+            ax.plot([rx, rx], [ry, ry + rh], color=edge_color, lw=edge_lw, solid_capstyle="round", zorder=zorder)
+        if has_right:
+            ax.plot([rx + rw, rx + rw], [ry, ry + rh], color=edge_color, lw=edge_lw, solid_capstyle="round", zorder=zorder)
+
+    # Doubled CAD 45-degree hatch ticks pointing into neighbor space
+    if has_left:
+        y_curr = ry
+        while y_curr <= ry + rh + 0.001:
+            ax.plot([rx, rx - tick_len], [y_curr, y_curr + tick_len], color=edge_color, lw=tick_lw, solid_capstyle="round", zorder=zorder)
+            y_curr += tick_step
+    if has_right:
+        y_curr = ry
+        while y_curr <= ry + rh + 0.001:
+            ax.plot([rx + rw, rx + rw + tick_len], [y_curr, y_curr + tick_len], color=edge_color, lw=tick_lw, solid_capstyle="round", zorder=zorder)
+            y_curr += tick_step
+    if has_top:
+        x_curr = rx
+        while x_curr <= rx + rw + 0.001:
+            ax.plot([x_curr, x_curr + tick_len], [ry + rh, ry + rh + tick_len], color=edge_color, lw=tick_lw, solid_capstyle="round", zorder=zorder)
+            x_curr += tick_step
+    if has_bottom:
+        x_curr = rx
+        while x_curr <= rx + rw + 0.001:
+            ax.plot([x_curr, x_curr + tick_len], [ry, ry - tick_len], color=edge_color, lw=tick_lw, solid_capstyle="round", zorder=zorder)
+            x_curr += tick_step
+
+
+def draw_column_label_beside(ax, rx, ry, rw, rh, cx, cy, label_text, is_right_edge=False, fontsize=11.5, zorder=8):
+    """
+    Draws column ID label beside the column rectangle in a dark bold color with a clean background box.
+    """
+    lbl_x = rx - 0.12 if is_right_edge else (rx + rw + 0.12)
+    ha_align = "right" if is_right_edge else "left"
+    ax.text(
+        lbl_x, cy, str(label_text),
+        color="#0f172a", fontsize=fontsize, weight="bold", ha=ha_align, va="center",
+        bbox=dict(boxstyle="round,pad=0.20", facecolor="#ffffff", edgecolor="#64748b", lw=0.9, alpha=0.95),
+        zorder=zorder
+    )
+
 
 
 @st.cache_data(show_spinner=False)
@@ -360,7 +507,8 @@ def get_flat_slab_columns(Lx_spans, Ly_spans, bc_cm=30, tc_cm=30, removed_ids=No
             is_edge_col = False
             edge_dir = ""
             if is_edge_req and edge_dir_req:
-                is_valid, _ = validate_edge_column_offset(geom, edge_dir_req)
+                slab_bounds_local = {"min_x": x_coords[0], "max_x": x_coords[-1], "min_y": y_coords[0], "max_y": y_coords[-1]}
+                is_valid, _ = validate_edge_column_offset(geom, edge_dir_req, slab_bounds=slab_bounds_local)
                 if is_valid:
                     is_edge_col = True
                     edge_dir = edge_dir_req
@@ -563,6 +711,17 @@ def generate_flat_slab_sketch(
     slab_w = x_slab_max - x_slab_min
     slab_h = y_slab_max - y_slab_min
 
+    slab_bounds = {
+        "min_x": x_coords[0],
+        "max_x": x_coords[-1],
+        "min_y": y_coords[0],
+        "max_y": y_coords[-1],
+        "cant_left": cant_left,
+        "cant_right": cant_right,
+        "cant_bottom": cant_bottom,
+        "cant_top": cant_top,
+    }
+
     # Grid bubble & dimension offsets calculated upfront to size figure proportionally
     bubble_radius = max(0.28, min(slab_w, slab_h) * 0.030)
     offset_grid_top = max(1.0, slab_h * 0.09)
@@ -746,81 +905,23 @@ def generate_flat_slab_sketch(
                 zorder=7
             )
         else:
-            # Normal active column — solid concrete hatch with label beside the column
+            # Active column — solid concrete rectangle with label beside the column
             col_rect = patches.Rectangle(
                 (rx, ry), rw, rh,
-                linewidth=1.5, edgecolor="#0f172a", facecolor="#1e293b", zorder=4
+                linewidth=1.8, edgecolor="#0f172a", facecolor="#1e293b", zorder=4
             )
             ax_plan.add_patch(col_rect)
             display_id = label if label else orig_id
             is_right_edge = (info["i"] == len(x_coords) - 1)
-            lbl_x = rx - 0.10 if is_right_edge else rx + rw + 0.10
-            ha_align = "right" if is_right_edge else "left"
-            ax_plan.text(
-                lbl_x, cy, display_id,
-                color="#0f172a", fontsize=11, weight="bold", ha=ha_align, va="center",
-                bbox=dict(boxstyle="round,pad=0.22", facecolor="#ffffff", edgecolor="#475569", lw=0.9, alpha=0.95),
-                zorder=7
-            )
+            draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, display_id, is_right_edge=is_right_edge, fontsize=11.0, zorder=7)
 
-        # Highlight edge column faces in pink with hatch lines (Edge Columns / أعمدة الجور)
+        # Highlight edge column faces in pink with doubled hatch lines (Edge Columns / أعمدة الجور)
         edge_info = (edge_columns or {}).get(orig_id) or (edge_columns or {}).get(label) or {}
         if isinstance(edge_info, dict) and edge_info.get("is_edge") == "Yes":
             raw_edge_dir = str(edge_info.get("direction", "")).strip()
-            is_edge_valid, _ = validate_edge_column_offset(geom, raw_edge_dir)
+            is_edge_valid, _ = validate_edge_column_offset(geom, raw_edge_dir, slab_bounds=slab_bounds)
             if is_edge_valid:
-                ed_dir = raw_edge_dir.upper()
-                has_top    = "TOP" in ed_dir
-                has_bottom = "BOTTOM" in ed_dir
-                has_left   = "LEFT" in ed_dir
-                has_right  = "RIGHT" in ed_dir
-
-                edge_lw = 4.2
-                edge_color = "#db2777"  # Distinct pink / rose for edge column property line
-                tick_len = 0.10
-                tick_step = 0.08
-                tick_lw = 2.0
-
-                # Main solid boundary line
-                if has_top and has_left and not has_bottom and not has_right:
-                    ax_plan.plot([rx + rw, rx, rx], [ry + rh, ry + rh, ry], color=edge_color, lw=edge_lw, solid_capstyle="round", solid_joinstyle="round", zorder=8)
-                elif has_top and has_right and not has_bottom and not has_left:
-                    ax_plan.plot([rx, rx + rw, rx + rw], [ry + rh, ry + rh, ry], color=edge_color, lw=edge_lw, solid_capstyle="round", solid_joinstyle="round", zorder=8)
-                elif has_bottom and has_left and not has_top and not has_right:
-                    ax_plan.plot([rx + rw, rx, rx], [ry, ry, ry + rh], color=edge_color, lw=edge_lw, solid_capstyle="round", solid_joinstyle="round", zorder=8)
-                elif has_bottom and has_right and not has_top and not has_left:
-                    ax_plan.plot([rx, rx + rw, rx + rw], [ry, ry, ry + rh], color=edge_color, lw=edge_lw, solid_capstyle="round", solid_joinstyle="round", zorder=8)
-                else:
-                    if has_top:
-                        ax_plan.plot([rx, rx + rw], [ry + rh, ry + rh], color=edge_color, lw=edge_lw, solid_capstyle="round", zorder=8)
-                    if has_bottom:
-                        ax_plan.plot([rx, rx + rw], [ry, ry], color=edge_color, lw=edge_lw, solid_capstyle="round", zorder=8)
-                    if has_left:
-                        ax_plan.plot([rx, rx], [ry, ry + rh], color=edge_color, lw=edge_lw, solid_capstyle="round", zorder=8)
-                    if has_right:
-                        ax_plan.plot([rx + rw, rx + rw], [ry, ry + rh], color=edge_color, lw=edge_lw, solid_capstyle="round", zorder=8)
-
-                # CAD 45-degree hatch ticks pointing into neighbor space
-                if has_left:
-                    y_curr = ry
-                    while y_curr <= ry + rh + 0.001:
-                        ax_plan.plot([rx, rx - tick_len], [y_curr, y_curr + tick_len], color=edge_color, lw=tick_lw, solid_capstyle="round", zorder=8)
-                        y_curr += tick_step
-                if has_right:
-                    y_curr = ry
-                    while y_curr <= ry + rh + 0.001:
-                        ax_plan.plot([rx + rw, rx + rw + tick_len], [y_curr, y_curr + tick_len], color=edge_color, lw=tick_lw, solid_capstyle="round", zorder=8)
-                        y_curr += tick_step
-                if has_top:
-                    x_curr = rx
-                    while x_curr <= rx + rw + 0.001:
-                        ax_plan.plot([x_curr, x_curr + tick_len], [ry + rh, ry + rh + tick_len], color=edge_color, lw=tick_lw, solid_capstyle="round", zorder=8)
-                        x_curr += tick_step
-                if has_bottom:
-                    x_curr = rx
-                    while x_curr <= rx + rw + 0.001:
-                        ax_plan.plot([x_curr, x_curr + tick_len], [ry, ry - tick_len], color=edge_color, lw=tick_lw, solid_capstyle="round", zorder=8)
-                        x_curr += tick_step
+                draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, raw_edge_dir, zorder=8)
 
     # Span Dimensions (Lx along Bottom)
     y_dim_lx = y_slab_min - dim_offset_bot
@@ -1021,6 +1122,7 @@ def generate_flat_slab_top_rft_sketch(
     col_d_cm=30,
     removed_cols=None,
     void_panel_ids=None,
+    edge_columns=None,
 ):
     """
     Generate the full-width engineering Top Reinforcement Drawing (المخطط الإنشائي للحديد العلوي).
@@ -1214,13 +1316,18 @@ def generate_flat_slab_top_rft_sketch(
         col_cx = col_data.get("center_x", x)
         col_cy = col_data.get("center_y", y)
 
+        is_edge_c = is_edge_column_verified(cid, geom=col_data, edge_columns=edge_columns)
         col_box = patches.Rectangle(
             (col_rx, col_ry),
             col_rw, col_rh,
-            linewidth=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=4
+            linewidth=2.0, edgecolor="#0f172a", facecolor="#1e293b", zorder=4
         )
         ax_plan.add_patch(col_box)
-        ax_plan.text(col_cx, col_cy, cid, color="#facc15", fontsize=16.0, ha="center", va="center", weight="bold", zorder=5)
+        if is_edge_c:
+            ed_info = (edge_columns or {}).get(cid) or {}
+            draw_neighbor_edge_strip(ax_plan, col_rx, col_ry, col_rw, col_rh, ed_info.get("direction", ""), zorder=6)
+        is_right = (col_cx >= x_coords[-1] - 0.1)
+        draw_column_label_beside(ax_plan, col_rx, col_ry, col_rw, col_rh, col_cx, col_cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=7)
 
     # Span Dimensions (Lx along Bottom)
     y_dim_lx = y_slab_min - dim_offset_bot
@@ -1398,6 +1505,7 @@ def generate_flat_slab_bottom_rft_sketch(
     void_panel_ids=None,
     direction="both",   # "X", "Y", or "both"
     col_transforms=None,
+    edge_columns=None,
 ):
     """
     Generate the full-width engineering Bottom Reinforcement Drawing (المخطط الإنشائي للحديد السفلي).
@@ -1554,12 +1662,17 @@ def generate_flat_slab_bottom_rft_sketch(
             rx, ry = geom["x_min"], geom["y_min"]
             rw, rh = geom["width_m"], geom["height_m"]
             cx, cy = geom["center_x"], geom["center_y"]
+            is_edge_c = is_edge_column_verified(cid, geom=geom, edge_columns=edge_columns)
             col_box = patches.Rectangle(
                 (rx, ry), rw, rh,
-                linewidth=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=4
+                linewidth=2.0, edgecolor="#0f172a", facecolor="#1e293b", zorder=4
             )
             ax_plan.add_patch(col_box)
-            ax_plan.text(cx, cy, cid, color="#facc15", fontsize=16.0, ha="center", va="center", weight="bold", zorder=5)
+            if is_edge_c:
+                ed_info = (edge_columns or {}).get(cid) or {}
+                draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=6)
+            is_right = (cx >= x_coords[-1] - 0.1)
+            draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=7)
             col_num += 1
 
     # 🔵 2. BOTTOM EXTRA REBAR IN ENLARGED BAYS (BLUE)
@@ -1749,6 +1862,7 @@ def generate_flat_slab_reactions_sketch(
     removed_cols=None,
     void_panel_ids=None,
     col_sf=1.10,
+    edge_columns=None,
 ):
     """
     Renders an engineering layout plan showing column tributary areas,
@@ -1932,13 +2046,19 @@ def generate_flat_slab_reactions_sketch(
                 col_cx = x
                 col_cy = y
 
+            orig_cid = r_info.get("Orig ID", cid) if r_info else cid
+            is_edge_c = is_edge_column_verified(cid, geom=r_info, edge_columns=edge_columns, alt_id=orig_cid)
             col_box = patches.Rectangle(
                 (col_rx, col_ry),
                 col_rw, col_rh,
-                linewidth=2.4, edgecolor="#0f172a", facecolor="#1e293b", zorder=4
+                linewidth=2.0, edgecolor="#0f172a", facecolor="#1e293b", zorder=4
             )
             ax_plan.add_patch(col_box)
-            ax_plan.text(col_cx, col_cy, cid, color="#facc15", fontsize=15.0, ha="center", va="center", weight="bold", zorder=5)
+            if is_edge_c:
+                ed_info = (edge_columns or {}).get(cid) or (edge_columns or {}).get(orig_cid) or {}
+                draw_neighbor_edge_strip(ax_plan, col_rx, col_ry, col_rw, col_rh, ed_info.get("direction", ""), zorder=6)
+            is_right = (col_cx >= x_coords[-1] - 0.1)
+            draw_column_label_beside(ax_plan, col_rx, col_ry, col_rw, col_rh, col_cx, col_cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=7)
 
             if r_info:
                 pu1 = r_info.get("pu_1f_val", 0.0)
@@ -2273,6 +2393,7 @@ def generate_flat_slab_moment_contour(
     top_extra_cols=None,
     btm_extra_spans=None,
     col_transforms=None,
+    edge_columns=None,
 ):
     """
     Renders an engineering 2D Bending Moment Matrix & Color Contour Map (M11 or M22)
@@ -2451,12 +2572,17 @@ def generate_flat_slab_moment_contour(
             cx, cy = geom["center_x"], geom["center_y"]
 
             # Column rectangle
+            is_edge_c = is_edge_column_verified(cid, geom=geom, edge_columns=edge_columns)
             col_box = patches.Rectangle(
                 (rx, ry), rw, rh,
-                linewidth=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=6
+                linewidth=2.0, edgecolor="#0f172a", facecolor="#1e293b", zorder=6
             )
             ax_plan.add_patch(col_box)
-            ax_plan.text(cx, cy, cid, color="#facc15", fontsize=14.5, ha="center", va="center", weight="bold", zorder=7)
+            if is_edge_c:
+                ed_info = (edge_columns or {}).get(cid) or {}
+                draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=8)
+            is_right = (cx >= x_coords[-1] - 0.1)
+            draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=11.5, zorder=9)
 
             # Local peak negative moment value from raw unmasked matrix
             ix = np.argmin(np.abs(x_vec - x))
@@ -2640,6 +2766,8 @@ def generate_flat_slab_dual_moment_contour(
     col_d_cm=30,
     removed_cols=None,
     void_panel_ids=None,
+    col_transforms=None,
+    edge_columns=None,
 ):
     """
     Renders dual side-by-side engineering contour maps for both M11 and M22 on a unified canvas.
@@ -2752,8 +2880,20 @@ def generate_flat_slab_dual_moment_contour(
             for x in x_coords:
                 if (x, y) in rem_coords:
                     continue
-                ax.add_patch(patches.Rectangle((x - col_w_m/2.0, y - col_d_m/2.0), col_w_m, col_d_m, linewidth=1.8, edgecolor="#0f172a", facecolor="#1e293b", zorder=6))
-                ax.text(x, y, f"C{col_c}", color="#facc15", fontsize=12, ha="center", va="center", weight="bold", zorder=7)
+                cid = f"C{col_c}"
+                c_trans = (col_transforms or {}).get(cid) or {}
+                geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+                is_edge_c = is_edge_column_verified(cid, geom=geom, edge_columns=edge_columns)
+                col_box = patches.Rectangle(
+                    (geom["x_min"], geom["y_min"]), geom["width_m"], geom["height_m"],
+                    linewidth=2.0, edgecolor="#0f172a", facecolor="#1e293b", zorder=6
+                )
+                ax.add_patch(col_box)
+                if is_edge_c:
+                    ed_info = (edge_columns or {}).get(cid) or {}
+                    draw_neighbor_edge_strip(ax, geom["x_min"], geom["y_min"], geom["width_m"], geom["height_m"], ed_info.get("direction", ""), zorder=8)
+                is_right = (geom["center_x"] >= x_coords[-1] - 0.1)
+                draw_column_label_beside(ax, geom["x_min"], geom["y_min"], geom["width_m"], geom["height_m"], geom["center_x"], geom["center_y"], cid, is_right_edge=is_right, fontsize=10.5, zorder=9)
                 col_c += 1
 
         ax.set_title(f"Moment {mode_name} — {dir_label}\n[Max +M: +{m_max:.2f} t.m/m | Max -M: {m_min:.2f} t.m/m]", fontsize=16, weight="bold", pad=12, color="#0f172a")
@@ -2783,6 +2923,7 @@ def generate_moment_deficit_contour(
     removed_cols=None,
     void_panel_ids=None,
     col_transforms=None,
+    edge_columns=None,
 ):
     """
     Generates a 2D colour-contour map of the MOMENT DEFICIT in the bottom steel.
@@ -3009,11 +3150,19 @@ def generate_moment_deficit_contour(
             rx, ry = geom["x_min"], geom["y_min"]
             rw, rh = geom["width_m"], geom["height_m"]
             cx, cy = geom["center_x"], geom["center_y"]
+            is_edge_c = is_edge_column_verified(cid, geom=geom, edge_columns=edge_columns)
             ax_plan.add_patch(patches.Rectangle(
                 (rx, ry), rw, rh,
-                linewidth=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=6,
+                linewidth=2.0,
+                edgecolor="#0f172a",
+                facecolor="#1e293b",
+                zorder=6,
             ))
-            ax_plan.text(cx, cy, cid, color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=7)
+            if is_edge_c:
+                ed_info = (edge_columns or {}).get(cid) or {}
+                draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=8)
+            is_right = (i_idx == len(x_coords) - 1)
+            draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=9)
             col_idx += 1
 
     # ── مربعات العجز على كل بلاطة ──────────────────────────────────────────────
@@ -3568,6 +3717,7 @@ def generate_flat_slab_column_caps_sketch(
     col_w_cm=30, col_d_cm=30,
     removed_cols=None, void_panel_ids=None,
     col_transforms=None,
+    edge_columns=None,
 ):
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
 
@@ -3670,8 +3820,19 @@ def generate_flat_slab_column_caps_sketch(
             rw, rh = geom["width_m"], geom["height_m"]
             cx, cy = geom["center_x"], geom["center_y"]
             col_dict[cid] = (cx, cy, i_idx, j_idx)
-            ax_plan.add_patch(patches.Rectangle((rx, ry), rw, rh, lw=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=8))
-            ax_plan.text(cx, cy, cid, color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=9)
+            is_edge_c = is_edge_column_verified(cid, geom=geom, edge_columns=edge_columns)
+            ax_plan.add_patch(patches.Rectangle(
+                (rx, ry), rw, rh,
+                lw=2.0,
+                edgecolor="#0f172a",
+                facecolor="#1e293b",
+                zorder=8
+            ))
+            if is_edge_c:
+                ed_info = (edge_columns or {}).get(cid) or {}
+                draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=9)
+            is_right = (i_idx == len(x_coords) - 1)
+            draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=10)
             col_idx += 1
 
     active_caps_count = 0
@@ -4613,6 +4774,7 @@ def generate_flat_slab_deflection_contour_sketch(
     removed_cols=None,
     void_panel_ids=None,
     col_transforms=None,
+    edge_columns=None,
 ):
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
 
@@ -4791,8 +4953,19 @@ def generate_flat_slab_deflection_contour_sketch(
             ry = max(geom["y_min"], geom["y_max"] - _min_col_d) if geom["height_m"] < _min_col_d else geom["y_min"]
             rw = max(geom["width_m"], _min_col_w)
             rh = max(geom["height_m"], _min_col_d)
-            ax_plan.add_patch(patches.Rectangle((rx, ry), rw, rh, lw=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=8))
-            ax_plan.text(geom["center_x"], geom["center_y"], orig_id, color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=9)
+            is_edge_c = is_edge_column_verified(orig_id, geom=geom, edge_columns=edge_columns)
+            ax_plan.add_patch(patches.Rectangle(
+                (rx, ry), rw, rh,
+                lw=2.0,
+                edgecolor="#0f172a",
+                facecolor="#1e293b",
+                zorder=8
+            ))
+            if is_edge_c:
+                ed_info = (edge_columns or {}).get(orig_id) or {}
+                draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=9)
+            is_right = (x >= x_coords[-1] - 0.1)
+            draw_column_label_beside(ax_plan, rx, ry, rw, rh, geom["center_x"], geom["center_y"], orig_id, is_right_edge=is_right, fontsize=12.0, zorder=10)
             col_k += 1
 
     # Panel Deflection Callout Tags
@@ -5000,6 +5173,7 @@ def generate_flat_slab_punching_shear_sketch(
     col_d_cm=30,
     removed_cols=None,
     void_panel_ids=None,
+    edge_columns=None,
 ):
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
 
@@ -5270,18 +5444,26 @@ def generate_flat_slab_punching_shear_sketch(
         # Draw column box
         col_rx = p.get("x_min", cx - cur_w_m / 2.0)
         col_ry = p.get("y_min", cy - cur_h_m / 2.0)
+        orig_cid = p.get("orig_id", cid)
+        is_edge_c = p.get("is_edge_col", False) or is_edge_column_verified(cid, geom=p, edge_columns=edge_columns, alt_id=orig_cid)
+
         ax_plan.add_patch(patches.Rectangle(
             (col_rx, col_ry), cur_w_m, cur_h_m,
             lw=col_lw, edgecolor=col_edge, facecolor=col_face, zorder=8
         ))
 
-        # Column text inside box
+        if is_edge_c:
+            ed_info = (edge_columns or {}).get(cid) or (edge_columns or {}).get(orig_cid) or {}
+            draw_neighbor_edge_strip(ax_plan, col_rx, col_ry, cur_w_m, cur_h_m, ed_info.get("direction", ""), zorder=9)
+
+        is_right = (cx >= x_coords[-1] - 0.1)
+        draw_column_label_beside(ax_plan, col_rx, col_ry, cur_w_m, cur_h_m, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=10)
+
+        # Status text inside box (SAFE / UNSAFE)
         if is_safe:
-            ax_plan.text(cx, cy + cur_h_m * 0.15, cid, color="#facc15", fontsize=14, ha="center", va="center", weight="bold", zorder=9)
-            ax_plan.text(cx, cy - cur_h_m * 0.22, "SAFE", color="#4ade80", fontsize=10.5, ha="center", va="center", weight="bold", zorder=9)
+            ax_plan.text(cx, cy, "SAFE", color="#4ade80", fontsize=11, ha="center", va="center", weight="bold", zorder=9)
         else:
-            ax_plan.text(cx, cy + cur_h_m * 0.16, cid, color="#7f1d1d", fontsize=15, ha="center", va="center", weight="bold", zorder=9)
-            ax_plan.text(cx, cy - cur_h_m * 0.22, "UNSAFE", color="#b91c1c", fontsize=11, ha="center", va="center", weight="bold", zorder=9)
+            ax_plan.text(cx, cy, "UNSAFE", color="#b91c1c", fontsize=11, ha="center", va="center", weight="bold", zorder=9)
 
         # Callout Text near the column showing Qup clearly
         offset_y = cur_h_m / 2.0 + 0.55
@@ -6091,6 +6273,7 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
     removed_cols=None, void_panel_ids=None,
     direction="X",
     col_transforms=None,
+    edge_columns=None,
 ):
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
 
@@ -6195,8 +6378,19 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
             rx, ry = geom["x_min"], geom["y_min"]
             rw, rh = geom["width_m"], geom["height_m"]
             cx, cy = geom["center_x"], geom["center_y"]
-            ax_plan.add_patch(patches.Rectangle((rx, ry), rw, rh, lw=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=8))
-            ax_plan.text(cx, cy, cid, color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=9)
+            is_edge_c = is_edge_column_verified(cid, geom=geom, edge_columns=edge_columns)
+            ax_plan.add_patch(patches.Rectangle(
+                (rx, ry), rw, rh,
+                lw=2.0,
+                edgecolor="#0f172a",
+                facecolor="#1e293b",
+                zorder=8
+            ))
+            if is_edge_c:
+                ed_info = (edge_columns or {}).get(cid) or {}
+                draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=9)
+            is_right = (i_idx == len(x_coords) - 1)
+            draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=10)
             col_idx += 1
 
     # Filter items by direction
@@ -6461,6 +6655,7 @@ def generate_flat_slab_top_mesh_extra_sketch(
     removed_cols=None, void_panel_ids=None,
     direction="X",
     col_transforms=None,
+    edge_columns=None,
 ):
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
 
@@ -6565,8 +6760,19 @@ def generate_flat_slab_top_mesh_extra_sketch(
             rx, ry = geom["x_min"], geom["y_min"]
             rw, rh = geom["width_m"], geom["height_m"]
             cx, cy = geom["center_x"], geom["center_y"]
-            ax_plan.add_patch(patches.Rectangle((rx, ry), rw, rh, lw=2.2, edgecolor="#0f172a", facecolor="#1e293b", zorder=8))
-            ax_plan.text(cx, cy, cid, color="#facc15", fontsize=13, ha="center", va="center", weight="bold", zorder=9)
+            is_edge_c = is_edge_column_verified(cid, geom=geom, edge_columns=edge_columns)
+            ax_plan.add_patch(patches.Rectangle(
+                (rx, ry), rw, rh,
+                lw=2.0,
+                edgecolor="#0f172a",
+                facecolor="#1e293b",
+                zorder=8
+            ))
+            if is_edge_c:
+                ed_info = (edge_columns or {}).get(cid) or {}
+                draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=9)
+            is_right = (i_idx == len(x_coords) - 1)
+            draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=10)
             col_idx += 1
 
     # ── Check Extra Top Slab Reinforcement by Direction ─────────────────────
@@ -6773,6 +6979,7 @@ def generate_flat_slab_master_steel_layout_sketch(
     removed_cols=None,
     void_panel_ids=None,
     col_transforms=None,
+    edge_columns=None,
 ):
     """
     Generates a master 2D structural floor plan (Steel Layout - مسقط أفقي لتسليح البلاطة)
@@ -6902,11 +7109,19 @@ def generate_flat_slab_master_steel_layout_sketch(
             rw, rh = geom["width_m"], geom["height_m"]
             cx, cy = geom["center_x"], geom["center_y"]
             col_dict[cid] = (cx, cy, i_idx, j_idx)
+            is_edge_c = is_edge_column_verified(cid, geom=geom, edge_columns=edge_columns)
             ax_plan.add_patch(patches.Rectangle(
                 (rx, ry), rw, rh,
-                linewidth=2.0, edgecolor="#0f172a", facecolor="#1e293b", zorder=8,
+                linewidth=2.0,
+                edgecolor="#0f172a",
+                facecolor="#1e293b",
+                zorder=8,
             ))
-            ax_plan.text(cx, cy, cid, color="#facc15", fontsize=11, ha="center", va="center", weight="bold", zorder=9)
+            if is_edge_c:
+                ed_info = (edge_columns or {}).get(cid) or {}
+                draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=9)
+            is_right = (i_idx == len(x_coords) - 1)
+            draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=11.5, zorder=10)
             col_idx += 1
 
     # 5. Base Mesh Indicators (Bottom & Top) in Central Bays
@@ -7533,6 +7748,8 @@ def calculate_punching_shear(columns, Lx_spans, Ly_spans, cantilevers, Wu, d_cm,
             "height_m": col.get("height_m", tc / 100.0),
             "bc": bc,
             "tc": tc,
+            "is_edge_col": col.get("is_edge_col", False),
+            "edge_dir": col.get("edge_dir", ""),
         })
     return results
 
@@ -7961,9 +8178,9 @@ def render():
         div[data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] p,
         .streamlit-expanderHeader p,
         .streamlit-expanderHeader span {
-            font-size: 18px !important;
+            font-size: 13.5px !important;
             font-weight: 800 !important;
-            line-height: 1.4 !important;
+            line-height: 1.35 !important;
             color: #0f172a !important;
         }
 
@@ -7971,9 +8188,9 @@ def render():
         div[data-testid="stExpander"] summary svg,
         .stExpander summary svg,
         details summary svg {
-            width: 17px !important;
-            height: 17px !important;
-            min-width: 17px !important;
+            width: 14px !important;
+            height: 14px !important;
+            min-width: 14px !important;
             fill: currentColor !important;
             stroke: currentColor !important;
             color: #1e40af !important;
@@ -8154,7 +8371,7 @@ def render():
                 min_value=1, max_value=10,
             )
 
-        st.markdown("**Lx spans — between vertical axes Y (m)**")
+        st.markdown("<div style='font-size: 15px; font-weight: 700; color: #ffffff; margin-top: 14px; margin-bottom: 10px;'>📏 Lx spans — between vertical axes Y (m)</div>", unsafe_allow_html=True)
         lx_cols = st.columns(int(n_lx))
         Lx_spans = []
         for i, c in enumerate(lx_cols):
@@ -8166,7 +8383,7 @@ def render():
                 )
                 Lx_spans.append(val)
 
-        st.markdown("**Ly spans — between horizontal axes X (m)**")
+        st.markdown("<div style='font-size: 15px; font-weight: 700; color: #ffffff; margin-top: 14px; margin-bottom: 10px;'>📏 Ly spans — between horizontal axes X (m)</div>", unsafe_allow_html=True)
         ly_cols = st.columns(int(n_ly))
         Ly_spans = []
         for j, c in enumerate(ly_cols):
@@ -8178,7 +8395,7 @@ def render():
                 )
                 Ly_spans.append(val)
 
-        st.markdown("**Cantilevers (m) — enter 0 if none**")
+        st.markdown("<div style='font-size: 15px; font-weight: 700; color: #ffffff; margin-top: 14px; margin-bottom: 10px;'>📐 Cantilevers (m) — enter 0 if none</div>", unsafe_allow_html=True)
         cc1, cc2, cc3, cc4 = st.columns(4)
         with cc1:
             cant_left = S.number_input("Left", "fs_cant_left", min_value=0.0, max_value=5.0, step=0.25)
@@ -8199,7 +8416,7 @@ def render():
         c1, c2, c3, c4 = st.columns(4)
 
         with c1:
-            st.markdown("**🏛️ Column, Thickness & Floors**")
+            st.markdown("<div style='font-size: 15px; font-weight: 700; color: #ffffff; margin-top: 6px; margin-bottom: 10px;'>🏛️ Column, Thickness & Floors</div>", unsafe_allow_html=True)
             bc_s = S.number_input("Col. Width bc (cm)", "slab_bc", min_value=None, step=5)
             tc_s = S.number_input("Col. Depth tc (cm)", "slab_tc", min_value=None, step=5)
             ts_initial = S.number_input("Initial Slab ts (cm)", "slab_ts_initial", min_value=12, max_value=80, step=1)
@@ -8212,20 +8429,20 @@ def render():
             )
 
         with c2:
-            st.markdown("**⚖️ Surface Loads (ton/m²)**")
+            st.markdown("<div style='font-size: 15px; font-weight: 700; color: #ffffff; margin-top: 6px; margin-bottom: 10px;'>⚖️ Surface Loads (ton/m²)</div>", unsafe_allow_html=True)
             SDL       = S.number_input("Flooring / SDL", "slab_SDL", min_value=None, step=0.05)
             wall_load = S.number_input("Wall Load (WL)", "slab_wall_load", min_value=None, step=0.05)
             LL        = S.number_input("Live Load (LL)", "slab_LL", min_value=None, step=0.05)
             gamma_c   = S.number_input("γ_concrete (t/m³)", "slab_gamma_c", min_value=None, step=0.1)
 
         with c3:
-            st.markdown("**🧪 Materials & Cover**")
+            st.markdown("<div style='font-size: 15px; font-weight: 700; color: #ffffff; margin-top: 6px; margin-bottom: 10px;'>🧪 Materials & Cover</div>", unsafe_allow_html=True)
             Fcu = S.number_input("Concrete Fcu (kg/cm²)", "slab_Fcu", min_value=None, step=25)
             Fy  = S.number_input("Steel Fy (kg/cm²)", "slab_Fy", min_value=None, step=200)
             cov = S.number_input("Concrete Cover (cm)", "slab_cover", min_value=0.5, max_value=5.0, step=0.5)
 
         with c4:
-            st.markdown("**🔩 Rebar Diameters (Φ mm)**")
+            st.markdown("<div style='font-size: 15px; font-weight: 700; color: #ffffff; margin-top: 6px; margin-bottom: 10px;'>🔩 Rebar Diameters (Φ mm)</div>", unsafe_allow_html=True)
             bottom_mesh_dia = S.selectbox("Bottom Mesh Φ", "slab_bottom_mesh_dia_idx", options=BAR_DIA)
             n_btm_mesh_usr  = S.number_input(
                 "عدد أسياخ الشبكة السفلية / م'  (Bottom Mesh n)",
@@ -8363,6 +8580,25 @@ def render():
     _active_panels = [p for p in _all_panels if not p["is_void"]]
     _void_panels = [p for p in _all_panels if p["is_void"]]
 
+    _x_coords_ref = [0.0]
+    for lx in Lx_spans:
+        _x_coords_ref.append(_x_coords_ref[-1] + lx)
+    _y_coords_ref = [0.0]
+    for ly in Ly_spans:
+        _y_coords_ref.append(_y_coords_ref[-1] + ly)
+
+    _slab_bounds_current = {
+        "min_x": _x_coords_ref[0],
+        "max_x": _x_coords_ref[-1],
+        "min_y": _y_coords_ref[0],
+        "max_y": _y_coords_ref[-1],
+        "cant_left": float(cantilevers.get("left", 0.0) or 0.0) if isinstance(cantilevers, dict) else 0.0,
+        "cant_right": float(cantilevers.get("right", 0.0) or 0.0) if isinstance(cantilevers, dict) else 0.0,
+        "cant_bottom": float(cantilevers.get("bottom", 0.0) or 0.0) if isinstance(cantilevers, dict) else 0.0,
+        "cant_top": float(cantilevers.get("top", 0.0) or 0.0) if isinstance(cantilevers, dict) else 0.0,
+    }
+    st.session_state["_fs_current_slab_bounds"] = _slab_bounds_current
+
     # ── 5c. Build active columns with confirmed removals applied ─────────────
     _active_cols, _all_cols, _eff_Lx, _eff_Ly, _ddm_warn = get_flat_slab_columns(
         Lx_spans, Ly_spans, bc_cm=_bc_col, tc_cm=_tc_col,
@@ -8459,10 +8695,10 @@ def render():
                     div[class*="st-key-_fs_edge_dir_widget"],
                     div[data-testid="stColumn"]:nth-of-type(2) div[data-testid="stSelectbox"],
                     div[data-testid="column"]:nth-of-type(2) div[data-testid="stSelectbox"] {
-                        margin-bottom: 6px !important;
+                        margin-bottom: 2px !important;
                     }
 
-                    /* Light yellow labels for dropdowns (~18px) */
+                    /* Light yellow labels for dropdowns (75% scale: ~13.5px) */
                     div:has(.fs-col-ctrl-card) label,
                     div:has(.fs-col-ctrl-card) label p,
                     div:has(.fs-col-ctrl-card) [data-testid="stWidgetLabel"] p,
@@ -8470,16 +8706,16 @@ def render():
                     div[class*="st-key-_fs_"] label p,
                     div[data-testid="stColumn"]:nth-of-type(2) div[data-testid="stSelectbox"] label p,
                     div[data-testid="column"]:nth-of-type(2) div[data-testid="stSelectbox"] label p {
-                        font-size: 18px !important;
+                        font-size: 13.5px !important;
                         font-weight: 800 !important;
                         color: #eab308 !important; /* Light Yellow */
                         text-shadow: 0 0 1px #a16207;
-                        margin-bottom: 3px !important;
+                        margin-bottom: 1px !important;
                         padding: 0 !important;
-                        line-height: 1.25 !important;
+                        line-height: 1.15 !important;
                     }
 
-                    /* Scaled font size (14.5px) for input box text inside column 2 dropdowns */
+                    /* Scaled font size (11px) for input box text inside column 2 dropdowns */
                     div[class*="st-key-_fs_"] input,
                     div[class*="st-key-_fs_"] .react-aria-Input,
                     div[class*="st-key-_fs_"] .e1fp86qc1,
@@ -8500,16 +8736,16 @@ def render():
                     /* Fallbacks for older BaseWeb versions */
                     div[class*="st-key-_fs_"] div[data-baseweb="select"] *,
                     div[data-testid="stColumn"]:nth-of-type(2) div[data-testid="stSelectbox"] div[data-baseweb="select"] * {
-                        font-size: 14.5px !important;
+                        font-size: 11px !important;
                         font-weight: 600 !important;
-                        line-height: 1.3 !important;
-                        padding-left: 6px !important;
-                        padding-right: 6px !important;
-                        padding-top: 3px !important;
-                        padding-bottom: 3px !important;
+                        line-height: 1.25 !important;
+                        padding-left: 5px !important;
+                        padding-right: 5px !important;
+                        padding-top: 2px !important;
+                        padding-bottom: 2px !important;
                     }
 
-                    /* Dropdown popover options list (14.5px to match input boxes) */
+                    /* Dropdown popover options list (11px to match input boxes) */
                     div[data-testid="stSelectboxVirtualDropdown"] [role="option"],
                     div[data-testid="stSelectboxVirtualDropdown"] [role="option"] *,
                     div[data-testid="stSelectboxVirtualDropdown"] .react-aria-ListBoxItem,
@@ -8523,13 +8759,13 @@ def render():
                     div[data-baseweb="popover"] ul[role="listbox"] li[role="option"] *,
                     li[role="option"],
                     li[role="option"] * {
-                        font-size: 14.5px !important;
+                        font-size: 11px !important;
                         font-weight: 600 !important;
-                        line-height: 1.35 !important;
-                        padding-top: 6px !important;
-                        padding-bottom: 6px !important;
-                        padding-left: 8px !important;
-                        padding-right: 8px !important;
+                        line-height: 1.25 !important;
+                        padding-top: 3px !important;
+                        padding-bottom: 3px !important;
+                        padding-left: 6px !important;
+                        padding-right: 6px !important;
                     }
 
 
@@ -8642,16 +8878,6 @@ def render():
                     if _saved_edge_dir not in REAL_EDGE_DIR_OPTIONS:
                         _saved_edge_dir = SELECT_DIR_PLACEHOLDER
 
-                    idx_is_edge = 1 if _saved_is_edge == "Yes" else 0
-                    sel_is_edge = st.selectbox(
-                        "Edge Column?",
-                        options=["No", "Yes"],
-                        index=idx_is_edge,
-                        key=f"_fs_is_edge_widget_{_tgt_orig_id}",
-                        help="تحديد ما إذا كان العمود يعتبر عمود جار (Edge Column) أم لا.",
-                    )
-
-                    sel_edge_dir = _saved_edge_dir
                     _curr_trans_state = {
                         "direction": sel_dir,
                         "shift_x": sel_sx,
@@ -8664,39 +8890,81 @@ def render():
                         _curr_trans_state,
                     )
 
+                    # ── فحص هل العمود يقع على المحيط الخارجي للمسقط أم داخل المساحة ──
+                    _gx_col = _tgt_col.get("grid_x_m", _tgt_col.get("x", 0.0))
+                    _gy_col = _tgt_col.get("grid_y_m", _tgt_col.get("y", 0.0))
+                    _min_x_ref = _slab_bounds_current.get("min_x", 0.0)
+                    _max_x_ref = _slab_bounds_current.get("max_x", 0.0)
+                    _min_y_ref = _slab_bounds_current.get("min_y", 0.0)
+                    _max_y_ref = _slab_bounds_current.get("max_y", 0.0)
+                    _cant_l = float(_slab_bounds_current.get("cant_left", 0.0) or 0.0)
+                    _cant_r = float(_slab_bounds_current.get("cant_right", 0.0) or 0.0)
+                    _cant_b = float(_slab_bounds_current.get("cant_bottom", 0.0) or 0.0)
+                    _cant_t = float(_slab_bounds_current.get("cant_top", 0.0) or 0.0)
+
+                    _TOL_EDGE = 0.05
+                    _is_on_left   = (_gx_col <= _min_x_ref + _TOL_EDGE) and (_cant_l <= _TOL_EDGE)
+                    _is_on_right  = (_gx_col >= _max_x_ref - _TOL_EDGE) and (_cant_r <= _TOL_EDGE)
+                    _is_on_bottom = (_gy_col <= _min_y_ref + _TOL_EDGE) and (_cant_b <= _TOL_EDGE)
+                    _is_on_top    = (_gy_col >= _max_y_ref - _TOL_EDGE) and (_cant_t <= _TOL_EDGE)
+
+                    _can_be_edge_column = bool(_is_on_left or _is_on_right or _is_on_bottom or _is_on_top)
+
                     _is_edge_valid = False
                     _edge_validation_errors = []
 
-                    if sel_is_edge == "Yes":
-                        idx_edge_dir = EDGE_DIR_OPTIONS.index(_saved_edge_dir) if _saved_edge_dir in EDGE_DIR_OPTIONS else 0
-                        sel_edge_dir = st.selectbox(
-                            "Edge Direction",
-                            options=EDGE_DIR_OPTIONS,
-                            index=idx_edge_dir,
-                            key=f"_fs_edge_dir_widget_{_tgt_orig_id}",
-                            help="اتجاه وجه/أوجه الجار في المسقط بالنسبة لحدود المسقط.",
+                    if _can_be_edge_column:
+                        idx_is_edge = 1 if _saved_is_edge == "Yes" else 0
+                        sel_is_edge = st.selectbox(
+                            "عمود جار",
+                            options=["No", "Yes"],
+                            index=idx_is_edge,
+                            key=f"_fs_is_edge_widget_{_tgt_orig_id}",
+                            help="تحديد ما إذا كان العمود يعتبر عمود جار (Edge Column) أم لا.",
                         )
-                        if sel_edge_dir == SELECT_DIR_PLACEHOLDER or sel_edge_dir not in REAL_EDGE_DIR_OPTIONS:
-                            _is_edge_valid = False
-                            st.markdown(
-                                """
-                                <div dir='rtl' style='direction:rtl;text-align:right;background:#eff6ff;border:1.5px solid #3b82f6;color:#1e40af;padding:8px 12px;border-radius:6px;font-size:13px;font-weight:bold;margin-top:6px;margin-bottom:6px;line-height:1.45;'>
-                                    ℹ️ يرجى اختيار اتجاه الجار (Edge Direction) من القائمة أعلاه لتحديد أوجه الجور.
-                                </div>
-                                """,
-                                unsafe_allow_html=True,
+
+                        sel_edge_dir = _saved_edge_dir
+                        if sel_is_edge == "Yes":
+                            idx_edge_dir = EDGE_DIR_OPTIONS.index(_saved_edge_dir) if _saved_edge_dir in EDGE_DIR_OPTIONS else 0
+                            sel_edge_dir = st.selectbox(
+                                "اتجاه الجار",
+                                options=EDGE_DIR_OPTIONS,
+                                index=idx_edge_dir,
+                                key=f"_fs_edge_dir_widget_{_tgt_orig_id}",
+                                help="اتجاه وجه/أوجه الجار في المسقط بالنسبة لحدود المسقط.",
                             )
-                        else:
-                            _is_edge_valid, _edge_validation_errors = validate_edge_column_offset(_col_geom_preview, sel_edge_dir)
-                            for _err in _edge_validation_errors:
+                            if sel_edge_dir == SELECT_DIR_PLACEHOLDER or sel_edge_dir not in REAL_EDGE_DIR_OPTIONS:
+                                _is_edge_valid = False
                                 st.markdown(
-                                    f"""
-                                    <div dir='rtl' style='direction:rtl;text-align:right;background:#fef2f2;border:1.5px solid #ef4444;color:#991b1b;padding:8px 12px;border-radius:6px;font-size:13px;font-weight:bold;margin-top:6px;margin-bottom:6px;line-height:1.45;box-shadow:0 1px 2px rgba(239,68,68,0.1);'>
-                                        ⚠️ {_err}
+                                    """
+                                    <div dir='rtl' style='direction:rtl;text-align:right;background:#eff6ff;border:1.5px solid #3b82f6;color:#1e40af;padding:8px 12px;border-radius:6px;font-size:13px;font-weight:bold;margin-top:6px;margin-bottom:6px;line-height:1.45;'>
+                                        ℹ️ يرجى اختيار اتجاه الجار (Edge Direction) من القائمة أعلاه لتحديد أوجه الجور.
                                     </div>
                                     """,
                                     unsafe_allow_html=True,
                                 )
+                            else:
+                                _is_edge_valid, _edge_validation_errors = validate_edge_column_offset(_col_geom_preview, sel_edge_dir, slab_bounds=_slab_bounds_current)
+                                if _edge_validation_errors:
+                                    play_sharp_whistle_alert()
+                                    for _err in _edge_validation_errors:
+                                        st.markdown(
+                                            f"""
+                                            <div dir='rtl' style='direction:rtl;text-align:right;background:#fef2f2;border:1.5px solid #ef4444;color:#991b1b;padding:8px 12px;border-radius:6px;font-size:13px;font-weight:bold;margin-top:6px;margin-bottom:6px;line-height:1.45;box-shadow:0 1px 2px rgba(239,68,68,0.1);'>
+                                                ⚠️ {_err}
+                                            </div>
+                                            """,
+                                            unsafe_allow_html=True,
+                                        )
+                        else:
+                            sel_edge_dir = ""
+                            _is_edge_valid = False
+                            _edge_validation_errors = []
+                    else:
+                        sel_is_edge = "No"
+                        sel_edge_dir = ""
+                        _is_edge_valid = False
+                        _edge_validation_errors = []
 
                     _trans_changed = (sel_dir != _norm_trans["direction"] or sel_sx != _norm_trans["shift_x"] or sel_sy != _norm_trans["shift_y"])
                     _edge_changed = (sel_is_edge != _saved_is_edge or (sel_is_edge == "Yes" and sel_edge_dir != _saved_edge_dir))
@@ -8750,50 +9018,37 @@ def render():
                     st.markdown("<div style='flex:1 1 auto; min-height:25px;'></div>", unsafe_allow_html=True)
 
                     _edge_status_html = ""
-                    if sel_is_edge == "Yes":
+                    if not _can_be_edge_column:
+                        _edge_status_html = "<div dir='rtl' style='direction:rtl;text-align:right;font-size:14px;color:#64748b;font-weight:bold;margin-top:6px;'>⚪ عمود داخلي (Interior Column — يقع داخل مساحة المسقط)</div>"
+                    elif sel_is_edge == "Yes":
                         if sel_edge_dir not in REAL_EDGE_DIR_OPTIONS or sel_edge_dir == SELECT_DIR_PLACEHOLDER:
-                            _edge_status_html = """
-                            <div dir='rtl' style='direction:rtl;text-align:right;font-size:13px;color:#2563eb;font-weight:bold;margin-top:6px;background:#eff6ff;border:1px solid #bfdbfe;padding:5px 10px;border-radius:6px;'>
-                                ⏳ بانتظار اختيار اتجاه الجار (Edge Direction)
-                            </div>
-                            """
+                            _edge_status_html = "<div dir='rtl' style='direction:rtl;text-align:right;font-size:13px;color:#2563eb;font-weight:bold;margin-top:6px;background:#eff6ff;border:1px solid #bfdbfe;padding:5px 10px;border-radius:6px;'>⏳ بانتظار اختيار اتجاه الجار (Edge Direction)</div>"
                         elif _is_edge_valid:
-                            _edge_status_html = f"""
-                            <div dir='rtl' style='direction:rtl;text-align:right;font-size:14px;color:#0f172a;font-weight:bold;margin-top:6px;'>
-                                🌸 عمود جار (Edge Column): <span style='color:#db2777;font-weight:800;'><bdi dir="ltr">{sel_edge_dir}</bdi></span> <span style='color:#be185d;font-size:12px;font-weight:600;'>(خط بينك مهشر)</span>
-                            </div>
-                            """
+                            _is_corner_dir = ("+" in sel_edge_dir)
+                            _edge_type_lbl = "عمود جار ركني (Corner Column)" if _is_corner_dir else "عمود جار طرفي (Edge Column)"
+                            _edge_status_html = f"<div dir='rtl' style='direction:rtl;text-align:right;font-size:14px;color:#0f172a;font-weight:bold;margin-top:6px;'>🌸 {_edge_type_lbl}: <span style='color:#db2777;font-weight:800;'><bdi dir='ltr'>{sel_edge_dir}</bdi></span> <span style='color:#be185d;font-size:12px;font-weight:600;'>(خط بينك مهشر)</span></div>"
                         else:
-                            _edge_status_html = f"""
-                            <div dir='rtl' style='direction:rtl;text-align:right;font-size:13px;color:#b91c1c;font-weight:bold;margin-top:6px;background:#fef2f2;border:1px solid #fecaca;padding:5px 10px;border-radius:6px;line-height:1.4;'>
-                                ⚠️ لا يجوز اعتباره عمود جار (تجاوز حد الـ 6 سم في {sel_edge_dir})
-                            </div>
-                            """
+                            _err_reason = _edge_validation_errors[0] if _edge_validation_errors else f"الاتجاه المختار {sel_edge_dir} غير مسموح"
+                            _edge_status_html = f"<div dir='rtl' style='direction:rtl;text-align:right;font-size:13px;color:#b91c1c;font-weight:bold;margin-top:6px;background:#fef2f2;border:1px solid #fecaca;padding:5px 10px;border-radius:6px;line-height:1.4;'>⚠️ {_err_reason}</div>"
                     else:
-                        _edge_status_html = f"""
-                        <div dir='rtl' style='direction:rtl;text-align:right;font-size:14px;color:#64748b;font-weight:bold;margin-top:6px;'>
-                            ⚪ عمود داخلي (Non-Edge Column)
-                        </div>
-                        """
+                        _edge_status_html = "<div dir='rtl' style='direction:rtl;text-align:right;font-size:14px;color:#64748b;font-weight:bold;margin-top:6px;'>⚪ عمود محيطي غير ملاصق لجار (Non-Edge Column)</div>"
 
                     # Lower status panel raised upwards by 3 lines (~65px)
-                    st.markdown(
-                        f"""
-                        <div class='fs-bottom-panel' dir='rtl' style='direction:rtl;text-align:right;background:#ffffff;border:1.5px solid #cbd5e1;padding:10px 14px;border-radius:8px;margin-top:auto;margin-bottom:65px;box-shadow:0 1px 3px rgba(0,0,0,0.05);'>
-                            <div dir='rtl' style='direction:rtl;text-align:right;font-size:21px;font-weight:bold;color:#0f172a;margin-bottom:6px;line-height:1.4;'>
-                                🏛️ اسم العمود: <span style='color:#1d4ed8;font-size:22px;font-weight:bold;'><bdi dir="ltr">{selected_col_name}</bdi></span> <span style='font-size:15px;font-weight:normal;color:#64748b;'><bdi dir="ltr">({_tgt_col.get('grid_x', '')} - {_tgt_col.get('grid_y', '')})</bdi></span>
-                            </div>
-                            <div dir='rtl' style='direction:rtl;text-align:right;font-size:21px;font-weight:bold;color:#0f172a;margin-bottom:6px;line-height:1.4;'>
-                                📐 قطاع العمود: <span style='color:#0f766e;font-size:22px;font-weight:bold;'><bdi dir="ltr">{_col_geom_preview['width_cm']:.0f} × {_col_geom_preview['height_cm']:.0f} cm</bdi></span>
-                            </div>
-                            <div dir='rtl' style='direction:rtl;text-align:right;font-size:14px;color:#0f172a;font-weight:bold;margin-top:6px;'>
-                                📍 الترحيل عن المحاور: <span style='color:#eab308;text-shadow:0 0 1px #a16207;'><bdi dir="ltr">X = {_offset_x_display}</bdi></span> | <span style='color:#eab308;text-shadow:0 0 1px #a16207;'><bdi dir="ltr">Y = {_offset_y_display}</bdi></span>
-                            </div>
-                            {_edge_status_html}
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
+                    _panel_card_html = (
+                        f"<div class='fs-bottom-panel' dir='rtl' style='direction:rtl;text-align:right;background:#ffffff;border:1.5px solid #cbd5e1;padding:10px 14px;border-radius:8px;margin-top:auto;margin-bottom:65px;box-shadow:0 1px 3px rgba(0,0,0,0.05);'>"
+                        f"<div dir='rtl' style='direction:rtl;text-align:right;font-size:21px;font-weight:bold;color:#0f172a;margin-bottom:6px;line-height:1.4;'>"
+                        f"🏛️ اسم العمود: <span style='color:#1d4ed8;font-size:22px;font-weight:bold;'><bdi dir='ltr'>{selected_col_name}</bdi></span> <span style='font-size:15px;font-weight:normal;color:#64748b;'><bdi dir='ltr'>({_tgt_col.get('grid_x', '')} - {_tgt_col.get('grid_y', '')})</bdi></span>"
+                        f"</div>"
+                        f"<div dir='rtl' style='direction:rtl;text-align:right;font-size:21px;font-weight:bold;color:#0f172a;margin-bottom:6px;line-height:1.4;'>"
+                        f"📐 قطاع العمود: <span style='color:#0f766e;font-size:22px;font-weight:bold;'><bdi dir='ltr'>{_col_geom_preview['width_cm']:.0f} × {_col_geom_preview['height_cm']:.0f} cm</bdi></span>"
+                        f"</div>"
+                        f"<div dir='rtl' style='direction:rtl;text-align:right;font-size:14px;color:#0f172a;font-weight:bold;margin-top:6px;'>"
+                        f"📍 الترحيل عن المحاور: <span style='color:#eab308;text-shadow:0 0 1px #a16207;'><bdi dir='ltr'>X = {_offset_x_display}</bdi></span> | <span style='color:#eab308;text-shadow:0 0 1px #a16207;'><bdi dir='ltr'>Y = {_offset_y_display}</bdi></span>"
+                        f"</div>"
+                        f"{_edge_status_html}"
+                        f"</div>"
                     )
+                    st.markdown(_panel_card_html, unsafe_allow_html=True)
 
             # ── ملخص الأبعاد ─────────────────────────────────────────────────────
             n_total_cols  = (len(Lx_spans) + 1) * (len(Ly_spans) + 1)
@@ -9089,7 +9344,7 @@ def render():
                     st.rerun()
 
     # ── 5g. DATA CARD & DESIGN PARAMETERS ─────────────────────────────────────
-    with st.expander("📋 بطاقة البيانات ومعايير التصميم (DATA CARD & DESIGN PARAMETERS)", expanded=False, key=f"{prefix}exp_data_card", on_change="rerun"):
+    with st.expander("📋 Data Card & Design Parameters (بطاقة البيانات ومعايير التصميم)", expanded=False, key=f"{prefix}exp_data_card", on_change="rerun"):
         if st.session_state.get(f"{prefix}exp_data_card", False):
             st.markdown(
                 '<div class="section-header">📋 بطاقة البيانات ومعايير التصميم الإنشائية (DATA CARD & DESIGN PARAMETERS)</div>',
@@ -9851,6 +10106,7 @@ def render():
                     col_w_cm=bc_s, col_d_cm=tc_s,
                     removed_cols=_removed_col_objs,
                     void_panel_ids=set(_confirmed_voids),
+                    edge_columns=_edge_columns,
                 )
                 st.pyplot(fig_punch, clear_figure=True, use_container_width=True)
 
@@ -10342,6 +10598,7 @@ def render():
                     top_extra_cols=top_extra_cols,
                     btm_extra_spans=btm_extra_spans,
                     col_transforms=_col_transforms,
+                    edge_columns=_edge_columns,
                 )
                 st.pyplot(fig_m11, clear_figure=True, use_container_width=True)
                 buf_m11 = io.BytesIO()
@@ -10368,6 +10625,7 @@ def render():
                     top_extra_cols=top_extra_cols,
                     btm_extra_spans=btm_extra_spans,
                     col_transforms=_col_transforms,
+                    edge_columns=_edge_columns,
                 )
                 st.pyplot(fig_m22, clear_figure=True, use_container_width=True)
                 buf_m22 = io.BytesIO()
@@ -10451,6 +10709,7 @@ def render():
                 removed_cols=_removed_col_objs,
                 void_panel_ids=set(_confirmed_voids),
                 col_transforms=_col_transforms,
+                edge_columns=_edge_columns,
             )
             st.pyplot(fig_deficit, clear_figure=True, use_container_width=True)
             buf_deficit = io.BytesIO()
@@ -10663,6 +10922,7 @@ def render():
                     removed_cols=_confirmed_removals,
                     void_panel_ids=_confirmed_voids,
                     col_transforms=_col_transforms,
+                    edge_columns=_edge_columns,
                 )
                 st.pyplot(fig_cc, clear_figure=True, use_container_width=True)
                 buf_cc = io.BytesIO()
@@ -10694,6 +10954,7 @@ def render():
                     void_panel_ids=_confirmed_voids,
                     direction="X",
                     col_transforms=_col_transforms,
+                    edge_columns=_edge_columns,
                 )
                 st.pyplot(fig_bes_x, clear_figure=True, use_container_width=True)
                 buf_bes_x = io.BytesIO()
@@ -10725,6 +10986,7 @@ def render():
                     void_panel_ids=_confirmed_voids,
                     direction="Y",
                     col_transforms=_col_transforms,
+                    edge_columns=_edge_columns,
                 )
                 st.pyplot(fig_bes_y, clear_figure=True, use_container_width=True)
                 buf_bes_y = io.BytesIO()
@@ -10755,6 +11017,7 @@ def render():
                     void_panel_ids=_confirmed_voids,
                     direction="X",
                     col_transforms=_col_transforms,
+                    edge_columns=_edge_columns,
                 )
                 st.pyplot(fig_tmes_x, clear_figure=True, use_container_width=True)
                 buf_tmes_x = io.BytesIO()
@@ -10785,6 +11048,7 @@ def render():
                     void_panel_ids=_confirmed_voids,
                     direction="Y",
                     col_transforms=_col_transforms,
+                    edge_columns=_edge_columns,
                 )
                 st.pyplot(fig_tmes_y, clear_figure=True, use_container_width=True)
                 buf_tmes_y = io.BytesIO()
@@ -10893,6 +11157,7 @@ def render():
                 removed_cols=_removed_col_objs,
                 void_panel_ids=set(_confirmed_voids),
                 col_transforms=_col_transforms,
+                edge_columns=_edge_columns,
             )
             st.pyplot(fig_def, clear_figure=True, use_container_width=True)
 
@@ -11027,36 +11292,8 @@ def render():
                     opt_res = solve_deflection_optimization(sel_panel_data, DL_tot, LL, Fcu, Fy=Fy)
 
                     if opt_res.get("all_failed", False):
-                        # ── FAILURE ALERT: Trigger Audio Beep & Mandatory Slab Thickness Alert ──
-                        audio_beep_html = """
-                        <script>
-                        (function() {
-                            try {
-                                var AudioContext = window.AudioContext || window.webkitAudioContext;
-                                if (!AudioContext) return;
-                                var ctx = new AudioContext();
-                                function playBeep(freq, start, duration) {
-                                    var osc = ctx.createOscillator();
-                                    var gain = ctx.createGain();
-                                    osc.type = 'sawtooth';
-                                    osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
-                                    gain.gain.setValueAtTime(0.22, ctx.currentTime + start);
-                                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
-                                    osc.connect(gain);
-                                    gain.connect(ctx.destination);
-                                    osc.start(ctx.currentTime + start);
-                                    osc.stop(ctx.currentTime + start + duration);
-                                }
-                                playBeep(880, 0.05, 0.22);
-                                playBeep(880, 0.35, 0.22);
-                                playBeep(1175, 0.70, 0.45);
-                            } catch(e) {
-                                console.error("Audio beep error:", e);
-                            }
-                        })();
-                        </script>
-                        """
-                        st.components.v1.html(audio_beep_html, height=0)
+                        # ── FAILURE ALERT: Trigger Unified Whistle & Mandatory Slab Thickness Alert ──
+                        S.play_warning_sound()
 
                         st.markdown(
                             f"""
@@ -11217,6 +11454,7 @@ def render():
                 removed_cols=_removed_col_objs,
                 void_panel_ids=set(_confirmed_voids),
                 col_sf=col_sf_val,
+                edge_columns=_edge_columns,
             )
             st.pyplot(fig_reac, clear_figure=True, use_container_width=True)
             buf_reac = io.BytesIO()
@@ -11764,18 +12002,52 @@ def render():
         col_c_dim = float(tc_s if tc_s else 50)
         col_b_dim = float(col_b_val if col_b_val else 30)
 
-        # 2b. Neighbor Columns Selection
+        # 2b. Neighbor Columns Definition (Derived directly from Project Inputs)
         auto_nbr_ids = [c["id"] for c in _active_cols if c.get("is_edge_col")]
+        sel_neighbor_ids = auto_nbr_ids
+
         with st.container(border=True):
-            st.markdown("<div style='font-size:16.5px; font-weight:800; color:#1e3a8a; margin-bottom:4px;'>🏘️ تحديد أعمدة الجار بالمشروع (Property-Line / Neighbor Columns Selection)</div>", unsafe_allow_html=True)
-            st.caption("حدد الأعمدة الملاصقة لحدود الجار. يقوم الكود بتصميم أعمدة الجار الجانبية بقواعد شداد متعامدة (Module 9)، وأعمدة الجار الركن بشدادات مائلة (Module 10)، وباقي الأعمدة كقواعد منفصلة (Module 3) أو قواعد مشتركة عند حدوث تداخل (Module 8). في حال تركها فارغة، يُعتبر المشروع بدون جيران وتُصمم كافة القواعد كقواعد منفصلة ومشتركة.")
-            sel_neighbor_ids = st.multiselect(
-                "اختر أعمدة الجار (الملاصقة لحدود الجار):",
-                options=[c["id"] for c in _active_cols],
-                default=auto_nbr_ids,
-                key=f"{prefix}m1_ftg_neighbor_select",
-                help="اختر أعمدة الجار بالمشروع.",
-            )
+            if auto_nbr_ids:
+                nbr_cols_str = "، ".join([f"<span dir='ltr'><b>{cid}</b></span>" for cid in auto_nbr_ids])
+                st.markdown(
+                    f"""
+                    <div dir="rtl" style="direction: rtl !important; text-align: right !important; background:#eff6ff; border:1.5px solid #bfdbfe; border-right:7px solid #2563eb; border-radius:10px; padding:16px 20px; margin:4px 0 8px 0; color:#1e293b; line-height:1.9;">
+                        <div style="direction: rtl !important; text-align: right !important; font-size:1.35rem; font-weight:800; color:#1e40af; margin-bottom:8px;">
+                            🏘️ أعمدة الجار المعتمدة بالمشروع (طبقاً لمدخلات البلاطة والأعمدة):
+                        </div>
+                        <div style="direction: rtl !important; text-align: right !important; font-size:1.25rem; font-weight:700; line-height:1.9; color:#0f172a;">
+                            أعمدة الجار المحددة في المشروع هي: 
+                            <span dir="rtl" style="font-size:1.35rem; font-weight:900; color:#b91c1c; background:#fef2f2; padding:3px 12px; border-radius:7px; border:1.5px solid #fca5a5; margin:0 6px; display:inline-block;">
+                                {nbr_cols_str}
+                            </span>
+                            <span style="font-size:1.05rem; font-weight:600; color:#475569;">
+                                (إجمالي {len(auto_nbr_ids)} أعمدة ملاصقة لحدود الجار)
+                            </span>
+                        </div>
+                        <div style="direction: rtl !important; text-align: right !important; font-size:1.05rem; font-weight:600; color:#2563eb; margin-top:8px; line-height:1.8;">
+                            ℹ️ يتم تصميم أساسات هذه الأعمدة تلقائياً كقواعد شداد (جانبية بنظام Module 9 أو ركنية مائلة بنظام Module 10) وربطها بأقرب أعمدة داخلية.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            else:
+                st.markdown(
+                    """
+                    <div dir="rtl" style="direction: rtl !important; text-align: right !important; background:#f8fafc; border:1.5px solid #e2e8f0; border-right:7px solid #64748b; border-radius:10px; padding:16px 20px; margin:4px 0 8px 0; color:#1e293b; line-height:1.9;">
+                        <div style="direction: rtl !important; text-align: right !important; font-size:1.35rem; font-weight:800; color:#334155; margin-bottom:8px;">
+                            🏘️ أعمدة الجار بالمشروع:
+                        </div>
+                        <div style="direction: rtl !important; text-align: right !important; font-size:1.2rem; font-weight:700; color:#0f172a;">
+                            لا توجد أعمدة ملاصقة لحدود الجار محددة في مدخلات المشروع.
+                        </div>
+                        <div style="direction: rtl !important; text-align: right !important; font-size:1.05rem; font-weight:600; color:#64748b; margin-top:8px; line-height:1.8;">
+                            ℹ️ تُصمم كافة أساسات المبنى كقواعد منفصلة (Module 3) وقواعد مشتركة تلقائية عند حدوث تداخل (Module 8).
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
         # Build active columns data list
         fs_active_columns = []
@@ -11820,6 +12092,45 @@ def render():
         st.session_state["fs_ftg_analysis"] = ftg_analysis
         counts = ftg_analysis["summary_counts"]
 
+        # ── Automated Ground Beams Layout & Design Integration ──
+        from modules.ground_beam_layout import extract_structural_links_and_beams
+
+        gb_level_type = S.cfg_val(f"{prefix}gb_level_type", "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)")
+        gb_b_unified = float(S.cfg_val(f"{prefix}gb_b_unified", 25.0))
+        gb_has_wall = S.cfg_val(f"{prefix}gb_has_wall", True)
+        gb_h_wall = float(S.cfg_val(f"{prefix}gb_h_wall", 3.00))
+        gb_t_wall = float(S.cfg_val(f"{prefix}gb_t_wall", 12.0))
+        gb_gamma_brick = float(S.cfg_val(f"{prefix}gb_gamma_brick", 1.80))
+        gb_axial_tie = float(S.cfg_val(f"{prefix}gb_axial_tie_ratio", 0.10))
+        gb_phi_bot_val = int(S.cfg_val(f"{prefix}gb_phi_bot", 16))
+        gb_phi_top_val = int(S.cfg_val(f"{prefix}gb_phi_top", 12))
+        gb_phi_st_val = int(S.cfg_val(f"{prefix}gb_phi_st", 8))
+        gb_phi_side_val = int(S.cfg_val(f"{prefix}gb_phi_side", 10))
+        gb_stirrups_val = int(S.cfg_val(f"{prefix}gb_stirrups_m", 6))
+        gb_user_overrides = st.session_state.get(f"{prefix}gb_overrides", {})
+
+        gb_analysis = extract_structural_links_and_beams(
+            active_columns=fs_active_columns,
+            ftg_analysis=ftg_analysis,
+            b_unified=gb_b_unified,
+            level_type=gb_level_type,
+            has_wall=gb_has_wall,
+            h_wall=gb_h_wall,
+            t_wall=gb_t_wall,
+            gamma_brick=gb_gamma_brick,
+            axial_tie_ratio=gb_axial_tie,
+            fcu=ftg_fcu,
+            fy=ftg_fy,
+            cover_cm=4.0,
+            phi_bot=gb_phi_bot_val,
+            phi_top=gb_phi_top_val,
+            phi_st=gb_phi_st_val,
+            phi_side=gb_phi_side_val,
+            stirrups_per_m=gb_stirrups_val,
+            user_overrides=gb_user_overrides,
+        )
+        st.session_state["fs_gb_analysis"] = gb_analysis
+
         # 3. Executive Report Banner
         st.markdown(
             f"""
@@ -11859,68 +12170,411 @@ def render():
             unsafe_allow_html=True,
         )
 
-        # Dynamic Tabs: Detailed Table + Layout Sketch
-        fs_tab_table, fs_tab_sketch = st.tabs([
-            "📋 Footings Detailed Table (جدول تفاصيل وتصميم نماذج القواعد)",
-            "🗺️ Foundation Layout Sketch (المسقط الأفقي وتوزيع كافة القواعد والشدادات)",
+        # 4. Footings Detailed Table (Unified Schedule: All 4 Types)
+        st.markdown("##### 📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)")
+        df_fs_export = pd.DataFrame(ftg_analysis["unified_rows"])
+        render_styled_table(df_fs_export)
+
+        # Export Excel & CSV
+        csv_fs_data = df_fs_export.to_csv(index=False).encode('utf-8-sig')
+        buf_fs_xl = io.BytesIO()
+        with pd.ExcelWriter(buf_fs_xl, engine='openpyxl') as writer:
+            df_fs_export.to_excel(writer, index=False, sheet_name='Footings_Schedule')
+        excel_fs_bytes = buf_fs_xl.getvalue()
+
+        exp_c1, exp_c2 = st.columns(2)
+        with exp_c1:
+            st.download_button(
+                label="📊 تصدير جدول نماذج القواعد الموحد (Excel .xlsx)",
+                data=excel_fs_bytes,
+                file_name=f"{prefix}Unified_Footings_Schedule_{num_floors}Floors.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key=f"{prefix}btn_dl_unified_excel_fs",
+            )
+        with exp_c2:
+            st.download_button(
+                label="📥 تصدير جدول نماذج القواعد الموحد (CSV)",
+                data=csv_fs_data,
+                file_name=f"{prefix}Unified_Footings_Schedule_{num_floors}Floors.csv",
+                mime="text/csv",
+                use_container_width=True,
+                key=f"{prefix}btn_dl_unified_csv_fs",
+            )
+
+    # ── 🧱 GROUND BEAMS DESIGN SECTION (ECP 203) ───────────────────────────────────
+    with st.expander(f"🧱 Ground Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج الميدات والسملات الأرضية)", expanded=False):
+        # 1. Header & Description Banner
+        st.markdown(
+            f"""
+            <div dir="rtl" style="background:#f0fdf4; border:1.5px solid #bbf7d0; border-right:7px solid #16a34a; border-radius:10px; padding:18px 22px; margin-bottom:16px; color:#14532d; line-height:1.9; text-align:right;">
+                <div style="font-size:1.45rem; font-weight:800; color:#15803d; margin-bottom:10px;">
+                    🧱 منظومة تصميم وتفريد ونماذج الميدات والسملات الأرضية (Ground Beams & Tie Beams — ECP 203):
+                </div>
+                <div style="font-size:1.15rem; font-weight:700; color:#166534;">
+                    نظام متكامل يربط تلقائياً بين مسقط الأعمدة والأساسات في <b>Module 1</b> وعناصر الربط الإنشائية الأرضية:
+                    <br/>• <b>التفرقة والتصنيف الصريح:</b> تمييز <b>الشدادات (Strap Beams: ST1, ST2)</b> الناقلة للعزوم لقواعد الجار، عن <b>السملات الأرضية (Ground Beams: B1, B2, B3)</b>.
+                    <br/>• <b>استنتاج حالة الاستمرارية تلقائياً من المسقط:</b> تحديد حالة الدعم (بسيطة / مستمرة من طرف واحد / مستمرة من الطرفين) بناءً على امتداد محاور الأعمدة في المسقط بدون الحاجة لإدخال يدوي.
+                    <br/>• <b>قوى الربط المحوري (Axial Tie Action):</b> تصميم السملات على قوى ربط محوري بنسبة <span dir="ltr">10%</span> من حمل العمود الأكبر لمقاومة الهبوط المتفاوت والزلازل طبقاً للكود.
+                    <br/>• <b>التجميع التلقائي في 3 نماذج تنفيذية (B1, B2, B3):</b> تطبيق قاعدة الظرف الحاكم (Governing Envelope Rule) مع إتاحة التعديل اليدوي التفاعلي المباشر.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        # 2. Design Parameters & Controls
+        with st.container(border=True):
+            st.markdown("<div style='font-size:16px; font-weight:800; color:#1e3a8a; margin-bottom:6px;'>⚙️ محددات ومعايير تصميم السملات الأرضية (Ground Beam Design Parameters)</div>", unsafe_allow_html=True)
+            gbc1, gbc2, gbc3, gbc4 = st.columns(4)
+            with gbc1:
+                lvl_opts = [
+                    "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)",
+                    "At Footing Level (في منسوب القواعد المسلحة)",
+                ]
+                sel_lvl_idx = 0 if "Above" in gb_level_type else 1
+                new_gb_level = st.selectbox(
+                    "منسوب الميدة الإنشائي:",
+                    options=lvl_opts,
+                    index=sel_lvl_idx,
+                    key=f"{prefix}w_gb_level_type",
+                    help="في منسوب القواعد تؤخذ عزوم وقوى الهبوط المتفاوت في الحسابات.",
+                )
+                if new_gb_level != gb_level_type:
+                    S.cfg_set(f"{prefix}gb_level_type", new_gb_level)
+                    st.rerun()
+
+                new_gb_b = st.number_input(
+                    "عرض الميدة الموحد b (cm):",
+                    min_value=15.0, max_value=60.0,
+                    value=float(gb_b_unified), step=5.0,
+                    key=f"{prefix}w_gb_b_unified",
+                )
+                if new_gb_b != gb_b_unified:
+                    S.cfg_set(f"{prefix}gb_b_unified", new_gb_b)
+                    st.rerun()
+
+            with gbc2:
+                new_gb_wall = st.checkbox("وجود حوائط مباني فوق السملات", value=bool(gb_has_wall), key=f"{prefix}w_gb_has_wall")
+                if new_gb_wall != gb_has_wall:
+                    S.cfg_set(f"{prefix}gb_has_wall", new_gb_wall)
+                    st.rerun()
+
+                new_gb_hw = st.number_input(
+                    "ارتفاع الحائط H_wall (m):",
+                    min_value=1.0, max_value=6.0,
+                    value=float(gb_h_wall), step=0.25,
+                    disabled=not new_gb_wall,
+                    key=f"{prefix}w_gb_h_wall",
+                )
+                if new_gb_hw != gb_h_wall:
+                    S.cfg_set(f"{prefix}gb_h_wall", new_gb_hw)
+                    st.rerun()
+
+                new_gb_tw = st.number_input(
+                    "سُمك الحائط t_wall (cm):",
+                    min_value=10.0, max_value=40.0,
+                    value=float(gb_t_wall), step=2.0,
+                    disabled=not new_gb_wall,
+                    key=f"{prefix}w_gb_t_wall",
+                )
+                if new_gb_tw != gb_t_wall:
+                    S.cfg_set(f"{prefix}gb_t_wall", new_gb_tw)
+                    st.rerun()
+
+            with gbc3:
+                new_gb_tie = st.number_input(
+                    "نسبة قوة الربط المحوري (Tie %):",
+                    min_value=0.05, max_value=0.25,
+                    value=float(gb_axial_tie), step=0.01,
+                    format="%.2f",
+                    help="نسبة حمل العمود الأكبر للربط المحوري لمقاومة الهبوط المتفاوت والزلازل (10% per ECP 203).",
+                    key=f"{prefix}w_gb_tie_ratio",
+                )
+                if new_gb_tie != gb_axial_tie:
+                    S.cfg_set(f"{prefix}gb_axial_tie_ratio", new_gb_tie)
+                    st.rerun()
+
+                new_gb_st_m = st.number_input(
+                    "عدد الكانات الأساسية / م':",
+                    min_value=5, max_value=10,
+                    value=int(gb_stirrups_val), step=1,
+                    key=f"{prefix}w_gb_stirrups_m",
+                )
+                if new_gb_st_m != gb_stirrups_val:
+                    S.cfg_set(f"{prefix}gb_stirrups_m", new_gb_st_m)
+                    st.rerun()
+
+            with gbc4:
+                dia_opts = [12, 16, 18, 22, 25]
+                dia_st_opts = [8, 10]
+                idx_b = dia_opts.index(gb_phi_bot_val) if gb_phi_bot_val in dia_opts else 1
+                idx_t = dia_opts.index(gb_phi_top_val) if gb_phi_top_val in dia_opts else 0
+                idx_s = dia_st_opts.index(gb_phi_st_val) if gb_phi_st_val in dia_st_opts else 0
+
+                new_p_bot = st.selectbox("قطر التسليح السفلي Φ_bot (mm):", options=dia_opts, index=idx_b, key=f"{prefix}w_gb_phi_bot")
+                new_p_top = st.selectbox("قطر التسليح العلوي Φ_top (mm):", options=dia_opts, index=idx_t, key=f"{prefix}w_gb_phi_top")
+                new_p_st = st.selectbox("قطر الكانات Φ_st (mm):", options=dia_st_opts, index=idx_s, key=f"{prefix}w_gb_phi_st")
+
+                if new_p_bot != gb_phi_bot_val or new_p_top != gb_phi_top_val or new_p_st != gb_phi_st_val:
+                    S.cfg_set(f"{prefix}gb_phi_bot", new_p_bot)
+                    S.cfg_set(f"{prefix}gb_phi_top", new_p_top)
+                    S.cfg_set(f"{prefix}gb_phi_st", new_p_st)
+                    st.rerun()
+
+        # 3. KPI Metrics Banner
+        cnt_gb = len(gb_analysis["ground_beams"])
+        cnt_st = len(gb_analysis["strap_beams"])
+        len_gb = sum(b["span_m"] for b in gb_analysis["ground_beams"])
+        len_st = sum(b["span_m"] for b in gb_analysis["strap_beams"])
+
+        st.markdown(
+            f"""
+            <div dir="rtl" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 12px 0 16px 0;">
+                <div style="background:rgba(224, 231, 255, 0.5); border:1.5px solid #6366f1; border-right:5px solid #4338ca; border-radius:8px; padding:12px 14px;">
+                    <div style="font-size:14px; font-weight:800; color:#312e81;">🧱 إجمالي السملات الأرضية (Ground Beams)</div>
+                    <div style="font-size:20px; font-weight:900; color:#1e1b4b;">{cnt_gb} <span style="font-size:13px; font-weight:600; color:#475569;">سملة ({len_gb:.1f} m)</span></div>
+                    <div style="font-size:12px; color:#4338ca; margin-top:2px;">مجمعة في 3 نماذج: B1, B2, B3</div>
+                </div>
+                <div style="background:rgba(254, 215, 170, 0.5); border:1.5px solid #ea580c; border-right:5px solid #c2410c; border-radius:8px; padding:12px 14px;">
+                    <div style="font-size:14px; font-weight:800; color:#9a3412;">🟧 إجمالي الشدادات (Strap Beams)</div>
+                    <div style="font-size:20px; font-weight:900; color:#431407;">{cnt_st} <span style="font-size:13px; font-weight:600; color:#475569;">شداد ({len_st:.1f} m)</span></div>
+                    <div style="font-size:12px; color:#c2410c; margin-top:2px;">لقواعد الجار والركن (ST1, ST2...)</div>
+                </div>
+                <div style="background:rgba(240, 253, 244, 0.7); border:1.5px solid #22c55e; border-right:5px solid #15803d; border-radius:8px; padding:12px 14px;">
+                    <div style="font-size:14px; font-weight:800; color:#14532d;">📊 حجم الخرسانة المسلحة للسملات</div>
+                    <div style="font-size:20px; font-weight:900; color:#052e16;">{gb_analysis['boq']['conc_vol_rc']:.2f} <span style="font-size:13px; font-weight:600; color:#475569;">m³</span></div>
+                    <div style="font-size:12px; color:#15803d; margin-top:2px;">بمعدل أسمنت 350 كجم/م³</div>
+                </div>
+                <div style="background:rgba(245, 243, 255, 0.7); border:1.5px solid #8b5cf6; border-right:5px solid #6d28d9; border-radius:8px; padding:12px 14px;">
+                    <div style="font-size:14px; font-weight:800; color:#4c1d95;">⚙️ إجمالي وزن حديد تسليح السملات</div>
+                    <div style="font-size:20px; font-weight:900; color:#2e1065;">{gb_analysis['boq']['steel_ton_tot']:.3f} <span style="font-size:13px; font-weight:600; color:#475569;">Ton ({gb_analysis['boq']['steel_kg_tot']:,.0f} kg)</span></div>
+                    <div style="font-size:12px; color:#6d28d9; margin-top:2px;">معدل: {gb_analysis['boq']['steel_ratio_kg_m3']:.1f} kg/m³</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # 4. Interactive Tabs
+        tab_gb_class, tab_gb_models, tab_gb_details = st.tabs([
+            "📋 Classification Table (جدول تصنيف عناصر الربط: شدادات وسملات)",
+            "🏛️ Master Models Schedule (جدول نماذج السملات التنفيذي B1, B2, B3)",
+            "🔩 Detailed Beams Schedule (جدول تفريد وتفاصيل جميع السملات الفردية)",
         ])
 
-        # ── TAB 1: FOOTINGS DETAILED TABLE (UNIFIED SCHEDULE: ALL 4 TYPES) ──
-        with fs_tab_table:
-            st.markdown("##### 📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)")
-            df_fs_export = pd.DataFrame(ftg_analysis["unified_rows"])
-            render_styled_table(df_fs_export)
+        # ── TAB 1: UNIFIED CLASSIFICATION TABLE (STRAP BEAMS & GROUND BEAMS) ──
+        with tab_gb_class:
+            st.markdown("##### 📋 جدول تصنيف عناصر الربط الإنشائية الشامل (Unified Structural Links Classification Table)")
+            st.caption("يوضح التفرقة الصريحة بين الشدادات (Strap Beams) الحاملة لعزوم لامركزية قواعد الجار والسملات الأرضية (Ground Beams) الرابطة للأعمدة.")
+            df_class_export = pd.DataFrame(gb_analysis["classification_rows"])
+            render_styled_table(df_class_export)
 
             # Export Excel & CSV
-            csv_fs_data = df_fs_export.to_csv(index=False).encode('utf-8-sig')
-            buf_fs_xl = io.BytesIO()
-            with pd.ExcelWriter(buf_fs_xl, engine='openpyxl') as writer:
-                df_fs_export.to_excel(writer, index=False, sheet_name='Footings_Schedule')
-            excel_fs_bytes = buf_fs_xl.getvalue()
+            csv_class_data = df_class_export.to_csv(index=False).encode('utf-8-sig')
+            buf_class_xl = io.BytesIO()
+            with pd.ExcelWriter(buf_class_xl, engine='openpyxl') as writer:
+                df_class_export.to_excel(writer, index=False, sheet_name='Classification_Table')
+            excel_class_bytes = buf_class_xl.getvalue()
 
-            exp_c1, exp_c2 = st.columns(2)
-            with exp_c1:
+            c_cl1, c_cl2 = st.columns(2)
+            with c_cl1:
                 st.download_button(
-                    label="📊 تصدير جدول نماذج القواعد الموحد (Excel .xlsx)",
-                    data=excel_fs_bytes,
-                    file_name=f"{prefix}Unified_Footings_Schedule_{num_floors}Floors.xlsx",
+                    label="📊 تصدير جدول التصنيف الإنشائي (Excel .xlsx)",
+                    data=excel_class_bytes,
+                    file_name=f"{prefix}Structural_Links_Classification_{num_floors}Floors.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
-                    key=f"{prefix}btn_dl_unified_excel_fs",
+                    key=f"{prefix}btn_dl_class_excel",
                 )
-            with exp_c2:
+            with c_cl2:
                 st.download_button(
-                    label="📥 تصدير جدول نماذج القواعد الموحد (CSV)",
-                    data=csv_fs_data,
-                    file_name=f"{prefix}Unified_Footings_Schedule_{num_floors}Floors.csv",
+                    label="📥 تصدير جدول التصنيف الإنشائي (CSV)",
+                    data=csv_class_data,
+                    file_name=f"{prefix}Structural_Links_Classification_{num_floors}Floors.csv",
                     mime="text/csv",
                     use_container_width=True,
-                    key=f"{prefix}btn_dl_unified_csv_fs",
+                    key=f"{prefix}btn_dl_class_csv",
                 )
 
-        # ── TAB 2: FOUNDATION LAYOUT SKETCH (COLOR-CODED PLAN: ISOLATED, COMBINED, STRAP) ──
-        with fs_tab_sketch:
-            st.markdown("##### 🗺️ المسقط الأفقي العام لأساسات المبنى وتوزيع القواعد والشدادات (Foundation Layout Plan Sketch)")
-            st.caption("مخطط ملون يوضح: 🟦 القواعد المنفصلة (أزرق)، 🟩 القواعد المشتركة (أخضر)، 🟧 قواعد وكمرات الشدادات الجانبية والركنية (برتقالي) مع المحاور والأبعاد.")
-            with st.expander("🖼️ استعراض وتحميل المسقط الأفقي العام للأساسات (Load Foundation Layout Plan)", expanded=False, key=f"{prefix}exp_fs_found_sketch", on_change="rerun"):
-                if st.session_state.get(f"{prefix}exp_fs_found_sketch", False):
-                    fig_full_sketch = draw_comprehensive_foundation_sketch(fs_active_columns, ftg_analysis)
-                    st.pyplot(fig_full_sketch, clear_figure=True, use_container_width=True)
+        # ── TAB 2: MASTER GROUND BEAMS SCHEDULE (B1, B2, B3) & INTERACTIVE OVERRIDES ──
+        with tab_gb_models:
+            st.markdown("##### 🏛️ جدول نماذج السملات التنفيذي (Master Ground Beams Schedule — Governing Envelopes)")
+            st.caption("تم تجميع السملات تلقائياً في 3 نماذج تنفيذية (B1 للقطاع الثقيل، B2 للمتوسط، B3 للخفيف) بتطبيق قاعدة الظرف الحاكم.")
+            df_models_export = pd.DataFrame(gb_analysis["models_schedule"])
+            render_styled_table(df_models_export)
 
-                    buf_fs_sketch = io.BytesIO()
-                    fig_full_sketch.savefig(buf_fs_sketch, format="png", bbox_inches="tight", dpi=180)
-                    buf_fs_sketch.seek(0)
-                    st.download_button(
-                        label="📥 Download Foundation Layout Plan Sketch (High-Res PNG)",
-                        data=buf_fs_sketch,
-                        file_name=f"{prefix}Foundation_Comprehensive_Layout_{num_floors}Floors.png",
-                        mime="image/png",
-                        use_container_width=True,
-                        key=f"{prefix}btn_dl_full_foundation_sketch",
-                    )
-                    plt.close(fig_full_sketch)
-                else:
-                    st.info("💡 انقر لتوسيع هذا القسم وتوليد المسقط الأفقي العام لأساسات المبنى وتوزيع القواعد.")
+            st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown("<div style='font-size:15.5px; font-weight:800; color:#9333ea; margin-bottom:6px;'>🛠️ واجهة التعديل اليدوي التفاعلية لنماذج السملات (Interactive Overrides Table)</div>", unsafe_allow_html=True)
+                st.caption("يمكنك تعديل العمق أو عدد الأسياخ أو الكانات لكل نموذج مباشرة. تنعكس التعديلات فوراً على المخطط واللوحات وحصر الكميات.")
+
+                ov_changed = False
+                cur_ov = dict(st.session_state.get(f"{prefix}gb_overrides", {}))
+
+                ov_cols = st.columns(len(gb_analysis["models_dict"])) if gb_analysis["models_dict"] else [st.container()]
+                for idx_m, (m_mark, m_data) in enumerate(gb_analysis["models_dict"].items()):
+                    with ov_cols[idx_m]:
+                        st.markdown(f"**📌 نموذج {m_mark} ({m_data['count']} سملات):**")
+                        # Depth override
+                        new_t = st.number_input(
+                            f"عمق {m_mark} الكلي t (cm):",
+                            min_value=30.0, max_value=120.0,
+                            value=float(m_data["t_cm"]), step=5.0,
+                            key=f"{prefix}ov_t_{m_mark}",
+                        )
+                        if new_t != m_data["t_cm"]:
+                            cur_ov[f"{m_mark}_t"] = new_t
+                            ov_changed = True
+
+                        # Bottom bars override
+                        new_nbot = st.number_input(
+                            f"عدد سفلي Φ{m_data['phi_bot']}:",
+                            min_value=2, max_value=20,
+                            value=int(m_data["n_bot"]), step=1,
+                            key=f"{prefix}ov_nbot_{m_mark}",
+                        )
+                        if new_nbot != m_data["n_bot"]:
+                            cur_ov[f"{m_mark}_nbot"] = new_nbot
+                            ov_changed = True
+
+                        # Top bars override
+                        new_ntop = st.number_input(
+                            f"عدد علوي Φ{m_data['phi_top']}:",
+                            min_value=2, max_value=20,
+                            value=int(m_data["n_top"]), step=1,
+                            key=f"{prefix}ov_ntop_{m_mark}",
+                        )
+                        if new_ntop != m_data["n_top"]:
+                            cur_ov[f"{m_mark}_ntop"] = new_ntop
+                            ov_changed = True
+
+                        # Stirrups override
+                        new_st = st.number_input(
+                            f"كانات/م' Φ{m_data['phi_st']}:",
+                            min_value=5, max_value=12,
+                            value=int(m_data["stirrups_per_m"]), step=1,
+                            key=f"{prefix}ov_st_{m_mark}",
+                        )
+                        if new_st != m_data["stirrups_per_m"]:
+                            cur_ov[f"{m_mark}_stirrups"] = new_st
+                            ov_changed = True
+
+                if ov_changed:
+                    st.session_state[f"{prefix}gb_overrides"] = cur_ov
+                    st.rerun()
+
+                if st.button("🔄 إعادة ضبط نماذج السملات إلى الحسابات التلقائية (Reset Overrides)", key=f"{prefix}btn_reset_gb_ov"):
+                    st.session_state[f"{prefix}gb_overrides"] = {}
+                    st.rerun()
+
+            # Export Excel & CSV
+            csv_models_data = df_models_export.to_csv(index=False).encode('utf-8-sig')
+            buf_models_xl = io.BytesIO()
+            with pd.ExcelWriter(buf_models_xl, engine='openpyxl') as writer:
+                df_models_export.to_excel(writer, index=False, sheet_name='Master_Models_Schedule')
+            excel_models_bytes = buf_models_xl.getvalue()
+
+            c_md1, c_md2 = st.columns(2)
+            with c_md1:
+                st.download_button(
+                    label="📊 تصدير جدول نماذج السملات التنفيذي (Excel .xlsx)",
+                    data=excel_models_bytes,
+                    file_name=f"{prefix}Master_Ground_Beams_Schedule_{num_floors}Floors.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key=f"{prefix}btn_dl_models_excel",
+                )
+            with c_md2:
+                st.download_button(
+                    label="📥 تصدير جدول نماذج السملات التنفيذي (CSV)",
+                    data=csv_models_data,
+                    file_name=f"{prefix}Master_Ground_Beams_Schedule_{num_floors}Floors.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    key=f"{prefix}btn_dl_models_csv",
+                )
+
+        # ── TAB 3: DETAILED GROUND BEAMS BAR BENDING SCHEDULE ──
+        with tab_gb_details:
+            st.markdown("##### 🔩 جدول تفريد وحصر وتفاصيل جميع السملات الإنشائية (Detailed Ground Beams Schedule)")
+            st.caption("تفصيل دقيق لكل سملة بالمبنى مع البحور الصافية، والعزوم، وقوى القص، وقوى الربط المحوري، والتسليح النهائي.")
+            df_det_export = pd.DataFrame(gb_analysis["detailed_schedule_rows"])
+            render_styled_table(df_det_export)
+
+            # Export Excel & CSV
+            csv_det_data = df_det_export.to_csv(index=False).encode('utf-8-sig')
+            buf_det_xl = io.BytesIO()
+            with pd.ExcelWriter(buf_det_xl, engine='openpyxl') as writer:
+                df_det_export.to_excel(writer, index=False, sheet_name='Detailed_Ground_Beams')
+            excel_det_bytes = buf_det_xl.getvalue()
+
+            c_dt1, c_dt2 = st.columns(2)
+            with c_dt1:
+                st.download_button(
+                    label="📊 تصدير جدول تفريد السملات التفصيلي (Excel .xlsx)",
+                    data=excel_det_bytes,
+                    file_name=f"{prefix}Detailed_Ground_Beams_Schedule_{num_floors}Floors.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key=f"{prefix}btn_dl_det_excel",
+                )
+            with c_dt2:
+                st.download_button(
+                    label="📥 تصدير جدول تفريد السملات التفصيلي (CSV)",
+                    data=csv_det_data,
+                    file_name=f"{prefix}Detailed_Ground_Beams_Schedule_{num_floors}Floors.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    key=f"{prefix}btn_dl_det_csv",
+                )
+
+    # ── 🗺️ FOUNDATION LAYOUT SKETCH SECTION (ECP 203) ──────────────────────────────
+    with st.expander(f"🗺️ Foundation Layout Sketch — {num_floors} Floors (المسقط الأفقي وتوزيع كافة القواعد والشدادات والسملات)", expanded=False):
+        st.markdown(
+            f"""
+            <div dir="rtl" style="background:#eff6ff; border:1.5px solid #bfdbfe; border-right:7px solid #2563eb; border-radius:10px; padding:18px 22px; margin-bottom:16px; color:#1e3a8a; line-height:1.9; text-align:right;">
+                <div style="font-size:1.45rem; font-weight:800; color:#1d4ed8; margin-bottom:10px;">
+                    🗺️ المسقط الأفقي العام لأساسات المبنى وعناصر الربط الإنشائي (Foundation Layout Plan Sketch):
+                </div>
+                <div style="font-size:1.15rem; font-weight:700; color:#1e40af;">
+                    لوحة تنفيذية متكاملة لأساسات المبنى لعدد <span style="font-weight:800; color:#1e3a8a;">{num_floors} طوابق</span>، توضح التوزيع الهندسي الشامل لجميع عناصر الأساسات والربط الإنشائي طبقاً لـ <span dir="ltr">ECP 203</span>:
+                    <br/>• 🟦 <b>القواعد المنفصلة (Module 3):</b> للأعمدة غير المتصلة بجار طالما لا يوجد تداخل.
+                    <br/>• 🟩 <b>القواعد المشتركة (Module 8):</b> تدمج تلقائياً أي قواعد متداخلة (خلوص &lt; 0.15 م).
+                    <br/>• 🟧 <b>قواعد وكمرات الشدادات للجار (Modules 9 & 10):</b> برموز واضحة (<span dir="ltr">ST1, ST2...</span>) وأبعاد القطاع وعزوم الاتزان.
+                    <br/>• 🟪 <b>السملات والميدات الأرضية (Module 11):</b> بلون نيلي مميز مع بطاقات النماذج التنفيذية (<span dir="ltr">B1, B2, B3</span>) والمحاور والأبعاد.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        ftg_analysis_sketch = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
+        gb_analysis_sketch = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis")
+        active_cols_sketch = fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols
+
+        if ftg_analysis_sketch and active_cols_sketch:
+            gb_list = gb_analysis_sketch.get("ground_beams", []) if gb_analysis_sketch else []
+            fig_full_sketch = draw_comprehensive_foundation_sketch(
+                active_cols_sketch, ftg_analysis_sketch, ground_beams=gb_list,
+                edge_columns=_edge_columns,
+            )
+            st.pyplot(fig_full_sketch, clear_figure=True, use_container_width=True)
+
+            buf_fs_sketch = io.BytesIO()
+            fig_full_sketch.savefig(buf_fs_sketch, format="png", bbox_inches="tight", dpi=180)
+            buf_fs_sketch.seek(0)
+            st.download_button(
+                label="📥 Download Foundation Layout Plan Sketch (High-Res PNG)",
+                data=buf_fs_sketch,
+                file_name=f"{prefix}Foundation_Comprehensive_Layout_{num_floors}Floors.png",
+                mime="image/png",
+                use_container_width=True,
+                key=f"{prefix}btn_dl_full_foundation_sketch",
+            )
+            plt.close(fig_full_sketch)
+        else:
+            st.info("💡 جاري معالجة بيانات الأساسات والسملات لتوليد المسقط الأفقي العام.")
 
     # ── 📊 الحصر التقريبي للكميات — APPROXIMATE QUANTITY SURVEY ──────────────
     # 1. Slab Quantities (السقف)
@@ -12048,16 +12702,34 @@ def render():
     ftgs_sand_val       = (ftgs_conc_rc_val + ftgs_conc_pc_val) * 0.40
     ftgs_ratio_val      = (ftgs_steel_kg_val / ftgs_conc_rc_val) if ftgs_conc_rc_val > 0 else 0.0
 
-    # 4. Grand Total Quantities (السقف + الأعمدة + الأساسات)
-    grand_conc_rc_val   = slab_conc_val + cols_conc_tot_val + ftgs_conc_rc_val
+    # 3b. Ground Beams Quantities (السملات والميدات الأرضية)
+    gb_analysis_obj = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis")
+    gb_conc_rc_val  = 0.0
+    gb_steel_kg_val = 0.0
+    gb_dia_map      = {}
+    if gb_analysis_obj and "boq" in gb_analysis_obj:
+        gboq = gb_analysis_obj["boq"]
+        gb_conc_rc_val  = float(gboq.get("conc_vol_rc", 0.0))
+        gb_steel_kg_val = float(gboq.get("steel_kg_tot", 0.0))
+        gb_dia_map      = dict(gboq.get("dia_map", {}))
+
+    gb_steel_ton_val  = gb_steel_kg_val / 1000.0
+    gb_cement_ton     = (gb_conc_rc_val * 350.0) / 1000.0
+    gb_cement_bags    = int(round(gb_cement_ton * 1000.0 / 50.0))
+    gb_gravel_val     = gb_conc_rc_val * 0.80
+    gb_sand_val       = gb_conc_rc_val * 0.40
+    gb_ratio_val      = (gb_steel_kg_val / gb_conc_rc_val) if gb_conc_rc_val > 0 else 0.0
+
+    # 4. Grand Total Quantities (السقف + الأعمدة + الأساسات + السملات)
+    grand_conc_rc_val   = slab_conc_val + cols_conc_tot_val + ftgs_conc_rc_val + gb_conc_rc_val
     grand_conc_pc_val   = ftgs_conc_pc_val
     grand_conc_all_val  = grand_conc_rc_val + grand_conc_pc_val
-    grand_steel_kg_val  = slab_steel_kg + cols_steel_kg_tot_val + ftgs_steel_kg_val
-    grand_steel_ton_val = slab_steel_ton + cols_steel_ton_tot_val + ftgs_steel_ton_val
-    grand_cement_ton    = slab_cement_ton + cols_cement_tot_ton + ftgs_cement_ton
-    grand_cement_bags   = slab_cement_bags + cols_cement_tot_bags + ftgs_cement_bags
-    grand_gravel_val    = slab_gravel_val + cols_gravel_tot_val + ftgs_gravel_val
-    grand_sand_val      = slab_sand_val + cols_sand_tot_val + ftgs_sand_val
+    grand_steel_kg_val  = slab_steel_kg + cols_steel_kg_tot_val + ftgs_steel_kg_val + gb_steel_kg_val
+    grand_steel_ton_val = slab_steel_ton + cols_steel_ton_tot_val + ftgs_steel_ton_val + gb_steel_ton_val
+    grand_cement_ton    = slab_cement_ton + cols_cement_tot_ton + ftgs_cement_ton + gb_cement_ton
+    grand_cement_bags   = slab_cement_bags + cols_cement_tot_bags + ftgs_cement_bags + gb_cement_bags
+    grand_gravel_val    = slab_gravel_val + cols_gravel_tot_val + ftgs_gravel_val + gb_gravel_val
+    grand_sand_val      = slab_sand_val + cols_sand_tot_val + ftgs_sand_val + gb_sand_val
     grand_ratio_val     = (grand_steel_kg_val / grand_conc_rc_val) if grand_conc_rc_val > 0 else 0.0
 
     # 5. Detailed Diameter Breakdown (Slab, Columns & Foundations)
@@ -12102,16 +12774,17 @@ def render():
                 cols_dia_map[phi_st]["weight_kg"] += wt_st_bld
 
     all_dias_set.update(ftg_dia_map.keys())
+    all_dias_set.update(gb_dia_map.keys())
 
     with st.expander("📊 Approximate Quantity Survey (الحصر التقريبي للكميات)", expanded=False):
         st.markdown(
             f"""
             <div style="background:#f8fafc; border-left:4px solid #1e40af; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
                 <div style="font-size:1.0rem; font-weight:800; color:#1e3a8a;">
-                    📋 جدول الحصر الشامل لكميات ومواد السقف والأعمدة والأساسات والإجمالي الكلي للمبنى:
+                    📋 جدول الحصر الشامل لكميات ومواد السقف والأعمدة والأساسات والسملات والإجمالي الكلي للمبنى:
                 </div>
                 <div style="font-size:0.9rem; color:#475569; margin-top:3px;">
-                    حصر تفصيلي شامل للخرسانة المسلحة والعادية، وحديد التسليح (لكل قطر وإجمالي)، والأسمنت، والزلط، والرمل لسقف البلاطة اللاكمرية، وأعمدة المبنى ({num_floors} طوابق)، وأساسات المبنى بالكامل (القواعد المنفصلة والمشتركة).
+                    حصر تفصيلي شامل للخرسانة المسلحة والعادية، وحديد التسليح (لكل قطر وإجمالي)، والأسمنت، والزلط، والرمل لسقف البلاطة اللاكمرية، وأعمدة المبنى ({num_floors} طوابق)، وأساسات المبنى بالكامل (القواعد المنفصلة والمشتركة)، وسملات الربط الأرضية (Ground Beams).
                 </div>
             </div>
             """,
@@ -12137,7 +12810,7 @@ def render():
                 <div style="background:#f5f3ff; border:1.5px solid #c4b5fd; border-radius:8px; padding:10px 14px; text-align:center;">
                     <div style="font-size:13px; font-weight:600; color:#6d28d9; margin-bottom:4px;">إجمالي وزن حديد التسليح</div>
                     <div style="font-size:20px; font-weight:800; color:#5b21b6;">{grand_steel_ton_val:.3f} Ton</div>
-                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">سقف: {slab_steel_ton:.2f}t │ أعمدة: {cols_steel_ton_tot_val:.2f}t │ أساسات: {ftgs_steel_ton_val:.2f}t</div>
+                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">سقف: {slab_steel_ton:.2f}t │ أعمدة: {cols_steel_ton_tot_val:.2f}t │ أساسات: {ftgs_steel_ton_val:.2f}t │ سملات: {gb_steel_ton_val:.2f}t</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -12191,15 +12864,17 @@ def render():
                 "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_conc_val:.2f} m³",
                 f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_conc_tot_val:.2f} m³",
                 "أساسات المبنى (Foundations)": f"{ftgs_conc_rc_val:.2f} m³",
+                "سملات وميدات (Ground Beams)": f"{gb_conc_rc_val:.2f} m³",
                 "الإجمالي الشامل (Grand Total)": f"{grand_conc_rc_val:.2f} m³",
                 "الوحدة (Unit)": "متر مكعب (m³)",
-                "الملاحظات والمواصفات (Notes & Specs)": f"مسطح السقف الصافي {slab_area_val:.1f} m² + كامل الأعمدة ({tot_active_cols} عمود) + القواعد المسلحة",
+                "الملاحظات والمواصفات (Notes & Specs)": f"مسطح السقف الصافي {slab_area_val:.1f} m² + كامل الأعمدة ({tot_active_cols} عمود) + القواعد المسلحة + السملات الأرضية",
             },
             {
                 "البند / المكون الإنشائي (Item / Material)": "2. حجم الخرسانة العادية (Plain Concrete P.C.)",
                 "سقف البلاطة اللاكمرية (Flat Slab)": "—",
                 f"أعمدة المبنى ({num_floors} طوابق)": "—",
                 "أساسات المبنى (Foundations)": f"{ftgs_conc_pc_val:.2f} m³",
+                "سملات وميدات (Ground Beams)": "—",
                 "الإجمالي الشامل (Grand Total)": f"{grand_conc_pc_val:.2f} m³",
                 "الوحدة (Unit)": "متر مكعب (m³)",
                 "الملاحظات والمواصفات (Notes & Specs)": "فرشة نظافة بسمك 20 سم ورفرفة 20 سم أسفل كامل القواعد",
@@ -12209,15 +12884,17 @@ def render():
                 "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
                 f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
                 "أساسات المبنى (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
+                "سملات وميدات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
                 "الإجمالي الشامل (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
                 "الوحدة (Unit)": "طن (Ton) / كجم (kg)",
-                "الملاحظات والمواصفات (Notes & Specs)": "شامل شبكات السقف والإضافي + حديد الأعمدة والكانات + تسليح القواعد المنفصلة والمشتركة",
+                "الملاحظات والمواصفات (Notes & Specs)": "شامل شبكات السقف والإضافي + حديد الأعمدة والكانات + تسليح القواعد المنفصلة والمشتركة والشدادات والسملات",
             },
             {
                 "البند / المكون الإنشائي (Item / Material)": "4. كمية الأسمنت البورتلاندي (Portland Cement)",
                 "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_cement_ton:.2f} Ton ({slab_cement_bags:,} شكارة)",
                 f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_cement_tot_ton:.2f} Ton ({cols_cement_tot_bags:,} شكارة)",
                 "أساسات المبنى (Foundations)": f"{ftgs_cement_ton:.2f} Ton ({ftgs_cement_bags:,} شكارة)",
+                "سملات وميدات (Ground Beams)": f"{gb_cement_ton:.2f} Ton ({gb_cement_bags:,} شكارة)",
                 "الإجمالي الشامل (Grand Total)": f"{grand_cement_ton:.2f} Ton ({grand_cement_bags:,} شكارة)",
                 "الوحدة (Unit)": "طن (Ton) / شكارة",
                 "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 350 كجم/م³ للمسلحة (7 شكاير) و 250 كجم/م³ للعادية (5 شكاير)",
@@ -12227,6 +12904,7 @@ def render():
                 "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_gravel_val:.2f} m³",
                 f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_gravel_tot_val:.2f} m³",
                 "أساسات المبنى (Foundations)": f"{ftgs_gravel_val:.2f} m³",
+                "سملات وميدات (Ground Beams)": f"{gb_gravel_val:.2f} m³",
                 "الإجمالي الشامل (Grand Total)": f"{grand_gravel_val:.2f} m³",
                 "الوحدة (Unit)": "متر مكعب (m³)",
                 "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.80 m³ زلط متدرج ونظيف لكل 1.0 m³ خرسانة (مسلحة وعادية)",
@@ -12236,6 +12914,7 @@ def render():
                 "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_sand_val:.2f} m³",
                 f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_sand_tot_val:.2f} m³",
                 "أساسات المبنى (Foundations)": f"{ftgs_sand_val:.2f} m³",
+                "سملات وميدات (Ground Beams)": f"{gb_sand_val:.2f} m³",
                 "الإجمالي الشامل (Grand Total)": f"{grand_sand_val:.2f} m³",
                 "الوحدة (Unit)": "متر مكعب (m³)",
                 "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.40 m³ رمل حرش نظيف لكل 1.0 m³ خرسانة (نصف حجم الزلط)",
@@ -12245,6 +12924,7 @@ def render():
                 "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_ratio_val:.1f} kg/m³",
                 f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_ratio_val:.1f} kg/m³",
                 "أساسات المبنى (Foundations)": f"{ftgs_ratio_val:.1f} kg/m³",
+                "سملات وميدات (Ground Beams)": f"{gb_ratio_val:.1f} kg/m³",
                 "الإجمالي الشامل (Grand Total)": f"{grand_ratio_val:.1f} kg/m³",
                 "الوحدة (Unit)": "كجم / م³ خرسانة مسلحة",
                 "الملاحظات والمواصفات (Notes & Specs)": "متوسط استهلاك الحديد المسلح لكافة عناصر المبنى",
@@ -12292,7 +12972,9 @@ def render():
             c_ton = c_kg / 1000.0
             f_kg = ftg_dia_map.get(d, {}).get("weight_kg", 0.0)
             f_ton = f_kg / 1000.0
-            t_kg = s_kg + c_kg + f_kg
+            gb_kg = gb_dia_map.get(d, {}).get("weight_kg", 0.0)
+            gb_ton = gb_kg / 1000.0
+            t_kg = s_kg + c_kg + f_kg + gb_kg
             t_ton = t_kg / 1000.0
             pct = (t_kg / max(0.001, grand_steel_kg_val)) * 100.0
 
@@ -12303,6 +12985,8 @@ def render():
                 sources_list.append(f"الأعمدة: {cols_dia_map[d].get('apps', '—')}")
             if f_kg > 0:
                 sources_list.append(f"الأساسات: {ftg_dia_map[d].get('apps', '—')}")
+            if gb_kg > 0:
+                sources_list.append(f"السملات: {gb_dia_map[d].get('apps', '—')}")
 
             dia_table_rows.append({
                 "قطر السيخ Φ (Bar Dia)": f"Φ {d} mm",
@@ -12310,6 +12994,7 @@ def render():
                 "حديد السقف (Slab Steel)": f"{s_ton:.3f} Ton ({s_kg:,.1f} kg)" if s_kg > 0 else "—",
                 f"حديد الأعمدة ({num_floors}F)": f"{c_ton:.3f} Ton ({c_kg:,.1f} kg)" if c_kg > 0 else "—",
                 "حديد الأساسات (Foundations)": f"{f_ton:.3f} Ton ({f_kg:,.1f} kg)" if f_kg > 0 else "—",
+                "حديد السملات (Ground Beams)": f"{gb_ton:.3f} Ton ({gb_kg:,.1f} kg)" if gb_kg > 0 else "—",
                 "الإجمالي الكلي (Grand Total)": f"{t_ton:.3f} Ton ({t_kg:,.1f} kg)",
                 "النسبة (%)": f"{pct:.1f} %",
                 "مواقع الاستخدام في المشروع (Applications)": " │ ".join(sources_list) if sources_list else "—",
@@ -12321,6 +13006,7 @@ def render():
             "حديد السقف (Slab Steel)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
             f"حديد الأعمدة ({num_floors}F)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
             "حديد الأساسات (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
+            "حديد السملات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
             "الإجمالي الكلي (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
             "النسبة (%)": "100.0 %",
             "مواقع الاستخدام في المشروع (Applications)": f"متوسط استهلاك المشروع بالكامل: {grand_ratio_val:.1f} kg/m³ خرسانة مسلحة",
@@ -12363,6 +13049,7 @@ def render():
                         mode="M11", col_w_cm=bc_s, col_d_cm=tc_s,
                         removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
                         top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
+                        col_transforms=_col_transforms, edge_columns=_edge_columns,
                     )
                     _buf = io.BytesIO()
                     _fig_m11_rep.savefig(_buf, format="png", bbox_inches="tight", dpi=180)
@@ -12376,6 +13063,7 @@ def render():
                         mode="M22", col_w_cm=bc_s, col_d_cm=tc_s,
                         removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
                         top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
+                        col_transforms=_col_transforms, edge_columns=_edge_columns,
                     )
                     _buf = io.BytesIO()
                     _fig_m22_rep.savefig(_buf, format="png", bbox_inches="tight", dpi=180)

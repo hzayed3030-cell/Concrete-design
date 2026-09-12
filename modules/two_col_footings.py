@@ -22,6 +22,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+from matplotlib.lines import Line2D
 from modules import settings as S
 from modules.table_styler import render_styled_table
 
@@ -1100,22 +1101,61 @@ def classify_and_design_building_foundations(
             P2u = float(c2.get("pu_tot", 120.0))
 
             m9_in = dict(DEFAULTS_M9)
+            strap_b_val = 40.0
+            strap_D_val = max(80.0, float(round(S_m * 100.0 / 5.0, -1)))
+            L1_ov_val = max(1.5, round(math.sqrt(P1u / (1.5 * q_all_net * 10.0)) * 1.15, 2))
+            stirrup_per_m_val = 5.0
+            stirrup_dia_val = 10.0
+
             m9_in.update({
                 "S": max(2.0, S_m), "edge_clearance": 0.0,
                 "a1": float(c1.get("tc", col_c_dim)), "b1": float(c1.get("bc", col_b_dim)),
                 "a2": float(c2.get("tc", col_c_dim)), "b2": float(c2.get("bc", col_b_dim)),
                 "P1_u": P1u, "P2_u": P2u, "col_weight_factor": 1.0,
                 "q_all_net": q_all_net, "fcu": fcu, "fy": fy, "t_pc": 10.0,
-                "strap_b": 40.0,
-                "L1_override": max(1.5, round(math.sqrt(P1u / (1.5 * q_all_net * 10.0)) * 1.15, 2)),
-                "strap_D": max(80.0, round(S_m * 100.0 / 5.0, -1)),
+                "strap_b": strap_b_val,
+                "L1_override": L1_ov_val,
+                "strap_D": strap_D_val,
+                "stirrup_per_m": stirrup_per_m_val,
+                "stirrup_dia": stirrup_dia_val,
             })
-            res9 = calc_m9(m9_in)
+
+            # Automated Convergence Loop for Safe Edge Strap Footing & Beam (ECP 203)
+            res9 = None
+            for _iter_m9 in range(30):
+                res9 = calc_m9(m9_in)
+                q1_ok = res9.get("q_act1", 0.0) <= q_all_net + 1e-4
+                q2_ok = res9.get("q_act2", 0.0) <= q_all_net + 1e-4
+                shear_max_ok = res9.get("shear_max_ok", True)
+                stirrups_ok = res9.get("stirrups_shear_ok", True)
+
+                if q1_ok and q2_ok and shear_max_ok and stirrups_ok:
+                    break
+
+                # 1. Soil contact pressure adjustment on exterior footing
+                if not q1_ok:
+                    q_ratio = math.sqrt(max(1.01, res9["q_act1"] / (q_all_net * 0.98)))
+                    m9_in["L1_override"] = round(max(m9_in["L1_override"] * q_ratio, m9_in["L1_override"] + 0.05), 2)
+                    continue
+
+                # 2. Maximum shear stress exceeded -> increase strap depth D
+                if not shear_max_ok:
+                    m9_in["strap_D"] = float(round(m9_in["strap_D"] + 10.0, -1))
+                    continue
+
+                # 3. Stirrups capacity deficit -> increase stirrups up to 8/m, then increase depth
+                if not stirrups_ok:
+                    if m9_in["stirrup_per_m"] < 8.0:
+                        m9_in["stirrup_per_m"] += 1.0
+                    else:
+                        m9_in["strap_D"] = float(round(m9_in["strap_D"] + 10.0, -1))
+                        m9_in["stirrup_per_m"] = 5.0
+                    continue
 
             t1_val = res9.get("t1_cm", res9.get("t1", 60.0))
             t2_val = res9.get("t2_cm", res9.get("t2", 60.0))
             sb_val = m9_in.get("strap_b", 40.0)
-            sD_val = res9.get("sD_cm", res9.get("strap_D", 100.0))
+            sD_val = res9.get("sD_cm", res9.get("strap_D", m9_in.get("strap_D", 100.0)))
 
             edge_strap_footings.append({
                 "name": f"SF-{len(edge_strap_footings)+1}",
@@ -1129,7 +1169,7 @@ def classify_and_design_building_foundations(
                 "strap_b": sb_val, "strap_D": sD_val,
                 "direction": ov_dir,
                 "q_act1": res9["q_act1"], "q_act2": res9["q_act2"],
-                "status": "✅ Safe" if (res9["q_act1"] <= q_all_net and res9["q_act2"] <= q_all_net) else "⚠️ Review",
+                "status": "✅ Safe" if (res9["q_act1"] <= q_all_net + 1e-4 and res9["q_act2"] <= q_all_net + 1e-4 and res9.get("shear_max_ok", True) and res9.get("stirrups_shear_ok", True)) else "⚠️ Review",
                 "calc_res": res9,
             })
             assigned_ids.add(c1["id"])
@@ -1176,6 +1216,27 @@ def classify_and_design_building_foundations(
             m10_in.update(rec)
             res10 = calc_m10(m10_in)
 
+            # Auto-safety convergence loop for Module 10
+            for _iter_m10 in range(15):
+                q1_ok = res10.get("q_act1", 0.0) <= q_all_net + 1e-4
+                q2_ok = res10.get("q_act2", 0.0) <= q_all_net + 1e-4
+                shear_max_ok = res10.get("shear_max_ok", True)
+                stirrups_ok = res10.get("stirrups_shear_ok", True)
+
+                if q1_ok and q2_ok and shear_max_ok and stirrups_ok:
+                    break
+
+                if not shear_max_ok or not stirrups_ok:
+                    m10_in["strap_D"] = float(round(m10_in.get("strap_D", rec.get("strap_D", 100.0)) + 10.0, -1))
+                    res10 = calc_m10(m10_in)
+                    continue
+
+                if not q1_ok:
+                    m10_in["L1x"] = round(m10_in.get("L1x", rec.get("L1x", 2.0)) + 0.10, 2)
+                    m10_in["L1y"] = round(m10_in.get("L1y", rec.get("L1y", 2.0)) + 0.10, 2)
+                    res10 = calc_m10(m10_in)
+                    continue
+
             corner_strap_footings.append({
                 "name": f"DSF-{len(corner_strap_footings)+1}",
                 "model_name": f"DSF-{len(corner_strap_footings)+1} (شداد ركن مائل)",
@@ -1183,11 +1244,11 @@ def classify_and_design_building_foundations(
                 "col1": c1, "col2": c2,
                 "supported_cols": f"{c1['id']} (ركن) + {c2['id']} (داخلي)",
                 "P1u": P1u, "P2u": P2u, "S_m": S_m, "theta_deg": math.degrees(theta),
-                "L1x": rec["L1x"], "L1y": rec["L1y"], "t1": rec["t1"],
+                "L1x": m10_in.get("L1x", rec["L1x"]), "L1y": m10_in.get("L1y", rec["L1y"]), "t1": rec["t1"],
                 "L2x": rec["L2x"], "L2y": rec["L2y"], "t2": rec["t2"],
-                "strap_b": 40.0, "strap_D": rec["strap_D"],
+                "strap_b": 40.0, "strap_D": m10_in.get("strap_D", rec["strap_D"]),
                 "q_act1": res10["q_act1"], "q_act2": res10["q_act2"],
-                "status": "✅ Safe" if (res10["q_act1"] <= q_all_net and res10["q_act2"] <= q_all_net) else "⚠️ Review",
+                "status": "✅ Safe" if (res10["q_act1"] <= q_all_net + 1e-4 and res10["q_act2"] <= q_all_net + 1e-4 and res10.get("shear_max_ok", True) and res10.get("stirrups_shear_ok", True)) else "⚠️ Review",
                 "calc_res": res10,
                 "rec": rec,
             })
@@ -1625,12 +1686,15 @@ def draw_comprehensive_foundation_sketch(
     active_columns: list,
     foundation_res: dict,
     title: str = "ECP 203 — Comprehensive Building Foundations Layout Plan & Sketch",
+    ground_beams: list = None,
+    edge_columns: dict = None,
 ):
     """
     Renders comprehensive 2D foundation plan sketch with distinct color-coding:
     - Soft Sky Blue: Isolated Footings (Module 3)
     - Light Green: Combined Footings (Module 8)
-    - Warm Amber/Orange: Strap Footings & Beams (Module 9 & 10)
+    - Warm Amber/Orange: Strap Footings & Beams (Module 9 & 10) tagged as ST1, ST2...
+    - Royal Indigo/Blue: Ground Beams / Tie Beams (Module 11) tagged as B1, B2, B3...
     """
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "sans-serif"]
     fig, ax = plt.subplots(figsize=(16, 13), dpi=160, facecolor="#ffffff")
@@ -1708,44 +1772,52 @@ def draw_comprehensive_foundation_sketch(
         ax.add_patch(cf_rect)
         ax.text(cf_x0 + 0.12, cf_y0 + cf_h - 0.18, cf["name"], color="#15803d", fontweight="bold", fontsize=10, zorder=5)
 
-    # 3. Draw Edge Strap Footings (Warm Amber & Orange)
-    for sf in foundation_res.get("edge_strap_footings", []):
+    # 3. Draw Edge Strap Footings & Beams (Warm Amber & Orange, Tagged ST1, ST2...)
+    edge_straps = foundation_res.get("edge_strap_footings", [])
+    for idx, sf in enumerate(edge_straps, start=1):
         c1 = sf["col1"]
         c2 = sf["col2"]
         L1, B1 = sf["L1"], sf["B1"]
         L2, B2 = sf["L2"], sf["B2"]
         sb_w = float(sf.get("strap_b", 40.0)) / 100.0
+        st_tag = f"ST{idx}"
 
         r1 = patches.Rectangle((c1["x"] - L1/2.0, c1["y"] - B1/2.0), L1, B1, facecolor="#fed7aa", edgecolor="#ea580c", lw=2.0, alpha=0.85, zorder=2)
         ax.add_patch(r1)
-        ax.text(c1["x"] - L1/2.0 + 0.08, c1["y"] - B1/2.0 + 0.08, f"{sf['name']}-F1", color="#9a3412", fontweight="bold", fontsize=8.5, zorder=4)
+        ax.text(c1["x"] - L1/2.0 + 0.08, c1["y"] - B1/2.0 + 0.08, f"{sf.get('name', st_tag)}-F1", color="#9a3412", fontweight="bold", fontsize=8.5, zorder=4)
 
         r2 = patches.Rectangle((c2["x"] - L2/2.0, c2["y"] - B2/2.0), L2, B2, facecolor="#fed7aa", edgecolor="#ea580c", lw=2.0, alpha=0.85, zorder=2)
         ax.add_patch(r2)
-        ax.text(c2["x"] - L2/2.0 + 0.08, c2["y"] - B2/2.0 + 0.08, f"{sf['name']}-F2", color="#9a3412", fontweight="bold", fontsize=8.5, zorder=4)
+        ax.text(c2["x"] - L2/2.0 + 0.08, c2["y"] - B2/2.0 + 0.08, f"{sf.get('name', st_tag)}-F2", color="#9a3412", fontweight="bold", fontsize=8.5, zorder=4)
 
         if abs(c2["x"] - c1["x"]) >= abs(c2["y"] - c1["y"]):
             bx0 = min(c1["x"], c2["x"])
             bw = abs(c2["x"] - c1["x"])
             by0 = c1["y"] - sb_w / 2.0
-            r_beam = patches.Rectangle((bx0, by0), bw, sb_w, facecolor="#fdba74", edgecolor="#c2410c", hatch="///", lw=2.0, alpha=0.9, zorder=4)
+            r_beam = patches.Rectangle((bx0, by0), bw, sb_w, facecolor="#fdba74", edgecolor="#c2410c", hatch="///", lw=2.2, alpha=0.92, zorder=4)
             ax.add_patch(r_beam)
-            ax.text(bx0 + bw/2.0, by0 + sb_w + 0.06, f"Strap Beam {int(sf['strap_b'])}×{int(sf['strap_D'])}", color="#9a3412", fontsize=8.5, fontweight="bold", ha="center", va="bottom", zorder=6)
+            ax.text(bx0 + bw/2.0, by0 + sb_w + 0.06, f"★ {st_tag} (Strap {int(sf['strap_b'])}×{int(sf['strap_D'])})",
+                    color="#9a3412", fontsize=8.5, fontweight="bold", ha="center", va="bottom", zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.12", fc="#fff7ed", ec="#ea580c", lw=0.9, alpha=0.9))
         else:
             by0 = min(c1["y"], c2["y"])
             bh = abs(c2["y"] - c1["y"])
             bx0 = c1["x"] - sb_w / 2.0
-            r_beam = patches.Rectangle((bx0, by0), sb_w, bh, facecolor="#fdba74", edgecolor="#c2410c", hatch="///", lw=2.0, alpha=0.9, zorder=4)
+            r_beam = patches.Rectangle((bx0, by0), sb_w, bh, facecolor="#fdba74", edgecolor="#c2410c", hatch="///", lw=2.2, alpha=0.92, zorder=4)
             ax.add_patch(r_beam)
-            ax.text(bx0 + sb_w + 0.06, by0 + bh/2.0, f"Strap Beam {int(sf['strap_b'])}×{int(sf['strap_D'])}", color="#9a3412", fontsize=8.5, fontweight="bold", ha="left", va="center", rotation=90, zorder=6)
+            ax.text(bx0 + sb_w + 0.06, by0 + bh/2.0, f"★ {st_tag} (Strap {int(sf['strap_b'])}×{int(sf['strap_D'])})",
+                    color="#9a3412", fontsize=8.5, fontweight="bold", ha="left", va="center", rotation=90, zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.12", fc="#fff7ed", ec="#ea580c", lw=0.9, alpha=0.9))
 
-    # 4. Draw Corner Diagonal Strap Footings (Warm Amber & Diagonal Orange Beam)
-    for dsf in foundation_res.get("corner_strap_footings", []):
+    # 4. Draw Corner Diagonal Strap Footings & Beams (Warm Amber, Tagged ST...)
+    corner_straps = foundation_res.get("corner_strap_footings", [])
+    for idx, dsf in enumerate(corner_straps, start=len(edge_straps) + 1):
         c1 = dsf["col1"]
         c2 = dsf["col2"]
         L1x, L1y = dsf["L1x"], dsf["L1y"]
         L2x, L2y = dsf["L2x"], dsf["L2y"]
         sb_w = float(dsf.get("strap_b", 40.0)) / 100.0
+        st_tag = f"ST{idx}"
 
         r1 = patches.Rectangle((c1["x"] - L1x/2.0, c1["y"] - L1y/2.0), L1x, L1y, facecolor="#fed7aa", edgecolor="#ea580c", lw=2.0, alpha=0.85, zorder=2)
         ax.add_patch(r1)
@@ -1763,7 +1835,7 @@ def draw_comprehensive_foundation_sketch(
         poly = patches.Polygon([
             (c1["x"] + nx, c1["y"] + ny), (c2["x"] + nx, c2["y"] + ny),
             (c2["x"] - nx, c2["y"] - ny), (c1["x"] - nx, c1["y"] - ny)
-        ], facecolor="#fdba74", edgecolor="#c2410c", hatch="///", lw=2.0, alpha=0.9, zorder=4)
+        ], facecolor="#fdba74", edgecolor="#c2410c", hatch="///", lw=2.2, alpha=0.92, zorder=4)
         ax.add_patch(poly)
 
         mid_x = (c1["x"] + c2["x"]) / 2.0
@@ -1773,9 +1845,39 @@ def draw_comprehensive_foundation_sketch(
             rot_deg -= 180
         elif rot_deg < -90:
             rot_deg += 180
-        ax.text(mid_x, mid_y, f"Diagonal Strap {int(dsf['strap_b'])}×{int(dsf['strap_D'])}",
+        ax.text(mid_x, mid_y, f"★ {st_tag} (Diag Strap {int(dsf['strap_b'])}×{int(dsf['strap_D'])})",
                 color="#9a3412", fontsize=8.5, fontweight="bold",
-                rotation=rot_deg, ha="center", va="bottom", zorder=6)
+                rotation=rot_deg, ha="center", va="bottom", zorder=6,
+                bbox=dict(boxstyle="round,pad=0.12", fc="#fff7ed", ec="#ea580c", lw=0.9, alpha=0.9))
+
+    # 4b. Draw Ground Beams (Distinct Royal Indigo/Blue Color & Marked B1, B2, B3)
+    gb_list = ground_beams if ground_beams is not None else foundation_res.get("ground_beams", [])
+    for gb in gb_list:
+        c1 = gb["col1"]
+        c2 = gb["col2"]
+        gb_w = float(gb.get("b_cm", 25.0)) / 100.0
+        mark = gb.get("tag", gb.get("model_mark", "B1"))
+        b_val = int(gb.get("b_cm", 25.0))
+        t_val = int(gb.get("exec_t_cm", gb.get("t_calc", 60.0)))
+
+        if abs(c2["x"] - c1["x"]) >= abs(c2["y"] - c1["y"]):
+            bx0 = min(c1["x"], c2["x"])
+            bw = abs(c2["x"] - c1["x"])
+            by0 = c1["y"] - gb_w / 2.0
+            r_gb = patches.Rectangle((bx0, by0), bw, gb_w, facecolor="#e0e7ff", edgecolor="#4338ca", lw=1.8, alpha=0.88, zorder=3)
+            ax.add_patch(r_gb)
+            ax.text(bx0 + bw/2.0, by0 + gb_w/2.0, f"{mark} ({b_val}×{t_val})",
+                    color="#312e81", fontsize=8.0, fontweight="bold", ha="center", va="center", zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.10", fc="#ffffff", ec="#6366f1", lw=0.8, alpha=0.85))
+        else:
+            by0 = min(c1["y"], c2["y"])
+            bh = abs(c2["y"] - c1["y"])
+            bx0 = c1["x"] - gb_w / 2.0
+            r_gb = patches.Rectangle((bx0, by0), gb_w, bh, facecolor="#e0e7ff", edgecolor="#4338ca", lw=1.8, alpha=0.88, zorder=3)
+            ax.add_patch(r_gb)
+            ax.text(bx0 + gb_w/2.0, by0 + bh/2.0, f"{mark} ({b_val}×{t_val})",
+                    color="#312e81", fontsize=8.0, fontweight="bold", ha="center", va="center", rotation=90, zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.10", fc="#ffffff", ec="#6366f1", lw=0.8, alpha=0.85))
 
     # 5. Draw Columns
     for c in active_columns:
@@ -1785,8 +1887,26 @@ def draw_comprehensive_foundation_sketch(
             w_m, h_m = float(c.get("tc", 50.0))/100.0, float(c.get("bc", 30.0))/100.0
         cx0 = c["x"] - w_m / 2.0
         cy0 = c["y"] - h_m / 2.0
-        col_rect = patches.Rectangle((cx0, cy0), w_m, h_m, facecolor="#334155", edgecolor="#0f172a", hatch="//", lw=1.5, zorder=7)
+
+        # Check if edge column
+        cid = c.get("id") or c.get("orig_id", "")
+        orig_id = c.get("orig_id", cid)
+        is_edge_c = False
+        raw_dir = ""
+        if edge_columns and isinstance(edge_columns, dict):
+            ed_info = edge_columns.get(cid) or edge_columns.get(orig_id) or {}
+            if isinstance(ed_info, dict) and ed_info.get("is_edge") == "Yes":
+                is_edge_c = True
+                raw_dir = ed_info.get("direction", "")
+        elif c.get("is_edge_col"):
+            is_edge_c = True
+            raw_dir = c.get("edge_direction", "")
+
+        col_rect = patches.Rectangle((cx0, cy0), w_m, h_m, facecolor="#334155", edgecolor="#0f172a", lw=1.5, zorder=7)
         ax.add_patch(col_rect)
+        if is_edge_c:
+            from modules.flat_slab import draw_neighbor_edge_strip
+            draw_neighbor_edge_strip(ax, cx0, cy0, w_m, h_m, raw_dir, zorder=8)
         ax.text(c["x"] + w_m/2.0 + 0.08, c["y"] + h_m/2.0 + 0.05, c["id"],
                 color="#0f172a", fontweight="bold", fontsize=9.5, zorder=9,
                 bbox=dict(boxstyle="round,pad=0.15", fc="#ffffff", ec="#64748b", alpha=0.9))
@@ -1804,10 +1924,12 @@ def draw_comprehensive_foundation_sketch(
         patches.Patch(facecolor="#bae6fd", edgecolor="#0284c7", lw=1.8, label=f"Isolated Footings (Module 3) — {_ar('قواعد منفصلة')}"),
         patches.Patch(facecolor="#bbf7d0", edgecolor="#15803d", linestyle="--", lw=2.2, label=f"Combined Footings (Module 8) — {_ar('قواعد مشتركة')}"),
         patches.Patch(facecolor="#fed7aa", edgecolor="#ea580c", lw=2.0, label=f"Strap Footings (Module 9 & 10) — {_ar('قواعد الشدادات')}"),
-        patches.Patch(facecolor="#fdba74", edgecolor="#c2410c", hatch="///", lw=2.0, label=f"Strap Beams — {_ar('كمرات الشداد (مستقيمة ومائلة)')}"),
+        patches.Patch(facecolor="#fdba74", edgecolor="#c2410c", hatch="///", lw=2.0, label=f"Strap Beams (ST1, ST2) — {_ar('شدادات الجار والركن')}"),
+        patches.Patch(facecolor="#e0e7ff", edgecolor="#4338ca", lw=1.8, label=f"Ground Beams (B1, B2, B3) — {_ar('سملات وميدات أرضية')}"),
+        Line2D([0], [0], color="#db2777", lw=3.2, label=f"Neighbor Edge Line — {_ar('حد الجار (خط بينك مهشر)')}"),
     ]
     ax.legend(handles=leg_handles, loc="upper center", bbox_to_anchor=(0.5, -0.04),
-              ncol=2, fontsize=10, frameon=True, facecolor="#ffffff")
+              ncol=3, fontsize=9.5, frameon=True, facecolor="#ffffff")
 
     ax.set_title(title, fontsize=14, fontweight="bold", color="#0f172a", pad=25)
     ax.set_xlim(x_bubble_center - 1.2, x_right_base + 1.2)
@@ -2030,8 +2152,8 @@ def _render_structural_tutorial():
     with st.expander("📚 Combined Footing Structural Tutorial (الدليل الإنشائي والتعليمي للقواعد المشتركة)", expanded=False, key="m7_tut_exp", on_change="rerun"):
         if st.session_state.get("m7_tut_exp", False):
             t1, t2 = st.tabs([
-                "📈 مخططات العزوم والسلوك الإنشائي (BMD & Structural Behavior)",
-                "🧱 قطاعات وتفاصيل التسليح الكاملة (Full 4-Layer Detailing)",
+                "📈 BMD & Structural Behavior (مخططات العزوم والسلوك الإنشائي)",
+                "🧱 Full 4-Layer Detailing (قطاعات وتفاصيل التسليح الكاملة)",
             ])
             with t1:
                 st.markdown("#### 🔍 السلوك الإنشائي ومخططات العزوم (Bending Moments & Mechanics)")
@@ -2075,10 +2197,10 @@ def render():
     st.markdown(
         """
         <style>
-        div[data-testid="stExpander"] details { padding: 8px 14px !important; margin-bottom: 8px !important; }
-        div[data-testid="stExpander"] details summary { padding: 6px 10px !important; }
-        div[data-testid="stExpander"] div[data-testid="stVerticalBlock"] { gap: 0.45rem !important; }
-        .stCaption { font-size: 11.5px !important; }
+        div[data-testid="stExpander"] details { padding: 4px 8px !important; margin-bottom: 4px !important; }
+        div[data-testid="stExpander"] details summary { padding: 5px 8px !important; }
+        div[data-testid="stExpander"] div[data-testid="stVerticalBlock"] { gap: 0.15rem !important; }
+        .stCaption { font-size: 9.5px !important; }
         </style>
         """,
         unsafe_allow_html=True,
@@ -2129,7 +2251,7 @@ def render():
                 st.rerun()
 
         # 2. Material & Soil Properties Expander
-        with st.expander("🌱 مدخلات التربة وخواص المواد والخرسانة (Soil & Material Properties)", expanded=True):
+        with st.expander("🌱 Soil & Material Properties (مدخلات التربة وخواص المواد والخرسانة)", expanded=True):
             mc1, mc2, mc3, mc4, mc5 = st.columns(5)
             with mc1:
                 q_net = S.number_input("q_all,net (kg/cm²)", "tcf_q_net", min_value=0.5, max_value=5.0, step=0.1)
@@ -2144,7 +2266,7 @@ def render():
                 Phi = S.selectbox("Main Rebar Φ (mm)", "tcf_Phi_index", options=[12, 16, 18, 22, 25])
 
         # 3. Governing Loads by Type Expander (Pu total int / edge / corner)
-        with st.expander("🔩 ردود الأفعال القصوى للأعمدة (Governing Column Loads from Module 1)", expanded=True):
+        with st.expander("🔩 Governing Column Loads from Module 1 (ردود الأفعال القصوى للأعمدة)", expanded=True):
             gc1, gc2, gc3, gc4 = st.columns(4)
             with gc1:
                 st.markdown("**🔹 عمود الركن (C₁)**")
@@ -2230,7 +2352,7 @@ def render():
             )
 
         # ── 6. FOUNDATION GENERAL LAYOUT PLAN ─────────────────────────────────
-        with st.expander("📐 المسقط الأفقي العام للقواعد وفحص التداخل (Foundation General Layout Plan)", expanded=False, key="m7_plan_exp", on_change="rerun"):
+        with st.expander("📐 Foundation General Layout Plan (المسقط الأفقي العام للقواعد وفحص التداخل)", expanded=False, key="m7_plan_exp", on_change="rerun"):
             if st.session_state.get("m7_plan_exp", False):
                 fig_plan = draw_foundation_layout_plan(cols_list, footings_map, overlap_res, combined_models)
                 st.pyplot(fig_plan, use_container_width=True)
@@ -2261,12 +2383,12 @@ def render():
 
         if has_overlap:
             tab_iso, tab_comb = st.tabs([
-                "🔹 تصميم القواعد المنفصلة (Isolated Footings)",
-                "🔸 تصميم القواعد المشتركة (Combined Footings)",
+                "🔹 Isolated Footings (تصميم القواعد المنفصلة)",
+                "🔸 Combined Footings (تصميم القواعد المشتركة)",
             ])
         else:
             tab_iso, = st.tabs([
-                "🔹 تصميم القواعد المنفصلة (Isolated Footings)",
+                "🔹 Isolated Footings (تصميم القواعد المنفصلة)",
             ])
 
         # ── TAB 1: UNIFIED FOOTINGS SCHEDULE (ISOLATED + COMBINED) ───────────
@@ -2335,7 +2457,7 @@ def render():
                     key="btn_dl_unified_csv_tcf",
                 )
 
-            with st.expander("🔍 تفاصيل التحققات الإنشائية والإجهادات (Detailed Stresses & Checks)", expanded=False):
+            with st.expander("🔍 Detailed Stresses & Checks (تفاصيل التحققات الإنشائية والإجهادات)", expanded=False):
                 for f in [F1, F2, F3]:
                     st.markdown(f"##### 📌 نموذج {f['model_name']} — {f['dims_str']}")
                     c_det1, c_det2, c_det3, c_det4 = st.columns(4)
@@ -2350,7 +2472,7 @@ def render():
             with tab_comb:
                 st.markdown("#### 🧱 تفاصيل وحسابات القواعد المشتركة الناتجة عن التداخل (Combined Footings Analysis)")
 
-                with st.expander("🔍 تفاصيل العزوم والتصميم الإنشائي للقواعد المشتركة (Bending & Details)", expanded=False):
+                with st.expander("🔍 Combined Footings Bending & Details (تفاصيل العزوم والتصميم الإنشائي للقواعد المشتركة)", expanded=False):
                     for cf in combined_models:
                         st.markdown(f"##### 🧱 نموذج {cf['name']} ({cf['supported_cols']}) — البحر S = {cf['S_m']} m")
                         cc1, cc2, cc3, cc4 = st.columns(4)

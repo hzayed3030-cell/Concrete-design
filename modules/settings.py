@@ -274,6 +274,31 @@ ECP_DEFAULTS: dict = {
     "m9_stirrup_per_m":  5,
     "m9_stirrup_spacing": 20,
     "m9_trans_bar_dia":  16,
+
+    # Module 12 – Brick & Plastering Survey (حصر أعمال الطوب والمحارة)
+    "module_12_brick_survey": {
+        "x_axes": [0.0, 4.0, 8.0],
+        "y_axes": [0.0, 3.0, 6.0],
+        "col_removed": [],
+        "col_dirs": {},
+        "col_shifted": {},
+        "wall_thickness": {},
+        "wall_removed": [],
+        "default_wall_height": 3.0,
+        "wall_heights": {},
+        "windows": {},
+        "doors": {},
+        "next_op_id": 1,
+        "window_types": [],
+        "door_types": [],
+        "brick_type": "الطوب الأحمر الطفلي",
+        "brick_size": "25×12×6",
+        "mortar_thickness_cm": 1.0,
+        "brick_custom_l": 25.0,
+        "brick_custom_w": 12.0,
+        "brick_custom_h": 6.0,
+    },
+
 }
 
 
@@ -537,12 +562,366 @@ get_default_ground_beam_state = get_default_module_11_state
 _M11_FALLBACK = get_default_module_11_state()
 
 
+def get_default_module_12_state() -> dict:
+    """
+    Factory returning canonical default schema for module_12_brick_survey.
+    Used for new project initialization and backward compatibility migrations.
+    """
+    return {
+        "x_axes": [0.0, 4.0, 8.0],
+        "y_axes": [0.0, 3.0, 6.0],
+        "col_removed": [],
+        "col_dirs": {},
+        "col_shifted": {},
+        "wall_thickness": {},
+        "wall_removed": [],
+        "default_wall_height": 3.0,
+        "wall_heights": {},
+        "windows": {},
+        "doors": {},
+        "next_op_id": 1,
+        # نماذج الشبابيك: [{id, label, w_cm, h_cm, sill_cm}, ...]
+        "window_types": [],
+        # نماذج الأبواب: [{id, label, w_cm, h_cm}, ...]
+        "door_types": [],
+        # حصر الطوب — BOQ only (لا يُستخدم في الحسابات الإنشائية)
+        "brick_type": "الطوب الأحمر الطفلي",
+        "brick_size": "25×12×6",
+        "mortar_thickness_cm": 1.0,
+        "brick_custom_l": 25.0,
+        "brick_custom_w": 12.0,
+        "brick_custom_h": 6.0,
+        # أوجه المحارة المحددة لكل حائط: {"i1,j1,i2,j2": ["أعلى" | "أسفل" | "يمين" | "يسار"]}
+        "plaster_faces": {},
+    }
+
+
+get_default_brick_survey_state = get_default_module_12_state
+_M12_FALLBACK = get_default_module_12_state()
+
+
+def _parse_m12_coord_tuple(val):
+    """Safely parse coordinates from tuple, list, or string format into an int tuple."""
+    if isinstance(val, (tuple, list)):
+        return tuple(int(x) for x in val)
+    if isinstance(val, str):
+        cleaned = val.strip("()[] \t\r\n")
+        if cleaned:
+            return tuple(int(x.strip()) for x in cleaned.split(",") if x.strip())
+    return None
+
+
+def _serialize_module_12_state(state: dict) -> dict:
+    """Convert Python set and tuple-keyed session state into JSON-serializable primitives."""
+    x_axes = [float(x) for x in state.get("m12_x_axes", [0.0, 4.0, 8.0])]
+    y_axes = [float(y) for y in state.get("m12_y_axes", [0.0, 3.0, 6.0])]
+
+    col_removed = []
+    for item in state.get("m12_col_removed", set()):
+        t = _parse_m12_coord_tuple(item)
+        if t and len(t) == 2:
+            col_removed.append(list(t))
+
+    col_dirs = {}
+    for k, v in state.get("m12_col_dirs", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 2:
+            col_dirs[f"{t[0]},{t[1]}"] = str(v)
+
+    col_shifted = {}
+    for k, v in state.get("m12_col_shifted", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 2:
+            col_shifted[f"{t[0]},{t[1]}"] = [float(v[0]), float(v[1])]
+
+    wall_thickness = {}
+    for k, v in state.get("m12_wall_thickness", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4:
+            wall_thickness[f"{t[0]},{t[1]},{t[2]},{t[3]}"] = int(v)
+
+    wall_removed = []
+    for item in state.get("m12_wall_removed", set()):
+        t = _parse_m12_coord_tuple(item)
+        if t and len(t) == 4:
+            wall_removed.append(list(t))
+
+    default_wall_height = float(state.get("m12_default_wall_height", 3.0))
+
+    wall_heights = {}
+    for k, v in state.get("m12_wall_heights", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4:
+            wall_heights[f"{t[0]},{t[1]},{t[2]},{t[3]}"] = float(v)
+
+    windows = {}
+    for k, win_list in state.get("m12_windows", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4 and isinstance(win_list, list):
+            clean_wins = []
+            for w in win_list:
+                wd = dict(w)
+                wd["id"] = str(wd.get("id", ""))
+                wd["name"] = str(wd.get("name", ""))
+                wd["type_label"] = str(wd.get("type_label", "W1"))
+                wd["w_m"] = float(wd.get("w_m", 1.0))
+                wd["h_m"] = float(wd.get("h_m", 1.2))
+                wd["pos_m"] = float(wd.get("pos_m", 0.0))
+                wd["sill_m"] = float(wd.get("sill_m", 0.9))
+                wd["removed"] = bool(wd.get("removed", False))
+                clean_wins.append(wd)
+            windows[f"{t[0]},{t[1]},{t[2]},{t[3]}"] = clean_wins
+
+    doors = {}
+    for k, door_list in state.get("m12_doors", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4 and isinstance(door_list, list):
+            clean_doors = []
+            for d in door_list:
+                dd = dict(d)
+                dd["id"] = str(dd.get("id", ""))
+                dd["name"] = str(dd.get("name", ""))
+                dd["type_label"] = str(dd.get("type_label", "D1"))
+                dd["w_m"] = float(dd.get("w_m", 0.9))
+                dd["h_m"] = float(dd.get("h_m", 2.1))
+                dd["pos_m"] = float(dd.get("pos_m", 0.0))
+                dd["leaf_dir"] = str(dd.get("leaf_dir", "أعلى"))
+                dd["hinge_dir"] = str(dd.get("hinge_dir", "يسار"))
+                dd["removed"] = bool(dd.get("removed", False))
+                clean_doors.append(dd)
+            doors[f"{t[0]},{t[1]},{t[2]},{t[3]}"] = clean_doors
+
+
+    next_op_id = int(state.get("m12_next_op_id", 1))
+
+    # نماذج الشبابيك والأبواب
+    window_types = []
+    for wt in state.get("m12_window_types", []):
+        window_types.append({
+            "id": str(wt.get("id", "")),
+            "label": str(wt.get("label", "")),
+            "w_cm": float(wt.get("w_cm", 100.0)),
+            "h_cm": float(wt.get("h_cm", 120.0)),
+            "sill_cm": float(wt.get("sill_cm", 90.0)),
+        })
+
+    door_types = []
+    for dt in state.get("m12_door_types", []):
+        door_types.append({
+            "id": str(dt.get("id", "")),
+            "label": str(dt.get("label", "")),
+            "w_cm": float(dt.get("w_cm", 90.0)),
+            "h_cm": float(dt.get("h_cm", 210.0)),
+        })
+
+    # بيانات الطوب — BOQ فقط
+    brick_type = str(state.get("m12_brick_type", "الطوب الأحمر الطفلي"))
+    brick_size = str(state.get("m12_brick_size", "25×12×6"))
+    mortar_thickness_cm = float(state.get("m12_mortar_thickness_cm", 1.0))
+    brick_custom_l = float(state.get("m12_brick_custom_l", 25.0))
+    brick_custom_w = float(state.get("m12_brick_custom_w", 12.0))
+    brick_custom_h = float(state.get("m12_brick_custom_h", 6.0))
+
+    plaster_faces = {}
+    for k, v in state.get("m12_plaster_faces", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4 and isinstance(v, (list, tuple, set)):
+            plaster_faces[f"{t[0]},{t[1]},{t[2]},{t[3]}"] = [str(face) for face in v]
+
+    return {
+        "x_axes": x_axes,
+        "y_axes": y_axes,
+        "col_removed": col_removed,
+        "col_dirs": col_dirs,
+        "col_shifted": col_shifted,
+        "wall_thickness": wall_thickness,
+        "wall_removed": wall_removed,
+        "default_wall_height": default_wall_height,
+        "wall_heights": wall_heights,
+        "windows": windows,
+        "doors": doors,
+        "next_op_id": next_op_id,
+        "window_types": window_types,
+        "door_types": door_types,
+        "brick_type": brick_type,
+        "brick_size": brick_size,
+        "mortar_thickness_cm": mortar_thickness_cm,
+        "brick_custom_l": brick_custom_l,
+        "brick_custom_w": brick_custom_w,
+        "brick_custom_h": brick_custom_h,
+        "plaster_faces": plaster_faces,
+    }
+
+
+
+def _deserialize_module_12_state(data: dict) -> dict:
+    """Convert JSON-stored dict back into tuple-keyed and set session state items."""
+    schema = get_default_module_12_state()
+    if not isinstance(data, dict):
+        data = dict(schema)
+
+    x_axes = [float(x) for x in data.get("x_axes", schema["x_axes"])]
+    y_axes = [float(y) for y in data.get("y_axes", schema["y_axes"])]
+    if len(x_axes) < 2:
+        x_axes = list(schema["x_axes"])
+    if len(y_axes) < 2:
+        y_axes = list(schema["y_axes"])
+
+    col_rem = set()
+    for item in data.get("col_removed", []):
+        t = _parse_m12_coord_tuple(item)
+        if t and len(t) == 2:
+            col_rem.add(t)
+
+    col_dirs = {}
+    for k, v in data.get("col_dirs", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 2:
+            col_dirs[t] = str(v)
+
+    col_shifted = {}
+    for k, v in data.get("col_shifted", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 2:
+            col_shifted[t] = (float(v[0]), float(v[1]))
+
+    wall_thick = {}
+    for k, v in data.get("wall_thickness", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4:
+            wall_thick[t] = int(v)
+
+    wall_rem = set()
+    for item in data.get("wall_removed", []):
+        t = _parse_m12_coord_tuple(item)
+        if t and len(t) == 4:
+            wall_rem.add(t)
+
+    def_h = float(data.get("default_wall_height", schema["default_wall_height"]))
+
+    wall_heights = {}
+    for k, v in data.get("wall_heights", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4:
+            wall_heights[t] = float(v)
+
+    windows = {}
+    for k, win_list in data.get("windows", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4 and isinstance(win_list, list):
+            windows[t] = [dict(w) for w in win_list]
+
+    doors = {}
+    for k, door_list in data.get("doors", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4 and isinstance(door_list, list):
+            doors[t] = [dict(d) for d in door_list]
+
+    next_op_id = int(data.get("next_op_id", 1))
+
+    # نماذج الشبابيك والأبواب
+    window_types = []
+    for wt in data.get("window_types", []):
+        if isinstance(wt, dict):
+            window_types.append({
+                "id": str(wt.get("id", "")),
+                "label": str(wt.get("label", "")),
+                "w_cm": float(wt.get("w_cm", 100.0)),
+                "h_cm": float(wt.get("h_cm", 120.0)),
+                "sill_cm": float(wt.get("sill_cm", 90.0)),
+            })
+
+    door_types = []
+    for dt in data.get("door_types", []):
+        if isinstance(dt, dict):
+            door_types.append({
+                "id": str(dt.get("id", "")),
+                "label": str(dt.get("label", "")),
+                "w_cm": float(dt.get("w_cm", 90.0)),
+                "h_cm": float(dt.get("h_cm", 210.0)),
+            })
+
+    # بيانات الطوب — BOQ فقط
+    brick_type = str(data.get("brick_type", schema.get("brick_type", "الطوب الأحمر الطفلي")))
+    brick_size = str(data.get("brick_size", schema.get("brick_size", "25×12×6")))
+    mortar_thickness_cm = float(data.get("mortar_thickness_cm", schema.get("mortar_thickness_cm", 1.0)))
+    brick_custom_l = float(data.get("brick_custom_l", schema.get("brick_custom_l", 25.0)))
+    brick_custom_w = float(data.get("brick_custom_w", schema.get("brick_custom_w", 12.0)))
+    brick_custom_h = float(data.get("brick_custom_h", schema.get("brick_custom_h", 6.0)))
+
+    plaster_faces = {}
+    for k, v in data.get("plaster_faces", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4 and isinstance(v, list):
+            plaster_faces[t] = [str(face) for face in v]
+
+    return {
+        "m12_x_axes": x_axes,
+        "m12_y_axes": y_axes,
+        "m12_col_removed": col_rem,
+        "m12_col_dirs": col_dirs,
+        "m12_col_shifted": col_shifted,
+        "m12_wall_thickness": wall_thick,
+        "m12_wall_removed": wall_rem,
+        "m12_default_wall_height": def_h,
+        "m12_wall_heights": wall_heights,
+        "m12_windows": windows,
+        "m12_doors": doors,
+        "m12_next_op_id": next_op_id,
+        "m12_window_types": window_types,
+        "m12_door_types": door_types,
+        "m12_brick_type": brick_type,
+        "m12_brick_size": brick_size,
+        "m12_mortar_thickness_cm": mortar_thickness_cm,
+        "m12_brick_custom_l": brick_custom_l,
+        "m12_brick_custom_w": brick_custom_w,
+        "m12_brick_custom_h": brick_custom_h,
+        "m12_plaster_faces": plaster_faces,
+    }
+
+
+
+def migrate_module_12_in_project_dict(pdata_dict: dict) -> bool:
+    """
+    Seamless migration patch for Module 12 (Brick & Plastering Survey):
+    Inspects if 'module_12_brick_survey' exists in project dictionary.
+    If missing, appends default schema.
+    Fills any missing keys if schema was updated.
+    Returns True if pdata_dict was modified.
+    """
+    if not isinstance(pdata_dict, dict):
+        return False
+
+    modified = False
+    schema = get_default_module_12_state()
+    nested = pdata_dict.get("module_12_brick_survey")
+
+    if not isinstance(nested, dict):
+        pdata_dict["module_12_brick_survey"] = dict(schema)
+        modified = True
+    else:
+        for k, v in schema.items():
+            if k not in nested:
+                nested[k] = v
+                modified = True
+
+        if not isinstance(nested.get("x_axes"), list) or len(nested.get("x_axes", [])) < 2:
+            nested["x_axes"] = schema["x_axes"]
+            modified = True
+        if not isinstance(nested.get("y_axes"), list) or len(nested.get("y_axes", [])) < 2:
+            nested["y_axes"] = schema["y_axes"]
+            modified = True
+
+    return modified
+
+
 def get_default_project_state(project_name: str = "", owner_name: str = "") -> dict:
     """Return fresh default project state with all module schemas initialized."""
     d = dict(ECP_DEFAULTS)
     d["module_9_strap_footing"] = get_default_module_9_state()
     d["module_10_diagonal_strap"] = get_default_module_10_state()
     d["module_11_ground_beam"] = get_default_module_11_state()
+    d["module_12_brick_survey"] = get_default_module_12_state()
     if project_name:
         d["apartment_name"] = project_name
         d["cs_project_name"] = project_name
@@ -842,6 +1221,10 @@ def load_profiles_data() -> dict:
         if migrate_module_11_in_project_dict(pdata_dict):
             modified = True
 
+        # ── Module 12 backward-compatibility migration ───────────────
+        if migrate_module_12_in_project_dict(pdata_dict):
+            modified = True
+
     if modified:
         save_profiles_data(data)
 
@@ -979,11 +1362,16 @@ def _clear_widget_cache():
         "nav_view",
         "in_module",
         "_app_session_started",
+        "selected_module_idx",
         "module_9_data",
         "module_10_data",
         "module_11_data",
+        "module_12_data",
     }
-    keys_to_del = [k for k in list(st.session_state.keys()) if k not in preserve_keys]
+    keys_to_del = [
+        k for k in list(st.session_state.keys())
+        if k not in preserve_keys and not k.startswith("m12_") and not k.startswith("_confirm_")
+    ]
     for k in keys_to_del:
         del st.session_state[k]
 
@@ -1099,6 +1487,63 @@ def _ensure_module11_state(cfg: dict | None = None) -> None:
     st.session_state["current_project"] = cfg
 
 
+def _clear_m12_session_keys() -> None:
+    """Clear all m12_* and module_12_data keys from st.session_state."""
+    for k in list(st.session_state.keys()):
+        if k.startswith("m12_") or k == "module_12_data":
+            del st.session_state[k]
+
+
+def _ensure_module12_state(cfg: dict | None = None) -> None:
+    """
+    Build/refresh session_state for Module 12 safely:
+    1. Inspects if 'module_12_brick_survey' exists in cfg, migrating if missing.
+    2. Populates session_state m12_* variables from the active project.
+    3. Keeps session_state['current_project'] and cfg synchronized.
+    """
+    if cfg is None:
+        cfg = st.session_state.get("cfg", {})
+
+    migrate_module_12_in_project_dict(cfg)
+
+    nested = cfg.get("module_12_brick_survey")
+    if not isinstance(nested, dict):
+        nested = get_default_module_12_state()
+        cfg["module_12_brick_survey"] = nested
+
+    deserialized = _deserialize_module_12_state(nested)
+    for k, v in deserialized.items():
+        st.session_state[k] = v
+
+    # Set axis count and inputs in session state so Streamlit widgets render correctly
+    st.session_state["m12_n_x"] = len(deserialized["m12_x_axes"])
+    st.session_state["m12_n_y"] = len(deserialized["m12_y_axes"])
+    for idx, xv in enumerate(deserialized["m12_x_axes"]):
+        st.session_state[f"m12_x_val_{idx}"] = float(xv)
+    for idx, yv in enumerate(deserialized["m12_y_axes"]):
+        st.session_state[f"m12_y_val_{idx}"] = float(yv)
+    st.session_state["m12_default_h_input"] = float(deserialized["m12_default_wall_height"])
+
+    st.session_state["module_12_data"] = nested
+    cfg["module_12_brick_survey"] = nested
+    st.session_state["current_project"] = cfg
+
+
+def reset_module_12_state(cfg: dict | None = None) -> None:
+    """
+    Reset Module 12 state to standard ECP defaults, clear session state and persist immediately.
+    """
+    if cfg is None:
+        cfg = st.session_state.get("cfg", {})
+    cfg["_m12_reset_v1_done"] = True
+    def_m12 = get_default_module_12_state()
+    _clear_m12_session_keys()
+    cfg["module_12_brick_survey"] = dict(def_m12)
+    st.session_state["module_12_data"] = dict(def_m12)
+    _ensure_module12_state(cfg)
+    save_settings()
+
+
 
 def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
     """Switch active profile, load its data into cfg, and clear widget session cache."""
@@ -1117,6 +1562,7 @@ def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
     new_cfg["module_9_strap_footing"] = get_default_module_9_state()
     new_cfg["module_10_diagonal_strap"] = get_default_module_10_state()
     new_cfg["module_11_ground_beam"] = get_default_module_11_state()
+    new_cfg["module_12_brick_survey"] = get_default_module_12_state()
     profile_cfg = profiles[profile_name].get("data", {})
     for k, v in profile_cfg.items():
         new_cfg[k] = v
@@ -1131,25 +1577,30 @@ def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
     migrate_module_9_in_project_dict(new_cfg)
     migrate_module_10_in_project_dict(new_cfg)
     migrate_module_11_in_project_dict(new_cfg)
+    migrate_module_12_in_project_dict(new_cfg)
 
     st.session_state["cfg"] = new_cfg
     st.session_state["current_project"] = new_cfg
     st.session_state["_settings_loaded_from_file"] = True
 
-    # Wipe old Module 9, 10 & 11 session data so the new project's values are loaded cleanly
+    # Wipe old Module 9, 10, 11 & 12 session data so the new project's values are loaded cleanly
     st.session_state.pop("module_9_data", None)
     st.session_state.pop("module_10_data", None)
     st.session_state.pop("module_11_data", None)
+    st.session_state.pop("module_12_data", None)
+    _clear_m12_session_keys()
     _ensure_module9_state(new_cfg)
     _ensure_module10_state(new_cfg)
     _ensure_module11_state(new_cfg)
+    _ensure_module12_state(new_cfg)
 
     if clear_cache:
         _clear_widget_cache()
-        # Re-inject Module 9, 10 & 11 state after cache wipe
+        # Re-inject Module 9, 10, 11 & 12 state after cache wipe
         _ensure_module9_state(new_cfg)
         _ensure_module10_state(new_cfg)
         _ensure_module11_state(new_cfg)
+        _ensure_module12_state(new_cfg)
 
 
 
@@ -1190,10 +1641,11 @@ def create_project(
     else:
         new_data = dict(ECP_DEFAULTS)
 
-    # Ensure clean isolated default schema for module_9_strap_footing & module_10_diagonal_strap & module_11_ground_beam
+    # Ensure clean isolated default schema for module_9_strap_footing & module_10_diagonal_strap & module_11_ground_beam & module_12_brick_survey
     migrate_module_9_in_project_dict(new_data)
     migrate_module_10_in_project_dict(new_data)
     migrate_module_11_in_project_dict(new_data)
+    migrate_module_12_in_project_dict(new_data)
 
     # Apply enabled_modules if provided or inherited
     if enabled_modules is not None and isinstance(enabled_modules, list):
@@ -1323,6 +1775,7 @@ ALL_MODULES = [
     {"idx": 7, "key": "strap_footing", "name": "🔗 Module 9: Reinforced Concrete Strap Footing (قواعد الشدادات - الجار)", "short": "Module 9"},
     {"idx": 8, "key": "diagonal_strap_footing", "name": "📐 Module 10: Corner Footing with Diagonal Strap (قاعدة جار ركن بشداد مائل)", "short": "Module 10"},
     {"idx": 9, "key": "ground_beam", "name": "🧱 Module 11: Ground Beam Design & Detailing (تصميم وتفاصيل الميدات والسملات)", "short": "Module 11"},
+    {"idx": 10, "key": "brick_survey", "name": "🏠 Module 12: Brick & Plastering Survey (حصر أعمال الطوب والمحارة)", "short": "Module 12"},
 ]
 
 
@@ -1472,6 +1925,22 @@ def get_project_summary(project_name: str) -> dict:
         ts = 0.0
         floors = 1
         module_name = "Steel Rebar"
+
+    elif mod_idx == 10:
+        # ── Module 12: Brick & Plastering Survey (حصر أعمال الطوب والمحارة) ──
+        m12 = data.get("module_12_brick_survey", {})
+        xs = m12.get("x_axes", [0.0, 4.0, 8.0])
+        ys = m12.get("y_axes", [0.0, 3.0, 6.0])
+        total_w = float(xs[-1] - xs[0]) if len(xs) >= 2 else 0.0
+        total_h = float(ys[-1] - ys[0]) if len(ys) >= 2 else 0.0
+        area = total_w * total_h
+        n_cols_total = len(xs) * len(ys)
+        n_cols_active = n_cols_total - len(m12.get("col_removed", []))
+        n_lx = max(len(xs) - 1, 1)
+        n_ly = max(len(ys) - 1, 1)
+        ts = float(m12.get("default_wall_height", 3.0))
+        floors = 1
+        module_name = "Brick & Plastering Survey"
 
     else:
         # ── Module 1: Flat Slabs & General Grid ──
@@ -1696,6 +2165,7 @@ def import_project_json(json_content: str, overwrite: bool = False) -> tuple:
                 migrate_module_9_in_project_dict(p_entry["data"])
                 migrate_module_10_in_project_dict(p_entry["data"])
                 migrate_module_11_in_project_dict(p_entry["data"])
+                migrate_module_12_in_project_dict(p_entry["data"])
         pdata["profiles"] = existing_profiles
         save_profiles_data(pdata)
         set_active_project(pdata.get("active_profile", list(existing_profiles.keys())[0]))
@@ -1755,6 +2225,7 @@ def load_settings() -> None:
     migrate_module_9_in_project_dict(cfg)
     migrate_module_10_in_project_dict(cfg)
     migrate_module_11_in_project_dict(cfg)
+    migrate_module_12_in_project_dict(cfg)
 
     st.session_state["cfg"] = cfg
     st.session_state["current_project"] = cfg
@@ -1763,10 +2234,11 @@ def load_settings() -> None:
     if "nav_view" not in st.session_state:
         st.session_state["nav_view"] = "profile_manager"
     cfg["nav_view"] = "profile_manager"
-    # Ensure Module 9, 10 & 11 session state is always populated correctly on app load
+    # Ensure Module 9, 10, 11 & 12 session state is always populated correctly on app load
     _ensure_module9_state(cfg)
     _ensure_module10_state(cfg)
     _ensure_module11_state(cfg)
+    _ensure_module12_state(cfg)
 
 
 
@@ -1780,8 +2252,8 @@ def save_settings() -> None:
     if not cfg:
         return
 
-    # nav_view on disk should always default to profile_manager so app opens to projects screen
-    cfg["nav_view"] = "profile_manager"
+    # Keep current live nav_view in memory session_state
+    cfg["nav_view"] = st.session_state.get("nav_view", "module")
 
     # ── Persist Module 9 data: write nested dict + flat alias mirror ─────────
     m9 = st.session_state.get("module_9_data", {})
@@ -1810,6 +2282,15 @@ def save_settings() -> None:
     if m11:
         cfg["module_11_ground_beam"] = {k: v for k, v in m11.items()}
     # ── End Module 11 persistence ────────────────────────────────────────────
+
+    # ── Persist Module 12 data: write nested dict ───────────────────────────
+    if "m12_x_axes" in st.session_state:
+        m12_serialized = _serialize_module_12_state(st.session_state)
+        cfg["module_12_brick_survey"] = m12_serialized
+        st.session_state["module_12_data"] = m12_serialized
+    elif "module_12_data" in st.session_state and isinstance(st.session_state["module_12_data"], dict):
+        cfg["module_12_brick_survey"] = dict(st.session_state["module_12_data"])
+    # ── End Module 12 persistence ────────────────────────────────────────────
 
     active_name = get_active_project_name()
     pdata = load_profiles_data()
@@ -1841,6 +2322,7 @@ def save_settings() -> None:
         }
 
     clean_cfg = {k: _sanitize_for_json(v) for k, v in cfg.items()}
+    clean_cfg["nav_view"] = "profile_manager"
 
     # CRITICAL: enabled_modules and deleted_modules_trash must NEVER be overwritten with stale cfg values.
     # Pull authoritative values from existing_data in profiles.json if they exist.
@@ -1882,9 +2364,13 @@ def reset_settings() -> None:
     active_name = get_active_profile_name()
     cfg = dict(ECP_DEFAULTS)
     cfg["apartment_name"] = active_name
+    _clear_m12_session_keys()
+    cfg["module_12_brick_survey"] = get_default_module_12_state()
     st.session_state["cfg"] = cfg
+    _ensure_module12_state(cfg)
     save_settings()
     _clear_widget_cache()
+    _ensure_module12_state(cfg)
 
 
 def reset_font_sizes() -> None:
@@ -2247,6 +2733,9 @@ MODULE_DATA_KEY_PREFIXES = {
     9: [  # Module 11 — Ground Beam Design & Detailing
         "module_11_ground_beam", "m11_",
     ],
+    10: [  # Module 12 — Brick & Plastering Survey
+        "module_12_brick_survey", "m12_",
+    ],
 }
 
 # Dependency map: which modules DEPEND ON a given module.
@@ -2254,7 +2743,7 @@ MODULE_DATA_KEY_PREFIXES = {
 # Key = module index; Value = list of (linked_idx, relationship_description)
 # Module 1 (Flat Slab) and Module 2 (Columns) have a direct, mutual BIDIRECTIONAL dependency.
 # Module 3 (Footings) depends on Module 2 (Columns).
-# Module 4, 5, 6, 7, 8, 9, 11 (Ground Slabs, Steel Rebar, Quantity Survey, Two-Column Footings, Strap Footings, Diagonal Strap, Ground Beams) are 100% standalone.
+# Module 4, 5, 6, 7, 8, 9, 11, 12 are 100% standalone.
 FUNCTIONAL_DEPENDENCIES: dict[int, list] = {
     0: [  # Module 1 — Flat Slabs (البلاطات اللاكمرية) -> Requires Columns (1)
         (1, "مرتبط بنماذج وتصميم الأعمدة: يغذي الأعمدة بالأحمال المحسوبة وتعتمد بحور السقف والقص الثاقب عليها"),
@@ -2272,6 +2761,7 @@ FUNCTIONAL_DEPENDENCIES: dict[int, list] = {
     7: [],  # Module 9 — Strap Footings: Standalone
     8: [],  # Module 10 — Diagonal Strap Footings: Standalone
     9: [],  # Module 11 — Ground Beam Design & Detailing: Standalone
+    10: [], # Module 12 — Brick & Plastering Survey: Standalone
 }
 
 
@@ -2416,32 +2906,29 @@ def get_deleted_modules_trash(project_name: str) -> dict:
 
 
 def generate_alarm_wav_bytes() -> bytes:
-    """Generates a loud, high-contrast double-beep WAV buffer in memory."""
+    """
+    Generates the unified standardized sharp whistle WAV buffer in memory:
+    Carrier: 2550 Hz with 36 Hz Trill vibrato modulation.
+    """
+    sample_rate = 22050
+    duration = 0.38
+    n_samples = int(sample_rate * duration)
     buf = io.BytesIO()
     with wave.open(buf, 'wb') as wav_file:
         wav_file.setnchannels(1)
         wav_file.setsampwidth(2)
-        wav_file.setframerate(22050)
-
-        # Tone 1: 850 Hz for 0.14s (loud alert tone)
-        n1 = int(22050 * 0.14)
-        for i in range(n1):
-            env = 1.0 - (i / n1) * 0.3
-            val = int(32767.0 * 0.85 * env * math.sin(2.0 * math.pi * 850.0 * (i / 22050.0)))
-            wav_file.writeframesraw(struct.pack('<h', val))
-
-        # Pause 0.04s
-        np = int(22050 * 0.04)
-        for i in range(np):
-            wav_file.writeframesraw(struct.pack('<h', 0))
-
-        # Tone 2: 550 Hz for 0.20s (secondary warning tone)
-        n2 = int(22050 * 0.20)
-        for i in range(n2):
-            env = 1.0 - (i / n2) * 0.35
-            val = int(32767.0 * 0.90 * env * math.sin(2.0 * math.pi * 550.0 * (i / 22050.0)))
-            wav_file.writeframesraw(struct.pack('<h', val))
-
+        wav_file.setframerate(sample_rate)
+        samples = bytearray()
+        for i in range(n_samples):
+            t = i / sample_rate
+            # 2550 Hz carrier with 36 Hz trill modulation (amplitude 190 Hz)
+            f = 2550.0 + 190.0 * math.sin(2.0 * math.pi * 36.0 * t)
+            # Smooth envelope to avoid clicks
+            env = math.sin(math.pi * (i / n_samples))
+            val = int(32000.0 * env * math.sin(2.0 * math.pi * f * t))
+            val = max(-32768, min(32767, val))
+            samples.extend(val.to_bytes(2, byteorder='little', signed=True))
+        wav_file.writeframes(samples)
     return buf.getvalue()
 
 
@@ -2451,12 +2938,14 @@ ALARM_WAV_B64: str = base64.b64encode(ALARM_WAV_BYTES).decode('ascii')
 
 def play_warning_sound() -> None:
     """
-    Centralized, Multi-Layer Warning Sound mechanism for ANY blocked delete across the application.
+    Centralized, Multi-Layer Warning Sound mechanism for ALL warning messages across the entire application:
+    Carrier: 2550 Hz with 36 Hz Trill vibrato modulation.
     Executes complementary audio layers without displaying any UI player controls:
-      Layer 1: Browser iframe HTML5 Web Audio API synthesis + invisible audio element via components.html
-      Layer 2: Native Host OS System Sound (winsound on Windows)
+      Layer 1: Browser iframe HTML5 Web Audio API synthesis (2550 Hz carrier + 36 Hz Trill LFO)
+      Layer 2: Browser HTML5 invisible audio element with synthesized Base64 WAV
+      Layer 3: Native Host OS System Sound (winsound.Beep(2550, 320) on Windows in background thread)
     """
-    # ── Layer 1: Browser Frontend Sound (Completely Invisible) ──────────────
+    # ── Layer 1 & 2: Browser Frontend Sound (Completely Invisible) ──────────────
     try:
         import streamlit.components.v1 as components
         js_code = f"""
@@ -2467,32 +2956,38 @@ def play_warning_sound() -> None:
         <script>
         (function() {{
             try {{
-                var AudioCtx = window.AudioContext || window.webkitAudioContext || (window.parent && (window.parent.AudioContext || window.parent.webkitAudioContext));
+                var AudioCtx = window.AudioContext || window.webkitAudioContext;
                 if (AudioCtx) {{
                     var ctx = new AudioCtx();
                     if (ctx.state === 'suspended') {{ ctx.resume(); }}
                     var now = ctx.currentTime;
-                    var osc1 = ctx.createOscillator();
-                    var gain1 = ctx.createGain();
-                    osc1.type = 'sawtooth';
-                    osc1.frequency.setValueAtTime(850, now);
-                    gain1.gain.setValueAtTime(0.50, now);
-                    gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.14);
-                    osc1.connect(gain1);
-                    gain1.connect(ctx.destination);
-                    osc1.start(now);
-                    osc1.stop(now + 0.14);
+                    var dur = 0.38;
 
-                    var osc2 = ctx.createOscillator();
-                    var gain2 = ctx.createGain();
-                    osc2.type = 'sawtooth';
-                    osc2.frequency.setValueAtTime(550, now + 0.18);
-                    gain2.gain.setValueAtTime(0.55, now + 0.18);
-                    gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.38);
-                    osc2.connect(gain2);
-                    gain2.connect(ctx.destination);
-                    osc2.start(now + 0.18);
-                    osc2.stop(now + 0.38);
+                    var osc = ctx.createOscillator();
+                    var gain = ctx.createGain();
+                    var lfo = ctx.createOscillator();
+                    var lfoGain = ctx.createGain();
+
+                    // 36 Hz Trill LFO modulation
+                    lfo.frequency.setValueAtTime(36.0, now);
+                    lfoGain.gain.setValueAtTime(190.0, now);
+                    lfo.connect(osc.frequency);
+
+                    // 2550 Hz Carrier
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(2550.0, now);
+
+                    gain.gain.setValueAtTime(0.001, now);
+                    gain.gain.linearRampToValueAtTime(0.40, now + 0.02);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+
+                    lfo.start(now);
+                    osc.start(now);
+                    lfo.stop(now + dur);
+                    osc.stop(now + dur);
                 }}
             }} catch(e) {{}}
         }})();
@@ -2506,13 +3001,13 @@ def play_warning_sound() -> None:
 
     # ── Layer 3: Native Host OS Hardware Alert Sound ────────────────────────
     try:
-        import winsound
-        winsound.MessageBeep(winsound.MB_ICONHAND)
-        try:
-            winsound.Beep(850, 140)
-            winsound.Beep(550, 200)
-        except Exception:
-            pass
+        import winsound, threading
+        def _beep():
+            try:
+                winsound.Beep(2550, 320)
+            except Exception:
+                pass
+        threading.Thread(target=_beep, daemon=True).start()
     except Exception:
         try:
             sys.stdout.write('\a')
@@ -2522,6 +3017,42 @@ def play_warning_sound() -> None:
 
 
 play_system_delete_blocked_sound = play_warning_sound
+play_sharp_whistle_alert = play_warning_sound
+
+
+def _install_unified_warning_hook() -> None:
+    """
+    Installs a global automatic hook on st.warning and st.error so that any warning or error
+    displayed across ANY module (existing, legacy, or future) automatically
+    plays the unified sharp whistle sound (2550 Hz with 36 Hz Trill).
+    Includes a 0.4s debounce per render cycle to prevent overlapping audio bursts.
+    """
+    if getattr(st, "_unified_whistle_hooked", False):
+        return
+    _orig_st_warning = st.warning
+    _orig_st_error = st.error
+
+    def _trigger_debounced_whistle():
+        now = time.time()
+        last = getattr(st, "_last_whistle_time", 0.0)
+        if now - last > 0.40:
+            st._last_whistle_time = now
+            play_warning_sound()
+
+    def _hooked_st_warning(body, *args, **kwargs):
+        _trigger_debounced_whistle()
+        return _orig_st_warning(body, *args, **kwargs)
+
+    def _hooked_st_error(body, *args, **kwargs):
+        _trigger_debounced_whistle()
+        return _orig_st_error(body, *args, **kwargs)
+
+    st.warning = _hooked_st_warning
+    st.error = _hooked_st_error
+    st._unified_whistle_hooked = True
+
+
+_install_unified_warning_hook()
 
 
 def soft_delete_module(project_name: str, module_idx: int) -> bool:

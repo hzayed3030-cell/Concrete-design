@@ -86,30 +86,31 @@ from modules.two_col_footings import render as render_two_col_footings
 from modules.module_9_strap_footing import render_strap_footing_module
 from modules.module_10_diagonal_strap import render_diagonal_strap_module
 from modules.module_11_ground_beam import render_ground_beam_module
+from modules.module_12_brick_survey import render_brick_survey_module
 
-# ── CSS Injection: Fixed Unified Typography (14px) ───────────────────────────
+# ── CSS Injection: Fixed Unified Typography (75% Compact Scale) ─────────────
 st.markdown(
     """
     <style>
     :root {
         /* ═══════════════════════════════════════════════════════════════════════
-           BALANCED COMFORTABLE TYPOGRAPHY (19px Base for Inputs & Outputs)
+           BALANCED COMFORTABLE TYPOGRAPHY (75% Compact Scale for Inputs & Outputs)
            ═══════════════════════════════════════════════════════════════════════ */
-        --ecp-modules-base-font-size: 16px;
-        --ecp-input-font-size: 19px;
-        --ecp-output-font-size: 19px;
+        --ecp-modules-base-font-size: 12px;
+        --ecp-input-font-size: 14.25px;
+        --ecp-output-font-size: 14.25px;
 
-        /* Proportional Scales for Module Output Elements */
-        --ecp-font-size-title: 25px;
-        --ecp-font-size-h1: 25px;
-        --ecp-font-size-h2: 22px;
-        --ecp-font-size-h3: 20px;
-        --ecp-font-size-body: 18px;
-        --ecp-font-size-table-hdr: 18px;
-        --ecp-font-size-table-cell: 17px;
-        --ecp-font-size-small: 16px;
-        --ecp-font-size-metric-val: 18px;
-        --ecp-font-size-metric-lbl: 13px;
+        /* Proportional Scales for Module Output Elements (75% Baseline) */
+        --ecp-font-size-title: 18.75px;
+        --ecp-font-size-h1: 18.75px;
+        --ecp-font-size-h2: 16.5px;
+        --ecp-font-size-h3: 15px;
+        --ecp-font-size-body: 13.5px;
+        --ecp-font-size-table-hdr: 13.5px;
+        --ecp-font-size-table-cell: 12.75px;
+        --ecp-font-size-small: 12px;
+        --ecp-font-size-metric-val: 13.5px;
+        --ecp-font-size-metric-lbl: 9.75px;
     }
 
     /* Global Base */
@@ -135,7 +136,7 @@ st.markdown(
     [data-testid="stSidebar"] small {
         font-size: var(--ecp-modules-base-font-size) !important;
         color: #e0e6f0 !important;
-        line-height: 1.4 !important;
+        line-height: 1.35 !important;
     }
 
     /* Sidebar Headings */
@@ -172,20 +173,62 @@ st.markdown(
        1. FORM INPUT CONTROLS: LABELS, TITLES, & ENTERED NUMBERS
        ═══════════════════════════════════════════════════════════════════════════ */
     
-    /* Input Labels (Light Yellow for Dark Mode) */
+    /* ═══════════════════════════════════════════════════════════════════════════
+       INPUT GROUP SUB-HEADERS & FIELDSET TITLES (Standalone White Text Only)
+       ═══════════════════════════════════════════════════════════════════════════ */
+    [data-testid="stMainBlockContainer"] div[data-testid="element-container"]:not(:has([data-testid="stWidgetLabel"])) [data-testid="stMarkdownContainer"] p,
+    [data-testid="stMainBlockContainer"] div[data-testid="element-container"]:not(:has([data-testid="stWidgetLabel"])) [data-testid="stMarkdownContainer"] strong,
+    [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] details > div > div:not(:has([data-testid="stWidgetLabel"])) [data-testid="stMarkdownContainer"] p,
+    [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] details > div > div:not(:has([data-testid="stWidgetLabel"])) [data-testid="stMarkdownContainer"] strong {
+        font-size: calc(var(--ecp-input-font-size) * 1.08) !important;
+        font-weight: 700 !important;
+        line-height: 1.4 !important;
+        color: #ffffff !important;
+        display: block !important;
+        margin-top: 14px !important;
+        margin-bottom: 10px !important;
+        padding-bottom: 2px !important;
+    }
+
+    [data-testid="stMainBlockContainer"] div[data-testid="element-container"]:not(:has([data-testid="stWidgetLabel"])):has([data-testid="stMarkdownContainer"] strong) {
+        margin-top: 10px !important;
+        margin-bottom: 8px !important;
+    }
+
+    /* First element inside an expander doesn't need excessive top margin */
+    [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] details > div > div:first-child:not(:has([data-testid="stWidgetLabel"])) [data-testid="stMarkdownContainer"] p,
+    [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] details > div > div:first-child:not(:has([data-testid="stWidgetLabel"])) [data-testid="stMarkdownContainer"] strong {
+        margin-top: 4px !important;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════
+       1. FORM INPUT LABELS (GUARANTEED VIBRANT YELLOW: #fde047 / #facc15)
+       ═══════════════════════════════════════════════════════════════════════════ */
     [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"],
     [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] *,
     [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] label,
     [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] p,
     [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] span,
+    [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] div,
+    [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] [data-testid="stMarkdownContainer"],
+    [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] [data-testid="stMarkdownContainer"] *,
+    [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] [data-testid="stMarkdownContainer"] p,
+    [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] [data-testid="stMarkdownContainer"] span,
+    [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] [data-testid="stMarkdownContainer"] strong,
+    [data-testid="stMainBlockContainer"] label[data-testid="stWidgetLabel"] p,
+    [data-testid="stMainBlockContainer"] label[data-testid="stWidgetLabel"] span,
     [data-testid="stMainBlockContainer"] .stNumberInput label,
     [data-testid="stMainBlockContainer"] .stNumberInput label *,
+    [data-testid="stMainBlockContainer"] .stNumberInput [data-testid="stWidgetLabel"] *,
     [data-testid="stMainBlockContainer"] .stSelectbox label,
     [data-testid="stMainBlockContainer"] .stSelectbox label *,
+    [data-testid="stMainBlockContainer"] .stSelectbox [data-testid="stWidgetLabel"] *,
     [data-testid="stMainBlockContainer"] .stTextInput label,
     [data-testid="stMainBlockContainer"] .stTextInput label *,
+    [data-testid="stMainBlockContainer"] .stTextInput [data-testid="stWidgetLabel"] *,
     [data-testid="stMainBlockContainer"] .stTextArea label,
     [data-testid="stMainBlockContainer"] .stTextArea label *,
+    [data-testid="stMainBlockContainer"] .stTextArea [data-testid="stWidgetLabel"] *,
     [data-testid="stMainBlockContainer"] .stRadio > label,
     [data-testid="stMainBlockContainer"] .stRadio > label *,
     [data-testid="stMainBlockContainer"] .stRadio [data-testid="stWidgetLabel"] *,
@@ -194,6 +237,7 @@ st.markdown(
     [data-testid="stMainBlockContainer"] .stCheckbox [data-testid="stWidgetLabel"] *,
     [data-testid="stMainBlockContainer"] .stSlider label,
     [data-testid="stMainBlockContainer"] .stSlider label *,
+    [data-testid="stMainBlockContainer"] .stSlider [data-testid="stWidgetLabel"] *,
     [data-testid="stMainBlockContainer"] .stFileUploader label,
     [data-testid="stMainBlockContainer"] .stFileUploader label *,
     [data-testid="stMainBlockContainer"] .stMultiSelect label,
@@ -202,71 +246,94 @@ st.markdown(
         font-weight: 700 !important;
         line-height: 1.25 !important;
         color: #fde047 !important; /* Elegant light yellow */
+        margin-top: 0px !important;
+        margin-bottom: 2px !important;
+        display: inline-block !important;
     }
 
     [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] {
-        margin-bottom: 3px !important;
+        margin-bottom: 2px !important;
+        margin-top: 2px !important;
         min-height: 0px !important;
     }
-    [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] p,
-    [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] label {
-        margin-bottom: 1px !important;
+
+    /* Widget Containers Compact Vertical Spacing (Universal Across Modules) */
+    [data-testid="stMainBlockContainer"] .stNumberInput,
+    [data-testid="stMainBlockContainer"] .stSelectbox,
+    [data-testid="stMainBlockContainer"] .stTextInput,
+    [data-testid="stMainBlockContainer"] .stTextArea,
+    [data-testid="stMainBlockContainer"] .stRadio,
+    [data-testid="stMainBlockContainer"] .stCheckbox,
+    [data-testid="stMainBlockContainer"] .stSlider,
+    [data-testid="stMainBlockContainer"] .stMultiSelect {
+        margin-bottom: 2px !important;
         margin-top: 0px !important;
-        line-height: 1.2 !important;
-        color: #fde047 !important;
+        padding-top: 0px !important;
+        padding-bottom: 0px !important;
     }
-
-    /* Input Sub-headers & Section Labels inside Input Groups */
-    [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] details > div [data-testid="stMarkdownContainer"] p,
-    [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] details > div [data-testid="stMarkdownContainer"] strong,
-    [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] details > div [data-testid="stMarkdownContainer"] span {
-        font-size: calc(var(--ecp-input-font-size) * 1.05) !important;
-        font-weight: 700 !important;
-        line-height: 1.25 !important;
-        margin-top: 4px !important;
-        margin-bottom: 3px !important;
-    }
-
-    /* Widget Containers Compact Vertical Spacing */
     [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] .stNumberInput,
     [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] .stSelectbox,
     [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] .stTextInput,
     [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] .stTextArea {
-        margin-bottom: 3px !important;
+        margin-bottom: 2px !important;
         margin-top: 0px !important;
     }
-    [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] [data-testid="stVerticalBlock"] {
+    [data-testid="stMainBlockContainer"] [data-testid="stVerticalBlock"] {
+        gap: 0.2rem !important;
+    }
+    [data-testid="stMainBlockContainer"] [data-testid="stHorizontalBlock"] {
         gap: 0.4rem !important;
+    }
+    [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] [data-testid="stVerticalBlock"] {
+        gap: 0.15rem !important;
+    }
+    [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] details {
+        padding: 4px 8px !important;
+        margin-bottom: 4px !important;
     }
 
     /* Entered Numbers & Values inside Input Fields */
     [data-testid="stMainBlockContainer"] input,
     [data-testid="stMainBlockContainer"] input[type="number"],
     [data-testid="stMainBlockContainer"] input[type="text"],
-    [data-testid="stMainBlockContainer"] textarea,
     [data-testid="stMainBlockContainer"] div[data-baseweb="input"] input,
     [data-testid="stMainBlockContainer"] .stNumberInput input,
-    [data-testid="stMainBlockContainer"] .stTextInput input,
+    [data-testid="stMainBlockContainer"] .stTextInput input {
+        font-size: var(--ecp-input-font-size) !important;
+        min-height: 28px !important;
+        height: 28px !important;
+        line-height: 28px !important;
+        padding-top: 1px !important;
+        padding-bottom: 1px !important;
+        padding-left: 6px !important;
+        padding-right: 6px !important;
+    }
+    [data-testid="stMainBlockContainer"] div[data-baseweb="input"] {
+        min-height: 28px !important;
+        height: 28px !important;
+    }
+    [data-testid="stMainBlockContainer"] textarea,
     [data-testid="stMainBlockContainer"] div[data-baseweb="textarea"] textarea,
     [data-testid="stMainBlockContainer"] .stTextArea textarea {
         font-size: var(--ecp-input-font-size) !important;
-        min-height: 38px !important;
-        line-height: 1.3 !important;
-        padding-top: 4px !important;
-        padding-bottom: 4px !important;
+        min-height: 44px !important;
+        line-height: 1.25 !important;
+        padding-top: 3px !important;
+        padding-bottom: 3px !important;
     }
 
     /* Stepper Buttons (+ / -) */
     [data-testid="stMainBlockContainer"] button[data-testid="stNumberInputStepUp"],
     [data-testid="stMainBlockContainer"] button[data-testid="stNumberInputStepDown"] {
-        min-height: 18px !important;
-        height: 18px !important;
-        width: calc(var(--ecp-input-font-size) * 1.6) !important;
+        min-height: 14px !important;
+        height: 14px !important;
+        width: calc(var(--ecp-input-font-size) * 1.5) !important;
+        padding: 0px !important;
     }
     [data-testid="stMainBlockContainer"] button[data-testid="stNumberInputStepUp"] svg,
     [data-testid="stMainBlockContainer"] button[data-testid="stNumberInputStepDown"] svg {
-        width: calc(var(--ecp-input-font-size) * 0.70) !important;
-        height: calc(var(--ecp-input-font-size) * 0.70) !important;
+        width: calc(var(--ecp-input-font-size) * 0.65) !important;
+        height: calc(var(--ecp-input-font-size) * 0.65) !important;
     }
 
     /* Dropdown Menus & Select Option Values */
@@ -281,7 +348,12 @@ st.markdown(
         font-size: var(--ecp-input-font-size) !important;
     }
     [data-testid="stMainBlockContainer"] div[data-baseweb="select"] {
-        min-height: 38px !important;
+        min-height: 28px !important;
+    }
+    [data-testid="stMainBlockContainer"] div[data-baseweb="select"] > div {
+        min-height: 28px !important;
+        padding-top: 0px !important;
+        padding-bottom: 0px !important;
     }
 
     /* Radios & Checkboxes */
@@ -292,13 +364,23 @@ st.markdown(
     [data-testid="stMainBlockContainer"] div[data-testid="stCheckbox"] span,
     [data-testid="stMainBlockContainer"] div[data-testid="stCheckbox"] p {
         font-size: var(--ecp-input-font-size) !important;
+        line-height: 1.2 !important;
+    }
+    [data-testid="stMainBlockContainer"] div[data-testid="stRadio"] div[role="radiogroup"] {
+        gap: 0.35rem !important;
     }
 
     /* Tabs Styling */
+    div[data-baseweb="tab-list"] {
+        gap: 4px !important;
+    }
+    button[data-baseweb="tab"] {
+        padding: 5px 12px !important;
+    }
     button[data-baseweb="tab"] p,
     button[data-baseweb="tab"] div,
     button[data-baseweb="tab"] span {
-        font-size: 18px !important;
+        font-size: 13.5px !important;
         font-weight: 700 !important;
     }
 
@@ -306,27 +388,33 @@ st.markdown(
        2. GENERAL UI, RESULTS, TITLES & TABLES
        ═══════════════════════════════════════════════════════════════════════════ */
     
+    /* Main Content Top Margin - تقليل الهامش العلوي بعد فتح المشروع بمقدار سطرين */
+    [data-testid="stMainBlockContainer"],
+    section.main > div.block-container {
+        padding-top: 2.2rem !important;
+    }
+    
     /* Distinctive Centered Input Section Header (Golden Amber Theme) */
     [data-testid="stMainBlockContainer"] .input-section-header,
     [data-testid="stMainBlockContainer"] .input-section-header * {
         font-size: var(--ecp-font-size-h2) !important;
         font-weight: 900 !important;
-        line-height: 1.35 !important;
+        line-height: 1.3 !important;
     }
     [data-testid="stMainBlockContainer"] .input-section-header {
         background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #0f172a 100%) !important;
         color: #fbbf24 !important;
         border: 2px solid #fbbf24 !important;
-        border-radius: 12px !important;
-        padding: 12px 20px !important;
-        margin: 14px 0 12px 0 !important;
+        border-radius: 10px !important;
+        padding: 8px 16px !important;
+        margin: 8px 0 6px 0 !important;
         text-align: center !important;
         display: flex !important;
         justify-content: center !important;
         align-items: center !important;
-        gap: 12px !important;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 18px rgba(251, 191, 36, 0.25) !important;
-        text-shadow: 0 0 12px rgba(251, 191, 36, 0.4) !important;
+        gap: 8px !important;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45), 0 0 14px rgba(251, 191, 36, 0.2) !important;
+        text-shadow: 0 0 10px rgba(251, 191, 36, 0.35) !important;
     }
 
     /* Section & Output Headers (Blue / Navy Theme) */
@@ -334,20 +422,20 @@ st.markdown(
     [data-testid="stMainBlockContainer"] .section-header * {
         font-size: var(--ecp-font-size-h3) !important;
         font-weight: 700 !important;
-        line-height: 1.35 !important;
+        line-height: 1.3 !important;
     }
     [data-testid="stMainBlockContainer"] .section-header {
         background: linear-gradient(90deg, #1a2340, #2e4080);
         color: white !important;
-        padding: calc(var(--ecp-output-font-size) * 0.4) calc(var(--ecp-output-font-size) * 0.75);
-        border-radius: 8px;
-        margin: 14px 0 8px 0;
+        padding: calc(var(--ecp-output-font-size) * 0.3) calc(var(--ecp-output-font-size) * 0.6);
+        border-radius: 6px;
+        margin: 12px 0 10px 0 !important;
     }
-    [data-testid="stMainBlockContainer"] h1, [data-testid="stMainBlockContainer"] h1 * { font-size: var(--ecp-font-size-h1) !important; font-weight: 700 !important; }
-    [data-testid="stMainBlockContainer"] h2, [data-testid="stMainBlockContainer"] h2 * { font-size: var(--ecp-font-size-h2) !important; font-weight: 700 !important; }
-    [data-testid="stMainBlockContainer"] h3, [data-testid="stMainBlockContainer"] h3 * { font-size: var(--ecp-font-size-h3) !important; font-weight: 600 !important; }
-    [data-testid="stMainBlockContainer"] h4, [data-testid="stMainBlockContainer"] h4 * { font-size: calc(var(--ecp-output-font-size) * 1.05) !important; font-weight: 600 !important; }
-    [data-testid="stMainBlockContainer"] h5, [data-testid="stMainBlockContainer"] h5 * { font-size: var(--ecp-output-font-size) !important; font-weight: 600 !important; }
+    [data-testid="stMainBlockContainer"] h1, [data-testid="stMainBlockContainer"] h1 * { font-size: var(--ecp-font-size-h1) !important; font-weight: 700 !important; margin-top: 14px !important; margin-bottom: 10px !important; }
+    [data-testid="stMainBlockContainer"] h2, [data-testid="stMainBlockContainer"] h2 * { font-size: var(--ecp-font-size-h2) !important; font-weight: 700 !important; margin-top: 14px !important; margin-bottom: 10px !important; }
+    [data-testid="stMainBlockContainer"] h3, [data-testid="stMainBlockContainer"] h3 * { font-size: var(--ecp-font-size-h3) !important; font-weight: 600 !important; margin-top: 14px !important; margin-bottom: 8px !important; }
+    [data-testid="stMainBlockContainer"] h4, [data-testid="stMainBlockContainer"] h4 * { font-size: calc(var(--ecp-output-font-size) * 1.05) !important; font-weight: 600 !important; margin-top: 12px !important; margin-bottom: 8px !important; }
+    [data-testid="stMainBlockContainer"] h5, [data-testid="stMainBlockContainer"] h5 * { font-size: var(--ecp-output-font-size) !important; font-weight: 600 !important; margin-top: 10px !important; margin-bottom: 6px !important; }
 
     /* General Body Text outside inputs */
     [data-testid="stMainBlockContainer"] p:not([data-testid="stWidgetLabel"] *),
@@ -356,7 +444,7 @@ st.markdown(
     [data-testid="stMainBlockContainer"] strong:not([data-testid="stWidgetLabel"] *),
     [data-testid="stMainBlockContainer"] em {
         font-size: var(--ecp-font-size-body);
-        line-height: 1.5;
+        line-height: 1.45;
     }
 
     /* Calculation Tables, DataFrames, Headers & Cell Numbers */
@@ -377,7 +465,7 @@ st.markdown(
     [data-testid="stMainBlockContainer"] .dvn-scroller,
     [data-testid="stMainBlockContainer"] .dvn-scroller * {
         font-size: var(--ecp-font-size-table-cell) !important;
-        line-height: 1.4 !important;
+        line-height: 1.35 !important;
     }
 
     [data-testid="stMainBlockContainer"] table:not(.ecp-styled-dark-table) th,
@@ -391,9 +479,21 @@ st.markdown(
     [data-testid="stMainBlockContainer"] div[data-testid="metric-container"] {
         background: #f0f4ff !important;
         border: 1px solid #c8d4f0 !important;
-        border-radius: 8px !important;
-        padding: 7px 11px !important;
+        border-radius: 6px !important;
+        padding: 6px 10px !important;
         box-sizing: border-box !important;
+        margin-top: 4px !important;
+        margin-bottom: 4px !important;
+    }
+
+    /* Metric Container Rows & Grids Spacing (Universal Across All Modules) */
+    [data-testid="stMainBlockContainer"] [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]),
+    [data-testid="stMainBlockContainer"] [data-testid="stHorizontalBlock"]:has(div[data-testid="metric-container"]),
+    [data-testid="stMainBlockContainer"] [data-testid="stHorizontalBlock"]:has(.ecp-metric-box),
+    [data-testid="stMainBlockContainer"] div:has(> [data-testid="column"] [data-testid="stMetric"]),
+    [data-testid="stMainBlockContainer"] div:has(> [data-testid="column"] .ecp-metric-box) {
+        margin-top: 14px !important;
+        margin-bottom: 14px !important;
     }
 
     [data-testid="stMainBlockContainer"] [data-testid="stMetricValue"],
@@ -404,7 +504,7 @@ st.markdown(
         font-size: var(--ecp-font-size-metric-val) !important;
         white-space: normal !important;
         overflow: visible !important;
-        line-height: 1.25 !important;
+        line-height: 1.2 !important;
         font-weight: 700 !important;
         color: #1e3a8a !important;
     }
@@ -418,12 +518,12 @@ st.markdown(
         font-weight: 600 !important;
         font-size: var(--ecp-font-size-metric-lbl) !important;
         white-space: normal !important;
-        line-height: 1.2 !important;
+        line-height: 1.15 !important;
     }
 
     [data-testid="stMainBlockContainer"] [data-testid="stMetricDelta"],
     [data-testid="stMainBlockContainer"] [data-testid="stMetricDelta"] * {
-        font-size: 15px !important;
+        font-size: 11.25px !important;
         color: #1d4ed8 !important;
         font-weight: 600 !important;
     }
@@ -434,19 +534,89 @@ st.markdown(
         color: #dc2626 !important;
     }
 
-    /* Result Highlight Cards & Banners */
+    /* Result Highlight Cards & Structural Banners */
     [data-testid="stMainBlockContainer"] div[style*="border:2px solid"],
     [data-testid="stMainBlockContainer"] div[style*="border:2px solid"] *,
     [data-testid="stMainBlockContainer"] div[style*="border:3px solid"],
-    [data-testid="stMainBlockContainer"] div[style*="border:3px solid"] *,
-    [data-testid="stMainBlockContainer"] .result-ok,
-    [data-testid="stMainBlockContainer"] .result-ok *,
-    [data-testid="stMainBlockContainer"] .result-warn,
-    [data-testid="stMainBlockContainer"] .result-warn *,
-    [data-testid="stMainBlockContainer"] .result-fail,
-    [data-testid="stMainBlockContainer"] .result-fail * {
+    [data-testid="stMainBlockContainer"] div[style*="border:3px solid"] * {
         font-size: var(--ecp-output-font-size) !important;
         line-height: 1.45;
+    }
+
+    [data-testid="stMainBlockContainer"] .result-ok,
+    [data-testid="stMainBlockContainer"] .result-warn,
+    [data-testid="stMainBlockContainer"] .result-fail {
+        display: block !important;
+        font-size: var(--ecp-output-font-size) !important;
+        line-height: 1.45 !important;
+        font-weight: 700 !important;
+        padding: 8px 16px !important;
+        margin-top: 6px !important;
+        margin-bottom: 8px !important;
+        border-radius: 8px !important;
+        box-sizing: border-box !important;
+    }
+
+    [data-testid="stMainBlockContainer"] .result-ok *,
+    [data-testid="stMainBlockContainer"] .result-warn *,
+    [data-testid="stMainBlockContainer"] .result-fail * {
+        font-size: var(--ecp-output-font-size) !important;
+        line-height: 1.45 !important;
+        font-weight: 700 !important;
+    }
+
+    [data-testid="stMainBlockContainer"] .result-ok {
+        background: rgba(34, 197, 94, 0.12) !important;
+        border: 1.5px solid #22c55e !important;
+        color: #15803d !important;
+    }
+    [data-testid="stMainBlockContainer"] .result-ok * {
+        color: #15803d !important;
+    }
+
+    [data-testid="stMainBlockContainer"] .result-warn {
+        background: rgba(234, 179, 8, 0.12) !important;
+        border: 1.5px solid #eab308 !important;
+        color: #b45309 !important;
+    }
+    [data-testid="stMainBlockContainer"] .result-warn * {
+        color: #b45309 !important;
+    }
+
+    [data-testid="stMainBlockContainer"] .result-fail {
+        background: rgba(239, 68, 68, 0.12) !important;
+        border: 1.5px solid #ef4444 !important;
+        color: #b91c1c !important;
+    }
+    [data-testid="stMainBlockContainer"] .result-fail * {
+        color: #b91c1c !important;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        [data-testid="stMainBlockContainer"] .result-ok,
+        [data-testid="stMainBlockContainer"] .result-ok * {
+            color: #4ade80 !important;
+            background: rgba(34, 197, 94, 0.20) !important;
+        }
+        [data-testid="stMainBlockContainer"] .result-warn,
+        [data-testid="stMainBlockContainer"] .result-warn * {
+            color: #fde047 !important;
+            background: rgba(234, 179, 8, 0.20) !important;
+        }
+        [data-testid="stMainBlockContainer"] .result-fail,
+        [data-testid="stMainBlockContainer"] .result-fail * {
+            color: #fca5a5 !important;
+            background: rgba(239, 68, 68, 0.20) !important;
+        }
+    }
+    [data-theme="dark"] .result-ok, [data-theme="dark"] .result-ok * { color: #4ade80 !important; background: rgba(34, 197, 94, 0.20) !important; }
+    [data-theme="dark"] .result-warn, [data-theme="dark"] .result-warn * { color: #fde047 !important; background: rgba(234, 179, 8, 0.20) !important; }
+    [data-theme="dark"] .result-fail, [data-theme="dark"] .result-fail * { color: #fca5a5 !important; background: rgba(239, 68, 68, 0.20) !important; }
+
+    /* Separator Lines */
+    [data-testid="stMainBlockContainer"] hr {
+        margin-top: 14px !important;
+        margin-bottom: 14px !important;
     }
 
     /* Alerts & Notifications - Right-to-Left Arabic Support */
@@ -455,8 +625,10 @@ st.markdown(
     div[data-testid="stAlert"] {
         direction: rtl !important;
         text-align: right !important;
-        padding: calc(var(--ecp-output-font-size) * 0.4) calc(var(--ecp-output-font-size) * 0.75) !important;
+        padding: calc(var(--ecp-output-font-size) * 0.35) calc(var(--ecp-output-font-size) * 0.65) !important;
         border-radius: 8px !important;
+        margin-top: 8px !important;
+        margin-bottom: 10px !important;
         unicode-bidi: isolate !important;
     }
     [data-testid="stMainBlockContainer"] .stAlert p,
@@ -471,12 +643,12 @@ st.markdown(
         direction: rtl !important;
         text-align: right !important;
         font-size: var(--ecp-output-font-size) !important;
-        line-height: 1.6 !important;
+        line-height: 1.5 !important;
         unicode-bidi: isolate !important;
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
-       EXPANDER HEADERS (عناوين الأقسام المطوية / Collapsed Sections) - 21px BOLD with Background
+       EXPANDER HEADERS (عناوين الأقسام المطوية / Collapsed Sections) - 15.75px BOLD with Background
        ═══════════════════════════════════════════════════════════════════════════ */
     div[data-testid="stExpander"] details summary,
     div[data-testid="stExpander"] summary,
@@ -487,7 +659,7 @@ st.markdown(
         background: #f1f5f9 !important;
         border: 1px solid #cbd5e1 !important;
         border-radius: 8px !important;
-        padding: 9px 16px !important;
+        padding: 6px 12px !important;
         box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04) !important;
         transition: background-color 0.2s ease, border-color 0.2s ease !important;
     }
@@ -514,9 +686,9 @@ st.markdown(
     div[data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] p,
     .streamlit-expanderHeader p,
     .streamlit-expanderHeader span {
-        font-size: 21px !important;
+        font-size: 15.75px !important;
         font-weight: 800 !important;
-        line-height: 1.4 !important;
+        line-height: 1.35 !important;
         color: #0f172a !important;
     }
 
@@ -524,9 +696,9 @@ st.markdown(
     div[data-testid="stExpander"] summary svg,
     .stExpander summary svg,
     details summary svg {
-        width: 19px !important;
-        height: 19px !important;
-        min-width: 19px !important;
+        width: 15px !important;
+        height: 15px !important;
+        min-width: 15px !important;
         fill: currentColor !important;
         stroke: currentColor !important;
         color: #1e40af !important;
@@ -592,100 +764,100 @@ st.markdown(
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
-       PROFILES DASHBOARD & METRIC BOXES THEME-ADAPTIVE STYLING (2X ENLARGED)
+       PROFILES DASHBOARD & METRIC BOXES THEME-ADAPTIVE STYLING (75% Compact Scale)
        ═══════════════════════════════════════════════════════════════════════════ */
     .profile-card {
         background: #ffffff;
         border: 2px solid #cbd5e1;
-        border-radius: 12px;
-        padding: 14px 18px;
-        margin-bottom: 10px;
+        border-radius: 10px;
+        padding: 10px 14px;
+        margin-bottom: 8px;
         box-shadow: 0 2px 6px rgba(0,0,0,0.06);
         transition: all 0.2s ease;
     }
     .profile-card.active {
-        border: 3px solid #2563eb !important;
+        border: 2.5px solid #2563eb !important;
         background: #eff6ff;
     }
     .profile-card-title {
-        font-size: 31px;
+        font-size: 23px;
         font-weight: 800;
         color: #0f172a;
     }
     .profile-card-meta {
-        font-size: 23px;
+        font-size: 17px;
         color: #64748b;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
     }
     .profile-card-specs {
         background: #f8fafc;
         border: 1.5px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 10px 14px;
-        font-size: 24px;
+        border-radius: 6px;
+        padding: 8px 12px;
+        font-size: 18px;
         color: #1e293b;
-        line-height: 1.6;
-        margin-bottom: 12px;
+        line-height: 1.5;
+        margin-bottom: 8px;
     }
     .profile-card-specs div {
-        font-size: 24px !important;
+        font-size: 18px !important;
         color: #1e293b !important;
     }
     .profile-card-specs b {
-        font-size: 24px !important;
+        font-size: 18px !important;
         color: #0f172a !important;
     }
 
     .ecp-metric-box {
         background: #f8fafc;
         border: 1.5px solid #cbd5e1;
-        border-radius: 8px;
-        padding: 8px 10px;
+        border-radius: 6px;
+        padding: 6px 8px;
         text-align: center;
     }
     .ecp-metric-lbl {
-        font-size: 13px !important;
+        font-size: 9.75px !important;
         font-weight: 700 !important;
         color: #64748b;
         margin-bottom: 2px !important;
-        line-height: 1.25 !important;
+        line-height: 1.2 !important;
     }
     .ecp-metric-val {
-        font-size: 18px !important;
+        font-size: 13.5px !important;
         font-weight: 800 !important;
         color: #1e40af;
         line-height: 1.2 !important;
     }
 
-    /* Double font sizes for all interactive widgets in Profile Manager View */
+    /* Proportional font sizes for all interactive widgets in Profile Manager View */
     div[data-testid="stAppViewContainer"]:has(.profile-mgr-active-flag) button,
     div[data-testid="stAppViewContainer"]:has(.profile-mgr-active-flag) button p,
     div[data-testid="stAppViewContainer"]:has(.profile-mgr-active-flag) button span,
     div[data-testid="stAppViewContainer"]:has(.profile-mgr-active-flag) label p,
     div[data-testid="stAppViewContainer"]:has(.profile-mgr-active-flag) div[data-baseweb="select"] span {
-        font-size: 1.30rem !important;
+        font-size: 1.0rem !important;
         font-weight: 700 !important;
     }
     div[data-testid="stAppViewContainer"]:has(.profile-mgr-active-flag) input {
-        font-size: 1.35rem !important;
+        font-size: 1.0rem !important;
         font-weight: 800 !important;
-        padding: 8px 12px !important;
+        padding: 6px 10px !important;
     }
     div[data-testid="stAppViewContainer"]:has(.profile-mgr-active-flag) button {
-        min-height: 48px !important;
-        padding: 8px 14px !important;
+        min-height: 36px !important;
+        padding: 6px 12px !important;
     }
 
-    /* Sidebar Profile Manager 2x Font Scale */
+    /* Sidebar Profile Manager Font Scale */
     div[data-testid="stSidebar"]:has(.sidebar-profile-mgr-badge) button,
     div[data-testid="stSidebar"]:has(.sidebar-profile-mgr-badge) button p,
     div[data-testid="stSidebar"]:has(.sidebar-profile-mgr-badge) button span {
-        font-size: 1.25rem !important;
+        font-size: 0.95rem !important;
         font-weight: 800 !important;
-        min-height: 48px !important;
+        min-height: 36px !important;
     }
     div[data-testid="stSidebar"]:has(.sidebar-profile-mgr-badge) small {
-        font-size: 19px !important;
+        font-size: 14px !important;
     }
 
     /* Dark Mode Adaptive Rules */
@@ -898,9 +1070,9 @@ st.markdown(
         border: 2px solid #ef4444 !important;
         border-radius: 12px !important;
         color: #fca5a5 !important;
-        font-size: 18px !important;
+        font-size: 13.5px !important;
         font-weight: 800 !important;
-        padding: 8px 20px !important;
+        padding: 6px 16px !important;
         cursor: pointer !important;
         transition: all 0.2s ease !important;
     }
@@ -912,19 +1084,19 @@ st.markdown(
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
-       GLOBAL PROJECT NAME (اسم المشروع) LUXURY CENTERED STYLING (1.80rem THEME)
+       GLOBAL PROJECT NAME (اسم المشروع) LUXURY CENTERED STYLING (75% Compact Scale)
        ═══════════════════════════════════════════════════════════════════════════ */
     
     /* Target ANY Project Name Text Input container across ALL modules and forms */
     div[data-testid="stTextInput"]:has(input[aria-label*="Project Name"]),
     div[data-testid="stTextInput"]:has(input[aria-label*="اسم المشروع"]) {
         text-align: center !important;
-        margin: 2px auto 8px auto !important;
+        margin: 2px auto 6px auto !important;
         width: 100% !important;
         background: linear-gradient(135deg, #0b1329 0%, #1e293b 50%, #0b1329 100%) !important;
         border: 2px solid #fbbf24 !important;
-        border-radius: 12px !important;
-        padding: 6px 16px 8px 16px !important;
+        border-radius: 10px !important;
+        padding: 4px 12px 6px 12px !important;
         box-shadow: 0 4px 18px rgba(0, 0, 0, 0.6), 0 0 14px rgba(251, 191, 36, 0.2) !important;
     }
 
@@ -935,28 +1107,28 @@ st.markdown(
     div[data-testid="stTextInput"]:has(input[aria-label*="اسم المشروع"]) label p,
     div[data-testid="stTextInput"]:has(input[aria-label*="Project Name"]) [data-testid="stWidgetLabel"] p,
     div[data-testid="stTextInput"]:has(input[aria-label*="اسم المشروع"]) [data-testid="stWidgetLabel"] p {
-        font-size: 1.60rem !important;
+        font-size: 1.20rem !important;
         font-weight: 900 !important;
         color: #fbbf24 !important;
         text-align: center !important;
         display: block !important;
         width: 100% !important;
-        margin: 0 auto 3px auto !important;
+        margin: 0 auto 2px auto !important;
         line-height: 1.2 !important;
         text-shadow: 0 0 12px rgba(251, 191, 36, 0.45) !important;
-        letter-spacing: 0.5px !important;
+        letter-spacing: 0.4px !important;
     }
 
     /* Target the Input Box (Distinctive Luminous Cyan / Sky Blue Text) */
     div[data-testid="stTextInput"]:has(input[aria-label*="Project Name"]) input,
     div[data-testid="stTextInput"]:has(input[aria-label*="اسم المشروع"]) input {
-        font-size: 1.65rem !important;
+        font-size: 1.24rem !important;
         font-weight: 900 !important;
         color: #38bdf8 !important;
         background: #080f1d !important;
         border: 1.8px solid #38bdf8 !important;
-        border-radius: 8px !important;
-        padding: 6px 14px !important;
+        border-radius: 6px !important;
+        padding: 4px 10px !important;
         text-align: center !important;
         box-shadow: 0 0 14px rgba(56, 189, 248, 0.25), 0 4px 14px rgba(0, 0, 0, 0.5) !important;
         text-shadow: 0 0 10px rgba(56, 189, 248, 0.4) !important;
@@ -979,9 +1151,9 @@ st.markdown(
     (function() {
         try {
             const root = document.documentElement;
-            root.style.setProperty('--ecp-modules-base-font-size', '16px');
-            root.style.setProperty('--ecp-input-font-size', '19px');
-            root.style.setProperty('--ecp-output-font-size', '19px');
+            root.style.setProperty('--ecp-modules-base-font-size', '12px');
+            root.style.setProperty('--ecp-input-font-size', '14.25px');
+            root.style.setProperty('--ecp-output-font-size', '14.25px');
         } catch(e) {
             console.warn('Init error:', e);
         }
@@ -1025,18 +1197,16 @@ def render_top_profile_bar():
 
     render_custom_html(
         f"""
-        <div style="background: linear-gradient(135deg, #0b1329 0%, #1e293b 50%, #0b1329 100%); border: 1.5px solid rgba(56, 189, 248, 0.45); border-radius: 12px; padding: 12px 20px; margin-bottom: 6px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.45), 0 0 15px rgba(56, 189, 248, 0.12); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-            <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
-                <span style="font-size: 26px; filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.5));">🏗️</span>
-                <div style="display: flex; flex-direction: column;">
-                    <div style="font-size: 13px; font-weight: 700; color: #94a3b8;">المشروع الإنشائي النشط حالياً:</div>
-                    <div style="font-size: 20px; font-weight: 900; color: #38bdf8; text-shadow: 0 0 10px rgba(56, 189, 248, 0.35);">📁 {active_pname}</div>
-                </div>
-                <span style="background: rgba(34, 197, 94, 0.20); color: #4ade80; border: 1.5px solid #22c55e; padding: 4px 14px; border-radius: 20px; font-size: 13px; font-weight: 800; box-shadow: 0 0 10px rgba(34, 197, 94, 0.25);">🟢 متزامن ونشط</span>
+        <div style="background: linear-gradient(135deg, #0b1329 0%, #1e293b 50%, #0b1329 100%); border: 1px solid rgba(56, 189, 248, 0.40); border-radius: 8px; padding: 4px 14px; margin-bottom: 5px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 32px;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <span style="font-size: 18px; filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.4)); line-height: 1;">🏗️</span>
+                <span style="font-size: 12px; font-weight: 700; color: #94a3b8;">المشروع النشط:</span>
+                <span style="font-size: 15px; font-weight: 900; color: #38bdf8; text-shadow: 0 0 8px rgba(56, 189, 248, 0.35);">📁 {active_pname}</span>
+                <span style="background: rgba(34, 197, 94, 0.18); color: #4ade80; border: 1px solid #22c55e; padding: 1px 9px; border-radius: 12px; font-size: 11.5px; font-weight: 800; line-height: 1.4;">🟢 متزامن</span>
             </div>
-            <div style="display: flex; align-items: center; gap: 10px; font-size: 14px; color: #cbd5e1; font-weight: 700;">
-                <span style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.35); padding: 5px 14px; border-radius: 8px; color: #38bdf8;">📐 ECP 203-2018</span>
-                <span style="background: rgba(251, 191, 36, 0.15); border: 1px solid rgba(251, 191, 36, 0.35); padding: 5px 14px; border-radius: 8px; color: #fbbf24;">⚖️ ton · m · cm</span>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #cbd5e1; font-weight: 700;">
+                <span style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.30); padding: 2px 10px; border-radius: 6px; color: #38bdf8;">📐 ECP 203</span>
+                <span style="background: rgba(251, 191, 36, 0.12); border: 1px solid rgba(251, 191, 36, 0.30); padding: 2px 10px; border-radius: 6px; color: #fbbf24;">⚖️ ton·m·cm</span>
             </div>
         </div>
         """
@@ -2209,7 +2379,14 @@ else:
     elif "Steel Rebar" in module or "Steel" in module or "اقطار" in module:
         render_steel_bars()
     elif "Quantity Survey" in module or "Survey" in module or "حصر" in module:
-        render_concrete_survey()
+        if "Brick" in module or "Plastering" in module or "Module 12" in module or "brick_survey" in module or "طوب" in module:
+            try:
+                render_brick_survey_module()
+            except Exception as ex:
+                st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 12: {ex}")
+                st.exception(ex)
+        else:
+            render_concrete_survey()
     else:
         render_flat_slab()
 

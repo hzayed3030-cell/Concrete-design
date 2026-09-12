@@ -60,9 +60,9 @@ def render() -> None:
     )
 
     tab_ref, tab_calc, tab_multi = st.tabs([
-        "📋 جدول مرجعي  |  Reference Table",
-        "🔢 حاسبة بار واحد  |  Single-Bar Calculator",
-        "📦 حاسبة متعددة  |  Multi-Bar Calculator",
+        "📋 Reference Table (جدول مرجعي)",
+        "🔢 Single-Bar Calculator (حاسبة بار واحد)",
+        "📦 Multi-Bar Calculator (حاسبة متعددة)",
     ])
 
     # ────────────────────────────────────────────────────────────────────────
@@ -96,7 +96,7 @@ def render() -> None:
         )
 
         # Grade info
-        with st.expander("📌 درجات الحديد وحدود الخضوع  |  Steel Grades & Yield Strengths"):
+        with st.expander("📌 Steel Grades & Yield Strengths (درجات الحديد وحدود الخضوع)"):
             g_rows = [
                 {"الدرجة / Grade": g, "حد الخضوع Fy (kg/cm²)": fy}
                 for g, fy in GRADES.items()
@@ -104,7 +104,7 @@ def render() -> None:
             render_styled_table(g_rows)
 
         # Areas per metre for multiple bars
-        with st.expander("📐 مساحة (n) بار / متر طولي  |  As (n bars/m) Table"):
+        with st.expander("📐 As (n bars/m) Table (مساحة n بار / متر طولي)"):
             counts = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12]
             area_rows = []
             for b in BARS:

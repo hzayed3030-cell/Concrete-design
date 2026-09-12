@@ -29,6 +29,7 @@ from modules.settings import (
     cfg_set,
     text_input,
     get_safe_profile_filename_prefix,
+    play_warning_sound,
 )
 from modules.report_generator import (
     generate_column_survey_report_html,
@@ -1072,49 +1073,8 @@ def _generate_alarm_wav_b64() -> str:
 if hasattr(st, "dialog"):
     @st.dialog("⚠️ تحذير هندسي: طول القطع أقل من الكود المصري (ECP 203)")
     def _warn_short_cut_dialog(short_models: list, total_types: int = 4):
-        # Audible Alarm: Web Audio API Oscillator + HTML5 Audio Autoplay
-        try:
-            alarm_b64 = _generate_alarm_wav_b64()
-            audio_html = (
-                '<audio autoplay style="display:none;">'
-                + f'<source src="data:audio/wav;base64,{alarm_b64}" type="audio/wav">'
-                + '</audio>'
-                + """
-                <script>
-                (function() {
-                    try {
-                        var AudioCtx = window.AudioContext || window.webkitAudioContext || (window.parent && (window.parent.AudioContext || window.parent.webkitAudioContext));
-                        if (AudioCtx) {
-                            var ctx = new AudioCtx();
-                            if (ctx.state === 'suspended') ctx.resume();
-                            function playTone(freq, start, duration, type) {
-                                var osc = ctx.createOscillator();
-                                var gain = ctx.createGain();
-                                osc.type = type || 'sawtooth';
-                                osc.frequency.setValueAtTime(freq, start);
-                                gain.gain.setValueAtTime(0.001, start);
-                                gain.gain.linearRampToValueAtTime(0.35, start + 0.02);
-                                gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
-                                osc.connect(gain);
-                                gain.connect(ctx.destination);
-                                osc.start(start);
-                                osc.stop(start + duration);
-                            }
-                            var now = ctx.currentTime;
-                            playTone(920, now, 0.15, 'sawtooth');
-                            playTone(920, now + 0.20, 0.15, 'sawtooth');
-                            playTone(1200, now + 0.40, 0.28, 'triangle');
-                        }
-                    } catch(e) {
-                        console.log("Audio alarm notice:", e);
-                    }
-                })();
-                </script>
-                """
-            )
-            components.html(audio_html, height=0, width=0)
-        except Exception:
-            pass
+        # Audible Alarm: Unified Whistle (2550 Hz with 36 Hz Trill)
+        play_warning_sound()
 
         # Build table rows for all affected models
         warning_rows = []
@@ -1169,49 +1129,8 @@ if hasattr(st, "dialog"):
 if hasattr(st, "dialog"):
     @st.dialog("⚠️ تحذير هندسي: إجهاد الخرسانة أقل من الحد القياسي (350 kg/cm²)")
     def _warn_low_fcu_dialog(fcu_val: float):
-        # Audible Alarm: Web Audio API Oscillator + HTML5 Audio Autoplay
-        try:
-            alarm_b64 = _generate_alarm_wav_b64()
-            audio_html = (
-                '<audio autoplay style="display:none;">'
-                + f'<source src="data:audio/wav;base64,{alarm_b64}" type="audio/wav">'
-                + '</audio>'
-                + """
-                <script>
-                (function() {
-                    try {
-                        var AudioCtx = window.AudioContext || window.webkitAudioContext || (window.parent && (window.parent.AudioContext || window.parent.webkitAudioContext));
-                        if (AudioCtx) {
-                            var ctx = new AudioCtx();
-                            if (ctx.state === 'suspended') ctx.resume();
-                            function playTone(freq, start, duration, type) {
-                                var osc = ctx.createOscillator();
-                                var gain = ctx.createGain();
-                                osc.type = type || 'sawtooth';
-                                osc.frequency.setValueAtTime(freq, start);
-                                gain.gain.setValueAtTime(0.001, start);
-                                gain.gain.linearRampToValueAtTime(0.35, start + 0.02);
-                                gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
-                                osc.connect(gain);
-                                gain.connect(ctx.destination);
-                                osc.start(start);
-                                osc.stop(start + duration);
-                            }
-                            var now = ctx.currentTime;
-                            playTone(920, now, 0.15, 'sawtooth');
-                            playTone(920, now + 0.20, 0.15, 'sawtooth');
-                            playTone(1200, now + 0.40, 0.28, 'triangle');
-                        }
-                    } catch(e) {
-                        console.log("Audio alarm notice:", e);
-                    }
-                })();
-                </script>
-                """
-            )
-            components.html(audio_html, height=0, width=0)
-        except Exception:
-            pass
+        # Audible Alarm: Unified Whistle (2550 Hz with 36 Hz Trill)
+        play_warning_sound()
 
         st.markdown(
             f"""
@@ -1262,21 +1181,21 @@ def render() -> None:
     st.markdown(
         """
         <style>
-        /* Enlarged typography for ALL Tabs across Concrete Survey module */
+        /* Compact typography for ALL Tabs across Concrete Survey module (75% Scale) */
         div[data-testid="stTabs"] button[data-testid="stTab"] {
-            font-size: 1.30rem !important;
+            font-size: 0.95rem !important;
             font-weight: 800 !important;
-            padding: 10px 22px !important;
-            border-radius: 8px 8px 0 0 !important;
+            padding: 6px 14px !important;
+            border-radius: 6px 6px 0 0 !important;
         }
         div[data-testid="stTabs"] button[data-testid="stTab"] p {
-            font-size: 1.30rem !important;
+            font-size: 0.95rem !important;
             font-weight: 800 !important;
-            line-height: 1.4 !important;
+            line-height: 1.3 !important;
         }
         div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"] {
             color: #1e3a8a !important;
-            border-bottom: 4px solid #2563eb !important;
+            border-bottom: 3px solid #2563eb !important;
             background: rgba(37, 99, 235, 0.08) !important;
         }
         div[data-testid="stTabs"] button[data-testid="stTab"][aria-selected="true"] p {
@@ -1294,9 +1213,9 @@ def render() -> None:
 
     tab_customs, tab_quick, tab_table, tab_materials = st.tabs([
         "🏛️ Customs — Concrete Columns Survey",
-        "🧱 حصر العناصر الإنشائية  |  Elements Survey",
-        "📋 جدول حصر مخصص  |  Custom Takeoff Table",
-        "🧪 تقدير مواد الخلطة  |  Mix Materials Estimator",
+        "🧱 Elements Survey (حصر العناصر الإنشائية)",
+        "📋 Custom Takeoff Table (جدول حصر مخصص)",
+        "🧪 Mix Materials Estimator (تقدير مواد الخلطة)",
     ])
 
     # ────────────────────────────────────────────────────────────────────────
@@ -1311,38 +1230,41 @@ def render() -> None:
             st.markdown(
                 """
                 <style>
-                /* Distinctive Custom Colored Frame for Inputs */
+                /* Distinctive Custom Colored Frame for Inputs (75% Compact Scale) */
                 div[data-testid="stVerticalBlockBorderWrapper"]:has(.cs-inputs-header-badge) {
                     border: 2px solid #38bdf8 !important;
-                    border-radius: 10px !important;
+                    border-radius: 8px !important;
                     background: linear-gradient(180deg, #0b1329 0%, #1e293b 100%) !important;
-                    padding: 10px 14px !important;
+                    padding: 8px 12px !important;
                     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.40) !important;
                 }
                 div[data-testid="stVerticalBlockBorderWrapper"]:has(.cs-inputs-header-badge):hover {
                     border-color: #60a5fa !important;
                     box-shadow: 0 6px 18px rgba(56, 189, 248, 0.25) !important;
                 }
-                /* Increase label font size by 1.25x (عناوين المدخلات) */
+                /* Scaled label font size (75%: عناوين المدخلات) */
                 div[data-testid="stVerticalBlockBorderWrapper"]:has(.cs-inputs-header-badge) label p {
-                    font-size: 1.15rem !important;
+                    font-size: 0.85rem !important;
                     font-weight: 700 !important;
                     color: #fde047 !important;
-                    line-height: 1.30 !important;
+                    line-height: 1.15 !important;
+                    margin-bottom: 1px !important;
                 }
-                /* Increase input values/numbers font size by 1.25x (قيم المدخلات) */
+                /* Scaled input values/numbers font size (75%: قيم المدخلات) */
                 div[data-testid="stVerticalBlockBorderWrapper"]:has(.cs-inputs-header-badge) input {
-                    font-size: 1.22rem !important;
+                    font-size: 0.90rem !important;
                     font-weight: 800 !important;
-                    padding: 6px 10px !important;
+                    padding: 3px 8px !important;
+                    min-height: 28px !important;
+                    height: 28px !important;
                 }
-                /* Increase selectbox and radio text font size by 1.25x */
+                /* Scaled selectbox and radio text font size (75%) */
                 div[data-testid="stVerticalBlockBorderWrapper"]:has(.cs-inputs-header-badge) div[data-baseweb="select"] span {
-                    font-size: 1.18rem !important;
+                    font-size: 0.88rem !important;
                     font-weight: 700 !important;
                 }
                 div[data-testid="stVerticalBlockBorderWrapper"]:has(.cs-inputs-header-badge) div[data-testid="stRadio"] label p {
-                    font-size: 1.15rem !important;
+                    font-size: 0.85rem !important;
                     font-weight: 700 !important;
                 }
                 </style>
@@ -1482,7 +1404,7 @@ def render() -> None:
             # ── SECTION B: PER-COLUMN TYPE SPECIFIC INPUTS ──
             st.markdown("<div style='font-size:14.5px; font-weight:800; color:#1e3a8a; margin-bottom:6px;'>🏛️ 2. مدخلات وتفاصيل نماذج الأعمدة (Per-Column Model Details)</div>", unsafe_allow_html=True)
 
-            type_tabs = st.tabs([f"🏛️ نموذج C{i+1}" for i in range(int(n_types_in))])
+            type_tabs = st.tabs([f"🏛️ Model C{i+1} (نموذج C{i+1})" for i in range(int(n_types_in))])
             col_inputs = []
             short_models_list = []
 
@@ -1855,7 +1777,7 @@ def render() -> None:
                 unsafe_allow_html=True,
             )
 
-            slab_tabs = st.tabs([f"🟦 نموذج بلاطة S{i+1}" for i in range(int(n_slabs_fs_in))])
+            slab_tabs = st.tabs([f"🟦 Slab Model S{i+1} (نموذج بلاطة S{i+1})" for i in range(int(n_slabs_fs_in))])
             slab_inputs = []
 
             for s_idx in range(int(n_slabs_fs_in)):
@@ -1921,7 +1843,7 @@ def render() -> None:
                     )
 
                     top_add_models = []
-                    top_tabs = st.tabs([f"🔹 نموذج علوي T{k+1}" for k in range(int(n_top_models_in))])
+                    top_tabs = st.tabs([f"🔹 Top Extra T{k+1} (نموذج علوي T{k+1})" for k in range(int(n_top_models_in))])
                     for k in range(int(n_top_models_in)):
                         with top_tabs[k]:
                             t_c0, t_c1, t_c2, t_c3, t_c4, t_c5, t_c6 = st.columns([1.2, 1.1, 1.1, 1.1, 1.0, 1.0, 1.0])
@@ -1985,7 +1907,7 @@ def render() -> None:
                     )
 
                     btm_add_models = []
-                    btm_tabs = st.tabs([f"🔹 نموذج سفلي B{k+1}" for k in range(int(n_btm_models_in))])
+                    btm_tabs = st.tabs([f"🔹 Bottom Extra B{k+1} (نموذج سفلي B{k+1})" for k in range(int(n_btm_models_in))])
                     for k in range(int(n_btm_models_in)):
                         with btm_tabs[k]:
                             b_c0, b_c1, b_c2, b_c3, b_c4, b_c5, b_c6 = st.columns([1.2, 1.1, 1.1, 1.1, 1.0, 1.0, 1.0])
@@ -2635,7 +2557,7 @@ def render() -> None:
         # INTEGRATED CAD DRAWINGS & BBS VISUALIZER (Columns + Flat Slabs)
         # ────────────────────────────────────────────────────────────────────
         with st.expander(
-            f"📐 المخططات الإنشائية وتفريد التسليح للعناصر ({len(col_results)} نماذج أعمدة + {len(slab_results)} نماذج بلاطات)",
+            f"📐 CAD Drawings & Rebar Detailing — ({len(col_results)} Column Models + {len(slab_results)} Slab Models) (المخططات الإنشائية وتفريد التسليح للعناصر)",
             expanded=False,
             key="cs_draw_exp",
             on_change="rerun",
@@ -3387,7 +3309,7 @@ def render() -> None:
             st.markdown(clean_pricing_html, unsafe_allow_html=True)
 
         # Materials estimation for all elements (Columns + Flat Slabs)
-        with st.expander(f"🧪 تقدير مواد الخلطة الخرسانية الإجمالية للمشروع ({grand_vol_concrete_all:.2f} m³ لكافة الأعمدة والأسقف)"):
+        with st.expander(f"🧪 Total Project Concrete Mix Estimation — ({grand_vol_concrete_all:.2f} m³ for All Columns & Slabs) (تقدير مواد الخلطة الخرسانية الإجمالية للمشروع)"):
             mat_c1, mat_c2, mat_c3, mat_c4 = st.columns(4)
             mat_c1.metric(f"أسمنت ({fcu_in:.0f} kg/m³)", f"{grand_cement_tons:.2f} طن", f"{grand_cement_bags} شكارة")
             mat_c2.metric("رمل (0.40 m³/m³)", f"{grand_sand_m3:.2f} m³")
@@ -3610,7 +3532,7 @@ def render() -> None:
         st.markdown("#### حصر العناصر الإنشائية الرئيسية")
         
         # 1. Footings
-        with st.expander("🪨 1. القواعد (Footings - PC & RC)", expanded=True):
+        with st.expander("🪨 1. Footings - PC & RC (القواعد العادية والمسلحة)", expanded=True):
             f_col1, f_col2 = st.columns(2)
             with f_col1:
                 st.markdown("**القواعد العادية (Plain Concrete - PC)**")
@@ -3631,7 +3553,7 @@ def render() -> None:
                 st.markdown(f"**حجم خرسانة مسلحة:** `{rc_vol:.2f} m³`")
 
         # 2. Columns & Necks
-        with st.expander("🏛️ 2. الأعمدة ورقاب الأعمدة (Columns & Necks)", expanded=True):
+        with st.expander("🏛️ 2. Columns & Necks (الأعمدة ورقاب الأعمدة)", expanded=True):
             c_col1, c_col2 = st.columns(2)
             with c_col1:
                 st.markdown("**رقاب الأعمدة (Neck Columns)**")
@@ -3653,7 +3575,7 @@ def render() -> None:
                 st.markdown(f"**حجم الأعمدة الكلي:** `{col_vol:.2f} m³`")
 
         # 3. Ground Beams & Tie Beams (السملات والشدادات)
-        with st.expander("🔗 3. السملات والشدادات (Ground Beams & Straps)", expanded=False):
+        with st.expander("🔗 3. Ground Beams & Straps (السملات والشدادات)", expanded=False):
             gb_col1, gb_col2 = st.columns(2)
             with gb_col1:
                 gb_l = st.number_input("إجمالي أطوال السملات L (m)", min_value=0.0, value=85.0, step=1.0, key="surv_gb_l")
@@ -3665,7 +3587,7 @@ def render() -> None:
             st.markdown(f"**حجم السملات والشدادات:** `{gb_vol:.2f} m³`")
 
         # 4. Slabs & Beams (الأسقف والكمرات)
-        with st.expander("🟦 4. الأسقف والكمرات (Slabs & Beams)", expanded=True):
+        with st.expander("🟦 4. Slabs & Beams (الأسقف والكمرات)", expanded=True):
             slab_type = st.radio(
                 "نوع البلاطة / Slab Type",
                 ["Flat Slab (بلاطة لاكمرية)", "Solid Slab (بلاطة كمرية)"],

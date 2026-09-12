@@ -444,7 +444,7 @@ def render():
         """,
         unsafe_allow_html=True,
     )
-    with st.expander("📝 تفاصيل مدخلات القاعدة والتربة (Click to Expand / Collapse)", expanded=True):
+    with st.expander("📝 Footing & Soil Input Details (تفاصيل مدخلات القاعدة والتربة) — [Click to Expand / Collapse]", expanded=True):
         c1, c2, c3 = st.columns(3)
 
         with c1:
@@ -815,6 +815,7 @@ def render():
         '✅ SAFE DESIGN – ALL ECP 203 CHECKS SATISFIED</div>',
         unsafe_allow_html=True,
     )
+    st.markdown("<div style='margin-top: 14px;'></div>", unsafe_allow_html=True)
 
     # ── KEY DESIGN METRICS GRID ──────────────────────────────────────────────
     m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)

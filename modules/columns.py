@@ -641,7 +641,7 @@ def render():
         """,
         unsafe_allow_html=True,
     )
-    with st.expander("📝 تفاصيل مدخلات وأبعاد العمود (Click to Expand / Collapse)", expanded=True):
+    with st.expander("📝 Column Dimensions & Input Details (تفاصيل مدخلات وأبعاد العمود) — [Click to Expand / Collapse]", expanded=True):
         col1, col2, col3 = st.columns(3)
 
         with col1:
@@ -757,18 +757,23 @@ def render():
         )
 
     # Slenderness banner
+    slender_icon = "✅" if slender_ok else "⚠️"
     banner_cls = "result-ok" if slender_ok else "result-warn"
     st.markdown(
-        f'<div class="{banner_cls}">Slenderness Check: λb = {lambda_b:.2f} → {slender_class}</div>',
+        f'<div class="{banner_cls}">{slender_icon} Slenderness Check: λb = {lambda_b:.2f} → {slender_class}</div>',
         unsafe_allow_html=True,
     )
 
     # Capacity banner
+    cap_icon = "✅" if util <= 100 else "❌"
     cap_cls = "result-ok" if util <= 100 else "result-fail"
     st.markdown(
-        f'<div class="{cap_cls}">Capacity Check: Pu_design = {Pu_ton:.1f} ton | Pu_capacity = {Pu_cap_t:.1f} ton | Utilisation = {util:.1f}%</div>',
+        f'<div class="{cap_cls}">{cap_icon} Capacity Check: Pu_design = {Pu_ton:.1f} ton | Pu_capacity = {Pu_cap_t:.1f} ton | Utilisation = {util:.1f}%</div>',
         unsafe_allow_html=True,
     )
+
+    # Spacing before metric cards panel
+    st.markdown("<div style='margin-top: 14px;'></div>", unsafe_allow_html=True)
 
     # Summary metric cards
     c1, c2, c3, c4, c5 = st.columns(5)
