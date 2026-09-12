@@ -388,10 +388,10 @@ st.markdown(
        2. GENERAL UI, RESULTS, TITLES & TABLES
        ═══════════════════════════════════════════════════════════════════════════ */
     
-    /* Main Content Top Margin - تقليل الهامش العلوي بعد فتح المشروع بمقدار سطرين */
+    /* Main Content Top Margin - زيادة الهامش العلوي بعد فتح المشروع بمقدار سطرين لظهور شريط المشروع النشط بوضوح */
     [data-testid="stMainBlockContainer"],
     section.main > div.block-container {
-        padding-top: 2.2rem !important;
+        padding-top: 4.0rem !important;
     }
     
     /* Distinctive Centered Input Section Header (Golden Amber Theme) */
@@ -1197,7 +1197,7 @@ def render_top_profile_bar():
 
     render_custom_html(
         f"""
-        <div style="background: linear-gradient(135deg, #0b1329 0%, #1e293b 50%, #0b1329 100%); border: 1px solid rgba(56, 189, 248, 0.40); border-radius: 8px; padding: 4px 14px; margin-bottom: 5px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 32px;">
+        <div style="background: linear-gradient(135deg, #0b1329 0%, #1e293b 50%, #0b1329 100%); border: 1px solid rgba(56, 189, 248, 0.40); border-radius: 8px; padding: 4px 14px; margin-top: 8px; margin-bottom: 8px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 32px;">
             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
                 <span style="font-size: 18px; filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.4)); line-height: 1;">🏗️</span>
                 <span style="font-size: 12px; font-weight: 700; color: #94a3b8;">المشروع النشط:</span>
