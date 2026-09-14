@@ -1,6 +1,6 @@
 {
   "selected_module_idx": 10,
-  "apartment_name": "try1",
+  "apartment_name": "تجربة حصر الطوب والمحارة - موديول 12 فقط",
   "col_Pu_input": 160.0,
   "col_Safety_Factor": 1.2,
   "col_b": 30,
@@ -131,7 +131,7 @@
   "cs_price_gravel": 600.0,
   "cs_price_sand": 200.0,
   "cs_price_labor": 2000.0,
-  "cs_project_name": "try1",
+  "cs_project_name": "تجربة حصر الطوب والمحارة - موديول 12 فقط",
   "gs_lx": 30.0,
   "gs_ly": 20.0,
   "gs_ts": 20.0,
@@ -238,16 +238,118 @@
       3.0,
       6.0
     ],
+    "col_length_cm": 60.0,
+    "col_width_cm": 30.0,
     "col_removed": [],
     "col_dirs": {},
-    "col_shifted": {},
+    "col_shifts": {
+      "0,0": {
+        "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
+        "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
+      },
+      "0,2": {
+        "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
+        "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+      },
+      "0,1": {
+        "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
+        "shift_y": "متمركز على المحور (Centered)"
+      },
+      "2,2": {
+        "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+        "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+      },
+      "1,2": {
+        "shift_x": "متمركز على المحور (Centered)",
+        "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+      },
+      "2,1": {
+        "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+        "shift_y": "متمركز على المحور (Centered)"
+      },
+      "2,0": {
+        "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+        "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
+      }
+    },
+    "col_shifted": {
+      "0,0": [
+        9.0,
+        24.0
+      ],
+      "0,2": [
+        9.0,
+        -24.0
+      ],
+      "0,1": [
+        9.0,
+        0.0
+      ],
+      "2,2": [
+        -9.0,
+        -24.0
+      ],
+      "1,2": [
+        0.0,
+        -24.0
+      ],
+      "2,1": [
+        -9.0,
+        0.0
+      ],
+      "2,0": [
+        -9.0,
+        24.0
+      ]
+    },
     "wall_thickness": {
       "0,2,1,2": 25,
-      "0,1,0,2": 25
+      "0,1,0,2": 25,
+      "1,0,2,0": 25,
+      "0,0,1,0": 25,
+      "1,0,1,1": 12,
+      "1,1,1,2": 12,
+      "2,0,2,1": 25,
+      "0,0,0,1": 25,
+      "1,1,2,1": 25
     },
     "wall_removed": [],
     "default_wall_height": 3.0,
-    "wall_heights": {},
+    "parapet_wall_height": 1.3,
+    "parapet_walls": [
+      [
+        1,
+        2,
+        2,
+        2
+      ],
+      [
+        2,
+        1,
+        2,
+        2
+      ],
+      [
+        1,
+        1,
+        2,
+        1
+      ]
+    ],
+    "wall_heights": {
+      "0,0,1,0": 3.0,
+      "1,0,2,0": 3.0,
+      "0,1,1,1": 3.0,
+      "1,1,2,1": 1.3,
+      "0,2,1,2": 3.0,
+      "1,2,2,2": 1.3,
+      "0,0,0,1": 3.0,
+      "0,1,0,2": 3.0,
+      "1,0,1,1": 3.0,
+      "1,1,1,2": 3.0,
+      "2,0,2,1": 3.0,
+      "2,1,2,2": 1.3
+    },
     "windows": {
       "0,0,1,0": [
         {
@@ -348,7 +450,7 @@
           "type_label": "W2",
           "w_m": 0.8,
           "h_m": 0.8,
-          "pos_m": 0.2,
+          "pos_m": 1.45,
           "sill_m": 1.2,
           "removed": false,
           "is_preview": false,
@@ -367,7 +469,7 @@
           "type_label": "W1",
           "w_m": 1.0,
           "h_m": 1.2,
-          "pos_m": 2.0,
+          "pos_m": 2.5,
           "sill_m": 0.9,
           "removed": false,
           "is_preview": false,
@@ -402,7 +504,7 @@
           "h_m": 1.2,
           "pos_m": 0.7,
           "sill_m": 0.9,
-          "removed": false,
+          "removed": true,
           "is_preview": false,
           "has_conflict": false,
           "id": "win_27"
@@ -427,6 +529,48 @@
           "is_preview": false,
           "has_conflict": false,
           "id": "win_28"
+        }
+      ],
+      "2,0,2,1": [
+        {
+          "kind": "win",
+          "wk": [
+            2,
+            0,
+            2,
+            1
+          ],
+          "name": "W1-2",
+          "type_label": "W1",
+          "w_m": 1.0,
+          "h_m": 1.2,
+          "pos_m": 0.53,
+          "sill_m": 0.9,
+          "removed": false,
+          "is_preview": false,
+          "has_conflict": false,
+          "id": "win_29"
+        }
+      ],
+      "0,1,0,2": [
+        {
+          "kind": "win",
+          "wk": [
+            0,
+            1,
+            0,
+            2
+          ],
+          "name": "W2-2",
+          "type_label": "W2",
+          "w_m": 0.8,
+          "h_m": 0.8,
+          "pos_m": 1.0,
+          "sill_m": 1.2,
+          "removed": false,
+          "is_preview": false,
+          "has_conflict": false,
+          "id": "win_32"
         }
       ]
     },
@@ -470,7 +614,7 @@
           "type_label": "D1",
           "w_m": 0.9,
           "h_m": 2.1,
-          "pos_m": 2.21,
+          "pos_m": 0.5,
           "leaf_dir": "أعلى",
           "hinge_dir": "يسار",
           "removed": false,
@@ -498,9 +642,75 @@
           "has_conflict": false,
           "id": "door_24"
         }
+      ],
+      "1,1,2,1": [
+        {
+          "kind": "door",
+          "wk": [
+            1,
+            1,
+            2,
+            1
+          ],
+          "name": "D1-2",
+          "type_label": "D1",
+          "w_m": 0.9,
+          "h_m": 2.1,
+          "pos_m": 2.6,
+          "leaf_dir": "أعلى",
+          "hinge_dir": "يمين",
+          "removed": true,
+          "is_preview": false,
+          "has_conflict": false,
+          "id": "door_30"
+        }
+      ],
+      "1,1,1,2": [
+        {
+          "kind": "door",
+          "wk": [
+            1,
+            1,
+            1,
+            2
+          ],
+          "name": "D1-2",
+          "type_label": "D1",
+          "w_m": 0.9,
+          "h_m": 2.1,
+          "pos_m": 1.5,
+          "leaf_dir": "يسار",
+          "hinge_dir": "أعلى",
+          "removed": false,
+          "is_preview": false,
+          "has_conflict": false,
+          "id": "door_31"
+        }
+      ],
+      "2,0,2,1": [
+        {
+          "kind": "door",
+          "wk": [
+            2,
+            0,
+            2,
+            1
+          ],
+          "name": "D1-3",
+          "type_label": "D1",
+          "w_m": 0.9,
+          "h_m": 2.1,
+          "pos_m": 1.7,
+          "leaf_dir": "يمين",
+          "hinge_dir": "أعلى",
+          "removed": false,
+          "is_preview": false,
+          "has_conflict": false,
+          "id": "door_33"
+        }
       ]
     },
-    "next_op_id": 29,
+    "next_op_id": 34,
     "window_types": [
       {
         "id": "wt_1",
@@ -638,6 +848,150 @@
     "has_wall": true
   },
   "_m12_reset_v1_done": true,
+  "fs_col_pu_int": 79.59599999999999,
+  "fs_col_tot_pu_int": 79.59599999999999,
+  "fs_col_pu_edge": 39.797999999999995,
+  "fs_col_tot_pu_edge": 39.797999999999995,
+  "fs_col_pu_corner": 19.898999999999997,
+  "fs_col_tot_pu_corner": 19.898999999999997,
+  "fs_building_columns": [
+    {
+      "id": "C1",
+      "orig_id": "C1",
+      "grid_x": "Y1",
+      "grid_y": "X1",
+      "type": "Corner",
+      "x": 0.0,
+      "y": 0.0,
+      "bc": 50.0,
+      "tc": 30.0,
+      "pu_1f": 19.898999999999997,
+      "pu_tot": 19.898999999999997,
+      "atrib": 9.0
+    },
+    {
+      "id": "C2",
+      "orig_id": "C2",
+      "grid_x": "Y2",
+      "grid_y": "X1",
+      "type": "Edge",
+      "x": 6.0,
+      "y": 0.0,
+      "bc": 50.0,
+      "tc": 30.0,
+      "pu_1f": 39.797999999999995,
+      "pu_tot": 39.797999999999995,
+      "atrib": 18.0
+    },
+    {
+      "id": "C3",
+      "orig_id": "C3",
+      "grid_x": "Y3",
+      "grid_y": "X1",
+      "type": "Corner",
+      "x": 12.0,
+      "y": 0.0,
+      "bc": 50.0,
+      "tc": 30.0,
+      "pu_1f": 19.898999999999997,
+      "pu_tot": 19.898999999999997,
+      "atrib": 9.0
+    },
+    {
+      "id": "C4",
+      "orig_id": "C4",
+      "grid_x": "Y1",
+      "grid_y": "X2",
+      "type": "Edge",
+      "x": 0.0,
+      "y": 6.0,
+      "bc": 50.0,
+      "tc": 30.0,
+      "pu_1f": 39.797999999999995,
+      "pu_tot": 39.797999999999995,
+      "atrib": 18.0
+    },
+    {
+      "id": "C5",
+      "orig_id": "C5",
+      "grid_x": "Y2",
+      "grid_y": "X2",
+      "type": "Interior",
+      "x": 6.0,
+      "y": 6.0,
+      "bc": 50.0,
+      "tc": 30.0,
+      "pu_1f": 79.59599999999999,
+      "pu_tot": 79.59599999999999,
+      "atrib": 36.0
+    },
+    {
+      "id": "C6",
+      "orig_id": "C6",
+      "grid_x": "Y3",
+      "grid_y": "X2",
+      "type": "Edge",
+      "x": 12.0,
+      "y": 6.0,
+      "bc": 50.0,
+      "tc": 30.0,
+      "pu_1f": 39.797999999999995,
+      "pu_tot": 39.797999999999995,
+      "atrib": 18.0
+    },
+    {
+      "id": "C7",
+      "orig_id": "C7",
+      "grid_x": "Y1",
+      "grid_y": "X3",
+      "type": "Corner",
+      "x": 0.0,
+      "y": 12.0,
+      "bc": 50.0,
+      "tc": 30.0,
+      "pu_1f": 19.898999999999997,
+      "pu_tot": 19.898999999999997,
+      "atrib": 9.0
+    },
+    {
+      "id": "C8",
+      "orig_id": "C8",
+      "grid_x": "Y2",
+      "grid_y": "X3",
+      "type": "Edge",
+      "x": 6.0,
+      "y": 12.0,
+      "bc": 50.0,
+      "tc": 30.0,
+      "pu_1f": 39.797999999999995,
+      "pu_tot": 39.797999999999995,
+      "atrib": 18.0
+    },
+    {
+      "id": "C9",
+      "orig_id": "C9",
+      "grid_x": "Y3",
+      "grid_y": "X3",
+      "type": "Corner",
+      "x": 12.0,
+      "y": 12.0,
+      "bc": 50.0,
+      "tc": 30.0,
+      "pu_1f": 19.898999999999997,
+      "pu_tot": 19.898999999999997,
+      "atrib": 9.0
+    }
+  ],
+  "fs_col_b": 30.0,
+  "fs_col_c": 50.0,
+  "fs_Lx_spans": [
+    6.0,
+    6.0
+  ],
+  "fs_Ly_spans": [
+    6.0,
+    6.0
+  ],
   "enabled_modules": [
     0,
     1,

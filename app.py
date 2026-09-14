@@ -26,7 +26,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Load / initialise persistent settings BEFORE any styling or module renders ─
+# ── Load / initialise persistent settings BEFORE any styling or module renders (Single Whistle Alert Active) ─
 from modules.settings import (
     load_settings,
     reset_settings,
@@ -1798,7 +1798,7 @@ def render_profile_manager():
         trash_for_pname = get_deleted_modules_trash(pname)
         has_trash = len(trash_for_pname) > 0
 
-        b1, b2, b3, b4, b5, b6, b7, _pad = st.columns([1.1, 1.15, 1.05, 1.05, 0.95, 0.8, 0.45, 2.4])
+        b1, b_rn, b2, b3, b4, b5, b6, b7, _pad = st.columns([1.05, 1.2, 1.15, 1.05, 1.05, 0.95, 0.8, 0.45, 1.3])
         with b1:
             if st.button(
                 "🚀 تشغيل",
@@ -1813,6 +1813,20 @@ def render_profile_manager():
                 target_mod = saved_mod if saved_mod in enabled_mods else enabled_mods[0]
                 st.session_state["selected_module_idx"] = target_mod
                 st.rerun()
+        with b_rn:
+            is_rn_open = st.session_state.get(f"_show_rename_{pname}", False)
+            btn_rn_label = "🔼 إخفاء" if is_rn_open else "✏️ تغيير الاسم"
+            if st.button(
+                btn_rn_label,
+                key=f"btn_rename_{pname}",
+                use_container_width=True,
+                help=f"تغيير اسم مشروع {pname}",
+            ):
+                st.session_state[f"_show_rename_{pname}"] = not is_rn_open
+                st.session_state[f"_show_mod_config_{pname}"] = False
+                st.session_state[f"_show_delete_mod_{pname}"] = False
+                st.session_state[f"_show_restore_mod_{pname}"] = False
+                st.rerun()
         with b2:
             is_mod_open = st.session_state.get(f"_show_mod_config_{pname}", False)
             btn_mod_label = "🔼 إخفاء" if is_mod_open else "🎛️ موديولات"
@@ -1824,6 +1838,7 @@ def render_profile_manager():
             ):
                 st.session_state[f"_show_mod_config_{pname}"] = not is_mod_open
                 # Close other drawers for this project
+                st.session_state[f"_show_rename_{pname}"] = False
                 st.session_state[f"_show_delete_mod_{pname}"] = False
                 st.session_state[f"_show_restore_mod_{pname}"] = False
                 st.rerun()
@@ -1838,6 +1853,7 @@ def render_profile_manager():
             ):
                 st.session_state[f"_show_delete_mod_{pname}"] = not is_del_mod_open
                 # Close other drawers for this project
+                st.session_state[f"_show_rename_{pname}"] = False
                 st.session_state[f"_show_mod_config_{pname}"] = False
                 st.session_state[f"_show_restore_mod_{pname}"] = False
                 # Clear any pending dialogs for this project
@@ -1855,6 +1871,7 @@ def render_profile_manager():
                 disabled=not has_trash,
             ):
                 st.session_state[f"_show_restore_mod_{pname}"] = not is_restore_open
+                st.session_state[f"_show_rename_{pname}"] = False
                 st.session_state[f"_show_mod_config_{pname}"] = False
                 st.session_state[f"_show_delete_mod_{pname}"] = False
                 st.rerun()
@@ -1887,6 +1904,52 @@ def render_profile_manager():
                 play_warning_sound()
                 st.session_state["_profile_to_delete"] = pname
                 st.rerun()
+
+        # ── Interactive Rename Project Drawer (Hide/Show) ───────────────────
+        if st.session_state.get(f"_show_rename_{pname}", False):
+            with st.container(border=True):
+                st.markdown(
+                    f"""
+                    <div style="background: linear-gradient(135deg, #0b1f3a 0%, #1e3a8a 100%); border: 1.5px solid #38bdf8; border-radius: 8px; padding: 10px 16px; margin-bottom: 10px;">
+                        <div style="font-weight: 800; font-size: 16px; color: #ffffff; display: flex; align-items: center; gap: 8px;">
+                            <span>✏️</span> تغيير اسم المشروع (Rename Project): <b style="color: #fef08a;">«{pname}»</b>
+                        </div>
+                        <div style="font-size: 13px; color: #cbd5e1; margin-top: 4px;">
+                            أدخل الاسم الجديد للمشروع واضغط «حفظ الاسم الجديد». سيتم تحديث اسم المشروع في كافة السجلات مع الحفاظ الكامل على جميع الحسابات والموديولات والتصميمات.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                col_rn_input, col_rn_save, col_rn_cancel, _rn_pad = st.columns([4.2, 1.8, 1.2, 2.8])
+                with col_rn_input:
+                    new_name_val = st.text_input(
+                        "اسم المشروع الجديد:",
+                        value=pname,
+                        key=f"input_new_name_{pname}",
+                        label_visibility="collapsed",
+                        placeholder="اكتب الاسم الجديد للمشروع...",
+                    )
+                with col_rn_save:
+                    if st.button("💾 حفظ الاسم الجديد", type="primary", use_container_width=True, key=f"btn_save_rename_{pname}"):
+                        cleaned_name = (new_name_val or "").strip()
+                        if not cleaned_name:
+                            st.error("⚠️ يرجى إدخال اسم صحيح وغير فارغ للمشروع.")
+                        elif cleaned_name == pname:
+                            st.warning("⚠️ الاسم المدخل مطابق للاسم الحالي للمشروع دون تغيير.")
+                        elif cleaned_name in projects:
+                            st.error(f"⛔ يوجد مشروع آخر بالفعل بنفس الاسم «{cleaned_name}». يرجى اختيار اسم فريد.")
+                        else:
+                            if rename_project(pname, cleaned_name):
+                                st.session_state[f"_show_rename_{pname}"] = False
+                                st.success(f"✅ تم تغيير اسم المشروع بنجاح إلى: «{cleaned_name}»")
+                                st.rerun()
+                            else:
+                                st.error("❌ تعذر تغيير اسم المشروع. يرجى المحاولة مرة أخرى.")
+                with col_rn_cancel:
+                    if st.button("❌ إلغاء", key=f"btn_cancel_rename_{pname}", use_container_width=True):
+                        st.session_state[f"_show_rename_{pname}"] = False
+                        st.rerun()
 
         # ── Interactive Module Customizer Drawer (Hide/Show) ─────────────────
         if st.session_state.get(f"_show_mod_config_{pname}", False):
@@ -2194,14 +2257,21 @@ def render_profile_manager():
 # 1. Fresh application startup: Default to the Projects Manager screen
 if "_app_session_started" not in st.session_state:
     st.session_state["_app_session_started"] = True
-    st.session_state["nav_view"] = "profile_manager"
-    st.session_state["in_module"] = False
+    if "m12_op_move" in st.query_params or st.query_params.get("module") == "12":
+        st.session_state["nav_view"] = "module"
+        st.session_state["in_module"] = True
+        cfg_set("selected_module_idx", 10)
+    else:
+        st.session_state["nav_view"] = "profile_manager"
+        st.session_state["in_module"] = False
 
 # 2. Strict Navigation Guard: Once inside a module, modifying ANY input NEVER exits to Projects screen!
-if st.session_state.get("in_module", False) or st.session_state.get("nav_view") == "module":
+if st.session_state.get("in_module", False) or st.session_state.get("nav_view") == "module" or "m12_op_move" in st.query_params or st.query_params.get("module") == "12":
     current_nav = "module"
     st.session_state["nav_view"] = "module"
     st.session_state["in_module"] = True
+    if "m12_op_move" in st.query_params or st.query_params.get("module") == "12":
+        cfg_set("selected_module_idx", 10)
 else:
     current_nav = "profile_manager"
     st.session_state["nav_view"] = "profile_manager"
@@ -2259,10 +2329,49 @@ else:
         )
         render_custom_html(mod_card_html)
 
-        if st.button("🏠 شاشة إدارة المشاريع (Projects)", use_container_width=True, key="sb_btn_projects_mgr"):
-            st.session_state["nav_view"] = "profile_manager"
-            st.session_state["in_module"] = False
-            st.rerun()
+        col_sb_nav1, col_sb_nav2 = st.columns([1.1, 1.1])
+        with col_sb_nav1:
+            if st.button("🏠 المشاريع", use_container_width=True, key="sb_btn_projects_mgr", help="العودة إلى شاشة إدارة المشاريع الرئيسية"):
+                st.session_state["nav_view"] = "profile_manager"
+                st.session_state["in_module"] = False
+                st.rerun()
+        with col_sb_nav2:
+            sb_rn_open = st.session_state.get("_sb_show_rename", False)
+            btn_sb_rn_lbl = "🔼 إخفاء" if sb_rn_open else "✏️ تغيير الاسم"
+            if st.button(btn_sb_rn_lbl, use_container_width=True, key="sb_btn_rename_proj", help="تغيير اسم المشروع الإنشائي النشط"):
+                st.session_state["_sb_show_rename"] = not sb_rn_open
+                st.rerun()
+
+        if st.session_state.get("_sb_show_rename", False):
+            with st.container(border=True):
+                st.markdown("<small style='color:#38bdf8; font-weight:800;'>✏️ الاسم الجديد للمشروع النشط:</small>", unsafe_allow_html=True)
+                sb_new_name = st.text_input(
+                    "اسم المشروع الجديد:",
+                    value=active_project_sidebar,
+                    key="sb_input_rename_proj",
+                    label_visibility="collapsed",
+                )
+                col_sb_rn_a, col_sb_rn_b = st.columns(2)
+                with col_sb_rn_a:
+                    if st.button("💾 حفظ", type="primary", use_container_width=True, key="sb_save_rename_confirm"):
+                        cleaned_sb = (sb_new_name or "").strip()
+                        if not cleaned_sb:
+                            st.error("⚠️ يرجى إدخال اسم.")
+                        elif cleaned_sb == active_project_sidebar:
+                            st.warning("⚠️ مطابق للاسم الحالي.")
+                        elif cleaned_sb in all_projects_list:
+                            st.error("⛔ الاسم مستخدم مسبقاً.")
+                        else:
+                            if rename_project(active_project_sidebar, cleaned_sb):
+                                st.session_state["_sb_show_rename"] = False
+                                st.success("✅ تم التغيير بنجاح!")
+                                st.rerun()
+                            else:
+                                st.error("❌ تعذر التغيير.")
+                with col_sb_rn_b:
+                    if st.button("❌ إلغاء", use_container_width=True, key="sb_cancel_rename_btn"):
+                        st.session_state["_sb_show_rename"] = False
+                        st.rerun()
 
         st.markdown("---")
 

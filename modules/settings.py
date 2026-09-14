@@ -281,6 +281,7 @@ ECP_DEFAULTS: dict = {
         "y_axes": [0.0, 3.0, 6.0],
         "col_removed": [],
         "col_dirs": {},
+        "col_shifts": {},
         "col_shifted": {},
         "wall_thickness": {},
         "wall_removed": [],
@@ -570,12 +571,17 @@ def get_default_module_12_state() -> dict:
     return {
         "x_axes": [0.0, 4.0, 8.0],
         "y_axes": [0.0, 3.0, 6.0],
+        "col_length_cm": 60.0,
+        "col_width_cm": 30.0,
         "col_removed": [],
         "col_dirs": {},
+        "col_shifts": {},
         "col_shifted": {},
         "wall_thickness": {},
         "wall_removed": [],
         "default_wall_height": 3.0,
+        "parapet_wall_height": 1.0,
+        "parapet_walls": [],
         "wall_heights": {},
         "windows": {},
         "doors": {},
@@ -615,6 +621,8 @@ def _serialize_module_12_state(state: dict) -> dict:
     """Convert Python set and tuple-keyed session state into JSON-serializable primitives."""
     x_axes = [float(x) for x in state.get("m12_x_axes", [0.0, 4.0, 8.0])]
     y_axes = [float(y) for y in state.get("m12_y_axes", [0.0, 3.0, 6.0])]
+    col_length_cm = float(state.get("m12_col_length_cm", 60.0))
+    col_width_cm = float(state.get("m12_col_width_cm", 30.0))
 
     col_removed = []
     for item in state.get("m12_col_removed", set()):
@@ -627,6 +635,15 @@ def _serialize_module_12_state(state: dict) -> dict:
         t = _parse_m12_coord_tuple(k)
         if t and len(t) == 2:
             col_dirs[f"{t[0]},{t[1]}"] = str(v)
+
+    col_shifts = {}
+    for k, v in state.get("m12_col_shifts", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 2 and isinstance(v, dict):
+            col_shifts[f"{t[0]},{t[1]}"] = {
+                "shift_x": str(v.get("shift_x", "متمركز على المحور (Centered)")),
+                "shift_y": str(v.get("shift_y", "متمركز على المحور (Centered)")),
+            }
 
     col_shifted = {}
     for k, v in state.get("m12_col_shifted", {}).items():
@@ -646,7 +663,14 @@ def _serialize_module_12_state(state: dict) -> dict:
         if t and len(t) == 4:
             wall_removed.append(list(t))
 
-    default_wall_height = float(state.get("m12_default_wall_height", 3.0))
+    default_wall_height = float(state.get("m12_default_wall_height", state.get("m12_default_h_input", 3.0)))
+    parapet_wall_height = float(state.get("m12_parapet_wall_height", state.get("m12_parapet_h_input", 1.0)))
+
+    parapet_walls = []
+    for item in state.get("m12_parapet_walls", set()):
+        t = _parse_m12_coord_tuple(item)
+        if t and len(t) == 4:
+            parapet_walls.append(list(t))
 
     wall_heights = {}
     for k, v in state.get("m12_wall_heights", {}).items():
@@ -731,12 +755,17 @@ def _serialize_module_12_state(state: dict) -> dict:
     return {
         "x_axes": x_axes,
         "y_axes": y_axes,
+        "col_length_cm": col_length_cm,
+        "col_width_cm": col_width_cm,
         "col_removed": col_removed,
         "col_dirs": col_dirs,
+        "col_shifts": col_shifts,
         "col_shifted": col_shifted,
         "wall_thickness": wall_thickness,
         "wall_removed": wall_removed,
         "default_wall_height": default_wall_height,
+        "parapet_wall_height": parapet_wall_height,
+        "parapet_walls": parapet_walls,
         "wall_heights": wall_heights,
         "windows": windows,
         "doors": doors,
@@ -767,6 +796,9 @@ def _deserialize_module_12_state(data: dict) -> dict:
     if len(y_axes) < 2:
         y_axes = list(schema["y_axes"])
 
+    col_length_cm = float(data.get("col_length_cm", schema.get("col_length_cm", 60.0)))
+    col_width_cm = float(data.get("col_width_cm", schema.get("col_width_cm", 30.0)))
+
     col_rem = set()
     for item in data.get("col_removed", []):
         t = _parse_m12_coord_tuple(item)
@@ -778,6 +810,15 @@ def _deserialize_module_12_state(data: dict) -> dict:
         t = _parse_m12_coord_tuple(k)
         if t and len(t) == 2:
             col_dirs[t] = str(v)
+
+    col_shifts = {}
+    for k, v in data.get("col_shifts", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 2 and isinstance(v, dict):
+            col_shifts[t] = {
+                "shift_x": str(v.get("shift_x", "متمركز على المحور (Centered)")),
+                "shift_y": str(v.get("shift_y", "متمركز على المحور (Centered)")),
+            }
 
     col_shifted = {}
     for k, v in data.get("col_shifted", {}).items():
@@ -798,6 +839,13 @@ def _deserialize_module_12_state(data: dict) -> dict:
             wall_rem.add(t)
 
     def_h = float(data.get("default_wall_height", schema["default_wall_height"]))
+    parapet_h = float(data.get("parapet_wall_height", schema.get("parapet_wall_height", 1.0)))
+
+    parapet_walls = set()
+    for item in data.get("parapet_walls", []):
+        t = _parse_m12_coord_tuple(item)
+        if t and len(t) == 4:
+            parapet_walls.add(t)
 
     wall_heights = {}
     for k, v in data.get("wall_heights", {}).items():
@@ -858,12 +906,17 @@ def _deserialize_module_12_state(data: dict) -> dict:
     return {
         "m12_x_axes": x_axes,
         "m12_y_axes": y_axes,
+        "m12_col_length_cm": col_length_cm,
+        "m12_col_width_cm": col_width_cm,
         "m12_col_removed": col_rem,
         "m12_col_dirs": col_dirs,
+        "m12_col_shifts": col_shifts,
         "m12_col_shifted": col_shifted,
         "m12_wall_thickness": wall_thick,
         "m12_wall_removed": wall_rem,
         "m12_default_wall_height": def_h,
+        "m12_parapet_wall_height": parapet_h,
+        "m12_parapet_walls": parapet_walls,
         "m12_wall_heights": wall_heights,
         "m12_windows": windows,
         "m12_doors": doors,
@@ -1511,6 +1564,41 @@ def _ensure_module12_state(cfg: dict | None = None) -> None:
         nested = get_default_module_12_state()
         cfg["module_12_brick_survey"] = nested
 
+    # If Module 12 session state is ALREADY active, preserve live user edits and do not clobber session_state
+    if "m12_x_axes" in st.session_state:
+        if "m12_col_length_cm" not in st.session_state:
+            st.session_state["m12_col_length_cm"] = float(nested.get("col_length_cm", 60.0))
+        if "m12_col_width_cm" not in st.session_state:
+            st.session_state["m12_col_width_cm"] = float(nested.get("col_width_cm", 30.0))
+        if "m12_parapet_wall_height" not in st.session_state:
+            st.session_state["m12_parapet_wall_height"] = float(nested.get("parapet_wall_height", 1.0))
+        if "m12_parapet_h_input" not in st.session_state:
+            st.session_state["m12_parapet_h_input"] = float(st.session_state["m12_parapet_wall_height"])
+        if "m12_default_wall_height" not in st.session_state:
+            st.session_state["m12_default_wall_height"] = float(nested.get("default_wall_height", 3.0))
+        if "m12_default_h_input" not in st.session_state:
+            st.session_state["m12_default_h_input"] = float(st.session_state["m12_default_wall_height"])
+        if "m12_parapet_walls" not in st.session_state:
+            pw = set()
+            for item in nested.get("parapet_walls", []):
+                t = _parse_m12_coord_tuple(item)
+                if t and len(t) == 4:
+                    pw.add(t)
+            st.session_state["m12_parapet_walls"] = pw
+        if "m12_col_shifts" not in st.session_state:
+            cs = {}
+            for k, v in nested.get("col_shifts", {}).items():
+                t = _parse_m12_coord_tuple(k)
+                if t and len(t) == 2 and isinstance(v, dict):
+                    cs[t] = {
+                        "shift_x": str(v.get("shift_x", "متمركز على المحور (Centered)")),
+                        "shift_y": str(v.get("shift_y", "متمركز على المحور (Centered)")),
+                    }
+            st.session_state["m12_col_shifts"] = cs
+        cfg["module_12_brick_survey"] = st.session_state.get("module_12_data", nested)
+        st.session_state["current_project"] = cfg
+        return
+
     deserialized = _deserialize_module_12_state(nested)
     for k, v in deserialized.items():
         st.session_state[k] = v
@@ -1523,6 +1611,7 @@ def _ensure_module12_state(cfg: dict | None = None) -> None:
     for idx, yv in enumerate(deserialized["m12_y_axes"]):
         st.session_state[f"m12_y_val_{idx}"] = float(yv)
     st.session_state["m12_default_h_input"] = float(deserialized["m12_default_wall_height"])
+    st.session_state["m12_parapet_h_input"] = float(deserialized.get("m12_parapet_wall_height", 1.0))
 
     st.session_state["module_12_data"] = nested
     cfg["module_12_brick_survey"] = nested
@@ -1709,6 +1798,9 @@ def rename_project(old_name: str, new_name: str) -> bool:
         if "cfg" in st.session_state:
             st.session_state["cfg"]["apartment_name"] = new_clean
             st.session_state["cfg"]["cs_project_name"] = new_clean
+        if "current_project" in st.session_state and isinstance(st.session_state["current_project"], dict):
+            st.session_state["current_project"]["apartment_name"] = new_clean
+            st.session_state["current_project"]["cs_project_name"] = new_clean
 
     save_profiles_data(pdata)
     _clear_widget_cache()
@@ -2936,61 +3028,88 @@ ALARM_WAV_BYTES: bytes = generate_alarm_wav_bytes()
 ALARM_WAV_B64: str = base64.b64encode(ALARM_WAV_BYTES).decode('ascii')
 
 
+_LAST_WHISTLE_TIMESTAMP: float = 0.0
+
+
 def play_warning_sound() -> None:
     """
-    Centralized, Multi-Layer Warning Sound mechanism for ALL warning messages across the entire application:
-    Carrier: 2550 Hz with 36 Hz Trill vibrato modulation.
-    Executes complementary audio layers without displaying any UI player controls:
-      Layer 1: Browser iframe HTML5 Web Audio API synthesis (2550 Hz carrier + 36 Hz Trill LFO)
-      Layer 2: Browser HTML5 invisible audio element with synthesized Base64 WAV
-      Layer 3: Native Host OS System Sound (winsound.Beep(2550, 320) on Windows in background thread)
+    Centralized Warning Sound mechanism for ALL warning messages across the application:
+    Emits exactly ONE single sharp whistle (2600 Hz pure piercing tone, 0.28s).
+    Strictly locked by 2-second debounces across Python session_state, module globals,
+    browser window.top, and browser sessionStorage to guarantee only ONE sound per warning event.
     """
-    # ── Layer 1 & 2: Browser Frontend Sound (Completely Invisible) ──────────────
+    global _LAST_WHISTLE_TIMESTAMP
+    now = time.time()
+    last_sess = 0.0
+    try:
+        if hasattr(st, "session_state"):
+            last_sess = float(st.session_state.get("_last_whistle_time", 0.0))
+    except Exception:
+        pass
+    last = max(_LAST_WHISTLE_TIMESTAMP, getattr(st, "_last_whistle_time", 0.0), last_sess)
+    if now - last < 2.0:
+        return
+    _LAST_WHISTLE_TIMESTAMP = now
+    st._last_whistle_time = now
+    try:
+        if hasattr(st, "session_state"):
+            st.session_state["_last_whistle_time"] = now
+    except Exception:
+        pass
+
     try:
         import streamlit.components.v1 as components
-        js_code = f"""
+        js_code = """
         <html>
         <head><meta charset="utf-8"></head>
         <body style="margin:0;padding:0;overflow:hidden;background:transparent;">
-        <audio autoplay style="display:none;" src="data:audio/wav;base64,{ALARM_WAV_B64}"></audio>
         <script>
-        (function() {{
-            try {{
+        (function() {
+            try {
+                var now = Date.now();
+                // 1. Guard against duplicate play in parent window / React re-mounts
+                try {
+                    if (window.top && window.top !== window) {
+                        var topLast = window.top.__last_warning_whistle || 0;
+                        if (now - topLast < 2000) return;
+                        window.top.__last_warning_whistle = now;
+                    }
+                } catch(e) {}
+
+                // 2. Guard against duplicate play across iframe contexts via sessionStorage
+                try {
+                    var sessLast = parseInt(sessionStorage.getItem('__last_whistle_ts') || '0');
+                    if (now - sessLast < 2000) return;
+                    sessionStorage.setItem('__last_whistle_ts', now.toString());
+                } catch(e) {}
+
+                // 3. Synthesize exactly ONE single sharp whistle
                 var AudioCtx = window.AudioContext || window.webkitAudioContext;
-                if (AudioCtx) {{
-                    var ctx = new AudioCtx();
-                    if (ctx.state === 'suspended') {{ ctx.resume(); }}
-                    var now = ctx.currentTime;
-                    var dur = 0.38;
+                if (!AudioCtx) return;
+                var ctx = new AudioCtx();
+                if (ctx.state === 'suspended') { ctx.resume(); }
 
-                    var osc = ctx.createOscillator();
-                    var gain = ctx.createGain();
-                    var lfo = ctx.createOscillator();
-                    var lfoGain = ctx.createGain();
+                var t = ctx.currentTime;
+                var dur = 0.28;
+                var osc = ctx.createOscillator();
+                var gain = ctx.createGain();
 
-                    // 36 Hz Trill LFO modulation
-                    lfo.frequency.setValueAtTime(36.0, now);
-                    lfoGain.gain.setValueAtTime(190.0, now);
-                    lfo.connect(osc.frequency);
+                // 2600 Hz pure sharp carrier
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(2600.0, t);
 
-                    // 2550 Hz Carrier
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(2550.0, now);
+                // Clean sharp attack and smooth exponential decay (single whistle)
+                gain.gain.setValueAtTime(0.0001, t);
+                gain.gain.linearRampToValueAtTime(0.35, t + 0.015);
+                gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
 
-                    gain.gain.setValueAtTime(0.001, now);
-                    gain.gain.linearRampToValueAtTime(0.40, now + 0.02);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
 
-                    osc.connect(gain);
-                    gain.connect(ctx.destination);
-
-                    lfo.start(now);
-                    osc.start(now);
-                    lfo.stop(now + dur);
-                    osc.stop(now + dur);
-                }}
-            }} catch(e) {{}}
-        }})();
+                osc.start(t);
+                osc.stop(t + dur);
+            } catch(e) {}
+        })();
         </script>
         </body>
         </html>
@@ -2998,22 +3117,6 @@ def play_warning_sound() -> None:
         components.html(js_code, height=0, width=0)
     except Exception:
         pass
-
-    # ── Layer 3: Native Host OS Hardware Alert Sound ────────────────────────
-    try:
-        import winsound, threading
-        def _beep():
-            try:
-                winsound.Beep(2550, 320)
-            except Exception:
-                pass
-        threading.Thread(target=_beep, daemon=True).start()
-    except Exception:
-        try:
-            sys.stdout.write('\a')
-            sys.stdout.flush()
-        except Exception:
-            pass
 
 
 play_system_delete_blocked_sound = play_warning_sound
@@ -3023,9 +3126,8 @@ play_sharp_whistle_alert = play_warning_sound
 def _install_unified_warning_hook() -> None:
     """
     Installs a global automatic hook on st.warning and st.error so that any warning or error
-    displayed across ANY module (existing, legacy, or future) automatically
-    plays the unified sharp whistle sound (2550 Hz with 36 Hz Trill).
-    Includes a 0.4s debounce per render cycle to prevent overlapping audio bursts.
+    displayed across ANY module automatically plays the single sharp whistle sound.
+    Includes a 2.0s debounce to guarantee strictly one sound per user interaction.
     """
     if getattr(st, "_unified_whistle_hooked", False):
         return
@@ -3034,9 +3136,14 @@ def _install_unified_warning_hook() -> None:
 
     def _trigger_debounced_whistle():
         now = time.time()
-        last = getattr(st, "_last_whistle_time", 0.0)
-        if now - last > 0.40:
-            st._last_whistle_time = now
+        last_sess = 0.0
+        try:
+            if hasattr(st, "session_state"):
+                last_sess = float(st.session_state.get("_last_whistle_time", 0.0))
+        except Exception:
+            pass
+        last = max(_LAST_WHISTLE_TIMESTAMP, getattr(st, "_last_whistle_time", 0.0), last_sess)
+        if now - last >= 2.0:
             play_warning_sound()
 
     def _hooked_st_warning(body, *args, **kwargs):
