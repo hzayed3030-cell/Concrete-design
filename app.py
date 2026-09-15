@@ -53,10 +53,12 @@ from modules.settings import (
     # Module soft-delete / restore / creation validation
     check_module_dependencies,
     validate_new_project_module_selection,
+    validate_batch_module_deletion,
     play_warning_sound,
     play_system_delete_blocked_sound,
     get_deleted_modules_trash,
     soft_delete_module,
+    soft_delete_modules_batch,
     restore_module,
     # Aliases for backward compatibility
     get_all_profiles,
@@ -87,6 +89,7 @@ from modules.module_9_strap_footing import render_strap_footing_module
 from modules.module_10_diagonal_strap import render_diagonal_strap_module
 from modules.module_11_ground_beam import render_ground_beam_module
 from modules.module_12_brick_survey import render_brick_survey_module
+from modules.module_13_standalone_flat_slab import render as render_standalone_flat_slab
 
 # ── CSS Injection: Fixed Unified Typography (75% Compact Scale) ─────────────
 st.markdown(
@@ -249,6 +252,13 @@ st.markdown(
         margin-top: 0px !important;
         margin-bottom: 2px !important;
         display: inline-block !important;
+    }
+
+    /* Checkbox Label Flex Container (Preserve flex and prevent box/text overlap) */
+    [data-testid="stMainBlockContainer"] .stCheckbox > label {
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 8px !important;
     }
 
     [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] {
@@ -1296,6 +1306,11 @@ def render_profile_manager():
             st.session_state["_new_proj_step"] = 1
             st.session_state["show_import_profile_form"] = False
             st.session_state["show_git_update_form"] = False
+            if not is_open:
+                st.session_state.pop("_new_proj_saved_name", None)
+                st.session_state.pop("_new_proj_selected_indices", None)
+                for m in ALL_MODULES:
+                    st.session_state.pop(f"chk_new_proj_{m['idx']}", None)
             st.rerun()
     with g2:
         if st.button("📥 استيراد JSON", use_container_width=True, key="btn_global_import"):
@@ -1584,6 +1599,10 @@ def render_profile_manager():
                         if st.button("❌ إلغاء", key="btn_cancel_step1", use_container_width=True):
                             st.session_state["show_create_profile_form"] = False
                             st.session_state["_new_proj_step"] = 1
+                            st.session_state.pop("_new_proj_saved_name", None)
+                            st.session_state.pop("_new_proj_selected_indices", None)
+                            for m in ALL_MODULES:
+                                st.session_state.pop(f"chk_new_proj_{m['idx']}", None)
                             st.rerun()
 
                 elif curr_step == 2:
@@ -1650,6 +1669,10 @@ def render_profile_manager():
                             set_project_enabled_modules(created_name, chosen_indices)
                             st.session_state["show_create_profile_form"] = False
                             st.session_state["_new_proj_step"] = 1
+                            st.session_state.pop("_new_proj_saved_name", None)
+                            st.session_state.pop("_new_proj_selected_indices", None)
+                            for m in ALL_MODULES:
+                                st.session_state.pop(f"chk_new_proj_{m['idx']}", None)
                             st.session_state["nav_view"] = "module"
                             st.session_state["in_module"] = True
                             st.session_state["selected_module_idx"] = chosen_indices[0]
@@ -1663,6 +1686,10 @@ def render_profile_manager():
                         if st.button("❌ إلغاء", key="btn_cancel_step2", use_container_width=True):
                             st.session_state["show_create_profile_form"] = False
                             st.session_state["_new_proj_step"] = 1
+                            st.session_state.pop("_new_proj_saved_name", None)
+                            st.session_state.pop("_new_proj_selected_indices", None)
+                            for m in ALL_MODULES:
+                                st.session_state.pop(f"chk_new_proj_{m['idx']}", None)
                             st.rerun()
 
         st.markdown("<hr style='margin: 10px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
@@ -1844,12 +1871,12 @@ def render_profile_manager():
                 st.rerun()
         with b3:
             is_del_mod_open = st.session_state.get(f"_show_delete_mod_{pname}", False)
-            btn_del_mod_label = "🔼 إخفاء" if is_del_mod_open else "🗑️ حذف موديول"
+            btn_del_mod_label = "🔼 إخفاء" if is_del_mod_open else "🗑️ حذف موديولات"
             if st.button(
                 btn_del_mod_label,
                 key=f"btn_delete_mod_{pname}",
                 use_container_width=True,
-                help=f"حذف (soft delete) موديول من مشروع {pname} مع إمكانية الاستعادة لاحقاً",
+                help=f"حذف (soft delete) موديولات من مشروع {pname} مع إمكانية الاستعادة لاحقاً",
             ):
                 st.session_state[f"_show_delete_mod_{pname}"] = not is_del_mod_open
                 # Close other drawers for this project
@@ -1857,8 +1884,8 @@ def render_profile_manager():
                 st.session_state[f"_show_mod_config_{pname}"] = False
                 st.session_state[f"_show_restore_mod_{pname}"] = False
                 # Clear any pending dialogs for this project
-                st.session_state.pop(f"_mod_to_delete_{pname}", None)
-                st.session_state.pop(f"_dep_warning_{pname}", None)
+                st.session_state.pop(f"_pending_batch_del_{pname}", None)
+                st.session_state.pop(f"_batch_warning_{pname}", None)
                 st.rerun()
         with b4:
             is_restore_open = st.session_state.get(f"_show_restore_mod_{pname}", False)
@@ -2017,23 +2044,45 @@ def render_profile_manager():
             st.markdown("<hr style='margin:6px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 
 
-        # ── Delete Module Drawer ─────────────────────────────────────────────
+        # ── Delete Modules Drawer (Checklist + Smart Dependency Validation + "I am sure" Confirmation) ──
         if st.session_state.get(f"_show_delete_mod_{pname}", False):
             with st.container(border=True):
-                cur_enabled_del = get_project_enabled_modules(pname)
                 cur_trash_del = get_deleted_modules_trash(pname)
                 deleted_idxs_del = [int(k) for k in cur_trash_del.keys()]
-                # Show ALL modules regardless of visibility (enabled/hidden) — only exclude already-deleted ones
+                # Available modules that are currently active (NOT in trash)
                 deletable_mods = [m for m in ALL_MODULES if m["idx"] not in deleted_idxs_del]
 
+                # ── Requirement 1: Large & Clear Informational Header on Linked Modules ──
                 st.markdown(
                     f"""
-                    <div style="background: linear-gradient(135deg, #3b0f0f 0%, #7f1d1d 100%); border: 1.5px solid #ef4444; border-radius: 8px; padding: 8px 14px; margin-bottom: 10px;">
-                        <div style="font-weight: 800; font-size: 16px; color: #ffffff; display: flex; align-items: center; gap: 8px;">
-                            <span>🗑️</span> حذف موديول (Soft Delete) — مشروع: <b style="color: #fca5a5;">«{pname}»</b>
+                    <div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #1e1b4b 0%, #2e1065 50%, #1e1b4b 100%); border: 2.5px solid #a855f7; border-radius: 12px; padding: 18px 24px; margin-bottom: 14px; box-shadow: 0 4px 20px rgba(168, 85, 247, 0.25);">
+                        <div style="font-weight: 900; font-size: 20px; color: #f5d0fe; display: flex; align-items: center; justify-content: flex-start; gap: 10px; margin-bottom: 12px; border-bottom: 1.5px solid rgba(216, 180, 254, 0.35); padding-bottom: 10px; direction: rtl; text-align: right;">
+                            <span style="font-size: 26px;">🔗</span>
+                            <span>خريطة الارتباطات الهندسية بين الموديولات — مشروع: <b style="color: #fbcfe8;">«{pname}»</b></span>
                         </div>
-                        <div style="font-size: 13px; color: #fecaca; margin-top: 2px;">
-                            يتم فحص الارتباطات الهندسية أولاً. لا يمكن حذف الموديول إلا في حال عدم وجود أي موديول نشط يعتمد عليه.
+                        <div style="color: #ffffff; font-size: 15px; line-height: 1.8; font-weight: 600; direction: rtl; text-align: right;">
+                            <div style="margin-bottom: 10px; direction: rtl; text-align: right; display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
+                                <span style="font-size: 15.5px; font-weight: 800; color: #ffffff;">📌 مسار نقل الأحمال الإنشائية:</span>
+                                <span style="background: rgba(103, 232, 249, 0.18); border: 1.5px solid #06b6d4; border-radius: 6px; padding: 2px 10px; color: #67e8f9; font-weight: 800; font-size: 13.5px; direction: ltr; display: inline-block;">[Module 1: Integrated Structural Design]</span>
+                                <span style="color: #facc15; font-weight: 800; font-size: 14px;">⬅️ يغذي ⬅️</span>
+                                <span style="background: rgba(103, 232, 249, 0.18); border: 1.5px solid #06b6d4; border-radius: 6px; padding: 2px 10px; color: #67e8f9; font-weight: 800; font-size: 13.5px; direction: ltr; display: inline-block;">[Module 2: Rectangular Columns]</span>
+                                <span style="color: #facc15; font-weight: 800; font-size: 14px;">⬅️ يغذي ⬅️</span>
+                                <span style="background: rgba(103, 232, 249, 0.18); border: 1.5px solid #06b6d4; border-radius: 6px; padding: 2px 10px; color: #67e8f9; font-weight: 800; font-size: 13.5px; direction: ltr; display: inline-block;">[Module 3: Isolated Footings]</span>
+                            </div>
+                            <div style="color: #e2e8f0; font-size: 14px; line-height: 1.8; font-weight: 600; direction: rtl; text-align: right;">
+                                <div style="margin-bottom: 6px; display: flex; align-items: flex-start; gap: 8px; direction: rtl; text-align: right;">
+                                    <span style="color: #c084fc; font-size: 18px; line-height: 1.2;">•</span>
+                                    <span><b>حذف السقف (Mod 1) أو القواعد (Mod 3) منفرداً:</b> مسموح بالكامل دون أي تعارض هندسي.</span>
+                                </div>
+                                <div style="margin-bottom: 6px; display: flex; align-items: flex-start; gap: 8px; direction: rtl; text-align: right;">
+                                    <span style="color: #c084fc; font-size: 18px; line-height: 1.2;">•</span>
+                                    <span><b>حذف الأعمدة (Mod 2):</b> يتطلب اختيار الموديولات التابعة لها (القواعد أو السقف) معاً في نفس قائمة الحذف لحذف المنظومة كحزمة متكاملة.</span>
+                                </div>
+                                <div style="color: #86efac; font-weight: 700; display: flex; align-items: flex-start; gap: 8px; direction: rtl; text-align: right;">
+                                    <span style="color: #4ade80; font-size: 18px; line-height: 1.2;">•</span>
+                                    <span><b>موديول 12 (حصر أعمال الطوب والمحارة) وباقي الموديولات:</b> مستقلة تماماً (Standalone) ويمكن حذفها أو الإبقاء عليها وحدها في أي وقت دون قيود.</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     """,
@@ -2043,128 +2092,166 @@ def render_profile_manager():
                 if not deletable_mods:
                     st.info("✅ لا توجد موديولات نشطة يمكن حذفها في هذا المشروع.")
                 else:
-                    pending_del_idx = st.session_state.get(f"_mod_to_delete_{pname}", None)
-                    dep_warning = st.session_state.get(f"_dep_warning_{pname}", None)
+                    pending_batch = st.session_state.get(f"_pending_batch_del_{pname}", None)
+                    batch_warning = st.session_state.get(f"_batch_warning_{pname}", None)
 
-                    # ── Step 1: Module Selector Grid ─────────────────────────────
-                    if pending_del_idx is None and dep_warning is None:
+                    # ── Stage 1: Checklist of Available Modules ──
+                    if pending_batch is None and batch_warning is None:
                         st.markdown(
-                            "<div style='font-size: 14px; color: #cbd5e1; margin-bottom: 8px; font-weight: 600;'>اختر الموديول الذي تريد حذفه:</div>",
+                            "<div style='font-size: 15px; color: #cbd5e1; margin-bottom: 10px; font-weight: 700;'>حدد الموديولات التي ترغب في حذفها من المشروع (Checklist):</div>",
                             unsafe_allow_html=True,
                         )
+                        selected_for_del = {}
                         grid_del_cols = min(len(deletable_mods), 3)
                         del_cols = st.columns(grid_del_cols)
                         for ci, mod in enumerate(deletable_mods):
                             with del_cols[ci % grid_del_cols]:
-                                if st.button(
+                                selected_for_del[mod["idx"]] = st.checkbox(
                                     f"🗑️ {mod['name']}",
-                                    key=f"btn_pick_del_{pname}_{mod['idx']}",
-                                    use_container_width=True,
-                                ):
-                                    # Always trigger warning sound upon picking any module to delete
-                                    play_warning_sound()
-                                    # Dependency check
-                                    deps = check_module_dependencies(pname, mod["idx"])
-                                    if deps:
-                                        st.session_state[f"_dep_warning_{pname}"] = {
-                                            "module_idx": mod["idx"],
-                                            "module_name": mod["name"],
-                                            "deps": deps,
-                                        }
+                                    key=f"chk_batch_del_{pname}_{mod['idx']}",
+                                    value=False,
+                                )
+
+                        st.markdown("<div style='margin-top: 12px;'></div>", unsafe_allow_html=True)
+                        btn_c1, btn_c2, _ = st.columns([2.0, 1.2, 6.8])
+                        with btn_c1:
+                            if st.button("🔍 متابعة ومراجعة الحذف", key=f"btn_review_del_{pname}", type="primary", use_container_width=True):
+                                chosen_indices = [idx for idx, checked in selected_for_del.items() if checked]
+                                if not chosen_indices:
+                                    st.warning("⚠️ يرجى تحديد موديول واحد على الأقل للحذف.")
+                                else:
+                                    is_valid, violations, linked_pairs = validate_batch_module_deletion(pname, chosen_indices)
+                                    if not is_valid:
+                                        play_warning_sound()
+                                        st.session_state[f"_batch_warning_{pname}"] = violations
+                                        st.rerun()
                                     else:
-                                        st.session_state[f"_mod_to_delete_{pname}"] = mod["idx"]
-                                    st.rerun()
+                                        play_warning_sound()
+                                        st.session_state[f"_pending_batch_del_{pname}"] = {
+                                            "indices": chosen_indices,
+                                            "linked_pairs": linked_pairs,
+                                        }
+                                        st.rerun()
+                        with btn_c2:
+                            if st.button("❌ إلغاء", key=f"btn_cancel_del_drawer_{pname}", use_container_width=True):
+                                st.session_state[f"_show_delete_mod_{pname}"] = False
+                                st.rerun()
 
-                    # ── Step 2a: No-dependency Confirmation Dialog (ENLARGED + WARNING BEEP) ───
-                    elif pending_del_idx is not None and dep_warning is None:
-                        mod_info_del = next((m for m in ALL_MODULES if m["idx"] == pending_del_idx), None)
-                        mod_name_del = mod_info_del["name"] if mod_info_del else f"Module {pending_del_idx}"
-
-                        # Play warning sound on confirmation dialog render
+                    # ── Stage 2a: Broken Dependency Warning (Blocked) ──
+                    elif batch_warning is not None:
                         play_warning_sound()
-
+                        viol_items_html = "".join([
+                            f"<li style='margin: 8px 0; color: #fee2e2; font-size: 15px; font-weight: 600;'>{v}</li>"
+                            for v in batch_warning
+                        ])
                         st.markdown(
                             f"""
-                            <div style="background: linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #3f0a0a 100%); border: 3.5px solid #ef4444; border-radius: 14px; padding: 22px 26px; margin: 10px 0 14px 0; box-shadow: 0 10px 35px rgba(239, 68, 68, 0.45);">
-                                <div style="color: #ffffff; font-weight: 900; font-size: 24px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; border-bottom: 2px solid rgba(239, 68, 68, 0.6); padding-bottom: 10px;">
-                                    <span style="font-size: 32px;">🗑️</span>
-                                    <span>تأكيد حذف الموديول — DELETE MODEL CONFIRMATION</span>
+                            <div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #3f0a0a 100%); border: 3px solid #ef4444; border-radius: 12px; padding: 20px 24px; margin: 10px 0 14px 0; box-shadow: 0 10px 35px rgba(239, 68, 68, 0.45);">
+                                <div style="color: #ffffff; font-weight: 900; font-size: 22px; margin-bottom: 12px; display: flex; align-items: center; justify-content: flex-start; gap: 10px; border-bottom: 2px solid rgba(239, 68, 68, 0.6); padding-bottom: 10px; direction: rtl; text-align: right;">
+                                    <span style="font-size: 28px;">🚫</span>
+                                    <span>تعذر إتمام الحذف لوجود ارتباطات هندسية غير مكتملة</span>
                                 </div>
-                                <div style="color: #fee2e2; font-size: 18px; font-weight: 700; line-height: 1.6; margin-bottom: 12px;">
-                                    هل أنت متأكد تماماً من رغبتك في حذف الموديول <b style="color: #fef08a; font-size: 21px; text-decoration: underline;">«{mod_name_del}»</b> من مشروع <b>«{pname}»</b>؟
+                                <div style="color: #fee2e2; font-size: 16px; font-weight: 700; line-height: 1.6; margin-bottom: 12px; direction: rtl; text-align: right;">
+                                    تم رفض تنفيذ عملية الحذف للأسباب التالية:
                                 </div>
-                                <div style="background: rgba(0, 0, 0, 0.35); border: 1.5px solid rgba(254, 202, 202, 0.25); border-radius: 8px; padding: 10px 16px; color: #86efac; font-size: 15px; font-weight: 700;">
-                                    ✅ <b>الحفظ الآمن:</b> سيتم حفظ نسخة كاملة من جميع مدخلات وبيانات الموديول (Snapshot) ويمكنك استعادتها في أي وقت عبر زر ♻️ استعادة.
+                                <ul style="margin: 0 0 14px 0; padding-right: 24px; list-style: disc; direction: rtl; text-align: right;">
+                                    {viol_items_html}
+                                </ul>
+                                <div style="background: rgba(0, 0, 0, 0.35); border: 1.5px solid rgba(254, 202, 202, 0.25); border-radius: 8px; padding: 10px 16px; color: #fef08a; font-size: 14px; font-weight: 700; direction: rtl; text-align: right;">
+                                    💡 <b>الحل الهندسي:</b> لحذف الموديولات المرتبطة، يرجى اختيارهما معاً في قائمة الحذف لحذف المنظومة كحزمة متكاملة، أو إبقاء الموديولات التابعة نشطة.
                                 </div>
                             </div>
                             """,
                             unsafe_allow_html=True,
                         )
-                        cd1, cd2, _ = st.columns([1.6, 1.6, 4.8])
-                        with cd1:
-                            if st.button("🗑️ تأكيد حذف الموديول", key=f"btn_confirm_del_mod_{pname}", type="primary", use_container_width=True):
-                                ok = soft_delete_module(pname, pending_del_idx)
-                                st.session_state.pop(f"_mod_to_delete_{pname}", None)
-                                st.session_state[f"_show_delete_mod_{pname}"] = False
-                                if ok:
-                                    st.success(f"✅ تم حذف الموديول «{mod_name_del}» وحفظ بياناته. يمكن استعادته عبر زر ♻️ استعادة.")
-                                else:
-                                    st.error("❌ فشل حذف الموديول. يرجى المحاولة مرة أخرى.")
-                                st.rerun()
-                        with cd2:
-                            if st.button("❌ تراجع / إلغاء", key=f"btn_cancel_del_mod_{pname}", use_container_width=True):
-                                st.session_state.pop(f"_mod_to_delete_{pname}", None)
+                        btn_back, _ = st.columns([2.5, 7.5])
+                        with btn_back:
+                            if st.button("↩️ العودة وتعديل قائمة الاختيار", key=f"btn_back_from_warn_{pname}", type="primary", use_container_width=True):
+                                st.session_state.pop(f"_batch_warning_{pname}", None)
                                 st.rerun()
 
-                    # ── Step 2b: Large Dependency Warning Dialog (DELETION REJECTED & BLOCKED) ───
-                    elif dep_warning is not None:
-                        dw_mod_idx = dep_warning["module_idx"]
-                        dw_mod_name = dep_warning["module_name"]
-                        dw_deps = dep_warning["deps"]
-
-                        # Play audible warning alarm immediately on dialog render
+                    # ── Stage 2b: Valid Selection -> "I am sure" Confirmation Dialog ──
+                    elif pending_batch is not None:
                         play_warning_sound()
+                        indices_to_del = pending_batch["indices"]
+                        linked_pairs = pending_batch.get("linked_pairs", [])
 
-                        dep_list_html = "".join([
-                            f"""<li style="margin: 8px 0; color: #ffffff; font-size: 16px;">
-                                <b style="color: #fef08a; font-size: 17px;">{d['name']}</b>
-                                <div style="color: #cbd5e1; font-size: 14px; margin-top: 2px;">🔗 طبيعة الارتباط: {d['relationship']}</div>
-                            </li>"""
-                            for d in dw_deps
+                        del_names = [
+                            next((m["name"] for m in ALL_MODULES if m["idx"] == idx), f"Module {idx}")
+                            for idx in indices_to_del
+                        ]
+                        del_names_html = "".join([
+                            f"<li style='margin: 6px 0; color: #ffffff; font-size: 16px; font-weight: 700;'><span style='color: #fef08a;'>{name}</span></li>"
+                            for name in del_names
                         ])
 
-                        warning_dialog_html = f"""
-                        <div style="background: linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #3f0a0a 100%); border: 3.5px solid #ef4444; border-radius: 14px; padding: 22px 26px; margin: 10px 0; box-shadow: 0 10px 35px rgba(239, 68, 68, 0.45);">
-                            <div style="color: #ffffff; font-weight: 900; font-size: 23px; margin-bottom: 14px; display: flex; align-items: center; gap: 12px; border-bottom: 2px solid rgba(239, 68, 68, 0.6); padding-bottom: 12px;">
-                                <span style="font-size: 32px;">🚫</span>
-                                <span style="letter-spacing: 0.5px;">عملية الحذف مرفوضة تماماً — DELETE NOT ALLOWED</span>
-                            </div>
-                            
-                            <div style="color: #fee2e2; font-size: 17px; font-weight: 700; line-height: 1.6; margin-bottom: 16px;">
-                                لا يمكن حذف الموديول <b style="color: #fef08a; font-size: 19px; text-decoration: underline;">«{dw_mod_name}»</b> لوجود ارتباطات واعتماديات هندسية نشطة تمنع حذفه.
-                            </div>
-
-                            <div style="background: rgba(0, 0, 0, 0.40); border: 1.5px solid rgba(254, 202, 202, 0.3); border-radius: 10px; padding: 16px 20px; margin-bottom: 18px;">
-                                <div style="color: #fef08a; font-size: 16px; font-weight: 800; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-                                    <span>⚠️</span> الموديولات المرتبطة التي تمنع الحذف ({len(dw_deps)} موديول):
-                                </div>
-                                <ul style="margin: 0; padding-right: 24px; list-style: disc;">
-                                    {dep_list_html}
+                        linked_banner_html = ""
+                        if linked_pairs:
+                            linked_items = "".join([f"<li style='margin: 4px 0;'>{lp}</li>" for lp in linked_pairs])
+                            linked_banner_html = f"""
+                            <div dir="rtl" style="direction: rtl !important; text-align: right !important; background: rgba(234, 179, 8, 0.18); border: 1.5px solid #eab308; border-radius: 8px; padding: 10px 16px; color: #fef08a; font-size: 14px; font-weight: 700; margin-bottom: 12px;">
+                                ⚠️ <b>تنبيه ارتباط متبادل:</b> تحتوي هذه العملية على موديولات مرتبطة ببعضها وسيتم حذفها معاً كحزمة متكاملة:
+                                <ul style="margin: 6px 0 0 0; padding-right: 20px; list-style: circle;">
+                                    {linked_items}
                                 </ul>
                             </div>
+                            """
 
-                            <div style="color: #fca5a5; font-size: 15px; font-weight: 700; background: rgba(239, 68, 68, 0.25); border-radius: 8px; padding: 12px 16px; border-right: 5px solid #ef4444; line-height: 1.5;">
-                                ℹ️ <b>تعليمات فك الارتباط:</b> لحذف هذا الموديول، يجب أولاً إزالة الارتباط أو حذف الموديولات التابعة المذكورة أعلاه.
+                        st.markdown(
+                            f"""
+                            <div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #3f0a0a 100%); border: 3.5px solid #ef4444; border-radius: 14px; padding: 22px 26px; margin: 10px 0 14px 0; box-shadow: 0 10px 35px rgba(239, 68, 68, 0.45);">
+                                <div style="color: #ffffff; font-weight: 900; font-size: 23px; margin-bottom: 12px; display: flex; align-items: center; justify-content: flex-start; gap: 12px; border-bottom: 2px solid rgba(239, 68, 68, 0.6); padding-bottom: 10px; direction: rtl; text-align: right;">
+                                    <span style="font-size: 30px;">⚠️</span>
+                                    <span>تأكيد حذف الموديولات المحددة ({len(del_names)} موديول) — مشروع: «{pname}»</span>
+                                </div>
+                                
+                                <div style="color: #fee2e2; font-size: 16px; font-weight: 700; margin-bottom: 10px; direction: rtl; text-align: right;">
+                                    سيتم حذف الموديولات التالية من المشروع ونقلها إلى سلة المحذوفات:
+                                </div>
+                                <ul style="margin: 0 0 12px 0; padding-right: 24px; list-style: disc; direction: rtl; text-align: right;">
+                                    {del_names_html}
+                                </ul>
+
+                                {linked_banner_html}
+
+                                <div style="background: rgba(0, 0, 0, 0.35); border: 1.5px solid rgba(254, 202, 202, 0.25); border-radius: 8px; padding: 10px 16px; color: #86efac; font-size: 14px; font-weight: 700; margin-bottom: 14px; direction: rtl; text-align: right;">
+                                    ✅ <b>الحفظ الآمن:</b> سيتم حفظ نسخة كاملة (Snapshot) من جميع بيانات ومدخلات هذه الموديولات، ويمكنك استعادتها لاحقاً في أي وقت عبر زر ♻️ استعادة.
+                                </div>
                             </div>
-                        </div>
-                        """
-                        render_custom_html(warning_dialog_html)
+                            """,
+                            unsafe_allow_html=True,
+                        )
 
-                        # ONLY ONE BUTTON: OK / Dismiss (No "Delete Anyway"!)
-                        cd_ok, _ = st.columns([2.5, 7.5])
-                        with cd_ok:
-                            if st.button("✅ فهمت ذلك / حسناً (OK)", key=f"btn_dep_ok_{pname}", type="primary", use_container_width=True):
-                                st.session_state.pop(f"_dep_warning_{pname}", None)
+                        col_sure_in, col_sure_btn, col_sure_cancel = st.columns([3.5, 2.2, 1.3])
+                        with col_sure_in:
+                            sure_input = st.text_input(
+                                'اكتب العبارة "I am sure" لتأكيد الحذف:',
+                                key=f"input_sure_{pname}",
+                                placeholder="I am sure",
+                                help="اكتب العبارة بدقة لتفعيل زر الحذف",
+                            )
+                        with col_sure_btn:
+                            st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                            is_phrase_matched = (sure_input or "").strip() == "I am sure"
+                            if st.button(
+                                "🗑️ تأكيد الحذف النهائي",
+                                key=f"btn_confirm_sure_del_{pname}",
+                                type="primary",
+                                disabled=not is_phrase_matched,
+                                use_container_width=True,
+                            ):
+                                ok, msg = soft_delete_modules_batch(pname, indices_to_del)
+                                st.session_state.pop(f"_pending_batch_del_{pname}", None)
+                                st.session_state[f"_show_delete_mod_{pname}"] = False
+                                if ok:
+                                    st.success(f"✅ {msg}")
+                                else:
+                                    st.error(f"❌ {msg}")
+                                st.rerun()
+                        with col_sure_cancel:
+                            st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+                            if st.button("❌ تراجع", key=f"btn_cancel_sure_del_{pname}", use_container_width=True):
+                                st.session_state.pop(f"_pending_batch_del_{pname}", None)
                                 st.rerun()
 
                 # Close Delete Drawer button
@@ -2172,8 +2259,8 @@ def render_profile_manager():
                 with c_close_del:
                     if st.button("❌ إغلاق", key=f"btn_close_del_mod_{pname}", use_container_width=True):
                         st.session_state[f"_show_delete_mod_{pname}"] = False
-                        st.session_state.pop(f"_mod_to_delete_{pname}", None)
-                        st.session_state.pop(f"_dep_warning_{pname}", None)
+                        st.session_state.pop(f"_pending_batch_del_{pname}", None)
+                        st.session_state.pop(f"_batch_warning_{pname}", None)
                         st.rerun()
 
             st.markdown("<hr style='margin:6px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
@@ -2329,49 +2416,10 @@ else:
         )
         render_custom_html(mod_card_html)
 
-        col_sb_nav1, col_sb_nav2 = st.columns([1.1, 1.1])
-        with col_sb_nav1:
-            if st.button("🏠 المشاريع", use_container_width=True, key="sb_btn_projects_mgr", help="العودة إلى شاشة إدارة المشاريع الرئيسية"):
-                st.session_state["nav_view"] = "profile_manager"
-                st.session_state["in_module"] = False
-                st.rerun()
-        with col_sb_nav2:
-            sb_rn_open = st.session_state.get("_sb_show_rename", False)
-            btn_sb_rn_lbl = "🔼 إخفاء" if sb_rn_open else "✏️ تغيير الاسم"
-            if st.button(btn_sb_rn_lbl, use_container_width=True, key="sb_btn_rename_proj", help="تغيير اسم المشروع الإنشائي النشط"):
-                st.session_state["_sb_show_rename"] = not sb_rn_open
-                st.rerun()
-
-        if st.session_state.get("_sb_show_rename", False):
-            with st.container(border=True):
-                st.markdown("<small style='color:#38bdf8; font-weight:800;'>✏️ الاسم الجديد للمشروع النشط:</small>", unsafe_allow_html=True)
-                sb_new_name = st.text_input(
-                    "اسم المشروع الجديد:",
-                    value=active_project_sidebar,
-                    key="sb_input_rename_proj",
-                    label_visibility="collapsed",
-                )
-                col_sb_rn_a, col_sb_rn_b = st.columns(2)
-                with col_sb_rn_a:
-                    if st.button("💾 حفظ", type="primary", use_container_width=True, key="sb_save_rename_confirm"):
-                        cleaned_sb = (sb_new_name or "").strip()
-                        if not cleaned_sb:
-                            st.error("⚠️ يرجى إدخال اسم.")
-                        elif cleaned_sb == active_project_sidebar:
-                            st.warning("⚠️ مطابق للاسم الحالي.")
-                        elif cleaned_sb in all_projects_list:
-                            st.error("⛔ الاسم مستخدم مسبقاً.")
-                        else:
-                            if rename_project(active_project_sidebar, cleaned_sb):
-                                st.session_state["_sb_show_rename"] = False
-                                st.success("✅ تم التغيير بنجاح!")
-                                st.rerun()
-                            else:
-                                st.error("❌ تعذر التغيير.")
-                with col_sb_rn_b:
-                    if st.button("❌ إلغاء", use_container_width=True, key="sb_cancel_rename_btn"):
-                        st.session_state["_sb_show_rename"] = False
-                        st.rerun()
+        if st.button("🏠 المشاريع", use_container_width=True, key="sb_btn_projects_mgr", help="العودة إلى شاشة إدارة المشاريع الرئيسية"):
+            st.session_state["nav_view"] = "profile_manager"
+            st.session_state["in_module"] = False
+            st.rerun()
 
         st.markdown("---")
 
@@ -2457,7 +2505,13 @@ else:
     # ── Render Top Profile Bar & Selected Module ──────────────────────────
     render_top_profile_bar()
 
-    if "Flat Slabs" in module or "Flat" in module:
+    if "Module 13" in module or "Standalone" in module or "standalone_flat_slab" in module:
+        try:
+            render_standalone_flat_slab()
+        except Exception as ex:
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 13: {ex}")
+            st.exception(ex)
+    elif "Integrated" in module or "Flat Slabs" in module or "Flat" in module or "Module 1" in module:
         render_flat_slab()
     elif "Columns" in module or "الأعمدة" in module:
         render_columns()

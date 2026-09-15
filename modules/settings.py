@@ -1254,13 +1254,16 @@ def load_profiles_data() -> dict:
             modified = True
 
         if "enabled_modules" in pdata_dict and isinstance(pdata_dict["enabled_modules"], list):
-            curr_enabled = list(pdata_dict["enabled_modules"])
-            for mod in ALL_MODULES:
-                midx = mod["idx"]
-                if midx not in deleted_indices and midx not in curr_enabled:
-                    curr_enabled.append(midx)
-                    modified = True
-            pdata_dict["enabled_modules"] = sorted(curr_enabled)
+            cleaned_enabled = sorted(list(set(
+                int(i) for i in pdata_dict["enabled_modules"]
+                if int(i) in range(len(ALL_MODULES)) and int(i) not in deleted_indices
+            )))
+            if cleaned_enabled != pdata_dict["enabled_modules"]:
+                pdata_dict["enabled_modules"] = cleaned_enabled
+                modified = True
+        elif "enabled_modules" not in pdata_dict:
+            pdata_dict["enabled_modules"] = [m["idx"] for m in ALL_MODULES if m["idx"] not in deleted_indices]
+            modified = True
 
         # ── Module 9 backward-compatibility migration ────────────────
         if migrate_module_9_in_project_dict(pdata_dict):
@@ -1857,7 +1860,7 @@ duplicate_profile = duplicate_project
 
 # ── PROJECT MODULE CUSTOMIZATION DEFINITIONS & HELPERS ───────────────────────
 ALL_MODULES = [
-    {"idx": 0, "key": "flat_slab", "name": "🟦 Module 1 — Flat Slabs", "short": "Module 1"},
+    {"idx": 0, "key": "flat_slab", "name": "🟦 Module 1 — Integrated Structural Design", "short": "Module 1"},
     {"idx": 1, "key": "columns", "name": "🏛️ Module 2 — Rectangular Columns", "short": "Module 2"},
     {"idx": 2, "key": "footings", "name": "🪸 Module 3 — Isolated Footings", "short": "Module 3"},
     {"idx": 3, "key": "ground_slab", "name": "🏗️ Module 4 — Ground Slabs", "short": "Module 4"},
@@ -1868,6 +1871,7 @@ ALL_MODULES = [
     {"idx": 8, "key": "diagonal_strap_footing", "name": "📐 Module 10: Corner Footing with Diagonal Strap (قاعدة جار ركن بشداد مائل)", "short": "Module 10"},
     {"idx": 9, "key": "ground_beam", "name": "🧱 Module 11: Ground Beam Design & Detailing (تصميم وتفاصيل الميدات والسملات)", "short": "Module 11"},
     {"idx": 10, "key": "brick_survey", "name": "🏠 Module 12: Brick & Plastering Survey (حصر أعمال الطوب والمحارة)", "short": "Module 12"},
+    {"idx": 11, "key": "standalone_flat_slab", "name": "🏢 Module 13: Standalone - Flat slabs", "short": "Module 13"},
 ]
 
 
@@ -2057,7 +2061,7 @@ def get_project_summary(project_name: str) -> dict:
 
         ts = float(data.get("slab_ts_initial", 20.0))
         floors = int(data.get("slab_n_floors", 1))
-        module_name = "Flat Slabs"
+        module_name = "Integrated Structural Design"
 
     # Project name is the project's primary identity
     p_name = pinfo.get("name", project_name)
@@ -2828,21 +2832,22 @@ MODULE_DATA_KEY_PREFIXES = {
     10: [  # Module 12 — Brick & Plastering Survey
         "module_12_brick_survey", "m12_",
     ],
+    11: [  # Module 13 — Standalone - Flat slabs
+        "m13_", "fs_", "slab_",
+    ],
 }
 
 # Dependency map: which modules DEPEND ON a given module.
-# Bidirectional & Functional Module Dependency Map
-# Key = module index; Value = list of (linked_idx, relationship_description)
-# Module 1 (Flat Slab) and Module 2 (Columns) have a direct, mutual BIDIRECTIONAL dependency.
-# Module 3 (Footings) depends on Module 2 (Columns).
-# Module 4, 5, 6, 7, 8, 9, 11, 12 are 100% standalone.
+# Engineering Load-Path & Functional Dependency Map
+# Key = module index; Value = list of (required_idx, relationship_description)
+# Module 1 (Flat Slabs) and Module 3 (Footings) depend on Module 2 (Columns).
+# Module 2 (Columns) has independent manual load input and does not depend on Slabs.
+# Module 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 are 100% standalone.
 FUNCTIONAL_DEPENDENCIES: dict[int, list] = {
-    0: [  # Module 1 — Flat Slabs (البلاطات اللاكمرية) -> Requires Columns (1)
-        (1, "مرتبط بنماذج وتصميم الأعمدة: يغذي الأعمدة بالأحمال المحسوبة وتعتمد بحور السقف والقص الثاقب عليها"),
+    0: [  # Module 1 — Integrated Structural Design -> Requires Columns (1) for punching shear & column support
+        (1, "مرتبط بنماذج وتصميم الأعمدة: يغذي الأعمدة بالأحمال وتعتمد بحور السقف والقص الثاقب عليها"),
     ],
-    1: [  # Module 2 — Columns (الأعمدة المستطيلة) -> Requires Flat Slabs (0)
-        (0, "مرتبط بالألواح المسطحة: يستقبل أحمال الأعمدة المحسوبة من السقف وتعتمد عليها قطاعات الأعمدة للقص الثاقب"),
-    ],
+    1: [],  # Module 2 — Columns (الأعمدة المستطيلة): Has independent manual load input (Pu)
     2: [  # Module 3 — Footings (القواعد المنفصلة) -> Requires Columns (1)
         (1, "مرتبط بالأعمدة: يستقبل أبعاد قطاعات الأعمدة وأحمالها لتصميم القواعد"),
     ],
@@ -2853,7 +2858,8 @@ FUNCTIONAL_DEPENDENCIES: dict[int, list] = {
     7: [],  # Module 9 — Strap Footings: Standalone
     8: [],  # Module 10 — Diagonal Strap Footings: Standalone
     9: [],  # Module 11 — Ground Beam Design & Detailing: Standalone
-    10: [], # Module 12 — Brick & Plastering Survey: Standalone
+    10: [], # Module 12 — Brick & Plastering Survey: 100% Standalone
+    11: [], # Module 13 — Standalone - Flat slabs: 100% Standalone
 }
 
 
@@ -3244,6 +3250,133 @@ def soft_delete_module(project_name: str, module_idx: int) -> bool:
         _clear_widget_cache()
 
     return ok
+
+
+def validate_batch_module_deletion(project_name: str, module_indices_to_delete: list[int]) -> tuple[bool, list[str], list[str]]:
+    """
+    Validates deleting a batch of modules from a project based on structural load-path rules:
+      1. Modules that remain active after this deletion:
+         remaining = active_in_project \\ module_indices_to_delete
+      2. If Module 3 (Footings) is in remaining, but Module 2 (Columns) is in module_indices_to_delete:
+         Violation! Footings cannot exist without Columns providing column dimensions and loads.
+      3. If Module 1 (Flat Slabs) is in remaining, but Module 2 (Columns) is in module_indices_to_delete:
+         Violation! Flat Slabs cannot calculate punching shear without Columns.
+      4. Deleting Module 1 (Flat Slabs) alone is ALLOWED because Columns has manual load inputs (Pu).
+      5. Deleting Module 2 + Module 1 together, or Module 2 + Module 3 + Module 1 together, is ALLOWED.
+      6. Deleting standalone modules (like Module 12, 4, 5, 6, 7, 8, 9, 10, 11) is ALWAYS ALLOWED.
+      7. Deleting ALL modules except Module 12 is 100% ALLOWED.
+
+    Returns:
+      (is_valid: bool, violations: list[str], linked_names: list[str])
+    """
+    trash = get_deleted_modules_trash(project_name)
+    deleted_indices = [int(k) for k in trash.keys()] if isinstance(trash, dict) else []
+    active_indices = [m["idx"] for m in ALL_MODULES if m["idx"] not in deleted_indices]
+
+    to_del_set = set(int(i) for i in module_indices_to_delete if int(i) in active_indices)
+    if not to_del_set:
+        return False, ["يرجى اختيار موديول واحد على الأقل للحذف."], []
+
+    remaining_set = set(active_indices) - to_del_set
+    violations = []
+
+    # Check 1: If Columns (1) is deleted, but Footings (2) remains active
+    if 1 in to_del_set and 2 in remaining_set:
+        violations.append("لا يمكن حذف موديول «🏛️ الأعمدة المستطيلة» مع بقاء موديول «🪸 القواعد المنفصلة» نشطاً بالمشروع؛ لأن تصميم القواعد يعتمد كلياً على أحمال وقطاعات الأعمدة. يرجى اختيار القواعد المنفصلة أيضاً في قائمة الحذف لحذفهما معاً.")
+
+    # Check 2: If Columns (1) is deleted, but Integrated Structural Design (0) remains active
+    if 1 in to_del_set and 0 in remaining_set:
+        violations.append("لا يمكن حذف موديول «🏛️ الأعمدة المستطيلة» مع بقاء موديول «🟦 Integrated Structural Design» نشطاً؛ لأن حسابات القص الثاقب (Punching) وعزوم الأعمدة بالسقف تتطلب قطاعات الأعمدة. يرجى اختيار موديول 1 أيضاً في قائمة الحذف لحذفهما معاً.")
+
+    # Detect if any linked modules are included in this deletion batch
+    linked_pairs = []
+    if 0 in to_del_set and 1 in to_del_set:
+        linked_pairs.append("موديول 1 (Integrated Structural Design) وموديول 2 (Columns) [مرتبطان تبادلياً بالأحمال والقص الثاقب]")
+    if 1 in to_del_set and 2 in to_del_set:
+        linked_pairs.append("موديول 2 (Columns) وموديول 3 (Footings) [مرتبطان بنقل أحمال وقطاعات الأعمدة إلى القواعد]")
+
+    is_valid = len(violations) == 0
+    return is_valid, violations, linked_pairs
+
+
+def soft_delete_modules_batch(project_name: str, module_indices: list[int]) -> tuple[bool, str]:
+    """
+    Soft-delete multiple modules together in a single atomic transaction:
+      1. Validates batch dependencies via validate_batch_module_deletion.
+      2. Snapshots each module into deleted_modules_trash.
+      3. Updates enabled_modules.
+      4. Adjusts selected_module_idx if needed.
+      5. Atomically saves to profiles.json and syncs session_state.
+    Returns (success: bool, message: str).
+    """
+    is_valid, violations, _ = validate_batch_module_deletion(project_name, module_indices)
+    if not is_valid:
+        play_warning_sound()
+        return False, " | ".join(violations)
+
+    pdata = load_profiles_data()
+    profiles = pdata.get("profiles", {})
+    if project_name not in profiles:
+        return False, "المشروع غير موجود."
+
+    pinfo = profiles[project_name]
+    project_data = pinfo.get("data", {})
+    trash = project_data.get("deleted_modules_trash", {})
+    if not isinstance(trash, dict):
+        trash = {}
+
+    to_del_set = set(int(i) for i in module_indices)
+    now_str = _get_now_str()
+
+    for midx in to_del_set:
+        snapshot = get_module_data_keys(project_data, midx)
+        mod_info = next((m for m in ALL_MODULES if m["idx"] == midx), None)
+        mod_name = mod_info["name"] if mod_info else f"Module {midx}"
+        trash[str(midx)] = {
+            "deleted_at": now_str,
+            "module_idx": midx,
+            "module_name": mod_name,
+            "snapshot": snapshot,
+        }
+
+    project_data["deleted_modules_trash"] = trash
+
+    curr_enabled = project_data.get("enabled_modules", [m["idx"] for m in ALL_MODULES])
+    if not isinstance(curr_enabled, list):
+        curr_enabled = [m["idx"] for m in ALL_MODULES]
+
+    deleted_str_keys = set(trash.keys())
+    new_enabled = [i for i in curr_enabled if i not in to_del_set and str(i) not in deleted_str_keys]
+    if not new_enabled:
+        remaining = [m["idx"] for m in ALL_MODULES if str(m["idx"]) not in deleted_str_keys]
+        new_enabled = [remaining[0]] if remaining else []
+    project_data["enabled_modules"] = new_enabled
+
+    # Redirect selected_module_idx if current was deleted
+    if int(project_data.get("selected_module_idx", 0)) in to_del_set:
+        project_data["selected_module_idx"] = new_enabled[0] if new_enabled else 0
+
+    pinfo["data"] = project_data
+    pinfo["updated_at"] = now_str
+    profiles[project_name] = pinfo
+    pdata["profiles"] = profiles
+
+    ok = save_profiles_data(pdata)
+
+    if ok and project_name == get_active_project_name():
+        cfg = st.session_state.get("cfg", {})
+        cfg["enabled_modules"] = new_enabled
+        cfg["deleted_modules_trash"] = trash
+        if int(st.session_state.get("selected_module_idx", 0)) in to_del_set:
+            fallback_idx = new_enabled[0] if new_enabled else 0
+            st.session_state["selected_module_idx"] = fallback_idx
+            cfg["selected_module_idx"] = fallback_idx
+        st.session_state["cfg"] = cfg
+        _clear_widget_cache()
+
+    if ok:
+        return True, "تم حذف الموديولات المحددة وحفظ بياناتها في سلة المحذوفات بنجاح."
+    return False, "فشل حفظ بيانات المشروع."
 
 
 def restore_module(project_name: str, module_idx: int) -> tuple:

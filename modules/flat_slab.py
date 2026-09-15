@@ -8135,7 +8135,7 @@ def calculate_boq(Lx_spans, Ly_spans, cantilevers, ts_cm, mesh_btm_n, mesh_btm_d
 #  STREAMLIT RENDER
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def render():
+def render(is_standalone: bool = False):
     st.markdown(
         """
         <style>
@@ -8320,10 +8320,16 @@ def render():
         """,
         unsafe_allow_html=True,
     )
-    st.markdown(
-        '<div class="section-header">🟦 Module 1 – Flat Slab Design (ECP 203) (تصميم البلاطات اللاكمرية)</div>',
-        unsafe_allow_html=True,
-    )
+    if is_standalone:
+        st.markdown(
+            '<div class="section-header">🏢 Module 13 – Standalone Flat Slab Design (ECP 203) (تصميم البلاطات اللاكمرية المستقلة)</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            '<div class="section-header">🟦 Module 1 – Integrated Structural Design (ECP 203) (التصميم الإنشائي المتكامل)</div>',
+            unsafe_allow_html=True,
+        )
 
     active_profile_name = S.get_active_profile_name()
     prefix = S.get_safe_profile_filename_prefix()
@@ -11409,1611 +11415,1616 @@ def render():
         else:
             st.info("💡 انقر لتوسيع هذا القسم وعرض التحقق الإنشائي النهائي من سهم الانحناء طويل الأمد (Deflection Verification).")
 
-    # ── 🏛️ COLUMN REACTIONS & MULTI-STOREY LOADS (ردود أفعال وتوزيع أحمال الأعمدة) ────
     col_reactions_data = []
-    for c in _active_cols:
-        pu_1f = c.get("Pu", 0.0)
-        pu_tot = pu_1f * num_floors
-        atrib = c.get("Atrib_0", 0.0)
-        raw_type = c.get("type", "Interior")
-        col_reactions_data.append({
-            "Column ID": c["id"],
-            "Orig ID": c.get("orig_id", c["id"]),
-            "Grid": f"{c['grid_x']} - {c['grid_y']}",
-            "Location Type": {"Interior": "داخلي (Interior)", "Edge": "طرفي / وسط خارجي (Edge)", "Corner": "ركن (Corner)"}.get(raw_type, raw_type),
-            "Raw Type": raw_type,
-            "Tributary Area (m²)": f"{atrib:.2f}",
-            "Pu (1 Floor) [ton]": f"{pu_1f:.2f}",
-            f"Total Pu ({num_floors} Floors) [ton]": f"{pu_tot:.2f}",
-            "pu_1f_val": pu_1f,
-            "pu_tot_val": pu_tot,
-            "atrib_val": atrib,
-            "x_min": c.get("x_min"),
-            "y_min": c.get("y_min"),
-            "x_max": c.get("x_max"),
-            "y_max": c.get("y_max"),
-            "width_m": c.get("width_m"),
-            "height_m": c.get("height_m"),
-            "center_x": c.get("center_x", c.get("x")),
-            "center_y": c.get("center_y", c.get("y")),
-        })
-
+    summary_models = []
     img_reactions_b64 = None
-    exp_reac = st.expander(
-        f"🏛️ Column Reactions & Vertical Loads — {num_floors} Floors (ردود أفعال وتوزيع أحمال الأعمدة)",
-        expanded=False,
-        key=f"{prefix}exp_col_reactions",
-        on_change="rerun",
-    )
-    with exp_reac:
-        if st.session_state.get(f"{prefix}exp_col_reactions", False):
-            fig_reac = generate_flat_slab_reactions_sketch(
-                Lx_calc, Ly_calc, cantilevers, num_floors, Wu,
-                col_reactions_data,
-                col_w_cm=bc_s, col_d_cm=tc_s,
-                removed_cols=_removed_col_objs,
-                void_panel_ids=set(_confirmed_voids),
-                col_sf=col_sf_val,
-                edge_columns=_edge_columns,
-            )
-            st.pyplot(fig_reac, clear_figure=True, use_container_width=True)
-            buf_reac = io.BytesIO()
-            fig_reac.savefig(buf_reac, format="png", bbox_inches="tight", dpi=180)
-            buf_reac.seek(0)
-            img_reactions_b64 = "data:image/png;base64," + base64.b64encode(buf_reac.getvalue()).decode("utf-8")
-            buf_reac.seek(0)
-            st.download_button(
-                label="📥 Download Column Reactions Plan (High-Res PNG)",
-                data=buf_reac,
-                file_name=f"{prefix}Flat_Slab_Column_Reactions_Plan_{num_floors}Floors.png",
-                mime="image/png",
-                use_container_width=True,
-            )
-            plt.close(fig_reac)
-        else:
-            st.info("💡 انقر لتوسيع هذا القسم وعرض مخطط ردود أفعال وتوزيع أحمال الأعمدة.")
 
-    with st.expander(f"📊 Column Reactions Table — {num_floors} Floors (جدول ردود أفعال وتوزيع أحمال الأعمدة)", expanded=False):
-        reactions_df = pd.DataFrame([
-            {
-                "Column ID": r["Column ID"],
-                "Grid": r["Grid"],
-                "Location Type": r["Location Type"],
-                "Tributary Area (m²)": r["Tributary Area (m²)"],
-                "Pu (1 Floor) [ton]": r["Pu (1 Floor) [ton]"],
-                f"Total Pu ({num_floors} Floors) [ton]": r[f"Total Pu ({num_floors} Floors) [ton]"],
-            }
-            for r in col_reactions_data
-        ])
-        render_styled_table(reactions_df)
-        st.caption(f"ℹ️ الأحمال المحورية $P_u$ تشمل معامل الأمان ووزن الأعمدة (Factor of Safety & Columns Weight = **{col_sf_val:.2f}**).")
-
-    # ── 📊 CLASSIFICATION INTO 3 GOVERNING COLUMN TYPES ──────────────────────
-    with st.expander("📌 Governing Column Loads by Type (أقصى ردود أفعال وتصنيف نماذج الأعمدة)", expanded=False):
-        int_cols = [r for r in col_reactions_data if r["Raw Type"] == "Interior"]
-        edge_cols = [r for r in col_reactions_data if r["Raw Type"] == "Edge"]
-        corner_cols = [r for r in col_reactions_data if r["Raw Type"] == "Corner"]
-
-        max_int = max(int_cols, key=lambda x: x["pu_1f_val"]) if int_cols else None
-        max_edge = max(edge_cols, key=lambda x: x["pu_1f_val"]) if edge_cols else None
-        max_corner = max(corner_cols, key=lambda x: x["pu_1f_val"]) if corner_cols else None
-
-        # Governing summary model table
-        summary_models = []
-        if max_int:
-            summary_models.append({
-                "Column Model (نموذج التصميم)": "C_int (أقصى عمود داخلي)",
-                "Governing Column": f"{max_int['Column ID']} ({max_int['Grid']})",
-                "Location Type": "داخلي (Interior)",
-                "Tributary Area (m²)": f"{max_int['atrib_val']:.2f}",
-                "Pu (1 Floor) [ton]": f"{max_int['pu_1f_val']:.2f}",
-                f"Total Pu ({num_floors} Floors) [ton]": f"{max_int['pu_tot_val']:.2f}",
-            })
-        if max_edge:
-            summary_models.append({
-                "Column Model (نموذج التصميم)": "C_edge (أقصى عمود طرفي)",
-                "Governing Column": f"{max_edge['Column ID']} ({max_edge['Grid']})",
-                "Location Type": "طرفي / وسط خارجي (Edge)",
-                "Tributary Area (m²)": f"{max_edge['atrib_val']:.2f}",
-                "Pu (1 Floor) [ton]": f"{max_edge['pu_1f_val']:.2f}",
-                f"Total Pu ({num_floors} Floors) [ton]": f"{max_edge['pu_tot_val']:.2f}",
-            })
-        if max_corner:
-            summary_models.append({
-                "Column Model (نموذج التصميم)": "C_corner (أقصى عمود ركن)",
-                "Governing Column": f"{max_corner['Column ID']} ({max_corner['Grid']})",
-                "Location Type": "ركن (Corner)",
-                "Tributary Area (m²)": f"{max_corner['atrib_val']:.2f}",
-                "Pu (1 Floor) [ton]": f"{max_corner['pu_1f_val']:.2f}",
-                f"Total Pu ({num_floors} Floors) [ton]": f"{max_corner['pu_tot_val']:.2f}",
+    if not is_standalone:
+        # ── 🏛️ COLUMN REACTIONS & MULTI-STOREY LOADS (ردود أفعال وتوزيع أحمال الأعمدة) ────
+        col_reactions_data = []
+        for c in _active_cols:
+            pu_1f = c.get("Pu", 0.0)
+            pu_tot = pu_1f * num_floors
+            atrib = c.get("Atrib_0", 0.0)
+            raw_type = c.get("type", "Interior")
+            col_reactions_data.append({
+                "Column ID": c["id"],
+                "Orig ID": c.get("orig_id", c["id"]),
+                "Grid": f"{c['grid_x']} - {c['grid_y']}",
+                "Location Type": {"Interior": "داخلي (Interior)", "Edge": "طرفي / وسط خارجي (Edge)", "Corner": "ركن (Corner)"}.get(raw_type, raw_type),
+                "Raw Type": raw_type,
+                "Tributary Area (m²)": f"{atrib:.2f}",
+                "Pu (1 Floor) [ton]": f"{pu_1f:.2f}",
+                f"Total Pu ({num_floors} Floors) [ton]": f"{pu_tot:.2f}",
+                "pu_1f_val": pu_1f,
+                "pu_tot_val": pu_tot,
+                "atrib_val": atrib,
+                "x_min": c.get("x_min"),
+                "y_min": c.get("y_min"),
+                "x_max": c.get("x_max"),
+                "y_max": c.get("y_max"),
+                "width_m": c.get("width_m"),
+                "height_m": c.get("height_m"),
+                "center_x": c.get("center_x", c.get("x")),
+                "center_y": c.get("center_y", c.get("y")),
             })
 
-        if summary_models:
-            render_styled_table(summary_models)
+        img_reactions_b64 = None
+        exp_reac = st.expander(
+            f"🏛️ Column Reactions & Vertical Loads — {num_floors} Floors (ردود أفعال وتوزيع أحمال الأعمدة)",
+            expanded=False,
+            key=f"{prefix}exp_col_reactions",
+            on_change="rerun",
+        )
+        with exp_reac:
+            if st.session_state.get(f"{prefix}exp_col_reactions", False):
+                fig_reac = generate_flat_slab_reactions_sketch(
+                    Lx_calc, Ly_calc, cantilevers, num_floors, Wu,
+                    col_reactions_data,
+                    col_w_cm=bc_s, col_d_cm=tc_s,
+                    removed_cols=_removed_col_objs,
+                    void_panel_ids=set(_confirmed_voids),
+                    col_sf=col_sf_val,
+                    edge_columns=_edge_columns,
+                )
+                st.pyplot(fig_reac, clear_figure=True, use_container_width=True)
+                buf_reac = io.BytesIO()
+                fig_reac.savefig(buf_reac, format="png", bbox_inches="tight", dpi=180)
+                buf_reac.seek(0)
+                img_reactions_b64 = "data:image/png;base64," + base64.b64encode(buf_reac.getvalue()).decode("utf-8")
+                buf_reac.seek(0)
+                st.download_button(
+                    label="📥 Download Column Reactions Plan (High-Res PNG)",
+                    data=buf_reac,
+                    file_name=f"{prefix}Flat_Slab_Column_Reactions_Plan_{num_floors}Floors.png",
+                    mime="image/png",
+                    use_container_width=True,
+                )
+                plt.close(fig_reac)
+            else:
+                st.info("💡 انقر لتوسيع هذا القسم وعرض مخطط ردود أفعال وتوزيع أحمال الأعمدة.")
 
-    # ── 💾 PERSIST GOVERNING COLUMN LOADS FOR MODULE 2 & MODULE 7 ─────────────
-    if max_int and max_int.get("pu_1f_val", 0) > 0:
-        pu_int_1f = float(max_int["pu_1f_val"])
-        pu_int_tot = float(max_int["pu_tot_val"])
-        S.cfg_set("fs_col_pu_int", pu_int_1f)
-        S.cfg_set("fs_col_tot_pu_int", pu_int_tot)
-        st.session_state["fs_col_pu_int"] = pu_int_1f
-        st.session_state["fs_col_tot_pu_int"] = pu_int_tot
-        st.session_state["pu_tot_int"] = pu_int_tot
+        with st.expander(f"📊 Column Reactions Table — {num_floors} Floors (جدول ردود أفعال وتوزيع أحمال الأعمدة)", expanded=False):
+            reactions_df = pd.DataFrame([
+                {
+                    "Column ID": r["Column ID"],
+                    "Grid": r["Grid"],
+                    "Location Type": r["Location Type"],
+                    "Tributary Area (m²)": r["Tributary Area (m²)"],
+                    "Pu (1 Floor) [ton]": r["Pu (1 Floor) [ton]"],
+                    f"Total Pu ({num_floors} Floors) [ton]": r[f"Total Pu ({num_floors} Floors) [ton]"],
+                }
+                for r in col_reactions_data
+            ])
+            render_styled_table(reactions_df)
+            st.caption(f"ℹ️ الأحمال المحورية $P_u$ تشمل معامل الأمان ووزن الأعمدة (Factor of Safety & Columns Weight = **{col_sf_val:.2f}**).")
 
-    if max_edge and max_edge.get("pu_1f_val", 0) > 0:
-        pu_edge_1f = float(max_edge["pu_1f_val"])
-        pu_edge_tot = float(max_edge["pu_tot_val"])
-        S.cfg_set("fs_col_pu_edge", pu_edge_1f)
-        S.cfg_set("fs_col_tot_pu_edge", pu_edge_tot)
-        st.session_state["fs_col_pu_edge"] = pu_edge_1f
-        st.session_state["fs_col_tot_pu_edge"] = pu_edge_tot
-        st.session_state["pu_tot_edge"] = pu_edge_tot
-        st.session_state["pu_tot_side"] = pu_edge_tot
+        # ── 📊 CLASSIFICATION INTO 3 GOVERNING COLUMN TYPES ──────────────────────
+        with st.expander("📌 Governing Column Loads by Type (أقصى ردود أفعال وتصنيف نماذج الأعمدة)", expanded=False):
+            int_cols = [r for r in col_reactions_data if r["Raw Type"] == "Interior"]
+            edge_cols = [r for r in col_reactions_data if r["Raw Type"] == "Edge"]
+            corner_cols = [r for r in col_reactions_data if r["Raw Type"] == "Corner"]
 
-    if max_corner and max_corner.get("pu_1f_val", 0) > 0:
-        pu_corner_1f = float(max_corner["pu_1f_val"])
-        pu_corner_tot = float(max_corner["pu_tot_val"])
-        S.cfg_set("fs_col_pu_corner", pu_corner_1f)
-        S.cfg_set("fs_col_tot_pu_corner", pu_corner_tot)
-        st.session_state["fs_col_pu_corner"] = pu_corner_1f
-        st.session_state["fs_col_tot_pu_corner"] = pu_corner_tot
-        st.session_state["pu_tot_corner"] = pu_corner_tot
+            max_int = max(int_cols, key=lambda x: x["pu_1f_val"]) if int_cols else None
+            max_edge = max(edge_cols, key=lambda x: x["pu_1f_val"]) if edge_cols else None
+            max_corner = max(corner_cols, key=lambda x: x["pu_1f_val"]) if corner_cols else None
 
-    # Export full building columns layout (coordinates, dimensions, loads, types)
-    cols_export = []
-    for c in _active_cols:
-        cols_export.append({
-            "id": c["id"],
-            "orig_id": c.get("orig_id", c["id"]),
-            "grid_x": c.get("grid_x", ""),
-            "grid_y": c.get("grid_y", ""),
-            "type": c.get("type", "Interior"),
-            "x": float(c["x"]),
-            "y": float(c["y"]),
-            "bc": float(c.get("bc", bc_s)),
-            "tc": float(c.get("tc", tc_s)),
-            "pu_1f": float(c.get("Pu", 0.0)),
-            "pu_tot": float(c.get("Pu", 0.0) * num_floors),
-            "atrib": float(c.get("Atrib_0", 0.0)),
-        })
-    st.session_state["fs_building_columns"] = cols_export
-    st.session_state["fs_num_floors"] = num_floors
-    st.session_state["fs_Lx_spans"] = [float(x) for x in Lx_calc]
-    st.session_state["fs_Ly_spans"] = [float(y) for y in Ly_calc]
-    st.session_state["fs_col_b"] = float(bc_s)
-    st.session_state["fs_col_c"] = float(tc_s)
-    S.cfg_set("fs_building_columns", cols_export)
-    S.cfg_set("fs_col_b", float(bc_s))
-    S.cfg_set("fs_col_c", float(tc_s))
-    S.cfg_set("fs_Lx_spans", [float(x) for x in Lx_calc])
-    S.cfg_set("fs_Ly_spans", [float(y) for y in Ly_calc])
-
-    # ── 🏛️ RECTANGULAR COLUMNS DESIGN FROM FLAT SLAB LOADS ─────────────────────
-    from modules.columns import design_rectangular_column
-
-    col_sf = S.cfg_val("col_Safety_Factor", 1.20)
-    col_b_val = S.cfg_val("col_b", bc_s if bc_s else 30)
-    col_H = S.cfg_val("col_H_clear", 300)
-    col_K_idx = S.cfg_val("col_K_index", 1)
-    K_opts = [0.50, 0.70, 1.00, 1.20, 2.00]
-    col_K = K_opts[col_K_idx] if 0 <= col_K_idx < len(K_opts) else 0.70
-    col_Fcu = S.cfg_val("col_Fcu", Fcu if Fcu else 250)
-    col_Fy = S.cfg_val("col_Fy", Fy if Fy else 4000)
-    col_Fyk = S.cfg_val("col_Fyk", 2400)
-    col_mu = S.cfg_val("col_mu_target", 1.0)
-    phi_opts = [12, 16, 18, 20, 25]
-    col_phi_idx = S.cfg_val("col_Phi_index", 1)
-    col_phi = phi_opts[col_phi_idx] if 0 <= col_phi_idx < len(phi_opts) else 16
-    phi_st_opts = [6, 8, 10]
-    col_phist_idx = S.cfg_val("col_Phi_st_index", 1)
-    col_phi_st = phi_st_opts[col_phist_idx] if 0 <= col_phist_idx < len(phi_st_opts) else 8
-
-    cnt_int = sum(1 for c in _active_cols if c.get("type") == "Interior")
-    cnt_edge = sum(1 for c in _active_cols if c.get("type") == "Edge")
-    cnt_corner = sum(1 for c in _active_cols if c.get("type") == "Corner")
-    tot_active_cols = len(_active_cols)
-    tot_conc_vol_1f = 0.0
-    tot_main_steel_kg_1f = 0.0
-    tot_stirrup_steel_kg_1f = 0.0
-    tot_steel_kg_1f = 0.0
-    tot_ratio_1f = 0.0
-    tot_conc_vol_bld = 0.0
-    tot_steel_ton_bld = 0.0
-    tot_steel_kg_bld = 0.0
-    cement_ton_cols = 0.0
-    cement_bags_cols = 0
-    gravel_m3_cols = 0.0
-    sand_m3_cols = 0.0
-
-    col_designs = []
-    for model_label, col_obj, model_key in [
-        ("C_int (أقصى عمود داخلي)", max_int, "C_int"),
-        ("C_edge (أقصى عمود طرفي)", max_edge, "C_edge"),
-        ("C_corner (أقصى عمود ركن)", max_corner, "C_corner"),
-    ]:
-        if col_obj and col_obj.get("pu_tot_val", 0) > 0:
-            pu_tot = float(col_obj["pu_tot_val"])
-            pu_1f = float(col_obj["pu_1f_val"])
-            des = design_rectangular_column(
-                Pu_input=pu_tot,
-                Safety_Factor=1.0,
-                b=col_b_val,
-                H_clear=col_H,
-                K=col_K,
-                Fcu=col_Fcu,
-                Fy=col_Fy,
-                Fyk=col_Fyk,
-                mu_target=col_mu,
-                Phi=col_phi,
-                Phi_st=col_phi_st,
-            )
-            des["model_label"] = model_label
-            des["model_key"] = model_key
-            des["gov_col"] = f"{col_obj['Column ID']} ({col_obj['Grid']})"
-            des["loc_type"] = col_obj["Location Type"]
-            des["atrib"] = col_obj["atrib_val"]
-            des["pu_1f"] = pu_1f
-            des["pu_tot"] = pu_tot
-            col_designs.append(des)
-
-    # Design calculation for all individual columns
-    indiv_col_designs = []
-    for r in col_reactions_data:
-        r_pu_tot = float(r["pu_tot_val"])
-        r_pu_1f = float(r["pu_1f_val"])
-        if r_pu_tot > 0:
-            r_des = design_rectangular_column(
-                Pu_input=r_pu_tot,
-                Safety_Factor=1.0,
-                b=col_b_val,
-                H_clear=col_H,
-                K=col_K,
-                Fcu=col_Fcu,
-                Fy=col_Fy,
-                Fyk=col_Fyk,
-                mu_target=col_mu,
-                Phi=col_phi,
-                Phi_st=col_phi_st,
-            )
-            r_des["col_id"] = r["Column ID"]
-            r_des["grid"] = r["Grid"]
-            r_des["loc_type"] = r["Location Type"]
-            r_des["atrib"] = r["atrib_val"]
-            r_des["pu_1f"] = r_pu_1f
-            r_des["pu_tot"] = r_pu_tot
-            indiv_col_designs.append(r_des)
-
-    if col_designs:
-        with st.expander(f"🏛️ Rectangular Columns Design — {num_floors} Floors (التصميم الإنشائي لنماذج الأعمدة المستطيلة)", expanded=False):
-            st.markdown(
-                f"""
-                <div style='background:#f8fafc;border-left:4px solid #1e40af;padding:10px 14px;border-radius:6px;margin-bottom:12px;'>
-                <b>📋 تصميم قطاعات وتسليح نماذج الأعمدة (ECP 203 — Direct Axial Design):</b><br>
-                يتم تصميم قطاعات الأعمدة بناءً على أقصى حمل كلي لعدد <b>{num_floors} طابق</b> <code>Total Pu ({num_floors} Floors)</code> لكل نموذج عمود 
-                (داخلي C_int، طرفي C_edge، ركن C_corner) وفقاً لمساحة التأثير وموقع العمود في المسقط الإنشائي.
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-            col_designs_table = []
-            for des in col_designs:
-                col_designs_table.append({
-                    "نموذج العمود (Model)": des["model_label"],
-                    "العمود الحاكم (Gov Col)": des["gov_col"],
-                    "حمل الدور Pu_1F (t)": f"{des['pu_1f']:.2f}",
-                    f"حمل التصميم الكلي ({num_floors}F) [ton]": f"{des['pu_tot']:.2f}",
-                    "القطاع المصمم b × t (cm)": f"{des['b']:.0f} × {des['t']:.0f}",
-                    "التسليح الطولي (Main RFT)": f"{des['main_steel_str']} (μ={des['mu_provided']:.2f}%)",
-                    "الكانات (Stirrups / Ties)": des["stirrups_str"],
-                    "سعة التحمل Pu,cap (t)": f"{des['Pu_cap_t']:.2f}",
-                    "نسبة الاستخدام (Util %)": f"{des['util_percent']:.1f} %",
-                    "فحص النحافة والأمان": "✅ Safe" if des["is_safe"] else "⚠️ Review",
+            # Governing summary model table
+            summary_models = []
+            if max_int:
+                summary_models.append({
+                    "Column Model (نموذج التصميم)": "C_int (أقصى عمود داخلي)",
+                    "Governing Column": f"{max_int['Column ID']} ({max_int['Grid']})",
+                    "Location Type": "داخلي (Interior)",
+                    "Tributary Area (m²)": f"{max_int['atrib_val']:.2f}",
+                    "Pu (1 Floor) [ton]": f"{max_int['pu_1f_val']:.2f}",
+                    f"Total Pu ({num_floors} Floors) [ton]": f"{max_int['pu_tot_val']:.2f}",
+                })
+            if max_edge:
+                summary_models.append({
+                    "Column Model (نموذج التصميم)": "C_edge (أقصى عمود طرفي)",
+                    "Governing Column": f"{max_edge['Column ID']} ({max_edge['Grid']})",
+                    "Location Type": "طرفي / وسط خارجي (Edge)",
+                    "Tributary Area (m²)": f"{max_edge['atrib_val']:.2f}",
+                    "Pu (1 Floor) [ton]": f"{max_edge['pu_1f_val']:.2f}",
+                    f"Total Pu ({num_floors} Floors) [ton]": f"{max_edge['pu_tot_val']:.2f}",
+                })
+            if max_corner:
+                summary_models.append({
+                    "Column Model (نموذج التصميم)": "C_corner (أقصى عمود ركن)",
+                    "Governing Column": f"{max_corner['Column ID']} ({max_corner['Grid']})",
+                    "Location Type": "ركن (Corner)",
+                    "Tributary Area (m²)": f"{max_corner['atrib_val']:.2f}",
+                    "Pu (1 Floor) [ton]": f"{max_corner['pu_1f_val']:.2f}",
+                    f"Total Pu ({num_floors} Floors) [ton]": f"{max_corner['pu_tot_val']:.2f}",
                 })
 
-            render_styled_table(col_designs_table)
+            if summary_models:
+                render_styled_table(summary_models)
 
-            st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
+        # ── 💾 PERSIST GOVERNING COLUMN LOADS FOR MODULE 2 & MODULE 7 ─────────────
+        if max_int and max_int.get("pu_1f_val", 0) > 0:
+            pu_int_1f = float(max_int["pu_1f_val"])
+            pu_int_tot = float(max_int["pu_tot_val"])
+            S.cfg_set("fs_col_pu_int", pu_int_1f)
+            S.cfg_set("fs_col_tot_pu_int", pu_int_tot)
+            st.session_state["fs_col_pu_int"] = pu_int_1f
+            st.session_state["fs_col_tot_pu_int"] = pu_int_tot
+            st.session_state["pu_tot_int"] = pu_int_tot
 
-            # 3 Detailed Cards for the 3 Column Models
-            d_c1, d_c2, d_c3 = st.columns(3)
-            for des, container, color_border, color_hdr in zip(
-                col_designs,
-                [d_c1, d_c2, d_c3],
-                ["#93c5fd", "#fde68a", "#fecaca"],
-                ["#1e40af", "#b45309", "#b91c1c"]
-            ):
-                with container:
+        if max_edge and max_edge.get("pu_1f_val", 0) > 0:
+            pu_edge_1f = float(max_edge["pu_1f_val"])
+            pu_edge_tot = float(max_edge["pu_tot_val"])
+            S.cfg_set("fs_col_pu_edge", pu_edge_1f)
+            S.cfg_set("fs_col_tot_pu_edge", pu_edge_tot)
+            st.session_state["fs_col_pu_edge"] = pu_edge_1f
+            st.session_state["fs_col_tot_pu_edge"] = pu_edge_tot
+            st.session_state["pu_tot_edge"] = pu_edge_tot
+            st.session_state["pu_tot_side"] = pu_edge_tot
+
+        if max_corner and max_corner.get("pu_1f_val", 0) > 0:
+            pu_corner_1f = float(max_corner["pu_1f_val"])
+            pu_corner_tot = float(max_corner["pu_tot_val"])
+            S.cfg_set("fs_col_pu_corner", pu_corner_1f)
+            S.cfg_set("fs_col_tot_pu_corner", pu_corner_tot)
+            st.session_state["fs_col_pu_corner"] = pu_corner_1f
+            st.session_state["fs_col_tot_pu_corner"] = pu_corner_tot
+            st.session_state["pu_tot_corner"] = pu_corner_tot
+
+        # Export full building columns layout (coordinates, dimensions, loads, types)
+        cols_export = []
+        for c in _active_cols:
+            cols_export.append({
+                "id": c["id"],
+                "orig_id": c.get("orig_id", c["id"]),
+                "grid_x": c.get("grid_x", ""),
+                "grid_y": c.get("grid_y", ""),
+                "type": c.get("type", "Interior"),
+                "x": float(c["x"]),
+                "y": float(c["y"]),
+                "bc": float(c.get("bc", bc_s)),
+                "tc": float(c.get("tc", tc_s)),
+                "pu_1f": float(c.get("Pu", 0.0)),
+                "pu_tot": float(c.get("Pu", 0.0) * num_floors),
+                "atrib": float(c.get("Atrib_0", 0.0)),
+            })
+        st.session_state["fs_building_columns"] = cols_export
+        st.session_state["fs_num_floors"] = num_floors
+        st.session_state["fs_Lx_spans"] = [float(x) for x in Lx_calc]
+        st.session_state["fs_Ly_spans"] = [float(y) for y in Ly_calc]
+        st.session_state["fs_col_b"] = float(bc_s)
+        st.session_state["fs_col_c"] = float(tc_s)
+        S.cfg_set("fs_building_columns", cols_export)
+        S.cfg_set("fs_col_b", float(bc_s))
+        S.cfg_set("fs_col_c", float(tc_s))
+        S.cfg_set("fs_Lx_spans", [float(x) for x in Lx_calc])
+        S.cfg_set("fs_Ly_spans", [float(y) for y in Ly_calc])
+
+        # ── 🏛️ RECTANGULAR COLUMNS DESIGN FROM FLAT SLAB LOADS ─────────────────────
+        from modules.columns import design_rectangular_column
+
+        col_sf = S.cfg_val("col_Safety_Factor", 1.20)
+        col_b_val = S.cfg_val("col_b", bc_s if bc_s else 30)
+        col_H = S.cfg_val("col_H_clear", 300)
+        col_K_idx = S.cfg_val("col_K_index", 1)
+        K_opts = [0.50, 0.70, 1.00, 1.20, 2.00]
+        col_K = K_opts[col_K_idx] if 0 <= col_K_idx < len(K_opts) else 0.70
+        col_Fcu = S.cfg_val("col_Fcu", Fcu if Fcu else 250)
+        col_Fy = S.cfg_val("col_Fy", Fy if Fy else 4000)
+        col_Fyk = S.cfg_val("col_Fyk", 2400)
+        col_mu = S.cfg_val("col_mu_target", 1.0)
+        phi_opts = [12, 16, 18, 20, 25]
+        col_phi_idx = S.cfg_val("col_Phi_index", 1)
+        col_phi = phi_opts[col_phi_idx] if 0 <= col_phi_idx < len(phi_opts) else 16
+        phi_st_opts = [6, 8, 10]
+        col_phist_idx = S.cfg_val("col_Phi_st_index", 1)
+        col_phi_st = phi_st_opts[col_phist_idx] if 0 <= col_phist_idx < len(phi_st_opts) else 8
+
+        cnt_int = sum(1 for c in _active_cols if c.get("type") == "Interior")
+        cnt_edge = sum(1 for c in _active_cols if c.get("type") == "Edge")
+        cnt_corner = sum(1 for c in _active_cols if c.get("type") == "Corner")
+        tot_active_cols = len(_active_cols)
+        tot_conc_vol_1f = 0.0
+        tot_main_steel_kg_1f = 0.0
+        tot_stirrup_steel_kg_1f = 0.0
+        tot_steel_kg_1f = 0.0
+        tot_ratio_1f = 0.0
+        tot_conc_vol_bld = 0.0
+        tot_steel_ton_bld = 0.0
+        tot_steel_kg_bld = 0.0
+        cement_ton_cols = 0.0
+        cement_bags_cols = 0
+        gravel_m3_cols = 0.0
+        sand_m3_cols = 0.0
+
+        col_designs = []
+        for model_label, col_obj, model_key in [
+            ("C_int (أقصى عمود داخلي)", max_int, "C_int"),
+            ("C_edge (أقصى عمود طرفي)", max_edge, "C_edge"),
+            ("C_corner (أقصى عمود ركن)", max_corner, "C_corner"),
+        ]:
+            if col_obj and col_obj.get("pu_tot_val", 0) > 0:
+                pu_tot = float(col_obj["pu_tot_val"])
+                pu_1f = float(col_obj["pu_1f_val"])
+                des = design_rectangular_column(
+                    Pu_input=pu_tot,
+                    Safety_Factor=1.0,
+                    b=col_b_val,
+                    H_clear=col_H,
+                    K=col_K,
+                    Fcu=col_Fcu,
+                    Fy=col_Fy,
+                    Fyk=col_Fyk,
+                    mu_target=col_mu,
+                    Phi=col_phi,
+                    Phi_st=col_phi_st,
+                )
+                des["model_label"] = model_label
+                des["model_key"] = model_key
+                des["gov_col"] = f"{col_obj['Column ID']} ({col_obj['Grid']})"
+                des["loc_type"] = col_obj["Location Type"]
+                des["atrib"] = col_obj["atrib_val"]
+                des["pu_1f"] = pu_1f
+                des["pu_tot"] = pu_tot
+                col_designs.append(des)
+
+        # Design calculation for all individual columns
+        indiv_col_designs = []
+        for r in col_reactions_data:
+            r_pu_tot = float(r["pu_tot_val"])
+            r_pu_1f = float(r["pu_1f_val"])
+            if r_pu_tot > 0:
+                r_des = design_rectangular_column(
+                    Pu_input=r_pu_tot,
+                    Safety_Factor=1.0,
+                    b=col_b_val,
+                    H_clear=col_H,
+                    K=col_K,
+                    Fcu=col_Fcu,
+                    Fy=col_Fy,
+                    Fyk=col_Fyk,
+                    mu_target=col_mu,
+                    Phi=col_phi,
+                    Phi_st=col_phi_st,
+                )
+                r_des["col_id"] = r["Column ID"]
+                r_des["grid"] = r["Grid"]
+                r_des["loc_type"] = r["Location Type"]
+                r_des["atrib"] = r["atrib_val"]
+                r_des["pu_1f"] = r_pu_1f
+                r_des["pu_tot"] = r_pu_tot
+                indiv_col_designs.append(r_des)
+
+        if col_designs:
+            with st.expander(f"🏛️ Rectangular Columns Design — {num_floors} Floors (التصميم الإنشائي لنماذج الأعمدة المستطيلة)", expanded=False):
+                st.markdown(
+                    f"""
+                    <div style='background:#f8fafc;border-left:4px solid #1e40af;padding:10px 14px;border-radius:6px;margin-bottom:12px;'>
+                    <b>📋 تصميم قطاعات وتسليح نماذج الأعمدة (ECP 203 — Direct Axial Design):</b><br>
+                    يتم تصميم قطاعات الأعمدة بناءً على أقصى حمل كلي لعدد <b>{num_floors} طابق</b> <code>Total Pu ({num_floors} Floors)</code> لكل نموذج عمود 
+                    (داخلي C_int، طرفي C_edge، ركن C_corner) وفقاً لمساحة التأثير وموقع العمود في المسقط الإنشائي.
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+                col_designs_table = []
+                for des in col_designs:
+                    col_designs_table.append({
+                        "نموذج العمود (Model)": des["model_label"],
+                        "العمود الحاكم (Gov Col)": des["gov_col"],
+                        "حمل الدور Pu_1F (t)": f"{des['pu_1f']:.2f}",
+                        f"حمل التصميم الكلي ({num_floors}F) [ton]": f"{des['pu_tot']:.2f}",
+                        "القطاع المصمم b × t (cm)": f"{des['b']:.0f} × {des['t']:.0f}",
+                        "التسليح الطولي (Main RFT)": f"{des['main_steel_str']} (μ={des['mu_provided']:.2f}%)",
+                        "الكانات (Stirrups / Ties)": des["stirrups_str"],
+                        "سعة التحمل Pu,cap (t)": f"{des['Pu_cap_t']:.2f}",
+                        "نسبة الاستخدام (Util %)": f"{des['util_percent']:.1f} %",
+                        "فحص النحافة والأمان": "✅ Safe" if des["is_safe"] else "⚠️ Review",
+                    })
+
+                render_styled_table(col_designs_table)
+
+                st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
+
+                # 3 Detailed Cards for the 3 Column Models
+                d_c1, d_c2, d_c3 = st.columns(3)
+                for des, container, color_border, color_hdr in zip(
+                    col_designs,
+                    [d_c1, d_c2, d_c3],
+                    ["#93c5fd", "#fde68a", "#fecaca"],
+                    ["#1e40af", "#b45309", "#b91c1c"]
+                ):
+                    with container:
+                        st.markdown(
+                            f"""
+                            <div style="background:#ffffff; border:2px solid {color_border}; border-radius:10px; padding:12px 14px; text-align:center;">
+                                <div style="font-size:15px; font-weight:700; color:{color_hdr}; margin-bottom:6px;">{des['model_label']}</div>
+                                <div style="font-size:13px; color:#475569;">العمود: <b>{des['gov_col']}</b></div>
+                                <div style="font-size:13px; color:#475569;">Pu_1F = <b>{des['pu_1f']:.1f} t</b> (Total {num_floors}F = <b>{des['pu_tot']:.1f} t</b>)</div>
+                                <hr style="margin:8px 0; border:0; border-top:1px solid #e2e8f0;">
+                                <div style="font-size:17px; font-weight:800; color:#0f172a;">{des['b']:.0f} × {des['t']:.0f} cm</div>
+                                <div style="font-size:14px; font-weight:700; color:#991b1b; margin-top:2px;">{des['main_steel_str']} (μ={des['mu_provided']:.2f}%)</div>
+                                <div style="font-size:13px; font-weight:600; color:#166534; margin-top:2px;">{des['stirrups_str']}</div>
+                                <div style="font-size:12px; color:#64748b; margin-top:4px;">Pu,cap = {des['Pu_cap_t']:.1f} t (كفاءة {des['util_percent']:.1f}%)</div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                # Optional view: Detailed Design Table for ALL Individual Columns
+                if indiv_col_designs:
+                    with st.expander(f"📋 Individual Columns Schedule — Detailed Design for All {len(indiv_col_designs)} Columns (جدول تصميم كافة أعمدة السقف)", expanded=False):
+                        indiv_table = []
+                        for ides in indiv_col_designs:
+                            indiv_table.append({
+                                "Column ID": ides["col_id"],
+                                "Grid": ides["grid"],
+                                "Location Type": ides["loc_type"],
+                                "Atrib (m²)": f"{ides['atrib']:.2f}",
+                                "Pu (1F) [ton]": f"{ides['pu_1f']:.2f}",
+                                f"Total Pu ({num_floors}F) [ton]": f"{ides['pu_tot']:.2f}",
+                                "Design Section b × t (cm)": f"{ides['b']:.0f} × {ides['t']:.0f}",
+                                "Main Rebar": f"{ides['main_steel_str']} (μ={ides['mu_provided']:.2f}%)",
+                                "Ties / Stirrups": ides["stirrups_str"],
+                                "Pu,cap (ton)": f"{ides['Pu_cap_t']:.2f}",
+                                "Util %": f"{ides['util_percent']:.1f} %",
+                            })
+                        render_styled_table(indiv_table)
+
+                st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
+                st.markdown("---")
+
+                # ── 📊 حصر كميات الخرسانة والحديد لجميع أعمدة المسقط الإنشائي (Columns BOQ) ──
+                cnt_int = sum(1 for c in _active_cols if c.get("type") == "Interior")
+                cnt_edge = sum(1 for c in _active_cols if c.get("type") == "Edge")
+                cnt_corner = sum(1 for c in _active_cols if c.get("type") == "Corner")
+                tot_active_cols = len(_active_cols)
+
+                st.markdown(
+                    f"##### 📊 حصر كميات الخرسانة والحديد لجميع الأعمدة في المسقط الإنشائي "
+                    f"({tot_active_cols} عمود: {cnt_int} داخلي + {cnt_edge} طرفي + {cnt_corner} ركن)"
+                )
+
+                des_map = {d["model_key"]: d for d in col_designs}
+                col_boq_rows = []
+                tot_conc_vol_1f = 0.0
+                tot_main_steel_kg_1f = 0.0
+                tot_stirrup_steel_kg_1f = 0.0
+                tot_steel_kg_1f = 0.0
+
+                H_m = col_H / 100.0  # column height in meters
+
+                for m_key, m_label, count in [
+                    ("C_int", "C_int (أعمدة داخلية)", cnt_int),
+                    ("C_edge", "C_edge (أعمدة طرفية)", cnt_edge),
+                    ("C_corner", "C_corner (أعمدة ركن)", cnt_corner),
+                ]:
+                    if count > 0 and m_key in des_map:
+                        des = des_map[m_key]
+                        b_cm = des["b"]
+                        t_cm = des["t"]
+                        phi_m = des["Phi"]
+                        n_b = des["n_bars"]
+                        phi_st = des["Phi_st"]
+                        n_st_m = des["n_st_per_m"]
+
+                        # Concrete volume for 1 column and all columns of this type (m³)
+                        vol_1col = (b_cm / 100.0) * (t_cm / 100.0) * H_m
+                        vol_total = vol_1col * count
+
+                        # Main longitudinal rebar: L = H + splice (m)
+                        L_bar = H_m + max(1.0, (50.0 * phi_m) / 1000.0)
+                        unit_w_main = (phi_m ** 2) / 162.0
+                        tot_len_main_1col = n_b * L_bar
+                        w_main_1col = tot_len_main_1col * unit_w_main
+                        tot_w_main = w_main_1col * count
+
+                        # Stirrups / Ties
+                        n_ties_1col = max(5, int(math.ceil(H_m * n_st_m)))
+                        cov_cm = 2.5
+                        tie_perim = 2.0 * (((b_cm - 2.0 * cov_cm) + (t_cm - 2.0 * cov_cm)) / 100.0) + 0.20
+                        unit_w_st = (phi_st ** 2) / 162.0
+                        tot_len_st_1col = n_ties_1col * tie_perim
+                        w_st_1col = tot_len_st_1col * unit_w_st
+                        tot_w_st = w_st_1col * count
+
+                        # Total steel weight & ratio
+                        tot_w_steel = tot_w_main + tot_w_st
+                        ratio_kg_m3 = (tot_w_steel / vol_total) if vol_total > 0 else 0.0
+
+                        tot_conc_vol_1f += vol_total
+                        tot_main_steel_kg_1f += tot_w_main
+                        tot_stirrup_steel_kg_1f += tot_w_st
+                        tot_steel_kg_1f += tot_w_steel
+
+                        col_boq_rows.append({
+                            "نموذج العمود (Model)": m_label,
+                            "العدد في المسقط (Count)": f"{count} عمود",
+                            "القطاع b × t (cm)": f"{b_cm:.0f} × {t_cm:.0f}",
+                            "حجم الخرسانة (m³)": f"{vol_total:.2f} m³",
+                            "التسليح الرئيسي (Main Steel)": f"{n_b}Φ{phi_m} ({tot_w_main:,.1f} kg)",
+                            "الكانات (Stirrups)": f"{n_st_m}Φ{phi_st}/m' ({tot_w_st:,.1f} kg)",
+                            "إجمالي وزن الحديد (Ton)": f"{tot_w_steel/1000.0:.3f} Ton",
+                            "معدل التسليح (kg/m³)": f"{ratio_kg_m3:.1f} kg/m³",
+                        })
+
+                # Total row
+                tot_ratio_1f = (tot_steel_kg_1f / tot_conc_vol_1f) if tot_conc_vol_1f > 0 else 0.0
+                col_boq_rows.append({
+                    "نموذج العمود (Model)": "📌 الإجمالي الكلي للأعمدة (1 Floor)",
+                    "العدد في المسقط (Count)": f"{tot_active_cols} عمود",
+                    "القطاع b × t (cm)": f"ارتفاع H = {H_m:.2f} m",
+                    "حجم الخرسانة (m³)": f"{tot_conc_vol_1f:.2f} m³",
+                    "التسليح الرئيسي (Main Steel)": f"{tot_main_steel_kg_1f:,.1f} kg ({tot_main_steel_kg_1f/1000.0:.3f} Ton)",
+                    "الكانات (Stirrups)": f"{tot_stirrup_steel_kg_1f:,.1f} kg ({tot_stirrup_steel_kg_1f/1000.0:.3f} Ton)",
+                    "إجمالي وزن الحديد (Ton)": f"{tot_steel_kg_1f/1000.0:.3f} Ton",
+                    "معدل التسليح (kg/m³)": f"{tot_ratio_1f:.1f} kg/m³",
+                })
+
+                # Multi-storey figures
+                tot_conc_vol_bld = tot_conc_vol_1f * num_floors
+                tot_steel_ton_bld = (tot_steel_kg_1f / 1000.0) * num_floors
+                tot_steel_kg_bld = tot_steel_kg_1f * num_floors
+                cement_ton_cols = tot_conc_vol_1f * 0.350
+                cement_bags_cols = int(round(tot_conc_vol_1f * 7.0))
+                gravel_m3_cols = tot_conc_vol_1f * 0.80
+                sand_m3_cols = tot_conc_vol_1f * 0.40
+
+                # ── Summary Metric Panels for Columns BOQ ──
+                cb1, cb2, cb3, cb4 = st.columns(4)
+                with cb1:
                     st.markdown(
                         f"""
-                        <div style="background:#ffffff; border:2px solid {color_border}; border-radius:10px; padding:12px 14px; text-align:center;">
-                            <div style="font-size:15px; font-weight:700; color:{color_hdr}; margin-bottom:6px;">{des['model_label']}</div>
-                            <div style="font-size:13px; color:#475569;">العمود: <b>{des['gov_col']}</b></div>
-                            <div style="font-size:13px; color:#475569;">Pu_1F = <b>{des['pu_1f']:.1f} t</b> (Total {num_floors}F = <b>{des['pu_tot']:.1f} t</b>)</div>
-                            <hr style="margin:8px 0; border:0; border-top:1px solid #e2e8f0;">
-                            <div style="font-size:17px; font-weight:800; color:#0f172a;">{des['b']:.0f} × {des['t']:.0f} cm</div>
-                            <div style="font-size:14px; font-weight:700; color:#991b1b; margin-top:2px;">{des['main_steel_str']} (μ={des['mu_provided']:.2f}%)</div>
-                            <div style="font-size:13px; font-weight:600; color:#166534; margin-top:2px;">{des['stirrups_str']}</div>
-                            <div style="font-size:12px; color:#64748b; margin-top:4px;">Pu,cap = {des['Pu_cap_t']:.1f} t (كفاءة {des['util_percent']:.1f}%)</div>
+                        <div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:8px; padding:10px 14px; text-align:center;">
+                            <div style="font-size:14px; font-weight:600; color:#475569; margin-bottom:4px;">إجمالي عدد الأعمدة (Columns Count)</div>
+                            <div style="font-size:20px; font-weight:700; color:#1e40af;">{tot_active_cols} عمود</div>
+                            <div style="font-size:12px; color:#64748b; margin-top:2px;">{cnt_int} داخلي + {cnt_edge} طرفي + {cnt_corner} ركن</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with cb2:
+                    st.markdown(
+                        f"""
+                        <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:10px 14px; text-align:center;">
+                            <div style="font-size:14px; font-weight:600; color:#15803d; margin-bottom:4px;">حجم خرسانة الأعمدة (Concrete Vol)</div>
+                            <div style="font-size:20px; font-weight:700; color:#166534;">{tot_conc_vol_1f:.2f} m³</div>
+                            <div style="font-size:12px; color:#64748b; margin-top:2px;">ولـ {num_floors} طابق: {tot_conc_vol_bld:.2f} m³</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with cb3:
+                    st.markdown(
+                        f"""
+                        <div style="background:#f5f3ff; border:1.5px solid #c4b5fd; border-radius:8px; padding:10px 14px; text-align:center;">
+                            <div style="font-size:14px; font-weight:600; color:#6d28d9; margin-bottom:4px;">إجمالي وزن حديد الأعمدة (Steel Weight)</div>
+                            <div style="font-size:20px; font-weight:700; color:#5b21b6;">{tot_steel_kg_1f/1000.0:.3f} Ton</div>
+                            <div style="font-size:12px; color:#64748b; margin-top:2px;">{tot_steel_kg_1f:,.1f} kg (ولـ {num_floors} طابق: {tot_steel_ton_bld:.3f} Ton)</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with cb4:
+                    st.markdown(
+                        f"""
+                        <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:10px 14px; text-align:center;">
+                            <div style="font-size:14px; font-weight:600; color:#1e40af; margin-bottom:4px;">معدل التسليح للأعمدة (Steel Ratio)</div>
+                            <div style="font-size:20px; font-weight:700; color:#1e3a8a;">{tot_ratio_1f:.1f} kg/m³</div>
+                            <div style="font-size:12px; color:#64748b; margin-top:2px;">متوسط نسبة التسليح لخرسانة الأعمدة</div>
                         </div>
                         """,
                         unsafe_allow_html=True,
                     )
 
-            # Optional view: Detailed Design Table for ALL Individual Columns
-            if indiv_col_designs:
-                with st.expander(f"📋 Individual Columns Schedule — Detailed Design for All {len(indiv_col_designs)} Columns (جدول تصميم كافة أعمدة السقف)", expanded=False):
-                    indiv_table = []
-                    for ides in indiv_col_designs:
-                        indiv_table.append({
-                            "Column ID": ides["col_id"],
-                            "Grid": ides["grid"],
-                            "Location Type": ides["loc_type"],
-                            "Atrib (m²)": f"{ides['atrib']:.2f}",
-                            "Pu (1F) [ton]": f"{ides['pu_1f']:.2f}",
-                            f"Total Pu ({num_floors}F) [ton]": f"{ides['pu_tot']:.2f}",
-                            "Design Section b × t (cm)": f"{ides['b']:.0f} × {ides['t']:.0f}",
-                            "Main Rebar": f"{ides['main_steel_str']} (μ={ides['mu_provided']:.2f}%)",
-                            "Ties / Stirrups": ides["stirrups_str"],
-                            "Pu,cap (ton)": f"{ides['Pu_cap_t']:.2f}",
-                            "Util %": f"{ides['util_percent']:.1f} %",
-                        })
-                    render_styled_table(indiv_table)
+                st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
+                render_styled_table(col_boq_rows)
 
-            st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
-            st.markdown("---")
+                st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
 
-            # ── 📊 حصر كميات الخرسانة والحديد لجميع أعمدة المسقط الإنشائي (Columns BOQ) ──
-            cnt_int = sum(1 for c in _active_cols if c.get("type") == "Interior")
-            cnt_edge = sum(1 for c in _active_cols if c.get("type") == "Edge")
-            cnt_corner = sum(1 for c in _active_cols if c.get("type") == "Corner")
-            tot_active_cols = len(_active_cols)
+                # ── Concrete Raw Materials Panels for Columns ──
+                st.markdown("###### 🧱 المواد الأولية المطلوبة لصب خرسانة الأعمدة (Concrete Materials for Columns):")
+                cm1, cm2, cm3, cm4 = st.columns(4)
+                with cm1:
+                    st.markdown(
+                        f"""
+                        <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:8px 12px; text-align:center;">
+                            <div style="font-size:13px; font-weight:600; color:#1e40af;">كمية الأسمنت للأعمدة</div>
+                            <div style="font-size:18px; font-weight:700; color:#1e3a8a;">{cement_ton_cols:.2f} Ton</div>
+                            <div style="font-size:11.5px; color:#64748b;">{cement_bags_cols} شكارة (بمعدل 350 kg/m³)</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with cm2:
+                    st.markdown(
+                        f"""
+                        <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:8px; padding:8px 12px; text-align:center;">
+                            <div style="font-size:13px; font-weight:600; color:#b45309;">كمية الزلط للأعمدة</div>
+                            <div style="font-size:18px; font-weight:700; color:#92400e;">{gravel_m3_cols:.2f} m³</div>
+                            <div style="font-size:11.5px; color:#64748b;">بمعدل 0.80 m³ لكل م³ خرسانة</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with cm3:
+                    st.markdown(
+                        f"""
+                        <div style="background:#fef2f2; border:1.5px solid #fecaca; border-radius:8px; padding:8px 12px; text-align:center;">
+                            <div style="font-size:13px; font-weight:600; color:#b91c1c;">كمية الرمل للأعمدة</div>
+                            <div style="font-size:18px; font-weight:700; color:#991b1b;">{sand_m3_cols:.2f} m³</div>
+                            <div style="font-size:11.5px; color:#64748b;">بمعدل 0.40 m³ لكل م³ خرسانة</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with cm4:
+                    st.markdown(
+                        f"""
+                        <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:8px 12px; text-align:center;">
+                            <div style="font-size:13px; font-weight:600; color:#15803d;">إجمالي وزن الحديد الكامل</div>
+                            <div style="font-size:18px; font-weight:700; color:#166534;">{tot_steel_kg_1f/1000.0:.3f} Ton</div>
+                            <div style="font-size:11.5px; color:#64748b;">رئيسي: {tot_main_steel_kg_1f/1000.0:.2f}t | كانات: {tot_stirrup_steel_kg_1f/1000.0:.2f}t</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
+        # ── 🪸 BUILDING FOUNDATIONS DESIGN & DYNAMIC TABS (ECP 203) ───────────────
+        from modules.two_col_footings import (
+            design_isolated_footing_model,
+            design_combined_footing_model,
+            check_building_clearances_and_overlaps,
+            draw_foundation_layout_plan,
+            classify_and_design_building_foundations,
+            draw_comprehensive_foundation_sketch,
+        )
+
+        with st.expander(f"🪸 Building Foundations Design — {num_floors} Floors (تصميم أساسات المبنى والقواعد المنفصلة والمشتركة والشدادات)", expanded=False):
+            # 1. Header / Intro
             st.markdown(
-                f"##### 📊 حصر كميات الخرسانة والحديد لجميع الأعمدة في المسقط الإنشائي "
-                f"({tot_active_cols} عمود: {cnt_int} داخلي + {cnt_edge} طرفي + {cnt_corner} ركن)"
+                f"""
+                <div dir="rtl" style="background:#fff7ed; border:1.5px solid #fed7aa; border-right:7px solid #ea580c; border-radius:10px; padding:18px 22px; margin-bottom:16px; color:#1c1917; line-height:1.9; text-align:right;">
+                    <div style="font-size:1.45rem; font-weight:800; color:#9a3412; margin-bottom:10px;">
+                        📋 تصميم وتوحيد وتوزيع نماذج القواعد والشدادات لأساسات المبنى (ECP 203):
+                    </div>
+                    <div style="font-size:1.25rem; font-weight:700; color:#1c1917;">
+                        نظام متكامل لتصميم أساسات المبنى لعدد <span style="font-weight:800; color:#c2410c;">{num_floors} طوابق</span> بناءً على ردود الأفعال القصوى <span dir="ltr">Pu</span> والأحمال التشغيلية <span dir="ltr">Pw = Pu / 1.5</span>:
+                        <br/>• <b>قواعد منفصلة (Module 3):</b> للأعمدة الداخلية والطرفية غير المتصلة بجار طالما لا يوجد تداخل خرساني.
+                        <br/>• <b>قواعد مشتركة (Module 8):</b> تدمج تلقائياً أي قواعد منفصلة متداخلة (خلوص &lt; 0.15 م).
+                        <br/>• <b>قواعد شدادات جانبية (Module 9):</b> لأعمدة الجار الجانبية وتربطها بشداد مع أقرب عمود داخلي.
+                        <br/>• <b>قواعد شدادات ركن مائلة (Module 10):</b> لأعمدة الجار الركن وتربطها بشداد مائل مع العمود الداخلي المقابل.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
             )
 
-            des_map = {d["model_key"]: d for d in col_designs}
-            col_boq_rows = []
-            tot_conc_vol_1f = 0.0
-            tot_main_steel_kg_1f = 0.0
-            tot_stirrup_steel_kg_1f = 0.0
-            tot_steel_kg_1f = 0.0
+            # 2. Controls & Soil Properties
+            ftg_qnet = S.cfg_val("tcf_q_net", 1.5)
+            ftg_fcu = S.cfg_val("tcf_Fcu", col_Fcu if col_Fcu else 250)
+            ftg_fy = S.cfg_val("tcf_Fy", col_Fy if col_Fy else 4000)
+            ftg_cov = S.cfg_val("tcf_cover", 7)
+            phi_opts_ftg = [12, 16, 18, 22, 25]
+            phi_idx_ftg = S.cfg_val("tcf_Phi_index", 1)
+            ftg_phi = phi_opts_ftg[phi_idx_ftg] if 0 <= phi_idx_ftg < len(phi_opts_ftg) else 16
 
-            H_m = col_H / 100.0  # column height in meters
+            col_c_dim = float(tc_s if tc_s else 50)
+            col_b_dim = float(col_b_val if col_b_val else 30)
 
-            for m_key, m_label, count in [
-                ("C_int", "C_int (أعمدة داخلية)", cnt_int),
-                ("C_edge", "C_edge (أعمدة طرفية)", cnt_edge),
-                ("C_corner", "C_corner (أعمدة ركن)", cnt_corner),
-            ]:
-                if count > 0 and m_key in des_map:
-                    des = des_map[m_key]
-                    b_cm = des["b"]
-                    t_cm = des["t"]
-                    phi_m = des["Phi"]
-                    n_b = des["n_bars"]
-                    phi_st = des["Phi_st"]
-                    n_st_m = des["n_st_per_m"]
+            # 2b. Neighbor Columns Definition (Derived directly from Project Inputs)
+            auto_nbr_ids = [c["id"] for c in _active_cols if c.get("is_edge_col")]
+            sel_neighbor_ids = auto_nbr_ids
 
-                    # Concrete volume for 1 column and all columns of this type (m³)
-                    vol_1col = (b_cm / 100.0) * (t_cm / 100.0) * H_m
-                    vol_total = vol_1col * count
+            with st.container(border=True):
+                if auto_nbr_ids:
+                    nbr_cols_str = "، ".join([f"<span dir='ltr'><b>{cid}</b></span>" for cid in auto_nbr_ids])
+                    st.markdown(
+                        f"""
+                        <div dir="rtl" style="direction: rtl !important; text-align: right !important; background:#eff6ff; border:1.5px solid #bfdbfe; border-right:7px solid #2563eb; border-radius:10px; padding:16px 20px; margin:4px 0 8px 0; color:#1e293b; line-height:1.9;">
+                            <div style="direction: rtl !important; text-align: right !important; font-size:1.35rem; font-weight:800; color:#1e40af; margin-bottom:8px;">
+                                🏘️ أعمدة الجار المعتمدة بالمشروع (طبقاً لمدخلات البلاطة والأعمدة):
+                            </div>
+                            <div style="direction: rtl !important; text-align: right !important; font-size:1.25rem; font-weight:700; line-height:1.9; color:#0f172a;">
+                                أعمدة الجار المحددة في المشروع هي: 
+                                <span dir="rtl" style="font-size:1.35rem; font-weight:900; color:#b91c1c; background:#fef2f2; padding:3px 12px; border-radius:7px; border:1.5px solid #fca5a5; margin:0 6px; display:inline-block;">
+                                    {nbr_cols_str}
+                                </span>
+                                <span style="font-size:1.05rem; font-weight:600; color:#475569;">
+                                    (إجمالي {len(auto_nbr_ids)} أعمدة ملاصقة لحدود الجار)
+                                </span>
+                            </div>
+                            <div style="direction: rtl !important; text-align: right !important; font-size:1.05rem; font-weight:600; color:#2563eb; margin-top:8px; line-height:1.8;">
+                                ℹ️ يتم تصميم أساسات هذه الأعمدة تلقائياً كقواعد شداد (جانبية بنظام Module 9 أو ركنية مائلة بنظام Module 10) وربطها بأقرب أعمدة داخلية.
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st.markdown(
+                        """
+                        <div dir="rtl" style="direction: rtl !important; text-align: right !important; background:#f8fafc; border:1.5px solid #e2e8f0; border-right:7px solid #64748b; border-radius:10px; padding:16px 20px; margin:4px 0 8px 0; color:#1e293b; line-height:1.9;">
+                            <div style="direction: rtl !important; text-align: right !important; font-size:1.35rem; font-weight:800; color:#334155; margin-bottom:8px;">
+                                🏘️ أعمدة الجار بالمشروع:
+                            </div>
+                            <div style="direction: rtl !important; text-align: right !important; font-size:1.2rem; font-weight:700; color:#0f172a;">
+                                لا توجد أعمدة ملاصقة لحدود الجار محددة في مدخلات المشروع.
+                            </div>
+                            <div style="direction: rtl !important; text-align: right !important; font-size:1.05rem; font-weight:600; color:#64748b; margin-top:8px; line-height:1.8;">
+                                ℹ️ تُصمم كافة أساسات المبنى كقواعد منفصلة (Module 3) وقواعد مشتركة تلقائية عند حدوث تداخل (Module 8).
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
 
-                    # Main longitudinal rebar: L = H + splice (m)
-                    L_bar = H_m + max(1.0, (50.0 * phi_m) / 1000.0)
-                    unit_w_main = (phi_m ** 2) / 162.0
-                    tot_len_main_1col = n_b * L_bar
-                    w_main_1col = tot_len_main_1col * unit_w_main
-                    tot_w_main = w_main_1col * count
+            # Build active columns data list
+            fs_active_columns = []
+            for c_item in _active_cols:
+                c_type = c_item.get("type", "Interior")
+                pu_val = float(c_item.get("Pu", 0.0) * num_floors)
+                fs_active_columns.append({
+                    "id": c_item["id"],
+                    "orig_id": c_item.get("orig_id", c_item["id"]),
+                    "type": c_type,
+                    "x": float(c_item.get("center_x", c_item["x"])),
+                    "y": float(c_item.get("center_y", c_item["y"])),
+                    "bc": float(c_item.get("bc", col_b_dim)),
+                    "tc": float(c_item.get("tc", col_c_dim)),
+                    "pu_tot": pu_val,
+                    "grid_x": c_item.get("grid_x", ""),
+                    "grid_y": c_item.get("grid_y", ""),
+                    "grid_x_m": float(c_item.get("grid_x_m", c_item["x"])),
+                    "grid_y_m": float(c_item.get("grid_y_m", c_item["y"])),
+                    "x_min": float(c_item.get("x_min", c_item.get("center_x", c_item["x"]) - c_item.get("width_m", c_item.get("tc", col_c_dim)/100.0)/2.0)),
+                    "x_max": float(c_item.get("x_max", c_item.get("center_x", c_item["x"]) + c_item.get("width_m", c_item.get("tc", col_c_dim)/100.0)/2.0)),
+                    "y_min": float(c_item.get("y_min", c_item.get("center_y", c_item["y"]) - c_item.get("height_m", c_item.get("bc", col_b_dim)/100.0)/2.0)),
+                    "y_max": float(c_item.get("y_max", c_item.get("center_y", c_item["y"]) + c_item.get("height_m", c_item.get("bc", col_b_dim)/100.0)/2.0)),
+                    "width_m": float(c_item.get("width_m", c_item.get("tc", col_c_dim)/100.0)),
+                    "height_m": float(c_item.get("height_m", c_item.get("bc", col_b_dim)/100.0)),
+                    "edge_dir": c_item.get("edge_dir", ""),
+                })
 
-                    # Stirrups / Ties
-                    n_ties_1col = max(5, int(math.ceil(H_m * n_st_m)))
-                    cov_cm = 2.5
-                    tie_perim = 2.0 * (((b_cm - 2.0 * cov_cm) + (t_cm - 2.0 * cov_cm)) / 100.0) + 0.20
-                    unit_w_st = (phi_st ** 2) / 162.0
-                    tot_len_st_1col = n_ties_1col * tie_perim
-                    w_st_1col = tot_len_st_1col * unit_w_st
-                    tot_w_st = w_st_1col * count
+            # Run Comprehensive Multi-Module Engine
+            ftg_analysis = classify_and_design_building_foundations(
+                active_columns=fs_active_columns,
+                neighbor_col_ids=sel_neighbor_ids,
+                col_b_dim=col_b_dim,
+                col_c_dim=col_c_dim,
+                q_all_net=ftg_qnet,
+                fcu=ftg_fcu,
+                fy=ftg_fy,
+                cov=ftg_cov,
+                phi=ftg_phi,
+                num_floors=num_floors,
+            )
+            st.session_state["fs_ftg_analysis"] = ftg_analysis
+            counts = ftg_analysis["summary_counts"]
 
-                    # Total steel weight & ratio
-                    tot_w_steel = tot_w_main + tot_w_st
-                    ratio_kg_m3 = (tot_w_steel / vol_total) if vol_total > 0 else 0.0
+            # ── Automated Ground Beams Layout & Design Integration ──
+            from modules.ground_beam_layout import extract_structural_links_and_beams
 
-                    tot_conc_vol_1f += vol_total
-                    tot_main_steel_kg_1f += tot_w_main
-                    tot_stirrup_steel_kg_1f += tot_w_st
-                    tot_steel_kg_1f += tot_w_steel
+            gb_level_type = S.cfg_val(f"{prefix}gb_level_type", "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)")
+            gb_b_unified = float(S.cfg_val(f"{prefix}gb_b_unified", 25.0))
+            gb_has_wall = S.cfg_val(f"{prefix}gb_has_wall", True)
+            gb_h_wall = float(S.cfg_val(f"{prefix}gb_h_wall", 3.00))
+            gb_t_wall = float(S.cfg_val(f"{prefix}gb_t_wall", 12.0))
+            gb_gamma_brick = float(S.cfg_val(f"{prefix}gb_gamma_brick", 1.80))
+            gb_axial_tie = float(S.cfg_val(f"{prefix}gb_axial_tie_ratio", 0.10))
+            gb_phi_bot_val = int(S.cfg_val(f"{prefix}gb_phi_bot", 16))
+            gb_phi_top_val = int(S.cfg_val(f"{prefix}gb_phi_top", 12))
+            gb_phi_st_val = int(S.cfg_val(f"{prefix}gb_phi_st", 8))
+            gb_phi_side_val = int(S.cfg_val(f"{prefix}gb_phi_side", 10))
+            gb_stirrups_val = int(S.cfg_val(f"{prefix}gb_stirrups_m", 6))
+            gb_user_overrides = st.session_state.get(f"{prefix}gb_overrides", {})
 
-                    col_boq_rows.append({
-                        "نموذج العمود (Model)": m_label,
-                        "العدد في المسقط (Count)": f"{count} عمود",
-                        "القطاع b × t (cm)": f"{b_cm:.0f} × {t_cm:.0f}",
-                        "حجم الخرسانة (m³)": f"{vol_total:.2f} m³",
-                        "التسليح الرئيسي (Main Steel)": f"{n_b}Φ{phi_m} ({tot_w_main:,.1f} kg)",
-                        "الكانات (Stirrups)": f"{n_st_m}Φ{phi_st}/m' ({tot_w_st:,.1f} kg)",
-                        "إجمالي وزن الحديد (Ton)": f"{tot_w_steel/1000.0:.3f} Ton",
-                        "معدل التسليح (kg/m³)": f"{ratio_kg_m3:.1f} kg/m³",
-                    })
+            gb_analysis = extract_structural_links_and_beams(
+                active_columns=fs_active_columns,
+                ftg_analysis=ftg_analysis,
+                b_unified=gb_b_unified,
+                level_type=gb_level_type,
+                has_wall=gb_has_wall,
+                h_wall=gb_h_wall,
+                t_wall=gb_t_wall,
+                gamma_brick=gb_gamma_brick,
+                axial_tie_ratio=gb_axial_tie,
+                fcu=ftg_fcu,
+                fy=ftg_fy,
+                cover_cm=4.0,
+                phi_bot=gb_phi_bot_val,
+                phi_top=gb_phi_top_val,
+                phi_st=gb_phi_st_val,
+                phi_side=gb_phi_side_val,
+                stirrups_per_m=gb_stirrups_val,
+                user_overrides=gb_user_overrides,
+            )
+            st.session_state["fs_gb_analysis"] = gb_analysis
 
-            # Total row
-            tot_ratio_1f = (tot_steel_kg_1f / tot_conc_vol_1f) if tot_conc_vol_1f > 0 else 0.0
-            col_boq_rows.append({
-                "نموذج العمود (Model)": "📌 الإجمالي الكلي للأعمدة (1 Floor)",
-                "العدد في المسقط (Count)": f"{tot_active_cols} عمود",
-                "القطاع b × t (cm)": f"ارتفاع H = {H_m:.2f} m",
-                "حجم الخرسانة (m³)": f"{tot_conc_vol_1f:.2f} m³",
-                "التسليح الرئيسي (Main Steel)": f"{tot_main_steel_kg_1f:,.1f} kg ({tot_main_steel_kg_1f/1000.0:.3f} Ton)",
-                "الكانات (Stirrups)": f"{tot_stirrup_steel_kg_1f:,.1f} kg ({tot_stirrup_steel_kg_1f/1000.0:.3f} Ton)",
-                "إجمالي وزن الحديد (Ton)": f"{tot_steel_kg_1f/1000.0:.3f} Ton",
-                "معدل التسليح (kg/m³)": f"{tot_ratio_1f:.1f} kg/m³",
-            })
-
-            # Multi-storey figures
-            tot_conc_vol_bld = tot_conc_vol_1f * num_floors
-            tot_steel_ton_bld = (tot_steel_kg_1f / 1000.0) * num_floors
-            tot_steel_kg_bld = tot_steel_kg_1f * num_floors
-            cement_ton_cols = tot_conc_vol_1f * 0.350
-            cement_bags_cols = int(round(tot_conc_vol_1f * 7.0))
-            gravel_m3_cols = tot_conc_vol_1f * 0.80
-            sand_m3_cols = tot_conc_vol_1f * 0.40
-
-            # ── Summary Metric Panels for Columns BOQ ──
-            cb1, cb2, cb3, cb4 = st.columns(4)
-            with cb1:
-                st.markdown(
-                    f"""
-                    <div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:8px; padding:10px 14px; text-align:center;">
-                        <div style="font-size:14px; font-weight:600; color:#475569; margin-bottom:4px;">إجمالي عدد الأعمدة (Columns Count)</div>
-                        <div style="font-size:20px; font-weight:700; color:#1e40af;">{tot_active_cols} عمود</div>
-                        <div style="font-size:12px; color:#64748b; margin-top:2px;">{cnt_int} داخلي + {cnt_edge} طرفي + {cnt_corner} ركن</div>
+            # 3. Executive Report Banner
+            st.markdown(
+                f"""
+                <div dir="rtl" style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%); border: 2px solid #38bdf8; border-radius: 12px; padding: 18px 22px; margin: 12px 0 18px 0; box-shadow: 0 4px 20px rgba(0,0,0,0.35); text-align: right;">
+                    <div style="font-size: 18px; font-weight: 900; color: #38bdf8; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                        <span>📋 تقرير توزيع وتصنيف أساسات المبنى الإنشائي (Building Foundations Classification Report)</span>
+                        <span style="font-size: 13.5px; background: #0284c7; color: #ffffff; padding: 4px 12px; border-radius: 6px; font-weight: 800;">إجمالي الأعمدة: {len(fs_active_columns)} عمود</span>
                     </div>
-                    """,
-                    unsafe_allow_html=True,
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 10px;">
+                        <!-- 1. Isolated Footings -->
+                        <div style="background: rgba(186, 230, 253, 0.12); border: 1.5px solid #38bdf8; border-right: 5px solid #0284c7; border-radius: 8px; padding: 12px 14px;">
+                            <div style="font-size: 15px; font-weight: 800; color: #7dd3fc; margin-bottom: 4px;">🟦 1. القواعد المنفصلة (Module 3)</div>
+                            <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['isolated_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة منفصلة</span></div>
+                            <div style="font-size: 12.5px; color: #cbd5e1; margin-top: 4px; line-height: 1.45;"><b>النماذج:</b> {', '.join(counts['isolated_names']) if counts['isolated_names'] else 'لا يوجد'}</div>
+                        </div>
+                        <!-- 2. Combined Footings -->
+                        <div style="background: rgba(187, 247, 208, 0.12); border: 1.5px solid #4ade80; border-right: 5px solid #16a34a; border-radius: 8px; padding: 12px 14px;">
+                            <div style="font-size: 15px; font-weight: 800; color: #86efac; margin-bottom: 4px;">🟩 2. القواعد المشتركة (Module 8)</div>
+                            <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['combined_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة مشتركة</span></div>
+                            <div style="font-size: 12.5px; color: #cbd5e1; margin-top: 4px; line-height: 1.45;"><b>النماذج:</b> {', '.join(counts['combined_names']) if counts['combined_names'] else 'لا يوجد تداخل خرساني'}</div>
+                        </div>
+                        <!-- 3. Edge Strap Footings -->
+                        <div style="background: rgba(254, 215, 170, 0.12); border: 1.5px solid #fb923c; border-right: 5px solid #ea580c; border-radius: 8px; padding: 12px 14px;">
+                            <div style="font-size: 15px; font-weight: 800; color: #fdba74; margin-bottom: 4px;">🟧 3. قواعد الشدادات الجانبية (Module 9)</div>
+                            <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['edge_strap_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة شداد جانبي</span></div>
+                            <div style="font-size: 12.5px; color: #cbd5e1; margin-top: 4px; line-height: 1.45;"><b>النماذج:</b> {', '.join(counts['edge_strap_names']) if counts['edge_strap_names'] else 'لا توجد أعمدة جار جانبية'}</div>
+                        </div>
+                        <!-- 4. Corner Strap Footings -->
+                        <div style="background: rgba(253, 186, 116, 0.15); border: 1.5px solid #f97316; border-right: 5px solid #c2410c; border-radius: 8px; padding: 12px 14px;">
+                            <div style="font-size: 15px; font-weight: 800; color: #fed7aa; margin-bottom: 4px;">🟪 4. قواعد الشدادات الركن (Module 10)</div>
+                            <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['corner_strap_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة شداد ركن مائل</span></div>
+                            <div style="font-size: 12.5px; color: #cbd5e1; margin-top: 4px; line-height: 1.45;"><b>النماذج:</b> {', '.join(counts['corner_strap_names']) if counts['corner_strap_names'] else 'لا توجد أعمدة جار ركن'}</div>
+                        </div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # 4. Footings Detailed Table (Unified Schedule: All 4 Types)
+            st.markdown("##### 📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)")
+            df_fs_export = pd.DataFrame(ftg_analysis["unified_rows"])
+            render_styled_table(df_fs_export)
+
+            # Export Excel & CSV
+            csv_fs_data = df_fs_export.to_csv(index=False).encode('utf-8-sig')
+            buf_fs_xl = io.BytesIO()
+            with pd.ExcelWriter(buf_fs_xl, engine='openpyxl') as writer:
+                df_fs_export.to_excel(writer, index=False, sheet_name='Footings_Schedule')
+            excel_fs_bytes = buf_fs_xl.getvalue()
+
+            exp_c1, exp_c2 = st.columns(2)
+            with exp_c1:
+                st.download_button(
+                    label="📊 تصدير جدول نماذج القواعد الموحد (Excel .xlsx)",
+                    data=excel_fs_bytes,
+                    file_name=f"{prefix}Unified_Footings_Schedule_{num_floors}Floors.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key=f"{prefix}btn_dl_unified_excel_fs",
                 )
-            with cb2:
+            with exp_c2:
+                st.download_button(
+                    label="📥 تصدير جدول نماذج القواعد الموحد (CSV)",
+                    data=csv_fs_data,
+                    file_name=f"{prefix}Unified_Footings_Schedule_{num_floors}Floors.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    key=f"{prefix}btn_dl_unified_csv_fs",
+                )
+
+        # ── 🧱 GROUND BEAMS DESIGN SECTION (ECP 203) ───────────────────────────────────
+        with st.expander(f"🧱 Ground Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج الميدات والسملات الأرضية)", expanded=False):
+            # 1. Header & Description Banner
+            st.markdown(
+                f"""
+                <div dir="rtl" style="background:#f0fdf4; border:1.5px solid #bbf7d0; border-right:7px solid #16a34a; border-radius:10px; padding:18px 22px; margin-bottom:16px; color:#14532d; line-height:1.9; text-align:right;">
+                    <div style="font-size:1.45rem; font-weight:800; color:#15803d; margin-bottom:10px;">
+                        🧱 منظومة تصميم وتفريد ونماذج الميدات والسملات الأرضية (Ground Beams & Tie Beams — ECP 203):
+                    </div>
+                    <div style="font-size:1.15rem; font-weight:700; color:#166534;">
+                        نظام متكامل يربط تلقائياً بين مسقط الأعمدة والأساسات في <b>Module 1</b> وعناصر الربط الإنشائية الأرضية:
+                        <br/>• <b>التفرقة والتصنيف الصريح:</b> تمييز <b>الشدادات (Strap Beams: ST1, ST2)</b> الناقلة للعزوم لقواعد الجار، عن <b>السملات الأرضية (Ground Beams: B1, B2, B3)</b>.
+                        <br/>• <b>استنتاج حالة الاستمرارية تلقائياً من المسقط:</b> تحديد حالة الدعم (بسيطة / مستمرة من طرف واحد / مستمرة من الطرفين) بناءً على امتداد محاور الأعمدة في المسقط بدون الحاجة لإدخال يدوي.
+                        <br/>• <b>قوى الربط المحوري (Axial Tie Action):</b> تصميم السملات على قوى ربط محوري بنسبة <span dir="ltr">10%</span> من حمل العمود الأكبر لمقاومة الهبوط المتفاوت والزلازل طبقاً للكود.
+                        <br/>• <b>التجميع التلقائي في 3 نماذج تنفيذية (B1, B2, B3):</b> تطبيق قاعدة الظرف الحاكم (Governing Envelope Rule) مع إتاحة التعديل اليدوي التفاعلي المباشر.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            # 2. Design Parameters & Controls
+            with st.container(border=True):
+                st.markdown("<div style='font-size:16px; font-weight:800; color:#1e3a8a; margin-bottom:6px;'>⚙️ محددات ومعايير تصميم السملات الأرضية (Ground Beam Design Parameters)</div>", unsafe_allow_html=True)
+                gbc1, gbc2, gbc3, gbc4 = st.columns(4)
+                with gbc1:
+                    lvl_opts = [
+                        "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)",
+                        "At Footing Level (في منسوب القواعد المسلحة)",
+                    ]
+                    sel_lvl_idx = 0 if "Above" in gb_level_type else 1
+                    new_gb_level = st.selectbox(
+                        "منسوب الميدة الإنشائي:",
+                        options=lvl_opts,
+                        index=sel_lvl_idx,
+                        key=f"{prefix}w_gb_level_type",
+                        help="في منسوب القواعد تؤخذ عزوم وقوى الهبوط المتفاوت في الحسابات.",
+                    )
+                    if new_gb_level != gb_level_type:
+                        S.cfg_set(f"{prefix}gb_level_type", new_gb_level)
+                        st.rerun()
+
+                    new_gb_b = st.number_input(
+                        "عرض الميدة الموحد b (cm):",
+                        min_value=15.0, max_value=60.0,
+                        value=float(gb_b_unified), step=5.0,
+                        key=f"{prefix}w_gb_b_unified",
+                    )
+                    if new_gb_b != gb_b_unified:
+                        S.cfg_set(f"{prefix}gb_b_unified", new_gb_b)
+                        st.rerun()
+
+                with gbc2:
+                    new_gb_wall = st.checkbox("وجود حوائط مباني فوق السملات", value=bool(gb_has_wall), key=f"{prefix}w_gb_has_wall")
+                    if new_gb_wall != gb_has_wall:
+                        S.cfg_set(f"{prefix}gb_has_wall", new_gb_wall)
+                        st.rerun()
+
+                    new_gb_hw = st.number_input(
+                        "ارتفاع الحائط H_wall (m):",
+                        min_value=1.0, max_value=6.0,
+                        value=float(gb_h_wall), step=0.25,
+                        disabled=not new_gb_wall,
+                        key=f"{prefix}w_gb_h_wall",
+                    )
+                    if new_gb_hw != gb_h_wall:
+                        S.cfg_set(f"{prefix}gb_h_wall", new_gb_hw)
+                        st.rerun()
+
+                    new_gb_tw = st.number_input(
+                        "سُمك الحائط t_wall (cm):",
+                        min_value=10.0, max_value=40.0,
+                        value=float(gb_t_wall), step=2.0,
+                        disabled=not new_gb_wall,
+                        key=f"{prefix}w_gb_t_wall",
+                    )
+                    if new_gb_tw != gb_t_wall:
+                        S.cfg_set(f"{prefix}gb_t_wall", new_gb_tw)
+                        st.rerun()
+
+                with gbc3:
+                    new_gb_tie = st.number_input(
+                        "نسبة قوة الربط المحوري (Tie %):",
+                        min_value=0.05, max_value=0.25,
+                        value=float(gb_axial_tie), step=0.01,
+                        format="%.2f",
+                        help="نسبة حمل العمود الأكبر للربط المحوري لمقاومة الهبوط المتفاوت والزلازل (10% per ECP 203).",
+                        key=f"{prefix}w_gb_tie_ratio",
+                    )
+                    if new_gb_tie != gb_axial_tie:
+                        S.cfg_set(f"{prefix}gb_axial_tie_ratio", new_gb_tie)
+                        st.rerun()
+
+                    new_gb_st_m = st.number_input(
+                        "عدد الكانات الأساسية / م':",
+                        min_value=5, max_value=10,
+                        value=int(gb_stirrups_val), step=1,
+                        key=f"{prefix}w_gb_stirrups_m",
+                    )
+                    if new_gb_st_m != gb_stirrups_val:
+                        S.cfg_set(f"{prefix}gb_stirrups_m", new_gb_st_m)
+                        st.rerun()
+
+                with gbc4:
+                    dia_opts = [12, 16, 18, 22, 25]
+                    dia_st_opts = [8, 10]
+                    idx_b = dia_opts.index(gb_phi_bot_val) if gb_phi_bot_val in dia_opts else 1
+                    idx_t = dia_opts.index(gb_phi_top_val) if gb_phi_top_val in dia_opts else 0
+                    idx_s = dia_st_opts.index(gb_phi_st_val) if gb_phi_st_val in dia_st_opts else 0
+
+                    new_p_bot = st.selectbox("قطر التسليح السفلي Φ_bot (mm):", options=dia_opts, index=idx_b, key=f"{prefix}w_gb_phi_bot")
+                    new_p_top = st.selectbox("قطر التسليح العلوي Φ_top (mm):", options=dia_opts, index=idx_t, key=f"{prefix}w_gb_phi_top")
+                    new_p_st = st.selectbox("قطر الكانات Φ_st (mm):", options=dia_st_opts, index=idx_s, key=f"{prefix}w_gb_phi_st")
+
+                    if new_p_bot != gb_phi_bot_val or new_p_top != gb_phi_top_val or new_p_st != gb_phi_st_val:
+                        S.cfg_set(f"{prefix}gb_phi_bot", new_p_bot)
+                        S.cfg_set(f"{prefix}gb_phi_top", new_p_top)
+                        S.cfg_set(f"{prefix}gb_phi_st", new_p_st)
+                        st.rerun()
+
+            # 3. KPI Metrics Banner
+            cnt_gb = len(gb_analysis["ground_beams"])
+            cnt_st = len(gb_analysis["strap_beams"])
+            len_gb = sum(b["span_m"] for b in gb_analysis["ground_beams"])
+            len_st = sum(b["span_m"] for b in gb_analysis["strap_beams"])
+
+            st.markdown(
+                f"""
+                <div dir="rtl" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 12px 0 16px 0;">
+                    <div style="background:rgba(224, 231, 255, 0.5); border:1.5px solid #6366f1; border-right:5px solid #4338ca; border-radius:8px; padding:12px 14px;">
+                        <div style="font-size:14px; font-weight:800; color:#312e81;">🧱 إجمالي السملات الأرضية (Ground Beams)</div>
+                        <div style="font-size:20px; font-weight:900; color:#1e1b4b;">{cnt_gb} <span style="font-size:13px; font-weight:600; color:#475569;">سملة ({len_gb:.1f} m)</span></div>
+                        <div style="font-size:12px; color:#4338ca; margin-top:2px;">مجمعة في 3 نماذج: B1, B2, B3</div>
+                    </div>
+                    <div style="background:rgba(254, 215, 170, 0.5); border:1.5px solid #ea580c; border-right:5px solid #c2410c; border-radius:8px; padding:12px 14px;">
+                        <div style="font-size:14px; font-weight:800; color:#9a3412;">🟧 إجمالي الشدادات (Strap Beams)</div>
+                        <div style="font-size:20px; font-weight:900; color:#431407;">{cnt_st} <span style="font-size:13px; font-weight:600; color:#475569;">شداد ({len_st:.1f} m)</span></div>
+                        <div style="font-size:12px; color:#c2410c; margin-top:2px;">لقواعد الجار والركن (ST1, ST2...)</div>
+                    </div>
+                    <div style="background:rgba(240, 253, 244, 0.7); border:1.5px solid #22c55e; border-right:5px solid #15803d; border-radius:8px; padding:12px 14px;">
+                        <div style="font-size:14px; font-weight:800; color:#14532d;">📊 حجم الخرسانة المسلحة للسملات</div>
+                        <div style="font-size:20px; font-weight:900; color:#052e16;">{gb_analysis['boq']['conc_vol_rc']:.2f} <span style="font-size:13px; font-weight:600; color:#475569;">m³</span></div>
+                        <div style="font-size:12px; color:#15803d; margin-top:2px;">بمعدل أسمنت 350 كجم/م³</div>
+                    </div>
+                    <div style="background:rgba(245, 243, 255, 0.7); border:1.5px solid #8b5cf6; border-right:5px solid #6d28d9; border-radius:8px; padding:12px 14px;">
+                        <div style="font-size:14px; font-weight:800; color:#4c1d95;">⚙️ إجمالي وزن حديد تسليح السملات</div>
+                        <div style="font-size:20px; font-weight:900; color:#2e1065;">{gb_analysis['boq']['steel_ton_tot']:.3f} <span style="font-size:13px; font-weight:600; color:#475569;">Ton ({gb_analysis['boq']['steel_kg_tot']:,.0f} kg)</span></div>
+                        <div style="font-size:12px; color:#6d28d9; margin-top:2px;">معدل: {gb_analysis['boq']['steel_ratio_kg_m3']:.1f} kg/m³</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # 4. Interactive Tabs
+            tab_gb_class, tab_gb_models, tab_gb_details = st.tabs([
+                "📋 Classification Table (جدول تصنيف عناصر الربط: شدادات وسملات)",
+                "🏛️ Master Models Schedule (جدول نماذج السملات التنفيذي B1, B2, B3)",
+                "🔩 Detailed Beams Schedule (جدول تفريد وتفاصيل جميع السملات الفردية)",
+            ])
+
+            # ── TAB 1: UNIFIED CLASSIFICATION TABLE (STRAP BEAMS & GROUND BEAMS) ──
+            with tab_gb_class:
+                st.markdown("##### 📋 جدول تصنيف عناصر الربط الإنشائية الشامل (Unified Structural Links Classification Table)")
+                st.caption("يوضح التفرقة الصريحة بين الشدادات (Strap Beams) الحاملة لعزوم لامركزية قواعد الجار والسملات الأرضية (Ground Beams) الرابطة للأعمدة.")
+                df_class_export = pd.DataFrame(gb_analysis["classification_rows"])
+                render_styled_table(df_class_export)
+
+                # Export Excel & CSV
+                csv_class_data = df_class_export.to_csv(index=False).encode('utf-8-sig')
+                buf_class_xl = io.BytesIO()
+                with pd.ExcelWriter(buf_class_xl, engine='openpyxl') as writer:
+                    df_class_export.to_excel(writer, index=False, sheet_name='Classification_Table')
+                excel_class_bytes = buf_class_xl.getvalue()
+
+                c_cl1, c_cl2 = st.columns(2)
+                with c_cl1:
+                    st.download_button(
+                        label="📊 تصدير جدول التصنيف الإنشائي (Excel .xlsx)",
+                        data=excel_class_bytes,
+                        file_name=f"{prefix}Structural_Links_Classification_{num_floors}Floors.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        key=f"{prefix}btn_dl_class_excel",
+                    )
+                with c_cl2:
+                    st.download_button(
+                        label="📥 تصدير جدول التصنيف الإنشائي (CSV)",
+                        data=csv_class_data,
+                        file_name=f"{prefix}Structural_Links_Classification_{num_floors}Floors.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        key=f"{prefix}btn_dl_class_csv",
+                    )
+
+            # ── TAB 2: MASTER GROUND BEAMS SCHEDULE (B1, B2, B3) & INTERACTIVE OVERRIDES ──
+            with tab_gb_models:
+                st.markdown("##### 🏛️ جدول نماذج السملات التنفيذي (Master Ground Beams Schedule — Governing Envelopes)")
+                st.caption("تم تجميع السملات تلقائياً في 3 نماذج تنفيذية (B1 للقطاع الثقيل، B2 للمتوسط، B3 للخفيف) بتطبيق قاعدة الظرف الحاكم.")
+                df_models_export = pd.DataFrame(gb_analysis["models_schedule"])
+                render_styled_table(df_models_export)
+
+                st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
+                with st.container(border=True):
+                    st.markdown("<div style='font-size:15.5px; font-weight:800; color:#9333ea; margin-bottom:6px;'>🛠️ واجهة التعديل اليدوي التفاعلية لنماذج السملات (Interactive Overrides Table)</div>", unsafe_allow_html=True)
+                    st.caption("يمكنك تعديل العمق أو عدد الأسياخ أو الكانات لكل نموذج مباشرة. تنعكس التعديلات فوراً على المخطط واللوحات وحصر الكميات.")
+
+                    ov_changed = False
+                    cur_ov = dict(st.session_state.get(f"{prefix}gb_overrides", {}))
+
+                    ov_cols = st.columns(len(gb_analysis["models_dict"])) if gb_analysis["models_dict"] else [st.container()]
+                    for idx_m, (m_mark, m_data) in enumerate(gb_analysis["models_dict"].items()):
+                        with ov_cols[idx_m]:
+                            st.markdown(f"**📌 نموذج {m_mark} ({m_data['count']} سملات):**")
+                            # Depth override
+                            new_t = st.number_input(
+                                f"عمق {m_mark} الكلي t (cm):",
+                                min_value=30.0, max_value=120.0,
+                                value=float(m_data["t_cm"]), step=5.0,
+                                key=f"{prefix}ov_t_{m_mark}",
+                            )
+                            if new_t != m_data["t_cm"]:
+                                cur_ov[f"{m_mark}_t"] = new_t
+                                ov_changed = True
+
+                            # Bottom bars override
+                            new_nbot = st.number_input(
+                                f"عدد سفلي Φ{m_data['phi_bot']}:",
+                                min_value=2, max_value=20,
+                                value=int(m_data["n_bot"]), step=1,
+                                key=f"{prefix}ov_nbot_{m_mark}",
+                            )
+                            if new_nbot != m_data["n_bot"]:
+                                cur_ov[f"{m_mark}_nbot"] = new_nbot
+                                ov_changed = True
+
+                            # Top bars override
+                            new_ntop = st.number_input(
+                                f"عدد علوي Φ{m_data['phi_top']}:",
+                                min_value=2, max_value=20,
+                                value=int(m_data["n_top"]), step=1,
+                                key=f"{prefix}ov_ntop_{m_mark}",
+                            )
+                            if new_ntop != m_data["n_top"]:
+                                cur_ov[f"{m_mark}_ntop"] = new_ntop
+                                ov_changed = True
+
+                            # Stirrups override
+                            new_st = st.number_input(
+                                f"كانات/م' Φ{m_data['phi_st']}:",
+                                min_value=5, max_value=12,
+                                value=int(m_data["stirrups_per_m"]), step=1,
+                                key=f"{prefix}ov_st_{m_mark}",
+                            )
+                            if new_st != m_data["stirrups_per_m"]:
+                                cur_ov[f"{m_mark}_stirrups"] = new_st
+                                ov_changed = True
+
+                    if ov_changed:
+                        st.session_state[f"{prefix}gb_overrides"] = cur_ov
+                        st.rerun()
+
+                    if st.button("🔄 إعادة ضبط نماذج السملات إلى الحسابات التلقائية (Reset Overrides)", key=f"{prefix}btn_reset_gb_ov"):
+                        st.session_state[f"{prefix}gb_overrides"] = {}
+                        st.rerun()
+
+                # Export Excel & CSV
+                csv_models_data = df_models_export.to_csv(index=False).encode('utf-8-sig')
+                buf_models_xl = io.BytesIO()
+                with pd.ExcelWriter(buf_models_xl, engine='openpyxl') as writer:
+                    df_models_export.to_excel(writer, index=False, sheet_name='Master_Models_Schedule')
+                excel_models_bytes = buf_models_xl.getvalue()
+
+                c_md1, c_md2 = st.columns(2)
+                with c_md1:
+                    st.download_button(
+                        label="📊 تصدير جدول نماذج السملات التنفيذي (Excel .xlsx)",
+                        data=excel_models_bytes,
+                        file_name=f"{prefix}Master_Ground_Beams_Schedule_{num_floors}Floors.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        key=f"{prefix}btn_dl_models_excel",
+                    )
+                with c_md2:
+                    st.download_button(
+                        label="📥 تصدير جدول نماذج السملات التنفيذي (CSV)",
+                        data=csv_models_data,
+                        file_name=f"{prefix}Master_Ground_Beams_Schedule_{num_floors}Floors.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        key=f"{prefix}btn_dl_models_csv",
+                    )
+
+            # ── TAB 3: DETAILED GROUND BEAMS BAR BENDING SCHEDULE ──
+            with tab_gb_details:
+                st.markdown("##### 🔩 جدول تفريد وحصر وتفاصيل جميع السملات الإنشائية (Detailed Ground Beams Schedule)")
+                st.caption("تفصيل دقيق لكل سملة بالمبنى مع البحور الصافية، والعزوم، وقوى القص، وقوى الربط المحوري، والتسليح النهائي.")
+                df_det_export = pd.DataFrame(gb_analysis["detailed_schedule_rows"])
+                render_styled_table(df_det_export)
+
+                # Export Excel & CSV
+                csv_det_data = df_det_export.to_csv(index=False).encode('utf-8-sig')
+                buf_det_xl = io.BytesIO()
+                with pd.ExcelWriter(buf_det_xl, engine='openpyxl') as writer:
+                    df_det_export.to_excel(writer, index=False, sheet_name='Detailed_Ground_Beams')
+                excel_det_bytes = buf_det_xl.getvalue()
+
+                c_dt1, c_dt2 = st.columns(2)
+                with c_dt1:
+                    st.download_button(
+                        label="📊 تصدير جدول تفريد السملات التفصيلي (Excel .xlsx)",
+                        data=excel_det_bytes,
+                        file_name=f"{prefix}Detailed_Ground_Beams_Schedule_{num_floors}Floors.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        key=f"{prefix}btn_dl_det_excel",
+                    )
+                with c_dt2:
+                    st.download_button(
+                        label="📥 تصدير جدول تفريد السملات التفصيلي (CSV)",
+                        data=csv_det_data,
+                        file_name=f"{prefix}Detailed_Ground_Beams_Schedule_{num_floors}Floors.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        key=f"{prefix}btn_dl_det_csv",
+                    )
+
+        # ── 🗺️ FOUNDATION LAYOUT SKETCH SECTION (ECP 203) ──────────────────────────────
+        with st.expander(f"🗺️ Foundation Layout Sketch — {num_floors} Floors (المسقط الأفقي وتوزيع كافة القواعد والشدادات والسملات)", expanded=False):
+            st.markdown(
+                f"""
+                <div dir="rtl" style="background:#eff6ff; border:1.5px solid #bfdbfe; border-right:7px solid #2563eb; border-radius:10px; padding:18px 22px; margin-bottom:16px; color:#1e3a8a; line-height:1.9; text-align:right;">
+                    <div style="font-size:1.45rem; font-weight:800; color:#1d4ed8; margin-bottom:10px;">
+                        🗺️ المسقط الأفقي العام لأساسات المبنى وعناصر الربط الإنشائي (Foundation Layout Plan Sketch):
+                    </div>
+                    <div style="font-size:1.15rem; font-weight:700; color:#1e40af;">
+                        لوحة تنفيذية متكاملة لأساسات المبنى لعدد <span style="font-weight:800; color:#1e3a8a;">{num_floors} طوابق</span>، توضح التوزيع الهندسي الشامل لجميع عناصر الأساسات والربط الإنشائي طبقاً لـ <span dir="ltr">ECP 203</span>:
+                        <br/>• 🟦 <b>القواعد المنفصلة (Module 3):</b> للأعمدة غير المتصلة بجار طالما لا يوجد تداخل.
+                        <br/>• 🟩 <b>القواعد المشتركة (Module 8):</b> تدمج تلقائياً أي قواعد متداخلة (خلوص &lt; 0.15 م).
+                        <br/>• 🟧 <b>قواعد وكمرات الشدادات للجار (Modules 9 & 10):</b> برموز واضحة (<span dir="ltr">ST1, ST2...</span>) وأبعاد القطاع وعزوم الاتزان.
+                        <br/>• 🟪 <b>السملات والميدات الأرضية (Module 11):</b> بلون نيلي مميز مع بطاقات النماذج التنفيذية (<span dir="ltr">B1, B2, B3</span>) والمحاور والأبعاد.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            ftg_analysis_sketch = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
+            gb_analysis_sketch = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis")
+            active_cols_sketch = fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols
+
+            if ftg_analysis_sketch and active_cols_sketch:
+                gb_list = gb_analysis_sketch.get("ground_beams", []) if gb_analysis_sketch else []
+                fig_full_sketch = draw_comprehensive_foundation_sketch(
+                    active_cols_sketch, ftg_analysis_sketch, ground_beams=gb_list,
+                    edge_columns=_edge_columns,
+                )
+                st.pyplot(fig_full_sketch, clear_figure=True, use_container_width=True)
+
+                buf_fs_sketch = io.BytesIO()
+                fig_full_sketch.savefig(buf_fs_sketch, format="png", bbox_inches="tight", dpi=180)
+                buf_fs_sketch.seek(0)
+                st.download_button(
+                    label="📥 Download Foundation Layout Plan Sketch (High-Res PNG)",
+                    data=buf_fs_sketch,
+                    file_name=f"{prefix}Foundation_Comprehensive_Layout_{num_floors}Floors.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key=f"{prefix}btn_dl_full_foundation_sketch",
+                )
+                plt.close(fig_full_sketch)
+            else:
+                st.info("💡 جاري معالجة بيانات الأساسات والسملات لتوليد المسقط الأفقي العام.")
+
+        # ── 📊 الحصر التقريبي للكميات — APPROXIMATE QUANTITY SURVEY ──────────────
+        # 1. Slab Quantities (السقف)
+        slab_area_val    = boq.get("slab_area_m2", 0.0)
+        slab_conc_val    = boq.get("concrete_vol_m3", 0.0)
+        slab_steel_kg    = boq.get("total_steel_kg", 0.0)
+        slab_steel_ton   = boq.get("total_steel_ton", 0.0)
+        slab_cement_ton  = boq.get("cement_ton", 0.0)
+        slab_cement_bags = boq.get("cement_bags", 0)
+        slab_gravel_val  = boq.get("gravel_m3", 0.0)
+        slab_sand_val    = boq.get("sand_m3", 0.0)
+        slab_ratio_val   = boq.get("steel_ratio_kg_m3", 0.0)
+
+        # 2. Columns Quantities (الأعمدة لجميع الأدوار)
+        cols_conc_1f_val      = tot_conc_vol_1f
+        cols_steel_kg_1f_val  = tot_steel_kg_1f
+        cols_steel_ton_1f_val = tot_steel_kg_1f / 1000.0
+
+        cols_conc_tot_val      = cols_conc_1f_val * num_floors
+        cols_steel_kg_tot_val  = cols_steel_kg_1f_val * num_floors
+        cols_steel_ton_tot_val = cols_steel_ton_1f_val * num_floors
+        cols_cement_tot_ton    = (cols_conc_tot_val * 350.0) / 1000.0
+        cols_cement_tot_bags   = int(round(cols_cement_tot_ton * 1000.0 / 50.0))
+        cols_gravel_tot_val    = cols_conc_tot_val * 0.80
+        cols_sand_tot_val      = cols_conc_tot_val * 0.40
+        cols_ratio_val         = (cols_steel_kg_tot_val / cols_conc_tot_val) if cols_conc_tot_val > 0 else 0.0
+
+        # 3. Foundations Quantities (أساسات المبنى: قواعد منفصلة + قواعد مشتركة)
+        ftgs_conc_rc_val  = 0.0
+        ftgs_conc_pc_val  = 0.0
+        ftgs_steel_kg_val = 0.0
+        ftg_dia_map = {}
+
+        def _add_ftg_dia_entry(phi_val, wt_kg, app_desc):
+            if phi_val not in ftg_dia_map:
+                ftg_dia_map[phi_val] = {"weight_kg": 0.0, "apps": app_desc}
+            ftg_dia_map[phi_val]["weight_kg"] += wt_kg
+
+        ftg_analysis_obj = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
+        if ftg_analysis_obj and "quantities" in ftg_analysis_obj:
+            fq = ftg_analysis_obj["quantities"]
+            ftgs_conc_rc_val = float(fq.get("ftgs_conc_rc_val", 0.0))
+            ftgs_conc_pc_val = float(fq.get("ftgs_conc_pc_val", 0.0))
+            ftgs_steel_kg_val = float(fq.get("ftgs_steel_kg_val", 0.0))
+            ftg_dia_map = dict(fq.get("ftg_dia_map", {}))
+        elif 'fs_active_columns' in locals() and fs_active_columns:
+            ov_col_ids_set = overlap_data.get("overlapping_col_ids", set()) if 'overlap_data' in locals() else set()
+            for col_item in fs_active_columns:
+                cid = col_item["id"]
+                if cid in ov_col_ids_set:
+                    continue
+                ctype = col_item.get("type", "Interior")
+                f_model = ftgs_dict.get(ctype, ftgs_dict.get("Interior")) if 'ftgs_dict' in locals() else None
+                if not f_model:
+                    continue
+
+                L_m = f_model["L_cm"] / 100.0
+                B_m = f_model["B_cm"] / 100.0
+                t_m = f_model["t_cm"] / 100.0
+                ftgs_conc_rc_val += L_m * B_m * t_m
+
+                # P.C. Blinding Layer (20 cm thick with 20 cm projection)
+                L_pc_m = (f_model["L_cm"] + 40.0) / 100.0
+                B_pc_m = (f_model["B_cm"] + 40.0) / 100.0
+                ftgs_conc_pc_val += L_pc_m * B_pc_m * 0.20
+
+                # Steel: bottom longitudinal & transverse
+                phi_f = f_model.get("Phi", 16)
+                unit_w_f = (phi_f ** 2) / 162.0
+                n_L = max(5, int(math.ceil(B_m * f_model.get("n_bars_L", 5.0))))
+                len_L = L_m - 0.10 + 2.0 * max(0.20, t_m - 0.10)
+                wt_L = n_L * len_L * unit_w_f
+
+                n_B = max(5, int(math.ceil(L_m * f_model.get("n_bars_B", 5.0))))
+                len_B = B_m - 0.10 + 2.0 * max(0.20, t_m - 0.10)
+                wt_B = n_B * len_B * unit_w_f
+
+                isolated_col_steel = wt_L + wt_B
+                ftgs_steel_kg_val += isolated_col_steel
+                _add_ftg_dia_entry(phi_f, isolated_col_steel, "تسليح سفلي لقواعد منفصلة (Isolated Footings)")
+
+            if 'combined_fs_models' in locals() and combined_fs_models:
+                for cf in combined_fs_models:
+                    Lc_m = cf["Lc_cm"] / 100.0
+                    Bc_m = cf["Bc_cm"] / 100.0
+                    tc_m = cf["tc_cm"] / 100.0
+                    ftgs_conc_rc_val += Lc_m * Bc_m * tc_m
+
+                    # P.C. Blinding for Combined Footings
+                    Lc_pc_m = (cf["Lc_cm"] + 40.0) / 100.0
+                    Bc_pc_m = (cf["Bc_cm"] + 40.0) / 100.0
+                    ftgs_conc_pc_val += Lc_pc_m * Bc_pc_m * 0.20
+
+                    # Rebar: Bottom longitudinal
+                    phi_bot = cf.get("Phi_mm", 18)
+                    unit_w_bot = (phi_bot ** 2) / 162.0
+                    n_bot = max(5, int(math.ceil(Bc_m * 6.0)))
+                    len_bot = Lc_m - 0.10 + 2.0 * max(0.25, tc_m - 0.10)
+                    wt_bot = n_bot * len_bot * unit_w_bot
+
+                    # Rebar: Top longitudinal (Negative moment rebar)
+                    phi_top = cf.get("Phi_mm", 18)
+                    unit_w_top = (phi_top ** 2) / 162.0
+                    n_top = max(5, int(math.ceil(Bc_m * 8.0)))
+                    len_top = Lc_m - 0.10 + 2.0 * max(0.25, tc_m - 0.10)
+                    wt_top = n_top * len_top * unit_w_top
+
+                    # Rebar: Transverse steel
+                    phi_trans = 16
+                    unit_w_trans = (16 ** 2) / 162.0
+                    n_trans = max(5, int(math.ceil(Lc_m * 5.0)))
+                    len_trans = Bc_m - 0.10 + 2.0 * max(0.25, tc_m - 0.10)
+                    wt_trans = n_trans * len_trans * unit_w_trans
+
+                    combined_col_steel = wt_bot + wt_top + wt_trans
+                    ftgs_steel_kg_val += combined_col_steel
+                    _add_ftg_dia_entry(phi_bot, wt_bot, "تسليح سفلي لقواعد مشتركة (Combined Footings)")
+                    _add_ftg_dia_entry(phi_top, wt_top, "تسليح علوي رئيسي لقواعد مشتركة (Combined Footings)")
+                    _add_ftg_dia_entry(phi_trans, wt_trans, "تسليح عرضي لقواعد مشتركة (Combined Footings)")
+
+        ftgs_steel_ton_val  = ftgs_steel_kg_val / 1000.0
+        ftgs_cement_ton     = (ftgs_conc_rc_val * 350.0 + ftgs_conc_pc_val * 250.0) / 1000.0
+        ftgs_cement_bags    = int(round(ftgs_cement_ton * 1000.0 / 50.0))
+        ftgs_gravel_val     = (ftgs_conc_rc_val + ftgs_conc_pc_val) * 0.80
+        ftgs_sand_val       = (ftgs_conc_rc_val + ftgs_conc_pc_val) * 0.40
+        ftgs_ratio_val      = (ftgs_steel_kg_val / ftgs_conc_rc_val) if ftgs_conc_rc_val > 0 else 0.0
+
+        # 3b. Ground Beams Quantities (السملات والميدات الأرضية)
+        gb_analysis_obj = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis")
+        gb_conc_rc_val  = 0.0
+        gb_steel_kg_val = 0.0
+        gb_dia_map      = {}
+        if gb_analysis_obj and "boq" in gb_analysis_obj:
+            gboq = gb_analysis_obj["boq"]
+            gb_conc_rc_val  = float(gboq.get("conc_vol_rc", 0.0))
+            gb_steel_kg_val = float(gboq.get("steel_kg_tot", 0.0))
+            gb_dia_map      = dict(gboq.get("dia_map", {}))
+
+        gb_steel_ton_val  = gb_steel_kg_val / 1000.0
+        gb_cement_ton     = (gb_conc_rc_val * 350.0) / 1000.0
+        gb_cement_bags    = int(round(gb_cement_ton * 1000.0 / 50.0))
+        gb_gravel_val     = gb_conc_rc_val * 0.80
+        gb_sand_val       = gb_conc_rc_val * 0.40
+        gb_ratio_val      = (gb_steel_kg_val / gb_conc_rc_val) if gb_conc_rc_val > 0 else 0.0
+
+        # 4. Grand Total Quantities (السقف + الأعمدة + الأساسات + السملات)
+        grand_conc_rc_val   = slab_conc_val + cols_conc_tot_val + ftgs_conc_rc_val + gb_conc_rc_val
+        grand_conc_pc_val   = ftgs_conc_pc_val
+        grand_conc_all_val  = grand_conc_rc_val + grand_conc_pc_val
+        grand_steel_kg_val  = slab_steel_kg + cols_steel_kg_tot_val + ftgs_steel_kg_val + gb_steel_kg_val
+        grand_steel_ton_val = slab_steel_ton + cols_steel_ton_tot_val + ftgs_steel_ton_val + gb_steel_ton_val
+        grand_cement_ton    = slab_cement_ton + cols_cement_tot_ton + ftgs_cement_ton + gb_cement_ton
+        grand_cement_bags   = slab_cement_bags + cols_cement_tot_bags + ftgs_cement_bags + gb_cement_bags
+        grand_gravel_val    = slab_gravel_val + cols_gravel_tot_val + ftgs_gravel_val + gb_gravel_val
+        grand_sand_val      = slab_sand_val + cols_sand_tot_val + ftgs_sand_val + gb_sand_val
+        grand_ratio_val     = (grand_steel_kg_val / grand_conc_rc_val) if grand_conc_rc_val > 0 else 0.0
+
+        # 5. Detailed Diameter Breakdown (Slab, Columns & Foundations)
+        all_dias_set = set()
+        slab_dia_map = {}
+        for d_row in boq.get("by_dia", []):
+            d_val = d_row.get("dia_mm") or d_row.get("dia")
+            if d_val:
+                all_dias_set.add(d_val)
+                slab_dia_map[d_val] = {
+                    "weight_kg": d_row.get("weight_kg", 0.0),
+                    "weight_ton": d_row.get("weight_ton", 0.0),
+                    "apps": d_row.get("apps", "—"),
+                }
+
+        cols_dia_map = {}
+        if 'des_map' in locals() and des_map:
+            for m_key, des_item in des_map.items():
+                cnt = cnt_int if m_key == "C_int" else (cnt_edge if m_key == "C_edge" else cnt_corner)
+                if cnt > 0:
+                    phi_m = des_item["Phi"]
+                    phi_st = des_item["Phi_st"]
+                    all_dias_set.add(phi_m)
+                    all_dias_set.add(phi_st)
+
+                    H_m_col = col_H / 100.0
+                    L_bar_col = H_m_col + max(1.0, (50.0 * phi_m) / 1000.0)
+                    unit_w_m = (phi_m ** 2) / 162.0
+                    wt_main_bld = des_item["n_bars"] * L_bar_col * unit_w_m * cnt * num_floors
+
+                    n_ties_col = max(5, int(math.ceil(H_m_col * des_item["n_st_per_m"])))
+                    tie_perim_col = 2.0 * (((des_item["b"] - 5.0) + (des_item["t"] - 5.0)) / 100.0) + 0.20
+                    unit_w_st = (phi_st ** 2) / 162.0
+                    wt_st_bld = n_ties_col * tie_perim_col * unit_w_st * cnt * num_floors
+
+                    if phi_m not in cols_dia_map:
+                        cols_dia_map[phi_m] = {"weight_kg": 0.0, "apps": "تسليح طولي رئيسي للأعمدة (Main Column Rebar)"}
+                    cols_dia_map[phi_m]["weight_kg"] += wt_main_bld
+
+                    if phi_st not in cols_dia_map:
+                        cols_dia_map[phi_st] = {"weight_kg": 0.0, "apps": "كانات وأطواق الأعمدة (Column Stirrup Ties)"}
+                    cols_dia_map[phi_st]["weight_kg"] += wt_st_bld
+
+        all_dias_set.update(ftg_dia_map.keys())
+        all_dias_set.update(gb_dia_map.keys())
+
+        with st.expander("📊 Approximate Quantity Survey (الحصر التقريبي للكميات)", expanded=False):
+            st.markdown(
+                f"""
+                <div style="background:#f8fafc; border-left:4px solid #1e40af; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
+                    <div style="font-size:1.0rem; font-weight:800; color:#1e3a8a;">
+                        📋 جدول الحصر الشامل لكميات ومواد السقف والأعمدة والأساسات والسملات والإجمالي الكلي للمبنى:
+                    </div>
+                    <div style="font-size:0.9rem; color:#475569; margin-top:3px;">
+                        حصر تفصيلي شامل للخرسانة المسلحة والعادية، وحديد التسليح (لكل قطر وإجمالي)، والأسمنت، والزلط، والرمل لسقف البلاطة اللاكمرية، وأعمدة المبنى ({num_floors} طوابق)، وأساسات المبنى بالكامل (القواعد المنفصلة والمشتركة)، وسملات الربط الأرضية (Ground Beams).
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # ── KPI Summary Cards ──
+            kpi_c1, kpi_c2, kpi_c3, kpi_c4 = st.columns(4)
+            with kpi_c1:
                 st.markdown(
                     f"""
                     <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:10px 14px; text-align:center;">
-                        <div style="font-size:14px; font-weight:600; color:#15803d; margin-bottom:4px;">حجم خرسانة الأعمدة (Concrete Vol)</div>
-                        <div style="font-size:20px; font-weight:700; color:#166534;">{tot_conc_vol_1f:.2f} m³</div>
-                        <div style="font-size:12px; color:#64748b; margin-top:2px;">ولـ {num_floors} طابق: {tot_conc_vol_bld:.2f} m³</div>
+                        <div style="font-size:13px; font-weight:600; color:#15803d; margin-bottom:4px;">إجمالي حجم الخرسانات</div>
+                        <div style="font-size:20px; font-weight:800; color:#166534;">{grand_conc_all_val:.2f} m³</div>
+                        <div style="font-size:11.5px; color:#475569; margin-top:2px;">مسلحة: {grand_conc_rc_val:.1f} m³ │ عادية: {grand_conc_pc_val:.1f} m³</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-            with cb3:
+            with kpi_c2:
                 st.markdown(
                     f"""
                     <div style="background:#f5f3ff; border:1.5px solid #c4b5fd; border-radius:8px; padding:10px 14px; text-align:center;">
-                        <div style="font-size:14px; font-weight:600; color:#6d28d9; margin-bottom:4px;">إجمالي وزن حديد الأعمدة (Steel Weight)</div>
-                        <div style="font-size:20px; font-weight:700; color:#5b21b6;">{tot_steel_kg_1f/1000.0:.3f} Ton</div>
-                        <div style="font-size:12px; color:#64748b; margin-top:2px;">{tot_steel_kg_1f:,.1f} kg (ولـ {num_floors} طابق: {tot_steel_ton_bld:.3f} Ton)</div>
+                        <div style="font-size:13px; font-weight:600; color:#6d28d9; margin-bottom:4px;">إجمالي وزن حديد التسليح</div>
+                        <div style="font-size:20px; font-weight:800; color:#5b21b6;">{grand_steel_ton_val:.3f} Ton</div>
+                        <div style="font-size:11.5px; color:#475569; margin-top:2px;">سقف: {slab_steel_ton:.2f}t │ أعمدة: {cols_steel_ton_tot_val:.2f}t │ أساسات: {ftgs_steel_ton_val:.2f}t │ سملات: {gb_steel_ton_val:.2f}t</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-            with cb4:
+            with kpi_c3:
                 st.markdown(
                     f"""
                     <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:10px 14px; text-align:center;">
-                        <div style="font-size:14px; font-weight:600; color:#1e40af; margin-bottom:4px;">معدل التسليح للأعمدة (Steel Ratio)</div>
-                        <div style="font-size:20px; font-weight:700; color:#1e3a8a;">{tot_ratio_1f:.1f} kg/m³</div>
-                        <div style="font-size:12px; color:#64748b; margin-top:2px;">متوسط نسبة التسليح لخرسانة الأعمدة</div>
+                        <div style="font-size:13px; font-weight:600; color:#1e40af; margin-bottom:4px;">إجمالي كمية الأسمنت</div>
+                        <div style="font-size:20px; font-weight:800; color:#1e3a8a;">{grand_cement_ton:.2f} Ton</div>
+                        <div style="font-size:11.5px; color:#475569; margin-top:2px;">{grand_cement_bags:,} شكارة (50 كجم)</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with kpi_c4:
+                st.markdown(
+                    f"""
+                    <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:8px; padding:10px 14px; text-align:center;">
+                        <div style="font-size:13px; font-weight:600; color:#b45309; margin-bottom:4px;">إجمالي الزلط والرمل</div>
+                        <div style="font-size:18px; font-weight:800; color:#92400e;">زلط: {grand_gravel_val:.1f} m³</div>
+                        <div style="font-size:11.5px; color:#475569; margin-top:2px;">رمل: {grand_sand_val:.1f} m³ │ معدل: {grand_ratio_val:.1f} kg/m³</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
 
-            st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
-            render_styled_table(col_boq_rows)
+            st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
 
-            st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
+            # ── Table 1: Main Materials Quantity Survey Table ──
+            st.markdown("##### 📋 1. جدول الحصر التقريبي العام للكميات والمواد الإنشائية (General Quantity Survey Table)")
 
-            # ── Concrete Raw Materials Panels for Columns ──
-            st.markdown("###### 🧱 المواد الأولية المطلوبة لصب خرسانة الأعمدة (Concrete Materials for Columns):")
-            cm1, cm2, cm3, cm4 = st.columns(4)
-            with cm1:
-                st.markdown(
-                    f"""
-                    <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:8px 12px; text-align:center;">
-                        <div style="font-size:13px; font-weight:600; color:#1e40af;">كمية الأسمنت للأعمدة</div>
-                        <div style="font-size:18px; font-weight:700; color:#1e3a8a;">{cement_ton_cols:.2f} Ton</div>
-                        <div style="font-size:11.5px; color:#64748b;">{cement_bags_cols} شكارة (بمعدل 350 kg/m³)</div>
+            st.markdown(
+                """
+                <div style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 2.5px solid #f59e0b; border-radius: 10px; padding: 14px 20px; margin-top: 8px; margin-bottom: 16px; text-align: center; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.20);">
+                    <div style="font-size: 1.18rem; font-weight: 800; color: #92400e; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <span style="font-size: 1.45rem;">⚠️</span>
+                        <span>تنبيه وإرشاد هندسي هام:</span>
                     </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            with cm2:
-                st.markdown(
-                    f"""
-                    <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:8px; padding:8px 12px; text-align:center;">
-                        <div style="font-size:13px; font-weight:600; color:#b45309;">كمية الزلط للأعمدة</div>
-                        <div style="font-size:18px; font-weight:700; color:#92400e;">{gravel_m3_cols:.2f} m³</div>
-                        <div style="font-size:11.5px; color:#64748b;">بمعدل 0.80 m³ لكل م³ خرسانة</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            with cm3:
-                st.markdown(
-                    f"""
-                    <div style="background:#fef2f2; border:1.5px solid #fecaca; border-radius:8px; padding:8px 12px; text-align:center;">
-                        <div style="font-size:13px; font-weight:600; color:#b91c1c;">كمية الرمل للأعمدة</div>
-                        <div style="font-size:18px; font-weight:700; color:#991b1b;">{sand_m3_cols:.2f} m³</div>
-                        <div style="font-size:11.5px; color:#64748b;">بمعدل 0.40 m³ لكل م³ خرسانة</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            with cm4:
-                st.markdown(
-                    f"""
-                    <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:8px 12px; text-align:center;">
-                        <div style="font-size:13px; font-weight:600; color:#15803d;">إجمالي وزن الحديد الكامل</div>
-                        <div style="font-size:18px; font-weight:700; color:#166534;">{tot_steel_kg_1f/1000.0:.3f} Ton</div>
-                        <div style="font-size:11.5px; color:#64748b;">رئيسي: {tot_main_steel_kg_1f/1000.0:.2f}t | كانات: {tot_stirrup_steel_kg_1f/1000.0:.2f}t</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-    # ── 🪸 BUILDING FOUNDATIONS DESIGN & DYNAMIC TABS (ECP 203) ───────────────
-    from modules.two_col_footings import (
-        design_isolated_footing_model,
-        design_combined_footing_model,
-        check_building_clearances_and_overlaps,
-        draw_foundation_layout_plan,
-        classify_and_design_building_foundations,
-        draw_comprehensive_foundation_sketch,
-    )
-
-    with st.expander(f"🪸 Building Foundations Design — {num_floors} Floors (تصميم أساسات المبنى والقواعد المنفصلة والمشتركة والشدادات)", expanded=False):
-        # 1. Header / Intro
-        st.markdown(
-            f"""
-            <div dir="rtl" style="background:#fff7ed; border:1.5px solid #fed7aa; border-right:7px solid #ea580c; border-radius:10px; padding:18px 22px; margin-bottom:16px; color:#1c1917; line-height:1.9; text-align:right;">
-                <div style="font-size:1.45rem; font-weight:800; color:#9a3412; margin-bottom:10px;">
-                    📋 تصميم وتوحيد وتوزيع نماذج القواعد والشدادات لأساسات المبنى (ECP 203):
-                </div>
-                <div style="font-size:1.25rem; font-weight:700; color:#1c1917;">
-                    نظام متكامل لتصميم أساسات المبنى لعدد <span style="font-weight:800; color:#c2410c;">{num_floors} طوابق</span> بناءً على ردود الأفعال القصوى <span dir="ltr">Pu</span> والأحمال التشغيلية <span dir="ltr">Pw = Pu / 1.5</span>:
-                    <br/>• <b>قواعد منفصلة (Module 3):</b> للأعمدة الداخلية والطرفية غير المتصلة بجار طالما لا يوجد تداخل خرساني.
-                    <br/>• <b>قواعد مشتركة (Module 8):</b> تدمج تلقائياً أي قواعد منفصلة متداخلة (خلوص &lt; 0.15 م).
-                    <br/>• <b>قواعد شدادات جانبية (Module 9):</b> لأعمدة الجار الجانبية وتربطها بشداد مع أقرب عمود داخلي.
-                    <br/>• <b>قواعد شدادات ركن مائلة (Module 10):</b> لأعمدة الجار الركن وتربطها بشداد مائل مع العمود الداخلي المقابل.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        # 2. Controls & Soil Properties
-        ftg_qnet = S.cfg_val("tcf_q_net", 1.5)
-        ftg_fcu = S.cfg_val("tcf_Fcu", col_Fcu if col_Fcu else 250)
-        ftg_fy = S.cfg_val("tcf_Fy", col_Fy if col_Fy else 4000)
-        ftg_cov = S.cfg_val("tcf_cover", 7)
-        phi_opts_ftg = [12, 16, 18, 22, 25]
-        phi_idx_ftg = S.cfg_val("tcf_Phi_index", 1)
-        ftg_phi = phi_opts_ftg[phi_idx_ftg] if 0 <= phi_idx_ftg < len(phi_opts_ftg) else 16
-
-        col_c_dim = float(tc_s if tc_s else 50)
-        col_b_dim = float(col_b_val if col_b_val else 30)
-
-        # 2b. Neighbor Columns Definition (Derived directly from Project Inputs)
-        auto_nbr_ids = [c["id"] for c in _active_cols if c.get("is_edge_col")]
-        sel_neighbor_ids = auto_nbr_ids
-
-        with st.container(border=True):
-            if auto_nbr_ids:
-                nbr_cols_str = "، ".join([f"<span dir='ltr'><b>{cid}</b></span>" for cid in auto_nbr_ids])
-                st.markdown(
-                    f"""
-                    <div dir="rtl" style="direction: rtl !important; text-align: right !important; background:#eff6ff; border:1.5px solid #bfdbfe; border-right:7px solid #2563eb; border-radius:10px; padding:16px 20px; margin:4px 0 8px 0; color:#1e293b; line-height:1.9;">
-                        <div style="direction: rtl !important; text-align: right !important; font-size:1.35rem; font-weight:800; color:#1e40af; margin-bottom:8px;">
-                            🏘️ أعمدة الجار المعتمدة بالمشروع (طبقاً لمدخلات البلاطة والأعمدة):
-                        </div>
-                        <div style="direction: rtl !important; text-align: right !important; font-size:1.25rem; font-weight:700; line-height:1.9; color:#0f172a;">
-                            أعمدة الجار المحددة في المشروع هي: 
-                            <span dir="rtl" style="font-size:1.35rem; font-weight:900; color:#b91c1c; background:#fef2f2; padding:3px 12px; border-radius:7px; border:1.5px solid #fca5a5; margin:0 6px; display:inline-block;">
-                                {nbr_cols_str}
-                            </span>
-                            <span style="font-size:1.05rem; font-weight:600; color:#475569;">
-                                (إجمالي {len(auto_nbr_ids)} أعمدة ملاصقة لحدود الجار)
-                            </span>
-                        </div>
-                        <div style="direction: rtl !important; text-align: right !important; font-size:1.05rem; font-weight:600; color:#2563eb; margin-top:8px; line-height:1.8;">
-                            ℹ️ يتم تصميم أساسات هذه الأعمدة تلقائياً كقواعد شداد (جانبية بنظام Module 9 أو ركنية مائلة بنظام Module 10) وربطها بأقرب أعمدة داخلية.
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            else:
-                st.markdown(
-                    """
-                    <div dir="rtl" style="direction: rtl !important; text-align: right !important; background:#f8fafc; border:1.5px solid #e2e8f0; border-right:7px solid #64748b; border-radius:10px; padding:16px 20px; margin:4px 0 8px 0; color:#1e293b; line-height:1.9;">
-                        <div style="direction: rtl !important; text-align: right !important; font-size:1.35rem; font-weight:800; color:#334155; margin-bottom:8px;">
-                            🏘️ أعمدة الجار بالمشروع:
-                        </div>
-                        <div style="direction: rtl !important; text-align: right !important; font-size:1.2rem; font-weight:700; color:#0f172a;">
-                            لا توجد أعمدة ملاصقة لحدود الجار محددة في مدخلات المشروع.
-                        </div>
-                        <div style="direction: rtl !important; text-align: right !important; font-size:1.05rem; font-weight:600; color:#64748b; margin-top:8px; line-height:1.8;">
-                            ℹ️ تُصمم كافة أساسات المبنى كقواعد منفصلة (Module 3) وقواعد مشتركة تلقائية عند حدوث تداخل (Module 8).
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-        # Build active columns data list
-        fs_active_columns = []
-        for c_item in _active_cols:
-            c_type = c_item.get("type", "Interior")
-            pu_val = float(c_item.get("Pu", 0.0) * num_floors)
-            fs_active_columns.append({
-                "id": c_item["id"],
-                "orig_id": c_item.get("orig_id", c_item["id"]),
-                "type": c_type,
-                "x": float(c_item.get("center_x", c_item["x"])),
-                "y": float(c_item.get("center_y", c_item["y"])),
-                "bc": float(c_item.get("bc", col_b_dim)),
-                "tc": float(c_item.get("tc", col_c_dim)),
-                "pu_tot": pu_val,
-                "grid_x": c_item.get("grid_x", ""),
-                "grid_y": c_item.get("grid_y", ""),
-                "grid_x_m": float(c_item.get("grid_x_m", c_item["x"])),
-                "grid_y_m": float(c_item.get("grid_y_m", c_item["y"])),
-                "x_min": float(c_item.get("x_min", c_item.get("center_x", c_item["x"]) - c_item.get("width_m", c_item.get("tc", col_c_dim)/100.0)/2.0)),
-                "x_max": float(c_item.get("x_max", c_item.get("center_x", c_item["x"]) + c_item.get("width_m", c_item.get("tc", col_c_dim)/100.0)/2.0)),
-                "y_min": float(c_item.get("y_min", c_item.get("center_y", c_item["y"]) - c_item.get("height_m", c_item.get("bc", col_b_dim)/100.0)/2.0)),
-                "y_max": float(c_item.get("y_max", c_item.get("center_y", c_item["y"]) + c_item.get("height_m", c_item.get("bc", col_b_dim)/100.0)/2.0)),
-                "width_m": float(c_item.get("width_m", c_item.get("tc", col_c_dim)/100.0)),
-                "height_m": float(c_item.get("height_m", c_item.get("bc", col_b_dim)/100.0)),
-                "edge_dir": c_item.get("edge_dir", ""),
-            })
-
-        # Run Comprehensive Multi-Module Engine
-        ftg_analysis = classify_and_design_building_foundations(
-            active_columns=fs_active_columns,
-            neighbor_col_ids=sel_neighbor_ids,
-            col_b_dim=col_b_dim,
-            col_c_dim=col_c_dim,
-            q_all_net=ftg_qnet,
-            fcu=ftg_fcu,
-            fy=ftg_fy,
-            cov=ftg_cov,
-            phi=ftg_phi,
-            num_floors=num_floors,
-        )
-        st.session_state["fs_ftg_analysis"] = ftg_analysis
-        counts = ftg_analysis["summary_counts"]
-
-        # ── Automated Ground Beams Layout & Design Integration ──
-        from modules.ground_beam_layout import extract_structural_links_and_beams
-
-        gb_level_type = S.cfg_val(f"{prefix}gb_level_type", "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)")
-        gb_b_unified = float(S.cfg_val(f"{prefix}gb_b_unified", 25.0))
-        gb_has_wall = S.cfg_val(f"{prefix}gb_has_wall", True)
-        gb_h_wall = float(S.cfg_val(f"{prefix}gb_h_wall", 3.00))
-        gb_t_wall = float(S.cfg_val(f"{prefix}gb_t_wall", 12.0))
-        gb_gamma_brick = float(S.cfg_val(f"{prefix}gb_gamma_brick", 1.80))
-        gb_axial_tie = float(S.cfg_val(f"{prefix}gb_axial_tie_ratio", 0.10))
-        gb_phi_bot_val = int(S.cfg_val(f"{prefix}gb_phi_bot", 16))
-        gb_phi_top_val = int(S.cfg_val(f"{prefix}gb_phi_top", 12))
-        gb_phi_st_val = int(S.cfg_val(f"{prefix}gb_phi_st", 8))
-        gb_phi_side_val = int(S.cfg_val(f"{prefix}gb_phi_side", 10))
-        gb_stirrups_val = int(S.cfg_val(f"{prefix}gb_stirrups_m", 6))
-        gb_user_overrides = st.session_state.get(f"{prefix}gb_overrides", {})
-
-        gb_analysis = extract_structural_links_and_beams(
-            active_columns=fs_active_columns,
-            ftg_analysis=ftg_analysis,
-            b_unified=gb_b_unified,
-            level_type=gb_level_type,
-            has_wall=gb_has_wall,
-            h_wall=gb_h_wall,
-            t_wall=gb_t_wall,
-            gamma_brick=gb_gamma_brick,
-            axial_tie_ratio=gb_axial_tie,
-            fcu=ftg_fcu,
-            fy=ftg_fy,
-            cover_cm=4.0,
-            phi_bot=gb_phi_bot_val,
-            phi_top=gb_phi_top_val,
-            phi_st=gb_phi_st_val,
-            phi_side=gb_phi_side_val,
-            stirrups_per_m=gb_stirrups_val,
-            user_overrides=gb_user_overrides,
-        )
-        st.session_state["fs_gb_analysis"] = gb_analysis
-
-        # 3. Executive Report Banner
-        st.markdown(
-            f"""
-            <div dir="rtl" style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%); border: 2px solid #38bdf8; border-radius: 12px; padding: 18px 22px; margin: 12px 0 18px 0; box-shadow: 0 4px 20px rgba(0,0,0,0.35); text-align: right;">
-                <div style="font-size: 18px; font-weight: 900; color: #38bdf8; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                    <span>📋 تقرير توزيع وتصنيف أساسات المبنى الإنشائي (Building Foundations Classification Report)</span>
-                    <span style="font-size: 13.5px; background: #0284c7; color: #ffffff; padding: 4px 12px; border-radius: 6px; font-weight: 800;">إجمالي الأعمدة: {len(fs_active_columns)} عمود</span>
-                </div>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 10px;">
-                    <!-- 1. Isolated Footings -->
-                    <div style="background: rgba(186, 230, 253, 0.12); border: 1.5px solid #38bdf8; border-right: 5px solid #0284c7; border-radius: 8px; padding: 12px 14px;">
-                        <div style="font-size: 15px; font-weight: 800; color: #7dd3fc; margin-bottom: 4px;">🟦 1. القواعد المنفصلة (Module 3)</div>
-                        <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['isolated_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة منفصلة</span></div>
-                        <div style="font-size: 12.5px; color: #cbd5e1; margin-top: 4px; line-height: 1.45;"><b>النماذج:</b> {', '.join(counts['isolated_names']) if counts['isolated_names'] else 'لا يوجد'}</div>
-                    </div>
-                    <!-- 2. Combined Footings -->
-                    <div style="background: rgba(187, 247, 208, 0.12); border: 1.5px solid #4ade80; border-right: 5px solid #16a34a; border-radius: 8px; padding: 12px 14px;">
-                        <div style="font-size: 15px; font-weight: 800; color: #86efac; margin-bottom: 4px;">🟩 2. القواعد المشتركة (Module 8)</div>
-                        <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['combined_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة مشتركة</span></div>
-                        <div style="font-size: 12.5px; color: #cbd5e1; margin-top: 4px; line-height: 1.45;"><b>النماذج:</b> {', '.join(counts['combined_names']) if counts['combined_names'] else 'لا يوجد تداخل خرساني'}</div>
-                    </div>
-                    <!-- 3. Edge Strap Footings -->
-                    <div style="background: rgba(254, 215, 170, 0.12); border: 1.5px solid #fb923c; border-right: 5px solid #ea580c; border-radius: 8px; padding: 12px 14px;">
-                        <div style="font-size: 15px; font-weight: 800; color: #fdba74; margin-bottom: 4px;">🟧 3. قواعد الشدادات الجانبية (Module 9)</div>
-                        <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['edge_strap_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة شداد جانبي</span></div>
-                        <div style="font-size: 12.5px; color: #cbd5e1; margin-top: 4px; line-height: 1.45;"><b>النماذج:</b> {', '.join(counts['edge_strap_names']) if counts['edge_strap_names'] else 'لا توجد أعمدة جار جانبية'}</div>
-                    </div>
-                    <!-- 4. Corner Strap Footings -->
-                    <div style="background: rgba(253, 186, 116, 0.15); border: 1.5px solid #f97316; border-right: 5px solid #c2410c; border-radius: 8px; padding: 12px 14px;">
-                        <div style="font-size: 15px; font-weight: 800; color: #fed7aa; margin-bottom: 4px;">🟪 4. قواعد الشدادات الركن (Module 10)</div>
-                        <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['corner_strap_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة شداد ركن مائل</span></div>
-                        <div style="font-size: 12.5px; color: #cbd5e1; margin-top: 4px; line-height: 1.45;"><b>النماذج:</b> {', '.join(counts['corner_strap_names']) if counts['corner_strap_names'] else 'لا توجد أعمدة جار ركن'}</div>
+                    <div style="font-size: 1.12rem; font-weight: 800; color: #b45309; margin-top: 6px; line-height: 1.7;">
+                        إن هذه الحسابات استرشادية طبقاً للتصميم، يرجى استخدام موديول حصر الكميات لإدخال الكميات التي سيتم التنفيذ طبقاً لها على أرض الواقع.
                     </div>
                 </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        # 4. Footings Detailed Table (Unified Schedule: All 4 Types)
-        st.markdown("##### 📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)")
-        df_fs_export = pd.DataFrame(ftg_analysis["unified_rows"])
-        render_styled_table(df_fs_export)
-
-        # Export Excel & CSV
-        csv_fs_data = df_fs_export.to_csv(index=False).encode('utf-8-sig')
-        buf_fs_xl = io.BytesIO()
-        with pd.ExcelWriter(buf_fs_xl, engine='openpyxl') as writer:
-            df_fs_export.to_excel(writer, index=False, sheet_name='Footings_Schedule')
-        excel_fs_bytes = buf_fs_xl.getvalue()
-
-        exp_c1, exp_c2 = st.columns(2)
-        with exp_c1:
-            st.download_button(
-                label="📊 تصدير جدول نماذج القواعد الموحد (Excel .xlsx)",
-                data=excel_fs_bytes,
-                file_name=f"{prefix}Unified_Footings_Schedule_{num_floors}Floors.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                key=f"{prefix}btn_dl_unified_excel_fs",
-            )
-        with exp_c2:
-            st.download_button(
-                label="📥 تصدير جدول نماذج القواعد الموحد (CSV)",
-                data=csv_fs_data,
-                file_name=f"{prefix}Unified_Footings_Schedule_{num_floors}Floors.csv",
-                mime="text/csv",
-                use_container_width=True,
-                key=f"{prefix}btn_dl_unified_csv_fs",
+                """,
+                unsafe_allow_html=True,
             )
 
-    # ── 🧱 GROUND BEAMS DESIGN SECTION (ECP 203) ───────────────────────────────────
-    with st.expander(f"🧱 Ground Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج الميدات والسملات الأرضية)", expanded=False):
-        # 1. Header & Description Banner
-        st.markdown(
-            f"""
-            <div dir="rtl" style="background:#f0fdf4; border:1.5px solid #bbf7d0; border-right:7px solid #16a34a; border-radius:10px; padding:18px 22px; margin-bottom:16px; color:#14532d; line-height:1.9; text-align:right;">
-                <div style="font-size:1.45rem; font-weight:800; color:#15803d; margin-bottom:10px;">
-                    🧱 منظومة تصميم وتفريد ونماذج الميدات والسملات الأرضية (Ground Beams & Tie Beams — ECP 203):
-                </div>
-                <div style="font-size:1.15rem; font-weight:700; color:#166534;">
-                    نظام متكامل يربط تلقائياً بين مسقط الأعمدة والأساسات في <b>Module 1</b> وعناصر الربط الإنشائية الأرضية:
-                    <br/>• <b>التفرقة والتصنيف الصريح:</b> تمييز <b>الشدادات (Strap Beams: ST1, ST2)</b> الناقلة للعزوم لقواعد الجار، عن <b>السملات الأرضية (Ground Beams: B1, B2, B3)</b>.
-                    <br/>• <b>استنتاج حالة الاستمرارية تلقائياً من المسقط:</b> تحديد حالة الدعم (بسيطة / مستمرة من طرف واحد / مستمرة من الطرفين) بناءً على امتداد محاور الأعمدة في المسقط بدون الحاجة لإدخال يدوي.
-                    <br/>• <b>قوى الربط المحوري (Axial Tie Action):</b> تصميم السملات على قوى ربط محوري بنسبة <span dir="ltr">10%</span> من حمل العمود الأكبر لمقاومة الهبوط المتفاوت والزلازل طبقاً للكود.
-                    <br/>• <b>التجميع التلقائي في 3 نماذج تنفيذية (B1, B2, B3):</b> تطبيق قاعدة الظرف الحاكم (Governing Envelope Rule) مع إتاحة التعديل اليدوي التفاعلي المباشر.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+            main_survey_data = [
+                {
+                    "البند / المكون الإنشائي (Item / Material)": "1. حجم الخرسانة المسلحة (Reinforced Concrete R.C.)",
+                    "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_conc_val:.2f} m³",
+                    f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_conc_tot_val:.2f} m³",
+                    "أساسات المبنى (Foundations)": f"{ftgs_conc_rc_val:.2f} m³",
+                    "سملات وميدات (Ground Beams)": f"{gb_conc_rc_val:.2f} m³",
+                    "الإجمالي الشامل (Grand Total)": f"{grand_conc_rc_val:.2f} m³",
+                    "الوحدة (Unit)": "متر مكعب (m³)",
+                    "الملاحظات والمواصفات (Notes & Specs)": f"مسطح السقف الصافي {slab_area_val:.1f} m² + كامل الأعمدة ({tot_active_cols} عمود) + القواعد المسلحة + السملات الأرضية",
+                },
+                {
+                    "البند / المكون الإنشائي (Item / Material)": "2. حجم الخرسانة العادية (Plain Concrete P.C.)",
+                    "سقف البلاطة اللاكمرية (Flat Slab)": "—",
+                    f"أعمدة المبنى ({num_floors} طوابق)": "—",
+                    "أساسات المبنى (Foundations)": f"{ftgs_conc_pc_val:.2f} m³",
+                    "سملات وميدات (Ground Beams)": "—",
+                    "الإجمالي الشامل (Grand Total)": f"{grand_conc_pc_val:.2f} m³",
+                    "الوحدة (Unit)": "متر مكعب (m³)",
+                    "الملاحظات والمواصفات (Notes & Specs)": "فرشة نظافة بسمك 20 سم ورفرفة 20 سم أسفل كامل القواعد",
+                },
+                {
+                    "البند / المكون الإنشائي (Item / Material)": "3. إجمالي وزن حديد التسليح (Total Reinforcement Steel)",
+                    "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
+                    f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
+                    "أساسات المبنى (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
+                    "سملات وميدات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
+                    "الإجمالي الشامل (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
+                    "الوحدة (Unit)": "طن (Ton) / كجم (kg)",
+                    "الملاحظات والمواصفات (Notes & Specs)": "شامل شبكات السقف والإضافي + حديد الأعمدة والكانات + تسليح القواعد المنفصلة والمشتركة والشدادات والسملات",
+                },
+                {
+                    "البند / المكون الإنشائي (Item / Material)": "4. كمية الأسمنت البورتلاندي (Portland Cement)",
+                    "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_cement_ton:.2f} Ton ({slab_cement_bags:,} شكارة)",
+                    f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_cement_tot_ton:.2f} Ton ({cols_cement_tot_bags:,} شكارة)",
+                    "أساسات المبنى (Foundations)": f"{ftgs_cement_ton:.2f} Ton ({ftgs_cement_bags:,} شكارة)",
+                    "سملات وميدات (Ground Beams)": f"{gb_cement_ton:.2f} Ton ({gb_cement_bags:,} شكارة)",
+                    "الإجمالي الشامل (Grand Total)": f"{grand_cement_ton:.2f} Ton ({grand_cement_bags:,} شكارة)",
+                    "الوحدة (Unit)": "طن (Ton) / شكارة",
+                    "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 350 كجم/م³ للمسلحة (7 شكاير) و 250 كجم/م³ للعادية (5 شكاير)",
+                },
+                {
+                    "البند / المكون الإنشائي (Item / Material)": "5. كمية الزلط / الركام الكبير (Gravel / Coarse Aggregate)",
+                    "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_gravel_val:.2f} m³",
+                    f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_gravel_tot_val:.2f} m³",
+                    "أساسات المبنى (Foundations)": f"{ftgs_gravel_val:.2f} m³",
+                    "سملات وميدات (Ground Beams)": f"{gb_gravel_val:.2f} m³",
+                    "الإجمالي الشامل (Grand Total)": f"{grand_gravel_val:.2f} m³",
+                    "الوحدة (Unit)": "متر مكعب (m³)",
+                    "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.80 m³ زلط متدرج ونظيف لكل 1.0 m³ خرسانة (مسلحة وعادية)",
+                },
+                {
+                    "البند / المكون الإنشائي (Item / Material)": "6. كمية الرمل الحرش / الركام الصغير (Clean Sand)",
+                    "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_sand_val:.2f} m³",
+                    f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_sand_tot_val:.2f} m³",
+                    "أساسات المبنى (Foundations)": f"{ftgs_sand_val:.2f} m³",
+                    "سملات وميدات (Ground Beams)": f"{gb_sand_val:.2f} m³",
+                    "الإجمالي الشامل (Grand Total)": f"{grand_sand_val:.2f} m³",
+                    "الوحدة (Unit)": "متر مكعب (m³)",
+                    "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.40 m³ رمل حرش نظيف لكل 1.0 m³ خرسانة (نصف حجم الزلط)",
+                },
+                {
+                    "البند / المكون الإنشائي (Item / Material)": "7. معدل استهلاك الحديد (Steel Consumption Ratio)",
+                    "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_ratio_val:.1f} kg/m³",
+                    f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_ratio_val:.1f} kg/m³",
+                    "أساسات المبنى (Foundations)": f"{ftgs_ratio_val:.1f} kg/m³",
+                    "سملات وميدات (Ground Beams)": f"{gb_ratio_val:.1f} kg/m³",
+                    "الإجمالي الشامل (Grand Total)": f"{grand_ratio_val:.1f} kg/m³",
+                    "الوحدة (Unit)": "كجم / م³ خرسانة مسلحة",
+                    "الملاحظات والمواصفات (Notes & Specs)": "متوسط استهلاك الحديد المسلح لكافة عناصر المبنى",
+                },
+            ]
+            render_styled_table(main_survey_data)
 
-        # 2. Design Parameters & Controls
-        with st.container(border=True):
-            st.markdown("<div style='font-size:16px; font-weight:800; color:#1e3a8a; margin-bottom:6px;'>⚙️ محددات ومعايير تصميم السملات الأرضية (Ground Beam Design Parameters)</div>", unsafe_allow_html=True)
-            gbc1, gbc2, gbc3, gbc4 = st.columns(4)
-            with gbc1:
-                lvl_opts = [
-                    "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)",
-                    "At Footing Level (في منسوب القواعد المسلحة)",
-                ]
-                sel_lvl_idx = 0 if "Above" in gb_level_type else 1
-                new_gb_level = st.selectbox(
-                    "منسوب الميدة الإنشائي:",
-                    options=lvl_opts,
-                    index=sel_lvl_idx,
-                    key=f"{prefix}w_gb_level_type",
-                    help="في منسوب القواعد تؤخذ عزوم وقوى الهبوط المتفاوت في الحسابات.",
-                )
-                if new_gb_level != gb_level_type:
-                    S.cfg_set(f"{prefix}gb_level_type", new_gb_level)
-                    st.rerun()
+            # Export Excel & CSV buttons for Quantity Survey
+            df_survey_export = pd.DataFrame(main_survey_data)
+            csv_survey_data = df_survey_export.to_csv(index=False).encode('utf-8-sig')
+            buf_surv_xl = io.BytesIO()
+            with pd.ExcelWriter(buf_surv_xl, engine='openpyxl') as writer:
+                df_survey_export.to_excel(writer, index=False, sheet_name='Main_Quantities')
+            excel_surv_bytes = buf_surv_xl.getvalue()
 
-                new_gb_b = st.number_input(
-                    "عرض الميدة الموحد b (cm):",
-                    min_value=15.0, max_value=60.0,
-                    value=float(gb_b_unified), step=5.0,
-                    key=f"{prefix}w_gb_b_unified",
-                )
-                if new_gb_b != gb_b_unified:
-                    S.cfg_set(f"{prefix}gb_b_unified", new_gb_b)
-                    st.rerun()
-
-            with gbc2:
-                new_gb_wall = st.checkbox("وجود حوائط مباني فوق السملات", value=bool(gb_has_wall), key=f"{prefix}w_gb_has_wall")
-                if new_gb_wall != gb_has_wall:
-                    S.cfg_set(f"{prefix}gb_has_wall", new_gb_wall)
-                    st.rerun()
-
-                new_gb_hw = st.number_input(
-                    "ارتفاع الحائط H_wall (m):",
-                    min_value=1.0, max_value=6.0,
-                    value=float(gb_h_wall), step=0.25,
-                    disabled=not new_gb_wall,
-                    key=f"{prefix}w_gb_h_wall",
-                )
-                if new_gb_hw != gb_h_wall:
-                    S.cfg_set(f"{prefix}gb_h_wall", new_gb_hw)
-                    st.rerun()
-
-                new_gb_tw = st.number_input(
-                    "سُمك الحائط t_wall (cm):",
-                    min_value=10.0, max_value=40.0,
-                    value=float(gb_t_wall), step=2.0,
-                    disabled=not new_gb_wall,
-                    key=f"{prefix}w_gb_t_wall",
-                )
-                if new_gb_tw != gb_t_wall:
-                    S.cfg_set(f"{prefix}gb_t_wall", new_gb_tw)
-                    st.rerun()
-
-            with gbc3:
-                new_gb_tie = st.number_input(
-                    "نسبة قوة الربط المحوري (Tie %):",
-                    min_value=0.05, max_value=0.25,
-                    value=float(gb_axial_tie), step=0.01,
-                    format="%.2f",
-                    help="نسبة حمل العمود الأكبر للربط المحوري لمقاومة الهبوط المتفاوت والزلازل (10% per ECP 203).",
-                    key=f"{prefix}w_gb_tie_ratio",
-                )
-                if new_gb_tie != gb_axial_tie:
-                    S.cfg_set(f"{prefix}gb_axial_tie_ratio", new_gb_tie)
-                    st.rerun()
-
-                new_gb_st_m = st.number_input(
-                    "عدد الكانات الأساسية / م':",
-                    min_value=5, max_value=10,
-                    value=int(gb_stirrups_val), step=1,
-                    key=f"{prefix}w_gb_stirrups_m",
-                )
-                if new_gb_st_m != gb_stirrups_val:
-                    S.cfg_set(f"{prefix}gb_stirrups_m", new_gb_st_m)
-                    st.rerun()
-
-            with gbc4:
-                dia_opts = [12, 16, 18, 22, 25]
-                dia_st_opts = [8, 10]
-                idx_b = dia_opts.index(gb_phi_bot_val) if gb_phi_bot_val in dia_opts else 1
-                idx_t = dia_opts.index(gb_phi_top_val) if gb_phi_top_val in dia_opts else 0
-                idx_s = dia_st_opts.index(gb_phi_st_val) if gb_phi_st_val in dia_st_opts else 0
-
-                new_p_bot = st.selectbox("قطر التسليح السفلي Φ_bot (mm):", options=dia_opts, index=idx_b, key=f"{prefix}w_gb_phi_bot")
-                new_p_top = st.selectbox("قطر التسليح العلوي Φ_top (mm):", options=dia_opts, index=idx_t, key=f"{prefix}w_gb_phi_top")
-                new_p_st = st.selectbox("قطر الكانات Φ_st (mm):", options=dia_st_opts, index=idx_s, key=f"{prefix}w_gb_phi_st")
-
-                if new_p_bot != gb_phi_bot_val or new_p_top != gb_phi_top_val or new_p_st != gb_phi_st_val:
-                    S.cfg_set(f"{prefix}gb_phi_bot", new_p_bot)
-                    S.cfg_set(f"{prefix}gb_phi_top", new_p_top)
-                    S.cfg_set(f"{prefix}gb_phi_st", new_p_st)
-                    st.rerun()
-
-        # 3. KPI Metrics Banner
-        cnt_gb = len(gb_analysis["ground_beams"])
-        cnt_st = len(gb_analysis["strap_beams"])
-        len_gb = sum(b["span_m"] for b in gb_analysis["ground_beams"])
-        len_st = sum(b["span_m"] for b in gb_analysis["strap_beams"])
-
-        st.markdown(
-            f"""
-            <div dir="rtl" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 12px 0 16px 0;">
-                <div style="background:rgba(224, 231, 255, 0.5); border:1.5px solid #6366f1; border-right:5px solid #4338ca; border-radius:8px; padding:12px 14px;">
-                    <div style="font-size:14px; font-weight:800; color:#312e81;">🧱 إجمالي السملات الأرضية (Ground Beams)</div>
-                    <div style="font-size:20px; font-weight:900; color:#1e1b4b;">{cnt_gb} <span style="font-size:13px; font-weight:600; color:#475569;">سملة ({len_gb:.1f} m)</span></div>
-                    <div style="font-size:12px; color:#4338ca; margin-top:2px;">مجمعة في 3 نماذج: B1, B2, B3</div>
-                </div>
-                <div style="background:rgba(254, 215, 170, 0.5); border:1.5px solid #ea580c; border-right:5px solid #c2410c; border-radius:8px; padding:12px 14px;">
-                    <div style="font-size:14px; font-weight:800; color:#9a3412;">🟧 إجمالي الشدادات (Strap Beams)</div>
-                    <div style="font-size:20px; font-weight:900; color:#431407;">{cnt_st} <span style="font-size:13px; font-weight:600; color:#475569;">شداد ({len_st:.1f} m)</span></div>
-                    <div style="font-size:12px; color:#c2410c; margin-top:2px;">لقواعد الجار والركن (ST1, ST2...)</div>
-                </div>
-                <div style="background:rgba(240, 253, 244, 0.7); border:1.5px solid #22c55e; border-right:5px solid #15803d; border-radius:8px; padding:12px 14px;">
-                    <div style="font-size:14px; font-weight:800; color:#14532d;">📊 حجم الخرسانة المسلحة للسملات</div>
-                    <div style="font-size:20px; font-weight:900; color:#052e16;">{gb_analysis['boq']['conc_vol_rc']:.2f} <span style="font-size:13px; font-weight:600; color:#475569;">m³</span></div>
-                    <div style="font-size:12px; color:#15803d; margin-top:2px;">بمعدل أسمنت 350 كجم/م³</div>
-                </div>
-                <div style="background:rgba(245, 243, 255, 0.7); border:1.5px solid #8b5cf6; border-right:5px solid #6d28d9; border-radius:8px; padding:12px 14px;">
-                    <div style="font-size:14px; font-weight:800; color:#4c1d95;">⚙️ إجمالي وزن حديد تسليح السملات</div>
-                    <div style="font-size:20px; font-weight:900; color:#2e1065;">{gb_analysis['boq']['steel_ton_tot']:.3f} <span style="font-size:13px; font-weight:600; color:#475569;">Ton ({gb_analysis['boq']['steel_kg_tot']:,.0f} kg)</span></div>
-                    <div style="font-size:12px; color:#6d28d9; margin-top:2px;">معدل: {gb_analysis['boq']['steel_ratio_kg_m3']:.1f} kg/m³</div>
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        # 4. Interactive Tabs
-        tab_gb_class, tab_gb_models, tab_gb_details = st.tabs([
-            "📋 Classification Table (جدول تصنيف عناصر الربط: شدادات وسملات)",
-            "🏛️ Master Models Schedule (جدول نماذج السملات التنفيذي B1, B2, B3)",
-            "🔩 Detailed Beams Schedule (جدول تفريد وتفاصيل جميع السملات الفردية)",
-        ])
-
-        # ── TAB 1: UNIFIED CLASSIFICATION TABLE (STRAP BEAMS & GROUND BEAMS) ──
-        with tab_gb_class:
-            st.markdown("##### 📋 جدول تصنيف عناصر الربط الإنشائية الشامل (Unified Structural Links Classification Table)")
-            st.caption("يوضح التفرقة الصريحة بين الشدادات (Strap Beams) الحاملة لعزوم لامركزية قواعد الجار والسملات الأرضية (Ground Beams) الرابطة للأعمدة.")
-            df_class_export = pd.DataFrame(gb_analysis["classification_rows"])
-            render_styled_table(df_class_export)
-
-            # Export Excel & CSV
-            csv_class_data = df_class_export.to_csv(index=False).encode('utf-8-sig')
-            buf_class_xl = io.BytesIO()
-            with pd.ExcelWriter(buf_class_xl, engine='openpyxl') as writer:
-                df_class_export.to_excel(writer, index=False, sheet_name='Classification_Table')
-            excel_class_bytes = buf_class_xl.getvalue()
-
-            c_cl1, c_cl2 = st.columns(2)
-            with c_cl1:
+            surv_c1, surv_c2 = st.columns(2)
+            with surv_c1:
                 st.download_button(
-                    label="📊 تصدير جدول التصنيف الإنشائي (Excel .xlsx)",
-                    data=excel_class_bytes,
-                    file_name=f"{prefix}Structural_Links_Classification_{num_floors}Floors.xlsx",
+                    label="📊 تصدير جدول الحصر العام (Excel .xlsx)",
+                    data=excel_surv_bytes,
+                    file_name=f"{prefix}General_Quantity_Survey_{num_floors}Floors.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True,
-                    key=f"{prefix}btn_dl_class_excel",
+                    key=f"{prefix}btn_dl_survey_excel",
                 )
-            with c_cl2:
+            with surv_c2:
                 st.download_button(
-                    label="📥 تصدير جدول التصنيف الإنشائي (CSV)",
-                    data=csv_class_data,
-                    file_name=f"{prefix}Structural_Links_Classification_{num_floors}Floors.csv",
+                    label="📥 تصدير جدول الحصر العام (CSV)",
+                    data=csv_survey_data,
+                    file_name=f"{prefix}General_Quantity_Survey_{num_floors}Floors.csv",
                     mime="text/csv",
                     use_container_width=True,
-                    key=f"{prefix}btn_dl_class_csv",
+                    key=f"{prefix}btn_dl_survey_csv",
                 )
 
-        # ── TAB 2: MASTER GROUND BEAMS SCHEDULE (B1, B2, B3) & INTERACTIVE OVERRIDES ──
-        with tab_gb_models:
-            st.markdown("##### 🏛️ جدول نماذج السملات التنفيذي (Master Ground Beams Schedule — Governing Envelopes)")
-            st.caption("تم تجميع السملات تلقائياً في 3 نماذج تنفيذية (B1 للقطاع الثقيل، B2 للمتوسط، B3 للخفيف) بتطبيق قاعدة الظرف الحاكم.")
-            df_models_export = pd.DataFrame(gb_analysis["models_schedule"])
-            render_styled_table(df_models_export)
+            st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
 
-            st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
-            with st.container(border=True):
-                st.markdown("<div style='font-size:15.5px; font-weight:800; color:#9333ea; margin-bottom:6px;'>🛠️ واجهة التعديل اليدوي التفاعلية لنماذج السملات (Interactive Overrides Table)</div>", unsafe_allow_html=True)
-                st.caption("يمكنك تعديل العمق أو عدد الأسياخ أو الكانات لكل نموذج مباشرة. تنعكس التعديلات فوراً على المخطط واللوحات وحصر الكميات.")
+            # ── Table 2: Detailed Steel Reinforcement by Bar Diameter (جدول تفصيل حديد التسليح لكل قطر) ──
+            st.markdown("##### 🔩 2. جدول تفصيل أوزان حديد التسليح لكل قطر والإجمالي الكلي (Steel Breakdown by Bar Diameter)")
+            dia_table_rows = []
+            for d in sorted(all_dias_set):
+                s_kg = slab_dia_map.get(d, {}).get("weight_kg", 0.0)
+                s_ton = s_kg / 1000.0
+                c_kg = cols_dia_map.get(d, {}).get("weight_kg", 0.0)
+                c_ton = c_kg / 1000.0
+                f_kg = ftg_dia_map.get(d, {}).get("weight_kg", 0.0)
+                f_ton = f_kg / 1000.0
+                gb_kg = gb_dia_map.get(d, {}).get("weight_kg", 0.0)
+                gb_ton = gb_kg / 1000.0
+                t_kg = s_kg + c_kg + f_kg + gb_kg
+                t_ton = t_kg / 1000.0
+                pct = (t_kg / max(0.001, grand_steel_kg_val)) * 100.0
 
-                ov_changed = False
-                cur_ov = dict(st.session_state.get(f"{prefix}gb_overrides", {}))
+                sources_list = []
+                if s_kg > 0:
+                    sources_list.append(f"السقف: {slab_dia_map[d].get('apps', '—')}")
+                if c_kg > 0:
+                    sources_list.append(f"الأعمدة: {cols_dia_map[d].get('apps', '—')}")
+                if f_kg > 0:
+                    sources_list.append(f"الأساسات: {ftg_dia_map[d].get('apps', '—')}")
+                if gb_kg > 0:
+                    sources_list.append(f"السملات: {gb_dia_map[d].get('apps', '—')}")
 
-                ov_cols = st.columns(len(gb_analysis["models_dict"])) if gb_analysis["models_dict"] else [st.container()]
-                for idx_m, (m_mark, m_data) in enumerate(gb_analysis["models_dict"].items()):
-                    with ov_cols[idx_m]:
-                        st.markdown(f"**📌 نموذج {m_mark} ({m_data['count']} سملات):**")
-                        # Depth override
-                        new_t = st.number_input(
-                            f"عمق {m_mark} الكلي t (cm):",
-                            min_value=30.0, max_value=120.0,
-                            value=float(m_data["t_cm"]), step=5.0,
-                            key=f"{prefix}ov_t_{m_mark}",
-                        )
-                        if new_t != m_data["t_cm"]:
-                            cur_ov[f"{m_mark}_t"] = new_t
-                            ov_changed = True
-
-                        # Bottom bars override
-                        new_nbot = st.number_input(
-                            f"عدد سفلي Φ{m_data['phi_bot']}:",
-                            min_value=2, max_value=20,
-                            value=int(m_data["n_bot"]), step=1,
-                            key=f"{prefix}ov_nbot_{m_mark}",
-                        )
-                        if new_nbot != m_data["n_bot"]:
-                            cur_ov[f"{m_mark}_nbot"] = new_nbot
-                            ov_changed = True
-
-                        # Top bars override
-                        new_ntop = st.number_input(
-                            f"عدد علوي Φ{m_data['phi_top']}:",
-                            min_value=2, max_value=20,
-                            value=int(m_data["n_top"]), step=1,
-                            key=f"{prefix}ov_ntop_{m_mark}",
-                        )
-                        if new_ntop != m_data["n_top"]:
-                            cur_ov[f"{m_mark}_ntop"] = new_ntop
-                            ov_changed = True
-
-                        # Stirrups override
-                        new_st = st.number_input(
-                            f"كانات/م' Φ{m_data['phi_st']}:",
-                            min_value=5, max_value=12,
-                            value=int(m_data["stirrups_per_m"]), step=1,
-                            key=f"{prefix}ov_st_{m_mark}",
-                        )
-                        if new_st != m_data["stirrups_per_m"]:
-                            cur_ov[f"{m_mark}_stirrups"] = new_st
-                            ov_changed = True
-
-                if ov_changed:
-                    st.session_state[f"{prefix}gb_overrides"] = cur_ov
-                    st.rerun()
-
-                if st.button("🔄 إعادة ضبط نماذج السملات إلى الحسابات التلقائية (Reset Overrides)", key=f"{prefix}btn_reset_gb_ov"):
-                    st.session_state[f"{prefix}gb_overrides"] = {}
-                    st.rerun()
-
-            # Export Excel & CSV
-            csv_models_data = df_models_export.to_csv(index=False).encode('utf-8-sig')
-            buf_models_xl = io.BytesIO()
-            with pd.ExcelWriter(buf_models_xl, engine='openpyxl') as writer:
-                df_models_export.to_excel(writer, index=False, sheet_name='Master_Models_Schedule')
-            excel_models_bytes = buf_models_xl.getvalue()
-
-            c_md1, c_md2 = st.columns(2)
-            with c_md1:
-                st.download_button(
-                    label="📊 تصدير جدول نماذج السملات التنفيذي (Excel .xlsx)",
-                    data=excel_models_bytes,
-                    file_name=f"{prefix}Master_Ground_Beams_Schedule_{num_floors}Floors.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    key=f"{prefix}btn_dl_models_excel",
-                )
-            with c_md2:
-                st.download_button(
-                    label="📥 تصدير جدول نماذج السملات التنفيذي (CSV)",
-                    data=csv_models_data,
-                    file_name=f"{prefix}Master_Ground_Beams_Schedule_{num_floors}Floors.csv",
-                    mime="text/csv",
-                    use_container_width=True,
-                    key=f"{prefix}btn_dl_models_csv",
-                )
-
-        # ── TAB 3: DETAILED GROUND BEAMS BAR BENDING SCHEDULE ──
-        with tab_gb_details:
-            st.markdown("##### 🔩 جدول تفريد وحصر وتفاصيل جميع السملات الإنشائية (Detailed Ground Beams Schedule)")
-            st.caption("تفصيل دقيق لكل سملة بالمبنى مع البحور الصافية، والعزوم، وقوى القص، وقوى الربط المحوري، والتسليح النهائي.")
-            df_det_export = pd.DataFrame(gb_analysis["detailed_schedule_rows"])
-            render_styled_table(df_det_export)
-
-            # Export Excel & CSV
-            csv_det_data = df_det_export.to_csv(index=False).encode('utf-8-sig')
-            buf_det_xl = io.BytesIO()
-            with pd.ExcelWriter(buf_det_xl, engine='openpyxl') as writer:
-                df_det_export.to_excel(writer, index=False, sheet_name='Detailed_Ground_Beams')
-            excel_det_bytes = buf_det_xl.getvalue()
-
-            c_dt1, c_dt2 = st.columns(2)
-            with c_dt1:
-                st.download_button(
-                    label="📊 تصدير جدول تفريد السملات التفصيلي (Excel .xlsx)",
-                    data=excel_det_bytes,
-                    file_name=f"{prefix}Detailed_Ground_Beams_Schedule_{num_floors}Floors.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    key=f"{prefix}btn_dl_det_excel",
-                )
-            with c_dt2:
-                st.download_button(
-                    label="📥 تصدير جدول تفريد السملات التفصيلي (CSV)",
-                    data=csv_det_data,
-                    file_name=f"{prefix}Detailed_Ground_Beams_Schedule_{num_floors}Floors.csv",
-                    mime="text/csv",
-                    use_container_width=True,
-                    key=f"{prefix}btn_dl_det_csv",
-                )
-
-    # ── 🗺️ FOUNDATION LAYOUT SKETCH SECTION (ECP 203) ──────────────────────────────
-    with st.expander(f"🗺️ Foundation Layout Sketch — {num_floors} Floors (المسقط الأفقي وتوزيع كافة القواعد والشدادات والسملات)", expanded=False):
-        st.markdown(
-            f"""
-            <div dir="rtl" style="background:#eff6ff; border:1.5px solid #bfdbfe; border-right:7px solid #2563eb; border-radius:10px; padding:18px 22px; margin-bottom:16px; color:#1e3a8a; line-height:1.9; text-align:right;">
-                <div style="font-size:1.45rem; font-weight:800; color:#1d4ed8; margin-bottom:10px;">
-                    🗺️ المسقط الأفقي العام لأساسات المبنى وعناصر الربط الإنشائي (Foundation Layout Plan Sketch):
-                </div>
-                <div style="font-size:1.15rem; font-weight:700; color:#1e40af;">
-                    لوحة تنفيذية متكاملة لأساسات المبنى لعدد <span style="font-weight:800; color:#1e3a8a;">{num_floors} طوابق</span>، توضح التوزيع الهندسي الشامل لجميع عناصر الأساسات والربط الإنشائي طبقاً لـ <span dir="ltr">ECP 203</span>:
-                    <br/>• 🟦 <b>القواعد المنفصلة (Module 3):</b> للأعمدة غير المتصلة بجار طالما لا يوجد تداخل.
-                    <br/>• 🟩 <b>القواعد المشتركة (Module 8):</b> تدمج تلقائياً أي قواعد متداخلة (خلوص &lt; 0.15 م).
-                    <br/>• 🟧 <b>قواعد وكمرات الشدادات للجار (Modules 9 & 10):</b> برموز واضحة (<span dir="ltr">ST1, ST2...</span>) وأبعاد القطاع وعزوم الاتزان.
-                    <br/>• 🟪 <b>السملات والميدات الأرضية (Module 11):</b> بلون نيلي مميز مع بطاقات النماذج التنفيذية (<span dir="ltr">B1, B2, B3</span>) والمحاور والأبعاد.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        ftg_analysis_sketch = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
-        gb_analysis_sketch = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis")
-        active_cols_sketch = fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols
-
-        if ftg_analysis_sketch and active_cols_sketch:
-            gb_list = gb_analysis_sketch.get("ground_beams", []) if gb_analysis_sketch else []
-            fig_full_sketch = draw_comprehensive_foundation_sketch(
-                active_cols_sketch, ftg_analysis_sketch, ground_beams=gb_list,
-                edge_columns=_edge_columns,
-            )
-            st.pyplot(fig_full_sketch, clear_figure=True, use_container_width=True)
-
-            buf_fs_sketch = io.BytesIO()
-            fig_full_sketch.savefig(buf_fs_sketch, format="png", bbox_inches="tight", dpi=180)
-            buf_fs_sketch.seek(0)
-            st.download_button(
-                label="📥 Download Foundation Layout Plan Sketch (High-Res PNG)",
-                data=buf_fs_sketch,
-                file_name=f"{prefix}Foundation_Comprehensive_Layout_{num_floors}Floors.png",
-                mime="image/png",
-                use_container_width=True,
-                key=f"{prefix}btn_dl_full_foundation_sketch",
-            )
-            plt.close(fig_full_sketch)
-        else:
-            st.info("💡 جاري معالجة بيانات الأساسات والسملات لتوليد المسقط الأفقي العام.")
-
-    # ── 📊 الحصر التقريبي للكميات — APPROXIMATE QUANTITY SURVEY ──────────────
-    # 1. Slab Quantities (السقف)
-    slab_area_val    = boq.get("slab_area_m2", 0.0)
-    slab_conc_val    = boq.get("concrete_vol_m3", 0.0)
-    slab_steel_kg    = boq.get("total_steel_kg", 0.0)
-    slab_steel_ton   = boq.get("total_steel_ton", 0.0)
-    slab_cement_ton  = boq.get("cement_ton", 0.0)
-    slab_cement_bags = boq.get("cement_bags", 0)
-    slab_gravel_val  = boq.get("gravel_m3", 0.0)
-    slab_sand_val    = boq.get("sand_m3", 0.0)
-    slab_ratio_val   = boq.get("steel_ratio_kg_m3", 0.0)
-
-    # 2. Columns Quantities (الأعمدة لجميع الأدوار)
-    cols_conc_1f_val      = tot_conc_vol_1f
-    cols_steel_kg_1f_val  = tot_steel_kg_1f
-    cols_steel_ton_1f_val = tot_steel_kg_1f / 1000.0
-
-    cols_conc_tot_val      = cols_conc_1f_val * num_floors
-    cols_steel_kg_tot_val  = cols_steel_kg_1f_val * num_floors
-    cols_steel_ton_tot_val = cols_steel_ton_1f_val * num_floors
-    cols_cement_tot_ton    = (cols_conc_tot_val * 350.0) / 1000.0
-    cols_cement_tot_bags   = int(round(cols_cement_tot_ton * 1000.0 / 50.0))
-    cols_gravel_tot_val    = cols_conc_tot_val * 0.80
-    cols_sand_tot_val      = cols_conc_tot_val * 0.40
-    cols_ratio_val         = (cols_steel_kg_tot_val / cols_conc_tot_val) if cols_conc_tot_val > 0 else 0.0
-
-    # 3. Foundations Quantities (أساسات المبنى: قواعد منفصلة + قواعد مشتركة)
-    ftgs_conc_rc_val  = 0.0
-    ftgs_conc_pc_val  = 0.0
-    ftgs_steel_kg_val = 0.0
-    ftg_dia_map = {}
-
-    def _add_ftg_dia_entry(phi_val, wt_kg, app_desc):
-        if phi_val not in ftg_dia_map:
-            ftg_dia_map[phi_val] = {"weight_kg": 0.0, "apps": app_desc}
-        ftg_dia_map[phi_val]["weight_kg"] += wt_kg
-
-    ftg_analysis_obj = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
-    if ftg_analysis_obj and "quantities" in ftg_analysis_obj:
-        fq = ftg_analysis_obj["quantities"]
-        ftgs_conc_rc_val = float(fq.get("ftgs_conc_rc_val", 0.0))
-        ftgs_conc_pc_val = float(fq.get("ftgs_conc_pc_val", 0.0))
-        ftgs_steel_kg_val = float(fq.get("ftgs_steel_kg_val", 0.0))
-        ftg_dia_map = dict(fq.get("ftg_dia_map", {}))
-    elif 'fs_active_columns' in locals() and fs_active_columns:
-        ov_col_ids_set = overlap_data.get("overlapping_col_ids", set()) if 'overlap_data' in locals() else set()
-        for col_item in fs_active_columns:
-            cid = col_item["id"]
-            if cid in ov_col_ids_set:
-                continue
-            ctype = col_item.get("type", "Interior")
-            f_model = ftgs_dict.get(ctype, ftgs_dict.get("Interior")) if 'ftgs_dict' in locals() else None
-            if not f_model:
-                continue
-
-            L_m = f_model["L_cm"] / 100.0
-            B_m = f_model["B_cm"] / 100.0
-            t_m = f_model["t_cm"] / 100.0
-            ftgs_conc_rc_val += L_m * B_m * t_m
-
-            # P.C. Blinding Layer (20 cm thick with 20 cm projection)
-            L_pc_m = (f_model["L_cm"] + 40.0) / 100.0
-            B_pc_m = (f_model["B_cm"] + 40.0) / 100.0
-            ftgs_conc_pc_val += L_pc_m * B_pc_m * 0.20
-
-            # Steel: bottom longitudinal & transverse
-            phi_f = f_model.get("Phi", 16)
-            unit_w_f = (phi_f ** 2) / 162.0
-            n_L = max(5, int(math.ceil(B_m * f_model.get("n_bars_L", 5.0))))
-            len_L = L_m - 0.10 + 2.0 * max(0.20, t_m - 0.10)
-            wt_L = n_L * len_L * unit_w_f
-
-            n_B = max(5, int(math.ceil(L_m * f_model.get("n_bars_B", 5.0))))
-            len_B = B_m - 0.10 + 2.0 * max(0.20, t_m - 0.10)
-            wt_B = n_B * len_B * unit_w_f
-
-            isolated_col_steel = wt_L + wt_B
-            ftgs_steel_kg_val += isolated_col_steel
-            _add_ftg_dia_entry(phi_f, isolated_col_steel, "تسليح سفلي لقواعد منفصلة (Isolated Footings)")
-
-        if 'combined_fs_models' in locals() and combined_fs_models:
-            for cf in combined_fs_models:
-                Lc_m = cf["Lc_cm"] / 100.0
-                Bc_m = cf["Bc_cm"] / 100.0
-                tc_m = cf["tc_cm"] / 100.0
-                ftgs_conc_rc_val += Lc_m * Bc_m * tc_m
-
-                # P.C. Blinding for Combined Footings
-                Lc_pc_m = (cf["Lc_cm"] + 40.0) / 100.0
-                Bc_pc_m = (cf["Bc_cm"] + 40.0) / 100.0
-                ftgs_conc_pc_val += Lc_pc_m * Bc_pc_m * 0.20
-
-                # Rebar: Bottom longitudinal
-                phi_bot = cf.get("Phi_mm", 18)
-                unit_w_bot = (phi_bot ** 2) / 162.0
-                n_bot = max(5, int(math.ceil(Bc_m * 6.0)))
-                len_bot = Lc_m - 0.10 + 2.0 * max(0.25, tc_m - 0.10)
-                wt_bot = n_bot * len_bot * unit_w_bot
-
-                # Rebar: Top longitudinal (Negative moment rebar)
-                phi_top = cf.get("Phi_mm", 18)
-                unit_w_top = (phi_top ** 2) / 162.0
-                n_top = max(5, int(math.ceil(Bc_m * 8.0)))
-                len_top = Lc_m - 0.10 + 2.0 * max(0.25, tc_m - 0.10)
-                wt_top = n_top * len_top * unit_w_top
-
-                # Rebar: Transverse steel
-                phi_trans = 16
-                unit_w_trans = (16 ** 2) / 162.0
-                n_trans = max(5, int(math.ceil(Lc_m * 5.0)))
-                len_trans = Bc_m - 0.10 + 2.0 * max(0.25, tc_m - 0.10)
-                wt_trans = n_trans * len_trans * unit_w_trans
-
-                combined_col_steel = wt_bot + wt_top + wt_trans
-                ftgs_steel_kg_val += combined_col_steel
-                _add_ftg_dia_entry(phi_bot, wt_bot, "تسليح سفلي لقواعد مشتركة (Combined Footings)")
-                _add_ftg_dia_entry(phi_top, wt_top, "تسليح علوي رئيسي لقواعد مشتركة (Combined Footings)")
-                _add_ftg_dia_entry(phi_trans, wt_trans, "تسليح عرضي لقواعد مشتركة (Combined Footings)")
-
-    ftgs_steel_ton_val  = ftgs_steel_kg_val / 1000.0
-    ftgs_cement_ton     = (ftgs_conc_rc_val * 350.0 + ftgs_conc_pc_val * 250.0) / 1000.0
-    ftgs_cement_bags    = int(round(ftgs_cement_ton * 1000.0 / 50.0))
-    ftgs_gravel_val     = (ftgs_conc_rc_val + ftgs_conc_pc_val) * 0.80
-    ftgs_sand_val       = (ftgs_conc_rc_val + ftgs_conc_pc_val) * 0.40
-    ftgs_ratio_val      = (ftgs_steel_kg_val / ftgs_conc_rc_val) if ftgs_conc_rc_val > 0 else 0.0
-
-    # 3b. Ground Beams Quantities (السملات والميدات الأرضية)
-    gb_analysis_obj = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis")
-    gb_conc_rc_val  = 0.0
-    gb_steel_kg_val = 0.0
-    gb_dia_map      = {}
-    if gb_analysis_obj and "boq" in gb_analysis_obj:
-        gboq = gb_analysis_obj["boq"]
-        gb_conc_rc_val  = float(gboq.get("conc_vol_rc", 0.0))
-        gb_steel_kg_val = float(gboq.get("steel_kg_tot", 0.0))
-        gb_dia_map      = dict(gboq.get("dia_map", {}))
-
-    gb_steel_ton_val  = gb_steel_kg_val / 1000.0
-    gb_cement_ton     = (gb_conc_rc_val * 350.0) / 1000.0
-    gb_cement_bags    = int(round(gb_cement_ton * 1000.0 / 50.0))
-    gb_gravel_val     = gb_conc_rc_val * 0.80
-    gb_sand_val       = gb_conc_rc_val * 0.40
-    gb_ratio_val      = (gb_steel_kg_val / gb_conc_rc_val) if gb_conc_rc_val > 0 else 0.0
-
-    # 4. Grand Total Quantities (السقف + الأعمدة + الأساسات + السملات)
-    grand_conc_rc_val   = slab_conc_val + cols_conc_tot_val + ftgs_conc_rc_val + gb_conc_rc_val
-    grand_conc_pc_val   = ftgs_conc_pc_val
-    grand_conc_all_val  = grand_conc_rc_val + grand_conc_pc_val
-    grand_steel_kg_val  = slab_steel_kg + cols_steel_kg_tot_val + ftgs_steel_kg_val + gb_steel_kg_val
-    grand_steel_ton_val = slab_steel_ton + cols_steel_ton_tot_val + ftgs_steel_ton_val + gb_steel_ton_val
-    grand_cement_ton    = slab_cement_ton + cols_cement_tot_ton + ftgs_cement_ton + gb_cement_ton
-    grand_cement_bags   = slab_cement_bags + cols_cement_tot_bags + ftgs_cement_bags + gb_cement_bags
-    grand_gravel_val    = slab_gravel_val + cols_gravel_tot_val + ftgs_gravel_val + gb_gravel_val
-    grand_sand_val      = slab_sand_val + cols_sand_tot_val + ftgs_sand_val + gb_sand_val
-    grand_ratio_val     = (grand_steel_kg_val / grand_conc_rc_val) if grand_conc_rc_val > 0 else 0.0
-
-    # 5. Detailed Diameter Breakdown (Slab, Columns & Foundations)
-    all_dias_set = set()
-    slab_dia_map = {}
-    for d_row in boq.get("by_dia", []):
-        d_val = d_row.get("dia_mm") or d_row.get("dia")
-        if d_val:
-            all_dias_set.add(d_val)
-            slab_dia_map[d_val] = {
-                "weight_kg": d_row.get("weight_kg", 0.0),
-                "weight_ton": d_row.get("weight_ton", 0.0),
-                "apps": d_row.get("apps", "—"),
-            }
-
-    cols_dia_map = {}
-    if 'des_map' in locals() and des_map:
-        for m_key, des_item in des_map.items():
-            cnt = cnt_int if m_key == "C_int" else (cnt_edge if m_key == "C_edge" else cnt_corner)
-            if cnt > 0:
-                phi_m = des_item["Phi"]
-                phi_st = des_item["Phi_st"]
-                all_dias_set.add(phi_m)
-                all_dias_set.add(phi_st)
-
-                H_m_col = col_H / 100.0
-                L_bar_col = H_m_col + max(1.0, (50.0 * phi_m) / 1000.0)
-                unit_w_m = (phi_m ** 2) / 162.0
-                wt_main_bld = des_item["n_bars"] * L_bar_col * unit_w_m * cnt * num_floors
-
-                n_ties_col = max(5, int(math.ceil(H_m_col * des_item["n_st_per_m"])))
-                tie_perim_col = 2.0 * (((des_item["b"] - 5.0) + (des_item["t"] - 5.0)) / 100.0) + 0.20
-                unit_w_st = (phi_st ** 2) / 162.0
-                wt_st_bld = n_ties_col * tie_perim_col * unit_w_st * cnt * num_floors
-
-                if phi_m not in cols_dia_map:
-                    cols_dia_map[phi_m] = {"weight_kg": 0.0, "apps": "تسليح طولي رئيسي للأعمدة (Main Column Rebar)"}
-                cols_dia_map[phi_m]["weight_kg"] += wt_main_bld
-
-                if phi_st not in cols_dia_map:
-                    cols_dia_map[phi_st] = {"weight_kg": 0.0, "apps": "كانات وأطواق الأعمدة (Column Stirrup Ties)"}
-                cols_dia_map[phi_st]["weight_kg"] += wt_st_bld
-
-    all_dias_set.update(ftg_dia_map.keys())
-    all_dias_set.update(gb_dia_map.keys())
-
-    with st.expander("📊 Approximate Quantity Survey (الحصر التقريبي للكميات)", expanded=False):
-        st.markdown(
-            f"""
-            <div style="background:#f8fafc; border-left:4px solid #1e40af; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
-                <div style="font-size:1.0rem; font-weight:800; color:#1e3a8a;">
-                    📋 جدول الحصر الشامل لكميات ومواد السقف والأعمدة والأساسات والسملات والإجمالي الكلي للمبنى:
-                </div>
-                <div style="font-size:0.9rem; color:#475569; margin-top:3px;">
-                    حصر تفصيلي شامل للخرسانة المسلحة والعادية، وحديد التسليح (لكل قطر وإجمالي)، والأسمنت، والزلط، والرمل لسقف البلاطة اللاكمرية، وأعمدة المبنى ({num_floors} طوابق)، وأساسات المبنى بالكامل (القواعد المنفصلة والمشتركة)، وسملات الربط الأرضية (Ground Beams).
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        # ── KPI Summary Cards ──
-        kpi_c1, kpi_c2, kpi_c3, kpi_c4 = st.columns(4)
-        with kpi_c1:
-            st.markdown(
-                f"""
-                <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:13px; font-weight:600; color:#15803d; margin-bottom:4px;">إجمالي حجم الخرسانات</div>
-                    <div style="font-size:20px; font-weight:800; color:#166534;">{grand_conc_all_val:.2f} m³</div>
-                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">مسلحة: {grand_conc_rc_val:.1f} m³ │ عادية: {grand_conc_pc_val:.1f} m³</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        with kpi_c2:
-            st.markdown(
-                f"""
-                <div style="background:#f5f3ff; border:1.5px solid #c4b5fd; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:13px; font-weight:600; color:#6d28d9; margin-bottom:4px;">إجمالي وزن حديد التسليح</div>
-                    <div style="font-size:20px; font-weight:800; color:#5b21b6;">{grand_steel_ton_val:.3f} Ton</div>
-                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">سقف: {slab_steel_ton:.2f}t │ أعمدة: {cols_steel_ton_tot_val:.2f}t │ أساسات: {ftgs_steel_ton_val:.2f}t │ سملات: {gb_steel_ton_val:.2f}t</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        with kpi_c3:
-            st.markdown(
-                f"""
-                <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:13px; font-weight:600; color:#1e40af; margin-bottom:4px;">إجمالي كمية الأسمنت</div>
-                    <div style="font-size:20px; font-weight:800; color:#1e3a8a;">{grand_cement_ton:.2f} Ton</div>
-                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">{grand_cement_bags:,} شكارة (50 كجم)</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        with kpi_c4:
-            st.markdown(
-                f"""
-                <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:8px; padding:10px 14px; text-align:center;">
-                    <div style="font-size:13px; font-weight:600; color:#b45309; margin-bottom:4px;">إجمالي الزلط والرمل</div>
-                    <div style="font-size:18px; font-weight:800; color:#92400e;">زلط: {grand_gravel_val:.1f} m³</div>
-                    <div style="font-size:11.5px; color:#475569; margin-top:2px;">رمل: {grand_sand_val:.1f} m³ │ معدل: {grand_ratio_val:.1f} kg/m³</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
-
-        # ── Table 1: Main Materials Quantity Survey Table ──
-        st.markdown("##### 📋 1. جدول الحصر التقريبي العام للكميات والمواد الإنشائية (General Quantity Survey Table)")
-
-        st.markdown(
-            """
-            <div style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 2.5px solid #f59e0b; border-radius: 10px; padding: 14px 20px; margin-top: 8px; margin-bottom: 16px; text-align: center; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.20);">
-                <div style="font-size: 1.18rem; font-weight: 800; color: #92400e; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                    <span style="font-size: 1.45rem;">⚠️</span>
-                    <span>تنبيه وإرشاد هندسي هام:</span>
-                </div>
-                <div style="font-size: 1.12rem; font-weight: 800; color: #b45309; margin-top: 6px; line-height: 1.7;">
-                    إن هذه الحسابات استرشادية طبقاً للتصميم، يرجى استخدام موديول حصر الكميات لإدخال الكميات التي سيتم التنفيذ طبقاً لها على أرض الواقع.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        main_survey_data = [
-            {
-                "البند / المكون الإنشائي (Item / Material)": "1. حجم الخرسانة المسلحة (Reinforced Concrete R.C.)",
-                "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_conc_val:.2f} m³",
-                f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_conc_tot_val:.2f} m³",
-                "أساسات المبنى (Foundations)": f"{ftgs_conc_rc_val:.2f} m³",
-                "سملات وميدات (Ground Beams)": f"{gb_conc_rc_val:.2f} m³",
-                "الإجمالي الشامل (Grand Total)": f"{grand_conc_rc_val:.2f} m³",
-                "الوحدة (Unit)": "متر مكعب (m³)",
-                "الملاحظات والمواصفات (Notes & Specs)": f"مسطح السقف الصافي {slab_area_val:.1f} m² + كامل الأعمدة ({tot_active_cols} عمود) + القواعد المسلحة + السملات الأرضية",
-            },
-            {
-                "البند / المكون الإنشائي (Item / Material)": "2. حجم الخرسانة العادية (Plain Concrete P.C.)",
-                "سقف البلاطة اللاكمرية (Flat Slab)": "—",
-                f"أعمدة المبنى ({num_floors} طوابق)": "—",
-                "أساسات المبنى (Foundations)": f"{ftgs_conc_pc_val:.2f} m³",
-                "سملات وميدات (Ground Beams)": "—",
-                "الإجمالي الشامل (Grand Total)": f"{grand_conc_pc_val:.2f} m³",
-                "الوحدة (Unit)": "متر مكعب (m³)",
-                "الملاحظات والمواصفات (Notes & Specs)": "فرشة نظافة بسمك 20 سم ورفرفة 20 سم أسفل كامل القواعد",
-            },
-            {
-                "البند / المكون الإنشائي (Item / Material)": "3. إجمالي وزن حديد التسليح (Total Reinforcement Steel)",
-                "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
-                f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
-                "أساسات المبنى (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
-                "سملات وميدات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
-                "الإجمالي الشامل (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
-                "الوحدة (Unit)": "طن (Ton) / كجم (kg)",
-                "الملاحظات والمواصفات (Notes & Specs)": "شامل شبكات السقف والإضافي + حديد الأعمدة والكانات + تسليح القواعد المنفصلة والمشتركة والشدادات والسملات",
-            },
-            {
-                "البند / المكون الإنشائي (Item / Material)": "4. كمية الأسمنت البورتلاندي (Portland Cement)",
-                "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_cement_ton:.2f} Ton ({slab_cement_bags:,} شكارة)",
-                f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_cement_tot_ton:.2f} Ton ({cols_cement_tot_bags:,} شكارة)",
-                "أساسات المبنى (Foundations)": f"{ftgs_cement_ton:.2f} Ton ({ftgs_cement_bags:,} شكارة)",
-                "سملات وميدات (Ground Beams)": f"{gb_cement_ton:.2f} Ton ({gb_cement_bags:,} شكارة)",
-                "الإجمالي الشامل (Grand Total)": f"{grand_cement_ton:.2f} Ton ({grand_cement_bags:,} شكارة)",
-                "الوحدة (Unit)": "طن (Ton) / شكارة",
-                "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 350 كجم/م³ للمسلحة (7 شكاير) و 250 كجم/م³ للعادية (5 شكاير)",
-            },
-            {
-                "البند / المكون الإنشائي (Item / Material)": "5. كمية الزلط / الركام الكبير (Gravel / Coarse Aggregate)",
-                "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_gravel_val:.2f} m³",
-                f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_gravel_tot_val:.2f} m³",
-                "أساسات المبنى (Foundations)": f"{ftgs_gravel_val:.2f} m³",
-                "سملات وميدات (Ground Beams)": f"{gb_gravel_val:.2f} m³",
-                "الإجمالي الشامل (Grand Total)": f"{grand_gravel_val:.2f} m³",
-                "الوحدة (Unit)": "متر مكعب (m³)",
-                "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.80 m³ زلط متدرج ونظيف لكل 1.0 m³ خرسانة (مسلحة وعادية)",
-            },
-            {
-                "البند / المكون الإنشائي (Item / Material)": "6. كمية الرمل الحرش / الركام الصغير (Clean Sand)",
-                "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_sand_val:.2f} m³",
-                f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_sand_tot_val:.2f} m³",
-                "أساسات المبنى (Foundations)": f"{ftgs_sand_val:.2f} m³",
-                "سملات وميدات (Ground Beams)": f"{gb_sand_val:.2f} m³",
-                "الإجمالي الشامل (Grand Total)": f"{grand_sand_val:.2f} m³",
-                "الوحدة (Unit)": "متر مكعب (m³)",
-                "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.40 m³ رمل حرش نظيف لكل 1.0 m³ خرسانة (نصف حجم الزلط)",
-            },
-            {
-                "البند / المكون الإنشائي (Item / Material)": "7. معدل استهلاك الحديد (Steel Consumption Ratio)",
-                "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_ratio_val:.1f} kg/m³",
-                f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_ratio_val:.1f} kg/m³",
-                "أساسات المبنى (Foundations)": f"{ftgs_ratio_val:.1f} kg/m³",
-                "سملات وميدات (Ground Beams)": f"{gb_ratio_val:.1f} kg/m³",
-                "الإجمالي الشامل (Grand Total)": f"{grand_ratio_val:.1f} kg/m³",
-                "الوحدة (Unit)": "كجم / م³ خرسانة مسلحة",
-                "الملاحظات والمواصفات (Notes & Specs)": "متوسط استهلاك الحديد المسلح لكافة عناصر المبنى",
-            },
-        ]
-        render_styled_table(main_survey_data)
-
-        # Export Excel & CSV buttons for Quantity Survey
-        df_survey_export = pd.DataFrame(main_survey_data)
-        csv_survey_data = df_survey_export.to_csv(index=False).encode('utf-8-sig')
-        buf_surv_xl = io.BytesIO()
-        with pd.ExcelWriter(buf_surv_xl, engine='openpyxl') as writer:
-            df_survey_export.to_excel(writer, index=False, sheet_name='Main_Quantities')
-        excel_surv_bytes = buf_surv_xl.getvalue()
-
-        surv_c1, surv_c2 = st.columns(2)
-        with surv_c1:
-            st.download_button(
-                label="📊 تصدير جدول الحصر العام (Excel .xlsx)",
-                data=excel_surv_bytes,
-                file_name=f"{prefix}General_Quantity_Survey_{num_floors}Floors.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                key=f"{prefix}btn_dl_survey_excel",
-            )
-        with surv_c2:
-            st.download_button(
-                label="📥 تصدير جدول الحصر العام (CSV)",
-                data=csv_survey_data,
-                file_name=f"{prefix}General_Quantity_Survey_{num_floors}Floors.csv",
-                mime="text/csv",
-                use_container_width=True,
-                key=f"{prefix}btn_dl_survey_csv",
-            )
-
-        st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
-
-        # ── Table 2: Detailed Steel Reinforcement by Bar Diameter (جدول تفصيل حديد التسليح لكل قطر) ──
-        st.markdown("##### 🔩 2. جدول تفصيل أوزان حديد التسليح لكل قطر والإجمالي الكلي (Steel Breakdown by Bar Diameter)")
-        dia_table_rows = []
-        for d in sorted(all_dias_set):
-            s_kg = slab_dia_map.get(d, {}).get("weight_kg", 0.0)
-            s_ton = s_kg / 1000.0
-            c_kg = cols_dia_map.get(d, {}).get("weight_kg", 0.0)
-            c_ton = c_kg / 1000.0
-            f_kg = ftg_dia_map.get(d, {}).get("weight_kg", 0.0)
-            f_ton = f_kg / 1000.0
-            gb_kg = gb_dia_map.get(d, {}).get("weight_kg", 0.0)
-            gb_ton = gb_kg / 1000.0
-            t_kg = s_kg + c_kg + f_kg + gb_kg
-            t_ton = t_kg / 1000.0
-            pct = (t_kg / max(0.001, grand_steel_kg_val)) * 100.0
-
-            sources_list = []
-            if s_kg > 0:
-                sources_list.append(f"السقف: {slab_dia_map[d].get('apps', '—')}")
-            if c_kg > 0:
-                sources_list.append(f"الأعمدة: {cols_dia_map[d].get('apps', '—')}")
-            if f_kg > 0:
-                sources_list.append(f"الأساسات: {ftg_dia_map[d].get('apps', '—')}")
-            if gb_kg > 0:
-                sources_list.append(f"السملات: {gb_dia_map[d].get('apps', '—')}")
+                dia_table_rows.append({
+                    "قطر السيخ Φ (Bar Dia)": f"Φ {d} mm",
+                    "وزن المتر الطولي (kg/m')": f"{(d**2)/162.0:.4f} kg/m'",
+                    "حديد السقف (Slab Steel)": f"{s_ton:.3f} Ton ({s_kg:,.1f} kg)" if s_kg > 0 else "—",
+                    f"حديد الأعمدة ({num_floors}F)": f"{c_ton:.3f} Ton ({c_kg:,.1f} kg)" if c_kg > 0 else "—",
+                    "حديد الأساسات (Foundations)": f"{f_ton:.3f} Ton ({f_kg:,.1f} kg)" if f_kg > 0 else "—",
+                    "حديد السملات (Ground Beams)": f"{gb_ton:.3f} Ton ({gb_kg:,.1f} kg)" if gb_kg > 0 else "—",
+                    "الإجمالي الكلي (Grand Total)": f"{t_ton:.3f} Ton ({t_kg:,.1f} kg)",
+                    "النسبة (%)": f"{pct:.1f} %",
+                    "مواقع الاستخدام في المشروع (Applications)": " │ ".join(sources_list) if sources_list else "—",
+                })
 
             dia_table_rows.append({
-                "قطر السيخ Φ (Bar Dia)": f"Φ {d} mm",
-                "وزن المتر الطولي (kg/m')": f"{(d**2)/162.0:.4f} kg/m'",
-                "حديد السقف (Slab Steel)": f"{s_ton:.3f} Ton ({s_kg:,.1f} kg)" if s_kg > 0 else "—",
-                f"حديد الأعمدة ({num_floors}F)": f"{c_ton:.3f} Ton ({c_kg:,.1f} kg)" if c_kg > 0 else "—",
-                "حديد الأساسات (Foundations)": f"{f_ton:.3f} Ton ({f_kg:,.1f} kg)" if f_kg > 0 else "—",
-                "حديد السملات (Ground Beams)": f"{gb_ton:.3f} Ton ({gb_kg:,.1f} kg)" if gb_kg > 0 else "—",
-                "الإجمالي الكلي (Grand Total)": f"{t_ton:.3f} Ton ({t_kg:,.1f} kg)",
-                "النسبة (%)": f"{pct:.1f} %",
-                "مواقع الاستخدام في المشروع (Applications)": " │ ".join(sources_list) if sources_list else "—",
+                "قطر السيخ Φ (Bar Dia)": "📌 TOTAL STEEL (إجمالي حديد التسليح بالكامل)",
+                "وزن المتر الطولي (kg/m')": "—",
+                "حديد السقف (Slab Steel)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
+                f"حديد الأعمدة ({num_floors}F)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
+                "حديد الأساسات (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
+                "حديد السملات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
+                "الإجمالي الكلي (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
+                "النسبة (%)": "100.0 %",
+                "مواقع الاستخدام في المشروع (Applications)": f"متوسط استهلاك المشروع بالكامل: {grand_ratio_val:.1f} kg/m³ خرسانة مسلحة",
             })
+            render_styled_table(dia_table_rows)
 
-        dia_table_rows.append({
-            "قطر السيخ Φ (Bar Dia)": "📌 TOTAL STEEL (إجمالي حديد التسليح بالكامل)",
-            "وزن المتر الطولي (kg/m')": "—",
-            "حديد السقف (Slab Steel)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
-            f"حديد الأعمدة ({num_floors}F)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
-            "حديد الأساسات (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
-            "حديد السملات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
-            "الإجمالي الكلي (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
-            "النسبة (%)": "100.0 %",
-            "مواقع الاستخدام في المشروع (Applications)": f"متوسط استهلاك المشروع بالكامل: {grand_ratio_val:.1f} kg/m³ خرسانة مسلحة",
-        })
-        render_styled_table(dia_table_rows)
-
-    st.markdown("---")
+        st.markdown("---")
 
     # ── 💾 SAVE & EXPORT COMPLETE CALCULATION SHEET ────────────────────────────
     st.markdown(
@@ -13032,7 +13043,7 @@ def render():
                     📄 ملف المذكرة الحسابية الهندسية الشاملة (ECP 203 Calculation Sheet)
                 </div>
                 <div style='font-size:0.88rem; color:#cbd5e1; margin-top:2px;'>
-                    يتضمن جميع المدخلات، والمخططات الهندسية عالية الدقة، وفحوصات القص الثاقب، وردود أفعال وتصنيفات الأعمدة لـ <b>{num_floors} طوابق</b>، وحصر الكميات.
+                    {"يتضمن جميع المدخلات، والمخططات الهندسية عالية الدقة، وفحوصات القص الثاقب، وحسابات العزوم والتسليح وسهم الانحناء وحصر كميات السقف." if is_standalone else f"يتضمن جميع المدخلات، والمخططات الهندسية عالية الدقة، وفحوصات القص الثاقب، وردود أفعال وتصنيفات الأعمدة لـ <b>{num_floors} طوابق</b>، وحصر الكميات."}
                 </div>
             </div>
             """,
@@ -13072,7 +13083,7 @@ def render():
                     plt.close(_fig_m22_rep)
 
                 report_html = generate_flat_slab_report_html(
-                    project_name="Flat Slab Reinforced Concrete Design (ECP 203)",
+                    project_name="Standalone Flat Slab Reinforced Concrete Design (ECP 203)" if is_standalone else "Integrated Structural Design (ECP 203)",
                     ts=ts, d=d, num_floors=num_floors, Wu=Wu,
                     Lx_spans=Lx_calc, Ly_spans=Ly_calc, cantilevers=cantilevers,
                     mesh_btm_str=mesh_btm_str, mesh_top_str=mesh_top_str,
@@ -13088,10 +13099,11 @@ def render():
                     img_dual_moment_b64=img_dual_moment_b64,
                 )
 
+                rep_fn_tag = "ECP203_Standalone_Flat_Slab" if is_standalone else "ECP203_Integrated_Structural_Design"
                 st.download_button(
                     label="🌐 Save Calculation Sheet (HTML)",
                     data=report_html,
-                    file_name=f"{prefix}ECP203_Flat_Slab_Calculation_Sheet_ts{ts:.0f}cm_{num_floors}Floors.html",
+                    file_name=f"{prefix}{rep_fn_tag}_Calculation_Sheet_ts{ts:.0f}cm_{num_floors}Floors.html",
                     mime="text/html",
                     use_container_width=True,
                 )

@@ -3090,15 +3090,237 @@ def _section_walls():
         # ── الاختيارات الثلاث للتحكم في الحائط المختار ──
         st.markdown(
             """<style>
-            div[data-testid="stCheckbox"] label,
-            div[data-testid="stCheckbox"] label *,
-            div[data-testid="stCheckbox"] label p,
-            div[data-testid="stCheckbox"] label span {
-                color: #fde047 !important;
+            /* ═══════════════════════════════════════════════════════════════════
+               1. حاوية وبطاقات سُمك الحائط (العمود الأول)
+               ═══════════════════════════════════════════════════════════════════ */
+            div[class*="m12_wall_thick_radio"],
+            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] {
+                background: linear-gradient(135deg, rgba(30, 41, 59, 0.88) 0%, rgba(15, 23, 42, 0.88) 100%) !important;
+                border: 1.5px solid rgba(148, 163, 184, 0.35) !important;
+                border-radius: 8px !important;
+                padding: 6px 10px !important;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+                min-height: 48px !important;
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                justify-content: center !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+                margin: 0 auto !important;
             }
-            div[data-testid="column"]:nth-of-type(3) .stButton > button {
-                min-height: 40px !important;
-                font-size: 14.5px !important;
+            div[class*="m12_wall_thick_radio"] > div[data-testid="stRadio"] {
+                background: transparent !important;
+                border: none !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                width: 100% !important;
+            }
+            /* عنوان سُمك الحائط داخل أعلى البانيل */
+            div[class*="m12_wall_thick_radio"] label[data-testid="stWidgetLabel"],
+            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] label[data-testid="stWidgetLabel"] {
+                display: block !important;
+                width: 100% !important;
+                text-align: center !important;
+                margin: 0 0 5px 0 !important;
+                padding: 0 !important;
+            }
+            div[class*="m12_wall_thick_radio"] label[data-testid="stWidgetLabel"] p,
+            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] label[data-testid="stWidgetLabel"] p {
+                color: #fde047 !important;
+                font-size: 13.5px !important;
+                font-weight: 700 !important;
+                text-align: center !important;
+                margin: 0 !important;
+                line-height: 1.25 !important;
+            }
+            /* صف خيارات الراديو */
+            div[class*="m12_wall_thick_radio"] div[role="radiogroup"],
+            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] {
+                display: flex !important;
+                flex-direction: row !important;
+                justify-content: center !important;
+                align-items: center !important;
+                gap: 8px !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            /* بطاقات خيارات سُمك الحائط (12 سم و 25 سم) */
+            div[class*="m12_wall_thick_radio"] div[role="radiogroup"] > label,
+            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label {
+                background: rgba(51, 65, 85, 0.7) !important;
+                border: 1.2px solid rgba(148, 163, 184, 0.45) !important;
+                border-radius: 6px !important;
+                padding: 3px 8px !important;
+                cursor: pointer !important;
+                margin: 0 !important;
+                display: inline-flex !important;
+                flex-direction: row !important;
+                align-items: center !important;
+                gap: 6px !important;
+                transition: all 0.2s ease !important;
+            }
+            div[class*="m12_wall_thick_radio"] div[role="radiogroup"] > label:hover,
+            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label:hover {
+                border-color: #fde047 !important;
+                background: rgba(51, 65, 85, 0.95) !important;
+            }
+            div[class*="m12_wall_thick_radio"] div[role="radiogroup"] > label[data-selected="true"],
+            div[class*="m12_wall_thick_radio"] div[role="radiogroup"] > label:has(input:checked),
+            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label[data-selected="true"],
+            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) {
+                background: rgba(2, 132, 199, 0.35) !important;
+                border-color: #38bdf8 !important;
+            }
+            /* دوائر الراديو الخارجية - بيضاء ناصعة مع إطار رمادي واضح */
+            div[class*="m12_wall_thick_radio"] div[role="radiogroup"] > label div[class*="etak9234"],
+            div[class*="m12_wall_thick_radio"] div[role="radiogroup"] > label > div > div > div:first-child,
+            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label div[class*="etak9234"],
+            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label > div > div > div:first-child {
+                background-color: #ffffff !important;
+                border: 2px solid #94a3b8 !important;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35) !important;
+                border-radius: 50% !important;
+                width: 16px !important;
+                height: 16px !important;
+                min-width: 16px !important;
+                min-height: 16px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+            }
+            /* الدائرة الخارجية عند الاختيار */
+            div[class*="m12_wall_thick_radio"] div[role="radiogroup"] > label[data-selected="true"] div[class*="etak9234"],
+            div[class*="m12_wall_thick_radio"] div[role="radiogroup"] > label:has(input:checked) div[class*="etak9234"],
+            div[class*="m12_wall_thick_radio"] div[role="radiogroup"] > label[data-selected="true"] > div > div > div:first-child,
+            div[class*="m12_wall_thick_radio"] div[role="radiogroup"] > label:has(input:checked) > div > div > div:first-child,
+            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label[data-selected="true"] div[class*="etak9234"],
+            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) div[class*="etak9234"] {
+                border-color: #0284c7 !important;
+                background-color: #ffffff !important;
+                box-shadow: 0 0 8px rgba(2, 132, 199, 0.6) !important;
+            }
+            /* النقطة الداخلية */
+            div[class*="m12_wall_thick_radio"] div[role="radiogroup"] > label div[class*="etak9235"],
+            div[class*="m12_wall_thick_radio"] div[role="radiogroup"] > label > div > div > div:first-child > div,
+            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label div[class*="etak9235"],
+            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label > div > div > div:first-child > div {
+                background-color: #ffffff !important;
+                border-radius: 50% !important;
+                width: 7px !important;
+                height: 7px !important;
+            }
+            /* النقطة الداخلية عند الاختيار - أزرق سماوي */
+            div[class*="m12_wall_thick_radio"] div[role="radiogroup"] > label[data-selected="true"] div[class*="etak9235"],
+            div[class*="m12_wall_thick_radio"] div[role="radiogroup"] > label:has(input:checked) div[class*="etak9235"],
+            div[class*="m12_wall_thick_radio"] div[role="radiogroup"] > label[data-selected="true"] > div > div > div:first-child > div,
+            div[class*="m12_wall_thick_radio"] div[role="radiogroup"] > label:has(input:checked) > div > div > div:first-child > div,
+            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label[data-selected="true"] div[class*="etak9235"],
+            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) div[class*="etak9235"] {
+                background-color: #0284c7 !important;
+            }
+            /* نصوص خيارات الراديو (12 سم و 25 سم) - استهداف دقيق لـ p فقط دون المساس بـ span */
+            div[class*="m12_wall_thick_radio"] div[role="radiogroup"] > label div[data-testid="stMarkdownContainer"] p,
+            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label div[data-testid="stMarkdownContainer"] p {
+                color: #fde047 !important;
+                font-size: 13px !important;
+                font-weight: 700 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                white-space: nowrap !important;
+            }
+
+            /* ═══════════════════════════════════════════════════════════════════
+               2. بانيل تصنيف كحائط دروة (العمود الثاني)
+               ═══════════════════════════════════════════════════════════════════ */
+            div[class*="st-key-m12_single_parapet_chk"],
+            div.stCheckbox[class*="st-key-m12_single_parapet_chk"],
+            div.stCheckbox:has(input[id*="m12_single_parapet_chk"]),
+            div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stCheckbox"] {
+                background: linear-gradient(135deg, rgba(30, 41, 59, 0.88) 0%, rgba(15, 23, 42, 0.88) 100%) !important;
+                border: 1.5px solid rgba(148, 163, 184, 0.35) !important;
+                border-radius: 8px !important;
+                padding: 6px 12px !important;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+                min-height: 48px !important;
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                justify-content: center !important;
+                width: 100% !important;
+                box-sizing: border-box !important;
+                margin: 0 auto !important;
+            }
+            div[class*="st-key-m12_single_parapet_chk"] label,
+            div.stCheckbox[class*="st-key-m12_single_parapet_chk"] label,
+            div.stCheckbox:has(input[id*="m12_single_parapet_chk"]) label,
+            div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stCheckbox"] label {
+                display: flex !important;
+                flex-direction: column-reverse !important;
+                align-items: center !important;
+                justify-content: center !important;
+                gap: 4px !important;
+                cursor: pointer !important;
+                margin: 0 auto !important;
+                padding: 0 !important;
+                width: auto !important;
+                background: transparent !important;
+            }
+            div[class*="st-key-m12_single_parapet_chk"] label p,
+            div.stCheckbox[class*="st-key-m12_single_parapet_chk"] label p,
+            div.stCheckbox:has(input[id*="m12_single_parapet_chk"]) label p,
+            div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stCheckbox"] label p {
+                color: #fde047 !important;
+                font-size: 13.5px !important;
+                font-weight: 700 !important;
+                text-align: center !important;
+                line-height: 1.25 !important;
+                white-space: nowrap !important;
+                margin: 0 !important;
+            }
+            /* مربع الاختيار (Checkbox Square) - أبيض ناصع مع إطار رمادي واضح */
+            div[class*="st-key-m12_single_parapet_chk"] label div[class*="ew2p8o3"],
+            div[class*="st-key-m12_single_parapet_chk"] label > div:not([data-testid="stWidgetLabel"]),
+            div.stCheckbox:has(input[id*="m12_single_parapet_chk"]) label div[class*="ew2p8o3"],
+            div.stCheckbox:has(input[id*="m12_single_parapet_chk"]) label > div:not([data-testid="stWidgetLabel"]),
+            div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stCheckbox"] label > div:not([data-testid="stWidgetLabel"]) {
+                background-color: #ffffff !important;
+                border: 2px solid #94a3b8 !important;
+                border-radius: 4px !important;
+                width: 17px !important;
+                height: 17px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+                margin: 0 !important;
+            }
+            /* عند تفعيل حائط دروة (Checked) */
+            div[class*="st-key-m12_single_parapet_chk"] label:has(input:checked) div[class*="ew2p8o3"],
+            div[class*="st-key-m12_single_parapet_chk"] label:has(input:checked) > div:not([data-testid="stWidgetLabel"]),
+            div.stCheckbox:has(input[id*="m12_single_parapet_chk"]) label:has(input:checked) div[class*="ew2p8o3"],
+            div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stCheckbox"] label:has(input:checked) > div:not([data-testid="stWidgetLabel"]) {
+                background-color: #0284c7 !important;
+                border-color: #38bdf8 !important;
+                box-shadow: 0 0 8px rgba(2, 132, 199, 0.5) !important;
+            }
+            div[class*="st-key-m12_single_parapet_chk"] label:has(input:checked) svg polyline,
+            div.stCheckbox:has(input[id*="m12_single_parapet_chk"]) label:has(input:checked) svg polyline,
+            div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stCheckbox"] label:has(input:checked) svg polyline {
+                stroke: #ffffff !important;
+            }
+
+            /* ═══════════════════════════════════════════════════════════════════
+               3. زر الحذف/الاستعادة (العمود الثالث)
+               ═══════════════════════════════════════════════════════════════════ */
+            .stButton:has(button[key="m12_del_wall"]) > button,
+            .stButton:has(button[key="m12_restore_wall"]) > button,
+            .stButton:has(button[key="m12_del_wall_dis"]) > button,
+            div[data-testid="stHorizontalBlock"] .stButton > button {
+                min-height: 48px !important;
+                font-size: 14px !important;
                 font-weight: 700 !important;
                 border-radius: 8px !important;
                 padding: 6px 14px !important;
@@ -3107,17 +3329,8 @@ def _section_walls():
             unsafe_allow_html=True
         )
 
-        # السطر الأول: العناوين
-        t1, t2, t3 = st.columns([1.1, 1.55, 1.0])
-        with t1:
-            st.markdown("<div style='font-size:14px; font-weight:700; color:#fde047; margin-bottom:2px;'>سُمك الحائط</div>", unsafe_allow_html=True)
-        with t2:
-            st.markdown("<div style='font-size:14px; font-weight:700; color:#fde047; margin-bottom:2px;'>🧱 تصنيف كحائط دروة</div>", unsafe_allow_html=True)
-        with t3:
-            st.markdown("<div style='font-size:14px; font-weight:700; color:#fde047; margin-bottom:2px;'>&nbsp;</div>", unsafe_allow_html=True)
-
-        # السطر الثاني: المدخلات التفاعلية (على نفس السطر الأفقي تماماً)
-        c1, c2, c3 = st.columns([1.1, 1.55, 1.0], vertical_alignment="center")
+        # صف التحكم التفاعلي في الحائط المختار (3 أعمدة متوازنة الارتفاع)
+        c1, c2, c3 = st.columns([1.3, 1.3, 1.0], vertical_alignment="center")
         with c1:
             nt = st.radio(
                 "سُمك الحائط",
@@ -3125,7 +3338,7 @@ def _section_walls():
                 index=0 if tc == _WALL_THIN else 1,
                 format_func=lambda v: f"{v} سم",
                 horizontal=True,
-                label_visibility="collapsed",
+                label_visibility="visible",
                 key=f"m12_wall_thick_radio_{wk[0]}_{wk[1]}_{wk[2]}_{wk[3]}",
                 disabled=is_rem
             )

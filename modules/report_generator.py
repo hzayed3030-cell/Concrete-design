@@ -820,6 +820,16 @@ def generate_flat_slab_report_html(
     </div>
     """ if img_reactions_b64 else ""
 
+    section_4_html = f"""
+    <!-- Section 4: Column Reactions & Multi-Storey Loads -->
+    <div class="section-title page-break">4. ردود أفعال وأحمال الأعمدة ({num_floors} طوابق) — (Column Reactions & Loads)</div>
+    {reaction_drawing_html}
+    {reactions_table_html}
+
+    <div class="subsection-title">📌 نماذج التصميم الحاكمة للأعمدة (Governing Column Models by Type):</div>
+    {models_table_html}
+    """ if col_reactions_data and len(col_reactions_data) > 0 else ""
+
     html_content = f"""<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -865,13 +875,7 @@ def generate_flat_slab_report_html(
     </div>
     {punching_table_html}
 
-    <!-- Section 4: Column Reactions & Multi-Storey Loads -->
-    <div class="section-title page-break">4. ردود أفعال وأحمال الأعمدة ({num_floors} طوابق) — (Column Reactions & Loads)</div>
-    {reaction_drawing_html}
-    {reactions_table_html}
-
-    <div class="subsection-title">📌 نماذج التصميم الحاكمة للأعمدة (Governing Column Models by Type):</div>
-    {models_table_html}
+    {section_4_html}
 
     <!-- Section 5: BOQ & Quantities -->
     <div class="section-title page-break">5. حصر الكميات التقديري وجداول تفريد الأقطار (Estimated BOQ & Steel Take-off)</div>
