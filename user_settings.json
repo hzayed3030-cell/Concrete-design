@@ -47,43 +47,43 @@
   "tcf_Lc_ov": null,
   "tcf_Bc_ov": null,
   "tcf_tc_ov": null,
-  "fs_n_lx": 2,
-  "fs_n_ly": 2,
+  "fs_n_lx": 5,
+  "fs_n_ly": 4,
   "slab_bc": 30,
-  "slab_tc": 50,
+  "slab_tc": 60,
   "slab_SDL": 0.15,
   "slab_wall_load": 0.5,
-  "slab_LL": 0.25,
+  "slab_LL": 0.3,
   "slab_gamma_c": 2.5,
   "slab_Fcu": 250,
-  "slab_Fy": 4000,
+  "slab_Fy": 3600,
   "slab_cover": 1.5,
   "slab_ts_initial": 20,
   "slab_n_floors": 1,
   "slab_col_safety_factor": 1.1,
   "slab_bottom_mesh_dia_idx": 2,
-  "slab_n_btm_mesh": 5,
+  "slab_n_btm_mesh": 6,
   "slab_top_mesh_dia_idx": 1,
   "slab_n_top_mesh": 5,
   "slab_col_extra_dia_idx": 2,
   "slab_strip_top_extra_dia_idx": 2,
   "slab_strip_bottom_extra_dia_idx": 2,
   "slab_Phi_index": 2,
-  "fs_lx_0": 6.0,
-  "fs_lx_1": 6.0,
-  "fs_lx_2": 6.0,
-  "fs_lx_3": 6.0,
-  "fs_lx_4": 6.0,
+  "fs_lx_0": 4.4,
+  "fs_lx_1": 3.0,
+  "fs_lx_2": 0.7,
+  "fs_lx_3": 2.55,
+  "fs_lx_4": 1.35,
   "fs_lx_5": 6.0,
   "fs_lx_6": 6.0,
   "fs_lx_7": 6.0,
   "fs_lx_8": 6.0,
   "fs_lx_9": 6.0,
-  "fs_ly_0": 6.0,
-  "fs_ly_1": 6.0,
-  "fs_ly_2": 6.0,
-  "fs_ly_3": 6.0,
-  "fs_ly_4": 6.0,
+  "fs_ly_0": 1.2,
+  "fs_ly_1": 4.7,
+  "fs_ly_2": 4.1,
+  "fs_ly_3": 5.0,
+  "fs_ly_4": 1.2,
   "fs_ly_5": 6.0,
   "fs_ly_6": 6.0,
   "fs_ly_7": 6.0,
@@ -92,10 +92,109 @@
   "fs_cant_left": 0.0,
   "fs_cant_right": 0.0,
   "fs_cant_bottom": 0.0,
-  "fs_cant_top": 0.0,
-  "fs_removed_cols": [],
-  "fs_void_panels": [],
-  "fs_col_transforms": {},
+  "fs_cant_top": 1.25,
+  "fs_removed_cols": [
+    "C12",
+    "C11",
+    "C5",
+    "C10",
+    "C1",
+    "C18",
+    "C22",
+    "C27",
+    "C9",
+    "C3",
+    "C8",
+    "C29",
+    "C24",
+    "C16"
+  ],
+  "fs_void_panels": [
+    "P_5_3",
+    "P_4_3"
+  ],
+  "fs_col_transforms": {
+    "C6": {
+      "direction": "اتجاه Y",
+      "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
+      "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)"
+    },
+    "C7": {
+      "direction": "اتجاه Y",
+      "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
+      "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)"
+    },
+    "C2": {
+      "direction": "اتجاه X",
+      "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
+      "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)"
+    },
+    "C4": {
+      "direction": "اتجاه Y",
+      "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
+      "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)"
+    },
+    "C13": {
+      "direction": "اتجاه Y",
+      "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
+      "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
+    },
+    "C14": {
+      "direction": "اتجاه X",
+      "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
+      "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
+    },
+    "C15": {
+      "direction": "اتجاه X",
+      "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
+      "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
+    },
+    "C17": {
+      "direction": "اتجاه Y",
+      "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
+      "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)"
+    },
+    "C19": {
+      "direction": "اتجاه Y",
+      "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
+      "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)"
+    },
+    "C20": {
+      "direction": "اتجاه X",
+      "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
+      "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)"
+    },
+    "C21": {
+      "direction": "اتجاه X",
+      "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
+      "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)"
+    },
+    "C23": {
+      "direction": "اتجاه Y",
+      "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
+      "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
+    },
+    "C25": {
+      "direction": "اتجاه Y",
+      "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
+      "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
+    },
+    "C26": {
+      "direction": "اتجاه X",
+      "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
+      "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
+    },
+    "C28": {
+      "direction": "اتجاه Y",
+      "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
+      "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
+    },
+    "C30": {
+      "direction": "اتجاه Y",
+      "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
+      "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
+    }
+  },
   "fs_edge_columns": {},
   "cs_n_types": 2,
   "cs_col_h": 300.0,
@@ -323,6 +422,8 @@
     "is_calculated": true
   },
   "nav_view": "profile_manager",
+  "fs_moment_contour_view_mode_idx": 1,
+  "fs_deficit_contour_view_mode_idx": 0,
   "enabled_modules": [
     11
   ]

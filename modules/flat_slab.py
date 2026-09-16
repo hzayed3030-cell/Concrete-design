@@ -109,17 +109,27 @@ def _compute_effective_spans(Lx_spans, Ly_spans, removed_ij_set):
     for j in range(n_yj):
         remaining_per_yj[j] = n_xi - sum(1 for i in range(n_xi) if (i, j) in removed_ij_set)
 
-    # Active axis lines: those that still have at least one column
-    active_xi = [i for i in range(n_xi) if remaining_per_xi[i] > 0]
-    active_yj = [j for j in range(n_yj) if remaining_per_yj[j] > 0]
+    # An axis line acts as a continuous structural support line in DDM
+    # only if it retains enough columns (at least 2 for grids >= 3, or > 0 for small grids)
+    min_cols_x = 2 if n_yj >= 3 else 1
+    min_cols_y = 2 if n_xi >= 3 else 1
+
+    active_xi = [i for i in range(n_xi) if remaining_per_xi[i] >= min_cols_x]
+    active_yj = [j for j in range(n_yj) if remaining_per_yj[j] >= min_cols_y]
+
+    # Guard: always keep at least the boundary axes
+    if len(active_xi) < 2:
+        active_xi = [0, n_xi - 1]
+    if len(active_yj) < 2:
+        active_yj = [0, n_yj - 1]
 
     # Compute effective spans between consecutive active axis lines
     eff_Lx = [x_coords[active_xi[k+1]] - x_coords[active_xi[k]] for k in range(len(active_xi)-1)]
     eff_Ly = [y_coords[active_yj[k+1]] - y_coords[active_yj[k]] for k in range(len(active_yj)-1)]
 
-    # Detect fully-removed axis lines (for warning)
-    full_x_removed = [i for i in range(n_xi) if remaining_per_xi[i] == 0]
-    full_y_removed = [j for j in range(n_yj) if remaining_per_yj[j] == 0]
+    # Detect fully or mostly-removed axis lines (for warning)
+    full_x_removed = [i for i in range(n_xi) if remaining_per_xi[i] < min_cols_x]
+    full_y_removed = [j for j in range(n_yj) if remaining_per_yj[j] < min_cols_y]
 
     # DDM validity check: adjacent effective spans ratio must be ≤ 1.33
     ddm_warning = None
@@ -569,8 +579,8 @@ def get_flat_slab_columns(Lx_spans, Ly_spans, bc_cm=30, tc_cm=30, removed_ids=No
     for col in active_columns:
         col["id"]   = f"C{new_count}"
         col["name"] = f"C{new_count}"
-        col["i_eff"] = active_xi.index(col["i"]) if col["i"] in active_xi else min(col["i"], len(active_xi)-1)
-        col["j_eff"] = active_yj.index(col["j"]) if col["j"] in active_yj else min(col["j"], len(active_yj)-1)
+        col["i_eff"] = active_xi.index(col["i"]) if col["i"] in active_xi else min(range(len(active_xi)), key=lambda k: abs(active_xi[k] - col["i"]))
+        col["j_eff"] = active_yj.index(col["j"]) if col["j"] in active_yj else min(range(len(active_yj)), key=lambda k: abs(active_yj[k] - col["j"]))
         # Reclassify based on effective grid boundaries
         is_corner_eff = (col["i"] in (active_xi[0], active_xi[-1])) and \
                         (col["j"] in (active_yj[0], active_yj[-1]))
@@ -611,7 +621,7 @@ def get_flat_slab_panels(Lx_spans, Ly_spans, void_ids=None):
     for j in range(len(Ly_spans)):
         for i in range(len(Lx_spans)):
             pid = f"P_{i+1}_{j+1}"
-            short_name = f"P({i+1},{j+1})"
+            short_name = f"P ({i+1},{j+1})"
             x1, x2 = x_coords[i], x_coords[i+1]
             y1, y2 = y_coords[j], y_coords[j+1]
             lx = Lx_spans[i]
@@ -637,7 +647,7 @@ def get_flat_slab_panels(Lx_spans, Ly_spans, void_ids=None):
                 "grid_x": grid_x,
                 "grid_y": grid_y,
                 "is_void": is_void,
-                "label": f"Panel P({i+1},{j+1}) [{grid_x} × {grid_y}] ({lx:.2f}m × {ly:.2f}m — {area:.1f} m²)",
+                "label": f"Panel P ({i+1},{j+1}) [{grid_x} × {grid_y}] ({lx:.2f}m × {ly:.2f}m — {area:.1f} m²)",
             })
             panel_count += 1
 
@@ -802,7 +812,7 @@ def generate_flat_slab_sketch(
             ax_plan.plot([p["x1"], p["x2"]], [p["y1"], p["y2"]], color="#ef4444", linestyle="--", linewidth=1.8, zorder=2)
             ax_plan.plot([p["x1"], p["x2"]], [p["y2"], p["y1"]], color="#ef4444", linestyle="--", linewidth=1.8, zorder=2)
             ax_plan.text(
-                p["mid_x"], p["mid_y"], f"VOID (منور)\n{p['area']:.1f} m²",
+                p["mid_x"], p["mid_y"], f"VOID (منور)\n{p['name']}\n{p['area']:.1f} m²",
                 ha="center", va="center", fontsize=11.5, weight="bold", color="#b91c1c",
                 bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.5),
                 zorder=3
@@ -817,9 +827,17 @@ def generate_flat_slab_sketch(
             ax_plan.plot([p["x1"], p["x2"]], [p["y1"], p["y2"]], color="#ea580c", linestyle="--", linewidth=1.8, zorder=2)
             ax_plan.plot([p["x1"], p["x2"]], [p["y2"], p["y1"]], color="#ea580c", linestyle="--", linewidth=1.8, zorder=2)
             ax_plan.text(
-                p["mid_x"], p["mid_y"], "PENDING VOID\n(قيد الحذف)",
+                p["mid_x"], p["mid_y"], f"PENDING VOID\n{p['name']}\n(قيد الحذف)",
                 ha="center", va="center", fontsize=11.5, weight="bold", color="#c2410c",
                 bbox=dict(boxstyle="round,pad=0.3", facecolor="#fff7ed", edgecolor="#ea580c", lw=1.5),
+                zorder=3
+            )
+        else:
+            # Active panel: prominent label badge P (i,j) matching the input selection list
+            ax_plan.text(
+                p["mid_x"], p["mid_y"], p["name"],
+                ha="center", va="center", fontsize=12.0, weight="bold", color="#1e40af",
+                bbox=dict(boxstyle="round,pad=0.35,rounding_size=0.3", facecolor="#ffffff", edgecolor="#2563eb", lw=1.6, alpha=0.95),
                 zorder=3
             )
 
@@ -878,7 +896,7 @@ def generate_flat_slab_sketch(
             # Completely omitted / removed from drawing after confirmation
             continue
 
-        c_trans = (col_transforms or {}).get(orig_id) or (col_transforms or {}).get(label) or {}
+        c_trans = (col_transforms or {}).get(orig_id, {})
         geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
         rx = geom["x_min"]
         ry = geom["y_min"]
@@ -916,7 +934,7 @@ def generate_flat_slab_sketch(
             draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, display_id, is_right_edge=is_right_edge, fontsize=11.0, zorder=7)
 
         # Highlight edge column faces in pink with doubled hatch lines (Edge Columns / أعمدة الجور)
-        edge_info = (edge_columns or {}).get(orig_id) or (edge_columns or {}).get(label) or {}
+        edge_info = (edge_columns or {}).get(orig_id, {})
         if isinstance(edge_info, dict) and edge_info.get("is_edge") == "Yes":
             raw_edge_dir = str(edge_info.get("direction", "")).strip()
             is_edge_valid, _ = validate_edge_column_offset(geom, raw_edge_dir, slab_bounds=slab_bounds)
@@ -1061,7 +1079,7 @@ def generate_flat_slab_data_card(
 
     rows = [
         ("Slab Thickness (ts)", f"{ts_initial:.0f} cm  (d = {d_eff_sketch:.1f} cm)", "#0f172a"),
-        ("No. of Floors", f"{n_floors} Floors (طوابق)", "#1e40af"),
+        ("Structural System", "Standalone Floor (سقف مستقل)", "#1e40af") if n_floors == 1 else ("No. of Floors", f"{n_floors} Floors (طوابق)", "#1e40af"),
         ("Concrete Cover", f"{concrete_cover:.1f} cm  (15 mm)", "#334155"),
         ("Bottom Mesh (B1, B2)", f"{bottom_mesh_n} Φ {bottom_mesh_dia} / m'", "#1d4ed8"),
         ("Top Mesh (T1, T2)", f"{top_mesh_n} Φ {top_mesh_dia} / m'", "#1d4ed8"),
@@ -1651,25 +1669,28 @@ def generate_flat_slab_bottom_rft_sketch(
 
     # Draw Columns
     rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
+    grid_num = 1
     col_num = 1
     for y in y_coords:
         for x in x_coords:
+            orig_id = f"C{grid_num}"
+            grid_num += 1
             if (x, y) in rem_coords:
                 continue
             cid = f"C{col_num}"
-            c_trans = (col_transforms or {}).get(cid) or {}
+            c_trans = (col_transforms or {}).get(orig_id, {})
             geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
             rx, ry = geom["x_min"], geom["y_min"]
             rw, rh = geom["width_m"], geom["height_m"]
             cx, cy = geom["center_x"], geom["center_y"]
-            is_edge_c = is_edge_column_verified(cid, geom=geom, edge_columns=edge_columns)
+            is_edge_c = is_edge_column_verified(orig_id, geom=geom, edge_columns=edge_columns)
             col_box = patches.Rectangle(
                 (rx, ry), rw, rh,
                 linewidth=2.0, edgecolor="#0f172a", facecolor="#1e293b", zorder=4
             )
             ax_plan.add_patch(col_box)
             if is_edge_c:
-                ed_info = (edge_columns or {}).get(cid) or {}
+                ed_info = (edge_columns or {}).get(orig_id, {})
                 draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=6)
             is_right = (cx >= x_coords[-1] - 0.1)
             draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=7)
@@ -2224,10 +2245,12 @@ def build_slab_moment_field(
     Wu,
     void_panel_ids=None,
     grid_res=220,
+    void_boxes=None,
+    btm_extra_spans=None,
 ):
     """
     Reconstructs continuous 2D moment fields M11(x, y) and M22(x, y)
-    from DDM calculation values without altering any structural formulas.
+    in moment intensity units (t·m/m') from DDM calculation values.
     Returns (X, Y, M11, M22, M11_raw, M22_raw).
     """
     cant_L = cantilevers.get("left", 0.0)
@@ -2264,7 +2287,7 @@ def build_slab_moment_field(
     h_cs_y = min(Lx_avg, Ly_avg) / 4.0
     h_cs_x = min(Lx_avg, Ly_avg) / 4.0
 
-    # ── 1. Calculate M11(x, y) (Moments along X-direction) ───────────────────
+    # ── 1. Calculate M11(x, y) (Moments along X-direction in t·m/m) ───────────
     dist_to_y_axes = np.min(np.abs(Y[:, :, np.newaxis] - np.array(y_coords)), axis=2)
     w_cs_11 = np.cos(np.pi / 2.0 * np.clip(dist_to_y_axes / (h_cs_y * 1.35), 0.0, 1.0)) ** 2
 
@@ -2284,34 +2307,37 @@ def build_slab_moment_field(
             continue
 
         r_info = rows_x[min(i, len(rows_x)-1)] if rows_x else {}
-        M_pos = r_info.get("M_pos", 0.35 * r_info.get("Mo", 10.0))
+        cs_w = max(0.1, r_info.get("cs_w", min(lx, Ly_avg) / 2.0))
+        ms_w = max(0.1, r_info.get("ms_w", max(0.1, Ly_avg - cs_w)))
+
+        # Normalized moment intensities in t·m/m' (divided by strip width)
+        m_cs_pos = r_info.get("cs_pos", 0.60 * r_info.get("M_pos", 10.0)) / cs_w
+        m_ms_pos = r_info.get("ms_pos", 0.40 * r_info.get("M_pos", 10.0)) / ms_w
 
         if i == 0:
-            M_neg_L = max(r_info.get("M_neg_ext", 0.0), 0.5 * Wu * (cant_L ** 2))
+            cant_m = 0.5 * Wu * (cant_L ** 2)
+            m_cs_neg_L = max(r_info.get("cs_neg_ext", 0.0) / cs_w, cant_m)
+            m_ms_neg_L = max(r_info.get("ms_neg_ext", 0.0) / ms_w, cant_m)
         else:
-            M_neg_L = r_info.get("M_neg_int", 0.65 * r_info.get("Mo", 10.0))
+            m_cs_neg_L = r_info.get("cs_neg_int", 0.75 * r_info.get("Mo", 10.0) * 0.65) / cs_w
+            m_ms_neg_L = r_info.get("ms_neg_int", 0.25 * r_info.get("Mo", 10.0) * 0.65) / ms_w
 
         if i == len(Lx_spans) - 1:
-            M_neg_R = max(r_info.get("M_neg_ext", 0.0), 0.5 * Wu * (cant_R ** 2))
+            cant_m = 0.5 * Wu * (cant_R ** 2)
+            m_cs_neg_R = max(r_info.get("cs_neg_ext", 0.0) / cs_w, cant_m)
+            m_ms_neg_R = max(r_info.get("ms_neg_ext", 0.0) / ms_w, cant_m)
         else:
-            M_neg_R = r_info.get("M_neg_int", 0.65 * r_info.get("Mo", 10.0))
-
-        M_cs_neg_L = 0.75 * M_neg_L
-        M_cs_neg_R = 0.75 * M_neg_R
-        M_cs_pos   = 0.60 * M_pos
-
-        M_ms_neg_L = 0.25 * M_neg_L
-        M_ms_neg_R = 0.25 * M_neg_R
-        M_ms_pos   = 0.40 * M_pos
+            m_cs_neg_R = r_info.get("cs_neg_int", 0.75 * r_info.get("Mo", 10.0) * 0.65) / cs_w
+            m_ms_neg_R = r_info.get("ms_neg_int", 0.25 * r_info.get("Mo", 10.0) * 0.65) / ms_w
 
         xi = (X[mask_span] - x_left) / max(0.001, lx)
-        M_cs = -M_cs_neg_L * (1.0 - xi) - M_cs_neg_R * xi + 4.0 * (M_cs_pos + (M_cs_neg_L + M_cs_neg_R) / 2.0) * xi * (1.0 - xi)
-        M_ms = -M_ms_neg_L * (1.0 - xi) - M_ms_neg_R * xi + 4.0 * (M_ms_pos + (M_ms_neg_L + M_ms_neg_R) / 2.0) * xi * (1.0 - xi)
+        M_cs = -m_cs_neg_L * (1.0 - xi) - m_cs_neg_R * xi + 4.0 * (m_cs_pos + (m_cs_neg_L + m_cs_neg_R) / 2.0) * xi * (1.0 - xi)
+        M_ms = -m_ms_neg_L * (1.0 - xi) - m_ms_neg_R * xi + 4.0 * (m_ms_pos + (m_ms_neg_L + m_ms_neg_R) / 2.0) * xi * (1.0 - xi)
 
         w = w_cs_11[mask_span]
         M11[mask_span] = w * M_cs + (1.0 - w) * M_ms
 
-    # ── 2. Calculate M22(x, y) (Moments along Y-direction) ───────────────────
+    # ── 2. Calculate M22(x, y) (Moments along Y-direction in t·m/m) ───────────
     dist_to_x_axes = np.min(np.abs(X[:, :, np.newaxis] - np.array(x_coords)), axis=2)
     w_cs_22 = np.cos(np.pi / 2.0 * np.clip(dist_to_x_axes / (h_cs_x * 1.35), 0.0, 1.0)) ** 2
 
@@ -2331,39 +2357,78 @@ def build_slab_moment_field(
             continue
 
         r_info = rows_y[min(j, len(rows_y)-1)] if rows_y else {}
-        M_pos = r_info.get("M_pos", 0.35 * r_info.get("Mo", 10.0))
+        cs_w = max(0.1, r_info.get("cs_w", min(ly, Lx_avg) / 2.0))
+        ms_w = max(0.1, r_info.get("ms_w", max(0.1, Lx_avg - cs_w)))
+
+        # Normalized moment intensities in t·m/m' (divided by strip width)
+        m_cs_pos = r_info.get("cs_pos", 0.60 * r_info.get("M_pos", 10.0)) / cs_w
+        m_ms_pos = r_info.get("ms_pos", 0.40 * r_info.get("M_pos", 10.0)) / ms_w
 
         if j == 0:
-            M_neg_B = max(r_info.get("M_neg_ext", 0.0), 0.5 * Wu * (cant_B ** 2))
+            cant_m = 0.5 * Wu * (cant_B ** 2)
+            m_cs_neg_B = max(r_info.get("cs_neg_ext", 0.0) / cs_w, cant_m)
+            m_ms_neg_B = max(r_info.get("ms_neg_ext", 0.0) / ms_w, cant_m)
         else:
-            M_neg_B = r_info.get("M_neg_int", 0.65 * r_info.get("Mo", 10.0))
+            m_cs_neg_B = r_info.get("cs_neg_int", 0.75 * r_info.get("Mo", 10.0) * 0.65) / cs_w
+            m_ms_neg_B = r_info.get("ms_neg_int", 0.25 * r_info.get("Mo", 10.0) * 0.65) / ms_w
 
         if j == len(Ly_spans) - 1:
-            M_neg_T = max(r_info.get("M_neg_ext", 0.0), 0.5 * Wu * (cant_T ** 2))
+            cant_m = 0.5 * Wu * (cant_T ** 2)
+            m_cs_neg_T = max(r_info.get("cs_neg_ext", 0.0) / cs_w, cant_m)
+            m_ms_neg_T = max(r_info.get("ms_neg_ext", 0.0) / ms_w, cant_m)
         else:
-            M_neg_T = r_info.get("M_neg_int", 0.65 * r_info.get("Mo", 10.0))
-
-        M_cs_neg_B = 0.75 * M_neg_B
-        M_cs_neg_T = 0.75 * M_neg_T
-        M_cs_pos   = 0.60 * M_pos
-
-        M_ms_neg_B = 0.25 * M_neg_B
-        M_ms_neg_T = 0.25 * M_neg_T
-        M_ms_pos   = 0.40 * M_pos
+            m_cs_neg_T = r_info.get("cs_neg_int", 0.75 * r_info.get("Mo", 10.0) * 0.65) / cs_w
+            m_ms_neg_T = r_info.get("ms_neg_int", 0.25 * r_info.get("Mo", 10.0) * 0.65) / ms_w
 
         eta = (Y[mask_span] - y_bot) / max(0.001, ly)
-        M_cs = -M_cs_neg_B * (1.0 - eta) - M_cs_neg_T * eta + 4.0 * (M_cs_pos + (M_cs_neg_B + M_cs_neg_T) / 2.0) * eta * (1.0 - eta)
-        M_ms = -M_ms_neg_B * (1.0 - eta) - M_ms_neg_T * eta + 4.0 * (M_ms_pos + (M_ms_neg_B + M_ms_neg_T) / 2.0) * eta * (1.0 - eta)
+        M_cs = -m_cs_neg_B * (1.0 - eta) - m_cs_neg_T * eta + 4.0 * (m_cs_pos + (m_cs_neg_B + m_cs_neg_T) / 2.0) * eta * (1.0 - eta)
+        M_ms = -m_ms_neg_B * (1.0 - eta) - m_ms_neg_T * eta + 4.0 * (m_ms_pos + (m_ms_neg_B + m_ms_neg_T) / 2.0) * eta * (1.0 - eta)
 
         w = w_cs_22[mask_span]
         M22[mask_span] = w * M_cs + (1.0 - w) * M_ms
+
+    # ── 2b. Adjust positive moment intensity in enlarged bays (after column removal) ──
+    if btm_extra_spans:
+        ratio_enl = 0.50 / 0.35
+        for item in btm_extra_spans:
+            if not item.get("is_enlarged", False):
+                continue
+            item_dir = item.get("dir", "Y")
+            cx = item.get("cx", None)
+            cy = item.get("cy", None)
+            span_len = item.get("span_len", 0.0)
+            w_bay = item.get("W_bay", 0.0)
+            if cx is None or cy is None or span_len <= 0 or w_bay <= 0:
+                continue
+
+            if item_dir == "X":
+                px1 = cx - span_len / 2.0
+                px2 = cx + span_len / 2.0
+                py1 = cy - w_bay / 2.0
+                py2 = cy + w_bay / 2.0
+                mask_bay = (X >= px1 - 0.02) & (X <= px2 + 0.02) & (Y >= py1 - 0.02) & (Y <= py2 + 0.02)
+                pos_mask = mask_bay & (M11 > 0)
+                M11[pos_mask] = M11[pos_mask] * ratio_enl
+            elif item_dir == "Y":
+                px1 = cx - w_bay / 2.0
+                px2 = cx + w_bay / 2.0
+                py1 = cy - span_len / 2.0
+                py2 = cy + span_len / 2.0
+                mask_bay = (X >= px1 - 0.02) & (X <= px2 + 0.02) & (Y >= py1 - 0.02) & (Y <= py2 + 0.02)
+                pos_mask = mask_bay & (M22 > 0)
+                M22[pos_mask] = M22[pos_mask] * ratio_enl
 
     # Keep unmasked copies for sampling support values
     M11_raw = np.copy(M11)
     M22_raw = np.copy(M22)
 
     # ── 3. Mask Void Openings ────────────────────────────────────────────────
-    if void_panel_ids:
+    if void_boxes:
+        for (vx1, vx2, vy1, vy2, *_) in void_boxes:
+            v_mask = (X >= vx1) & (X <= vx2) & (Y >= vy1) & (Y <= vy2)
+            M11[v_mask] = np.nan
+            M22[v_mask] = np.nan
+    elif void_panel_ids:
         void_set = set(void_panel_ids)
         for j in range(len(Ly_spans)):
             for i in range(len(Lx_spans)):
@@ -2394,6 +2459,17 @@ def generate_flat_slab_moment_contour(
     btm_extra_spans=None,
     col_transforms=None,
     edge_columns=None,
+    active_cols=None,
+    active_x_labels=None,
+    active_y_labels=None,
+    void_boxes=None,
+    prov_btm_mesh_cm2m=None,
+    prov_top_mesh_cm2m=None,
+    d_cm=None,
+    Fcu=None,
+    Fy=None,
+    mesh_btm_str="",
+    mesh_top_str="",
 ):
     """
     Renders an engineering 2D Bending Moment Matrix & Color Contour Map (M11 or M22)
@@ -2424,7 +2500,9 @@ def generate_flat_slab_moment_contour(
 
     # Reconstruct 2D mesh and moment matrix
     X, Y, M11, M22, M11_raw, M22_raw = build_slab_moment_field(
-        Lx_spans, Ly_spans, cantilevers, rows_x, rows_y, Wu, void_panel_ids=void_panel_ids
+        Lx_spans, Ly_spans, cantilevers, rows_x, rows_y, Wu,
+        void_panel_ids=void_panel_ids, void_boxes=void_boxes,
+        btm_extra_spans=btm_extra_spans,
     )
 
     M_field = M11 if mode == "M11" else M22
@@ -2517,24 +2595,39 @@ def generate_flat_slab_moment_contour(
         ax_plan.add_patch(patches.Rectangle((x_slab_min, y_coords[-1]), slab_w, cant_top, **cant_style))
 
     # Voids / Openings
-    _voids = set(void_panel_ids) if void_panel_ids else set()
-    for j in range(len(Ly_spans)):
-        for i in range(len(Lx_spans)):
-            pid = f"P_{i+1}_{j+1}"
-            if pid in _voids:
-                x1, x2 = x_coords[i], x_coords[i+1]
-                y1, y2 = y_coords[j], y_coords[j+1]
-                lx, ly = x2 - x1, y2 - y1
-                v_rect = patches.Rectangle((x1, y1), lx, ly, linewidth=2.2, edgecolor="#ef4444", facecolor="#ffffff", zorder=4)
-                ax_plan.add_patch(v_rect)
-                ax_plan.plot([x1, x2], [y1, y2], color="#ef4444", linestyle="--", linewidth=1.8, zorder=4)
-                ax_plan.plot([x1, x2], [y2, y1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=4)
-                ax_plan.text(
-                    (x1 + x2) / 2.0, (y1 + y2) / 2.0, f"VOID (منور)\n{lx*ly:.1f} m²",
-                    ha="center", va="center", fontsize=13.0, weight="bold", color="#b91c1c",
-                    bbox=dict(boxstyle="round,pad=0.32", facecolor="#ffffff", edgecolor="#ef4444", lw=1.6),
-                    zorder=5
-                )
+    if void_boxes:
+        for (vx1, vx2, vy1, vy2, *rest) in void_boxes:
+            lx, ly = vx2 - vx1, vy2 - vy1
+            varea = rest[0] if rest else (lx * ly)
+            v_rect = patches.Rectangle((vx1, vy1), lx, ly, linewidth=2.2, edgecolor="#ef4444", facecolor="#ffffff", zorder=4)
+            ax_plan.add_patch(v_rect)
+            ax_plan.plot([vx1, vx2], [vy1, vy2], color="#ef4444", linestyle="--", linewidth=1.8, zorder=4)
+            ax_plan.plot([vx1, vx2], [vy2, vy1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=4)
+            ax_plan.text(
+                (vx1 + vx2) / 2.0, (vy1 + vy2) / 2.0, f"VOID (منور)\n{varea:.1f} m²",
+                ha="center", va="center", fontsize=13.0, weight="bold", color="#b91c1c",
+                bbox=dict(boxstyle="round,pad=0.32", facecolor="#ffffff", edgecolor="#ef4444", lw=1.6),
+                zorder=5
+            )
+    elif void_panel_ids:
+        _voids = set(void_panel_ids)
+        for j in range(len(Ly_spans)):
+            for i in range(len(Lx_spans)):
+                pid = f"P_{i+1}_{j+1}"
+                if pid in _voids:
+                    x1, x2 = x_coords[i], x_coords[i+1]
+                    y1, y2 = y_coords[j], y_coords[j+1]
+                    lx, ly = x2 - x1, y2 - y1
+                    v_rect = patches.Rectangle((x1, y1), lx, ly, linewidth=2.2, edgecolor="#ef4444", facecolor="#ffffff", zorder=4)
+                    ax_plan.add_patch(v_rect)
+                    ax_plan.plot([x1, x2], [y1, y2], color="#ef4444", linestyle="--", linewidth=1.8, zorder=4)
+                    ax_plan.plot([x1, x2], [y2, y1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=4)
+                    ax_plan.text(
+                        (x1 + x2) / 2.0, (y1 + y2) / 2.0, f"VOID (منور)\n{lx*ly:.1f} m²",
+                        ha="center", va="center", fontsize=13.0, weight="bold", color="#b91c1c",
+                        bbox=dict(boxstyle="round,pad=0.32", facecolor="#ffffff", edgecolor="#ef4444", lw=1.6),
+                        zorder=5
+                    )
 
     # Vertical Grid Axes (Y1, Y2, ...) with Top CAD Bubbles
     for idx, x in enumerate(x_coords):
@@ -2543,7 +2636,8 @@ def generate_flat_slab_moment_contour(
         ax_plan.plot([x, x], [y_bot_ext, y_top_ext], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.75, zorder=3)
         bubble = Circle((x, y_top_ext), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=6)
         ax_plan.add_patch(bubble)
-        ax_plan.text(x, y_top_ext, f"Y{idx + 1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
+        lbl_x = active_x_labels[idx] if (active_x_labels and idx < len(active_x_labels)) else f"Y{idx + 1}"
+        ax_plan.text(x, y_top_ext, lbl_x, color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
 
     # Horizontal Grid Axes (X1, X2, ...) with Left CAD Bubbles
     for idx, y in enumerate(y_coords):
@@ -2552,78 +2646,152 @@ def generate_flat_slab_moment_contour(
         ax_plan.plot([x_left_ext, x_right_ext], [y, y], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.75, zorder=3)
         bubble = Circle((x_left_ext, y), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=6)
         ax_plan.add_patch(bubble)
-        ax_plan.text(x_left_ext, y, f"X{idx + 1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
+        lbl_y = active_y_labels[idx] if (active_y_labels and idx < len(active_y_labels)) else f"X{idx + 1}"
+        ax_plan.text(x_left_ext, y, lbl_y, color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
 
     # Column Box & Peak Negative Moment Badges
     col_w_m = max(col_w_cm / 100.0, slab_w * 0.045)
     col_d_m = max(col_d_cm / 100.0, slab_h * 0.045)
-    rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
 
-    col_idx = 1
-    for j_idx, y in enumerate(y_coords):
-        for i_idx, x in enumerate(x_coords):
-            if (x, y) in rem_coords:
-                continue
-            cid = f"C{col_idx}"
-            c_trans = (col_transforms or {}).get(cid) or {}
-            geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
-            rx, ry = geom["x_min"], geom["y_min"]
-            rw, rh = geom["width_m"], geom["height_m"]
-            cx, cy = geom["center_x"], geom["center_y"]
+    if active_cols:
+        for c in active_cols:
+            cid = c.get("id", c.get("orig_id", "C"))
+            orig_id = c.get("orig_id", cid)
+            cx, cy = c["x"], c["y"]
+            rx, ry = c["x_min"], c["y_min"]
+            rw, rh = c["width_m"], c["height_m"]
+            is_edge_c = is_edge_column_verified(orig_id, geom=c, edge_columns=edge_columns)
 
-            # Column rectangle
-            is_edge_c = is_edge_column_verified(cid, geom=geom, edge_columns=edge_columns)
             col_box = patches.Rectangle(
                 (rx, ry), rw, rh,
                 linewidth=2.0, edgecolor="#0f172a", facecolor="#1e293b", zorder=6
             )
             ax_plan.add_patch(col_box)
             if is_edge_c:
-                ed_info = (edge_columns or {}).get(cid) or {}
+                ed_info = (edge_columns or {}).get(orig_id, {})
                 draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=8)
             is_right = (cx >= x_coords[-1] - 0.1)
             draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=11.5, zorder=9)
 
             # Local peak negative moment value from raw unmasked matrix
-            ix = np.argmin(np.abs(x_vec - x))
-            iy = np.argmin(np.abs(y_vec - y))
+            ix = np.argmin(np.abs(x_vec - cx))
+            iy = np.argmin(np.abs(y_vec - cy))
             m_val = M_raw[iy, ix]
 
             # Badge offset
-            if j_idx == 0:
-                badge_y = y + col_d_m * 0.75 + 0.35
+            if cy <= y_coords[0] + 0.1:
+                badge_y = cy + rh * 0.75 + 0.35
                 va_pos = "bottom"
             else:
-                badge_y = y - col_d_m * 0.75 - 0.35
+                badge_y = cy - rh * 0.75 - 0.35
                 va_pos = "top"
 
             ax_plan.text(
-                x, badge_y,
+                cx, badge_y,
                 f"M⁻ = {m_val:.2f} t.m",
                 color="#1e3a8a", fontsize=12.0, weight="bold", ha="center", va=va_pos,
                 bbox=dict(boxstyle="round,pad=0.28", facecolor="#ffffff", edgecolor="#3b82f6", lw=1.5, alpha=0.96),
                 zorder=8
             )
+    else:
+        rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
+        grid_idx = 1
+        col_idx = 1
+        for j_idx, y in enumerate(y_coords):
+            for i_idx, x in enumerate(x_coords):
+                orig_id = f"C{grid_idx}"
+                grid_idx += 1
+                if (x, y) in rem_coords:
+                    continue
+                cid = f"C{col_idx}"
+                col_idx += 1
+                c_trans = (col_transforms or {}).get(orig_id, {})
+                geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+                rx, ry = geom["x_min"], geom["y_min"]
+                rw, rh = geom["width_m"], geom["height_m"]
+                cx, cy = geom["center_x"], geom["center_y"]
 
-            col_idx += 1
+                is_edge_c = is_edge_column_verified(orig_id, geom=geom, edge_columns=edge_columns)
+                col_box = patches.Rectangle(
+                    (rx, ry), rw, rh,
+                    linewidth=2.0, edgecolor="#0f172a", facecolor="#1e293b", zorder=6
+                )
+                ax_plan.add_patch(col_box)
+                if is_edge_c:
+                    ed_info = (edge_columns or {}).get(orig_id, {})
+                    draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=8)
+                is_right = (cx >= x_coords[-1] - 0.1)
+                draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=11.5, zorder=9)
 
-    # Peak Positive Moment Badges at Bay Midspans
+                ix = np.argmin(np.abs(x_vec - x))
+                iy = np.argmin(np.abs(y_vec - y))
+                m_val = M_raw[iy, ix]
+
+                if j_idx == 0:
+                    badge_y = y + col_d_m * 0.75 + 0.35
+                    va_pos = "bottom"
+                else:
+                    badge_y = y - col_d_m * 0.75 - 0.35
+                    va_pos = "top"
+
+                ax_plan.text(
+                    x, badge_y,
+                    f"M⁻ = {m_val:.2f} t.m",
+                    color="#1e3a8a", fontsize=12.0, weight="bold", ha="center", va=va_pos,
+                    bbox=dict(boxstyle="round,pad=0.28", facecolor="#ffffff", edgecolor="#3b82f6", lw=1.5, alpha=0.96),
+                    zorder=8
+                )
+
+    # Peak Positive Moment Badges at Bay Midspans (with Anti-Overlap Staggering)
     for j in range(len(Ly_spans)):
+        Ly = y_coords[j+1] - y_coords[j]
         for i in range(len(Lx_spans)):
-            pid = f"P_{i+1}_{j+1}"
-            if pid in _voids:
-                continue
+            Lx = x_coords[i+1] - x_coords[i]
             mid_x = (x_coords[i] + x_coords[i+1]) / 2.0
             mid_y = (y_coords[j] + y_coords[j+1]) / 2.0
+            # Check if midspan is inside any void
+            in_void = False
+            if void_boxes:
+                in_void = any((vx1 <= mid_x <= vx2 and vy1 <= mid_y <= vy2) for (vx1, vx2, vy1, vy2, *_) in void_boxes)
+            elif void_panel_ids:
+                pid = f"P_{i+1}_{j+1}"
+                in_void = (pid in set(void_panel_ids))
+            if in_void:
+                continue
+
             ix = np.argmin(np.abs(x_vec - mid_x))
             iy = np.argmin(np.abs(y_vec - mid_y))
             m_pos_val = M_raw[iy, ix]
 
+            # Prevent badge overlap in narrow spans:
+            has_narrow_x = (Lx < 2.5) or (i > 0 and Lx_spans[i-1] < 2.5) or (i < len(Lx_spans)-1 and Lx_spans[i+1] < 2.5)
+            has_narrow_y = (Ly < 2.5) or (j > 0 and Ly_spans[j-1] < 2.5) or (j < len(Ly_spans)-1 and Ly_spans[j+1] < 2.5)
+
+            tag_x = mid_x
+            tag_y = mid_y
+            if has_narrow_x and Ly >= 2.0:
+                y_stagger = min(1.10, Ly * 0.20)
+                tag_y = mid_y + (y_stagger if (i % 2 == 1) else -y_stagger)
+                tag_y = max(y_coords[j] + 0.45, min(y_coords[j+1] - 0.45, tag_y))
+            elif has_narrow_y and Lx >= 2.0:
+                x_stagger = min(1.10, Lx * 0.18)
+                tag_x = mid_x + (x_stagger if (j % 2 == 1) else -x_stagger)
+                tag_x = max(x_coords[i] + 0.45, min(x_coords[i+1] - 0.45, tag_x))
+
+            if Lx < 2.2:
+                txt_label = f"M⁺ = +{m_pos_val:.2f}"
+                lbl_font = 9.5
+                lbl_pad = 0.22
+            else:
+                txt_label = f"M⁺ = +{m_pos_val:.2f}\nt.m/m"
+                lbl_font = 12.0
+                lbl_pad = 0.32
+
             ax_plan.text(
-                mid_x, mid_y,
-                f"M⁺ = +{m_pos_val:.2f}\nt.m/m",
-                color="#991b1b", fontsize=12.5, weight="bold", ha="center", va="center",
-                bbox=dict(boxstyle="round,pad=0.32", facecolor="#fff7ed", edgecolor="#ea580c", lw=1.6, alpha=0.96),
+                tag_x, tag_y,
+                txt_label,
+                color="#991b1b", fontsize=lbl_font, weight="bold", ha="center", va="center",
+                bbox=dict(boxstyle=f"round,pad={lbl_pad}", facecolor="#fff7ed", edgecolor="#ea580c", lw=1.6, alpha=0.96),
                 zorder=7
             )
 
@@ -2719,8 +2887,13 @@ def generate_flat_slab_moment_contour(
             "#15803d", "#dcfce7", "#16a34a"
         ),
         (
-            "EXTREME DESIGN VALUES\n(القيم القصوى التصميمية)",
-            f"Max Pos (+M): +{m_max:.2f} t.m/m\nMax Neg (-M): {m_min:.2f} t.m/m",
+            "EXTREME VALUES & CAPACITY\n(القيم القصوى وطاقة الشبكة)",
+            (
+                f"Max Pos (+M): +{m_max:.2f} t·m/m  (M⁺_cap: {calc_moment_capacity_btm(prov_btm_mesh_cm2m, d_cm, Fcu, Fy):.2f})\n"
+                f"Max Neg (-M): {m_min:.2f} t·m/m" + (f"  (M⁻_cap: {calc_moment_capacity_btm(prov_top_mesh_cm2m, d_cm, Fcu, Fy):.2f})" if prov_top_mesh_cm2m else "")
+            ) if (prov_btm_mesh_cm2m and d_cm and Fcu and Fy) else (
+                f"Max Pos (+M): +{m_max:.2f} t.m/m\nMax Neg (-M): {m_min:.2f} t.m/m"
+            ),
             "#0f172a", "#f1f5f9", "#64748b"
         ),
     ]
@@ -2746,11 +2919,31 @@ def generate_flat_slab_moment_contour(
             ha="center", va="center", fontsize=14.0, color="#1e293b", weight="normal", linespacing=1.25, zorder=3
         )
 
-    sub_title_ar = "اتجاه المحور الأفقي X" if mode == "M11" else "اتجاه المحور الرأسي Y"
-    fig.suptitle(
-        f"2D BENDING MOMENT CONTOUR MAP — {mode} (المخطط اللوني لمصفوفة عزوم الانحناء — {sub_title_ar})",
-        fontsize=20, weight="bold", y=0.98, color="#0f172a"
-    )
+    dir_txt_ar = "اتجاه المحور الأفقي X" if mode == "M11" else "اتجاه المحور الرأسي Y"
+    main_title = f"2D BENDING MOMENT CONTOUR MAP — {mode} (المخطط اللوني لمصفوفة عزوم الانحناء — {dir_txt_ar})"
+
+    if prov_btm_mesh_cm2m and d_cm and Fcu and Fy:
+        M_cap_btm = calc_moment_capacity_btm(prov_btm_mesh_cm2m, d_cm, Fcu, Fy)
+        M_cap_top = calc_moment_capacity_btm(prov_top_mesh_cm2m, d_cm, Fcu, Fy) if prov_top_mesh_cm2m else 0.0
+
+        btm_desc = f"{mesh_btm_str} ({prov_btm_mesh_cm2m:.2f} cm²/m)" if mesh_btm_str else f"{prov_btm_mesh_cm2m:.2f} cm²/m"
+        top_desc = f"{mesh_top_str} ({prov_top_mesh_cm2m:.2f} cm²/m)" if mesh_top_str else (f"{prov_top_mesh_cm2m:.2f} cm²/m" if prov_top_mesh_cm2m else "—")
+        top_cap_txt = f"{M_cap_top:.2f} t·m/m' [{top_desc}]" if M_cap_top > 0 else "—"
+
+        sub_line = (
+            f"Provided Mesh Capacity (طاقة تحمل شبكة التسليح المدخلة):   "
+            f"Bottom Mesh (السفلي): M⁺_cap = {M_cap_btm:.2f} t·m/m' [{btm_desc}]    |    "
+            f"Top Mesh (العلوي): M⁻_cap = {top_cap_txt}"
+        )
+        fig.suptitle(
+            f"{main_title}\n{sub_line}",
+            fontsize=17, weight="bold", y=0.985, color="#0f172a", linespacing=1.35
+        )
+    else:
+        fig.suptitle(
+            main_title,
+            fontsize=20, weight="bold", y=0.98, color="#0f172a"
+        )
 
     return fig
 
@@ -2768,6 +2961,8 @@ def generate_flat_slab_dual_moment_contour(
     void_panel_ids=None,
     col_transforms=None,
     edge_columns=None,
+    btm_extra_spans=None,
+    void_boxes=None,
 ):
     """
     Renders dual side-by-side engineering contour maps for both M11 and M22 on a unified canvas.
@@ -2796,7 +2991,9 @@ def generate_flat_slab_dual_moment_contour(
     slab_h = y_slab_max - y_slab_min
 
     X, Y, M11, M22, M11_raw, M22_raw = build_slab_moment_field(
-        Lx_spans, Ly_spans, cantilevers, rows_x, rows_y, Wu, void_panel_ids=void_panel_ids
+        Lx_spans, Ly_spans, cantilevers, rows_x, rows_y, Wu,
+        void_panel_ids=void_panel_ids, void_boxes=void_boxes,
+        btm_extra_spans=btm_extra_spans,
     )
 
     bubble_radius = max(0.40, min(slab_w, slab_h) * 0.030)
@@ -2875,26 +3072,29 @@ def generate_flat_slab_dual_moment_contour(
             ax.text(x_slab_min - offset_grid_left, y, f"X{idx+1}", color="#991b1b", fontsize=13, weight="bold", ha="center", va="center", zorder=7)
 
         # Columns
+        grid_c = 1
         col_c = 1
         for y in y_coords:
             for x in x_coords:
+                orig_id = f"C{grid_c}"
+                grid_c += 1
                 if (x, y) in rem_coords:
                     continue
                 cid = f"C{col_c}"
-                c_trans = (col_transforms or {}).get(cid) or {}
+                col_c += 1
+                c_trans = (col_transforms or {}).get(orig_id, {})
                 geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
-                is_edge_c = is_edge_column_verified(cid, geom=geom, edge_columns=edge_columns)
+                is_edge_c = is_edge_column_verified(orig_id, geom=geom, edge_columns=edge_columns)
                 col_box = patches.Rectangle(
                     (geom["x_min"], geom["y_min"]), geom["width_m"], geom["height_m"],
                     linewidth=2.0, edgecolor="#0f172a", facecolor="#1e293b", zorder=6
                 )
                 ax.add_patch(col_box)
                 if is_edge_c:
-                    ed_info = (edge_columns or {}).get(cid) or {}
+                    ed_info = (edge_columns or {}).get(orig_id, {})
                     draw_neighbor_edge_strip(ax, geom["x_min"], geom["y_min"], geom["width_m"], geom["height_m"], ed_info.get("direction", ""), zorder=8)
                 is_right = (geom["center_x"] >= x_coords[-1] - 0.1)
                 draw_column_label_beside(ax, geom["x_min"], geom["y_min"], geom["width_m"], geom["height_m"], geom["center_x"], geom["center_y"], cid, is_right_edge=is_right, fontsize=10.5, zorder=9)
-                col_c += 1
 
         ax.set_title(f"Moment {mode_name} — {dir_label}\n[Max +M: +{m_max:.2f} t.m/m | Max -M: {m_min:.2f} t.m/m]", fontsize=16, weight="bold", pad=12, color="#0f172a")
         ax.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
@@ -2924,6 +3124,9 @@ def generate_moment_deficit_contour(
     void_panel_ids=None,
     col_transforms=None,
     edge_columns=None,
+    btm_extra_spans=None,
+    void_boxes=None,
+    mesh_btm_str="",
 ):
     """
     Generates a 2D colour-contour map of the MOMENT DEFICIT in the bottom steel.
@@ -2960,7 +3163,8 @@ def generate_moment_deficit_contour(
     # ── Moment field from DDM ─────────────────────────────────────────────────
     X, Y, M11, M22, M11_raw, M22_raw = build_slab_moment_field(
         Lx_spans, Ly_spans, cantilevers, rows_x, rows_y, Wu,
-        void_panel_ids=void_panel_ids
+        void_panel_ids=void_panel_ids, void_boxes=void_boxes,
+        btm_extra_spans=btm_extra_spans,
     )
 
     M_field = M11 if mode == "M11" else M22
@@ -3139,18 +3343,22 @@ def generate_moment_deficit_contour(
     col_w_m   = max(col_w_cm / 100.0, slab_w * 0.045)
     col_d_m   = max(col_d_cm / 100.0, slab_h * 0.045)
     rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
+    grid_idx = 1
     col_idx = 1
     for j_idx, y in enumerate(y_coords):
         for i_idx, x in enumerate(x_coords):
+            orig_id = f"C{grid_idx}"
+            grid_idx += 1
             if (x, y) in rem_coords:
                 continue
             cid = f"C{col_idx}"
-            c_trans = (col_transforms or {}).get(cid) or {}
+            col_idx += 1
+            c_trans = (col_transforms or {}).get(orig_id, {})
             geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
             rx, ry = geom["x_min"], geom["y_min"]
             rw, rh = geom["width_m"], geom["height_m"]
             cx, cy = geom["center_x"], geom["center_y"]
-            is_edge_c = is_edge_column_verified(cid, geom=geom, edge_columns=edge_columns)
+            is_edge_c = is_edge_column_verified(orig_id, geom=geom, edge_columns=edge_columns)
             ax_plan.add_patch(patches.Rectangle(
                 (rx, ry), rw, rh,
                 linewidth=2.0,
@@ -3159,19 +3367,20 @@ def generate_moment_deficit_contour(
                 zorder=6,
             ))
             if is_edge_c:
-                ed_info = (edge_columns or {}).get(cid) or {}
+                ed_info = (edge_columns or {}).get(orig_id, {})
                 draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=8)
             is_right = (i_idx == len(x_coords) - 1)
             draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=9)
-            col_idx += 1
 
-    # ── مربعات العجز على كل بلاطة ──────────────────────────────────────────────
+    # ── مربعات العجز على كل بلاطة مع منع التداخل التام (Anti-Overlap Staggering) ──
     for j in range(len(Ly_spans)):
+        Ly = y_coords[j+1] - y_coords[j]
         for i in range(len(Lx_spans)):
             pid = f"P_{i+1}_{j+1}"
             if pid in _voids:
                 continue
 
+            Lx = x_coords[i+1] - x_coords[i]
             mid_x = (x_coords[i] + x_coords[i+1]) / 2.0
             mid_y = (y_coords[j] + y_coords[j+1]) / 2.0
 
@@ -3185,6 +3394,23 @@ def generate_moment_deficit_contour(
             valid_cells = panel_def[~np.isnan(panel_def)]
             max_def = float(np.max(valid_cells)) if len(valid_cells) > 0 else 0.0
 
+            # ── كشف تقارب البحور لمنع التداخل ──
+            has_narrow_x = (Lx < 2.6) or (i > 0 and Lx_spans[i-1] < 2.6) or (i < len(Lx_spans)-1 and Lx_spans[i+1] < 2.6)
+            has_narrow_y = (Ly < 2.6) or (j > 0 and Ly_spans[j-1] < 2.6) or (j < len(Ly_spans)-1 and Ly_spans[j+1] < 2.6)
+
+            tag_x = mid_x
+            tag_y = mid_y
+
+            # إزاحة رأسية تبادلية (Zig-Zag) للبلاطات المتقاربة أفقياً
+            if has_narrow_x and Ly >= 2.0:
+                y_stagger = min(1.30, Ly * 0.22)
+                tag_y = mid_y + (y_stagger if (i % 2 == 1) else -y_stagger)
+                tag_y = max(y_coords[j] + 0.55, min(y_coords[j+1] - 0.55, tag_y))
+            elif has_narrow_y and Lx >= 2.0:
+                x_stagger = min(1.20, Lx * 0.20)
+                tag_x = mid_x + (x_stagger if (j % 2 == 1) else -x_stagger)
+                tag_x = max(x_coords[i] + 0.55, min(x_coords[i+1] - 0.55, tag_x))
+
             if max_def > 0.01:
                 # ── تحديد موقع أقصى عجز (شريط الأعمدة أم منتصف البلاطة) ──────
                 flat_idx   = int(np.nanargmax(panel_def))
@@ -3196,52 +3422,57 @@ def generate_moment_deficit_contour(
                 max_x  = float(x_vec[max_xi])
                 max_y  = float(y_vec[max_yi])
 
-                Lx = x_coords[i+1] - x_coords[i]
-                Ly = y_coords[j+1] - y_coords[j]
-
-                # عرض شريط الأعمدة = min(Lx, Ly)/4 من كل جانب
-                # (وفقاً لـ ECP 203: عرض شريط الأعمدة = نصف أصغر بحر)
                 col_hw = min(Lx, Ly) / 4.0
 
                 if mode == "M11":
-                    # M11: عزوم أفقية — شريط الأعمدة على طول محاور Y
                     near_col = (
                         (max_y < y_coords[j]   + col_hw) or
                         (max_y > y_coords[j+1] - col_hw)
                     )
                 else:
-                    # M22: عزوم رأسية — شريط الأعمدة على طول محاور X
                     near_col = (
                         (max_x < x_coords[i]   + col_hw) or
                         (max_x > x_coords[i+1] - col_hw)
                     )
 
-                location_txt = "📍 في شريط الأعمدة" if near_col else "📍 في منتصف البلاطة"
+                loc_txt = "شريط أعمدة" if near_col else "وسط البلاطة"
 
                 badge_color  = "#fef3c7"
                 border_color = "#d97706"
                 txt_color    = "#92400e"
-                label = (
-                    f"أقصى عجز:\n"
-                    f"Δ_max = +{max_def:.2f} t.m/m\n"
-                    f"{location_txt}\n"
-                    f"حديد سفلي إضافي مطلوب"
-                )
+
+                if Lx < 2.4:
+                    # نصوص مختصرة وخط أنيق ومضغوط للبحور الضيقة لمنع التداخل
+                    label = f"عجز: Δ = +{max_def:.2f}\nt.m/m"
+                    b_font = 9.5
+                    b_pad = 0.22
+                else:
+                    label = f"أقصى عجز:\nΔ_max = +{max_def:.2f} t.m/m\n({loc_txt})"
+                    b_font = 11.0
+                    b_pad = 0.30
             else:
                 badge_color  = "#f0fdf4"
                 border_color = "#16a34a"
                 txt_color    = "#15803d"
-                label = (
-                    f"✓ الشبكة السفلية كافية\n"
-                    f"لا يوجد عجز في أي نقطة\n"
-                    f"M_cap = {M_cap:.2f} t.m/m"
-                )
+
+                if Lx < 2.4:
+                    label = "✓ كافية\n(No Deficit)"
+                    b_font = 9.5
+                    b_pad = 0.22
+                else:
+                    label = (
+                        f"✓ الشبكة كافية\n"
+                        f"لا يوجد عجز\n"
+                        f"M_cap = {M_cap:.2f} t.m/m"
+                    )
+                    b_font = 11.0
+                    b_pad = 0.30
 
             ax_plan.text(
-                mid_x, mid_y, label,
-                ha="center", va="center", fontsize=11.5, weight="bold", color=txt_color,
-                linespacing=1.4,
-                bbox=dict(boxstyle="round,pad=0.35", facecolor=badge_color, edgecolor=border_color, lw=1.8),
+                tag_x, tag_y, label,
+                ha="center", va="center", fontsize=b_font, weight="bold", color=txt_color,
+                linespacing=1.35,
+                bbox=dict(boxstyle=f"round,pad={b_pad}", facecolor=badge_color, edgecolor=border_color, lw=1.8),
                 zorder=8,
             )
 
@@ -3318,9 +3549,9 @@ def generate_moment_deficit_contour(
         (
             "COLOUR CODE\n(دلالة الألوان)",
             (
-                "⬜ White  → Deficit = 0  (Mesh Sufficient)\n🟡→🔴 Yellow-Red → Extra Bottom Steel Needed"
+                "• White  → Deficit = 0  (Mesh Sufficient)\n• Yellow-Red → Extra Bottom Steel Needed"
                 if has_deficit else
-                "⬜ All Zones: No Deficit\n✓ Base Mesh Covers Everything"
+                "• All Zones: No Deficit\n✓ Base Mesh Covers Everything"
             ),
             "#b45309", "#fef3c7", "#d97706",
         ),
@@ -3366,7 +3597,13 @@ def generate_moment_deficit_contour(
         )
         _title_color = "#15803d"
 
-    fig.suptitle(_main_title, fontsize=19, weight="bold", y=0.98, color=_title_color)
+    mesh_desc = f"{mesh_btm_str} ({prov_btm_mesh_cm2m:.2f} cm²/m)" if mesh_btm_str else f"{prov_btm_mesh_cm2m:.2f} cm²/m"
+    sub_title = (
+        f"Provided Bottom Mesh Capacity (طاقة تحمل شبكة التسليح السفلية المدخلة): "
+        f"M⁺_cap = {M_cap:.3f} t·m/m' [{mesh_desc}]   |   "
+        f"Deficit (فارق العزم المطلوب تغطيته بإضافي): Δ = max(0, M_{mode} − M_cap)"
+    )
+    fig.suptitle(f"{_main_title}\n{sub_title}", fontsize=16.5, weight="bold", y=0.985, color=_title_color, linespacing=1.35)
 
     return fig
 
@@ -3718,6 +3955,10 @@ def generate_flat_slab_column_caps_sketch(
     removed_cols=None, void_panel_ids=None,
     col_transforms=None,
     edge_columns=None,
+    active_cols=None,
+    active_x_labels=None,
+    active_y_labels=None,
+    void_boxes=None,
 ):
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
 
@@ -3776,51 +4017,60 @@ def generate_flat_slab_column_caps_sketch(
 
     ax_plan.add_patch(patches.Rectangle((x_slab_min, y_slab_min), slab_w, slab_h, lw=3.2, edgecolor="#0f172a", facecolor="#ffffff", zorder=1))
 
+    # Voids
     _voids = set(void_panel_ids) if void_panel_ids else set()
-    for j in range(len(Ly_spans)):
-        for i in range(len(Lx_spans)):
-            pid = f"P_{i+1}_{j+1}"
-            if pid in _voids:
-                px0, px1 = x_coords[i], x_coords[i+1]
-                py0, py1 = y_coords[j], y_coords[j+1]
-                pw, ph = px1 - px0, py1 - py0
-                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=2)
-                ax_plan.add_patch(v_rect)
-                ax_plan.plot([px0, px1], [py0, py1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
-                ax_plan.plot([px0, px1], [py1, py0], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
-                ax_plan.text(px0 + pw/2, py0 + ph/2, "VOID\n(منور)", ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4))
+    if void_boxes:
+        for (vx1, vx2, vy1, vy2, v_area) in void_boxes:
+            pw, ph = vx2 - vx1, vy2 - vy1
+            v_rect = patches.Rectangle((vx1, vy1), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=2)
+            ax_plan.add_patch(v_rect)
+            ax_plan.plot([vx1, vx2], [vy1, vy2], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
+            ax_plan.plot([vx1, vx2], [vy2, vy1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
+            ax_plan.text(vx1 + pw/2, vy1 + ph/2, "VOID\n(منور)", ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4))
+    else:
+        for j in range(len(Ly_spans)):
+            for i in range(len(Lx_spans)):
+                pid = f"P_{i+1}_{j+1}"
+                if pid in _voids:
+                    px0, px1 = x_coords[i], x_coords[i+1]
+                    py0, py1 = y_coords[j], y_coords[j+1]
+                    pw, ph = px1 - px0, py1 - py0
+                    v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=2)
+                    ax_plan.add_patch(v_rect)
+                    ax_plan.plot([px0, px1], [py0, py1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
+                    ax_plan.plot([px0, px1], [py1, py0], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
+                    ax_plan.text(px0 + pw/2, py0 + ph/2, "VOID\n(منور)", ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4))
 
     for idx, x in enumerate(x_coords):
         y_top_ext = y_slab_max + offset_grid_top
         ax_plan.plot([x, x], [y_slab_min - 0.5, y_top_ext], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.8, zorder=3)
         bub = Circle((x, y_top_ext), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=6)
         ax_plan.add_patch(bub)
-        ax_plan.text(x, y_top_ext, f"Y{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
+        lbl_x = active_x_labels[idx] if (active_x_labels and idx < len(active_x_labels)) else f"Y{idx+1}"
+        ax_plan.text(x, y_top_ext, lbl_x, color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
 
     for idx, y in enumerate(y_coords):
         x_left_ext = x_slab_min - offset_grid_left
         ax_plan.plot([x_left_ext, x_slab_max + 0.5], [y, y], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.8, zorder=3)
         bub = Circle((x_left_ext, y), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=6)
         ax_plan.add_patch(bub)
-        ax_plan.text(x_left_ext, y, f"X{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
+        lbl_y = active_y_labels[idx] if (active_y_labels and idx < len(active_y_labels)) else f"X{idx+1}"
+        ax_plan.text(x_left_ext, y, lbl_y, color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
 
     col_w_m   = max(col_w_cm / 100.0, slab_w * 0.042)
     col_d_m   = max(col_d_cm / 100.0, slab_h * 0.042)
-    rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
     col_dict = {}
-    col_idx = 1
-    for j_idx, y in enumerate(y_coords):
-        for i_idx, x in enumerate(x_coords):
-            if (x, y) in rem_coords:
-                continue
-            cid = f"C{col_idx}"
-            c_trans = (col_transforms or {}).get(cid) or {}
-            geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
-            rx, ry = geom["x_min"], geom["y_min"]
-            rw, rh = geom["width_m"], geom["height_m"]
-            cx, cy = geom["center_x"], geom["center_y"]
-            col_dict[cid] = (cx, cy, i_idx, j_idx)
-            is_edge_c = is_edge_column_verified(cid, geom=geom, edge_columns=edge_columns)
+    if active_cols:
+        for c in active_cols:
+            cid = c.get("id", c.get("orig_id", "C"))
+            orig_id = c.get("orig_id", cid)
+            cx, cy = c["x"], c["y"]
+            rx, ry = c["x_min"], c["y_min"]
+            rw, rh = c["width_m"], c["height_m"]
+            ci = c.get("i_eff", c.get("i", 0))
+            cj = c.get("j_eff", c.get("j", 0))
+            col_dict[cid] = (cx, cy, ci, cj)
+            is_edge_c = is_edge_column_verified(orig_id, geom=c, edge_columns=edge_columns)
             ax_plan.add_patch(patches.Rectangle(
                 (rx, ry), rw, rh,
                 lw=2.0,
@@ -3829,26 +4079,92 @@ def generate_flat_slab_column_caps_sketch(
                 zorder=8
             ))
             if is_edge_c:
-                ed_info = (edge_columns or {}).get(cid) or {}
+                ed_info = (edge_columns or {}).get(orig_id, {})
                 draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=9)
-            is_right = (i_idx == len(x_coords) - 1)
+            is_right = (cx >= x_coords[-1] - 0.1)
             draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=10)
-            col_idx += 1
+    else:
+        rem_set = set()
+        rem_coords = set()
+        if removed_cols:
+            for item in removed_cols:
+                if isinstance(item, str):
+                    rem_set.add(item)
+                elif isinstance(item, dict):
+                    if "orig_id" in item:
+                        rem_set.add(item["orig_id"])
+                    if "id" in item:
+                        rem_set.add(item["id"])
+                    if "x" in item and "y" in item:
+                        rem_coords.add((round(item["x"], 3), round(item["y"], 3)))
+        grid_idx = 1
+        col_idx = 1
+        for j_idx, y in enumerate(y_coords):
+            for i_idx, x in enumerate(x_coords):
+                orig_id = f"C{grid_idx}"
+                grid_idx += 1
+                if orig_id in rem_set or (round(x, 3), round(y, 3)) in rem_coords:
+                    continue
+                cid = f"C{col_idx}"
+                col_idx += 1
+                c_trans = (col_transforms or {}).get(orig_id, {})
+                geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+                rx, ry = geom["x_min"], geom["y_min"]
+                rw, rh = geom["width_m"], geom["height_m"]
+                cx, cy = geom["center_x"], geom["center_y"]
+                col_dict[cid] = (cx, cy, i_idx, j_idx)
+                is_edge_c = is_edge_column_verified(orig_id, geom=geom, edge_columns=edge_columns)
+                ax_plan.add_patch(patches.Rectangle(
+                    (rx, ry), rw, rh,
+                    lw=2.0,
+                    edgecolor="#0f172a",
+                    facecolor="#1e293b",
+                    zorder=8
+                ))
+                if is_edge_c:
+                    ed_info = (edge_columns or {}).get(orig_id, {})
+                    draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=9)
+                is_right = (i_idx == len(x_coords) - 1)
+                draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=10)
 
     active_caps_count = 0
+    needed_caps = []
     for c_info in (top_extra_cols or []):
         cid = c_info["id"]
-        if cid not in col_dict:
-            continue
-        cx, cy, ci, cj = col_dict[cid]
-        is_needed = c_info.get("is_needed", False)
-        L_ext = c_info.get("L_extra", 3.0)
-        n_ext = c_info.get("n_extra", 6)
-        dia_ext = c_info.get("dia_extra", 12)
-        callout = c_info.get("callout", f"{n_ext}Φ{dia_ext}")
+        if cid in col_dict and c_info.get("is_needed", False):
+            needed_caps.append(c_info)
 
-        if is_needed:
-            active_caps_count += 1
+    active_caps_count = len(needed_caps)
+
+    if active_caps_count == 0:
+        mid_x_slab = (x_slab_min + x_slab_max) / 2.0
+        mid_y_slab = (y_slab_min + y_slab_max) / 2.0
+        banner_w = min(slab_w * 0.78, 14.0)
+        banner_h = max(1.8, slab_h * 0.12)
+
+        banner_box = FancyBboxPatch(
+            (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
+            boxstyle="round,pad=0.5,rounding_size=0.6",
+            facecolor="#f0fdf4", edgecolor="#16a34a", lw=2.6, zorder=10
+        )
+        ax_plan.add_patch(banner_box)
+
+        ax_plan.text(
+            mid_x_slab, mid_y_slab,
+            "[OK] NO EXTRA TOP STEEL NEEDED AT COLUMNS (الشبكة العلوية كافية تماماً)",
+            ha="center", va="center", fontsize=15.0, fontweight="bold", color="#15803d", zorder=11
+        )
+    else:
+        # Sort by Y ascending, then X ascending to alternate Above/Below along each row
+        needed_caps_sorted = sorted(needed_caps, key=lambda c: (round(col_dict[c["id"]][1], 2), col_dict[c["id"]][0]))
+        row_counts = {}
+        for c_info in needed_caps_sorted:
+            cid = c_info["id"]
+            cx, cy, ci, cj = col_dict[cid]
+            L_ext = c_info.get("L_extra", 3.0)
+            n_ext = c_info.get("n_extra", 6)
+            dia_ext = c_info.get("dia_extra", 12)
+
             cap_w = L_ext
             cap_h = min(Lx_spans[min(ci, len(Lx_spans)-1)], Ly_spans[min(cj, len(Ly_spans)-1)]) * 0.45
             cap_rect = patches.Rectangle(
@@ -3867,8 +4183,18 @@ def generate_flat_slab_column_caps_sketch(
             ax_plan.plot([bar_x, bar_x - 0.25], [cy - cap_h/2.0, cy - cap_h/2.0], color="#b91c1c", lw=3.0, zorder=6)
             ax_plan.plot([bar_x, bar_x - 0.25], [cy + cap_h/2.0, cy + cap_h/2.0], color="#b91c1c", lw=3.0, zorder=6)
 
-            # Alternating Callout Placement (الكتابة بالتبادل لتجنب التداخل)
-            is_above = ((ci + cj) % 2 == 0)
+            # Determine row index by cj (grid row index) so all columns on the same row alternate cleanly
+            row_key = cj
+            k_in_row = row_counts.get(row_key, 0)
+            row_counts[row_key] = k_in_row + 1
+
+            is_above = (k_in_row % 2 == 0)
+            # Boundary check allowing placement outside slab boundary if space permits before dimensions
+            if is_above and (cy + cap_h/2.0 + 0.4 > y_slab_max + 1.2):
+                is_above = False
+            elif not is_above and (cy - cap_h/2.0 - 0.4 < (y_slab_min - dim_offset_bot) + 0.5):
+                is_above = True
+
             if is_above:
                 tag_y = cy + cap_h/2.0 + 0.35
                 va_pos = "bottom"
@@ -3876,21 +4202,13 @@ def generate_flat_slab_column_caps_sketch(
                 tag_y = cy - cap_h/2.0 - 0.35
                 va_pos = "top"
 
+            font_sz = 11.5 if (cap_w < 2.2 or min(Lx_spans) < 2.0) else 13.0
+            pad_sz = 0.28 if (cap_w < 2.2 or min(Lx_spans) < 2.0) else 0.35
             ax_plan.text(
                 cx, tag_y,
-                f"★ {cid} Top Cap: {n_ext}Φ{dia_ext}\n"
-                f"Strip Dim: {cap_w:.2f}m (L) × {cap_h:.2f}m (W)",
-                ha="center", va=va_pos, fontsize=12.0, fontweight="bold", color="#991b1b", zorder=8,
-                bbox=dict(boxstyle="round,pad=0.4", facecolor="#ffffff", edgecolor="#dc2626", lw=1.8)
-            )
-        else:
-            is_above = ((ci + cj) % 2 == 0)
-            tag_y = (cy + col_d_m/2.0 + 0.25) if is_above else (cy - col_d_m/2.0 - 0.25)
-            va_pos = "bottom" if is_above else "top"
-            ax_plan.text(
-                cx, tag_y, f"{cid}: Base Mesh OK",
-                ha="center", va=va_pos, fontsize=11.0, fontweight="bold", color="#15803d", zorder=7,
-                bbox=dict(boxstyle="round,pad=0.25", facecolor="#f0fdf4", edgecolor="#22c55e", lw=1.2)
+                f"{n_ext} Φ {dia_ext}  (L = {cap_w:.2f} m)",
+                ha="center", va=va_pos, fontsize=font_sz, fontweight="bold", color="#991b1b", zorder=8,
+                bbox=dict(boxstyle=f"round,pad={pad_sz}", facecolor="#ffffff", edgecolor="#dc2626", lw=1.8)
             )
 
     dim_y = y_slab_min - dim_offset_bot
@@ -6274,6 +6592,10 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
     direction="X",
     col_transforms=None,
     edge_columns=None,
+    active_cols=None,
+    active_x_labels=None,
+    active_y_labels=None,
+    void_boxes=None,
 ):
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
 
@@ -6335,18 +6657,27 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
 
     # Voids
     _voids = set(void_panel_ids) if void_panel_ids else set()
-    for j in range(len(Ly_spans)):
-        for i in range(len(Lx_spans)):
-            pid = f"P_{i+1}_{j+1}"
-            if pid in _voids:
-                px0, px1 = x_coords[i], x_coords[i+1]
-                py0, py1 = y_coords[j], y_coords[j+1]
-                pw, ph = px1 - px0, py1 - py0
-                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=2)
-                ax_plan.add_patch(v_rect)
-                ax_plan.plot([px0, px1], [py0, py1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
-                ax_plan.plot([px0, px1], [py1, py0], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
-                ax_plan.text(px0 + pw/2, py0 + ph/2, "VOID\n(منور)", ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4))
+    if void_boxes:
+        for (vx1, vx2, vy1, vy2, v_area) in void_boxes:
+            pw, ph = vx2 - vx1, vy2 - vy1
+            v_rect = patches.Rectangle((vx1, vy1), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=2)
+            ax_plan.add_patch(v_rect)
+            ax_plan.plot([vx1, vx2], [vy1, vy2], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
+            ax_plan.plot([vx1, vx2], [vy2, vy1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
+            ax_plan.text(vx1 + pw/2, vy1 + ph/2, "VOID\n(منور)", ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4))
+    else:
+        for j in range(len(Ly_spans)):
+            for i in range(len(Lx_spans)):
+                pid = f"P_{i+1}_{j+1}"
+                if pid in _voids:
+                    px0, px1 = x_coords[i], x_coords[i+1]
+                    py0, py1 = y_coords[j], y_coords[j+1]
+                    pw, ph = px1 - px0, py1 - py0
+                    v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=2)
+                    ax_plan.add_patch(v_rect)
+                    ax_plan.plot([px0, px1], [py0, py1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
+                    ax_plan.plot([px0, px1], [py1, py0], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
+                    ax_plan.text(px0 + pw/2, py0 + ph/2, "VOID\n(منور)", ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4))
 
     # Grids & Bubbles
     for idx, x in enumerate(x_coords):
@@ -6354,31 +6685,28 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
         ax_plan.plot([x, x], [y_slab_min - 0.5, y_top_ext], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.8, zorder=3)
         bub = Circle((x, y_top_ext), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=6)
         ax_plan.add_patch(bub)
-        ax_plan.text(x, y_top_ext, f"Y{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
+        lbl_x = active_x_labels[idx] if (active_x_labels and idx < len(active_x_labels)) else f"Y{idx+1}"
+        ax_plan.text(x, y_top_ext, lbl_x, color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
 
     for idx, y in enumerate(y_coords):
         x_left_ext = x_slab_min - offset_grid_left
         ax_plan.plot([x_left_ext, x_slab_max + 0.5], [y, y], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.8, zorder=3)
         bub = Circle((x_left_ext, y), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=6)
         ax_plan.add_patch(bub)
-        ax_plan.text(x_left_ext, y, f"X{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
+        lbl_y = active_y_labels[idx] if (active_y_labels and idx < len(active_y_labels)) else f"X{idx+1}"
+        ax_plan.text(x_left_ext, y, lbl_y, color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
 
     # Columns
     col_w_m   = max(col_w_cm / 100.0, slab_w * 0.042)
     col_d_m   = max(col_d_cm / 100.0, slab_h * 0.042)
-    rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
-    col_idx = 1
-    for j_idx, y in enumerate(y_coords):
-        for i_idx, x in enumerate(x_coords):
-            if (x, y) in rem_coords:
-                continue
-            cid = f"C{col_idx}"
-            c_trans = (col_transforms or {}).get(cid) or {}
-            geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
-            rx, ry = geom["x_min"], geom["y_min"]
-            rw, rh = geom["width_m"], geom["height_m"]
-            cx, cy = geom["center_x"], geom["center_y"]
-            is_edge_c = is_edge_column_verified(cid, geom=geom, edge_columns=edge_columns)
+    if active_cols:
+        for c in active_cols:
+            cid = c.get("id", c.get("orig_id", "C"))
+            orig_id = c.get("orig_id", cid)
+            cx, cy = c["x"], c["y"]
+            rx, ry = c["x_min"], c["y_min"]
+            rw, rh = c["width_m"], c["height_m"]
+            is_edge_c = is_edge_column_verified(orig_id, geom=c, edge_columns=edge_columns)
             ax_plan.add_patch(patches.Rectangle(
                 (rx, ry), rw, rh,
                 lw=2.0,
@@ -6387,11 +6715,52 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
                 zorder=8
             ))
             if is_edge_c:
-                ed_info = (edge_columns or {}).get(cid) or {}
+                ed_info = (edge_columns or {}).get(orig_id, {})
                 draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=9)
-            is_right = (i_idx == len(x_coords) - 1)
+            is_right = (cx >= x_coords[-1] - 0.1)
             draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=10)
-            col_idx += 1
+    else:
+        rem_set = set()
+        rem_coords = set()
+        if removed_cols:
+            for item in removed_cols:
+                if isinstance(item, str):
+                    rem_set.add(item)
+                elif isinstance(item, dict):
+                    if "orig_id" in item:
+                        rem_set.add(item["orig_id"])
+                    if "id" in item:
+                        rem_set.add(item["id"])
+                    if "x" in item and "y" in item:
+                        rem_coords.add((round(item["x"], 3), round(item["y"], 3)))
+        grid_idx = 1
+        col_idx = 1
+        for j_idx, y in enumerate(y_coords):
+            for i_idx, x in enumerate(x_coords):
+                orig_id = f"C{grid_idx}"
+                grid_idx += 1
+                if orig_id in rem_set or (round(x, 3), round(y, 3)) in rem_coords:
+                    continue
+                cid = f"C{col_idx}"
+                col_idx += 1
+                c_trans = (col_transforms or {}).get(orig_id, {})
+                geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+                rx, ry = geom["x_min"], geom["y_min"]
+                rw, rh = geom["width_m"], geom["height_m"]
+                cx, cy = geom["center_x"], geom["center_y"]
+                is_edge_c = is_edge_column_verified(orig_id, geom=geom, edge_columns=edge_columns)
+                ax_plan.add_patch(patches.Rectangle(
+                    (rx, ry), rw, rh,
+                    lw=2.0,
+                    edgecolor="#0f172a",
+                    facecolor="#1e293b",
+                    zorder=8
+                ))
+                if is_edge_c:
+                    ed_info = (edge_columns or {}).get(orig_id, {})
+                    draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=9)
+                is_right = (i_idx == len(x_coords) - 1)
+                draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=10)
 
     # Filter items by direction
     dir_req = (direction or "X").upper()
@@ -6403,7 +6772,10 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
     has_extra = len(filtered_bays) > 0
 
     if has_extra:
-        for b_info in filtered_bays:
+        # Sort bays by row to alternate vertical placement across horizontal bays in X
+        filtered_bays_sorted = sorted(filtered_bays, key=lambda b: (round(b.get("cy", b.get("mid_y", 0.0)), 1), b.get("cx", b.get("mid_x", 0.0))))
+        b_row_counts = {}
+        for b_info in filtered_bays_sorted:
             pid = b_info.get("panel_id", "")
             if pid in _voids:
                 continue
@@ -6433,13 +6805,22 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
                 ax_plan.plot([cx - L_ext/2.0, cx - L_ext/2.0], [y_bar - 0.25, y_bar + 0.25], color=line_c, lw=3.0, zorder=6)
                 ax_plan.plot([cx + L_ext/2.0, cx + L_ext/2.0], [y_bar - 0.25, y_bar + 0.25], color=line_c, lw=3.0, zorder=6)
 
+                # Vertical stagger to prevent horizontal badge collision in narrow bays
+                row_k = round(cy, 1)
+                k_idx = b_row_counts.get(row_k, 0)
+                b_row_counts[row_k] = k_idx + 1
+
+                is_stagger = (k_idx % 2 == 1)
+                tag_y = (cy - 0.45) if not is_stagger else (cy + 1.10)
+                f_sz = 11.0 if (L_ext < 2.2 or min(Lx_spans) < 2.0) else 13.0
+                p_sz = 0.25 if (L_ext < 2.2 or min(Lx_spans) < 2.0) else 0.35
+
                 ax_plan.text(
-                    cx, cy - 0.45,
-                    f"★ Bottom Extra (X-Dir / اتجاه X): {n_ext}Φ{dia_ext}\n"
-                    f"Bay Dim: {area_w:.2f}m (L) × {W_bay:.2f}m (W)",
-                    ha="center", va="center", fontsize=12.5, fontweight="bold", color="#b45309", zorder=8,
+                    cx, tag_y,
+                    f"{n_ext} Φ {dia_ext}  (L = {L_ext:.2f} m)",
+                    ha="center", va="center", fontsize=f_sz, fontweight="bold", color="#b45309", zorder=8,
                     rotation=0,
-                    bbox=dict(boxstyle="round,pad=0.4", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
+                    bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
                 )
             else:
                 area_w = W_bay * 0.88
@@ -6455,13 +6836,15 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
                 ax_plan.plot([x_bar - 0.25, x_bar + 0.25], [cy - L_ext/2.0, cy - L_ext/2.0], color=line_c, lw=3.0, zorder=6)
                 ax_plan.plot([x_bar - 0.25, x_bar + 0.25], [cy + L_ext/2.0, cy + L_ext/2.0], color=line_c, lw=3.0, zorder=6)
 
+                f_sz = 11.0 if (W_bay < 1.5) else 13.0
+                p_sz = 0.25 if (W_bay < 1.5) else 0.35
+                tag_x = (cx - 0.45) if W_bay >= 1.5 else cx
                 ax_plan.text(
-                    cx - 0.45, cy,
-                    f"★ Bottom Extra (Y-Dir / اتجاه Y): {n_ext}Φ{dia_ext}\n"
-                    f"Bay Dim: {W_bay:.2f}m (W) × {area_h:.2f}m (L)",
-                    ha="center", va="center", fontsize=12.5, fontweight="bold", color="#b45309", zorder=8,
+                    tag_x, cy,
+                    f"{n_ext} Φ {dia_ext}  (L = {L_ext:.2f} m)",
+                    ha="center", va="center", fontsize=f_sz, fontweight="bold", color="#b45309", zorder=8,
                     rotation=90,
-                    bbox=dict(boxstyle="round,pad=0.4", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
+                    bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
                 )
     else:
         # Prominent banner when no extra bottom rebar needed in this direction
@@ -6500,9 +6883,9 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
                 ax_plan.plot([cx_tip, cx_tip + 0.5 * L_c], [cy_mid - 0.35, cy_mid - 0.35], color="#9333ea", lw=3.5, zorder=6)
                 ax_plan.plot([cx_tip, cx_tip], [cy_mid - 0.35, cy_mid], color="#9333ea", lw=3.5, zorder=6)
                 ax_plan.text(
-                    cx_tip + L_c/2.0, cy_mid + 0.55, f"★ Shawka: {callout}\n(Total Cut L = {tot_L:.2f} m)",
-                    ha="center", va="bottom", fontsize=13.0, fontweight="bold", color="#7e22ce", zorder=8,
-                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#faf5ff", edgecolor="#a855f7", lw=1.6)
+                    cx_tip + L_c/2.0, cy_mid + 0.55, f"{callout}  (L = {tot_L:.2f} m)",
+                    ha="center", va="bottom", fontsize=12.5, fontweight="bold", color="#7e22ce", zorder=8,
+                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#ffffff", edgecolor="#9333ea", lw=1.8)
                 )
             elif side == "right" and cant_right > 0:
                 cy_mid = (y_slab_min + y_slab_max) / 2.0
@@ -6512,9 +6895,9 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
                 ax_plan.plot([cx_tip, cx_tip - 0.5 * L_c], [cy_mid - 0.35, cy_mid - 0.35], color="#9333ea", lw=3.5, zorder=6)
                 ax_plan.plot([cx_tip, cx_tip], [cy_mid - 0.35, cy_mid], color="#9333ea", lw=3.5, zorder=6)
                 ax_plan.text(
-                    cx_tip - L_c/2.0, cy_mid + 0.55, f"★ Shawka: {callout}\n(Total Cut L = {tot_L:.2f} m)",
-                    ha="center", va="bottom", fontsize=13.0, fontweight="bold", color="#7e22ce", zorder=8,
-                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#faf5ff", edgecolor="#a855f7", lw=1.6)
+                    cx_tip - L_c/2.0, cy_mid + 0.55, f"{callout}  (L = {tot_L:.2f} m)",
+                    ha="center", va="bottom", fontsize=12.5, fontweight="bold", color="#7e22ce", zorder=8,
+                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#ffffff", edgecolor="#9333ea", lw=1.8)
                 )
         else: # Y
             if side == "top" and cant_top > 0:
@@ -6525,9 +6908,9 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
                 ax_plan.plot([cx_mid + 0.35, cx_mid + 0.35], [cy_tip, cy_tip - 0.5 * L_c], color="#9333ea", lw=3.5, zorder=6)
                 ax_plan.plot([cx_mid, cx_mid + 0.35], [cy_tip, cy_tip], color="#9333ea", lw=3.5, zorder=6)
                 ax_plan.text(
-                    cx_mid + 0.65, cy_tip - L_c/2.0, f"★ Shawka: {callout}\n(Total Cut L = {tot_L:.2f} m)",
-                    ha="left", va="center", fontsize=13.0, fontweight="bold", color="#7e22ce", zorder=8,
-                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#faf5ff", edgecolor="#a855f7", lw=1.6)
+                    cx_mid + 0.65, cy_tip - L_c/2.0, f"{callout}  (L = {tot_L:.2f} m)",
+                    ha="left", va="center", fontsize=12.5, fontweight="bold", color="#7e22ce", zorder=8,
+                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#ffffff", edgecolor="#9333ea", lw=1.8)
                 )
             elif side == "bottom" and cant_bottom > 0:
                 cx_mid = (x_slab_min + x_slab_max) / 2.0
@@ -6537,9 +6920,9 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
                 ax_plan.plot([cx_mid + 0.35, cx_mid + 0.35], [cy_tip, cy_tip + 0.5 * L_c], color="#9333ea", lw=3.5, zorder=6)
                 ax_plan.plot([cx_mid, cx_mid + 0.35], [cy_tip, cy_tip], color="#9333ea", lw=3.5, zorder=6)
                 ax_plan.text(
-                    cx_mid + 0.65, cy_tip + L_c/2.0, f"★ Shawka: {callout}\n(Total Cut L = {tot_L:.2f} m)",
-                    ha="left", va="center", fontsize=13.0, fontweight="bold", color="#7e22ce", zorder=8,
-                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#faf5ff", edgecolor="#a855f7", lw=1.6)
+                    cx_mid + 0.65, cy_tip + L_c/2.0, f"{callout}  (L = {tot_L:.2f} m)",
+                    ha="left", va="center", fontsize=12.5, fontweight="bold", color="#7e22ce", zorder=8,
+                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#ffffff", edgecolor="#9333ea", lw=1.8)
                 )
 
     # Dimensions
@@ -6656,6 +7039,10 @@ def generate_flat_slab_top_mesh_extra_sketch(
     direction="X",
     col_transforms=None,
     edge_columns=None,
+    active_cols=None,
+    active_x_labels=None,
+    active_y_labels=None,
+    void_boxes=None,
 ):
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
 
@@ -6717,18 +7104,27 @@ def generate_flat_slab_top_mesh_extra_sketch(
 
     # Voids
     _voids = set(void_panel_ids) if void_panel_ids else set()
-    for j in range(len(Ly_spans)):
-        for i in range(len(Lx_spans)):
-            pid = f"P_{i+1}_{j+1}"
-            if pid in _voids:
-                px0, px1 = x_coords[i], x_coords[i+1]
-                py0, py1 = y_coords[j], y_coords[j+1]
-                pw, ph = px1 - px0, py1 - py0
-                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=2)
-                ax_plan.add_patch(v_rect)
-                ax_plan.plot([px0, px1], [py0, py1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
-                ax_plan.plot([px0, px1], [py1, py0], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
-                ax_plan.text(px0 + pw/2, py0 + ph/2, "VOID\n(منور)", ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4))
+    if void_boxes:
+        for (vx1, vx2, vy1, vy2, v_area) in void_boxes:
+            pw, ph = vx2 - vx1, vy2 - vy1
+            v_rect = patches.Rectangle((vx1, vy1), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=2)
+            ax_plan.add_patch(v_rect)
+            ax_plan.plot([vx1, vx2], [vy1, vy2], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
+            ax_plan.plot([vx1, vx2], [vy2, vy1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
+            ax_plan.text(vx1 + pw/2, vy1 + ph/2, "VOID\n(منور)", ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4))
+    else:
+        for j in range(len(Ly_spans)):
+            for i in range(len(Lx_spans)):
+                pid = f"P_{i+1}_{j+1}"
+                if pid in _voids:
+                    px0, px1 = x_coords[i], x_coords[i+1]
+                    py0, py1 = y_coords[j], y_coords[j+1]
+                    pw, ph = px1 - px0, py1 - py0
+                    v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=2)
+                    ax_plan.add_patch(v_rect)
+                    ax_plan.plot([px0, px1], [py0, py1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
+                    ax_plan.plot([px0, px1], [py1, py0], color="#ef4444", linestyle="--", linewidth=1.8, zorder=3)
+                    ax_plan.text(px0 + pw/2, py0 + ph/2, "VOID\n(منور)", ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=4, bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4))
 
     # Grids & Bubbles
     for idx, x in enumerate(x_coords):
@@ -6736,31 +7132,28 @@ def generate_flat_slab_top_mesh_extra_sketch(
         ax_plan.plot([x, x], [y_slab_min - 0.5, y_top_ext], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.8, zorder=3)
         bub = Circle((x, y_top_ext), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=6)
         ax_plan.add_patch(bub)
-        ax_plan.text(x, y_top_ext, f"Y{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
+        lbl_x = active_x_labels[idx] if (active_x_labels and idx < len(active_x_labels)) else f"Y{idx+1}"
+        ax_plan.text(x, y_top_ext, lbl_x, color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
 
     for idx, y in enumerate(y_coords):
         x_left_ext = x_slab_min - offset_grid_left
         ax_plan.plot([x_left_ext, x_slab_max + 0.5], [y, y], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.8, zorder=3)
         bub = Circle((x_left_ext, y), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=6)
         ax_plan.add_patch(bub)
-        ax_plan.text(x_left_ext, y, f"X{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
+        lbl_y = active_y_labels[idx] if (active_y_labels and idx < len(active_y_labels)) else f"X{idx+1}"
+        ax_plan.text(x_left_ext, y, lbl_y, color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=7)
 
     # Columns
     col_w_m   = max(col_w_cm / 100.0, slab_w * 0.042)
     col_d_m   = max(col_d_cm / 100.0, slab_h * 0.042)
-    rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
-    col_idx = 1
-    for j_idx, y in enumerate(y_coords):
-        for i_idx, x in enumerate(x_coords):
-            if (x, y) in rem_coords:
-                continue
-            cid = f"C{col_idx}"
-            c_trans = (col_transforms or {}).get(cid) or {}
-            geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
-            rx, ry = geom["x_min"], geom["y_min"]
-            rw, rh = geom["width_m"], geom["height_m"]
-            cx, cy = geom["center_x"], geom["center_y"]
-            is_edge_c = is_edge_column_verified(cid, geom=geom, edge_columns=edge_columns)
+    if active_cols:
+        for c in active_cols:
+            cid = c.get("id", c.get("orig_id", "C"))
+            orig_id = c.get("orig_id", cid)
+            cx, cy = c["x"], c["y"]
+            rx, ry = c["x_min"], c["y_min"]
+            rw, rh = c["width_m"], c["height_m"]
+            is_edge_c = is_edge_column_verified(orig_id, geom=c, edge_columns=edge_columns)
             ax_plan.add_patch(patches.Rectangle(
                 (rx, ry), rw, rh,
                 lw=2.0,
@@ -6769,11 +7162,52 @@ def generate_flat_slab_top_mesh_extra_sketch(
                 zorder=8
             ))
             if is_edge_c:
-                ed_info = (edge_columns or {}).get(cid) or {}
+                ed_info = (edge_columns or {}).get(orig_id, {})
                 draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=9)
-            is_right = (i_idx == len(x_coords) - 1)
+            is_right = (cx >= x_coords[-1] - 0.1)
             draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=10)
-            col_idx += 1
+    else:
+        rem_set = set()
+        rem_coords = set()
+        if removed_cols:
+            for item in removed_cols:
+                if isinstance(item, str):
+                    rem_set.add(item)
+                elif isinstance(item, dict):
+                    if "orig_id" in item:
+                        rem_set.add(item["orig_id"])
+                    if "id" in item:
+                        rem_set.add(item["id"])
+                    if "x" in item and "y" in item:
+                        rem_coords.add((round(item["x"], 3), round(item["y"], 3)))
+        grid_idx = 1
+        col_idx = 1
+        for j_idx, y in enumerate(y_coords):
+            for i_idx, x in enumerate(x_coords):
+                orig_id = f"C{grid_idx}"
+                grid_idx += 1
+                if orig_id in rem_set or (round(x, 3), round(y, 3)) in rem_coords:
+                    continue
+                cid = f"C{col_idx}"
+                col_idx += 1
+                c_trans = (col_transforms or {}).get(orig_id, {})
+                geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+                rx, ry = geom["x_min"], geom["y_min"]
+                rw, rh = geom["width_m"], geom["height_m"]
+                cx, cy = geom["center_x"], geom["center_y"]
+                is_edge_c = is_edge_column_verified(orig_id, geom=geom, edge_columns=edge_columns)
+                ax_plan.add_patch(patches.Rectangle(
+                    (rx, ry), rw, rh,
+                    lw=2.0,
+                    edgecolor="#0f172a",
+                    facecolor="#1e293b",
+                    zorder=8
+                ))
+                if is_edge_c:
+                    ed_info = (edge_columns or {}).get(orig_id, {})
+                    draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=9)
+                is_right = (i_idx == len(x_coords) - 1)
+                draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=10)
 
     # ── Check Extra Top Slab Reinforcement by Direction ─────────────────────
     dir_req = (direction or "X").upper()
@@ -6785,7 +7219,9 @@ def generate_flat_slab_top_mesh_extra_sketch(
     has_extra_top = len(filtered_bays) > 0
 
     if has_extra_top:
-        for b_info in filtered_bays:
+        filtered_bays_sorted = sorted(filtered_bays, key=lambda b: (round(b.get("cy", (y_coords[0] + y_coords[-1])/2.0), 1), b.get("cx", (x_coords[0] + x_coords[-1])/2.0)))
+        b_row_counts = {}
+        for b_info in filtered_bays_sorted:
             pid = b_info.get("panel_id", "")
             if pid in _voids:
                 continue
@@ -6815,13 +7251,22 @@ def generate_flat_slab_top_mesh_extra_sketch(
                 ax_plan.plot([cx - L_ext/2.0, cx - L_ext/2.0], [y_bar, y_bar - 0.35], color=line_c, lw=3.0, zorder=6)
                 ax_plan.plot([cx + L_ext/2.0, cx + L_ext/2.0], [y_bar, y_bar - 0.35], color=line_c, lw=3.0, zorder=6)
 
+                # Vertical stagger to prevent horizontal badge collision in narrow bays
+                row_k = round(cy, 1)
+                k_idx = b_row_counts.get(row_k, 0)
+                b_row_counts[row_k] = k_idx + 1
+
+                is_stagger = (k_idx % 2 == 1)
+                tag_y = (cy - 0.45) if not is_stagger else (cy + 1.10)
+                f_sz = 11.0 if (L_ext < 2.2 or min(Lx_spans) < 2.0) else 13.0
+                p_sz = 0.25 if (L_ext < 2.2 or min(Lx_spans) < 2.0) else 0.35
+
                 ax_plan.text(
-                    cx, cy - 0.45,
-                    f"★ Top Slab Extra (X-Dir / اتجاه X): {n_ext}Φ{dia_ext}\n"
-                    f"Bay Dim: {area_w:.2f}m (L) × {W_bay:.2f}m (W)",
-                    ha="center", va="center", fontsize=12.5, fontweight="bold", color="#1d4ed8", zorder=8,
+                    cx, tag_y,
+                    f"{n_ext} Φ {dia_ext}  (L = {L_ext:.2f} m)",
+                    ha="center", va="center", fontsize=f_sz, fontweight="bold", color="#1d4ed8", zorder=8,
                     rotation=0,
-                    bbox=dict(boxstyle="round,pad=0.4", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
+                    bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
                 )
             else:
                 area_w = W_bay * 0.88
@@ -6837,13 +7282,15 @@ def generate_flat_slab_top_mesh_extra_sketch(
                 ax_plan.plot([x_bar - 0.35, x_bar], [cy - L_ext/2.0, cy - L_ext/2.0], color=line_c, lw=3.0, zorder=6)
                 ax_plan.plot([x_bar - 0.35, x_bar], [cy + L_ext/2.0, cy + L_ext/2.0], color=line_c, lw=3.0, zorder=6)
 
+                f_sz = 11.0 if (W_bay < 1.5) else 13.0
+                p_sz = 0.25 if (W_bay < 1.5) else 0.35
+                tag_x = (cx - 0.45) if W_bay >= 1.5 else cx
                 ax_plan.text(
-                    cx - 0.45, cy,
-                    f"★ Top Slab Extra (Y-Dir / اتجاه Y): {n_ext}Φ{dia_ext}\n"
-                    f"Bay Dim: {W_bay:.2f}m (W) × {area_h:.2f}m (L)",
-                    ha="center", va="center", fontsize=12.5, fontweight="bold", color="#1d4ed8", zorder=8,
+                    tag_x, cy,
+                    f"{n_ext} Φ {dia_ext}  (L = {L_ext:.2f} m)",
+                    ha="center", va="center", fontsize=f_sz, fontweight="bold", color="#1d4ed8", zorder=8,
                     rotation=90,
-                    bbox=dict(boxstyle="round,pad=0.4", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
+                    bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
                 )
     else:
         # ── 🌟 PROMINENT LARGE BANNER WHEN NO EXTRA TOP SLAB REBAR REQUIRED ─────
@@ -7097,19 +7544,23 @@ def generate_flat_slab_master_steel_layout_sketch(
     rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
 
     col_dict = {}
+    grid_idx = 1
     col_idx = 1
     for j_idx, y in enumerate(y_coords):
         for i_idx, x in enumerate(x_coords):
+            orig_id = f"C{grid_idx}"
+            grid_idx += 1
             if (x, y) in rem_coords:
                 continue
             cid = f"C{col_idx}"
-            c_trans = (col_transforms or {}).get(cid) or {}
+            col_idx += 1
+            c_trans = (col_transforms or {}).get(orig_id, {})
             geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
             rx, ry = geom["x_min"], geom["y_min"]
             rw, rh = geom["width_m"], geom["height_m"]
             cx, cy = geom["center_x"], geom["center_y"]
             col_dict[cid] = (cx, cy, i_idx, j_idx)
-            is_edge_c = is_edge_column_verified(cid, geom=geom, edge_columns=edge_columns)
+            is_edge_c = is_edge_column_verified(orig_id, geom=geom, edge_columns=edge_columns)
             ax_plan.add_patch(patches.Rectangle(
                 (rx, ry), rw, rh,
                 linewidth=2.0,
@@ -7118,11 +7569,10 @@ def generate_flat_slab_master_steel_layout_sketch(
                 zorder=8,
             ))
             if is_edge_c:
-                ed_info = (edge_columns or {}).get(cid) or {}
+                ed_info = (edge_columns or {}).get(orig_id, {})
                 draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=9)
             is_right = (i_idx == len(x_coords) - 1)
             draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=11.5, zorder=10)
-            col_idx += 1
 
     # 5. Base Mesh Indicators (Bottom & Top) in Central Bays
     mid_i = len(Lx_spans) // 2
@@ -8385,7 +8835,7 @@ def render(is_standalone: bool = False):
                 val = S.number_input(
                     f"Lx{i+1}",
                     f"fs_lx_{i}",
-                    min_value=1.0, max_value=20.0, step=0.5,
+                    min_value=0.10, max_value=20.0, step=0.05,
                 )
                 Lx_spans.append(val)
 
@@ -8397,7 +8847,7 @@ def render(is_standalone: bool = False):
                 val = S.number_input(
                     f"Ly{j+1}",
                     f"fs_ly_{j}",
-                    min_value=1.0, max_value=20.0, step=0.5,
+                    min_value=0.10, max_value=20.0, step=0.05,
                 )
                 Ly_spans.append(val)
 
@@ -8422,17 +8872,20 @@ def render(is_standalone: bool = False):
         c1, c2, c3, c4 = st.columns(4)
 
         with c1:
-            st.markdown("<div style='font-size: 15px; font-weight: 700; color: #ffffff; margin-top: 6px; margin-bottom: 10px;'>🏛️ Column, Thickness & Floors</div>", unsafe_allow_html=True)
+            st.markdown("<div style='font-size: 15px; font-weight: 700; color: #ffffff; margin-top: 6px; margin-bottom: 10px;'>🏛️ Column & Slab Thickness</div>", unsafe_allow_html=True)
             bc_s = S.number_input("Col. Width bc (cm)", "slab_bc", min_value=None, step=5)
             tc_s = S.number_input("Col. Depth tc (cm)", "slab_tc", min_value=None, step=5)
             ts_initial = S.number_input("Initial Slab ts (cm)", "slab_ts_initial", min_value=12, max_value=80, step=1)
-            n_floors = S.integer_input("No. of Floors (عدد الأدوار)", "slab_n_floors", min_value=1, max_value=100)
-            col_sf = S.number_input(
-                "Factor of safety & Columns weight (معامل أمان ووزن الأعمدة)",
-                "slab_col_safety_factor",
-                min_value=1.00, max_value=2.00, step=0.05,
-                help="معامل أمان إضافي لتغطية الوزن الذاتي لأعمدة الأدوار وعزوم اللامركزية الصغرى (القيمة الافتراضية 1.10 = إضافة 10%).",
-            )
+            n_floors = 1
+            if not is_standalone:
+                col_sf = S.number_input(
+                    "Factor of safety & Columns weight (معامل أمان ووزن الأعمدة)",
+                    "slab_col_safety_factor",
+                    min_value=1.00, max_value=2.00, step=0.05,
+                    help="معامل أمان إضافي لتغطية الوزن الذاتي لأعمدة الأدوار وعزوم اللامركزية الصغرى (القيمة الافتراضية 1.10 = إضافة 10%).",
+                )
+            else:
+                col_sf = 1.0
 
         with c2:
             st.markdown("<div style='font-size: 15px; font-weight: 700; color: #ffffff; margin-top: 6px; margin-bottom: 10px;'>⚖️ Surface Loads (ton/m²)</div>", unsafe_allow_html=True)
@@ -8526,7 +8979,7 @@ def render(is_standalone: bool = False):
     if any(ly <= 0 for ly in Ly_spans):   errs.append("All Ly spans must be > 0.")
 
     num_floors = int(n_floors) if n_floors and n_floors >= 1 else 1
-    col_sf_val = float(col_sf) if col_sf is not None and col_sf >= 1.0 else 1.10
+    col_sf_val = float(col_sf) if (col_sf is not None and not is_standalone and col_sf >= 1.0) else 1.0
 
     # ── ④ VERIFICATION SKETCH ────────────────────────────────────────────────
     # الحسابات دائماً تُنفَّذ (خارج الـ expander) لأن img_verif_b64 مطلوب لاحقاً
@@ -8570,6 +9023,17 @@ def render(is_standalone: bool = False):
     _confirmed_removals = [cid for cid in _confirmed_raw if cid in _valid_orig_ids]
     if _confirmed_removals != _confirmed_raw:          # geometry changed → prune stale IDs
         S.cfg_set("fs_removed_cols", _confirmed_removals)
+
+    # تنظيف أي معرّفات قديمة أو غير متوافقة في قواميس التحويلات لضمان فك الارتباط
+    _cleaned_transforms = {k: v for k, v in _col_transforms.items() if k in _valid_orig_ids}
+    if _cleaned_transforms != _col_transforms:
+        _col_transforms = _cleaned_transforms
+        S.cfg_set("fs_col_transforms", _cleaned_transforms)
+
+    _cleaned_edge = {k: v for k, v in _edge_columns.items() if k in _valid_orig_ids}
+    if _cleaned_edge != _edge_columns:
+        _edge_columns = _cleaned_edge
+        S.cfg_set("fs_edge_columns", _cleaned_edge)
 
     # Generate all panels to validate persisted void IDs
     _all_panels_ref = get_flat_slab_panels(Lx_spans, Ly_spans)
@@ -8786,10 +9250,6 @@ def render(is_standalone: bool = False):
                         text-align: right !important;
                     }
                     </style>
-                    <div class='fs-col-ctrl-card' style='background:#f8fafc;border:2px solid #3b82f6;padding:10px 12px;border-radius:8px;margin-bottom:8px;'>
-                        <div style='font-size:14px;font-weight:bold;color:#1e3a8a;margin-bottom:4px;'>📐 ضرب وترحيل وتحديد أعمدة الجور</div>
-                        <div style='font-size:11.5px;color:#334155;line-height:1.4;font-weight:500;'>تحكم فوري في ضرب وترحيل وتحديد أوجه الجور (Edge Columns) مع التمييز المباشر باللون البينك المهشر على المخطط.</div>
-                    </div>
                     """,
                     unsafe_allow_html=True,
                 )
@@ -8802,9 +9262,11 @@ def render(is_standalone: bool = False):
                     if not isinstance(_col_transforms_current, dict):
                         _col_transforms_current = {}
 
+                    _col_label_map = {c["id"]: f"{c.get('grid_x', '')}-{c.get('grid_y', '')}" for c in _active_cols}
                     selected_col_name = st.selectbox(
                         "اسم العمود",
                         options=_active_col_names,
+                        format_func=lambda cid: f"{cid} ({_col_label_map.get(cid, '')})" if cid in _col_label_map else cid,
                         key="_fs_col_orientation_name_select",
                         help="اختر العمود المراد ضبط ضربه وترحيله من المسقط الأفقي الحالي.",
                     )
@@ -8812,7 +9274,7 @@ def render(is_standalone: bool = False):
                     _tgt_col = next((c for c in _active_cols if c["id"] == selected_col_name), _active_cols[0])
                     _tgt_orig_id = _tgt_col["orig_id"]
 
-                    _saved_trans = _col_transforms_current.get(_tgt_orig_id) or _col_transforms_current.get(selected_col_name) or {}
+                    _saved_trans = _col_transforms_current.get(_tgt_orig_id, {})
                     _norm_trans = normalize_col_transform(_saved_trans)
 
                     DIR_OPTIONS = ['اتجاه X', 'اتجاه Y']
@@ -8859,7 +9321,7 @@ def render(is_standalone: bool = False):
                     if not isinstance(_edge_columns_current, dict):
                         _edge_columns_current = {}
 
-                    _saved_edge = _edge_columns_current.get(_tgt_orig_id) or _edge_columns_current.get(selected_col_name) or {}
+                    _saved_edge = _edge_columns_current.get(_tgt_orig_id, {})
                     if not isinstance(_saved_edge, dict):
                         _saved_edge = {}
 
@@ -8984,8 +9446,6 @@ def render(is_standalone: bool = False):
                                 "shift_y": sel_sy,
                             }
                             _updated_map[_tgt_orig_id] = _new_data
-                            if selected_col_name != _tgt_orig_id:
-                                _updated_map[selected_col_name] = _new_data
                             st.session_state.setdefault("cfg", {})["fs_col_transforms"] = _updated_map
 
                         if _edge_changed:
@@ -8997,12 +9457,11 @@ def render(is_standalone: bool = False):
                                 "is_valid": _is_edge_valid and _has_real_dir,
                             }
                             _updated_edge_map[_tgt_orig_id] = _new_edge_data
-                            if selected_col_name != _tgt_orig_id:
-                                _updated_edge_map[selected_col_name] = _new_edge_data
                             st.session_state.setdefault("cfg", {})["fs_edge_columns"] = _updated_edge_map
 
                         S.save_settings()
                         st.rerun()
+
 
                     _sx_val = _curr_trans_state.get("shift_x", "")
                     if "جسم العمود يميناً" in _sx_val or _sx_val.startswith("يمين"):
@@ -9040,10 +9499,11 @@ def render(is_standalone: bool = False):
                         _edge_status_html = "<div dir='rtl' style='direction:rtl;text-align:right;font-size:14px;color:#64748b;font-weight:bold;margin-top:6px;'>⚪ عمود محيطي غير ملاصق لجار (Non-Edge Column)</div>"
 
                     # Lower status panel raised upwards by 3 lines (~65px)
+                    _orig_tag = f" <span style='font-size:15px;font-weight:normal;color:#64748b;'><bdi dir='rtl'>(الأصل: {_tgt_orig_id})</bdi></span>" if _tgt_orig_id != selected_col_name else ""
                     _panel_card_html = (
                         f"<div class='fs-bottom-panel' dir='rtl' style='direction:rtl;text-align:right;background:#ffffff;border:1.5px solid #cbd5e1;padding:10px 14px;border-radius:8px;margin-top:auto;margin-bottom:65px;box-shadow:0 1px 3px rgba(0,0,0,0.05);'>"
                         f"<div dir='rtl' style='direction:rtl;text-align:right;font-size:21px;font-weight:bold;color:#0f172a;margin-bottom:6px;line-height:1.4;'>"
-                        f"🏛️ اسم العمود: <span style='color:#1d4ed8;font-size:22px;font-weight:bold;'><bdi dir='ltr'>{selected_col_name}</bdi></span> <span style='font-size:15px;font-weight:normal;color:#64748b;'><bdi dir='ltr'>({_tgt_col.get('grid_x', '')} - {_tgt_col.get('grid_y', '')})</bdi></span>"
+                        f"🏛️ اسم العمود: <span style='color:#1d4ed8;font-size:22px;font-weight:bold;'><bdi dir='ltr'>{selected_col_name}</bdi></span> <span style='font-size:15px;font-weight:normal;color:#64748b;'><bdi dir='ltr'>({_tgt_col.get('grid_x', '')} - {_tgt_col.get('grid_y', '')})</bdi></span>{_orig_tag}"
                         f"</div>"
                         f"<div dir='rtl' style='direction:rtl;text-align:right;font-size:21px;font-weight:bold;color:#0f172a;margin-bottom:6px;line-height:1.4;'>"
                         f"📐 قطاع العمود: <span style='color:#0f766e;font-size:22px;font-weight:bold;'><bdi dir='ltr'>{_col_geom_preview['width_cm']:.0f} × {_col_geom_preview['height_cm']:.0f} cm</bdi></span>"
@@ -9099,11 +9559,15 @@ def render(is_standalone: bool = False):
     ):
         st.markdown(
             """
-            <div style='background:#fffbeb;border-left:4px solid #f59e0b;padding:10px 14px;
-                        border-radius:6px;margin-bottom:10px;'>
-            <b>📋 يرجى مراجعة مخطط الأعمدة أعلاه.</b><br>
-            حدّد الأعمدة التي تريد حذفها من الشبكة الإنشائية (بأرقامها الأصلية).<br>
-            بعد التأكيد: سيُعاد رسم المخطط وترقيم الأعمدة وإعادة جميع حسابات التصميم تلقائياً.
+            <div dir='rtl' style='direction:rtl;text-align:right;background:#fffbeb;border-left:5px solid #f59e0b;padding:12px 16px;
+                        border-radius:6px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06);'>
+                <div style='font-size:15px;font-weight:800;color:#0f172a;margin-bottom:5px;line-height:1.4;'>
+                    📋 يرجى مراجعة مخطط الأعمدة أعلاه.
+                </div>
+                <div style='font-size:13.5px;color:#1e293b;line-height:1.65;font-weight:600;'>
+                    حدّد الأعمدة التي تريد حذفها من الشبكة الإنشائية (بأرقامها الأصلية).<br>
+                    بعد التأكيد: سيُعاد رسم المخطط وترقيم الأعمدة وإعادة جميع حسابات التصميم تلقائياً.
+                </div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -9287,16 +9751,26 @@ def render(is_standalone: bool = False):
             _snap_panels = [p for p in _all_panels if p["id"] in _void_snapshot]
             _tot_vd_area = sum(p["area"] for p in _snap_panels)
 
-            st.warning(
-                "⚠️ **Pending Void Creation Confirmation**\n\n"
-                f"سيتم تفريغ البلاطات التالية كـ **مناور معمارية (Voids)** بمساحة إجمالية **{_tot_vd_area:.2f} m²**:\n\n"
-                + "\n".join(
-                    f"- **{_void_labels.get(pid, pid)}**"
-                    for pid in _void_snapshot
-                )
+            _void_badges_html = "".join(
+                f"<span style='background:#ffffff; border:1px solid #fcd34d; border-radius:4px; padding:2px 8px; font-size:12px; font-weight:700; color:#0f172a; white-space:nowrap;'>• {_void_labels.get(pid, pid)}</span>"
+                for pid in _void_snapshot
             )
 
-            _conf_v_a, _conf_v_b, _ = st.columns([1, 1, 2])
+            st.markdown(
+                f"""
+                <div dir='rtl' style='direction:rtl; text-align:right; background:#fffbeb; border:1px solid #fde68a; border-right:4px solid #f59e0b; padding:6px 12px; border-radius:6px; margin:2px 0 6px 0; line-height:1.4;'>
+                    <div style='font-size:12.5px; font-weight:700; color:#92400e;'>
+                        ⚠️ <b>Pending Void Creation Confirmation:</b> سيتم تفريغ البلاطات كـ <b>مناور معمارية (Voids)</b> بمساحة إجمالية <span style='color:#b45309; font-size:13px; font-weight:800;'>{_tot_vd_area:.2f} m²</span>:
+                    </div>
+                    <div style='display:flex; flex-wrap:wrap; gap:4px 8px; margin-top:4px;'>
+                        {_void_badges_html}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            _conf_v_a, _conf_v_b, _ = st.columns([1.2, 0.8, 2], gap="small")
             with _conf_v_a:
                 if st.button("✅ Yes — Confirm Voids & Redesign",
                              key="_fs_btn_void_yes", use_container_width=True):
@@ -9349,63 +9823,33 @@ def render(is_standalone: bool = False):
                     st.session_state["_fs_show_void_confirm"] = False
                     st.rerun()
 
-    # ── 5g. DATA CARD & DESIGN PARAMETERS ─────────────────────────────────────
-    with st.expander("📋 Data Card & Design Parameters (بطاقة البيانات ومعايير التصميم)", expanded=False, key=f"{prefix}exp_data_card", on_change="rerun"):
+    # ── 5g. DESIGN CRITERIA SUMMARY ──────────────────────────────────────────
+    with st.expander("📋 Design Criteria Summary (ملخص معايير التصميم الإنشائية)", expanded=False, key=f"{prefix}exp_data_card", on_change="rerun"):
         if st.session_state.get(f"{prefix}exp_data_card", False):
             st.markdown(
-                '<div class="section-header">📋 بطاقة البيانات ومعايير التصميم الإنشائية (DATA CARD & DESIGN PARAMETERS)</div>',
+                '<div class="section-header">📋 ملخص معايير التصميم الإنشائية (Design Criteria Summary)</div>',
                 unsafe_allow_html=True,
             )
-            col_card_fig, col_card_info = st.columns([1.1, 0.9], gap="large")
-            with col_card_fig:
-                fig_card = generate_flat_slab_data_card(
-                    ts_initial=ts_initial if ts_initial is not None else 20,
-                    n_floors=num_floors,
-                    bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
-                    bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
-                    top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
-                    top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
-                    col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
-                    strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
-                    strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
-                    concrete_cover=cov if cov is not None else 1.5,
-                    fcu=Fcu if Fcu is not None else 250,
-                    fy=Fy if Fy is not None else 4000,
-                    live_load=LL if LL is not None else 0.25,
-                    flooring_load=SDL if SDL is not None else 0.15,
-                    wall_load=wall_load if wall_load is not None else 0.50,
-                    col_w_cm=_col_w_sk,
-                    col_d_cm=_col_d_sk,
-                )
-                st.pyplot(fig_card, clear_figure=True, use_container_width=True)
-                buf_c = io.BytesIO()
-                fig_card.savefig(buf_c, format="png", bbox_inches="tight", dpi=180)
-                buf_c.seek(0)
-                st.download_button(
-                    label="📥 Download Data Card (High-Res PNG)",
-                    data=buf_c,
-                    file_name=f"{prefix}Flat_Slab_Data_Card.png",
-                    mime="image/png",
-                    key="_fs_btn_dl_datacard",
-                    use_container_width=True,
-                )
-            with col_card_info:
-                st.markdown("### 📌 ملخص معايير التصميم (Design Criteria Summary)")
-                render_styled_table(pd.DataFrame([
-                    {"Parameter / المعيار": "Concrete Grade (Fcu)", "Value / القيمة": f"{Fcu if Fcu else 250} kg/cm²", "Category": "Materials"},
-                    {"Parameter / المعيار": "Steel Yield (Fy)", "Value / القيمة": f"{Fy if Fy else 4000} kg/cm²", "Category": "Materials"},
-                    {"Parameter / المعيار": "Concrete Cover (الغلاف الخرساني)", "Value / القيمة": f"{cov if cov else 1.5} cm", "Category": "Materials"},
-                    {"Parameter / المعيار": "Initial Slab Thickness (ts)", "Value / القيمة": f"{ts_initial if ts_initial else 20} cm", "Category": "Geometry"},
-                    {"Parameter / المعيار": "Number of Floors", "Value / القيمة": f"{num_floors} Floor(s)", "Category": "Geometry"},
-                    {"Parameter / المعيار": "Live Load (LL)", "Value / القيمة": f"{LL if LL else 0.25} t/m²", "Category": "Loading"},
-                    {"Parameter / المعيار": "Superimposed Dead Load (SDL)", "Value / القيمة": f"{SDL if SDL else 0.15} t/m²", "Category": "Loading"},
-                    {"Parameter / المعيار": "Wall Load (WL)", "Value / القيمة": f"{wall_load if wall_load else 0.50} t/m²", "Category": "Loading"},
-                    {"Parameter / المعيار": "Bottom Mesh (الرقة السفلية)", "Value / القيمة": f"{int(n_btm_mesh_usr) if n_btm_mesh_usr else 5} Φ {bottom_mesh_dia if bottom_mesh_dia else 12} / m'", "Category": "Reinforcement"},
-                    {"Parameter / المعيار": "Top Mesh (الرقة العلوية)", "Value / القيمة": f"{int(n_top_mesh_usr) if n_top_mesh_usr else 5} Φ {top_mesh_dia if top_mesh_dia else 10} / m'", "Category": "Reinforcement"},
-                    {"Parameter / المعيار": "Default Column Dimensions", "Value / القيمة": f"{_col_w_sk} cm × {_col_d_sk} cm", "Category": "Columns"},
-                ]))
+            _avg_rebar_cm = (bottom_mesh_dia if bottom_mesh_dia else 12) / 10.0
+            _d_eff_val = (ts_initial if ts_initial else 20) - (cov if cov else 1.5) - (_avg_rebar_cm / 2.0)
+
+            render_styled_table(pd.DataFrame([
+                {"Parameter / المعيار": "Concrete Grade (Fcu)", "Value / القيمة": f"{Fcu if Fcu else 250} kg/cm²", "Category": "Materials"},
+                {"Parameter / المعيار": "Steel Yield (Fy)", "Value / القيمة": f"{Fy if Fy else 4000} kg/cm²", "Category": "Materials"},
+                {"Parameter / المعيار": "Concrete Cover (الغلاف الخرساني)", "Value / القيمة": f"{cov if cov else 1.5} cm", "Category": "Materials"},
+                {"Parameter / المعيار": "Initial Slab Thickness (ts)", "Value / القيمة": f"{ts_initial if ts_initial else 20} cm  (d ≈ {_d_eff_val:.1f} cm)", "Category": "Geometry"},
+                {"Parameter / المعيار": "Structural System", "Value / القيمة": "Standalone Floor (سقف مستقل)" if num_floors == 1 else f"{num_floors} Floors (طوابق)", "Category": "Geometry"},
+                {"Parameter / المعيار": "Live Load (LL)", "Value / القيمة": f"{LL if LL else 0.25} t/m²", "Category": "Loading"},
+                {"Parameter / المعيار": "Superimposed Dead Load (SDL)", "Value / القيمة": f"{SDL if SDL else 0.15} t/m²", "Category": "Loading"},
+                {"Parameter / المعيار": "Wall Load (WL)", "Value / القيمة": f"{wall_load if wall_load else 0.50} t/m²", "Category": "Loading"},
+                {"Parameter / المعيار": "Bottom Mesh (الرقة السفلية B1, B2)", "Value / القيمة": f"{int(n_btm_mesh_usr) if n_btm_mesh_usr else 5} Φ {bottom_mesh_dia if bottom_mesh_dia else 12} / m'", "Category": "Reinforcement"},
+                {"Parameter / المعيار": "Top Mesh (الرقة العلوية T1, T2)", "Value / القيمة": f"{int(n_top_mesh_usr) if n_top_mesh_usr else 5} Φ {top_mesh_dia if top_mesh_dia else 10} / m'", "Category": "Reinforcement"},
+                {"Parameter / المعيار": "Column Extra Top Rebar", "Value / القيمة": f"Φ {col_extra_dia if col_extra_dia else 12} mm", "Category": "Reinforcement"},
+                {"Parameter / المعيار": "Strip Extra Top / Btm Rebar", "Value / القيمة": f"Φ {strip_top_extra_dia if strip_top_extra_dia else 12} / Φ {strip_bottom_extra_dia if strip_bottom_extra_dia else 12} mm", "Category": "Reinforcement"},
+                {"Parameter / المعيار": "Default Column Dimensions", "Value / القيمة": f"{_col_w_sk} cm × {_col_d_sk} cm", "Category": "Columns"},
+            ]))
         else:
-            st.info("💡 انقر لتوسيع هذا القسم وعرض بطاقة البيانات والمعايير الإنشائية.")
+            st.info("💡 انقر لتوسيع هذا القسم وعرض ملخص معايير التصميم الإنشائية.")
 
     # ── Columns Registry Table (reflects active columns after removal) ────────
     _registry_df = pd.DataFrame([
@@ -9576,27 +10020,45 @@ def render(is_standalone: bool = False):
     y_coords = [0.0]
     for ly in Ly_spans:
         y_coords.append(y_coords[-1] + ly)
-
     n_xi = len(x_coords)
     n_yj = len(y_coords)
+
+    x_eff_coords = [0.0]
+    for lx in Lx_calc:
+        x_eff_coords.append(x_eff_coords[-1] + lx)
+    y_eff_coords = [0.0]
+    for ly in Ly_calc:
+        y_eff_coords.append(y_eff_coords[-1] + ly)
+
+    # Labels and indices for active grid axes (skipping removed support lines)
+    min_cols_x = 2 if n_yj >= 3 else 1
+    min_cols_y = 2 if n_xi >= 3 else 1
+    _active_xi = [i for i in range(n_xi) if sum(1 for c in _active_cols if c["i"] == i) >= min_cols_x]
+    _active_yj = [j for j in range(n_yj) if sum(1 for c in _active_cols if c["j"] == j) >= min_cols_y]
+    if len(_active_xi) < 2:
+        _active_xi = [0, n_xi - 1]
+    if len(_active_yj) < 2:
+        _active_yj = [0, n_yj - 1]
+    _active_x_labels = [f"Y{i+1}" for i in _active_xi]
+    _active_y_labels = [f"X{j+1}" for j in _active_yj]
 
     # 1. Standard DDM span rows for X direction
     Ly_avg = sum(Ly_calc) / len(Ly_calc)
     Lx_avg = sum(Lx_calc) / len(Lx_calc)
     Ln_x_all = []
     for i, lx in enumerate(Lx_calc):
-        cols_l = [c for c in _active_cols if c["i"] == i]
-        cols_r = [c for c in _active_cols if c["i"] == i + 1]
-        face_l = max([c["x_max"] for c in cols_l], default=x_coords[i] + bc_m / 2.0)
-        face_r = min([c["x_min"] for c in cols_r], default=x_coords[min(i + 1, len(x_coords) - 1)] - bc_m / 2.0)
+        cols_l = [c for c in _active_cols if c["i"] == _active_xi[i]] if i < len(_active_xi) else []
+        cols_r = [c for c in _active_cols if c["i"] == _active_xi[i + 1]] if (i + 1) < len(_active_xi) else []
+        face_l = max([c["x_max"] for c in cols_l], default=x_eff_coords[i] + bc_m / 2.0)
+        face_r = min([c["x_min"] for c in cols_r], default=x_eff_coords[i + 1] - bc_m / 2.0)
         Ln_x_all.append(max(0.5, face_r - face_l))
 
     Ln_y_all = []
     for j, ly in enumerate(Ly_calc):
-        cols_b = [c for c in _active_cols if c["j"] == j]
-        cols_t = [c for c in _active_cols if c["j"] == j + 1]
-        face_b = max([c["y_max"] for c in cols_b], default=y_coords[j] + tc_m / 2.0)
-        face_t = min([c["y_min"] for c in cols_t], default=y_coords[min(j + 1, len(y_coords) - 1)] - tc_m / 2.0)
+        cols_b = [c for c in _active_cols if c["j"] == _active_yj[j]] if j < len(_active_yj) else []
+        cols_t = [c for c in _active_cols if c["j"] == _active_yj[j + 1]] if (j + 1) < len(_active_yj) else []
+        face_b = max([c["y_max"] for c in cols_b], default=y_eff_coords[j] + tc_m / 2.0)
+        face_t = min([c["y_min"] for c in cols_t], default=y_eff_coords[j + 1] - tc_m / 2.0)
         Ln_y_all.append(max(0.5, face_t - face_b))
 
     rows_x = []
@@ -9668,6 +10130,13 @@ def render(is_standalone: bool = False):
             As_ms_neg_int = calc_As(m["ms_neg_int"], ms_w, d, Fcu, Fy, ts),
         ))
 
+    # Physical bounding boxes for confirmed voids
+    _orig_panels_sk = get_flat_slab_panels(Lx_spans, Ly_spans)
+    _void_boxes_sk = [
+        (p["x1"], p["x2"], p["y1"], p["y2"], p["area"])
+        for p in _orig_panels_sk if p["id"] in set(_confirmed_voids)
+    ]
+
     # 3. Detect and calculate Bottom Extra Steel per Panel Bay (بين المحاور داخل كل باكية)
     rem_coords_set = {(c["x"], c["y"]) for c in (_removed_col_objs or [])}
     all_panels_x_design = []
@@ -9679,17 +10148,17 @@ def render(is_standalone: bool = False):
             if pid in _confirmed_voids:
                 continue
 
-            x_l, x_r = x_coords[i], x_coords[i+1]
-            y_b, y_t = y_coords[j], y_coords[j+1]
+            x_l, x_r = x_eff_coords[i], x_eff_coords[i+1]
+            y_b, y_t = y_eff_coords[j], y_eff_coords[j+1]
             span_lx = Lx_calc[i]
             span_ly = Ly_calc[j]
             cx = (x_l + x_r) / 2.0
             cy = (y_b + y_t) / 2.0
 
-            col_bl = next((c for c in _active_cols if c["i"] == i and c["j"] == j), None)
-            col_br = next((c for c in _active_cols if c["i"] == i + 1 and c["j"] == j), None)
-            col_tl = next((c for c in _active_cols if c["i"] == i and c["j"] == j + 1), None)
-            col_tr = next((c for c in _active_cols if c["i"] == i + 1 and c["j"] == j + 1), None)
+            col_bl = next((c for c in _active_cols if c["i"] == _active_xi[i] and c["j"] == _active_yj[j]), None) if (i < len(_active_xi) and j < len(_active_yj)) else None
+            col_br = next((c for c in _active_cols if c["i"] == _active_xi[i + 1] and c["j"] == _active_yj[j]), None) if ((i + 1) < len(_active_xi) and j < len(_active_yj)) else None
+            col_tl = next((c for c in _active_cols if c["i"] == _active_xi[i] and c["j"] == _active_yj[j + 1]), None) if (i < len(_active_xi) and (j + 1) < len(_active_yj)) else None
+            col_tr = next((c for c in _active_cols if c["i"] == _active_xi[i + 1] and c["j"] == _active_yj[j + 1]), None) if ((i + 1) < len(_active_xi) and (j + 1) < len(_active_yj)) else None
 
             left_x_max = max([c["x_max"] for c in (col_bl, col_tl) if c], default=x_l + bc_m / 2.0)
             right_x_min = min([c["x_min"] for c in (col_br, col_tr) if c], default=x_r - bc_m / 2.0)
@@ -9718,6 +10187,7 @@ def render(is_standalone: bool = False):
             As_ms_m_x = As_ms_req_x / ms_w_x
             delta_As_ms_x = max(0.0, As_ms_m_x - prov_btm_mesh_cm2m)
             delta_As_x = max(delta_As_cs_x, delta_As_ms_x)
+            Mu_pos_m_x = max(M_cs_x / max(0.1, w_cs_x), M_ms_x / max(0.1, ms_w_x))
 
             # Y-direction Bending
             Mo_y = Wu * span_lx * (Ln_y ** 2) / 8.0
@@ -9734,6 +10204,7 @@ def render(is_standalone: bool = False):
             As_ms_m_y = As_ms_req_y / ms_w_y
             delta_As_ms_y = max(0.0, As_ms_m_y - prov_btm_mesh_cm2m)
             delta_As_y = max(delta_As_cs_y, delta_As_ms_y)
+            Mu_pos_m_y = max(M_cs_y / max(0.1, w_cs_y), M_ms_y / max(0.1, ms_w_y))
 
             # X-direction Bottom Extra Check & Record
             a_bar = bar_area(strip_bottom_extra_dia)
@@ -9755,6 +10226,7 @@ def render(is_standalone: bool = False):
                 "cy": cy,
                 "Mo": Mo_x,
                 "M_pos": M_pos_x,
+                "Mu_pos_m": Mu_pos_m_x,
                 "As_req_m": max(As_cs_m_x, As_ms_m_x),
                 "As_prov_m": prov_btm_mesh_cm2m,
                 "delta_As": delta_As_x,
@@ -9791,6 +10263,7 @@ def render(is_standalone: bool = False):
                 "cy": cy,
                 "Mo": Mo_y,
                 "M_pos": M_pos_y,
+                "Mu_pos_m": Mu_pos_m_y,
                 "As_req_m": max(As_cs_m_y, As_ms_m_y),
                 "As_prov_m": prov_btm_mesh_cm2m,
                 "delta_As": delta_As_y,
@@ -9828,17 +10301,17 @@ def render(is_standalone: bool = False):
             pid = f"P_{i+1}_{j+1}"
             if pid in _confirmed_voids:
                 continue
-            x_l, x_r = x_coords[i], x_coords[i+1]
-            y_b, y_t = y_coords[j], y_coords[j+1]
+            x_l, x_r = x_eff_coords[i], x_eff_coords[i+1]
+            y_b, y_t = y_eff_coords[j], y_eff_coords[j+1]
             span_lx = Lx_calc[i]
             span_ly = Ly_calc[j]
             cx = (x_l + x_r) / 2.0
             cy = (y_b + y_t) / 2.0
 
-            col_bl = next((c for c in _active_cols if c["i"] == i and c["j"] == j), None)
-            col_br = next((c for c in _active_cols if c["i"] == i + 1 and c["j"] == j), None)
-            col_tl = next((c for c in _active_cols if c["i"] == i and c["j"] == j + 1), None)
-            col_tr = next((c for c in _active_cols if c["i"] == i + 1 and c["j"] == j + 1), None)
+            col_bl = next((c for c in _active_cols if c["i"] == _active_xi[i] and c["j"] == _active_yj[j]), None) if (i < len(_active_xi) and j < len(_active_yj)) else None
+            col_br = next((c for c in _active_cols if c["i"] == _active_xi[i + 1] and c["j"] == _active_yj[j]), None) if ((i + 1) < len(_active_xi) and j < len(_active_yj)) else None
+            col_tl = next((c for c in _active_cols if c["i"] == _active_xi[i] and c["j"] == _active_yj[j + 1]), None) if (i < len(_active_xi) and (j + 1) < len(_active_yj)) else None
+            col_tr = next((c for c in _active_cols if c["i"] == _active_xi[i + 1] and c["j"] == _active_yj[j + 1]), None) if ((i + 1) < len(_active_xi) and (j + 1) < len(_active_yj)) else None
 
             left_x_max = max([c["x_max"] for c in (col_bl, col_tl) if c], default=x_l + bc_m / 2.0)
             right_x_min = min([c["x_min"] for c in (col_br, col_tr) if c], default=x_r - bc_m / 2.0)
@@ -10605,6 +11078,17 @@ def render(is_standalone: bool = False):
                     btm_extra_spans=btm_extra_spans,
                     col_transforms=_col_transforms,
                     edge_columns=_edge_columns,
+                    active_cols=_active_cols,
+                    active_x_labels=_active_x_labels,
+                    active_y_labels=_active_y_labels,
+                    void_boxes=_void_boxes_sk,
+                    prov_btm_mesh_cm2m=prov_btm_mesh_cm2m,
+                    prov_top_mesh_cm2m=prov_top_mesh_cm2m,
+                    d_cm=d,
+                    Fcu=Fcu,
+                    Fy=Fy,
+                    mesh_btm_str=mesh_btm_str,
+                    mesh_top_str=mesh_top_str,
                 )
                 st.pyplot(fig_m11, clear_figure=True, use_container_width=True)
                 buf_m11 = io.BytesIO()
@@ -10632,6 +11116,17 @@ def render(is_standalone: bool = False):
                     btm_extra_spans=btm_extra_spans,
                     col_transforms=_col_transforms,
                     edge_columns=_edge_columns,
+                    active_cols=_active_cols,
+                    active_x_labels=_active_x_labels,
+                    active_y_labels=_active_y_labels,
+                    void_boxes=_void_boxes_sk,
+                    prov_btm_mesh_cm2m=prov_btm_mesh_cm2m,
+                    prov_top_mesh_cm2m=prov_top_mesh_cm2m,
+                    d_cm=d,
+                    Fcu=Fcu,
+                    Fy=Fy,
+                    mesh_btm_str=mesh_btm_str,
+                    mesh_top_str=mesh_top_str,
                 )
                 st.pyplot(fig_m22, clear_figure=True, use_container_width=True)
                 buf_m22 = io.BytesIO()
@@ -10716,6 +11211,9 @@ def render(is_standalone: bool = False):
                 void_panel_ids=set(_confirmed_voids),
                 col_transforms=_col_transforms,
                 edge_columns=_edge_columns,
+                btm_extra_spans=btm_extra_spans,
+                void_boxes=_void_boxes_sk,
+                mesh_btm_str=mesh_btm_str,
             )
             st.pyplot(fig_deficit, clear_figure=True, use_container_width=True)
             buf_deficit = io.BytesIO()
@@ -10825,7 +11323,7 @@ def render(is_standalone: bool = False):
                         "نوع البحر (Span Classification)": bx["span_type"],
                         "طول البحر L (m)": f"{bx['span_len']:.2f} m",
                         "البحر الصافي Ln (m)": f"{bx['Ln']:.2f} m",
-                        "العزم الموجب التصميمي Mu⁺ (ton·m/m)": f"{bx['M_pos']:.2f}",
+                        "العزم الموجب التصميمي Mu⁺ (ton·m/m)": f"{bx.get('Mu_pos_m', bx['M_pos']):.2f} (كلي {bx['M_pos']:.1f} t.m)",
                         "التسليح السفلي المطلوب As_req (cm²/m)": f"{bx['As_req_m']:.2f}",
                         "تسليح الشبكة السفلية As_prov (cm²/m)": f"{bx['As_prov_m']:.2f}",
                         "فارق التسليح ΔAs (cm²/m)": f"{bx['delta_As']:.2f}",
@@ -10855,7 +11353,7 @@ def render(is_standalone: bool = False):
                         "نوع البحر (Span Classification)": by["span_type"],
                         "طول البحر L (m)": f"{by['span_len']:.2f} m",
                         "البحر الصافي Ln (m)": f"{by['Ln']:.2f} m",
-                        "العزم الموجب التصميمي Mu⁺ (ton·m/m)": f"{by['M_pos']:.2f}",
+                        "العزم الموجب التصميمي Mu⁺ (ton·m/m)": f"{by.get('Mu_pos_m', by['M_pos']):.2f} (كلي {by['M_pos']:.1f} t.m)",
                         "التسليح السفلي المطلوب As_req (cm²/m)": f"{by['As_req_m']:.2f}",
                         "تسليح الشبكة السفلية As_prov (cm²/m)": f"{by['As_prov_m']:.2f}",
                         "فارق التسليح ΔAs (cm²/m)": f"{by['delta_As']:.2f}",
@@ -10925,10 +11423,14 @@ def render(is_standalone: bool = False):
                     Lx_calc, Ly_calc, cantilevers, ts,
                     top_extra_cols=top_extra_cols,
                     col_w_cm=bc_s, col_d_cm=tc_s,
-                    removed_cols=_confirmed_removals,
-                    void_panel_ids=_confirmed_voids,
+                    removed_cols=_removed_col_objs,
+                    void_panel_ids=set(_confirmed_voids),
                     col_transforms=_col_transforms,
                     edge_columns=_edge_columns,
+                    active_cols=_active_cols,
+                    active_x_labels=_active_x_labels,
+                    active_y_labels=_active_y_labels,
+                    void_boxes=_void_boxes_sk,
                 )
                 st.pyplot(fig_cc, clear_figure=True, use_container_width=True)
                 buf_cc = io.BytesIO()
@@ -10956,11 +11458,15 @@ def render(is_standalone: bool = False):
                     n_mesh_top=n_mesh_top,
                     top_mesh_dia=top_mesh_dia,
                     col_w_cm=bc_s, col_d_cm=tc_s,
-                    removed_cols=_confirmed_removals,
-                    void_panel_ids=_confirmed_voids,
+                    removed_cols=_removed_col_objs,
+                    void_panel_ids=set(_confirmed_voids),
                     direction="X",
                     col_transforms=_col_transforms,
                     edge_columns=_edge_columns,
+                    active_cols=_active_cols,
+                    active_x_labels=_active_x_labels,
+                    active_y_labels=_active_y_labels,
+                    void_boxes=_void_boxes_sk,
                 )
                 st.pyplot(fig_bes_x, clear_figure=True, use_container_width=True)
                 buf_bes_x = io.BytesIO()
@@ -10988,11 +11494,15 @@ def render(is_standalone: bool = False):
                     n_mesh_top=n_mesh_top,
                     top_mesh_dia=top_mesh_dia,
                     col_w_cm=bc_s, col_d_cm=tc_s,
-                    removed_cols=_confirmed_removals,
-                    void_panel_ids=_confirmed_voids,
+                    removed_cols=_removed_col_objs,
+                    void_panel_ids=set(_confirmed_voids),
                     direction="Y",
                     col_transforms=_col_transforms,
                     edge_columns=_edge_columns,
+                    active_cols=_active_cols,
+                    active_x_labels=_active_x_labels,
+                    active_y_labels=_active_y_labels,
+                    void_boxes=_void_boxes_sk,
                 )
                 st.pyplot(fig_bes_y, clear_figure=True, use_container_width=True)
                 buf_bes_y = io.BytesIO()
@@ -11019,11 +11529,15 @@ def render(is_standalone: bool = False):
                     n_mesh_btm=n_mesh_btm,
                     bottom_mesh_dia=bottom_mesh_dia,
                     col_w_cm=bc_s, col_d_cm=tc_s,
-                    removed_cols=_confirmed_removals,
-                    void_panel_ids=_confirmed_voids,
+                    removed_cols=_removed_col_objs,
+                    void_panel_ids=set(_confirmed_voids),
                     direction="X",
                     col_transforms=_col_transforms,
                     edge_columns=_edge_columns,
+                    active_cols=_active_cols,
+                    active_x_labels=_active_x_labels,
+                    active_y_labels=_active_y_labels,
+                    void_boxes=_void_boxes_sk,
                 )
                 st.pyplot(fig_tmes_x, clear_figure=True, use_container_width=True)
                 buf_tmes_x = io.BytesIO()
@@ -11050,11 +11564,15 @@ def render(is_standalone: bool = False):
                     n_mesh_btm=n_mesh_btm,
                     bottom_mesh_dia=bottom_mesh_dia,
                     col_w_cm=bc_s, col_d_cm=tc_s,
-                    removed_cols=_confirmed_removals,
-                    void_panel_ids=_confirmed_voids,
+                    removed_cols=_removed_col_objs,
+                    void_panel_ids=set(_confirmed_voids),
                     direction="Y",
                     col_transforms=_col_transforms,
                     edge_columns=_edge_columns,
+                    active_cols=_active_cols,
+                    active_x_labels=_active_x_labels,
+                    active_y_labels=_active_y_labels,
+                    void_boxes=_void_boxes_sk,
                 )
                 st.pyplot(fig_tmes_y, clear_figure=True, use_container_width=True)
                 buf_tmes_y = io.BytesIO()
@@ -11098,17 +11616,20 @@ def render(is_standalone: bool = False):
             for r in rows:
                 sl  = r["span_label"]
                 st_ = r["span_type"]
+                cs_w = r["cs_w"]
+                ms_w = r["ms_w"]
+                tot_w = max(0.1, cs_w + ms_w)
                 moment_rows += [
-                    [f"{sl}  [{st_}]  Total Static Mo", f"{r['Mo']:.3f}", "—"],
-                    [f"  ↳ Neg. Ext.  (M_neg_ext)", f"{r['M_neg_ext']:.3f}", "—"],
-                    [f"  ↳ Positive   (M_pos)",     f"{r['M_pos']:.3f}",     "—"],
-                    [f"  ↳ Neg. Int.  (M_neg_int)", f"{r['M_neg_int']:.3f}", "—"],
-                    [f"    ↳ Col.Strip neg.ext",  f"{r['cs_neg_ext']:.3f}", f"{r['cs_w']:.2f}"],
-                    [f"    ↳ Mid.Strip neg.ext",  f"{r['ms_neg_ext']:.3f}", f"{r['ms_w']:.2f}"],
-                    [f"    ↳ Col.Strip pos",      f"{r['cs_pos']:.3f}",     f"{r['cs_w']:.2f}"],
-                    [f"    ↳ Mid.Strip pos",      f"{r['ms_pos']:.3f}",     f"{r['ms_w']:.2f}"],
-                    [f"    ↳ Col.Strip neg.int",  f"{r['cs_neg_int']:.3f}", f"{r['cs_w']:.2f}"],
-                    [f"    ↳ Mid.Strip neg.int",  f"{r['ms_neg_int']:.3f}", f"{r['ms_w']:.2f}"],
+                    [f"{sl}  [{st_}]  Total Static Mo", f"{r['Mo']:.3f}", f"{tot_w:.2f}", f"{r['Mo']/tot_w:.2f}"],
+                    [f"  ↳ Neg. Ext.  (M_neg_ext)", f"{r['M_neg_ext']:.3f}", "—", "—"],
+                    [f"  ↳ Positive   (M_pos)",     f"{r['M_pos']:.3f}",     f"{tot_w:.2f}", f"{r['M_pos']/tot_w:.2f}"],
+                    [f"  ↳ Neg. Int.  (M_neg_int)", f"{r['M_neg_int']:.3f}", "—", "—"],
+                    [f"    ↳ Col.Strip neg.ext",  f"{r['cs_neg_ext']:.3f}", f"{cs_w:.2f}", f"{r['cs_neg_ext']/max(0.1, cs_w):.2f}"],
+                    [f"    ↳ Mid.Strip neg.ext",  f"{r['ms_neg_ext']:.3f}", f"{ms_w:.2f}", f"{r['ms_neg_ext']/max(0.1, ms_w):.2f}"],
+                    [f"    ↳ Col.Strip pos",      f"{r['cs_pos']:.3f}",     f"{cs_w:.2f}", f"{r['cs_pos']/max(0.1, cs_w):.2f}"],
+                    [f"    ↳ Mid.Strip pos",      f"{r['ms_pos']:.3f}",     f"{ms_w:.2f}", f"{r['ms_pos']/max(0.1, ms_w):.2f}"],
+                    [f"    ↳ Col.Strip neg.int",  f"{r['cs_neg_int']:.3f}", f"{cs_w:.2f}", f"{r['cs_neg_int']/max(0.1, cs_w):.2f}"],
+                    [f"    ↳ Mid.Strip neg.int",  f"{r['ms_neg_int']:.3f}", f"{ms_w:.2f}", f"{r['ms_neg_int']/max(0.1, ms_w):.2f}"],
                 ]
 
                 def steel_entry(label, As_req, w_m):
@@ -11131,7 +11652,7 @@ def render(is_standalone: bool = False):
                     steel_entry(f"Mid.Strip TOP (neg.int)  w={r['ms_w']:.1f}m", r["As_ms_neg_int"], r["ms_w"]),
                 ]
 
-            render_styled_table(moment_rows, headers=["Strip / Location", "Moment (ton·m)", "Strip Width (m)"])
+            render_styled_table(moment_rows, headers=["Strip / Location", "Total Moment (ton·m)", "Strip Width (m)", "Moment Intensity (ton·m/m') | كثافة العزم"])
             render_styled_table(steel_rows, headers=["Zone", "Total As_req (cm²)", "As/m (cm²/m)", "Bars / meter", "Spacing", "As_prov/m (cm²/m)"])
 
     render_direction(rows_x, "X-Direction (spanning across Lx spans)")
@@ -13061,6 +13582,10 @@ def render(is_standalone: bool = False):
                         removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
                         top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
                         col_transforms=_col_transforms, edge_columns=_edge_columns,
+                        active_cols=_active_cols,
+                        active_x_labels=_active_x_labels,
+                        active_y_labels=_active_y_labels,
+                        void_boxes=_void_boxes_sk,
                     )
                     _buf = io.BytesIO()
                     _fig_m11_rep.savefig(_buf, format="png", bbox_inches="tight", dpi=180)
@@ -13075,6 +13600,10 @@ def render(is_standalone: bool = False):
                         removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
                         top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
                         col_transforms=_col_transforms, edge_columns=_edge_columns,
+                        active_cols=_active_cols,
+                        active_x_labels=_active_x_labels,
+                        active_y_labels=_active_y_labels,
+                        void_boxes=_void_boxes_sk,
                     )
                     _buf = io.BytesIO()
                     _fig_m22_rep.savefig(_buf, format="png", bbox_inches="tight", dpi=180)
