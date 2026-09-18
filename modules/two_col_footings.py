@@ -31,6 +31,17 @@ from modules.table_styler import render_styled_table
 #  1. CORE UTILITY HELPERS (kg · cm · ton · m · kN)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def safe_to_excel_bytes(df: pd.DataFrame, sheet_name: str = 'Sheet1'):
+    """Safely converts DataFrame to Excel (.xlsx) bytes using openpyxl without crashing if openpyxl is missing."""
+    try:
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name=sheet_name)
+        return buf.getvalue()
+    except Exception:
+        return None
+
+
 def _r5(v_cm):
     """Round UP to nearest 5 cm."""
     return int(math.ceil(float(v_cm) / 5.0) * 5)
@@ -2432,21 +2443,28 @@ def render():
 
             # Export Excel & CSV
             csv_tcf_data = unified_df.to_csv(index=False).encode('utf-8-sig')
-            buf_tcf_xl = io.BytesIO()
-            with pd.ExcelWriter(buf_tcf_xl, engine='openpyxl') as writer:
-                unified_df.to_excel(writer, index=False, sheet_name='Footings_Schedule')
-            excel_tcf_bytes = buf_tcf_xl.getvalue()
+            excel_tcf_bytes = safe_to_excel_bytes(unified_df, sheet_name='Footings_Schedule')
 
             tcf_c1, tcf_c2 = st.columns(2)
             with tcf_c1:
-                st.download_button(
-                    label="📊 تصدير جدول نماذج القواعد الموحد (Excel .xlsx)",
-                    data=excel_tcf_bytes,
-                    file_name="Unified_Building_Footings_Schedule.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    key="btn_dl_unified_excel_tcf",
-                )
+                if excel_tcf_bytes is not None:
+                    st.download_button(
+                        label="📊 تصدير جدول نماذج القواعد الموحد (Excel .xlsx)",
+                        data=excel_tcf_bytes,
+                        file_name="Unified_Building_Footings_Schedule.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        key="btn_dl_unified_excel_tcf",
+                    )
+                else:
+                    st.download_button(
+                        label="📊 تصدير جدول نماذج القواعد الموحد (Excel .xlsx)",
+                        data=b"",
+                        disabled=True,
+                        help="يلزم تثبيت مكتبة openpyxl لتصدير Excel",
+                        use_container_width=True,
+                        key="btn_dl_unified_excel_tcf_dis",
+                    )
             with tcf_c2:
                 st.download_button(
                     label="📥 تصدير جدول نماذج القواعد الموحد (CSV)",

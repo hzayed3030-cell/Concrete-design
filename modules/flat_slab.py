@@ -41,6 +41,17 @@ BAR_DIA = [8, 10, 12, 14, 16, 18, 20, 22, 25]  # mm
 #  HELPER FUNCTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def safe_to_excel_bytes(df: pd.DataFrame, sheet_name: str = 'Sheet1'):
+    """Safely converts DataFrame to Excel (.xlsx) bytes using openpyxl without crashing if openpyxl is missing."""
+    try:
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name=sheet_name)
+        return buf.getvalue()
+    except Exception:
+        return None
+
+
 def bar_area(dia_mm):
     """Cross-sectional area of one bar in cm²."""
     return math.pi * (dia_mm / 10.0) ** 2 / 4.0
@@ -8590,119 +8601,155 @@ def render(is_standalone: bool = False):
         """
         <style>
         /* ═══════════════════════════════════════════════════════════════════════
-           EXPANDER HEADERS (عناوين الأقسام المطوية / Collapsed Sections) - 18px BOLD with Background
+           EXPANDER HEADERS (عناوين أقسام موديول 1 - خلفية بيضاء وكتابة سوداء)
            ═══════════════════════════════════════════════════════════════════════ */
+        div[data-testid="stExpander"] details {
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 8px !important;
+        }
+
         div[data-testid="stExpander"] details summary,
         div[data-testid="stExpander"] summary,
         .stExpander details summary,
         .stExpander summary,
         details summary,
         .streamlit-expanderHeader {
-            background: #f1f5f9 !important;
+            background: #ffffff !important;
             border: 1px solid #cbd5e1 !important;
             border-radius: 8px !important;
             padding: 9px 16px !important;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04) !important;
-            transition: background-color 0.2s ease, border-color 0.2s ease !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+            transition: all 0.2s ease !important;
         }
 
         div[data-testid="stExpander"] details summary:hover,
         div[data-testid="stExpander"] summary:hover,
         .stExpander summary:hover {
-            background: #e2e8f0 !important;
+            background: #f8fafc !important;
             border-color: #94a3b8 !important;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.08) !important;
         }
 
         div[data-testid="stExpander"] details[open] > summary,
         div[data-testid="stExpander"] details[open] > summary:hover {
             border-bottom-left-radius: 0px !important;
             border-bottom-right-radius: 0px !important;
-            border-bottom: 1px solid #cbd5e1 !important;
+            border-bottom: 1px solid #e2e8f0 !important;
         }
 
         div[data-testid="stExpander"] details summary p,
         div[data-testid="stExpander"] details summary span,
         div[data-testid="stExpander"] details summary div,
+        div[data-testid="stExpander"] details summary *,
         div[data-testid="stExpander"] summary p,
         div[data-testid="stExpander"] summary span,
+        div[data-testid="stExpander"] summary *,
         div[data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] p,
         .streamlit-expanderHeader p,
-        .streamlit-expanderHeader span {
-            font-size: 13.5px !important;
+        .streamlit-expanderHeader span,
+        .streamlit-expanderHeader * {
+            font-size: 14.25px !important;
             font-weight: 800 !important;
             line-height: 1.35 !important;
-            color: #0f172a !important;
+            color: #000000 !important;
+            text-shadow: none !important;
         }
 
         div[data-testid="stExpander"] details summary svg,
         div[data-testid="stExpander"] summary svg,
         .stExpander summary svg,
         details summary svg {
-            width: 14px !important;
-            height: 14px !important;
-            min-width: 14px !important;
-            fill: currentColor !important;
-            stroke: currentColor !important;
-            color: #1e40af !important;
+            width: 15px !important;
+            height: 15px !important;
+            min-width: 15px !important;
+            fill: #000000 !important;
+            stroke: #000000 !important;
+            color: #000000 !important;
         }
 
-        /* Dark Mode Theme Adaptive Rules */
+        /* Adaptive Theme Rules (Ensuring Black Text and White Background in Light & Dark Themes) */
         @media (prefers-color-scheme: dark) {
+            div[data-testid="stExpander"] details {
+                border-color: #cbd5e1 !important;
+            }
             div[data-testid="stExpander"] details summary,
             div[data-testid="stExpander"] summary,
             .stExpander summary {
-                background: #1e293b !important;
-                border-color: #334155 !important;
-                box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.25) !important;
+                background: #ffffff !important;
+                border-color: #cbd5e1 !important;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15) !important;
             }
             div[data-testid="stExpander"] details summary:hover,
             div[data-testid="stExpander"] summary:hover,
             .stExpander summary:hover {
-                background: #334155 !important;
-                border-color: #475569 !important;
+                background: #f8fafc !important;
+                border-color: #94a3b8 !important;
             }
             div[data-testid="stExpander"] details[open] > summary {
-                border-bottom-color: #334155 !important;
+                border-bottom-color: #e2e8f0 !important;
             }
             div[data-testid="stExpander"] summary p,
             div[data-testid="stExpander"] summary span,
             div[data-testid="stExpander"] summary * {
-                color: #f8fafc !important;
+                color: #000000 !important;
             }
             div[data-testid="stExpander"] summary svg {
-                color: #60a5fa !important;
+                color: #000000 !important;
+                fill: #000000 !important;
+                stroke: #000000 !important;
             }
         }
-        [data-theme="dark"] div[data-testid="stExpander"] summary,
-        .stApp[data-theme="dark"] div[data-testid="stExpander"] summary {
-            background: #1e293b !important;
-            border-color: #334155 !important;
+        [data-theme="dark"] div[data-testid="stExpander"] details {
+            border-color: #cbd5e1 !important;
         }
+        [data-theme="dark"] div[data-testid="stExpander"] details summary,
+        [data-theme="dark"] div[data-testid="stExpander"] summary,
+        .stApp[data-theme="dark"] div[data-testid="stExpander"] details summary,
+        .stApp[data-theme="dark"] div[data-testid="stExpander"] summary {
+            background: #ffffff !important;
+            border-color: #cbd5e1 !important;
+        }
+        [data-theme="dark"] div[data-testid="stExpander"] details summary:hover,
         [data-theme="dark"] div[data-testid="stExpander"] summary:hover,
         .stApp[data-theme="dark"] div[data-testid="stExpander"] summary:hover {
-            background: #334155 !important;
-            border-color: #475569 !important;
+            background: #f8fafc !important;
+            border-color: #94a3b8 !important;
         }
         [data-theme="dark"] div[data-testid="stExpander"] summary *,
         .stApp[data-theme="dark"] div[data-testid="stExpander"] summary * {
-            color: #f8fafc !important;
+            color: #000000 !important;
         }
         [data-theme="dark"] div[data-testid="stExpander"] summary svg,
         .stApp[data-theme="dark"] div[data-testid="stExpander"] summary svg {
-            color: #60a5fa !important;
+            color: #000000 !important;
+            fill: #000000 !important;
+            stroke: #000000 !important;
         }
-        [data-theme="light"] div[data-testid="stExpander"] summary,
-        .stApp[data-theme="light"] div[data-testid="stExpander"] summary {
-            background: #f1f5f9 !important;
+        [data-theme="light"] div[data-testid="stExpander"] details {
             border-color: #cbd5e1 !important;
+        }
+        [data-theme="light"] div[data-testid="stExpander"] details summary,
+        [data-theme="light"] div[data-testid="stExpander"] summary,
+        .stApp[data-theme="light"] div[data-testid="stExpander"] details summary,
+        .stApp[data-theme="light"] div[data-testid="stExpander"] summary {
+            background: #ffffff !important;
+            border-color: #cbd5e1 !important;
+        }
+        [data-theme="light"] div[data-testid="stExpander"] details summary:hover,
+        [data-theme="light"] div[data-testid="stExpander"] summary:hover,
+        .stApp[data-theme="light"] div[data-testid="stExpander"] summary:hover {
+            background: #f8fafc !important;
+            border-color: #94a3b8 !important;
         }
         [data-theme="light"] div[data-testid="stExpander"] summary *,
         .stApp[data-theme="light"] div[data-testid="stExpander"] summary * {
-            color: #0f172a !important;
+            color: #000000 !important;
         }
         [data-theme="light"] div[data-testid="stExpander"] summary svg,
         .stApp[data-theme="light"] div[data-testid="stExpander"] summary svg {
-            color: #1e40af !important;
+            color: #000000 !important;
+            fill: #000000 !important;
+            stroke: #000000 !important;
         }
         /* ═══════════════════════════════════════════════════════════════════════
            COMPACT VERTICAL LINE SPACING FOR INPUTS (Step 1 & Step 2)
@@ -9020,27 +9067,17 @@ def render(is_standalone: bool = False):
         edge_columns=_edge_columns,
     )
     _valid_orig_ids = {c["orig_id"] for c in _all_cols_ref}
+    # فلترة آمنة للعرض والتحليل فقط دون مسح مدخلات المستخدم من ملف الإعدادات وقاعدة البيانات
     _confirmed_removals = [cid for cid in _confirmed_raw if cid in _valid_orig_ids]
-    if _confirmed_removals != _confirmed_raw:          # geometry changed → prune stale IDs
-        S.cfg_set("fs_removed_cols", _confirmed_removals)
 
-    # تنظيف أي معرّفات قديمة أو غير متوافقة في قواميس التحويلات لضمان فك الارتباط
+    # فلترة تحويلات الأعمدة للعرض والتحليل دون حذفها من الـ cfg
     _cleaned_transforms = {k: v for k, v in _col_transforms.items() if k in _valid_orig_ids}
-    if _cleaned_transforms != _col_transforms:
-        _col_transforms = _cleaned_transforms
-        S.cfg_set("fs_col_transforms", _cleaned_transforms)
-
     _cleaned_edge = {k: v for k, v in _edge_columns.items() if k in _valid_orig_ids}
-    if _cleaned_edge != _edge_columns:
-        _edge_columns = _cleaned_edge
-        S.cfg_set("fs_edge_columns", _cleaned_edge)
 
-    # Generate all panels to validate persisted void IDs
+    # Generate all panels to validate persisted void IDs (فلترة المناور للعرض فقط)
     _all_panels_ref = get_flat_slab_panels(Lx_spans, Ly_spans)
     _valid_panel_ids = {p["id"] for p in _all_panels_ref}
     _confirmed_voids = [pid for pid in _confirmed_voids_raw if pid in _valid_panel_ids]
-    if _confirmed_voids != _confirmed_voids_raw:        # geometry changed → prune stale IDs
-        S.cfg_set("fs_void_panels", _confirmed_voids)
 
     _pending_removals = st.session_state.get("_fs_pending_removals", [])
     _pending_voids = st.session_state.get("_fs_pending_voids", [])
@@ -12627,19 +12664,21 @@ def render(is_standalone: bool = False):
             # ── Automated Ground Beams Layout & Design Integration ──
             from modules.ground_beam_layout import extract_structural_links_and_beams
 
-            gb_level_type = S.cfg_val(f"{prefix}gb_level_type", "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)")
-            gb_b_unified = float(S.cfg_val(f"{prefix}gb_b_unified", 25.0))
-            gb_has_wall = S.cfg_val(f"{prefix}gb_has_wall", True)
-            gb_h_wall = float(S.cfg_val(f"{prefix}gb_h_wall", 3.00))
-            gb_t_wall = float(S.cfg_val(f"{prefix}gb_t_wall", 12.0))
-            gb_gamma_brick = float(S.cfg_val(f"{prefix}gb_gamma_brick", 1.80))
-            gb_axial_tie = float(S.cfg_val(f"{prefix}gb_axial_tie_ratio", 0.10))
-            gb_phi_bot_val = int(S.cfg_val(f"{prefix}gb_phi_bot", 16))
-            gb_phi_top_val = int(S.cfg_val(f"{prefix}gb_phi_top", 12))
-            gb_phi_st_val = int(S.cfg_val(f"{prefix}gb_phi_st", 8))
-            gb_phi_side_val = int(S.cfg_val(f"{prefix}gb_phi_side", 10))
-            gb_stirrups_val = int(S.cfg_val(f"{prefix}gb_stirrups_m", 6))
-            gb_user_overrides = st.session_state.get(f"{prefix}gb_overrides", {})
+            gb_level_type = S.cfg_val("gb_level_type", S.cfg_val(f"{prefix}gb_level_type", "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)"))
+            gb_b_unified = float(S.cfg_val("gb_b_unified", S.cfg_val(f"{prefix}gb_b_unified", 25.0)))
+            gb_has_wall = S.cfg_val("gb_has_wall", S.cfg_val(f"{prefix}gb_has_wall", True))
+            gb_h_wall = float(S.cfg_val("gb_h_wall", S.cfg_val(f"{prefix}gb_h_wall", 3.00)))
+            gb_t_wall = float(S.cfg_val("gb_t_wall", S.cfg_val(f"{prefix}gb_t_wall", 12.0)))
+            gb_gamma_brick = float(S.cfg_val("gb_gamma_brick", S.cfg_val(f"{prefix}gb_gamma_brick", 1.80)))
+            gb_axial_tie = float(S.cfg_val("gb_axial_tie_ratio", S.cfg_val(f"{prefix}gb_axial_tie_ratio", 0.10)))
+            gb_phi_bot_val = int(S.cfg_val("gb_phi_bot", S.cfg_val(f"{prefix}gb_phi_bot", 16)))
+            gb_phi_top_val = int(S.cfg_val("gb_phi_top", S.cfg_val(f"{prefix}gb_phi_top", 12)))
+            gb_phi_st_val = int(S.cfg_val("gb_phi_st", S.cfg_val(f"{prefix}gb_phi_st", 8)))
+            gb_phi_side_val = int(S.cfg_val("gb_phi_side", S.cfg_val(f"{prefix}gb_phi_side", 10)))
+            gb_stirrups_val = int(S.cfg_val("gb_stirrups_m", S.cfg_val(f"{prefix}gb_stirrups_m", 6)))
+            gb_user_overrides = S.cfg_val("gb_overrides") or st.session_state.get(f"{prefix}gb_overrides", {})
+            if not isinstance(gb_user_overrides, dict):
+                gb_user_overrides = {}
 
             gb_analysis = extract_structural_links_and_beams(
                 active_columns=fs_active_columns,
@@ -12709,21 +12748,28 @@ def render(is_standalone: bool = False):
 
             # Export Excel & CSV
             csv_fs_data = df_fs_export.to_csv(index=False).encode('utf-8-sig')
-            buf_fs_xl = io.BytesIO()
-            with pd.ExcelWriter(buf_fs_xl, engine='openpyxl') as writer:
-                df_fs_export.to_excel(writer, index=False, sheet_name='Footings_Schedule')
-            excel_fs_bytes = buf_fs_xl.getvalue()
+            excel_fs_bytes = safe_to_excel_bytes(df_fs_export, sheet_name='Footings_Schedule')
 
             exp_c1, exp_c2 = st.columns(2)
             with exp_c1:
-                st.download_button(
-                    label="📊 تصدير جدول نماذج القواعد الموحد (Excel .xlsx)",
-                    data=excel_fs_bytes,
-                    file_name=f"{prefix}Unified_Footings_Schedule_{num_floors}Floors.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    key=f"{prefix}btn_dl_unified_excel_fs",
-                )
+                if excel_fs_bytes is not None:
+                    st.download_button(
+                        label="📊 تصدير جدول نماذج القواعد الموحد (Excel .xlsx)",
+                        data=excel_fs_bytes,
+                        file_name=f"{prefix}Unified_Footings_Schedule_{num_floors}Floors.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        key=f"{prefix}btn_dl_unified_excel_fs",
+                    )
+                else:
+                    st.download_button(
+                        label="📊 تصدير جدول نماذج القواعد الموحد (Excel .xlsx)",
+                        data=b"",
+                        disabled=True,
+                        help="يلزم تثبيت مكتبة openpyxl لتصدير Excel",
+                        use_container_width=True,
+                        key=f"{prefix}btn_dl_unified_excel_fs_dis",
+                    )
             with exp_c2:
                 st.download_button(
                     label="📥 تصدير جدول نماذج القواعد الموحد (CSV)",
@@ -12773,6 +12819,7 @@ def render(is_standalone: bool = False):
                         help="في منسوب القواعد تؤخذ عزوم وقوى الهبوط المتفاوت في الحسابات.",
                     )
                     if new_gb_level != gb_level_type:
+                        S.cfg_set("gb_level_type", new_gb_level)
                         S.cfg_set(f"{prefix}gb_level_type", new_gb_level)
                         st.rerun()
 
@@ -12783,12 +12830,14 @@ def render(is_standalone: bool = False):
                         key=f"{prefix}w_gb_b_unified",
                     )
                     if new_gb_b != gb_b_unified:
+                        S.cfg_set("gb_b_unified", new_gb_b)
                         S.cfg_set(f"{prefix}gb_b_unified", new_gb_b)
                         st.rerun()
 
                 with gbc2:
                     new_gb_wall = st.checkbox("وجود حوائط مباني فوق السملات", value=bool(gb_has_wall), key=f"{prefix}w_gb_has_wall")
                     if new_gb_wall != gb_has_wall:
+                        S.cfg_set("gb_has_wall", new_gb_wall)
                         S.cfg_set(f"{prefix}gb_has_wall", new_gb_wall)
                         st.rerun()
 
@@ -12800,6 +12849,7 @@ def render(is_standalone: bool = False):
                         key=f"{prefix}w_gb_h_wall",
                     )
                     if new_gb_hw != gb_h_wall:
+                        S.cfg_set("gb_h_wall", new_gb_hw)
                         S.cfg_set(f"{prefix}gb_h_wall", new_gb_hw)
                         st.rerun()
 
@@ -12811,6 +12861,7 @@ def render(is_standalone: bool = False):
                         key=f"{prefix}w_gb_t_wall",
                     )
                     if new_gb_tw != gb_t_wall:
+                        S.cfg_set("gb_t_wall", new_gb_tw)
                         S.cfg_set(f"{prefix}gb_t_wall", new_gb_tw)
                         st.rerun()
 
@@ -12824,6 +12875,7 @@ def render(is_standalone: bool = False):
                         key=f"{prefix}w_gb_tie_ratio",
                     )
                     if new_gb_tie != gb_axial_tie:
+                        S.cfg_set("gb_axial_tie_ratio", new_gb_tie)
                         S.cfg_set(f"{prefix}gb_axial_tie_ratio", new_gb_tie)
                         st.rerun()
 
@@ -12834,6 +12886,7 @@ def render(is_standalone: bool = False):
                         key=f"{prefix}w_gb_stirrups_m",
                     )
                     if new_gb_st_m != gb_stirrups_val:
+                        S.cfg_set("gb_stirrups_m", new_gb_st_m)
                         S.cfg_set(f"{prefix}gb_stirrups_m", new_gb_st_m)
                         st.rerun()
 
@@ -12849,8 +12902,11 @@ def render(is_standalone: bool = False):
                     new_p_st = st.selectbox("قطر الكانات Φ_st (mm):", options=dia_st_opts, index=idx_s, key=f"{prefix}w_gb_phi_st")
 
                     if new_p_bot != gb_phi_bot_val or new_p_top != gb_phi_top_val or new_p_st != gb_phi_st_val:
+                        S.cfg_set("gb_phi_bot", new_p_bot)
                         S.cfg_set(f"{prefix}gb_phi_bot", new_p_bot)
+                        S.cfg_set("gb_phi_top", new_p_top)
                         S.cfg_set(f"{prefix}gb_phi_top", new_p_top)
+                        S.cfg_set("gb_phi_st", new_p_st)
                         S.cfg_set(f"{prefix}gb_phi_st", new_p_st)
                         st.rerun()
 
@@ -12904,21 +12960,28 @@ def render(is_standalone: bool = False):
 
                 # Export Excel & CSV
                 csv_class_data = df_class_export.to_csv(index=False).encode('utf-8-sig')
-                buf_class_xl = io.BytesIO()
-                with pd.ExcelWriter(buf_class_xl, engine='openpyxl') as writer:
-                    df_class_export.to_excel(writer, index=False, sheet_name='Classification_Table')
-                excel_class_bytes = buf_class_xl.getvalue()
+                excel_class_bytes = safe_to_excel_bytes(df_class_export, sheet_name='Classification_Table')
 
                 c_cl1, c_cl2 = st.columns(2)
                 with c_cl1:
-                    st.download_button(
-                        label="📊 تصدير جدول التصنيف الإنشائي (Excel .xlsx)",
-                        data=excel_class_bytes,
-                        file_name=f"{prefix}Structural_Links_Classification_{num_floors}Floors.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True,
-                        key=f"{prefix}btn_dl_class_excel",
-                    )
+                    if excel_class_bytes is not None:
+                        st.download_button(
+                            label="📊 تصدير جدول التصنيف الإنشائي (Excel .xlsx)",
+                            data=excel_class_bytes,
+                            file_name=f"{prefix}Structural_Links_Classification_{num_floors}Floors.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key=f"{prefix}btn_dl_class_excel",
+                        )
+                    else:
+                        st.download_button(
+                            label="📊 تصدير جدول التصنيف الإنشائي (Excel .xlsx)",
+                            data=b"",
+                            disabled=True,
+                            help="يلزم تثبيت مكتبة openpyxl لتصدير Excel",
+                            use_container_width=True,
+                            key=f"{prefix}btn_dl_class_excel_dis",
+                        )
                 with c_cl2:
                     st.download_button(
                         label="📥 تصدير جدول التصنيف الإنشائي (CSV)",
@@ -12942,7 +13005,7 @@ def render(is_standalone: bool = False):
                     st.caption("يمكنك تعديل العمق أو عدد الأسياخ أو الكانات لكل نموذج مباشرة. تنعكس التعديلات فوراً على المخطط واللوحات وحصر الكميات.")
 
                     ov_changed = False
-                    cur_ov = dict(st.session_state.get(f"{prefix}gb_overrides", {}))
+                    cur_ov = dict(S.cfg_val("gb_overrides") or st.session_state.get(f"{prefix}gb_overrides", {}))
 
                     ov_cols = st.columns(len(gb_analysis["models_dict"])) if gb_analysis["models_dict"] else [st.container()]
                     for idx_m, (m_mark, m_data) in enumerate(gb_analysis["models_dict"].items()):
@@ -12993,30 +13056,39 @@ def render(is_standalone: bool = False):
                                 ov_changed = True
 
                     if ov_changed:
+                        S.cfg_set("gb_overrides", cur_ov)
                         st.session_state[f"{prefix}gb_overrides"] = cur_ov
                         st.rerun()
 
                     if st.button("🔄 إعادة ضبط نماذج السملات إلى الحسابات التلقائية (Reset Overrides)", key=f"{prefix}btn_reset_gb_ov"):
+                        S.cfg_set("gb_overrides", {})
                         st.session_state[f"{prefix}gb_overrides"] = {}
                         st.rerun()
 
                 # Export Excel & CSV
                 csv_models_data = df_models_export.to_csv(index=False).encode('utf-8-sig')
-                buf_models_xl = io.BytesIO()
-                with pd.ExcelWriter(buf_models_xl, engine='openpyxl') as writer:
-                    df_models_export.to_excel(writer, index=False, sheet_name='Master_Models_Schedule')
-                excel_models_bytes = buf_models_xl.getvalue()
+                excel_models_bytes = safe_to_excel_bytes(df_models_export, sheet_name='Master_Models_Schedule')
 
                 c_md1, c_md2 = st.columns(2)
                 with c_md1:
-                    st.download_button(
-                        label="📊 تصدير جدول نماذج السملات التنفيذي (Excel .xlsx)",
-                        data=excel_models_bytes,
-                        file_name=f"{prefix}Master_Ground_Beams_Schedule_{num_floors}Floors.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True,
-                        key=f"{prefix}btn_dl_models_excel",
-                    )
+                    if excel_models_bytes is not None:
+                        st.download_button(
+                            label="📊 تصدير جدول نماذج السملات التنفيذي (Excel .xlsx)",
+                            data=excel_models_bytes,
+                            file_name=f"{prefix}Master_Ground_Beams_Schedule_{num_floors}Floors.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key=f"{prefix}btn_dl_models_excel",
+                        )
+                    else:
+                        st.download_button(
+                            label="📊 تصدير جدول نماذج السملات التنفيذي (Excel .xlsx)",
+                            data=b"",
+                            disabled=True,
+                            help="يلزم تثبيت مكتبة openpyxl لتصدير Excel",
+                            use_container_width=True,
+                            key=f"{prefix}btn_dl_models_excel_dis",
+                        )
                 with c_md2:
                     st.download_button(
                         label="📥 تصدير جدول نماذج السملات التنفيذي (CSV)",
@@ -13036,21 +13108,28 @@ def render(is_standalone: bool = False):
 
                 # Export Excel & CSV
                 csv_det_data = df_det_export.to_csv(index=False).encode('utf-8-sig')
-                buf_det_xl = io.BytesIO()
-                with pd.ExcelWriter(buf_det_xl, engine='openpyxl') as writer:
-                    df_det_export.to_excel(writer, index=False, sheet_name='Detailed_Ground_Beams')
-                excel_det_bytes = buf_det_xl.getvalue()
+                excel_det_bytes = safe_to_excel_bytes(df_det_export, sheet_name='Detailed_Ground_Beams')
 
                 c_dt1, c_dt2 = st.columns(2)
                 with c_dt1:
-                    st.download_button(
-                        label="📊 تصدير جدول تفريد السملات التفصيلي (Excel .xlsx)",
-                        data=excel_det_bytes,
-                        file_name=f"{prefix}Detailed_Ground_Beams_Schedule_{num_floors}Floors.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True,
-                        key=f"{prefix}btn_dl_det_excel",
-                    )
+                    if excel_det_bytes is not None:
+                        st.download_button(
+                            label="📊 تصدير جدول تفريد السملات التفصيلي (Excel .xlsx)",
+                            data=excel_det_bytes,
+                            file_name=f"{prefix}Detailed_Ground_Beams_Schedule_{num_floors}Floors.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key=f"{prefix}btn_dl_det_excel",
+                        )
+                    else:
+                        st.download_button(
+                            label="📊 تصدير جدول تفريد السملات التفصيلي (Excel .xlsx)",
+                            data=b"",
+                            disabled=True,
+                            help="يلزم تثبيت مكتبة openpyxl لتصدير Excel",
+                            use_container_width=True,
+                            key=f"{prefix}btn_dl_det_excel_dis",
+                        )
                 with c_dt2:
                     st.download_button(
                         label="📥 تصدير جدول تفريد السملات التفصيلي (CSV)",
@@ -13308,6 +13387,35 @@ def render(is_standalone: bool = False):
         all_dias_set.update(ftg_dia_map.keys())
         all_dias_set.update(gb_dia_map.keys())
 
+        # ── 🏢 3D Integrated Structural BIM & Rebar Viewer ──
+        try:
+            from modules.bim_3d_viewer import render_3d_bim_viewer
+            render_3d_bim_viewer(
+                Lx_calc=Lx_calc,
+                Ly_calc=Ly_calc,
+                cantilevers=cantilevers,
+                ts_cm=ts,
+                active_cols=_active_cols,
+                indiv_col_designs=indiv_col_designs if 'indiv_col_designs' in locals() else None,
+                col_designs=col_designs if 'col_designs' in locals() else None,
+                col_H_cm=col_H if 'col_H' in locals() else 300.0,
+                num_floors=num_floors,
+                ftg_analysis=ftg_analysis if 'ftg_analysis' in locals() else st.session_state.get("fs_ftg_analysis"),
+                gb_analysis=gb_analysis if 'gb_analysis' in locals() else st.session_state.get("fs_gb_analysis"),
+                punching_results=punching_results if 'punching_results' in locals() else None,
+                top_extra_cols=top_extra_cols if 'top_extra_cols' in locals() else None,
+                btm_extra_spans=btm_extra_spans if 'btm_extra_spans' in locals() else None,
+                n_mesh_btm=n_mesh_btm if 'n_mesh_btm' in locals() else 5.0,
+                bottom_mesh_dia=bottom_mesh_dia if 'bottom_mesh_dia' in locals() else 10,
+                n_mesh_top=n_mesh_top if 'n_mesh_top' in locals() else 5.0,
+                top_mesh_dia=top_mesh_dia if 'top_mesh_dia' in locals() else 10,
+                fcu=float(Fcu) if 'Fcu' in locals() and Fcu else 250.0,
+                fy=float(Fy) if 'Fy' in locals() and Fy else 4000.0,
+                prefix=prefix,
+            )
+        except Exception as _e_3d:
+            st.error(f"⚠️ خطأ أثناء تحميل العارض ثلاثي الأبعاد: {_e_3d}")
+
         with st.expander("📊 Approximate Quantity Survey (الحصر التقريبي للكميات)", expanded=False):
             st.markdown(
                 f"""
@@ -13467,21 +13575,28 @@ def render(is_standalone: bool = False):
             # Export Excel & CSV buttons for Quantity Survey
             df_survey_export = pd.DataFrame(main_survey_data)
             csv_survey_data = df_survey_export.to_csv(index=False).encode('utf-8-sig')
-            buf_surv_xl = io.BytesIO()
-            with pd.ExcelWriter(buf_surv_xl, engine='openpyxl') as writer:
-                df_survey_export.to_excel(writer, index=False, sheet_name='Main_Quantities')
-            excel_surv_bytes = buf_surv_xl.getvalue()
+            excel_surv_bytes = safe_to_excel_bytes(df_survey_export, sheet_name='Main_Quantities')
 
             surv_c1, surv_c2 = st.columns(2)
             with surv_c1:
-                st.download_button(
-                    label="📊 تصدير جدول الحصر العام (Excel .xlsx)",
-                    data=excel_surv_bytes,
-                    file_name=f"{prefix}General_Quantity_Survey_{num_floors}Floors.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    key=f"{prefix}btn_dl_survey_excel",
-                )
+                if excel_surv_bytes is not None:
+                    st.download_button(
+                        label="📊 تصدير جدول الحصر العام (Excel .xlsx)",
+                        data=excel_surv_bytes,
+                        file_name=f"{prefix}General_Quantity_Survey_{num_floors}Floors.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        key=f"{prefix}btn_dl_survey_excel",
+                    )
+                else:
+                    st.download_button(
+                        label="📊 تصدير جدول الحصر العام (Excel .xlsx)",
+                        data=b"",
+                        disabled=True,
+                        help="يلزم تثبيت مكتبة openpyxl لتصدير Excel",
+                        use_container_width=True,
+                        key=f"{prefix}btn_dl_survey_excel_dis",
+                    )
             with surv_c2:
                 st.download_button(
                     label="📥 تصدير جدول الحصر العام (CSV)",

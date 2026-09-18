@@ -1258,6 +1258,16 @@ def load_profiles_data() -> dict:
                 int(i) for i in pdata_dict["enabled_modules"]
                 if int(i) in range(len(ALL_MODULES)) and int(i) not in deleted_indices
             )))
+            # درع الحماية الذاتي: إذا كان لدى المشروع مدخلات إنشائية ولكن enabled_modules محصور بموديول واحد فقط،
+            # يتم استعادة إظهار كافة الموديولات فوراً لمنع حجب المدخلات عن المستخدم
+            has_structural = (
+                pdata_dict.get("fs_n_lx", 0) > 0 or
+                any(k.startswith("fs_") for k in pdata_dict) or
+                any(k.startswith("col_") for k in pdata_dict)
+            )
+            if has_structural and (0 not in cleaned_enabled or len(cleaned_enabled) <= 1):
+                cleaned_enabled = [m["idx"] for m in ALL_MODULES if m["idx"] not in deleted_indices]
+
             if cleaned_enabled != pdata_dict["enabled_modules"]:
                 pdata_dict["enabled_modules"] = cleaned_enabled
                 modified = True
@@ -1898,6 +1908,16 @@ def get_project_enabled_modules(project_name: str) -> list:
             int(i) for i in enabled
             if isinstance(i, (int, float, str)) and str(i).isdigit() and int(i) in available_indices
         ]
+        # درع الحماية الذاتي: إذا كان لدى المشروع مدخلات إنشائية ولكن enabled_modules محصور بموديول واحد فقط،
+        # يتم استعادة إظهار كافة الموديولات فوراً لمنع حجب المدخلات عن المستخدم
+        has_structural = (
+            data.get("fs_n_lx", 0) > 0 or
+            any(k.startswith("fs_") for k in data) or
+            any(k.startswith("col_") for k in data)
+        )
+        if has_structural and (0 not in valid_indices or len(valid_indices) <= 1):
+            return available_indices
+
         if valid_indices:
             return sorted(list(set(valid_indices)))
 
@@ -2418,7 +2438,7 @@ def save_settings() -> None:
         }
 
     clean_cfg = {k: _sanitize_for_json(v) for k, v in cfg.items()}
-    clean_cfg["nav_view"] = "profile_manager"
+    clean_cfg["nav_view"] = st.session_state.get("nav_view", cfg.get("nav_view", "module"))
 
     # CRITICAL: enabled_modules and deleted_modules_trash must NEVER be overwritten with stale cfg values.
     # Pull authoritative values from existing_data in profiles.json if they exist.

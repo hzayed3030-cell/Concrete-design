@@ -2346,3 +2346,7 @@ def render_strap_footing_module():
     d["final_B2"] = r["B2"]
     d["is_calculated"] = True
     st.session_state["module_9_data"] = d
+    if "cfg" in st.session_state and isinstance(st.session_state["cfg"], dict):
+        st.session_state["cfg"]["module_9_strap_footing"] = {k: v for k, v in d.items()}
+    from modules.settings import save_settings
+    save_settings()

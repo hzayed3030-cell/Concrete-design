@@ -2053,41 +2053,39 @@ def render_profile_manager():
                 deletable_mods = [m for m in ALL_MODULES if m["idx"] not in deleted_idxs_del]
 
                 # ── Requirement 1: Large & Clear Informational Header on Linked Modules ──
-                st.markdown(
-                    f"""
-                    <div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #1e1b4b 0%, #2e1065 50%, #1e1b4b 100%); border: 2.5px solid #a855f7; border-radius: 12px; padding: 18px 24px; margin-bottom: 14px; box-shadow: 0 4px 20px rgba(168, 85, 247, 0.25);">
-                        <div style="font-weight: 900; font-size: 20px; color: #f5d0fe; display: flex; align-items: center; justify-content: flex-start; gap: 10px; margin-bottom: 12px; border-bottom: 1.5px solid rgba(216, 180, 254, 0.35); padding-bottom: 10px; direction: rtl; text-align: right;">
-                            <span style="font-size: 26px;">🔗</span>
-                            <span>خريطة الارتباطات الهندسية بين الموديولات — مشروع: <b style="color: #fbcfe8;">«{pname}»</b></span>
-                        </div>
-                        <div style="color: #ffffff; font-size: 15px; line-height: 1.8; font-weight: 600; direction: rtl; text-align: right;">
-                            <div style="margin-bottom: 10px; direction: rtl; text-align: right; display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
-                                <span style="font-size: 15.5px; font-weight: 800; color: #ffffff;">📌 مسار نقل الأحمال الإنشائية:</span>
-                                <span style="background: rgba(103, 232, 249, 0.18); border: 1.5px solid #06b6d4; border-radius: 6px; padding: 2px 10px; color: #67e8f9; font-weight: 800; font-size: 13.5px; direction: ltr; display: inline-block;">[Module 1: Integrated Structural Design]</span>
-                                <span style="color: #facc15; font-weight: 800; font-size: 14px;">⬅️ يغذي ⬅️</span>
-                                <span style="background: rgba(103, 232, 249, 0.18); border: 1.5px solid #06b6d4; border-radius: 6px; padding: 2px 10px; color: #67e8f9; font-weight: 800; font-size: 13.5px; direction: ltr; display: inline-block;">[Module 2: Rectangular Columns]</span>
-                                <span style="color: #facc15; font-weight: 800; font-size: 14px;">⬅️ يغذي ⬅️</span>
-                                <span style="background: rgba(103, 232, 249, 0.18); border: 1.5px solid #06b6d4; border-radius: 6px; padding: 2px 10px; color: #67e8f9; font-weight: 800; font-size: 13.5px; direction: ltr; display: inline-block;">[Module 3: Isolated Footings]</span>
-                            </div>
-                            <div style="color: #e2e8f0; font-size: 14px; line-height: 1.8; font-weight: 600; direction: rtl; text-align: right;">
-                                <div style="margin-bottom: 6px; display: flex; align-items: flex-start; gap: 8px; direction: rtl; text-align: right;">
-                                    <span style="color: #c084fc; font-size: 18px; line-height: 1.2;">•</span>
-                                    <span><b>حذف السقف (Mod 1) أو القواعد (Mod 3) منفرداً:</b> مسموح بالكامل دون أي تعارض هندسي.</span>
-                                </div>
-                                <div style="margin-bottom: 6px; display: flex; align-items: flex-start; gap: 8px; direction: rtl; text-align: right;">
-                                    <span style="color: #c084fc; font-size: 18px; line-height: 1.2;">•</span>
-                                    <span><b>حذف الأعمدة (Mod 2):</b> يتطلب اختيار الموديولات التابعة لها (القواعد أو السقف) معاً في نفس قائمة الحذف لحذف المنظومة كحزمة متكاملة.</span>
-                                </div>
-                                <div style="color: #86efac; font-weight: 700; display: flex; align-items: flex-start; gap: 8px; direction: rtl; text-align: right;">
-                                    <span style="color: #4ade80; font-size: 18px; line-height: 1.2;">•</span>
-                                    <span><b>موديول 12 (حصر أعمال الطوب والمحارة) وباقي الموديولات:</b> مستقلة تماماً (Standalone) ويمكن حذفها أو الإبقاء عليها وحدها في أي وقت دون قيود.</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
+                links_map_html = (
+                    f'<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #1e1b4b 0%, #2e1065 50%, #1e1b4b 100%); border: 2.5px solid #a855f7; border-radius: 12px; padding: 18px 24px; margin-bottom: 14px; box-shadow: 0 4px 20px rgba(168, 85, 247, 0.25);">'
+                    f'<div style="font-weight: 900; font-size: 20px; color: #f5d0fe; display: flex; align-items: center; justify-content: flex-start; gap: 10px; margin-bottom: 12px; border-bottom: 1.5px solid rgba(216, 180, 254, 0.35); padding-bottom: 10px; direction: rtl; text-align: right;">'
+                    f'<span style="font-size: 26px;">🔗</span>'
+                    f'<span>خريطة الارتباطات الهندسية بين الموديولات — مشروع: <b style="color: #fbcfe8;">«{pname}»</b></span>'
+                    f'</div>'
+                    f'<div style="color: #ffffff; font-size: 15px; line-height: 1.8; font-weight: 600; direction: rtl; text-align: right;">'
+                    f'<div style="margin-bottom: 10px; direction: rtl; text-align: right; display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">'
+                    f'<span style="font-size: 15.5px; font-weight: 800; color: #ffffff;">📌 مسار نقل الأحمال الإنشائية:</span>'
+                    f'<span style="background: rgba(103, 232, 249, 0.18); border: 1.5px solid #06b6d4; border-radius: 6px; padding: 2px 10px; color: #67e8f9; font-weight: 800; font-size: 13.5px; direction: ltr; display: inline-block;">[Module 1: Integrated Structural Design]</span>'
+                    f'<span style="color: #facc15; font-weight: 800; font-size: 14px;">⬅️ يغذي ⬅️</span>'
+                    f'<span style="background: rgba(103, 232, 249, 0.18); border: 1.5px solid #06b6d4; border-radius: 6px; padding: 2px 10px; color: #67e8f9; font-weight: 800; font-size: 13.5px; direction: ltr; display: inline-block;">[Module 2: Rectangular Columns]</span>'
+                    f'<span style="color: #facc15; font-weight: 800; font-size: 14px;">⬅️ يغذي ⬅️</span>'
+                    f'<span style="background: rgba(103, 232, 249, 0.18); border: 1.5px solid #06b6d4; border-radius: 6px; padding: 2px 10px; color: #67e8f9; font-weight: 800; font-size: 13.5px; direction: ltr; display: inline-block;">[Module 3: Isolated Footings]</span>'
+                    f'</div>'
+                    f'<div style="color: #e2e8f0; font-size: 14px; line-height: 1.8; font-weight: 600; direction: rtl; text-align: right;">'
+                    f'<div style="margin-bottom: 6px; display: flex; align-items: flex-start; gap: 8px; direction: rtl; text-align: right;">'
+                    f'<span style="color: #c084fc; font-size: 18px; line-height: 1.2;">•</span>'
+                    f'<span><b>حذف السقف (Mod 1) أو القواعد (Mod 3) منفرداً:</b> مسموح بالكامل دون أي تعارض هندسي.</span>'
+                    f'</div>'
+                    f'<div style="margin-bottom: 6px; display: flex; align-items: flex-start; gap: 8px; direction: rtl; text-align: right;">'
+                    f'<span style="color: #c084fc; font-size: 18px; line-height: 1.2;">•</span>'
+                    f'<span><b>حذف الأعمدة (Mod 2):</b> يتطلب اختيار الموديولات التابعة لها (القواعد أو السقف) معاً في نفس قائمة الحذف لحذف المنظومة كحزمة متكاملة.</span>'
+                    f'</div>'
+                    f'<div style="color: #86efac; font-weight: 700; display: flex; align-items: flex-start; gap: 8px; direction: rtl; text-align: right;">'
+                    f'<span style="color: #4ade80; font-size: 18px; line-height: 1.2;">•</span>'
+                    f'<span><b>موديول 12 (حصر أعمال الطوب والمحارة) وباقي الموديولات:</b> مستقلة تماماً (Standalone) ويمكن حذفها أو الإبقاء عليها وحدها في أي وقت دون قيود.</span>'
+                    f'</div>'
+                    f'</div>'
+                    f'</div>'
+                    f'</div>'
                 )
+                st.markdown(links_map_html, unsafe_allow_html=True)
 
                 if not deletable_mods:
                     st.info("✅ لا توجد موديولات نشطة يمكن حذفها في هذا المشروع.")
@@ -2144,26 +2142,24 @@ def render_profile_manager():
                             f"<li style='margin: 8px 0; color: #fee2e2; font-size: 15px; font-weight: 600;'>{v}</li>"
                             for v in batch_warning
                         ])
-                        st.markdown(
-                            f"""
-                            <div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #3f0a0a 100%); border: 3px solid #ef4444; border-radius: 12px; padding: 20px 24px; margin: 10px 0 14px 0; box-shadow: 0 10px 35px rgba(239, 68, 68, 0.45);">
-                                <div style="color: #ffffff; font-weight: 900; font-size: 22px; margin-bottom: 12px; display: flex; align-items: center; justify-content: flex-start; gap: 10px; border-bottom: 2px solid rgba(239, 68, 68, 0.6); padding-bottom: 10px; direction: rtl; text-align: right;">
-                                    <span style="font-size: 28px;">🚫</span>
-                                    <span>تعذر إتمام الحذف لوجود ارتباطات هندسية غير مكتملة</span>
-                                </div>
-                                <div style="color: #fee2e2; font-size: 16px; font-weight: 700; line-height: 1.6; margin-bottom: 12px; direction: rtl; text-align: right;">
-                                    تم رفض تنفيذ عملية الحذف للأسباب التالية:
-                                </div>
-                                <ul style="margin: 0 0 14px 0; padding-right: 24px; list-style: disc; direction: rtl; text-align: right;">
-                                    {viol_items_html}
-                                </ul>
-                                <div style="background: rgba(0, 0, 0, 0.35); border: 1.5px solid rgba(254, 202, 202, 0.25); border-radius: 8px; padding: 10px 16px; color: #fef08a; font-size: 14px; font-weight: 700; direction: rtl; text-align: right;">
-                                    💡 <b>الحل الهندسي:</b> لحذف الموديولات المرتبطة، يرجى اختيارهما معاً في قائمة الحذف لحذف المنظومة كحزمة متكاملة، أو إبقاء الموديولات التابعة نشطة.
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
+                        warn_dialog_html = (
+                            f'<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #3f0a0a 100%); border: 3px solid #ef4444; border-radius: 12px; padding: 20px 24px; margin: 10px 0 14px 0; box-shadow: 0 10px 35px rgba(239, 68, 68, 0.45);">'
+                            f'<div style="color: #ffffff; font-weight: 900; font-size: 22px; margin-bottom: 12px; display: flex; align-items: center; justify-content: flex-start; gap: 10px; border-bottom: 2px solid rgba(239, 68, 68, 0.6); padding-bottom: 10px; direction: rtl; text-align: right;">'
+                            f'<span style="font-size: 28px;">🚫</span>'
+                            f'<span>تعذر إتمام الحذف لوجود ارتباطات هندسية غير مكتملة</span>'
+                            f'</div>'
+                            f'<div style="color: #fee2e2; font-size: 16px; font-weight: 700; line-height: 1.6; margin-bottom: 12px; direction: rtl; text-align: right;">'
+                            f'تم رفض تنفيذ عملية الحذف للأسباب التالية:'
+                            f'</div>'
+                            f'<ul style="margin: 0 0 14px 0; padding-right: 24px; list-style: disc; direction: rtl; text-align: right;">'
+                            f'{viol_items_html}'
+                            f'</ul>'
+                            f'<div style="background: rgba(0, 0, 0, 0.35); border: 1.5px solid rgba(254, 202, 202, 0.25); border-radius: 8px; padding: 10px 16px; color: #fef08a; font-size: 14px; font-weight: 700; direction: rtl; text-align: right;">'
+                            f'💡 <b>الحل الهندسي:</b> لحذف الموديولات المرتبطة، يرجى اختيارهما معاً في قائمة الحذف لحذف المنظومة كحزمة متكاملة، أو إبقاء الموديولات التابعة نشطة.'
+                            f'</div>'
+                            f'</div>'
                         )
+                        st.markdown(warn_dialog_html, unsafe_allow_html=True)
                         btn_back, _ = st.columns([2.5, 7.5])
                         with btn_back:
                             if st.button("↩️ العودة وتعديل قائمة الاختيار", key=f"btn_back_from_warn_{pname}", type="primary", use_container_width=True):
@@ -2188,39 +2184,34 @@ def render_profile_manager():
                         linked_banner_html = ""
                         if linked_pairs:
                             linked_items = "".join([f"<li style='margin: 4px 0;'>{lp}</li>" for lp in linked_pairs])
-                            linked_banner_html = f"""
-                            <div dir="rtl" style="direction: rtl !important; text-align: right !important; background: rgba(234, 179, 8, 0.18); border: 1.5px solid #eab308; border-radius: 8px; padding: 10px 16px; color: #fef08a; font-size: 14px; font-weight: 700; margin-bottom: 12px;">
-                                ⚠️ <b>تنبيه ارتباط متبادل:</b> تحتوي هذه العملية على موديولات مرتبطة ببعضها وسيتم حذفها معاً كحزمة متكاملة:
-                                <ul style="margin: 6px 0 0 0; padding-right: 20px; list-style: circle;">
-                                    {linked_items}
-                                </ul>
-                            </div>
-                            """
+                            linked_banner_html = (
+                                f'<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: rgba(234, 179, 8, 0.18); border: 1.5px solid #eab308; border-radius: 8px; padding: 10px 16px; color: #fef08a; font-size: 14px; font-weight: 700; margin-bottom: 12px;">'
+                                f'⚠️ <b>تنبيه ارتباط متبادل:</b> تحتوي هذه العملية على موديولات مرتبطة ببعضها وسيتم حذفها معاً كحزمة متكاملة:'
+                                f'<ul style="margin: 6px 0 0 0; padding-right: 20px; list-style: circle;">'
+                                f'{linked_items}'
+                                f'</ul>'
+                                f'</div>'
+                            )
 
-                        st.markdown(
-                            f"""
-                            <div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #3f0a0a 100%); border: 3.5px solid #ef4444; border-radius: 14px; padding: 22px 26px; margin: 10px 0 14px 0; box-shadow: 0 10px 35px rgba(239, 68, 68, 0.45);">
-                                <div style="color: #ffffff; font-weight: 900; font-size: 23px; margin-bottom: 12px; display: flex; align-items: center; justify-content: flex-start; gap: 12px; border-bottom: 2px solid rgba(239, 68, 68, 0.6); padding-bottom: 10px; direction: rtl; text-align: right;">
-                                    <span style="font-size: 30px;">⚠️</span>
-                                    <span>تأكيد حذف الموديولات المحددة ({len(del_names)} موديول) — مشروع: «{pname}»</span>
-                                </div>
-                                
-                                <div style="color: #fee2e2; font-size: 16px; font-weight: 700; margin-bottom: 10px; direction: rtl; text-align: right;">
-                                    سيتم حذف الموديولات التالية من المشروع ونقلها إلى سلة المحذوفات:
-                                </div>
-                                <ul style="margin: 0 0 12px 0; padding-right: 24px; list-style: disc; direction: rtl; text-align: right;">
-                                    {del_names_html}
-                                </ul>
-
-                                {linked_banner_html}
-
-                                <div style="background: rgba(0, 0, 0, 0.35); border: 1.5px solid rgba(254, 202, 202, 0.25); border-radius: 8px; padding: 10px 16px; color: #86efac; font-size: 14px; font-weight: 700; margin-bottom: 14px; direction: rtl; text-align: right;">
-                                    ✅ <b>الحفظ الآمن:</b> سيتم حفظ نسخة كاملة (Snapshot) من جميع بيانات ومدخلات هذه الموديولات، ويمكنك استعادتها لاحقاً في أي وقت عبر زر ♻️ استعادة.
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
+                        confirm_dialog_html = (
+                            f'<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #3f0a0a 100%); border: 3.5px solid #ef4444; border-radius: 14px; padding: 22px 26px; margin: 10px 0 14px 0; box-shadow: 0 10px 35px rgba(239, 68, 68, 0.45);">'
+                            f'<div style="color: #ffffff; font-weight: 900; font-size: 23px; margin-bottom: 12px; display: flex; align-items: center; justify-content: flex-start; gap: 12px; border-bottom: 2px solid rgba(239, 68, 68, 0.6); padding-bottom: 10px; direction: rtl; text-align: right;">'
+                            f'<span style="font-size: 30px;">⚠️</span>'
+                            f'<span>تأكيد حذف الموديولات المحددة ({len(del_names)} موديول) — مشروع: «{pname}»</span>'
+                            f'</div>'
+                            f'<div style="color: #fee2e2; font-size: 16px; font-weight: 700; margin-bottom: 10px; direction: rtl; text-align: right;">'
+                            f'سيتم حذف الموديولات التالية من المشروع ونقلها إلى سلة المحذوفات:'
+                            f'</div>'
+                            f'<ul style="margin: 0 0 12px 0; padding-right: 24px; list-style: disc; direction: rtl; text-align: right;">'
+                            f'{del_names_html}'
+                            f'</ul>'
+                            f'{linked_banner_html}'
+                            f'<div style="background: rgba(0, 0, 0, 0.35); border: 1.5px solid rgba(254, 202, 202, 0.25); border-radius: 8px; padding: 10px 16px; color: #86efac; font-size: 14px; font-weight: 700; margin-bottom: 14px; direction: rtl; text-align: right;">'
+                            f'✅ <b>الحفظ الآمن:</b> سيتم حفظ نسخة كاملة (Snapshot) من جميع بيانات ومدخلات هذه الموديولات، ويمكنك استعادتها لاحقاً في أي وقت عبر زر ♻️ استعادة.'
+                            f'</div>'
+                            f'</div>'
                         )
+                        st.markdown(confirm_dialog_html, unsafe_allow_html=True)
 
                         col_sure_in, col_sure_btn, col_sure_cancel = st.columns([3.5, 2.2, 1.3])
                         with col_sure_in:
@@ -2272,16 +2263,14 @@ def render_profile_manager():
                 trash_restore = get_deleted_modules_trash(pname)
 
                 st.markdown(
-                    f"""
-                    <div style="background: linear-gradient(135deg, #052e16 0%, #14532d 100%); border: 1.5px solid #4ade80; border-radius: 8px; padding: 8px 14px; margin-bottom: 10px;">
-                        <div style="font-weight: 800; font-size: 16px; color: #ffffff; display: flex; align-items: center; gap: 8px;">
-                            <span>♻️</span> استعادة موديول محذوف — مشروع: <b style="color: #86efac;">«{pname}»</b>
-                        </div>
-                        <div style="font-size: 13px; color: #bbf7d0; margin-top: 2px;">
-                            سيتم استعادة الموديول وجميع بياناته وإعداداته كما كانت قبل الحذف.
-                        </div>
-                    </div>
-                    """,
+                    f'<div style="background: linear-gradient(135deg, #052e16 0%, #14532d 100%); border: 1.5px solid #4ade80; border-radius: 8px; padding: 8px 14px; margin-bottom: 10px;">'
+                    f'<div style="font-weight: 800; font-size: 16px; color: #ffffff; display: flex; align-items: center; gap: 8px;">'
+                    f'<span>♻️</span> استعادة موديول محذوف — مشروع: <b style="color: #86efac;">«{pname}»</b>'
+                    f'</div>'
+                    f'<div style="font-size: 13px; color: #bbf7d0; margin-top: 2px;">'
+                    f'سيتم استعادة الموديول وجميع بياناته وإعداداته كما كانت قبل الحذف.'
+                    f'</div>'
+                    f'</div>',
                     unsafe_allow_html=True,
                 )
 
@@ -2301,14 +2290,12 @@ def render_profile_manager():
                         rc1, rc2 = st.columns([5, 1.6])
                         with rc1:
                             st.markdown(
-                                f"""
-                                <div style="background: rgba(74, 222, 128, 0.08); border: 1px solid rgba(74, 222, 128, 0.3); border-radius: 6px; padding: 8px 12px; margin-bottom: 4px;">
-                                    <div style="color: #4ade80; font-weight: 700; font-size: 14px;">{t_name}</div>
-                                    <div style="color: #94a3b8; font-size: 12px; margin-top: 2px;">
-                                        🕒 حُذف في: {t_date} &nbsp;|&nbsp; 💾 {t_snap_count} قيمة محفوظة في الـ snapshot
-                                    </div>
-                                </div>
-                                """,
+                                f'<div style="background: rgba(74, 222, 128, 0.08); border: 1px solid rgba(74, 222, 128, 0.3); border-radius: 6px; padding: 8px 12px; margin-bottom: 4px;">'
+                                f'<div style="color: #4ade80; font-weight: 700; font-size: 14px;">{t_name}</div>'
+                                f'<div style="color: #94a3b8; font-size: 12px; margin-top: 2px;">'
+                                f'🕒 حُذف في: {t_date} &nbsp;|&nbsp; 💾 {t_snap_count} قيمة محفوظة في الـ snapshot'
+                                f'</div>'
+                                f'</div>',
                                 unsafe_allow_html=True,
                             )
                         with rc2:
@@ -2512,7 +2499,11 @@ else:
             st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 13: {ex}")
             st.exception(ex)
     elif "Integrated" in module or "Flat Slabs" in module or "Flat" in module or "Module 1" in module:
-        render_flat_slab()
+        try:
+            render_flat_slab()
+        except Exception as ex:
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 1: {ex}")
+            st.exception(ex)
     elif "Columns" in module or "الأعمدة" in module:
         render_columns()
     elif "Combined" in module or "Two-Column" in module or "Two" in module or "Module 7" in module:
