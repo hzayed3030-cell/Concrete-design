@@ -248,6 +248,8 @@ def extract_structural_links_and_beams(
                     supp_cond = "Continuous from Both Ends (مستمر من الطرفين)"
 
             S_m = math.dist((cA["x"], cA["y"]), (cB["x"], cB["y"]))
+            if S_m > 7.50:
+                continue
             colA_w = float(cA.get("width_m", cA.get("tc", 50.0)/100.0))
             colB_w = float(cB.get("width_m", cB.get("tc", 50.0)/100.0))
             Ln_m = max(0.40, S_m - (colA_w / 2.0 + colB_w / 2.0))
@@ -294,6 +296,8 @@ def extract_structural_links_and_beams(
                     supp_cond = "Continuous from Both Ends (مستمر من الطرفين)"
 
             S_m = math.dist((cA["x"], cA["y"]), (cB["x"], cB["y"]))
+            if S_m > 7.50:
+                continue
             colA_h = float(cA.get("height_m", cA.get("bc", 30.0)/100.0))
             colB_h = float(cB.get("height_m", cB.get("bc", 30.0)/100.0))
             Ln_m = max(0.40, S_m - (colA_h / 2.0 + colB_h / 2.0))
@@ -313,6 +317,228 @@ def extract_structural_links_and_beams(
                 "m_cols_on_line": n,
                 "span_idx": k,
             })
+
+    # ── Step B.2: Enforce ECP 203 Section 6 Connectivity & Minimum 3-Way Framing ──
+    # Strict compliance with ECP 203:
+    # 1. Strict span limitation: S <= 7.50 m (prevents huge illogical spans across void bays)
+    # 2. Orthogonal inward T-joints for edge columns to prevent diagonal slicing across bays
+    # 3. Localized corner diagonal ties strictly for true building envelope corners (S <= 8.50 m)
+    # 4. Perimeter gap ties (S <= 6.50 m) for re-entrant / missing corner bays
+    # 5. Fallback tie search ensuring every column has >= 3 distinct directional restraints
+
+    MAX_SPAN_GRID = 7.50
+    MAX_SPAN_DIAG = 8.50
+
+    connected_pairs = set()
+    for sb in strap_beams:
+        c1_id = sb["col1_id"]
+        c2_id = sb["col2_id"]
+        connected_pairs.add(tuple(sorted([c1_id, c2_id])))
+
+    for sp in raw_ground_spans:
+        connected_pairs.add(tuple(sorted([sp["col1_id"], sp["col2_id"]])))
+
+    cen_x = sum(c["x"] for c in active_columns) / max(1, len(active_columns))
+    cen_y = sum(c["y"] for c in active_columns) / max(1, len(active_columns))
+
+    def _get_col_links(cid):
+        conns = []
+        for sp in raw_ground_spans:
+            if sp["col1_id"] == cid:
+                conns.append((sp["col2"], sp["dir"]))
+            elif sp["col2_id"] == cid:
+                conns.append((sp["col1"], sp["dir"]))
+        for sb in strap_beams:
+            if sb["col1_id"] == cid:
+                conns.append((sb["col2"], "Strap"))
+            elif sb["col2_id"] == cid:
+                conns.append((sb["col1"], "Strap"))
+        return conns
+
+    def _add_tie_span(cA, cB, dir_code, axis_lbl, supp_cond_desc, is_t_joint=False):
+        pair_k = tuple(sorted([cA["id"], cB["id"]]))
+        if pair_k in connected_pairs:
+            return False
+        connected_pairs.add(pair_k)
+        S_m = math.dist((cA["x"], cA["y"]), (cB["x"], cB["y"]))
+        colA_w = float(cA.get("width_m", cA.get("tc", 50.0) / 100.0))
+        colB_w = float(cB.get("width_m", cB.get("tc", 50.0) / 100.0))
+        Ln_m = max(0.40, S_m - (colA_w / 2.0 + colB_w / 2.0))
+
+        raw_ground_spans.append({
+            "dir": dir_code,
+            "col1": cA,
+            "col2": cB,
+            "col1_id": cA["id"],
+            "col2_id": cB["id"],
+            "axis_name": axis_lbl,
+            "S_m": S_m,
+            "Ln_m": Ln_m,
+            "supp_cond": supp_cond_desc,
+            "m_cols_on_line": 2,
+            "span_idx": 0,
+            "is_3way_tie": True,
+            "is_t_joint": is_t_joint,
+        })
+        return True
+
+    # 1. Inward Orthogonal T-Joints for Edge Columns (ECP 203 Section 6)
+    # If an edge column lacks an inward tie, it drops a perpendicular tie into the nearest parallel beam
+    for c in active_columns:
+        links = _get_col_links(c["id"])
+        x_links = [nb for (nb, d) in links if d == "X" or abs(nb["y"] - c["y"]) <= 0.35]
+        y_links = [nb for (nb, d) in links if d == "Y" or abs(nb["x"] - c["x"]) <= 0.35]
+        inward_y_dir = +1 if cen_y > c["y"] else -1
+        inward_x_dir = +1 if cen_x > c["x"] else -1
+
+        has_inward_y = any((nb["y"] - c["y"]) * inward_y_dir > 0.4 for nb in y_links)
+        if not has_inward_y and len(x_links) >= 1:
+            best_tj = None
+            min_tj_dy = 999.0
+            for sp in list(raw_ground_spans):
+                if sp["dir"] == "X":
+                    sp_y = (sp["col1"]["y"] + sp["col2"]["y"]) / 2.0
+                    dy = (sp_y - c["y"]) * inward_y_dir
+                    if 0.5 <= dy <= MAX_SPAN_GRID:
+                        x_min_sp = min(sp["col1"]["x"], sp["col2"]["x"]) - 1.50
+                        x_max_sp = max(sp["col1"]["x"], sp["col2"]["x"]) + 1.50
+                        if x_min_sp <= c["x"] <= x_max_sp:
+                            if dy < min_tj_dy:
+                                min_tj_dy = dy
+                                best_tj = (sp, c["x"], sp_y)
+            if best_tj:
+                target_sp, tj_x, tj_y = best_tj
+                tj_node = {
+                    "id": f"TJ-{c['id']}-H",
+                    "x": tj_x,
+                    "y": tj_y,
+                    "tc": 30.0,
+                    "bc": 30.0,
+                    "pu_tot": float(c.get("pu_tot", 60.0)) * 0.5,
+                    "grid_x": f"TJ-{c['id']}",
+                    "grid_y": f"TJ-{c['id']}",
+                    "is_t_joint": True,
+                }
+                _add_tie_span(
+                    c, tj_node, "Y",
+                    f"سملة تفرعية متعامدة Y ({c['id']} ➔ {target_sp['axis_name']})",
+                    "Simply Supported (سملة تفرعية متعامدة Y)",
+                    is_t_joint=True
+                )
+
+        has_inward_x = any((nb["x"] - c["x"]) * inward_x_dir > 0.4 for nb in x_links)
+        if not has_inward_x and len(y_links) >= 1:
+            best_tj = None
+            min_tj_dx = 999.0
+            for sp in list(raw_ground_spans):
+                if sp["dir"] == "Y":
+                    sp_x = (sp["col1"]["x"] + sp["col2"]["x"]) / 2.0
+                    dx = (sp_x - c["x"]) * inward_x_dir
+                    if 0.5 <= dx <= MAX_SPAN_GRID:
+                        y_min_sp = min(sp["col1"]["y"], sp["col2"]["y"]) - 1.50
+                        y_max_sp = max(sp["col1"]["y"], sp["col2"]["y"]) + 1.50
+                        if y_min_sp <= c["y"] <= y_max_sp:
+                            if dx < min_tj_dx:
+                                min_tj_dx = dx
+                                best_tj = (sp, sp_x, c["y"])
+            if best_tj:
+                target_sp, tj_x, tj_y = best_tj
+                tj_node = {
+                    "id": f"TJ-{c['id']}-V",
+                    "x": tj_x,
+                    "y": tj_y,
+                    "tc": 30.0,
+                    "bc": 30.0,
+                    "pu_tot": float(c.get("pu_tot", 60.0)) * 0.5,
+                    "grid_x": f"TJ-{c['id']}",
+                    "grid_y": f"TJ-{c['id']}",
+                    "is_t_joint": True,
+                }
+                _add_tie_span(
+                    c, tj_node, "X",
+                    f"سملة تفرعية متعامدة X ({c['id']} ➔ {target_sp['axis_name']})",
+                    "Simply Supported (سملة تفرعية متعامدة X)",
+                    is_t_joint=True
+                )
+
+    # 2. Localized Corner Diagonals strictly for true building envelope corners
+    min_x_bldg = min(c["x"] for c in active_columns)
+    max_x_bldg = max(c["x"] for c in active_columns)
+    min_y_bldg = min(c["y"] for c in active_columns)
+    max_y_bldg = max(c["y"] for c in active_columns)
+
+    for c in active_columns:
+        links = _get_col_links(c["id"])
+        if len(links) < 3:
+            is_corner_x = abs(c["x"] - min_x_bldg) <= 0.50 or abs(c["x"] - max_x_bldg) <= 0.50
+            is_corner_y = abs(c["y"] - min_y_bldg) <= 0.50 or abs(c["y"] - max_y_bldg) <= 0.50
+            if is_corner_x and is_corner_y:
+                inw_x = +1 if c["x"] < cen_x else -1
+                inw_y = +1 if c["y"] < cen_y else -1
+                best_diag = None
+                min_diag_dist = 999.0
+                for cand in active_columns:
+                    if cand["id"] == c["id"]:
+                        continue
+                    dx = (cand["x"] - c["x"]) * inw_x
+                    dy = (cand["y"] - c["y"]) * inw_y
+                    if 0.5 <= dx <= MAX_SPAN_GRID and 0.5 <= dy <= MAX_SPAN_GRID:
+                        d_diag = math.dist((c["x"], c["y"]), (cand["x"], cand["y"]))
+                        if d_diag <= MAX_SPAN_DIAG and d_diag < min_diag_dist:
+                            min_diag_dist = d_diag
+                            best_diag = cand
+                if best_diag:
+                    _add_tie_span(
+                        c, best_diag, "Diag-Tie",
+                        f"رابط ركن قطري ({c['id']} ↔ {best_diag['id']})",
+                        "Simply Supported (رابط ركن قطري)"
+                    )
+
+    # 3. Perimeter Gap Ties (for re-entrant corners or where corner columns were removed)
+    for c in active_columns:
+        links = _get_col_links(c["id"])
+        if len(links) < 3:
+            best_p = None
+            min_d = 999.0
+            for cand in active_columns:
+                if cand["id"] == c["id"]:
+                    continue
+                d = math.dist((c["x"], c["y"]), (cand["x"], cand["y"]))
+                if 0.5 <= d <= MAX_SPAN_GRID:
+                    cand_links = _get_col_links(cand["id"])
+                    if len(cand_links) < 3 and d < min_d:
+                        min_d = d
+                        best_p = cand
+            if best_p and min_d <= 6.50:
+                _add_tie_span(
+                    c, best_p, "Edge-Tie",
+                    f"سملة ربط محيطية ({c['id']} ↔ {best_p['id']})",
+                    "Simply Supported (سملة ربط محيطية)"
+                )
+
+    # 4. General Safety Fallback for any remaining unbraced columns
+    for c in active_columns:
+        links = _get_col_links(c["id"])
+        if len(links) < 3:
+            best_c = None
+            min_d = 999.0
+            for cand in active_columns:
+                if cand["id"] == c["id"]:
+                    continue
+                pair_k = tuple(sorted([c["id"], cand["id"]]))
+                if pair_k in connected_pairs:
+                    continue
+                d = math.dist((c["x"], c["y"]), (cand["x"], cand["y"]))
+                if 0.4 <= d <= MAX_SPAN_GRID and d < min_d:
+                    min_d = d
+                    best_c = cand
+            if best_c:
+                _add_tie_span(
+                    c, best_c, "Tie",
+                    f"سملة ربط تكميلية ({c['id']} ↔ {best_c['id']})",
+                    "Simply Supported (سملة ربط تكميلية)"
+                )
+
 
     # ── Step C: Structural Design of Each Ground Beam per Module 11 Rules ──────
     is_at_footing = "At Footing Level" in level_type

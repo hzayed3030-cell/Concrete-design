@@ -1871,9 +1871,30 @@ def draw_comprehensive_foundation_sketch(
         b_val = int(gb.get("b_cm", 25.0))
         t_val = int(gb.get("exec_t_cm", gb.get("t_calc", 60.0)))
 
-        if abs(c2["x"] - c1["x"]) >= abs(c2["y"] - c1["y"]):
+        dx_val = c2["x"] - c1["x"]
+        dy_val = c2["y"] - c1["y"]
+        if abs(dx_val) > 0.35 and abs(dy_val) > 0.35:
+            th_gb = math.atan2(dy_val, dx_val)
+            nx_gb = -math.sin(th_gb) * gb_w / 2.0
+            ny_gb = math.cos(th_gb) * gb_w / 2.0
+            poly_gb = patches.Polygon([
+                (c1["x"] + nx_gb, c1["y"] + ny_gb), (c2["x"] + nx_gb, c2["y"] + ny_gb),
+                (c2["x"] - nx_gb, c2["y"] - ny_gb), (c1["x"] - nx_gb, c1["y"] - ny_gb)
+            ], facecolor="#e0e7ff", edgecolor="#4338ca", lw=1.8, alpha=0.88, zorder=3)
+            ax.add_patch(poly_gb)
+            mid_x_gb = (c1["x"] + c2["x"]) / 2.0
+            mid_y_gb = (c1["y"] + c2["y"]) / 2.0
+            rot_deg_gb = math.degrees(th_gb)
+            if rot_deg_gb > 90:
+                rot_deg_gb -= 180
+            elif rot_deg_gb < -90:
+                rot_deg_gb += 180
+            ax.text(mid_x_gb, mid_y_gb, f"{mark} ({b_val}×{t_val})",
+                    color="#312e81", fontsize=7.5, fontweight="bold", ha="center", va="center", rotation=rot_deg_gb, zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.10", fc="#ffffff", ec="#6366f1", lw=0.8, alpha=0.85))
+        elif abs(dx_val) >= abs(dy_val):
             bx0 = min(c1["x"], c2["x"])
-            bw = abs(c2["x"] - c1["x"])
+            bw = abs(dx_val)
             by0 = c1["y"] - gb_w / 2.0
             r_gb = patches.Rectangle((bx0, by0), bw, gb_w, facecolor="#e0e7ff", edgecolor="#4338ca", lw=1.8, alpha=0.88, zorder=3)
             ax.add_patch(r_gb)
@@ -1882,7 +1903,7 @@ def draw_comprehensive_foundation_sketch(
                     bbox=dict(boxstyle="round,pad=0.10", fc="#ffffff", ec="#6366f1", lw=0.8, alpha=0.85))
         else:
             by0 = min(c1["y"], c2["y"])
-            bh = abs(c2["y"] - c1["y"])
+            bh = abs(dy_val)
             bx0 = c1["x"] - gb_w / 2.0
             r_gb = patches.Rectangle((bx0, by0), gb_w, bh, facecolor="#e0e7ff", edgecolor="#4338ca", lw=1.8, alpha=0.88, zorder=3)
             ax.add_patch(r_gb)

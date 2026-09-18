@@ -10200,9 +10200,9 @@
       "name": "بلاطة دور السطح - فلات سلاب",
       "description": "مشروع بلاطة دور السطح - فلات سلاب",
       "created_at": "2026-09-15 15:53",
-      "updated_at": "2026-09-18 20:15",
+      "updated_at": "2026-09-18 22:27",
       "data": {
-        "selected_module_idx": 11,
+        "selected_module_idx": 0,
         "apartment_name": "بلاطة دور السطح - فلات سلاب",
         "col_Pu_input": 160.0,
         "col_Safety_Factor": 1.2,
