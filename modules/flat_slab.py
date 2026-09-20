@@ -9157,12 +9157,12 @@ def render(is_standalone: bool = False):
                     col_transforms=_col_transforms,
                     edge_columns=_edge_columns,
                 )
-                st.pyplot(fig_verif, clear_figure=True, use_container_width=True)
                 buf_v = io.BytesIO()
                 fig_verif.savefig(buf_v, format="png", bbox_inches="tight", dpi=180)
                 buf_v.seek(0)
                 img_verif_b64 = "data:image/png;base64," + base64.b64encode(buf_v.getvalue()).decode("utf-8")
                 buf_v.seek(0)
+                st.pyplot(fig_verif, clear_figure=True, use_container_width=True)
                 st.download_button(
                     label="📥 Download Structural Geometry Sketch (High-Res PNG)",
                     data=buf_v,
@@ -10624,11 +10624,10 @@ def render(is_standalone: bool = False):
                     void_panel_ids=set(_confirmed_voids),
                     edge_columns=_edge_columns,
                 )
-                st.pyplot(fig_punch, clear_figure=True, use_container_width=True)
-
                 buf_punch = io.BytesIO()
                 fig_punch.savefig(buf_punch, format="png", bbox_inches="tight", dpi=180)
                 buf_punch.seek(0)
+                st.pyplot(fig_punch, clear_figure=True, use_container_width=True)
                 st.download_button(
                     label="📥 Download Punching Shear Verification Plan (High-Res PNG)",
                     data=buf_punch,
@@ -10961,11 +10960,10 @@ def render(is_standalone: bool = False):
                         Fy=Fy,
                         stirrup_dia_mm=sel_stirrup_dia,
                     )
-                    st.pyplot(fig_det, clear_figure=True, use_container_width=True)
-
                     buf_det = io.BytesIO()
                     fig_det.savefig(buf_det, format="png", bbox_inches="tight", dpi=180)
                     buf_det.seek(0)
+                    st.pyplot(fig_det, clear_figure=True, use_container_width=True)
                     st.download_button(
                         label=f"📥 Download 2D Detailing Plan & Elevation — Column {sel_col_id} (High-Res PNG)",
                         data=buf_det,
@@ -10988,11 +10986,10 @@ def render(is_standalone: bool = False):
                         Fy=Fy,
                         stirrup_dia_mm=sel_stirrup_dia,
                     )
-                    st.pyplot(fig_3d, clear_figure=True, use_container_width=True)
-
                     buf_3d = io.BytesIO()
                     fig_3d.savefig(buf_3d, format="png", bbox_inches="tight", dpi=180)
                     buf_3d.seek(0)
+                    st.pyplot(fig_3d, clear_figure=True, use_container_width=True)
                     st.download_button(
                         label=f"📥 Download 3D Isometric Detailing Model — Column {sel_col_id} (High-Res PNG)",
                         data=buf_3d,
@@ -13170,11 +13167,15 @@ def render(is_standalone: bool = False):
                     active_cols_sketch, ftg_analysis_sketch, ground_beams=gb_list,
                     edge_columns=_edge_columns,
                 )
-                st.pyplot(fig_full_sketch, clear_figure=True, use_container_width=True)
-
                 buf_fs_sketch = io.BytesIO()
-                fig_full_sketch.savefig(buf_fs_sketch, format="png", bbox_inches="tight", dpi=180)
+                fig_full_sketch.savefig(buf_fs_sketch, format="png", bbox_inches="tight", dpi=160)
                 buf_fs_sketch.seek(0)
+                try:
+                    st.session_state[f"{prefix}foundation_sketch_b64"] = base64.b64encode(buf_fs_sketch.getvalue()).decode("utf-8")
+                except Exception:
+                    pass
+
+                st.pyplot(fig_full_sketch, clear_figure=True, use_container_width=True)
                 st.download_button(
                     label="📥 Download Foundation Layout Plan Sketch (High-Res PNG)",
                     data=buf_fs_sketch,
@@ -13412,6 +13413,8 @@ def render(is_standalone: bool = False):
                 fcu=float(Fcu) if 'Fcu' in locals() and Fcu else 250.0,
                 fy=float(Fy) if 'Fy' in locals() and Fy else 4000.0,
                 prefix=prefix,
+                edge_columns=_edge_columns if '_edge_columns' in locals() else None,
+                layout_sketch_b64=st.session_state.get(f"{prefix}foundation_sketch_b64", ""),
             )
         except Exception as _e_3d:
             st.error(f"⚠️ خطأ أثناء تحميل العارض ثلاثي الأبعاد: {_e_3d}")

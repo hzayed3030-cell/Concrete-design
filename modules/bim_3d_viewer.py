@@ -17,6 +17,8 @@ Features:
 ================================================================================
 """
 
+import io
+import base64
 import json
 import math
 import streamlit as st
@@ -1451,6 +1453,146 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
     cursor: pointer;
   }}
   .btn-reset-iso:hover {{ background: #475569; }}
+
+  /* Fullscreen & Toolbar Buttons */
+  #btn-fullscreen.active {{
+    background: #0284c7;
+    border-color: #38bdf8;
+    color: #ffffff;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+  }}
+
+  /* Foundation Layout Sketch Picture-in-Picture Overlay (Top-Left) */
+  .sketch-box {{
+    position: absolute;
+    top: 60px;
+    left: 12px;
+    width: 330px;
+    background: rgba(15, 23, 42, 0.94);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1.5px solid #38bdf8;
+    border-radius: 10px;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.75);
+    z-index: 24;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    pointer-events: auto;
+    transition: width 0.2s ease, opacity 0.2s ease, box-shadow 0.2s ease;
+  }}
+  .sketch-box.enlarged {{
+    width: 620px;
+    max-width: calc(100vw - 30px);
+  }}
+  .sketch-box.minimized .sketch-body {{
+    display: none;
+  }}
+  .sketch-header {{
+    background: rgba(30, 41, 59, 0.98);
+    padding: 7px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(56, 189, 248, 0.35);
+    cursor: grab;
+    user-select: none;
+  }}
+  .sketch-title {{
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #38bdf8;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }}
+  .sketch-actions {{
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }}
+  .btn-sketch-action {{
+    background: #1e293b;
+    color: #cbd5e1;
+    border: 1px solid #475569;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 10.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }}
+  .btn-sketch-action:hover {{
+    background: #334155;
+    color: #38bdf8;
+    border-color: #38bdf8;
+  }}
+  .sketch-body {{
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    background: rgba(11, 15, 25, 0.75);
+  }}
+  .sketch-img-wrap {{
+    width: 100%;
+    max-height: 240px;
+    overflow: hidden;
+    border-radius: 6px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    background: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: zoom-in;
+    transition: max-height 0.2s ease;
+  }}
+  .sketch-box.enlarged .sketch-img-wrap {{
+    max-height: 460px;
+  }}
+  .sketch-img {{
+    width: 100%;
+    height: auto;
+    max-height: 100%;
+    object-fit: contain;
+    display: block;
+  }}
+  .sketch-footer {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    color: #94a3b8;
+    font-weight: 700;
+    padding: 2px 2px 0 2px;
+  }}
+  .sketch-opacity-control {{
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }}
+  .sketch-opacity-control input[type="range"] {{
+    width: 60px;
+    height: 4px;
+    cursor: pointer;
+  }}
+  .sketch-dl-btn {{
+    color: #38bdf8;
+    text-decoration: none;
+    font-size: 10.5px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(56, 189, 248, 0.15);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    transition: background 0.15s;
+  }}
+  .sketch-dl-btn:hover {{
+    background: rgba(56, 189, 248, 0.35);
+  }}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -1468,6 +1610,8 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
     <button class="btn-tool" id="btn-reset-cam" title="إعادة ضبط زاوية الكاميرا">🔄 ضبط</button>
     <button class="btn-tool" id="btn-theme" title="تبديل الخلفية">🌙 / ☀️</button>
     <button class="btn-tool active" id="btn-toggle-labels" title="إظهار / إخفاء أسماء وتسميات العناصر الإنشائية (C1, F1...)">🏷️ الأسماء (Labels)</button>
+    <button class="btn-tool active" id="btn-toggle-sketch" title="إظهار / إخفاء مسقط الأساسات (Foundation Layout Sketch)">🗺️ مسقط الأساسات</button>
+    <button class="btn-tool" id="btn-fullscreen" title="عرض كامل الشاشة بنفس الأزرار والأدوات">⛶ ملء الشاشة</button>
   </div>
 
   <div class="tb-group">
@@ -1504,6 +1648,35 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
 
 <div class="help-bar">
   🖱️ تدوير: سحب بالفأرة &nbsp;|&nbsp; Zoom: عجلة الفأرة &nbsp;|&nbsp; Pan: زر الفأرة الأيمن &nbsp;|&nbsp; 🏷️ انقر على أي عنصر أو تسمية لفحصه وعزله
+</div>
+
+<!-- Foundation Layout Sketch Picture-in-Picture Box (Top-Left Corner) -->
+<div class="sketch-box" id="sketch-box">
+  <div class="sketch-header" id="sketch-header">
+    <div class="sketch-title">
+      <span>🗺️</span>
+      <span>مسقط الأساسات (Layout Sketch)</span>
+    </div>
+    <div class="sketch-actions">
+      <button class="btn-sketch-action" id="btn-sketch-align-top" title="محاذاة كاميرا المجسم 3D للمسقط الأفقي لمقارنة مطابقة 1:1">📐 مسقط 3D</button>
+      <button class="btn-sketch-action" id="btn-sketch-size" title="تكبير / تصغير نافذة المخطط للمقارنة">🔍 تكبير</button>
+      <button class="btn-sketch-action" id="btn-sketch-min" title="طي / توسيع نافذة المخطط">➖</button>
+      <button class="btn-sketch-action" id="btn-sketch-close" title="إخفاء نافذة المخطط">✕</button>
+    </div>
+  </div>
+  <div class="sketch-body" id="sketch-body">
+    <div class="sketch-img-wrap" id="sketch-img-wrap" title="انقر لتكبير صورة المخطط للمقارنة المباشرة">
+      <img id="sketch-img" class="sketch-img" alt="Foundation Layout Plan Sketch" />
+    </div>
+    <div class="sketch-footer">
+      <div class="sketch-opacity-control">
+        <span>الشفافية:</span>
+        <input type="range" id="sketch-opacity-slider" min="30" max="100" value="100" step="5" />
+        <span id="sketch-opacity-val">100%</span>
+      </div>
+      <a id="sketch-download-link" download="Foundation_Layout_Sketch.png" class="sketch-dl-btn" title="تحميل صورة المسقط عالية الدقة">📥 تنزيل</a>
+    </div>
+  </div>
 </div>
 
 <div class="inspector-panel" id="inspector-panel">
@@ -1996,7 +2169,7 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
   }}
 
   window.addEventListener('click', (e) => {{
-    if (e.target.closest('.toolbar') || e.target.closest('.inspector-panel') || e.target.closest('.rebar-legend')) {{
+    if (e.target.closest('.toolbar') || e.target.closest('.inspector-panel') || e.target.closest('.rebar-legend') || e.target.closest('.sketch-box')) {{
       return;
     }}
 
@@ -2063,6 +2236,221 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
     gridHelper.material.color.set(isDark ? 0x334155 : 0xcbd5e1);
   }});
 
+  // ─── Full Screen Mode Toggle Logic ───
+  const btnFullScreen = document.getElementById('btn-fullscreen');
+
+  function isCurrentlyFullScreen() {{
+    return !!(
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement ||
+      document.msFullscreenElement
+    );
+  }}
+
+  function updateFullScreenUI(active) {{
+    if (!btnFullScreen) return;
+    if (active) {{
+      btnFullScreen.innerHTML = '🗗 إنهاء ملء الشاشة';
+      btnFullScreen.classList.add('active');
+      btnFullScreen.title = 'إنهاء وضع ملء الشاشة (ESC)';
+    }} else {{
+      btnFullScreen.innerHTML = '⛶ ملء الشاشة (Full Screen)';
+      btnFullScreen.classList.remove('active');
+      btnFullScreen.title = 'عرض المجسم ثلاثي الأبعاد بملء الشاشة مع كافة الأزرار والأدوات';
+    }}
+  }}
+
+  function toggleFullScreenMode() {{
+    const docEl = document.documentElement;
+    if (!isCurrentlyFullScreen()) {{
+      const req = docEl.requestFullscreen || docEl.webkitRequestFullscreen || docEl.mozRequestFullScreen || docEl.msRequestFullscreen;
+      if (req) {{
+        req.call(docEl).then(() => {{
+          updateFullScreenUI(true);
+        }}).catch(err => {{
+          console.warn("Fullscreen request error:", err);
+        }});
+      }}
+    }} else {{
+      const exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen || document.msExitFullscreen;
+      if (exit) {{
+        exit.call(document).then(() => {{
+          updateFullScreenUI(false);
+        }}).catch(err => {{
+          console.warn("Exit fullscreen error:", err);
+        }});
+      }}
+    }}
+  }}
+
+  if (btnFullScreen) {{
+    btnFullScreen.addEventListener('click', toggleFullScreenMode);
+  }}
+
+  document.addEventListener('fullscreenchange', () => {{
+    updateFullScreenUI(isCurrentlyFullScreen());
+    setTimeout(() => {{
+      window.dispatchEvent(new Event('resize'));
+    }}, 100);
+  }});
+  document.addEventListener('webkitfullscreenchange', () => {{
+    updateFullScreenUI(isCurrentlyFullScreen());
+    setTimeout(() => {{
+      window.dispatchEvent(new Event('resize'));
+    }}, 100);
+  }});
+
+  // ─── Foundation Layout Sketch Picture-in-Picture Logic ───
+  const sketchBox = document.getElementById('sketch-box');
+  const sketchImg = document.getElementById('sketch-img');
+  const sketchImgWrap = document.getElementById('sketch-img-wrap');
+  const btnToggleSketch = document.getElementById('btn-toggle-sketch');
+  const btnSketchSize = document.getElementById('btn-sketch-size');
+  const btnSketchMin = document.getElementById('btn-sketch-min');
+  const btnSketchClose = document.getElementById('btn-sketch-close');
+  const btnSketchAlignTop = document.getElementById('btn-sketch-align-top');
+  const sketchOpacitySlider = document.getElementById('sketch-opacity-slider');
+  const sketchOpacityVal = document.getElementById('sketch-opacity-val');
+  const sketchDownloadLink = document.getElementById('sketch-download-link');
+
+  const sketchB64 = data.layout_sketch_b64;
+  if (sketchB64 && sketchB64.length > 50) {{
+    const imgSrc = 'data:image/png;base64,' + sketchB64;
+    sketchImg.src = imgSrc;
+    if (sketchDownloadLink) {{
+      sketchDownloadLink.href = imgSrc;
+    }}
+  }} else {{
+    if (sketchImgWrap) {{
+      sketchImgWrap.style.background = '#1e293b';
+      sketchImgWrap.style.padding = '20px 10px';
+      sketchImgWrap.innerHTML = '<div style="color:#94a3b8; font-size:11px; text-align:center; line-height:1.6;">💡 المسقط الأفقي للأساسات غير متوفر حالياً.<br/>يرجى إدخال بيانات الأعمدة والقواعد.</div>';
+    }}
+    if (sketchDownloadLink) {{
+      sketchDownloadLink.style.display = 'none';
+    }}
+  }}
+
+  // Prevent OrbitControls interference when clicking or dragging inside sketch box
+  if (sketchBox) {{
+    ['mousedown', 'pointerdown', 'wheel', 'touchstart', 'dblclick', 'contextmenu'].forEach(evt => {{
+      sketchBox.addEventListener(evt, (e) => e.stopPropagation());
+    }});
+  }}
+
+  // Toggle show/hide sketch box from toolbar button
+  let sketchVisible = true;
+  if (btnToggleSketch) {{
+    btnToggleSketch.addEventListener('click', () => {{
+      sketchVisible = !sketchVisible;
+      sketchBox.style.display = sketchVisible ? 'flex' : 'none';
+      btnToggleSketch.classList.toggle('active', sketchVisible);
+    }});
+  }}
+
+  // Close button on sketch box
+  if (btnSketchClose) {{
+    btnSketchClose.addEventListener('click', () => {{
+      sketchVisible = false;
+      sketchBox.style.display = 'none';
+      if (btnToggleSketch) btnToggleSketch.classList.remove('active');
+    }});
+  }}
+
+  // Enlarge / Compact toggle
+  let isSketchEnlarged = false;
+  if (btnSketchSize) {{
+    btnSketchSize.addEventListener('click', () => {{
+      isSketchEnlarged = !isSketchEnlarged;
+      sketchBox.classList.toggle('enlarged', isSketchEnlarged);
+      btnSketchSize.innerHTML = isSketchEnlarged ? '🔍 تصغير' : '🔍 تكبير';
+      btnSketchSize.title = isSketchEnlarged ? 'استعادة الحجم المصغر في الركن' : 'تكبير المخطط لمقارنة أوضح';
+    }});
+  }}
+
+  // Click image to toggle enlarge
+  if (sketchImgWrap) {{
+    sketchImgWrap.addEventListener('click', () => {{
+      isSketchEnlarged = !isSketchEnlarged;
+      sketchBox.classList.toggle('enlarged', isSketchEnlarged);
+      if (btnSketchSize) {{
+        btnSketchSize.innerHTML = isSketchEnlarged ? '🔍 تصغير' : '🔍 تكبير';
+      }}
+    }});
+  }}
+
+  // Minimize / Expand toggle
+  let isSketchMinimized = false;
+  if (btnSketchMin) {{
+    btnSketchMin.addEventListener('click', () => {{
+      isSketchMinimized = !isSketchMinimized;
+      sketchBox.classList.toggle('minimized', isSketchMinimized);
+      btnSketchMin.textContent = isSketchMinimized ? '➕' : '➖';
+      btnSketchMin.title = isSketchMinimized ? 'توسيع المخطط' : 'طي المخطط للشريط فقط';
+    }});
+  }}
+
+  // Align 3D Camera to Top View for 1:1 Layout Comparison
+  if (btnSketchAlignTop) {{
+    btnSketchAlignTop.addEventListener('click', () => {{
+      document.querySelectorAll('.tb-group .btn-tool').forEach(b => b.classList.remove('active'));
+      const topBtn = document.getElementById('btn-view-top');
+      if (topBtn) topBtn.classList.add('active');
+      setCameraPreset('top');
+    }});
+  }}
+
+  // Opacity Slider for sketch box
+  if (sketchOpacitySlider && sketchOpacityVal) {{
+    sketchOpacitySlider.addEventListener('input', (e) => {{
+      const val = e.target.value;
+      sketchOpacityVal.textContent = val + '%';
+      sketchBox.style.opacity = (val / 100.0).toString();
+    }});
+  }}
+
+  // Draggable Sketch Box by Header
+  const sketchHeader = document.getElementById('sketch-header');
+  let isDraggingSketch = false;
+  let sketchDragStartX = 0, sketchDragStartY = 0;
+  let sketchBoxStartX = 0, sketchBoxStartY = 0;
+
+  if (sketchHeader && sketchBox) {{
+    sketchHeader.addEventListener('mousedown', (e) => {{
+      if (e.target.closest('.btn-sketch-action')) return;
+      isDraggingSketch = true;
+      sketchDragStartX = e.clientX;
+      sketchDragStartY = e.clientY;
+      const rect = sketchBox.getBoundingClientRect();
+      sketchBoxStartX = rect.left;
+      sketchBoxStartY = rect.top;
+      sketchBox.style.right = 'auto';
+      sketchBox.style.bottom = 'auto';
+      sketchBox.style.left = sketchBoxStartX + 'px';
+      sketchBox.style.top = sketchBoxStartY + 'px';
+      sketchHeader.style.cursor = 'grabbing';
+      e.preventDefault();
+    }});
+
+    window.addEventListener('mousemove', (e) => {{
+      if (!isDraggingSketch) return;
+      const dx = e.clientX - sketchDragStartX;
+      const dy = e.clientY - sketchDragStartY;
+      const newX = Math.max(5, Math.min(window.innerWidth - sketchBox.offsetWidth - 5, sketchBoxStartX + dx));
+      const newY = Math.max(5, Math.min(window.innerHeight - sketchBox.offsetHeight - 5, sketchBoxStartY + dy));
+      sketchBox.style.left = newX + 'px';
+      sketchBox.style.top = newY + 'px';
+    }});
+
+    window.addEventListener('mouseup', () => {{
+      if (isDraggingSketch) {{
+        isDraggingSketch = false;
+        sketchHeader.style.cursor = 'grab';
+      }}
+    }});
+  }}
+
 }})();
 </script>
 </body>
@@ -2092,6 +2480,8 @@ def render_3d_bim_viewer(
     fy: float = 4000.0,
     prefix: str = "",
     height: int = 760,
+    edge_columns: dict = None,
+    layout_sketch_b64: str = None,
 ):
     """
     Renders the Integrated 3D Structural BIM & Rebar Viewer inside Module 1.
@@ -2123,6 +2513,30 @@ def render_3d_bim_viewer(
         if not scene_data or not scene_data.get("concrete_elements"):
             st.info("💡 أدخل بيانات شبكة المحاور وقم بتنفيذ التصميم لعرض النموذج الإنشائي ثلاثي الأبعاد.")
             return
+
+        # Check / retrieve / generate Foundation Layout Sketch base64 for side-by-side comparison
+        if not layout_sketch_b64:
+            layout_sketch_b64 = st.session_state.get(f"{prefix}foundation_sketch_b64", "")
+        # If missing or smaller than a real drawing (<25KB base64 indicates a blank/cleared canvas), generate fresh
+        if (not layout_sketch_b64 or len(layout_sketch_b64) < 25000) and active_cols and ftg_analysis:
+            try:
+                import matplotlib.pyplot as plt
+                from modules.two_col_footings import draw_comprehensive_foundation_sketch
+                gb_list = gb_analysis.get("ground_beams", []) if gb_analysis else []
+                fig_sketch = draw_comprehensive_foundation_sketch(
+                    active_cols, ftg_analysis, ground_beams=gb_list,
+                    edge_columns=edge_columns,
+                )
+                buf_sk = io.BytesIO()
+                fig_sketch.savefig(buf_sk, format="png", bbox_inches="tight", dpi=140)
+                buf_sk.seek(0)
+                layout_sketch_b64 = base64.b64encode(buf_sk.getvalue()).decode("utf-8")
+                st.session_state[f"{prefix}foundation_sketch_b64"] = layout_sketch_b64
+                plt.close(fig_sketch)
+            except Exception:
+                layout_sketch_b64 = ""
+
+        scene_data["layout_sketch_b64"] = layout_sketch_b64 or ""
 
         m = scene_data["metrics"]
 
