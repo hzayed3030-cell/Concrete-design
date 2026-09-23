@@ -211,6 +211,15 @@ def compute_column_geometry(grid_x, grid_y, bc_cm, tc_cm, trans=None):
     norm_sx  = t["shift_x"]
     norm_sy  = t["shift_y"]
 
+    try:
+        grid_x = float(grid_x)
+    except (ValueError, TypeError):
+        grid_x = 0.0
+    try:
+        grid_y = float(grid_y)
+    except (ValueError, TypeError):
+        grid_y = 0.0
+
     D_cm = max(float(bc_cm), float(tc_cm))
     B_cm = min(float(bc_cm), float(tc_cm))
 
@@ -292,12 +301,60 @@ def validate_edge_column_offset(geom, edge_dir, slab_bounds=None):
     if not ed_str or ed_str.startswith("--"):
         return False, []
 
-    gx = geom.get("grid_x", 0.0)
-    gy = geom.get("grid_y", 0.0)
-    x_min = geom.get("x_min", 0.0)
-    x_max = geom.get("x_max", 0.0)
-    y_min = geom.get("y_min", 0.0)
-    y_max = geom.get("y_max", 0.0)
+    def _to_float(val, fallback=None):
+        if val is None:
+            return fallback
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return fallback
+
+    # Resolve numeric grid_x coordinate in meters
+    gx = None
+    if "grid_x_m" in geom and geom["grid_x_m"] is not None:
+        gx = _to_float(geom["grid_x_m"], None)
+    if gx is None:
+        gx = _to_float(geom.get("grid_x"), None)
+    if gx is None:
+        gx = _to_float(geom.get("x"), None)
+    if gx is None:
+        gx = _to_float(geom.get("center_x"), 0.0)
+
+    # Resolve numeric grid_y coordinate in meters
+    gy = None
+    if "grid_y_m" in geom and geom["grid_y_m"] is not None:
+        gy = _to_float(geom["grid_y_m"], None)
+    if gy is None:
+        gy = _to_float(geom.get("grid_y"), None)
+    if gy is None:
+        gy = _to_float(geom.get("y"), None)
+    if gy is None:
+        gy = _to_float(geom.get("center_y"), 0.0)
+
+    # Resolve column bounding box in meters
+    w_m = _to_float(geom.get("width_m"), None)
+    if w_m is None:
+        w_m = _to_float(geom.get("bc", 30.0), 30.0) / 100.0
+
+    h_m = _to_float(geom.get("height_m"), None)
+    if h_m is None:
+        h_m = _to_float(geom.get("tc", 30.0), 30.0) / 100.0
+
+    x_min = _to_float(geom.get("x_min"), None)
+    if x_min is None:
+        x_min = gx - (w_m / 2.0)
+
+    x_max = _to_float(geom.get("x_max"), None)
+    if x_max is None:
+        x_max = gx + (w_m / 2.0)
+
+    y_min = _to_float(geom.get("y_min"), None)
+    if y_min is None:
+        y_min = gy - (h_m / 2.0)
+
+    y_max = _to_float(geom.get("y_max"), None)
+    if y_max is None:
+        y_max = gy + (h_m / 2.0)
 
     offset_right_cm  = round((x_max - gx) * 100.0, 2)
     offset_left_cm   = round((gx - x_min) * 100.0, 2)
@@ -321,14 +378,14 @@ def validate_edge_column_offset(geom, edge_dir, slab_bounds=None):
             sb = st.session_state.get("_fs_current_slab_bounds")
 
     if isinstance(sb, dict):
-        min_x = sb.get("min_x")
-        max_x = sb.get("max_x")
-        min_y = sb.get("min_y")
-        max_y = sb.get("max_y")
-        cant_left = float(sb.get("cant_left", 0.0) or 0.0)
-        cant_right = float(sb.get("cant_right", 0.0) or 0.0)
-        cant_bottom = float(sb.get("cant_bottom", 0.0) or 0.0)
-        cant_top = float(sb.get("cant_top", 0.0) or 0.0)
+        min_x = _to_float(sb.get("min_x"), None)
+        max_x = _to_float(sb.get("max_x"), None)
+        min_y = _to_float(sb.get("min_y"), None)
+        max_y = _to_float(sb.get("max_y"), None)
+        cant_left = _to_float(sb.get("cant_left", 0.0), 0.0)
+        cant_right = _to_float(sb.get("cant_right", 0.0), 0.0)
+        cant_bottom = _to_float(sb.get("cant_bottom", 0.0), 0.0)
+        cant_top = _to_float(sb.get("cant_top", 0.0), 0.0)
 
         TOL = 0.05  # سماحية 5 سم للمطابقة الهندسية للمحاور
 
@@ -2509,6 +2566,17 @@ def generate_flat_slab_moment_contour(
     slab_w = x_slab_max - x_slab_min
     slab_h = y_slab_max - y_slab_min
 
+    slab_bounds_contour = {
+        "min_x": x_coords[0],
+        "max_x": x_coords[-1],
+        "min_y": y_coords[0],
+        "max_y": y_coords[-1],
+        "cant_left": cant_left,
+        "cant_right": cant_right,
+        "cant_bottom": cant_bottom,
+        "cant_top": cant_top,
+    }
+
     # Reconstruct 2D mesh and moment matrix
     X, Y, M11, M22, M11_raw, M22_raw = build_slab_moment_field(
         Lx_spans, Ly_spans, cantilevers, rows_x, rows_y, Wu,
@@ -2671,7 +2739,7 @@ def generate_flat_slab_moment_contour(
             cx, cy = c["x"], c["y"]
             rx, ry = c["x_min"], c["y_min"]
             rw, rh = c["width_m"], c["height_m"]
-            is_edge_c = is_edge_column_verified(orig_id, geom=c, edge_columns=edge_columns)
+            is_edge_c = is_edge_column_verified(orig_id, geom=c, edge_columns=edge_columns, slab_bounds=slab_bounds_contour)
 
             col_box = patches.Rectangle(
                 (rx, ry), rw, rh,
@@ -2722,7 +2790,7 @@ def generate_flat_slab_moment_contour(
                 rw, rh = geom["width_m"], geom["height_m"]
                 cx, cy = geom["center_x"], geom["center_y"]
 
-                is_edge_c = is_edge_column_verified(orig_id, geom=geom, edge_columns=edge_columns)
+                is_edge_c = is_edge_column_verified(orig_id, geom=geom, edge_columns=edge_columns, slab_bounds=slab_bounds_contour)
                 col_box = patches.Rectangle(
                     (rx, ry), rw, rh,
                     linewidth=2.0, edgecolor="#0f172a", facecolor="#1e293b", zorder=6
@@ -9161,6 +9229,7 @@ def render(is_standalone: bool = False):
                 fig_verif.savefig(buf_v, format="png", bbox_inches="tight", dpi=180)
                 buf_v.seek(0)
                 img_verif_b64 = "data:image/png;base64," + base64.b64encode(buf_v.getvalue()).decode("utf-8")
+                st.session_state[f"{prefix}flat_slab_plan_b64"] = img_verif_b64
                 buf_v.seek(0)
                 st.pyplot(fig_verif, clear_figure=True, use_container_width=True)
                 st.download_button(
@@ -9366,23 +9435,6 @@ def render(is_standalone: bool = False):
                     if _saved_is_edge not in ["No", "Yes"]:
                         _saved_is_edge = "No"
 
-                    SELECT_DIR_PLACEHOLDER = "-- اختر اتجاه الجار --"
-                    REAL_EDGE_DIR_OPTIONS = [
-                        "Left",
-                        "Right",
-                        "Top",
-                        "Bottom",
-                        "Top + Left",
-                        "Top + Right",
-                        "Bottom + Left",
-                        "Bottom + Right",
-                    ]
-                    EDGE_DIR_OPTIONS = [SELECT_DIR_PLACEHOLDER] + REAL_EDGE_DIR_OPTIONS
-
-                    _saved_edge_dir = _saved_edge.get("direction", "")
-                    if _saved_edge_dir not in REAL_EDGE_DIR_OPTIONS:
-                        _saved_edge_dir = SELECT_DIR_PLACEHOLDER
-
                     _curr_trans_state = {
                         "direction": sel_dir,
                         "shift_x": sel_sx,
@@ -9395,7 +9447,7 @@ def render(is_standalone: bool = False):
                         _curr_trans_state,
                     )
 
-                    # ── فحص هل العمود يقع على المحيط الخارجي للمسقط أم داخل المساحة ──
+                    # ── فحص مطابقة إحداثيات العمود لحدود مساحة الرسم والمسقط ──
                     _gx_col = _tgt_col.get("grid_x_m", _tgt_col.get("x", 0.0))
                     _gy_col = _tgt_col.get("grid_y_m", _tgt_col.get("y", 0.0))
                     _min_x_ref = _slab_bounds_current.get("min_x", 0.0)
@@ -9415,6 +9467,44 @@ def render(is_standalone: bool = False):
 
                     _can_be_edge_column = bool(_is_on_left or _is_on_right or _is_on_bottom or _is_on_top)
 
+                    # ── حصر اتجاهات الجار المسموح بها هندسياً والمطلة على الحدود الخارجية فقط ──
+                    _avail_faces = []
+                    if _is_on_left:
+                        _avail_faces.append("Left")
+                    if _is_on_right:
+                        _avail_faces.append("Right")
+                    if _is_on_bottom:
+                        _avail_faces.append("Bottom")
+                    if _is_on_top:
+                        _avail_faces.append("Top")
+
+                    REAL_EDGE_DIR_OPTIONS = []
+                    for _face in ["Left", "Right", "Bottom", "Top"]:
+                        if _face in _avail_faces:
+                            REAL_EDGE_DIR_OPTIONS.append(_face)
+
+                    if "Bottom" in _avail_faces and "Left" in _avail_faces:
+                        REAL_EDGE_DIR_OPTIONS.append("Bottom + Left")
+                    if "Bottom" in _avail_faces and "Right" in _avail_faces:
+                        REAL_EDGE_DIR_OPTIONS.append("Bottom + Right")
+                    if "Top" in _avail_faces and "Left" in _avail_faces:
+                        REAL_EDGE_DIR_OPTIONS.append("Top + Left")
+                    if "Top" in _avail_faces and "Right" in _avail_faces:
+                        REAL_EDGE_DIR_OPTIONS.append("Top + Right")
+
+                    SELECT_DIR_PLACEHOLDER = "-- اختر اتجاه الجار --"
+                    _raw_saved_dir = _saved_edge.get("direction", "")
+
+                    if len(REAL_EDGE_DIR_OPTIONS) == 1:
+                        # إذا كان هناك اتجاه خارجي وحيد ممكن هندسياً (مثل عمود طرفي على محور Y1)، يتم اختياره تلقائياً
+                        EDGE_DIR_OPTIONS = [SELECT_DIR_PLACEHOLDER] + REAL_EDGE_DIR_OPTIONS
+                        _saved_edge_dir = _raw_saved_dir if _raw_saved_dir in REAL_EDGE_DIR_OPTIONS else REAL_EDGE_DIR_OPTIONS[0]
+                    else:
+                        EDGE_DIR_OPTIONS = [SELECT_DIR_PLACEHOLDER] + REAL_EDGE_DIR_OPTIONS
+                        _saved_edge_dir = _raw_saved_dir if _raw_saved_dir in REAL_EDGE_DIR_OPTIONS else SELECT_DIR_PLACEHOLDER
+
+                    idx_edge_dir = EDGE_DIR_OPTIONS.index(_saved_edge_dir) if _saved_edge_dir in EDGE_DIR_OPTIONS else 0
+
                     _is_edge_valid = False
                     _edge_validation_errors = []
 
@@ -9430,12 +9520,14 @@ def render(is_standalone: bool = False):
 
                         sel_edge_dir = _saved_edge_dir
                         if sel_is_edge == "Yes":
-                            idx_edge_dir = EDGE_DIR_OPTIONS.index(_saved_edge_dir) if _saved_edge_dir in EDGE_DIR_OPTIONS else 0
+                            _widget_dir_key = f"_fs_edge_dir_widget_{_tgt_orig_id}"
+                            if _widget_dir_key in st.session_state and st.session_state[_widget_dir_key] not in EDGE_DIR_OPTIONS:
+                                st.session_state[_widget_dir_key] = _saved_edge_dir
                             sel_edge_dir = st.selectbox(
                                 "اتجاه الجار",
                                 options=EDGE_DIR_OPTIONS,
                                 index=idx_edge_dir,
-                                key=f"_fs_edge_dir_widget_{_tgt_orig_id}",
+                                key=_widget_dir_key,
                                 help="اتجاه وجه/أوجه الجار في المسقط بالنسبة لحدود المسقط.",
                             )
                             if sel_edge_dir == SELECT_DIR_PLACEHOLDER or sel_edge_dir not in REAL_EDGE_DIR_OPTIONS:
@@ -9472,7 +9564,10 @@ def render(is_standalone: bool = False):
                         _edge_validation_errors = []
 
                     _trans_changed = (sel_dir != _norm_trans["direction"] or sel_sx != _norm_trans["shift_x"] or sel_sy != _norm_trans["shift_y"])
-                    _edge_changed = (sel_is_edge != _saved_is_edge or (sel_is_edge == "Yes" and sel_edge_dir != _saved_edge_dir))
+                    _edge_changed = (
+                        sel_is_edge != _saved_is_edge
+                        or (sel_is_edge == "Yes" and (sel_edge_dir != _raw_saved_dir or sel_edge_dir not in REAL_EDGE_DIR_OPTIONS))
+                    )
 
                     if _trans_changed or _edge_changed:
                         if _trans_changed:
@@ -12097,6 +12192,51 @@ def render(is_standalone: bool = False):
             if summary_models:
                 render_styled_table(summary_models)
 
+                st.markdown(
+                    """
+                    <div dir="rtl" style="background: rgba(30, 64, 175, 0.12); border: 1.5px solid #3b82f6; border-radius: 8px; padding: 12px 16px; margin: 12px 0 10px 0; text-align: right;">
+                        <div style="font-size: 14.5px; font-weight: 800; color: #60a5fa; margin-bottom: 4px;">
+                            🚀 الانتقال المباشر لتصميم نماذج القواعد المنفصلة (F1, F2, F3) في موديول 3 (Isolated Footings):
+                        </div>
+                        <div style="font-size: 12.5px; color: #cbd5e1;">
+                            اضغط على أي من الأزرار التالية لتحميل الأحمال الحاكمة تلقائياً والانتقال الفوري إلى موديول 3 لتصميم وتدقيق النموذج:
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                col_b1, col_b2, col_b3 = st.columns(3)
+                with col_b1:
+                    if st.button("🪨 تصميم F1 (قواعد داخلية)", key="btn_nav_m3_f1", use_container_width=True, help="الانتقال إلى موديول 3 وتصميم نموذج F1 بأقصى حمل للأعمدة الداخلية"):
+                        if max_int:
+                            S.set_setting("ftg_Pu", float(max_int["pu_tot_val"]))
+                            S.set_setting("ftg_tc", float(tc_s))
+                            S.set_setting("ftg_bc", float(bc_s))
+                        st.session_state["ftg_selected_model_type"] = "F1"
+                        S.cfg_set("selected_module_idx", 2)
+                        st.session_state["selected_module_idx"] = 2
+                        st.rerun()
+                with col_b2:
+                    if st.button("🪨 تصميم F2 (قواعد جانبية)", key="btn_nav_m3_f2", use_container_width=True, help="الانتقال إلى موديول 3 وتصميم نموذج F2 بأقصى حمل للأعمدة الجانبية"):
+                        if max_edge:
+                            S.set_setting("ftg_Pu", float(max_edge["pu_tot_val"]))
+                            S.set_setting("ftg_tc", float(tc_s))
+                            S.set_setting("ftg_bc", float(bc_s))
+                        st.session_state["ftg_selected_model_type"] = "F2"
+                        S.cfg_set("selected_module_idx", 2)
+                        st.session_state["selected_module_idx"] = 2
+                        st.rerun()
+                with col_b3:
+                    if st.button("🪨 تصميم F3 (قواعد أركان)", key="btn_nav_m3_f3", use_container_width=True, help="الانتقال إلى موديول 3 وتصميم نموذج F3 بأقصى حمل لأعمدة الأركان"):
+                        if max_corner:
+                            S.set_setting("ftg_Pu", float(max_corner["pu_tot_val"]))
+                            S.set_setting("ftg_tc", float(tc_s))
+                            S.set_setting("ftg_bc", float(bc_s))
+                        st.session_state["ftg_selected_model_type"] = "F3"
+                        S.cfg_set("selected_module_idx", 2)
+                        st.session_state["selected_module_idx"] = 2
+                        st.rerun()
+
         # ── 💾 PERSIST GOVERNING COLUMN LOADS FOR MODULE 2 & MODULE 7 ─────────────
         if max_int and max_int.get("pu_1f_val", 0) > 0:
             pu_int_1f = float(max_int["pu_1f_val"])
@@ -12546,8 +12686,7 @@ def render(is_standalone: bool = False):
                     </div>
                     <div style="font-size:1.25rem; font-weight:700; color:#1c1917;">
                         نظام متكامل لتصميم أساسات المبنى لعدد <span style="font-weight:800; color:#c2410c;">{num_floors} طوابق</span> بناءً على ردود الأفعال القصوى <span dir="ltr">Pu</span> والأحمال التشغيلية <span dir="ltr">Pw = Pu / 1.5</span>:
-                        <br/>• <b>قواعد منفصلة (Module 3):</b> للأعمدة الداخلية والطرفية غير المتصلة بجار طالما لا يوجد تداخل خرساني.
-                        <br/>• <b>قواعد مشتركة (Module 8):</b> تدمج تلقائياً أي قواعد منفصلة متداخلة (خلوص &lt; 0.15 م).
+                        <br/>• <b>قواعد منفصلة (Module 3):</b> مصنفة إلى 3 نماذج رئيسية قياسية (F1 للأعمدة الداخلية، F2 للأعمدة الجانبية، F3 لأعمدة الأركان).
                         <br/>• <b>قواعد شدادات جانبية (Module 9):</b> لأعمدة الجار الجانبية وتربطها بشداد مع أقرب عمود داخلي.
                         <br/>• <b>قواعد شدادات ركن مائلة (Module 10):</b> لأعمدة الجار الركن وتربطها بشداد مائل مع العمود الداخلي المقابل.
                     </div>
@@ -12569,7 +12708,12 @@ def render(is_standalone: bool = False):
             col_b_dim = float(col_b_val if col_b_val else 30)
 
             # 2b. Neighbor Columns Definition (Derived directly from Project Inputs)
-            auto_nbr_ids = [c["id"] for c in _active_cols if c.get("is_edge_col")]
+            auto_nbr_ids = [
+                c["id"] for c in _active_cols
+                if c.get("is_edge_col")
+                or (isinstance(_edge_columns, dict) and _edge_columns.get(c.get("orig_id", c["id"]), {}).get("is_edge") == "Yes")
+                or (isinstance(_edge_columns, dict) and _edge_columns.get(c["id"], {}).get("is_edge") == "Yes")
+            ]
             sel_neighbor_ids = auto_nbr_ids
 
             with st.container(border=True):
@@ -12608,7 +12752,7 @@ def render(is_standalone: bool = False):
                                 لا توجد أعمدة ملاصقة لحدود الجار محددة في مدخلات المشروع.
                             </div>
                             <div style="direction: rtl !important; text-align: right !important; font-size:1.05rem; font-weight:600; color:#64748b; margin-top:8px; line-height:1.8;">
-                                ℹ️ تُصمم كافة أساسات المبنى كقواعد منفصلة (Module 3) وقواعد مشتركة تلقائية عند حدوث تداخل (Module 8).
+                                ℹ️ تُصمم كافة أساسات المبنى كقواعد منفصلة (Module 3) مصنفة إلى 3 نماذج رئيسية موحدة (F1, F2, F3).
                             </div>
                         </div>
                         """,
@@ -12620,10 +12764,16 @@ def render(is_standalone: bool = False):
             for c_item in _active_cols:
                 c_type = c_item.get("type", "Interior")
                 pu_val = float(c_item.get("Pu", 0.0) * num_floors)
+                is_edge = bool(
+                    c_item.get("is_edge_col")
+                    or (isinstance(_edge_columns, dict) and _edge_columns.get(c_item.get("orig_id", c_item["id"]), {}).get("is_edge") == "Yes")
+                    or (isinstance(_edge_columns, dict) and _edge_columns.get(c_item["id"], {}).get("is_edge") == "Yes")
+                )
                 fs_active_columns.append({
                     "id": c_item["id"],
                     "orig_id": c_item.get("orig_id", c_item["id"]),
                     "type": c_type,
+                    "is_edge_col": is_edge,
                     "x": float(c_item.get("center_x", c_item["x"])),
                     "y": float(c_item.get("center_y", c_item["y"])),
                     "bc": float(c_item.get("bc", col_b_dim)),
@@ -12654,6 +12804,8 @@ def render(is_standalone: bool = False):
                 cov=ftg_cov,
                 phi=ftg_phi,
                 num_floors=num_floors,
+                edge_columns=_edge_columns,
+                slab_bounds=_slab_bounds_current,
             )
             st.session_state["fs_ftg_analysis"] = ftg_analysis
             counts = ftg_analysis["summary_counts"]
@@ -12707,30 +12859,24 @@ def render(is_standalone: bool = False):
                         <span>📋 تقرير توزيع وتصنيف أساسات المبنى الإنشائي (Building Foundations Classification Report)</span>
                         <span style="font-size: 13.5px; background: #0284c7; color: #ffffff; padding: 4px 12px; border-radius: 6px; font-weight: 800;">إجمالي الأعمدة: {len(fs_active_columns)} عمود</span>
                     </div>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 10px;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-top: 10px;">
                         <!-- 1. Isolated Footings -->
-                        <div style="background: rgba(186, 230, 253, 0.12); border: 1.5px solid #38bdf8; border-right: 5px solid #0284c7; border-radius: 8px; padding: 12px 14px;">
-                            <div style="font-size: 15px; font-weight: 800; color: #7dd3fc; margin-bottom: 4px;">🟦 1. القواعد المنفصلة (Module 3)</div>
+                        <div style="background: rgba(186, 230, 253, 0.12); border: 1.5px solid #38bdf8; border-right: 5px solid #0284c7; border-radius: 8px; padding: 14px 16px;">
+                            <div style="font-size: 15px; font-weight: 800; color: #7dd3fc; margin-bottom: 4px;">🟦 1. القواعد المنفصلة (Module 3 — F1, F2, F3)</div>
                             <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['isolated_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة منفصلة</span></div>
-                            <div style="font-size: 12.5px; color: #cbd5e1; margin-top: 4px; line-height: 1.45;"><b>النماذج:</b> {', '.join(counts['isolated_names']) if counts['isolated_names'] else 'لا يوجد'}</div>
+                            <div style="font-size: 13px; color: #cbd5e1; margin-top: 6px; line-height: 1.5;"><b>النماذج الموحدة:</b> {', '.join(counts['isolated_names']) if counts['isolated_names'] else 'لا يوجد'}</div>
                         </div>
-                        <!-- 2. Combined Footings -->
-                        <div style="background: rgba(187, 247, 208, 0.12); border: 1.5px solid #4ade80; border-right: 5px solid #16a34a; border-radius: 8px; padding: 12px 14px;">
-                            <div style="font-size: 15px; font-weight: 800; color: #86efac; margin-bottom: 4px;">🟩 2. القواعد المشتركة (Module 8)</div>
-                            <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['combined_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة مشتركة</span></div>
-                            <div style="font-size: 12.5px; color: #cbd5e1; margin-top: 4px; line-height: 1.45;"><b>النماذج:</b> {', '.join(counts['combined_names']) if counts['combined_names'] else 'لا يوجد تداخل خرساني'}</div>
-                        </div>
-                        <!-- 3. Edge Strap Footings -->
-                        <div style="background: rgba(254, 215, 170, 0.12); border: 1.5px solid #fb923c; border-right: 5px solid #ea580c; border-radius: 8px; padding: 12px 14px;">
-                            <div style="font-size: 15px; font-weight: 800; color: #fdba74; margin-bottom: 4px;">🟧 3. قواعد الشدادات الجانبية (Module 9)</div>
+                        <!-- 2. Edge Strap Footings -->
+                        <div style="background: rgba(254, 215, 170, 0.12); border: 1.5px solid #fb923c; border-right: 5px solid #ea580c; border-radius: 8px; padding: 14px 16px;">
+                            <div style="font-size: 15px; font-weight: 800; color: #fdba74; margin-bottom: 4px;">🟧 2. قواعد الشدادات الجانبية (Module 9)</div>
                             <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['edge_strap_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة شداد جانبي</span></div>
-                            <div style="font-size: 12.5px; color: #cbd5e1; margin-top: 4px; line-height: 1.45;"><b>النماذج:</b> {', '.join(counts['edge_strap_names']) if counts['edge_strap_names'] else 'لا توجد أعمدة جار جانبية'}</div>
+                            <div style="font-size: 13px; color: #cbd5e1; margin-top: 6px; line-height: 1.5;"><b>النماذج:</b> {', '.join(counts['edge_strap_names']) if counts['edge_strap_names'] else 'لا توجد أعمدة جار جانبية'}</div>
                         </div>
-                        <!-- 4. Corner Strap Footings -->
-                        <div style="background: rgba(253, 186, 116, 0.15); border: 1.5px solid #f97316; border-right: 5px solid #c2410c; border-radius: 8px; padding: 12px 14px;">
-                            <div style="font-size: 15px; font-weight: 800; color: #fed7aa; margin-bottom: 4px;">🟪 4. قواعد الشدادات الركن (Module 10)</div>
+                        <!-- 3. Corner Strap Footings -->
+                        <div style="background: rgba(253, 186, 116, 0.15); border: 1.5px solid #f97316; border-right: 5px solid #c2410c; border-radius: 8px; padding: 14px 16px;">
+                            <div style="font-size: 15px; font-weight: 800; color: #fed7aa; margin-bottom: 4px;">🟪 3. قواعد الشدادات الركن (Module 10)</div>
                             <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['corner_strap_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة شداد ركن مائل</span></div>
-                            <div style="font-size: 12.5px; color: #cbd5e1; margin-top: 4px; line-height: 1.45;"><b>النماذج:</b> {', '.join(counts['corner_strap_names']) if counts['corner_strap_names'] else 'لا توجد أعمدة جار ركن'}</div>
+                            <div style="font-size: 13px; color: #cbd5e1; margin-top: 6px; line-height: 1.5;"><b>النماذج:</b> {', '.join(counts['corner_strap_names']) if counts['corner_strap_names'] else 'لا توجد أعمدة جار ركن'}</div>
                         </div>
                     </div>
                 </div>
@@ -13147,8 +13293,7 @@ def render(is_standalone: bool = False):
                     </div>
                     <div style="font-size:1.15rem; font-weight:700; color:#1e40af;">
                         لوحة تنفيذية متكاملة لأساسات المبنى لعدد <span style="font-weight:800; color:#1e3a8a;">{num_floors} طوابق</span>، توضح التوزيع الهندسي الشامل لجميع عناصر الأساسات والربط الإنشائي طبقاً لـ <span dir="ltr">ECP 203</span>:
-                        <br/>• 🟦 <b>القواعد المنفصلة (Module 3):</b> للأعمدة غير المتصلة بجار طالما لا يوجد تداخل.
-                        <br/>• 🟩 <b>القواعد المشتركة (Module 8):</b> تدمج تلقائياً أي قواعد متداخلة (خلوص &lt; 0.15 م).
+                        <br/>• 🟦 <b>القواعد المنفصلة (Module 3):</b> مصنفة إلى 3 نماذج رئيسية قياسية موحدة (<span dir="ltr">F1, F2, F3</span>) بأبعادها وتسليحها الحاكم.
                         <br/>• 🟧 <b>قواعد وكمرات الشدادات للجار (Modules 9 & 10):</b> برموز واضحة (<span dir="ltr">ST1, ST2...</span>) وأبعاد القطاع وعزوم الاتزان.
                         <br/>• 🟪 <b>السملات والميدات الأرضية (Module 11):</b> بلون نيلي مميز مع بطاقات النماذج التنفيذية (<span dir="ltr">B1, B2, B3</span>) والمحاور والأبعاد.
                     </div>
@@ -13166,6 +13311,7 @@ def render(is_standalone: bool = False):
                 fig_full_sketch = draw_comprehensive_foundation_sketch(
                     active_cols_sketch, ftg_analysis_sketch, ground_beams=gb_list,
                     edge_columns=_edge_columns,
+                    slab_bounds=_slab_bounds_current,
                 )
                 buf_fs_sketch = io.BytesIO()
                 fig_full_sketch.savefig(buf_fs_sketch, format="png", bbox_inches="tight", dpi=160)
@@ -13662,6 +13808,137 @@ def render(is_standalone: bool = False):
                 "مواقع الاستخدام في المشروع (Applications)": f"متوسط استهلاك المشروع بالكامل: {grand_ratio_val:.1f} kg/m³ خرسانة مسلحة",
             })
             render_styled_table(dia_table_rows)
+
+        st.markdown("---")
+    else:
+        # ══════════════════════════════════════════════════════════════════════
+        #  MODULE 13: STANDALONE FLAT SLAB 3D BIM VIEWER & QUANTITY SURVEY
+        # ══════════════════════════════════════════════════════════════════════
+        from modules.bim_3d_viewer import render_standalone_flat_slab_3d_bim_viewer
+
+        render_standalone_flat_slab_3d_bim_viewer(
+            Lx_calc=Lx_calc,
+            Ly_calc=Ly_calc,
+            cantilevers=cantilevers,
+            ts_cm=ts,
+            active_cols=_active_cols,
+            col_H_cm=col_H if 'col_H' in locals() else 300.0,
+            top_extra_cols=top_extra_cols if 'top_extra_cols' in locals() else None,
+            btm_extra_spans=btm_extra_spans if 'btm_extra_spans' in locals() else None,
+            punching_results=punching_results if 'punching_results' in locals() else None,
+            n_mesh_btm=n_mesh_btm if 'n_mesh_btm' in locals() else 5.0,
+            bottom_mesh_dia=bottom_mesh_dia if 'bottom_mesh_dia' in locals() else 10,
+            n_mesh_top=n_mesh_top if 'n_mesh_top' in locals() else 5.0,
+            top_mesh_dia=top_mesh_dia if 'top_mesh_dia' in locals() else 10,
+            fcu=float(Fcu) if 'Fcu' in locals() and Fcu else 250.0,
+            fy=float(Fy) if 'Fy' in locals() and Fy else 4000.0,
+            prefix=prefix,
+            layout_sketch_b64=st.session_state.get(f"{prefix}flat_slab_plan_b64", ""),
+        )
+
+        with st.expander("📊 Approximate Quantity Survey (الحصر التقريبي لكميات ومواد السقف)", expanded=True):
+            st.markdown(
+                f"""
+                <div style="background:#f8fafc; border-left:4px solid #0284c7; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
+                    <div style="font-size:1.0rem; font-weight:800; color:#0369a1;">
+                        📋 جدول الحصر الهندسي الشامل لكميات ومواد سقف البلاطة اللاكمرية (Standalone Flat Slab BOQ):
+                    </div>
+                    <div style="font-size:0.9rem; color:#475569; margin-top:3px;">
+                        حصر تفصيلي شامل لحجم الخرسانة المسلحة، وإجمالي أوزان حديد التسليح (الشبكة السفلية والعلوية، والحديد الإضافي، وتسليح القص الثاقب)، وكميات الأسمنت والرمل والزلط طبقا للكود المصري ECP 203.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            slab_area_val    = boq.get("slab_area_m2", 0.0)
+            slab_conc_val    = boq.get("concrete_vol_m3", 0.0)
+            slab_steel_kg    = boq.get("total_steel_kg", 0.0)
+            slab_steel_ton   = boq.get("total_steel_ton", 0.0)
+            slab_cement_ton  = boq.get("cement_ton", 0.0)
+            slab_cement_bags = boq.get("cement_bags", 0)
+            slab_gravel_val  = boq.get("gravel_m3", 0.0)
+            slab_sand_val    = boq.get("sand_m3", 0.0)
+            slab_ratio_val   = boq.get("steel_ratio_kg_m3", 0.0)
+
+            kpi_c1, kpi_c2, kpi_c3, kpi_c4 = st.columns(4)
+            with kpi_c1:
+                st.markdown(
+                    f"""
+                    <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:10px 14px; text-align:center;">
+                        <div style="font-size:13px; font-weight:600; color:#15803d; margin-bottom:4px;">حجم خرسانة السقف</div>
+                        <div style="font-size:20px; font-weight:800; color:#166534;">{slab_conc_val:.2f} m³</div>
+                        <div style="font-size:11.5px; color:#475569; margin-top:2px;">مسطح: {slab_area_val:.1f} m² │ سمك: {ts:.0f} cm</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with kpi_c2:
+                st.markdown(
+                    f"""
+                    <div style="background:#f5f3ff; border:1.5px solid #c4b5fd; border-radius:8px; padding:10px 14px; text-align:center;">
+                        <div style="font-size:13px; font-weight:600; color:#6d28d9; margin-bottom:4px;">إجمالي حديد السقف</div>
+                        <div style="font-size:20px; font-weight:800; color:#5b21b6;">{slab_steel_ton:.3f} Ton</div>
+                        <div style="font-size:11.5px; color:#475569; margin-top:2px;">{slab_steel_kg:,.1f} kg │ معدل: {slab_ratio_val:.1f} kg/m³</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with kpi_c3:
+                st.markdown(
+                    f"""
+                    <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:10px 14px; text-align:center;">
+                        <div style="font-size:13px; font-weight:600; color:#1e40af; margin-bottom:4px;">كمية الأسمنت المطلوبة</div>
+                        <div style="font-size:20px; font-weight:800; color:#1e3a8a;">{slab_cement_ton:.2f} Ton</div>
+                        <div style="font-size:11.5px; color:#475569; margin-top:2px;">{slab_cement_bags:,} شكارة (350 kg/m³)</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with kpi_c4:
+                st.markdown(
+                    f"""
+                    <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:8px; padding:10px 14px; text-align:center;">
+                        <div style="font-size:13px; font-weight:600; color:#b45309; margin-bottom:4px;">الزلط والرمل</div>
+                        <div style="font-size:18px; font-weight:800; color:#92400e;">زلط: {slab_gravel_val:.1f} m³</div>
+                        <div style="font-size:11.5px; color:#475569; margin-top:2px;">رمل: {slab_sand_val:.1f} m³</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
+
+            # Detailed Rebar Breakdown by Component
+            slab_breakdown_rows = []
+            for b_item in boq.get("components", []):
+                slab_breakdown_rows.append({
+                    "البند / نوع التسليح": b_item.get("description", "تسليح السقف"),
+                    "القطر Φ (mm)": f"Φ {b_item.get('dia_mm', 10)}",
+                    "الوزن (kg)": f"{b_item.get('weight_kg', 0.0):,.1f} kg",
+                    "الوزن (Ton)": f"{b_item.get('weight_kg', 0.0)/1000.0:.3f} Ton",
+                    "النسبة من الإجمالي": f"{(b_item.get('weight_kg', 0.0)/slab_steel_kg*100.0) if slab_steel_kg > 0 else 0.0:.1f} %",
+                })
+
+            if slab_breakdown_rows:
+                df_slab_boq = pd.DataFrame(slab_breakdown_rows)
+                render_styled_table(df_slab_boq)
+            else:
+                # By diameter table
+                dia_rows = []
+                for d_row in boq.get("by_dia", []):
+                    d_val = d_row.get("dia_mm") or d_row.get("dia", 10)
+                    w_k = d_row.get("weight_kg", 0.0)
+                    dia_rows.append({
+                        "قطر السيخ Φ (mm)": f"Φ {d_val}",
+                        "وزن المتر الطولي (kg/m')": f"{(d_val**2)/162.0:.3f} kg/m'",
+                        "إجمالي الوزن (kg)": f"{w_k:,.1f} kg",
+                        "إجمالي الوزن (Ton)": f"{w_k/1000.0:.3f} Ton",
+                        "النسبة (%)": f"{(w_k/slab_steel_kg*100.0) if slab_steel_kg > 0 else 0.0:.1f} %",
+                    })
+                if dia_rows:
+                    df_dia_boq = pd.DataFrame(dia_rows)
+                    render_styled_table(df_dia_boq)
 
         st.markdown("---")
 

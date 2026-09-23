@@ -430,9 +430,93 @@ def generate_footing_section_sketch(
 
 def render():
     st.markdown(
-        '<div class="section-header">🪨 Module 3 – Isolated Footing Design (ECP 203) (تصميم القواعد المنفصلة)</div>',
+        '<div class="section-header">🪨 Module 3 – Isolated Footing Design (ECP 203) (تصميم وتدقيق القواعد المنفصلة)</div>',
         unsafe_allow_html=True,
     )
+
+    prefix = S.get_safe_profile_filename_prefix()
+
+    # ── Quick Return to Module 1 & Model Selector Bar ──────────────────────
+    pu_int = st.session_state.get("fs_col_tot_pu_int") or S.cfg_val("fs_col_tot_pu_int")
+    pu_edge = st.session_state.get("fs_col_tot_pu_edge") or S.cfg_val("fs_col_tot_pu_edge")
+    pu_corner = st.session_state.get("fs_col_tot_pu_corner") or S.cfg_val("fs_col_tot_pu_corner")
+    col_b_fs = st.session_state.get("fs_col_b") or S.cfg_val("fs_col_b", 30.0)
+    col_c_fs = st.session_state.get("fs_col_c") or S.cfg_val("fs_col_c", 50.0)
+
+    has_m1 = (pu_int is not None) or (pu_edge is not None) or (pu_corner is not None)
+
+    nav_col1, nav_col2 = st.columns([3, 1])
+    with nav_col2:
+        if st.button("🔙 العودة إلى Module 1 (Flat Slab)", key="btn_back_to_m1_from_ftg", use_container_width=True):
+            S.cfg_set("selected_module_idx", 0)
+            st.session_state["selected_module_idx"] = 0
+            st.rerun()
+
+    model_opts = [
+        "🏢 F1 — قواعد الأعمدة الداخلية (Interior)",
+        "🏢 F2 — قواعد الأعمدة الجانبية (Edge)",
+        "🏢 F3 — قواعد أعمدة الأركان (Corner)",
+        "✏️ إدخال يدوي مخصص (Custom)",
+    ]
+
+    sel_m_type = st.session_state.get("ftg_selected_model_type", "F1" if has_m1 else "custom")
+    default_m_idx = 0
+    if sel_m_type == "F2":
+        default_m_idx = 1
+    elif sel_m_type == "F3":
+        default_m_idx = 2
+    elif sel_m_type == "custom" or not has_m1:
+        default_m_idx = 3
+
+    with nav_col1:
+        selected_model_str = st.radio(
+            "📌 اختيار وتصميم نموذج القاعدة (Footing Model Selection):",
+            options=model_opts,
+            index=default_m_idx,
+            horizontal=True,
+            key="rb_ftg_model_selection",
+        )
+
+    # Sync selected model with inputs
+    if "F1" in selected_model_str:
+        st.session_state["ftg_selected_model_type"] = "F1"
+        if pu_int and st.session_state.get("_last_synced_ftg_model") != "F1":
+            S.set_setting("ftg_Pu", float(pu_int))
+            S.set_setting("ftg_tc", float(col_c_fs))
+            S.set_setting("ftg_bc", float(col_b_fs))
+            st.session_state["_last_synced_ftg_model"] = "F1"
+            st.rerun()
+    elif "F2" in selected_model_str:
+        st.session_state["ftg_selected_model_type"] = "F2"
+        if pu_edge and st.session_state.get("_last_synced_ftg_model") != "F2":
+            S.set_setting("ftg_Pu", float(pu_edge))
+            S.set_setting("ftg_tc", float(col_c_fs))
+            S.set_setting("ftg_bc", float(col_b_fs))
+            st.session_state["_last_synced_ftg_model"] = "F2"
+            st.rerun()
+    elif "F3" in selected_model_str:
+        st.session_state["ftg_selected_model_type"] = "F3"
+        if pu_corner and st.session_state.get("_last_synced_ftg_model") != "F3":
+            S.set_setting("ftg_Pu", float(pu_corner))
+            S.set_setting("ftg_tc", float(col_c_fs))
+            S.set_setting("ftg_bc", float(col_b_fs))
+            st.session_state["_last_synced_ftg_model"] = "F3"
+            st.rerun()
+    else:
+        st.session_state["ftg_selected_model_type"] = "custom"
+        st.session_state["_last_synced_ftg_model"] = "custom"
+
+    if has_m1 and sel_m_type in ["F1", "F2", "F3"]:
+        cur_pu = pu_int if sel_m_type == "F1" else (pu_edge if sel_m_type == "F2" else pu_corner)
+        if cur_pu:
+            st.markdown(
+                f"""
+                <div dir="rtl" style="background:#eff6ff; border:1.5px solid #bfdbfe; border-right:6px solid #2563eb; border-radius:8px; padding:10px 14px; margin-bottom:12px; color:#1e40af; line-height:1.7;">
+                    ✅ <b>نموذج {sel_m_type}:</b> تم تحميل أقصى حمل تصميمي حاكم (<b>{float(cur_pu):.2f} ton</b>) وأبعاد العمود (<b>{float(col_c_fs):.0f} × {float(col_b_fs):.0f} سم</b>) تلقائياً من Module 1.
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
     # ── INPUTS ──────────────────────────────────────────────────────────────
     st.markdown(
@@ -1172,6 +1256,150 @@ def render():
                 ],
             })
             render_styled_table(df_rebar)
+
+    # ── 🏢 3D Integrated Structural BIM & Rebar Viewer (عارض النماذج الإنشائية ثلاثي الأبعاد والحديد) ──
+    _cur_prefix = locals().get("prefix") or S.get_safe_profile_filename_prefix()
+    ftg_sketch_b64 = locals().get("img_plan_b64") or st.session_state.get(f"{_cur_prefix}ftg_plan_sketch_b64", "")
+    if not ftg_sketch_b64 or len(ftg_sketch_b64) < 100:
+        try:
+            fig_sk = generate_footing_plan_sketch(
+                L_cm=L, B_cm=B, t_rc_cm=t_rc, bc_cm=bc, tc_cm=tc,
+                Phi=Phi, n_long=n_long, n_m_long=n_m_long, sp_long=sp_long,
+                n_sht=n_sht, n_m_sht=n_m_sht, sp_sht=sp_sht,
+                cover_cm=cover, t_pc_cm=10, pc_offset_cm=10,
+            )
+            buf_sk = io.BytesIO()
+            fig_sk.savefig(buf_sk, format="png", bbox_inches="tight", dpi=140)
+            buf_sk.seek(0)
+            ftg_sketch_b64 = "data:image/png;base64," + base64.b64encode(buf_sk.getvalue()).decode("utf-8")
+            st.session_state[f"{_cur_prefix}ftg_plan_sketch_b64"] = ftg_sketch_b64
+            plt.close(fig_sk)
+        except Exception:
+            ftg_sketch_b64 = ""
+
+    try:
+        from modules.bim_3d_viewer import render_isolated_footing_3d_bim_viewer
+        render_isolated_footing_3d_bim_viewer(
+            L_cm=L,
+            B_cm=B,
+            t_rc_cm=t_rc,
+            bc_cm=bc,
+            tc_cm=tc,
+            Phi=Phi,
+            n_long=n_long,
+            n_sht=n_sht,
+            q_all=q_all,
+            q_act=q_act,
+            Pu=Pu,
+            fcu=Fcu,
+            fy=Fy,
+            layout_sketch_b64=ftg_sketch_b64,
+            ftg_id="F1",
+            col_id="C1",
+            height=740,
+        )
+    except Exception as _e_ftg_3d:
+        st.error(f"⚠️ خطأ أثناء تحميل العارض ثلاثي الأبعاد للقاعدة: {_e_ftg_3d}")
+
+    # ── 📊 ISOLATED FOOTING BOQ TAKE-OFF (جدول حصر وتفريد حديد ومواد القاعدة) ──
+    vol_rc_m3 = (L / 100.0) * (B / 100.0) * (t_rc / 100.0)
+    vol_pc_m3 = ((L + 20) / 100.0) * ((B + 20) / 100.0) * 0.10
+    unit_w_bar = (Phi ** 2) / 162.0
+    L_bar_long = (L / 100.0) - 0.10 + 2.0 * max(0.15, (t_rc / 100.0) - 0.10)
+    L_bar_sht = (B / 100.0) - 0.10 + 2.0 * max(0.15, (t_rc / 100.0) - 0.10)
+    w_long_kg = n_long * L_bar_long * unit_w_bar
+    w_sht_kg = n_sht * L_bar_sht * unit_w_bar
+    w_dowels_kg = 4 * 1.50 * unit_w_bar
+    tot_steel_kg_ftg = w_long_kg + w_sht_kg + w_dowels_kg
+    steel_ratio_ftg = tot_steel_kg_ftg / max(0.01, vol_rc_m3)
+
+    st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
+    with st.expander("📊 Bar Bending Schedule & BOQ Take-off (جدول حصر وتفريد حديد ومواد القاعدة)", expanded=True):
+        boq_ftg_rows = [
+            {
+                "بند التسليح (Item)": "1. حديد الفرش في الاتجاه الرئيسي (L-Direction Bottom Rebar)",
+                "القطر Φ": f"Φ {Phi} mm",
+                "العدد (Count)": f"{n_long} أسياخ ({n_m_long} Φ/m)",
+                "طول القطع (m)": f"{L_bar_long:.2f} m' (طول {L}cm + رجلين)",
+                "إجمالي الأطوال (m')": f"{n_long * L_bar_long:,.1f} m'",
+                "وزن المتر (kg/m')": f"{unit_w_bar:.3f}",
+                "إجمالي الوزن (kg)": f"{w_long_kg:,.1f} kg",
+                "إجمالي الوزن (Ton)": f"{w_long_kg / 1000.0:.3f} Ton",
+            },
+            {
+                "بند التسليح (Item)": "2. حديد الغطاء في الاتجاه الثانوي (B-Direction Bottom Rebar)",
+                "القطر Φ": f"Φ {Phi} mm",
+                "العدد (Count)": f"{n_sht} أسياخ ({n_m_sht} Φ/m)",
+                "طول القطع (m)": f"{L_bar_sht:.2f} m' (طول {B}cm + رجلين)",
+                "إجمالي الأطوال (m')": f"{n_sht * L_bar_sht:,.1f} m'",
+                "وزن المتر (kg/m')": f"{unit_w_bar:.3f}",
+                "إجمالي الوزن (kg)": f"{w_sht_kg:,.1f} kg",
+                "إجمالي الوزن (Ton)": f"{w_sht_kg / 1000.0:.3f} Ton",
+            },
+            {
+                "بند التسليح (Item)": "3. أشاير رقبة العمود في القاعدة (Column Dowels in Footing)",
+                "القطر Φ": f"Φ {Phi} mm",
+                "العدد (Count)": "4 أسياخ (أركان الرقبة)",
+                "طول القطع (m)": "1.50 m' (رجل 30cm + رقبة)",
+                "إجمالي الأطوال (m')": f"{4 * 1.50:.1f} m'",
+                "وزن المتر (kg/m')": f"{unit_w_bar:.3f}",
+                "إجمالي الوزن (kg)": f"{w_dowels_kg:,.1f} kg",
+                "إجمالي الوزن (Ton)": f"{w_dowels_kg / 1000.0:.3f} Ton",
+            },
+            {
+                "بند التسليح (Item)": "📌 الإجمالي الكلي لحديد تسليح القاعدة (Grand Total Steel)",
+                "القطر Φ": "—",
+                "العدد (Count)": f"{n_long + n_sht + 4} سيخ",
+                "طول القطع (m)": f"معدل الاستهلاك: {steel_ratio_ftg:.1f} kg/m³",
+                "إجمالي الأطوال (m')": f"{n_long*L_bar_long + n_sht*L_bar_sht + 6.0:,.1f} m'",
+                "وزن المتر (kg/m')": "—",
+                "إجمالي الوزن (kg)": f"{tot_steel_kg_ftg:,.1f} kg",
+                "إجمالي الوزن (Ton)": f"{tot_steel_kg_ftg / 1000.0:.3f} Ton",
+            },
+        ]
+        render_styled_table(boq_ftg_rows)
+        st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
+        fb1, fb2, fb3, fb4 = st.columns(4)
+        with fb1:
+            st.markdown(
+                f"""
+                <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:8px 12px; text-align:center;">
+                    <div style="font-size:13px; font-weight:600; color:#15803d;">خرسانة مسلحة R.C.</div>
+                    <div style="font-size:18px; font-weight:800; color:#166534;">{vol_rc_m3:.2f} m³</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with fb2:
+            st.markdown(
+                f"""
+                <div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:8px; padding:8px 12px; text-align:center;">
+                    <div style="font-size:13px; font-weight:600; color:#475569;">خرسانة عادية P.C.</div>
+                    <div style="font-size:18px; font-weight:800; color:#1e293b;">{vol_pc_m3:.2f} m³</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with fb3:
+            st.markdown(
+                f"""
+                <div style="background:#f5f3ff; border:1.5px solid #c4b5fd; border-radius:8px; padding:8px 12px; text-align:center;">
+                    <div style="font-size:13px; font-weight:600; color:#6d28d9;">إجمالي حديد التسليح</div>
+                    <div style="font-size:18px; font-weight:800; color:#5b21b6;">{tot_steel_kg_ftg:.1f} kg</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with fb4:
+            st.markdown(
+                f"""
+                <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:8px 12px; text-align:center;">
+                    <div style="font-size:13px; font-weight:600; color:#1d4ed8;">الأسمنت (7 شكاير/م³)</div>
+                    <div style="font-size:18px; font-weight:800; color:#1e40af;">{int(round(vol_rc_m3 * 7.0))} شيكارة</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
     # ── 💾 SAVE & EXPORT COMPLETE CALCULATION SHEET ────────────────────────────
     st.markdown("---")

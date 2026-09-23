@@ -1927,7 +1927,30 @@ def render_strap_footing_module():
     else:
         st.markdown(table_html, unsafe_allow_html=True)
 
-    # ── 7. Structural Detailing & Reinforcement Layout ─────────────────────────
+    # ── 7. 🏢 3D Integrated BIM & Rebar Viewer ──────────────────────────────────
+    from modules.bim_3d_viewer import render_strap_footing_3d_bim_viewer
+    import io
+    import base64
+
+    m9_sketch = ""
+    try:
+        fig_sk = _draw_plan(d, r)
+        buf_sk = io.BytesIO()
+        fig_sk.savefig(buf_sk, format="png", bbox_inches="tight", dpi=140)
+        buf_sk.seek(0)
+        m9_sketch = base64.b64encode(buf_sk.read()).decode("utf-8")
+        st.session_state["m9_strap_sketch_b64"] = m9_sketch
+        plt.close(fig_sk)
+    except Exception:
+        m9_sketch = ""
+
+    render_strap_footing_3d_bim_viewer(
+        strap_dict=d,
+        res_dict=r,
+        layout_sketch_b64=m9_sketch,
+    )
+
+    # ── 8. Structural Detailing & Reinforcement Layout ─────────────────────────
     st.divider()
     st.markdown(
         """### <span style="color: #67e8f9 !important;">🏗️ المخطط الإنشائي وتفاصيل التسليح التنفيذية</span> <span style="color: #94a3b8 !important;">—</span> <span style="color: #fb923c !important;">Structural Detailing & Reinforcement Layout</span>""",

@@ -2556,6 +2556,9 @@ def render() -> None:
         # ────────────────────────────────────────────────────────────────────
         # INTEGRATED CAD DRAWINGS & BBS VISUALIZER (Columns + Flat Slabs)
         # ────────────────────────────────────────────────────────────────────
+        all_drawings: List[Dict[str, Any]] = []
+        slab_drawings: List[Dict[str, Any]] = []
+
         with st.expander(
             f"📐 CAD Drawings & Rebar Detailing — ({len(col_results)} Column Models + {len(slab_results)} Slab Models) (المخططات الإنشائية وتفريد التسليح للعناصر)",
             expanded=False,
@@ -2637,6 +2640,11 @@ def render() -> None:
                     })
 
                 combined_all_drawings = all_drawings + slab_drawings
+                # Cache generated drawings for this project to preserve them if collapsed
+                st.session_state["cs_cached_all_drawings"] = all_drawings
+                st.session_state["cs_cached_slab_drawings"] = slab_drawings
+                st.session_state["cs_cached_drawings_proj"] = st.session_state.get("active_profile", "")
+
                 view_mode_col1, view_mode_col2 = st.columns([2, 1])
                 with view_mode_col1:
                     draw_view_mode = st.radio(
@@ -2774,6 +2782,10 @@ def render() -> None:
                         )
             else:
                 st.info("💡 انقر لتوسيع هذا القسم وتوليد المخططات الهندسية وتفريد التسليح لكافة نماذج الأعمدة والأسقف (Lazy Loading).")
+                # Reuse cached drawings if previously generated for the current active project
+                if st.session_state.get("cs_cached_drawings_proj") == st.session_state.get("active_profile", ""):
+                    all_drawings = st.session_state.get("cs_cached_all_drawings", [])
+                    slab_drawings = st.session_state.get("cs_cached_slab_drawings", [])
 
         # ────────────────────────────────────────────────────────────────────
         # BOTTOM PANEL: SUMMARY METRICS & DETAILED QUANTITY TAKEOFF RESULTS
@@ -3379,7 +3391,15 @@ def render() -> None:
             "price_labor": float(price_labor_in),
         }
 
-        first_draw_b64 = all_drawings[0]["img_b64"] if all_drawings else (slab_drawings[0]["img_b64"] if slab_drawings else None)
+        first_draw_b64 = (
+            all_drawings[0].get("img_b64")
+            if (all_drawings and len(all_drawings) > 0 and isinstance(all_drawings[0], dict))
+            else (
+                slab_drawings[0].get("img_b64")
+                if (slab_drawings and len(slab_drawings) > 0 and isinstance(slab_drawings[0], dict))
+                else None
+            )
+        )
 
         col_survey_html = generate_column_survey_report_html(
             project_name=project_name_in,
@@ -3472,6 +3492,10 @@ def render() -> None:
         export_df = pd.DataFrame(export_rows)
         csv_data = export_df.to_csv(index=False).encode('utf-8-sig')
 
+        drawings_notice_html = ""
+        if not all_drawings and not slab_drawings:
+            drawings_notice_html = "<div style='font-size:0.83rem; color:#0284c7; margin-top:5px; font-weight:700;'>💡 ملاحظة: لتضمين المخططات الهندسية وتفريد التسليح داخل ملف التقرير، يرجى فتح قسم «المخططات الإنشائية وتفريد التسليح» أعلاه لتوليدها.</div>"
+
         c_save1, c_save2 = st.columns([3, 1])
         with c_save1:
             st.markdown(
@@ -3483,6 +3507,7 @@ def render() -> None:
                     <div style='font-size:0.88rem; color:#64748b; margin-top:2px;'>
                         يتضمن جميع المدخلات، والمخططات الهندسية وتفريد التسليح (BBS)، وجداول حصر الكميات لـ <b>{len(col_results)} نماذج أعمدة ({total_cols_all} عمود)</b> و <b>{len(slab_results)} نماذج بلاطات ({total_slabs_count} مسطح)</b>، وجدول المقايسة وحصر الأسعار الشامل (إجمالي خرسانة: <b>{grand_vol_concrete_all:.2f} m³</b>، حديد: <b>{grand_w_steel_ton_all:.3f} Ton</b>، تكلفة: <b>{cost_grand_total:,.0f} EGP</b>).
                     </div>
+                    {drawings_notice_html}
                 </div>
                 """,
                 unsafe_allow_html=True,

@@ -371,6 +371,9 @@ def design_combined_footing_model(
         "rft_bot_str": f"{n_bot_total} Φ {Phi_mm} ({n_bot_total/Bc_m:.0f}Φ/m)",
         "rft_top_str": f"{n_top_total} Φ {Phi_mm} ({n_top_total/Bc_m:.0f}Φ/m)",
         "rft_trans_str": f"{n_trans_m} Φ {Phi_mm} / m'",
+        "n_top_total": n_top_total,
+        "n_bot_total": n_bot_total,
+        "Phi_mm": Phi_mm,
         "x1_cm": round(x1_m * 100.0, 1),
         "x2_cm": round(x2_m * 100.0, 1),
         "overhangs_str": f"x₁ = {x1_m*100:.0f} cm, x₂ = {x2_m*100:.0f} cm",
@@ -996,6 +999,168 @@ def draw_foundation_layout_plan(
 #      Module 9 (Edge Strap), and Module 10 (Corner Diagonal Strap)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def compute_strap_f1_geometry(sf: dict, edge_columns: dict = None, slab_bounds: dict = None) -> dict:
+    """
+    Computes exact rectangular geometry (x0, y0, w, h, cx, cy, nbr_face) for Footing F1
+    of an Edge Strap Footing (Module 9).
+    The footing outer face in the neighbor direction is aligned flush with the property line /
+    drawing boundary, and extends entirely inwards towards interior column c2.
+    """
+    c1 = sf["col1"]
+    c2 = sf["col2"]
+    L1 = float(sf.get("L1", 2.2))
+    B1 = float(sf.get("B1", 3.0))
+
+    c1_id = str(c1.get("id", ""))
+    c1_orig_id = str(c1.get("orig_id", c1_id))
+    ed_info = (edge_columns or {}).get(c1_id) or (edge_columns or {}).get(c1_orig_id) or {}
+    raw_ed = str(ed_info.get("direction") or c1.get("edge_dir") or "").strip()
+    ed_upper = raw_ed.upper()
+
+    dx_c = c2["x"] - c1["x"]
+    dy_c = c2["y"] - c1["y"]
+
+    w1 = float(c1.get("width_m", float(c1.get("tc", 50.0)) / 100.0))
+    h1 = float(c1.get("height_m", float(c1.get("bc", 30.0)) / 100.0))
+    c1_xmin = float(c1.get("x_min", c1["x"] - w1 / 2.0))
+    c1_xmax = float(c1.get("x_max", c1["x"] + w1 / 2.0))
+    c1_ymin = float(c1.get("y_min", c1["y"] - h1 / 2.0))
+    c1_ymax = float(c1.get("y_max", c1["y"] + h1 / 2.0))
+
+    sb = slab_bounds or {}
+    sb_min_x = sb.get("min_x")
+    sb_cant_l = float(sb.get("cant_left", 0.0) or 0.0)
+    x_slab_min = (sb_min_x - sb_cant_l) if sb_min_x is not None else c1_xmin
+
+    sb_max_x = sb.get("max_x")
+    sb_cant_r = float(sb.get("cant_right", 0.0) or 0.0)
+    x_slab_max = (sb_max_x + sb_cant_r) if sb_max_x is not None else c1_xmax
+
+    sb_min_y = sb.get("min_y")
+    sb_cant_b = float(sb.get("cant_bottom", 0.0) or 0.0)
+    y_slab_min = (sb_min_y - sb_cant_b) if sb_min_y is not None else c1_ymin
+
+    sb_max_y = sb.get("max_y")
+    sb_cant_t = float(sb.get("cant_top", 0.0) or 0.0)
+    y_slab_max = (sb_max_y + sb_cant_t) if sb_max_y is not None else c1_ymax
+
+    if "LEFT" in ed_upper or (not raw_ed and abs(dx_c) >= abs(dy_c) and dx_c > 0):
+        f1_x0 = min(x_slab_min, c1_xmin)
+        f1_w = L1
+        f1_y0 = c1["y"] - B1 / 2.0
+        f1_h = B1
+        nbr_face = "Left"
+    elif "RIGHT" in ed_upper or (not raw_ed and abs(dx_c) >= abs(dy_c) and dx_c < 0):
+        f1_x_max = max(x_slab_max, c1_xmax)
+        f1_x0 = f1_x_max - L1
+        f1_w = L1
+        f1_y0 = c1["y"] - B1 / 2.0
+        f1_h = B1
+        nbr_face = "Right"
+    elif "BOTTOM" in ed_upper or (not raw_ed and abs(dy_c) > abs(dx_c) and dy_c > 0):
+        f1_y0 = min(y_slab_min, c1_ymin)
+        f1_h = L1
+        f1_x0 = c1["x"] - B1 / 2.0
+        f1_w = B1
+        nbr_face = "Bottom"
+    else:
+        f1_y_max = max(y_slab_max, c1_ymax)
+        f1_y0 = f1_y_max - L1
+        f1_h = L1
+        f1_x0 = c1["x"] - B1 / 2.0
+        f1_w = B1
+        nbr_face = "Top"
+
+    return {
+        "x0": f1_x0,
+        "y0": f1_y0,
+        "w": f1_w,
+        "h": f1_h,
+        "cx": f1_x0 + f1_w / 2.0,
+        "cy": f1_y0 + f1_h / 2.0,
+        "nbr_face": nbr_face,
+    }
+
+
+def compute_corner_strap_f1_geometry(dsf: dict, edge_columns: dict = None, slab_bounds: dict = None) -> dict:
+    """
+    Computes exact rectangular geometry (x0, y0, w, h, cx, cy, nbr_x, nbr_y) for Footing F1
+    of a Corner Diagonal Strap Footing (Module 10).
+    The footing outer faces in both neighbor directions are aligned flush with the property lines /
+    drawing boundaries, and extend entirely inwards towards interior column c2.
+    """
+    c1 = dsf["col1"]
+    c2 = dsf["col2"]
+    L1x = float(dsf.get("L1x", 2.0))
+    L1y = float(dsf.get("L1y", 2.0))
+
+    c1_id = str(c1.get("id", ""))
+    c1_orig_id = str(c1.get("orig_id", c1_id))
+    ed_info = (edge_columns or {}).get(c1_id) or (edge_columns or {}).get(c1_orig_id) or {}
+    raw_ed = str(ed_info.get("direction") or c1.get("edge_dir") or "").strip()
+    ed_upper = raw_ed.upper()
+
+    dx_c = c2["x"] - c1["x"]
+    dy_c = c2["y"] - c1["y"]
+
+    w1 = float(c1.get("width_m", float(c1.get("tc", 50.0)) / 100.0))
+    h1 = float(c1.get("height_m", float(c1.get("bc", 30.0)) / 100.0))
+    c1_xmin = float(c1.get("x_min", c1["x"] - w1 / 2.0))
+    c1_xmax = float(c1.get("x_max", c1["x"] + w1 / 2.0))
+    c1_ymin = float(c1.get("y_min", c1["y"] - h1 / 2.0))
+    c1_ymax = float(c1.get("y_max", c1["y"] + h1 / 2.0))
+
+    sb = slab_bounds or {}
+    sb_min_x = sb.get("min_x")
+    sb_cant_l = float(sb.get("cant_left", 0.0) or 0.0)
+    x_slab_min = (sb_min_x - sb_cant_l) if sb_min_x is not None else c1_xmin
+
+    sb_max_x = sb.get("max_x")
+    sb_cant_r = float(sb.get("cant_right", 0.0) or 0.0)
+    x_slab_max = (sb_max_x + sb_cant_r) if sb_max_x is not None else c1_xmax
+
+    sb_min_y = sb.get("min_y")
+    sb_cant_b = float(sb.get("cant_bottom", 0.0) or 0.0)
+    y_slab_min = (sb_min_y - sb_cant_b) if sb_min_y is not None else c1_ymin
+
+    sb_max_y = sb.get("max_y")
+    sb_cant_t = float(sb.get("cant_top", 0.0) or 0.0)
+    y_slab_max = (sb_max_y + sb_cant_t) if sb_max_y is not None else c1_ymax
+
+    # X direction:
+    if "LEFT" in ed_upper or dx_c >= 0:
+        f1_x0 = min(x_slab_min, c1_xmin)
+        f1_w = L1x
+        nbr_x = "Left"
+    else:
+        f1_x_max = max(x_slab_max, c1_xmax)
+        f1_x0 = f1_x_max - L1x
+        f1_w = L1x
+        nbr_x = "Right"
+
+    # Y direction:
+    if "BOTTOM" in ed_upper or dy_c >= 0:
+        f1_y0 = min(y_slab_min, c1_ymin)
+        f1_h = L1y
+        nbr_y = "Bottom"
+    else:
+        f1_y_max = max(y_slab_max, c1_ymax)
+        f1_y0 = f1_y_max - L1y
+        f1_h = L1y
+        nbr_y = "Top"
+
+    return {
+        "x0": f1_x0,
+        "y0": f1_y0,
+        "w": f1_w,
+        "h": f1_h,
+        "cx": f1_x0 + f1_w / 2.0,
+        "cy": f1_y0 + f1_h / 2.0,
+        "nbr_x": nbr_x,
+        "nbr_y": nbr_y,
+    }
+
+
 def classify_and_design_building_foundations(
     active_columns: list,
     neighbor_col_ids: list | set,
@@ -1007,6 +1172,8 @@ def classify_and_design_building_foundations(
     cov: float,
     phi: int,
     num_floors: int = 1,
+    edge_columns: dict = None,
+    slab_bounds: dict = None,
 ) -> dict:
     """
     Automated building foundation classification and multi-module design engine:
@@ -1025,6 +1192,14 @@ def classify_and_design_building_foundations(
     )
 
     neighbor_ids = set(neighbor_col_ids or [])
+    if edge_columns and isinstance(edge_columns, dict):
+        for ec_id, ec_info in edge_columns.items():
+            if isinstance(ec_info, dict) and ec_info.get("is_edge") == "Yes":
+                neighbor_ids.add(ec_id)
+    for c_item in active_columns:
+        if c_item.get("is_edge_col"):
+            neighbor_ids.add(c_item["id"])
+
     cols_map = {c["id"]: c for c in active_columns}
 
     assigned_ids = set()
@@ -1168,7 +1343,7 @@ def classify_and_design_building_foundations(
             sb_val = m9_in.get("strap_b", 40.0)
             sD_val = res9.get("sD_cm", res9.get("strap_D", m9_in.get("strap_D", 100.0)))
 
-            edge_strap_footings.append({
+            sf_entry = {
                 "name": f"SF-{len(edge_strap_footings)+1}",
                 "model_name": f"SF-{len(edge_strap_footings)+1} (شداد جانبي)",
                 "type": "Edge Strap",
@@ -1182,7 +1357,10 @@ def classify_and_design_building_foundations(
                 "q_act1": res9["q_act1"], "q_act2": res9["q_act2"],
                 "status": "✅ Safe" if (res9["q_act1"] <= q_all_net + 1e-4 and res9["q_act2"] <= q_all_net + 1e-4 and res9.get("shear_max_ok", True) and res9.get("stirrups_shear_ok", True)) else "⚠️ Review",
                 "calc_res": res9,
-            })
+            }
+            sf_entry["f1_geom"] = compute_strap_f1_geometry(sf_entry, edge_columns=edge_columns, slab_bounds=slab_bounds)
+            sf_entry["edge_dir"] = sf_entry["f1_geom"]["nbr_face"]
+            edge_strap_footings.append(sf_entry)
             assigned_ids.add(c1["id"])
             assigned_ids.add(c2["id"])
 
@@ -1248,7 +1426,7 @@ def classify_and_design_building_foundations(
                     res10 = calc_m10(m10_in)
                     continue
 
-            corner_strap_footings.append({
+            dsf_entry = {
                 "name": f"DSF-{len(corner_strap_footings)+1}",
                 "model_name": f"DSF-{len(corner_strap_footings)+1} (شداد ركن مائل)",
                 "type": "Corner Strap",
@@ -1262,65 +1440,110 @@ def classify_and_design_building_foundations(
                 "status": "✅ Safe" if (res10["q_act1"] <= q_all_net + 1e-4 and res10["q_act2"] <= q_all_net + 1e-4 and res10.get("shear_max_ok", True) and res10.get("stirrups_shear_ok", True)) else "⚠️ Review",
                 "calc_res": res10,
                 "rec": rec,
-            })
+            }
+            dsf_entry["f1_geom"] = compute_corner_strap_f1_geometry(dsf_entry, edge_columns=edge_columns, slab_bounds=slab_bounds)
+            dsf_entry["edge_dir"] = f"{dsf_entry['f1_geom']['nbr_x']} + {dsf_entry['f1_geom']['nbr_y']}"
+            corner_strap_footings.append(dsf_entry)
             assigned_ids.add(c1["id"])
             assigned_ids.add(c2["id"])
 
-    # 4. Remaining Non-Strap Columns -> Isolated or Combined
+    # 4. Remaining Non-Strap Columns -> Standardized Isolated Footings (F1, F2, F3)
     remaining_cols = [c for c in active_columns if c["id"] not in assigned_ids]
-    iso_candidates = {}
+
+    int_cols = []
+    edge_cols = []
+    corner_cols = []
+
     for c in remaining_cols:
-        f_cand = design_isolated_footing_model(
-            f"F-{c['id']}", f"قاعدة منفصلة {c['id']}", c["id"],
-            float(c.get("pu_tot", 60.0)),
-            float(c.get("tc", col_c_dim)), float(c.get("bc", col_b_dim)),
-            q_all_net, fcu, fy, cov, phi
+        c_type = c.get("type", "")
+        if not c_type or c_type not in ["Interior", "Edge", "Corner"]:
+            is_geom_corner = (
+                (abs(c["x"] - min_x) < 0.35 or abs(c["x"] - max_x) < 0.35) and
+                (abs(c["y"] - min_y) < 0.35 or abs(c["y"] - max_y) < 0.35)
+            )
+            is_geom_edge = (
+                abs(c["x"] - min_x) < 0.35 or abs(c["x"] - max_x) < 0.35 or
+                abs(c["y"] - min_y) < 0.35 or abs(c["y"] - max_y) < 0.35
+            )
+            if is_geom_corner:
+                c_type = "Corner"
+            elif is_geom_edge:
+                c_type = "Edge"
+            else:
+                c_type = "Interior"
+
+        if c_type == "Corner":
+            corner_cols.append(c)
+        elif c_type == "Edge":
+            edge_cols.append(c)
+        else:
+            int_cols.append(c)
+
+    # 4a. Model F1: Interior Columns (القواعد الداخلية)
+    f1_model = None
+    if int_cols:
+        pu_gov_int = max([float(c.get("pu_tot", 60.0)) for c in int_cols], default=60.0)
+        c_gov_int = max([float(c.get("tc", col_c_dim)) for c in int_cols], default=col_c_dim)
+        b_gov_int = max([float(c.get("bc", col_b_dim)) for c in int_cols], default=col_b_dim)
+        f1_model = design_isolated_footing_model(
+            "F1", "قواعد داخلية", ", ".join([c["id"] for c in int_cols]),
+            pu_gov_int, c_gov_int, b_gov_int, q_all_net, fcu, fy, cov, phi
         )
-        f_cand["col"] = c
-        iso_candidates[c["id"]] = f_cand
+        f1_model["cols_list"] = int_cols
+        for c in int_cols:
+            f_inst = dict(f1_model)
+            f_inst["col"] = c
+            f_inst["col_id"] = c["id"]
+            f_inst["name"] = "F1"
+            f_inst["model_id"] = "F1"
+            f_inst["model_name"] = "F1 (قاعدة داخلية)"
+            f_inst["x"] = c["x"]
+            f_inst["y"] = c["y"]
+            isolated_footings.append(f_inst)
 
-    comb_assigned = set()
-    for i in range(len(remaining_cols)):
-        cA = remaining_cols[i]
-        if cA["id"] in comb_assigned:
-            continue
-        for j in range(i + 1, len(remaining_cols)):
-            cB = remaining_cols[j]
-            if cB["id"] in comb_assigned:
-                continue
-            dx = abs(cB["x"] - cA["x"])
-            dy = abs(cB["y"] - cA["y"])
-            fA = iso_candidates[cA["id"]]
-            fB = iso_candidates[cB["id"]]
+    # 4b. Model F2: Edge Columns (القواعد الجانبية / الطرفية)
+    f2_model = None
+    if edge_cols:
+        pu_gov_edge = max([float(c.get("pu_tot", 50.0)) for c in edge_cols], default=50.0)
+        c_gov_edge = max([float(c.get("tc", col_c_dim)) for c in edge_cols], default=col_c_dim)
+        b_gov_edge = max([float(c.get("bc", col_b_dim)) for c in edge_cols], default=col_b_dim)
+        f2_model = design_isolated_footing_model(
+            "F2", "قواعد جانبية", ", ".join([c["id"] for c in edge_cols]),
+            pu_gov_edge, c_gov_edge, b_gov_edge, q_all_net, fcu, fy, cov, phi
+        )
+        f2_model["cols_list"] = edge_cols
+        for c in edge_cols:
+            f_inst = dict(f2_model)
+            f_inst["col"] = c
+            f_inst["col_id"] = c["id"]
+            f_inst["name"] = "F2"
+            f_inst["model_id"] = "F2"
+            f_inst["model_name"] = "F2 (قاعدة جانبية)"
+            f_inst["x"] = c["x"]
+            f_inst["y"] = c["y"]
+            isolated_footings.append(f_inst)
 
-            if dy < 0.35 and dx > 0.1:
-                clr = dx - (fA["L_cm"] / 200.0 + fB["L_cm"] / 200.0)
-                if clr < 0.15:
-                    cf_model = design_combined_footing_model(
-                        f"CF-{len(combined_footings)+1}", cA, cB, dx,
-                        q_all_net, fcu, fy, cov, phi
-                    )
-                    cf_model["overlap_dir"] = "X"
-                    combined_footings.append(cf_model)
-                    comb_assigned.add(cA["id"])
-                    comb_assigned.add(cB["id"])
-                    break
-            elif dx < 0.35 and dy > 0.1:
-                clr = dy - (fA["B_cm"] / 200.0 + fB["B_cm"] / 200.0)
-                if clr < 0.15:
-                    cf_model = design_combined_footing_model(
-                        f"CF-{len(combined_footings)+1}", cA, cB, dy,
-                        q_all_net, fcu, fy, cov, phi
-                    )
-                    cf_model["overlap_dir"] = "Y"
-                    combined_footings.append(cf_model)
-                    comb_assigned.add(cA["id"])
-                    comb_assigned.add(cB["id"])
-                    break
-
-    for c in remaining_cols:
-        if c["id"] not in comb_assigned:
-            isolated_footings.append(iso_candidates[c["id"]])
+    # 4c. Model F3: Corner Columns (قواعد الأركان)
+    f3_model = None
+    if corner_cols:
+        pu_gov_corner = max([float(c.get("pu_tot", 40.0)) for c in corner_cols], default=40.0)
+        c_gov_corner = max([float(c.get("tc", col_c_dim)) for c in corner_cols], default=col_c_dim)
+        b_gov_corner = max([float(c.get("bc", col_b_dim)) for c in corner_cols], default=col_b_dim)
+        f3_model = design_isolated_footing_model(
+            "F3", "قواعد أركان", ", ".join([c["id"] for c in corner_cols]),
+            pu_gov_corner, c_gov_corner, b_gov_corner, q_all_net, fcu, fy, cov, phi
+        )
+        f3_model["cols_list"] = corner_cols
+        for c in corner_cols:
+            f_inst = dict(f3_model)
+            f_inst["col"] = c
+            f_inst["col_id"] = c["id"]
+            f_inst["name"] = "F3"
+            f_inst["model_id"] = "F3"
+            f_inst["model_name"] = "F3 (قاعدة ركن)"
+            f_inst["x"] = c["x"]
+            f_inst["y"] = c["y"]
+            isolated_footings.append(f_inst)
 
     # 5. Build Unified Table Rows & Quantity Accumulation
     ftgs_conc_rc_val = 0.0
@@ -1338,7 +1561,26 @@ def classify_and_design_building_foundations(
 
     unified_rows = []
 
-    # 5a. Isolated Footings (Module 3)
+    # 5a. Isolated Footings: Standardized Models (F1, F2, F3)
+    # Add summary rows for the active models to the unified schedule
+    for m, m_cols in [(f1_model, int_cols), (f2_model, edge_cols), (f3_model, corner_cols)]:
+        if m is None or not m_cols:
+            continue
+        pc_L = m["L_cm"] + 40
+        pc_B = m["B_cm"] + 40
+        cols_str = f"{len(m_cols)} أعمدة ({', '.join([c['id'] for c in m_cols])})"
+        unified_rows.append({
+            "نموذج القاعدة (Model)": f"{m['model_id']} ({m['model_label']})",
+            "النوع والتصنيف": "قاعدة منفصلة (Module 3)",
+            "الأعمدة المرتكزة (Columns)": cols_str,
+            "أقصى حمل تصميمي Pu (ton)": f"{m['Pu_ton']:.2f} ton (الحاكم)",
+            "أبعاد المسلحة R.C. (cm)": f"{m['L_cm']} × {m['B_cm']} × {m['t_cm']}",
+            "أبعاد العادية P.C. (cm)": f"{pc_L} × {pc_B} × 20",
+            "التسليح والتفاصيل الإنشائية": f"فرش: {m['rft_long_str']} | غطاء: {m['rft_short_str']}",
+            "حالة التحقق الإنشائي (Status)": m.get("status_str", "✅ Safe ومحقق للكود"),
+        })
+
+    # Accumulate quantities for ALL physical isolated footings
     for f in isolated_footings:
         pu_f = float(f["Pu_ton"])
         ftgs_total_pu += pu_f
@@ -1368,19 +1610,6 @@ def classify_and_design_building_foundations(
             wt_shrink = (math.ceil(B_m * 5.0) * len_L + math.ceil(L_m * 5.0) * len_B) * (12.0**2 / 162.0)
             ftgs_steel_kg_val += wt_shrink
             _add_dia(12, wt_shrink, "انكماش علوي لقواعد منفصلة (Shrinkage Rebar)")
-
-        pc_L = f["L_cm"] + 40
-        pc_B = f["B_cm"] + 40
-        unified_rows.append({
-            "نموذج القاعدة (Model)": f.get("model_name", f.get("name")),
-            "النوع والتصنيف": "قاعدة منفصلة (Module 3)",
-            "الأعمدة المرتكزة (Columns)": f.get("supported_col_str", f["col"]["id"]),
-            "أقصى حمل تصميمي Pu (ton)": f"{pu_f:.2f} ton",
-            "أبعاد المسلحة R.C. (cm)": f"{f['L_cm']} × {f['B_cm']} × {f['t_cm']}",
-            "أبعاد العادية P.C. (cm)": f"{pc_L} × {pc_B} × 20",
-            "التسليح والتفاصيل الإنشائية": f"فرش: {f['rft_long_str']} | غطاء: {f['rft_short_str']}",
-            "حالة التحقق الإنشائي (Status)": f.get("status_str", "✅ Safe"),
-        })
 
     # 5b. Combined Footings (Module 8)
     for cf in combined_footings:
@@ -1458,7 +1687,7 @@ def classify_and_design_building_foundations(
         _add_dia(12, wt_long1, "تسليح طولي لقواعد الجار (Edge Footings)")
 
         unified_rows.append({
-            "نموذج القاعدة (Model)": f"{sf['name']} — F1 (قاعدة جار)",
+            "نموذج القاعدة (Model)": f"{sf['name']} (قاعدة جار)",
             "النوع والتصنيف": "قاعدة جار خارجية (Module 9)",
             "الأعمدة المرتكزة (Columns)": f"{sf['col1']['id']} (عمود جار)",
             "أقصى حمل تصميمي Pu (ton)": f"Pu = {P1:.1f}t (R1u = {r9.get('Ru1', P1):.1f}t)",
@@ -1492,7 +1721,7 @@ def classify_and_design_building_foundations(
         _add_dia(12, wt_long2, "تسليح طولي لقواعد الشداد الداخلية")
 
         unified_rows.append({
-            "نموذج القاعدة (Model)": f"{sf['name']} — F2 (قاعدة داخلية)",
+            "نموذج القاعدة (Model)": f"{sf['name']} (قاعدة داخلية)",
             "النوع والتصنيف": "قاعدة داخلية للشداد (Module 9)",
             "الأعمدة المرتكزة (Columns)": f"{sf['col2']['id']} (عمود داخلي)",
             "أقصى حمل تصميمي Pu (ton)": f"Pu = {P2:.1f}t (R2u = {r9.get('R2', P2/1.5)*1.5:.1f}t)",
@@ -1570,7 +1799,7 @@ def classify_and_design_building_foundations(
         _add_dia(16, wt1x + wt1y, "تسليح شبكة اتجاهين لقواعد الركن (Corner Footings)")
 
         unified_rows.append({
-            "نموذج القاعدة (Model)": f"{dsf['name']} — F1 (قاعدة ركن)",
+            "نموذج القاعدة (Model)": f"{dsf['name']} (قاعدة ركن جار)",
             "النوع والتصنيف": "قاعدة ركن خارجية (Module 10)",
             "الأعمدة المرتكزة (Columns)": f"{dsf['col1']['id']} (عمود ركن)",
             "أقصى حمل تصميمي Pu (ton)": f"Pu = {P1:.1f}t (R1u = {r10.get('R1u', P1):.1f}t)",
@@ -1604,7 +1833,7 @@ def classify_and_design_building_foundations(
         _add_dia(12, wt2y, "تسليح طولي لقواعد الشداد المائل الداخلية")
 
         unified_rows.append({
-            "نموذج القاعدة (Model)": f"{dsf['name']} — F2 (قاعدة داخلية)",
+            "نموذج القاعدة (Model)": f"{dsf['name']} (قاعدة داخلية)",
             "النوع والتصنيف": "قاعدة داخلية للشداد المائل (Module 10)",
             "الأعمدة المرتكزة (Columns)": f"{dsf['col2']['id']} (عمود داخلي)",
             "أقصى حمل تصميمي Pu (ton)": f"Pu = {P2:.1f}t (R2u = {r10.get('R2u', P2):.1f}t)",
@@ -1666,6 +1895,14 @@ def classify_and_design_building_foundations(
         "حالة التحقق الإنشائي (Status)": "✅ آمن ومحقق للكود بالكامل",
     })
 
+    iso_names_list = []
+    if int_cols:
+        iso_names_list.append(f"F1 ({len(int_cols)} داخلية)")
+    if edge_cols:
+        iso_names_list.append(f"F2 ({len(edge_cols)} جانبية)")
+    if corner_cols:
+        iso_names_list.append(f"F3 ({len(corner_cols)} أركان)")
+
     return {
         "isolated_footings": isolated_footings,
         "combined_footings": combined_footings,
@@ -1673,13 +1910,18 @@ def classify_and_design_building_foundations(
         "corner_strap_footings": corner_strap_footings,
         "summary_counts": {
             "isolated_count": len(isolated_footings),
-            "isolated_names": [f.get("model_name", f.get("name")) for f in isolated_footings],
+            "isolated_names": iso_names_list,
             "combined_count": len(combined_footings),
             "combined_names": [cf["name"] for cf in combined_footings],
             "edge_strap_count": len(edge_strap_footings),
             "edge_strap_names": [sf["name"] for sf in edge_strap_footings],
             "corner_strap_count": len(corner_strap_footings),
             "corner_strap_names": [dsf["name"] for dsf in corner_strap_footings],
+        },
+        "models": {
+            "F1": f1_model,
+            "F2": f2_model,
+            "F3": f3_model,
         },
         "unified_rows": unified_rows,
         "quantities": {
@@ -1690,6 +1932,8 @@ def classify_and_design_building_foundations(
             "ftgs_total_pu": ftgs_total_pu,
             "ftg_dia_map": ftg_dia_map,
         },
+        "edge_columns": edge_columns,
+        "slab_bounds": slab_bounds,
     }
 
 
@@ -1699,6 +1943,7 @@ def draw_comprehensive_foundation_sketch(
     title: str = "ECP 203 — Comprehensive Building Foundations Layout Plan & Sketch",
     ground_beams: list = None,
     edge_columns: dict = None,
+    slab_bounds: dict = None,
 ):
     """
     Renders comprehensive 2D foundation plan sketch with distinct color-coding:
@@ -1752,6 +1997,26 @@ def draw_comprehensive_foundation_sketch(
             _vdim(ax, x_left_base, unique_ys[j], unique_ys[j + 1], f"{unique_ys[j+1]-unique_ys[j]:.2f} m", side="left", fs=9.5, offset=0.5, draw_ext=False)
         _vdim(ax, x_left_base, unique_ys[0], unique_ys[-1], f"Total B = {unique_ys[-1]-unique_ys[0]:.2f} m", side="left", fs=10.5, offset=1.3, draw_ext=False)
 
+    # ── Building / Slab Boundary Outline (حدود مساحة الرسم ومحيط المبنى) ──
+    eff_sb = slab_bounds if slab_bounds is not None else foundation_res.get("slab_bounds")
+    if eff_sb and isinstance(eff_sb, dict):
+        x_sb_min = float(eff_sb.get("min_x", 0.0)) - float(eff_sb.get("cant_left", 0.0) or 0.0)
+        x_sb_max = float(eff_sb.get("max_x", 0.0)) + float(eff_sb.get("cant_right", 0.0) or 0.0)
+        y_sb_min = float(eff_sb.get("min_y", 0.0)) - float(eff_sb.get("cant_bottom", 0.0) or 0.0)
+        y_sb_max = float(eff_sb.get("max_y", 0.0)) + float(eff_sb.get("cant_top", 0.0) or 0.0)
+        sb_w_bldg = x_sb_max - x_sb_min
+        sb_h_bldg = y_sb_max - y_sb_min
+        if sb_w_bldg > 0 and sb_h_bldg > 0:
+            bldg_rect = patches.Rectangle(
+                (x_sb_min, y_sb_min), sb_w_bldg, sb_h_bldg,
+                linewidth=1.8, edgecolor="#475569", facecolor="none", linestyle="-.", alpha=0.8, zorder=1.5
+            )
+            ax.add_patch(bldg_rect)
+            ax.text(x_sb_min + 0.12, y_sb_max - 0.22, "حدود مساحة الرسم والمبنى (Plot Boundary)",
+                    fontsize=8.5, color="#475569", fontweight="bold", zorder=2)
+
+    eff_edge_cols = edge_columns if edge_columns is not None else foundation_res.get("edge_columns")
+
     # 1. Draw Isolated Footings (Soft Sky Blue)
     for f in foundation_res.get("isolated_footings", []):
         col = f["col"]
@@ -1761,7 +2026,9 @@ def draw_comprehensive_foundation_sketch(
         y0 = col["y"] - B_m / 2.0
         rect = patches.Rectangle((x0, y0), L_m, B_m, facecolor="#bae6fd", edgecolor="#0284c7", lw=1.8, alpha=0.85, zorder=2)
         ax.add_patch(rect)
-        ax.text(x0 + 0.10, y0 + 0.10, f.get("name", "F_iso"), color="#0369a1", fontweight="bold", fontsize=9, zorder=4)
+        f_lbl = f.get("name", "F1")
+        ax.text(x0 + 0.10, y0 + 0.10, f_lbl, color="#0369a1", fontweight="bold", fontsize=10.5, zorder=4,
+                bbox=dict(boxstyle="round,pad=0.15", fc="#f0f9ff", ec="#0284c7", lw=0.8, alpha=0.9))
 
     # 2. Draw Combined Footings (Light Green)
     for cf in foundation_res.get("combined_footings", []):
@@ -1793,13 +2060,21 @@ def draw_comprehensive_foundation_sketch(
         sb_w = float(sf.get("strap_b", 40.0)) / 100.0
         st_tag = f"ST{idx}"
 
-        r1 = patches.Rectangle((c1["x"] - L1/2.0, c1["y"] - B1/2.0), L1, B1, facecolor="#fed7aa", edgecolor="#ea580c", lw=2.0, alpha=0.85, zorder=2)
+        # F1 Exterior Footing: Flush with neighbor boundary (does not extend into neighbor)
+        f1_g = sf.get("f1_geom") or compute_strap_f1_geometry(sf, edge_columns=eff_edge_cols, slab_bounds=eff_sb)
+        r1 = patches.Rectangle((f1_g["x0"], f1_g["y0"]), f1_g["w"], f1_g["h"], facecolor="#fed7aa", edgecolor="#ea580c", lw=2.0, alpha=0.85, zorder=2)
         ax.add_patch(r1)
-        ax.text(c1["x"] - L1/2.0 + 0.08, c1["y"] - B1/2.0 + 0.08, f"{sf.get('name', st_tag)}-F1", color="#9a3412", fontweight="bold", fontsize=8.5, zorder=4)
+        ax.text(f1_g["x0"] + 0.08, f1_g["y0"] + 0.08, f"{sf.get('name', st_tag)} (جار)", color="#9a3412", fontweight="bold", fontsize=8.5, zorder=4)
 
-        r2 = patches.Rectangle((c2["x"] - L2/2.0, c2["y"] - B2/2.0), L2, B2, facecolor="#fed7aa", edgecolor="#ea580c", lw=2.0, alpha=0.85, zorder=2)
+        # F2 Interior Footing: Centered on interior column c2
+        ov_dir = sf.get("direction", "X")
+        if ov_dir == "Y":
+            f2_w, f2_h = B2, L2
+        else:
+            f2_w, f2_h = L2, B2
+        r2 = patches.Rectangle((c2["x"] - f2_w/2.0, c2["y"] - f2_h/2.0), f2_w, f2_h, facecolor="#fed7aa", edgecolor="#ea580c", lw=2.0, alpha=0.85, zorder=2)
         ax.add_patch(r2)
-        ax.text(c2["x"] - L2/2.0 + 0.08, c2["y"] - B2/2.0 + 0.08, f"{sf.get('name', st_tag)}-F2", color="#9a3412", fontweight="bold", fontsize=8.5, zorder=4)
+        ax.text(c2["x"] - f2_w/2.0 + 0.08, c2["y"] - f2_h/2.0 + 0.08, f"{sf.get('name', st_tag)} (داخلي)", color="#9a3412", fontweight="bold", fontsize=8.5, zorder=4)
 
         if abs(c2["x"] - c1["x"]) >= abs(c2["y"] - c1["y"]):
             bx0 = min(c1["x"], c2["x"])
@@ -1830,13 +2105,15 @@ def draw_comprehensive_foundation_sketch(
         sb_w = float(dsf.get("strap_b", 40.0)) / 100.0
         st_tag = f"ST{idx}"
 
-        r1 = patches.Rectangle((c1["x"] - L1x/2.0, c1["y"] - L1y/2.0), L1x, L1y, facecolor="#fed7aa", edgecolor="#ea580c", lw=2.0, alpha=0.85, zorder=2)
+        # F1 Corner Footing: Flush with both neighbor boundaries (does not extend into neighbor)
+        f1_g = dsf.get("f1_geom") or compute_corner_strap_f1_geometry(dsf, edge_columns=eff_edge_cols, slab_bounds=eff_sb)
+        r1 = patches.Rectangle((f1_g["x0"], f1_g["y0"]), f1_g["w"], f1_g["h"], facecolor="#fed7aa", edgecolor="#ea580c", lw=2.0, alpha=0.85, zorder=2)
         ax.add_patch(r1)
-        ax.text(c1["x"] - L1x/2.0 + 0.08, c1["y"] - L1y/2.0 + 0.08, f"{dsf['name']}-F1", color="#9a3412", fontweight="bold", fontsize=8.5, zorder=4)
+        ax.text(f1_g["x0"] + 0.08, f1_g["y0"] + 0.08, f"{dsf['name']} (جار)", color="#9a3412", fontweight="bold", fontsize=8.5, zorder=4)
 
         r2 = patches.Rectangle((c2["x"] - L2x/2.0, c2["y"] - L2y/2.0), L2x, L2y, facecolor="#fed7aa", edgecolor="#ea580c", lw=2.0, alpha=0.85, zorder=2)
         ax.add_patch(r2)
-        ax.text(c2["x"] - L2x/2.0 + 0.08, c2["y"] - L2y/2.0 + 0.08, f"{dsf['name']}-F2", color="#9a3412", fontweight="bold", fontsize=8.5, zorder=4)
+        ax.text(c2["x"] - L2x/2.0 + 0.08, c2["y"] - L2y/2.0 + 0.08, f"{dsf['name']} (داخلي)", color="#9a3412", fontweight="bold", fontsize=8.5, zorder=4)
 
         dX = c2["x"] - c1["x"]
         dY = c2["y"] - c1["y"]
@@ -1953,9 +2230,8 @@ def draw_comprehensive_foundation_sketch(
             return txt
 
     leg_handles = [
-        patches.Patch(facecolor="#bae6fd", edgecolor="#0284c7", lw=1.8, label=f"Isolated Footings (Module 3) — {_ar('قواعد منفصلة')}"),
-        patches.Patch(facecolor="#bbf7d0", edgecolor="#15803d", linestyle="--", lw=2.2, label=f"Combined Footings (Module 8) — {_ar('قواعد مشتركة')}"),
-        patches.Patch(facecolor="#fed7aa", edgecolor="#ea580c", lw=2.0, label=f"Strap Footings (Module 9 & 10) — {_ar('قواعد الشدادات')}"),
+        patches.Patch(facecolor="#bae6fd", edgecolor="#0284c7", lw=1.8, label=f"Isolated Footings (F1, F2, F3) — {_ar('قواعد منفصلة (F1, F2, F3)')}"),
+        patches.Patch(facecolor="#fed7aa", edgecolor="#ea580c", lw=2.0, label=f"Strap Footings (SF, DSF) — {_ar('قواعد الشدادات والجار (SF, DSF)')}"),
         patches.Patch(facecolor="#fdba74", edgecolor="#c2410c", hatch="///", lw=2.0, label=f"Strap Beams (ST1, ST2) — {_ar('شدادات الجار والركن')}"),
         patches.Patch(facecolor="#e0e7ff", edgecolor="#4338ca", lw=1.8, label=f"Ground Beams (B1, B2, B3) — {_ar('سملات وميدات أرضية')}"),
         Line2D([0], [0], color="#db2777", lw=3.2, label=f"Neighbor Edge Line — {_ar('حد الجار (خط بينك مهشر)')}"),
@@ -2004,36 +2280,249 @@ def _vdim(ax, x, y1, y2, label, side="right", fs=_DIM_FS, offset=0.12, draw_ext=
 def _draw_plan(mode, *, S_m, c1_cm, b1_cm, c2_cm, b2_cm,
                L1_cm=None, B1_cm=None, L2_cm=None, B2_cm=None,
                Lc_cm=None, Bc_cm=None, x1_cm=None, x2_cm=None,
-               rft=None):
+               rft=None, **kwargs):
+    """
+    Renders complete architectural/structural CAD-grade 2D plan view for footings:
+    - Sets explicit xlim/ylim to prevent any viewport clipping.
+    - Plain Concrete (P.C.) blinding perimeter with offset.
+    - Reinforced Concrete (R.C.) footing outline.
+    - Hatched columns C1 & C2 with section dimensions.
+    - Structural centerlines and grid axis bubbles ① and ②.
+    - Longitudinal reinforcement schematics (top red & bottom blue) with hooked ends.
+    - Complete multi-tier dimensioning lines for overhangs, span, and total dimensions.
+    """
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "sans-serif"]
-    fig, ax = plt.subplots(figsize=(13, 7.5), dpi=150, facecolor="#ffffff")
+    fig, ax = plt.subplots(figsize=(14, 7.5), dpi=150, facecolor="#ffffff")
     ax.set_facecolor("#f8fafc")
-    c1_m = c1_cm / 100.0; b1_m = b1_cm / 100.0
-    c2_m = c2_cm / 100.0; b2_m = b2_cm / 100.0
+
+    c1_m = float(c1_cm) / 100.0
+    b1_m = float(b1_cm) / 100.0
+    c2_m = float(c2_cm) / 100.0
+    b2_m = float(b2_cm) / 100.0
+    p_proj = 0.20  # 20 cm PC blinding projection
+
+    def _dim_h(x1, x2, y, text, y_wit=None, color="#1e293b", fs=8.8):
+        if y_wit is not None:
+            ax.plot([x1, x1], [y_wit, y], color="#94a3b8", lw=0.8, ls="--", zorder=2)
+            ax.plot([x2, x2], [y_wit, y], color="#94a3b8", lw=0.8, ls="--", zorder=2)
+        ax.annotate(
+            "", xy=(x2, y), xytext=(x1, y),
+            arrowprops=dict(arrowstyle="<->", color=color, lw=1.2, shrinkA=0, shrinkB=0),
+            zorder=4,
+        )
+        ax.text(
+            (x1 + x2) / 2.0, y, text,
+            ha="center", va="center", fontsize=fs, fontweight="bold", color=color,
+            bbox=dict(boxstyle="square,pad=0.15", fc="#ffffff", ec="none", alpha=0.95),
+            zorder=5,
+        )
+
+    def _dim_v(y1, y2, x, text, x_wit=None, color="#1e293b", fs=8.8):
+        if x_wit is not None:
+            ax.plot([x_wit, x], [y1, y1], color="#94a3b8", lw=0.8, ls="--", zorder=2)
+            ax.plot([x_wit, x], [y2, y2], color="#94a3b8", lw=0.8, ls="--", zorder=2)
+        ax.annotate(
+            "", xy=(x, y2), xytext=(x, y1),
+            arrowprops=dict(arrowstyle="<->", color=color, lw=1.2, shrinkA=0, shrinkB=0),
+            zorder=4,
+        )
+        ax.text(
+            x, (y1 + y2) / 2.0, text,
+            ha="center", va="center", fontsize=fs, fontweight="bold", color=color,
+            rotation=90,
+            bbox=dict(boxstyle="square,pad=0.15", fc="#ffffff", ec="none", alpha=0.95),
+            zorder=5,
+        )
 
     if mode == "isolated":
-        L1_m = L1_cm / 100.0; B1_m = B1_cm / 100.0
-        L2_m = L2_cm / 100.0; B2_m = B2_cm / 100.0
-        x_c1 = 0.0; x_c2 = S_m
+        L1_m = (float(L1_cm) if L1_cm else 200.0) / 100.0
+        B1_m = (float(B1_cm) if B1_cm else 180.0) / 100.0
+        L2_m = (float(L2_cm) if L2_cm else 220.0) / 100.0
+        B2_m = (float(B2_cm) if B2_cm else 200.0) / 100.0
+        x_c1 = 0.0
+        x_c2 = float(S_m)
         y_c = 0.0
-        ax.add_patch(patches.Rectangle((x_c1 - L1_m / 2, y_c - B1_m / 2), L1_m, B1_m, fc="#e2e8f0", ec="#0f172a", lw=2.5))
-        ax.add_patch(patches.Rectangle((x_c2 - L2_m / 2, y_c - B2_m / 2), L2_m, B2_m, fc="#e2e8f0", ec="#0f172a", lw=2.5))
-        ax.add_patch(patches.Rectangle((x_c1 - c1_m / 2, y_c - b1_m / 2), c1_m, b1_m, fc="#1e293b", ec="#0f172a", lw=2))
-        ax.add_patch(patches.Rectangle((x_c2 - c2_m / 2, y_c - b2_m / 2), c2_m, b2_m, fc="#1e293b", ec="#0f172a", lw=2))
-        ax.text(x_c1, y_c, "C1", ha="center", va="center", color="#facc15", fontweight="bold", fontsize=11)
-        ax.text(x_c2, y_c, "C2", ha="center", va="center", color="#facc15", fontweight="bold", fontsize=11)
-    else:
-        Lc_m = Lc_cm / 100.0; Bc_m = Bc_cm / 100.0
-        x1_m = x1_cm / 100.0
-        x_c1 = 0.0; x_c2 = S_m; y_c = 0.0
-        x0 = x_c1 - x1_m
-        ax.add_patch(patches.Rectangle((x0, y_c - Bc_m / 2), Lc_m, Bc_m, fc="#e2e8f0", ec="#0f172a", lw=2.5))
-        ax.add_patch(patches.Rectangle((x_c1 - c1_m / 2, y_c - b1_m / 2), c1_m, b1_m, fc="#1e293b", ec="#0f172a", lw=2))
-        ax.add_patch(patches.Rectangle((x_c2 - c2_m / 2, y_c - b2_m / 2), c2_m, b2_m, fc="#1e293b", ec="#0f172a", lw=2))
-        ax.text(x_c1, y_c, "C1", ha="center", va="center", color="#facc15", fontweight="bold", fontsize=11)
-        ax.text(x_c2, y_c, "C2", ha="center", va="center", color="#facc15", fontweight="bold", fontsize=11)
 
-    ax.set_aspect("equal")
+        x1_l = x_c1 - L1_m / 2.0
+        x1_r = x_c1 + L1_m / 2.0
+        y1_b = y_c - B1_m / 2.0
+        y1_t = y_c + B1_m / 2.0
+
+        x2_l = x_c2 - L2_m / 2.0
+        x2_r = x_c2 + L2_m / 2.0
+        y2_b = y_c - B2_m / 2.0
+        y2_t = y_c + B2_m / 2.0
+
+        d_clear_m = x2_l - x1_r
+
+        # PC Blinding
+        ax.add_patch(patches.Rectangle((x1_l - p_proj, y1_b - p_proj), L1_m + 2 * p_proj, B1_m + 2 * p_proj,
+                                       fc="#f1f5f9", ec="#94a3b8", lw=1.5, ls="--", zorder=1))
+        ax.add_patch(patches.Rectangle((x2_l - p_proj, y2_b - p_proj), L2_m + 2 * p_proj, B2_m + 2 * p_proj,
+                                       fc="#f1f5f9", ec="#94a3b8", lw=1.5, ls="--", zorder=1))
+
+        # RC Footings
+        ax.add_patch(patches.Rectangle((x1_l, y1_b), L1_m, B1_m, fc="#ffffff", ec="#0f172a", lw=2.5, zorder=2))
+        ax.add_patch(patches.Rectangle((x2_l, y2_b), L2_m, B2_m, fc="#ffffff", ec="#0f172a", lw=2.5, zorder=2))
+
+        ax.text(x_c1, y1_b + 0.15, f"F1: {L1_m*100:.0f}×{B1_m*100:.0f} cm", ha="center", va="bottom",
+                fontsize=9.0, fontweight="bold", color="#0f172a", zorder=5)
+        ax.text(x_c2, y2_b + 0.15, f"F2: {L2_m*100:.0f}×{B2_m*100:.0f} cm", ha="center", va="bottom",
+                fontsize=9.0, fontweight="bold", color="#0f172a", zorder=5)
+
+        # Columns
+        ax.add_patch(patches.Rectangle((x_c1 - c1_m / 2.0, y_c - b1_m / 2.0), c1_m, b1_m,
+                                       fc="#334155", ec="#0f172a", hatch="///", lw=1.8, zorder=6))
+        ax.add_patch(patches.Rectangle((x_c2 - c2_m / 2.0, y_c - b2_m / 2.0), c2_m, b2_m,
+                                       fc="#334155", ec="#0f172a", hatch="///", lw=1.8, zorder=6))
+        ax.text(x_c1, y_c, f"C1\n{c1_cm:.0f}×{b1_cm:.0f}", ha="center", va="center", color="#facc15",
+                fontweight="bold", fontsize=9.0, zorder=7)
+        ax.text(x_c2, y_c, f"C2\n{c2_cm:.0f}×{b2_cm:.0f}", ha="center", va="center", color="#facc15",
+                fontweight="bold", fontsize=9.0, zorder=7)
+
+        # Centerlines & Axis Bubbles
+        max_y_top = max(y1_t, y2_t) + p_proj
+        min_y_bot = min(y1_b, y2_b) - p_proj
+
+        ax.plot([x1_l - p_proj - 0.45, x2_r + p_proj + 0.45], [y_c, y_c], color="#dc2626", lw=1.1, ls="-.", zorder=3)
+        for xc, num in [(x_c1, "①"), (x_c2, "②")]:
+            ax.plot([xc, xc], [min_y_bot - 0.25, max_y_top + 0.25], color="#dc2626", lw=1.1, ls="-.", zorder=3)
+            ax.add_patch(patches.Circle((xc, max_y_top + 0.45), 0.18, fc="#fee2e2", ec="#dc2626", lw=1.3, zorder=8))
+            ax.text(xc, max_y_top + 0.45, num, ha="center", va="center", color="#991b1b", fontweight="bold", fontsize=10.5, zorder=9)
+
+        # Dimensions
+        y_d1 = min_y_bot - 0.40
+        _dim_h(x1_l, x1_r, y_d1, f"L1 = {L1_m:.2f} m", y_wit=min_y_bot, color="#0f172a")
+        if d_clear_m > 0.05:
+            _dim_h(x1_r, x2_l, y_d1, f"Clearance = {d_clear_m:.2f} m", y_wit=min_y_bot, color="#16a34a")
+        elif d_clear_m <= 0:
+            ax.text((x1_r + x2_l) / 2.0, y_d1, f"OVERLAP! ({abs(d_clear_m):.2f}m)", ha="center", va="center",
+                    color="#dc2626", fontweight="bold", fontsize=9.0,
+                    bbox=dict(boxstyle="round,pad=0.2", fc="#fee2e2", ec="#dc2626", lw=1.0), zorder=6)
+        _dim_h(x2_l, x2_r, y_d1, f"L2 = {L2_m:.2f} m", y_wit=min_y_bot, color="#0f172a")
+
+        y_d2 = min_y_bot - 0.80
+        _dim_h(x_c1, x_c2, y_d2, f"Span S = {S_m:.2f} m ({float(S_m)*100:.0f} cm)", y_wit=min_y_bot, color="#0284c7")
+
+        _dim_v(y1_b, y1_t, x1_l - p_proj - 0.35, f"B1 = {B1_m:.2f} m", x_wit=x1_l, color="#0f172a")
+        _dim_v(y2_b, y2_t, x2_r + p_proj + 0.35, f"B2 = {B2_m:.2f} m", x_wit=x2_r, color="#0f172a")
+
+        ax.set_xlim(x1_l - p_proj - 1.1, x2_r + p_proj + 1.1)
+        ax.set_ylim(min_y_bot - 1.15, max_y_top + 0.80)
+        ax.set_title("ISOLATED FOOTINGS LAYOUT (مسقط القواعد المنفصلة وفحص التداخل)", fontsize=12.5, fontweight="bold", pad=15, color="#0f172a")
+
+    else:
+        # Combined Footing
+        Lc_m = (float(Lc_cm) if Lc_cm else 500.0) / 100.0
+        Bc_m = (float(Bc_cm) if Bc_cm else 200.0) / 100.0
+        x1_m = (float(x1_cm) if x1_cm is not None else 50.0) / 100.0
+        x2_m = (float(x2_cm) / 100.0) if x2_cm is not None else (Lc_m - x1_m - float(S_m))
+        x_c1 = 0.0
+        x_c2 = float(S_m)
+        y_c = 0.0
+
+        x_l = x_c1 - x1_m
+        x_r = x_l + Lc_m
+        y_b = y_c - Bc_m / 2.0
+        y_t = y_c + Bc_m / 2.0
+
+        x_pc_l = x_l - p_proj
+        x_pc_r = x_r + p_proj
+        y_pc_b = y_b - p_proj
+        y_pc_t = y_t + p_proj
+        L_pc = Lc_m + 2 * p_proj
+        B_pc = Bc_m + 2 * p_proj
+
+        # PC patch
+        ax.add_patch(patches.Rectangle((x_pc_l, y_pc_b), L_pc, B_pc, fc="#f1f5f9", ec="#94a3b8", lw=1.5, ls="--", zorder=1))
+        ax.text(x_pc_l + 0.08, y_pc_t - 0.12, "P.C. Blinding 20cm (فرشة عادية)", fontsize=8, color="#64748b", va="top", zorder=3)
+
+        # RC patch
+        ax.add_patch(patches.Rectangle((x_l, y_b), Lc_m, Bc_m, fc="#ffffff", ec="#0f172a", lw=2.8, zorder=2))
+
+        # Columns
+        ax.add_patch(patches.Rectangle((x_c1 - c1_m / 2.0, y_c - b1_m / 2.0), c1_m, b1_m,
+                                       fc="#334155", ec="#0f172a", hatch="///", lw=2.0, zorder=6))
+        ax.add_patch(patches.Rectangle((x_c2 - c2_m / 2.0, y_c - b2_m / 2.0), c2_m, b2_m,
+                                       fc="#334155", ec="#0f172a", hatch="///", lw=2.0, zorder=6))
+        ax.text(x_c1, y_c, f"C1\n{c1_cm:.0f}×{b1_cm:.0f}", ha="center", va="center", color="#facc15",
+                fontweight="bold", fontsize=9.5, zorder=7)
+        ax.text(x_c2, y_c, f"C2\n{c2_cm:.0f}×{b2_cm:.0f}", ha="center", va="center", color="#facc15",
+                fontweight="bold", fontsize=9.5, zorder=7)
+
+        # Centerlines & Axis Bubbles
+        ax.plot([x_pc_l - 0.40, x_pc_r + 0.40], [y_c, y_c], color="#dc2626", lw=1.1, ls="-.", zorder=3)
+        ax.add_patch(patches.Circle((x_pc_l - 0.50, y_c), 0.16, fc="#fee2e2", ec="#dc2626", lw=1.3, zorder=8))
+        ax.text(x_pc_l - 0.50, y_c, "CL", ha="center", va="center", color="#991b1b", fontweight="bold", fontsize=8.0, zorder=9)
+
+        for xc, num in [(x_c1, "①"), (x_c2, "②")]:
+            ax.plot([xc, xc], [y_pc_b - 0.25, y_pc_t + 0.25], color="#dc2626", lw=1.1, ls="-.", zorder=3)
+            ax.add_patch(patches.Circle((xc, y_pc_t + 0.45), 0.18, fc="#fee2e2", ec="#dc2626", lw=1.3, zorder=8))
+            ax.text(xc, y_pc_t + 0.45, num, ha="center", va="center", color="#991b1b", fontweight="bold", fontsize=10.5, zorder=9)
+
+        # Schematic Rebar Lines
+        y_rft_top = y_c + 0.28 * Bc_m
+        y_rft_bot = y_c - 0.28 * Bc_m
+        hk_len = min(0.25, Bc_m * 0.15)
+
+        # Top Bar (Red with hooks down)
+        ax.plot([x_l + 0.08, x_r - 0.08], [y_rft_top, y_rft_top], color="#ea580c", lw=2.0, ls="-", zorder=4)
+        ax.plot([x_l + 0.08, x_l + 0.08], [y_rft_top, y_rft_top - hk_len], color="#ea580c", lw=2.0, ls="-", zorder=4)
+        ax.plot([x_r - 0.08, x_r - 0.08], [y_rft_top, y_rft_top - hk_len], color="#ea580c", lw=2.0, ls="-", zorder=4)
+
+        top_label = kwargs.get("rft_top_str")
+        top_txt = f"Top Rebar: {top_label} (حديد علوي)" if top_label else "Top Rebar (حديد علوي لمقاومة العزم السالب)"
+        ax.text((x_c1 + x_c2) / 2.0, y_rft_top + 0.04, top_txt,
+                ha="center", va="bottom", fontsize=8.5, fontweight="bold", color="#ea580c",
+                bbox=dict(boxstyle="round,pad=0.2", fc="#fff7ed", ec="#ea580c", lw=0.9, alpha=0.92), zorder=5)
+
+        # Bottom Bar (Blue with hooks up)
+        ax.plot([x_l + 0.08, x_r - 0.08], [y_rft_bot, y_rft_bot], color="#0284c7", lw=2.0, ls="-", zorder=4)
+        ax.plot([x_l + 0.08, x_l + 0.08], [y_rft_bot, y_rft_bot + hk_len], color="#0284c7", lw=2.0, ls="-", zorder=4)
+        ax.plot([x_r - 0.08, x_r - 0.08], [y_rft_bot, y_rft_bot + hk_len], color="#0284c7", lw=2.0, ls="-", zorder=4)
+
+        bot_label = kwargs.get("rft_bot_str")
+        bot_txt = f"Bottom Rebar: {bot_label} (حديد سفلي)" if bot_label else "Bottom Rebar (حديد سفلي لمقاومة العزم الموجب)"
+        ax.text((x_c1 + x_c2) / 2.0, y_rft_bot - 0.04, bot_txt,
+                ha="center", va="top", fontsize=8.5, fontweight="bold", color="#0284c7",
+                bbox=dict(boxstyle="round,pad=0.2", fc="#f0f9ff", ec="#0284c7", lw=0.9, alpha=0.92), zorder=5)
+
+        # Transverse bands
+        for xt in [x_c1, x_c2]:
+            ax.plot([xt - c1_m * 0.6, xt - c1_m * 0.6], [y_b + 0.08, y_t - 0.08], color="#6366f1", lw=1.2, ls=":", zorder=4)
+            ax.plot([xt + c1_m * 0.6, xt + c1_m * 0.6], [y_b + 0.08, y_t - 0.08], color="#6366f1", lw=1.2, ls=":", zorder=4)
+
+        # Horizontal Dimensions
+        y_d1 = y_pc_b - 0.38
+        _dim_h(x_l, x_c1, y_d1, f"x₁={x1_m*100:.0f} cm", y_wit=y_b, color="#0f172a")
+        _dim_h(x_c1, x_c2, y_d1, f"S = {S_m:.2f} m ({float(S_m)*100:.0f} cm)", y_wit=y_b, color="#0f172a")
+        _dim_h(x_c2, x_r, y_d1, f"x₂={x2_m*100:.0f} cm", y_wit=y_b, color="#0f172a")
+
+        y_d2 = y_pc_b - 0.80
+        _dim_h(x_l, x_r, y_d2, f"Lc = {Lc_m:.2f} m ({Lc_m*100:.0f} cm)", y_wit=y_b, color="#0284c7")
+
+        y_d3 = y_pc_b - 1.20
+        _dim_h(x_pc_l, x_pc_r, y_d3, f"L_pc = {L_pc:.2f} m ({L_pc*100:.0f} cm)", y_wit=y_pc_b, color="#64748b")
+
+        # Vertical Dimensions
+        x_dv1 = x_pc_r + 0.40
+        _dim_v(y_b, y_t, x_dv1, f"Bc = {Bc_m:.2f} m ({Bc_m*100:.0f} cm)", x_wit=x_r, color="#0284c7")
+
+        x_dv2 = x_pc_r + 0.85
+        _dim_v(y_pc_b, y_pc_t, x_dv2, f"B_pc = {B_pc:.2f} m ({B_pc*100:.0f} cm)", x_wit=x_pc_r, color="#64748b")
+
+        # Set Limits
+        margin_l = max(0.9, x1_m * 0.25 + 0.6)
+        margin_r = max(1.2, x2_m * 0.25 + 1.1)
+        ax.set_xlim(x_pc_l - margin_l, x_pc_r + margin_r)
+        ax.set_ylim(y_pc_b - 1.45, y_pc_t + 0.75)
+
+        tc_val = kwargs.get("tc_cm")
+        t_note = f" × t = {tc_val:.0f} cm" if tc_val else ""
+        ax.set_title(f"COMBINED FOOTING PLAN (المسقط الأفقي للقاعدة المشتركة) — Lc = {Lc_m:.2f} m × Bc = {Bc_m:.2f} m{t_note}",
+                     fontsize=12.5, fontweight="bold", pad=15, color="#0f172a")
+
+    ax.set_aspect("equal", adjustable="box")
     ax.axis("off")
     fig.tight_layout()
     return fig
@@ -2204,14 +2693,14 @@ def _render_structural_tutorial():
 
 
 def render():
-    """Entry point — Module 7: Building Foundations & Combined Footings (ECP 203)."""
+    """Entry point — Module 7: Quick Two-Column Combined Footing Design (ECP 203)."""
 
     # ── HEADER ────────────────────────────────────────────────────────────────
     st.markdown(
         """
         <div class="input-section-header">
-            <span style="font-size:26px;">🏗️</span>
-            <span>Module 7 — تصميم أساسات المبنى والقواعد المشتركة (Building Foundations — ECP 203)</span>
+            <span style="font-size:26px;">📐</span>
+            <span>Module 7 — تصميم قاعدة مشتركة لعمودين (Quick Two-Column Combined Footing Design — ECP 203)</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -2238,355 +2727,172 @@ def render():
         unsafe_allow_html=True,
     )
 
-    # ── MODE SELECTOR ─────────────────────────────────────────────────────────
-    m_choice = st.radio(
-        "اختر نظام العمل المطلوب:",
-        [
-            "🏢 تصميم أساسات المبنى بالكامل (ربط تلقائي مع Module 1 — مسقط عام وفحص التداخل)",
-            "📐 وضع التصميم السريع لقاعدتين (Manual Two-Column Mode)",
-        ],
-        index=0,
-        horizontal=True,
-        key="tcf_main_work_mode",
+    st.markdown(
+        """
+        <div class="section-header">📥 مدخلات التصميم اليدوي السريع لقاعدتين (Manual Two-Column Inputs)</div>
+        """,
+        unsafe_allow_html=True,
     )
 
-    # ══════════════════════════════════════════════════════════════════════════
-    #  A. FULL BUILDING FOUNDATIONS SYSTEM (LINKED WITH MODULE 1)
-    # ══════════════════════════════════════════════════════════════════════════
-    if "المبنى بالكامل" in m_choice:
-        b_data = get_building_columns_data()
-        cols_list = b_data["columns"]
+    with st.expander("📝 Column & Soil Data (بيانات الأعمدة والتربة)", expanded=True):
+        ic1, ic2, ic3 = st.columns(3)
+        with ic1:
+            st.markdown("**🔩 Column 1 (C₁)**")
+            P1 = S.number_input("Service Load P₁ (ton)", "tcf_P1", min_value=1.0, max_value=3000.0, step=5.0)
+            c1 = S.number_input("c₁ — parallel (cm)", "tcf_c1", min_value=15, max_value=300, step=5)
+            b1 = S.number_input("b₁ — perpendicular (cm)", "tcf_b1", min_value=15, max_value=300, step=5)
 
-        # 1. Sync & Data Pipeline Status
-        st.markdown(
-            """
-            <div class="section-header">📥 1. نقل البيانات وتوحيد نماذج القواعد (Data Pipeline & Grouping)</div>
-            """,
-            unsafe_allow_html=True,
-        )
+        with ic2:
+            st.markdown("**🔩 Column 2 (C₂)**")
+            P2 = S.number_input("Service Load P₂ (ton)", "tcf_P2", min_value=1.0, max_value=3000.0, step=5.0)
+            c2 = S.number_input("c₂ — parallel (cm)", "tcf_c2", min_value=15, max_value=300, step=5)
+            b2 = S.number_input("b₂ — perpendicular (cm)", "tcf_b2", min_value=15, max_value=300, step=5)
 
-        stat_col1, stat_col2 = st.columns([3, 1])
-        with stat_col1:
-            if b_data["has_imported"]:
-                st.success(
-                    f"✅ **تم استيراد ردود الأفعال القصوى وأبعاد ومواقع الأعمدة بنجاح من Module 1 (Flat Slabs)!**\n\n"
-                    f"إجمالي عدد الأعمدة في المسقط العام: **{len(cols_list)} عمود**."
-                )
-            else:
-                st.info(
-                    f"ℹ️ **المسقط الافتراضي:** لم يتم تشغيل Module 1 في الجلسة الحالية، تم تحميل نموذج مسقط قياسي للمبنى ({len(cols_list)} عمود).\n"
-                    f"يمكنك تشغيل Module 1 لحساب كامل الأحمال بدقة، أو إدخال/تعديل الأحمال أدناه مباشرة."
-                )
+        with ic3:
+            st.markdown("**🌱 Soil & Materials**")
+            S_dist = S.number_input("Spacing S (m)", "tcf_S", min_value=0.5, max_value=30.0, step=0.25)
+            q_net = S.number_input("q_all,net (kg/cm²)", "tcf_q_net", min_value=0.5, max_value=5.0, step=0.1)
+            Fcu = S.number_input("Fcu (kg/cm²)", "tcf_Fcu", min_value=150, max_value=600, step=25)
+            Fy = S.number_input("Fy (kg/cm²)", "tcf_Fy", min_value=2000, max_value=6000, step=200)
+            cover = S.number_input("Cover (cm)", "tcf_cover", min_value=3, max_value=15, step=1)
+            Phi = S.selectbox("Main Bar Φ (mm)", "tcf_Phi_index", options=[12, 16, 18, 22, 25])
 
-        with stat_col2:
-            if st.button("🔄 مزامنة واستيراد من Module 1", use_container_width=True, key="btn_resync_mod1"):
-                st.rerun()
+    f1_quick = design_isolated_footing_model("F1", "C1", "C1", P1 * 1.5, c1, b1, q_net, Fcu, Fy, cover, Phi)
+    f2_quick = design_isolated_footing_model("F2", "C2", "C2", P2 * 1.5, c2, b2, q_net, Fcu, Fy, cover, Phi)
 
-        # 2. Material & Soil Properties Expander
-        with st.expander("🌱 Soil & Material Properties (مدخلات التربة وخواص المواد والخرسانة)", expanded=True):
-            mc1, mc2, mc3, mc4, mc5 = st.columns(5)
-            with mc1:
-                q_net = S.number_input("q_all,net (kg/cm²)", "tcf_q_net", min_value=0.5, max_value=5.0, step=0.1)
-                st.caption("1.5 kg/cm² = 15 t/m²")
-            with mc2:
-                Fcu = S.number_input("Fcu (kg/cm²)", "tcf_Fcu", min_value=150, max_value=600, step=25)
-            with mc3:
-                Fy = S.number_input("Fy (kg/cm²)", "tcf_Fy", min_value=2000, max_value=6000, step=200)
-            with mc4:
-                cover = S.number_input("Cover (cm)", "tcf_cover", min_value=3, max_value=15, step=1)
-            with mc5:
-                Phi = S.selectbox("Main Rebar Φ (mm)", "tcf_Phi_index", options=[12, 16, 18, 22, 25])
+    clr_quick = S_dist - (f1_quick["L_cm"] / 200.0 + f2_quick["L_cm"] / 200.0)
+    mode_q = "isolated" if clr_quick >= 0.15 else "combined"
 
-        # 3. Governing Loads by Type Expander (Pu total int / edge / corner)
-        with st.expander("🔩 Governing Column Loads from Module 1 (ردود الأفعال القصوى للأعمدة)", expanded=True):
-            gc1, gc2, gc3, gc4 = st.columns(4)
-            with gc1:
-                st.markdown("**🔹 عمود الركن (C₁)**")
-                Pu1_val = st.number_input("P_u1 Total (ton)", min_value=1.0, max_value=3000.0,
-                                          value=float(b_data["pu_corner"]), step=2.5, key="inp_pu_corner")
-                st.caption(f"= {Pu1_val*9.80665:.1f} kN")
-            with gc2:
-                st.markdown("**🔹 العمود الجانبي (C₂)**")
-                Pu2_val = st.number_input("P_u2 Total (ton)", min_value=1.0, max_value=3000.0,
-                                          value=float(b_data["pu_edge"]), step=2.5, key="inp_pu_edge")
-                st.caption(f"= {Pu2_val*9.80665:.1f} kN")
-            with gc3:
-                st.markdown("**🔹 العمود الداخلي (C₃)**")
-                Pu3_val = st.number_input("P_u3 Total (ton)", min_value=1.0, max_value=3000.0,
-                                          value=float(b_data["pu_int"]), step=2.5, key="inp_pu_int")
-                st.caption(f"= {Pu3_val*9.80665:.1f} kN")
-            with gc4:
-                st.markdown("**📐 أبعاد الأعمدة (c × b)**")
-                col_c = st.number_input("عمق العمود c (cm)", min_value=20, max_value=300, value=int(b_data["tc"]), step=5, key="inp_col_c")
-                col_b = st.number_input("عرض العمود b (cm)", min_value=20, max_value=300, value=int(b_data["bc"]), step=5, key="inp_col_b")
-
-        # Design the 3 Typical Isolated Footing Models: F1, F2, F3
-        F1 = design_isolated_footing_model("F1", "قاعدة ركن", "C1", Pu1_val, col_c, col_b, q_net, Fcu, Fy, cover, Phi)
-        F2 = design_isolated_footing_model("F2", "قاعدة جانبية", "C2", Pu2_val, col_c, col_b, q_net, Fcu, Fy, cover, Phi)
-        F3 = design_isolated_footing_model("F3", "قاعدة داخلية", "C3", Pu3_val, col_c, col_b, q_net, Fcu, Fy, cover, Phi)
-
-        footings_map = {
-            "Corner": F1,
-            "Edge": F2,
-            "Interior": F3,
-        }
-
-        # 4. Clearance & Overlap Engine Execution
-        overlap_res = check_building_clearances_and_overlaps(cols_list, footings_map)
-        has_overlap = overlap_res["has_overlap"]
-
-        combined_models = []
-        if has_overlap:
-            cf_counter = 1
-            for p in overlap_res["overlapping_pairs"]:
-                cf_obj = design_combined_footing_model(
-                    f"comb-{cf_counter}",
-                    p["col_A"],
-                    p["col_B"],
-                    p["spacing_m"],
-                    q_net,
-                    Fcu,
-                    Fy,
-                    cover,
-                    Phi,
-                )
-                combined_models.append(cf_obj)
-                cf_counter += 1
-
-        # ── 5. ALERT BANNER ───────────────────────────────────────────────────
-        if has_overlap:
-            st.markdown(
-                """
-                <div style="background:#fee2e2; border:2px solid #ef4444; border-radius:12px; padding:18px 24px; margin: 16px 0 20px 0;">
-                    <span style="font-size:26px;">🚨</span>
-                    <b style="font-size:20px; color:#991b1b;">تنبيه إنشائي:</b>
-                    <span style="font-size:18px; color:#7f1d1d; font-weight:700;">
-                    القواعد المحددة بالخط الأخضر المتقطع هي قواعد متداخلة (المسافة الصافية Clearance &lt; 0.15 م)،
-                    وسيتم تصميمها تلقائياً بنظام القواعد المشتركة (Combined Footings).
-                    </span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(
-                """
-                <div style="background:#dcfce7; border:2px solid #22c55e; border-radius:12px; padding:18px 24px; margin: 16px 0 20px 0;">
-                    <span style="font-size:26px;">✅</span>
-                    <b style="font-size:20px; color:#166534;">النظام الإنشائي مستقر:</b>
-                    <span style="font-size:18px; color:#14532d; font-weight:700;">
-                    كامل النظام الإنشائي للأساسات مستقر كقواعد منفصلة ولا يوجد أي تداخل خرساني
-                    (جميع المسافات الصافية Clearance &ge; 0.15 م).
-                    </span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        # ── 6. FOUNDATION GENERAL LAYOUT PLAN ─────────────────────────────────
-        with st.expander("📐 Foundation General Layout Plan (المسقط الأفقي العام للقواعد وفحص التداخل)", expanded=False, key="m7_plan_exp", on_change="rerun"):
-            if st.session_state.get("m7_plan_exp", False):
-                fig_plan = draw_foundation_layout_plan(cols_list, footings_map, overlap_res, combined_models)
-                st.pyplot(fig_plan, use_container_width=True)
-
-                buf_p = io.BytesIO()
-                fig_plan.savefig(buf_p, format="png", bbox_inches="tight", dpi=250)
-                buf_p.seek(0)
-                st.download_button(
-                    "📥 Download Foundation General Layout Plan (High-Res PNG)",
-                    buf_p.getvalue(),
-                    file_name="ECP203_Building_Foundations_Plan.png",
-                    mime="image/png",
-                    use_container_width=True,
-                    key="btn_dl_bld_plan",
-                )
-                plt.close(fig_plan)
-            else:
-                st.info("💡 انقر لتوسيع هذا القسم وتوليد المسقط الأفقي العام لأساسات المبنى وفحص التداخل الخرساني (Lazy Loading).")
-
-        # ── 7. DYNAMIC STREAMLIT TABS ─────────────────────────────────────────
-        st.markdown("---")
-        st.markdown(
-            """
-            <div class="section-header">📋 جداول التصميم والمخرجات الإنشائية (Foundation Schedules & Design Outputs)</div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        if has_overlap:
-            tab_iso, tab_comb = st.tabs([
-                "🔹 Isolated Footings (تصميم القواعد المنفصلة)",
-                "🔸 Combined Footings (تصميم القواعد المشتركة)",
-            ])
-        else:
-            tab_iso, = st.tabs([
-                "🔹 Isolated Footings (تصميم القواعد المنفصلة)",
-            ])
-
-        # ── TAB 1: UNIFIED FOOTINGS SCHEDULE (ISOLATED + COMBINED) ───────────
-        with tab_iso:
-            st.markdown("#### 📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)")
-
-            unified_schedule_data = []
-            for f in [F1, F2, F3]:
-                pc_L = f["L_cm"] + 40
-                pc_B = f["B_cm"] + 40
-                unified_schedule_data.append({
-                    "نموذج القاعدة (Model)": f["model_name"],
-                    "الأعمدة المرتكزة (Columns)": f["supported_col_str"],
-                    "أقصى حمل تصميمي Pu (ton)": f"{f['Pu_ton']:.2f} ton",
-                    "أبعاد المسلحة R.C. (cm)": f"{f['L_cm']} × {f['B_cm']} × {f['t_cm']}",
-                    "أبعاد العادية P.C. (cm)": f"{pc_L} × {pc_B} × 20 (نظافة)",
-                    "التسليح السفلي (Bottom RFT)": f"فرش: {f['rft_long_str']} | غطاء: {f['rft_short_str']}",
-                    "التسليح العلوي الرئيسي (Top RFT)": "-" if f["t_cm"] < 80 else f["top_rft_str"],
-                    "طول التماسك / الرفارف (Details)": f"Ld = {f['Ld_str']}",
-                    "حالة التحقق الإنشائي (Status)": f["status_str"],
-                })
-
-            if has_overlap:
-                for cf in combined_models:
-                    cf_pc_L = cf["Lc_cm"] + 40
-                    cf_pc_B = cf["Bc_cm"] + 40
-                    unified_schedule_data.append({
-                        "نموذج القاعدة (Model)": f"{cf['name']} (مشتركة)",
-                        "الأعمدة المرتكزة (Columns)": cf["supported_cols"],
-                        "أقصى حمل تصميمي Pu (ton)": f"Ru = {cf['Ru_ton']:.2f} ton",
-                        "أبعاد المسلحة R.C. (cm)": f"{cf['Lc_cm']} × {cf['Bc_cm']} × {cf['tc_cm']}",
-                        "أبعاد العادية P.C. (cm)": f"{cf_pc_L} × {cf_pc_B} × 20 (نظافة)",
-                        "التسليح السفلي (Bottom RFT)": f"طولي: {cf['rft_bot_str']} | عرضي: {cf['rft_trans_str']}",
-                        "التسليح العلوي الرئيسي (Top RFT)": f"علوي رئيسي: {cf['rft_top_str']} (-M={cf['M_top_tm']:.2f} t·m)",
-                        "طول التماسك / الرفارف (Details)": f"رفارف: {cf['overhangs_str']}",
-                        "حالة التحقق الإنشائي (Status)": cf["status_str"],
-                    })
-
-            unified_df = pd.DataFrame(unified_schedule_data)
-            render_styled_table(unified_df)
-
-            # Export Excel & CSV
-            csv_tcf_data = unified_df.to_csv(index=False).encode('utf-8-sig')
-            excel_tcf_bytes = safe_to_excel_bytes(unified_df, sheet_name='Footings_Schedule')
-
-            tcf_c1, tcf_c2 = st.columns(2)
-            with tcf_c1:
-                if excel_tcf_bytes is not None:
-                    st.download_button(
-                        label="📊 تصدير جدول نماذج القواعد الموحد (Excel .xlsx)",
-                        data=excel_tcf_bytes,
-                        file_name="Unified_Building_Footings_Schedule.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True,
-                        key="btn_dl_unified_excel_tcf",
-                    )
-                else:
-                    st.download_button(
-                        label="📊 تصدير جدول نماذج القواعد الموحد (Excel .xlsx)",
-                        data=b"",
-                        disabled=True,
-                        help="يلزم تثبيت مكتبة openpyxl لتصدير Excel",
-                        use_container_width=True,
-                        key="btn_dl_unified_excel_tcf_dis",
-                    )
-            with tcf_c2:
-                st.download_button(
-                    label="📥 تصدير جدول نماذج القواعد الموحد (CSV)",
-                    data=csv_tcf_data,
-                    file_name="Unified_Building_Footings_Schedule.csv",
-                    mime="text/csv",
-                    use_container_width=True,
-                    key="btn_dl_unified_csv_tcf",
-                )
-
-            with st.expander("🔍 Detailed Stresses & Checks (تفاصيل التحققات الإنشائية والإجهادات)", expanded=False):
-                for f in [F1, F2, F3]:
-                    st.markdown(f"##### 📌 نموذج {f['model_name']} — {f['dims_str']}")
-                    c_det1, c_det2, c_det3, c_det4 = st.columns(4)
-                    c_det1.metric("إجهاد التلامس (q_act)", f"{f['q_act']:.2f} kg/cm²", f"المسموح: {f['q_net']:.2f}")
-                    c_det2.metric("إجهاد القص (One-Way Shear)", f"{f['tau_s']:.2f} kg/cm²", f"المسموح: {f['tau_s_allow']:.2f}")
-                    c_det3.metric("إجهاد الثقب (Punching)", f"{f['tau_p']:.2f} kg/cm²", f"المسموح: {f['tau_p_allow']:.2f}")
-                    c_det4.metric("أقصى عزم انحناء (Mu)", f"{f['M_L_tm']:.2f} t·m", f"d = {f['d_cm']:.1f} cm")
-                    st.markdown("---")
-
-        # ── TAB 2: COMBINED FOOTINGS STRUCTURAL DETAILS ──────────────────────
-        if has_overlap:
-            with tab_comb:
-                st.markdown("#### 🧱 تفاصيل وحسابات القواعد المشتركة الناتجة عن التداخل (Combined Footings Analysis)")
-
-                with st.expander("🔍 Combined Footings Bending & Details (تفاصيل العزوم والتصميم الإنشائي للقواعد المشتركة)", expanded=False):
-                    for cf in combined_models:
-                        st.markdown(f"##### 🧱 نموذج {cf['name']} ({cf['supported_cols']}) — البحر S = {cf['S_m']} m")
-                        cc1, cc2, cc3, cc4 = st.columns(4)
-                        cc1.metric("الحمل الإجمالي Ru", f"{cf['Ru_ton']:.1f} ton", f"P1={cf['P1_ton']:.1f}, P2={cf['P2_ton']:.1f}")
-                        cc2.metric("عزم علوي سالب (-M_top)", f"{cf['M_top_tm']:.2f} t·m", "تسليح علوي رئيسي")
-                        cc3.metric("عزم كابولي سفلي (+M_bot)", f"{cf['M_bot_max_tm']:.2f} t·m", "تسليح سفلي رئيسي")
-                        cc4.metric("إجهاد التربة الفعلي q_act", f"{cf['q_act']:.2f} kg/cm²", f"المسموح: {cf['q_net']:.2f}")
-                        st.markdown("---")
-
-        _render_structural_tutorial()
-
-    # ══════════════════════════════════════════════════════════════════════════
-    #  B. MANUAL QUICK TWO-COLUMN MODE (PRESERVED)
-    # ══════════════════════════════════════════════════════════════════════════
+    if mode_q == "isolated":
+        st.success(f"🟢 **النوع المحدد: قواعد منفصلة (ISOLATED FOOTINGS) — Clearance = {clr_quick*100:.0f} cm ≥ 15 cm ✅**")
     else:
-        st.markdown(
-            """
-            <div class="section-header">📥 مدخلات التصميم اليدوي السريع لقاعدتين (Manual Two-Column Inputs)</div>
-            """,
-            unsafe_allow_html=True,
+        st.warning(f"🟠 **النوع المحدد: قاعدة مشتركة (COMBINED FOOTING) — Clearance = {clr_quick*100:.0f} cm < 15 cm ⚠️**")
+
+    colA_dict = {"id": "C1", "tc": c1, "bc": b1, "pu_tot": P1 * 1.5}
+    colB_dict = {"id": "C2", "tc": c2, "bc": b2, "pu_tot": P2 * 1.5}
+
+    exp_quick_plan = st.expander("🖼️ Quick Plan Schematic (المسقط التخطيطي السريع)", expanded=False, key="tcf_quick_plan_exp", on_change="rerun")
+    with exp_quick_plan:
+        if st.session_state.get("tcf_quick_plan_exp", False):
+            if mode_q == "combined":
+                cf_quick = design_combined_footing_model("comb-1", colA_dict, colB_dict, S_dist, q_net, Fcu, Fy, cover, Phi)
+                fig_q = _draw_plan(
+                    "combined",
+                    S_m=S_dist,
+                    c1_cm=c1,
+                    b1_cm=b1,
+                    c2_cm=c2,
+                    b2_cm=b2,
+                    Lc_cm=cf_quick["Lc_cm"],
+                    Bc_cm=cf_quick["Bc_cm"],
+                    x1_cm=cf_quick["x1_cm"],
+                    x2_cm=cf_quick["x2_cm"],
+                    tc_cm=cf_quick.get("tc_cm"),
+                    rft_top_str=cf_quick.get("rft_top_str"),
+                    rft_bot_str=cf_quick.get("rft_bot_str"),
+                )
+            else:
+                fig_q = _draw_plan("isolated", S_m=S_dist, c1_cm=c1, b1_cm=b1, c2_cm=c2, b2_cm=b2,
+                                   L1_cm=f1_quick["L_cm"], B1_cm=f1_quick["B_cm"],
+                                   L2_cm=f2_quick["L_cm"], B2_cm=f2_quick["B_cm"])
+
+            st.pyplot(fig_q, use_container_width=True)
+            plt.close(fig_q)
+
+    # ── 3D INTEGRATED BIM & REBAR VIEWER (MANUAL MODE) ────────────────────
+    from modules.bim_3d_viewer import render_combined_footing_3d_bim_viewer, render_isolated_footing_3d_bim_viewer
+
+    if mode_q == "combined":
+        cf_quick = design_combined_footing_model("comb-1", colA_dict, colB_dict, S_dist, q_net, Fcu, Fy, cover, Phi)
+        q_sk_b64 = ""
+        try:
+            fig_q = _draw_plan(
+                "combined",
+                S_m=S_dist,
+                c1_cm=c1,
+                b1_cm=b1,
+                c2_cm=c2,
+                b2_cm=b2,
+                Lc_cm=cf_quick["Lc_cm"],
+                Bc_cm=cf_quick["Bc_cm"],
+                x1_cm=cf_quick["x1_cm"],
+                x2_cm=cf_quick["x2_cm"],
+                tc_cm=cf_quick.get("tc_cm"),
+                rft_top_str=cf_quick.get("rft_top_str"),
+                rft_bot_str=cf_quick.get("rft_bot_str"),
+            )
+            buf_q = io.BytesIO()
+            fig_q.savefig(buf_q, format="png", bbox_inches="tight", dpi=130)
+            buf_q.seek(0)
+            q_sk_b64 = base64.b64encode(buf_q.read()).decode("utf-8")
+            plt.close(fig_q)
+        except Exception:
+            q_sk_b64 = ""
+
+        render_combined_footing_3d_bim_viewer(
+            Lc_m=cf_quick["Lc_cm"] / 100.0,
+            Bc_m=cf_quick["Bc_cm"] / 100.0,
+            tc_cm=cf_quick["tc_cm"],
+            c1_cm=c1,
+            b1_cm=b1,
+            P1_ton=P1,
+            c2_cm=c2,
+            b2_cm=b2,
+            P2_ton=P2,
+            S_m=S_dist,
+            x1_m=cf_quick["x1_cm"] / 100.0,
+            x2_m=cf_quick["x2_cm"] / 100.0,
+            Phi_top=cf_quick.get("Phi_mm", Phi),
+            n_top=cf_quick.get("n_top_total", 8),
+            Phi_bot=cf_quick.get("Phi_mm", Phi),
+            n_bot=cf_quick.get("n_bot_total", 8),
+            q_net=q_net,
+            q_act=cf_quick["q_act"],
+            fcu=Fcu,
+            fy=Fy,
+            layout_sketch_b64=q_sk_b64,
+            cf_id="CF-Quick",
+        )
+    else:
+        q_sk_b64 = ""
+        try:
+            fig_q = _draw_plan(
+                "isolated",
+                S_m=S_dist,
+                c1_cm=c1,
+                b1_cm=b1,
+                c2_cm=c2,
+                b2_cm=b2,
+                L1_cm=f1_quick["L_cm"],
+                B1_cm=f1_quick["B_cm"],
+                L2_cm=f2_quick["L_cm"],
+                B2_cm=f2_quick["B_cm"],
+            )
+            buf_q = io.BytesIO()
+            fig_q.savefig(buf_q, format="png", bbox_inches="tight", dpi=130)
+            buf_q.seek(0)
+            q_sk_b64 = base64.b64encode(buf_q.read()).decode("utf-8")
+            plt.close(fig_q)
+        except Exception:
+            q_sk_b64 = ""
+
+        render_isolated_footing_3d_bim_viewer(
+            L_rc=f1_quick["L_cm"] / 100.0,
+            B_rc=f1_quick["B_cm"] / 100.0,
+            t_rc=f1_quick["t_cm"] / 100.0,
+            col_c=c1 / 100.0,
+            col_b=b1 / 100.0,
+            phi_long=Phi,
+            phi_short=Phi,
+            n_long=int(f1_quick.get("n_long", 6)),
+            n_short=int(f1_quick.get("n_short", 6)),
+            q_net=q_net,
+            q_act=f1_quick["q_act"],
+            pu_ton=P1 * 1.5,
+            fcu=Fcu,
+            fy=Fy,
+            layout_sketch_b64=q_sk_b64,
+            ftg_name="F1-Quick",
         )
 
-        with st.expander("📝 Column & Soil Data (بيانات الأعمدة والتربة)", expanded=True):
-            ic1, ic2, ic3 = st.columns(3)
-            with ic1:
-                st.markdown("**🔩 Column 1 (C₁)**")
-                P1 = S.number_input("Service Load P₁ (ton)", "tcf_P1", min_value=1.0, max_value=3000.0, step=5.0)
-                c1 = S.number_input("c₁ — parallel (cm)", "tcf_c1", min_value=15, max_value=300, step=5)
-                b1 = S.number_input("b₁ — perpendicular (cm)", "tcf_b1", min_value=15, max_value=300, step=5)
-
-            with ic2:
-                st.markdown("**🔩 Column 2 (C₂)**")
-                P2 = S.number_input("Service Load P₂ (ton)", "tcf_P2", min_value=1.0, max_value=3000.0, step=5.0)
-                c2 = S.number_input("c₂ — parallel (cm)", "tcf_c2", min_value=15, max_value=300, step=5)
-                b2 = S.number_input("b₂ — perpendicular (cm)", "tcf_b2", min_value=15, max_value=300, step=5)
-
-            with ic3:
-                st.markdown("**🌱 Soil & Materials**")
-                S_dist = S.number_input("Spacing S (m)", "tcf_S", min_value=0.5, max_value=30.0, step=0.25)
-                q_net = S.number_input("q_all,net (kg/cm²)", "tcf_q_net", min_value=0.5, max_value=5.0, step=0.1)
-                Fcu = S.number_input("Fcu (kg/cm²)", "tcf_Fcu", min_value=150, max_value=600, step=25)
-                Fy = S.number_input("Fy (kg/cm²)", "tcf_Fy", min_value=2000, max_value=6000, step=200)
-                cover = S.number_input("Cover (cm)", "tcf_cover", min_value=3, max_value=15, step=1)
-                Phi = S.selectbox("Main Bar Φ (mm)", "tcf_Phi_index", options=[12, 16, 18, 22, 25])
-
-        f1_quick = design_isolated_footing_model("F1", "C1", "C1", P1 * 1.5, c1, b1, q_net, Fcu, Fy, cover, Phi)
-        f2_quick = design_isolated_footing_model("F2", "C2", "C2", P2 * 1.5, c2, b2, q_net, Fcu, Fy, cover, Phi)
-
-        clr_quick = S_dist - (f1_quick["L_cm"] / 200.0 + f2_quick["L_cm"] / 200.0)
-        mode_q = "isolated" if clr_quick >= 0.15 else "combined"
-
-        if mode_q == "isolated":
-            st.success(f"🟢 **النوع المحدد: قواعد منفصلة (ISOLATED FOOTINGS) — Clearance = {clr_quick*100:.0f} cm ≥ 15 cm ✅**")
-        else:
-            st.warning(f"🟠 **النوع المحدد: قاعدة مشتركة (COMBINED FOOTING) — Clearance = {clr_quick*100:.0f} cm < 15 cm ⚠️**")
-
-        colA_dict = {"id": "C1", "tc": c1, "bc": b1, "pu_tot": P1 * 1.5}
-        colB_dict = {"id": "C2", "tc": c2, "bc": b2, "pu_tot": P2 * 1.5}
-
-        exp_quick_plan = st.expander("🖼️ Quick Plan Schematic (المسقط التخطيطي السريع)", expanded=False, key="tcf_quick_plan_exp", on_change="rerun")
-        with exp_quick_plan:
-            if st.session_state.get("tcf_quick_plan_exp", False):
-                if mode_q == "combined":
-                    cf_quick = design_combined_footing_model("comb-1", colA_dict, colB_dict, S_dist, q_net, Fcu, Fy, cover, Phi)
-                    fig_q = _draw_plan("combined", S_m=S_dist, c1_cm=c1, b1_cm=b1, c2_cm=c2, b2_cm=b2,
-                                       Lc_cm=cf_quick["Lc_cm"], Bc_cm=cf_quick["Bc_cm"],
-                                       x1_cm=cf_quick["x1_cm"], x2_cm=cf_quick["x2_cm"])
-                else:
-                    fig_q = _draw_plan("isolated", S_m=S_dist, c1_cm=c1, b1_cm=b1, c2_cm=c2, b2_cm=b2,
-                                       L1_cm=f1_quick["L_cm"], B1_cm=f1_quick["B_cm"],
-                                       L2_cm=f2_quick["L_cm"], B2_cm=f2_quick["B_cm"])
-
-                st.pyplot(fig_q, use_container_width=True)
-                plt.close(fig_q)
-            else:
-                st.info("💡 انقر لعرض المسقط التخطيطي السريع (Quick Plan Schematic).")
-
-        _render_structural_tutorial()
+    _render_structural_tutorial()

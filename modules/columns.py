@@ -631,6 +631,8 @@ def render():
     st.markdown('<div class="section-header">🏛️ Module 2 – Rectangular Column Design (ECP 203) (تصميم الأعمدة المستطيلة)</div>',
                 unsafe_allow_html=True)
 
+    prefix = S.get_safe_profile_filename_prefix()
+
     # ── INPUT FORM ──────────────────────────────────────────────────────────
     st.markdown(
         """
@@ -904,6 +906,50 @@ def render():
     cement_bags_col = int(round(vol_conc_m3_col * 7.0))
     gravel_m3_col = vol_conc_m3_col * 0.80
     sand_m3_col = vol_conc_m3_col * 0.40
+
+    # ── 🏢 3D Integrated Structural BIM & Rebar Viewer (عارض النماذج الإنشائية ثلاثي الأبعاد والحديد) ──
+    _cur_prefix = locals().get("prefix") or S.get_safe_profile_filename_prefix()
+    col_sketch_b64 = locals().get("img_col_b64") or st.session_state.get(f"{_cur_prefix}col_sketch_b64", "")
+    if not col_sketch_b64 or len(col_sketch_b64) < 100:
+        try:
+            main_steel_str = f"{n_bars} Φ {Phi}"
+            stirrups_str   = f"{n_st_per_m} Φ {Phi_st} / m'"
+            fig_sk = draw_rectangular_column_output(
+                b=b, t=t_design,
+                main_steel_str=main_steel_str,
+                stirrups_str=stirrups_str,
+                Pu=Pu_ton, fcu=Fcu, fy=Fy, mu_percent=mu_provided,
+                n_bars=n_bars, phi_mm=Phi, phi_st_mm=Phi_st, n_st_per_m=n_st_per_m,
+                s_calc=S_calc, pu_cap=Pu_cap_t, cover=2.5, slender_str=slender_class, H_clear=H_clear,
+            )
+            buf_sk = io.BytesIO()
+            fig_sk.savefig(buf_sk, format="png", bbox_inches="tight", dpi=140)
+            buf_sk.seek(0)
+            col_sketch_b64 = "data:image/png;base64," + base64.b64encode(buf_sk.getvalue()).decode("utf-8")
+            st.session_state[f"{_cur_prefix}col_sketch_b64"] = col_sketch_b64
+            plt.close(fig_sk)
+        except Exception:
+            col_sketch_b64 = ""
+
+    try:
+        from modules.bim_3d_viewer import render_column_3d_bim_viewer
+        render_column_3d_bim_viewer(
+            b_cm=b,
+            t_cm=t_design,
+            H_clear_cm=H_clear,
+            n_bars=n_bars,
+            phi_mm=Phi,
+            phi_st_mm=Phi_st,
+            n_st_per_m=n_st_per_m,
+            Pu_ton=Pu_ton,
+            fcu=Fcu,
+            fy=Fy,
+            layout_sketch_b64=col_sketch_b64,
+            col_id="C1",
+            height=740,
+        )
+    except Exception as _e_col_3d:
+        st.error(f"⚠️ خطأ أثناء تحميل العارض ثلاثي الأبعاد للعمود: {_e_col_3d}")
 
     st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
     with st.expander("📊 Bar Bending Schedule & BOQ Take-off (جدول حصر وتفريد حديد ومواد العمود)", expanded=True):

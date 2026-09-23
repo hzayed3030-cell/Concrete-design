@@ -1170,6 +1170,44 @@ def render_ground_beam_module():
     #  TAB 4: STEEL BAR BENDING SCHEDULE (BBS) & BOQ
     # ═══════════════════════════════════════════════════════════════════════════
     with tab_bbs:
+        # ── 3D INTEGRATED BIM & REBAR VIEWER ──────────────────────────────────
+        import base64
+        from modules.bim_3d_viewer import render_ground_beam_3d_bim_viewer
+
+        gb_sketch = st.session_state.get("m11_beam_sketch_b64", "")
+        if not gb_sketch:
+            try:
+                fig_sk = draw_ground_beam_cross_section(res)
+                buf_sk = io.BytesIO()
+                fig_sk.savefig(buf_sk, format="png", bbox_inches="tight", dpi=130)
+                buf_sk.seek(0)
+                gb_sketch = base64.b64encode(buf_sk.read()).decode("utf-8")
+                st.session_state["m11_beam_sketch_b64"] = gb_sketch
+                plt.close(fig_sk)
+            except Exception:
+                gb_sketch = ""
+
+        render_ground_beam_3d_bim_viewer(
+            b_cm=res["b"],
+            t_cm=res["t"],
+            L_m=res["L"],
+            n_top=res["n_top"],
+            phi_top=res["phi_top"],
+            n_bot=res["n_bot"],
+            phi_bot=res["phi_bot"],
+            phi_st=res["phi_st"],
+            n_st_per_m=res["n_st_per_m"],
+            n_branches=res["n_branches"],
+            n_side=res.get("n_side", 0),
+            phi_side=res.get("phi_side", 10),
+            fcu=res.get("fcu", 250.0),
+            fy=res.get("fy", 4000.0),
+            Mu_tm=res.get("Mu", 0.0),
+            Qu_ton=res.get("Qu", 0.0),
+            layout_sketch_b64=gb_sketch,
+            beam_id="GB-1",
+        )
+
         st.markdown("<div style='font-size:17px; font-weight:800; color:#38bdf8; margin-bottom:8px;'>📊 جدول تفريد وحصر كميات حديد التسليح (Bar Bending Schedule)</div>", unsafe_allow_html=True)
         st.caption("ℹ️ تم حساب وزن المتر الطولي لكافة الأقطار بدقة متناهية طبقاً للمعادلة الكودية: **(Φ² / 162) kg/m**.")
 

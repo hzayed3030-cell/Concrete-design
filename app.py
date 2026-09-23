@@ -55,6 +55,7 @@ from modules.settings import (
     validate_new_project_module_selection,
     validate_batch_module_deletion,
     play_warning_sound,
+    play_strong_whistle_siren,
     play_system_delete_blocked_sound,
     get_deleted_modules_trash,
     soft_delete_module,
@@ -1516,6 +1517,69 @@ def render_profile_manager():
                                 Please select the Modules you want to open in this new Project. (يرجى اختيار الموديولات التي ترغب في تفعيلها وفتحها في هذا المشروع الجديد).
                             </div>
                         </div>
+                        <style>
+                        /* ── New Project Module Selection Checkbox Cards & Text Wrap (Compact) ── */
+                        [data-testid="stMainBlockContainer"] div[data-testid="stColumn"] > div[data-testid="stVerticalBlock"]:has(div[class*="st-key-chk_new_proj_"]) {
+                            gap: 4px !important;
+                        }
+                        [data-testid="stMainBlockContainer"] div[data-testid="stColumn"]:has(div[class*="st-key-chk_new_proj_"]) div[data-testid="stVerticalBlock"] {
+                            gap: 4px !important;
+                        }
+                        [data-testid="stMainBlockContainer"] div[class*="st-key-chk_new_proj_"] {
+                            background: rgba(15, 23, 42, 0.65) !important;
+                            border: 1.2px solid rgba(148, 163, 184, 0.25) !important;
+                            border-radius: 8px !important;
+                            padding: 4px 10px !important;
+                            margin-bottom: 4px !important;
+                            min-height: 38px !important;
+                            display: flex !important;
+                            align-items: center !important;
+                            box-sizing: border-box !important;
+                            transition: all 0.2s ease-in-out !important;
+                        }
+                        [data-testid="stMainBlockContainer"] div[class*="st-key-chk_new_proj_"]:hover {
+                            background: rgba(30, 27, 75, 0.75) !important;
+                            border-color: #818cf8 !important;
+                            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25) !important;
+                        }
+                        [data-testid="stMainBlockContainer"] div[class*="st-key-chk_new_proj_"] div[data-baseweb="checkbox"],
+                        [data-testid="stMainBlockContainer"] div[class*="st-key-chk_new_proj_"] label[data-baseweb="checkbox"] {
+                            margin: 0 !important;
+                            padding: 0 !important;
+                        }
+                        [data-testid="stMainBlockContainer"] div[class*="st-key-chk_new_proj_"] > label {
+                            display: flex !important;
+                            flex-direction: row !important;
+                            align-items: center !important;
+                            gap: 8px !important;
+                            width: 100% !important;
+                            margin: 0 !important;
+                            padding: 0 !important;
+                            cursor: pointer !important;
+                        }
+                        [data-testid="stMainBlockContainer"] div[class*="st-key-chk_new_proj_"] label div[data-testid="stMarkdownContainer"] {
+                            flex: 1 1 auto !important;
+                            min-width: 0 !important;
+                            width: 100% !important;
+                            white-space: normal !important;
+                            word-break: break-word !important;
+                            overflow-wrap: break-word !important;
+                        }
+                        [data-testid="stMainBlockContainer"] div[class*="st-key-chk_new_proj_"] label div[data-testid="stMarkdownContainer"] p,
+                        [data-testid="stMainBlockContainer"] div[class*="st-key-chk_new_proj_"] label span {
+                            white-space: normal !important;
+                            word-break: break-word !important;
+                            overflow-wrap: break-word !important;
+                            line-height: 1.24 !important;
+                            font-size: 12.8px !important;
+                            font-weight: 700 !important;
+                            color: #f1f5f9 !important;
+                            margin: 0 !important;
+                            padding: 0 !important;
+                            display: block !important;
+                            unicode-bidi: plaintext !important;
+                        }
+                        </style>
                         """,
                         unsafe_allow_html=True,
                     )
@@ -1534,7 +1598,7 @@ def render_profile_manager():
                             st.rerun()
 
                     # Grid of Module Checkboxes
-                    grid_del_cols = 3
+                    grid_del_cols = 2
                     del_cols = st.columns(grid_del_cols)
                     selected_module_indices = []
 
@@ -1612,9 +1676,9 @@ def render_profile_manager():
 
                     # 1. New Project Confirmation Card
                     selected_mods_html = "".join([
-                        f"""<li style="margin: 4px 0; color: #ffffff; font-size: 15px; display: flex; align-items: center; gap: 8px;">
-                            <span style="color: #4ade80; font-size: 17px;">✓</span>
-                            <span>{m['name']}</span>
+                        f"""<li style="margin: 3px 0; color: #ffffff; font-size: 13.5px; display: flex; align-items: center; gap: 8px; line-height: 1.25; word-break: break-word;">
+                            <span style="color: #4ade80; font-size: 16px; line-height: 1;">✓</span>
+                            <span style="flex: 1; word-break: break-word;">{m['name']}</span>
                         </li>"""
                         for m in ALL_MODULES if m["idx"] in chosen_indices
                     ])
@@ -1734,94 +1798,301 @@ def render_profile_manager():
     # ── Delete Confirmation Dialog (ENLARGED + WARNING BEEP) ───────────────
     if st.session_state.get("_profile_to_delete"):
         del_target = st.session_state["_profile_to_delete"]
-        # Trigger warning sound for project delete dialog
-        play_warning_sound()
+        # Trigger strong emergency warning whistle / siren before the confirmation message
+        if st.session_state.get("_play_strong_whistle_now", True):
+            play_strong_whistle_siren()
+            st.session_state["_play_strong_whistle_now"] = False
         st.markdown(
             f"""
-            <div style="background: linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #3f0a0a 100%); border: 3.5px solid #ef4444; border-radius: 14px; padding: 22px 26px; margin: 12px 0 16px 0; box-shadow: 0 10px 35px rgba(239, 68, 68, 0.45);">
+            <div dir="rtl" style="background: linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #3f0a0a 100%); border: 3.5px solid #ef4444; border-radius: 14px; padding: 22px 26px; margin: 12px 0 16px 0; box-shadow: 0 10px 35px rgba(239, 68, 68, 0.45); text-align: right;">
                 <div style="color: #ffffff; font-weight: 900; font-size: 24px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; border-bottom: 2px solid rgba(239, 68, 68, 0.6); padding-bottom: 10px;">
-                    <span style="font-size: 32px;">⚠️</span>
+                    <span style="font-size: 32px;">🚨</span>
                     <span>تأكيد حذف المشروع بالكامل — DELETE PROJECT CONFIRMATION</span>
                 </div>
-                <div style="font-size: 18px; color: #fee2e2; font-weight: 700; line-height: 1.6; margin-bottom: 12px;">
-                    هل أنت متأكد تماماً من رغبتك في حذف المشروع <b style="color: #fef08a; font-size: 21px; text-decoration: underline;">«{del_target}»</b> وجميع بياناته وموديولاته؟
+                <div style="font-size: 20px; color: #fef08a; font-weight: 900; line-height: 1.7; margin-bottom: 10px;">
+                    ⚠️ سيتم حذف المشروع بالكامل بجميع البيانات والموديولات  !
                 </div>
-                <div style="background: rgba(0, 0, 0, 0.35); border: 1.5px solid rgba(254, 202, 202, 0.25); border-radius: 8px; padding: 10px 16px; color: #fca5a5; font-size: 15px; font-weight: 700;">
+                <div style="font-size: 17px; color: #fee2e2; font-weight: 700; line-height: 1.6; margin-bottom: 12px;">
+                    المشروع المستهدف بالحذف: <b style="color: #ffffff; font-size: 20px; text-decoration: underline;">«{del_target}»</b>
+                </div>
+                <div style="background: rgba(0, 0, 0, 0.45); border: 1.5px solid rgba(254, 202, 202, 0.3); border-radius: 8px; padding: 12px 18px; color: #fca5a5; font-size: 15px; font-weight: 700;">
                     🚨 <b>تحذير:</b> سيتم حذف ملفات المشروع وجميع الحسابات والتصميمات الخاصة به بشكل نهائي.
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-        cd1, cd2, _ = st.columns([1.6, 1.6, 4.8])
-        with cd1:
-            if st.button("🗑️ نعم، احذف المشروع", key=f"btn_confirm_del_proj_{del_target}", use_container_width=True, type="primary"):
+
+        col_in_sure, col_btn_sure, col_btn_cancel = st.columns([3.4, 2.2, 1.4])
+        with col_in_sure:
+            sure_text = st.text_input(
+                'اكتب العبارة "I am sure" لتأكيد حذف المشروع:',
+                key=f"input_sure_del_proj_{del_target}",
+                placeholder="I am sure",
+                help="اكتب العبارة بدقة لتفعيل زر حذف المشروع النهائي",
+            )
+        is_sure_matched = (sure_text or "").strip().lower() == "i am sure"
+
+        with col_btn_sure:
+            st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+            if st.button(
+                "🗑️ نعم، احذف المشروع",
+                key=f"btn_confirm_del_proj_{del_target}",
+                use_container_width=True,
+                type="primary",
+                disabled=not is_sure_matched,
+            ):
                 delete_project(del_target)
                 st.session_state["_profile_to_delete"] = None
-                st.success(f"✅ تم حذف المشروع «{del_target}» بنجاح.")
+                st.session_state.pop("_play_strong_whistle_now", None)
+                st.session_state.pop(f"input_sure_del_proj_{del_target}", None)
+                st.success(f"✅ تم حذف المشروع «{del_target}» بالكامل بنجاح.")
                 st.rerun()
-        with cd2:
+
+        with col_btn_cancel:
+            st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
             if st.button("❌ تراجع / إلغاء", key=f"btn_cancel_del_proj_{del_target}", use_container_width=True):
                 st.session_state["_profile_to_delete"] = None
+                st.session_state.pop("_play_strong_whistle_now", None)
+                st.session_state.pop(f"input_sure_del_proj_{del_target}", None)
                 st.rerun()
+
+        if not is_sure_matched:
+            st.caption("💡 اكتب **I am sure** في الحقل أعلاه لتفعيل زر الحذف النهائي للمشروع.")
+
         st.markdown("<hr style='margin:6px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 
-    # ── Compact Projects List ───────────────────────────────────────────────
-    st.markdown(
-        "<div style='margin:8px 0 6px 0; font-weight: 800; font-size: 18px; color: #e2e8f0;'>📋 قائمة المشاريع المسجلة:</div>",
-        unsafe_allow_html=True,
+    # ── CSS for Project Manager: Active Project Card (Green Theme) & Saved Projects Directory ─────────
+    render_custom_html(
+        """
+        <style>
+        /* ── Top Pinned Active Project Card (Calm Light Mint Green Theme) ── */
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-active) {
+            border: 2.5px solid #059669 !important;
+            border-radius: 14px !important;
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 45%, #bbf7d0 100%) !important;
+            box-shadow: 0 6px 24px rgba(5, 150, 105, 0.20), 0 0 14px rgba(16, 185, 129, 0.12) !important;
+            padding: 14px 18px 16px 18px !important;
+            margin-bottom: 20px !important;
+            transition: all 0.25s ease-in-out !important;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-active):hover {
+            border-color: #047857 !important;
+            box-shadow: 0 8px 30px rgba(5, 150, 105, 0.32), 0 0 18px rgba(16, 185, 129, 0.22) !important;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-active) > div[data-testid="stVerticalBlock"] {
+            background: transparent !important;
+        }
+
+        /* Distinct styling for primary button inside Active Project Card */
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-active) button[kind="primary"] {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+            border: 1.5px solid #047857 !important;
+            color: #ffffff !important;
+            font-weight: 900 !important;
+            box-shadow: 0 2px 8px rgba(5, 150, 105, 0.30) !important;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-active) button[kind="primary"]:hover {
+            background: linear-gradient(135deg, #047857 0%, #064e3b 100%) !important;
+            box-shadow: 0 4px 14px rgba(5, 150, 105, 0.45) !important;
+        }
+
+        /* Distinct styling for secondary buttons and download button inside Active Project Card */
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-active) button[kind="secondary"],
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-active) [data-testid="stDownloadButton"] button {
+            background: #ffffff !important;
+            border: 1.5px solid #059669 !important;
+            color: #064e3b !important;
+            font-weight: 800 !important;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
+            transition: all 0.2s ease !important;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-active) button[kind="secondary"]:hover,
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-active) [data-testid="stDownloadButton"] button:hover {
+            background: #ecfdf5 !important;
+            border-color: #047857 !important;
+            color: #047857 !important;
+            box-shadow: 0 3px 10px rgba(5, 150, 105, 0.25) !important;
+        }
+
+        /* Distinct Delete Project button */
+        div[class*="st-key-btn_del_"] button {
+            border-color: #ef4444 !important;
+            color: #dc2626 !important;
+        }
+        div[class*="st-key-btn_del_"] button:hover {
+            background: #fef2f2 !important;
+            border-color: #b91c1c !important;
+            color: #b91c1c !important;
+            box-shadow: 0 3px 10px rgba(239, 68, 68, 0.25) !important;
+        }
+
+        /* ── Saved Projects Cards - Dark (Odd items) ── */
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-saved.project-box-dark),
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-saved):has(.project-box-dark) {
+            border: 1.8px solid rgba(148, 163, 184, 0.25) !important;
+            border-radius: 12px !important;
+            background: linear-gradient(135deg, #090d16 0%, #0f172a 60%, #1e293b 100%) !important;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.40) !important;
+            padding: 10px 14px !important;
+            margin-bottom: 8px !important;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-saved.project-box-dark):hover,
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-saved):has(.project-box-dark):hover {
+            border-color: #38bdf8 !important;
+            box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55), 0 0 14px rgba(56, 189, 248, 0.25) !important;
+        }
+
+        /* ── Saved Projects Cards - Light Gray (Even items) ── */
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-saved.project-box-light),
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-saved):has(.project-box-light) {
+            border: 1.8px solid rgba(15, 23, 42, 0.35) !important;
+            border-radius: 12px !important;
+            background: linear-gradient(135deg, #94a3b8 0%, #64748b 50%, #475569 100%) !important;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25) !important;
+            padding: 10px 14px !important;
+            margin-bottom: 8px !important;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-saved.project-box-light):hover,
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-saved):has(.project-box-light):hover {
+            border-color: #38bdf8 !important;
+            box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35), 0 0 14px rgba(56, 189, 248, 0.30) !important;
+        }
+
+        /* Ensure inner vertical block doesn't set conflicting background */
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-saved) > div[data-testid="stVerticalBlock"] {
+            background: transparent !important;
+        }
+
+        /* ── Set Active Button Styling ── */
+        div[class*="st-key-btn_set_active_"] button {
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+            color: #ffffff !important;
+            border: 1.5px solid #38bdf8 !important;
+            font-weight: 800 !important;
+            font-size: 13.5px !important;
+            border-radius: 8px !important;
+            padding: 6px 10px !important;
+            transition: all 0.2s ease !important;
+        }
+        div[class*="st-key-btn_set_active_"] button:hover {
+            background: linear-gradient(135deg, #0369a1 0%, #075985 100%) !important;
+            border-color: #7dd3fc !important;
+            box-shadow: 0 3px 12px rgba(56, 189, 248, 0.45) !important;
+            transform: translateY(-1px) !important;
+        }
+        </style>
+        """
     )
 
     all_pnames = list(projects.keys())
-    # Sort active project to the very top (first)
-    if active_name in all_pnames:
-        sorted_pnames = [active_name] + [p for p in all_pnames if p != active_name]
+    if not all_pnames:
+        st.info("ℹ️ لا توجد مشاريع مسجلة حالياً. يمكنك إنشاء أول مشروع عبر زر «➕ مشروع جديد» بالأعلى.")
+        return
+
+    # Ensure active_name is valid and exists in projects
+    if active_name not in all_pnames and all_pnames:
+        active_name = all_pnames[0]
+        set_active_project(active_name)
+
+    ACCENT_PALETTE = [
+        {"accent": "#0ea5e9", "bg": "rgba(14, 165, 233, 0.12)", "border": "rgba(14, 165, 233, 0.40)", "tag": "#38bdf8"},  # Sky Cyan
+        {"accent": "#a855f7", "bg": "rgba(168, 85, 247, 0.12)", "border": "rgba(168, 85, 247, 0.40)", "tag": "#c084fc"},  # Purple
+        {"accent": "#f59e0b", "bg": "rgba(245, 158, 11, 0.12)", "border": "rgba(245, 158, 11, 0.40)", "tag": "#fbbf24"},  # Amber
+        {"accent": "#14b8a6", "bg": "rgba(20, 184, 166, 0.12)", "border": "rgba(20, 184, 166, 0.40)", "tag": "#2dd4bf"},  # Teal
+        {"accent": "#6366f1", "bg": "rgba(99, 102, 241, 0.12)", "border": "rgba(99, 102, 241, 0.40)", "tag": "#818cf8"},  # Indigo
+        {"accent": "#f43f5e", "bg": "rgba(244, 63, 94, 0.12)", "border": "rgba(244, 63, 94, 0.40)", "tag": "#fb7185"},   # Rose
+    ]
+
+    # ── SECTION 1: ACTIVE PROJECT (PINNED AT THE TOP IN GREEN) ──────────────
+    st.markdown(
+        "<div style='margin:10px 0 8px 0; font-weight: 800; font-size: 18px; color: #4ade80; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;'>"
+        "<span>🟢 المشروع الحالي النشط (Active Project):</span>"
+        "<span style='font-size: 12.5px; font-weight: 800; color: #4ade80; background: rgba(34, 197, 94, 0.15); padding: 3px 12px; border-radius: 8px; border: 1px solid rgba(34, 197, 94, 0.4);'>⭐ Pinned Active</span>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    pname = active_name
+    summary = get_project_summary(pname)
+    safe_pname = get_safe_project_filename_prefix(pname)
+    project_json_str = export_project_json(pname)
+    p_updated = summary.get("updated_at", "-")
+    p_last_used = summary.get("last_used_at", p_updated)
+    enabled_mods = get_project_enabled_modules(pname)
+
+    # Detect clone/copy count
+    copy_count = pname.count("(نسخة)")
+    if copy_count >= 2:
+        copy_badge_html = f'<span style="background: rgba(245, 158, 11, 0.22); color: #92400e; border: 1.5px solid #d97706; padding: 2px 9px; border-radius: 6px; font-size: 12px; font-weight: 800;">📋 نسخة مكررة ({copy_count})</span>'
+    elif copy_count == 1:
+        copy_badge_html = '<span style="background: rgba(245, 158, 11, 0.18); color: #b45309; border: 1.5px solid #d97706; padding: 2px 9px; border-radius: 6px; font-size: 12px; font-weight: 800;">📋 نسخة</span>'
     else:
-        sorted_pnames = all_pnames
+        copy_badge_html = ""
 
-    for pname in sorted_pnames:
-        summary = get_project_summary(pname)
-        is_active = (pname == active_name)
-        safe_pname = get_safe_project_filename_prefix(pname)
-        project_json_str = export_project_json(pname)
-        p_updated = summary.get("updated_at", "-")
-        enabled_mods = get_project_enabled_modules(pname)
+    # Modules badge
+    if len(enabled_mods) < len(ALL_MODULES):
+        short_names = ", ".join([ALL_MODULES[i]["short"] for i in enabled_mods if i in range(len(ALL_MODULES))])
+        custom_badge_html = f'<span style="background: rgba(245, 158, 11, 0.18); color: #b45309; border: 1.5px solid #f59e0b; padding: 3px 10px; border-radius: 14px; font-size: 12.5px; font-weight: 800;">🎛️ مخصص ({len(enabled_mods)}): {short_names}</span>'
+    else:
+        custom_badge_html = '<span style="background: rgba(2, 132, 199, 0.15); color: #0369a1; border: 1.5px solid #0284c7; padding: 3px 10px; border-radius: 14px; font-size: 12px; font-weight: 800;">🧩 كافة الموديولات (12)</span>'
 
-        if is_active:
-            card_border = "1.5px solid #38bdf8"
-            card_bg = "linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 58, 138, 0.3) 100%)"
-            card_shadow = "box-shadow: 0 2px 10px rgba(56, 189, 248, 0.18);"
-            title_color = "#38bdf8"
-            badge_html = """<span style="background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid #22c55e; padding: 2px 8px; border-radius: 6px; font-size: 13px; font-weight: 800;">🟢 النشط حالياً</span>"""
-        else:
-            card_border = "1px solid rgba(148, 163, 184, 0.18)"
-            card_bg = "linear-gradient(135deg, rgba(15, 23, 42, 0.85) 0%, rgba(30, 41, 59, 0.45) 100%)"
-            card_shadow = "box-shadow: 0 1px 6px rgba(0, 0, 0, 0.2);"
-            title_color = "#f1f5f9"
-            badge_html = """<span style="background: rgba(148, 163, 184, 0.12); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.25); padding: 2px 7px; border-radius: 6px; font-size: 12px; font-weight: 700;">📁 محفوظ</span>"""
+    p_last_used_clean = p_last_used[:16] if p_last_used and len(p_last_used) >= 16 else (p_last_used or "-")
+    p_updated_clean = p_updated[:16] if p_updated and len(p_updated) >= 16 else (p_updated or "-")
 
-        if len(enabled_mods) < len(ALL_MODULES):
-            short_names = ", ".join([ALL_MODULES[i]["short"] for i in enabled_mods if i in range(len(ALL_MODULES))])
-            custom_badge_html = f"""<span style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.35); padding: 2px 7px; border-radius: 6px; font-size: 12px; font-weight: 700;">🎛️ {short_names}</span>"""
-        else:
-            custom_badge_html = ""
+    last_used_pill_html = f'''<div style="color: #94a3b8; display: inline-flex; align-items: center; gap: 5px; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.85);">
+        <span style="font-weight: 700;">🕒 آخر تشغيل:</span>
+        <span style="font-weight: 800; font-family: monospace;">{p_last_used_clean}</span>
+    </div>'''
 
-        row_html = f"""<div style="background: {card_bg}; border: {card_border}; {card_shadow} border-radius: 8px; padding: 8px 14px; margin-bottom: 4px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <span style="font-size: 18px; font-weight: 800; color: {title_color};">📁 {pname}</span>
-                    {badge_html}
-                    {custom_badge_html}
+    if p_last_used_clean != p_updated_clean and p_updated_clean != "-":
+        updated_pill_html = f'''<div style="color: #94a3b8; display: inline-flex; align-items: center; gap: 5px; font-size: 13px; text-shadow: 0 1px 2px rgba(0,0,0,0.85);">
+            <span style="font-weight: 700;">✏️ آخر تعديل:</span>
+            <span style="font-weight: 800; font-family: monospace;">{p_updated_clean}</span>
+        </div>'''
+    else:
+        updated_pill_html = ""
+
+    with st.container(border=True):
+        row_html = f"""<div class="project-box-active">
+            <div style="
+                background: transparent;
+                border-radius: 8px;
+                border-right: 7px solid #059669;
+                padding: 4px 12px 10px 12px;
+                margin-bottom: 12px;
+                border-bottom: 1.5px solid rgba(5, 150, 105, 0.25);
+            ">
+                <!-- Top Row: Number Badge, Project Title, Copy Badge & Status Badges -->
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <span style="background: linear-gradient(135deg, #059669 0%, #047857 100%); color: #ffffff; font-weight: 900; font-size: 13.5px; padding: 3px 10px; border-radius: 6px; border: 1.5px solid #047857; letter-spacing: 0.5px;">★ المشروع النشط</span>
+                        <span style="font-size: 21px; font-weight: 900; color: #fde047; letter-spacing: 0.3px; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 0 1px rgba(0, 0, 0, 0.5);">⭐ 🏗️ {pname}</span>
+                        {copy_badge_html}
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <span style="background: rgba(5, 150, 105, 0.15); color: #065f46; border: 1.5px solid #059669; padding: 3px 12px; border-radius: 16px; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px;">🟢 المشروع النشط حالياً</span>
+                        {custom_badge_html}
+                    </div>
                 </div>
-                <div style="font-size: 13px; color: #94a3b8; font-weight: 600;">
-                    <span>🕒 آخر تعديل:</span>
-                    <span style="color: #cbd5e1; font-weight: 700;">{p_updated}</span>
+                <!-- Bottom Sub-Row: Timestamps & Activity Chips -->
+                <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-top: 4px; font-size: 12.5px;">
+                    {last_used_pill_html}
+                    {updated_pill_html}
                 </div>
             </div>
         </div>"""
         render_custom_html(row_html)
 
-        # Action buttons — Run, Modules Config, Delete Module, Restore Module, JSON Export, Clone, Delete Project
+        # Action buttons — Run, Rename, Modules Config, Delete Module, Restore Module, JSON Export, Clone, Delete Project
         trash_for_pname = get_deleted_modules_trash(pname)
         has_trash = len(trash_for_pname) > 0
 
@@ -1830,7 +2101,7 @@ def render_profile_manager():
             if st.button(
                 "🚀 تشغيل",
                 key=f"btn_run_{pname}",
-                type="primary" if is_active else "secondary",
+                type="primary",
                 use_container_width=True,
             ):
                 set_active_project(pname)
@@ -1864,7 +2135,6 @@ def render_profile_manager():
                 help=f"تخصيص الموديولات المتاحة لمشروع {pname}",
             ):
                 st.session_state[f"_show_mod_config_{pname}"] = not is_mod_open
-                # Close other drawers for this project
                 st.session_state[f"_show_rename_{pname}"] = False
                 st.session_state[f"_show_delete_mod_{pname}"] = False
                 st.session_state[f"_show_restore_mod_{pname}"] = False
@@ -1879,11 +2149,9 @@ def render_profile_manager():
                 help=f"حذف (soft delete) موديولات من مشروع {pname} مع إمكانية الاستعادة لاحقاً",
             ):
                 st.session_state[f"_show_delete_mod_{pname}"] = not is_del_mod_open
-                # Close other drawers for this project
                 st.session_state[f"_show_rename_{pname}"] = False
                 st.session_state[f"_show_mod_config_{pname}"] = False
                 st.session_state[f"_show_restore_mod_{pname}"] = False
-                # Clear any pending dialogs for this project
                 st.session_state.pop(f"_pending_batch_del_{pname}", None)
                 st.session_state.pop(f"_batch_warning_{pname}", None)
                 st.rerun()
@@ -1928,8 +2196,8 @@ def render_profile_manager():
                 use_container_width=True,
                 help=f"حذف مشروع {pname}",
             ):
-                play_warning_sound()
                 st.session_state["_profile_to_delete"] = pname
+                st.session_state["_play_strong_whistle_now"] = True
                 st.rerun()
 
         # ── Interactive Rename Project Drawer (Hide/Show) ───────────────────
@@ -2043,7 +2311,6 @@ def render_profile_manager():
 
             st.markdown("<hr style='margin:6px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 
-
         # ── Delete Modules Drawer (Checklist + Smart Dependency Validation + "I am sure" Confirmation) ──
         if st.session_state.get(f"_show_delete_mod_{pname}", False):
             with st.container(border=True):
@@ -2052,7 +2319,7 @@ def render_profile_manager():
                 # Available modules that are currently active (NOT in trash)
                 deletable_mods = [m for m in ALL_MODULES if m["idx"] not in deleted_idxs_del]
 
-                # ── Requirement 1: Large & Clear Informational Header on Linked Modules ──
+                # Large & Clear Informational Header on Linked Modules
                 links_map_html = (
                     f'<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #1e1b4b 0%, #2e1065 50%, #1e1b4b 100%); border: 2.5px solid #a855f7; border-radius: 12px; padding: 18px 24px; margin-bottom: 14px; box-shadow: 0 4px 20px rgba(168, 85, 247, 0.25);">'
                     f'<div style="font-weight: 900; font-size: 20px; color: #f5d0fe; display: flex; align-items: center; justify-content: flex-start; gap: 10px; margin-bottom: 12px; border-bottom: 1.5px solid rgba(216, 180, 254, 0.35); padding-bottom: 10px; direction: rtl; text-align: right;">'
@@ -2093,14 +2360,65 @@ def render_profile_manager():
                     pending_batch = st.session_state.get(f"_pending_batch_del_{pname}", None)
                     batch_warning = st.session_state.get(f"_batch_warning_{pname}", None)
 
-                    # ── Stage 1: Checklist of Available Modules ──
+                    # Stage 1: Checklist of Available Modules
                     if pending_batch is None and batch_warning is None:
                         st.markdown(
-                            "<div style='font-size: 15px; color: #cbd5e1; margin-bottom: 10px; font-weight: 700;'>حدد الموديولات التي ترغب في حذفها من المشروع (Checklist):</div>",
+                            """
+                            <div style='font-size: 15px; color: #cbd5e1; margin-bottom: 10px; font-weight: 700;'>حدد الموديولات التي ترغب في حذفها من المشروع (Checklist):</div>
+                            <style>
+                            [data-testid="stMainBlockContainer"] div[class*="st-key-chk_batch_del_"] {
+                                background: rgba(15, 23, 42, 0.65) !important;
+                                border: 1.2px solid rgba(148, 163, 184, 0.25) !important;
+                                border-radius: 10px !important;
+                                padding: 10px 14px !important;
+                                margin-bottom: 10px !important;
+                                min-height: 66px !important;
+                                display: flex !important;
+                                align-items: center !important;
+                                box-sizing: border-box !important;
+                                transition: all 0.2s ease-in-out !important;
+                            }
+                            [data-testid="stMainBlockContainer"] div[class*="st-key-chk_batch_del_"]:hover {
+                                background: rgba(69, 10, 10, 0.45) !important;
+                                border-color: #ef4444 !important;
+                                box-shadow: 0 4px 14px rgba(239, 68, 68, 0.25) !important;
+                            }
+                            [data-testid="stMainBlockContainer"] div[class*="st-key-chk_batch_del_"] > label {
+                                display: flex !important;
+                                flex-direction: row !important;
+                                align-items: flex-start !important;
+                                gap: 12px !important;
+                                width: 100% !important;
+                                margin: 0 !important;
+                                cursor: pointer !important;
+                            }
+                            [data-testid="stMainBlockContainer"] div[class*="st-key-chk_batch_del_"] label div[data-testid="stMarkdownContainer"] {
+                                flex: 1 1 auto !important;
+                                min-width: 0 !important;
+                                width: 100% !important;
+                                white-space: normal !important;
+                                word-break: break-word !important;
+                                overflow-wrap: break-word !important;
+                            }
+                            [data-testid="stMainBlockContainer"] div[class*="st-key-chk_batch_del_"] label div[data-testid="stMarkdownContainer"] p,
+                            [data-testid="stMainBlockContainer"] div[class*="st-key-chk_batch_del_"] label span {
+                                white-space: normal !important;
+                                word-break: break-word !important;
+                                overflow-wrap: break-word !important;
+                                line-height: 1.45 !important;
+                                font-size: 13.5px !important;
+                                font-weight: 700 !important;
+                                color: #f1f5f9 !important;
+                                margin: 0 !important;
+                                display: block !important;
+                                unicode-bidi: plaintext !important;
+                            }
+                            </style>
+                            """,
                             unsafe_allow_html=True,
                         )
                         selected_for_del = {}
-                        grid_del_cols = min(len(deletable_mods), 3)
+                        grid_del_cols = min(len(deletable_mods), 2)
                         del_cols = st.columns(grid_del_cols)
                         for ci, mod in enumerate(deletable_mods):
                             with del_cols[ci % grid_del_cols]:
@@ -2135,7 +2453,7 @@ def render_profile_manager():
                                 st.session_state[f"_show_delete_mod_{pname}"] = False
                                 st.rerun()
 
-                    # ── Stage 2a: Broken Dependency Warning (Blocked) ──
+                    # Stage 2a: Broken Dependency Warning (Blocked)
                     elif batch_warning is not None:
                         play_warning_sound()
                         viol_items_html = "".join([
@@ -2166,7 +2484,7 @@ def render_profile_manager():
                                 st.session_state.pop(f"_batch_warning_{pname}", None)
                                 st.rerun()
 
-                    # ── Stage 2b: Valid Selection -> "I am sure" Confirmation Dialog ──
+                    # Stage 2b: Valid Selection -> "I am sure" Confirmation Dialog
                     elif pending_batch is not None:
                         play_warning_sound()
                         indices_to_del = pending_batch["indices"]
@@ -2256,7 +2574,6 @@ def render_profile_manager():
 
             st.markdown("<hr style='margin:6px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 
-
         # ── Restore Module Drawer ────────────────────────────────────────────
         if st.session_state.get(f"_show_restore_mod_{pname}", False):
             with st.container(border=True):
@@ -2323,8 +2640,119 @@ def render_profile_manager():
 
             st.markdown("<hr style='margin:6px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 
-        st.markdown("<div style='margin-bottom: 4px;'></div>", unsafe_allow_html=True)
+    # ── SECTION 2: SAVED PROJECTS DIRECTORY (سائر المشروعات المحفوظة) ───────
+    other_pnames = [p for p in all_pnames if p != active_name]
 
+    st.markdown(
+        "<div style='margin:28px 0 10px 0; font-weight: 800; font-size: 18px; color: #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;'>"
+        "<span>📋 سائر المشروعات المحفوظة (Saved Projects Directory):</span>"
+        f"<span style='font-size: 13px; font-weight: 800; color: #38bdf8; background: rgba(56, 189, 248, 0.12); padding: 3px 12px; border-radius: 8px; border: 1px solid rgba(56, 189, 248, 0.3);'>📁 {len(other_pnames)} مشاريع محفوظة</span>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    if not other_pnames:
+        st.info("ℹ️ لا توجد مشاريع أخرى محفوظة حالياً. يمكنك إنشاء مشروع جديد من زر «➕ مشروع جديد» أعلاه.")
+    else:
+        for p_idx, s_pname in enumerate(other_pnames, 2):
+            s_summary = get_project_summary(s_pname)
+            is_odd = (p_idx % 2 == 1)
+            stripe_class = "project-box-dark" if is_odd else "project-box-light"
+            marker_class = f"project-box-saved {stripe_class}"
+            s_updated = s_summary.get("updated_at", "-")
+            s_last_used = s_summary.get("last_used_at", s_updated)
+            s_enabled_mods = get_project_enabled_modules(s_pname)
+
+            copy_count = s_pname.count("(نسخة)")
+            if copy_count >= 2:
+                copy_badge_html = f'<span style="background: rgba(245, 158, 11, 0.22); color: #fbbf24; border: 1.5px solid #f59e0b; padding: 2px 9px; border-radius: 6px; font-size: 12px; font-weight: 800;">📋 نسخة مكررة ({copy_count})</span>'
+            elif copy_count == 1:
+                copy_badge_html = '<span style="background: rgba(245, 158, 11, 0.18); color: #fde047; border: 1.5px solid rgba(245, 158, 11, 0.5); padding: 2px 9px; border-radius: 6px; font-size: 12px; font-weight: 800;">📋 نسخة</span>'
+            else:
+                copy_badge_html = ""
+
+            pal = ACCENT_PALETTE[(p_idx - 2) % len(ACCENT_PALETTE)]
+            panel_accent = pal["accent"]
+
+            if is_odd:
+                num_badge_bg = "rgba(15, 23, 42, 0.85)"
+                num_badge_color = pal["tag"]
+                num_badge_border = pal["accent"]
+                num_badge_text = f"#{p_idx:02d}"
+                title_color = "#f8fafc"
+                title_shadow = "0 2px 4px rgba(0,0,0,0.6)"
+                badge_html = f'<span style="background: rgba(148, 163, 184, 0.15); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3); padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700;">📁 محفوظ #{p_idx}</span>'
+            else:
+                num_badge_bg = "rgba(15, 23, 42, 0.90)"
+                num_badge_color = pal["tag"]
+                num_badge_border = pal["accent"]
+                num_badge_text = f"#{p_idx:02d}"
+                title_color = "#f8fafc"
+                title_shadow = "0 2px 4px rgba(15, 23, 42, 0.95), 0 0 3px rgba(0, 0, 0, 0.90)"
+                badge_html = f'<span style="background: rgba(15, 23, 42, 0.85); color: #f1f5f9; border: 1.5px solid #475569; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700;">📁 محفوظ #{p_idx}</span>'
+
+            if len(s_enabled_mods) < len(ALL_MODULES):
+                short_names = ", ".join([ALL_MODULES[i]["short"] for i in s_enabled_mods if i in range(len(ALL_MODULES))])
+                custom_badge_html = f'<span style="background: rgba(251, 191, 36, 0.2); color: #fbbf24; border: 1.5px solid #f59e0b; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 800;">🎛️ ({len(s_enabled_mods)}): {short_names}</span>'
+            else:
+                custom_badge_html = '<span style="background: rgba(56, 189, 248, 0.15); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.35); padding: 2px 8px; border-radius: 12px; font-size: 11.5px; font-weight: 700;">🧩 كافة الموديولات (12)</span>'
+
+            s_last_used_clean = s_last_used[:16] if s_last_used and len(s_last_used) >= 16 else (s_last_used or "-")
+            s_updated_clean = s_updated[:16] if s_updated and len(s_updated) >= 16 else (s_updated or "-")
+
+            last_used_pill_html = f'''<div style="color: #94a3b8; display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.85);">
+                <span style="font-weight: 700;">🕒 آخر تشغيل:</span>
+                <span style="font-weight: 800; font-family: monospace;">{s_last_used_clean}</span>
+            </div>'''
+
+            if s_last_used_clean != s_updated_clean and s_updated_clean != "-":
+                updated_pill_html = f'''<div style="color: #94a3b8; display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; text-shadow: 0 1px 2px rgba(0,0,0,0.85);">
+                    <span style="font-weight: 700;">✏️ آخر تعديل:</span>
+                    <span style="font-weight: 800; font-family: monospace;">{s_updated_clean}</span>
+                </div>'''
+            else:
+                updated_pill_html = ""
+
+            with st.container(border=True):
+                col_row_info, col_row_btn = st.columns([8.2, 1.8])
+                with col_row_info:
+                    row_html = f"""<div class="{marker_class}">
+                        <div style="
+                            background: transparent;
+                            border-radius: 8px;
+                            border-right: 6px solid {panel_accent};
+                            padding: 2px 10px 4px 10px;
+                        ">
+                            <!-- Top Row: Number Badge, Project Title, Copy Badge & Status Badges -->
+                            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 4px;">
+                                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                    <span style="background: {num_badge_bg}; color: {num_badge_color}; font-weight: 900; font-size: 12.5px; padding: 2px 8px; border-radius: 5px; border: 1.5px solid {num_badge_border};">{num_badge_text}</span>
+                                    <span style="font-size: 17px; font-weight: 800; color: {title_color}; letter-spacing: 0.3px; text-shadow: {title_shadow};">📁 {s_pname}</span>
+                                    {copy_badge_html}
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                                    {badge_html}
+                                    {custom_badge_html}
+                                </div>
+                            </div>
+                            <!-- Bottom Sub-Row: Timestamps & Activity Chips -->
+                            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px;">
+                                {last_used_pill_html}
+                                {updated_pill_html}
+                            </div>
+                        </div>
+                    </div>"""
+                    render_custom_html(row_html)
+                with col_row_btn:
+                    st.markdown("<div style='margin-top: 6px;'></div>", unsafe_allow_html=True)
+                    if st.button(
+                        "📌 تعيين كنشط",
+                        key=f"btn_set_active_{s_pname}",
+                        use_container_width=True,
+                        help=f"تعيين مشروع «{s_pname}» كمشروع نشط ليظهر بالأعلى وتتاح كافة أزراره",
+                    ):
+                        set_active_project(s_pname)
+                        st.rerun()
 
 
 # ── MAIN EXECUTION & SIDEBAR CONDITIONAL ROUTING ──────────────────────────────
@@ -2492,55 +2920,65 @@ else:
     # ── Render Top Profile Bar & Selected Module ──────────────────────────
     render_top_profile_bar()
 
-    if "Module 13" in module or "Standalone" in module or "standalone_flat_slab" in module:
+    mod_info = next((m for m in ALL_MODULES if m["name"] == module or m.get("short") == module), None)
+    mod_key = mod_info["key"] if mod_info else ""
+
+    if mod_key == "standalone_flat_slab" or "Module 13" in module or "standalone_flat_slab" in module:
         try:
             render_standalone_flat_slab()
         except Exception as ex:
             st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 13: {ex}")
             st.exception(ex)
-    elif "Integrated" in module or "Flat Slabs" in module or "Flat" in module or "Module 1" in module:
+    elif mod_key == "brick_survey" or "Module 12" in module or "brick_survey" in module or "طوب" in module or "المحارة" in module:
         try:
-            render_flat_slab()
+            render_brick_survey_module()
         except Exception as ex:
-            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 1: {ex}")
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 12: {ex}")
             st.exception(ex)
-    elif "Columns" in module or "الأعمدة" in module:
-        render_columns()
-    elif "Combined" in module or "Two-Column" in module or "Two" in module or "Module 7" in module:
-        render_two_col_footings()
-    elif "Module 10" in module or "diagonal_strap" in module or "ركن" in module or "المائل" in module:
-        try:
-            render_diagonal_strap_module()
-        except Exception as ex:
-            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 10: {ex}")
-            st.exception(ex)
-    elif "Module 11" in module or "ground_beam" in module or "الميدات" in module or "السملات" in module:
+    elif mod_key == "ground_beam" or "Module 11" in module or "ground_beam" in module or "الميدات" in module or "السملات" in module:
         try:
             render_ground_beam_module()
         except Exception as ex:
             st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 11: {ex}")
             st.exception(ex)
-    elif "Strap" in module or "Module 9" in module or "strap_footing" in module or "قواعد الشدادات" in module:
+    elif mod_key == "diagonal_strap_footing" or "Module 10" in module or "diagonal_strap" in module or "بشداد مائل" in module:
+        try:
+            render_diagonal_strap_module()
+        except Exception as ex:
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 10: {ex}")
+            st.exception(ex)
+    elif mod_key == "strap_footing" or "Module 9" in module or "strap_footing" in module or "قواعد الشدادات" in module:
         try:
             render_strap_footing_module()
         except Exception as ex:
             st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 9: {ex}")
             st.exception(ex)
-    elif "Footings" in module or "Isolated" in module or "القواعد" in module:
-        render_footings()
-    elif "Ground Slabs" in module or "الأرضية" in module:
-        render_ground_slab()
-    elif "Steel Rebar" in module or "Steel" in module or "اقطار" in module:
-        render_steel_bars()
-    elif "Quantity Survey" in module or "Survey" in module or "حصر" in module:
-        if "Brick" in module or "Plastering" in module or "Module 12" in module or "brick_survey" in module or "طوب" in module:
-            try:
-                render_brick_survey_module()
-            except Exception as ex:
-                st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 12: {ex}")
-                st.exception(ex)
-        else:
+    elif mod_key == "two_col_footings" or "Module 7" in module or "Two-Column" in module or "two_col_footings" in module or "مشتركة لعمودين" in module:
+        try:
+            render_two_col_footings()
+        except Exception as ex:
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 7: {ex}")
+            st.exception(ex)
+    elif mod_key == "concrete_survey" or "Module 6" in module or "concrete_survey" in module or ("Concrete" in module and "Survey" in module) or "حصر الخرسانات" in module:
+        try:
             render_concrete_survey()
+        except Exception as ex:
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 6: {ex}")
+            st.exception(ex)
+    elif mod_key == "steel_bars" or "Module 5" in module or "steel_bars" in module or "Steel Rebar" in module or "اقطار" in module:
+        render_steel_bars()
+    elif mod_key == "ground_slab" or "Module 4" in module or "ground_slab" in module or "Ground Slabs" in module or "الأرضية" in module:
+        render_ground_slab()
+    elif mod_key == "footings" or "Module 3" in module or "footings" in module or "Isolated Footings" in module or "المنفصلة" in module or ("القواعد" in module and "الشدادات" not in module and "مشتركة" not in module):
+        render_footings()
+    elif mod_key == "columns" or "Module 2" in module or "columns" in module or "Rectangular Columns" in module or "الأعمدة" in module:
+        render_columns()
+    elif mod_key == "flat_slab" or "Module 1 " in module or "Module 1 —" in module or "Integrated" in module or "flat_slab" in module:
+        try:
+            render_flat_slab()
+        except Exception as ex:
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 1: {ex}")
+            st.exception(ex)
     else:
         render_flat_slab()
 

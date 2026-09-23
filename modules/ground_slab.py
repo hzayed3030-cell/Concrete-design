@@ -238,6 +238,8 @@ def compute_ground_slab_design(
         "num_bays_y": num_bays_y,
         "actual_bay_lx": actual_bay_lx,
         "actual_bay_ly": actual_bay_ly,
+        "joint_spacing_x_m": joint_spacing_x_m,
+        "joint_spacing_y_m": joint_spacing_y_m,
         "aspect_ratio_bay": aspect_ratio_bay,
         "is_aspect_ratio_safe": is_aspect_ratio_safe,
         "dowel_phi_mm": dowel_phi_mm,
@@ -958,6 +960,37 @@ def render():
                     )
             else:
                 st.info("💡 حدد المربع أعلاه لتوليد المخططات الهندسية والمسقط الأفقي العام وتفاصيل فواصل البلاطة الأرضية.")
+
+        # ── 🏢 3D Integrated BIM & Rebar Viewer (عارض النماذج الإنشائية ثلاثي الأبعاد والحديد) ──
+        gs_sketch_b64 = b64_plan or ""
+        if not gs_sketch_b64 or len(gs_sketch_b64) < 100:
+            try:
+                _b64_p, _ = generate_ground_slab_plan_and_detail_sketches(res)
+                gs_sketch_b64 = _b64_p or ""
+            except Exception:
+                gs_sketch_b64 = ""
+
+        try:
+            from modules.bim_3d_viewer import render_ground_slab_3d_bim_viewer
+            render_ground_slab_3d_bim_viewer(
+                Lx_m=res["Lx_m"],
+                Ly_m=res["Ly_m"],
+                ts_cm=res["ts_cm"],
+                mesh_type=res["mesh_type"],
+                phi_mesh_mm=res["phi_mesh_mm"],
+                spacing_mesh_cm=res["spacing_mesh_cm"],
+                dowel_phi_mm=res["dowel_phi_mm"],
+                dowel_len_cm=res["dowel_len_cm"],
+                dowel_spacing_cm=res["dowel_spacing_cm"],
+                joint_spacing_x_m=float(res.get("joint_spacing_x_m", res.get("actual_bay_lx", float(joint_sx_in)))),
+                joint_spacing_y_m=float(res.get("joint_spacing_y_m", res.get("actual_bay_ly", float(joint_sy_in)))),
+                fcu=res["fcu_kg_cm2"],
+                wheel_load_ton=float(res.get("P_single_ton", 5.0)),
+                layout_sketch_b64=gs_sketch_b64,
+                height=740,
+            )
+        except Exception as _e_gs_3d:
+            st.error(f"⚠️ خطأ أثناء تحميل العارض ثلاثي الأبعاد للبلاطة الأرضية: {_e_gs_3d}")
 
         st.markdown("---")
         st.markdown("### 📋 جدول حصر الكميات والمقايسة المادية (Takeoff & BOQ Breakdown)")

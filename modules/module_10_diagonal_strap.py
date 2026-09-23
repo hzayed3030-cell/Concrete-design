@@ -1922,6 +1922,30 @@ def render_diagonal_strap_module():
             st.metric("عزم رفرفة القاعدة الداخلية Mu,trans2", f"{r['Mu_trans2']:.2f} t·m/m")
 
     with det_tab4:
+        # ── 3D INTEGRATED BIM & REBAR VIEWER ──────────────────────────────────
+        from modules.bim_3d_viewer import render_diagonal_strap_3d_bim_viewer
+        import io
+        import base64
+
+        m10_sketch = st.session_state.get("m10_diag_sketch_b64", "")
+        if not m10_sketch:
+            try:
+                fig_sk = _draw_plan(d, r)
+                buf_sk = io.BytesIO()
+                fig_sk.savefig(buf_sk, format="png", bbox_inches="tight", dpi=130)
+                buf_sk.seek(0)
+                m10_sketch = base64.b64encode(buf_sk.read()).decode("utf-8")
+                st.session_state["m10_diag_sketch_b64"] = m10_sketch
+                plt.close(fig_sk)
+            except Exception:
+                m10_sketch = ""
+
+        render_diagonal_strap_3d_bim_viewer(
+            diag_dict=d,
+            res_dict=r,
+            layout_sketch_b64=m10_sketch,
+        )
+
         st.markdown(
             """#### <span style="color: #67e8f9 !important;">📊 جدول حصر الكميات والمواد الإنشائية</span> <span style="color: #fb923c !important;">(BOQ)</span>""",
             unsafe_allow_html=True,

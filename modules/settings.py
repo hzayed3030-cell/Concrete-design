@@ -303,9 +303,38 @@ ECP_DEFAULTS: dict = {
 }
 
 
-def _get_now_str() -> str:
+def _get_now_str(with_seconds: bool = False) -> str:
     """Return formatted current timestamp."""
-    return datetime.now().strftime("%Y-%m-%d %H:%M")
+    fmt = "%Y-%m-%d %H:%M:%S" if with_seconds else "%Y-%m-%d %H:%M"
+    return datetime.now().strftime(fmt)
+
+
+def _parse_timestamp_for_sort(ts_str: str) -> float:
+    """Parse timestamp string to float (unix epoch) for exact, reliable sort comparison."""
+    if not ts_str or not isinstance(ts_str, str):
+        return 0.0
+    ts = ts_str.strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(ts, fmt).timestamp()
+        except Exception:
+            pass
+    return 0.0
+
+
+def sort_profiles_dict_by_mru(profiles_dict: dict) -> dict:
+    """Sort dictionary of profiles by recently used descending (last_used_at -> updated_at -> created_at)."""
+    if not isinstance(profiles_dict, dict) or not profiles_dict:
+        return {}
+
+    def _sort_key(item):
+        pname, pinfo = item
+        if not isinstance(pinfo, dict):
+            return 0.0
+        ts = pinfo.get("last_used_at") or pinfo.get("updated_at") or pinfo.get("created_at") or ""
+        return _parse_timestamp_for_sort(ts)
+
+    return dict(sorted(profiles_dict.items(), key=_sort_key, reverse=True))
 
 
 def _sanitize_for_json(val):
@@ -934,6 +963,75 @@ def _deserialize_module_12_state(data: dict) -> dict:
 
 
 
+def migrate_remove_module_8_in_project_dict(pdata_dict: dict) -> bool:
+    """
+    Seamless migration patch for removing Module 8 (Building Foundations & Overlap Layout):
+    Module 8 is removed from the active modules list.
+    Any index == 7 is removed.
+    Any index > 7 is decremented by 1 (8->7, 9->8, 10->9, 11->10, 12->11).
+    """
+    if not isinstance(pdata_dict, dict):
+        return False
+    if pdata_dict.get("_schema_mod8_removed", False):
+        return False
+
+    modified = False
+
+    # 1. Migrate enabled_modules
+    curr_enabled = pdata_dict.get("enabled_modules")
+    if isinstance(curr_enabled, list):
+        new_enabled = []
+        for idx in curr_enabled:
+            if idx == 7:
+                continue
+            elif idx > 7:
+                new_enabled.append(idx - 1)
+            else:
+                new_enabled.append(idx)
+        new_enabled = sorted(list(set(new_enabled)))
+        if new_enabled != curr_enabled:
+            pdata_dict["enabled_modules"] = new_enabled
+            modified = True
+
+    # 2. Migrate deleted_modules_trash
+    trash = pdata_dict.get("deleted_modules_trash")
+    if isinstance(trash, dict) and trash:
+        new_trash = {}
+        for k_str, entry in trash.items():
+            try:
+                k_int = int(k_str)
+                if k_int == 7:
+                    continue
+                elif k_int > 7:
+                    new_k_int = k_int - 1
+                    if isinstance(entry, dict):
+                        entry["module_idx"] = new_k_int
+                    new_trash[str(new_k_int)] = entry
+                else:
+                    new_trash[k_str] = entry
+            except Exception:
+                new_trash[k_str] = entry
+        pdata_dict["deleted_modules_trash"] = new_trash
+        modified = True
+
+    # 3. Migrate selected_module_idx
+    sel_idx = pdata_dict.get("selected_module_idx")
+    if isinstance(sel_idx, int):
+        if sel_idx == 7:
+            pdata_dict["selected_module_idx"] = 0
+            modified = True
+        elif sel_idx > 7:
+            pdata_dict["selected_module_idx"] = sel_idx - 1
+            modified = True
+
+    pdata_dict["_schema_mod8_removed"] = True
+    return True
+
+
+migrate_module_8_in_project_dict = migrate_remove_module_8_in_project_dict
+
+
+
 def migrate_module_12_in_project_dict(pdata_dict: dict) -> bool:
     """
     Seamless migration patch for Module 12 (Brick & Plastering Survey):
@@ -1253,20 +1351,19 @@ def load_profiles_data() -> dict:
         if _sanitize_tcf_values(pdata_dict):
             modified = True
 
+        available_indices = [m["idx"] for m in ALL_MODULES if m["idx"] not in deleted_indices]
+
+        # ── Module 8 / 13-Modules schema migration ───────────────────
+        if migrate_module_8_in_project_dict(pdata_dict):
+            modified = True
+
         if "enabled_modules" in pdata_dict and isinstance(pdata_dict["enabled_modules"], list):
             cleaned_enabled = sorted(list(set(
                 int(i) for i in pdata_dict["enabled_modules"]
                 if int(i) in range(len(ALL_MODULES)) and int(i) not in deleted_indices
             )))
-            # درع الحماية الذاتي: إذا كان لدى المشروع مدخلات إنشائية ولكن enabled_modules محصور بموديول واحد فقط،
-            # يتم استعادة إظهار كافة الموديولات فوراً لمنع حجب المدخلات عن المستخدم
-            has_structural = (
-                pdata_dict.get("fs_n_lx", 0) > 0 or
-                any(k.startswith("fs_") for k in pdata_dict) or
-                any(k.startswith("col_") for k in pdata_dict)
-            )
-            if has_structural and (0 not in cleaned_enabled or len(cleaned_enabled) <= 1):
-                cleaned_enabled = [m["idx"] for m in ALL_MODULES if m["idx"] not in deleted_indices]
+            if not cleaned_enabled and available_indices:
+                cleaned_enabled = [available_indices[0]]
 
             if cleaned_enabled != pdata_dict["enabled_modules"]:
                 pdata_dict["enabled_modules"] = cleaned_enabled
@@ -1290,6 +1387,12 @@ def load_profiles_data() -> dict:
         # ── Module 12 backward-compatibility migration ───────────────
         if migrate_module_12_in_project_dict(pdata_dict):
             modified = True
+
+        # ── Ensure last_used_at is populated for MRU sorting ─────────
+        if isinstance(pinfo, dict):
+            if "last_used_at" not in pinfo or not pinfo.get("last_used_at"):
+                pinfo["last_used_at"] = pinfo.get("updated_at") or pinfo.get("created_at") or _get_now_str()
+                modified = True
 
     if modified:
         save_profiles_data(data)
@@ -1323,8 +1426,12 @@ def save_profiles_data(data: dict) -> bool:
                 "description": str(pinfo.get("description", "")),
                 "created_at": str(pinfo.get("created_at", _get_now_str())),
                 "updated_at": str(pinfo.get("updated_at", _get_now_str())),
+                "last_used_at": str(pinfo.get("last_used_at", pinfo.get("updated_at", _get_now_str()))),
                 "data": {str(k): _sanitize_for_json(v) for k, v in pinfo.get("data", {}).items()}
             }
+
+        # Keep profiles ordered by MRU (Recently Used)
+        clean_data["profiles"] = sort_profiles_dict_by_mru(clean_data["profiles"])
 
         # 1. Update in-memory cache immediately
         _PROFILES_CACHE = clean_data
@@ -1380,9 +1487,9 @@ def save_profiles_data(data: dict) -> bool:
 
 
 def get_all_profiles() -> dict:
-    """Return dictionary of all profiles: {profile_name: profile_dict}."""
+    """Return dictionary of all profiles: {profile_name: profile_dict}, sorted by recently used (MRU)."""
     pdata = load_profiles_data()
-    return pdata.get("profiles", {})
+    return sort_profiles_dict_by_mru(pdata.get("profiles", {}))
 
 
 def get_active_profile_name() -> str:
@@ -1654,7 +1761,10 @@ def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
     if profile_name not in profiles:
         return
 
+    now_full = _get_now_str(with_seconds=True)
     pdata["active_profile"] = profile_name
+    if profile_name in profiles:
+        profiles[profile_name]["last_used_at"] = now_full
     save_profiles_data(pdata)
 
     st.session_state["_active_profile_name"] = profile_name
@@ -1743,7 +1853,8 @@ def create_project(
     else:
         new_data = dict(ECP_DEFAULTS)
 
-    # Ensure clean isolated default schema for module_9_strap_footing & module_10_diagonal_strap & module_11_ground_beam & module_12_brick_survey
+    # Ensure clean isolated default schema for module_8, module_9, module_10, module_11 & module_12
+    migrate_module_8_in_project_dict(new_data)
     migrate_module_9_in_project_dict(new_data)
     migrate_module_10_in_project_dict(new_data)
     migrate_module_11_in_project_dict(new_data)
@@ -1764,12 +1875,14 @@ def create_project(
         new_data["cs_owner_name"] = owner_name.strip()
 
     now_str = _get_now_str()
+    now_full = _get_now_str(with_seconds=True)
 
     profiles[name] = {
         "name": name,
         "description": description or f"مشروع {name}",
         "created_at": now_str,
         "updated_at": now_str,
+        "last_used_at": now_full,
         "data": new_data,
     }
     pdata["profiles"] = profiles
@@ -1800,6 +1913,7 @@ def rename_project(old_name: str, new_name: str) -> bool:
     pinfo = profiles.pop(old_name)
     pinfo["name"] = new_clean
     pinfo["updated_at"] = _get_now_str()
+    pinfo["last_used_at"] = _get_now_str(with_seconds=True)
     pinfo["data"]["apartment_name"] = new_clean
     pinfo["data"]["cs_project_name"] = new_clean
     profiles[new_clean] = pinfo
@@ -1876,7 +1990,7 @@ ALL_MODULES = [
     {"idx": 3, "key": "ground_slab", "name": "🏗️ Module 4 — Ground Slabs", "short": "Module 4"},
     {"idx": 4, "key": "steel_bars", "name": "⚙️ Module 5 — Steel Rebar Diameters & Weights", "short": "Module 5"},
     {"idx": 5, "key": "concrete_survey", "name": "📊 Module 6 — Concrete Quantity Survey", "short": "Module 6"},
-    {"idx": 6, "key": "two_col_footings", "name": "🏗️ Module 7 — Combined Footing Design", "short": "Module 7"},
+    {"idx": 6, "key": "two_col_footings", "name": "📐 Module 7: Quick Two-Column Combined Footing (تصميم قاعدة مشتركة لعمودين)", "short": "Module 7"},
     {"idx": 7, "key": "strap_footing", "name": "🔗 Module 9: Reinforced Concrete Strap Footing (قواعد الشدادات - الجار)", "short": "Module 9"},
     {"idx": 8, "key": "diagonal_strap_footing", "name": "📐 Module 10: Corner Footing with Diagonal Strap (قاعدة جار ركن بشداد مائل)", "short": "Module 10"},
     {"idx": 9, "key": "ground_beam", "name": "🧱 Module 11: Ground Beam Design & Detailing (تصميم وتفاصيل الميدات والسملات)", "short": "Module 11"},
@@ -1908,16 +2022,6 @@ def get_project_enabled_modules(project_name: str) -> list:
             int(i) for i in enabled
             if isinstance(i, (int, float, str)) and str(i).isdigit() and int(i) in available_indices
         ]
-        # درع الحماية الذاتي: إذا كان لدى المشروع مدخلات إنشائية ولكن enabled_modules محصور بموديول واحد فقط،
-        # يتم استعادة إظهار كافة الموديولات فوراً لمنع حجب المدخلات عن المستخدم
-        has_structural = (
-            data.get("fs_n_lx", 0) > 0 or
-            any(k.startswith("fs_") for k in data) or
-            any(k.startswith("col_") for k in data)
-        )
-        if has_structural and (0 not in valid_indices or len(valid_indices) <= 1):
-            return available_indices
-
         if valid_indices:
             return sorted(list(set(valid_indices)))
 
@@ -1948,11 +2052,23 @@ def set_project_enabled_modules(project_name: str, enabled_indices: list) -> boo
     if "data" not in profiles[project_name]:
         profiles[project_name]["data"] = {}
     profiles[project_name]["data"]["enabled_modules"] = valid_indices
+
+    # If previously selected module is no longer enabled, switch selection to first enabled module
+    curr_mod_sel = profiles[project_name]["data"].get("selected_module_idx")
+    if curr_mod_sel not in valid_indices:
+        profiles[project_name]["data"]["selected_module_idx"] = valid_indices[0]
+
     profiles[project_name]["updated_at"] = _get_now_str()
 
     ok = save_profiles_data(pdata)
     if ok and project_name == get_active_project_name() and "cfg" in st.session_state:
         st.session_state["cfg"]["enabled_modules"] = valid_indices
+        if st.session_state.get("selected_module_idx") not in valid_indices:
+            st.session_state["selected_module_idx"] = valid_indices[0]
+            st.session_state["cfg"]["selected_module_idx"] = valid_indices[0]
+        if "current_project" in st.session_state and isinstance(st.session_state["current_project"], dict):
+            st.session_state["current_project"]["enabled_modules"] = valid_indices
+            st.session_state["current_project"]["selected_module_idx"] = valid_indices[0]
     return ok
 
 
@@ -2094,6 +2210,7 @@ def get_project_summary(project_name: str) -> dict:
         "description": pinfo.get("description", ""),
         "created_at": pinfo.get("created_at", ""),
         "updated_at": pinfo.get("updated_at", ""),
+        "last_used_at": pinfo.get("last_used_at", pinfo.get("updated_at", "")),
         "n_lx": n_lx,
         "n_ly": n_ly,
         "total_w": total_w,
@@ -2294,6 +2411,7 @@ get_all_projects = get_all_profiles
 get_active_project_name = get_active_profile_name
 get_active_project = get_active_profile
 set_active_project = set_active_profile
+sort_projects_by_recently_used = sort_profiles_dict_by_mru
 
 
 
@@ -2458,6 +2576,7 @@ def save_settings() -> None:
 
     profiles[active_name]["data"] = clean_cfg
     profiles[active_name]["updated_at"] = _get_now_str()
+    profiles[active_name]["last_used_at"] = _get_now_str(with_seconds=True)
     pdata["profiles"] = profiles
     pdata["active_profile"] = active_name
 
@@ -2521,6 +2640,10 @@ def cfg_set(key: str, value) -> None:
         load_settings()
     st.session_state["cfg"][key] = value
     save_settings()
+
+
+get_setting = cfg_val
+set_setting = cfg_set
 
 
 # ── Widget helpers ──────────────────────────────────────────────────────────
@@ -2833,7 +2956,7 @@ MODULE_DATA_KEY_PREFIXES = {
         # Dynamic per-column-type, per-slab, and elements takeoff keys
         "cs_", "surv_", "custom_takeoff_rows",
     ],
-    6: [  # Two-Column Footings (Isolated or Combined)
+    6: [  # Quick Two-Column Footings (Module 7)
         "tcf_P1", "tcf_P2", "tcf_c1", "tcf_b1", "tcf_c2", "tcf_b2",
         "tcf_S", "tcf_q_net", "tcf_Fcu", "tcf_Fy", "tcf_cover", "tcf_Phi_index",
         "tcf_L1_ov", "tcf_B1_ov", "tcf_t1_ov",
@@ -2862,7 +2985,7 @@ MODULE_DATA_KEY_PREFIXES = {
 # Key = module index; Value = list of (required_idx, relationship_description)
 # Module 1 (Flat Slabs) and Module 3 (Footings) depend on Module 2 (Columns).
 # Module 2 (Columns) has independent manual load input and does not depend on Slabs.
-# Module 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 are 100% standalone.
+# Module 4, 5, 6, 7, 9, 10, 11, 12, 13 are 100% standalone.
 FUNCTIONAL_DEPENDENCIES: dict[int, list] = {
     0: [  # Module 1 — Integrated Structural Design -> Requires Columns (1) for punching shear & column support
         (1, "مرتبط بنماذج وتصميم الأعمدة: يغذي الأعمدة بالأحمال وتعتمد بحور السقف والقص الثاقب عليها"),
@@ -2874,7 +2997,7 @@ FUNCTIONAL_DEPENDENCIES: dict[int, list] = {
     3: [],  # Module 4 — Ground Slabs: Standalone
     4: [],  # Module 5 — Steel Rebar: Standalone
     5: [],  # Module 6 — Concrete Quantity Survey: 100% Standalone
-    6: [],  # Module 7 — Two-Column Footings: Standalone
+    6: [],  # Module 7 — Quick Two-Column Footings: Standalone
     7: [],  # Module 9 — Strap Footings: Standalone
     8: [],  # Module 10 — Diagonal Strap Footings: Standalone
     9: [],  # Module 11 — Ground Beam Design & Detailing: Standalone
@@ -3135,6 +3258,111 @@ def play_warning_sound() -> None:
                 osc.start(t);
                 osc.stop(t + dur);
             } catch(e) {}
+        })();
+        </script>
+        </body>
+        </html>
+        """
+        components.html(js_code, height=0, width=0)
+    except Exception:
+        pass
+
+
+def play_strong_whistle_siren() -> None:
+    """
+    Emits a high-priority, loud, two-burst emergency warning whistle / siren.
+    Combines:
+    1. Browser Web Audio API dual-carrier whistle (2450 Hz + 2720 Hz beating with 26 Hz pea flutter)
+       with compression & high gain (0.95) for maximum piercing volume.
+    2. Host OS beep on Windows (winsound 2200Hz -> 2700Hz) in a background thread as parallel guarantee.
+    """
+    import threading
+    def _host_beep():
+        try:
+            import winsound
+            winsound.Beep(2200, 160)
+            time.sleep(0.06)
+            winsound.Beep(2700, 380)
+        except Exception:
+            pass
+    threading.Thread(target=_host_beep, daemon=True).start()
+
+    try:
+        import streamlit.components.v1 as components
+        js_code = """
+        <html>
+        <head><meta charset="utf-8"></head>
+        <body style="margin:0;padding:0;overflow:hidden;background:transparent;">
+        <script>
+        (function() {
+            try {
+                var AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+                var ctx = new AudioCtx();
+                if (ctx.state === 'suspended') {
+                    ctx.resume();
+                }
+
+                var t0 = ctx.currentTime + 0.02;
+
+                var compressor = ctx.createDynamicsCompressor();
+                compressor.threshold.setValueAtTime(-12, t0);
+                compressor.knee.setValueAtTime(4, t0);
+                compressor.ratio.setValueAtTime(12, t0);
+                compressor.attack.setValueAtTime(0.002, t0);
+                compressor.release.setValueAtTime(0.15, t0);
+                compressor.connect(ctx.destination);
+
+                var masterGain = ctx.createGain();
+                masterGain.gain.setValueAtTime(0.95, t0);
+                masterGain.connect(compressor);
+
+                function playWhistleBlast(startTime, duration, peakGain) {
+                    var osc1 = ctx.createOscillator();
+                    var osc2 = ctx.createOscillator();
+                    var blastGain = ctx.createGain();
+
+                    osc1.type = 'triangle';
+                    osc1.frequency.setValueAtTime(2450, startTime);
+                    osc1.frequency.linearRampToValueAtTime(2600, startTime + duration);
+
+                    osc2.type = 'sine';
+                    osc2.frequency.setValueAtTime(2720, startTime);
+                    osc2.frequency.linearRampToValueAtTime(2880, startTime + duration);
+
+                    var lfo = ctx.createOscillator();
+                    var lfoGain = ctx.createGain();
+                    lfo.type = 'sine';
+                    lfo.frequency.setValueAtTime(26, startTime);
+                    lfoGain.gain.setValueAtTime(85, startTime);
+                    lfo.connect(osc1.frequency);
+                    lfo.connect(osc2.frequency);
+
+                    blastGain.gain.setValueAtTime(0.0001, startTime);
+                    blastGain.gain.linearRampToValueAtTime(peakGain, startTime + 0.02);
+                    blastGain.gain.setValueAtTime(peakGain, startTime + duration - 0.04);
+                    blastGain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+
+                    osc1.connect(blastGain);
+                    osc2.connect(blastGain);
+                    blastGain.connect(masterGain);
+
+                    lfo.start(startTime);
+                    osc1.start(startTime);
+                    osc2.start(startTime);
+
+                    lfo.stop(startTime + duration);
+                    osc1.stop(startTime + duration);
+                    osc2.stop(startTime + duration);
+                }
+
+                // Blast 1: 0.16s sharp warning chirp
+                playWhistleBlast(t0, 0.16, 0.85);
+                // Blast 2: 0.45s sustained piercing high-volume blast
+                playWhistleBlast(t0 + 0.22, 0.45, 0.98);
+            } catch(e) {
+                console.warn("Audio whistle error:", e);
+            }
         })();
         </script>
         </body>

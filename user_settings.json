@@ -1,6 +1,6 @@
 {
-  "selected_module_idx": 0,
-  "apartment_name": "try1",
+  "selected_module_idx": 10,
+  "apartment_name": "مثال لتصميم كامل فلات - اعمدة - قواعد بجميع نواعها",
   "col_Pu_input": 155.0,
   "col_Safety_Factor": 1.2,
   "col_b": 30,
@@ -12,9 +12,9 @@
   "col_mu_target": 1.0,
   "col_Phi_index": 1,
   "col_Phi_st_index": 1,
-  "ftg_bc": 30,
-  "ftg_tc": 50,
-  "ftg_Pu": 90.0,
+  "ftg_bc": 30.0,
+  "ftg_tc": 50.0,
+  "ftg_Pu": 32.7063,
   "ftg_Wf_est": 5.0,
   "ftg_q_all": 1.5,
   "ftg_Df": 1.5,
@@ -23,9 +23,9 @@
   "ftg_Fy": 4000,
   "ftg_cover": 5,
   "ftg_Phi_index": 2,
-  "ftg_L_override": 220,
-  "ftg_B_override": 200,
-  "ftg_trc_override": 50,
+  "ftg_L_override": 135,
+  "ftg_B_override": 115,
+  "ftg_trc_override": 40,
   "tcf_P1": 80.0,
   "tcf_P2": 120.0,
   "tcf_c1": 50,
@@ -124,7 +124,7 @@
       "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
     },
     "C20": {
-      "direction": "اتجاه Y",
+      "direction": "اتجاه X",
       "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
       "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
     },
@@ -157,6 +157,11 @@
       "direction": "اتجاه X",
       "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
       "shift_y": "متمركز على المحور (Centered)"
+    },
+    "C12": {
+      "direction": "اتجاه Y",
+      "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
+      "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
     }
   },
   "fs_edge_columns": {
@@ -179,7 +184,7 @@
       "is_valid": false
     },
     "C5": {
-      "is_edge": "No",
+      "is_edge": "Yes",
       "direction": "",
       "is_valid": false
     },
@@ -233,7 +238,7 @@
   "cs_price_gravel": 600.0,
   "cs_price_sand": 200.0,
   "cs_price_labor": 1910.0,
-  "cs_project_name": "try1",
+  "cs_project_name": "مثال لتصميم كامل فلات - اعمدة - قواعد بجميع نواعها",
   "gs_lx": 30.0,
   "gs_ly": 20.0,
   "gs_ts": 20.0,
@@ -344,7 +349,12 @@
     "col_width_cm": 30.0,
     "col_removed": [],
     "col_dirs": {},
-    "col_shifts": {},
+    "col_shifts": {
+      "0,0": {
+        "shift_x": "متمركز على المحور (Centered)",
+        "shift_y": "متمركز على المحور (Centered)"
+      }
+    },
     "col_shifted": {},
     "wall_thickness": {
       "0,2,1,2": 25,
@@ -355,14 +365,14 @@
     "parapet_wall_height": 1.3,
     "parapet_walls": [
       [
-        2,
         1,
+        2,
         2,
         2
       ],
       [
-        1,
         2,
+        1,
         2,
         2
       ]
@@ -780,9 +790,9 @@
     "_last_upstream_sig": "0.0_0.0_30.0_60.0_4.5_3.8_40.0_50.0_80.0_120.0_1.0_1.5_300.0_4000.0_10.0_40.0"
   },
   "cs_owner_name": "",
-  "fs_moment_contour_view_mode_idx": 1,
+  "fs_moment_contour_view_mode_idx": 0,
   "fs_additional_moment_contour_view_mode_idx": 2,
-  "fs_deficit_contour_view_mode_idx": 1,
+  "fs_deficit_contour_view_mode_idx": 0,
   "fs_col_pu_int": 32.7063,
   "fs_col_pu_edge": 21.162899999999997,
   "fs_col_pu_corner": 10.3409625,
@@ -1142,10 +1152,10 @@
       "grid_x": "Y2",
       "grid_y": "X3",
       "type": "Interior",
-      "x": 4.0,
-      "y": 6.0,
-      "bc": 50.0,
-      "tc": 30.0,
+      "x": 4.09,
+      "y": 5.81,
+      "bc": 30.0,
+      "tc": 50.0,
       "pu_1f": 32.7063,
       "pu_tot": 32.7063,
       "atrib": 18.7
@@ -1254,10 +1264,10 @@
       "grid_x": "Y5",
       "grid_y": "X4",
       "type": "Corner",
-      "x": 17.409999999999997,
-      "y": 10.110000000000001,
-      "bc": 30.0,
-      "tc": 50.0,
+      "x": 17.31,
+      "y": 10.21,
+      "bc": 50.0,
+      "tc": 30.0,
       "pu_1f": 10.3409625,
       "pu_tot": 10.3409625,
       "atrib": 5.9125
@@ -1312,8 +1322,16 @@
   },
   "gb_overrides": {
     "B1_t": 45.0,
-    "B1_ntop": 3
+    "B1_ntop": 3,
+    "B1_nbot": 3
   },
+  "_schema_mod8_migrated": true,
+  "bf_q_net": 1.5,
+  "bf_Fcu": 300,
+  "bf_Fy": 4000,
+  "bf_cover": 5,
+  "bf_Phi": 16,
+  "_schema_mod8_removed": true,
   "enabled_modules": [
     0,
     1,
