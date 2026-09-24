@@ -8661,6 +8661,139 @@ def calculate_boq(Lx_spans, Ly_spans, cantilevers, ts_cm, mesh_btm_n, mesh_btm_d
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  DESIGN PHILOSOPHY MODAL DIALOG (دليل وفلسفة التصميم وحصر الكميات)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@st.dialog("📖 فلسفة التصميم الإنشائي وتوزيع الأحمال وحصر الكميات (Design Philosophy)", width="large")
+def show_design_philosophy_dialog():
+    html_dialog = (
+        '<div dir="rtl" style="direction: rtl; text-align: right; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif; line-height: 1.85; color: #0f172a;">'
+        '<div style="background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #1e40af 100%); color: #ffffff; padding: 20px 24px; border-radius: 12px; margin-bottom: 20px; border: 1.5px solid #3b82f6; box-shadow: 0 6px 18px rgba(15, 23, 42, 0.25);">'
+        '<h3 style="margin: 0 0 10px 0; color: #93c5fd; font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 8px;">'
+        '<span>🏛️ دليل وفلسفة التصميم الإنشائي المتكامل</span> '
+        '<span dir="ltr" style="font-size: 15px; color: #bfdbfe; font-weight: 600;">(ECP 203 Structural Design & BOQ Philosophy)</span>'
+        '</h3>'
+        '<p style="margin: 0; font-size: 14px; color: #e2e8f0; line-height: 1.7;">'
+        'شرح هندسي تفصيلي لمسار انتقال الأحمال <span dir="ltr" style="font-weight:700; color:#60a5fa;">(Load Path)</span> من البلاطة اللاكمرية <span dir="ltr" style="font-weight:700; color:#60a5fa;">(Flat Slab)</span> إلى الأعمدة <span dir="ltr" style="font-weight:700; color:#60a5fa;">(Columns)</span> وقواعد الأساسات <span dir="ltr" style="font-weight:700; color:#60a5fa;">(Foundations)</span>، مع بيان آلية حصر الكميات والمواد <span dir="ltr" style="font-weight:700; color:#60a5fa;">(BOQ Breakdown)</span> بين سقف الدور الواحد النمطي وكامل أسقف وعناصر المبنى.'
+        '</p>'
+        '</div>'
+
+        '<div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-right: 6px solid #2563eb; border-radius: 10px; padding: 18px 22px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">'
+        '<h4 style="color: #1e40af; margin-top: 0; margin-bottom: 10px; font-size: 16.5px; font-weight: 800;">'
+        '1️⃣ فلسفة حساب ردود أفعال وأحمال الأعمدة <span dir="ltr" style="font-size:14px; color:#3b82f6;">(Column Reactions & Tributary Area)</span>'
+        '</h4>'
+        '<ul style="margin-bottom: 6px; padding-right: 22px; line-height: 1.8;">'
+        '<li style="margin-bottom: 8px;">'
+        '<b>رد فعل السقف الواحد <span dir="ltr" style="color:#1d4ed8;">Pu(1F)</span>:</b> '
+        'يُحسب رد الفعل الرأسي الصافي المنقول من البلاطة اللاكمرية لكل عمود بدقة متناهية بناءً على مساحة تأثير وتحميل البلاطة <span dir="ltr" style="font-weight:700;">(Tributary Area)</span> المحمولة عليه طبقاً لمسار الأحمال وعزوم الكود المصري <span dir="ltr" style="font-weight:700;">ECP 203</span>:'
+        '<div dir="ltr" style="background: #f1f5f9; padding: 6px 14px; border-radius: 6px; font-size: 13.5px; font-family: Consolas, monospace; color: #0f172a; margin: 6px 0; font-weight: 700; border: 1px solid #cbd5e1; text-align: left;">'
+        'Pu(1F) = Tributary_Area × Wu(Slab) + Wall_Load'
+        '</div>'
+        'حيث يمثل <span dir="ltr" style="font-weight:700;">Wu(Slab)</span> الحمل التصميمي الأقصى للمتر المربع للبلاطة <span dir="ltr">(1.4 DL + 1.6 LL)</span>، و <span dir="ltr" style="font-weight:700;">Wall_Load</span> هو حمل الحوائط والقواطيع السطحية.'
+        '</li>'
+        '<li style="margin-bottom: 8px;">'
+        '<b>الحمل الرأسي التراكمي لعدد <span dir="ltr">N</span> طابق <span dir="ltr" style="color:#1d4ed8;">(Cumulative Vertical Load)</span>:</b> '
+        'نظراً لأن أعمدة الطوابق السفلية ومنسوب الأساسات تحمل كامل الأدوار المتكررة المتراكمة فوقها، يتم ضرب وتجميع ردود أفعال الأسقف تراكمياً مع معامل أمان لتغطية وزن الأعمدة:'
+        '<div dir="ltr" style="background: #f1f5f9; padding: 6px 14px; border-radius: 6px; font-size: 13.5px; font-family: Consolas, monospace; color: #0f172a; margin: 6px 0; font-weight: 700; border: 1px solid #cbd5e1; text-align: left;">'
+        'Total Pu = Pu(1F) × N × Safety_Factor'
+        '</div>'
+        '</li>'
+        '<li>'
+        '<b>معامل أمان ووزن الأعمدة <span dir="ltr" style="font-weight:700;">(Safety Factor & Columns Weight)</span>:</b> '
+        'المعامل المدخل (الافتراضي <span dir="ltr">1.10</span> أي إضافة <span dir="ltr">10%</span>) يغطي هندسياً الوزن الذاتي الخرساني لأعمدة الأدوار المتكررة <span dir="ltr">(Columns Self-Weight)</span> بالإضافة إلى عزوم اللامركزية العرضية الصغرى <span dir="ltr">(Accidental Eccentricity & Minimum Secondary Moments)</span> وفقاً لمتطلبات <span dir="ltr">ECP 203</span>.'
+        '</li>'
+        '</ul>'
+        '</div>'
+
+        '<div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-right: 6px solid #16a34a; border-radius: 10px; padding: 18px 22px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">'
+        '<h4 style="color: #15803d; margin-top: 0; margin-bottom: 10px; font-size: 16.5px; font-weight: 800;">'
+        '2️⃣ فلسفة تصميم قطاعات وتسليح الأعمدة <span dir="ltr" style="font-size:14px; color:#16a34a;">(Columns Structural Design)</span>'
+        '</h4>'
+        '<ul style="margin-bottom: 6px; padding-right: 22px; line-height: 1.8;">'
+        '<li style="margin-bottom: 8px;">'
+        '<b>الأبعاد الخرسانية للعمود <span dir="ltr" style="font-weight:700;">(Column Dimensions b × t)</span>:</b> '
+        'يتم تصميم أبعاد القطاع الخرساني (العرض <span dir="ltr">bc</span> والعمق <span dir="ltr">tc</span>) للعمود الحاكم عند منسوب الطابق الأرضي لمقاومة أقصى حمل ضغط محوري تراكمي <span dir="ltr">(Axial Compressive Load Total Pu)</span> لعدد <span dir="ltr">N</span> طابق، مع التحقق من إجهاد الضغط المسموح ومعامل النحافة والانبعاج <span dir="ltr">(Slenderness Ratio & Buckling)</span> طبقاً لمعادلات الكود المصري <span dir="ltr">ECP 203</span>.'
+        '</li>'
+        '<li>'
+        '<b>حديد التسليح الطولي والكانات <span dir="ltr" style="font-weight:700;">(Longitudinal Rebar As & Stirrup Ties)</span>:</b> '
+        'تُحسب مساحة حديد التسليح الطولي <span dir="ltr">As</span> لضمان عدم النزول عن النسبة الدنيا الكودية <span dir="ltr">(As_min = 0.8% Ac)</span> ومقاومة أحمال كامل الطوابق، مع تصميم كانات القص والأطواق <span dir="ltr">(Stirrup Ties)</span> وتكثيفها في أطراف الأعمدة <span dir="ltr">(End Confinement Zones)</span> للحبس الخرساني ومقاومة الانبعاج والزلازل.'
+        '</li>'
+        '</ul>'
+        '</div>'
+
+        '<div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-right: 6px solid #d97706; border-radius: 10px; padding: 18px 22px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">'
+        '<h4 style="color: #b45309; margin-top: 0; margin-bottom: 10px; font-size: 16.5px; font-weight: 800;">'
+        '3️⃣ فلسفة تصميم الأساسات والقواعد <span dir="ltr" style="font-size:14px; color:#d97706;">(Foundations Structural Design)</span>'
+        '</h4>'
+        '<ul style="margin-bottom: 6px; padding-right: 22px; line-height: 1.8;">'
+        '<li style="margin-bottom: 8px;">'
+        '<b>منسوب التأسيس <span dir="ltr" style="font-weight:700;">(Foundation Level)</span>:</b> '
+        'تقع منظومة الأساسات في أوطأ منسوب إنشائي أسفل المبنى، وترتكز مباشرة على تربة التأسيس، وبالتالي فإنها تُصمم إلزامياً على <b>إجمالي أحمال المبنى بالكامل لكامل الـ <span dir="ltr">N</span> طابق</b> بالإضافة للوزن الذاتي ووزن الردم.'
+        '</li>'
+        '<li style="margin-bottom: 8px;">'
+        '<b>القواعد المنفصلة <span dir="ltr" style="font-weight:700;">(Isolated Footings F1, F2, F3)</span>:</b> '
+        'يقوم البرنامج تلقائياً بجلب أقصى حمل تصميمي تراكمي <span dir="ltr">(Governing Ultimate Pu)</span> لعدد <span dir="ltr">N</span> طابق للأعمدة الداخلية <span dir="ltr">(F1)</span>، والأعمدة الطرفية <span dir="ltr">(F2)</span>، وأعمدة الأركان <span dir="ltr">(F3)</span>، لتصميم النماذج القياسية الثلاثة مساحةً وسمكاً وتسليحاً.'
+        '</li>'
+        '<li style="margin-bottom: 8px;">'
+        '<b>التدقيق الإنشائي وفقاً لـ <span dir="ltr">ECP 203</span>:</b> '
+        'تدقيق أبعاد الخرسانة العادية والمسلحة للتأكد من عدم تجاوز جهد التربة الصافي المسموح به <span dir="ltr">(Net Soil Bearing Capacity)</span>، وتدقيق سمك القاعدة ضد القص الثاقب <span dir="ltr">(Punching Shear)</span> والقص العرضي <span dir="ltr">(One-Way Shear)</span>، وحساب شبكة التسليح لمقاومة أقصى عزوم انحناء <span dir="ltr">(Bending Moments)</span>.'
+        '</li>'
+        '<li>'
+        '<b>القواعد المشتركة والشدادات <span dir="ltr" style="font-weight:700;">(Combined Footings & Strap Beams)</span>:</b> '
+        'في حالات تداخل القواعد أو قواعد الجار <span dir="ltr">(Property Line)</span>، يتم تصميم قواعد مشتركة أو كمرات شدادات جسئة <span dir="ltr">(Strap Beams)</span> لنقل عزوم اللامركزية وتوزيع أحمال الـ <span dir="ltr">N</span> طابق بأمان تام.'
+        '</li>'
+        '</ul>'
+        '</div>'
+
+        '<div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-right: 6px solid #7c3aed; border-radius: 10px; padding: 18px 22px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">'
+        '<h4 style="color: #6d28d9; margin-top: 0; margin-bottom: 10px; font-size: 16.5px; font-weight: 800;">'
+        '4️⃣ فلسفة حصر الكميات والمواد الإنشائية <span dir="ltr" style="font-size:14px; color:#7c3aed;">(Quantity Survey & BOQ Breakdown)</span>'
+        '</h4>'
+        '<div style="overflow-x: auto; margin-top: 10px;">'
+        '<table style="width: 100%; border-collapse: collapse; font-size: 13.5px; border: 1.5px solid #cbd5e1; text-align: right;">'
+        '<thead>'
+        '<tr style="background: #f1f5f9; border-bottom: 2px solid #cbd5e1;">'
+        '<th style="padding: 10px 14px; text-align: right; color: #1e293b; font-weight: 800;">العنصر الإنشائي</th>'
+        '<th style="padding: 10px 14px; text-align: center; color: #1e293b; font-weight: 800;">طريقة الحصر في الجدول</th>'
+        '<th style="padding: 10px 14px; text-align: right; color: #1e293b; font-weight: 800;">الهدف والاستخدام التنفيذي في الموقع</th>'
+        '</tr>'
+        '</thead>'
+        '<tbody>'
+        '<tr style="border-bottom: 1px solid #e2e8f0;">'
+        '<td style="padding: 10px 14px; font-weight: 700; color: #0f172a;">سقف الدور النمطي الواحد <span dir="ltr">(1 Floor Slab)</span></td>'
+        '<td style="padding: 10px 14px; text-align: center; color: #2563eb; font-weight: 800;">سقف دور واحد (1F)</td>'
+        '<td style="padding: 10px 14px; color: #334155;">تحديد كمية ومواد "صبة السقف الواحد" للطلبيات الميدانية الفورية للخرسانة الجاهزة <span dir="ltr">(Ready-Mix)</span> وحديد التسليح بالموقع عند كل رمية صب.</td>'
+        '</tr>'
+        '<tr style="border-bottom: 1px solid #e2e8f0; background: #f8fafc;">'
+        '<td style="padding: 10px 14px; font-weight: 700; color: #0f172a;">أسقف المبنى المتكررة <span dir="ltr">(N Floors Slabs)</span></td>'
+        '<td style="padding: 10px 14px; text-align: center; color: #16a34a; font-weight: 800;">سقف الدور × N طابق</td>'
+        '<td style="padding: 10px 14px; color: #334155;">إجمالي الخرسانة وحديد التسليح والأسمنت لكافة أسقف المبنى للأدوار المتكررة المتطابقة هندسياً.</td>'
+        '</tr>'
+        '<tr style="border-bottom: 1px solid #e2e8f0;">'
+        '<td style="padding: 10px 14px; font-weight: 700; color: #0f172a;">أعمدة المبنى <span dir="ltr">(Building Columns)</span></td>'
+        '<td style="padding: 10px 14px; text-align: center; color: #16a34a; font-weight: 800;">أعمدة الدور الواحد + إجمالي الـ N طابق</td>'
+        '<td style="padding: 10px 14px; color: #334155;">معرفة كمية صبة أعمدة الطابق الواحد مرحلياً، مع حصر إجمالي توريدات حديد وخرسانة الأعمدة للمبنى بالكامل لجميع الطوابق.</td>'
+        '</tr>'
+        '<tr style="border-bottom: 1px solid #e2e8f0; background: #f8fafc;">'
+        '<td style="padding: 10px 14px; font-weight: 700; color: #0f172a;">أساسات وسملات المبنى <span dir="ltr">(Foundations & Ground Beams)</span></td>'
+        '<td style="padding: 10px 14px; text-align: center; color: #b45309; font-weight: 800;">منسوب التأسيس كاملاً (مرة واحدة)</td>'
+        '<td style="padding: 10px 14px; color: #334155;">تُصب مرة واحدة في منسوب التأسيس لخدمة وحمل كامل أدوار المبنى الـ <span dir="ltr">N</span> المصممة عليها.</td>'
+        '</tr>'
+        '<tr style="background: #eff6ff;">'
+        '<td style="padding: 11px 14px; font-weight: 900; color: #1e3a8a;">الإجمالي الشامل للمبنى <span dir="ltr">(Full Building Grand Total)</span></td>'
+        '<td style="padding: 11px 14px; text-align: center; color: #1e3a8a; font-weight: 900;">إجمالي الـ N أسقف + الأعمدة + الأساسات + السملات</td>'
+        '<td style="padding: 11px 14px; font-weight: 700; color: #1e3a8a;">المقايسة التقديرية التثمينية الشاملة لكامل الهيكل الخرساني للمشروع لحساب التكلفة الإجمالية بدقة.</td>'
+        '</tr>'
+        '</tbody>'
+        '</table>'
+        '</div>'
+        '</div>'
+        '</div>'
+    )
+    st.markdown(html_dialog, unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  STREAMLIT RENDER
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -8881,6 +9014,55 @@ def render(is_standalone: bool = False):
             margin: 8px 0 6px 0 !important;
             padding: 6px 14px !important;
         }
+
+        /* ═══════════════════════════════════════════════════════════════════════
+           DESIGN PHILOSOPHY BUTTON (زر فلسفة التصميم وحصر الكميات - بعرض السطر كاملاً أسفل عنوان القسم)
+           ═══════════════════════════════════════════════════════════════════════ */
+        div[class*="btn_show_design_philosophy_step2"],
+        div[class*="btn_design_philosophy_boq"] {
+            width: 100% !important;
+            margin-top: 4px !important;
+            margin-bottom: 8px !important;
+        }
+
+        div[class*="btn_show_design_philosophy_step2"] button,
+        div[class*="btn_design_philosophy_boq"] button {
+            background: linear-gradient(135deg, #1c1917 0%, #78350f 45%, #92400e 100%) !important;
+            color: #ffffff !important;
+            font-size: 14.5px !important;
+            font-weight: 900 !important;
+            border: 2px solid #f59e0b !important;
+            border-radius: 8px !important;
+            box-shadow: 0 4px 14px rgba(120, 53, 15, 0.40) !important;
+            padding: 8px 16px !important;
+            letter-spacing: 0.3px !important;
+            white-space: nowrap !important;
+            width: 100% !important;
+            height: 42px !important;
+            line-height: 1.2 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            transition: all 0.25s ease-in-out !important;
+        }
+
+        div[class*="btn_show_design_philosophy_step2"] button:hover,
+        div[class*="btn_design_philosophy_boq"] button:hover {
+            background: linear-gradient(135deg, #78350f 0%, #92400e 45%, #b45309 100%) !important;
+            border-color: #fde68a !important;
+            box-shadow: 0 6px 20px rgba(245, 158, 11, 0.60) !important;
+            transform: translateY(-2px) !important;
+        }
+
+        div[class*="btn_show_design_philosophy_step2"] button p,
+        div[class*="btn_design_philosophy_boq"] button p,
+        div[class*="btn_show_design_philosophy_step2"] button span,
+        div[class*="btn_design_philosophy_boq"] button span {
+            color: #ffffff !important;
+            font-weight: 900 !important;
+            font-size: 14.5px !important;
+            white-space: nowrap !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -8984,6 +9166,16 @@ def render(is_standalone: bool = False):
 
     # ── ② COLUMN, THICKNESS, LOADS, MATERIALS & REBAR OPTIONS ────────────────
     with st.expander("🧱 Step 2 — Slab Thickness, Column Size, Loads & Rebar (السُمك والأعمدة والأحمال والتسليح)", expanded=False):
+        if not is_standalone:
+            if st.button(
+                "📖 الاطلاع على فلسفة التصميم وحصر الكميات",
+                key=f"{prefix}btn_show_design_philosophy_step2",
+                use_container_width=True,
+                help="عرض دليل وفلسفة حساب الأحمال التراكمية وتوزيعها وحصر الكميات",
+            ):
+                show_design_philosophy_dialog()
+            st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
+
         c1, c2, c3, c4 = st.columns(4)
 
         with c1:
@@ -8991,8 +9183,15 @@ def render(is_standalone: bool = False):
             bc_s = S.number_input("Col. Width bc (cm)", "slab_bc", min_value=None, step=5)
             tc_s = S.number_input("Col. Depth tc (cm)", "slab_tc", min_value=None, step=5)
             ts_initial = S.number_input("Initial Slab ts (cm)", "slab_ts_initial", min_value=12, max_value=80, step=1)
-            n_floors = 1
             if not is_standalone:
+                n_floors = S.integer_input(
+                    "🏢 عدد أدوار المبنى المحمولة (Floors)",
+                    "slab_n_floors",
+                    min_value=1,
+                    max_value=60,
+                    step=1,
+                    help="عدد الأدوار الإجمالي للمبنى المحمولة على الأعمدة والقواعد. يُستخدم لحساب الحمل الرأسي التراكمي وتصميم الأعمدة والأساسات (Pu = Pu_1F × N).",
+                )
                 col_sf = S.number_input(
                     "Factor of safety & Columns weight (معامل أمان ووزن الأعمدة)",
                     "slab_col_safety_factor",
@@ -9000,6 +9199,7 @@ def render(is_standalone: bool = False):
                     help="معامل أمان إضافي لتغطية الوزن الذاتي لأعمدة الأدوار وعزوم اللامركزية الصغرى (القيمة الافتراضية 1.10 = إضافة 10%).",
                 )
             else:
+                n_floors = 1
                 col_sf = 1.0
 
         with c2:
@@ -13478,16 +13678,25 @@ def render(is_standalone: bool = False):
         gb_sand_val       = gb_conc_rc_val * 0.40
         gb_ratio_val      = (gb_steel_kg_val / gb_conc_rc_val) if gb_conc_rc_val > 0 else 0.0
 
-        # 4. Grand Total Quantities (السقف + الأعمدة + الأساسات + السملات)
-        grand_conc_rc_val   = slab_conc_val + cols_conc_tot_val + ftgs_conc_rc_val + gb_conc_rc_val
+        # 1b. Full Building Slab Quantities (إجمالي أسقف المبنى بالكامل لعدد N طابق)
+        slab_conc_tot_val    = slab_conc_val * num_floors
+        slab_steel_kg_tot    = slab_steel_kg * num_floors
+        slab_steel_ton_tot   = slab_steel_ton * num_floors
+        slab_cement_tot_ton  = slab_cement_ton * num_floors
+        slab_cement_tot_bags = slab_cement_bags * num_floors
+        slab_gravel_tot_val  = slab_gravel_val * num_floors
+        slab_sand_tot_val    = slab_sand_val * num_floors
+
+        # 4. Grand Total Quantities (إجمالي أسقف المبنى + أعمدة المبنى + الأساسات + السملات)
+        grand_conc_rc_val   = slab_conc_tot_val + cols_conc_tot_val + ftgs_conc_rc_val + gb_conc_rc_val
         grand_conc_pc_val   = ftgs_conc_pc_val
         grand_conc_all_val  = grand_conc_rc_val + grand_conc_pc_val
-        grand_steel_kg_val  = slab_steel_kg + cols_steel_kg_tot_val + ftgs_steel_kg_val + gb_steel_kg_val
-        grand_steel_ton_val = slab_steel_ton + cols_steel_ton_tot_val + ftgs_steel_ton_val + gb_steel_ton_val
-        grand_cement_ton    = slab_cement_ton + cols_cement_tot_ton + ftgs_cement_ton + gb_cement_ton
-        grand_cement_bags   = slab_cement_bags + cols_cement_tot_bags + ftgs_cement_bags + gb_cement_bags
-        grand_gravel_val    = slab_gravel_val + cols_gravel_tot_val + ftgs_gravel_val + gb_gravel_val
-        grand_sand_val      = slab_sand_val + cols_sand_tot_val + ftgs_sand_val + gb_sand_val
+        grand_steel_kg_val  = slab_steel_kg_tot + cols_steel_kg_tot_val + ftgs_steel_kg_val + gb_steel_kg_val
+        grand_steel_ton_val = slab_steel_ton_tot + cols_steel_ton_tot_val + ftgs_steel_ton_val + gb_steel_ton_val
+        grand_cement_ton    = slab_cement_tot_ton + cols_cement_tot_ton + ftgs_cement_ton + gb_cement_ton
+        grand_cement_bags   = slab_cement_tot_bags + cols_cement_tot_bags + ftgs_cement_bags + gb_cement_bags
+        grand_gravel_val    = slab_gravel_tot_val + cols_gravel_tot_val + ftgs_gravel_val + gb_gravel_val
+        grand_sand_val      = slab_sand_tot_val + cols_sand_tot_val + ftgs_sand_val + gb_sand_val
         grand_ratio_val     = (grand_steel_kg_val / grand_conc_rc_val) if grand_conc_rc_val > 0 else 0.0
 
         # 5. Detailed Diameter Breakdown (Slab, Columns & Foundations)
@@ -13586,7 +13795,7 @@ def render(is_standalone: bool = False):
                 st.markdown(
                     f"""
                     <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:10px 14px; text-align:center;">
-                        <div style="font-size:13px; font-weight:600; color:#15803d; margin-bottom:4px;">إجمالي حجم الخرسانات</div>
+                        <div style="font-size:13px; font-weight:600; color:#15803d; margin-bottom:4px;">إجمالي خرسانات المبنى ({num_floors} أدوار)</div>
                         <div style="font-size:20px; font-weight:800; color:#166534;">{grand_conc_all_val:.2f} m³</div>
                         <div style="font-size:11.5px; color:#475569; margin-top:2px;">مسلحة: {grand_conc_rc_val:.1f} m³ │ عادية: {grand_conc_pc_val:.1f} m³</div>
                     </div>
@@ -13594,12 +13803,13 @@ def render(is_standalone: bool = False):
                     unsafe_allow_html=True,
                 )
             with kpi_c2:
+                slab_sub_txt = f"أسقف ({num_floors}): {slab_steel_ton_tot:.2f}t (الدور: {slab_steel_ton:.2f}t)" if num_floors > 1 else f"سقف: {slab_steel_ton:.2f}t"
                 st.markdown(
                     f"""
                     <div style="background:#f5f3ff; border:1.5px solid #c4b5fd; border-radius:8px; padding:10px 14px; text-align:center;">
-                        <div style="font-size:13px; font-weight:600; color:#6d28d9; margin-bottom:4px;">إجمالي وزن حديد التسليح</div>
+                        <div style="font-size:13px; font-weight:600; color:#6d28d9; margin-bottom:4px;">إجمالي حديد المبنى بالكامل</div>
                         <div style="font-size:20px; font-weight:800; color:#5b21b6;">{grand_steel_ton_val:.3f} Ton</div>
-                        <div style="font-size:11.5px; color:#475569; margin-top:2px;">سقف: {slab_steel_ton:.2f}t │ أعمدة: {cols_steel_ton_tot_val:.2f}t │ أساسات: {ftgs_steel_ton_val:.2f}t │ سملات: {gb_steel_ton_val:.2f}t</div>
+                        <div style="font-size:11.5px; color:#475569; margin-top:2px;">{slab_sub_txt} │ أعمدة: {cols_steel_ton_tot_val:.2f}t │ قواعد: {ftgs_steel_ton_val:.2f}t │ سملات: {gb_steel_ton_val:.2f}t</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -13608,7 +13818,7 @@ def render(is_standalone: bool = False):
                 st.markdown(
                     f"""
                     <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:10px 14px; text-align:center;">
-                        <div style="font-size:13px; font-weight:600; color:#1e40af; margin-bottom:4px;">إجمالي كمية الأسمنت</div>
+                        <div style="font-size:13px; font-weight:600; color:#1e40af; margin-bottom:4px;">إجمالي أسمنت المبنى</div>
                         <div style="font-size:20px; font-weight:800; color:#1e3a8a;">{grand_cement_ton:.2f} Ton</div>
                         <div style="font-size:11.5px; color:#475569; margin-top:2px;">{grand_cement_bags:,} شكارة (50 كجم)</div>
                     </div>
@@ -13630,7 +13840,12 @@ def render(is_standalone: bool = False):
             st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
 
             # ── Table 1: Main Materials Quantity Survey Table ──
-            st.markdown("##### 📋 1. جدول الحصر التقريبي العام للكميات والمواد الإنشائية (General Quantity Survey Table)")
+            col_t1_title, col_t1_btn = st.columns([2.3, 1.7])
+            with col_t1_title:
+                st.markdown("##### 📋 1. جدول الحصر التقريبي العام للكميات والمواد الإنشائية (General Quantity Survey Table)")
+            with col_t1_btn:
+                if st.button("📖 الاطلاع على فلسفة التصميم وحصر الكميات", key=f"{prefix}btn_design_philosophy_boq", use_container_width=True):
+                    show_design_philosophy_dialog()
 
             st.markdown(
                 """
@@ -13647,78 +13862,159 @@ def render(is_standalone: bool = False):
                 unsafe_allow_html=True,
             )
 
-            main_survey_data = [
-                {
-                    "البند / المكون الإنشائي (Item / Material)": "1. حجم الخرسانة المسلحة (Reinforced Concrete R.C.)",
-                    "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_conc_val:.2f} m³",
-                    f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_conc_tot_val:.2f} m³",
-                    "أساسات المبنى (Foundations)": f"{ftgs_conc_rc_val:.2f} m³",
-                    "سملات وميدات (Ground Beams)": f"{gb_conc_rc_val:.2f} m³",
-                    "الإجمالي الشامل (Grand Total)": f"{grand_conc_rc_val:.2f} m³",
-                    "الوحدة (Unit)": "متر مكعب (m³)",
-                    "الملاحظات والمواصفات (Notes & Specs)": f"مسطح السقف الصافي {slab_area_val:.1f} m² + كامل الأعمدة ({tot_active_cols} عمود) + القواعد المسلحة + السملات الأرضية",
-                },
-                {
-                    "البند / المكون الإنشائي (Item / Material)": "2. حجم الخرسانة العادية (Plain Concrete P.C.)",
-                    "سقف البلاطة اللاكمرية (Flat Slab)": "—",
-                    f"أعمدة المبنى ({num_floors} طوابق)": "—",
-                    "أساسات المبنى (Foundations)": f"{ftgs_conc_pc_val:.2f} m³",
-                    "سملات وميدات (Ground Beams)": "—",
-                    "الإجمالي الشامل (Grand Total)": f"{grand_conc_pc_val:.2f} m³",
-                    "الوحدة (Unit)": "متر مكعب (m³)",
-                    "الملاحظات والمواصفات (Notes & Specs)": "فرشة نظافة بسمك 20 سم ورفرفة 20 سم أسفل كامل القواعد",
-                },
-                {
-                    "البند / المكون الإنشائي (Item / Material)": "3. إجمالي وزن حديد التسليح (Total Reinforcement Steel)",
-                    "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
-                    f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
-                    "أساسات المبنى (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
-                    "سملات وميدات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
-                    "الإجمالي الشامل (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
-                    "الوحدة (Unit)": "طن (Ton) / كجم (kg)",
-                    "الملاحظات والمواصفات (Notes & Specs)": "شامل شبكات السقف والإضافي + حديد الأعمدة والكانات + تسليح القواعد المنفصلة والمشتركة والشدادات والسملات",
-                },
-                {
-                    "البند / المكون الإنشائي (Item / Material)": "4. كمية الأسمنت البورتلاندي (Portland Cement)",
-                    "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_cement_ton:.2f} Ton ({slab_cement_bags:,} شكارة)",
-                    f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_cement_tot_ton:.2f} Ton ({cols_cement_tot_bags:,} شكارة)",
-                    "أساسات المبنى (Foundations)": f"{ftgs_cement_ton:.2f} Ton ({ftgs_cement_bags:,} شكارة)",
-                    "سملات وميدات (Ground Beams)": f"{gb_cement_ton:.2f} Ton ({gb_cement_bags:,} شكارة)",
-                    "الإجمالي الشامل (Grand Total)": f"{grand_cement_ton:.2f} Ton ({grand_cement_bags:,} شكارة)",
-                    "الوحدة (Unit)": "طن (Ton) / شكارة",
-                    "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 350 كجم/م³ للمسلحة (7 شكاير) و 250 كجم/م³ للعادية (5 شكاير)",
-                },
-                {
-                    "البند / المكون الإنشائي (Item / Material)": "5. كمية الزلط / الركام الكبير (Gravel / Coarse Aggregate)",
-                    "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_gravel_val:.2f} m³",
-                    f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_gravel_tot_val:.2f} m³",
-                    "أساسات المبنى (Foundations)": f"{ftgs_gravel_val:.2f} m³",
-                    "سملات وميدات (Ground Beams)": f"{gb_gravel_val:.2f} m³",
-                    "الإجمالي الشامل (Grand Total)": f"{grand_gravel_val:.2f} m³",
-                    "الوحدة (Unit)": "متر مكعب (m³)",
-                    "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.80 m³ زلط متدرج ونظيف لكل 1.0 m³ خرسانة (مسلحة وعادية)",
-                },
-                {
-                    "البند / المكون الإنشائي (Item / Material)": "6. كمية الرمل الحرش / الركام الصغير (Clean Sand)",
-                    "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_sand_val:.2f} m³",
-                    f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_sand_tot_val:.2f} m³",
-                    "أساسات المبنى (Foundations)": f"{ftgs_sand_val:.2f} m³",
-                    "سملات وميدات (Ground Beams)": f"{gb_sand_val:.2f} m³",
-                    "الإجمالي الشامل (Grand Total)": f"{grand_sand_val:.2f} m³",
-                    "الوحدة (Unit)": "متر مكعب (m³)",
-                    "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.40 m³ رمل حرش نظيف لكل 1.0 m³ خرسانة (نصف حجم الزلط)",
-                },
-                {
-                    "البند / المكون الإنشائي (Item / Material)": "7. معدل استهلاك الحديد (Steel Consumption Ratio)",
-                    "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_ratio_val:.1f} kg/m³",
-                    f"أعمدة المبنى ({num_floors} طوابق)": f"{cols_ratio_val:.1f} kg/m³",
-                    "أساسات المبنى (Foundations)": f"{ftgs_ratio_val:.1f} kg/m³",
-                    "سملات وميدات (Ground Beams)": f"{gb_ratio_val:.1f} kg/m³",
-                    "الإجمالي الشامل (Grand Total)": f"{grand_ratio_val:.1f} kg/m³",
-                    "الوحدة (Unit)": "كجم / م³ خرسانة مسلحة",
-                    "الملاحظات والمواصفات (Notes & Specs)": "متوسط استهلاك الحديد المسلح لكافة عناصر المبنى",
-                },
-            ]
+            if num_floors > 1:
+                main_survey_data = [
+                    {
+                        "البند / المكون الإنشائي (Item / Material)": "1. حجم الخرسانة المسلحة (Reinforced Concrete R.C.)",
+                        "سقف الدور النمطي (1 Floor)": f"{slab_conc_val:.2f} m³",
+                        f"إجمالي أسقف المبنى ({num_floors} أسقف)": f"{slab_conc_tot_val:.2f} m³",
+                        f"أعمدة المبنى ({num_floors} أدوار)": f"{cols_conc_tot_val:.2f} m³",
+                        "أساسات المبنى (Foundations)": f"{ftgs_conc_rc_val:.2f} m³",
+                        "سملات وميدات (Ground Beams)": f"{gb_conc_rc_val:.2f} m³",
+                        "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_conc_rc_val:.2f} m³",
+                        "الوحدة (Unit)": "متر مكعب (m³)",
+                        "الملاحظات والمواصفات (Notes & Specs)": f"سقف الدور الواحد مسطح {slab_area_val:.1f} m² (صبة كل دور) │ إجمالي الـ {num_floors} أسقف + كامل الأعمدة ({tot_active_cols} عمود) + القواعد المسلحة + السملات",
+                    },
+                    {
+                        "البند / المكون الإنشائي (Item / Material)": "2. حجم الخرسانة العادية (Plain Concrete P.C.)",
+                        "سقف الدور النمطي (1 Floor)": "—",
+                        f"إجمالي أسقف المبنى ({num_floors} أسقف)": "—",
+                        f"أعمدة المبنى ({num_floors} أدوار)": "—",
+                        "أساسات المبنى (Foundations)": f"{ftgs_conc_pc_val:.2f} m³",
+                        "سملات وميدات (Ground Beams)": "—",
+                        "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_conc_pc_val:.2f} m³",
+                        "الوحدة (Unit)": "متر مكعب (m³)",
+                        "الملاحظات والمواصفات (Notes & Specs)": "فرشة نظافة بسمك 20 سم ورفرفة 20 سم أسفل كامل القواعد",
+                    },
+                    {
+                        "البند / المكون الإنشائي (Item / Material)": "3. إجمالي وزن حديد التسليح (Total Reinforcement Steel)",
+                        "سقف الدور النمطي (1 Floor)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
+                        f"إجمالي أسقف المبنى ({num_floors} أسقف)": f"{slab_steel_ton_tot:.3f} Ton ({slab_steel_kg_tot:,.1f} kg)",
+                        f"أعمدة المبنى ({num_floors} أدوار)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
+                        "أساسات المبنى (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
+                        "سملات وميدات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
+                        "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
+                        "الوحدة (Unit)": "طن (Ton) / كجم (kg)",
+                        "الملاحظات والمواصفات (Notes & Specs)": f"حديد السقف الواحد للطلبية الميدانية │ الإجمالي يشمل {num_floors} أسقف + تسليح وكانات الأعمدة + القواعد + السملات",
+                    },
+                    {
+                        "البند / المكون الإنشائي (Item / Material)": "4. كمية الأسمنت البورتلاندي (Portland Cement)",
+                        "سقف الدور النمطي (1 Floor)": f"{slab_cement_ton:.2f} Ton ({slab_cement_bags:,} شكارة)",
+                        f"إجمالي أسقف المبنى ({num_floors} أسقف)": f"{slab_cement_tot_ton:.2f} Ton ({slab_cement_tot_bags:,} شكارة)",
+                        f"أعمدة المبنى ({num_floors} أدوار)": f"{cols_cement_tot_ton:.2f} Ton ({cols_cement_tot_bags:,} شكارة)",
+                        "أساسات المبنى (Foundations)": f"{ftgs_cement_ton:.2f} Ton ({ftgs_cement_bags:,} شكارة)",
+                        "سملات وميدات (Ground Beams)": f"{gb_cement_ton:.2f} Ton ({gb_cement_bags:,} شكارة)",
+                        "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_cement_ton:.2f} Ton ({grand_cement_bags:,} شكارة)",
+                        "الوحدة (Unit)": "طن (Ton) / شكارة",
+                        "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 350 كجم/م³ للمسلحة (7 شكاير) و 250 كجم/م³ للعادية (5 شكاير)",
+                    },
+                    {
+                        "البند / المكون الإنشائي (Item / Material)": "5. كمية الزلط / الركام الكبير (Gravel / Coarse Aggregate)",
+                        "سقف الدور النمطي (1 Floor)": f"{slab_gravel_val:.2f} m³",
+                        f"إجمالي أسقف المبنى ({num_floors} أسقف)": f"{slab_gravel_tot_val:.2f} m³",
+                        f"أعمدة المبنى ({num_floors} أدوار)": f"{cols_gravel_tot_val:.2f} m³",
+                        "أساسات المبنى (Foundations)": f"{ftgs_gravel_val:.2f} m³",
+                        "سملات وميدات (Ground Beams)": f"{gb_gravel_val:.2f} m³",
+                        "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_gravel_val:.2f} m³",
+                        "الوحدة (Unit)": "متر مكعب (m³)",
+                        "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.80 m³ زلط متدرج ونظيف لكل 1.0 m³ خرسانة (مسلحة وعادية)",
+                    },
+                    {
+                        "البند / المكون الإنشائي (Item / Material)": "6. كمية الرمل الحرش / الركام الصغير (Clean Sand)",
+                        "سقف الدور النمطي (1 Floor)": f"{slab_sand_val:.2f} m³",
+                        f"إجمالي أسقف المبنى ({num_floors} أسقف)": f"{slab_sand_tot_val:.2f} m³",
+                        f"أعمدة المبنى ({num_floors} أدوار)": f"{cols_sand_tot_val:.2f} m³",
+                        "أساسات المبنى (Foundations)": f"{ftgs_sand_val:.2f} m³",
+                        "سملات وميدات (Ground Beams)": f"{gb_sand_val:.2f} m³",
+                        "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_sand_val:.2f} m³",
+                        "الوحدة (Unit)": "متر مكعب (m³)",
+                        "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.40 m³ رمل حرش نظيف لكل 1.0 m³ خرسانة (نصف حجم الزلط)",
+                    },
+                    {
+                        "البند / المكون الإنشائي (Item / Material)": "7. معدل استهلاك الحديد (Steel Consumption Ratio)",
+                        "سقف الدور النمطي (1 Floor)": f"{slab_ratio_val:.1f} kg/m³",
+                        f"إجمالي أسقف المبنى ({num_floors} أسقف)": f"{slab_ratio_val:.1f} kg/m³",
+                        f"أعمدة المبنى ({num_floors} أدوار)": f"{cols_ratio_val:.1f} kg/m³",
+                        "أساسات المبنى (Foundations)": f"{ftgs_ratio_val:.1f} kg/m³",
+                        "سملات وميدات (Ground Beams)": f"{gb_ratio_val:.1f} kg/m³",
+                        "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_ratio_val:.1f} kg/m³",
+                        "الوحدة (Unit)": "كجم / م³ خرسانة مسلحة",
+                        "الملاحظات والمواصفات (Notes & Specs)": f"متوسط استهلاك الحديد المسلح لكامل عناصر المبنى ({grand_ratio_val:.1f} kg/m³)",
+                    },
+                ]
+            else:
+                main_survey_data = [
+                    {
+                        "البند / المكون الإنشائي (Item / Material)": "1. حجم الخرسانة المسلحة (Reinforced Concrete R.C.)",
+                        "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_conc_val:.2f} m³",
+                        "أعمدة الدور الواحد (Columns)": f"{cols_conc_tot_val:.2f} m³",
+                        "أساسات المبنى (Foundations)": f"{ftgs_conc_rc_val:.2f} m³",
+                        "سملات وميدات (Ground Beams)": f"{gb_conc_rc_val:.2f} m³",
+                        "الإجمالي الشامل (Grand Total)": f"{grand_conc_rc_val:.2f} m³",
+                        "الوحدة (Unit)": "متر مكعب (m³)",
+                        "الملاحظات والمواصفات (Notes & Specs)": f"مسطح السقف الصافي {slab_area_val:.1f} m² + كامل الأعمدة ({tot_active_cols} عمود) + القواعد المسلحة + السملات الأرضية",
+                    },
+                    {
+                        "البند / المكون الإنشائي (Item / Material)": "2. حجم الخرسانة العادية (Plain Concrete P.C.)",
+                        "سقف البلاطة اللاكمرية (Flat Slab)": "—",
+                        "أعمدة الدور الواحد (Columns)": "—",
+                        "أساسات المبنى (Foundations)": f"{ftgs_conc_pc_val:.2f} m³",
+                        "سملات وميدات (Ground Beams)": "—",
+                        "الإجمالي الشامل (Grand Total)": f"{grand_conc_pc_val:.2f} m³",
+                        "الوحدة (Unit)": "متر مكعب (m³)",
+                        "الملاحظات والمواصفات (Notes & Specs)": "فرشة نظافة بسمك 20 سم ورفرفة 20 سم أسفل كامل القواعد",
+                    },
+                    {
+                        "البند / المكون الإنشائي (Item / Material)": "3. إجمالي وزن حديد التسليح (Total Reinforcement Steel)",
+                        "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
+                        "أعمدة الدور الواحد (Columns)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
+                        "أساسات المبنى (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
+                        "سملات وميدات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
+                        "الإجمالي الشامل (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
+                        "الوحدة (Unit)": "طن (Ton) / كجم (kg)",
+                        "الملاحظات والمواصفات (Notes & Specs)": "شامل شبكات السقف والإضافي + حديد الأعمدة والكانات + تسليح القواعد المنفصلة والمشتركة والشدادات والسملات",
+                    },
+                    {
+                        "البند / المكون الإنشائي (Item / Material)": "4. كمية الأسمنت البورتلاندي (Portland Cement)",
+                        "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_cement_ton:.2f} Ton ({slab_cement_bags:,} شكارة)",
+                        "أعمدة الدور الواحد (Columns)": f"{cols_cement_tot_ton:.2f} Ton ({cols_cement_tot_bags:,} شكارة)",
+                        "أساسات المبنى (Foundations)": f"{ftgs_cement_ton:.2f} Ton ({ftgs_cement_bags:,} شكارة)",
+                        "سملات وميدات (Ground Beams)": f"{gb_cement_ton:.2f} Ton ({gb_cement_bags:,} شكارة)",
+                        "الإجمالي الشامل (Grand Total)": f"{grand_cement_ton:.2f} Ton ({grand_cement_bags:,} شكارة)",
+                        "الوحدة (Unit)": "طن (Ton) / شكارة",
+                        "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 350 كجم/م³ للمسلحة (7 شكاير) و 250 كجم/م³ للعادية (5 شكاير)",
+                    },
+                    {
+                        "البند / المكون الإنشائي (Item / Material)": "5. كمية الزلط / الركام الكبير (Gravel / Coarse Aggregate)",
+                        "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_gravel_val:.2f} m³",
+                        "أعمدة الدور الواحد (Columns)": f"{cols_gravel_tot_val:.2f} m³",
+                        "أساسات المبنى (Foundations)": f"{ftgs_gravel_val:.2f} m³",
+                        "سملات وميدات (Ground Beams)": f"{gb_gravel_val:.2f} m³",
+                        "الإجمالي الشامل (Grand Total)": f"{grand_gravel_val:.2f} m³",
+                        "الوحدة (Unit)": "متر مكعب (m³)",
+                        "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.80 m³ زلط متدرج ونظيف لكل 1.0 m³ خرسانة (مسلحة وعادية)",
+                    },
+                    {
+                        "البند / المكون الإنشائي (Item / Material)": "6. كمية الرمل الحرش / الركام الصغير (Clean Sand)",
+                        "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_sand_val:.2f} m³",
+                        "أعمدة الدور الواحد (Columns)": f"{cols_sand_tot_val:.2f} m³",
+                        "أساسات المبنى (Foundations)": f"{ftgs_sand_val:.2f} m³",
+                        "سملات وميدات (Ground Beams)": f"{gb_sand_val:.2f} m³",
+                        "الإجمالي الشامل (Grand Total)": f"{grand_sand_val:.2f} m³",
+                        "الوحدة (Unit)": "متر مكعب (m³)",
+                        "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.40 m³ رمل حرش نظيف لكل 1.0 m³ خرسانة (نصف حجم الزلط)",
+                    },
+                    {
+                        "البند / المكون الإنشائي (Item / Material)": "7. معدل استهلاك الحديد (Steel Consumption Ratio)",
+                        "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_ratio_val:.1f} kg/m³",
+                        "أعمدة الدور الواحد (Columns)": f"{cols_ratio_val:.1f} kg/m³",
+                        "أساسات المبنى (Foundations)": f"{ftgs_ratio_val:.1f} kg/m³",
+                        "سملات وميدات (Ground Beams)": f"{gb_ratio_val:.1f} kg/m³",
+                        "الإجمالي الشامل (Grand Total)": f"{grand_ratio_val:.1f} kg/m³",
+                        "الوحدة (Unit)": "كجم / م³ خرسانة مسلحة",
+                        "الملاحظات والمواصفات (Notes & Specs)": "متوسط استهلاك الحديد المسلح لكافة عناصر المبنى",
+                    },
+                ]
             render_styled_table(main_survey_data)
 
             # Export Excel & CSV buttons for Quantity Survey
@@ -13762,7 +14058,8 @@ def render(is_standalone: bool = False):
             st.markdown("##### 🔩 2. جدول تفصيل أوزان حديد التسليح لكل قطر والإجمالي الكلي (Steel Breakdown by Bar Diameter)")
             dia_table_rows = []
             for d in sorted(all_dias_set):
-                s_kg = slab_dia_map.get(d, {}).get("weight_kg", 0.0)
+                s_kg_1f = slab_dia_map.get(d, {}).get("weight_kg", 0.0)
+                s_kg = s_kg_1f * num_floors
                 s_ton = s_kg / 1000.0
                 c_kg = cols_dia_map.get(d, {}).get("weight_kg", 0.0)
                 c_ton = c_kg / 1000.0
@@ -13784,29 +14081,57 @@ def render(is_standalone: bool = False):
                 if gb_kg > 0:
                     sources_list.append(f"السملات: {gb_dia_map[d].get('apps', '—')}")
 
-                dia_table_rows.append({
-                    "قطر السيخ Φ (Bar Dia)": f"Φ {d} mm",
-                    "وزن المتر الطولي (kg/m')": f"{(d**2)/162.0:.4f} kg/m'",
-                    "حديد السقف (Slab Steel)": f"{s_ton:.3f} Ton ({s_kg:,.1f} kg)" if s_kg > 0 else "—",
-                    f"حديد الأعمدة ({num_floors}F)": f"{c_ton:.3f} Ton ({c_kg:,.1f} kg)" if c_kg > 0 else "—",
-                    "حديد الأساسات (Foundations)": f"{f_ton:.3f} Ton ({f_kg:,.1f} kg)" if f_kg > 0 else "—",
-                    "حديد السملات (Ground Beams)": f"{gb_ton:.3f} Ton ({gb_kg:,.1f} kg)" if gb_kg > 0 else "—",
-                    "الإجمالي الكلي (Grand Total)": f"{t_ton:.3f} Ton ({t_kg:,.1f} kg)",
-                    "النسبة (%)": f"{pct:.1f} %",
-                    "مواقع الاستخدام في المشروع (Applications)": " │ ".join(sources_list) if sources_list else "—",
-                })
+                if num_floors > 1:
+                    dia_table_rows.append({
+                        "قطر السيخ Φ (Bar Dia)": f"Φ {d} mm",
+                        "وزن المتر الطولي (kg/m')": f"{(d**2)/162.0:.4f} kg/m'",
+                        "سقف الدور (1F)": f"{s_kg_1f/1000.0:.3f} Ton ({s_kg_1f:,.1f} kg)" if s_kg_1f > 0 else "—",
+                        f"أسقف المبنى ({num_floors}F)": f"{s_ton:.3f} Ton ({s_kg:,.1f} kg)" if s_kg > 0 else "—",
+                        f"أعمدة المبنى ({num_floors}F)": f"{c_ton:.3f} Ton ({c_kg:,.1f} kg)" if c_kg > 0 else "—",
+                        "حديد الأساسات (Foundations)": f"{f_ton:.3f} Ton ({f_kg:,.1f} kg)" if f_kg > 0 else "—",
+                        "حديد السملات (Ground Beams)": f"{gb_ton:.3f} Ton ({gb_kg:,.1f} kg)" if gb_kg > 0 else "—",
+                        "الإجمالي الكلي للمبنى (Grand Total)": f"{t_ton:.3f} Ton ({t_kg:,.1f} kg)",
+                        "النسبة (%)": f"{pct:.1f} %",
+                        "مواقع الاستخدام في المشروع (Applications)": " │ ".join(sources_list) if sources_list else "—",
+                    })
+                else:
+                    dia_table_rows.append({
+                        "قطر السيخ Φ (Bar Dia)": f"Φ {d} mm",
+                        "وزن المتر الطولي (kg/m')": f"{(d**2)/162.0:.4f} kg/m'",
+                        "حديد السقف (Slab Steel)": f"{s_ton:.3f} Ton ({s_kg:,.1f} kg)" if s_kg > 0 else "—",
+                        "حديد الأعمدة (Columns)": f"{c_ton:.3f} Ton ({c_kg:,.1f} kg)" if c_kg > 0 else "—",
+                        "حديد الأساسات (Foundations)": f"{f_ton:.3f} Ton ({f_kg:,.1f} kg)" if f_kg > 0 else "—",
+                        "حديد السملات (Ground Beams)": f"{gb_ton:.3f} Ton ({gb_kg:,.1f} kg)" if gb_kg > 0 else "—",
+                        "الإجمالي الكلي (Grand Total)": f"{t_ton:.3f} Ton ({t_kg:,.1f} kg)",
+                        "النسبة (%)": f"{pct:.1f} %",
+                        "مواقع الاستخدام في المشروع (Applications)": " │ ".join(sources_list) if sources_list else "—",
+                    })
 
-            dia_table_rows.append({
-                "قطر السيخ Φ (Bar Dia)": "📌 TOTAL STEEL (إجمالي حديد التسليح بالكامل)",
-                "وزن المتر الطولي (kg/m')": "—",
-                "حديد السقف (Slab Steel)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
-                f"حديد الأعمدة ({num_floors}F)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
-                "حديد الأساسات (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
-                "حديد السملات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
-                "الإجمالي الكلي (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
-                "النسبة (%)": "100.0 %",
-                "مواقع الاستخدام في المشروع (Applications)": f"متوسط استهلاك المشروع بالكامل: {grand_ratio_val:.1f} kg/m³ خرسانة مسلحة",
-            })
+            if num_floors > 1:
+                dia_table_rows.append({
+                    "قطر السيخ Φ (Bar Dia)": "📌 TOTAL STEEL (إجمالي حديد التسليح بالكامل)",
+                    "وزن المتر الطولي (kg/m')": "—",
+                    "سقف الدور (1F)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
+                    f"أسقف المبنى ({num_floors}F)": f"{slab_steel_ton_tot:.3f} Ton ({slab_steel_kg_tot:,.1f} kg)",
+                    f"أعمدة المبنى ({num_floors}F)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
+                    "حديد الأساسات (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
+                    "حديد السملات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
+                    "الإجمالي الكلي للمبنى (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
+                    "النسبة (%)": "100.0 %",
+                    "مواقع الاستخدام في المشروع (Applications)": f"متوسط استهلاك المشروع بالكامل: {grand_ratio_val:.1f} kg/m³ خرسانة مسلحة",
+                })
+            else:
+                dia_table_rows.append({
+                    "قطر السيخ Φ (Bar Dia)": "📌 TOTAL STEEL (إجمالي حديد التسليح بالكامل)",
+                    "وزن المتر الطولي (kg/m')": "—",
+                    "حديد السقف (Slab Steel)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
+                    "حديد الأعمدة (Columns)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
+                    "حديد الأساسات (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
+                    "حديد السملات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
+                    "الإجمالي الكلي (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
+                    "النسبة (%)": "100.0 %",
+                    "مواقع الاستخدام في المشروع (Applications)": f"متوسط استهلاك المشروع بالكامل: {grand_ratio_val:.1f} kg/m³ خرسانة مسلحة",
+                })
             render_styled_table(dia_table_rows)
 
         st.markdown("---")

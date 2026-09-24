@@ -405,17 +405,21 @@ st.markdown(
         padding-top: 4.0rem !important;
     }
     
-    /* Distinctive Centered Input Section Header (Golden Amber Theme) */
+    /* Distinctive Centered Input Section Header (White Background & Black Text) */
     [data-testid="stMainBlockContainer"] .input-section-header,
     [data-testid="stMainBlockContainer"] .input-section-header * {
         font-size: var(--ecp-font-size-h2) !important;
         font-weight: 900 !important;
         line-height: 1.3 !important;
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
     }
     [data-testid="stMainBlockContainer"] .input-section-header {
-        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #0f172a 100%) !important;
-        color: #fbbf24 !important;
-        border: 2px solid #fbbf24 !important;
+        background: #ffffff !important;
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        border: 2px solid #cbd5e1 !important;
         border-radius: 10px !important;
         padding: 8px 16px !important;
         margin: 8px 0 6px 0 !important;
@@ -424,23 +428,45 @@ st.markdown(
         justify-content: center !important;
         align-items: center !important;
         gap: 8px !important;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45), 0 0 14px rgba(251, 191, 36, 0.2) !important;
-        text-shadow: 0 0 10px rgba(251, 191, 36, 0.35) !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+        text-shadow: none !important;
     }
 
-    /* Section & Output Headers (Blue / Navy Theme) */
+    /* Section & Output Headers (White Background & Black Text) */
     [data-testid="stMainBlockContainer"] .section-header,
     [data-testid="stMainBlockContainer"] .section-header * {
         font-size: var(--ecp-font-size-h3) !important;
-        font-weight: 700 !important;
+        font-weight: 800 !important;
         line-height: 1.3 !important;
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        text-shadow: none !important;
     }
     [data-testid="stMainBlockContainer"] .section-header {
-        background: linear-gradient(90deg, #1a2340, #2e4080);
-        color: white !important;
-        padding: calc(var(--ecp-output-font-size) * 0.3) calc(var(--ecp-output-font-size) * 0.6);
-        border-radius: 6px;
+        background: #ffffff !important;
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+        border: 1.5px solid #cbd5e1 !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+        padding: calc(var(--ecp-output-font-size) * 0.35) calc(var(--ecp-output-font-size) * 0.7) !important;
+        border-radius: 8px !important;
         margin: 12px 0 10px 0 !important;
+        text-shadow: none !important;
+    }
+
+    /* Module Specific Subheaders (White Background & Black Text) */
+    .m9-hdr, .m9-subhdr, .m10-hdr, .m11-hdr, .cs-inputs-header-badge,
+    .m9-hdr *, .m9-subhdr *, .m10-hdr *, .m11-hdr *, .cs-inputs-header-badge * {
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
+    }
+    .m9-hdr, .m9-subhdr, .m10-hdr, .m11-hdr, .cs-inputs-header-badge {
+        background: #ffffff !important;
+        border: 1.5px solid #cbd5e1 !important;
+        border-radius: 6px !important;
+        padding: 6px 12px !important;
+        text-shadow: none !important;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04) !important;
     }
     [data-testid="stMainBlockContainer"] h1, [data-testid="stMainBlockContainer"] h1 * { font-size: var(--ecp-font-size-h1) !important; font-weight: 700 !important; margin-top: 14px !important; margin-bottom: 10px !important; }
     [data-testid="stMainBlockContainer"] h2, [data-testid="stMainBlockContainer"] h2 * { font-size: var(--ecp-font-size-h2) !important; font-weight: 700 !important; margin-top: 14px !important; margin-bottom: 10px !important; }
@@ -667,7 +693,7 @@ st.markdown(
     .stExpander summary,
     details summary,
     .streamlit-expanderHeader {
-        background: #f1f5f9 !important;
+        background: #ffffff !important;
         border: 1px solid #cbd5e1 !important;
         border-radius: 8px !important;
         padding: 6px 12px !important;
@@ -678,7 +704,7 @@ st.markdown(
     div[data-testid="stExpander"] details summary:hover,
     div[data-testid="stExpander"] summary:hover,
     .stExpander summary:hover {
-        background: #e2e8f0 !important;
+        background: #f8fafc !important;
         border-color: #94a3b8 !important;
     }
 
@@ -700,7 +726,8 @@ st.markdown(
         font-size: 15.75px !important;
         font-weight: 800 !important;
         line-height: 1.35 !important;
-        color: #0f172a !important;
+        color: #000000 !important;
+        -webkit-text-fill-color: #000000 !important;
     }
 
     div[data-testid="stExpander"] details summary svg,
@@ -712,7 +739,7 @@ st.markdown(
         min-width: 15px !important;
         fill: currentColor !important;
         stroke: currentColor !important;
-        color: #1e40af !important;
+        color: #000000 !important;
     }
 
     /* Dark Mode Theme Adaptive Rules */
@@ -720,9 +747,9 @@ st.markdown(
         div[data-testid="stExpander"] details summary,
         div[data-testid="stExpander"] summary,
         .stExpander summary {
-            background: #1e293b !important;
-            border-color: #334155 !important;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.25) !important;
+            background: #ffffff !important;
+            border-color: #cbd5e1 !important;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05) !important;
         }
         div[data-testid="stExpander"] details summary:hover,
         div[data-testid="stExpander"] summary:hover,
@@ -2319,37 +2346,46 @@ def render_profile_manager():
                 # Available modules that are currently active (NOT in trash)
                 deletable_mods = [m for m in ALL_MODULES if m["idx"] not in deleted_idxs_del]
 
-                # Large & Clear Informational Header on Linked Modules
+                # Informational Header on Linked & Unlinked Modules
                 links_map_html = (
-                    f'<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #1e1b4b 0%, #2e1065 50%, #1e1b4b 100%); border: 2.5px solid #a855f7; border-radius: 12px; padding: 18px 24px; margin-bottom: 14px; box-shadow: 0 4px 20px rgba(168, 85, 247, 0.25);">'
-                    f'<div style="font-weight: 900; font-size: 20px; color: #f5d0fe; display: flex; align-items: center; justify-content: flex-start; gap: 10px; margin-bottom: 12px; border-bottom: 1.5px solid rgba(216, 180, 254, 0.35); padding-bottom: 10px; direction: rtl; text-align: right;">'
+                    f'<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #2e1065 100%); border: 2.5px solid #8b5cf6; border-radius: 14px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 6px 24px rgba(139, 92, 246, 0.25);">'
+                    f'<div style="font-weight: 900; font-size: 20px; color: #f5d0fe; display: flex; align-items: center; justify-content: flex-start; gap: 10px; margin-bottom: 16px; border-bottom: 1.5px solid rgba(216, 180, 254, 0.30); padding-bottom: 10px; direction: rtl; text-align: right;">'
                     f'<span style="font-size: 26px;">🔗</span>'
                     f'<span>خريطة الارتباطات الهندسية بين الموديولات — مشروع: <b style="color: #fbcfe8;">«{pname}»</b></span>'
                     f'</div>'
-                    f'<div style="color: #ffffff; font-size: 15px; line-height: 1.8; font-weight: 600; direction: rtl; text-align: right;">'
-                    f'<div style="margin-bottom: 10px; direction: rtl; text-align: right; display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">'
-                    f'<span style="font-size: 15.5px; font-weight: 800; color: #ffffff;">📌 مسار نقل الأحمال الإنشائية:</span>'
-                    f'<span style="background: rgba(103, 232, 249, 0.18); border: 1.5px solid #06b6d4; border-radius: 6px; padding: 2px 10px; color: #67e8f9; font-weight: 800; font-size: 13.5px; direction: ltr; display: inline-block;">[Module 1: Integrated Structural Design]</span>'
-                    f'<span style="color: #facc15; font-weight: 800; font-size: 14px;">⬅️ يغذي ⬅️</span>'
-                    f'<span style="background: rgba(103, 232, 249, 0.18); border: 1.5px solid #06b6d4; border-radius: 6px; padding: 2px 10px; color: #67e8f9; font-weight: 800; font-size: 13.5px; direction: ltr; display: inline-block;">[Module 2: Rectangular Columns]</span>'
-                    f'<span style="color: #facc15; font-weight: 800; font-size: 14px;">⬅️ يغذي ⬅️</span>'
-                    f'<span style="background: rgba(103, 232, 249, 0.18); border: 1.5px solid #06b6d4; border-radius: 6px; padding: 2px 10px; color: #67e8f9; font-weight: 800; font-size: 13.5px; direction: ltr; display: inline-block;">[Module 3: Isolated Footings]</span>'
+
+                    # Section 1: Linked Modules (Cannot be deleted individually, must be deleted together)
+                    f'<div style="background: rgba(15, 23, 42, 0.75); border: 2px solid #ef4444; border-right: 7px solid #dc2626; border-radius: 12px; padding: 16px 20px; margin-bottom: 16px;">'
+                    f'<div style="color: #fca5a5; font-weight: 900; font-size: 16.5px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">'
+                    f'<span style="font-size: 20px;">🔒</span>'
+                    f'<span>1️⃣ الموديولات المرتبطة ببعضها (لا يمكن حذف أي موديول منها منفرداً، بل يمكن حذفهم معاً جميعاً كحزمة واحدة):</span>'
                     f'</div>'
-                    f'<div style="color: #e2e8f0; font-size: 14px; line-height: 1.8; font-weight: 600; direction: rtl; text-align: right;">'
-                    f'<div style="margin-bottom: 6px; display: flex; align-items: flex-start; gap: 8px; direction: rtl; text-align: right;">'
-                    f'<span style="color: #c084fc; font-size: 18px; line-height: 1.2;">•</span>'
-                    f'<span><b>حذف السقف (Mod 1) أو القواعد (Mod 3) منفرداً:</b> مسموح بالكامل دون أي تعارض هندسي.</span>'
-                    f'</div>'
-                    f'<div style="margin-bottom: 6px; display: flex; align-items: flex-start; gap: 8px; direction: rtl; text-align: right;">'
-                    f'<span style="color: #c084fc; font-size: 18px; line-height: 1.2;">•</span>'
-                    f'<span><b>حذف الأعمدة (Mod 2):</b> يتطلب اختيار الموديولات التابعة لها (القواعد أو السقف) معاً في نفس قائمة الحذف لحذف المنظومة كحزمة متكاملة.</span>'
-                    f'</div>'
-                    f'<div style="color: #86efac; font-weight: 700; display: flex; align-items: flex-start; gap: 8px; direction: rtl; text-align: right;">'
-                    f'<span style="color: #4ade80; font-size: 18px; line-height: 1.2;">•</span>'
-                    f'<span><b>موديول 12 (حصر أعمال الطوب والمحارة) وباقي الموديولات:</b> مستقلة تماماً (Standalone) ويمكن حذفها أو الإبقاء عليها وحدها في أي وقت دون قيود.</span>'
+                    f'<div style="color: #ffffff; font-size: 14.5px; font-weight: 700; line-height: 2; padding-right: 12px;">'
+                    f'• <span style="color: #60a5fa;">Module 1: Integrated Structural Design</span> (البلاطة اللاكمرية والتصميم الإنشائي المتكامل)<br/>'
+                    f'• <span style="color: #818cf8;">Module 2: Rectangular Columns</span> (الأعمدة المستطيلة)<br/>'
+                    f'• <span style="color: #fbbf24;">Module 3: Isolated Footings</span> (القواعد المنفصلة ECP 203)<br/>'
+                    f'• <span style="color: #fbbf24;">Module 7: Quick Two-Column Combined Footing</span> (تصميم قاعدة مشتركة لعمودين)<br/>'
+                    f'• <span style="color: #fbbf24;">Module 9: Reinforced Concrete Strap Footing</span> (قواعد الشدادات - الجار)<br/>'
+                    f'• <span style="color: #fbbf24;">Module 10: Corner Footing with Diagonal Strap</span> (قاعدة جار ركن بشداد مائل)<br/>'
+                    f'• <span style="color: #34d399;">Module 11: Ground Beam Design & Detailing</span> (تصميم وتفاصيل الميدات والسملات)'
                     f'</div>'
                     f'</div>'
+
+                    # Section 2: Unlinked Modules (Can be deleted individually without affecting other modules)
+                    f'<div style="background: rgba(15, 23, 42, 0.75); border: 2px solid #22c55e; border-right: 7px solid #16a34a; border-radius: 12px; padding: 16px 20px;">'
+                    f'<div style="color: #86efac; font-weight: 900; font-size: 16.5px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">'
+                    f'<span style="font-size: 20px;">🔓</span>'
+                    f'<span>2️⃣ الموديولات غير المرتبطة ببعضها (مستقلة تماماً ويمكن حذف أي موديول منها دون التأثير على الموديولات الأخرى):</span>'
                     f'</div>'
+                    f'<div style="color: #ffffff; font-size: 14.5px; font-weight: 700; line-height: 2; padding-right: 12px;">'
+                    f'• <span style="color: #a7f3d0;">Module 4: Ground Slabs</span> (بلاطات الأرضيات الخرسانية SOG)<br/>'
+                    f'• <span style="color: #f472b6;">Module 5: Steel Rebar Diameters & Weights</span> (أقطار وأوزان حديد التسليح)<br/>'
+                    f'• <span style="color: #c084fc;">Module 6: Concrete Quantity Survey</span> (حصر الكميات الخرسانية)<br/>'
+                    f'• <span style="color: #fb923c;">Module 12: Brick & Plastering Survey</span> (حصر أعمال الطوب والمحارة)<br/>'
+                    f'• <span style="color: #93c5fd;">Module 13: Standalone - Flat slabs</span> (البلاطة اللاكمرية المستقلة)'
+                    f'</div>'
+                    f'</div>'
+
                     f'</div>'
                 )
                 st.markdown(links_map_html, unsafe_allow_html=True)
@@ -2859,11 +2895,17 @@ else:
                 default_radio_idx = opt_i
                 break
 
+        radio_key = f"sb_mod_radio_{active_project_sidebar}"
+        target_mod_name = next((m["name"] for m in ALL_MODULES if m["idx"] == raw_saved_idx), None)
+        if target_mod_name and target_mod_name in project_module_options:
+            if st.session_state.get(radio_key) != target_mod_name:
+                st.session_state[radio_key] = target_mod_name
+
         selected_module_name = st.radio(
             "📂 Select Design Module / Engineering Module:",
             options=project_module_options,
             index=default_radio_idx,
-            key=f"sb_mod_radio_{active_project_sidebar}",
+            key=radio_key,
         )
 
         # Sync the selected module global index back to cfg

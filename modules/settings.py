@@ -2640,6 +2640,17 @@ def cfg_set(key: str, value) -> None:
         load_settings()
     st.session_state["cfg"][key] = value
     save_settings()
+    widget_key = f"w_{key}"
+    if widget_key in st.session_state:
+        try:
+            if isinstance(st.session_state[widget_key], float):
+                st.session_state[widget_key] = float(value)
+            elif isinstance(st.session_state[widget_key], int):
+                st.session_state[widget_key] = int(round(float(value)))
+            else:
+                st.session_state[widget_key] = value
+        except Exception:
+            st.session_state[widget_key] = value
 
 
 get_setting = cfg_val
@@ -2983,27 +2994,38 @@ MODULE_DATA_KEY_PREFIXES = {
 # Dependency map: which modules DEPEND ON a given module.
 # Engineering Load-Path & Functional Dependency Map
 # Key = module index; Value = list of (required_idx, relationship_description)
-# Module 1 (Flat Slabs) and Module 3 (Footings) depend on Module 2 (Columns).
+# Module 1 (Flat Slabs) and all Foundations (Modules 3, 7, 9, 10, 11) depend on Module 2 (Columns).
 # Module 2 (Columns) has independent manual load input and does not depend on Slabs.
-# Module 4, 5, 6, 7, 9, 10, 11, 12, 13 are 100% standalone.
+# Module 4, 5, 6, 12, 13 are standalone modules.
 FUNCTIONAL_DEPENDENCIES: dict[int, list] = {
     0: [  # Module 1 — Integrated Structural Design -> Requires Columns (1) for punching shear & column support
         (1, "مرتبط بنماذج وتصميم الأعمدة: يغذي الأعمدة بالأحمال وتعتمد بحور السقف والقص الثاقب عليها"),
     ],
     1: [],  # Module 2 — Columns (الأعمدة المستطيلة): Has independent manual load input (Pu)
     2: [  # Module 3 — Footings (القواعد المنفصلة) -> Requires Columns (1)
-        (1, "مرتبط بالأعمدة: يستقبل أبعاد قطاعات الأعمدة وأحمالها لتصميم القواعد"),
+        (1, "مرتبط بالأعمدة: يستقبل أبعاد قطاعات الأعمدة وأحمالها لتصميم القواعد المنفصلة"),
     ],
     3: [],  # Module 4 — Ground Slabs: Standalone
     4: [],  # Module 5 — Steel Rebar: Standalone
     5: [],  # Module 6 — Concrete Quantity Survey: 100% Standalone
-    6: [],  # Module 7 — Quick Two-Column Footings: Standalone
-    7: [],  # Module 9 — Strap Footings: Standalone
-    8: [],  # Module 10 — Diagonal Strap Footings: Standalone
-    9: [],  # Module 11 — Ground Beam Design & Detailing: Standalone
+    6: [  # Module 7 — Quick Two-Column Footings (القواعد المشتركة لعمودين) -> Requires Columns (1)
+        (1, "مرتبط بالأعمدة: يستقبل أبعاد قطاعات العمودين وأحمالهما لتصميم القاعدة المشتركة"),
+    ],
+    7: [  # Module 9 — Strap Footings (قواعد شدادات الجار) -> Requires Columns (1)
+        (1, "مرتبط بالأعمدة: يستقبل أحمال وقطاعات عمود الجار والعمود الداخلي لتصميم الشداد والقاعدتين"),
+    ],
+    8: [  # Module 10 — Diagonal Strap Footings (قواعد شدادات الجار الركنية المائلة) -> Requires Columns (1)
+        (1, "مرتبط بالأعمدة: يستقبل أحمال وقطاعات عمود الركن والعمود الداخلي لتصميم الشداد المائل والقاعدتين"),
+    ],
+    9: [  # Module 11 — Ground Beam Design & Detailing (الميدات والسملات) -> Requires Columns (1)
+        (1, "مرتبط بالأعمدة ومنظومة الأساسات: يربط رقاب الأعمدة والقواعد عند منسوب الردم وينقل أحمال الحوائط"),
+    ],
     10: [], # Module 12 — Brick & Plastering Survey: 100% Standalone
     11: [], # Module 13 — Standalone - Flat slabs: 100% Standalone
 }
+
+LINKED_MODULE_INDICES: set[int] = {0, 1, 2, 6, 7, 8, 9}
+UNLINKED_MODULE_INDICES: set[int] = {3, 4, 5, 10, 11}
 
 
 def validate_new_project_module_selection(selected_indices: list) -> tuple[bool, list[dict]]:
@@ -3528,20 +3550,24 @@ def validate_batch_module_deletion(project_name: str, module_indices_to_delete: 
     remaining_set = set(active_indices) - to_del_set
     violations = []
 
-    # Check 1: If Columns (1) is deleted, but Footings (2) remains active
-    if 1 in to_del_set and 2 in remaining_set:
-        violations.append("لا يمكن حذف موديول «🏛️ الأعمدة المستطيلة» مع بقاء موديول «🪸 القواعد المنفصلة» نشطاً بالمشروع؛ لأن تصميم القواعد يعتمد كلياً على أحمال وقطاعات الأعمدة. يرجى اختيار القواعد المنفصلة أيضاً في قائمة الحذف لحذفهما معاً.")
+    # Check 1: Linked Modules Rule:
+    # Linked modules {0, 1, 2, 6, 7, 8, 9} cannot be deleted individually; they must be deleted together as a complete bundle.
+    active_linked = set(active_indices) & LINKED_MODULE_INDICES
+    del_linked = to_del_set & LINKED_MODULE_INDICES
 
-    # Check 2: If Columns (1) is deleted, but Integrated Structural Design (0) remains active
-    if 1 in to_del_set and 0 in remaining_set:
-        violations.append("لا يمكن حذف موديول «🏛️ الأعمدة المستطيلة» مع بقاء موديول «🟦 Integrated Structural Design» نشطاً؛ لأن حسابات القص الثاقب (Punching) وعزوم الأعمدة بالسقف تتطلب قطاعات الأعمدة. يرجى اختيار موديول 1 أيضاً في قائمة الحذف لحذفهما معاً.")
+    if del_linked and del_linked != active_linked:
+        missing_linked = active_linked - del_linked
+        missing_names = [next((m["name"] for m in ALL_MODULES if m["idx"] == idx), f"Module {idx}") for idx in sorted(missing_linked)]
+        violations.append(
+            f"لا يمكن حذف أي موديول من الموديولات المرتبطة ببعضها منفرداً. "
+            f"الموديولات المرتبطة تشكل منظومة إنشائية متكاملة لا يمكن تجزئتها، بل يمكن حذفهم معاً جميعاً كحزمة واحدة. "
+            f"يرجى اختيار باقي الموديولات المرتبطة النشطة في قائمة الحذف: ({' ، '.join(missing_names)}) لحذف المنظومة كحزمة واحدة، أو إلغاء تحديدها."
+        )
 
     # Detect if any linked modules are included in this deletion batch
     linked_pairs = []
-    if 0 in to_del_set and 1 in to_del_set:
-        linked_pairs.append("موديول 1 (Integrated Structural Design) وموديول 2 (Columns) [مرتبطان تبادلياً بالأحمال والقص الثاقب]")
-    if 1 in to_del_set and 2 in to_del_set:
-        linked_pairs.append("موديول 2 (Columns) وموديول 3 (Footings) [مرتبطان بنقل أحمال وقطاعات الأعمدة إلى القواعد]")
+    if del_linked == active_linked and len(del_linked) > 1:
+        linked_pairs.append("الحزمة الإنشائية المرتبطة كاملة (Modules: 1, 2, 3, 7, 9, 10, 11) [سيتم حذف المنظومة معاً كحزمة واحدة]")
 
     is_valid = len(violations) == 0
     return is_valid, violations, linked_pairs

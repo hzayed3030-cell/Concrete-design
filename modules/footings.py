@@ -442,14 +442,36 @@ def render():
     pu_corner = st.session_state.get("fs_col_tot_pu_corner") or S.cfg_val("fs_col_tot_pu_corner")
     col_b_fs = st.session_state.get("fs_col_b") or S.cfg_val("fs_col_b", 30.0)
     col_c_fs = st.session_state.get("fs_col_c") or S.cfg_val("fs_col_c", 50.0)
+    building_cols = st.session_state.get("fs_building_columns") or S.cfg_val("fs_building_columns")
 
-    has_m1 = (pu_int is not None) or (pu_edge is not None) or (pu_corner is not None)
+    model_data_map = {
+        "F1": {"name": "الأعمدة الداخلية (Interior)", "pu": pu_int, "bc": col_b_fs, "tc": col_c_fs, "col_id": None},
+        "F2": {"name": "الأعمدة الجانبية (Edge)", "pu": pu_edge, "bc": col_b_fs, "tc": col_c_fs, "col_id": None},
+        "F3": {"name": "أعمدة الأركان (Corner)", "pu": pu_corner, "bc": col_b_fs, "tc": col_c_fs, "col_id": None},
+    }
+
+    if building_cols and isinstance(building_cols, list):
+        for m_k, type_name in [("F1", "Interior"), ("F2", "Edge"), ("F3", "Corner")]:
+            matching = [c for c in building_cols if str(c.get("type", "")).strip().lower() == type_name.lower()]
+            if matching:
+                best = max(matching, key=lambda x: float(x.get("pu_tot", x.get("pu_1f", 0.0))))
+                p_val = float(best.get("pu_tot", best.get("pu_1f", 0.0)))
+                if p_val > 0:
+                    model_data_map[m_k]["pu"] = p_val
+                    model_data_map[m_k]["bc"] = float(best.get("bc", col_b_fs))
+                    model_data_map[m_k]["tc"] = float(best.get("tc", col_c_fs))
+                    model_data_map[m_k]["col_id"] = best.get("id")
+
+    has_m1 = any(model_data_map[k]["pu"] is not None for k in ["F1", "F2", "F3"])
 
     nav_col1, nav_col2 = st.columns([3, 1])
     with nav_col2:
         if st.button("🔙 العودة إلى Module 1 (Flat Slab)", key="btn_back_to_m1_from_ftg", use_container_width=True):
             S.cfg_set("selected_module_idx", 0)
             st.session_state["selected_module_idx"] = 0
+            for k in list(st.session_state.keys()):
+                if k.startswith("sb_mod_radio_"):
+                    del st.session_state[k]
             st.rerun()
 
     model_opts = [
@@ -479,44 +501,69 @@ def render():
 
     # Sync selected model with inputs
     if "F1" in selected_model_str:
-        st.session_state["ftg_selected_model_type"] = "F1"
-        if pu_int and st.session_state.get("_last_synced_ftg_model") != "F1":
-            S.set_setting("ftg_Pu", float(pu_int))
-            S.set_setting("ftg_tc", float(col_c_fs))
-            S.set_setting("ftg_bc", float(col_b_fs))
-            st.session_state["_last_synced_ftg_model"] = "F1"
-            st.rerun()
+        chosen_model = "F1"
     elif "F2" in selected_model_str:
-        st.session_state["ftg_selected_model_type"] = "F2"
-        if pu_edge and st.session_state.get("_last_synced_ftg_model") != "F2":
-            S.set_setting("ftg_Pu", float(pu_edge))
-            S.set_setting("ftg_tc", float(col_c_fs))
-            S.set_setting("ftg_bc", float(col_b_fs))
-            st.session_state["_last_synced_ftg_model"] = "F2"
-            st.rerun()
+        chosen_model = "F2"
     elif "F3" in selected_model_str:
-        st.session_state["ftg_selected_model_type"] = "F3"
-        if pu_corner and st.session_state.get("_last_synced_ftg_model") != "F3":
-            S.set_setting("ftg_Pu", float(pu_corner))
-            S.set_setting("ftg_tc", float(col_c_fs))
-            S.set_setting("ftg_bc", float(col_b_fs))
-            st.session_state["_last_synced_ftg_model"] = "F3"
-            st.rerun()
+        chosen_model = "F3"
     else:
-        st.session_state["ftg_selected_model_type"] = "custom"
+        chosen_model = "custom"
+
+    st.session_state["ftg_selected_model_type"] = chosen_model
+
+    last_synced = st.session_state.get("_last_synced_ftg_model")
+    need_sync = (chosen_model != last_synced) and (chosen_model in ["F1", "F2", "F3"])
+
+    if need_sync:
+        m_info = model_data_map.get(chosen_model)
+        if m_info and m_info["pu"] is not None:
+            p_val = round(float(m_info["pu"]), 2)
+            b_val = round(float(m_info["bc"]), 1)
+            t_val = round(float(m_info["tc"]), 1)
+
+            S.cfg_set("ftg_Pu", p_val)
+            S.cfg_set("ftg_bc", b_val)
+            S.cfg_set("ftg_tc", t_val)
+
+            st.session_state["w_ftg_Pu"] = p_val
+            st.session_state["w_ftg_bc"] = b_val
+            st.session_state["w_ftg_tc"] = t_val
+
+            st.session_state["_last_synced_ftg_model"] = chosen_model
+            st.rerun()
+    elif chosen_model == "custom" and last_synced != "custom":
         st.session_state["_last_synced_ftg_model"] = "custom"
 
-    if has_m1 and sel_m_type in ["F1", "F2", "F3"]:
-        cur_pu = pu_int if sel_m_type == "F1" else (pu_edge if sel_m_type == "F2" else pu_corner)
-        if cur_pu:
-            st.markdown(
-                f"""
-                <div dir="rtl" style="background:#eff6ff; border:1.5px solid #bfdbfe; border-right:6px solid #2563eb; border-radius:8px; padding:10px 14px; margin-bottom:12px; color:#1e40af; line-height:1.7;">
-                    ✅ <b>نموذج {sel_m_type}:</b> تم تحميل أقصى حمل تصميمي حاكم (<b>{float(cur_pu):.2f} ton</b>) وأبعاد العمود (<b>{float(col_c_fs):.0f} × {float(col_b_fs):.0f} سم</b>) تلقائياً من Module 1.
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+    if has_m1 and chosen_model in ["F1", "F2", "F3"]:
+        m_info = model_data_map[chosen_model]
+        cur_pu = m_info.get("pu")
+        cur_bc = m_info.get("bc", 30.0)
+        cur_tc = m_info.get("tc", 50.0)
+        col_tag = f" (العمود الحاكم: {m_info['col_id']})" if m_info.get("col_id") else ""
+        if cur_pu is not None:
+            b_col1, b_col2 = st.columns([3.8, 1.2])
+            with b_col1:
+                st.markdown(
+                    f"""
+                    <div dir="rtl" style="background:#f0fdf4; border:1.5px solid #86efac; border-right:6px solid #16a34a; border-radius:8px; padding:10px 14px; margin-bottom:12px; color:#14532d; line-height:1.7;">
+                        ✅ <b>نموذج {chosen_model} — {m_info['name']}:</b> تم تحميل أقصى حمل تصميمي حاكم{col_tag} بقيمة (<b>{float(cur_pu):.2f} ton</b>) وأبعاد العمود (<b>{float(cur_tc):.0f} × {float(cur_bc):.0f} سم</b>) تلقائياً من Module 1.
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            with b_col2:
+                if st.button("🔄 إعادة جلب الأحمال", key=f"btn_resync_ftg_{chosen_model}", use_container_width=True, help="إعادة تحميل الأبعاد والأحمال الحاكمة من موديول 1"):
+                    st.session_state["_last_synced_ftg_model"] = None
+                    st.rerun()
+    elif not has_m1:
+        st.markdown(
+            """
+            <div dir="rtl" style="background:#fef3c7; border:1.5px solid #fde68a; border-right:6px solid #f59e0b; border-radius:8px; padding:10px 14px; margin-bottom:12px; color:#92400e; line-height:1.7;">
+                ℹ️ <b>تنبيه:</b> لم يتم العثور على أحمال أعمدة محسوبة في Module 1 بعد. يمكنك استخدام خيار <b>✏️ إدخال يدوي مخصص (Custom)</b> لإدخال الأحمال يدوياً، أو الضغط على زر <b>🔙 العودة إلى Module 1 (Flat Slab)</b> لإجراء التحليل وحساب ردود الأفعال أولاً.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     # ── INPUTS ──────────────────────────────────────────────────────────────
     st.markdown(
