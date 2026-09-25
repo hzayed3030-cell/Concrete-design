@@ -94,6 +94,7 @@ from modules.module_13_standalone_flat_slab import render as render_standalone_f
 from modules.raft_foundations import render_raft_foundations_module
 from modules.circular_tank_foundations import render_circular_tank_foundations_module
 from modules.module_philosophy import render_module_header_and_philosophy
+from modules.floating_calculator import inject_floating_calculator
 
 
 # ── CSS Injection: Fixed Unified Typography (75% Compact Scale) ─────────────
@@ -1424,6 +1425,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# ── Inject Floating Calculator & Inline Expression Evaluator ────────────────
+inject_floating_calculator()
+
 # ── PROFILE MANAGEMENT & NAVIGATION HELPERS ─────────────────────────────────
 
 # ── PROJECT MANAGEMENT & NAVIGATION HELPERS ─────────────────────────────────
@@ -1895,7 +1899,7 @@ def render_profile_manager():
                                     </ul>
                                 </div>
                                 <div style="color: #fef08a; font-size: 13.5px; font-weight: 700; margin-top: 10px; background: rgba(0, 0, 0, 0.35); padding: 8px 12px; border-radius: 6px; border-right: 4px solid #fef08a;">
-                                    ℹ️ <b>تعليمات الارتباط الهندسي:</b> يرجى اختيار الموديولات المرتبطة معاً أو إلغاء اختيارهما معاً (Please select both Modules or deselect both Modules).
+                                    ℹ️ <b>تعليمات الارتباط الهندسي:</b> عند اختيار Module 1 (التصميم الإنشائي المتكامل)، يجب تفعيل موديولات الأعمدة والقواعد والميدات (Modules 2..7) معه لأن حساباته تستدعي معادلاتها.
                                 </div>
                             </div>
                             """,
@@ -2640,40 +2644,67 @@ def render_profile_manager():
                     f'<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #2e1065 100%); border: 2.5px solid #8b5cf6; border-radius: 14px; padding: 20px 24px; margin-bottom: 16px; box-shadow: 0 6px 24px rgba(139, 92, 246, 0.25);">'
                     f'<div style="font-weight: 900; font-size: 20px; color: #f5d0fe; display: flex; align-items: center; justify-content: flex-start; gap: 10px; margin-bottom: 16px; border-bottom: 1.5px solid rgba(216, 180, 254, 0.30); padding-bottom: 10px; direction: rtl; text-align: right;">'
                     f'<span style="font-size: 26px;">🔗</span>'
-                    f'<span>خريطة الارتباطات الهندسية بين الموديولات — مشروع: <b style="color: #fbcfe8;">«{pname}»</b></span>'
+                    f'<span>خريطة وقواعد الارتباطات الهندسية لحذف الموديولات — مشروع: <b style="color: #fbcfe8;">«{pname}»</b></span>'
                     f'</div>'
 
-                    # Section 1: Linked Modules (Cannot be deleted individually, must be deleted together)
-                    f'<div style="background: rgba(15, 23, 42, 0.75); border: 2px solid #ef4444; border-right: 7px solid #dc2626; border-radius: 12px; padding: 16px 20px; margin-bottom: 16px;">'
-                    f'<div style="color: #fca5a5; font-weight: 900; font-size: 16.5px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">'
-                    f'<span style="font-size: 20px;">🔒</span>'
-                    f'<span>1️⃣ الموديولات المرتبطة ببعضها (لا يمكن حذف أي موديول منها منفرداً، بل يمكن حذفهم معاً جميعاً كحزمة واحدة):</span>'
+                    # Rule 1: Module 1 (Can be deleted alone)
+                    f'<div style="background: rgba(15, 23, 42, 0.75); border: 2px solid #3b82f6; border-right: 7px solid #2563eb; border-radius: 12px; padding: 16px 20px; margin-bottom: 16px; direction: rtl !important; text-align: right !important;">'
+                    f'<div style="color: #93c5fd; font-weight: 900; font-size: 16.5px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; direction: rtl; text-align: right;">'
+                    f'<span style="font-size: 22px;">🔹</span>'
+                    f'<span>1️⃣ موديول 1: التصميم الإنشائي المتكامل (Module 1: Integrated Structural Design) — [مسموح حذفه بمفرده]:</span>'
                     f'</div>'
-                    f'<div style="color: #ffffff; font-size: 14.5px; font-weight: 700; line-height: 2; padding-right: 12px;">'
-                    f'• <span style="color: #60a5fa;">Module 1: Integrated Structural Design</span> (التصميم الإنشائي المتكامل)<br/>'
-                    f'• <span style="color: #818cf8;">Module 2: Rectangular Columns</span> (الأعمدة المستطيلة)<br/>'
-                    f'• <span style="color: #fbbf24;">Module 3: Isolated Footings</span> (القواعد المنفصلة ECP 203)<br/>'
-                    f'• <span style="color: #fbbf24;">Module 4: Two-columns combined footings</span> (تصميم قاعدة مشتركة لعمودين)<br/>'
-                    f'• <span style="color: #fbbf24;">Module 5: Reinforced Concrete Strap Footing</span> (قواعد الشدادات - الجار)<br/>'
-                    f'• <span style="color: #fbbf24;">Module 6: Corner Footing with Diagonal Strap</span> (قاعدة جار ركن بشداد مائل)<br/>'
-                    f'• <span style="color: #34d399;">Module 7: Ground Beam Design & Detailing</span> (تصميم وتفاصيل الميدات والسملات)'
+                    f'<div style="color: #cbd5e1; font-size: 14px; font-weight: 700; margin-bottom: 10px; line-height: 1.6; direction: rtl; text-align: right;">'
+                    f'يمكن حذف هذا الموديول بمفرده بأمان تام؛ وستستمر الموديولات التابعة التالية بالعمل في المشروع كأنظمة مستقلة بمدخلات تصميم يدوية:'
+                    f'</div>'
+                    f'<div style="color: #ffffff; font-size: 14.5px; font-weight: 700; line-height: 2.1; padding-right: 12px; direction: rtl; text-align: right;">'
+                    f'• <span style="color: #818cf8;">موديول 2: الأعمدة المستطيلة (Module 2: Rectangular Columns)</span><br/>'
+                    f'• <span style="color: #fbbf24;">موديول 3: القواعد المنفصلة (Module 3: Isolated Footings ECP 203)</span><br/>'
+                    f'• <span style="color: #fbbf24;">موديول 4: تصميم قاعدة مشتركة لعمودين (Module 4: Two-columns combined footings)</span><br/>'
+                    f'• <span style="color: #fbbf24;">موديول 5: قواعد الشدادات - الجار (Module 5: Reinforced Concrete Strap Footing)</span><br/>'
+                    f'• <span style="color: #fbbf24;">موديول 6: قاعدة جار ركن بشداد مائل (Module 6: Corner Footing with Diagonal Strap)</span><br/>'
+                    f'• <span style="color: #34d399;">موديول 7: تصميم وتفاصيل الميدات والسملات (Module 7: Ground Beam Design & Detailing)</span>'
+                    f'</div>'
+                    f'<div style="color: #38bdf8; font-size: 13.5px; font-weight: 700; margin-top: 10px; background: rgba(56, 189, 248, 0.10); padding: 8px 12px; border-radius: 6px; border-right: 4px solid #38bdf8; direction: rtl; text-align: right;">'
+                    f'← لا يتأثر عمل أي موديول من الموديولات التابعة الستة المذكورة أعلاه عند حذف موديول 1 منفرداً.'
                     f'</div>'
                     f'</div>'
 
-                    # Section 2: Unlinked Modules (Can be deleted individually without affecting other modules)
-                    f'<div style="background: rgba(15, 23, 42, 0.75); border: 2px solid #22c55e; border-right: 7px solid #16a34a; border-radius: 12px; padding: 16px 20px;">'
-                    f'<div style="color: #86efac; font-weight: 900; font-size: 16.5px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">'
-                    f'<span style="font-size: 20px;">🔓</span>'
-                    f'<span>2️⃣ الموديولات غير المرتبطة ببعضها (مستقلة تماماً ويمكن حذف أي موديول منها دون التأثير على الموديولات الأخرى):</span>'
+                    # Rule 2: Modules 2..7 (Cannot be deleted alone while Module 1 is active)
+                    f'<div style="background: rgba(15, 23, 42, 0.75); border: 2px solid #ef4444; border-right: 7px solid #dc2626; border-radius: 12px; padding: 16px 20px; margin-bottom: 16px; direction: rtl !important; text-align: right !important;">'
+                    f'<div style="color: #fca5a5; font-weight: 900; font-size: 16.5px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; direction: rtl; text-align: right;">'
+                    f'<span style="font-size: 22px;">🔒</span>'
+                    f'<span>2️⃣ الموديولات التابعة لموديول 1 (لا يمكن حذف أي منها بمفرده طالما موديول 1 نشط في المشروع):</span>'
                     f'</div>'
-                    f'<div style="color: #ffffff; font-size: 14.5px; font-weight: 700; line-height: 2; padding-right: 12px;">'
-                    f'• <span style="color: #60a5fa;">Module 8: Raft Foundations</span> (اللبشة المسلحة)<br/>'
-                    f'• <span style="color: #a7f3d0;">Module 9: Ground Slabs</span> (بلاطات الأرضيات الخرسانية SOG)<br/>'
-                    f'• <span style="color: #34d399;">Module 10: Circular Tank Foundations</span> (قواعد الخزانات الدائرية)<br/>'
-                    f'• <span style="color: #93c5fd;">Module 11: Standalone - Flat Slabs</span> (البلاطة اللاكمرية المستقلة)<br/>'
-                    f'• <span style="color: #f472b6;">Module 12: Steel Rebar Dimensions & Weights</span> (أقطار وأوزان حديد التسليح)<br/>'
-                    f'• <span style="color: #c084fc;">Module 13: Concrete Quantity Survey</span> (حصر الكميات الخرسانية)<br/>'
-                    f'• <span style="color: #fb923c;">Module 14: Brick & Plastering Survey</span> (حصر أعمال الطوب والمحارة)'
+                    f'<div style="color: #fecaca; font-size: 13.5px; font-weight: 700; margin-bottom: 10px; line-height: 1.6; direction: rtl; text-align: right;">'
+                    f'⚠️ السبب: موديول 1 يستدعي معادلات وحسابات هذه الموديولات لشبكة الأعمدة والأساسات والميدات، لذا لا يمكن حذف أي منها إلا بحذف موديول 1 معها في نفس الدفعة، أو إذا كان موديول 1 محذوفاً بالفعل:'
+                    f'</div>'
+                    f'<div style="color: #ffffff; font-size: 14.5px; font-weight: 700; line-height: 2.1; padding-right: 12px; direction: rtl; text-align: right;">'
+                    f'• <span style="color: #818cf8;">موديول 2: الأعمدة المستطيلة (Module 2: Rectangular Columns)</span><br/>'
+                    f'• <span style="color: #fbbf24;">موديول 3: القواعد المنفصلة (Module 3: Isolated Footings ECP 203)</span><br/>'
+                    f'• <span style="color: #fbbf24;">موديول 4: تصميم قاعدة مشتركة لعمودين (Module 4: Two-columns combined footings)</span><br/>'
+                    f'• <span style="color: #fbbf24;">موديول 5: قواعد الشدادات - الجار (Module 5: Reinforced Concrete Strap Footing)</span><br/>'
+                    f'• <span style="color: #fbbf24;">موديول 6: قاعدة جار ركن بشداد مائل (Module 6: Corner Footing with Diagonal Strap)</span><br/>'
+                    f'• <span style="color: #34d399;">موديول 7: تصميم وتفاصيل الميدات والسملات (Module 7: Ground Beam Design & Detailing)</span>'
+                    f'</div>'
+                    f'</div>'
+
+                    # Rule 3: Modules 8..14 (Standalone, can be deleted freely)
+                    f'<div style="background: rgba(15, 23, 42, 0.75); border: 2px solid #22c55e; border-right: 7px solid #16a34a; border-radius: 12px; padding: 16px 20px; direction: rtl !important; text-align: right !important;">'
+                    f'<div style="color: #86efac; font-weight: 900; font-size: 16.5px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; direction: rtl; text-align: right;">'
+                    f'<span style="font-size: 22px;">🔓</span>'
+                    f'<span>3️⃣ باقي الموديولات المستقلة (يمكن حذف أي موديول منها بحرية تامة دون أي ارتباط):</span>'
+                    f'</div>'
+                    f'<div style="color: #bbf7d0; font-size: 13.5px; font-weight: 700; margin-bottom: 10px; line-height: 1.6; direction: rtl; text-align: right;">'
+                    f'✅ هذه الموديولات مستقلة بـ 0 اعتماديات متبادلة، ويمكن حذف أي منها منفرداً أو ضمن مجموعة دون التأثير على أي موديول آخر:'
+                    f'</div>'
+                    f'<div style="color: #ffffff; font-size: 14.5px; font-weight: 700; line-height: 2.1; padding-right: 12px; direction: rtl; text-align: right;">'
+                    f'• <span style="color: #60a5fa;">موديول 8: اللبشة المسلحة (Module 8: Raft Foundations)</span><br/>'
+                    f'• <span style="color: #a7f3d0;">موديول 9: بلاطات الأرضيات الخرسانية SOG (Module 9: Ground Slabs)</span><br/>'
+                    f'• <span style="color: #34d399;">موديول 10: قواعد الخزانات الدائرية (Module 10: Circular Tank Foundations)</span><br/>'
+                    f'• <span style="color: #93c5fd;">موديول 11: البلاطة اللاكمرية المستقلة (Module 11: Standalone - Flat Slabs)</span><br/>'
+                    f'• <span style="color: #f472b6;">موديول 12: أقطار وأوزان حديد التسليح (Module 12: Steel Rebar Dimensions & Weights)</span><br/>'
+                    f'• <span style="color: #c084fc;">موديول 13: حصر الكميات الخرسانية (Module 13: Concrete Quantity Survey)</span><br/>'
+                    f'• <span style="color: #fb923c;">موديول 14: حصر أعمال الطوب والمحارة (Module 14: Brick & Plastering Survey)</span>'
                     f'</div>'
                     f'</div>'
 
@@ -2800,7 +2831,7 @@ def render_profile_manager():
                             f'{viol_items_html}'
                             f'</ul>'
                             f'<div style="background: rgba(0, 0, 0, 0.35); border: 1.5px solid rgba(254, 202, 202, 0.25); border-radius: 8px; padding: 10px 16px; color: #fef08a; font-size: 14px; font-weight: 700; direction: rtl; text-align: right;">'
-                            f'💡 <b>الحل الهندسي:</b> لحذف الموديولات المرتبطة، يرجى اختيارهما معاً في قائمة الحذف لحذف المنظومة كحزمة متكاملة، أو إبقاء الموديولات التابعة نشطة.'
+                            f'💡 <b>الحل الهندسي:</b> لحذف أي موديول من موديولات الأعمدة أو القواعد أو الميدات (Modules 2..7)، يجب إما تحديد Module 1 لحذفه معها في نفس الدفعة، أو إلغاء تحديد الموديول التابع والإبقاء عليه نشطاً.'
                             f'</div>'
                             f'</div>'
                         )
@@ -3041,7 +3072,7 @@ def render_profile_manager():
                 updated_pill_html = ""
 
             with st.container(border=True):
-                col_row_info, col_row_btn = st.columns([8.2, 1.8])
+                col_row_info, col_row_btn = st.columns([7.7, 2.3])
                 with col_row_info:
                     row_html = f"""<div class="{marker_class}">
                         <div style="
@@ -3071,20 +3102,43 @@ def render_profile_manager():
                     </div>"""
                     render_custom_html(row_html)
                 with col_row_btn:
-                    st.markdown("<div style='margin-top: 6px;'></div>", unsafe_allow_html=True)
-                    if st.button(
-                        "📌 تعيين كنشط",
-                        key=f"btn_set_active_{s_pname}",
-                        use_container_width=True,
-                        help=f"تعيين مشروع «{s_pname}» كمشروع نشط ليظهر بالأعلى وتتاح كافة أزراره",
-                    ):
-                        set_active_project(s_pname)
-                        s_saved_mod = int(s_data.get("selected_module_idx", 0))
-                        s_target_mod = s_saved_mod if s_saved_mod in s_enabled_mods else s_enabled_mods[0]
-                        cfg_set("selected_module_idx", s_target_mod)
-                        st.session_state["selected_module_idx"] = s_target_mod
-                        st.session_state["_force_module_idx"] = s_target_mod
-                        st.rerun()
+                    st.markdown("<div style='margin-top: 5px;'></div>", unsafe_allow_html=True)
+                    b_sub1, b_sub2 = st.columns([1.1, 1.1])
+                    with b_sub1:
+                        if st.button(
+                            "🚀 تشغيل",
+                            key=f"btn_run_saved_{s_pname}",
+                            type="primary",
+                            use_container_width=True,
+                            help=f"تشغيل مشروع «{s_pname}» والانتقال مباشرة لواجهة تصميمه",
+                        ):
+                            set_active_project(s_pname)
+                            st.session_state["nav_view"] = "module"
+                            st.session_state["in_module"] = True
+                            s_proj_info = get_all_projects().get(s_pname, {})
+                            s_data = s_proj_info.get("data", {}) if isinstance(s_proj_info, dict) else {}
+                            s_saved_mod = int(s_summary.get("module_idx", s_data.get("selected_module_idx", 0)))
+                            s_target_mod = s_saved_mod if (s_enabled_mods and s_saved_mod in s_enabled_mods) else (s_enabled_mods[0] if s_enabled_mods else 0)
+                            cfg_set("selected_module_idx", s_target_mod)
+                            st.session_state["selected_module_idx"] = s_target_mod
+                            st.session_state["_force_module_idx"] = s_target_mod
+                            st.rerun()
+                    with b_sub2:
+                        if st.button(
+                            "📌 كنشط",
+                            key=f"btn_set_active_{s_pname}",
+                            use_container_width=True,
+                            help=f"تعيين مشروع «{s_pname}» كمشروع نشط ليظهر بالأعلى وتتاح كافة أزراره",
+                        ):
+                            set_active_project(s_pname)
+                            s_proj_info = get_all_projects().get(s_pname, {})
+                            s_data = s_proj_info.get("data", {}) if isinstance(s_proj_info, dict) else {}
+                            s_saved_mod = int(s_summary.get("module_idx", s_data.get("selected_module_idx", 0)))
+                            s_target_mod = s_saved_mod if (s_enabled_mods and s_saved_mod in s_enabled_mods) else (s_enabled_mods[0] if s_enabled_mods else 0)
+                            cfg_set("selected_module_idx", s_target_mod)
+                            st.session_state["selected_module_idx"] = s_target_mod
+                            st.session_state["_force_module_idx"] = s_target_mod
+                            st.rerun()
 
 
 # ── MAIN EXECUTION & SIDEBAR CONDITIONAL ROUTING ──────────────────────────────

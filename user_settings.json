@@ -1,6 +1,6 @@
 {
-  "selected_module_idx": 4,
-  "apartment_name": "مثال لتصميم كامل فلات - اعمدة - قواعد بجميع نواعها",
+  "selected_module_idx": 12,
+  "apartment_name": "حصر غرفة السطح - هشام (نسخة) (نسخة)",
   "col_Pu_input": 155.0,
   "col_Safety_Factor": 1.2,
   "col_b": 30,
@@ -12,9 +12,9 @@
   "col_mu_target": 1.0,
   "col_Phi_index": 1,
   "col_Phi_st_index": 1,
-  "ftg_bc": 30.0,
-  "ftg_tc": 50.0,
-  "ftg_Pu": 98.12,
+  "ftg_bc": 30,
+  "ftg_tc": 50,
+  "ftg_Pu": 90.0,
   "ftg_Wf_est": 5.0,
   "ftg_q_all": 1.5,
   "ftg_Df": 1.5,
@@ -23,30 +23,30 @@
   "ftg_Fy": 4000,
   "ftg_cover": 5,
   "ftg_Phi_index": 2,
-  "ftg_L_override": 225,
-  "ftg_B_override": 205,
-  "ftg_trc_override": 55,
+  "ftg_L_override": 220,
+  "ftg_B_override": 200,
+  "ftg_trc_override": 50,
   "tcf_P1": 80.0,
   "tcf_P2": 120.0,
-  "tcf_c1": 50,
-  "tcf_b1": 30,
-  "tcf_c2": 60,
-  "tcf_b2": 30,
-  "tcf_S": 2.5,
+  "tcf_c1": 40,
+  "tcf_b1": 40,
+  "tcf_c2": 50,
+  "tcf_b2": 40,
+  "tcf_S": 4.0,
   "tcf_q_net": 1.5,
-  "tcf_Fcu": 300,
+  "tcf_Fcu": 250,
   "tcf_Fy": 4000,
-  "tcf_cover": 5,
+  "tcf_cover": 7,
   "tcf_Phi_index": 1,
-  "tcf_L1_ov": 250,
-  "tcf_B1_ov": 230,
-  "tcf_t1_ov": 65,
-  "tcf_L2_ov": 310,
-  "tcf_B2_ov": 280,
-  "tcf_t2_ov": 75,
-  "tcf_Lc_ov": 390,
-  "tcf_Bc_ov": 360,
-  "tcf_tc_ov": 75,
+  "tcf_L1_ov": null,
+  "tcf_B1_ov": null,
+  "tcf_t1_ov": null,
+  "tcf_L2_ov": null,
+  "tcf_B2_ov": null,
+  "tcf_t2_ov": null,
+  "tcf_Lc_ov": null,
+  "tcf_Bc_ov": null,
+  "tcf_tc_ov": null,
   "fs_n_lx": 4,
   "fs_n_ly": 3,
   "slab_bc": 30,
@@ -58,7 +58,7 @@
   "slab_Fcu": 250,
   "slab_Fy": 4000,
   "slab_cover": 1.5,
-  "slab_ts_initial": 20,
+  "slab_ts_initial": 30,
   "slab_n_floors": 3,
   "slab_col_safety_factor": 1.1,
   "slab_bottom_mesh_dia_idx": 2,
@@ -69,17 +69,17 @@
   "slab_strip_top_extra_dia_idx": 2,
   "slab_strip_bottom_extra_dia_idx": 2,
   "slab_Phi_index": 2,
-  "fs_lx_0": 4.0,
+  "fs_lx_0": 2.5,
   "fs_lx_1": 4.5,
   "fs_lx_2": 3.5,
-  "fs_lx_3": 5.5,
+  "fs_lx_3": 7.0,
   "fs_lx_4": 5.0,
   "fs_lx_5": 4.5,
   "fs_lx_6": 5.0,
   "fs_lx_7": 4.5,
   "fs_lx_8": 6.0,
   "fs_lx_9": 6.0,
-  "fs_ly_0": 1.5,
+  "fs_ly_0": 2.0,
   "fs_ly_1": 4.5,
   "fs_ly_2": 4.3,
   "fs_ly_3": 6.0,
@@ -97,124 +97,19 @@
   "fs_void_panels": [
     "P_3_2"
   ],
-  "fs_col_transforms": {
-    "C1": {
-      "direction": "اتجاه Y",
-      "shift_x": "يمين المحور (توشية 6 سم)",
-      "shift_y": "أعلى المحور (توشية 6 سم)"
-    },
-    "C2": {
-      "direction": "اتجاه X",
-      "shift_x": "يمين المحور (توشية 6 سم)",
-      "shift_y": "أعلى المحور (توشية 6 سم)"
-    },
-    "C3": {
-      "direction": "اتجاه X",
-      "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
-      "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
-    },
-    "C13": {
-      "direction": "اتجاه Y",
-      "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
-      "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
-    },
-    "C14": {
-      "direction": "اتجاه Y",
-      "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
-      "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
-    },
-    "C20": {
-      "direction": "اتجاه X",
-      "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
-      "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
-    },
-    "C15": {
-      "direction": "اتجاه Y",
-      "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
-      "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
-    },
-    "C16": {
-      "direction": "اتجاه Y",
-      "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
-      "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
-    },
-    "C11": {
-      "direction": "اتجاه Y",
-      "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
-      "shift_y": "متمركز على المحور (Centered)"
-    },
-    "C5": {
-      "direction": "اتجاه X",
-      "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
-      "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)"
-    },
-    "C6": {
-      "direction": "اتجاه X",
-      "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
-      "shift_y": "متمركز على المحور (Centered)"
-    },
-    "C10": {
-      "direction": "اتجاه X",
-      "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
-      "shift_y": "متمركز على المحور (Centered)"
-    },
-    "C12": {
-      "direction": "اتجاه Y",
-      "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
-      "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)"
-    }
-  },
-  "fs_edge_columns": {
-    "C1": {
-      "is_edge": "Yes",
-      "direction": "Bottom + Left"
-    },
-    "C11": {
-      "is_edge": "Yes",
-      "direction": "Left"
-    },
-    "C20": {
-      "is_edge": "No",
-      "direction": "",
-      "is_valid": false
-    },
-    "C10": {
-      "is_edge": "No",
-      "direction": "",
-      "is_valid": false
-    },
-    "C5": {
-      "is_edge": "Yes",
-      "direction": "",
-      "is_valid": false
-    },
-    "C6": {
-      "is_edge": "Yes",
-      "direction": "Left",
-      "is_valid": false
-    },
-    "C15": {
-      "is_edge": "No",
-      "direction": "",
-      "is_valid": false
-    },
-    "C16": {
-      "is_edge": "Yes",
-      "direction": "Left",
-      "is_valid": true
-    }
-  },
-  "cs_n_types": 2,
+  "fs_col_transforms": {},
+  "fs_edge_columns": {},
+  "cs_n_types": 1,
   "cs_col_h": 300.0,
   "cs_t_slab": 20.0,
   "cs_fcu": 350.0,
-  "cs_fs_n_slabs": 3,
+  "cs_fs_n_slabs": 1,
   "cs_fs_ts": 20.0,
   "cs_fs_fcu": 350.0,
   "cs_fs_phi_btm": 12,
   "cs_fs_nb_btm": 6,
   "cs_fs_phi_top": 10,
-  "cs_fs_nb_top": 5,
+  "cs_fs_nb_top": 6,
   "cs_fs_phi_btm_x": 12,
   "cs_fs_phi_btm_y": 12,
   "cs_fs_nb_btm_x": 6,
@@ -233,18 +128,18 @@
   "cs_fs_add_btm_ly": 3.0,
   "cs_fs_n_btm_add_x": 0,
   "cs_fs_n_btm_add_y": 0,
-  "cs_price_steel": 41500.0,
+  "cs_price_steel": 42000.0,
   "cs_price_cement": 4000.0,
   "cs_price_gravel": 600.0,
   "cs_price_sand": 200.0,
-  "cs_price_labor": 1910.0,
-  "cs_project_name": "مثال لتصميم كامل فلات - اعمدة - قواعد بجميع نواعها",
+  "cs_price_labor": 1700.0,
+  "cs_project_name": "حصر غرفة السطح - هشام (نسخة) (نسخة)",
   "gs_lx": 30.0,
   "gs_ly": 20.0,
   "gs_ts": 20.0,
   "gs_cover": 4.0,
   "gs_fcu": 300.0,
-  "gs_fy": 4000.0,
+  "gs_fy": 4200.0,
   "gs_ks": 5.0,
   "gs_q_all": 1.5,
   "gs_h_base": 20.0,
@@ -268,72 +163,65 @@
   "module_9_strap_footing": {
     "S": 5.0,
     "edge_clearance": 0.0,
-    "a1": 50.0,
-    "b1": 30.0,
-    "a2": 70.0,
-    "b2": 30.0,
-    "P1_w": 60.0,
-    "P1_u": 90.0,
-    "P2_w": 80.0,
-    "P2_u": 120.0,
+    "a1": 30.0,
+    "b1": 60.0,
+    "a2": 40.0,
+    "b2": 50.0,
+    "P1_w": 80.0,
+    "P1_u": 120.0,
+    "P2_w": 120.0,
+    "P2_u": 180.0,
+    "col_weight_factor": 1.0,
     "q_all_net": 1.5,
-    "fcu": 300.0,
+    "fcu": 250.0,
     "fy": 4000.0,
     "t_pc": 10.0,
-    "strap_b": 30.0,
-    "strap_D": 120.0,
-    "L1_override": 1.9,
-    "L1_ov": 1.9,
-    "B1_ov": 2.45,
+    "strap_b": 40.0,
+    "strap_D": 100.0,
+    "L1_override": 2.2,
+    "L1_ov": 2.2,
+    "B1_ov": 0.0,
     "t1_ov": 50.0,
-    "L2_ov": 2.35,
-    "B2_ov": 2.3,
+    "L2_ov": 0.0,
+    "B2_ov": 0.0,
     "t2_ov": 50.0,
-    "long_bar_dia": 16,
-    "stirrup_dia": 8,
-    "stirrup_spacing": 14.29,
-    "trans_bar_dia": 18,
-    "final_B1": 2.45,
-    "final_L2": 2.35,
-    "final_B2": 2.3,
-    "is_calculated": true,
-    "col_weight_factor": 1.0,
-    "L1": 1.9,
-    "B1": 2.45,
-    "t1": 50.0,
-    "L2": 2.35,
-    "B2": 2.3,
-    "t2": 50.0,
-    "_last_upstream_sig": "5.0_0.0_50.0_30.0_70.0_30.0_90.0_120.0_1.0_1.5_30.0",
-    "stirrup_per_m": 7
+    "long_bar_dia": 22,
+    "stirrup_dia": 10,
+    "stirrup_spacing": 20,
+    "trans_bar_dia": 16,
+    "final_B1": null,
+    "final_L2": null,
+    "final_B2": null,
+    "is_calculated": false,
+    "stirrup_per_m": 5
   },
   "m9_S": 5.0,
   "m9_edge_clearance": 0.0,
-  "m9_a1": 50.0,
-  "m9_b1": 30.0,
-  "m9_a2": 70.0,
-  "m9_b2": 30.0,
-  "m9_P1_w": 60.0,
-  "m9_P1_u": 90.0,
-  "m9_P2_w": 80.0,
-  "m9_P2_u": 120.0,
+  "m9_a1": 30.0,
+  "m9_b1": 60.0,
+  "m9_a2": 40.0,
+  "m9_b2": 50.0,
+  "m9_P1_w": 80.0,
+  "m9_P1_u": 120.0,
+  "m9_P2_w": 120.0,
+  "m9_P2_u": 180.0,
   "m9_q_all_net": 1.5,
-  "m9_fcu": 300.0,
+  "m9_fcu": 250.0,
   "m9_fy": 4000.0,
   "m9_t_pc": 10.0,
-  "m9_strap_b": 30.0,
-  "m9_strap_D": 120.0,
-  "m9_L1_ov": 1.9,
-  "m9_B1_ov": 2.45,
+  "m9_strap_b": 40.0,
+  "m9_strap_D": 100.0,
+  "m9_L1_ov": 2.2,
+  "m9_B1_ov": 0.0,
   "m9_t1_ov": 50.0,
-  "m9_L2_ov": 2.35,
-  "m9_B2_ov": 2.3,
+  "m9_L2_ov": 0.0,
+  "m9_B2_ov": 0.0,
   "m9_t2_ov": 50.0,
-  "m9_long_bar_dia": 16,
-  "m9_stirrup_dia": 8,
-  "m9_stirrup_per_m": 7,
-  "m9_stirrup_spacing": 14.29,
-  "m9_trans_bar_dia": 18,
+  "m9_long_bar_dia": 22,
+  "m9_stirrup_dia": 10,
+  "m9_stirrup_per_m": 5,
+  "m9_stirrup_spacing": 20,
+  "m9_trans_bar_dia": 16,
   "module_12_brick_survey": {
     "x_axes": [
       0.0,
@@ -349,410 +237,26 @@
     "col_width_cm": 30.0,
     "col_removed": [],
     "col_dirs": {},
-    "col_shifts": {
-      "0,0": {
-        "shift_x": "متمركز على المحور (Centered)",
-        "shift_y": "متمركز على المحور (Centered)"
-      }
-    },
+    "col_shifts": {},
     "col_shifted": {},
-    "wall_thickness": {
-      "0,2,1,2": 25,
-      "0,1,0,2": 25
-    },
+    "wall_thickness": {},
     "wall_removed": [],
     "default_wall_height": 3.0,
-    "parapet_wall_height": 1.3,
-    "parapet_walls": [
-      [
-        1,
-        2,
-        2,
-        2
-      ],
-      [
-        2,
-        1,
-        2,
-        2
-      ]
-    ],
-    "wall_heights": {
-      "0,0,1,0": 3.0,
-      "1,0,2,0": 3.0,
-      "0,1,1,1": 3.0,
-      "1,1,2,1": 3.0,
-      "0,2,1,2": 3.0,
-      "1,2,2,2": 1.3,
-      "0,0,0,1": 3.0,
-      "0,1,0,2": 3.0,
-      "1,0,1,1": 3.0,
-      "1,1,1,2": 3.0,
-      "2,0,2,1": 3.0,
-      "2,1,2,2": 1.3
-    },
-    "windows": {
-      "0,0,1,0": [
-        {
-          "id": "win_15",
-          "name": "W1-1",
-          "type_label": "W1",
-          "w_m": 1.0,
-          "h_m": 1.2,
-          "pos_m": 1.5,
-          "sill_m": 0.9,
-          "removed": true
-        },
-        {
-          "kind": "win",
-          "wk": [
-            0,
-            0,
-            1,
-            0
-          ],
-          "name": "W1-1",
-          "type_label": "W1",
-          "w_m": 1.0,
-          "h_m": 1.2,
-          "pos_m": 0.11,
-          "sill_m": 0.9,
-          "removed": true,
-          "is_preview": false,
-          "has_conflict": false,
-          "id": "win_19"
-        },
-        {
-          "kind": "win",
-          "wk": [
-            0,
-            0,
-            1,
-            0
-          ],
-          "name": "W1-1",
-          "type_label": "W1",
-          "w_m": 1.0,
-          "h_m": 1.2,
-          "pos_m": 1.5,
-          "sill_m": 0.9,
-          "removed": true,
-          "is_preview": false,
-          "has_conflict": false,
-          "id": "win_20"
-        },
-        {
-          "kind": "win",
-          "wk": [
-            0,
-            0,
-            1,
-            0
-          ],
-          "name": "W1-1",
-          "type_label": "W1",
-          "w_m": 1.0,
-          "h_m": 1.2,
-          "pos_m": 1.0,
-          "sill_m": 0.9,
-          "removed": true,
-          "is_preview": false,
-          "has_conflict": false,
-          "id": "win_21"
-        },
-        {
-          "kind": "win",
-          "wk": [
-            0,
-            0,
-            1,
-            0
-          ],
-          "name": "W1-1",
-          "type_label": "W1",
-          "w_m": 1.0,
-          "h_m": 1.2,
-          "pos_m": 2.5,
-          "sill_m": 0.9,
-          "removed": true,
-          "is_preview": false,
-          "has_conflict": false,
-          "id": "win_22"
-        },
-        {
-          "kind": "win",
-          "wk": [
-            0,
-            0,
-            1,
-            0
-          ],
-          "name": "W2-1",
-          "type_label": "W2",
-          "w_m": 0.8,
-          "h_m": 0.8,
-          "pos_m": 0.2,
-          "sill_m": 1.2,
-          "removed": false,
-          "is_preview": false,
-          "has_conflict": false,
-          "id": "win_25"
-        },
-        {
-          "kind": "win",
-          "wk": [
-            0,
-            0,
-            1,
-            0
-          ],
-          "name": "W1-1",
-          "type_label": "W1",
-          "w_m": 1.0,
-          "h_m": 1.2,
-          "pos_m": 2.0,
-          "sill_m": 0.9,
-          "removed": false,
-          "is_preview": false,
-          "has_conflict": false,
-          "id": "win_26"
-        }
-      ],
-      "0,1,1,1": [
-        {
-          "id": "win_17",
-          "name": "W1-1",
-          "type_label": "W1",
-          "w_m": 1.0,
-          "h_m": 1.2,
-          "pos_m": 1.2,
-          "sill_m": 0.9,
-          "removed": true
-        }
-      ],
-      "1,0,1,1": [
-        {
-          "kind": "win",
-          "wk": [
-            1,
-            0,
-            1,
-            1
-          ],
-          "name": "W1-2",
-          "type_label": "W1",
-          "w_m": 1.0,
-          "h_m": 1.2,
-          "pos_m": 0.7,
-          "sill_m": 0.9,
-          "removed": true,
-          "is_preview": false,
-          "has_conflict": false,
-          "id": "win_27"
-        }
-      ],
-      "1,0,2,0": [
-        {
-          "kind": "win",
-          "wk": [
-            1,
-            0,
-            2,
-            0
-          ],
-          "name": "W1-2",
-          "type_label": "W1",
-          "w_m": 1.0,
-          "h_m": 1.2,
-          "pos_m": 2.75,
-          "sill_m": 0.9,
-          "removed": true,
-          "is_preview": false,
-          "has_conflict": false,
-          "id": "win_28"
-        }
-      ],
-      "2,0,2,1": [
-        {
-          "kind": "win",
-          "wk": [
-            2,
-            0,
-            2,
-            1
-          ],
-          "name": "W1-2",
-          "type_label": "W1",
-          "w_m": 1.0,
-          "h_m": 1.2,
-          "pos_m": 1.3,
-          "sill_m": 0.9,
-          "removed": false,
-          "is_preview": false,
-          "has_conflict": false,
-          "id": "win_29"
-        }
-      ]
-    },
-    "doors": {
-      "1,0,2,0": [
-        {
-          "id": "door_16",
-          "name": "D1-1",
-          "type_label": "D1",
-          "w_m": 0.9,
-          "h_m": 2.1,
-          "pos_m": 1.55,
-          "leaf_dir": "أعلى",
-          "hinge_dir": "يمين",
-          "removed": true
-        }
-      ],
-      "0,0,1,0": [
-        {
-          "id": "door_18",
-          "name": "D1-1",
-          "type_label": "D1",
-          "w_m": 0.9,
-          "h_m": 2.1,
-          "pos_m": 1.55,
-          "leaf_dir": "أعلى",
-          "hinge_dir": "يسار",
-          "removed": true
-        }
-      ],
-      "0,1,1,1": [
-        {
-          "kind": "door",
-          "wk": [
-            0,
-            1,
-            1,
-            1
-          ],
-          "name": "D1-1",
-          "type_label": "D1",
-          "w_m": 0.9,
-          "h_m": 2.1,
-          "pos_m": 2.21,
-          "leaf_dir": "أعلى",
-          "hinge_dir": "يسار",
-          "removed": false,
-          "is_preview": false,
-          "has_conflict": false,
-          "id": "door_23"
-        },
-        {
-          "kind": "door",
-          "wk": [
-            0,
-            1,
-            1,
-            1
-          ],
-          "name": "D1-1",
-          "type_label": "D1",
-          "w_m": 0.9,
-          "h_m": 2.1,
-          "pos_m": 0.2,
-          "leaf_dir": "أعلى",
-          "hinge_dir": "يسار",
-          "removed": true,
-          "is_preview": false,
-          "has_conflict": false,
-          "id": "door_24"
-        }
-      ],
-      "1,1,2,1": [
-        {
-          "kind": "door",
-          "wk": [
-            1,
-            1,
-            2,
-            1
-          ],
-          "name": "D1-2",
-          "type_label": "D1",
-          "w_m": 0.9,
-          "h_m": 2.1,
-          "pos_m": 2.6,
-          "leaf_dir": "أعلى",
-          "hinge_dir": "يمين",
-          "removed": true,
-          "is_preview": false,
-          "has_conflict": false,
-          "id": "door_30"
-        }
-      ]
-    },
-    "next_op_id": 31,
-    "window_types": [
-      {
-        "id": "wt_1",
-        "label": "W1",
-        "w_cm": 100.0,
-        "h_cm": 120.0,
-        "sill_cm": 90.0
-      },
-      {
-        "id": "wt_2",
-        "label": "W2",
-        "w_cm": 80.0,
-        "h_cm": 80.0,
-        "sill_cm": 120.0
-      }
-    ],
-    "door_types": [
-      {
-        "id": "dt_1",
-        "label": "D1",
-        "w_cm": 90.0,
-        "h_cm": 210.0
-      },
-      {
-        "id": "dt_2",
-        "label": "D2",
-        "w_cm": 80.0,
-        "h_cm": 210.0
-      }
-    ],
+    "parapet_wall_height": 1.0,
+    "parapet_walls": [],
+    "wall_heights": {},
+    "windows": {},
+    "doors": {},
+    "next_op_id": 1,
+    "window_types": [],
+    "door_types": [],
     "brick_type": "الطوب الأحمر الطفلي",
     "brick_size": "25×12×6",
     "mortar_thickness_cm": 1.0,
     "brick_custom_l": 25.0,
     "brick_custom_w": 12.0,
     "brick_custom_h": 6.0,
-    "plaster_faces": {
-      "0,0,1,0": [
-        "أعلى",
-        "أسفل"
-      ],
-      "1,0,2,0": [
-        "أعلى"
-      ],
-      "0,0,0,1": [
-        "يمين"
-      ],
-      "1,0,1,1": [
-        "يمين",
-        "يسار"
-      ],
-      "2,0,2,1": [
-        "يسار"
-      ],
-      "1,1,1,2": [
-        "يمين",
-        "يسار"
-      ],
-      "0,1,1,1": [
-        "أعلى",
-        "أسفل"
-      ],
-      "0,2,1,2": [
-        "أسفل"
-      ]
-    }
+    "plaster_faces": {}
   },
   "module_10_diagonal_strap": {
     "edge_clearance_x": 0.0,
@@ -763,31 +267,30 @@
     "Y2": 3.8,
     "a2": 40.0,
     "b2": 50.0,
-    "P1_u": 80.0,
-    "P2_u": 120.0,
+    "P1_w": 80.0,
+    "P1_u": 120.0,
+    "P2_w": 120.0,
+    "P2_u": 180.0,
     "col_weight_factor": 1.0,
-    "P1_w": 53.33,
-    "P2_w": 80.0,
     "q_all_net": 1.5,
-    "fcu": 300.0,
+    "fcu": 250.0,
     "fy": 4000.0,
     "t_pc": 10.0,
     "strap_b": 40.0,
-    "strap_D": 120.0,
-    "L1x": 2.15,
-    "L1y": 2.15,
-    "t1": 60.0,
-    "L2x": 2.35,
-    "L2y": 2.3,
-    "t2": 50.0,
-    "long_bar_dia": 16,
+    "strap_D": 170.0,
+    "L1x": 2.95,
+    "L1y": 2.75,
+    "t1": 80.0,
+    "L2x": 2.85,
+    "L2y": 2.85,
+    "t2": 60.0,
+    "long_bar_dia": 22,
     "stirrup_dia": 10,
     "stirrup_per_m": 5,
     "stirrup_spacing": 20.0,
     "trans_bar_dia": 16,
-    "is_calculated": true,
-    "is_manual_override": true,
-    "_last_upstream_sig": "0.0_0.0_30.0_60.0_4.5_3.8_40.0_50.0_80.0_120.0_1.0_1.5_300.0_4000.0_10.0_40.0"
+    "is_calculated": false,
+    "is_manual_override": false
   },
   "module_11_ground_beam": {
     "level_type": "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)",
@@ -795,7 +298,7 @@
     "L_m": 5.0,
     "b_cm": 25.0,
     "t_cm": 60.0,
-    "t_calc_cm": 40.0,
+    "t_calc_cm": 60.0,
     "auto_sync_depth": true,
     "cover_cm": 4.0,
     "t_footing_cm": 60.0,
@@ -805,11 +308,11 @@
     "h_backfill_m": 1.0,
     "has_wall_at_footing": true,
     "h_wall_m": 3.0,
-    "t_wall_cm": 25.0,
+    "t_wall_cm": 12.0,
     "gamma_brick": 1.8,
     "w_add_dl": 0.0,
     "w_add_ll": 0.0,
-    "fcu": 300.0,
+    "fcu": 250.0,
     "fy": 4000.0,
     "fy_stirrup": 2400.0,
     "phi_bot_mm": 16,
@@ -819,16 +322,15 @@
     "n_stirrup_branches": 2,
     "phi_side_mm": 10,
     "is_calculated": true,
-    "n_branches": 2,
     "has_wall": true
   },
   "cs_owner_name": "",
   "fs_moment_contour_view_mode_idx": 0,
   "fs_additional_moment_contour_view_mode_idx": 2,
-  "fs_deficit_contour_view_mode_idx": 0,
-  "fs_col_pu_int": 32.7063,
-  "fs_col_pu_edge": 21.162899999999997,
-  "fs_col_pu_corner": 10.3409625,
+  "fs_deficit_contour_view_mode_idx": 1,
+  "fs_col_pu_int": 40.892775,
+  "fs_col_pu_edge": 32.8636,
+  "fs_col_pu_corner": 16.058349999999997,
   "cs_is_top_floor_idx": 0,
   "cs_lap_factor_idx": 0,
   "cs_n_st_m": 6,
@@ -836,17 +338,17 @@
   "cs_name_0": "C1",
   "cs_b_0": 30.0,
   "cs_t_0": 60.0,
-  "cs_ncols_0": 14,
+  "cs_ncols_0": 4,
   "cs_nb_0": 8,
   "cs_phi_idx_0": 3,
   "cs_nrows_0": 4,
   "cs_tietype_idx_0": 1,
   "cs_name_1": "C2",
   "cs_b_1": 30.0,
-  "cs_t_1": 50.0,
-  "cs_ncols_1": 4,
+  "cs_t_1": 70.0,
+  "cs_ncols_1": 10,
   "cs_nb_1": 8,
-  "cs_phi_idx_1": 1,
+  "cs_phi_idx_1": 3,
   "cs_nrows_1": 4,
   "cs_tietype_idx_1": 1,
   "cs_name_2": "C3",
@@ -867,12 +369,12 @@
   "cs_tietype_idx_3": 1,
   "cs_has_footing_dowels_idx": 0,
   "cs_cut_length_0": 3.84,
-  "cs_cut_length_1": 3.68,
+  "cs_cut_length_1": 3.84,
   "cs_cut_length_2": 3.84,
   "cs_cut_length_3": 3.92,
   "cs_fs_name_0": "S1",
-  "cs_fs_lx_0": 12.0,
-  "cs_fs_ly_0": 10.0,
+  "cs_fs_lx_0": 5.0,
+  "cs_fs_ly_0": 4.4,
   "cs_fs_n_rep_0": 1,
   "cs_fs_phi_btm_x_0": 12,
   "cs_fs_phi_btm_y_0": 12,
@@ -883,9 +385,9 @@
   "cs_fs_nb_top_x_0": 6,
   "cs_fs_nb_top_y_0": 6,
   "cs_fs_name_1": "S2",
-  "cs_fs_lx_1": 4.0,
-  "cs_fs_ly_1": 5.0,
-  "cs_fs_n_rep_1": 1,
+  "cs_fs_lx_1": 2.0,
+  "cs_fs_ly_1": 3.0,
+  "cs_fs_n_rep_1": 15,
   "cs_fs_add_top_lx_0": 2.0,
   "cs_fs_add_top_ly_0": 3.0,
   "cs_fs_n_top_add_x_0": 6,
@@ -910,17 +412,17 @@
   "cs_fs_top_add_name_0_0": "T1",
   "cs_fs_top_add_phi_0_0": 12,
   "cs_fs_top_add_lx_0_0": 2.0,
-  "cs_fs_top_add_ly_0_0": 3.0,
+  "cs_fs_top_add_ly_0_0": 2.0,
   "cs_fs_top_add_nx_0_0": 6,
   "cs_fs_top_add_ny_0_0": 6,
-  "cs_fs_top_add_nz_0_0": 18,
+  "cs_fs_top_add_nz_0_0": 4,
   "cs_fs_n_btm_models_0": 1,
   "cs_fs_btm_add_name_0_0": "B1",
   "cs_fs_btm_add_phi_0_0": 16,
   "cs_fs_btm_add_lx_0_0": 10.0,
   "cs_fs_btm_add_ly_0_0": 4.0,
   "cs_fs_btm_add_nx_0_0": 0,
-  "cs_fs_btm_add_ny_0_0": 6,
+  "cs_fs_btm_add_ny_0_0": 0,
   "cs_fs_btm_add_nz_0_0": 1,
   "cs_fs_top_add_name_0_1": "T2",
   "cs_fs_top_add_phi_0_1": 12,
@@ -985,45 +487,10 @@
   "cs_fs_top_add_nx_0_9": 0,
   "cs_fs_top_add_ny_0_9": 0,
   "cs_fs_top_add_nz_0_9": 1,
-  "cs_fs_n_top_models_1": 1,
-  "cs_fs_top_add_name_1_0": "T1",
-  "cs_fs_top_add_phi_1_0": 12,
-  "cs_fs_top_add_lx_1_0": 0.6,
-  "cs_fs_top_add_ly_1_0": 0.9,
-  "cs_fs_top_add_nx_1_0": 0,
-  "cs_fs_top_add_ny_1_0": 0,
-  "cs_fs_top_add_nz_1_0": 1,
-  "cs_fs_n_btm_models_1": 1,
-  "cs_fs_btm_add_name_1_0": "B1",
-  "cs_fs_btm_add_phi_1_0": 12,
-  "cs_fs_btm_add_lx_1_0": 1.0,
-  "cs_fs_btm_add_ly_1_0": 1.5,
-  "cs_fs_btm_add_nx_1_0": 0,
-  "cs_fs_btm_add_ny_1_0": 0,
-  "cs_fs_btm_add_nz_1_0": 1,
-  "cs_fs_name_2": "S3",
-  "cs_fs_lx_2": 5.0,
-  "cs_fs_ly_2": 4.5,
-  "cs_fs_n_rep_2": 1,
-  "cs_fs_n_top_models_2": 1,
-  "cs_fs_top_add_name_2_0": "T1",
-  "cs_fs_top_add_phi_2_0": 12,
-  "cs_fs_top_add_lx_2_0": 3.6,
-  "cs_fs_top_add_ly_2_0": 3.0,
-  "cs_fs_top_add_nx_2_0": 0,
-  "cs_fs_top_add_ny_2_0": 0,
-  "cs_fs_top_add_nz_2_0": 1,
-  "cs_fs_n_btm_models_2": 1,
-  "cs_fs_btm_add_name_2_0": "B1",
-  "cs_fs_btm_add_phi_2_0": 12,
-  "cs_fs_btm_add_lx_2_0": 6.0,
-  "cs_fs_btm_add_ly_2_0": 5.0,
-  "cs_fs_btm_add_nx_2_0": 0,
-  "cs_fs_btm_add_ny_2_0": 0,
-  "cs_fs_btm_add_nz_2_0": 1,
-  "fs_col_tot_pu_int": 98.1189,
-  "fs_col_tot_pu_edge": 63.488699999999994,
-  "fs_col_tot_pu_corner": 31.0228875,
+  "nav_view": "profile_manager",
+  "fs_col_tot_pu_int": 40.892775,
+  "fs_col_tot_pu_edge": 32.8636,
+  "fs_col_tot_pu_corner": 16.058349999999997,
   "fs_building_columns": [
     {
       "id": "C1",
@@ -1031,13 +498,13 @@
       "grid_x": "Y1",
       "grid_y": "X1",
       "type": "Corner",
-      "x": 0.09,
-      "y": 0.19,
-      "bc": 30.0,
-      "tc": 50.0,
-      "pu_1f": 2.6235,
-      "pu_tot": 7.8705,
-      "atrib": 1.5
+      "x": 0.0,
+      "y": 0.0,
+      "bc": 50.0,
+      "tc": 30.0,
+      "pu_1f": 2.6675,
+      "pu_tot": 2.6675,
+      "atrib": 1.25
     },
     {
       "id": "C2",
@@ -1045,13 +512,13 @@
       "grid_x": "Y2",
       "grid_y": "X1",
       "type": "Edge",
-      "x": 4.1899999999999995,
-      "y": 0.09,
+      "x": 2.5,
+      "y": 0.0,
       "bc": 50.0,
       "tc": 30.0,
-      "pu_1f": 5.5749375,
-      "pu_tot": 16.7248125,
-      "atrib": 3.1875
+      "pu_1f": 7.469,
+      "pu_tot": 7.469,
+      "atrib": 3.5
     },
     {
       "id": "C3",
@@ -1059,13 +526,13 @@
       "grid_x": "Y3",
       "grid_y": "X1",
       "type": "Edge",
-      "x": 8.69,
-      "y": -0.09,
+      "x": 7.0,
+      "y": 0.0,
       "bc": 50.0,
       "tc": 30.0,
-      "pu_1f": 5.247,
-      "pu_tot": 15.741,
-      "atrib": 3.0
+      "pu_1f": 8.536,
+      "pu_tot": 8.536,
+      "atrib": 4.0
     },
     {
       "id": "C4",
@@ -1073,13 +540,13 @@
       "grid_x": "Y4",
       "grid_y": "X1",
       "type": "Edge",
-      "x": 12.0,
+      "x": 10.5,
       "y": 0.0,
       "bc": 50.0,
       "tc": 30.0,
-      "pu_1f": 5.902875,
-      "pu_tot": 17.708624999999998,
-      "atrib": 3.375
+      "pu_1f": 11.203500000000002,
+      "pu_tot": 11.203500000000002,
+      "atrib": 5.25
     },
     {
       "id": "C5",
@@ -1087,13 +554,13 @@
       "grid_x": "Y5",
       "grid_y": "X1",
       "type": "Corner",
-      "x": 17.31,
-      "y": 0.09,
+      "x": 17.5,
+      "y": 0.0,
       "bc": 50.0,
       "tc": 30.0,
-      "pu_1f": 3.6073125000000004,
-      "pu_tot": 10.8219375,
-      "atrib": 2.0625
+      "pu_1f": 7.469,
+      "pu_tot": 7.469,
+      "atrib": 3.5
     },
     {
       "id": "C6",
@@ -1101,13 +568,13 @@
       "grid_x": "Y1",
       "grid_y": "X2",
       "type": "Edge",
-      "x": 0.19,
-      "y": 1.5,
+      "x": 0.0,
+      "y": 2.0,
       "bc": 50.0,
       "tc": 30.0,
-      "pu_1f": 10.494,
-      "pu_tot": 31.482,
-      "atrib": 6.0
+      "pu_1f": 8.669375,
+      "pu_tot": 8.669375,
+      "atrib": 4.0625
     },
     {
       "id": "C7",
@@ -1115,13 +582,13 @@
       "grid_x": "Y2",
       "grid_y": "X2",
       "type": "Interior",
-      "x": 4.0,
-      "y": 1.5,
+      "x": 2.5,
+      "y": 2.0,
       "bc": 50.0,
       "tc": 30.0,
-      "pu_1f": 22.29975,
-      "pu_tot": 66.89925,
-      "atrib": 12.75
+      "pu_1f": 24.274250000000002,
+      "pu_tot": 24.274250000000002,
+      "atrib": 11.375
     },
     {
       "id": "C8",
@@ -1129,13 +596,13 @@
       "grid_x": "Y3",
       "grid_y": "X2",
       "type": "Interior",
-      "x": 8.5,
-      "y": 1.5,
+      "x": 7.0,
+      "y": 2.0,
       "bc": 50.0,
       "tc": 30.0,
-      "pu_1f": 14.1013125,
-      "pu_tot": 42.3039375,
-      "atrib": 8.0625
+      "pu_1f": 19.339375000000004,
+      "pu_tot": 19.339375000000004,
+      "atrib": 9.0625
     },
     {
       "id": "C9",
@@ -1143,13 +610,13 @@
       "grid_x": "Y4",
       "grid_y": "X2",
       "type": "Interior",
-      "x": 12.0,
-      "y": 1.5,
+      "x": 10.5,
+      "y": 2.0,
       "bc": 50.0,
       "tc": 30.0,
-      "pu_1f": 16.7248125,
-      "pu_tot": 50.174437499999996,
-      "atrib": 9.5625
+      "pu_1f": 28.00875,
+      "pu_tot": 28.00875,
+      "atrib": 13.125
     },
     {
       "id": "C10",
@@ -1157,13 +624,13 @@
       "grid_x": "Y5",
       "grid_y": "X2",
       "type": "Edge",
-      "x": 17.31,
-      "y": 1.5,
+      "x": 17.5,
+      "y": 2.0,
       "bc": 50.0,
       "tc": 30.0,
-      "pu_1f": 14.429250000000001,
-      "pu_tot": 43.28775,
-      "atrib": 8.25
+      "pu_1f": 24.274250000000002,
+      "pu_tot": 24.274250000000002,
+      "atrib": 11.375
     },
     {
       "id": "C11",
@@ -1171,13 +638,13 @@
       "grid_x": "Y1",
       "grid_y": "X3",
       "type": "Edge",
-      "x": 0.09,
-      "y": 6.0,
-      "bc": 30.0,
-      "tc": 50.0,
-      "pu_1f": 15.3912,
-      "pu_tot": 46.1736,
-      "atrib": 8.8
+      "x": 0.0,
+      "y": 6.5,
+      "bc": 50.0,
+      "tc": 30.0,
+      "pu_1f": 11.737,
+      "pu_tot": 11.737,
+      "atrib": 5.5
     },
     {
       "id": "C12",
@@ -1185,13 +652,13 @@
       "grid_x": "Y2",
       "grid_y": "X3",
       "type": "Interior",
-      "x": 4.09,
-      "y": 5.81,
-      "bc": 30.0,
-      "tc": 50.0,
-      "pu_1f": 32.7063,
-      "pu_tot": 98.1189,
-      "atrib": 18.7
+      "x": 2.5,
+      "y": 6.5,
+      "bc": 50.0,
+      "tc": 30.0,
+      "pu_1f": 32.8636,
+      "pu_tot": 32.8636,
+      "atrib": 15.399999999999999
     },
     {
       "id": "C13",
@@ -1199,12 +666,12 @@
       "grid_x": "Y3",
       "grid_y": "X3",
       "type": "Interior",
-      "x": 8.59,
-      "y": 5.81,
-      "bc": 30.0,
-      "tc": 50.0,
-      "pu_1f": 23.895712499999995,
-      "pu_tot": 71.68713749999998,
+      "x": 7.0,
+      "y": 6.5,
+      "bc": 50.0,
+      "tc": 30.0,
+      "pu_1f": 29.155775,
+      "pu_tot": 29.155775,
       "atrib": 13.662499999999998
     },
     {
@@ -1213,13 +680,13 @@
       "grid_x": "Y4",
       "grid_y": "X3",
       "type": "Interior",
-      "x": 11.91,
-      "y": 5.81,
-      "bc": 30.0,
-      "tc": 50.0,
-      "pu_1f": 27.743512499999998,
-      "pu_tot": 83.2305375,
-      "atrib": 15.862499999999999
+      "x": 10.5,
+      "y": 6.5,
+      "bc": 50.0,
+      "tc": 30.0,
+      "pu_1f": 40.892775,
+      "pu_tot": 40.892775,
+      "atrib": 19.162499999999998
     },
     {
       "id": "C15",
@@ -1227,13 +694,13 @@
       "grid_x": "Y5",
       "grid_y": "X3",
       "type": "Edge",
-      "x": 17.409999999999997,
-      "y": 5.81,
-      "bc": 30.0,
-      "tc": 50.0,
-      "pu_1f": 21.162899999999997,
-      "pu_tot": 63.488699999999994,
-      "atrib": 12.1
+      "x": 17.5,
+      "y": 6.5,
+      "bc": 50.0,
+      "tc": 30.0,
+      "pu_1f": 32.8636,
+      "pu_tot": 32.8636,
+      "atrib": 15.399999999999999
     },
     {
       "id": "C16",
@@ -1241,13 +708,13 @@
       "grid_x": "Y1",
       "grid_y": "X4",
       "type": "Corner",
-      "x": 0.09,
-      "y": 10.110000000000001,
-      "bc": 30.0,
-      "tc": 50.0,
-      "pu_1f": 7.5207,
-      "pu_tot": 22.5621,
-      "atrib": 4.3
+      "x": 0.0,
+      "y": 10.8,
+      "bc": 50.0,
+      "tc": 30.0,
+      "pu_1f": 5.735125000000001,
+      "pu_tot": 5.735125000000001,
+      "atrib": 2.6875
     },
     {
       "id": "C17",
@@ -1255,13 +722,13 @@
       "grid_x": "Y2",
       "grid_y": "X4",
       "type": "Edge",
-      "x": 4.0,
-      "y": 10.3,
+      "x": 2.5,
+      "y": 10.8,
       "bc": 50.0,
       "tc": 30.0,
-      "pu_1f": 15.9814875,
-      "pu_tot": 47.9444625,
-      "atrib": 9.1375
+      "pu_1f": 16.058349999999997,
+      "pu_tot": 16.058349999999997,
+      "atrib": 7.5249999999999995
     },
     {
       "id": "C18",
@@ -1269,12 +736,12 @@
       "grid_x": "Y3",
       "grid_y": "X4",
       "type": "Edge",
-      "x": 8.5,
-      "y": 10.3,
+      "x": 7.0,
+      "y": 10.8,
       "bc": 50.0,
       "tc": 30.0,
-      "pu_1f": 15.0414,
-      "pu_tot": 45.1242,
+      "pu_1f": 18.3524,
+      "pu_tot": 18.3524,
       "atrib": 8.6
     },
     {
@@ -1283,13 +750,13 @@
       "grid_x": "Y4",
       "grid_y": "X4",
       "type": "Edge",
-      "x": 12.0,
-      "y": 10.3,
+      "x": 10.5,
+      "y": 10.8,
       "bc": 50.0,
       "tc": 30.0,
-      "pu_1f": 16.921574999999997,
-      "pu_tot": 50.76472499999999,
-      "atrib": 9.674999999999999
+      "pu_1f": 24.087525,
+      "pu_tot": 24.087525,
+      "atrib": 11.2875
     },
     {
       "id": "C20",
@@ -1297,58 +764,32 @@
       "grid_x": "Y5",
       "grid_y": "X4",
       "type": "Corner",
-      "x": 17.31,
-      "y": 10.21,
+      "x": 17.5,
+      "y": 10.8,
       "bc": 50.0,
       "tc": 30.0,
-      "pu_1f": 10.3409625,
-      "pu_tot": 31.0228875,
-      "atrib": 5.9125
+      "pu_1f": 16.058349999999997,
+      "pu_tot": 16.058349999999997,
+      "atrib": 7.5249999999999995
     }
   ],
   "fs_col_b": 30.0,
   "fs_col_c": 50.0,
   "fs_Lx_spans": [
-    4.0,
+    2.5,
     4.5,
     3.5,
-    5.5
+    7.0
   ],
   "fs_Ly_spans": [
-    1.5,
+    2.0,
     4.5,
     4.3
   ],
-  "nav_view": "profile_manager",
-  "gb_overrides": {
-    "B1_t": 45.0,
-    "B1_ntop": 3,
-    "B1_nbot": 3,
-    "B2_ntop": 2,
-    "B3_ntop": 2
-  },
   "_schema_mod8_migrated": true,
-  "bf_q_net": 1.5,
-  "bf_Fcu": 300,
-  "bf_Fy": 4000,
-  "bf_cover": 5,
-  "bf_Phi": 16,
   "_schema_mod8_removed": true,
   "enabled_modules": [
-    0,
-    1,
-    2,
-    3,
-    4,
-    5,
-    6,
-    7,
-    8,
-    9,
-    10,
-    11,
-    12,
-    13
+    12
   ],
   "deleted_modules_trash": {}
 }

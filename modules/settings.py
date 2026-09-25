@@ -3100,38 +3100,42 @@ MODULE_DATA_KEY_PREFIXES = {
 # Dependency map: which modules DEPEND ON a given module.
 # Engineering Load-Path & Functional Dependency Map
 # Key = module index; Value = list of (required_idx, relationship_description)
-# Module 1 (Flat Slabs) and all Foundations (Modules 3, 4, 5, 6, 7) depend on Module 2 (Columns).
-# Module 2 (Columns) has independent manual load input and does not depend on Slabs.
-# Modules 8, 9, 10, 11, 12, 13, 14 are standalone modules.
+#
+# Rules:
+# 1. Module 1 (Integrated Structural Design - idx 0) calls and requires:
+#    - Module 2: Rectangular Columns (idx 1)
+#    - Module 3: Isolated Footings (idx 2)
+#    - Module 4: Two-columns combined footings (idx 3)
+#    - Module 5: Strap Footings (idx 4)
+#    - Module 6: Diagonal Strap Footings (idx 5)
+#    - Module 7: Ground Beam Design & Detailing (idx 6)
+# 2. Modules 2, 3, 4, 5, 6, 7 do NOT depend on Module 1 (they run independent calculations).
+# 3. Modules 8, 9, 10, 11, 12, 13, 14 are 100% standalone with 0 dependencies.
 FUNCTIONAL_DEPENDENCIES: dict[int, list] = {
-    0: [  # Module 1 — Integrated Structural Design -> Requires Columns (1) for punching shear & column support
-        (1, "مرتبط بنماذج وتصميم الأعمدة: يغذي الأعمدة بالأحمال وتعتمد بحور السقف والقص الثاقب عليها"),
+    0: [  # Module 1 — Integrated Structural Design -> Requires Modules 2, 3, 4, 5, 6, 7
+        (1, "مرتبط بالأعمدة المستطيلة (Module 2): يغذي الأعمدة بالأحمال وتعتمد قطاعاتها وحسابات القص الثاقب عليها"),
+        (2, "مرتبط بالقواعد المنفصلة (Module 3): يستدعي معادلات تصميم القواعد المنفصلة للأعمدة"),
+        (3, "مرتبط بالقواعد المشتركة لعمودين (Module 4): يستدعي معادلات تصميم القواعد المشتركة عند تقارب الأعمدة"),
+        (4, "مرتبط بقواعد الشدادات (Module 5): يستدعي معادلات تصميم قواعد الجار والشدادات"),
+        (5, "مرتبط بقواعد الشداد المائل (Module 6): يستدعي معادلات تصميم قواعد الجار الركنية ذات الشداد المائل"),
+        (6, "مرتبط بالميدات والسملات (Module 7): يستدعي معادلات وتفاصيل الميدات والكمرات الأرضية لشبكة أساسات المبنى"),
     ],
-    1: [],  # Module 2 — Columns (الأعمدة المستطيلة): Has independent manual load input (Pu)
-    2: [  # Module 3 — Footings (القواعد المنفصلة) -> Requires Columns (1)
-        (1, "مرتبط بالأعمدة: يستقبل أبعاد قطاعات الأعمدة وأحمالها لتصميم القواعد المنفصلة"),
-    ],
-    3: [  # Module 4 — Two-columns combined footings (القواعد المشتركة لعمودين) -> Requires Columns (1)
-        (1, "مرتبط بالأعمدة: يستقبل أبعاد قطاعات العمودين وأحمالهما لتصميم القاعدة المشتركة"),
-    ],
-    4: [  # Module 5 — Strap Footings (قواعد شدادات الجار) -> Requires Columns (1)
-        (1, "مرتبط بالأعمدة: يستقبل أحمال وقطاعات عمود الجار والعمود الداخلي لتصميم الشداد والقاعدتين"),
-    ],
-    5: [  # Module 6 — Diagonal Strap Footings (قواعد شدادات الجار الركنية المائلة) -> Requires Columns (1)
-        (1, "مرتبط بالأعمدة: يستقبل أحمال وقطاعات عمود الركن والعمود الداخلي لتصميم الشداد المائل والقاعدتين"),
-    ],
-    6: [  # Module 7 — Ground Beam Design & Detailing (الميدات والسملات) -> Requires Columns (1)
-        (1, "مرتبط بالأعمدة ومنظومة الأساسات: يربط رقاب الأعمدة والقواعد عند منسوب الردم وينقل أحمال الحوائط"),
-    ],
-    7: [],  # Module 8 — Raft Foundations: Standalone
-    8: [],  # Module 9 — Ground Slabs: Standalone
-    9: [],  # Module 10 — Circular Tank Foundations: Standalone
+    1: [],  # Module 2 — Columns: Independent manual load input (Pu)
+    2: [],  # Module 3 — Isolated Footings: Independent
+    3: [],  # Module 4 — Two-columns combined footings: Independent
+    4: [],  # Module 5 — Strap Footings: Independent
+    5: [],  # Module 6 — Diagonal Strap Footings: Independent
+    6: [],  # Module 7 — Ground Beam: Independent manual single-beam calculator
+    7: [],  # Module 8 — Raft Foundations: 100% Standalone
+    8: [],  # Module 9 — Ground Slabs: 100% Standalone
+    9: [],  # Module 10 — Circular Tank Foundations: 100% Standalone
     10: [], # Module 11 — Standalone - Flat Slabs: 100% Standalone
-    11: [], # Module 12 — Steel Rebar: Standalone
+    11: [], # Module 12 — Steel Rebar: 100% Standalone
     12: [], # Module 13 — Concrete Quantity Survey: 100% Standalone
     13: [], # Module 14 — Brick & Plastering Survey: 100% Standalone
 }
 
+MODULE_1_REQUIRED_SUBMODULES: set[int] = {1, 2, 3, 4, 5, 6}
 LINKED_MODULE_INDICES: set[int] = {0, 1, 2, 3, 4, 5, 6}
 UNLINKED_MODULE_INDICES: set[int] = {7, 8, 9, 10, 11, 12, 13}
 
@@ -3140,14 +3144,11 @@ def validate_new_project_module_selection(selected_indices: list) -> tuple[bool,
     """
     Validates a list of selected module indices for a NEW project.
     Enforces functional engineering dependencies:
-      - If module A is selected, any required module B must also be selected.
-      - If module A requires B and B is missing, produces a clear violation.
-      - Standalone modules (e.g. Concrete Quantity Survey) have 0 dependencies and can be selected alone.
+      - If Module 1 (idx 0) is selected, its required sub-modules (Modules 2, 3, 4, 5, 6, 7) must also be selected.
+      - If Module 1 is not selected, any other modules (2..14) can be selected in any combination.
+      - Standalone modules (Modules 8..14) have 0 dependencies and can be selected alone.
     Returns:
       (is_valid: bool, violations: list[dict])
-      where each violation dict contains:
-        {"module_a_idx": int, "module_a_name": str, "module_b_idx": int, "module_b_name": str,
-         "relationship": str, "message": str}
     """
     if not selected_indices:
         return False, [{"message": "يرجى اختيار موديول واحد على الأقل للمشروع الجديد."}]
@@ -3160,11 +3161,10 @@ def validate_new_project_module_selection(selected_indices: list) -> tuple[bool,
     seen_pairs = set()
 
     for midx in selected_set:
-        # Check forward dependencies
         forward_deps = FUNCTIONAL_DEPENDENCIES.get(midx, [])
         for dep_idx, relationship in forward_deps:
             if dep_idx not in selected_set:
-                pair_key = tuple(sorted([midx, dep_idx]))
+                pair_key = (midx, dep_idx)
                 if pair_key not in seen_pairs:
                     seen_pairs.add(pair_key)
                     m_a = next((m for m in ALL_MODULES if m["idx"] == midx), None)
@@ -3177,7 +3177,7 @@ def validate_new_project_module_selection(selected_indices: list) -> tuple[bool,
                         "module_b_idx": dep_idx,
                         "module_b_name": name_b,
                         "relationship": relationship,
-                        "message": f"الموديول «{name_a}» والموديول «{name_b}» مرتبطان هندسياً ويجب اختيارهما معاً في المشروع الجديد.",
+                        "message": f"الموديول «{name_a}» يتطلب وجود «{name_b}» في المشروع الجديد لاستدعاء معادلاته الإنشائية.",
                     })
 
     is_valid = len(violations) == 0
@@ -3211,12 +3211,15 @@ def get_module_data_keys(project_data: dict, module_idx: int) -> dict:
 
 def check_module_dependencies(project_name: str, module_idx: int) -> list:
     """
-    Check which active (non-deleted) modules are linked to module_idx within a project.
-    Performs a strict BIDIRECTIONAL scan (forward + reverse linkages).
-    Returns a list of dicts:
-        [{"idx": int, "name": str, "relationship": str}, ...]
-    Only returns dependencies for modules that currently exist in the project (not deleted).
-    Applies universally across all projects and all models/modules.
+    Check which active (non-deleted) modules DEPEND ON module_idx within a project.
+    Determines if deleting module_idx alone would break any remaining active module.
+
+    Rules:
+      1. Module 1 (idx 0) has NO dependents -> can be deleted alone (returns []).
+      2. Modules 2, 3, 4, 5, 6 (idx 1..5) are required by Module 1:
+         If Module 1 is currently active in project_name, returns Module 1 as a dependent.
+         If Module 1 is already deleted / not present, returns [].
+      3. Modules 7..14 (idx 6..13) are standalone and have NO dependents -> returns [].
     """
     trash = get_deleted_modules_trash(project_name)
     deleted_indices = [int(k) for k in trash.keys()] if isinstance(trash, dict) else []
@@ -3224,33 +3227,16 @@ def check_module_dependencies(project_name: str, module_idx: int) -> list:
     # Available (non-deleted) modules in the project
     available_indices = [m["idx"] for m in ALL_MODULES if m["idx"] not in deleted_indices]
 
-    # If the target module itself is not in available_indices or already deleted, return empty
     if module_idx not in available_indices or module_idx in deleted_indices:
         return []
 
     dependent_modules = []
-    seen_deps = set()
 
-    # 1. Forward dependencies: modules that module_idx explicitly declares a relationship with
-    forward_deps = FUNCTIONAL_DEPENDENCIES.get(module_idx, [])
-    for dep_idx, relationship in forward_deps:
-        if dep_idx != module_idx and dep_idx in available_indices and dep_idx not in deleted_indices:
-            if dep_idx not in seen_deps:
-                seen_deps.add(dep_idx)
-                dep_info = next((m for m in ALL_MODULES if m["idx"] == dep_idx), None)
-                dep_name = dep_info["name"] if dep_info else f"Module {dep_idx}"
-                dependent_modules.append({
-                    "idx": dep_idx,
-                    "name": dep_name,
-                    "relationship": relationship,
-                })
-
-    # 2. Reverse dependencies: other non-deleted modules that declare a relationship with module_idx
-    for other_idx, other_deps in FUNCTIONAL_DEPENDENCIES.items():
-        if other_idx != module_idx and other_idx in available_indices and other_idx not in deleted_indices:
-            for target_idx, rel in other_deps:
-                if target_idx == module_idx and other_idx not in seen_deps:
-                    seen_deps.add(other_idx)
+    # Check which active modules DEPEND ON module_idx
+    for other_idx in available_indices:
+        if other_idx != module_idx:
+            for req_idx, rel in FUNCTIONAL_DEPENDENCIES.get(other_idx, []):
+                if req_idx == module_idx:
                     dep_info = next((m for m in ALL_MODULES if m["idx"] == other_idx), None)
                     dep_name = dep_info["name"] if dep_info else f"Module {other_idx}"
                     dependent_modules.append({
@@ -3632,20 +3618,19 @@ def soft_delete_module(project_name: str, module_idx: int) -> bool:
 
 def validate_batch_module_deletion(project_name: str, module_indices_to_delete: list[int]) -> tuple[bool, list[str], list[str]]:
     """
-    Validates deleting a batch of modules from a project based on structural load-path rules:
-      1. Modules that remain active after this deletion:
-         remaining = active_in_project \\ module_indices_to_delete
-      2. If Module 3 (Footings) is in remaining, but Module 2 (Columns) is in module_indices_to_delete:
-         Violation! Footings cannot exist without Columns providing column dimensions and loads.
-      3. If Module 1 (Flat Slabs) is in remaining, but Module 2 (Columns) is in module_indices_to_delete:
-         Violation! Flat Slabs cannot calculate punching shear without Columns.
-      4. Deleting Module 1 (Flat Slabs) alone is ALLOWED because Columns has manual load inputs (Pu).
-      5. Deleting Module 2 + Module 1 together, or Module 2 + Module 3 + Module 1 together, is ALLOWED.
-      6. Deleting standalone modules (like Module 12, 4, 5, 6, 7, 8, 9, 10, 11) is ALWAYS ALLOWED.
-      7. Deleting ALL modules except Module 12 is 100% ALLOWED.
+    Validates whether a batch of module indices can be safely deleted together from project_name.
+
+    Enforces the 3 structural engineering dependency rules:
+      1. Module 1 (idx 0 - Integrated Structural Design) CAN be deleted alone without deleting
+         Modules 2, 3, 4, 5, 6, or 7 (its sub-modules continue operating as standalone modules).
+      2. Modules 2, 3, 4, 5, 6, 7 (idx 1..6) CANNOT be deleted alone while Module 1 remains active
+         in the project, because Module 1 calls their design equations and routines.
+         They can only be deleted if Module 1 is ALSO included in the deletion batch (or was already deleted).
+      3. Standalone Modules 8..14 (idx 7..13) have 0 dependencies and can be deleted freely at any time.
+      4. At least one module must remain in the project (cannot delete 100% of modules).
 
     Returns:
-      (is_valid: bool, violations: list[str], linked_names: list[str])
+      (is_valid: bool, violations: list[str], linked_pairs: list[str])
     """
     trash = get_deleted_modules_trash(project_name)
     deleted_indices = [int(k) for k in trash.keys()] if isinstance(trash, dict) else []
@@ -3656,26 +3641,35 @@ def validate_batch_module_deletion(project_name: str, module_indices_to_delete: 
         return False, ["يرجى اختيار موديول واحد على الأقل للحذف."], []
 
     remaining_set = set(active_indices) - to_del_set
+    if len(remaining_set) == 0:
+        return False, ["لا يمكن حذف جميع موديولات المشروع بالكامل. يجب الإبقاء على موديول واحد نشط على الأقل في المشروع."], []
+
     violations = []
-
-    # Check 1: Linked Modules Rule:
-    # Linked modules {0, 1, 2, 6, 7, 8, 9} cannot be deleted individually; they must be deleted together as a complete bundle.
-    active_linked = set(active_indices) & LINKED_MODULE_INDICES
-    del_linked = to_del_set & LINKED_MODULE_INDICES
-
-    if del_linked and del_linked != active_linked:
-        missing_linked = active_linked - del_linked
-        missing_names = [next((m["name"] for m in ALL_MODULES if m["idx"] == idx), f"Module {idx}") for idx in sorted(missing_linked)]
-        violations.append(
-            f"لا يمكن حذف أي موديول من الموديولات المرتبطة ببعضها منفرداً. "
-            f"الموديولات المرتبطة تشكل منظومة إنشائية متكاملة لا يمكن تجزئتها، بل يمكن حذفهم معاً جميعاً كحزمة واحدة. "
-            f"يرجى اختيار باقي الموديولات المرتبطة النشطة في قائمة الحذف: ({' ، '.join(missing_names)}) لحذف المنظومة كحزمة واحدة، أو إلغاء تحديدها."
-        )
-
-    # Detect if any linked modules are included in this deletion batch
     linked_pairs = []
-    if del_linked == active_linked and len(del_linked) > 1:
-        linked_pairs.append("الحزمة الإنشائية المرتبطة كاملة (Modules: 1, 2, 3, 4, 5, 6, 7) [سيتم حذف المنظومة معاً كحزمة واحدة]")
+
+    # Check rule: Does any module remaining active depend on a module being deleted?
+    for midx in sorted(remaining_set):
+        deps = FUNCTIONAL_DEPENDENCIES.get(midx, [])
+        for req_idx, rel_desc in deps:
+            if req_idx in to_del_set:
+                m_remaining = next((m for m in ALL_MODULES if m["idx"] == midx), None)
+                m_deleted = next((m for m in ALL_MODULES if m["idx"] == req_idx), None)
+                name_remaining = m_remaining["name"] if m_remaining else f"Module {midx + 1}"
+                name_deleted = m_deleted["name"] if m_deleted else f"Module {req_idx + 1}"
+                violations.append(
+                    f"لا يمكن حذف «{name_deleted}» بمفرده دون حذف «{name_remaining}» معه؛ "
+                    f"لأن «{name_remaining}» سيبقى نشطاً في المشروع ويعتمد عليه ويستدعي معادلاته الإنشائية وحساباته. "
+                    f"الحل: يمكنك إما تحديد «{name_remaining}» لحذفهما معاً في نفس الدفعة، أو إلغاء تحديد «{name_deleted}» من الحذف."
+                )
+
+    # Informative tags for valid deletion confirmation dialog
+    if len(violations) == 0:
+        deleted_submods = to_del_set & MODULE_1_REQUIRED_SUBMODULES
+        if 0 in to_del_set and deleted_submods:
+            sub_names = [next((m["short"] for m in ALL_MODULES if m["idx"] == idx), f"Module {idx+1}") for idx in sorted(deleted_submods)]
+            linked_pairs.append(f"حذف مشترك متوافق: سيتم حذف Module 1 مع الموديولات التابعة المحددة ({', '.join(sub_names)}) بنجاح دون تعارض.")
+        elif 0 in to_del_set and not deleted_submods:
+            linked_pairs.append("حذف Module 1 منفرداً: سيتم حذف Module 1 بنجاح، وستظل موديولات الأعمدة والقواعد والميدات (Modules 2, 3, 4, 5, 6, 7) نشطة وتعمل بصورة مستقلة تماماً.")
 
     is_valid = len(violations) == 0
     return is_valid, violations, linked_pairs
