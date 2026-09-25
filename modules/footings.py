@@ -429,11 +429,6 @@ def generate_footing_section_sketch(
 
 
 def render():
-    st.markdown(
-        '<div class="section-header">🪨 Module 3 – Isolated Footing Design (ECP 203) (تصميم وتدقيق القواعد المنفصلة)</div>',
-        unsafe_allow_html=True,
-    )
-
     prefix = S.get_safe_profile_filename_prefix()
 
     # ── Quick Return to Module 1 & Model Selector Bar ──────────────────────

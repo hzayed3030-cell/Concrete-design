@@ -2067,7 +2067,7 @@ def _draw_plan(with_dim=True):
         Line2D([0], [0], color="#0f172a", lw=1.2, marker="|", label="Dimension (خط بعد)"),
     ]
     ax.legend(handles=leg, loc="upper right", fontsize=fs_leg, framealpha=0.92, ncol=2)
-    ax.set_title("Floor Plan — Module 12: Brick & Plastering Survey", fontsize=fs_title, fontweight="bold", pad=12)
+    ax.set_title("Floor Plan — Module 14: Brick & Plastering Survey", fontsize=fs_title, fontweight="bold", pad=12)
 
     plt.tight_layout()
     buf = io.BytesIO(); fig.savefig(buf, format="png", dpi=150, bbox_inches="tight"); plt.close(fig); buf.seek(0)
@@ -5611,10 +5611,10 @@ def _section_3d_viewer():
   </div>
   <div class="mini-plan-body" id="mini-plan-body">
     <div class="mini-plan-img-wrapper" id="mini-plan-wrapper" title="انقر لتكبير المسقط الأفقي">
-      <img src="data:image/png;base64,__PLAN_B64__" alt="Floor Plan — Module 12: Brick & Plastering Survey" class="mini-plan-img" id="mini-plan-img" />
+      <img src="data:image/png;base64,__PLAN_B64__" alt="Floor Plan — Module 14: Brick & Plastering Survey" class="mini-plan-img" id="mini-plan-img" />
       <div class="mini-plan-zoom-hint">🔍 انقر للتكبير</div>
     </div>
-    <div class="mini-plan-caption">Floor Plan — Module 12: Brick & Plastering Survey</div>
+    <div class="mini-plan-caption">Floor Plan — Module 14: Brick & Plastering Survey</div>
   </div>
 </div>
 
@@ -5623,7 +5623,7 @@ def _section_3d_viewer():
   <div class="plan-modal-backdrop" id="modal-backdrop"></div>
   <div class="plan-modal-content">
     <div class="plan-modal-header">
-      <span>📐 Floor Plan — Module 12: Brick & Plastering Survey</span>
+      <span>📐 Floor Plan — Module 14: Brick & Plastering Survey</span>
       <button class="modal-close-btn" id="modal-close">✕ إغلاق</button>
     </div>
     <div class="plan-modal-body">
@@ -7288,17 +7288,6 @@ def render_brick_survey_module():
     st.session_state["in_module"] = True
     _apply_3d_opening_move()
     _init_state()
-    st.markdown(
-        """<div style='background:linear-gradient(135deg,#7B1818,#C45E20);padding:4px 14px;
-            border-radius:7px;margin-bottom:12px;display:flex;align-items:center;gap:10px;min-height:32px;'>
-            <span style='font-size:1.1rem;line-height:1;'>🧱</span>
-            <div style='display:flex;align-items:center;flex-wrap:wrap;gap:8px;'>
-                <span style='color:white;font-weight:bold;font-size:0.95rem;'>Module 12 — Brick &amp; Plastering Survey</span>
-                <span style='color:rgba(255,255,255,0.85);font-size:0.80rem;'>
-                    حصر أعمال الطوب والمحارة &nbsp;|&nbsp; سم / م / م² / م³
-                </span>
-            </div>
-        </div>""",unsafe_allow_html=True)
 
     def _on_openings_expander_change():
         is_now_open = bool(st.session_state.get("m12_openings_expander", False))

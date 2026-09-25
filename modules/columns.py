@@ -628,9 +628,6 @@ def design_rectangular_column(
 # ---------------------------------------------------------------------------
 
 def render():
-    st.markdown('<div class="section-header">🏛️ Module 2 – Rectangular Column Design (ECP 203) (تصميم الأعمدة المستطيلة)</div>',
-                unsafe_allow_html=True)
-
     prefix = S.get_safe_profile_filename_prefix()
 
     # ── INPUT FORM ──────────────────────────────────────────────────────────

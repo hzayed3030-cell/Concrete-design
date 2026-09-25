@@ -479,60 +479,25 @@ def generate_ground_slab_plan_and_detail_sketches(res: dict) -> tuple:
 
 def render():
     """Renders the complete luxury Ground Slab (Slab on Grade) Design Suite."""
-    col_hdr_main, col_hdr_actions = st.columns([3.6, 1.4])
-    with col_hdr_main:
-        st.markdown(
-            """
-            <div dir="rtl" style="
-                background: linear-gradient(135deg, #0b1329 0%, #1e293b 50%, #0b1329 100%);
-                padding: 12px 20px;
-                border-radius: 12px;
-                border: 1.5px solid rgba(56, 189, 248, 0.4);
-                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                text-align: center;
-                min-height: 82px;
-            ">
-                <div style="display: flex; justify-content: center; align-items: center; gap: 12px; flex-wrap: wrap;">
-                    <span style="font-size: 30px;">🏗️</span>
-                    <span style="font-size: 26px; font-weight: 900; color: #ffffff; letter-spacing: 0.5px;">
-                        تصميم البلاطات الأرضية الخرسانية (Slab on Grade / Ground Slab)
-                    </span>
-                    <span style="background: rgba(56, 189, 248, 0.2); color: #38bdf8; border: 1.5px solid #38bdf8; padding: 4px 14px; border-radius: 12px; font-size: 14px; font-weight: 800;">
-                        ECP 203 · ACI 360R
-                    </span>
-                </div>
-                <div style="color: #cbd5e1; font-size: 15px; font-weight: 700; margin-top: 5px; text-align: center;">
-                    إجهادات ويسترجارد (Westergaard) · فحص القص الثاقب للأرفف والمعدات · تسليح الفواصل والدواول
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with col_hdr_actions:
-        with st.container(border=True):
-            c_b1, c_b2 = st.columns([1.2, 0.9])
-            with c_b1:
-                is_help_open = st.session_state.get("_show_gs_help_panel", False)
-                btn_txt = "Close Help" if is_help_open else "💡 Help"
-                if st.button(btn_txt, key="btn_help_ground_slab", use_container_width=True, type="primary" if not is_help_open else "secondary"):
-                    st.session_state["_show_gs_help_panel"] = not is_help_open
-                    st.rerun()
-            with c_b2:
-                word_doc_path = r"e:\Concrete design\دليل_تصميم_ومدخلات_البلاطات_الأرضية_ECP203_ACI360R.docx"
-                if os.path.exists(word_doc_path):
-                    with open(word_doc_path, "rb") as f_word:
-                        word_bytes = f_word.read()
-                    st.download_button(
-                        "📥 Word",
-                        data=word_bytes,
-                        file_name="Ground_Slab_Design_Manual_ECP203.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        use_container_width=True,
-                    )
+    col_act1, col_act2, col_act_spacer = st.columns([1.2, 1.2, 3.6])
+    with col_act1:
+        is_help_open = st.session_state.get("_show_gs_help_panel", False)
+        btn_txt = "Close Help" if is_help_open else "💡 Help"
+        if st.button(btn_txt, key="btn_help_ground_slab", use_container_width=True, type="primary" if not is_help_open else "secondary"):
+            st.session_state["_show_gs_help_panel"] = not is_help_open
+            st.rerun()
+    with col_act2:
+        word_doc_path = r"e:\Concrete design\دليل_تصميم_ومدخلات_البلاطات_الأرضية_ECP203_ACI360R.docx"
+        if os.path.exists(word_doc_path):
+            with open(word_doc_path, "rb") as f_word:
+                word_bytes = f_word.read()
+            st.download_button(
+                "📥 Word",
+                data=word_bytes,
+                file_name="Ground_Slab_Design_Manual_ECP203.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True,
+            )
 
     # ── 💡 HELP & TECHNICAL GUIDE PANEL ───────────────────────────────────────
     if st.session_state.get("_show_gs_help_panel", False):

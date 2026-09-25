@@ -5,10 +5,10 @@
       "name": "مثال لتصميم كامل فلات - اعمدة - قواعد بجميع نواعها",
       "description": "مشروع try1",
       "created_at": "2026-09-05 19:13",
-      "updated_at": "2026-09-24 13:59",
-      "last_used_at": "2026-09-24 13:59:33",
+      "updated_at": "2026-09-25 21:48",
+      "last_used_at": "2026-09-25 21:48:20",
       "data": {
-        "selected_module_idx": 0,
+        "selected_module_idx": 4,
         "apartment_name": "مثال لتصميم كامل فلات - اعمدة - قواعد بجميع نواعها",
         "col_Pu_input": 155.0,
         "col_Safety_Factor": 1.2,
@@ -23,7 +23,7 @@
         "col_Phi_st_index": 1,
         "ftg_bc": 30.0,
         "ftg_tc": 50.0,
-        "ftg_Pu": 32.71,
+        "ftg_Pu": 98.12,
         "ftg_Wf_est": 5.0,
         "ftg_q_all": 1.5,
         "ftg_Df": 1.5,
@@ -32,9 +32,9 @@
         "ftg_Fy": 4000,
         "ftg_cover": 5,
         "ftg_Phi_index": 2,
-        "ftg_L_override": 135,
-        "ftg_B_override": 115,
-        "ftg_trc_override": 40,
+        "ftg_L_override": 225,
+        "ftg_B_override": 205,
+        "ftg_trc_override": 55,
         "tcf_P1": 80.0,
         "tcf_P2": 120.0,
         "tcf_c1": 50,
@@ -798,6 +798,39 @@
           "is_manual_override": true,
           "_last_upstream_sig": "0.0_0.0_30.0_60.0_4.5_3.8_40.0_50.0_80.0_120.0_1.0_1.5_300.0_4000.0_10.0_40.0"
         },
+        "module_11_ground_beam": {
+          "level_type": "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)",
+          "support_condition": "Simply Supported (حر من الطرفين)",
+          "L_m": 5.0,
+          "b_cm": 25.0,
+          "t_cm": 60.0,
+          "t_calc_cm": 40.0,
+          "auto_sync_depth": true,
+          "cover_cm": 4.0,
+          "t_footing_cm": 60.0,
+          "delta_settlement_mm": 10.0,
+          "q_all_soil": 1.5,
+          "soil_contact_type": "Clay / Medium Dense Sand (تربة طينية / رملية متوسطة)",
+          "h_backfill_m": 1.0,
+          "has_wall_at_footing": true,
+          "h_wall_m": 3.0,
+          "t_wall_cm": 25.0,
+          "gamma_brick": 1.8,
+          "w_add_dl": 0.0,
+          "w_add_ll": 0.0,
+          "fcu": 300.0,
+          "fy": 4000.0,
+          "fy_stirrup": 2400.0,
+          "phi_bot_mm": 16,
+          "phi_top_mm": 12,
+          "phi_stirrup_mm": 8,
+          "stirrups_per_m": 6,
+          "n_stirrup_branches": 2,
+          "phi_side_mm": 10,
+          "is_calculated": true,
+          "n_branches": 2,
+          "has_wall": true
+        },
         "cs_owner_name": "",
         "fs_moment_contour_view_mode_idx": 0,
         "fs_additional_moment_contour_view_mode_idx": 2,
@@ -1296,39 +1329,6 @@
           4.3
         ],
         "nav_view": "profile_manager",
-        "module_11_ground_beam": {
-          "level_type": "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)",
-          "support_condition": "Simply Supported (حر من الطرفين)",
-          "L_m": 5.0,
-          "b_cm": 25.0,
-          "t_cm": 60.0,
-          "t_calc_cm": 40.0,
-          "auto_sync_depth": true,
-          "cover_cm": 4.0,
-          "t_footing_cm": 60.0,
-          "delta_settlement_mm": 10.0,
-          "q_all_soil": 1.5,
-          "soil_contact_type": "Clay / Medium Dense Sand (تربة طينية / رملية متوسطة)",
-          "h_backfill_m": 1.0,
-          "has_wall_at_footing": true,
-          "h_wall_m": 3.0,
-          "t_wall_cm": 25.0,
-          "gamma_brick": 1.8,
-          "w_add_dl": 0.0,
-          "w_add_ll": 0.0,
-          "fcu": 300.0,
-          "fy": 4000.0,
-          "fy_stirrup": 2400.0,
-          "phi_bot_mm": 16,
-          "phi_top_mm": 12,
-          "phi_stirrup_mm": 8,
-          "stirrups_per_m": 6,
-          "n_stirrup_branches": 2,
-          "phi_side_mm": 10,
-          "is_calculated": true,
-          "n_branches": 2,
-          "has_wall": true
-        },
         "gb_overrides": {
           "B1_t": 45.0,
           "B1_ntop": 3,
@@ -1355,7 +1355,9 @@
           8,
           9,
           10,
-          11
+          11,
+          12,
+          13
         ],
         "deleted_modules_trash": {}
       }
@@ -1367,7 +1369,7 @@
       "updated_at": "2026-09-23 23:52",
       "last_used_at": "2026-09-23 23:52:41",
       "data": {
-        "selected_module_idx": 7,
+        "selected_module_idx": 4,
         "apartment_name": "تجربة حصر الطوب والمحارة - موديول 12 فقط",
         "col_Pu_input": 160.0,
         "col_Safety_Factor": 1.2,
@@ -2374,7 +2376,9 @@
           8,
           9,
           10,
-          11
+          11,
+          12,
+          13
         ],
         "deleted_modules_trash": {}
       }
@@ -2386,7 +2390,7 @@
       "updated_at": "2026-09-22 20:23",
       "last_used_at": "2026-09-22 20:23:34",
       "data": {
-        "selected_module_idx": 5,
+        "selected_module_idx": 12,
         "apartment_name": "حصر غرفة السطح - هشام (نسخة) (نسخة)",
         "col_Pu_input": 155.0,
         "col_Safety_Factor": 1.2,
@@ -3175,7 +3179,7 @@
         ],
         "_schema_mod8_migrated": true,
         "enabled_modules": [
-          5
+          12
         ],
         "deleted_modules_trash": {},
         "_schema_mod8_removed": true
@@ -3500,7 +3504,9 @@
           8,
           9,
           10,
-          11
+          11,
+          12,
+          13
         ],
         "module_9_strap_footing": {
           "S": 5.0,
@@ -3667,7 +3673,8 @@
           "col_shifts": {}
         },
         "_schema_mod8_migrated": true,
-        "_schema_mod8_removed": true
+        "_schema_mod8_removed": true,
+        "deleted_modules_trash": {}
       }
     },
     "حصر دور السطح وغرفة السطح - نهائي": {
@@ -4025,7 +4032,9 @@
           8,
           9,
           10,
-          11
+          11,
+          12,
+          13
         ],
         "module_9_strap_footing": {
           "S": 5.0,
@@ -4192,7 +4201,8 @@
           "col_shifts": {}
         },
         "_schema_mod8_migrated": true,
-        "_schema_mod8_removed": true
+        "_schema_mod8_removed": true,
+        "deleted_modules_trash": {}
       }
     },
     "حصر غرفة السطح - هشام": {
@@ -5001,7 +5011,9 @@
           8,
           9,
           10,
-          11
+          11,
+          12,
+          13
         ],
         "deleted_modules_trash": {},
         "_schema_mod8_migrated": true,
@@ -5015,7 +5027,7 @@
       "updated_at": "2026-09-20 20:45",
       "last_used_at": "2026-09-20 20:45",
       "data": {
-        "selected_module_idx": 5,
+        "selected_module_idx": 12,
         "apartment_name": "حصر غرفة السطح - هشام (نسخة)",
         "col_Pu_input": 155.0,
         "col_Safety_Factor": 1.2,
@@ -5516,7 +5528,9 @@
           8,
           9,
           10,
-          11
+          11,
+          12,
+          13
         ],
         "deleted_modules_trash": {},
         "_schema_mod8_migrated": true,
@@ -6213,10 +6227,13 @@
           8,
           9,
           10,
-          11
+          11,
+          12,
+          13
         ],
         "_schema_mod8_migrated": true,
-        "_schema_mod8_removed": true
+        "_schema_mod8_removed": true,
+        "deleted_modules_trash": {}
       }
     }
   }

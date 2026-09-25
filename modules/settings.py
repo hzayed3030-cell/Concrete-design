@@ -1984,18 +1984,20 @@ duplicate_profile = duplicate_project
 
 # ── PROJECT MODULE CUSTOMIZATION DEFINITIONS & HELPERS ───────────────────────
 ALL_MODULES = [
-    {"idx": 0, "key": "flat_slab", "name": "🟦 Module 1 — Integrated Structural Design", "short": "Module 1"},
-    {"idx": 1, "key": "columns", "name": "🏛️ Module 2 — Rectangular Columns", "short": "Module 2"},
-    {"idx": 2, "key": "footings", "name": "🪸 Module 3 — Isolated Footings", "short": "Module 3"},
-    {"idx": 3, "key": "ground_slab", "name": "🏗️ Module 4 — Ground Slabs", "short": "Module 4"},
-    {"idx": 4, "key": "steel_bars", "name": "⚙️ Module 5 — Steel Rebar Diameters & Weights", "short": "Module 5"},
-    {"idx": 5, "key": "concrete_survey", "name": "📊 Module 6 — Concrete Quantity Survey", "short": "Module 6"},
-    {"idx": 6, "key": "two_col_footings", "name": "📐 Module 7: Quick Two-Column Combined Footing (تصميم قاعدة مشتركة لعمودين)", "short": "Module 7"},
-    {"idx": 7, "key": "strap_footing", "name": "🔗 Module 9: Reinforced Concrete Strap Footing (قواعد الشدادات - الجار)", "short": "Module 9"},
-    {"idx": 8, "key": "diagonal_strap_footing", "name": "📐 Module 10: Corner Footing with Diagonal Strap (قاعدة جار ركن بشداد مائل)", "short": "Module 10"},
-    {"idx": 9, "key": "ground_beam", "name": "🧱 Module 11: Ground Beam Design & Detailing (تصميم وتفاصيل الميدات والسملات)", "short": "Module 11"},
-    {"idx": 10, "key": "brick_survey", "name": "🏠 Module 12: Brick & Plastering Survey (حصر أعمال الطوب والمحارة)", "short": "Module 12"},
-    {"idx": 11, "key": "standalone_flat_slab", "name": "🏢 Module 13: Standalone - Flat slabs", "short": "Module 13"},
+    {"idx": 0, "key": "flat_slab", "name": "🟦 Module 1 — Integrated Structural Design (التصميم الإنشائي المتكامل)", "short": "Module 1"},
+    {"idx": 1, "key": "columns", "name": "🏛️ Module 2 — Rectangular Columns (الأعمدة المستطيلة)", "short": "Module 2"},
+    {"idx": 2, "key": "footings", "name": "🪸 Module 3 — Isolated Footings (القواعد المنفصلة ECP 203)", "short": "Module 3"},
+    {"idx": 3, "key": "two_col_footings", "name": "📐 Module 4: Two-columns combined footings (تصميم قاعدة مشتركة لعمودين)", "short": "Module 4"},
+    {"idx": 4, "key": "strap_footing", "name": "🔗 Module 5: Reinforced Concrete Strap Footing (قواعد الشدادات - الجار)", "short": "Module 5"},
+    {"idx": 5, "key": "diagonal_strap_footing", "name": "📐 Module 6: Corner Footing with Diagonal Strap (قاعدة جار ركن بشداد مائل)", "short": "Module 6"},
+    {"idx": 6, "key": "ground_beam", "name": "🧱 Module 7: Ground Beam Design & Detailing (تصميم وتفاصيل الميدات والسملات)", "short": "Module 7"},
+    {"idx": 7, "key": "raft_foundations", "name": "🏗️ Module 8: Raft Foundations (اللبشة المسلحة)", "short": "Module 8"},
+    {"idx": 8, "key": "ground_slab", "name": "🏗️ Module 9 — Ground Slabs (بلاطات الأرضيات الخرسانية SOG)", "short": "Module 9"},
+    {"idx": 9, "key": "circular_tank_foundations", "name": "🛢️ Module 10: Circular Tank Foundations (قواعد الخزانات الدائرية)", "short": "Module 10"},
+    {"idx": 10, "key": "standalone_flat_slab", "name": "🏢 Module 11: Standalone - Flat Slabs (البلاطة اللاكمرية المستقلة)", "short": "Module 11"},
+    {"idx": 11, "key": "steel_bars", "name": "⚙️ Module 12 — Steel Rebar Dimensions & Weights (أقطار وأوزان حديد التسليح)", "short": "Module 12"},
+    {"idx": 12, "key": "concrete_survey", "name": "📊 Module 13 — Concrete Quantity Survey (حصر الكميات الخرسانية)", "short": "Module 13"},
+    {"idx": 13, "key": "brick_survey", "name": "🏠 Module 14: Brick & Plastering Survey (حصر أعمال الطوب والمحارة)", "short": "Module 14"},
 ]
 
 
@@ -2084,8 +2086,8 @@ def get_project_summary(project_name: str) -> dict:
 
     mod_idx = int(data.get("selected_module_idx", 0))
 
-    if mod_idx == 5:
-        # ── Module 6: Concrete Survey & Takeoff (حصر الخرسانات) ──
+    if mod_idx in (12, 5):
+        # ── Module 13: Concrete Survey & Takeoff (حصر الخرسانات) ──
         n_col_types = int(data.get("cs_n_types", 1))
         n_cols_active = sum(int(data.get(f"cs_ncols_{i}", 0)) for i in range(n_col_types))
         n_cols_total = n_cols_active
@@ -2106,8 +2108,8 @@ def get_project_summary(project_name: str) -> dict:
         floors = 1
         module_name = "Concrete Quantity Survey"
 
-    elif mod_idx == 3:
-        # ── Module 4: Ground Slab (البلاطات الأرضية) ──
+    elif mod_idx in (8, 3):
+        # ── Module 9: Ground Slab (البلاطات الأرضية) ──
         total_w = float(data.get("gs_lx", 30.0))
         total_h = float(data.get("gs_ly", 20.0))
         area = total_w * total_h
@@ -2145,8 +2147,106 @@ def get_project_summary(project_name: str) -> dict:
         floors = 1
         module_name = "Isolated Footings"
 
+    elif mod_idx == 3:
+        # ── Module 4: Two-columns combined footings ──
+        total_w = 0.0
+        total_h = 0.0
+        area = 0.0
+        n_cols_active = 2
+        n_cols_total = 2
+        n_lx = 1
+        n_ly = 1
+        ts = 0.0
+        floors = 1
+        module_name = "Two-columns combined footings"
+
     elif mod_idx == 4:
-        # ── Tool: Steel Rebar ──
+        # ── Module 5: Strap Footing ──
+        total_w = 0.0
+        total_h = 0.0
+        area = 0.0
+        n_cols_active = 2
+        n_cols_total = 2
+        n_lx = 1
+        n_ly = 1
+        ts = 0.0
+        floors = 1
+        module_name = "Reinforced Concrete Strap Footing"
+
+    elif mod_idx == 5:
+        # ── Module 6: Corner Footing with Diagonal Strap ──
+        total_w = 0.0
+        total_h = 0.0
+        area = 0.0
+        n_cols_active = 2
+        n_cols_total = 2
+        n_lx = 1
+        n_ly = 1
+        ts = 0.0
+        floors = 1
+        module_name = "Corner Footing with Diagonal Strap"
+
+    elif mod_idx == 6:
+        # ── Module 7: Ground Beam Design & Detailing ──
+        total_w = 0.0
+        total_h = 0.0
+        area = 0.0
+        n_cols_active = 0
+        n_cols_total = 0
+        n_lx = 1
+        n_ly = 1
+        ts = 0.0
+        floors = 1
+        module_name = "Ground Beam Design & Detailing"
+
+    elif mod_idx == 7:
+        # ── Module 8: Raft Foundations ──
+        total_w = 0.0
+        total_h = 0.0
+        area = 0.0
+        n_cols_active = 0
+        n_cols_total = 0
+        n_lx = 1
+        n_ly = 1
+        ts = 0.0
+        floors = 1
+        module_name = "Raft Foundations"
+
+    elif mod_idx == 9:
+        # ── Module 10: Circular Tank Foundations ──
+        total_w = 0.0
+        total_h = 0.0
+        area = 0.0
+        n_cols_active = 0
+        n_cols_total = 0
+        n_lx = 1
+        n_ly = 1
+        ts = 0.0
+        floors = 1
+        module_name = "Circular Tank Foundations"
+
+    elif mod_idx in (10, 11) and "standalone" in str(ALL_MODULES[mod_idx]["key"]):
+        # ── Module 11: Standalone - Flat Slabs ──
+        n_lx = int(data.get("fs_n_lx", 2))
+        n_ly = int(data.get("fs_n_ly", 2))
+        lx_spans = [float(data.get(f"fs_lx_{i}", 6.0)) for i in range(n_lx)]
+        ly_spans = [float(data.get(f"fs_ly_{j}", 6.0)) for j in range(n_ly)]
+        c_left = float(data.get("fs_cant_left", 0.0))
+        c_right = float(data.get("fs_cant_right", 0.0))
+        c_btm = float(data.get("fs_cant_bottom", 0.0))
+        c_top = float(data.get("fs_cant_top", 0.0))
+        total_w = sum(lx_spans) + c_left + c_right
+        total_h = sum(ly_spans) + c_btm + c_top
+        area = total_w * total_h
+        n_cols_total = (n_lx + 1) * (n_ly + 1)
+        removed_cols = data.get("fs_removed_cols", [])
+        n_cols_active = n_cols_total - len(removed_cols) if isinstance(removed_cols, list) else n_cols_total
+        ts = float(data.get("slab_ts_initial", 20.0))
+        floors = int(data.get("slab_n_floors", 1))
+        module_name = "Standalone - Flat Slabs"
+
+    elif mod_idx in (11, 4):
+        # ── Module 12: Steel Rebar ──
         total_w = 0.0
         total_h = 0.0
         area = 0.0
@@ -2158,8 +2258,8 @@ def get_project_summary(project_name: str) -> dict:
         floors = 1
         module_name = "Steel Rebar"
 
-    elif mod_idx == 10:
-        # ── Module 12: Brick & Plastering Survey (حصر أعمال الطوب والمحارة) ──
+    elif mod_idx in (13, 10):
+        # ── Module 14: Brick & Plastering Survey (حصر أعمال الطوب والمحارة) ──
         m12 = data.get("module_12_brick_survey", {})
         xs = m12.get("x_axes", [0.0, 4.0, 8.0])
         ys = m12.get("y_axes", [0.0, 3.0, 6.0])
@@ -2915,7 +3015,7 @@ def checkbox(label: str, cfg_key: str, **kwargs):
 # Key prefixes/patterns that belong to each module.
 # Used to snapshot a module's data before soft-deleting it.
 MODULE_DATA_KEY_PREFIXES = {
-    0: [  # Flat Slabs
+    0: [  # Module 1 — Integrated Structural Design (Flat Slabs)
         "fs_n_lx", "fs_n_ly",
         "fs_lx_", "fs_ly_",
         "fs_cant_left", "fs_cant_right", "fs_cant_bottom", "fs_cant_top",
@@ -2931,17 +3031,36 @@ MODULE_DATA_KEY_PREFIXES = {
         "slab_col_extra_dia_idx", "slab_strip_top_extra_dia_idx",
         "slab_strip_bottom_extra_dia_idx", "slab_Phi_index",
     ],
-    1: [  # Rectangular Columns
+    1: [  # Module 2 — Rectangular Columns
         "col_Pu_input", "col_Safety_Factor", "col_b", "col_H_clear",
         "col_K_index", "col_Fcu", "col_Fy", "col_Fyk",
         "col_mu_target", "col_Phi_index", "col_Phi_st_index",
     ],
-    2: [  # Isolated Footings
+    2: [  # Module 3 — Isolated Footings
         "ftg_bc", "ftg_tc", "ftg_Pu", "ftg_Wf_est", "ftg_q_all",
         "ftg_Df", "ftg_gamma_soil", "ftg_Fcu", "ftg_Fy", "ftg_cover",
         "ftg_Phi_index", "ftg_L_override", "ftg_B_override", "ftg_trc_override",
     ],
-    3: [  # Ground Slabs
+    3: [  # Module 4 — Two-columns combined footings
+        "tcf_P1", "tcf_P2", "tcf_c1", "tcf_b1", "tcf_c2", "tcf_b2",
+        "tcf_S", "tcf_q_net", "tcf_Fcu", "tcf_Fy", "tcf_cover", "tcf_Phi_index",
+        "tcf_L1_ov", "tcf_B1_ov", "tcf_t1_ov",
+        "tcf_L2_ov", "tcf_B2_ov", "tcf_t2_ov",
+        "tcf_Lc_ov", "tcf_Bc_ov", "tcf_tc_ov",
+    ],
+    4: [  # Module 5 — Strap Footings
+        "module_9_strap_footing", "m9_", "m5_",
+    ],
+    5: [  # Module 6 — Corner Footing with Diagonal Strap
+        "module_10_diagonal_strap", "m10_", "m6_",
+    ],
+    6: [  # Module 7 — Ground Beam Design & Detailing
+        "module_11_ground_beam", "m11_", "m7_", "gb_",
+    ],
+    7: [  # Module 8 — Raft Foundations (اللبشة المسلحة)
+        "module_8_raft", "raft_", "m8_",
+    ],
+    8: [  # Module 9 — Ground Slabs
         "gs_lx", "gs_ly", "gs_ts", "gs_cover", "gs_fcu", "gs_fy",
         "gs_ks", "gs_q_all", "gs_h_base", "gs_w_ll", "gs_p_wheel",
         "gs_wheel_b", "gs_wheel_l", "gs_p_post", "gs_post_bp", "gs_post_tp",
@@ -2949,9 +3068,15 @@ MODULE_DATA_KEY_PREFIXES = {
         "gs_joint_spacing_x", "gs_joint_spacing_y",
         "gs_dowel_phi", "gs_dowel_len", "gs_dowel_spacing",
     ],
-    4: [  # Steel Rebar — no persistent data keys
+    9: [  # Module 10 — Circular Tank Foundations (قواعد الخزانات الدائرية)
+        "module_10_tank", "tank_", "m10_tank_",
     ],
-    5: [  # Concrete Survey — 100% Standalone Data Keys
+    10: [  # Module 11 — Standalone - Flat Slabs
+        "m13_", "m11_", "fs_", "slab_",
+    ],
+    11: [  # Module 12 — Steel Rebar Dimensions & Weights (no persistent keys)
+    ],
+    12: [  # Module 13 — Concrete Quantity Survey
         "cs_n_types", "cs_col_h", "cs_t_slab", "cs_fcu",
         "cs_fs_n_slabs", "cs_fs_ts", "cs_fs_fcu",
         "cs_fs_phi_btm", "cs_fs_nb_btm", "cs_fs_phi_top", "cs_fs_nb_top",
@@ -2967,36 +3092,17 @@ MODULE_DATA_KEY_PREFIXES = {
         # Dynamic per-column-type, per-slab, and elements takeoff keys
         "cs_", "surv_", "custom_takeoff_rows",
     ],
-    6: [  # Quick Two-Column Footings (Module 7)
-        "tcf_P1", "tcf_P2", "tcf_c1", "tcf_b1", "tcf_c2", "tcf_b2",
-        "tcf_S", "tcf_q_net", "tcf_Fcu", "tcf_Fy", "tcf_cover", "tcf_Phi_index",
-        "tcf_L1_ov", "tcf_B1_ov", "tcf_t1_ov",
-        "tcf_L2_ov", "tcf_B2_ov", "tcf_t2_ov",
-        "tcf_Lc_ov", "tcf_Bc_ov", "tcf_tc_ov",
-    ],
-    7: [  # Module 9 — Strap Footings
-        "module_9_strap_footing", "m9_",
-    ],
-    8: [  # Module 10 — Diagonal Strap Footings
-        "module_10_diagonal_strap", "m10_",
-    ],
-    9: [  # Module 11 — Ground Beam Design & Detailing
-        "module_11_ground_beam", "m11_",
-    ],
-    10: [  # Module 12 — Brick & Plastering Survey
-        "module_12_brick_survey", "m12_",
-    ],
-    11: [  # Module 13 — Standalone - Flat slabs
-        "m13_", "fs_", "slab_",
+    13: [  # Module 14 — Brick & Plastering Survey
+        "module_12_brick_survey", "m12_", "m14_",
     ],
 }
 
 # Dependency map: which modules DEPEND ON a given module.
 # Engineering Load-Path & Functional Dependency Map
 # Key = module index; Value = list of (required_idx, relationship_description)
-# Module 1 (Flat Slabs) and all Foundations (Modules 3, 7, 9, 10, 11) depend on Module 2 (Columns).
+# Module 1 (Flat Slabs) and all Foundations (Modules 3, 4, 5, 6, 7) depend on Module 2 (Columns).
 # Module 2 (Columns) has independent manual load input and does not depend on Slabs.
-# Module 4, 5, 6, 12, 13 are standalone modules.
+# Modules 8, 9, 10, 11, 12, 13, 14 are standalone modules.
 FUNCTIONAL_DEPENDENCIES: dict[int, list] = {
     0: [  # Module 1 — Integrated Structural Design -> Requires Columns (1) for punching shear & column support
         (1, "مرتبط بنماذج وتصميم الأعمدة: يغذي الأعمدة بالأحمال وتعتمد بحور السقف والقص الثاقب عليها"),
@@ -3005,27 +3111,29 @@ FUNCTIONAL_DEPENDENCIES: dict[int, list] = {
     2: [  # Module 3 — Footings (القواعد المنفصلة) -> Requires Columns (1)
         (1, "مرتبط بالأعمدة: يستقبل أبعاد قطاعات الأعمدة وأحمالها لتصميم القواعد المنفصلة"),
     ],
-    3: [],  # Module 4 — Ground Slabs: Standalone
-    4: [],  # Module 5 — Steel Rebar: Standalone
-    5: [],  # Module 6 — Concrete Quantity Survey: 100% Standalone
-    6: [  # Module 7 — Quick Two-Column Footings (القواعد المشتركة لعمودين) -> Requires Columns (1)
+    3: [  # Module 4 — Two-columns combined footings (القواعد المشتركة لعمودين) -> Requires Columns (1)
         (1, "مرتبط بالأعمدة: يستقبل أبعاد قطاعات العمودين وأحمالهما لتصميم القاعدة المشتركة"),
     ],
-    7: [  # Module 9 — Strap Footings (قواعد شدادات الجار) -> Requires Columns (1)
+    4: [  # Module 5 — Strap Footings (قواعد شدادات الجار) -> Requires Columns (1)
         (1, "مرتبط بالأعمدة: يستقبل أحمال وقطاعات عمود الجار والعمود الداخلي لتصميم الشداد والقاعدتين"),
     ],
-    8: [  # Module 10 — Diagonal Strap Footings (قواعد شدادات الجار الركنية المائلة) -> Requires Columns (1)
+    5: [  # Module 6 — Diagonal Strap Footings (قواعد شدادات الجار الركنية المائلة) -> Requires Columns (1)
         (1, "مرتبط بالأعمدة: يستقبل أحمال وقطاعات عمود الركن والعمود الداخلي لتصميم الشداد المائل والقاعدتين"),
     ],
-    9: [  # Module 11 — Ground Beam Design & Detailing (الميدات والسملات) -> Requires Columns (1)
+    6: [  # Module 7 — Ground Beam Design & Detailing (الميدات والسملات) -> Requires Columns (1)
         (1, "مرتبط بالأعمدة ومنظومة الأساسات: يربط رقاب الأعمدة والقواعد عند منسوب الردم وينقل أحمال الحوائط"),
     ],
-    10: [], # Module 12 — Brick & Plastering Survey: 100% Standalone
-    11: [], # Module 13 — Standalone - Flat slabs: 100% Standalone
+    7: [],  # Module 8 — Raft Foundations: Standalone
+    8: [],  # Module 9 — Ground Slabs: Standalone
+    9: [],  # Module 10 — Circular Tank Foundations: Standalone
+    10: [], # Module 11 — Standalone - Flat Slabs: 100% Standalone
+    11: [], # Module 12 — Steel Rebar: Standalone
+    12: [], # Module 13 — Concrete Quantity Survey: 100% Standalone
+    13: [], # Module 14 — Brick & Plastering Survey: 100% Standalone
 }
 
-LINKED_MODULE_INDICES: set[int] = {0, 1, 2, 6, 7, 8, 9}
-UNLINKED_MODULE_INDICES: set[int] = {3, 4, 5, 10, 11}
+LINKED_MODULE_INDICES: set[int] = {0, 1, 2, 3, 4, 5, 6}
+UNLINKED_MODULE_INDICES: set[int] = {7, 8, 9, 10, 11, 12, 13}
 
 
 def validate_new_project_module_selection(selected_indices: list) -> tuple[bool, list[dict]]:
@@ -3567,7 +3675,7 @@ def validate_batch_module_deletion(project_name: str, module_indices_to_delete: 
     # Detect if any linked modules are included in this deletion batch
     linked_pairs = []
     if del_linked == active_linked and len(del_linked) > 1:
-        linked_pairs.append("الحزمة الإنشائية المرتبطة كاملة (Modules: 1, 2, 3, 7, 9, 10, 11) [سيتم حذف المنظومة معاً كحزمة واحدة]")
+        linked_pairs.append("الحزمة الإنشائية المرتبطة كاملة (Modules: 1, 2, 3, 4, 5, 6, 7) [سيتم حذف المنظومة معاً كحزمة واحدة]")
 
     is_valid = len(violations) == 0
     return is_valid, violations, linked_pairs

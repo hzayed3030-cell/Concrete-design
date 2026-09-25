@@ -1032,12 +1032,24 @@ def render_diagonal_strap_module():
     st.markdown(
         """
         <style>
-        /* ── Module 10 Inputs Typography (75% Compact Scale) ── */
+        /* ── Module 10 Inputs Typography & Zero Excess Gap ── */
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] [data-testid="stWidgetLabel"],
-        [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] [data-testid="stWidgetLabel"] *,
+        div[data-testid="stExpander"] div[data-testid="stWidgetLabel"],
+        div[data-testid="stExpander"] [data-testid="stWidgetLabel"] {
+            min-height: 0px !important;
+            margin-top: 0px !important;
+            margin-bottom: 1px !important;
+            padding-top: 0px !important;
+            padding-bottom: 0px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+        }
+
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] [data-testid="stWidgetLabel"] label,
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] [data-testid="stWidgetLabel"] p,
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] [data-testid="stWidgetLabel"] span,
+        [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] [data-testid="stWidgetLabel"] div,
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] .stNumberInput label,
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] .stNumberInput label *,
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] .stSelectbox label,
@@ -1046,18 +1058,41 @@ def render_diagonal_strap_module():
         div[data-testid="stExpander"] label *,
         div[data-testid="stExpander"] div[data-testid="stWidgetLabel"] label,
         div[data-testid="stExpander"] div[data-testid="stWidgetLabel"] p,
-        div[data-testid="stExpander"] div[data-testid="stWidgetLabel"] span,
-        div[data-testid="stWidgetLabel"] label,
-        div[data-testid="stWidgetLabel"] label p,
-        div[data-testid="stWidgetLabel"] label span {
+        div[data-testid="stExpander"] div[data-testid="stWidgetLabel"] span {
             font-size: 13px !important;
             font-weight: 700 !important;
-            line-height: 1.15 !important;
-            margin-bottom: 1px !important;
+            line-height: 1.2 !important;
+            margin-top: 0px !important;
+            margin-bottom: 0px !important;
+            padding-top: 0px !important;
             padding-bottom: 0px !important;
             color: #facc15 !important;
             letter-spacing: 0.1px !important;
-            white-space: nowrap !important;
+            white-space: normal !important;
+        }
+
+        /* Tooltip icon compactness inside label */
+        div[data-testid="stExpander"] [data-testid="stTooltipIcon"] {
+            margin: 0px !important;
+            padding: 0px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+        }
+        div[data-testid="stExpander"] [data-testid="stTooltipIcon"] button {
+            padding: 0px !important;
+            min-height: 0px !important;
+            height: 16px !important;
+            width: 16px !important;
+        }
+        div[data-testid="stExpander"] [data-testid="stTooltipIcon"] svg {
+            width: 13px !important;
+            height: 13px !important;
+        }
+
+        /* Input boxes & baseWeb container zero top gap */
+        div[data-testid="stExpander"] div[data-baseweb="input"],
+        div[data-testid="stExpander"] div[data-baseweb="select"] {
+            margin-top: 0px !important;
         }
 
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] input,
@@ -1086,31 +1121,36 @@ def render_diagonal_strap_module():
             border-radius: 8px !important;
         }
 
-        .m10-hdr {
-            font-size: 14.25px !important;
+        .m10-hdr,
+        .m10-hdr * {
+            font-size: 14.5px !important;
             font-weight: 900 !important;
-            color: #38bdf8 !important;
-            margin-bottom: 6px !important;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            background: transparent !important;
+            margin-bottom: 14px !important;
             border-bottom: 1.5px solid rgba(56, 189, 248, 0.4) !important;
-            padding-bottom: 3px !important;
+            padding-bottom: 5px !important;
         }
-        .m10-subhdr {
-            font-size: 12px !important;
+        .m10-subhdr,
+        .m10-subhdr * {
+            font-size: 13px !important;
             font-weight: 800 !important;
-            color: #a78bfa !important;
-            margin-top: 4px !important;
-            margin-bottom: 2px !important;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            background: rgba(51, 65, 85, 0.65) !important;
+            border-right: 3px solid #38bdf8 !important;
+            padding: 3px 8px !important;
+            margin-top: 14px !important;
+            margin-bottom: 20px !important;
+            border-radius: 4px !important;
+            display: block !important;
         }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown(
-        "<h2 style='color:#38bdf8; margin-bottom:2px;'>📐 Module 10 — Corner Footing with Diagonal Strap Beam (ECP 203)</h2>"
-        "<p style='color:#94a3b8; font-size:13px; margin-top:0;'>تصميم قاعدة جار ركن (محصورة بين حدي جار متعامدين) ومتصلة بقاعدة داخلية بشداد على المائل — الكود المصري (الوحدات: ton · kg · cm · m · kg/cm² · ton·m)</p>",
-        unsafe_allow_html=True,
-    )
 
     # ── 1. Inputs (Design Inputs) ─────────────────────────────────────────────
     with st.expander("📐 Design Inputs & Coordinates (المدخلات التصميمية والإحداثيات)", expanded=True):

@@ -1163,10 +1163,6 @@ if hasattr(st, "dialog"):
 
 
 def render() -> None:
-    st.markdown(
-        '<div class="section-header">📊 Module 6 – Concrete Quantity Survey & Take-off (ECP 203)</div>',
-        unsafe_allow_html=True,
-    )
 
     # ── Project Info Panel (اسم المشروع في بانيل مميز بالمنتصف) ─────────────
     col_p_pad1, col_p_center, col_p_pad2 = st.columns([0.6, 6.8, 0.6])

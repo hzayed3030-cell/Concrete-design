@@ -1188,12 +1188,24 @@ def render_strap_footing_module():
     st.markdown(
         """
         <style>
-        /* ── Module 9 Inputs Typography (75% Compact Scale) ── */
+        /* ── Module 9 Widget Labels & Zero Excess Gap to Input Cells ── */
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] [data-testid="stWidgetLabel"],
-        [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] [data-testid="stWidgetLabel"] *,
+        div[data-testid="stExpander"] div[data-testid="stWidgetLabel"],
+        div[data-testid="stExpander"] [data-testid="stWidgetLabel"] {
+            min-height: 0px !important;
+            margin-top: 0px !important;
+            margin-bottom: 1px !important;
+            padding-top: 0px !important;
+            padding-bottom: 0px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+        }
+
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] [data-testid="stWidgetLabel"] label,
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] [data-testid="stWidgetLabel"] p,
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] [data-testid="stWidgetLabel"] span,
+        [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] [data-testid="stWidgetLabel"] div,
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] .stNumberInput label,
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] .stNumberInput label *,
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] .stSelectbox label,
@@ -1208,15 +1220,48 @@ def render_strap_footing_module():
         div[data-testid="stWidgetLabel"] label span {
             font-size: 13px !important;
             font-weight: 700 !important;
-            line-height: 1.15 !important;
-            margin-bottom: 1px !important;
+            line-height: 1.2 !important;
+            margin-top: 0px !important;
+            margin-bottom: 0px !important;
+            padding-top: 0px !important;
             padding-bottom: 0px !important;
-            color: #facc15 !important; /* عناوين المدخلات باللون الأصفر */
+            color: #facc15 !important; /* عناوين المدخلات باللون الأصفر الواضح */
             letter-spacing: 0.1px !important;
-            white-space: nowrap !important;
+            white-space: normal !important;
         }
 
-        /* Input boxes (number inputs, selectboxes) — 75% Compact Scale */
+        /* Tooltip icon compactness inside label */
+        div[data-testid="stExpander"] [data-testid="stTooltipIcon"] {
+            margin: 0px !important;
+            padding: 0px !important;
+            display: inline-flex !important;
+            align-items: center !important;
+        }
+        div[data-testid="stExpander"] [data-testid="stTooltipIcon"] button {
+            padding: 0px !important;
+            min-height: 0px !important;
+            height: 16px !important;
+            width: 16px !important;
+        }
+        div[data-testid="stExpander"] [data-testid="stTooltipIcon"] svg {
+            width: 13px !important;
+            height: 13px !important;
+        }
+
+        /* Input containers balanced separation between successive widgets */
+        div[data-testid="stExpander"] div[data-testid="stNumberInput"],
+        div[data-testid="stExpander"] div[data-testid="stSelectbox"] {
+            margin-top: 0px !important;
+            margin-bottom: 3px !important;
+        }
+
+        /* Input boxes & baseWeb container zero top gap */
+        div[data-testid="stExpander"] div[data-baseweb="input"],
+        div[data-testid="stExpander"] div[data-baseweb="select"] {
+            margin-top: 0px !important;
+        }
+
+        /* Input boxes (number inputs, selectboxes) — Medium Compact Height */
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] input,
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] input[type="number"],
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] div[data-baseweb="input"],
@@ -1231,15 +1276,15 @@ def render_strap_footing_module():
         div[data-testid="stExpander"] div[data-baseweb="select"],
         div[data-testid="stExpander"] div[data-baseweb="select"] * {
             font-size: 13px !important;
-            min-height: 28px !important;
-            height: 28px !important;
-            line-height: 28px !important;
+            min-height: 30px !important;
+            height: 30px !important;
+            line-height: 30px !important;
         }
 
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] div[data-baseweb="input"] > div,
         div[data-testid="stExpander"] div[data-baseweb="input"] > div {
-            min-height: 28px !important;
-            height: 28px !important;
+            min-height: 30px !important;
+            height: 30px !important;
             padding: 0 6px !important;
         }
 
@@ -1249,8 +1294,8 @@ def render_strap_footing_module():
         [data-testid="stMainBlockContainer"] div[data-testid="stExpander"] button[data-testid="stNumberInputStepDown"],
         div[data-testid="stExpander"] div[data-testid="stNumberInput"] button,
         div[data-testid="stNumberInput"] button {
-            min-height: 14px !important;
-            height: 14px !important;
+            min-height: 15px !important;
+            height: 15px !important;
             width: 20px !important;
             padding: 0px !important;
         }
@@ -1277,12 +1322,12 @@ def render_strap_footing_module():
             box-shadow: 0 0 0 1px #facc15 !important;
         }
 
-        /* Tight vertical spacing between lines/widgets */
+        /* Balanced medium vertical spacing between lines/widgets */
         div[data-testid="stExpander"] div[data-testid="stVerticalBlock"] {
-            gap: 0.15rem !important;
+            gap: 0.35rem !important;
         }
         div[data-testid="stExpander"] div[data-testid="column"] {
-            padding: 0 4px !important;
+            padding: 0 5px !important;
         }
         div[data-testid="stExpander"] details {
             padding: 5px 10px !important;
@@ -1295,15 +1340,15 @@ def render_strap_footing_module():
             padding: 3px 8px !important;
         }
 
-        /* ── Clean Outlined White Line Borders (برواز خط أبيض أنيق بدون خلفية بطاقة) ── */
+        /* ── Clean Outlined White Line Borders with Balanced Padding ── */
         div[data-testid="stExpander"] div[data-testid="stVerticalBlockBorderWrapper"],
         div[data-testid="stExpander"] div[data-testid="stVerticalBlockBorderWrapper"] > div {
             border: 1.5px solid rgba(255, 255, 255, 0.55) !important;
             border-radius: 8px !important;
             background: transparent !important;
             background-color: transparent !important;
-            padding: 8px 10px !important;
-            margin-bottom: 4px !important;
+            padding: 9px 11px !important;
+            margin-bottom: 5px !important;
             box-shadow: none !important;
         }
 
@@ -1312,40 +1357,45 @@ def render_strap_footing_module():
             border-color: #ffffff !important;
         }
 
-        /* Section headers (Geometry, Loads, Soil, Footings) — 70% scaled */
-        .m9-hdr {
-            font-size: 17px !important;
+        /* Section headers (Geometry, Loads, Soil, Footings) with white text & comfortable clearance */
+        .m9-hdr,
+        .m9-hdr * {
+            font-size: 16.5px !important;
             font-weight: 800 !important;
-            color: #60a5fa !important;
-            margin: 6px 0 4px 0 !important;
-            padding-bottom: 3px !important;
-            border-bottom: 1.5px solid rgba(96, 165, 250, 0.35) !important;
-            line-height: 1.3 !important;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            background: transparent !important;
+            margin: 5px 0 17px 0 !important;
+            padding-bottom: 6px !important;
+            border-bottom: 1.5px solid rgba(96, 165, 250, 0.40) !important;
+            line-height: 1.35 !important;
             display: block !important;
         }
-        /* Subheaders (Column 1, Column 2, Strap Beam) */
-        .m9-subhdr {
-            font-size: 15px !important;
+        /* Subheaders (Column 1, Column 2, Strap Beam) with pure white text & comfortable clearance */
+        .m9-subhdr,
+        .m9-subhdr * {
+            font-size: 14px !important;
             font-weight: 700 !important;
-            color: #f8fafc !important;
-            background: rgba(51, 65, 85, 0.55) !important;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            background: rgba(51, 65, 85, 0.65) !important;
             border-right: 3px solid #38bdf8 !important;
             padding: 3px 8px !important;
-            margin: 6px 0 4px 0 !important;
+            margin: 14px 0 22px 0 !important;
             border-radius: 4px !important;
-            line-height: 1.3 !important;
+            line-height: 1.35 !important;
             display: block !important;
         }
         .m9-auto-badge {
-            font-size: 14px !important;
+            font-size: 13.5px !important;
             font-weight: 700 !important;
             color: #38bdf8 !important;
             background: rgba(15, 23, 42, 0.75) !important;
             border: 1px solid rgba(56, 189, 248, 0.45) !important;
             border-radius: 6px !important;
-            padding: 4px 8px !important;
+            padding: 3px 6px !important;
             margin: 4px 0 6px 0 !important;
-            line-height: 1.35 !important;
+            line-height: 1.3 !important;
             display: block !important;
             text-align: center !important;
             direction: ltr !important;
@@ -1355,18 +1405,13 @@ def render_strap_footing_module():
         }
 
         hr {
-            margin: 5px 0 !important;
+            margin: 6px 0 !important;
         }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown(
-        "<h2 style='color:#60a5fa; margin-bottom:2px;'>🔗 Module 9 — Strap Footing Design (ECP 203)</h2>"
-        "<p style='color:#94a3b8; font-size:12px; margin-top:0;'>تصميم قاعدة الجار والشداد — الكود المصري للخرسانة المسلحة (الوحدات: ton · kg · cm · m · kg/cm² · ton·m)</p>",
-        unsafe_allow_html=True,
-    )
 
     # ── 1. Inputs (Design Inputs) ─────────────────────────────────────────────
     with st.expander("📐 Design Inputs (المدخلات التصميمية)", expanded=True):

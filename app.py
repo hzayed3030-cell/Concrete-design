@@ -91,11 +91,17 @@ from modules.module_10_diagonal_strap import render_diagonal_strap_module
 from modules.module_11_ground_beam import render_ground_beam_module
 from modules.module_12_brick_survey import render_brick_survey_module
 from modules.module_13_standalone_flat_slab import render as render_standalone_flat_slab
+from modules.raft_foundations import render_raft_foundations_module
+from modules.circular_tank_foundations import render_circular_tank_foundations_module
+from modules.module_philosophy import render_module_header_and_philosophy
+
 
 # ── CSS Injection: Fixed Unified Typography (75% Compact Scale) ─────────────
 st.markdown(
     """
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;600;700;800;900&family=Reem+Kufi:wght@500;600;700;800&display=swap');
+
     :root {
         /* ═══════════════════════════════════════════════════════════════════════
            BALANCED COMFORTABLE TYPOGRAPHY (75% Compact Scale for Inputs & Outputs)
@@ -153,11 +159,221 @@ st.markdown(
         color: #ffffff !important;
     }
 
-    /* Sidebar Radio Module Selector */
-    [data-testid="stSidebar"] div[data-testid="stRadio"] label,
-    [data-testid="stSidebar"] div[data-testid="stRadio"] label * {
-        font-size: var(--ecp-modules-base-font-size) !important;
-        font-weight: 500 !important;
+    /* ═══════════════════════════════════════════════════════════════════════════
+       SIDEBAR DASHBOARD MODULE PANELS & GAPS
+       ═══════════════════════════════════════════════════════════════════════════ */
+    /* ═══════════════════════════════════════════════════════════════════════════
+       MAXIMUM VERTICAL ELEVATION: LIFT SIDEBAR CONTENT TO THE VERY TOP
+       ═══════════════════════════════════════════════════════════════════════════ */
+    /* Lift sidebar content completely to the top */
+    [data-testid="stSidebar"] section > div,
+    [data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+        padding-top: 0.25rem !important;
+        padding-left: 0.6rem !important;
+        padding-right: 0.6rem !important;
+    }
+
+    [data-testid="stSidebar"] [data-testid="stSidebarHeader"] {
+        padding-top: 0.2rem !important;
+        padding-bottom: 0.2rem !important;
+        min-height: 1.8rem !important;
+        height: auto !important;
+    }
+
+    [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+        padding-top: 0 !important;
+        margin-top: 0 !important;
+    }
+
+    /* Remove any top margin on the first child element of user content */
+    [data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > div:first-child,
+    [data-testid="stSidebar"] [data-testid="stSidebarContent"] > div:first-child {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+    }
+
+    /* Projects Button (بانيل العودة إلى قائمة المشاريع) */
+    div[data-testid="stSidebar"] div.st-key-sb_btn_projects_mgr {
+        margin-top: 0 !important;
+        margin-bottom: 6px !important;
+        width: 100% !important;
+    }
+    div[data-testid="stSidebar"] div.st-key-sb_btn_projects_mgr button {
+        min-height: 36px !important;
+        padding: 6px 12px !important;
+        font-size: 13.5px !important;
+        font-weight: 800 !important;
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%) !important;
+        border: 1.5px solid rgba(56, 189, 248, 0.45) !important;
+        border-radius: 9px !important;
+        color: #38bdf8 !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.40) !important;
+        transition: all 0.20s ease-in-out !important;
+        width: 100% !important;
+        display: flex !important;
+        justify-content: center !important;
+        align-items: center !important;
+    }
+    div[data-testid="stSidebar"] div.st-key-sb_btn_projects_mgr button:hover {
+        background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+        border-color: #38bdf8 !important;
+        color: #ffffff !important;
+        box-shadow: 0 0 14px rgba(56, 189, 248, 0.50) !important;
+        transform: translateY(-1px) !important;
+    }
+
+    /* Radio Container (بانيل الموديولات) */
+    [data-testid="stSidebar"] div[data-testid="stRadio"] {
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+    }
+
+    /* Hide default radio widget label */
+    [data-testid="stSidebar"] div[data-testid="stRadio"] > label[data-testid="stWidgetLabel"] {
+        display: none !important;
+    }
+
+    /* Container Box for all module panels: Distinct enclosing box with contrasting background */
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"],
+    [data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"],
+    [data-testid="stSidebar"] div[role="radiogroup"] {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 7px !important; /* فراغ Gap واضح ومنسق لفصل الموديولات عن بعض */
+        width: 100% !important;
+        padding: 8px !important;
+        background: #0f172a !important; /* بوكس حاضن بخلفية مختلفة ومتباينة عن شاشة الداشبورد */
+        border: 1.5px solid rgba(56, 189, 248, 0.30) !important;
+        border-radius: 12px !important;
+        box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6), 0 4px 14px rgba(0, 0, 0, 0.3) !important;
+    }
+
+    /* Base Module Item Panel / Box: General layout */
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div,
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > label,
+    [data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > div,
+    [data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > label,
+    [data-testid="stSidebar"] div[role="radiogroup"] > div,
+    [data-testid="stSidebar"] div[role="radiogroup"] > label {
+        border-radius: 9px !important;
+        padding: 9px 12px !important;
+        margin: 0 !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+        transition: all 0.20s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        position: relative !important;
+        overflow: hidden !important;
+    }
+
+    /* Inner label inside direct div: ensure it fills the container cleanly */
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div > label,
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] label[data-testid="stRadioOption"],
+    [data-testid="stSidebar"] div[role="radiogroup"] > div > label {
+        width: 100% !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        cursor: pointer !important;
+    }
+
+    /* ── Odd Modules (1, 3, 5, 7, 9, 11, 13) — Deep Slate-Cyan Theme ── */
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div:nth-child(odd),
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > label:nth-child(odd),
+    [data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > div:nth-child(odd),
+    [data-testid="stSidebar"] div[role="radiogroup"] > div:nth-child(odd),
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(odd) {
+        background: linear-gradient(135deg, #101c33 0%, #1a2a47 100%) !important;
+        border: 1.5px solid rgba(56, 189, 248, 0.40) !important;
+        border-right: 6px solid #38bdf8 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div:nth-child(odd) div[data-testid="stMarkdownContainer"] p,
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div:nth-child(odd) label span,
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div:nth-child(odd) span,
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > label:nth-child(odd) div[data-testid="stMarkdownContainer"] p,
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > label:nth-child(odd) label span {
+        color: #bae6fd !important; /* Soft sky cyan */
+    }
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div:nth-child(odd):hover,
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > label:nth-child(odd):hover {
+        background: linear-gradient(135deg, #172a4d 0%, #223a63 100%) !important;
+        border-color: #38bdf8 !important;
+        border-right-color: #7dd3fc !important;
+        transform: translateY(-1.2px) !important;
+    }
+
+    /* ── Even Modules (2, 4, 6, 8, 10, 12, 14) — Deep Indigo-Purple Theme ── */
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div:nth-child(even),
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > label:nth-child(even),
+    [data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > div:nth-child(even),
+    [data-testid="stSidebar"] div[role="radiogroup"] > div:nth-child(even),
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:nth-child(even) {
+        background: linear-gradient(135deg, #1d182e 0%, #29223f 100%) !important;
+        border: 1.5px solid rgba(168, 85, 247, 0.40) !important;
+        border-right: 6px solid #c084fc !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div:nth-child(even) div[data-testid="stMarkdownContainer"] p,
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div:nth-child(even) label span,
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div:nth-child(even) span,
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > label:nth-child(even) div[data-testid="stMarkdownContainer"] p,
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > label:nth-child(even) label span {
+        color: #f3e8ff !important; /* Soft violet white */
+    }
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div:nth-child(even):hover,
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > label:nth-child(even):hover {
+        background: linear-gradient(135deg, #2a2243 0%, #392f5b 100%) !important;
+        border-color: #c084fc !important;
+        border-right-color: #d8b4fe !important;
+        transform: translateY(-1.2px) !important;
+    }
+
+    /* Active / Selected Module Panel Box (Overrides odd/even styles when selected) */
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div[data-selected="true"],
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div:has([data-selected="true"]),
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div:has(input:checked),
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > label:has(input:checked),
+    [data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > div[data-selected="true"],
+    [data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] > div:has(input:checked),
+    [data-testid="stSidebar"] div[role="radiogroup"] > div[data-selected="true"],
+    [data-testid="stSidebar"] div[role="radiogroup"] > div:has(input:checked),
+    [data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {
+        background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
+        border: 2px solid #38bdf8 !important;
+        border-right: 7px solid #ffffff !important;
+        box-shadow: 0 0 18px rgba(56, 189, 248, 0.60), 0 3px 10px rgba(0, 0, 0, 0.5) !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div[data-selected="true"] div[data-testid="stMarkdownContainer"] p,
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div:has([data-selected="true"]) div[data-testid="stMarkdownContainer"] p,
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div:has(input:checked) div[data-testid="stMarkdownContainer"] p,
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > label:has(input:checked) div[data-testid="stMarkdownContainer"] p,
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div[data-selected="true"] span,
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] > div:has(input:checked) span {
+        color: #ffffff !important;
+        font-weight: 800 !important;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8) !important;
+    }
+
+    /* Typography inside Panel */
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] [data-testid="stRadioOption"],
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] div[data-testid="stMarkdownContainer"] {
+        width: 100% !important;
+        flex: 1 1 auto !important;
+    }
+
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] div[data-testid="stMarkdownContainer"] p,
+    [data-testid="stSidebar"] [data-testid="stRadioGroup"] [data-testid="stRadioOption"] span {
+        font-size: 13.5px !important;
+        font-weight: 700 !important;
+        line-height: 1.4 !important;
+        margin: 0 !important;
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
+        unicode-bidi: plaintext !important;
     }
 
     /* Sidebar Buttons (Reset buttons) */
@@ -251,7 +467,7 @@ st.markdown(
         line-height: 1.25 !important;
         color: #fde047 !important; /* Elegant light yellow */
         margin-top: 0px !important;
-        margin-bottom: 2px !important;
+        margin-bottom: 0px !important;
         display: inline-block !important;
     }
 
@@ -263,8 +479,8 @@ st.markdown(
     }
 
     [data-testid="stMainBlockContainer"] [data-testid="stWidgetLabel"] {
-        margin-bottom: 2px !important;
-        margin-top: 2px !important;
+        margin-bottom: 1px !important;
+        margin-top: 0px !important;
         min-height: 0px !important;
     }
 
@@ -454,13 +670,20 @@ st.markdown(
         text-shadow: none !important;
     }
 
-    /* Module Specific Subheaders (White Background & Black Text) */
-    .m9-hdr, .m9-subhdr, .m10-hdr, .m11-hdr, .cs-inputs-header-badge,
-    .m9-hdr *, .m9-subhdr *, .m10-hdr *, .m11-hdr *, .cs-inputs-header-badge * {
+    /* Module Specific Headings (White Text) */
+    .m9-hdr, .m9-subhdr, .m10-hdr, .m10-subhdr, .m11-hdr,
+    .m9-hdr *, .m9-subhdr *, .m10-hdr *, .m10-subhdr *, .m11-hdr * {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+    }
+
+    /* Concrete survey inputs header badge */
+    .cs-inputs-header-badge,
+    .cs-inputs-header-badge * {
         color: #000000 !important;
         -webkit-text-fill-color: #000000 !important;
     }
-    .m9-hdr, .m9-subhdr, .m10-hdr, .m11-hdr, .cs-inputs-header-badge {
+    .cs-inputs-header-badge {
         background: #ffffff !important;
         border: 1.5px solid #cbd5e1 !important;
         border-radius: 6px !important;
@@ -1235,16 +1458,23 @@ def render_top_profile_bar():
 
     render_custom_html(
         f"""
-        <div style="background: linear-gradient(135deg, #0b1329 0%, #1e293b 50%, #0b1329 100%); border: 1px solid rgba(56, 189, 248, 0.40); border-radius: 8px; padding: 4px 14px; margin-top: 8px; margin-bottom: 8px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 32px;">
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                <span style="font-size: 18px; filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.4)); line-height: 1;">🏗️</span>
-                <span style="font-size: 12px; font-weight: 700; color: #94a3b8;">المشروع النشط:</span>
-                <span style="font-size: 15px; font-weight: 900; color: #38bdf8; text-shadow: 0 0 8px rgba(56, 189, 248, 0.35);">📁 {active_pname}</span>
-                <span style="background: rgba(34, 197, 94, 0.18); color: #4ade80; border: 1px solid #22c55e; padding: 1px 9px; border-radius: 12px; font-size: 11.5px; font-weight: 800; line-height: 1.4;">🟢 متزامن</span>
+        <div style="background: linear-gradient(135deg, #020617 0%, #0b0f19 50%, #020617 100%); border: 1.5px solid rgba(248, 113, 113, 0.45); border-radius: 10px; padding: 8px 18px; margin-top: 8px; margin-bottom: 10px; box-shadow: 0 4px 22px rgba(0, 0, 0, 0.70), 0 0 16px rgba(248, 113, 113, 0.12); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; min-height: 64px;">
+            <div style="display: flex; align-items: center; gap: 8px; flex: 1 1 0; min-width: 170px; justify-content: flex-start;">
+                <span style="font-size: 20px; filter: drop-shadow(0 0 6px rgba(248, 113, 113, 0.4)); line-height: 1;">🏗️</span>
+                <span style="font-size: 13px; font-weight: 700; color: #cbd5e1; font-family: 'Noto Kufi Arabic', 'Reem Kufi', sans-serif;">المشروع النشط:</span>
+                <span style="background: rgba(34, 197, 94, 0.18); color: #4ade80; border: 1px solid #22c55e; padding: 2px 9px; border-radius: 12px; font-size: 11px; font-weight: 800; line-height: 1.4;">🟢 متزامن</span>
             </div>
-            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #cbd5e1; font-weight: 700;">
-                <span style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.30); padding: 2px 10px; border-radius: 6px; color: #38bdf8;">📐 ECP 203</span>
-                <span style="background: rgba(251, 191, 36, 0.12); border: 1px solid rgba(251, 191, 36, 0.30); padding: 2px 10px; border-radius: 6px; color: #fbbf24;">⚖️ ton·m·cm</span>
+            <div style="display: flex; align-items: center; justify-content: center; flex: 2 1 auto; text-align: center; min-width: 280px;">
+                <div style="background: rgba(3, 7, 18, 0.90); border: 1.5px solid rgba(255, 107, 120, 0.50); border-radius: 10px; padding: 2px 24px; box-shadow: 0 0 20px rgba(255, 80, 100, 0.22), inset 0 0 12px rgba(0, 0, 0, 0.6); display: inline-flex; align-items: center; justify-content: center;">
+                    <span style="font-family: 'Noto Kufi Arabic', 'Reem Kufi', 'Amiri', 'Cairo', sans-serif; font-size: 45px; font-weight: 800; color: #ff7575; text-shadow: 0 0 8px rgba(255, 255, 255, 0.45), 0 0 18px #ff4757, 0 0 32px #ff6b81, 0 0 45px rgba(255, 100, 120, 0.35); letter-spacing: 0.5px; display: inline-flex; align-items: center; justify-content: center; gap: 10px;">
+                        <span style="font-size: 34px; filter: drop-shadow(0 0 10px rgba(255, 107, 107, 0.65));">📁</span>
+                        <span>{active_pname}</span>
+                    </span>
+                </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #cbd5e1; font-weight: 700; flex: 1 1 0; min-width: 170px; justify-content: flex-end;">
+                <span style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.30); padding: 3px 10px; border-radius: 6px; color: #38bdf8;">📐 ECP 203</span>
+                <span style="background: rgba(251, 191, 36, 0.12); border: 1px solid rgba(251, 191, 36, 0.30); padding: 3px 10px; border-radius: 6px; color: #fbbf24;">⚖️ ton·m·cm</span>
             </div>
         </div>
         """
@@ -1766,7 +1996,9 @@ def render_profile_manager():
                                 st.session_state.pop(f"chk_new_proj_{m['idx']}", None)
                             st.session_state["nav_view"] = "module"
                             st.session_state["in_module"] = True
+                            cfg_set("selected_module_idx", chosen_indices[0])
                             st.session_state["selected_module_idx"] = chosen_indices[0]
+                            st.session_state["_force_module_idx"] = chosen_indices[0]
                             st.success(f"✅ تم إنشاء وتفعيل المشروع الجديد «{created_name}» بنجاح!")
                             st.rerun()
                     with c_back:
@@ -2136,7 +2368,9 @@ def render_profile_manager():
                 st.session_state["in_module"] = True
                 saved_mod = summary.get("module_idx", 0)
                 target_mod = saved_mod if saved_mod in enabled_mods else enabled_mods[0]
+                cfg_set("selected_module_idx", target_mod)
                 st.session_state["selected_module_idx"] = target_mod
+                st.session_state["_force_module_idx"] = target_mod
                 st.rerun()
         with b_rn:
             is_rn_open = st.session_state.get(f"_show_rename_{pname}", False)
@@ -2308,7 +2542,62 @@ def render_profile_manager():
                     # Dynamically render checkboxes ONLY for available (non-deleted) modules
                     checkbox_results = {}
                     if avail_mods:
-                        grid_num_cols = min(len(avail_mods), 3)
+                        st.markdown(
+                            """
+                            <style>
+                            [data-testid="stMainBlockContainer"] div[class*="st-key-chk_mod_cfg_"] {
+                                background: rgba(15, 23, 42, 0.65) !important;
+                                border: 1.2px solid rgba(148, 163, 184, 0.25) !important;
+                                border-radius: 10px !important;
+                                padding: 10px 14px !important;
+                                margin-bottom: 10px !important;
+                                min-height: 66px !important;
+                                display: flex !important;
+                                align-items: center !important;
+                                box-sizing: border-box !important;
+                                transition: all 0.2s ease-in-out !important;
+                            }
+                            [data-testid="stMainBlockContainer"] div[class*="st-key-chk_mod_cfg_"]:hover {
+                                background: rgba(30, 41, 59, 0.90) !important;
+                                border-color: #38bdf8 !important;
+                                box-shadow: 0 4px 14px rgba(56, 189, 248, 0.25) !important;
+                            }
+                            [data-testid="stMainBlockContainer"] div[class*="st-key-chk_mod_cfg_"] > label {
+                                display: flex !important;
+                                flex-direction: row !important;
+                                align-items: flex-start !important;
+                                gap: 12px !important;
+                                width: 100% !important;
+                                margin: 0 !important;
+                                cursor: pointer !important;
+                            }
+                            [data-testid="stMainBlockContainer"] div[class*="st-key-chk_mod_cfg_"] label div[data-testid="stMarkdownContainer"] {
+                                flex: 1 1 auto !important;
+                                min-width: 0 !important;
+                                width: 100% !important;
+                                white-space: normal !important;
+                                word-break: break-word !important;
+                                overflow-wrap: break-word !important;
+                            }
+                            [data-testid="stMainBlockContainer"] div[class*="st-key-chk_mod_cfg_"] label div[data-testid="stMarkdownContainer"] p,
+                            [data-testid="stMainBlockContainer"] div[class*="st-key-chk_mod_cfg_"] label span {
+                                white-space: normal !important;
+                                word-break: break-word !important;
+                                overflow-wrap: break-word !important;
+                                line-height: 1.25 !important;
+                                font-size: 13px !important;
+                                font-weight: 700 !important;
+                                color: #f1f5f9 !important;
+                                margin: 0 !important;
+                                padding: 0 !important;
+                                display: block !important;
+                                unicode-bidi: plaintext !important;
+                            }
+                            </style>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                        grid_num_cols = 2
                         grid_cols = st.columns(grid_num_cols)
                         for ci, mod in enumerate(avail_mods):
                             with grid_cols[ci % grid_num_cols]:
@@ -2361,13 +2650,13 @@ def render_profile_manager():
                     f'<span>1️⃣ الموديولات المرتبطة ببعضها (لا يمكن حذف أي موديول منها منفرداً، بل يمكن حذفهم معاً جميعاً كحزمة واحدة):</span>'
                     f'</div>'
                     f'<div style="color: #ffffff; font-size: 14.5px; font-weight: 700; line-height: 2; padding-right: 12px;">'
-                    f'• <span style="color: #60a5fa;">Module 1: Integrated Structural Design</span> (البلاطة اللاكمرية والتصميم الإنشائي المتكامل)<br/>'
+                    f'• <span style="color: #60a5fa;">Module 1: Integrated Structural Design</span> (التصميم الإنشائي المتكامل)<br/>'
                     f'• <span style="color: #818cf8;">Module 2: Rectangular Columns</span> (الأعمدة المستطيلة)<br/>'
                     f'• <span style="color: #fbbf24;">Module 3: Isolated Footings</span> (القواعد المنفصلة ECP 203)<br/>'
-                    f'• <span style="color: #fbbf24;">Module 7: Quick Two-Column Combined Footing</span> (تصميم قاعدة مشتركة لعمودين)<br/>'
-                    f'• <span style="color: #fbbf24;">Module 9: Reinforced Concrete Strap Footing</span> (قواعد الشدادات - الجار)<br/>'
-                    f'• <span style="color: #fbbf24;">Module 10: Corner Footing with Diagonal Strap</span> (قاعدة جار ركن بشداد مائل)<br/>'
-                    f'• <span style="color: #34d399;">Module 11: Ground Beam Design & Detailing</span> (تصميم وتفاصيل الميدات والسملات)'
+                    f'• <span style="color: #fbbf24;">Module 4: Two-columns combined footings</span> (تصميم قاعدة مشتركة لعمودين)<br/>'
+                    f'• <span style="color: #fbbf24;">Module 5: Reinforced Concrete Strap Footing</span> (قواعد الشدادات - الجار)<br/>'
+                    f'• <span style="color: #fbbf24;">Module 6: Corner Footing with Diagonal Strap</span> (قاعدة جار ركن بشداد مائل)<br/>'
+                    f'• <span style="color: #34d399;">Module 7: Ground Beam Design & Detailing</span> (تصميم وتفاصيل الميدات والسملات)'
                     f'</div>'
                     f'</div>'
 
@@ -2378,11 +2667,13 @@ def render_profile_manager():
                     f'<span>2️⃣ الموديولات غير المرتبطة ببعضها (مستقلة تماماً ويمكن حذف أي موديول منها دون التأثير على الموديولات الأخرى):</span>'
                     f'</div>'
                     f'<div style="color: #ffffff; font-size: 14.5px; font-weight: 700; line-height: 2; padding-right: 12px;">'
-                    f'• <span style="color: #a7f3d0;">Module 4: Ground Slabs</span> (بلاطات الأرضيات الخرسانية SOG)<br/>'
-                    f'• <span style="color: #f472b6;">Module 5: Steel Rebar Diameters & Weights</span> (أقطار وأوزان حديد التسليح)<br/>'
-                    f'• <span style="color: #c084fc;">Module 6: Concrete Quantity Survey</span> (حصر الكميات الخرسانية)<br/>'
-                    f'• <span style="color: #fb923c;">Module 12: Brick & Plastering Survey</span> (حصر أعمال الطوب والمحارة)<br/>'
-                    f'• <span style="color: #93c5fd;">Module 13: Standalone - Flat slabs</span> (البلاطة اللاكمرية المستقلة)'
+                    f'• <span style="color: #60a5fa;">Module 8: Raft Foundations</span> (اللبشة المسلحة)<br/>'
+                    f'• <span style="color: #a7f3d0;">Module 9: Ground Slabs</span> (بلاطات الأرضيات الخرسانية SOG)<br/>'
+                    f'• <span style="color: #34d399;">Module 10: Circular Tank Foundations</span> (قواعد الخزانات الدائرية)<br/>'
+                    f'• <span style="color: #93c5fd;">Module 11: Standalone - Flat Slabs</span> (البلاطة اللاكمرية المستقلة)<br/>'
+                    f'• <span style="color: #f472b6;">Module 12: Steel Rebar Dimensions & Weights</span> (أقطار وأوزان حديد التسليح)<br/>'
+                    f'• <span style="color: #c084fc;">Module 13: Concrete Quantity Survey</span> (حصر الكميات الخرسانية)<br/>'
+                    f'• <span style="color: #fb923c;">Module 14: Brick & Plastering Survey</span> (حصر أعمال الطوب والمحارة)'
                     f'</div>'
                     f'</div>'
 
@@ -2788,6 +3079,11 @@ def render_profile_manager():
                         help=f"تعيين مشروع «{s_pname}» كمشروع نشط ليظهر بالأعلى وتتاح كافة أزراره",
                     ):
                         set_active_project(s_pname)
+                        s_saved_mod = int(s_data.get("selected_module_idx", 0))
+                        s_target_mod = s_saved_mod if s_saved_mod in s_enabled_mods else s_enabled_mods[0]
+                        cfg_set("selected_module_idx", s_target_mod)
+                        st.session_state["selected_module_idx"] = s_target_mod
+                        st.session_state["_force_module_idx"] = s_target_mod
                         st.rerun()
 
 
@@ -2795,21 +3091,21 @@ def render_profile_manager():
 # 1. Fresh application startup: Default to the Projects Manager screen
 if "_app_session_started" not in st.session_state:
     st.session_state["_app_session_started"] = True
-    if "m12_op_move" in st.query_params or st.query_params.get("module") == "12":
+    if "m12_op_move" in st.query_params or st.query_params.get("module") in ["12", "14"]:
         st.session_state["nav_view"] = "module"
         st.session_state["in_module"] = True
-        cfg_set("selected_module_idx", 10)
+        cfg_set("selected_module_idx", 13)
     else:
         st.session_state["nav_view"] = "profile_manager"
         st.session_state["in_module"] = False
 
 # 2. Strict Navigation Guard: Once inside a module, modifying ANY input NEVER exits to Projects screen!
-if st.session_state.get("in_module", False) or st.session_state.get("nav_view") == "module" or "m12_op_move" in st.query_params or st.query_params.get("module") == "12":
+if st.session_state.get("in_module", False) or st.session_state.get("nav_view") == "module" or "m12_op_move" in st.query_params or st.query_params.get("module") in ["12", "14"]:
     current_nav = "module"
     st.session_state["nav_view"] = "module"
     st.session_state["in_module"] = True
-    if "m12_op_move" in st.query_params or st.query_params.get("module") == "12":
-        cfg_set("selected_module_idx", 10)
+    if "m12_op_move" in st.query_params or st.query_params.get("module") in ["12", "14"]:
+        cfg_set("selected_module_idx", 13)
 else:
     current_nav = "profile_manager"
     st.session_state["nav_view"] = "profile_manager"
@@ -2842,37 +3138,16 @@ if current_nav == "profile_manager":
 else:
     # ── SIDEBAR: Design Modules Dashboard Mode ─────────────────────────────
     with st.sidebar:
-        render_custom_html(
-            """
-            <div style="background: linear-gradient(135deg, #0b1329 0%, #1e293b 100%); border: 1.5px solid rgba(56, 189, 248, 0.45); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; text-align: center; box-shadow: 0 4px 16px rgba(0,0,0,0.4);">
-                <div style="font-size: 26px; margin-bottom: 4px;">🏗️</div>
-                <div style="font-size: 19px; font-weight: 900; color: #38bdf8; letter-spacing: 0.5px;">ECP 203 DASHBOARD</div>
-                <div style="font-size: 12.5px; color: #94a3b8; font-weight: 600; margin-top: 2px;">الكود المصري للمنشآت الخرسانية</div>
-            </div>
-            """
-        )
-
         active_project_sidebar = get_active_project_name()
         all_projects_dict = get_all_projects()
         all_projects_list = list(all_projects_dict.keys())
         if active_project_sidebar not in all_projects_list and all_projects_list:
             active_project_sidebar = all_projects_list[0]
 
-        mod_card_html = (
-            f'<div style="background:linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding:12px 14px; border-radius:10px; border:1.5px solid #38bdf8; margin-bottom:12px; box-shadow:0 0 14px rgba(56,189,248,0.25);">'
-            f'<div style="font-size:12px; font-weight:700; color:#94a3b8; margin-bottom:2px;">📁 المشروع الإنشائي النشط:</div>'
-            f'<div style="font-size:19px; font-weight:900; color:#38bdf8; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{active_project_sidebar}</div>'
-            f'<div style="margin-top:6px; font-size:12px; color:#4ade80; display:flex; align-items:center; gap:6px;"><span>🟢</span><span>متزامن ونشط</span></div>'
-            f'</div>'
-        )
-        render_custom_html(mod_card_html)
-
-        if st.button("🏠 المشاريع", use_container_width=True, key="sb_btn_projects_mgr", help="العودة إلى شاشة إدارة المشاريع الرئيسية"):
+        if st.button("🏠 العودة إلى قائمة المشاريع", use_container_width=True, key="sb_btn_projects_mgr", help="العودة إلى شاشة إدارة المشاريع الرئيسية"):
             st.session_state["nav_view"] = "profile_manager"
             st.session_state["in_module"] = False
             st.rerun()
-
-        st.markdown("---")
 
         # Load enabled modules for this specific active project
         proj_enabled_indices = get_project_enabled_modules(active_project_sidebar)
@@ -2896,68 +3171,66 @@ else:
                 break
 
         radio_key = f"sb_mod_radio_{active_project_sidebar}"
-        target_mod_name = next((m["name"] for m in ALL_MODULES if m["idx"] == raw_saved_idx), None)
-        if target_mod_name and target_mod_name in project_module_options:
-            if st.session_state.get(radio_key) != target_mod_name:
+
+        # Handle programmatic override if explicitly requested (e.g. from launch buttons, project cards)
+        if "_force_module_idx" in st.session_state:
+            forced_idx = int(st.session_state.pop("_force_module_idx"))
+            forced_name = next((m["name"] for m in ALL_MODULES if m["idx"] == forced_idx), None)
+            if forced_name and forced_name in project_module_options:
+                st.session_state[radio_key] = forced_name
+                cfg_set("selected_module_idx", forced_idx)
+
+        # Initialize radio_key ONLY if not yet in session_state, or if current value is invalid for this project
+        if radio_key not in st.session_state or st.session_state[radio_key] not in project_module_options:
+            target_mod_name = next((m["name"] for m in ALL_MODULES if m["idx"] == raw_saved_idx), None)
+            if target_mod_name and target_mod_name in project_module_options:
                 st.session_state[radio_key] = target_mod_name
+            else:
+                st.session_state[radio_key] = project_module_options[default_radio_idx]
+
+        def _on_module_radio_change():
+            sel_val = st.session_state.get(radio_key)
+            for m in ALL_MODULES:
+                if m["name"] == sel_val:
+                    cfg_set("selected_module_idx", m["idx"])
+                    st.session_state["selected_module_idx"] = m["idx"]
+                    break
+
+
 
         selected_module_name = st.radio(
             "📂 Select Design Module / Engineering Module:",
             options=project_module_options,
-            index=default_radio_idx,
             key=radio_key,
+            label_visibility="collapsed",
+            on_change=_on_module_radio_change,
         )
 
-        # Sync the selected module global index back to cfg
+        # Sync the selected module global index back to cfg and session_state
         for m in ALL_MODULES:
             if m["name"] == selected_module_name:
-                cfg_set("selected_module_idx", m["idx"])
+                if cfg_val("selected_module_idx") != m["idx"]:
+                    cfg_set("selected_module_idx", m["idx"])
+                st.session_state["selected_module_idx"] = m["idx"]
                 break
         module = selected_module_name
-        st.markdown("---")
+
+        # ── ECP 203 DASHBOARD Banner (Moved to Bottom of Screen) ────────────
+        render_custom_html(
+            """
+            <div style="background: linear-gradient(135deg, #0b1329 0%, #1e293b 100%); border: 1.5px solid rgba(56, 189, 248, 0.40); border-radius: 10px; padding: 10px 14px; margin-top: 14px; margin-bottom: 10px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.35);">
+                <div style="font-size: 22px; margin-bottom: 2px;">🏗️</div>
+                <div style="font-size: 16px; font-weight: 900; color: #38bdf8; letter-spacing: 0.5px;">ECP 203 DASHBOARD</div>
+                <div style="font-size: 11.5px; color: #94a3b8; font-weight: 600; margin-top: 2px;">الكود المصري للمنشآت الخرسانية</div>
+            </div>
+            """
+        )
 
         st.markdown("<small>Units: **ton · kg · cm · kg/cm²**</small>", unsafe_allow_html=True)
         st.markdown("<small>Code: **ECP 203-2018**</small>", unsafe_allow_html=True)
-        st.markdown("---")
+        st.markdown("<hr style='margin: 8px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 
-        loaded_from_file = st.session_state.get("_settings_loaded_from_file", False)
-        last_save_ok     = st.session_state.get("_last_save_ok", None)
-        if last_save_ok is True:
-            st.markdown(
-                f"<small style='color:#6fcf97;'>💾 تم حفظ التعديلات في المشروع <b>{active_project_sidebar}</b>.</small>",
-                unsafe_allow_html=True,
-            )
-        elif loaded_from_file:
-            st.markdown(
-                f"<small style='color:#6fcf97;'>✅ تم تحميل المشروع <b>{active_project_sidebar}</b> بنجاح.</small>",
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown("<small style='color:#a0aec0;'>📋 يتم استخدام القيم الافتراضية للكود المصري ECP 203.</small>", unsafe_allow_html=True)
 
-        if st.session_state.get("_confirm_reset_project", False):
-            st.markdown(
-                f"""<div style="background: rgba(239, 68, 68, 0.15); border: 1.5px solid #ef4444; border-radius: 8px; padding: 10px 12px; margin: 8px 0 10px 0;">
-                    <div style="color: #f87171; font-weight: 800; font-size: 15px;">⚠️ تأكيد إعادة الضبط</div>
-                    <div style="font-size: 13px; color: #f1f5f9; margin-top: 4px;">هل أنت متأكد من استعادة القيم الافتراضية للمشروع <b>«{active_project_sidebar}»</b>؟</div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
-            col_rc1, col_rc2 = st.columns(2)
-            with col_rc1:
-                if st.button("✅ نعم، تأكيد", use_container_width=True, type="primary", key="sb_btn_confirm_reset"):
-                    reset_settings()
-                    st.session_state["_confirm_reset_project"] = False
-                    st.success("تمت استعادة القيم الافتراضية بنجاح.")
-                    st.rerun()
-            with col_rc2:
-                if st.button("❌ تراجع", use_container_width=True, key="sb_btn_cancel_reset"):
-                    st.session_state["_confirm_reset_project"] = False
-                    st.rerun()
-        else:
-            if st.button("🔄 إعادة ضبط المشروع إلى القيم الافتراضية", use_container_width=True, key="sb_btn_reset_proj"):
-                st.session_state["_confirm_reset_project"] = True
-                st.rerun()
 
     # ── Render Top Profile Bar & Selected Module ──────────────────────────
     render_top_profile_bar()
@@ -2965,57 +3238,105 @@ else:
     mod_info = next((m for m in ALL_MODULES if m["name"] == module or m.get("short") == module), None)
     mod_key = mod_info["key"] if mod_info else ""
 
-    if mod_key == "standalone_flat_slab" or "Module 13" in module or "standalone_flat_slab" in module:
-        try:
-            render_standalone_flat_slab()
-        except Exception as ex:
-            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 13: {ex}")
-            st.exception(ex)
-    elif mod_key == "brick_survey" or "Module 12" in module or "brick_survey" in module or "طوب" in module or "المحارة" in module:
+    target_k = mod_key
+    if not target_k:
+        if "Module 14" in module or "brick_survey" in module or "طوب" in module or "المحارة" in module:
+            target_k = "brick_survey"
+        elif "Module 13" in module or "concrete_survey" in module or ("Concrete" in module and "Survey" in module) or "حصر الكميات" in module:
+            target_k = "concrete_survey"
+        elif "Module 12" in module or "steel_bars" in module or "Steel Rebar" in module or "أقطار" in module or "اقطار" in module:
+            target_k = "steel_bars"
+        elif "Module 11" in module or "standalone_flat_slab" in module or "المستقلة" in module:
+            target_k = "standalone_flat_slab"
+        elif "Module 10" in module or "circular_tank" in module or "الخزانات" in module:
+            target_k = "circular_tank_foundations"
+        elif "Module 9" in module or "ground_slab" in module or "Ground Slabs" in module or "الأرضية" in module or "SOG" in module:
+            target_k = "ground_slab"
+        elif "Module 8" in module or "raft" in module or "اللبشة" in module:
+            target_k = "raft_foundations"
+        elif "Module 7" in module or "ground_beam" in module or "الميدات" in module or "السملات" in module:
+            target_k = "ground_beam"
+        elif "Module 6" in module or "diagonal_strap" in module or "بشداد مائل" in module:
+            target_k = "diagonal_strap_footing"
+        elif "Module 5" in module or "strap_footing" in module or "قواعد الشدادات" in module:
+            target_k = "strap_footing"
+        elif "Module 4" in module or "Two-columns" in module or "Two-Column" in module or "two_col_footings" in module or "مشتركة لعمودين" in module:
+            target_k = "two_col_footings"
+        elif "Module 3" in module or "footings" in module or "Isolated Footings" in module or "المنفصلة" in module:
+            target_k = "footings"
+        elif "Module 2" in module or "columns" in module or "Rectangular Columns" in module or "الأعمدة" in module:
+            target_k = "columns"
+        elif "Module 1" in module or "Integrated" in module or "flat_slab" in module:
+            target_k = "flat_slab"
+
+    # ── Unified Centered Amber Title Banner & Philosophy Modal (Modules 2 to 14) ───
+    if target_k and target_k != "flat_slab":
+        pref = get_safe_profile_filename_prefix()
+        render_module_header_and_philosophy(target_k, prefix=pref)
+
+    if mod_key == "brick_survey" or "Module 14" in module or "brick_survey" in module or "طوب" in module or "المحارة" in module:
         try:
             render_brick_survey_module()
         except Exception as ex:
-            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 12: {ex}")
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 14: {ex}")
             st.exception(ex)
-    elif mod_key == "ground_beam" or "Module 11" in module or "ground_beam" in module or "الميدات" in module or "السملات" in module:
-        try:
-            render_ground_beam_module()
-        except Exception as ex:
-            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 11: {ex}")
-            st.exception(ex)
-    elif mod_key == "diagonal_strap_footing" or "Module 10" in module or "diagonal_strap" in module or "بشداد مائل" in module:
-        try:
-            render_diagonal_strap_module()
-        except Exception as ex:
-            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 10: {ex}")
-            st.exception(ex)
-    elif mod_key == "strap_footing" or "Module 9" in module or "strap_footing" in module or "قواعد الشدادات" in module:
-        try:
-            render_strap_footing_module()
-        except Exception as ex:
-            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 9: {ex}")
-            st.exception(ex)
-    elif mod_key == "two_col_footings" or "Module 7" in module or "Two-Column" in module or "two_col_footings" in module or "مشتركة لعمودين" in module:
-        try:
-            render_two_col_footings()
-        except Exception as ex:
-            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 7: {ex}")
-            st.exception(ex)
-    elif mod_key == "concrete_survey" or "Module 6" in module or "concrete_survey" in module or ("Concrete" in module and "Survey" in module) or "حصر الخرسانات" in module:
+    elif mod_key == "concrete_survey" or "Module 13" in module or "concrete_survey" in module or ("Concrete" in module and "Survey" in module) or "حصر الكميات" in module:
         try:
             render_concrete_survey()
         except Exception as ex:
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 13: {ex}")
+            st.exception(ex)
+    elif mod_key == "steel_bars" or "Module 12" in module or "steel_bars" in module or "Steel Rebar" in module or "أقطار" in module or "اقطار" in module:
+        render_steel_bars()
+    elif mod_key == "standalone_flat_slab" or "Module 11" in module or "standalone_flat_slab" in module or "المستقلة" in module:
+        try:
+            render_standalone_flat_slab()
+        except Exception as ex:
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 11: {ex}")
+            st.exception(ex)
+    elif mod_key == "circular_tank_foundations" or "Module 10" in module or "circular_tank" in module or "الخزانات" in module:
+        try:
+            render_circular_tank_foundations_module()
+        except Exception as ex:
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 10: {ex}")
+            st.exception(ex)
+    elif mod_key == "ground_slab" or "Module 9" in module or "ground_slab" in module or "Ground Slabs" in module or "الأرضية" in module or "SOG" in module:
+        render_ground_slab()
+    elif mod_key == "raft_foundations" or "Module 8" in module or "raft" in module or "اللبشة" in module:
+        try:
+            render_raft_foundations_module()
+        except Exception as ex:
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 8: {ex}")
+            st.exception(ex)
+    elif mod_key == "ground_beam" or "Module 7" in module or "ground_beam" in module or "الميدات" in module or "السملات" in module:
+        try:
+            render_ground_beam_module()
+        except Exception as ex:
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 7: {ex}")
+            st.exception(ex)
+    elif mod_key == "diagonal_strap_footing" or "Module 6" in module or "diagonal_strap" in module or "بشداد مائل" in module:
+        try:
+            render_diagonal_strap_module()
+        except Exception as ex:
             st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 6: {ex}")
             st.exception(ex)
-    elif mod_key == "steel_bars" or "Module 5" in module or "steel_bars" in module or "Steel Rebar" in module or "اقطار" in module:
-        render_steel_bars()
-    elif mod_key == "ground_slab" or "Module 4" in module or "ground_slab" in module or "Ground Slabs" in module or "الأرضية" in module:
-        render_ground_slab()
-    elif mod_key == "footings" or "Module 3" in module or "footings" in module or "Isolated Footings" in module or "المنفصلة" in module or ("القواعد" in module and "الشدادات" not in module and "مشتركة" not in module):
+    elif mod_key == "strap_footing" or "Module 5" in module or "strap_footing" in module or "قواعد الشدادات" in module:
+        try:
+            render_strap_footing_module()
+        except Exception as ex:
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 5: {ex}")
+            st.exception(ex)
+    elif mod_key == "two_col_footings" or "Module 4" in module or "Two-columns" in module or "Two-Column" in module or "two_col_footings" in module or "مشتركة لعمودين" in module:
+        try:
+            render_two_col_footings()
+        except Exception as ex:
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 4: {ex}")
+            st.exception(ex)
+    elif mod_key == "footings" or "Module 3" in module or "footings" in module or "Isolated Footings" in module or "المنفصلة" in module or ("القواعد" in module and "الشدادات" not in module and "مشتركة" not in module and "الخزانات" not in module and "اللبشة" not in module):
         render_footings()
     elif mod_key == "columns" or "Module 2" in module or "columns" in module or "Rectangular Columns" in module or "الأعمدة" in module:
         render_columns()
-    elif mod_key == "flat_slab" or "Module 1 " in module or "Module 1 —" in module or "Integrated" in module or "flat_slab" in module:
+    elif mod_key == "flat_slab" or "Module 1" in module or "Integrated" in module or "flat_slab" in module:
         try:
             render_flat_slab()
         except Exception as ex:

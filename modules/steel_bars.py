@@ -54,11 +54,6 @@ def _weight_per_m(d_mm: float) -> float:
 
 # ── Main render ──────────────────────────────────────────────────────────────
 def render() -> None:
-    st.markdown(
-        '<div class="section-header">⚙️ Module 5 – Steel Rebar Diameters, Weights & Areas (ECP 203)</div>',
-        unsafe_allow_html=True,
-    )
-
     tab_ref, tab_calc, tab_multi = st.tabs([
         "📋 Reference Table (جدول مرجعي)",
         "🔢 Single-Bar Calculator (حاسبة بار واحد)",

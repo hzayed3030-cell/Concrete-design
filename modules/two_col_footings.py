@@ -2695,17 +2695,6 @@ def _render_structural_tutorial():
 def render():
     """Entry point — Module 7: Quick Two-Column Combined Footing Design (ECP 203)."""
 
-    # ── HEADER ────────────────────────────────────────────────────────────────
-    st.markdown(
-        """
-        <div class="input-section-header">
-            <span style="font-size:26px;">📐</span>
-            <span>Module 7 — تصميم قاعدة مشتركة لعمودين (Quick Two-Column Combined Footing Design — ECP 203)</span>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
     # Design Note
     st.warning(
         "⚠️ **ملاحظة تصميمية واشتراطات الكود المصري (ECP 203):**\n\n"

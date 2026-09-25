@@ -9016,8 +9016,36 @@ def render(is_standalone: bool = False):
         }
 
         /* ═══════════════════════════════════════════════════════════════════════
+           MODULE 1 MAIN TITLE BANNER (Amber Gradient & Centered Typography)
+           ═══════════════════════════════════════════════════════════════════════ */
+        .module-title-banner-m1 {
+            background: linear-gradient(135deg, #1c1917 0%, #78350f 45%, #92400e 100%) !important;
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            border: 2px solid #f59e0b !important;
+            border-radius: 8px !important;
+            box-shadow: 0 4px 14px rgba(120, 53, 15, 0.40) !important;
+            padding: 12px 20px !important;
+            margin: 6px 0 8px 0 !important;
+            font-family: 'Cairo', 'Tajawal', 'Segoe UI', Tahoma, sans-serif !important;
+            font-size: 25.2px !important;
+            font-weight: 900 !important;
+            text-align: center !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 10px !important;
+            letter-spacing: 0.4px !important;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.65) !important;
+            line-height: 1.35 !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════════════
            DESIGN PHILOSOPHY BUTTON (زر فلسفة التصميم وحصر الكميات - بعرض السطر كاملاً أسفل عنوان القسم)
            ═══════════════════════════════════════════════════════════════════════ */
+        div[class*="btn_show_design_philosophy_top"],
         div[class*="btn_show_design_philosophy_step2"],
         div[class*="btn_design_philosophy_boq"] {
             width: 100% !important;
@@ -9025,6 +9053,7 @@ def render(is_standalone: bool = False):
             margin-bottom: 8px !important;
         }
 
+        div[class*="btn_show_design_philosophy_top"] button,
         div[class*="btn_show_design_philosophy_step2"] button,
         div[class*="btn_design_philosophy_boq"] button {
             background: linear-gradient(135deg, #1c1917 0%, #78350f 45%, #92400e 100%) !important;
@@ -9046,6 +9075,7 @@ def render(is_standalone: bool = False):
             transition: all 0.25s ease-in-out !important;
         }
 
+        div[class*="btn_show_design_philosophy_top"] button:hover,
         div[class*="btn_show_design_philosophy_step2"] button:hover,
         div[class*="btn_design_philosophy_boq"] button:hover {
             background: linear-gradient(135deg, #78350f 0%, #92400e 45%, #b45309 100%) !important;
@@ -9054,8 +9084,10 @@ def render(is_standalone: bool = False):
             transform: translateY(-2px) !important;
         }
 
+        div[class*="btn_show_design_philosophy_top"] button p,
         div[class*="btn_show_design_philosophy_step2"] button p,
         div[class*="btn_design_philosophy_boq"] button p,
+        div[class*="btn_show_design_philosophy_top"] button span,
         div[class*="btn_show_design_philosophy_step2"] button span,
         div[class*="btn_design_philosophy_boq"] button span {
             color: #ffffff !important;
@@ -9067,19 +9099,26 @@ def render(is_standalone: bool = False):
         """,
         unsafe_allow_html=True,
     )
-    if is_standalone:
+    if not is_standalone:
         st.markdown(
-            '<div class="section-header">🏢 Module 13 – Standalone Flat Slab Design (ECP 203) (تصميم البلاطات اللاكمرية المستقلة)</div>',
-            unsafe_allow_html=True,
-        )
-    else:
-        st.markdown(
-            '<div class="section-header">🟦 Module 1 – Integrated Structural Design (ECP 203) (التصميم الإنشائي المتكامل)</div>',
+            '<div class="module-title-banner-m1" style="background: linear-gradient(135deg, #1c1917 0%, #78350f 45%, #92400e 100%) !important; color: #ffffff !important; border: 2px solid #f59e0b !important; border-radius: 8px !important; box-shadow: 0 4px 14px rgba(120, 53, 15, 0.40) !important; padding: 12px 20px !important; margin: 6px 0 8px 0 !important; font-family: \'Cairo\', \'Tajawal\', \'Segoe UI\', Tahoma, sans-serif !important; font-size: 25.2px !important; font-weight: 900 !important; text-align: center !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 10px !important; letter-spacing: 0.4px !important; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.65) !important; line-height: 1.35 !important; width: 100% !important; box-sizing: border-box !important;">'
+            '<span>🟦 Module 1 – Integrated Structural Design (ECP 203) (التصميم الإنشائي المتكامل)</span>'
+            '</div>',
             unsafe_allow_html=True,
         )
 
     active_profile_name = S.get_active_profile_name()
     prefix = S.get_safe_profile_filename_prefix()
+
+    if not is_standalone:
+        if st.button(
+            "📖 الاطلاع على فلسفة التصميم وحصر الكميات",
+            key=f"{prefix}btn_show_design_philosophy_top",
+            use_container_width=True,
+            help="عرض دليل وفلسفة حساب الأحمال التراكمية وتوزيعها وحصر الكميات",
+        ):
+            show_design_philosophy_dialog()
+        st.markdown("<div style='margin-bottom: 6px;'></div>", unsafe_allow_html=True)
 
     Lx_spans = []
     Ly_spans = []
@@ -9166,16 +9205,6 @@ def render(is_standalone: bool = False):
 
     # ── ② COLUMN, THICKNESS, LOADS, MATERIALS & REBAR OPTIONS ────────────────
     with st.expander("🧱 Step 2 — Slab Thickness, Column Size, Loads & Rebar (السُمك والأعمدة والأحمال والتسليح)", expanded=False):
-        if not is_standalone:
-            if st.button(
-                "📖 الاطلاع على فلسفة التصميم وحصر الكميات",
-                key=f"{prefix}btn_show_design_philosophy_step2",
-                use_container_width=True,
-                help="عرض دليل وفلسفة حساب الأحمال التراكمية وتوزيعها وحصر الكميات",
-            ):
-                show_design_philosophy_dialog()
-            st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
-
         c1, c2, c3, c4 = st.columns(4)
 
         with c1:

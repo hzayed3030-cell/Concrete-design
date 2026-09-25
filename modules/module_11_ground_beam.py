@@ -716,30 +716,6 @@ def render_ground_beam_module():
     if float(data.get("q_all_soil", 1.50)) >= 5.0:
         data["q_all_soil"] = round(float(data["q_all_soil"]) / 10.0, 2)
 
-    # ── Header Banner ────────────────────────────────────────────────────────
-    st.markdown(
-        """
-        <div dir="rtl" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-                    border: 2px solid #38bdf8; border-radius: 12px; padding: 18px 22px; margin-bottom: 18px;
-                    box-shadow: 0 4px 20px rgba(56, 189, 248, 0.15); text-align: right;">
-            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-                <div>
-                    <div style="font-size: 23px; font-weight: 900; color: #38bdf8; display: flex; align-items: center; gap: 10px;">
-                        🧱 Module 11 — تصميم وتفاصيل الميدات والكمرات الأرضية (Ground Beams & Tie Beams)
-                    </div>
-                    <div style="font-size: 14.5px; color: #cbd5e1; margin-top: 6px; line-height: 1.7;">
-                        وفق اشتراطات الكود المصري <b>ECP 203-2018</b> • فحص الهبوط التفاضلي وأحمال الحوائط • إعادة التصميم التفاعلي للعمق التنفيذي • رسم قطاع إنشائي تنفيذي متكامل (Sec. A-A)
-                    </div>
-                </div>
-                <div style="background: rgba(56, 189, 248, 0.12); border: 1.5px solid #38bdf8; border-radius: 8px; padding: 8px 14px; text-align: center;">
-                    <div style="font-size: 12px; color: #94a3b8;">الوحدات الهندسية المعتمدة</div>
-                    <div style="font-size: 15px; font-weight: 800; color: #38bdf8;">ton · m · cm · kg/cm²</div>
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
     # ── Interactive Sidebar / Top Controls ───────────────────────────────────
     col_in1, col_in2, col_in3 = st.columns([1.1, 1.1, 1.0])
