@@ -2409,15 +2409,17 @@ def render_profile_manager():
                 margin-bottom: 12px;
                 border-bottom: 1.5px solid rgba(5, 150, 105, 0.25);
             ">
-                <!-- Top Row: Number Badge, Project Title, Copy Badge & Status Badges -->
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 8px;">
-                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                        <span style="background: linear-gradient(135deg, #059669 0%, #047857 100%); color: #ffffff; font-weight: 900; font-size: 13.5px; padding: 3px 10px; border-radius: 6px; border: 1.5px solid #047857; letter-spacing: 0.5px;">★ المشروع النشط</span>
-                        <span style="font-size: 21px; font-weight: 900; color: #fde047; letter-spacing: 0.3px; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 0 1px rgba(0, 0, 0, 0.5);">⭐ 🏗️ {pname}</span>
+                <!-- Top Row: Number Badge (Right), Centered Project Title, Status Badges (Left) -->
+                <div style="display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; margin-bottom: 8px;">
+                    <div style="display: flex; align-items: center; justify-content: flex-start; gap: 8px;">
+                        <span style="background: linear-gradient(135deg, #059669 0%, #047857 100%); color: #ffffff; font-weight: 900; font-size: 13.5px; padding: 3px 10px; border-radius: 6px; border: 1.5px solid #047857; letter-spacing: 0.5px; white-space: nowrap;">★ المشروع النشط</span>
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 8px; text-align: center;">
+                        <span style="font-size: 21px; font-weight: 900; color: #fde047; letter-spacing: 0.3px; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 0 1px rgba(0, 0, 0, 0.5); line-height: 1.3;">⭐ 🏗️ {pname}</span>
                         {copy_badge_html}
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                        <span style="background: rgba(5, 150, 105, 0.15); color: #065f46; border: 1.5px solid #059669; padding: 3px 12px; border-radius: 16px; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px;">🟢 المشروع النشط حالياً</span>
+                    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap;">
+                        <span style="background: rgba(5, 150, 105, 0.15); color: #065f46; border: 1.5px solid #059669; padding: 3px 12px; border-radius: 16px; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;">🟢 المشروع النشط حالياً</span>
                         {custom_badge_html}
                     </div>
                 </div>
@@ -3156,14 +3158,16 @@ def render_profile_manager():
                             border-right: 6px solid {panel_accent};
                             padding: 2px 10px 4px 10px;
                         ">
-                            <!-- Top Row: Number Badge, Project Title, Copy Badge & Status Badges -->
-                            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 4px;">
-                                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-                                    <span style="background: {num_badge_bg}; color: {num_badge_color}; font-weight: 900; font-size: 12.5px; padding: 2px 8px; border-radius: 5px; border: 1.5px solid {num_badge_border};">{num_badge_text}</span>
-                                    <span style="font-size: 17px; font-weight: 800; color: {title_color}; letter-spacing: 0.3px; text-shadow: {title_shadow};">📁 {s_pname}</span>
+                            <!-- Top Row: Number Badge (Right), Centered Project Title, Status Badges (Left) -->
+                            <div style="display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; margin-bottom: 4px;">
+                                <div style="display: flex; align-items: center; justify-content: flex-start; gap: 6px;">
+                                    <span style="background: {num_badge_bg}; color: {num_badge_color}; font-weight: 900; font-size: 12.5px; padding: 2px 8px; border-radius: 5px; border: 1.5px solid {num_badge_border}; white-space: nowrap;">{num_badge_text}</span>
+                                </div>
+                                <div style="display: flex; align-items: center; justify-content: center; gap: 8px; text-align: center;">
+                                    <span style="font-size: 17px; font-weight: 800; color: {title_color}; letter-spacing: 0.3px; text-shadow: {title_shadow}; line-height: 1.3;">📁 {s_pname}</span>
                                     {copy_badge_html}
                                 </div>
-                                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                                <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap;">
                                     {badge_html}
                                     {custom_badge_html}
                                 </div>
