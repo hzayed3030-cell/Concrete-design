@@ -194,33 +194,71 @@ st.markdown(
     }
 
     /* Projects Button (بانيل العودة إلى قائمة المشاريع) */
-    div[data-testid="stSidebar"] div.st-key-sb_btn_projects_mgr {
+    [data-testid="stSidebar"] div[class*="st-key-sb_btn_projects_mgr"],
+    div[class*="st-key-sb_btn_projects_mgr"],
+    .st-key-sb_btn_projects_mgr {
         margin-top: 0 !important;
-        margin-bottom: 6px !important;
+        margin-bottom: 8px !important;
         width: 100% !important;
     }
-    div[data-testid="stSidebar"] div.st-key-sb_btn_projects_mgr button {
-        min-height: 36px !important;
-        padding: 6px 12px !important;
-        font-size: 13.5px !important;
-        font-weight: 800 !important;
-        background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%) !important;
-        border: 1.5px solid rgba(56, 189, 248, 0.45) !important;
-        border-radius: 9px !important;
-        color: #38bdf8 !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.40) !important;
+    [data-testid="stSidebar"] div[class*="st-key-sb_btn_projects_mgr"] button,
+    div[class*="st-key-sb_btn_projects_mgr"] button,
+    .st-key-sb_btn_projects_mgr button,
+    [data-testid="stSidebar"] .stButton > button[key="sb_btn_projects_mgr"],
+    [data-testid="stSidebar"] button[data-testid="baseButton-secondary"],
+    [data-testid="stSidebar"] button[data-testid="stBaseButton-secondary"] {
+        min-height: 42px !important;
+        padding: 6px 14px !important;
+        font-size: 14.5px !important;
+        font-weight: 900 !important;
+        background: linear-gradient(135deg, #18181b 0%, #09090b 100%) !important;
+        background-color: #18181b !important;
+        border: 2px solid #ef4444 !important;
+        border-radius: 10px !important;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.65), 0 0 12px rgba(239, 68, 68, 0.25) !important;
         transition: all 0.20s ease-in-out !important;
         width: 100% !important;
         display: flex !important;
         justify-content: center !important;
         align-items: center !important;
+        cursor: pointer !important;
     }
-    div[data-testid="stSidebar"] div.st-key-sb_btn_projects_mgr button:hover {
-        background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important;
-        border-color: #38bdf8 !important;
-        color: #ffffff !important;
-        box-shadow: 0 0 14px rgba(56, 189, 248, 0.50) !important;
+    [data-testid="stSidebar"] div[class*="st-key-sb_btn_projects_mgr"] button *,
+    [data-testid="stSidebar"] div[class*="st-key-sb_btn_projects_mgr"] button p,
+    [data-testid="stSidebar"] div[class*="st-key-sb_btn_projects_mgr"] button span,
+    [data-testid="stSidebar"] div[class*="st-key-sb_btn_projects_mgr"] button div,
+    div[class*="st-key-sb_btn_projects_mgr"] button *,
+    div[class*="st-key-sb_btn_projects_mgr"] button p,
+    div[class*="st-key-sb_btn_projects_mgr"] button span,
+    .st-key-sb_btn_projects_mgr button *,
+    .st-key-sb_btn_projects_mgr button p,
+    .st-key-sb_btn_projects_mgr button span {
+        color: #ff3344 !important;
+        font-size: 14.5px !important;
+        font-weight: 900 !important;
+        text-shadow: 0 0 10px rgba(255, 51, 68, 0.50) !important;
+        line-height: 1.4 !important;
+    }
+    [data-testid="stSidebar"] div[class*="st-key-sb_btn_projects_mgr"] button:hover,
+    div[class*="st-key-sb_btn_projects_mgr"] button:hover,
+    .st-key-sb_btn_projects_mgr button:hover {
+        background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%) !important;
+        background-color: #991b1b !important;
+        border-color: #ff4d5a !important;
+        box-shadow: 0 0 20px rgba(239, 68, 68, 0.70) !important;
         transform: translateY(-1px) !important;
+    }
+    [data-testid="stSidebar"] div[class*="st-key-sb_btn_projects_mgr"] button:hover *,
+    [data-testid="stSidebar"] div[class*="st-key-sb_btn_projects_mgr"] button:hover p,
+    [data-testid="stSidebar"] div[class*="st-key-sb_btn_projects_mgr"] button:hover span,
+    div[class*="st-key-sb_btn_projects_mgr"] button:hover *,
+    div[class*="st-key-sb_btn_projects_mgr"] button:hover p,
+    div[class*="st-key-sb_btn_projects_mgr"] button:hover span,
+    .st-key-sb_btn_projects_mgr button:hover *,
+    .st-key-sb_btn_projects_mgr button:hover p,
+    .st-key-sb_btn_projects_mgr button:hover span {
+        color: #ffffff !important;
+        text-shadow: 0 0 12px rgba(255, 255, 255, 0.75) !important;
     }
 
     /* Radio Container (بانيل الموديولات) */
@@ -3198,6 +3236,58 @@ else:
         if active_project_sidebar not in all_projects_list and all_projects_list:
             active_project_sidebar = all_projects_list[0]
 
+        st.markdown(
+            """
+            <style>
+            [data-testid="stSidebar"] div[class*="st-key-sb_btn_projects_mgr"] button,
+            div[class*="st-key-sb_btn_projects_mgr"] button,
+            .st-key-sb_btn_projects_mgr button {
+                min-height: 42px !important;
+                background: linear-gradient(135deg, #18181b 0%, #09090b 100%) !important;
+                background-color: #18181b !important;
+                border: 2px solid #ef4444 !important;
+                border-radius: 10px !important;
+                box-shadow: 0 4px 14px rgba(0, 0, 0, 0.65), 0 0 12px rgba(239, 68, 68, 0.25) !important;
+            }
+            [data-testid="stSidebar"] div[class*="st-key-sb_btn_projects_mgr"] button *,
+            [data-testid="stSidebar"] div[class*="st-key-sb_btn_projects_mgr"] button p,
+            [data-testid="stSidebar"] div[class*="st-key-sb_btn_projects_mgr"] button span,
+            div[class*="st-key-sb_btn_projects_mgr"] button *,
+            div[class*="st-key-sb_btn_projects_mgr"] button p,
+            div[class*="st-key-sb_btn_projects_mgr"] button span,
+            .st-key-sb_btn_projects_mgr button *,
+            .st-key-sb_btn_projects_mgr button p,
+            .st-key-sb_btn_projects_mgr button span {
+                color: #ff3344 !important;
+                font-size: 14.5px !important;
+                font-weight: 900 !important;
+                text-shadow: 0 0 10px rgba(255, 51, 68, 0.50) !important;
+            }
+            [data-testid="stSidebar"] div[class*="st-key-sb_btn_projects_mgr"] button:hover,
+            div[class*="st-key-sb_btn_projects_mgr"] button:hover,
+            .st-key-sb_btn_projects_mgr button:hover {
+                background: linear-gradient(135deg, #7f1d1d 0%, #991b1b 100%) !important;
+                background-color: #991b1b !important;
+                border-color: #ff4d5a !important;
+                box-shadow: 0 0 20px rgba(239, 68, 68, 0.70) !important;
+                transform: translateY(-1px) !important;
+            }
+            [data-testid="stSidebar"] div[class*="st-key-sb_btn_projects_mgr"] button:hover *,
+            [data-testid="stSidebar"] div[class*="st-key-sb_btn_projects_mgr"] button:hover p,
+            [data-testid="stSidebar"] div[class*="st-key-sb_btn_projects_mgr"] button:hover span,
+            div[class*="st-key-sb_btn_projects_mgr"] button:hover *,
+            div[class*="st-key-sb_btn_projects_mgr"] button:hover p,
+            div[class*="st-key-sb_btn_projects_mgr"] button:hover span,
+            .st-key-sb_btn_projects_mgr button:hover *,
+            .st-key-sb_btn_projects_mgr button:hover p,
+            .st-key-sb_btn_projects_mgr button:hover span {
+                color: #ffffff !important;
+                text-shadow: 0 0 12px rgba(255, 255, 255, 0.75) !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
         if st.button("🏠 العودة إلى قائمة المشاريع", use_container_width=True, key="sb_btn_projects_mgr", help="العودة إلى شاشة إدارة المشاريع الرئيسية"):
             st.session_state["nav_view"] = "profile_manager"
             st.session_state["in_module"] = False
