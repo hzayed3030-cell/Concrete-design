@@ -11,6 +11,7 @@ import sys
 import subprocess
 import shutil
 import datetime
+import re
 
 # Ensure root directory is always first in sys.path regardless of CMD working directory
 app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1673,59 +1674,95 @@ def render_profile_manager():
                             st.session_state["show_git_update_form"] = False
                             st.rerun()
                 else:
-                    st.markdown(
-                        """
-                        <div style="background: linear-gradient(135deg, #0b1329 0%, #1e293b 50%, #0b1329 100%); border: 2px solid #38bdf8; border-radius: 10px; padding: 14px 18px; margin-bottom: 12px; box-shadow: 0 4px 16px rgba(56, 189, 248, 0.2);">
-                            <div style="display:flex; align-items:center; gap:8px; font-weight:900; font-size:1.15rem; color:#38bdf8;">
-                                <span>🚀</span> تأكيد رفع التحديثات إلى مستودع GitHub (Update git hub)
+                    with st.form("git_commit_push_form", clear_on_submit=False):
+                        st.markdown(
+                            """
+                            <div style="background: linear-gradient(135deg, #0b1329 0%, #1e293b 50%, #0b1329 100%); border: 2px solid #38bdf8; border-radius: 10px; padding: 14px 18px; margin-bottom: 12px; box-shadow: 0 4px 16px rgba(56, 189, 248, 0.2);">
+                                <div style="display:flex; align-items:center; gap:8px; font-weight:900; font-size:1.15rem; color:#38bdf8;">
+                                    <span>🚀</span> تأكيد رفع التحديثات إلى مستودع GitHub (Update git hub)
+                                </div>
+                                <div style="color:#cbd5e1; font-size:0.92rem; margin-top:6px; line-height: 1.4;">
+                                    سيتم حفظ كافة الملفات والتعديلات وإرسالها إلى مستودع GitHub الرئيسي عبر الأوامر (<code>git add -A</code> ⬅️ <code>git commit</code> ⬅️ <code>git push</code>).
+                                </div>
                             </div>
-                            <div style="color:#cbd5e1; font-size:0.92rem; margin-top:6px; line-height: 1.4;">
-                                سيتم حفظ كافة الملفات والتعديلات وإرسالها إلى مستودع GitHub الرئيسي عبر الأوامر (<code>git add .</code> ⬅️ <code>git commit</code> ⬅️ <code>git push</code>).
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                        now_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+                        default_fallback = f"Update project - {now_str}"
+
+                        col_in1, col_in2 = st.columns([3.2, 1.2])
+                        with col_in1:
+                            commit_msg_input = st.text_input(
+                                "🏷️ اسم أو وصف التعديل (Update Name / Commit):",
+                                value="",
+                                placeholder="اكتب اسم التعديل هنا (مثال: حصر الطوب والمحارة أو تعديل القواعد)...",
+                                key="input_git_commit_msg",
+                                help="اكتب اسم أو وصف التعديل الذي ترغب في ظهوره على GitHub ليحل محل «Update project»."
+                            )
+                        with col_in2:
+                            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+                            append_timestamp = st.checkbox("إلحاق التاريخ والوقت", value=True, help="إضافة (YYYY-MM-DD HH:MM) تلقائياً في نهاية اسم التعديل")
+
+                        st.markdown(
+                            f"""
+                            <div style="font-size: 0.85rem; color: #94a3b8; margin-top: -6px; margin-bottom: 12px;">
+                                💡 <b>ملاحظة:</b> إذا تركت الحقل فارغاً، سيتم التسمية تلقائياً: <code>{default_fallback}</code>. وعند كتابة أي اسم مخصص سيتم استبدال <code>Update project</code> به فوراً في سجل GitHub.
                             </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                    commit_msg = st.text_input(
-                        "اسم التعديل (Commit Message):",
-                        value=f"Update project - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}",
-                        placeholder="اكتب وصف التعديل الذي سيظهر بعد علامات التنصيص في أمر commit...",
-                        key="input_git_commit_msg",
-                        help="اسم ورسالة التعديل التي ستسجل في سجل Git و GitHub بعد علامات التنصيص -m \"...\"",
-                    )
-                    col_gbtn1, col_gbtn2 = st.columns([2, 1])
-                    with col_gbtn1:
-                        if st.button("🚀 تأكيد ورفع التحديثات إلى GitHub", use_container_width=True, type="primary", key="btn_exec_git_push"):
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                        col_gbtn1, col_gbtn2 = st.columns([2, 1])
+                        with col_gbtn1:
+                            btn_exec = st.form_submit_button("🚀 تأكيد ورفع التحديثات إلى GitHub", use_container_width=True, type="primary")
+                        with col_gbtn2:
+                            btn_cancel = st.form_submit_button("❌ إلغاء", use_container_width=True)
+
+                        if btn_cancel:
+                            st.session_state["show_git_update_form"] = False
+                            st.session_state.pop("input_git_commit_msg", None)
+                            st.rerun()
+
+                        if btn_exec:
                             # Final safety check
                             cur_dist_dirs = [d for d in ["dist", "build", "built"] if os.path.exists(os.path.join(app_dir, d))]
                             if cur_dist_dirs:
                                 st.error("⛔ تم رفض الرفع لوجود مجلدات dist أو build!")
                             else:
-                                with st.spinner("⏳ جاري رفع التحديثات إلى GitHub... (git add . ; git commit ; git push)"):
-                                    msg_final = commit_msg.strip() if commit_msg and commit_msg.strip() else "Update project files"
-                                    # git add .
-                                    subprocess.run(["git", "add", "."], cwd=app_dir, capture_output=True, text=True)
-                                    # git commit -m
-                                    res_commit = subprocess.run(["git", "commit", "-m", msg_final], cwd=app_dir, capture_output=True, text=True)
-                                    # git push
-                                    res_push = subprocess.run(["git", "push"], cwd=app_dir, capture_output=True, text=True)
+                                user_text = (commit_msg_input or "").strip()
+                                now_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+                                if not user_text:
+                                    msg_final = f"Update project - {now_str}"
+                                elif append_timestamp and not bool(re.search(r'\d{4}-\d{2}-\d{2}', user_text)):
+                                    msg_final = f"{user_text} - {now_str}"
+                                else:
+                                    msg_final = user_text
+
+                                with st.spinner(f"⏳ جاري رفع التحديثات باسم «{msg_final}» إلى GitHub..."):
+                                    # 1. git add -A
+                                    subprocess.run(["git", "add", "-A"], cwd=app_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
+                                    # 2. git commit --allow-empty -m
+                                    res_commit = subprocess.run(["git", "commit", "--allow-empty", "-m", msg_final], cwd=app_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
+                                    # 3. git push
+                                    res_push = subprocess.run(["git", "push"], cwd=app_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
                                     if res_push.returncode == 0:
                                         st.session_state["git_push_success_msg"] = f"✅ تم رفع وتحديث المشروع إلى GitHub بنجاح! باسم التعديل: «{msg_final}»"
                                         st.session_state["show_git_update_form"] = False
+                                        st.session_state.pop("input_git_commit_msg", None)
                                         st.rerun()
                                     else:
                                         err_text = (res_push.stderr or res_push.stdout or "").strip()
-                                        if "Everything up-to-date" in err_text or "nothing to commit" in (res_commit.stdout or ""):
+                                        commit_out = (res_commit.stdout or res_commit.stderr or "").strip()
+                                        if "Everything up-to-date" in err_text or "nothing to commit" in commit_out:
                                             st.session_state["git_push_success_msg"] = "✅ تم التحقق: المستودع متزامن مع GitHub بالفعل ولا توجد تعديلات جديدة للرفع (Everything up-to-date)."
                                             st.session_state["show_git_update_form"] = False
+                                            st.session_state.pop("input_git_commit_msg", None)
                                             st.rerun()
                                         else:
-                                            st.error(f"❌ حدث خطأ أثناء الرفع إلى GitHub:\n\n{err_text}")
-                    with col_gbtn2:
-                        if st.button("❌ إلغاء", use_container_width=True, key="btn_cancel_git_form"):
-                            st.session_state["show_git_update_form"] = False
-                            st.rerun()
+                                            st.error(f"❌ حدث خطأ أثناء الرفع إلى GitHub:\n\n{err_text if err_text else commit_out}")
 
         st.markdown("<hr style='margin: 10px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 
