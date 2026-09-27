@@ -146,10 +146,17 @@ def _init_state():
         st.session_state["m12_col_props"] = {}
     if "m12_deleted_cols_history" not in st.session_state:
         st.session_state["m12_deleted_cols_history"] = {}
+    if "m12_del_wall_mode" not in st.session_state:
+        st.session_state["m12_del_wall_mode"] = False
+    if "m12_pending_delete_wall" not in st.session_state:
+        st.session_state["m12_pending_delete_wall"] = None
 
-    # تنظيف المتغيرات القديمة الخاصة بآلية الإضافة والاستعادة السابقة
+    # تنظيف المتغيرات القديمة الخاصة بآلية الإضافة والاستعادة السابقة والمفاتيح المتضاربة
     for old_k in ["m12_add_col_sel", "m12_del_active_col_sel", "m12_confirm_del_col_tab", "m12_col_restore_expander_open"]:
         st.session_state.pop(old_k, None)
+    for k in list(st.session_state.keys()):
+        if k.startswith("m12_col_dir_radio_") or k.startswith("m12_col_shift_x_") or k.startswith("m12_col_shift_y_"):
+            st.session_state.pop(k, None)
 
     _sanitize_and_prune_grid_data()
 
@@ -850,7 +857,7 @@ def _record_col_deletion(ci, cj):
     shifts = st.session_state.get("m12_col_shifts", {})
     shifted = st.session_state.get("m12_col_shifted", {})
     cn = _get_col_name_map()
-    orig_name = cn.get((ci, cj), f"C(X{ci+1},Y{cj+1})")
+    orig_name = cn.get((ci, cj), f"C(Y{ci+1},X{cj+1})")
 
     dir_code = dirs.get((ci, cj), "NS")
     tr = shifts.get((ci, cj), {})
@@ -1794,8 +1801,8 @@ def _draw_plan(with_dim=True):
     pad_extra = 0.30
 
     margin_b = d_bays + d_tot_gap + d_tag_gap + pad_extra
-    margin_l = d_bays + d_tot_gap + d_tag_gap + pad_extra
-    margin_r = max(0.80, min(1.3, span_x * 0.08 + 0.3))
+    margin_l = d_bays + d_tot_gap + d_tag_gap + pad_extra + 1.10
+    margin_r = max(0.60, min(1.10, span_x * 0.06 + 0.3))
     margin_t = max(1.50, min(2.0, max(span_x, span_y) * 0.11 + 0.8))
 
     ax.set_xlim(x_min - margin_l, x_max + margin_r)
@@ -1846,9 +1853,9 @@ def _draw_plan(with_dim=True):
 
     # رسم خطوط المحاور الهندسية
     for idx, x in enumerate(xs):
-        ax.axvline(x=x, color=_CLR_AXIS_X, lw=0.7, ls="--", alpha=0.35, zorder=1)
+        ax.axvline(x=x, color=_CLR_AXIS_Y, lw=0.7, ls="--", alpha=0.35, zorder=1)
     for idx, y in enumerate(ys):
-        ax.axhline(y=y, color=_CLR_AXIS_Y, lw=0.7, ls="--", alpha=0.35, zorder=1)
+        ax.axhline(y=y, color=_CLR_AXIS_X, lw=0.7, ls="--", alpha=0.35, zorder=1)
 
     for wk in _get_all_walls():
         i1, j1, i2, j2 = wk; removed = wk in removed_walls
@@ -2370,10 +2377,29 @@ def _draw_plan(with_dim=True):
         txt_tot_x = f"Lx = {span_x:.2f}m (Active: {tot_bot_active:.2f}m)"
     draw_dim_h(x_min, x_max, y_dim_tot, txt_tot_x, color="#1e3a8a", is_active=True)
 
-    # وسوم المحاور الأفقية السفلية
+    # حساب نصف قطر موحد لدوائر المحاور مكبر بنسبة 1.3 (Scaled 1.3x CAD Bubble Radius)
+    all_b_spans = []
+    if len(xs) > 1:
+        all_b_spans.extend([abs(xs[i+1] - xs[i]) for i in range(len(xs) - 1)])
+    if len(ys) > 1:
+        all_b_spans.extend([abs(ys[j+1] - ys[j]) for j in range(len(ys) - 1)])
+    min_b_sp = min(all_b_spans) if all_b_spans else 4.0
+    base_cad_r = max(0.18, min(0.24, min_b_sp * 0.055))
+    cad_bubble_r = round(base_cad_r * 1.3, 3)
+    fs_bubble = round((fs_axis * 0.72) * 1.3, 1)
+
+    # وسوم المحاور الرأسية السفلية (Y1, Y2, ...)
     for idx, x in enumerate(xs):
-        ax.text(x, y_tag, f"X{idx+1}\n{x:.2f}m", ha="center", va="top",
-                fontsize=fs_axis, color=_CLR_AXIS_X, fontweight="bold")
+        ax.text(x, y_tag, f"Y{idx+1}\n{x:.2f}m", ha="center", va="top",
+                fontsize=fs_axis, color=_CLR_AXIS_Y, fontweight="bold")
+
+    # فقاعات المحاور الرأسية العلوية (Top CAD Bubbles Y1, Y2, ...)
+    y_bubble_top = y_max + cad_bubble_r + 0.16
+    for idx, x in enumerate(xs):
+        ax.plot([x, x], [y_max, y_bubble_top], color=_CLR_AXIS_Y, lw=0.9, ls="--", alpha=0.6, zorder=2)
+        bubble = patches.Circle((x, y_bubble_top), radius=cad_bubble_r, facecolor="#eff6ff", edgecolor=_CLR_AXIS_Y, lw=1.5, zorder=6)
+        ax.add_patch(bubble)
+        ax.text(x, y_bubble_top, f"Y{idx+1}", color=_CLR_AXIS_Y, fontsize=fs_bubble, weight="bold", ha="center", va="center", zorder=7)
 
     # خطوط الأبعاد الرأسية باليسار المضغوطة (Left Chains)
     x_dim_bays = x_min - d_bays
@@ -2408,10 +2434,16 @@ def _draw_plan(with_dim=True):
         txt_tot_y = f"Ly = {span_y:.2f}m (Active: {tot_left_active:.2f}m)"
     draw_dim_v(y_min, y_max, x_dim_tot, txt_tot_y, color="#1e3a8a", is_active=True)
 
-    # وسوم المحاور الرأسية باليسار
+    # فقاعات المحاور الأفقية باليسار (Left CAD Bubbles X1, X2, ...)
+    x_bubble_left = x_tag - cad_bubble_r - 0.06
     for idx, y in enumerate(ys):
-        ax.text(x_tag, y, f"Y{idx+1} {y:.2f}m", ha="right", va="center",
-                fontsize=fs_axis, color=_CLR_AXIS_Y, fontweight="bold")
+        ax.plot([x_min, x_bubble_left], [y, y], color=_CLR_AXIS_X, lw=0.9, ls="--", alpha=0.6, zorder=2)
+        bubble = patches.Circle((x_bubble_left, y), radius=cad_bubble_r, facecolor="#fee2e2", edgecolor=_CLR_AXIS_X, lw=1.5, zorder=6)
+        ax.add_patch(bubble)
+        ax.text(x_bubble_left, y, f"X{idx+1}", color=_CLR_AXIS_X, fontsize=fs_bubble, weight="bold", ha="center", va="center", zorder=7)
+        # كتابة البعد الإحداثي يسار الدائرة
+        ax.text(x_bubble_left - cad_bubble_r - 0.08, y, f"{y:.2f}m", ha="right", va="center",
+                fontsize=round(fs_axis * 0.76, 1), color=_CLR_AXIS_X, fontweight="bold")
 
     # إخفاء تدرجات المحاور الإحداثية لتجنب التشويش مع خطوط الأبعاد
     ax.set_xticks([])
@@ -2473,6 +2505,8 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
             box_mode = "add"
         elif st.session_state.get("m12_restore_col_mode", False):
             box_mode = "restore"
+        elif st.session_state.get("m12_del_wall_mode", False):
+            box_mode = "delete_wall"
 
     if box_mode == "add":
         box_hint = "اختر بالماوس صندوقاً يكون بداخله تقاطع المحورين الواقع العمود بداخله"
@@ -2490,6 +2524,14 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
         banner_icon = "♻️"
         box_border = "2px dashed #059669"
         box_bg = "rgba(5, 150, 105, 0.20)"
+    elif box_mode == "delete_wall":
+        box_hint = "اختر بالماوس صندوقاً يكون بداخله الحائط المراد حذفه"
+        banner_border = "#ef4444"
+        banner_bg = "linear-gradient(135deg, rgba(254, 242, 242, 0.98), rgba(254, 226, 226, 0.98))"
+        banner_txt = "#991b1b"
+        banner_icon = "🗑️"
+        box_border = "2px dashed #ef4444"
+        box_bg = "rgba(239, 68, 68, 0.20)"
     else:
         box_hint = ""
         banner_border = "#94a3b8"
@@ -2517,17 +2559,45 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     ratio = fig_h / fig_w
     viewer_h = int(max(540, min(820, 740 * ratio)))
 
-    bbox_info = st.session_state.get("m12_plan_bbox_info", {
+    cm = _get_col_name_map()
+    wm = _get_wall_name_map()
+    removed_walls = st.session_state.get("m12_wall_removed", set())
+    if not isinstance(removed_walls, set):
+        removed_walls = set(removed_walls)
+    walls_list = []
+    for wk in _get_all_walls():
+        i1, j1, i2, j2 = wk
+        if i1 < len(xs) and i2 < len(xs) and j1 < len(ys) and j2 < len(ys):
+            walls_list.append({
+                "wk": list(wk),
+                "name": wm.get(wk, ""),
+                "label": _wall_display_label(wk, cm, wm),
+                "x1": round(float(xs[i1]), 3),
+                "y1": round(float(ys[j1]), 3),
+                "x2": round(float(xs[i2]), 3),
+                "y2": round(float(ys[j2]), 3),
+                "is_h": (j1 == j2),
+                "thick_m": round(float(_get_wall_thickness(wk)) / 100.0, 3),
+                "removed": wk in removed_walls
+            })
+
+    bbox_info = dict(st.session_state.get("m12_plan_bbox_info", {
         "x0": 0.05, "y0": 0.05, "x1": 0.95, "y1": 0.95,
         "xlim": [min(xs) - 1.5, max(xs) + 1.5] if xs else [0, 10],
         "ylim": [min(ys) - 1.5, max(ys) + 1.5] if ys else [0, 10],
         "xs": list(xs), "ys": list(ys)
-    })
+    }))
+    bbox_info["walls"] = walls_list
     bbox_json = json.dumps(bbox_info)
     mode_str = box_mode or ""
     box_banner_display = "flex" if box_mode else "none"
     viewport_box_class = "box-mode" if box_mode else ""
-    hint_text_toolbar = "🎯 اسحب صندوقاً حول تقاطع المحورين" if box_mode else "✋ اسحب للتحريك | 🔍 بكرة الماوس للتكبير"
+    if box_mode == "delete_wall":
+        hint_text_toolbar = "🗑️ اسحب صندوقاً حول الحائط لحذفه"
+    elif box_mode:
+        hint_text_toolbar = "🎯 اسحب صندوقاً حول تقاطع المحورين"
+    else:
+        hint_text_toolbar = "✋ اسحب للتحريك | 🔍 بكرة الماوس للتكبير"
 
     html_content = f"""<!DOCTYPE html>
 <html lang="ar">
@@ -2576,14 +2646,14 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
   }}
   
   .tb-btn {{
-    background: #f1f5f9;
-    border: 1px solid #cbd5e1;
+    background: #1e293b;
+    border: 1px solid #475569;
     border-radius: 6px;
     padding: 5px 9px;
     font-size: 12.5px;
     font-weight: 700;
     cursor: pointer;
-    color: #1e293b;
+    color: #ffffff;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -2593,23 +2663,23 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     line-height: 1.2;
   }}
   .tb-btn:hover {{
-    background: #e2e8f0;
+    background: #334155;
     border-color: #64748b;
-    color: #0f172a;
+    color: #ffffff;
     transform: translateY(-1px);
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
   }}
   .tb-btn:active {{
     transform: translateY(0);
-    background: #cbd5e1;
+    background: #475569;
   }}
   
   .zoom-badge {{
     font-size: 11.5px;
     font-weight: 800;
-    color: #1d4ed8;
-    background: #eff6ff;
-    border: 1px solid #bfdbfe;
+    color: #ffffff;
+    background: #1e40af;
+    border: 1px solid #3b82f6;
     border-radius: 12px;
     padding: 3px 8px;
     min-width: 46px;
@@ -2986,6 +3056,93 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     return best;
   }}
 
+  function distToWallSegment(px, py, x1, y1, x2, y2) {{
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return Math.hypot(px - x1, py - y1);
+    let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+    const projX = x1 + t * dx;
+    const projY = y1 + t * dy;
+    return Math.hypot(px - projX, py - projY);
+  }}
+
+  function findWallInBox(bounds) {{
+    if (!bboxInfo || !bboxInfo.walls) return null;
+    const candidates = [];
+    const bCx = (bounds.xmin + bounds.xmax) / 2.0;
+    const bCy = (bounds.ymin + bounds.ymax) / 2.0;
+
+    for (let idx = 0; idx < bboxInfo.walls.length; idx++) {{
+      const w = bboxInfo.walls[idx];
+      if (w.removed) continue;
+      const wxMin = Math.min(w.x1, w.x2);
+      const wxMax = Math.max(w.x1, w.x2);
+      const wyMin = Math.min(w.y1, w.y2);
+      const wyMax = Math.max(w.y1, w.y2);
+
+      const mx = (w.x1 + w.x2) / 2.0;
+      const my = (w.y1 + w.y2) / 2.0;
+
+      // 1. Both endpoints inside box
+      const fullyInside = (wxMin >= bounds.xmin && wxMax <= bounds.xmax && wyMin >= bounds.ymin && wyMax <= bounds.ymax);
+
+      // 2. Midpoint inside box
+      const midInside = (mx >= bounds.xmin && mx <= bounds.xmax && my >= bounds.ymin && my <= bounds.ymax);
+
+      // 3. Segment intersects box
+      let intersects = false;
+      if (w.is_h) {{
+        const y = w.y1;
+        if (y >= bounds.ymin && y <= bounds.ymax) {{
+          if (!(wxMax < bounds.xmin || wxMin > bounds.xmax)) {{
+            intersects = true;
+          }}
+        }}
+      }} else {{
+        const x = w.x1;
+        if (x >= bounds.xmin && x <= bounds.xmax) {{
+          if (!(wyMax < bounds.ymin || wyMin > bounds.ymax)) {{
+            intersects = true;
+          }}
+        }}
+      }}
+
+      const dMid = Math.hypot(mx - bCx, my - bCy);
+      if (fullyInside) {{
+        candidates.push({{ wall: w, priority: 1, dist: dMid }});
+      }} else if (midInside) {{
+        candidates.push({{ wall: w, priority: 2, dist: dMid }});
+      }} else if (intersects) {{
+        candidates.push({{ wall: w, priority: 3, dist: dMid }});
+      }}
+    }}
+
+    if (candidates.length === 0) return null;
+    candidates.sort((a, b) => {{
+      if (a.priority !== b.priority) return a.priority - b.priority;
+      return a.dist - b.dist;
+    }});
+    return candidates[0].wall;
+  }}
+
+  function findClosestWall(wx, wy, maxDist) {{
+    if (!bboxInfo || !bboxInfo.walls) return null;
+    let best = null;
+    let minDist = maxDist || 0.65;
+    for (let idx = 0; idx < bboxInfo.walls.length; idx++) {{
+      const w = bboxInfo.walls[idx];
+      if (w.removed) continue;
+      const d = distToWallSegment(wx, wy, w.x1, w.y1, w.x2, w.y2);
+      if (d < minDist) {{
+        minDist = d;
+        best = w;
+      }}
+    }}
+    return best;
+  }}
+
   // ── Mouse & Interaction Handlers ──
   viewport.addEventListener('mousedown', function(e) {{
     if (e.target.closest('.cad-toolbar') || e.target.closest('#box-mode-banner')) return;
@@ -3003,8 +3160,13 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
       selBox.style.width = '0px';
       selBox.style.height = '0px';
       selBox.style.display = 'block';
-      selBadge.textContent = 'اسحب لتحديد تقاطع المحورين...';
-      selBadge.style.background = '#0f172a';
+      if (currentBoxMode === 'delete_wall') {{
+        selBadge.textContent = 'اسحب لتحديد الحائط المراد حذفه...';
+        selBadge.style.background = '#dc2626';
+      }} else {{
+        selBadge.textContent = 'اسحب لتحديد تقاطع المحورين...';
+        selBadge.style.background = '#0f172a';
+      }}
       e.preventDefault();
       return;
     }}
@@ -3032,13 +3194,24 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
 
       const bounds = getBoxWorldBounds(Math.min(boxStartX, curX), Math.min(boxStartY, curY), width, height);
       if (bounds) {{
-        const inter = findIntersectionInBox(bounds);
-        if (inter) {{
-          selBadge.innerHTML = '📍 تقاطع المحاور: X' + (inter.i + 1) + ' × Y' + (inter.j + 1);
-          selBadge.style.background = (currentBoxMode === 'add') ? '#0284c7' : '#059669';
+        if (currentBoxMode === 'delete_wall') {{
+          const wall = findWallInBox(bounds);
+          if (wall) {{
+            selBadge.innerHTML = '🗑️ الحائط المحدد: ' + (wall.name || wall.label);
+            selBadge.style.background = '#dc2626';
+          }} else {{
+            selBadge.innerHTML = 'اسحب ليشمل الحائط المراد حذفه';
+            selBadge.style.background = '#0f172a';
+          }}
         }} else {{
-          selBadge.innerHTML = 'اسحب ليشمل تقاطع المحورين';
-          selBadge.style.background = '#0f172a';
+          const inter = findIntersectionInBox(bounds);
+          if (inter) {{
+            selBadge.innerHTML = '📍 تقاطع المحاور: Y' + (inter.i + 1) + ' × X' + (inter.j + 1);
+            selBadge.style.background = (currentBoxMode === 'add') ? '#0284c7' : '#059669';
+          }} else {{
+            selBadge.innerHTML = 'اسحب ليشمل تقاطع المحورين';
+            selBadge.style.background = '#0f172a';
+          }}
         }}
       }}
       e.preventDefault();
@@ -3063,33 +3236,59 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
       const width = Math.abs(curX - boxStartX);
       const height = Math.abs(curY - boxStartY);
 
-      if (width >= 4 || height >= 4) {{
-        const bounds = getBoxWorldBounds(minX, minY, Math.max(width, 10), Math.max(height, 10));
-        if (bounds) {{
-          const inter = findIntersectionInBox(bounds);
+      if (currentBoxMode === 'delete_wall') {{
+        let wall = null;
+        if (width >= 4 || height >= 4) {{
+          const bounds = getBoxWorldBounds(minX, minY, Math.max(width, 10), Math.max(height, 10));
+          if (bounds) {{
+            wall = findWallInBox(bounds);
+          }}
+        }}
+        if (!wall) {{
+          const pt = screenToWorld(boxStartX, boxStartY);
+          if (pt) {{
+            wall = findClosestWall(pt.x, pt.y, 0.65);
+          }}
+        }}
+        if (wall) {{
           syncToStreamlit({{
-            action: (currentBoxMode === 'add') ? 'add_column_box' : 'restore_column_box',
-            box: [bounds.xmin, bounds.xmax, bounds.ymin, bounds.ymax],
-            grid_i: inter ? inter.i : null,
-            grid_j: inter ? inter.j : null,
-            mode: currentBoxMode,
+            action: 'select_delete_wall_box',
+            wk: wall.wk,
+            name: wall.name,
+            label: wall.label,
+            mode: 'delete_wall',
             ts: Date.now()
           }});
         }}
       }} else {{
-        // Single click tolerance: find closest intersection within 0.85m
-        const pt = screenToWorld(boxStartX, boxStartY);
-        if (pt) {{
-          const inter = findClosestIntersection(pt.x, pt.y, 0.85);
-          if (inter) {{
+        if (width >= 4 || height >= 4) {{
+          const bounds = getBoxWorldBounds(minX, minY, Math.max(width, 10), Math.max(height, 10));
+          if (bounds) {{
+            const inter = findIntersectionInBox(bounds);
             syncToStreamlit({{
               action: (currentBoxMode === 'add') ? 'add_column_box' : 'restore_column_box',
-              box: [pt.x - 0.5, pt.x + 0.5, pt.y - 0.5, pt.y + 0.5],
-              grid_i: inter.i,
-              grid_j: inter.j,
+              box: [bounds.xmin, bounds.xmax, bounds.ymin, bounds.ymax],
+              grid_i: inter ? inter.i : null,
+              grid_j: inter ? inter.j : null,
               mode: currentBoxMode,
               ts: Date.now()
             }});
+          }}
+        }} else {{
+          // Single click tolerance: find closest intersection within 0.85m
+          const pt = screenToWorld(boxStartX, boxStartY);
+          if (pt) {{
+            const inter = findClosestIntersection(pt.x, pt.y, 0.85);
+            if (inter) {{
+              syncToStreamlit({{
+                action: (currentBoxMode === 'add') ? 'add_column_box' : 'restore_column_box',
+                box: [pt.x - 0.5, pt.x + 0.5, pt.y - 0.5, pt.y + 0.5],
+                grid_i: inter.i,
+                grid_j: inter.j,
+                mode: currentBoxMode,
+                ts: Date.now()
+              }});
+            }}
           }}
         }}
       }}
@@ -3315,7 +3514,7 @@ def _section_brick_type():
 
     # ── 3. مقاس مخصص ────────────────────────────────────────────────
     if st.session_state.get("m12_brick_size") == _CUSTOM_SIZE_LABEL:
-        st.markdown("<span style='font-size:0.88rem;color:#1d4ed8;font-weight:bold;'>🔧 إدخال مقاس مخصص (سم):</span>", unsafe_allow_html=True)
+        st.markdown("<span style='font-size:0.88rem;color:#ffffff;font-weight:bold;'>🔧 إدخال مقاس مخصص (سم):</span>", unsafe_allow_html=True)
         cc1, cc2, cc3 = st.columns(3)
         new_cl = cc1.number_input("الطول (L)", min_value=5.0, max_value=200.0,
                                    value=float(st.session_state.get("m12_brick_custom_l", 25.0)),
@@ -3460,147 +3659,83 @@ def _section_opening_types():
         save_settings()
 
 def _section_axes():
-    # ── اختيار طريقة إدخال شبكة المحاور ──
-    mode_options = [
-        "📏 المسافات البينية بين المحاور (Spacings) — موصى به",
-        "📍 الإحداثيات التراكمية من الصفر (Coordinates)"
-    ]
-    axis_mode = st.radio(
-        "نظام إدخال شبكة المحاور:",
-        mode_options,
-        index=0,
-        horizontal=True,
-        key="m12_axis_input_mode",
-        help="المسافات البينية: إدخال أبعاد البحور بين كل محور والذي يليه (تتيح تكرار المسافات المتساوية مثل 4م، 4م، 4م). الإحداثيات: إدخال المسافة التراكمية لكل محور من الصفر."
-    )
-    is_spacing_mode = (axis_mode == mode_options[0])
-
     cxs = st.session_state["m12_x_axes"]
     cys = st.session_state["m12_y_axes"]
 
-    # عند تبديل النمط، مزامنة مفاتيح الواجهة من الإحداثيات الحالية لتجنب أي تعارض
-    if st.session_state.get("_m12_last_axis_mode") != axis_mode:
-        st.session_state["_m12_last_axis_mode"] = axis_mode
-        for idx in range(len(cxs) - 1):
-            st.session_state[f"m12_x_sp_{idx}"] = float(round(cxs[idx + 1] - cxs[idx], 2))
-        for idx in range(len(cxs)):
-            st.session_state[f"m12_x_val_{idx}"] = float(cxs[idx])
-        for idx in range(len(cys) - 1):
-            st.session_state[f"m12_y_sp_{idx}"] = float(round(cys[idx + 1] - cys[idx], 2))
-        for idx in range(len(cys)):
-            st.session_state[f"m12_y_val_{idx}"] = float(cys[idx])
-
     # ═════════════════════════════════════════════════════════════════════════
-    # 🔴 أولاً: محاور X (الاتجاه الأفقي)
+    # 🔴 Horizontal Axes — X1, X2, X3...
     # ═════════════════════════════════════════════════════════════════════════
     st.markdown(
-        f"""<div style='display:flex;align-items:center;gap:8px;margin-top:6px;margin-bottom:6px;'>
-            <span style='background:#fee2e2;color:{_CLR_AXIS_X};font-weight:bold;padding:4px 12px;border-radius:6px;font-size:0.95rem;border:1px solid #fca5a5;'>
-                🔴 محاور X (الاتجاه الأفقي)
+        f"""<div style='display:flex;align-items:center;gap:8px;margin-top:8px;margin-bottom:18px;'>
+            <span style='background:#fee2e2;color:{_CLR_AXIS_X};font-weight:bold;padding:5px 14px;border-radius:6px;font-size:0.95rem;border:1px solid #fca5a5;white-space:nowrap;'>
+                🔴 Horizontal Axes — X1, X2, X3...
             </span>
         </div>""",
         unsafe_allow_html=True
     )
 
-    cur_nx = len(cxs)
-    if "m12_n_x" in st.session_state and st.session_state.get("_m12_synced_nx") != cur_nx:
-        st.session_state["m12_n_x"] = cur_nx
-        st.session_state["_m12_synced_nx"] = cur_nx
+    cur_ny = len(cys)
+    if "m12_n_h_axes" in st.session_state and st.session_state.get("_m12_synced_ny") != cur_ny:
+        st.session_state["m12_n_h_axes"] = cur_ny
+        st.session_state["_m12_synced_ny"] = cur_ny
 
     c_nx1, c_nx2 = st.columns([1.2, 2.8])
     with c_nx1:
-        n_x = st.number_input("عدد محاور X", min_value=2, max_value=20, value=cur_nx, step=1, key="m12_n_x")
-        n_x = int(n_x)
+        n_x_axes = st.number_input(
+            "عدد المحاور الأفقية X",
+            min_value=2,
+            max_value=20,
+            value=cur_ny,
+            step=1,
+            key="m12_n_h_axes"
+        )
+        n_x_axes = int(n_x_axes)
     with c_nx2:
-        if is_spacing_mode:
-            st.caption("📐 أدخل المسافات البينية بين كل محورين متتاليين (م) [المحور الأول X1 = 0.00م]. يمكن تكرار المسافات المتساوية بحرية:")
-        else:
-            st.caption("📍 أدخل إحداثيات كل محور بالمتر تصاعدياً من الصفر:")
+        st.caption("📐 أدخل المسافات البينية بين كل محورين أفقيين متتاليين (م) [المحور الأول X1 = 0.00م]. يمكن تكرار المسافات المتساوية بحرية:")
 
-    if is_spacing_mode:
-        # مزامنة مفاتيح الواجهة إذا تم تعديل الإحداثيات من خارج القسم
-        if st.session_state.get("_m12_synced_x_axes") != cxs:
-            for idx in range(len(cxs) - 1):
-                st.session_state[f"m12_x_sp_{idx}"] = float(round(cxs[idx + 1] - cxs[idx], 2))
-            st.session_state["_m12_synced_x_axes"] = list(cxs)
+    # مزامنة مفاتيح الواجهة إذا تم تعديل الإحداثيات من خارج القسم
+    if st.session_state.get("_m12_synced_y_axes") != cys:
+        for idx in range(len(cys) - 1):
+            st.session_state[f"m12_y_sp_{idx}"] = float(round(cys[idx + 1] - cys[idx], 2))
+        st.session_state["_m12_synced_y_axes"] = list(cys)
 
-        spacings_x = []
-        n_spans_x = n_x - 1
-        for row_start in range(0, n_spans_x, 3):
-            chunk = range(row_start, min(row_start + 3, n_spans_x))
-            cols = st.columns(3)
-            for ci, idx in enumerate(chunk):
-                if idx < len(cxs) - 1:
-                    dsp = round(cxs[idx + 1] - cxs[idx], 2)
-                elif spacings_x:
-                    dsp = spacings_x[-1]
-                else:
-                    dsp = 4.0
-                if f"m12_x_sp_{idx}" not in st.session_state:
-                    st.session_state[f"m12_x_sp_{idx}"] = float(dsp)
-                sp = cols[ci].number_input(
-                    f"المسافة X{idx+1} → X{idx+2} (م)",
-                    min_value=0.25,
-                    max_value=50.0,
-                    value=float(st.session_state[f"m12_x_sp_{idx}"]),
-                    step=0.25,
-                    format="%.2f",
-                    key=f"m12_x_sp_{idx}"
-                )
-                spacings_x.append(float(sp))
+    spacings_y = []
+    n_spans_y = n_x_axes - 1
+    for row_start in range(0, n_spans_y, 3):
+        chunk = range(row_start, min(row_start + 3, n_spans_y))
+        cols = st.columns(3)
+        for ci, idx in enumerate(chunk):
+            if idx < len(cys) - 1:
+                dsp = round(cys[idx + 1] - cys[idx], 2)
+            elif spacings_y:
+                dsp = spacings_y[-1]
+            else:
+                dsp = 3.0
+            if f"m12_y_sp_{idx}" not in st.session_state:
+                st.session_state[f"m12_y_sp_{idx}"] = float(dsp)
+            sp = cols[ci].number_input(
+                f"المسافة X{idx+1} → X{idx+2}",
+                min_value=0.25,
+                max_value=50.0,
+                value=float(st.session_state[f"m12_y_sp_{idx}"]),
+                step=0.25,
+                format="%.2f",
+                key=f"m12_y_sp_{idx}"
+            )
+            spacings_y.append(float(sp))
 
-        # حساب الإحداثيات التراكمية من الصفر
-        x_vals = [0.0]
-        for s in spacings_x:
-            x_vals.append(round(x_vals[-1] + s, 3))
+    # حساب الإحداثيات التراكمية للمحاور الأفقية
+    y_vals = [0.0]
+    for s in spacings_y:
+        y_vals.append(round(y_vals[-1] + s, 3))
 
-        summary_x = " | ".join(f"X{i+1}: {xv:.2f}م" for i, xv in enumerate(x_vals))
-        st.info(f"📍 **مواقع محاور X على المخطط:** {summary_x} (الطول الكلي Lx = {x_vals[-1]:.2f}م)")
-
-        if x_vals != cxs:
-            st.session_state["m12_x_axes"] = x_vals
-            st.session_state["_m12_synced_x_axes"] = list(x_vals)
-            st.session_state["_m12_synced_nx"] = len(x_vals)
-            _sanitize_and_prune_grid_data()
-            _normalize_wall_keys()
-            save_settings()
-
-    else:
-        if st.session_state.get("_m12_synced_x_coords") != cxs:
-            for idx, xv in enumerate(cxs):
-                st.session_state[f"m12_x_val_{idx}"] = float(xv)
-            st.session_state["_m12_synced_x_coords"] = list(cxs)
-
-        x_vals = []
-        for row_start in range(0, n_x, 4):
-            chunk = range(row_start, min(row_start + 4, n_x))
-            cols = st.columns(4)
-            for ci, idx in enumerate(chunk):
-                dv = cxs[idx] if idx < len(cxs) else (cxs[-1] + 3.0 if cxs else float(idx * 3))
-                if f"m12_x_val_{idx}" not in st.session_state:
-                    st.session_state[f"m12_x_val_{idx}"] = float(dv)
-                v = cols[ci].number_input(
-                    f"X{idx+1} (م)",
-                    value=float(st.session_state[f"m12_x_val_{idx}"]),
-                    step=0.25,
-                    format="%.2f",
-                    key=f"m12_x_val_{idx}"
-                )
-                x_vals.append(float(v))
-
-        if sorted(x_vals) != x_vals:
-            st.error("⚠️ في نمط الإحداثيات، يجب أن تكون قيم محاور X تصاعدية من البداية للنهاية!")
-        elif len(set(round(v, 4) for v in x_vals)) < len(x_vals):
-            st.error("⚠️ لا يمكن تكرار نفس الإحداثي لمحورين! إذا كنت تقصد بحوراً متساوية (4م، 4م)، يُرجى اختيار نمط 'المسافات البينية' أعلاه.")
-        else:
-            if x_vals != cxs:
-                st.session_state["m12_x_axes"] = x_vals
-                st.session_state["_m12_synced_x_axes"] = list(x_vals)
-                st.session_state["_m12_synced_x_coords"] = list(x_vals)
-                st.session_state["_m12_synced_nx"] = len(x_vals)
-                _sanitize_and_prune_grid_data()
-                _normalize_wall_keys()
-                save_settings()
+    if y_vals != cys:
+        st.session_state["m12_y_axes"] = y_vals
+        st.session_state["_m12_synced_y_axes"] = list(y_vals)
+        st.session_state["_m12_synced_ny"] = len(y_vals)
+        _sanitize_and_prune_grid_data()
+        _normalize_wall_keys()
+        save_settings()
 
     # ─────────────────────────────────────────────────────────────────────────
     # فاصل أنيق بين محاور X ومحاور Y
@@ -3608,114 +3743,141 @@ def _section_axes():
     st.markdown("<hr style='margin:18px 0;border:0;border-top:1.5px dashed #cbd5e1;'>", unsafe_allow_html=True)
 
     # ═════════════════════════════════════════════════════════════════════════
-    # 🔵 ثانياً: محاور Y (الاتجاه الرأسي)
+    # 🔵 Vertical Axes — Y1, Y2, Y3...
     # ═════════════════════════════════════════════════════════════════════════
     st.markdown(
-        f"""<div style='display:flex;align-items:center;gap:8px;margin-top:2px;margin-bottom:6px;'>
-            <span style='background:#dbeafe;color:{_CLR_AXIS_Y};font-weight:bold;padding:4px 12px;border-radius:6px;font-size:0.95rem;border:1px solid #93c5fd;'>
-                🔵 محاور Y (الاتجاه الرأسي)
+        f"""<div style='display:flex;align-items:center;gap:8px;margin-top:10px;margin-bottom:18px;'>
+            <span style='background:#1e40af;color:#ffffff;font-weight:bold;padding:5px 14px;border-radius:6px;font-size:0.95rem;border:1px solid #3b82f6;white-space:nowrap;'>
+                🔵 Vertical Axes — Y1, Y2, Y3...
             </span>
         </div>""",
         unsafe_allow_html=True
     )
 
-    cur_ny = len(cys)
-    if "m12_n_y" in st.session_state and st.session_state.get("_m12_synced_ny") != cur_ny:
-        st.session_state["m12_n_y"] = cur_ny
-        st.session_state["_m12_synced_ny"] = cur_ny
+    cur_nx = len(cxs)
+    if "m12_n_v_axes" in st.session_state and st.session_state.get("_m12_synced_nx") != cur_nx:
+        st.session_state["m12_n_v_axes"] = cur_nx
+        st.session_state["_m12_synced_nx"] = cur_nx
 
     c_ny1, c_ny2 = st.columns([1.2, 2.8])
     with c_ny1:
-        n_y = st.number_input("عدد محاور Y", min_value=2, max_value=20, value=cur_ny, step=1, key="m12_n_y")
-        n_y = int(n_y)
+        n_y_axes = st.number_input(
+            "عدد المحاور الرأسية Y",
+            min_value=2,
+            max_value=20,
+            value=cur_nx,
+            step=1,
+            key="m12_n_v_axes"
+        )
+        n_y_axes = int(n_y_axes)
     with c_ny2:
-        if is_spacing_mode:
-            st.caption("📐 أدخل المسافات البينية بين كل محورين متتاليين (م) [المحور الأول Y1 = 0.00م]. يمكن تكرار المسافات المتساوية بحرية:")
+        st.caption("📐 أدخل المسافات البينية بين كل محورين رأسيين متتاليين (م) [المحور الأول Y1 = 0.00م]. يمكن تكرار المسافات المتساوية بحرية:")
+
+    # مزامنة مفاتيح الواجهة إذا تم تعديل الإحداثيات من خارج القسم
+    if st.session_state.get("_m12_synced_x_axes") != cxs:
+        for idx in range(len(cxs) - 1):
+            st.session_state[f"m12_x_sp_{idx}"] = float(round(cxs[idx + 1] - cxs[idx], 2))
+        st.session_state["_m12_synced_x_axes"] = list(cxs)
+
+    spacings_x = []
+    n_spans_x = n_y_axes - 1
+    for row_start in range(0, n_spans_x, 3):
+        chunk = range(row_start, min(row_start + 3, n_spans_x))
+        cols = st.columns(3)
+        for ci, idx in enumerate(chunk):
+            if idx < len(cxs) - 1:
+                dsp = round(cxs[idx + 1] - cxs[idx], 2)
+            elif spacings_x:
+                dsp = spacings_x[-1]
+            else:
+                dsp = 4.0
+            if f"m12_x_sp_{idx}" not in st.session_state:
+                st.session_state[f"m12_x_sp_{idx}"] = float(dsp)
+            sp = cols[ci].number_input(
+                f"المسافة Y{idx+1} → Y{idx+2}",
+                min_value=0.25,
+                max_value=50.0,
+                value=float(st.session_state[f"m12_x_sp_{idx}"]),
+                step=0.25,
+                format="%.2f",
+                key=f"m12_x_sp_{idx}"
+            )
+            spacings_x.append(float(sp))
+
+    # حساب الإحداثيات التراكمية للمحاور الرأسية
+    x_vals = [0.0]
+    for s in spacings_x:
+        x_vals.append(round(x_vals[-1] + s, 3))
+
+    if x_vals != cxs:
+        st.session_state["m12_x_axes"] = x_vals
+        st.session_state["_m12_synced_x_axes"] = list(x_vals)
+        st.session_state["_m12_synced_nx"] = len(x_vals)
+        _sanitize_and_prune_grid_data()
+        _normalize_wall_keys()
+        save_settings()
+
+def _confirm_delete_wall(wk):
+    """
+    تأكيد وحذف الحائط المحدد:
+    - إضافة مفتاح الحائط إلى مجموعة الحوائط المحذوفة m12_wall_removed.
+    - تصفير الحائط المعلق m12_pending_delete_wall.
+    - تحديث كاش صورة المسقط وحفظ الإعدادات.
+    - إظهار إشعار تأكيد مع إبقاء إمكانية الاستعادة في أي وقت.
+    """
+    if not wk or len(wk) != 4:
+        return
+    wk = tuple(int(x) for x in wk)
+    removed_walls = st.session_state.get("m12_wall_removed", set())
+    if not isinstance(removed_walls, set):
+        removed_walls = set(removed_walls)
+    removed_walls.add(wk)
+    st.session_state["m12_wall_removed"] = removed_walls
+    st.session_state["m12_pending_delete_wall"] = None
+    st.session_state.pop("m12_plan_png_b64", None)
+    save_settings()
+    cm = _get_col_name_map()
+    wm = _get_wall_name_map()
+    lbl = _wall_display_label(wk, cm, wm)
+    st.toast(f"🗑️ تم حذف الحائط ({lbl}) بنجاح! يمكنك استعادته في أي وقت من قسم استعادة الحوائط.", icon="🗑️")
+    st.rerun()
+
+
+def _execute_select_delete_wall_box(data):
+    """التقاط الحائط المحدد بواسطة الصندوق وتخزينه كحائط معلق لطلب تأكيد الحذف."""
+    wk_raw = data.get("wk")
+    if not wk_raw or len(wk_raw) != 4:
+        return
+    wk = tuple(int(x) for x in wk_raw)
+    all_walls = _get_all_walls()
+    if wk not in all_walls:
+        rev = (wk[2], wk[3], wk[0], wk[1])
+        if rev in all_walls:
+            wk = rev
         else:
-            st.caption("📍 أدخل إحداثيات كل محور بالمتر تصاعدياً من الصفر:")
+            return
 
-    if is_spacing_mode:
-        if st.session_state.get("_m12_synced_y_axes") != cys:
-            for idx in range(len(cys) - 1):
-                st.session_state[f"m12_y_sp_{idx}"] = float(round(cys[idx + 1] - cys[idx], 2))
-            st.session_state["_m12_synced_y_axes"] = list(cys)
+    cm = _get_col_name_map()
+    wm = _get_wall_name_map()
+    lbl = _wall_display_label(wk, cm, wm)
 
-        spacings_y = []
-        n_spans_y = n_y - 1
-        for row_start in range(0, n_spans_y, 3):
-            chunk = range(row_start, min(row_start + 3, n_spans_y))
-            cols = st.columns(3)
-            for ci, idx in enumerate(chunk):
-                if idx < len(cys) - 1:
-                    dsp = round(cys[idx + 1] - cys[idx], 2)
-                elif spacings_y:
-                    dsp = spacings_y[-1]
-                else:
-                    dsp = 4.0
-                if f"m12_y_sp_{idx}" not in st.session_state:
-                    st.session_state[f"m12_y_sp_{idx}"] = float(dsp)
-                sp = cols[ci].number_input(
-                    f"المسافة Y{idx+1} → Y{idx+2} (م)",
-                    min_value=0.25,
-                    max_value=50.0,
-                    value=float(st.session_state[f"m12_y_sp_{idx}"]),
-                    step=0.25,
-                    format="%.2f",
-                    key=f"m12_y_sp_{idx}"
-                )
-                spacings_y.append(float(sp))
+    st.session_state["m12_pending_delete_wall"] = wk
+    st.session_state["m12_del_wall_mode"] = True
+    save_settings()
+    st.toast(f"🎯 تم تحديد الحائط ({lbl}) — يرجى تأكيد الحذف!", icon="🗑️")
+    st.rerun()
 
-        y_vals = [0.0]
-        for s in spacings_y:
-            y_vals.append(round(y_vals[-1] + s, 3))
 
-        summary_y = " | ".join(f"Y{j+1}: {yv:.2f}م" for j, yv in enumerate(y_vals))
-        st.info(f"📍 **مواقع محاور Y على المخطط:** {summary_y} (الطول الكلي Ly = {y_vals[-1]:.2f}م)")
+def _execute_confirm_delete_wall_box(data):
+    """تنفيذ حذف الحائط بعد التأكيد من الصندوق أو النافذة التفاعلية."""
+    wk_raw = data.get("wk")
+    if not wk_raw and st.session_state.get("m12_pending_delete_wall"):
+        wk_raw = st.session_state.get("m12_pending_delete_wall")
+    if not wk_raw or len(wk_raw) != 4:
+        return
+    wk = tuple(int(x) for x in wk_raw)
+    _confirm_delete_wall(wk)
 
-        if y_vals != cys:
-            st.session_state["m12_y_axes"] = y_vals
-            st.session_state["_m12_synced_y_axes"] = list(y_vals)
-            st.session_state["_m12_synced_ny"] = len(y_vals)
-            _sanitize_and_prune_grid_data()
-            _normalize_wall_keys()
-            save_settings()
-
-    else:
-        if st.session_state.get("_m12_synced_y_coords") != cys:
-            for idx, yv in enumerate(cys):
-                st.session_state[f"m12_y_val_{idx}"] = float(yv)
-            st.session_state["_m12_synced_y_coords"] = list(cys)
-
-        y_vals = []
-        for row_start in range(0, n_y, 4):
-            chunk = range(row_start, min(row_start + 4, n_y))
-            cols = st.columns(4)
-            for ci, idx in enumerate(chunk):
-                dv = cys[idx] if idx < len(cys) else (cys[-1] + 3.0 if cys else float(idx * 3))
-                if f"m12_y_val_{idx}" not in st.session_state:
-                    st.session_state[f"m12_y_val_{idx}"] = float(dv)
-                v = cols[ci].number_input(
-                    f"Y{idx+1} (م)",
-                    value=float(st.session_state[f"m12_y_val_{idx}"]),
-                    step=0.25,
-                    format="%.2f",
-                    key=f"m12_y_val_{idx}"
-                )
-                y_vals.append(float(v))
-
-        if sorted(y_vals) != y_vals:
-            st.error("⚠️ في نمط الإحداثيات، يجب أن تكون قيم محاور Y تصاعدية من البداية للنهاية!")
-        elif len(set(round(v, 4) for v in y_vals)) < len(y_vals):
-            st.error("⚠️ لا يمكن تكرار نفس الإحداثي لمحورين! إذا كنت تقصد بحوراً متساوية (4م، 4م)، يُرجى اختيار نمط 'المسافات البينية' أعلاه.")
-        else:
-            if y_vals != cys:
-                st.session_state["m12_y_axes"] = y_vals
-                st.session_state["_m12_synced_y_axes"] = list(y_vals)
-                st.session_state["_m12_synced_y_coords"] = list(y_vals)
-                st.session_state["_m12_synced_ny"] = len(y_vals)
-                _sanitize_and_prune_grid_data()
-                _normalize_wall_keys()
-                save_settings()
 
 def _execute_add_column_box(data):
     """تنفيذ إسقاط ورسم العمود عند التقاطع المحدد بالصندوق وتحديث الحالة فوراً."""
@@ -3772,27 +3934,16 @@ def _execute_add_column_box(data):
     model_name = str(st.session_state.get("m12_new_col_model", "C1: 25x60"))
     b_cm = float(st.session_state.get("m12_new_col_b", 25.0))
     t_cm = float(st.session_state.get("m12_new_col_t", 60.0))
-    col_dir_choice = str(st.session_state.get("m12_new_col_dir", "رأسي"))
-    dir_code = "NS" if col_dir_choice == "رأسي" else "EW"
-    col_anchor = str(st.session_state.get("m12_new_col_anchor", "السنتر"))
-    corner_choice = str(st.session_state.get("m12_new_col_corner", "أعلى اليمين"))
+    cur_dirs = st.session_state.get("m12_col_dirs", {})
+    cur_shifts = st.session_state.get("m12_col_shifts", {})
+    dir_code = cur_dirs.get((target_i, target_j), "NS")
+    col_dir_choice = "رأسي" if dir_code == "NS" else "أفقي"
+    col_anchor = "السنتر"
+    corner_choice = "أعلى اليمين"
 
-    if col_anchor == "السنتر":
-        shift_x = "متمركز على المحور"
-        shift_y = "متمركز على المحور"
-    else:
-        if corner_choice == "أعلى اليمين":
-            shift_x = M12_SHIFT_X_OPTIONS[1]
-            shift_y = M12_SHIFT_Y_OPTIONS[1]
-        elif corner_choice == "أعلى اليسار":
-            shift_x = M12_SHIFT_X_OPTIONS[2]
-            shift_y = M12_SHIFT_Y_OPTIONS[1]
-        elif corner_choice == "أسفل اليمين":
-            shift_x = M12_SHIFT_X_OPTIONS[1]
-            shift_y = M12_SHIFT_Y_OPTIONS[2]
-        else:
-            shift_x = M12_SHIFT_X_OPTIONS[2]
-            shift_y = M12_SHIFT_Y_OPTIONS[2]
+    existing_tr = cur_shifts.get((target_i, target_j), {})
+    shift_x = existing_tr.get("shift_x", M12_SHIFT_X_OPTIONS[0])
+    shift_y = existing_tr.get("shift_y", M12_SHIFT_Y_OPTIONS[0])
 
     # تحديث مجموعات الأعمدة الموضوعة والمحذوفة
     placed_set = st.session_state.get("m12_col_placed", set())
@@ -3839,9 +3990,9 @@ def _execute_add_column_box(data):
     st.session_state["m12_col_shifted"] = col_shifted
 
     if is_existing:
-        st.toast(f"🔄 تم تحديث مواصفات العمود {model_name} عند تقاطع X{target_i+1} × Y{target_j+1} بنجاح!", icon="🏗️")
+        st.toast(f"🔄 تم تحديث مواصفات العمود {model_name} عند تقاطع Y{target_i+1} × X{target_j+1} بنجاح!", icon="🏗️")
     else:
-        st.toast(f"✅ تم إضافة العمود {model_name} عند تقاطع X{target_i+1} × Y{target_j+1} بنجاح!", icon="🏗️")
+        st.toast(f"✅ تم إضافة العمود {model_name} عند تقاطع Y{target_i+1} × X{target_j+1} بنجاح!", icon="🏗️")
     st.session_state["m12_add_col_mode"] = True
     st.rerun()
 
@@ -3903,14 +4054,14 @@ def _execute_restore_column_box(data):
     if not is_deleted:
         active_cols = _get_active_columns()
         if (target_i, target_j) in active_cols:
-            st.toast(f"ℹ️ العمود عند تقاطع X{target_i+1} × Y{target_j+1} قائم ونشط بالفعل!", icon="ℹ️")
+            st.toast(f"ℹ️ العمود عند تقاطع Y{target_i+1} × X{target_j+1} قائم ونشط بالفعل!", icon="ℹ️")
         else:
-            st.toast(f"⚠️ لا يوجد عمود محذوف مسجل عند تقاطع X{target_i+1} × Y{target_j+1} لاستعادته!", icon="⚠️")
+            st.toast(f"⚠️ لا يوجد عمود محذوف مسجل عند تقاطع Y{target_i+1} × X{target_j+1} لاستعادته!", icon="⚠️")
         return
 
     # استرجاع الخصائص الأصلية الكاملة من سجل المحذوفات
     hist_props = deleted_history.get((target_i, target_j), {})
-    model_name = hist_props.get("model", f"C(X{target_i+1},Y{target_j+1})")
+    model_name = hist_props.get("model", f"C(Y{target_i+1},X{target_j+1})")
     b_cm = hist_props.get("b_cm", st.session_state.get("m12_col_width_cm", 30.0))
     t_cm = hist_props.get("t_cm", st.session_state.get("m12_col_length_cm", 60.0))
     dir_code = hist_props.get("dir_code", hist_props.get("dir", "NS"))
@@ -3960,7 +4111,7 @@ def _execute_restore_column_box(data):
 
     st.session_state.pop("m12_plan_png_b64", None)
     save_settings()
-    st.toast(f"♻️ تم استعادة العمود {model_name} عند تقاطع X{target_i+1} × Y{target_j+1} بنجاح بكامل خصائصه الأصلية!", icon="♻️")
+    st.toast(f"♻️ تم استعادة العمود {model_name} عند تقاطع Y{target_i+1} × X{target_j+1} بنجاح بكامل خصائصه الأصلية!", icon="♻️")
     st.session_state["m12_restore_col_mode"] = True
     st.rerun()
 
@@ -4002,8 +4153,16 @@ def _handle_sync_payload(payload_str=None):
         if action == "exit_box_mode":
             st.session_state["m12_add_col_mode"] = False
             st.session_state["m12_restore_col_mode"] = False
+            st.session_state["m12_del_wall_mode"] = False
+            st.session_state["m12_pending_delete_wall"] = None
             save_settings()
             st.rerun()
+
+        elif action in ["select_delete_wall_box", "select_delete_wall"]:
+            _execute_select_delete_wall_box(data)
+
+        elif action in ["confirm_delete_wall_box", "confirm_delete_wall"]:
+            _execute_confirm_delete_wall_box(data)
 
         elif action in ["add_column_box", "add_column"]:
             _execute_add_column_box(data)
@@ -4049,7 +4208,7 @@ def _section_add_columns():
 
     is_add_active = bool(st.session_state.get("m12_add_col_mode", False))
 
-    st.markdown("<div style='font-size:0.95rem; font-weight:700; color:#1e293b; margin-bottom:6px;'>🏗️ نموذج وإعدادات العمود الجديد</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:0.95rem; font-weight:700; color:#ffffff; margin-bottom:6px;'>🏗️ نموذج وإعدادات العمود الجديد</div>", unsafe_allow_html=True)
 
     col_models_presets = [
         "C1: 25x60",
@@ -4113,39 +4272,86 @@ def _section_add_columns():
             help="عمق / طول العمود بالسنتمتر"
         )
 
-    col_dir = st.radio(
-        "اتجاه العمود (ضرب العمود):",
-        options=["رأسي", "أفقي"],
-        format_func=lambda d: "رأسي (موازٍ لمحور Y)" if d == "رأسي" else "أفقي (موازٍ لمحور X)",
-        index=0 if st.session_state.get("m12_new_col_dir", "رأسي") == "رأسي" else 1,
-        horizontal=True,
-        key="m12_new_col_dir"
-    )
-
-    col_anchor = st.radio(
-        "نقطة الارتكاز:",
-        options=["السنتر", "محاذاة أركان"],
-        index=0 if st.session_state.get("m12_new_col_anchor", "السنتر") == "السنتر" else 1,
-        horizontal=True,
-        key="m12_new_col_anchor"
-    )
-
-    if col_anchor == "محاذاة أركان":
-        corner_opts = ["أعلى اليمين", "أعلى اليسار", "أسفل اليمين", "أسفل اليسار"]
-        cur_corner = st.session_state.get("m12_new_col_corner", "أعلى اليمين")
-        corner_idx = corner_opts.index(cur_corner) if cur_corner in corner_opts else 0
-        st.selectbox(
-            "ركن المحاذاة بالنسبة لتقاطع المحاور:",
-            options=corner_opts,
-            index=corner_idx,
-            key="m12_new_col_corner",
-            help="محاذاة جسم العمود في أحد أركان تقاطع المحاور (ترحيل 6 سم القياسي)"
-        )
-
     st.markdown("<hr style='margin: 10px 0 12px 0; border: none; border-top: 1px solid #e2e8f0;'>", unsafe_allow_html=True)
 
+    st.markdown("<div style='font-size:0.90rem; font-weight:700; color:#ffffff; margin-bottom:4px;'>📍 إضافة عمود باختيار تقاطع المحاور:</div>", unsafe_allow_html=True)
+    all_inter = [(i, j) for j in range(len(ys)) for i in range(len(xs))]
+    active_cols = _get_active_columns()
+
+    def _inter_label(idx):
+        i, j = all_inter[idx]
+        status = "✅ قائم" if (i, j) in active_cols else "⚪ شاغر"
+        return f"Y{i+1} × X{j+1}  [Y={xs[i]:.2f}م، X={ys[j]:.2f}م]  — {status}"
+
+    sel_inter_idx = st.selectbox(
+        "اختر تقاطع المحاور:",
+        options=range(len(all_inter)),
+        format_func=_inter_label,
+        key="m12_add_col_dropdown_inter"
+    )
+    sel_i, sel_j = all_inter[sel_inter_idx]
+    is_already_active = (sel_i, sel_j) in active_cols
+    btn_text = f"➕ إضافة / تحديث العمود عند تقاطع Y{sel_i+1} × X{sel_j+1}"
+    if st.button(btn_text, type="primary" if not is_already_active else "secondary", use_container_width=True, key="m12_btn_add_col_by_dropdown"):
+        b_cm = float(st.session_state.get("m12_new_col_b", 25.0))
+        t_cm = float(st.session_state.get("m12_new_col_t", 60.0))
+        model_name = st.session_state.get("m12_new_col_model", "C1: 25x60")
+
+        # الحفاظ على اتجاه وترحيل العمود إن كان محدداً مسبقاً، وإلا فالافتراضي رأسي ومتمركز
+        cur_dirs = st.session_state.get("m12_col_dirs", {})
+        cur_shifts = st.session_state.get("m12_col_shifts", {})
+        dir_code = cur_dirs.get((sel_i, sel_j), "NS")
+        dir_ar = "رأسي" if dir_code == "NS" else "أفقي"
+        existing_tr = cur_shifts.get((sel_i, sel_j), {})
+        shift_x = existing_tr.get("shift_x", M12_SHIFT_X_OPTIONS[0])
+        shift_y = existing_tr.get("shift_y", M12_SHIFT_Y_OPTIONS[0])
+        anchor = "السنتر"
+        corner = "أعلى اليمين"
+
+        placed_set = st.session_state.get("m12_col_placed", set())
+        if not isinstance(placed_set, set): placed_set = set(placed_set)
+        placed_set.add((sel_i, sel_j))
+        st.session_state["m12_col_placed"] = placed_set
+
+        rem_cols = st.session_state.get("m12_col_removed", set())
+        if not isinstance(rem_cols, set): rem_cols = set(rem_cols)
+        rem_cols.discard((sel_i, sel_j))
+        st.session_state["m12_col_removed"] = rem_cols
+
+        col_props = st.session_state.setdefault("m12_col_props", {})
+        col_props[(sel_i, sel_j)] = {
+            "model": model_name, "b_cm": b_cm, "t_cm": t_cm,
+            "dir": dir_ar, "dir_code": dir_code,
+            "anchor": anchor, "corner": corner,
+            "shift_x": shift_x, "shift_y": shift_y
+        }
+        st.session_state["m12_col_props"] = col_props
+
+        col_dirs = st.session_state.setdefault("m12_col_dirs", {})
+        col_dirs[(sel_i, sel_j)] = dir_code
+        st.session_state["m12_col_dirs"] = col_dirs
+
+        col_shifts = st.session_state.setdefault("m12_col_shifts", {})
+        col_shifts[(sel_i, sel_j)] = {"shift_x": shift_x, "shift_y": shift_y}
+        st.session_state["m12_col_shifts"] = col_shifts
+
+        cw = (b_cm / 100.0) if dir_code == "NS" else (t_cm / 100.0)
+        ch = (t_cm / 100.0) if dir_code == "NS" else (b_cm / 100.0)
+        dx_m, dy_m = _compute_col_offsets(cw, ch, shift_x, shift_y)
+        col_shifted = st.session_state.setdefault("m12_col_shifted", {})
+        col_shifted[(sel_i, sel_j)] = (dx_m * 100.0, dy_m * 100.0)
+        st.session_state["m12_col_shifted"] = col_shifted
+
+        st.session_state.pop("m12_plan_png_b64", None)
+        save_settings()
+        st.toast(f"✅ تم إضافة/تحديث العمود {model_name} عند تقاطع Y{sel_i+1} × X{sel_j+1} بنجاح!", icon="🏗️")
+        st.rerun()
+
+    st.markdown("<hr style='margin: 10px 0 12px 0; border: none; border-top: 1px dashed #cbd5e1;'>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:0.90rem; font-weight:700; color:#ffffff; margin-bottom:4px;'>🎯 أو التحديد التفاعلي بالسحب على المسقط:</div>", unsafe_allow_html=True)
+
     if not is_add_active:
-        if st.button("🎯 اختيار عمود على المسقط الأفقي", type="primary", use_container_width=True, key="m12_btn_start_add_col"):
+        if st.button("🎯 تفعيل اختيار عمود بالسحب على المسقط", type="secondary", use_container_width=True, key="m12_btn_start_add_col"):
             st.session_state["m12_add_col_mode"] = True
             st.session_state["m12_restore_col_mode"] = False
             st.session_state["m12_rc_view_mode"] = "plan"
@@ -4153,12 +4359,12 @@ def _section_add_columns():
             st.rerun()
     else:
         st.markdown(
-            """<div style='background: linear-gradient(135deg, #eff6ff, #dbeafe); border: 2px solid #3b82f6; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px;' dir='rtl'>
-                <div style='display: flex; align-items: center; gap: 8px; font-weight: 700; color: #1e40af; font-size: 0.92rem;'>
+            """<div style='background: linear-gradient(135deg, rgba(30, 58, 138, 0.90), rgba(30, 64, 175, 0.90)); border: 2px solid #3b82f6; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px;' dir='rtl'>
+                <div style='display: flex; align-items: center; gap: 8px; font-weight: 700; color: #ffffff; font-size: 0.92rem;'>
                     <span>🎯</span>
                     <span>اختر بالماوس صندوقاً يكون بداخله تقاطع المحورين الواقع العمود بداخله</span>
                 </div>
-                <div style='font-size: 0.80rem; color: #3b82f6; margin-top: 4px;'>
+                <div style='font-size: 0.80rem; color: #f1f5f9; margin-top: 4px;'>
                     اسحب مؤشر الماوس فوق تقاطع المحاور المطلوب في المسقط الأفقي (باليمين). يستمر الوضع نشطاً لرسم أعمدة أخرى تباعاً.
                 </div>
             </div>""",
@@ -4168,10 +4374,234 @@ def _section_add_columns():
             st.session_state["m12_add_col_mode"] = False
             st.rerun()
 
+    c_b1, c_b2 = st.columns(2)
+    with c_b1:
+        if st.button("🏗️ وضع كافة الأعمدة على المحاور", key="m12_btn_bulk_add_all_cols", use_container_width=True, help="إسقاط أعمدة على كافة تقاطعات المحاور بالنموذج المختار"):
+            b_cm = float(st.session_state.get("m12_new_col_b", 25.0))
+            t_cm = float(st.session_state.get("m12_new_col_t", 60.0))
+            model_name = st.session_state.get("m12_new_col_model", "C1: 25x60")
+            dir_ar = "رأسي"
+            dir_code = "NS"
+            anchor = "السنتر"
+            corner = "أعلى اليمين"
+            shift_x = M12_SHIFT_X_OPTIONS[0]
+            shift_y = M12_SHIFT_Y_OPTIONS[0]
+
+            cw = (b_cm / 100.0) if dir_code == "NS" else (t_cm / 100.0)
+            ch = (t_cm / 100.0) if dir_code == "NS" else (b_cm / 100.0)
+            dx_m, dy_m = _compute_col_offsets(cw, ch, shift_x, shift_y)
+
+            placed_set = set(all_inter)
+            st.session_state["m12_col_placed"] = placed_set
+            st.session_state["m12_col_removed"] = set()
+
+            col_props = st.session_state.setdefault("m12_col_props", {})
+            col_dirs = st.session_state.setdefault("m12_col_dirs", {})
+            col_shifts = st.session_state.setdefault("m12_col_shifts", {})
+            col_shifted = st.session_state.setdefault("m12_col_shifted", {})
+
+            for (i, j) in all_inter:
+                col_props[(i, j)] = {
+                    "model": model_name, "b_cm": b_cm, "t_cm": t_cm,
+                    "dir": dir_ar, "dir_code": dir_code,
+                    "anchor": anchor, "corner": corner,
+                    "shift_x": shift_x, "shift_y": shift_y
+                }
+                col_dirs[(i, j)] = dir_code
+                col_shifts[(i, j)] = {"shift_x": shift_x, "shift_y": shift_y}
+                col_shifted[(i, j)] = (dx_m * 100.0, dy_m * 100.0)
+
+            st.session_state.pop("m12_plan_png_b64", None)
+            save_settings()
+            st.toast("✅ تم وضع أعمدة على كافة تقاطعات المحاور بنجاح!", icon="🏗️")
+            st.rerun()
+
+    with c_b2:
+        st.markdown(
+            f"<div style='font-size:0.80rem; color:#64748b; padding-top:8px;'>📊 الأعمدة القائمة: <b>{len(active_cols)}</b> من أصل <b>{len(all_inter)}</b> تقاطع محاور</div>",
+            unsafe_allow_html=True
+        )
+
+
+def _section_column_orientations():
+    """
+    قسم ضبط اتجاهات وضرب الأعمدة (Column Orientations & Offsets):
+    بنفس فلسفة موديول 1 (قسم Structural Geometry Sketch & Verification)
+    يحتوي فقط على المدخلات الأربعة التالية:
+    1. اسم العمود (اختيار العمود القائم مع كود التقاطع Y{i+1} × X{j+1})
+    2. اتجاه ضرب العمود (رأسي موازٍ لـ Y / أفقي موازٍ لـ X)
+    3. الترحيل الأفقي (X)
+    4. الترحيل الرأسي (Y)
+    دون تحديد أعمدة جار أو اتجاهاتها.
+    """
+    xs = st.session_state.get("m12_x_axes", [])
+    ys = st.session_state.get("m12_y_axes", [])
+    if len(xs) < 1 or len(ys) < 1:
+        st.info("⚠️ أدخل محاور X و Y أولاً في قسم 'شبكة المحاور'.")
+        return
+
     active_cols = _get_active_columns()
-    all_inter = [(i, j) for j in range(len(ys)) for i in range(len(xs))]
+    if not active_cols:
+        st.info("💡 لا توجد أعمدة قائمة حالياً. أضف أعمدة أولاً من قسم '➕ إضافة الأعمدة على المحاور'.")
+        return
+
+    cn = _get_col_name_map()
+    col_dirs = st.session_state.setdefault("m12_col_dirs", {})
+    col_shifts = st.session_state.setdefault("m12_col_shifts", {})
+    col_shifted = st.session_state.setdefault("m12_col_shifted", {})
+    col_props = st.session_state.setdefault("m12_col_props", {})
+
+    def _col_opt_label(coord):
+        i, j = coord
+        orig_cname = f"C{j * len(xs) + i + 1}"
+        cname = cn.get((i, j), orig_cname)
+        return f"{cname} — (Y{i+1} × X{j+1}) [Y={xs[i]:.2f}م، X={ys[j]:.2f}م]"
+
+    cur_sel = st.session_state.get("m12_col_orient_sel")
+    if cur_sel not in active_cols:
+        cur_sel = active_cols[0]
+        st.session_state["m12_col_orient_sel"] = cur_sel
+
+    sel_coord = st.selectbox(
+        "اسم العمود",
+        options=active_cols,
+        index=active_cols.index(cur_sel),
+        format_func=_col_opt_label,
+        key="m12_col_orient_sel",
+        help="اختر العمود المراد ضبط ضربه وترحيله من المسقط الأفقي الحالي."
+    )
+    si, sj = sel_coord
+
+    # قراءة بيانات العمود المختار
+    cur_dir_code = col_dirs.get((si, sj), "NS")
+    DIR_OPTIONS = ["رأسي (موازٍ لمحور Y)", "أفقي (موازٍ لمحور X)"]
+    idx_dir = 0 if cur_dir_code == "NS" else 1
+
+    cur_tr = col_shifts.get((si, sj), {})
+    if not cur_tr:
+        leg_dx, leg_dy = col_shifted.get((si, sj), (0.0, 0.0))
+        sx_init = M12_SHIFT_X_OPTIONS[0]
+        if leg_dx > 0.01:
+            sx_init = M12_SHIFT_X_OPTIONS[1]
+        elif leg_dx < -0.01:
+            sx_init = M12_SHIFT_X_OPTIONS[2]
+        sy_init = M12_SHIFT_Y_OPTIONS[0]
+        if leg_dy > 0.01:
+            sy_init = M12_SHIFT_Y_OPTIONS[1]
+        elif leg_dy < -0.01:
+            sy_init = M12_SHIFT_Y_OPTIONS[2]
+        cur_tr = {"shift_x": sx_init, "shift_y": sy_init}
+        col_shifts[(si, sj)] = cur_tr
+
+    norm_cur_sx = _normalize_m12_col_shift(cur_tr.get("shift_x"), axis="x")
+    norm_cur_sy = _normalize_m12_col_shift(cur_tr.get("shift_y"), axis="y")
+
+    idx_sx = M12_SHIFT_X_OPTIONS.index(norm_cur_sx) if norm_cur_sx in M12_SHIFT_X_OPTIONS else 0
+    idx_sy = M12_SHIFT_Y_OPTIONS.index(norm_cur_sy) if norm_cur_sy in M12_SHIFT_Y_OPTIONS else 0
+
+    k_dir = f"m12_orient_dir_{si}_{sj}"
+    k_sx = f"m12_orient_sx_{si}_{sj}"
+    k_sy = f"m12_orient_sy_{si}_{sj}"
+
+    def _apply_orient_update():
+        dir_val = st.session_state.get(k_dir)
+        sx_val = st.session_state.get(k_sx)
+        sy_val = st.session_state.get(k_sy)
+
+        new_dc = "NS" if dir_val and "رأسي" in str(dir_val) else "EW"
+        norm_sx = _normalize_m12_col_shift(sx_val, axis="x")
+        norm_sy = _normalize_m12_col_shift(sy_val, axis="y")
+
+        cdirs = st.session_state.setdefault("m12_col_dirs", {})
+        cdirs[(si, sj)] = new_dc
+        st.session_state["m12_col_dirs"] = cdirs
+
+        cshifts = st.session_state.setdefault("m12_col_shifts", {})
+        cshifts[(si, sj)] = {"shift_x": norm_sx, "shift_y": norm_sy}
+        st.session_state["m12_col_shifts"] = cshifts
+
+        cprops = st.session_state.setdefault("m12_col_props", {})
+        cp = cprops.setdefault((si, sj), {})
+        cp["dir"] = "رأسي" if new_dc == "NS" else "أفقي"
+        cp["dir_code"] = new_dc
+        cp["shift_x"] = norm_sx
+        cp["shift_y"] = norm_sy
+        st.session_state["m12_col_props"] = cprops
+
+        cw_now, ch_now = _get_col_wh(si, sj)
+        dx_m, dy_m = _compute_col_offsets(cw_now, ch_now, norm_sx, norm_sy)
+        cshifted = st.session_state.setdefault("m12_col_shifted", {})
+        cshifted[(si, sj)] = (dx_m * 100.0, dy_m * 100.0)
+        st.session_state["m12_col_shifted"] = cshifted
+
+        st.session_state.pop("m12_plan_png_b64", None)
+        save_settings()
+
+    # مزامنة مسبقة لحالة عناصر التحكم في حال وجود قيم مخزنة سابقة تختلف عن قيم العمود المختار
+    if k_dir in st.session_state:
+        state_dir_code = "NS" if "رأسي" in str(st.session_state[k_dir]) else "EW"
+        if state_dir_code != cur_dir_code:
+            st.session_state[k_dir] = DIR_OPTIONS[idx_dir]
+
+    if k_sx in st.session_state:
+        if _normalize_m12_col_shift(st.session_state[k_sx], axis="x") != norm_cur_sx:
+            st.session_state[k_sx] = M12_SHIFT_X_OPTIONS[idx_sx]
+
+    if k_sy in st.session_state:
+        if _normalize_m12_col_shift(st.session_state[k_sy], axis="y") != norm_cur_sy:
+            st.session_state[k_sy] = M12_SHIFT_Y_OPTIONS[idx_sy]
+
+    sel_dir = st.selectbox(
+        "اتجاه ضرب العمود",
+        options=DIR_OPTIONS,
+        index=idx_dir,
+        key=k_dir,
+        on_change=_apply_orient_update,
+        help="اتجاه البعد الأكبر للعمود (موازٍ لمحور Y أو لمحور X)."
+    )
+
+    sel_sx = st.selectbox(
+        "الترحيل الأفقي (X)",
+        options=M12_SHIFT_X_OPTIONS,
+        index=idx_sx,
+        key=k_sx,
+        on_change=_apply_orient_update,
+        help="الترحيل الأفقي لجسم العمود بالنسبة للمحور الرأسي Y (6 سم)."
+    )
+
+    sel_sy = st.selectbox(
+        "الترحيل الرأسي (Y)",
+        options=M12_SHIFT_Y_OPTIONS,
+        index=idx_sy,
+        key=k_sy,
+        on_change=_apply_orient_update,
+        help="الترحيل الرأسي لجسم العمود بالنسبة للمحور الأفقي X (6 سم)."
+    )
+
+    new_dir_code = "NS" if "رأسي" in str(sel_dir) else "EW"
+    norm_new_sx = _normalize_m12_col_shift(sel_sx, axis="x")
+    norm_new_sy = _normalize_m12_col_shift(sel_sy, axis="y")
+
+    if new_dir_code != col_dirs.get((si, sj)) or norm_new_sx != norm_cur_sx or norm_new_sy != norm_cur_sy:
+        _apply_orient_update()
+
+    # بطاقة معلومات توضيحية لترحيل العمود الحالي (أوفست بالسنتيمتر)
+    dx_val, dy_val = col_shifted.get((si, sj), (0.0, 0.0))
+    dir_badge = "رأسي (موازٍ لمحور Y)" if new_dir_code == "NS" else "أفقي (موازٍ لمحور X)"
+    badge_bg = "#1e40af" if new_dir_code == "NS" else "#b45309"
+    badge_clr = "#ffffff"
+
     st.markdown(
-        f"<div style='font-size:0.80rem; color:#64748b; margin-top:8px;'>📊 الأعمدة القائمة: <b>{len(active_cols)}</b> من أصل <b>{len(all_inter)}</b> تقاطع محاور</div>",
+        f"""<div style='background:rgba(30, 41, 59, 0.75); border:1px solid #334155; border-radius:8px; padding:10px 14px; margin-top:8px;' dir='rtl'>
+            <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;'>
+                <span style='font-size:0.85rem; color:#cbd5e1;'>ضرب العمود:</span>
+                <span style='background:{badge_bg}; color:{badge_clr}; font-weight:700; font-size:0.82rem; padding:2px 8px; border-radius:4px;'>{dir_badge}</span>
+            </div>
+            <div style='display:flex; justify-content:space-between; align-items:center; font-size:0.84rem; color:#ffffff;'>
+                <span>إزاحة المركز (ΔX): <b>{dx_val:+.1f} سم</b></span>
+                <span>إزاحة المركز (ΔY): <b>{dy_val:+.1f} سم</b></span>
+            </div>
+        </div>""",
         unsafe_allow_html=True
     )
 
@@ -4199,7 +4629,7 @@ def _section_restore_columns():
 
     rem_count = len(removed_cols)
 
-    st.markdown("<div style='font-size:0.95rem; font-weight:700; color:#1e293b; margin-bottom:6px;'>♻️ استعادة الأعمدة المحذوفة على المسقط</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:0.95rem; font-weight:700; color:#ffffff; margin-bottom:6px;'>♻️ استعادة الأعمدة المحذوفة على المسقط</div>", unsafe_allow_html=True)
 
     if not is_restore_active:
         if st.button("♻️ استعادة عمود على المسقط الأفقي", type="primary", use_container_width=True, key="m12_btn_start_restore_col"):
@@ -4241,7 +4671,7 @@ def _section_restore_columns():
                 c_dir = h_item.get("dir_code", h_item.get("dir", "NS"))
                 hist_rows.append({
                     "العمود": cname,
-                    "التقاطع": f"X{i+1} × Y{j+1}",
+                    "التقاطع": f"Y{i+1} × X{j+1}",
                     "الأبعاد (سم)": f"{int(round(b_cm))}×{int(round(t_cm))}",
                     "الاتجاه": "رأسي" if c_dir == "NS" else "أفقي"
                 })
@@ -4249,88 +4679,172 @@ def _section_restore_columns():
             st.dataframe(pd.DataFrame(hist_rows), use_container_width=True, hide_index=True)
 
 
+def _section_delete_walls():
+    """
+    قسم حذف الحوائط التفاعلي (Interactive Wall Deletion):
+    - زر 'اختيار حائط للحذف على المسقط الأفقي' لتفعيل نمط الصندوق الأحمر.
+    - رسالة تأكيد الحذف عند التقاط الحائط بالصندوق أو النقر عليه مع زري [✅ نعم، تأكيد الحذف] و [❌ إلغاء].
+    - إمكانية اختيار حائط يدوي من قائمة الحوائط النشطة كبديل سريع.
+    - إحصائيات الحوائط القائمة والمحذوفة.
+    - قسم استعادة الحوائط المحذوفة مع زر استعادة فردي وزر '♻️ استعادة جميع الحوائط المحذوفة'.
+    """
+    xs = st.session_state.get("m12_x_axes", [])
+    ys = st.session_state.get("m12_y_axes", [])
+    if len(xs) < 1 or len(ys) < 1:
+        st.info("⚠️ أدخل محاور X و Y أولاً في قسم 'شبكة المحاور'.")
+        return
+
+    all_walls = _get_all_walls()
+    if not all_walls:
+        st.info("ℹ️ لا توجد حوائط مرسومة في المخطط حالياً.")
+        return
+
+    cm = _get_col_name_map()
+    wm = _get_wall_name_map()
+    removed_walls = st.session_state.get("m12_wall_removed", set())
+    if not isinstance(removed_walls, set):
+        removed_walls = set(removed_walls)
+
+    active_walls = [w for w in all_walls if w not in removed_walls]
+    is_del_wall_active = bool(st.session_state.get("m12_del_wall_mode", False))
+    pending_wk = st.session_state.get("m12_pending_delete_wall")
+
+    st.markdown("<div style='font-size:0.95rem; font-weight:700; color:#ffffff; margin-bottom:6px;'>🗑️ حذف حوائط (Interactive Box Selection)</div>", unsafe_allow_html=True)
+
+    # 1. زر تفعيل نمط التحديد بالصندوق على المسقط الأفقي
+    if not is_del_wall_active:
+        if st.button("🎯 اختيار حائط للحذف على المسقط الأفقي", type="primary", use_container_width=True, key="m12_btn_start_del_wall"):
+            st.session_state["m12_del_wall_mode"] = True
+            st.session_state["m12_add_col_mode"] = False
+            st.session_state["m12_restore_col_mode"] = False
+            st.session_state["m12_rc_view_mode"] = "plan"
+            st.session_state["m12_plan_interactive_toggle"] = True
+            st.rerun()
+    else:
+        st.markdown(
+            """<div style='background: linear-gradient(135deg, #fef2f2, #fee2e2); border: 2px solid #ef4444; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px;' dir='rtl'>
+                <div style='display: flex; align-items: center; gap: 8px; font-weight: 700; color: #991b1b; font-size: 0.92rem;'>
+                    <span>🗑️</span>
+                    <span>اسحب مربعاً بالماوس ليشمل الحائط المراد حذفه في المسقط الأفقي</span>
+                </div>
+                <div style='font-size: 0.80rem; color: #b91c1c; margin-top: 4px;'>
+                    عند إفلات الماوس، ستظهر رسالة تأكيد الحائط. يستمر النمط نشطاً لحذف حوائط أخرى تباعاً.
+                </div>
+            </div>""",
+            unsafe_allow_html=True
+        )
+        if st.button("⏹️ إنهاء وضع الحذف (Esc)", key="m12_btn_exit_del_wall", use_container_width=True):
+            st.session_state["m12_del_wall_mode"] = False
+            st.session_state["m12_pending_delete_wall"] = None
+            st.rerun()
+
+    # 2. بطاقة تأكيد الحذف عند التقاط حائط معلق
+    if pending_wk and pending_wk in all_walls:
+        p_label = _wall_display_label(pending_wk, cm, wm)
+        p_len = _wall_length_m(pending_wk)
+        p_th = _get_wall_thickness(pending_wk)
+        st.markdown(
+            f"""<div style='background: #fff1f2; border: 2px solid #e11d48; border-radius: 8px; padding: 10px 14px; margin: 10px 0;' dir='rtl'>
+                <div style='font-weight: 800; color: #9f1239; font-size: 0.95rem; margin-bottom: 4px;'>
+                    ⚠️ هل أنت متأكد من رغبتك في حذف الحائط: <b>{p_label}</b>؟
+                </div>
+                <div style='font-size: 0.82rem; color: #be123c;'>
+                    الطول: <b>{p_len:.2f} م</b> | السُمك: <b>{p_th} سم</b>
+                </div>
+            </div>""",
+            unsafe_allow_html=True
+        )
+        c_sec_y, c_sec_n = st.columns(2)
+        with c_sec_y:
+            if st.button("✅ نعم، تأكيد حذف الحائط", key="m12_sec_conf_del_wall_yes", type="primary", use_container_width=True):
+                _confirm_delete_wall(pending_wk)
+        with c_sec_n:
+            if st.button("❌ إلغاء", key="m12_sec_conf_del_wall_no", use_container_width=True):
+                st.session_state["m12_pending_delete_wall"] = None
+                st.rerun()
+
+    # 3. اختيار يدوي بديل من القائمة
+    if active_walls:
+        with st.expander("🔍 أو اختر حائطاً مباشرة من القائمة للحذف", expanded=False):
+            wall_options = [0] + list(range(1, len(active_walls) + 1))
+            def _fmt_w(idx):
+                if idx == 0: return "-- اختر حائطاً للحذف مباشرة --"
+                w = active_walls[idx - 1]
+                return f"{_wall_display_label(w, cm, wm)} (طول: {_wall_length_m(w):.2f}م | سُمك: {_get_wall_thickness(w)}سم)"
+            sel_w_idx = st.selectbox("الحائط المراد حذفه:", options=wall_options, format_func=_fmt_w, key="m12_dropdown_del_wall")
+            if sel_w_idx != 0:
+                target_wk = active_walls[sel_w_idx - 1]
+                if st.button("🗑️ حذف هذا الحائط", key="m12_btn_request_dropdown_del_wall", use_container_width=True):
+                    st.session_state["m12_pending_delete_wall"] = target_wk
+                    st.session_state["m12_del_wall_mode"] = True
+                    st.rerun()
+
+    # 4. إحصائيات الحوائط
+    c_st1, c_st2 = st.columns(2)
+    with c_st1:
+        st.caption(f"🧱 الحوائط النشطة: **{len(active_walls)}** حائط")
+    with c_st2:
+        st.caption(f"🗑️ الحوائط المحذوفة: **{len(removed_walls)}** حائط")
+
+    # 5. قسم استعادة الحوائط المحذوفة
+    if removed_walls:
+        st.markdown("<hr style='margin: 10px 0 12px 0; border: none; border-top: 1px solid #e2e8f0;'>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:0.92rem; font-weight:700; color:#ffffff; margin-bottom:6px;'>♻️ استعادة الحوائط المحذوفة</div>", unsafe_allow_html=True)
+        if st.button("♻️ استعادة جميع الحوائط المحذوفة", key="m12_sec_restore_all_walls", type="primary", use_container_width=True):
+            st.session_state["m12_wall_removed"] = set()
+            st.session_state["m12_pending_delete_wall"] = None
+            st.session_state.pop("m12_plan_png_b64", None)
+            save_settings()
+            st.toast("✅ تم استعادة جميع الحوائط المحذوفة بنجاح!", icon="♻️")
+            st.rerun()
+
+        for r_wk in sorted(list(removed_walls), key=lambda x: all_walls.index(x) if x in all_walls else 9999):
+            if r_wk in all_walls:
+                rc_col1, rc_col2 = st.columns([2.6, 1.2], vertical_alignment="center")
+                with rc_col1:
+                    st.markdown(f"**🗑️ {_wall_display_label(r_wk, cm, wm)}**<br><span style='font-size:0.78rem;color:#64748b;'>الطول: `{_wall_length_m(r_wk):.2f}م` | السُمك: `{_get_wall_thickness(r_wk)}سم`</span>", unsafe_allow_html=True)
+                with rc_col2:
+                    if st.button("♻️ استعادة", key=f"m12_restore_wall_btn_{r_wk[0]}_{r_wk[1]}_{r_wk[2]}_{r_wk[3]}", use_container_width=True):
+                        removed_walls.discard(r_wk)
+                        st.session_state["m12_wall_removed"] = removed_walls
+                        st.session_state.pop("m12_plan_png_b64", None)
+                        save_settings()
+                        st.toast(f"✅ تم استعادة الحائط بنجاح!", icon="♻️")
+                        st.rerun()
+    else:
+        st.success("✅ لا توجد حوائط محذوفة حالياً. كافة حوائط المخطط نشطة وظاهرة في الحصر و 3D.")
+
+
 def _section_columns():
-    xs=st.session_state["m12_x_axes"]; ys=st.session_state["m12_y_axes"]
-    if not xs or not ys: st.info("أدخل المحاور أولاً."); return
-
-    # ── أبعاد الأعمدة الموحدة المعتمدة لكافة أعمدة المشروع ──
-    def _on_col_dim_change():
-        new_l = float(st.session_state.get("m12_col_length_input", 60.0))
-        new_w = float(st.session_state.get("m12_col_width_input", 30.0))
-        st.session_state["m12_col_length_cm"] = new_l
-        st.session_state["m12_col_width_cm"] = new_w
-        col_shifts = st.session_state.get("m12_col_shifts", {})
-        col_shifted = st.session_state.get("m12_col_shifted", {})
-        for k, tr in col_shifts.items():
-            if isinstance(k, tuple) and len(k) == 2:
-                cw, ch = _get_col_wh(k[0], k[1])
-                dx_m, dy_m = _compute_col_offsets(cw, ch, tr.get("shift_x"), tr.get("shift_y"))
-                col_shifted[k] = (dx_m * 100.0, dy_m * 100.0)
-        st.session_state["m12_col_shifted"] = col_shifted
-        save_settings()
-
-    col_dim1, col_dim2 = st.columns(2)
-    with col_dim1:
-        cur_l = float(st.session_state.get("m12_col_length_cm", 60.0))
-        if "m12_col_length_input" not in st.session_state:
-            st.session_state["m12_col_length_input"] = cur_l
-        val_l = st.number_input(
-            "طول العمود سم",
-            min_value=15.0,
-            max_value=300.0,
-            value=float(st.session_state.get("m12_col_length_input", cur_l)),
-            step=5.0,
-            format="%.1f",
-            key="m12_col_length_input",
-            on_change=_on_col_dim_change,
-            help="طول العمود المعتمد لجميع الأعمدة بالسنتمتر (افتراضي: 60 سم)"
-        )
-        if abs(val_l - cur_l) > 0.01:
-            st.session_state["m12_col_length_cm"] = val_l
-            save_settings()
-
-    with col_dim2:
-        cur_w = float(st.session_state.get("m12_col_width_cm", 30.0))
-        if "m12_col_width_input" not in st.session_state:
-            st.session_state["m12_col_width_input"] = cur_w
-        val_w = st.number_input(
-            "عرض العمود سم",
-            min_value=12.0,
-            max_value=200.0,
-            value=float(st.session_state.get("m12_col_width_input", cur_w)),
-            step=5.0,
-            format="%.1f",
-            key="m12_col_width_input",
-            on_change=_on_col_dim_change,
-            help="عرض العمود المعتمد لجميع الأعمدة بالسنتمتر (افتراضي: 30 سم)"
-        )
-        if abs(val_w - cur_w) > 0.01:
-            st.session_state["m12_col_width_cm"] = val_w
-            save_settings()
-
-    st.markdown("<hr style='margin: 8px 0 14px 0; border: none; border-top: 1px solid #e2e8f0;'>", unsafe_allow_html=True)
+    """قسم حذف الأعمدة (Delete Columns)."""
+    xs = st.session_state["m12_x_axes"]
+    ys = st.session_state["m12_y_axes"]
+    if not xs or not ys:
+        st.info("أدخل المحاور أولاً.")
+        return
 
     removed_cols = st.session_state.get("m12_col_removed", set())
     if not isinstance(removed_cols, set):
         removed_cols = set(removed_cols)
-    col_dirs=st.session_state["m12_col_dirs"]
-    col_shifted=st.session_state["m12_col_shifted"]; cn=_get_col_name_map()
+    col_dirs = st.session_state["m12_col_dirs"]
+    col_shifted = st.session_state["m12_col_shifted"]
+    cn = _get_col_name_map()
 
     placed_set = st.session_state.get("m12_col_placed", set())
     if not isinstance(placed_set, set):
         placed_set = set(_safe_coord_tuple(item, 2) for item in placed_set if _safe_coord_tuple(item, 2))
     all_cols = sorted(placed_set | removed_cols)
     if not all_cols:
-        st.info("💡 لم تُضَف أي أعمدة بعد. استخدم قسم '➕ إضافة أعمدة' أعلاه لإسقاط الأعمدة على المسقط.")
+        st.info("💡 لم تُضَف أي أعمدة بعد. استخدم قسم '➕ إضافة الأعمدة على المحاور' أعلاه لإسقاط الأعمدة على المسقط.")
         return
 
     def _clbl(k):
         i, j = all_cols[k]
         orig_cname = f"C{j * len(xs) + i + 1}"
         if (i, j) in removed_cols:
-            return f"🗑️ {orig_cname} محذوف (X{i+1},Y{j+1}) — X{i+1}={xs[i]:.2f}م, Y{j+1}={ys[j]:.2f}م"
+            return f"🗑️ {orig_cname} محذوف (Y{i+1},X{j+1}) — Y{i+1}={xs[i]:.2f}م, X{j+1}={ys[j]:.2f}م"
         nm = cn.get((i, j), orig_cname)
-        return f"✅ {nm} — X{i+1}={xs[i]:.2f}م, Y{j+1}={ys[j]:.2f}م"
+        return f"✅ {nm} — Y{i+1}={xs[i]:.2f}م, X{j+1}={ys[j]:.2f}م"
 
     _safe_idx("m12_sel_col", len(all_cols))
     sel = st.selectbox("اختر عموداً", options=range(len(all_cols)), format_func=_clbl, key="m12_sel_col")
@@ -4339,7 +4853,7 @@ def _section_columns():
     orig_cname = f"C{sj * len(xs) + si + 1}"
     cname = cn.get((si, sj), orig_cname)
     if is_rem:
-        st.error(f"🗑️ العمود **{orig_cname}** عند تقاطع (X{si+1}, Y{sj+1}) محذوف — يمكنك استعادته من قسم '♻️ استعادة أعمدة' بالسحب على المسقط.")
+        st.error(f"🗑️ العمود **{orig_cname}** عند تقاطع (Y{si+1}, X{sj+1}) محذوف — يمكنك استعادته من قسم '♻️ استعادة أعمدة' بالسحب على المسقط.")
 
     # تأكيد حذف العمود
     if not is_rem and st.session_state.get("m12_confirm_del_col") == (si,sj):
@@ -4358,89 +4872,16 @@ def _section_columns():
             if st.button("❌ إلغاء", key="m12_confirm_del_no", use_container_width=True):
                 st.session_state.pop("m12_confirm_del_col",None); st.rerun()
 
-    col_shifts = st.session_state.setdefault("m12_col_shifts", {})
-    cur_tr = col_shifts.get((si, sj))
-    if not cur_tr:
-        leg_dx, leg_dy = col_shifted.get((si, sj), (0.0, 0.0))
-        sx_init = M12_SHIFT_X_OPTIONS[0]
-        if leg_dx > 0.01:
-            sx_init = M12_SHIFT_X_OPTIONS[1]
-        elif leg_dx < -0.01:
-            sx_init = M12_SHIFT_X_OPTIONS[2]
+    if not is_rem:
+        if st.session_state.get("m12_confirm_del_col") != (si, sj):
+            if st.button("🗑️ حذف العمود", key="m12_del_col", use_container_width=True):
+                st.session_state["m12_confirm_del_col"] = (si, sj)
+                st.rerun()
+    else:
+        st.info("💡 استخدم زر '♻️ استعادة أعمدة' لاستعادة هذا العمود بالسحب على المسقط.")
 
-        sy_init = M12_SHIFT_Y_OPTIONS[0]
-        if leg_dy > 0.01:
-            sy_init = M12_SHIFT_Y_OPTIONS[1]
-        elif leg_dy < -0.01:
-            sy_init = M12_SHIFT_Y_OPTIONS[2]
-        cur_tr = {"shift_x": sx_init, "shift_y": sy_init}
-        col_shifts[(si, sj)] = cur_tr
+    col_shifts = st.session_state.get("m12_col_shifts", {})
 
-    norm_cur_sx = _normalize_m12_col_shift(cur_tr.get("shift_x"), axis="x")
-    norm_cur_sy = _normalize_m12_col_shift(cur_tr.get("shift_y"), axis="y")
-
-    row1_c1, row1_c2 = st.columns([1, 1])
-    with row1_c1:
-        if not is_rem:
-            if st.session_state.get("m12_confirm_del_col") != (si, sj):
-                if st.button("🗑️ حذف العمود", key="m12_del_col", use_container_width=True):
-                    st.session_state["m12_confirm_del_col"] = (si, sj)
-                    st.rerun()
-        else:
-            st.info("💡 استخدم زر '♻️ استعادة أعمدة' لاستعادة هذا العمود بالسحب على المسقط.")
-
-    with row1_c2:
-        nd = st.radio(
-            "ضرب العمود (الاتجاه)",
-            options=["NS", "EW"],
-            format_func=lambda d: "NS (طولي موازٍ لـ Y)" if d == "NS" else "EW (عرضي موازٍ لـ X)",
-            index=0 if cur_dir == "NS" else 1,
-            horizontal=True,
-            key=f"m12_col_dir_radio_{si}_{sj}",
-            help="NS: البعد الأكبر موازٍ لمحور Y / EW: البعد الأكبر موازٍ لمحور X"
-        )
-        if nd != cur_dir:
-            col_dirs[(si, sj)] = nd
-            st.session_state["m12_col_dirs"] = col_dirs
-            cw_now, ch_now = _get_col_wh(si, sj)
-            dx_m, dy_m = _compute_col_offsets(cw_now, ch_now, norm_cur_sx, norm_cur_sy)
-            col_shifted[(si, sj)] = (dx_m * 100.0, dy_m * 100.0)
-            st.session_state["m12_col_shifted"] = col_shifted
-            save_settings()
-            st.rerun()
-
-    row2_c1, row2_c2 = st.columns(2)
-    with row2_c1:
-        idx_sx = M12_SHIFT_X_OPTIONS.index(norm_cur_sx) if norm_cur_sx in M12_SHIFT_X_OPTIONS else 0
-        sel_sx = st.selectbox(
-            "الترحيل الأفقي (X)",
-            options=M12_SHIFT_X_OPTIONS,
-            index=idx_sx,
-            key=f"m12_col_shift_x_{si}_{sj}",
-            help="الترحيل الأفقي بالنسبة للمحور الرأسي X (6 سم)."
-        )
-
-    with row2_c2:
-        idx_sy = M12_SHIFT_Y_OPTIONS.index(norm_cur_sy) if norm_cur_sy in M12_SHIFT_Y_OPTIONS else 0
-        sel_sy = st.selectbox(
-            "الترحيل الرأسي (Y)",
-            options=M12_SHIFT_Y_OPTIONS,
-            index=idx_sy,
-            key=f"m12_col_shift_y_{si}_{sj}",
-            help="الترحيل الرأسي بالنسبة للمحور الأفقي Y (6 سم)."
-        )
-
-    norm_new_sx = _normalize_m12_col_shift(sel_sx, axis="x")
-    norm_new_sy = _normalize_m12_col_shift(sel_sy, axis="y")
-    if norm_new_sx != norm_cur_sx or norm_new_sy != norm_cur_sy:
-        col_shifts[(si, sj)] = {"shift_x": norm_new_sx, "shift_y": norm_new_sy}
-        st.session_state["m12_col_shifts"] = col_shifts
-        cw_now, ch_now = _get_col_wh(si, sj)
-        dx_m, dy_m = _compute_col_offsets(cw_now, ch_now, norm_new_sx, norm_new_sy)
-        col_shifted[(si, sj)] = (dx_m * 100.0, dy_m * 100.0)
-        st.session_state["m12_col_shifted"] = col_shifted
-        save_settings()
-        st.rerun()
 
     cd = []
     for (i, j) in all_cols:
@@ -5274,13 +5715,13 @@ def _section_openings():
                 if active_wins:
                     st.markdown(
                         f"""<div style='background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.3);border-radius:8px;padding:10px 14px;margin-top:12px;' dir='rtl'>
-                            <div style='color:#0284c7;font-weight:bold;font-size:0.9rem;margin-bottom:4px;'>
+                            <div style='color:#ffffff;font-weight:bold;font-size:0.9rem;margin-bottom:4px;'>
                                 ℹ️ الشبابيك القائمة على هذا الحائط ({len(active_wins)}):
                             </div>
-                            <div style='color:#334155;font-size:0.84rem;margin-bottom:6px;'>
+                            <div style='color:#e2e8f0;font-size:0.84rem;margin-bottom:6px;'>
                                 {', '.join([f"<b>{wm_win.get(w.get('id'), w.get('name', 'W'))}</b> (موضع {w.get('pos_m',0.0):.2f}م)" for w in active_wins])}
                             </div>
-                            <div style='color:#0369a1;font-size:0.82rem;font-weight:600;'>
+                            <div style='color:#ffffff;font-size:0.82rem;font-weight:600;'>
                                 💡 لتحريك أي شباك أو تعديل أبعاده وجلسته، توجه إلى قسم <b>«6️⃣ تحريك الشبابيك والأبواب»</b> أو حرّكه مباشرة بالمقبض في العارض 3D.
                             </div>
                         </div>""",
@@ -5599,7 +6040,7 @@ def _section_move_openings():
                     continue
 
                 if show_all_wins:
-                    st.markdown(f"<div style='font-weight:bold;color:#004488;margin:10px 0 4px 0;font-size:0.95rem;' dir='rtl'>🧱 {wlbl} [طول الحائط: {wlen:.2f}م]:</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='font-weight:bold;color:#ffffff;margin:10px 0 4px 0;font-size:0.95rem;' dir='rtl'>🧱 {wlbl} [طول الحائط: {wlen:.2f}م]:</div>", unsafe_allow_html=True)
 
                 for wi, winfo in enumerate(active_wins):
                     wid = winfo["id"]
@@ -5881,7 +6322,7 @@ def _section_delete_restore_openings():
     # التبويبة 1: حذف الشبابيك
     # ═══════════════════════════════════════════════════════════════════════
     with tw:
-        st.markdown("<h5 style='color:#004488;margin-bottom:8px;'>🗑️ حذف الشبابيك القائمة</h5>", unsafe_allow_html=True)
+        st.markdown("<h5 style='color:#ffffff;margin-bottom:8px;'>🗑️ حذف الشبابيك القائمة</h5>", unsafe_allow_html=True)
         if not active_walls:
             st.info("لا توجد حوائط نشطة في المشروع.")
         else:
@@ -5907,16 +6348,16 @@ def _section_delete_restore_openings():
                     
                     with st.container():
                         st.markdown(
-                            f"""<div style='background:#F8F9FA;border:1px solid #E2E8F0;border-right:5px solid #004488;
+                            f"""<div style='background:rgba(30, 41, 59, 0.7);border:1px solid #334155;border-right:5px solid #3b82f6;
                                 border-radius:6px;padding:8px 12px;margin-bottom:6px;' dir='rtl'>
                                 <div style='display:flex;justify-content:space-between;align-items:center;'>
                                     <div>
-                                        <b style='font-size:1.02rem;color:#004488;'>🪟 شباك {wname} [{winfo.get('type_label','W1')}]</b>
-                                        <span style='color:#555;font-size:0.86rem;margin-right:12px;'>
+                                        <b style='font-size:1.02rem;color:#ffffff;'>🪟 شباك {wname} [{winfo.get('type_label','W1')}]</b>
+                                        <span style='color:#cbd5e1;font-size:0.86rem;margin-right:12px;'>
                                             (عرض {float(winfo.get('w_m',1.0)):.2f}م × ارتفاع {float(winfo.get('h_m',1.2)):.2f}م | بعد البداية: {float(winfo.get('pos_m',0.0)):.2f}م)
                                         </span>
                                     </div>
-                                    <div style='color:#666;font-size:0.82rem;'>على {wlbl}</div>
+                                    <div style='color:#94a3b8;font-size:0.82rem;'>على {wlbl}</div>
                                 </div>
                             </div>""",
                             unsafe_allow_html=True
@@ -6147,10 +6588,10 @@ def _section_plaster_walls():
     plaster_faces_map = st.session_state.setdefault("m12_plaster_faces", {})
 
     st.markdown(
-        """<div style='background:#f8fafc;border:1px solid #cbd5e1;border-right:4px solid #1e3a8a;
+        """<div style='background:rgba(30, 41, 59, 0.75);border:1px solid #334155;border-right:4px solid #3b82f6;
             border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:0.87rem;' dir='rtl'>
-            <b style='color:#1e3a8a;font-size:0.95rem;'>🎨 تحديد وتعديل أوجه المحارة (Plaster Faces):</b><br>
-            <span style='color:#475569;'>
+            <b style='color:#ffffff;font-size:0.95rem;'>🎨 تحديد وتعديل أوجه المحارة (Plaster Faces):</b><br>
+            <span style='color:#cbd5e1;'>
             اختر الحائط وحدد الوجه المطلوب لتطبيق تهشير أزرق غامق بخطوط خضراء فوراً على الرسم وحصر الخامات بدقة.
             </span>
         </div>""",
@@ -6191,7 +6632,7 @@ def _section_plaster_walls():
     available_options = ["أعلى", "أسفل"] if is_h else ["يمين", "يسار"]
     current_faces = [f for f in plaster_faces_map.get(sel_wk, []) if f in available_options]
 
-    orient_str = "أفقي (محور Y)" if is_h else "رأسي (محور X)"
+    orient_str = "أفقي (محور X)" if is_h else "رأسي (محور Y)"
     st.markdown(
         f"<div style='font-size:0.85rem;color:#334155;margin-bottom:4px;' dir='rtl'>"
         f"<b>محور الحائط:</b> {orient_str} &nbsp;|&nbsp; "
@@ -6291,15 +6732,15 @@ def _section_plaster_walls():
             <div style='font-weight:bold;color:#166534;font-size:0.88rem;'>
                 🔍 بيانات محارة الحائط المختار ({_wall_display_label(sel_wk, cm, wm)}):
             </div>
-            <div style='display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:6px;font-size:0.80rem;color:#1e293b;margin-top:4px;'>
+            <div style='display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:6px;font-size:0.80rem;color:#ffffff;margin-top:4px;'>
                 <div>• الطول: <b>{sel_len:.2f} م</b></div>
                 <div>• الارتفاع: <b>{sel_h:.2f} م</b></div>
                 <div>• الأوجه: <b>{n_sel_faces} وجه ({' + '.join(sel_active_faces) if sel_active_faces else 'لا يوجد'})</b></div>
                 <div>• الإجمالي: <b>{sel_gross:.2f} م²</b></div>
                 <div>• الفتحات المخصومة: <b>{sel_ded:.2f} م²</b></div>
-                <div>• الصافي: <b style='color:#15803d;'>{sel_net:.2f} م²</b></div>
+                <div>• الصافي: <b style='color:#22c55e;'>{sel_net:.2f} م²</b></div>
             </div>
-            <div style='font-size:0.80rem;color:#1e3a8a;margin-top:4px;border-top:1px dashed #bbf7d0;padding-top:4px;'>
+            <div style='font-size:0.80rem;color:#ffffff;margin-top:4px;border-top:1px dashed #bbf7d0;padding-top:4px;'>
                 📦 <b>الخامات للحائط:</b> رمل: <b>{sel_sand:.2f} م³</b> | أسمنت: <b>{sel_cement_tons:.2f} طن ({sel_cement_bags} شكارة)</b>
             </div>
         </div>""",
@@ -6309,7 +6750,7 @@ def _section_plaster_walls():
     st.divider()
 
     # 4. جدول حصر كميات المحارة
-    st.markdown("<b style='font-size:0.95rem;color:#0f172a;'>📋 جدول حصر حوائط المحارة والخامات (طبقاً للكود المصري):</b>", unsafe_allow_html=True)
+    st.markdown("<b style='font-size:0.95rem;color:#ffffff;'>📋 جدول حصر حوائط المحارة والخامات (طبقاً للكود المصري):</b>", unsafe_allow_html=True)
 
     p_res = _compute_plaster_survey()
     p_rows = p_res["rows"]
@@ -6360,7 +6801,7 @@ def _section_plaster_walls():
 
     # رسالة إرشادية (Information Note)
     st.markdown(
-        """<div style='background-color:#eff6ff;border-right:4px solid #2563eb;border-radius:8px;padding:12px 16px;margin-top:10px;color:#1e3a8a;font-size:0.87rem;line-height:1.7;' dir='rtl'>
+        """<div style='background-color:rgba(30,58,138,0.25);border:1px solid #3b82f6;border-right:4px solid #3b82f6;border-radius:8px;padding:12px 16px;margin-top:10px;color:#ffffff;font-size:0.87rem;line-height:1.7;' dir='rtl'>
             <div style='font-weight:bold;margin-bottom:4px;display:flex;align-items:center;gap:6px;'>
                 <span>💡</span>
                 <span>رسالة إرشادية (Information Note) — الفرضيات ومعدلات الاستهلاك المعتمدة:</span>
@@ -6518,8 +6959,8 @@ def _section_upload_image():
                 <div style='color:#cbd5e1;font-size:0.80rem;margin-top:4px;'>
                     يتم الآن عرض الصورة في <b>الجهة اليمنى من الشاشة</b> بحجم كبير مثل المسقط الأفقي.
                 </div>
-                <div style='margin-top:6px;font-size:0.78rem;color:#94a3b8;border-top:1px solid rgba(148,163,184,0.2);padding-top:6px;'>
-                    📄 <b>{cur_name}</b> | الحجم: <b style='color:#38bdf8;'>{cur_size:.1f} KB</b> | الأبعاد: <b style='color:#38bdf8;'>{dim_str}</b>
+                <div style='margin-top:6px;font-size:0.78rem;color:#cbd5e1;border-top:1px solid rgba(148,163,184,0.2);padding-top:6px;'>
+                    📄 <b>{cur_name}</b> | الحجم: <b style='color:#ffffff;'>{cur_size:.1f} KB</b> | الأبعاد: <b style='color:#ffffff;'>{dim_str}</b>
                 </div>
             </div>""",
             unsafe_allow_html=True
@@ -6601,7 +7042,7 @@ def _prepare_3d_scene_data():
         columns_data.append({
             "id": f"col_{i}_{j}",
             "name": c_name,
-            "grid": f"X{i+1} - Y{j+1}",
+            "grid": f"Y{i+1} - X{j+1}",
             "col_key": [i, j],
             "x": round(cx - cx_mid, 3),
             "y": round(col_height / 2.0, 3),
@@ -6903,7 +7344,7 @@ def _prepare_3d_scene_data():
         z_start = round(-((max_y + ext) - cy_mid), 3)
         z_end = round(-((min_y - ext) - cy_mid), 3)
         axes_x_data.append({
-            "name": f"X{idx+1}",
+            "name": f"Y{idx+1}",
             "val": round(x_val, 2),
             "x_3d": x_3d,
             "z_start": z_start,
@@ -6916,7 +7357,7 @@ def _prepare_3d_scene_data():
         x_start = round((min_x - ext) - cx_mid, 3)
         x_end = round((max_x + ext) - cx_mid, 3)
         axes_y_data.append({
-            "name": f"Y{idx+1}",
+            "name": f"X{idx+1}",
             "val": round(y_val, 2),
             "z_3d": z_3d,
             "x_start": x_start,
@@ -7017,8 +7458,8 @@ def _section_3d_viewer():
   }
   .btn-tool:hover {
     background: #334155;
-    border-color: #0284c7;
-    color: #38bdf8;
+    border-color: #ffffff;
+    color: #ffffff;
   }
   .badge-legend {
     font-size: 11px;
@@ -7053,7 +7494,7 @@ def _section_3d_viewer():
     box-shadow: 0 4px 14px rgba(0,0,0,0.3);
   }
   .stats-item b {
-    color: #38bdf8;
+    color: #ffffff;
   }
 
   .help-tip {
@@ -7124,7 +7565,7 @@ def _section_3d_viewer():
   }
   .mini-btn:hover {
     background: rgba(255, 255, 255, 0.15);
-    color: #38bdf8;
+    color: #ffffff;
   }
   .mini-plan-body {
     padding: 8px;
@@ -7159,7 +7600,7 @@ def _section_3d_viewer():
     bottom: 4px;
     left: 4px;
     background: rgba(15, 23, 42, 0.85);
-    color: #38bdf8;
+    color: #ffffff;
     font-size: 9px;
     font-weight: 600;
     padding: 2px 6px;
@@ -7335,11 +7776,11 @@ def _section_3d_viewer():
   }
   .insp-label { font-size: 10px; color: #94a3b8; display: block; margin-bottom: 2px; }
   .insp-val { font-size: 11.5px; font-weight: 700; color: #f1f5f9; }
-  .insp-val b { color: #38bdf8; }
+  .insp-val b { color: #ffffff; }
   .insp-section-title {
     font-size: 11px;
     font-weight: 700;
-    color: #38bdf8;
+    color: #ffffff;
     margin: 8px 0 5px 0;
     display: flex;
     align-items: center;
@@ -7365,12 +7806,12 @@ def _section_3d_viewer():
   }
   .insp-btn:hover { background: #0369a1; }
 
-  /* ── شارات الأبعاد الثلاثية الأبعاد باللون اللبني (Live 3D Dimensions Badges) ── */
+  /* ── شارات الأبعاد الثلاثية الأبعاد (Live 3D Dimensions Badges) ── */
   .dim-badge {
     position: absolute;
     background: rgba(15, 23, 42, 0.94);
-    border: 1.5px solid #38bdf8;
-    color: #38bdf8;
+    border: 1.5px solid #ffffff;
+    color: #ffffff;
     font-weight: 800;
     font-size: 10.5px;
     padding: 2px 8px;
@@ -7459,7 +7900,7 @@ def _section_3d_viewer():
     <span class="badge-legend" style="color:#fca5a5;"><span class="dot" style="background:#dc2626; border:1px solid #ef4444;"></span> محاور (حمراء)</span>
     <span class="badge-legend" style="color:#f1f5f9;"><span class="dot" style="background:#cbd5e1; border:1px solid #94a3b8;"></span> حائط كامل (وحدة واحدة)</span>
     <span class="badge-legend" style="color:#cbd5e1;"><span class="dot" style="background:#475569; border:1px solid #334155;"></span> أعمدة</span>
-    <span class="badge-legend" style="color:#38bdf8;"><span class="dot" style="background:#38bdf8; opacity:0.85; border:1px solid #0284c7;"></span> شبابيك (مقبض ⟷)</span>
+    <span class="badge-legend" style="color:#ffffff;"><span class="dot" style="background:#38bdf8; opacity:0.85; border:1px solid #ffffff;"></span> شبابيك (مقبض ⟷)</span>
     <span class="badge-legend" style="color:#f59e0b;"><span class="dot" style="background:#b45309; border:1px solid #f59e0b;"></span> أبواب (مقبض ⟷)</span>
   </div>
 </div>
@@ -7616,7 +8057,7 @@ def _section_3d_viewer():
   const colEdgeMat = new THREE.LineBasicMaterial({ color: 0x1e293b, transparent: true, opacity: 0.75 });
 
   const winMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.50, roughness: 0.10, metalness: 0.25 });
-  const winEdgeMat = new THREE.LineBasicMaterial({ color: 0x0284c7, transparent: true, opacity: 0.85 });
+  const winEdgeMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
 
   const doorMat = new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.60, metalness: 0.15 });
   const doorEdgeMat = new THREE.LineBasicMaterial({ color: 0x78350f, transparent: true, opacity: 0.90 });
@@ -7656,11 +8097,11 @@ def _section_3d_viewer():
     depthTest: false
   });
 
-  // Selection Outline Material (Bright cyan glow)
-  const highlightMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2.5, depthTest: false, transparent: true, opacity: 0.98 });
+  // Selection Outline Material (White glow)
+  const highlightMat = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2.5, depthTest: false, transparent: true, opacity: 0.98 });
 
-  // 3D Dimension Lines Material
-  const dimLineMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, depthTest: false, transparent: true, opacity: 0.95 });
+  // 3D Dimension Lines Material (Pure White)
+  const dimLineMat = new THREE.LineBasicMaterial({ color: 0xffffff, depthTest: false, transparent: true, opacity: 0.95 });
 
   // Collections for Raycasting & Selection
   const selectableObjects = [];
@@ -8168,7 +8609,7 @@ def _section_3d_viewer():
     if (type === 'wall') {
       inspIcon.textContent = '🧱';
       inspHeader.textContent = 'فاحص الحائط بالكامل (وحدة واحدة)';
-      const parapetBadge = d.is_parapet ? '<span style="color:#38bdf8;font-size:10px;margin-right:5px;">[دروة سطح]</span>' : '';
+      const parapetBadge = d.is_parapet ? '<span style="color:#ffffff;font-size:10px;margin-right:5px;">[دروة سطح]</span>' : '';
       const plasterBadge = d.has_plaster ? '<span style="color:#ec4899;font-size:10px;margin-right:5px;">[وجه محارة]</span>' : '';
 
       html = `
@@ -8184,7 +8625,7 @@ def _section_3d_viewer():
           <div class="insp-item"><span class="insp-label">مساحة الفتحات</span><span class="insp-val">${d.openings_area.toFixed(2)} م²</span></div>
           <div class="insp-item" style="grid-column: span 2; background:rgba(2,132,199,0.20); border-color:#0284c7;">
             <span class="insp-label">صافي مسطح المباني (للحائط كاملاً)</span>
-            <span class="insp-val"><b style="font-size:13px;color:#38bdf8;">${d.net_area.toFixed(2)} م²</b></span>
+            <span class="insp-val"><b style="font-size:13px;color:#ffffff;">${d.net_area.toFixed(2)} م²</b></span>
           </div>
         </div>
 
@@ -9312,7 +9753,7 @@ def _section_survey():
                 <span>📋</span>
                 <span>الملخص الهندسي لحصر أعمال المباني والخامات (طبقاً للكود المصري ECP)</span>
             </div>
-            <span style='background-color:#eff6ff;color:#1d4ed8;font-size:0.80rem;font-weight:bold;padding:3px 10px;border-radius:20px;border:1px solid #bfdbfe;'>
+            <span style='background-color:#1e40af;color:#ffffff;font-size:0.80rem;font-weight:bold;padding:3px 10px;border-radius:20px;border:1px solid #3b82f6;'>
                 حسابات دقيقة للمواد
             </span>
         </div>
@@ -9325,9 +9766,9 @@ def _section_survey():
                 <div style='font-size:0.82rem;color:#14532d;font-weight:bold;'>2️⃣ مساحة فتحات الأبواب والشبابيك:</div>
                 <div style='font-size:1.25rem;font-weight:bold;color:#15803d;margin-top:4px;'>{op12:.2f} <span style='font-size:0.85rem;font-weight:normal;'>م² (لحوائط 12سم)</span> &nbsp;<span style='font-size:0.75rem;color:#4b5563;'>(الإجمالي العام: {total_openings:.2f} م²)</span></div>
             </div>
-            <div style='background-color:#eff6ff;border-right:4px solid #2563eb;padding:10px 14px;border-radius:6px;'>
-                <div style='font-size:0.82rem;color:#1e3a8a;font-weight:bold;'>3️⃣ صافي إجمالي مسطح طوب 12 سم:</div>
-                <div style='font-size:1.25rem;font-weight:bold;color:#1d4ed8;margin-top:4px;'>{n12:.2f} <span style='font-size:0.85rem;font-weight:normal;'>م² مسطح صافي</span></div>
+            <div style='background-color:rgba(30,58,138,0.25);border-right:4px solid #3b82f6;padding:10px 14px;border-radius:6px;'>
+                <div style='font-size:0.82rem;color:#ffffff;font-weight:bold;'>3️⃣ صافي إجمالي مسطح طوب 12 سم:</div>
+                <div style='font-size:1.25rem;font-weight:bold;color:#ffffff;margin-top:4px;'>{n12:.2f} <span style='font-size:0.85rem;font-weight:normal;'>م² مسطح صافي</span></div>
             </div>
             <div style='background-color:#fdf2f8;border-right:4px solid #db2777;padding:10px 14px;border-radius:6px;'>
                 <div style='font-size:0.82rem;color:#831843;font-weight:bold;'>4️⃣ صافي إجمالي مكعب طوب 25 سم:</div>
@@ -9347,7 +9788,7 @@ def _section_survey():
                 <span style='font-size:1.5rem;'>🏗️</span>
                 <div>
                     <div style='font-size:0.80rem;color:#475569;font-weight:bold;'>5️⃣ إجمالي الأسمنت المطلوب (محتوى 350 كجم/م³):</div>
-                    <div style='font-size:1.2rem;font-weight:bold;color:#0f172a;'>{cement_tons:.2f} <span style='font-size:0.85rem;'>طن</span> &nbsp;<span style='font-size:0.88rem;color:#2563eb;'>({cement_bags} شكارة سعة 50 كجم)</span></div>
+                    <div style='font-size:1.2rem;font-weight:bold;color:#0f172a;'>{cement_tons:.2f} <span style='font-size:0.85rem;'>طن</span> &nbsp;<span style='font-size:0.88rem;color:#ffffff;'>({cement_bags} شكارة سعة 50 كجم)</span></div>
                 </div>
             </div>
             <div style='height:36px;width:1px;background-color:#cbd5e1;'></div>
@@ -9366,7 +9807,7 @@ def _section_survey():
     # 6. رسالة توضيحية لطريقة حساب كمية الرمل والأسمنت طبقاً للكود المصري
     with st.expander("💡 6️⃣ رسالة توضيحية: طريقة حساب كميات الرمل والأسمنت طبقاً للكود المصري وأصول التنفيذ", expanded=False):
         st.markdown(
-            f"""<div style='line-height:1.8;font-size:0.88rem;color:#1e293b;' dir='rtl'>
+            f"""<div style='line-height:1.8;font-size:0.88rem;color:#ffffff;' dir='rtl'>
             <p><b>استندت الحسابات التقديرية لكميات المونة ومواد البناء إلى المواصفات الفنية لبنود الأعمال بالكود المصري للبناء وأصول الصناعة:</b></p>
             <ol style='padding-right:20px;margin-bottom:12px;'>
                 <li>
@@ -9428,7 +9869,7 @@ def _section_survey():
         _rt(r25, "25 سم")
 
     with tpl:
-        st.markdown("<b style='font-size:1.05rem;color:#1e3a8a;'>🪣 حصر كميات ومواد أعمال البياض (المحارة)</b>", unsafe_allow_html=True)
+        st.markdown("<b style='font-size:1.05rem;color:#ffffff;'>🪣 حصر كميات ومواد أعمال البياض (المحارة)</b>", unsafe_allow_html=True)
         p_res = _compute_plaster_survey()
         p_rows = p_res["rows"]
         if not p_rows:
@@ -9486,7 +9927,7 @@ def _section_survey():
             )
 
             st.markdown(
-                """<div style='background-color:#eff6ff;border-right:4px solid #2563eb;border-radius:8px;padding:12px 16px;margin-top:10px;color:#1e3a8a;font-size:0.87rem;line-height:1.7;' dir='rtl'>
+                """<div style='background-color:rgba(30,58,138,0.25);border:1px solid #3b82f6;border-right:4px solid #3b82f6;border-radius:8px;padding:12px 16px;margin-top:10px;color:#ffffff;font-size:0.87rem;line-height:1.7;' dir='rtl'>
                     <div style='font-weight:bold;margin-bottom:4px;display:flex;align-items:center;gap:6px;'>
                         <span>💡</span>
                         <span>رسالة إرشادية (Information Note) — الفرضيات ومعدلات الاستهلاك المعتمدة:</span>
@@ -9804,6 +10245,7 @@ def render_brick_survey_module():
 
     is_add_active = bool(st.session_state.get("m12_add_col_mode", False))
     is_restore_active = bool(st.session_state.get("m12_restore_col_mode", False))
+    is_del_wall_active = bool(st.session_state.get("m12_del_wall_mode", False))
 
     # Hidden bridge text_input placed at top of module so it is always present in DOM
     st.markdown(
@@ -9835,10 +10277,12 @@ def render_brick_survey_module():
     lc,rc=st.columns([0.82,1.65],gap="medium")
     with lc:
         with st.expander("1️⃣ شبكة المحاور", expanded=False): _section_axes()
-        with st.expander("➕ إضافة أعمدة (Interactive)", expanded=is_add_active): _section_add_columns()
+        with st.expander("➕ إضافة الأعمدة على المحاور", expanded=is_add_active): _section_add_columns()
+        with st.expander("📐 ضبط اتجاهات وضرب الأعمدة", expanded=False): _section_column_orientations()
+        with st.expander("🗑️ حذف الأعمدة", expanded=False): _section_columns()
         with st.expander("♻️ استعادة أعمدة (Interactive)", expanded=is_restore_active): _section_restore_columns()
-        with st.expander("2️⃣ خصائص وتعديل الأعمدة", expanded=False): _section_columns()
-        with st.expander("3️⃣ تحديد مواصفات وتعديل وحذف واستعادة الحوائط", expanded=False): _section_walls()
+        with st.expander("🗑️ حذف حوائط", expanded=is_del_wall_active): _section_delete_walls()
+        with st.expander("3️⃣ تحديد مواصفات وتعديل واستعادة الحوائط", expanded=False): _section_walls()
         with st.expander("4️⃣ نماذج الفتحات (Types)", expanded=False): _section_opening_types()
         openings_exp = st.expander(
             "5️⃣ إسقاط الشبابيك والأبواب",
@@ -9927,8 +10371,8 @@ def render_brick_survey_module():
             c_bot_info, c_bot_acts = st.columns([1.5, 1.0], vertical_alignment="center")
             with c_bot_info:
                 st.markdown(
-                    f"""<div style='font-size:0.80rem;color:#94a3b8;margin-top:6px;' dir='rtl'>
-                        📄 <b>{cur_name}</b> | الحجم: <b style='color:#38bdf8;'>{cur_size:.1f} KB</b> {('| الأبعاد: <b style="color:#38bdf8;">' + dim_str + '</b>') if dim_str else ''}
+                    f"""<div style='font-size:0.80rem;color:#cbd5e1;margin-top:6px;' dir='rtl'>
+                        📄 <b>{cur_name}</b> | الحجم: <b style='color:#ffffff;'>{cur_size:.1f} KB</b> {('| الأبعاد: <b style="color:#ffffff;">' + dim_str + '</b>') if dim_str else ''}
                     </div>""",
                     unsafe_allow_html=True
                 )
@@ -9953,13 +10397,13 @@ def render_brick_survey_module():
         elif current_rc_view == "both":
             col_plan_half, col_img_half = st.columns(2, gap="small")
             with col_plan_half:
-                st.markdown("<div style='font-size:0.88rem;font-weight:700;color:#38bdf8;text-align:center;margin-bottom:4px;'>📐 المسقط الأفقي المصمم</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size:0.88rem;font-weight:700;color:#ffffff;text-align:center;margin-bottom:4px;'>📐 المسقط الأفقي المصمم</div>", unsafe_allow_html=True)
                 st.image(_draw_plan(with_dim=False), use_container_width=True)
             with col_img_half:
                 cur_b64 = st.session_state.get("m12_uploaded_image_b64")
                 cur_type = st.session_state.get("m12_uploaded_image_type", "image/png")
                 cur_name = st.session_state.get("m12_uploaded_image_name", "المخطط")
-                st.markdown(f"<div style='font-size:0.88rem;font-weight:700;color:#38bdf8;text-align:center;margin-bottom:4px;'>🖼️ {cur_name}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div style='font-size:0.88rem;font-weight:700;color:#ffffff;text-align:center;margin-bottom:4px;'>🖼️ {cur_name}</div>", unsafe_allow_html=True)
                 if cur_b64:
                     st.markdown(
                         f"""<div style="width: 100%; text-align: center; background: #0b1120; border: 1.5px solid #334155; border-radius: 8px; padding: 4px;">
@@ -10003,11 +10447,11 @@ def render_brick_survey_module():
 
                 # شريط التنبيه المعماري العلوي مع اختفاء تدريجي تلقائي
                 st.markdown(
-                    f"""<div id="m12_dim_banner_container" style='background: linear-gradient(135deg, #eff6ff, #dbeafe); border: 1.5px solid #3b82f6;
+                    f"""<div id="m12_dim_banner_container" style='background: linear-gradient(135deg, rgba(30, 58, 138, 0.92), rgba(30, 64, 175, 0.92)); border: 1.5px solid #3b82f6;
                     border-radius: 8px; padding: 8px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; transition: all 0.4s ease;' dir='rtl'>
                         <div style='display: flex; align-items: center; gap: 8px;'>
                             <span style='font-size: 1.2rem;'>📏</span>
-                            <span style='font-weight: 700; color: #1e40af; font-size: 0.90rem;'>
+                            <span style='font-weight: 700; color: #ffffff; font-size: 0.90rem;'>
                                 خط أبعاد موضع {kind_ar} <b>{name}</b>: البعد عن بداية الحائط = <b>{pos_m:.2f}م</b>
                             </span>
                         </div>
@@ -10072,10 +10516,40 @@ def render_brick_survey_module():
                     except Exception:
                         pass
             else:
+                pending_del_w = st.session_state.get("m12_pending_delete_wall")
+                if pending_del_w:
+                    all_walls = _get_all_walls()
+                    if pending_del_w in all_walls:
+                        cm = _get_col_name_map()
+                        wm = _get_wall_name_map()
+                        p_label = _wall_display_label(pending_del_w, cm, wm)
+                        p_len = _wall_length_m(pending_del_w)
+                        p_th = _get_wall_thickness(pending_del_w)
+                        st.markdown(
+                            f"""<div style='background: linear-gradient(135deg, #fff1f2, #ffe4e6); border: 2px solid #f43f5e;
+                            border-radius: 8px; padding: 10px 16px; margin-bottom: 8px;' dir='rtl'>
+                                <div style='font-weight: 800; color: #9f1239; font-size: 0.95rem; margin-bottom: 4px;'>
+                                    ⚠️ هل أنت متأكد من رغبتك في حذف الحائط: <b>{p_label}</b>؟
+                                </div>
+                                <div style='font-size: 0.82rem; color: #be123c;'>
+                                    الطول: <b>{p_len:.2f} م</b> | السُمك: <b>{p_th} سم</b>
+                                </div>
+                            </div>""",
+                            unsafe_allow_html=True
+                        )
+                        c_rc_y, c_rc_n = st.columns([1.2, 1.0])
+                        with c_rc_y:
+                            if st.button("✅ نعم، تأكيد حذف الحائط", type="primary", key="m12_rc_conf_del_wall_btn", use_container_width=True):
+                                _confirm_delete_wall(pending_del_w)
+                        with c_rc_n:
+                            if st.button("❌ إلغاء", key="m12_rc_cancel_del_wall_btn", use_container_width=True):
+                                st.session_state["m12_pending_delete_wall"] = None
+                                st.rerun()
+
                 if is_add_active:
                     st.markdown(
-                        """<div style='background: linear-gradient(135deg, #eff6ff, #dbeafe); border: 2px solid #3b82f6; border-radius: 8px; padding: 8px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;' dir='rtl'>
-                            <span style='font-weight: 700; color: #1e40af; font-size: 0.90rem;'>🎯 <b>وضع إضافة الأعمدة نشط:</b> اختر بالماوس صندوقاً يكون بداخله تقاطع المحورين الواقع العمود بداخله</span>
+                        """<div style='background: linear-gradient(135deg, rgba(30, 58, 138, 0.90), rgba(30, 64, 175, 0.90)); border: 2px solid #3b82f6; border-radius: 8px; padding: 8px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;' dir='rtl'>
+                            <span style='font-weight: 700; color: #ffffff; font-size: 0.90rem;'>🎯 <b>وضع إضافة الأعمدة نشط:</b> اختر بالماوس صندوقاً يكون بداخله تقاطع المحورين الواقع العمود بداخله</span>
                             <span style='background: #3b82f6; color: #ffffff; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 600;'>Esc للإنهاء</span>
                         </div>""",
                         unsafe_allow_html=True
@@ -10090,6 +10564,15 @@ def render_brick_survey_module():
                         unsafe_allow_html=True
                     )
                     _render_interactive_plan(box_mode="restore")
+                elif is_del_wall_active:
+                    st.markdown(
+                        """<div style='background: linear-gradient(135deg, #fef2f2, #fee2e2); border: 2px solid #ef4444; border-radius: 8px; padding: 8px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;' dir='rtl'>
+                            <span style='font-weight: 700; color: #991b1b; font-size: 0.90rem;'>🗑️ <b>وضع حذف الحوائط نشط:</b> اختر بالماوس صندوقاً يكون بداخله الحائط المراد حذفه</span>
+                            <span style='background: #ef4444; color: #ffffff; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 600;'>Esc للإنهاء</span>
+                        </div>""",
+                        unsafe_allow_html=True
+                    )
+                    _render_interactive_plan(box_mode="delete_wall")
                 elif is_interactive:
                     _render_interactive_plan()
                 else:
@@ -10102,7 +10585,7 @@ def render_brick_survey_module():
                     <span style='color:{_CLR_DOOR};font-weight:bold;'>■ باب (D#)</span>
                     <span style='color:{_CLR_COL};font-weight:bold;'>■ عمود (C#)</span>
                     <span style='color:#EC4899;font-weight:bold;'>▨ وجه محارة (وردي)</span>
-                    <span style='color:#0284c7;font-weight:bold;'>■ حائط دروة [دروة]</span>
+                    <span style='color:#ffffff;font-weight:bold;'><span style='color:#38bdf8;'>■</span> حائط دروة [دروة]</span>
                     <span style='color:#222;font-weight:bold;'>■ حائط (L#)</span>
                     <span style='color:#888;font-weight:bold;'>┄ خط استرشادي (محذوف)</span>
                 </div>""",unsafe_allow_html=True)
