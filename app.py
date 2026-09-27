@@ -2466,6 +2466,8 @@ def render_profile_manager():
                 st.session_state[f"_show_mod_config_{pname}"] = False
                 st.session_state[f"_show_delete_mod_{pname}"] = False
                 st.session_state[f"_show_restore_mod_{pname}"] = False
+                st.session_state["input_rename_active_project"] = pname
+                st.session_state["_rename_input_owner"] = pname
                 st.rerun()
         with b2:
             is_mod_open = st.session_state.get(f"_show_mod_config_{pname}", False)
@@ -2552,24 +2554,48 @@ def render_profile_manager():
                             <span>✏️</span> تغيير اسم المشروع (Rename Project): <b style="color: #fef08a;">«{pname}»</b>
                         </div>
                         <div style="font-size: 13px; color: #cbd5e1; margin-top: 4px;">
-                            أدخل الاسم الجديد للمشروع واضغط «حفظ الاسم الجديد». سيتم تحديث اسم المشروع في كافة السجلات مع الحفاظ الكامل على جميع الحسابات والموديولات والتصميمات.
+                            أدخل الاسم الجديد للمشروع واضغط «حفظ الاسم الجديد» أو اضغط Enter. سيتم تحديث اسم المشروع في كافة السجلات مع الحفاظ الكامل على جميع الحسابات والموديولات والتصميمات.
                         </div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
-                col_rn_input, col_rn_save, col_rn_cancel, _rn_pad = st.columns([4.2, 1.8, 1.2, 2.8])
-                with col_rn_input:
-                    new_name_val = st.text_input(
-                        "اسم المشروع الجديد:",
-                        value=pname,
-                        key=f"input_new_name_{pname}",
-                        label_visibility="collapsed",
-                        placeholder="اكتب الاسم الجديد للمشروع...",
-                    )
-                with col_rn_save:
-                    if st.button("💾 حفظ الاسم الجديد", type="primary", use_container_width=True, key=f"btn_save_rename_{pname}"):
-                        cleaned_name = (new_name_val or "").strip()
+
+                # Ensure the input is synchronized to this active project
+                if st.session_state.get("_rename_input_owner") != pname or "input_rename_active_project" not in st.session_state:
+                    st.session_state["_rename_input_owner"] = pname
+                    st.session_state["input_rename_active_project"] = pname
+
+                with st.form(key="form_rename_active_project", clear_on_submit=False):
+                    col_rn_input, col_rn_save, col_rn_cancel, _rn_pad = st.columns([4.2, 1.8, 1.2, 2.8])
+                    with col_rn_input:
+                        new_name_val = st.text_input(
+                            "اسم المشروع الجديد:",
+                            key="input_rename_active_project",
+                            label_visibility="collapsed",
+                            placeholder="اكتب الاسم الجديد للمشروع...",
+                        )
+                    with col_rn_save:
+                        btn_save_rn = st.form_submit_button(
+                            "💾 حفظ الاسم الجديد",
+                            type="primary",
+                            use_container_width=True,
+                        )
+                    with col_rn_cancel:
+                        btn_cancel_rn = st.form_submit_button(
+                            "❌ إلغاء",
+                            use_container_width=True,
+                        )
+
+                    if btn_cancel_rn:
+                        st.session_state[f"_show_rename_{pname}"] = False
+                        st.session_state.pop("input_rename_active_project", None)
+                        st.session_state.pop("_rename_input_owner", None)
+                        st.rerun()
+
+                    if btn_save_rn:
+                        submitted_val = st.session_state.get("input_rename_active_project", new_name_val)
+                        cleaned_name = (submitted_val or "").strip()
                         if not cleaned_name:
                             st.error("⚠️ يرجى إدخال اسم صحيح وغير فارغ للمشروع.")
                         elif cleaned_name == pname:
@@ -2579,14 +2605,13 @@ def render_profile_manager():
                         else:
                             if rename_project(pname, cleaned_name):
                                 st.session_state[f"_show_rename_{pname}"] = False
+                                st.session_state[f"_show_rename_{cleaned_name}"] = False
+                                st.session_state.pop("input_rename_active_project", None)
+                                st.session_state.pop("_rename_input_owner", None)
                                 st.success(f"✅ تم تغيير اسم المشروع بنجاح إلى: «{cleaned_name}»")
                                 st.rerun()
                             else:
                                 st.error("❌ تعذر تغيير اسم المشروع. يرجى المحاولة مرة أخرى.")
-                with col_rn_cancel:
-                    if st.button("❌ إلغاء", key=f"btn_cancel_rename_{pname}", use_container_width=True):
-                        st.session_state[f"_show_rename_{pname}"] = False
-                        st.rerun()
 
         # ── Interactive Module Customizer Drawer (Hide/Show) ─────────────────
         if st.session_state.get(f"_show_mod_config_{pname}", False):

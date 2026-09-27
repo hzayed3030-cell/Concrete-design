@@ -445,10 +445,9 @@ CALCULATOR_INJECTION_HTML = """
       var target = e.target;
       if (target && target.tagName === 'INPUT' && target.id !== 'ecp-calc-val') {
         parentWin.__ecp_last_focused_input = target;
-        target.setAttribute('data-ecp-prev-val', target.value);
-
         if (target.type === 'number') {
           target.setAttribute('data-ecp-orig-type', 'number');
+          target.setAttribute('data-ecp-prev-val', target.value);
           target.type = 'text';
         }
       }
@@ -458,13 +457,12 @@ CALCULATOR_INJECTION_HTML = """
       var target = e.target;
       if (target && target.tagName === 'INPUT' && target.id !== 'ecp-calc-val') {
         if (e.key === 'Enter') {
-          if (hasMathExpression(target.value)) {
+          // Strictly evaluate math expressions ONLY on inputs that originated as number inputs
+          if (target.getAttribute('data-ecp-orig-type') === 'number' && hasMathExpression(target.value)) {
             e.preventDefault();
             e.stopPropagation();
             var success = handleInputEvaluation(target);
-            if (target.getAttribute('data-ecp-orig-type') === 'number') {
-              target.type = 'number';
-            }
+            target.type = 'number';
             // Trigger React update with evaluated number
             setTimeout(function() {
               target.dispatchEvent(new KeyboardEvent('keydown', {
@@ -483,8 +481,9 @@ CALCULATOR_INJECTION_HTML = """
     parentDoc.addEventListener('focusout', function(e) {
       var target = e.target;
       if (target && target.tagName === 'INPUT' && target.id !== 'ecp-calc-val') {
-        handleInputEvaluation(target);
+        // Strictly evaluate math expressions ONLY on inputs that originated as number inputs
         if (target.getAttribute('data-ecp-orig-type') === 'number') {
+          handleInputEvaluation(target);
           target.type = 'number';
         }
       }

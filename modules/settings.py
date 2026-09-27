@@ -279,6 +279,7 @@ ECP_DEFAULTS: dict = {
     "module_12_brick_survey": {
         "x_axes": [0.0, 4.0, 8.0],
         "y_axes": [0.0, 3.0, 6.0],
+        "col_placed": [],
         "col_removed": [],
         "col_dirs": {},
         "col_shifts": {},
@@ -602,6 +603,7 @@ def get_default_module_12_state() -> dict:
         "y_axes": [0.0, 3.0, 6.0],
         "col_length_cm": 60.0,
         "col_width_cm": 30.0,
+        "col_placed": [],
         "col_removed": [],
         "col_dirs": {},
         "col_shifts": {},
@@ -628,6 +630,8 @@ def get_default_module_12_state() -> dict:
         "brick_custom_h": 6.0,
         # أوجه المحارة المحددة لكل حائط: {"i1,j1,i2,j2": ["أعلى" | "أسفل" | "يمين" | "يسار"]}
         "plaster_faces": {},
+        "col_props": {},
+        "deleted_cols_history": {},
     }
 
 
@@ -638,11 +642,18 @@ _M12_FALLBACK = get_default_module_12_state()
 def _parse_m12_coord_tuple(val):
     """Safely parse coordinates from tuple, list, or string format into an int tuple."""
     if isinstance(val, (tuple, list)):
-        return tuple(int(x) for x in val)
+        try:
+            return tuple(int(x) for x in val)
+        except (ValueError, TypeError):
+            return None
     if isinstance(val, str):
         cleaned = val.strip("()[] \t\r\n")
         if cleaned:
-            return tuple(int(x.strip()) for x in cleaned.split(",") if x.strip())
+            try:
+                parts = tuple(int(x.strip()) for x in cleaned.split(",") if x.strip())
+                return parts if parts else None
+            except (ValueError, TypeError):
+                return None
     return None
 
 
@@ -652,6 +663,12 @@ def _serialize_module_12_state(state: dict) -> dict:
     y_axes = [float(y) for y in state.get("m12_y_axes", [0.0, 3.0, 6.0])]
     col_length_cm = float(state.get("m12_col_length_cm", 60.0))
     col_width_cm = float(state.get("m12_col_width_cm", 30.0))
+
+    col_placed = []
+    for item in state.get("m12_col_placed", set()):
+        t = _parse_m12_coord_tuple(item)
+        if t and len(t) == 2:
+            col_placed.append(list(t))
 
     col_removed = []
     for item in state.get("m12_col_removed", set()):
@@ -786,6 +803,7 @@ def _serialize_module_12_state(state: dict) -> dict:
         "y_axes": y_axes,
         "col_length_cm": col_length_cm,
         "col_width_cm": col_width_cm,
+        "col_placed": col_placed,
         "col_removed": col_removed,
         "col_dirs": col_dirs,
         "col_shifts": col_shifts,
@@ -808,6 +826,19 @@ def _serialize_module_12_state(state: dict) -> dict:
         "brick_custom_w": brick_custom_w,
         "brick_custom_h": brick_custom_h,
         "plaster_faces": plaster_faces,
+        "uploaded_image_b64": str(state.get("m12_uploaded_image_b64", "")),
+        "uploaded_image_name": str(state.get("m12_uploaded_image_name", "")),
+        "uploaded_image_type": str(state.get("m12_uploaded_image_type", "image/png")),
+        "col_props": {
+            f"{_parse_m12_coord_tuple(k)[0]},{_parse_m12_coord_tuple(k)[1]}": dict(v)
+            for k, v in state.get("m12_col_props", {}).items()
+            if _parse_m12_coord_tuple(k) and len(_parse_m12_coord_tuple(k)) == 2 and isinstance(v, dict)
+        },
+        "deleted_cols_history": {
+            f"{_parse_m12_coord_tuple(k)[0]},{_parse_m12_coord_tuple(k)[1]}": dict(v)
+            for k, v in state.get("m12_deleted_cols_history", {}).items()
+            if _parse_m12_coord_tuple(k) and len(_parse_m12_coord_tuple(k)) == 2 and isinstance(v, dict)
+        },
     }
 
 
@@ -827,6 +858,12 @@ def _deserialize_module_12_state(data: dict) -> dict:
 
     col_length_cm = float(data.get("col_length_cm", schema.get("col_length_cm", 60.0)))
     col_width_cm = float(data.get("col_width_cm", schema.get("col_width_cm", 30.0)))
+
+    col_plc = set()
+    for item in data.get("col_placed", []):
+        t = _parse_m12_coord_tuple(item)
+        if t and len(t) == 2:
+            col_plc.add(t)
 
     col_rem = set()
     for item in data.get("col_removed", []):
@@ -932,15 +969,30 @@ def _deserialize_module_12_state(data: dict) -> dict:
         if t and len(t) == 4 and isinstance(v, list):
             plaster_faces[t] = [str(face) for face in v]
 
+    col_props = {}
+    for k, v in data.get("col_props", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 2 and isinstance(v, dict):
+            col_props[t] = dict(v)
+
+    deleted_cols_history = {}
+    for k, v in data.get("deleted_cols_history", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 2 and isinstance(v, dict):
+            deleted_cols_history[t] = dict(v)
+
     return {
         "m12_x_axes": x_axes,
         "m12_y_axes": y_axes,
         "m12_col_length_cm": col_length_cm,
         "m12_col_width_cm": col_width_cm,
+        "m12_col_placed": col_plc,
         "m12_col_removed": col_rem,
         "m12_col_dirs": col_dirs,
         "m12_col_shifts": col_shifts,
         "m12_col_shifted": col_shifted,
+        "m12_col_props": col_props,
+        "m12_deleted_cols_history": deleted_cols_history,
         "m12_wall_thickness": wall_thick,
         "m12_wall_removed": wall_rem,
         "m12_default_wall_height": def_h,
@@ -959,6 +1011,9 @@ def _deserialize_module_12_state(data: dict) -> dict:
         "m12_brick_custom_w": brick_custom_w,
         "m12_brick_custom_h": brick_custom_h,
         "m12_plaster_faces": plaster_faces,
+        "m12_uploaded_image_b64": str(data.get("uploaded_image_b64", "")),
+        "m12_uploaded_image_name": str(data.get("uploaded_image_name", "")),
+        "m12_uploaded_image_type": str(data.get("uploaded_image_type", "image/png")),
     }
 
 
@@ -1061,6 +1116,11 @@ def migrate_module_12_in_project_dict(pdata_dict: dict) -> bool:
             modified = True
         if not isinstance(nested.get("y_axes"), list) or len(nested.get("y_axes", [])) < 2:
             nested["y_axes"] = schema["y_axes"]
+            modified = True
+
+        # ─── إذا لم تكن col_placed موجودة أو كانت None يتم تهيئتها كقائمة فارغة [] بدون أعمدة ───
+        if "col_placed" not in nested or nested.get("col_placed") is None:
+            nested["col_placed"] = []
             modified = True
 
     return modified
@@ -1661,9 +1721,9 @@ def _ensure_module11_state(cfg: dict | None = None) -> None:
 
 
 def _clear_m12_session_keys() -> None:
-    """Clear all m12_* and module_12_data keys from st.session_state."""
+    """Clear all m12_*, _m12_*, and module_12_data keys from st.session_state."""
     for k in list(st.session_state.keys()):
-        if k.startswith("m12_") or k == "module_12_data":
+        if k.startswith("m12_") or k.startswith("_m12_") or k == "module_12_data":
             del st.session_state[k]
 
 
@@ -1730,6 +1790,16 @@ def _ensure_module12_state(cfg: dict | None = None) -> None:
         st.session_state[f"m12_x_val_{idx}"] = float(xv)
     for idx, yv in enumerate(deserialized["m12_y_axes"]):
         st.session_state[f"m12_y_val_{idx}"] = float(yv)
+    for idx in range(len(deserialized["m12_x_axes"]) - 1):
+        sp = round(deserialized["m12_x_axes"][idx+1] - deserialized["m12_x_axes"][idx], 2)
+        st.session_state[f"m12_x_sp_{idx}"] = float(sp)
+    for idx in range(len(deserialized["m12_y_axes"]) - 1):
+        sp = round(deserialized["m12_y_axes"][idx+1] - deserialized["m12_y_axes"][idx], 2)
+        st.session_state[f"m12_y_sp_{idx}"] = float(sp)
+    st.session_state["_m12_synced_x_axes"] = list(deserialized["m12_x_axes"])
+    st.session_state["_m12_synced_y_axes"] = list(deserialized["m12_y_axes"])
+    st.session_state["_m12_synced_nx"] = len(deserialized["m12_x_axes"])
+    st.session_state["_m12_synced_ny"] = len(deserialized["m12_y_axes"])
     st.session_state["m12_default_h_input"] = float(deserialized["m12_default_wall_height"])
     st.session_state["m12_parapet_h_input"] = float(deserialized.get("m12_parapet_wall_height", 1.0))
 
@@ -1851,7 +1921,7 @@ def create_project(
         if not description:
             description = f"نسخة من {copy_from}"
     else:
-        new_data = dict(ECP_DEFAULTS)
+        new_data = get_default_project_state(project_name=name, owner_name=owner_name)
 
     # Ensure clean isolated default schema for module_8, module_9, module_10, module_11 & module_12
     migrate_module_8_in_project_dict(new_data)
@@ -2266,8 +2336,8 @@ def get_project_summary(project_name: str) -> dict:
         total_w = float(xs[-1] - xs[0]) if len(xs) >= 2 else 0.0
         total_h = float(ys[-1] - ys[0]) if len(ys) >= 2 else 0.0
         area = total_w * total_h
-        n_cols_total = len(xs) * len(ys)
-        n_cols_active = n_cols_total - len(m12.get("col_removed", []))
+        n_cols_total = len(m12.get("col_placed", [])) if "col_placed" in m12 else len(xs) * len(ys)
+        n_cols_active = max(0, n_cols_total - len(m12.get("col_removed", [])))
         n_lx = max(len(xs) - 1, 1)
         n_ly = max(len(ys) - 1, 1)
         ts = float(m12.get("default_wall_height", 3.0))
