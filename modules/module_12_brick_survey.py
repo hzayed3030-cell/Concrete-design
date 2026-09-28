@@ -3559,13 +3559,22 @@ def _section_brick_type():
     # حساب عدد وحدات تقريبي لكل م²
     upm2 = (100.0 / (bl + mortar_v)) * (100.0 / (bh + mortar_v)) if bl > 0 and bh > 0 else 0
     st.markdown(
-        f"""<div dir='rtl' style='background:#f0fdf4;border:1px solid #86efac;border-radius:6px;
-            padding:8px 12px;margin-top:6px;font-size:0.85rem;'>
-            <b style='color:#15803d;'>📊 ملخص الطوب الحالي:</b><br>
-            النوع: <b>{brick_type_v}</b> &nbsp;|&nbsp; المقاس: <b>{size_display}</b>
-            &nbsp;|&nbsp; المونة: <b>{mortar_v} سم</b><br>
-            <span style='color:#166534;'>عدد الطوب التقريبي لكل م² (وجه الحائط):
-            <b>≈ {upm2:.1f} وحدة</b></span>
+        f"""<div dir='rtl' style='background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border: 1.5px solid #10b981; border-radius: 8px; padding: 12px 16px; margin-top: 10px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);'>
+            <div style='display:flex; align-items:center; gap:8px; font-weight:bold; font-size:0.95rem; color:#34d399; margin-bottom:8px;'>
+                <span>📊</span>
+                <span>ملخص مواصفات الطوب المختار:</span>
+            </div>
+            <div style='font-size:0.88rem; color:#cbd5e1; line-height:1.8;'>
+                النوع: <b style='color:#60a5fa;'>{brick_type_v}</b> &nbsp;|&nbsp; 
+                المقاس: <b style='color:#fbbf24;'>{size_display}</b> &nbsp;|&nbsp; 
+                فاصل المونة: <b style='color:#a78bfa;'>{mortar_v} سم</b>
+            </div>
+            <div style='margin-top:8px; padding-top:8px; border-top:1px solid #334155; font-size:0.88rem; color:#cbd5e1;'>
+                عدد الطوب التقريبي لكل 1 م² (وجه الحائط): 
+                <b style='color:#4ade80; font-size:1.05rem; margin-right:4px;'>≈ {upm2:.1f} وحدة</b>
+            </div>
         </div>""",
         unsafe_allow_html=True
     )
@@ -4348,7 +4357,7 @@ def _section_add_columns():
         st.rerun()
 
     st.markdown("<hr style='margin: 10px 0 12px 0; border: none; border-top: 1px dashed #cbd5e1;'>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size:0.90rem; font-weight:700; color:#ffffff; margin-bottom:4px;'>🎯 أو التحديد التفاعلي بالسحب على المسقط:</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:0.92rem; font-weight:700; color:#ffffff; margin-top:8px; margin-bottom:16px;'>🎯 أو التحديد التفاعلي بالسحب على المسقط:</div>", unsafe_allow_html=True)
 
     if not is_add_active:
         if st.button("🎯 تفعيل اختيار عمود بالسحب على المسقط", type="secondary", use_container_width=True, key="m12_btn_start_add_col"):
@@ -4629,7 +4638,7 @@ def _section_restore_columns():
 
     rem_count = len(removed_cols)
 
-    st.markdown("<div style='font-size:0.95rem; font-weight:700; color:#ffffff; margin-bottom:6px;'>♻️ استعادة الأعمدة المحذوفة على المسقط</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:0.95rem; font-weight:700; color:#ffffff; margin-top:8px; margin-bottom:16px;'>♻️ استعادة الأعمدة المحذوفة على المسقط</div>", unsafe_allow_html=True)
 
     if not is_restore_active:
         if st.button("♻️ استعادة عمود على المسقط الأفقي", type="primary", use_container_width=True, key="m12_btn_start_restore_col"):
@@ -4709,7 +4718,7 @@ def _section_delete_walls():
     is_del_wall_active = bool(st.session_state.get("m12_del_wall_mode", False))
     pending_wk = st.session_state.get("m12_pending_delete_wall")
 
-    st.markdown("<div style='font-size:0.95rem; font-weight:700; color:#ffffff; margin-bottom:6px;'>🗑️ حذف حوائط (Interactive Box Selection)</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:0.95rem; font-weight:700; color:#ffffff; margin-top:8px; margin-bottom:16px;'>🗑️ حذف حوائط (Interactive Box Selection)</div>", unsafe_allow_html=True)
 
     # 1. زر تفعيل نمط التحديد بالصندوق على المسقط الأفقي
     if not is_del_wall_active:
@@ -6688,9 +6697,37 @@ def _section_plaster_walls():
 
     # إجراءات جماعية سريعة للمشروع
     with st.expander("⚡ إجراءات جماعية سريعة لكافة الحوائط", expanded=False):
+        st.markdown(
+            """<style>
+            div[class*="st-key-m12_plaster_all_both"] button,
+            div[class*="st-key-m12_plaster_clear_all"] button,
+            div.st-key-m12_plaster_all_both button,
+            div.st-key-m12_plaster_clear_all button {
+                font-size: 0.78rem !important;
+                padding: 4px 6px !important;
+                height: auto !important;
+                min-height: 2.3rem !important;
+                line-height: 1.25 !important;
+            }
+            div[class*="st-key-m12_plaster_all_both"] button p,
+            div[class*="st-key-m12_plaster_clear_all"] button p,
+            div.st-key-m12_plaster_all_both button p,
+            div.st-key-m12_plaster_clear_all button p,
+            div[class*="st-key-m12_plaster_all_both"] button div,
+            div[class*="st-key-m12_plaster_clear_all"] button div {
+                font-size: 0.78rem !important;
+                line-height: 1.25 !important;
+                white-space: normal !important;
+                overflow: visible !important;
+                text-overflow: clip !important;
+                text-align: center !important;
+            }
+            </style>""",
+            unsafe_allow_html=True
+        )
         c_all1, c_all2 = st.columns(2)
         with c_all1:
-            if st.button("➕ تفعيل كلا الوجهين للكل", key="m12_plaster_all_both", use_container_width=True):
+            if st.button("➕ تفعيل كلا الوجهين للكل", key="m12_plaster_all_both", use_container_width=True, help="تفعيل محارة كلا الوجهين لكافة الحوائط"):
                 for wk in active_walls:
                     is_wk_h = (wk[1] == wk[3])
                     plaster_faces_map[wk] = ["أعلى", "أسفل"] if is_wk_h else ["يمين", "يسار"]
@@ -6698,7 +6735,7 @@ def _section_plaster_walls():
                 save_settings()
                 st.rerun()
         with c_all2:
-            if st.button("🧹 مسح محارة كافة الحوائط", key="m12_plaster_clear_all", use_container_width=True):
+            if st.button("🧹 مسح محارة كافة الحوائط", key="m12_plaster_clear_all", use_container_width=True, help="مسح محارة كافة الحوائط"):
                 for wk in active_walls:
                     plaster_faces_map[wk] = []
                 st.session_state["m12_plaster_faces"] = plaster_faces_map
@@ -6728,20 +6765,21 @@ def _section_plaster_walls():
     sel_cement_bags = math.ceil(sel_cement_kg / 50.0) if sel_cement_kg > 0 else 0
 
     st.markdown(
-        f"""<div style='background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:8px 12px;margin:8px 0;' dir='rtl'>
-            <div style='font-weight:bold;color:#166534;font-size:0.88rem;'>
-                🔍 بيانات محارة الحائط المختار ({_wall_display_label(sel_wk, cm, wm)}):
+        f"""<div style='background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1.5px solid #0284c7; border-radius: 8px; padding: 12px 16px; margin: 10px 0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.25);' dir='rtl'>
+            <div style='display:flex; align-items:center; gap:8px; font-weight:bold; color:#38bdf8; font-size:0.92rem; margin-bottom:8px;'>
+                <span>🔍</span>
+                <span>بيانات محارة الحائط المختار ({_wall_display_label(sel_wk, cm, wm)}):</span>
             </div>
-            <div style='display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:6px;font-size:0.80rem;color:#ffffff;margin-top:4px;'>
-                <div>• الطول: <b>{sel_len:.2f} م</b></div>
-                <div>• الارتفاع: <b>{sel_h:.2f} م</b></div>
-                <div>• الأوجه: <b>{n_sel_faces} وجه ({' + '.join(sel_active_faces) if sel_active_faces else 'لا يوجد'})</b></div>
-                <div>• الإجمالي: <b>{sel_gross:.2f} م²</b></div>
-                <div>• الفتحات المخصومة: <b>{sel_ded:.2f} م²</b></div>
-                <div>• الصافي: <b style='color:#22c55e;'>{sel_net:.2f} م²</b></div>
+            <div style='display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px; font-size:0.84rem; color:#cbd5e1;'>
+                <div>• الطول: <b style='color:#f8fafc;'>{sel_len:.2f} م</b></div>
+                <div>• الارتفاع: <b style='color:#f8fafc;'>{sel_h:.2f} م</b></div>
+                <div>• الأوجه: <b style='color:#fbbf24;'>{n_sel_faces} وجه ({' + '.join(sel_active_faces) if sel_active_faces else 'لا يوجد'})</b></div>
+                <div>• الإجمالي: <b style='color:#93c5fd;'>{sel_gross:.2f} م²</b></div>
+                <div>• الفتحات المخصومة: <b style='color:#f87171;'>{sel_ded:.2f} م²</b></div>
+                <div>• الصافي: <b style='color:#4ade80; font-size:0.92rem;'>{sel_net:.2f} م²</b></div>
             </div>
-            <div style='font-size:0.80rem;color:#ffffff;margin-top:4px;border-top:1px dashed #bbf7d0;padding-top:4px;'>
-                📦 <b>الخامات للحائط:</b> رمل: <b>{sel_sand:.2f} م³</b> | أسمنت: <b>{sel_cement_tons:.2f} طن ({sel_cement_bags} شكارة)</b>
+            <div style='font-size:0.84rem; color:#cbd5e1; margin-top:8px; border-top:1px solid #334155; padding-top:8px;'>
+                📦 <b style='color:#38bdf8;'>الخامات للحائط:</b> رمل: <b style='color:#fde047;'>{sel_sand:.2f} م³</b> &nbsp;|&nbsp; أسمنت: <b style='color:#67e8f9;'>{sel_cement_tons:.2f} طن</b> <span style='color:#94a3b8;'>({sel_cement_bags} شكارة)</span>
             </div>
         </div>""",
         unsafe_allow_html=True
@@ -6894,26 +6932,6 @@ def _section_upload_image():
         unsafe_allow_html=True
     )
 
-    st.markdown(
-        """<div class='m12-upload-card' dir='rtl'>
-            <div style='display:flex;align-items:center;justify-content:space-between;gap:8px;'>
-                <div style='display:flex;align-items:center;gap:8px;'>
-                    <span style='font-size:1.35rem;'>🖼️</span>
-                    <span style='font-weight:700;color:#f8fafc;font-size:0.96rem;'>
-                        تحميل صورة المخطط من الهارد ديسك
-                    </span>
-                </div>
-                <span style='background:rgba(37,99,235,0.22);color:#93c5fd;font-size:0.75rem;padding:3px 10px;border-radius:12px;border:1px solid rgba(59,130,246,0.35);font-weight:600;'>
-                    عرض باليمين
-                </span>
-            </div>
-            <div style='font-size:0.80rem;color:#94a3b8;margin-top:6px;line-height:1.5;'>
-                اضغط على زر <b>"تحميل الصورة"</b> لاختيار صورة من جهاز الكمبيوتر ليتم تحميلها وعرضها فوراً في <b>الجهة اليمنى</b> من الشاشة بحجم كبير مثل المسقط الأفقي.
-            </div>
-        </div>""",
-        unsafe_allow_html=True
-    )
-
     # أداة تحميل الصورة من الهارد ديسك
     uploaded_file = st.file_uploader(
         "تحميل الصورة",
@@ -6949,23 +6967,6 @@ def _section_upload_image():
     cur_h = st.session_state.get("m12_uploaded_image_h")
 
     if cur_b64:
-        dim_str = f"{cur_w}×{cur_h} px" if cur_w and cur_h else "—"
-        st.markdown(
-            f"""<div style='background:rgba(34, 197, 94, 0.12);border:1.5px solid #22c55e;border-radius:8px;padding:10px 14px;margin-bottom:10px;' dir='rtl'>
-                <div style='color:#4ade80;font-weight:700;display:flex;align-items:center;gap:6px;font-size:0.90rem;'>
-                    <span>✅</span>
-                    <span>تم تحميل الصورة بنجاح!</span>
-                </div>
-                <div style='color:#cbd5e1;font-size:0.80rem;margin-top:4px;'>
-                    يتم الآن عرض الصورة في <b>الجهة اليمنى من الشاشة</b> بحجم كبير مثل المسقط الأفقي.
-                </div>
-                <div style='margin-top:6px;font-size:0.78rem;color:#cbd5e1;border-top:1px solid rgba(148,163,184,0.2);padding-top:6px;'>
-                    📄 <b>{cur_name}</b> | الحجم: <b style='color:#ffffff;'>{cur_size:.1f} KB</b> | الأبعاد: <b style='color:#ffffff;'>{dim_str}</b>
-                </div>
-            </div>""",
-            unsafe_allow_html=True
-        )
-
         c_view_btn, c_del_btn = st.columns([1.3, 1])
         with c_view_btn:
             if st.button("👁️ إظهار الصورة باليمين", key="m12_btn_switch_to_img", use_container_width=True):
@@ -6981,15 +6982,6 @@ def _section_upload_image():
                 st.session_state.pop("m12_uploaded_image_h", None)
                 st.session_state["m12_rc_view_mode"] = "plan"
                 st.rerun()
-    else:
-        st.markdown(
-            """<div style='background:rgba(15,23,42,0.6);border:1px dashed #475569;border-radius:8px;padding:14px;text-align:center;color:#94a3b8;font-size:0.82rem;margin-top:4px;' dir='rtl'>
-                <div style='font-size:1.6rem;margin-bottom:4px;'>📂</div>
-                <div style='font-weight:700;color:#cbd5e1;margin-bottom:2px;'>لم يتم تحميل صورة بعد</div>
-                <div>اضغط على زر <b>"تحميل الصورة"</b> أعلاه لاختيار صورة من جهازك ليتم عرضها في الجهة اليمنى بحجم كبير.</div>
-            </div>""",
-            unsafe_allow_html=True
-        )
 
 
 def _prepare_3d_scene_data():
@@ -9747,56 +9739,56 @@ def _section_survey():
 
     # بطاقة الملخص التنفيذي للحصر (الأرقام المطلوبة كخطوط مباشرة وواضحة)
     st.markdown(
-        f"""<div style='background-color:#ffffff;border:1.5px solid #cbd5e1;border-radius:10px;padding:16px 20px;margin-bottom:16px;box-shadow:0 2px 5px rgba(0,0,0,0.04);' dir='rtl'>
-        <div style='display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #e2e8f0;padding-bottom:10px;margin-bottom:12px;'>
-            <div style='font-weight:bold;font-size:1.05rem;color:#0f172a;display:flex;align-items:center;gap:8px;'>
+        f"""<div style='background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1.5px solid #334155; border-radius: 12px; padding: 18px 22px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.25);' dir='rtl'>
+        <div style='display:flex; align-items:center; justify-content:space-between; border-bottom: 1px solid #334155; padding-bottom: 12px; margin-bottom: 14px;'>
+            <div style='font-weight:bold; font-size:1.05rem; color:#f8fafc; display:flex; align-items:center; gap:8px;'>
                 <span>📋</span>
                 <span>الملخص الهندسي لحصر أعمال المباني والخامات (طبقاً للكود المصري ECP)</span>
             </div>
-            <span style='background-color:#1e40af;color:#ffffff;font-size:0.80rem;font-weight:bold;padding:3px 10px;border-radius:20px;border:1px solid #3b82f6;'>
+            <span style='background: linear-gradient(135deg, #1e40af, #2563eb); color:#ffffff; font-size:0.80rem; font-weight:bold; padding:4px 12px; border-radius:20px; border:1px solid #60a5fa;'>
                 حسابات دقيقة للمواد
             </span>
         </div>
-        <div style='display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;'>
-            <div style='background-color:#fff7ed;border-right:4px solid #f97316;padding:10px 14px;border-radius:6px;'>
-                <div style='font-size:0.82rem;color:#7c2d12;font-weight:bold;'>1️⃣ إجمالي مسطح طوب 12 سم (شامل الفتحات):</div>
-                <div style='font-size:1.25rem;font-weight:bold;color:#c2410c;margin-top:4px;'>{g12:.2f} <span style='font-size:0.85rem;font-weight:normal;'>م² مسطح</span></div>
+        <div style='display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:12px;'>
+            <div style='background: rgba(249, 115, 22, 0.12); border: 1px solid rgba(249, 115, 22, 0.35); border-right: 4px solid #f97316; padding: 12px 14px; border-radius: 8px;'>
+                <div style='font-size:0.84rem; color:#fdba74; font-weight:bold;'>1️⃣ إجمالي مسطح طوب 12 سم (شامل الفتحات):</div>
+                <div style='font-size:1.35rem; font-weight:bold; color:#ffedd5; margin-top:4px;'>{g12:.2f} <span style='font-size:0.85rem; font-weight:normal; color:#fed7aa;'>م² مسطح</span></div>
             </div>
-            <div style='background-color:#f0fdf4;border-right:4px solid #16a34a;padding:10px 14px;border-radius:6px;'>
-                <div style='font-size:0.82rem;color:#14532d;font-weight:bold;'>2️⃣ مساحة فتحات الأبواب والشبابيك:</div>
-                <div style='font-size:1.25rem;font-weight:bold;color:#15803d;margin-top:4px;'>{op12:.2f} <span style='font-size:0.85rem;font-weight:normal;'>م² (لحوائط 12سم)</span> &nbsp;<span style='font-size:0.75rem;color:#4b5563;'>(الإجمالي العام: {total_openings:.2f} م²)</span></div>
+            <div style='background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); border-right: 4px solid #10b981; padding: 12px 14px; border-radius: 8px;'>
+                <div style='font-size:0.84rem; color:#6ee7b7; font-weight:bold;'>2️⃣ مساحة فتحات الأبواب والشبابيك:</div>
+                <div style='font-size:1.35rem; font-weight:bold; color:#ecfdf5; margin-top:4px;'>{op12:.2f} <span style='font-size:0.85rem; font-weight:normal; color:#a7f3d0;'>م² (لحوائط 12سم)</span> &nbsp;<span style='font-size:0.75rem; color:#94a3b8;'>(الإجمالي العام: {total_openings:.2f} م²)</span></div>
             </div>
-            <div style='background-color:rgba(30,58,138,0.25);border-right:4px solid #3b82f6;padding:10px 14px;border-radius:6px;'>
-                <div style='font-size:0.82rem;color:#ffffff;font-weight:bold;'>3️⃣ صافي إجمالي مسطح طوب 12 سم:</div>
-                <div style='font-size:1.25rem;font-weight:bold;color:#ffffff;margin-top:4px;'>{n12:.2f} <span style='font-size:0.85rem;font-weight:normal;'>م² مسطح صافي</span></div>
+            <div style='background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.40); border-right: 4px solid #3b82f6; padding: 12px 14px; border-radius: 8px;'>
+                <div style='font-size:0.84rem; color:#93c5fd; font-weight:bold;'>3️⃣ صافي إجمالي مسطح طوب 12 سم:</div>
+                <div style='font-size:1.35rem; font-weight:bold; color:#eff6ff; margin-top:4px;'>{n12:.2f} <span style='font-size:0.85rem; font-weight:normal; color:#bfdbfe;'>م² مسطح صافي</span></div>
             </div>
-            <div style='background-color:#fdf2f8;border-right:4px solid #db2777;padding:10px 14px;border-radius:6px;'>
-                <div style='font-size:0.82rem;color:#831843;font-weight:bold;'>4️⃣ صافي إجمالي مكعب طوب 25 سم:</div>
-                <div style='font-size:1.25rem;font-weight:bold;color:#be185d;margin-top:4px;'>{v25:.2f} <span style='font-size:0.85rem;font-weight:normal;'>م³ مكعب صافي</span></div>
+            <div style='background: rgba(236, 72, 153, 0.12); border: 1px solid rgba(236, 72, 153, 0.35); border-right: 4px solid #ec4899; padding: 12px 14px; border-radius: 8px;'>
+                <div style='font-size:0.84rem; color:#f472b6; font-weight:bold;'>4️⃣ صافي إجمالي مكعب طوب 25 سم:</div>
+                <div style='font-size:1.35rem; font-weight:bold; color:#fdf2f8; margin-top:4px;'>{v25:.2f} <span style='font-size:0.85rem; font-weight:normal; color:#fbcfe8;'>م³ مكعب صافي</span></div>
             </div>
         </div>
-        <div style='margin-top:12px;background:linear-gradient(to left, #f8fafc, #f1f5f9);border:1px solid #cbd5e1;border-radius:8px;padding:12px 16px;display:flex;align-items:center;justify-content:space-around;flex-wrap:wrap;gap:16px;'>
-            <div style='display:flex;align-items:center;gap:10px;'>
-                <span style='font-size:1.5rem;'>🏜️</span>
+        <div style='margin-top:14px; background: rgba(15, 23, 42, 0.80); border: 1px solid #334155; border-radius: 8px; padding: 12px 16px; display:flex; align-items:center; justify-content:space-around; flex-wrap:wrap; gap:16px;'>
+            <div style='display:flex; align-items:center; gap:10px;'>
+                <span style='font-size:1.6rem;'>🏜️</span>
                 <div>
-                    <div style='font-size:0.80rem;color:#475569;font-weight:bold;'>5️⃣ إجمالي الرمل المطلوب للمباني (شامل 5% هالك):</div>
-                    <div style='font-size:1.2rem;font-weight:bold;color:#0f172a;'>{sand_total:.2f} <span style='font-size:0.85rem;'>م³</span></div>
+                    <div style='font-size:0.80rem; color:#cbd5e1; font-weight:bold;'>5️⃣ إجمالي الرمل المطلوب للمباني (شامل 5% هالك):</div>
+                    <div style='font-size:1.25rem; font-weight:bold; color:#fbbf24;'>{sand_total:.2f} <span style='font-size:0.85rem; color:#fde68a;'>م³</span></div>
                 </div>
             </div>
-            <div style='height:36px;width:1px;background-color:#cbd5e1;'></div>
-            <div style='display:flex;align-items:center;gap:10px;'>
-                <span style='font-size:1.5rem;'>🏗️</span>
+            <div style='height:36px; width:1px; background-color:#334155;'></div>
+            <div style='display:flex; align-items:center; gap:10px;'>
+                <span style='font-size:1.6rem;'>🏗️</span>
                 <div>
-                    <div style='font-size:0.80rem;color:#475569;font-weight:bold;'>5️⃣ إجمالي الأسمنت المطلوب (محتوى 350 كجم/م³):</div>
-                    <div style='font-size:1.2rem;font-weight:bold;color:#0f172a;'>{cement_tons:.2f} <span style='font-size:0.85rem;'>طن</span> &nbsp;<span style='font-size:0.88rem;color:#ffffff;'>({cement_bags} شكارة سعة 50 كجم)</span></div>
+                    <div style='font-size:0.80rem; color:#cbd5e1; font-weight:bold;'>6️⃣ إجمالي الأسمنت المطلوب (محتوى 350 كجم/م³):</div>
+                    <div style='font-size:1.25rem; font-weight:bold; color:#38bdf8;'>{cement_tons:.2f} <span style='font-size:0.85rem; color:#bae6fd;'>طن</span> &nbsp;<span style='font-size:0.85rem; color:#e2e8f0; font-weight:normal;'>({cement_bags} شكارة سعة 50 كجم)</span></div>
                 </div>
             </div>
-            <div style='height:36px;width:1px;background-color:#cbd5e1;'></div>
-            <div style='display:flex;align-items:center;gap:10px;'>
-                <span style='font-size:1.5rem;'>🧱</span>
+            <div style='height:36px; width:1px; background-color:#334155;'></div>
+            <div style='display:flex; align-items:center; gap:10px;'>
+                <span style='font-size:1.6rem;'>🧱</span>
                 <div>
-                    <div style='font-size:0.80rem;color:#475569;font-weight:bold;'>عدد الطوب المطلوب ({brick_type_display} | {brick_size_display} | مونة {mortar_v}سم):</div>
-                    <div style='font-size:1.2rem;font-weight:bold;color:#0f172a;'>{bricks_total:,} <span style='font-size:0.85rem;'>وحدة طوب</span></div>
+                    <div style='font-size:0.80rem; color:#cbd5e1; font-weight:bold;'>عدد الطوب المطلوب ({brick_type_display} | {brick_size_display} | مونة {mortar_v}سم):</div>
+                    <div style='font-size:1.25rem; font-weight:bold; color:#4ade80;'>{bricks_total:,} <span style='font-size:0.85rem; color:#bbf7d0;'>وحدة طوب</span></div>
                 </div>
             </div>
         </div>
@@ -9807,31 +9799,41 @@ def _section_survey():
     # 6. رسالة توضيحية لطريقة حساب كمية الرمل والأسمنت طبقاً للكود المصري
     with st.expander("💡 6️⃣ رسالة توضيحية: طريقة حساب كميات الرمل والأسمنت طبقاً للكود المصري وأصول التنفيذ", expanded=False):
         st.markdown(
-            f"""<div style='line-height:1.8;font-size:0.88rem;color:#ffffff;' dir='rtl'>
-            <p><b>استندت الحسابات التقديرية لكميات المونة ومواد البناء إلى المواصفات الفنية لبنود الأعمال بالكود المصري للبناء وأصول الصناعة:</b></p>
-            <ol style='padding-right:20px;margin-bottom:12px;'>
-                <li>
-                    <b>أعمال مباني طوب سمك 12 سم (نصف طوبة):</b>
-                    <br>• تُحصر هندسياً بالمتر المسطح (م²).
-                    <br>• المساحة الصافية = المساحة الإجمالية للمسقط مطروحاً منها مساحة فتحات الأبواب والشبابيك.
-                    <br>• معدل استهلاك الرمل لمونة البناء = <b>0.025 م³ رمل</b> لكل 1 م² مسطح مباني.
-                    <br>• حساب عدد الطوب = يُحسب بدقة هندسية لكل حائط استناداً إلى المقاس المختار (<b>{brick_type_display} | {brick_size_display}</b>) وفاصل مونة <b>{mortar_v} سم</b>.
+            f"""<div dir='rtl' style='direction: rtl !important; text-align: right !important; line-height: 1.85; font-size: 0.90rem; color: #f1f5f9; background: rgba(15, 23, 42, 0.6); border: 1px solid #334155; border-radius: 8px; padding: 14px 18px;'>
+            <p style='direction: rtl !important; text-align: right !important; font-weight: bold; color: #38bdf8; margin-bottom: 12px; font-size: 0.92rem;'>
+                استندت الحسابات التقديرية لكميات المونة ومواد البناء إلى المواصفات الفنية لبنود الأعمال بالكود المصري للبناء وأصول الصناعة:
+            </p>
+            <ol style='direction: rtl !important; text-align: right !important; padding-right: 25px; padding-left: 0; margin: 0 0 12px 0;'>
+                <li style='direction: rtl !important; text-align: right !important; margin-bottom: 12px; color: #e2e8f0;'>
+                    <b style='color: #fdba74;'>أعمال مباني طوب سمك 12 سم (نصف طوبة):</b>
+                    <div style='padding-right: 12px; margin-top: 4px; color: #cbd5e1; direction: rtl !important; text-align: right !important;'>
+                        • تُحصر هندسياً بالمتر المسطح (م²).<br>
+                        • المساحة الصافية = المساحة الإجمالية للمسقط مطروحاً منها مساحة فتحات الأبواب والشبابيك.<br>
+                        • معدل استهلاك الرمل لمونة البناء = <b style='color: #fde68a;'>0.025 م³ رمل</b> لكل 1 م² مسطح مباني.<br>
+                        • حساب عدد الطوب = يُحسب بدقة هندسية لكل حائط استناداً إلى المقاس المختار (<b style='color: #60a5fa;'>{brick_type_display} | {brick_size_display}</b>) وفاصل مونة <b style='color: #a78bfa;'>{mortar_v} سم</b>.
+                    </div>
                 </li>
-                <li style='margin-top:8px;'>
-                    <b>أعمال مباني طوب سمك 25 سم (طوبة كاملة):</b>
-                    <br>• تُحصر هندسياً بالمتر المكعب (م³ = المساحة الصافية × 0.25 م).
-                    <br>• معدل استهلاك الرمل لمونة البناء = <b>0.200 م³ رمل</b> لكل 1 م³ مكعب مباني (نسبة العراميس والمداميك).
-                    <br>• حساب عدد الطوب = يُحسب بدقة هندسية لكل حائط استناداً إلى المقاس المختار (<b>{brick_type_display} | {brick_size_display}</b>) وفاصل مونة <b>{mortar_v} سم</b>.
+                <li style='direction: rtl !important; text-align: right !important; margin-bottom: 12px; color: #e2e8f0;'>
+                    <b style='color: #f472b6;'>أعمال مباني طوب سمك 25 سم (طوبة كاملة):</b>
+                    <div style='padding-right: 12px; margin-top: 4px; color: #cbd5e1; direction: rtl !important; text-align: right !important;'>
+                        • تُحصر هندسياً بالمتر المكعب (م³ = المساحة الصافية × 0.25 م).<br>
+                        • معدل استهلاك الرمل لمونة البناء = <b style='color: #fde68a;'>0.200 م³ رمل</b> لكل 1 م³ مكعب مباني (نسبة العراميس والمداميك).<br>
+                        • حساب عدد الطوب = يُحسب بدقة هندسية لكل حائط استناداً إلى المقاس المختار (<b style='color: #60a5fa;'>{brick_type_display} | {brick_size_display}</b>) وفاصل مونة <b style='color: #a78bfa;'>{mortar_v} سم</b>.
+                    </div>
                 </li>
-                <li style='margin-top:8px;'>
-                    <b>نسبة خلط الأسمنت في مونة البناء (طبقاً لاشتراطات الكود المصري):</b>
-                    <br>• نسبة الخلط القياسية لمونة ربط الطوب هي <b>350 كجم أسمنت بورتلاندي عادي لكل 1 م³ رمل</b> نظيف متدرج (ما يعادل <b>7 شكاير أسمنت</b> زنة 50 كجم لكل متر مكعب رمل).
-                    <br>• إجمالي وزن الأسمنت (كجم) = حجم الرمل الإجمالي (م³) × 350 كجم.
-                    <br>• وزن الأسمنت بالطن = الأسمنت (كجم) ÷ 1000، وعدد الشكاير = سقف تقريبي (الأسمنت كجم ÷ 50).
+                <li style='direction: rtl !important; text-align: right !important; margin-bottom: 12px; color: #e2e8f0;'>
+                    <b style='color: #38bdf8;'>نسبة خلط الأسمنت في مونة البناء (طبقاً لاشتراطات الكود المصري):</b>
+                    <div style='padding-right: 12px; margin-top: 4px; color: #cbd5e1; direction: rtl !important; text-align: right !important;'>
+                        • نسبة الخلط القياسية لمونة ربط الطوب هي <b style='color: #bae6fd;'>350 كجم أسمنت بورتلاندي عادي لكل 1 م³ رمل</b> نظيف متدرج (ما يعادل <b style='color: #bae6fd;'>7 شكاير أسمنت</b> زنة 50 كجم لكل متر مكعب رمل).<br>
+                        • إجمالي وزن الأسمنت (كجم) = حجم الرمل الإجمالي (م³) × 350 كجم.<br>
+                        • وزن الأسمنت بالطن = الأسمنت (كجم) ÷ 1000، وعدد الشكاير = سقف تقريبي (الأسمنت كجم ÷ 50).
+                    </div>
                 </li>
-                <li style='margin-top:8px;'>
-                    <b>معامل الهالك والتشغيل (Waste Allowance):</b>
-                    <br>• تم احتساب نسبة هالك قدرها <b>5%</b> مضافة إلى كميات الرمل والأسمنت لتعويض الفواقد الطبيعية أثناء التشوين والخلط والتشغيل في الموقع.
+                <li style='direction: rtl !important; text-align: right !important; margin-bottom: 6px; color: #e2e8f0;'>
+                    <b style='color: #4ade80;'>معامل الهالك والتشغيل (Waste Allowance):</b>
+                    <div style='padding-right: 12px; margin-top: 4px; color: #cbd5e1; direction: rtl !important; text-align: right !important;'>
+                        • تم احتساب نسبة هالك قدرها <b style='color: #86efac;'>5%</b> مضافة إلى كميات الرمل والأسمنت لتعويض الفواقد الطبيعية أثناء التشوين والخلط والتشغيل في الموقع.
+                    </div>
                 </li>
             </ol>
         </div>""",
@@ -10276,6 +10278,8 @@ def render_brick_survey_module():
 
     lc,rc=st.columns([0.82,1.65],gap="medium")
     with lc:
+        with st.expander("🖼️ تحميل صورة مسقط افقي استرشادي للمباني", expanded=False):
+            _section_upload_image()
         with st.expander("1️⃣ شبكة المحاور", expanded=False): _section_axes()
         with st.expander("➕ إضافة الأعمدة على المحاور", expanded=is_add_active): _section_add_columns()
         with st.expander("📐 ضبط اتجاهات وضرب الأعمدة", expanded=False): _section_column_orientations()
@@ -10297,8 +10301,6 @@ def render_brick_survey_module():
         with st.expander("7️⃣ حذف الشبابيك والأبواب", expanded=False): _section_delete_restore_openings()
         with st.expander("8️⃣ أنواع مقاسات الطوب", expanded=False): _section_brick_type()
         with st.expander("9️⃣ تحديد حوائط المحارة", expanded=False): _section_plaster_walls()
-        with st.expander("🔟 تحميل صورة", expanded=False):
-            _section_upload_image()
 
     with rc:
         has_uploaded_img = bool(st.session_state.get("m12_uploaded_image_b64"))
@@ -10309,7 +10311,7 @@ def render_brick_survey_module():
                 st.session_state["m12_rc_view_mode"] = "uploaded"
             current_rc_view = st.session_state.get("m12_rc_view_mode", "uploaded")
 
-            c_header, c_plan_mode = st.columns([1.6, 1.0], vertical_alignment="center")
+            c_header, c_plan_mode = st.columns([1.85, 1.0], vertical_alignment="center")
             with c_header:
                 mode_dict = {
                     "uploaded": "🖼️ الصورة المحملة",
@@ -10339,8 +10341,8 @@ def render_brick_survey_module():
             c_plan_t, c_plan_mode = st.columns([1.4, 1.1], vertical_alignment="center")
             with c_plan_t:
                 st.markdown(
-                    "<div style='font-size:1.15rem;font-weight:700;color:#ffffff;line-height:32px;margin:0;display:flex;align-items:center;'>"
-                    "📐 المسقط الأفقي"
+                    "<div style='font-size:1.15rem;font-weight:700;color:#ffffff;line-height:32px;margin:0 0 18px 0;display:flex;align-items:center;'>"
+                    "📐 المسقط الأفقي المصمم"
                     "</div>",
                     unsafe_allow_html=True
                 )
@@ -10356,6 +10358,14 @@ def render_brick_survey_module():
             cur_h = st.session_state.get("m12_uploaded_image_h")
             cur_size = st.session_state.get("m12_uploaded_image_size_kb", 0.0)
             dim_str = f"{cur_w}×{cur_h} px" if cur_w and cur_h else ""
+
+            st.markdown(
+                f"""<div style='font-size:0.95rem; font-weight:700; color:#ffffff; margin-top:10px; margin-bottom:18px; display:flex; align-items:center; gap:8px;' dir='rtl'>
+                    <span>🖼️</span><span>تحميل صورة مسقط افقي استرشادي للمباني</span>
+                    <span style='color:#94a3b8; font-size:0.80rem; font-weight:normal;'>({cur_name})</span>
+                </div>""",
+                unsafe_allow_html=True
+            )
 
             if is_interactive and cur_b64:
                 _render_interactive_plan(b64_override=cur_b64)
@@ -10395,15 +10405,15 @@ def render_brick_survey_module():
 
         # ── 2) نمط عرض المقارنة جنباً إلى جنب ──
         elif current_rc_view == "both":
-            col_plan_half, col_img_half = st.columns(2, gap="small")
+            col_plan_half, col_img_half = st.columns(2, gap="medium")
             with col_plan_half:
-                st.markdown("<div style='font-size:0.88rem;font-weight:700;color:#ffffff;text-align:center;margin-bottom:4px;'>📐 المسقط الأفقي المصمم</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size:0.92rem; font-weight:700; color:#ffffff; text-align:center; margin-top:10px; margin-bottom:18px;'>📐 المسقط الأفقي المصمم</div>", unsafe_allow_html=True)
                 st.image(_draw_plan(with_dim=False), use_container_width=True)
             with col_img_half:
                 cur_b64 = st.session_state.get("m12_uploaded_image_b64")
                 cur_type = st.session_state.get("m12_uploaded_image_type", "image/png")
                 cur_name = st.session_state.get("m12_uploaded_image_name", "المخطط")
-                st.markdown(f"<div style='font-size:0.88rem;font-weight:700;color:#ffffff;text-align:center;margin-bottom:4px;'>🖼️ {cur_name}</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size:0.92rem; font-weight:700; color:#ffffff; text-align:center; margin-top:10px; margin-bottom:18px;'>🖼️ تحميل صورة مسقط افقي استرشادي للمباني</div>", unsafe_allow_html=True)
                 if cur_b64:
                     st.markdown(
                         f"""<div style="width: 100%; text-align: center; background: #0b1120; border: 1.5px solid #334155; border-radius: 8px; padding: 4px;">
@@ -10422,6 +10432,7 @@ def render_brick_survey_module():
 
         # ── 3) نمط عرض المسقط الأفقي المصمم للمشروع ──
         else:
+            st.markdown("<div style='font-size:0.95rem; font-weight:700; color:#ffffff; margin-top:10px; margin-bottom:18px;' dir='rtl'>📐 المسقط الأفقي المصمم</div>", unsafe_allow_html=True)
             active_dim = st.session_state.get("m12_active_move_dim")
             is_active_dim = False
             dim_elapsed = 0.0
