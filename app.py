@@ -1746,8 +1746,10 @@ def render_profile_manager():
                                     subprocess.run(["git", "add", "-A"], cwd=app_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
                                     # 2. git commit --allow-empty -m
                                     res_commit = subprocess.run(["git", "commit", "--allow-empty", "-m", msg_final], cwd=app_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
+                                    # 2.5. git pull --rebase to integrate any remote commits first
+                                    subprocess.run(["git", "pull", "--rebase", "origin", "main"], cwd=app_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
                                     # 3. git push
-                                    res_push = subprocess.run(["git", "push"], cwd=app_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
+                                    res_push = subprocess.run(["git", "push", "origin", "main"], cwd=app_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
                                     if res_push.returncode == 0:
                                         st.session_state["git_push_success_msg"] = f"✅ تم رفع وتحديث المشروع إلى GitHub بنجاح! باسم التعديل: «{msg_final}»"

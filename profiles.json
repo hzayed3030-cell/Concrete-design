@@ -5,13 +5,8 @@
       "name": "Test Module15",
       "description": "مشروع Test Module15",
       "created_at": "2026-09-30 00:31",
-<<<<<<< HEAD
-      "updated_at": "2026-09-30 17:20",
-      "last_used_at": "2026-09-30 17:20:45",
-=======
-      "updated_at": "2026-09-30 17:15",
-      "last_used_at": "2026-09-30 17:15:02",
->>>>>>> 1692d2a (Force drag mode - 2026-09-30 17:15)
+      "updated_at": "2026-09-30 17:23",
+      "last_used_at": "2026-09-30 17:23:17",
       "data": {
         "selected_module_idx": 14,
         "apartment_name": "Test Module15",
