@@ -632,11 +632,67 @@ def get_default_module_12_state() -> dict:
         "plaster_faces": {},
         "col_props": {},
         "deleted_cols_history": {},
+        # أسعار الخامات ومصنعيات المباني (EGP)
+        "price_brick_per_thousand": 2500.0,
+        "price_sand_per_m3": 200.0,
+        "price_cement_per_ton": 4000.0,
     }
 
 
 get_default_brick_survey_state = get_default_module_12_state
 _M12_FALLBACK = get_default_module_12_state()
+
+
+def get_default_module_15_state() -> dict:
+    """
+    Factory returning canonical default schema for module_15_masonry_plaster.
+    Starts with NO walls and NO columns by default.
+    """
+    return {
+        "x_axes": [0.0, 4.0, 8.0],
+        "y_axes": [0.0, 3.0, 6.0],
+        "col_length_cm": 60.0,
+        "col_width_cm": 30.0,
+        "col_placed": [],
+        "col_removed": [],
+        "col_dirs": {},
+        "col_shifts": {},
+        "col_shifted": {},
+        "walls_placed": [],
+        "wall_thickness": {},
+        "wall_removed": [],
+        "default_wall_height": 3.0,
+        "parapet_wall_height": 1.0,
+        "parapet_walls": [],
+        "wall_heights": {},
+        "windows": {},
+        "doors": {},
+        "next_op_id": 1,
+        "window_types": [],
+        "door_types": [],
+        "brick_type": "الطوب الأحمر الطفلي",
+        "brick_size": "25×12×6",
+        "mortar_thickness_cm": 1.0,
+        "brick_custom_l": 25.0,
+        "brick_custom_w": 12.0,
+        "brick_custom_h": 6.0,
+        "plaster_faces": {},
+        "col_props": {},
+        "deleted_cols_history": {},
+        "price_brick_per_thousand": 2500.0,
+        "price_sand_per_m3": 200.0,
+        "price_cement_per_ton": 4000.0,
+        "uploaded_image_b64": "",
+        "uploaded_image_name": "",
+        "uploaded_image_type": "image/png",
+        "uploaded_image_size_kb": 0.0,
+        "uploaded_image_w": None,
+        "uploaded_image_h": None,
+    }
+
+get_default_masonry_plaster_state = get_default_module_15_state
+_M15_FALLBACK = get_default_module_15_state()
+
 
 
 def _parse_m12_coord_tuple(val):
@@ -826,6 +882,9 @@ def _serialize_module_12_state(state: dict) -> dict:
         "brick_custom_w": brick_custom_w,
         "brick_custom_h": brick_custom_h,
         "plaster_faces": plaster_faces,
+        "price_brick_per_thousand": float(state.get("m12_price_brick_per_thousand", 2500.0)),
+        "price_sand_per_m3": float(state.get("m12_price_sand_per_m3", 200.0)),
+        "price_cement_per_ton": float(state.get("m12_price_cement_per_ton", 4000.0)),
         "uploaded_image_b64": str(state.get("m12_uploaded_image_b64", "")),
         "uploaded_image_name": str(state.get("m12_uploaded_image_name", "")),
         "uploaded_image_type": str(state.get("m12_uploaded_image_type", "image/png")),
@@ -1011,6 +1070,9 @@ def _deserialize_module_12_state(data: dict) -> dict:
         "m12_brick_custom_w": brick_custom_w,
         "m12_brick_custom_h": brick_custom_h,
         "m12_plaster_faces": plaster_faces,
+        "m12_price_brick_per_thousand": float(data.get("price_brick_per_thousand", schema.get("price_brick_per_thousand", 2500.0))),
+        "m12_price_sand_per_m3": float(data.get("price_sand_per_m3", schema.get("price_sand_per_m3", 200.0))),
+        "m12_price_cement_per_ton": float(data.get("price_cement_per_ton", schema.get("price_cement_per_ton", 4000.0))),
         "m12_uploaded_image_b64": str(data.get("uploaded_image_b64", "")),
         "m12_uploaded_image_name": str(data.get("uploaded_image_name", "")),
         "m12_uploaded_image_type": str(data.get("uploaded_image_type", "image/png")),
@@ -1775,6 +1837,12 @@ def _ensure_module12_state(cfg: dict | None = None) -> None:
                         "shift_y": str(v.get("shift_y", "متمركز على المحور (Centered)")),
                     }
             st.session_state["m12_col_shifts"] = cs
+        if "m12_price_brick_per_thousand" not in st.session_state:
+            st.session_state["m12_price_brick_per_thousand"] = float(nested.get("price_brick_per_thousand", 2500.0))
+        if "m12_price_sand_per_m3" not in st.session_state:
+            st.session_state["m12_price_sand_per_m3"] = float(nested.get("price_sand_per_m3", 200.0))
+        if "m12_price_cement_per_ton" not in st.session_state:
+            st.session_state["m12_price_cement_per_ton"] = float(nested.get("price_cement_per_ton", 4000.0))
         cfg["module_12_brick_survey"] = st.session_state.get("module_12_data", nested)
         st.session_state["current_project"] = cfg
         return
@@ -1823,6 +1891,475 @@ def reset_module_12_state(cfg: dict | None = None) -> None:
     save_settings()
 
 
+def _serialize_module_15_state(state: dict) -> dict:
+    """Convert Python set and tuple-keyed session state of Module 15 into JSON-serializable primitives."""
+    x_axes = [float(x) for x in state.get("m15_x_axes", [0.0, 4.0, 8.0])]
+    y_axes = [float(y) for y in state.get("m15_y_axes", [0.0, 3.0, 6.0])]
+    col_length_cm = float(state.get("m15_col_length_cm", 60.0))
+    col_width_cm = float(state.get("m15_col_width_cm", 30.0))
+
+    col_placed = []
+    for item in state.get("m15_col_placed", set()):
+        t = _parse_m12_coord_tuple(item)
+        if t and len(t) == 2:
+            col_placed.append(list(t))
+
+    col_removed = []
+    for item in state.get("m15_col_removed", set()):
+        t = _parse_m12_coord_tuple(item)
+        if t and len(t) == 2:
+            col_removed.append(list(t))
+
+    col_dirs = {}
+    for k, v in state.get("m15_col_dirs", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 2:
+            col_dirs[f"{t[0]},{t[1]}"] = str(v)
+
+    col_shifts = {}
+    for k, v in state.get("m15_col_shifts", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 2 and isinstance(v, dict):
+            col_shifts[f"{t[0]},{t[1]}"] = {
+                "shift_x": str(v.get("shift_x", "متمركز على المحور (Centered)")),
+                "shift_y": str(v.get("shift_y", "متمركز على المحور (Centered)")),
+            }
+
+    col_shifted = {}
+    for k, v in state.get("m15_col_shifted", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 2:
+            col_shifted[f"{t[0]},{t[1]}"] = [float(v[0]), float(v[1])]
+
+    walls_placed = []
+    for item in state.get("m15_walls_placed", []):
+        t = _parse_m12_coord_tuple(item)
+        if t and len(t) == 4:
+            walls_placed.append(list(t))
+
+    wall_thickness = {}
+    for k, v in state.get("m15_wall_thickness", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4:
+            wall_thickness[f"{t[0]},{t[1]},{t[2]},{t[3]}"] = int(v)
+
+    wall_removed = []
+    for item in state.get("m15_wall_removed", set()):
+        t = _parse_m12_coord_tuple(item)
+        if t and len(t) == 4:
+            wall_removed.append(list(t))
+
+    default_wall_height = float(state.get("m15_default_wall_height", state.get("m15_default_h_input", 3.0)))
+    parapet_wall_height = float(state.get("m15_parapet_wall_height", state.get("m15_parapet_h_input", 1.0)))
+
+    parapet_walls = []
+    for item in state.get("m15_parapet_walls", set()):
+        t = _parse_m12_coord_tuple(item)
+        if t and len(t) == 4:
+            parapet_walls.append(list(t))
+
+    wall_heights = {}
+    for k, v in state.get("m15_wall_heights", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4:
+            wall_heights[f"{t[0]},{t[1]},{t[2]},{t[3]}"] = float(v)
+
+    windows = {}
+    for k, win_list in state.get("m15_windows", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4 and isinstance(win_list, list):
+            clean_wins = []
+            for w in win_list:
+                wd = dict(w)
+                wd["id"] = str(wd.get("id", ""))
+                wd["name"] = str(wd.get("name", ""))
+                wd["type_label"] = str(wd.get("type_label", "W1"))
+                wd["w_m"] = float(wd.get("w_m", 1.0))
+                wd["h_m"] = float(wd.get("h_m", 1.2))
+                wd["pos_m"] = float(wd.get("pos_m", 0.0))
+                wd["sill_m"] = float(wd.get("sill_m", 0.9))
+                wd["removed"] = bool(wd.get("removed", False))
+                clean_wins.append(wd)
+            windows[f"{t[0]},{t[1]},{t[2]},{t[3]}"] = clean_wins
+
+    doors = {}
+    for k, door_list in state.get("m15_doors", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4 and isinstance(door_list, list):
+            clean_doors = []
+            for d in door_list:
+                dd = dict(d)
+                dd["id"] = str(dd.get("id", ""))
+                dd["name"] = str(dd.get("name", ""))
+                dd["type_label"] = str(dd.get("type_label", "D1"))
+                dd["w_m"] = float(dd.get("w_m", 0.9))
+                dd["h_m"] = float(dd.get("h_m", 2.1))
+                dd["pos_m"] = float(dd.get("pos_m", 0.0))
+                dd["leaf_dir"] = str(dd.get("leaf_dir", "أعلى"))
+                dd["hinge_dir"] = str(dd.get("hinge_dir", "يسار"))
+                dd["removed"] = bool(dd.get("removed", False))
+                clean_doors.append(dd)
+            doors[f"{t[0]},{t[1]},{t[2]},{t[3]}"] = clean_doors
+
+    next_op_id = int(state.get("m15_next_op_id", 1))
+
+    window_types = []
+    for wt in state.get("m15_window_types", []):
+        window_types.append({
+            "id": str(wt.get("id", "")),
+            "label": str(wt.get("label", "")),
+            "w_cm": float(wt.get("w_cm", 100.0)),
+            "h_cm": float(wt.get("h_cm", 120.0)),
+            "sill_cm": float(wt.get("sill_cm", 90.0)),
+        })
+
+    door_types = []
+    for dt in state.get("m15_door_types", []):
+        door_types.append({
+            "id": str(dt.get("id", "")),
+            "label": str(dt.get("label", "")),
+            "w_cm": float(dt.get("w_cm", 90.0)),
+            "h_cm": float(dt.get("h_cm", 210.0)),
+        })
+
+    brick_type = str(state.get("m15_brick_type", "الطوب الأحمر الطفلي"))
+    brick_size = str(state.get("m15_brick_size", "25×12×6"))
+    mortar_thickness_cm = float(state.get("m15_mortar_thickness_cm", 1.0))
+    brick_custom_l = float(state.get("m15_brick_custom_l", 25.0))
+    brick_custom_w = float(state.get("m15_brick_custom_w", 12.0))
+    brick_custom_h = float(state.get("m15_brick_custom_h", 6.0))
+
+    plaster_faces = {}
+    for k, v in state.get("m15_plaster_faces", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4 and isinstance(v, (list, tuple, set)):
+            plaster_faces[f"{t[0]},{t[1]},{t[2]},{t[3]}"] = [str(face) for face in v]
+
+    col_props = {}
+    for k, v in state.get("m15_col_props", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 2 and isinstance(v, dict):
+            col_props[f"{t[0]},{t[1]}"] = dict(v)
+
+    deleted_cols_history = {}
+    for k, v in state.get("m15_deleted_cols_history", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 2 and isinstance(v, dict):
+            deleted_cols_history[f"{t[0]},{t[1]}"] = dict(v)
+
+    price_brick = float(state.get("m15_price_brick_per_thousand", 2500.0))
+    price_sand = float(state.get("m15_price_sand_per_m3", 200.0))
+    price_cement = float(state.get("m15_price_cement_per_ton", 4000.0))
+    uploaded_image_b64 = str(state.get("m15_uploaded_image_b64", ""))
+    uploaded_image_name = str(state.get("m15_uploaded_image_name", ""))
+    uploaded_image_type = str(state.get("m15_uploaded_image_type", "image/png"))
+    uploaded_image_size_kb = float(state.get("m15_uploaded_image_size_kb", 0.0))
+    uploaded_image_w = state.get("m15_uploaded_image_w", None)
+    uploaded_image_h = state.get("m15_uploaded_image_h", None)
+
+    return {
+        "x_axes": x_axes,
+        "y_axes": y_axes,
+        "col_length_cm": col_length_cm,
+        "col_width_cm": col_width_cm,
+        "col_placed": col_placed,
+        "col_removed": col_removed,
+        "col_dirs": col_dirs,
+        "col_shifts": col_shifts,
+        "col_shifted": col_shifted,
+        "walls_placed": walls_placed,
+        "wall_thickness": wall_thickness,
+        "wall_removed": wall_removed,
+        "default_wall_height": default_wall_height,
+        "parapet_wall_height": parapet_wall_height,
+        "parapet_walls": parapet_walls,
+        "wall_heights": wall_heights,
+        "windows": windows,
+        "doors": doors,
+        "next_op_id": next_op_id,
+        "window_types": window_types,
+        "door_types": door_types,
+        "brick_type": brick_type,
+        "brick_size": brick_size,
+        "mortar_thickness_cm": mortar_thickness_cm,
+        "brick_custom_l": brick_custom_l,
+        "brick_custom_w": brick_custom_w,
+        "brick_custom_h": brick_custom_h,
+        "plaster_faces": plaster_faces,
+        "col_props": col_props,
+        "deleted_cols_history": deleted_cols_history,
+        "price_brick_per_thousand": price_brick,
+        "price_sand_per_m3": price_sand,
+        "price_cement_per_ton": price_cement,
+        "uploaded_image_b64": uploaded_image_b64,
+        "uploaded_image_name": uploaded_image_name,
+        "uploaded_image_type": uploaded_image_type,
+        "uploaded_image_size_kb": uploaded_image_size_kb,
+        "uploaded_image_w": uploaded_image_w,
+        "uploaded_image_h": uploaded_image_h,
+    }
+
+
+def _deserialize_module_15_state(data: dict) -> dict:
+    """Convert JSON-stored dict back into tuple-keyed and set session state items for Module 15."""
+    schema = get_default_module_15_state()
+    if not isinstance(data, dict):
+        data = dict(schema)
+
+    x_axes = [float(x) for x in data.get("x_axes", schema["x_axes"])]
+    y_axes = [float(y) for y in data.get("y_axes", schema["y_axes"])]
+    if len(x_axes) < 2:
+        x_axes = list(schema["x_axes"])
+    if len(y_axes) < 2:
+        y_axes = list(schema["y_axes"])
+
+    col_length_cm = float(data.get("col_length_cm", schema.get("col_length_cm", 60.0)))
+    col_width_cm = float(data.get("col_width_cm", schema.get("col_width_cm", 30.0)))
+
+    col_plc = set()
+    for item in data.get("col_placed", []):
+        t = _parse_m12_coord_tuple(item)
+        if t and len(t) == 2:
+            col_plc.add(t)
+
+    col_rem = set()
+    for item in data.get("col_removed", []):
+        t = _parse_m12_coord_tuple(item)
+        if t and len(t) == 2:
+            col_rem.add(t)
+
+    col_dirs = {}
+    for k, v in data.get("col_dirs", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 2:
+            col_dirs[t] = str(v)
+
+    col_shifts = {}
+    for k, v in data.get("col_shifts", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 2 and isinstance(v, dict):
+            col_shifts[t] = {
+                "shift_x": str(v.get("shift_x", "متمركز على المحور (Centered)")),
+                "shift_y": str(v.get("shift_y", "متمركز على المحور (Centered)")),
+            }
+
+    col_shifted = {}
+    for k, v in data.get("col_shifted", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 2:
+            col_shifted[t] = (float(v[0]), float(v[1]))
+
+    walls_placed = []
+    for item in data.get("walls_placed", []):
+        t = _parse_m12_coord_tuple(item)
+        if t and len(t) == 4:
+            walls_placed.append(t)
+
+    wall_thick = {}
+    for k, v in data.get("wall_thickness", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4:
+            wall_thick[t] = int(v)
+
+    wall_rem = set()
+    for item in data.get("wall_removed", []):
+        t = _parse_m12_coord_tuple(item)
+        if t and len(t) == 4:
+            wall_rem.add(t)
+
+    def_h = float(data.get("default_wall_height", schema["default_wall_height"]))
+    parapet_h = float(data.get("parapet_wall_height", schema.get("parapet_wall_height", 1.0)))
+
+    parapet_walls = set()
+    for item in data.get("parapet_walls", []):
+        t = _parse_m12_coord_tuple(item)
+        if t and len(t) == 4:
+            parapet_walls.add(t)
+
+    wall_heights = {}
+    for k, v in data.get("wall_heights", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4:
+            wall_heights[t] = float(v)
+
+    windows = {}
+    for k, win_list in data.get("windows", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4 and isinstance(win_list, list):
+            windows[t] = [dict(w) for w in win_list]
+
+    doors = {}
+    for k, door_list in data.get("doors", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4 and isinstance(door_list, list):
+            doors[t] = [dict(d) for d in door_list]
+
+    next_op_id = int(data.get("next_op_id", 1))
+
+    window_types = []
+    for wt in data.get("window_types", []):
+        if isinstance(wt, dict):
+            window_types.append({
+                "id": str(wt.get("id", "")),
+                "label": str(wt.get("label", "")),
+                "w_cm": float(wt.get("w_cm", 100.0)),
+                "h_cm": float(wt.get("h_cm", 120.0)),
+                "sill_cm": float(wt.get("sill_cm", 90.0)),
+            })
+
+    door_types = []
+    for dt in data.get("door_types", []):
+        if isinstance(dt, dict):
+            door_types.append({
+                "id": str(dt.get("id", "")),
+                "label": str(dt.get("label", "")),
+                "w_cm": float(dt.get("w_cm", 90.0)),
+                "h_cm": float(dt.get("h_cm", 210.0)),
+            })
+
+    brick_type = str(data.get("brick_type", schema.get("brick_type", "الطوب الأحمر الطفلي")))
+    brick_size = str(data.get("brick_size", schema.get("brick_size", "25×12×6")))
+    mortar_thickness_cm = float(data.get("mortar_thickness_cm", schema.get("mortar_thickness_cm", 1.0)))
+    brick_custom_l = float(data.get("brick_custom_l", schema.get("brick_custom_l", 25.0)))
+    brick_custom_w = float(data.get("brick_custom_w", schema.get("brick_custom_w", 12.0)))
+    brick_custom_h = float(data.get("brick_custom_h", schema.get("brick_custom_h", 6.0)))
+
+    plaster_faces = {}
+    for k, v in data.get("plaster_faces", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 4 and isinstance(v, (list, tuple, set)):
+            plaster_faces[t] = [str(face) for face in v]
+
+    col_props = {}
+    for k, v in data.get("col_props", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 2 and isinstance(v, dict):
+            col_props[t] = dict(v)
+
+    deleted_cols_history = {}
+    for k, v in data.get("deleted_cols_history", {}).items():
+        t = _parse_m12_coord_tuple(k)
+        if t and len(t) == 2 and isinstance(v, dict):
+            deleted_cols_history[t] = dict(v)
+
+    price_brick = float(data.get("price_brick_per_thousand", schema.get("price_brick_per_thousand", 2500.0)))
+    price_sand = float(data.get("price_sand_per_m3", schema.get("price_sand_per_m3", 200.0)))
+    price_cement = float(data.get("price_cement_per_ton", schema.get("price_cement_per_ton", 4000.0)))
+    uploaded_image_b64 = str(data.get("uploaded_image_b64", schema.get("uploaded_image_b64", "")))
+    uploaded_image_name = str(data.get("uploaded_image_name", schema.get("uploaded_image_name", "")))
+    uploaded_image_type = str(data.get("uploaded_image_type", schema.get("uploaded_image_type", "image/png")))
+    uploaded_image_size_kb = float(data.get("uploaded_image_size_kb", schema.get("uploaded_image_size_kb", 0.0)))
+    uploaded_image_w = data.get("uploaded_image_w", schema.get("uploaded_image_w", None))
+    uploaded_image_h = data.get("uploaded_image_h", schema.get("uploaded_image_h", None))
+
+    return {
+        "m15_x_axes": x_axes,
+        "m15_y_axes": y_axes,
+        "m15_col_length_cm": col_length_cm,
+        "m15_col_width_cm": col_width_cm,
+        "m15_col_placed": col_plc,
+        "m15_col_removed": col_rem,
+        "m15_col_dirs": col_dirs,
+        "m15_col_shifts": col_shifts,
+        "m15_col_shifted": col_shifted,
+        "m15_walls_placed": walls_placed,
+        "m15_wall_thickness": wall_thick,
+        "m15_wall_removed": wall_rem,
+        "m15_default_wall_height": def_h,
+        "m15_parapet_wall_height": parapet_h,
+        "m15_parapet_walls": parapet_walls,
+        "m15_wall_heights": wall_heights,
+        "m15_windows": windows,
+        "m15_doors": doors,
+        "m15_next_op_id": next_op_id,
+        "m15_window_types": window_types,
+        "m15_door_types": door_types,
+        "m15_brick_type": brick_type,
+        "m15_brick_size": brick_size,
+        "m15_mortar_thickness_cm": mortar_thickness_cm,
+        "m15_brick_custom_l": brick_custom_l,
+        "m15_brick_custom_w": brick_custom_w,
+        "m15_brick_custom_h": brick_custom_h,
+        "m15_plaster_faces": plaster_faces,
+        "m15_col_props": col_props,
+        "m15_deleted_cols_history": deleted_cols_history,
+        "m15_price_brick_per_thousand": price_brick,
+        "m15_price_sand_per_m3": price_sand,
+        "m15_price_cement_per_ton": price_cement,
+        "m15_uploaded_image_b64": uploaded_image_b64,
+        "m15_uploaded_image_name": uploaded_image_name,
+        "m15_uploaded_image_type": uploaded_image_type,
+        "m15_uploaded_image_size_kb": uploaded_image_size_kb,
+        "m15_uploaded_image_w": uploaded_image_w,
+        "m15_uploaded_image_h": uploaded_image_h,
+    }
+
+
+def _ensure_module15_state(cfg: dict | None = None) -> None:
+    """Build/refresh session_state for Module 15 safely."""
+    if cfg is None:
+        cfg = st.session_state.get("cfg", {})
+
+    nested = cfg.get("module_15_masonry_plaster")
+    if not isinstance(nested, dict):
+        nested = get_default_module_15_state()
+        cfg["module_15_masonry_plaster"] = nested
+
+    if "m15_x_axes" in st.session_state:
+        cfg["module_15_masonry_plaster"] = st.session_state.get("module_15_data", nested)
+        st.session_state["current_project"] = cfg
+        return
+
+    deserialized = _deserialize_module_15_state(nested)
+    for k, v in deserialized.items():
+        st.session_state[k] = v
+
+    st.session_state["m15_n_x"] = len(deserialized["m15_x_axes"])
+    st.session_state["m15_n_y"] = len(deserialized["m15_y_axes"])
+    for idx, xv in enumerate(deserialized["m15_x_axes"]):
+        st.session_state[f"m15_x_val_{idx}"] = float(xv)
+    for idx, yv in enumerate(deserialized["m15_y_axes"]):
+        st.session_state[f"m15_y_val_{idx}"] = float(yv)
+    for idx in range(len(deserialized["m15_x_axes"]) - 1):
+        sp = round(deserialized["m15_x_axes"][idx+1] - deserialized["m15_x_axes"][idx], 2)
+        st.session_state[f"m15_x_sp_{idx}"] = float(sp)
+    for idx in range(len(deserialized["m15_y_axes"]) - 1):
+        sp = round(deserialized["m15_y_axes"][idx+1] - deserialized["m15_y_axes"][idx], 2)
+        st.session_state[f"m15_y_sp_{idx}"] = float(sp)
+    st.session_state["_m15_synced_x_axes"] = list(deserialized["m15_x_axes"])
+    st.session_state["_m15_synced_y_axes"] = list(deserialized["m15_y_axes"])
+    st.session_state["_m15_synced_nx"] = len(deserialized["m15_x_axes"])
+    st.session_state["_m15_synced_ny"] = len(deserialized["m15_y_axes"])
+    st.session_state["m15_default_h_input"] = float(deserialized["m15_default_wall_height"])
+    st.session_state["m15_parapet_h_input"] = float(deserialized.get("m15_parapet_wall_height", 1.0))
+
+    st.session_state["module_15_data"] = nested
+    cfg["module_15_masonry_plaster"] = nested
+    st.session_state["current_project"] = cfg
+
+
+def _clear_m15_session_keys() -> None:
+    """Clear all m15_*, _m15_*, and module_15_data keys from st.session_state."""
+    for k in list(st.session_state.keys()):
+        if k.startswith("m15_") or k.startswith("_m15_") or k == "module_15_data":
+            del st.session_state[k]
+
+
+def reset_module_15_state(cfg: dict | None = None) -> None:
+    """
+    Reset Module 15 state to standard ECP defaults, clear session state and persist immediately.
+    """
+    if cfg is None:
+        cfg = st.session_state.get("cfg", {})
+    cfg["_m15_reset_v1_done"] = True
+    def_m15 = get_default_module_15_state()
+    _clear_m15_session_keys()
+    cfg["module_15_masonry_plaster"] = dict(def_m15)
+    st.session_state["module_15_data"] = dict(def_m15)
+    _ensure_module15_state(cfg)
+    save_settings()
+
+
 
 def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
     """Switch active profile, load its data into cfg, and clear widget session cache."""
@@ -1865,24 +2402,28 @@ def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
     st.session_state["current_project"] = new_cfg
     st.session_state["_settings_loaded_from_file"] = True
 
-    # Wipe old Module 9, 10, 11 & 12 session data so the new project's values are loaded cleanly
+    # Wipe old Module 9, 10, 11, 12 & 15 session data so the new project's values are loaded cleanly
     st.session_state.pop("module_9_data", None)
     st.session_state.pop("module_10_data", None)
     st.session_state.pop("module_11_data", None)
     st.session_state.pop("module_12_data", None)
+    st.session_state.pop("module_15_data", None)
     _clear_m12_session_keys()
+    _clear_m15_session_keys()
     _ensure_module9_state(new_cfg)
     _ensure_module10_state(new_cfg)
     _ensure_module11_state(new_cfg)
     _ensure_module12_state(new_cfg)
+    _ensure_module15_state(new_cfg)
 
     if clear_cache:
         _clear_widget_cache()
-        # Re-inject Module 9, 10, 11 & 12 state after cache wipe
+        # Re-inject Module 9, 10, 11, 12 & 15 state after cache wipe
         _ensure_module9_state(new_cfg)
         _ensure_module10_state(new_cfg)
         _ensure_module11_state(new_cfg)
         _ensure_module12_state(new_cfg)
+        _ensure_module15_state(new_cfg)
 
 
 
@@ -2068,6 +2609,7 @@ ALL_MODULES = [
     {"idx": 11, "key": "steel_bars", "name": "⚙️ Module 12 — Steel Rebar Dimensions & Weights (أقطار وأوزان حديد التسليح)", "short": "Module 12"},
     {"idx": 12, "key": "concrete_survey", "name": "📊 Module 13 — Concrete Quantity Survey (حصر الكميات الخرسانية)", "short": "Module 13"},
     {"idx": 13, "key": "brick_survey", "name": "🏠 Module 14: Brick & Plastering Survey (حصر أعمال الطوب والمحارة)", "short": "Module 14"},
+    {"idx": 14, "key": "masonry_plaster", "name": "🧱 Module 15: Masonry & Plastering Works (اعمال المباني والمحارة)", "short": "Module 15"},
 ]
 
 
@@ -2343,6 +2885,22 @@ def get_project_summary(project_name: str) -> dict:
         ts = float(m12.get("default_wall_height", 3.0))
         floors = 1
         module_name = "Brick & Plastering Survey"
+
+    elif mod_idx == 14:
+        # ── Module 15: Masonry & Plastering Works (اعمال المباني والمحارة) ──
+        m15 = data.get("module_15_masonry_plaster", {})
+        xs = m15.get("x_axes", [0.0, 4.0, 8.0])
+        ys = m15.get("y_axes", [0.0, 3.0, 6.0])
+        total_w = float(xs[-1] - xs[0]) if len(xs) >= 2 else 0.0
+        total_h = float(ys[-1] - ys[0]) if len(ys) >= 2 else 0.0
+        area = total_w * total_h
+        n_cols_total = len(m15.get("col_placed", []))
+        n_cols_active = max(0, n_cols_total - len(m15.get("col_removed", [])))
+        n_lx = max(len(xs) - 1, 1)
+        n_ly = max(len(ys) - 1, 1)
+        ts = float(m15.get("default_wall_height", 3.0))
+        floors = 1
+        module_name = "Masonry & Plastering Works"
 
     else:
         # ── Module 1: Flat Slabs & General Grid ──
@@ -2696,6 +3254,15 @@ def save_settings() -> None:
         cfg["module_12_brick_survey"] = dict(st.session_state["module_12_data"])
     # ── End Module 12 persistence ────────────────────────────────────────────
 
+    # ── Persist Module 15 data: write nested dict ───────────────────────────
+    if "m15_x_axes" in st.session_state:
+        m15_serialized = _serialize_module_15_state(st.session_state)
+        cfg["module_15_masonry_plaster"] = m15_serialized
+        st.session_state["module_15_data"] = m15_serialized
+    elif "module_15_data" in st.session_state and isinstance(st.session_state["module_15_data"], dict):
+        cfg["module_15_masonry_plaster"] = dict(st.session_state["module_15_data"])
+    # ── End Module 15 persistence ────────────────────────────────────────────
+
     active_name = get_active_project_name()
     pdata = load_profiles_data()
     profiles = pdata.get("profiles", {})
@@ -2770,12 +3337,16 @@ def reset_settings() -> None:
     cfg = dict(ECP_DEFAULTS)
     cfg["apartment_name"] = active_name
     _clear_m12_session_keys()
+    _clear_m15_session_keys()
     cfg["module_12_brick_survey"] = get_default_module_12_state()
+    cfg["module_15_masonry_plaster"] = get_default_module_15_state()
     st.session_state["cfg"] = cfg
     _ensure_module12_state(cfg)
+    _ensure_module15_state(cfg)
     save_settings()
     _clear_widget_cache()
     _ensure_module12_state(cfg)
+    _ensure_module15_state(cfg)
 
 
 def reset_font_sizes() -> None:

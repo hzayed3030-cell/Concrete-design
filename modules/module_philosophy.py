@@ -1186,7 +1186,74 @@ def show_dialog_m14_brick_survey():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  MODULE METADATA MAPPING (KEYS 1 TO 14)
+#  MODULE 15: MASONRY & PLASTERING WORKS MODAL DIALOG
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@st.dialog("📖 أصول وحسابات اعمال المباني والمحارة والإسقاط التفاعلي (Masonry & Plastering Works)", width="large")
+def show_dialog_m15_masonry_plaster():
+    html_dialog = (
+        '<div dir="rtl" style="direction: rtl; text-align: right; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif; line-height: 1.85; color: #0f172a;">'
+        '<div style="background: linear-gradient(135deg, #0f172a 0%, #78350f 50%, #92400e 100%); color: #ffffff; padding: 20px 24px; border-radius: 12px; margin-bottom: 20px; border: 1.5px solid #f59e0b; box-shadow: 0 6px 18px rgba(15, 23, 42, 0.25);">'
+        '<h3 style="margin: 0 0 10px 0; color: #fde68a; font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 8px;">'
+        '<span>🧱 دليل وأصول أعمال المباني والمحارة التفاعلية</span> '
+        '<span dir="ltr" style="font-size: 15px; color: #fef3c7; font-weight: 600;">(Interactive Masonry & Plastering Standards)</span>'
+        '</h3>'
+        '<p style="margin: 0; font-size: 14px; color: #e2e8f0; line-height: 1.7;">'
+        'الضوابط الهندسية لإسقاط الحوائط على شبكة المحاور ودمجها تلقائياً عند غياب الأعمدة، وفحص أطوال الحوائط الصافية لضمان سلامة استيعاب فتحات الأبواب والشبابيك، مع الحصر التراكمي الشامل للمباني والمحارة.'
+        '</p>'
+        '</div>'
+
+        '<div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-right: 6px solid #b45309; border-radius: 10px; padding: 18px 22px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">'
+        '<h4 style="color: #92400e; margin-top: 0; margin-bottom: 10px; font-size: 16.5px; font-weight: 800;">'
+        '1️⃣ فلسفة الإسقاط والدمج التلقائي للحوائط <span dir="ltr" style="font-size:14px; color:#b45309;">(Auto-Merge & Grid Snapping)</span>'
+        '</h4>'
+        '<ul style="margin-bottom: 6px; padding-right: 22px; line-height: 1.8;">'
+        '<li style="margin-bottom: 8px;">'
+        '<b>الإسقاط الحر بين المحاور:</b> يتم إسقاط الحوائط بين نقطتي تقاطع للمحاور (X, Y)، مما يضمن دقة استقامة الحوائط وتوافقها مع المخطط المعماري والإنشائي.'
+        '</li>'
+        '<li>'
+        '<b>الدمج والانقسام الذكي:</b> عند استمرار الحوائط على نفس الخط دون وجود عمود فاصل، تدمج برمجياً في حائط واحد يحمل اسماً موحداً (L1, L2...). وبمجرد إسقاط عمود فاصل يتم تقسيم الحائط هندسياً بدقة.'
+        '</li>'
+        '</ul>'
+        '</div>'
+
+        '<div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-right: 6px solid #16a34a; border-radius: 10px; padding: 18px 22px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">'
+        '<h4 style="color: #15803d; margin-top: 0; margin-bottom: 10px; font-size: 16.5px; font-weight: 800;">'
+        '2️⃣ التحقق الصارم من استيعاب الفتحات <span dir="ltr" style="font-size:14px; color:#16a34a;">(Clear Span & Opening Validation)</span>'
+        '</h4>'
+        '<ul style="margin-bottom: 6px; padding-right: 22px; line-height: 1.8;">'
+        '<li style="margin-bottom: 8px;">'
+        '<b>فحص الطول الصافي للحائط:</b> يتم حساب الطول الصافي المتاح بين طرفي الحائط أو الأعمدة المحيطة قبل السماح بتثبيت الباب أو الشباك.'
+        '</li>'
+        '<li>'
+        '<b>إلغاء الإسقاط عند التعارض:</b> إذا كان عرض الفتحة أكبر من الطول الصافي للحائط، يرفض النظام الإسقاط فوراً مع إظهار رسالة تحذيرية صريحة لمنع الأخطاء التنفيذية.'
+        '</li>'
+        '</ul>'
+        '</div>'
+
+        '<div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-right: 6px solid #2563eb; border-radius: 10px; padding: 18px 22px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">'
+        '<h4 style="color: #1e40af; margin-top: 0; margin-bottom: 10px; font-size: 16.5px; font-weight: 800;">'
+        '3️⃣ أصول حصر المباني والمحارة وخصم الفتحات <span dir="ltr" style="font-size:14px; color:#3b82f6;">(Standard Take-off Rules)</span>'
+        '</h4>'
+        '<ul style="margin-bottom: 6px; padding-right: 22px; line-height: 1.8;">'
+        '<li style="margin-bottom: 8px;">'
+        '<b>الحصر الهندسي للمباني:</b> الحوائط سمك 25 سم بالمتر المكعب (m³)، والقواطيع سمك 12 سم بالمتر المربع (m²).'
+        '</li>'
+        '<li>'
+        '<b>قواعد الخصم القياسية:</b> الفتحات < 0.5 م² لا تخصم، من 0.5 إلى 3.0 م² يخصم نصفها، وأكبر من 3.0 م² تخصم بالكامل.'
+        '</li>'
+        '<li>'
+        '<b>أعمال البياض والمحارة:</b> قياس المسطحات الصافية مع إضافة الجوانب والأكتاف وحساب استهلاك المونة الإسمنتية والطرطشة.'
+        '</li>'
+        '</ul>'
+        '</div>'
+        '</div>'
+    )
+    st.markdown(html_dialog, unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  MODULE METADATA MAPPING (KEYS 1 TO 15)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 MODULE_PHILOSOPHY_MAP = {
@@ -1268,6 +1335,12 @@ MODULE_PHILOSOPHY_MAP = {
         "help_text": "عرض دليل القواعد الهندسية لحصر أعمال المباني بالمتر المكعب والمربع وخصم الفتحات والمحارة",
         "dialog_func": show_dialog_m14_brick_survey,
     },
+    "masonry_plaster": {
+        "title": "🧱 Module 15 – Masonry & Plastering Works (اعمال المباني والمحارة)",
+        "btn_text": "📖 الاطلاع على فلسفة وأصول اسقاط وحصر أعمال المباني والمحارة (ECP 203 & BOQ)",
+        "help_text": "عرض دليل القواعد الهندسية لإسقاط الحوائط ودمجها وحصر أعمال المباني والمحارة",
+        "dialog_func": show_dialog_m15_masonry_plaster,
+    },
 }
 
 # Aliases for robust matching from different router keys or module labels
@@ -1312,6 +1385,10 @@ _KEY_ALIASES = {
     "module_14": "brick_survey",
     "طوب": "brick_survey",
     "المباني": "brick_survey",
+    "module 15": "masonry_plaster",
+    "module_15": "masonry_plaster",
+    "masonry_plaster": "masonry_plaster",
+    "اعمال المباني": "masonry_plaster",
 }
 
 

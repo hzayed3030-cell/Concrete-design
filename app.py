@@ -91,6 +91,7 @@ from modules.module_9_strap_footing import render_strap_footing_module
 from modules.module_10_diagonal_strap import render_diagonal_strap_module
 from modules.module_11_ground_beam import render_ground_beam_module
 from modules.module_12_brick_survey import render_brick_survey_module
+from modules.module_15_masonry_plaster import render_masonry_plaster_module
 from modules.module_13_standalone_flat_slab import render as render_standalone_flat_slab
 from modules.raft_foundations import render_raft_foundations_module
 from modules.circular_tank_foundations import render_circular_tank_foundations_module
@@ -3450,7 +3451,9 @@ else:
 
     target_k = mod_key
     if not target_k:
-        if "Module 14" in module or "brick_survey" in module or "طوب" in module or "المحارة" in module:
+        if "Module 15" in module or "masonry_plaster" in module or "اعمال المباني" in module:
+            target_k = "masonry_plaster"
+        elif "Module 14" in module or "brick_survey" in module or "طوب" in module or "المحارة" in module:
             target_k = "brick_survey"
         elif "Module 13" in module or "concrete_survey" in module or ("Concrete" in module and "Survey" in module) or "حصر الكميات" in module:
             target_k = "concrete_survey"
@@ -3479,12 +3482,18 @@ else:
         elif "Module 1" in module or "Integrated" in module or "flat_slab" in module:
             target_k = "flat_slab"
 
-    # ── Unified Centered Amber Title Banner & Philosophy Modal (Modules 2 to 14) ───
+    # ── Unified Centered Amber Title Banner & Philosophy Modal (Modules 2 to 15) ───
     if target_k and target_k != "flat_slab":
         pref = get_safe_profile_filename_prefix()
         render_module_header_and_philosophy(target_k, prefix=pref)
 
-    if mod_key == "brick_survey" or "Module 14" in module or "brick_survey" in module or "طوب" in module or "المحارة" in module:
+    if mod_key == "masonry_plaster" or "Module 15" in module or "masonry_plaster" in module or "اعمال المباني" in module:
+        try:
+            render_masonry_plaster_module()
+        except Exception as ex:
+            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 15: {ex}")
+            st.exception(ex)
+    elif mod_key == "brick_survey" or "Module 14" in module or "brick_survey" in module or "طوب" in module or "المحارة" in module:
         try:
             render_brick_survey_module()
         except Exception as ex:
