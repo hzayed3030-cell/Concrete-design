@@ -652,7 +652,9 @@ def get_default_module_15_state() -> dict:
         "x_axes": [0.0, 4.0, 8.0],
         "y_axes": [0.0, 3.0, 6.0],
         "col_length_cm": 60.0,
-        "col_width_cm": 30.0,
+        "col_width_cm": 25.0,
+        "new_col_b": 25.0,
+        "new_col_t": 60.0,
         "col_placed": [],
         "col_removed": [],
         "col_dirs": {},
@@ -688,6 +690,7 @@ def get_default_module_15_state() -> dict:
         "uploaded_image_size_kb": 0.0,
         "uploaded_image_w": None,
         "uploaded_image_h": None,
+        "named_spaces": [],
     }
 
 get_default_masonry_plaster_state = get_default_module_15_state
@@ -1188,6 +1191,44 @@ def migrate_module_12_in_project_dict(pdata_dict: dict) -> bool:
     return modified
 
 
+def migrate_module_15_in_project_dict(pdata_dict: dict) -> bool:
+    """
+    Seamless migration patch for Module 15 (Masonry & Plastering Survey):
+    Inspects if 'module_15_masonry_plaster' exists in project dictionary.
+    If missing, appends default schema.
+    Fills any missing keys if schema was updated.
+    Returns True if pdata_dict was modified.
+    """
+    if not isinstance(pdata_dict, dict):
+        return False
+
+    modified = False
+    schema = get_default_module_15_state()
+    nested = pdata_dict.get("module_15_masonry_plaster")
+
+    if not isinstance(nested, dict):
+        pdata_dict["module_15_masonry_plaster"] = dict(schema)
+        modified = True
+    else:
+        for k, v in schema.items():
+            if k not in nested:
+                nested[k] = v
+                modified = True
+
+        if not isinstance(nested.get("x_axes"), list) or len(nested.get("x_axes", [])) < 2:
+            nested["x_axes"] = schema["x_axes"]
+            modified = True
+        if not isinstance(nested.get("y_axes"), list) or len(nested.get("y_axes", [])) < 2:
+            nested["y_axes"] = schema["y_axes"]
+            modified = True
+
+        if "col_placed" not in nested or nested.get("col_placed") is None:
+            nested["col_placed"] = []
+            modified = True
+
+    return modified
+
+
 def get_default_project_state(project_name: str = "", owner_name: str = "") -> dict:
     """Return fresh default project state with all module schemas initialized."""
     d = dict(ECP_DEFAULTS)
@@ -1195,6 +1236,7 @@ def get_default_project_state(project_name: str = "", owner_name: str = "") -> d
     d["module_10_diagonal_strap"] = get_default_module_10_state()
     d["module_11_ground_beam"] = get_default_module_11_state()
     d["module_12_brick_survey"] = get_default_module_12_state()
+    d["module_15_masonry_plaster"] = get_default_module_15_state()
     if project_name:
         d["apartment_name"] = project_name
         d["cs_project_name"] = project_name
@@ -1508,6 +1550,10 @@ def load_profiles_data() -> dict:
 
         # ── Module 12 backward-compatibility migration ───────────────
         if migrate_module_12_in_project_dict(pdata_dict):
+            modified = True
+
+        # ── Module 15 backward-compatibility migration ───────────────
+        if migrate_module_15_in_project_dict(pdata_dict):
             modified = True
 
         # ── Ensure last_used_at is populated for MRU sorting ─────────
@@ -1895,8 +1941,8 @@ def _serialize_module_15_state(state: dict) -> dict:
     """Convert Python set and tuple-keyed session state of Module 15 into JSON-serializable primitives."""
     x_axes = [float(x) for x in state.get("m15_x_axes", [0.0, 4.0, 8.0])]
     y_axes = [float(y) for y in state.get("m15_y_axes", [0.0, 3.0, 6.0])]
-    col_length_cm = float(state.get("m15_col_length_cm", 60.0))
-    col_width_cm = float(state.get("m15_col_width_cm", 30.0))
+    col_width_cm = float(state.get("m15_new_col_b", state.get("m15_col_width_cm", 25.0)))
+    col_length_cm = float(state.get("m15_new_col_t", state.get("m15_col_length_cm", 60.0)))
 
     col_placed = []
     for item in state.get("m15_col_placed", set()):
@@ -2056,12 +2102,32 @@ def _serialize_module_15_state(state: dict) -> dict:
     uploaded_image_size_kb = float(state.get("m15_uploaded_image_size_kb", 0.0))
     uploaded_image_w = state.get("m15_uploaded_image_w", None)
     uploaded_image_h = state.get("m15_uploaded_image_h", None)
+    raw_spaces = state.get("m15_named_spaces", [])
+    clean_spaces = []
+    if isinstance(raw_spaces, list):
+        for s in raw_spaces:
+            if isinstance(s, dict):
+                s_copy = dict(s)
+                s_copy["cells"] = [list(c) for c in s.get("cells", [])]
+                walls_copy = {}
+                for d_k, d_list in s.get("walls", {}).items():
+                    cleaned_w = []
+                    if isinstance(d_list, list):
+                        for w_item in d_list:
+                            t_wk = _parse_m12_coord_tuple(w_item.get("wk"))
+                            if t_wk and len(t_wk) == 4:
+                                cleaned_w.append({"wk": list(t_wk), "face": str(w_item.get("face", ""))})
+                    walls_copy[d_k] = cleaned_w
+                s_copy["walls"] = walls_copy
+                clean_spaces.append(s_copy)
 
     return {
         "x_axes": x_axes,
         "y_axes": y_axes,
         "col_length_cm": col_length_cm,
         "col_width_cm": col_width_cm,
+        "new_col_b": col_width_cm,
+        "new_col_t": col_length_cm,
         "col_placed": col_placed,
         "col_removed": col_removed,
         "col_dirs": col_dirs,
@@ -2097,6 +2163,7 @@ def _serialize_module_15_state(state: dict) -> dict:
         "uploaded_image_size_kb": uploaded_image_size_kb,
         "uploaded_image_w": uploaded_image_w,
         "uploaded_image_h": uploaded_image_h,
+        "named_spaces": clean_spaces,
     }
 
 
@@ -2113,8 +2180,8 @@ def _deserialize_module_15_state(data: dict) -> dict:
     if len(y_axes) < 2:
         y_axes = list(schema["y_axes"])
 
-    col_length_cm = float(data.get("col_length_cm", schema.get("col_length_cm", 60.0)))
-    col_width_cm = float(data.get("col_width_cm", schema.get("col_width_cm", 30.0)))
+    col_width_cm = float(data.get("new_col_b", data.get("col_width_cm", schema.get("col_width_cm", 25.0))))
+    col_length_cm = float(data.get("new_col_t", data.get("col_length_cm", schema.get("col_length_cm", 60.0))))
 
     col_plc = set()
     for item in data.get("col_placed", []):
@@ -2252,11 +2319,31 @@ def _deserialize_module_15_state(data: dict) -> dict:
     uploaded_image_w = data.get("uploaded_image_w", schema.get("uploaded_image_w", None))
     uploaded_image_h = data.get("uploaded_image_h", schema.get("uploaded_image_h", None))
 
+    named_spaces = []
+    for s in data.get("named_spaces", []):
+        if isinstance(s, dict):
+            s_copy = dict(s)
+            s_copy["cells"] = [_parse_m12_coord_tuple(c) or tuple(c) for c in s.get("cells", [])]
+            walls_copy = {}
+            for d_k, d_list in s.get("walls", {}).items():
+                cleaned_w = []
+                if isinstance(d_list, list):
+                    for w_item in d_list:
+                        t_wk = _parse_m12_coord_tuple(w_item.get("wk"))
+                        if t_wk and len(t_wk) == 4:
+                            cleaned_w.append({"wk": t_wk, "face": str(w_item.get("face", ""))})
+                walls_copy[d_k] = cleaned_w
+            s_copy["walls"] = walls_copy
+            named_spaces.append(s_copy)
+
     return {
         "m15_x_axes": x_axes,
         "m15_y_axes": y_axes,
         "m15_col_length_cm": col_length_cm,
         "m15_col_width_cm": col_width_cm,
+        "m15_new_col_b": col_width_cm,
+        "m15_new_col_t": col_length_cm,
+        "m15_new_col_model": f"C({int(col_width_cm)}x{int(col_length_cm)})",
         "m15_col_placed": col_plc,
         "m15_col_removed": col_rem,
         "m15_col_dirs": col_dirs,
@@ -2292,6 +2379,7 @@ def _deserialize_module_15_state(data: dict) -> dict:
         "m15_uploaded_image_size_kb": uploaded_image_size_kb,
         "m15_uploaded_image_w": uploaded_image_w,
         "m15_uploaded_image_h": uploaded_image_h,
+        "m15_named_spaces": named_spaces,
     }
 
 
@@ -2308,6 +2396,18 @@ def _ensure_module15_state(cfg: dict | None = None) -> None:
     if "m15_x_axes" in st.session_state:
         cfg["module_15_masonry_plaster"] = st.session_state.get("module_15_data", nested)
         st.session_state["current_project"] = cfg
+        if "m15_new_col_b" not in st.session_state:
+            st.session_state["m15_new_col_b"] = float(nested.get("new_col_b", nested.get("col_width_cm", 25.0)))
+        if "m15_new_col_t" not in st.session_state:
+            st.session_state["m15_new_col_t"] = float(nested.get("new_col_t", nested.get("col_length_cm", 60.0)))
+        if "m15_col_width_cm" not in st.session_state:
+            st.session_state["m15_col_width_cm"] = st.session_state["m15_new_col_b"]
+        if "m15_col_length_cm" not in st.session_state:
+            st.session_state["m15_col_length_cm"] = st.session_state["m15_new_col_t"]
+        if "m15_new_col_model" not in st.session_state:
+            st.session_state["m15_new_col_model"] = f"C({int(st.session_state['m15_new_col_b'])}x{int(st.session_state['m15_new_col_t'])})"
+        if "m15_named_spaces" not in st.session_state:
+            st.session_state["m15_named_spaces"] = _deserialize_module_15_state(nested).get("m15_named_spaces", [])
         return
 
     deserialized = _deserialize_module_15_state(nested)
@@ -2382,6 +2482,7 @@ def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
     new_cfg["module_10_diagonal_strap"] = get_default_module_10_state()
     new_cfg["module_11_ground_beam"] = get_default_module_11_state()
     new_cfg["module_12_brick_survey"] = get_default_module_12_state()
+    new_cfg["module_15_masonry_plaster"] = get_default_module_15_state()
     profile_cfg = profiles[profile_name].get("data", {})
     for k, v in profile_cfg.items():
         new_cfg[k] = v
@@ -2397,6 +2498,7 @@ def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
     migrate_module_10_in_project_dict(new_cfg)
     migrate_module_11_in_project_dict(new_cfg)
     migrate_module_12_in_project_dict(new_cfg)
+    migrate_module_15_in_project_dict(new_cfg)
 
     st.session_state["cfg"] = new_cfg
     st.session_state["current_project"] = new_cfg
@@ -2470,6 +2572,7 @@ def create_project(
     migrate_module_10_in_project_dict(new_data)
     migrate_module_11_in_project_dict(new_data)
     migrate_module_12_in_project_dict(new_data)
+    migrate_module_15_in_project_dict(new_data)
 
     # Apply enabled_modules if provided or inherited
     if enabled_modules is not None and isinstance(enabled_modules, list):
@@ -3127,6 +3230,7 @@ def import_project_json(json_content: str, overwrite: bool = False) -> tuple:
                 migrate_module_10_in_project_dict(p_entry["data"])
                 migrate_module_11_in_project_dict(p_entry["data"])
                 migrate_module_12_in_project_dict(p_entry["data"])
+                migrate_module_15_in_project_dict(p_entry["data"])
         pdata["profiles"] = existing_profiles
         save_profiles_data(pdata)
         set_active_project(pdata.get("active_profile", list(existing_profiles.keys())[0]))
@@ -3188,6 +3292,7 @@ def load_settings() -> None:
     migrate_module_10_in_project_dict(cfg)
     migrate_module_11_in_project_dict(cfg)
     migrate_module_12_in_project_dict(cfg)
+    migrate_module_15_in_project_dict(cfg)
 
     st.session_state["cfg"] = cfg
     st.session_state["current_project"] = cfg
@@ -3196,11 +3301,12 @@ def load_settings() -> None:
     if "nav_view" not in st.session_state:
         st.session_state["nav_view"] = "profile_manager"
     cfg["nav_view"] = "profile_manager"
-    # Ensure Module 9, 10, 11 & 12 session state is always populated correctly on app load
+    # Ensure Module 9, 10, 11, 12 & 15 session state is always populated correctly on app load
     _ensure_module9_state(cfg)
     _ensure_module10_state(cfg)
     _ensure_module11_state(cfg)
     _ensure_module12_state(cfg)
+    _ensure_module15_state(cfg)
 
 
 

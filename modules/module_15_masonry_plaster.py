@@ -119,22 +119,24 @@ def _init_state():
         st.session_state["m15_parapet_wall_height"] = 1.0
     if "m15_parapet_walls" not in st.session_state:
         st.session_state["m15_parapet_walls"] = set()
+    def_col_w = float(st.session_state.get("m15_new_col_b", st.session_state.get("m15_col_width_cm", 25.0)))
+    def_col_l = float(st.session_state.get("m15_new_col_t", st.session_state.get("m15_col_length_cm", 60.0)))
     if "m15_col_length_cm" not in st.session_state:
-        st.session_state["m15_col_length_cm"] = 60.0
+        st.session_state["m15_col_length_cm"] = def_col_l
     if "m15_col_width_cm" not in st.session_state:
-        st.session_state["m15_col_width_cm"] = 30.0
+        st.session_state["m15_col_width_cm"] = def_col_w
     if "m15_col_placed" not in st.session_state:
         st.session_state["m15_col_placed"] = set()
     if "m15_add_col_mode" not in st.session_state:
         st.session_state["m15_add_col_mode"] = False
     if "m15_restore_col_mode" not in st.session_state:
         st.session_state["m15_restore_col_mode"] = False
-    if "m15_new_col_model" not in st.session_state:
-        st.session_state["m15_new_col_model"] = "C1: 25x60"
     if "m15_new_col_b" not in st.session_state:
-        st.session_state["m15_new_col_b"] = 25.0
+        st.session_state["m15_new_col_b"] = def_col_w
     if "m15_new_col_t" not in st.session_state:
-        st.session_state["m15_new_col_t"] = 60.0
+        st.session_state["m15_new_col_t"] = def_col_l
+    if "m15_new_col_model" not in st.session_state:
+        st.session_state["m15_new_col_model"] = f"C({int(st.session_state['m15_new_col_b'])}x{int(st.session_state['m15_new_col_t'])})"
     if "m15_new_col_dir" not in st.session_state:
         st.session_state["m15_new_col_dir"] = "رأسي"
     if "m15_new_col_anchor" not in st.session_state:
@@ -155,6 +157,8 @@ def _init_state():
         st.session_state["m15_add_win_mode"] = False
     if "m15_add_door_mode" not in st.session_state:
         st.session_state["m15_add_door_mode"] = False
+    if "m15_named_spaces" not in st.session_state:
+        st.session_state["m15_named_spaces"] = []
 
     # تنظيف المتغيرات القديمة الخاصة بآلية الإضافة والاستعادة السابقة والمفاتيح المتضاربة
     for old_k in ["m15_add_col_sel", "m15_del_active_col_sel", "m15_confirm_del_col_tab", "m15_col_restore_expander_open"]:
@@ -2299,27 +2303,33 @@ def _draw_plan(with_dim=True):
                 if (i_idx, j_idx) not in active_set:
                     ax.plot(ax_x, ax_y, marker="+", markersize=10, markeredgewidth=1.5, color="#0284c7", alpha=0.8, zorder=5.8)
 
-    # ── إسقاط ترقيم وتسمية الباكيات والمساحات الداخلية (A1, A2, ...) على المسقط الأفقي ──
-    bays = _compute_bays()
-    for b in bays:
-        bx, by = b["cx"], b["cy"]
-        b_code = b["id"]
-        # رسم رقم كل مساحة في منتصف الباكية داخل مربع تعريفي بارز ومميز بصرياً
-        ax.text(
-            bx, by, b_code,
-            ha="center", va="center",
-            fontsize=fs_col * 1.15,
-            color="#0369a1",
-            fontweight="heavy",
-            zorder=7.5,
-            bbox=dict(
-                boxstyle="square,pad=0.38",
-                facecolor="#f0f9ff",
-                edgecolor="#0284c7",
-                lw=1.8,
-                alpha=0.95
+    # ── إسقاط تسميات المساحات الداخلية المحددة طبقاً للحوائط فقط (وليس طبقاً للمحاور) ──
+    named_spaces = st.session_state.get("m15_named_spaces", [])
+    if named_spaces:
+        for s in named_spaces:
+            sx, sy = s["cx"], s["cy"]
+            s_name = s.get("name", s.get("id", ""))
+            s_code = s.get("code", "")
+            s_area = s.get("clear_area_m2", 0.0)
+            if s_code and s_code not in s_name:
+                txt_lbl = f"{s_name} ({s_code})\n{s_area:.2f} م²" if s_area > 0 else f"{s_name} ({s_code})"
+            else:
+                txt_lbl = f"{s_name}\n{s_area:.2f} م²" if s_area > 0 else s_name
+            ax.text(
+                sx, sy, txt_lbl,
+                ha="center", va="center",
+                fontsize=fs_col * 0.95,
+                color="#0369a1",
+                fontweight="heavy",
+                zorder=7.5,
+                bbox=dict(
+                    boxstyle="round,pad=0.42",
+                    facecolor="#f0f9ff",
+                    edgecolor="#0284c7",
+                    lw=1.6,
+                    alpha=0.94
+                )
             )
-        )
 
     # ── خط أبعاد مؤقت لموضع تحريك الفتحة (نافذة/باب) مع نقطة بداية الحائط ──
     active_move_dim = (st.session_state.get("m15_active_move_dim") if with_dim else None)
@@ -2712,7 +2722,7 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     bbox_info["walls"] = walls_list
     bbox_json = json.dumps(bbox_info)
     mode_str = box_mode or ""
-    box_banner_display = "flex" if box_mode else "none"
+    box_banner_display = "none" if box_mode == "add" else ("flex" if box_mode else "none")
     viewport_box_class = "box-mode" if box_mode else ""
     if box_mode == "delete_wall":
         hint_text_toolbar = "🗑️ اسحب صندوقاً حول الحائط لحذفه"
@@ -2798,6 +2808,15 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     transition: all 0.15s ease;
     text-decoration: none;
     line-height: 1.2;
+  }}
+  .tb-btn-fp {{
+    background: linear-gradient(135deg, #1e3a8a, #2563eb) !important;
+    border: 1px solid #60a5fa !important;
+    color: #ffffff !important;
+  }}
+  .tb-btn-fp:hover {{
+    background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+    box-shadow: 0 0 10px rgba(96, 165, 250, 0.5) !important;
   }}
   .tb-btn:hover {{
     background: #334155;
@@ -2927,6 +2946,7 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
 <div id="viewport" class="{viewport_box_class}">
   <!-- Floating CAD Toolbar -->
   <div class="cad-toolbar">
+    <button class="tb-btn tb-btn-fp" id="btn-toggle-floating-plan" title="عرض / إخفاء المسقط المعماري الاسترشادي (Ctrl + Alt + F)">🖼️ المسقط الاسترشادي</button>
     <button class="tb-btn" id="btn-zoom-in" title="تكبير (Zoom In)">🔍➕ تكبير</button>
     <button class="tb-btn" id="btn-zoom-out" title="تصغير (Zoom Out)">🔍➖ تصغير</button>
     <button class="tb-btn" id="btn-reset" title="استعادة المركز والحجم الطبيعي (Reset 100%)">🔄 ضبط</button>
@@ -3009,6 +3029,18 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     panX = 0;
     panY = 0;
     updateTransform();
+  }}
+
+  var btnFp = document.getElementById('btn-toggle-floating-plan');
+  if (btnFp) {{
+    btnFp.addEventListener('click', function(e) {{
+      e.stopPropagation();
+      try {{
+        var pWin = (window.parent && window.parent.document) ? window.parent : window;
+        if (pWin.m15ToggleFloatingPlan) pWin.m15ToggleFloatingPlan();
+        else if (pWin.m12ToggleFloatingPlan) pWin.m12ToggleFloatingPlan();
+      }} catch(err) {{}}
+    }});
   }}
 
   document.getElementById('btn-zoom-in').addEventListener('click', function(e) {{
@@ -3620,8 +3652,28 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     }}
   }});
 
-  // Keyboard Shortcuts (Esc to exit)
+  // Keyboard Shortcuts (Esc to exit, Ctrl + Alt + F for Floating Plan)
   window.addEventListener('keydown', function(e) {{
+    if (!e) return;
+    var codeMatches = (e.code === 'KeyF');
+    var keyMatches = (e.key === 'f' || e.key === 'F' || e.key === 'ب' || e.key === 'B' || e.key === 'ـ' || e.key === '[' || e.key === ']' || e.keyCode === 70 || e.which === 70);
+    var isF = codeMatches || keyMatches;
+    var hasAlt = e.altKey || (e.getModifierState && e.getModifierState('Alt'));
+    var hasCtrl = e.ctrlKey || e.metaKey || (e.getModifierState && e.getModifierState('Control'));
+    var hasAltGr = (e.getModifierState && e.getModifierState('AltGraph'));
+    var isToggleShortcut = isF && ((hasCtrl && hasAlt) || hasAltGr || (hasCtrl && e.shiftKey));
+
+    if (isToggleShortcut) {{
+      e.preventDefault();
+      e.stopPropagation();
+      try {{
+        var pWin = (window.parent && window.parent.document) ? window.parent : window;
+        if (pWin.m15ToggleFloatingPlan) pWin.m15ToggleFloatingPlan();
+        else if (pWin.m12ToggleFloatingPlan) pWin.m12ToggleFloatingPlan();
+      }} catch(err) {{}}
+      return false;
+    }}
+
     if ((e.key === 'Escape' || e.keyCode === 27) && currentBoxMode) {{
       syncToStreamlit({{ action: 'exit_box_mode', ts: Date.now() }});
     }}
@@ -4056,92 +4108,13 @@ def _section_axes():
     cys = st.session_state["m15_y_axes"]
 
     # ═════════════════════════════════════════════════════════════════════════
-    # 🔴 Horizontal Axes — X1, X2, X3...
+    # 🔵 Vertical Axes — Y1, Y2, Y3...   (m15_x_axes → خطوط رأسية في المسقط)
+    # تُحدد الأبعاد الأفقية (العرض) بين المحاور الرأسية
     # ═════════════════════════════════════════════════════════════════════════
     st.markdown(
         f"""<div style='display:flex;align-items:center;gap:8px;margin-top:8px;margin-bottom:18px;'>
-            <span style='background:#fee2e2;color:{_CLR_AXIS_X};font-weight:bold;padding:5px 14px;border-radius:6px;font-size:0.95rem;border:1px solid #fca5a5;white-space:nowrap;'>
-                🔴 Horizontal Axes — X1, X2, X3...
-            </span>
-        </div>""",
-        unsafe_allow_html=True
-    )
-
-    cur_ny = len(cys)
-    if "m15_n_h_axes" in st.session_state and st.session_state.get("_m15_synced_ny") != cur_ny:
-        st.session_state["m15_n_h_axes"] = cur_ny
-        st.session_state["_m15_synced_ny"] = cur_ny
-
-    c_nx1, c_nx2 = st.columns([1.2, 2.8])
-    with c_nx1:
-        n_x_axes = st.number_input(
-            "عدد المحاور الأفقية X",
-            min_value=2,
-            max_value=20,
-            value=cur_ny,
-            step=1,
-            key="m15_n_h_axes"
-        )
-        n_x_axes = int(n_x_axes)
-    with c_nx2:
-        st.caption("📐 أدخل المسافات البينية بين كل محورين أفقيين متتاليين (م) [المحور الأول X1 = 0.00م]. يمكن تكرار المسافات المتساوية بحرية:")
-
-    # مزامنة مفاتيح الواجهة إذا تم تعديل الإحداثيات من خارج القسم
-    if st.session_state.get("_m15_synced_y_axes") != cys:
-        for idx in range(len(cys) - 1):
-            st.session_state[f"m15_y_sp_{idx}"] = float(round(cys[idx + 1] - cys[idx], 2))
-        st.session_state["_m15_synced_y_axes"] = list(cys)
-
-    spacings_y = []
-    n_spans_y = n_x_axes - 1
-    for row_start in range(0, n_spans_y, 3):
-        chunk = range(row_start, min(row_start + 3, n_spans_y))
-        cols = st.columns(3)
-        for ci, idx in enumerate(chunk):
-            if idx < len(cys) - 1:
-                dsp = round(cys[idx + 1] - cys[idx], 2)
-            elif spacings_y:
-                dsp = spacings_y[-1]
-            else:
-                dsp = 3.0
-            if f"m15_y_sp_{idx}" not in st.session_state:
-                st.session_state[f"m15_y_sp_{idx}"] = float(dsp)
-            sp = cols[ci].number_input(
-                f"المسافة X{idx+1} → X{idx+2}",
-                min_value=0.25,
-                max_value=50.0,
-                value=float(st.session_state[f"m15_y_sp_{idx}"]),
-                step=0.25,
-                format="%.2f",
-                key=f"m15_y_sp_{idx}"
-            )
-            spacings_y.append(float(sp))
-
-    # حساب الإحداثيات التراكمية للمحاور الأفقية
-    y_vals = [0.0]
-    for s in spacings_y:
-        y_vals.append(round(y_vals[-1] + s, 3))
-
-    if y_vals != cys:
-        st.session_state["m15_y_axes"] = y_vals
-        st.session_state["_m15_synced_y_axes"] = list(y_vals)
-        st.session_state["_m15_synced_ny"] = len(y_vals)
-        _sanitize_and_prune_grid_data()
-        _normalize_wall_keys()
-        save_settings()
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # فاصل أنيق بين محاور X ومحاور Y
-    # ─────────────────────────────────────────────────────────────────────────
-    st.markdown("<hr style='margin:18px 0;border:0;border-top:1.5px dashed #cbd5e1;'>", unsafe_allow_html=True)
-
-    # ═════════════════════════════════════════════════════════════════════════
-    # 🔵 Vertical Axes — Y1, Y2, Y3...
-    # ═════════════════════════════════════════════════════════════════════════
-    st.markdown(
-        f"""<div style='display:flex;align-items:center;gap:8px;margin-top:10px;margin-bottom:18px;'>
             <span style='background:#1e40af;color:#ffffff;font-weight:bold;padding:5px 14px;border-radius:6px;font-size:0.95rem;border:1px solid #3b82f6;white-space:nowrap;'>
-                🔵 Vertical Axes — Y1, Y2, Y3...
+                🔵 المحاور الرأسية — Y1, Y2, Y3... (الأبعاد الأفقية بين المحاور)
             </span>
         </div>""",
         unsafe_allow_html=True
@@ -4164,7 +4137,7 @@ def _section_axes():
         )
         n_y_axes = int(n_y_axes)
     with c_ny2:
-        st.caption("📐 أدخل المسافات البينية بين كل محورين رأسيين متتاليين (م) [المحور الأول Y1 = 0.00م]. يمكن تكرار المسافات المتساوية بحرية:")
+        st.caption("📐 أدخل الأبعاد الأفقية (العرض) بين كل محورين رأسيين متتاليين (م) [المحور الأول Y1 = 0.00م]:")
 
     # مزامنة مفاتيح الواجهة إذا تم تعديل الإحداثيات من خارج القسم
     if st.session_state.get("_m15_synced_x_axes") != cxs:
@@ -4187,7 +4160,7 @@ def _section_axes():
             if f"m15_x_sp_{idx}" not in st.session_state:
                 st.session_state[f"m15_x_sp_{idx}"] = float(dsp)
             sp = cols[ci].number_input(
-                f"المسافة Y{idx+1} → Y{idx+2}",
+                f"البعد الأفقي Y{idx+1} → Y{idx+2}",
                 min_value=0.25,
                 max_value=50.0,
                 value=float(st.session_state[f"m15_x_sp_{idx}"]),
@@ -4206,6 +4179,87 @@ def _section_axes():
         st.session_state["m15_x_axes"] = x_vals
         st.session_state["_m15_synced_x_axes"] = list(x_vals)
         st.session_state["_m15_synced_nx"] = len(x_vals)
+        _sanitize_and_prune_grid_data()
+        _normalize_wall_keys()
+        save_settings()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # فاصل أنيق بين محاور Y الرأسية ومحاور X الأفقية
+    # ─────────────────────────────────────────────────────────────────────────
+    st.markdown("<hr style='margin:18px 0;border:0;border-top:1.5px dashed #cbd5e1;'>", unsafe_allow_html=True)
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # 🔴 Horizontal Axes — X1, X2, X3...   (m15_y_axes → خطوط أفقية في المسقط)
+    # تُحدد الأبعاد الرأسية (العمق) بين المحاور الأفقية
+    # ═════════════════════════════════════════════════════════════════════════
+    st.markdown(
+        f"""<div style='display:flex;align-items:center;gap:8px;margin-top:10px;margin-bottom:18px;'>
+            <span style='background:#fee2e2;color:{_CLR_AXIS_X};font-weight:bold;padding:5px 14px;border-radius:6px;font-size:0.95rem;border:1px solid #fca5a5;white-space:nowrap;'>
+                🔴 المحاور الأفقية — X1, X2, X3... (الأبعاد الرأسية بين المحاور)
+            </span>
+        </div>""",
+        unsafe_allow_html=True
+    )
+
+    cur_ny = len(cys)
+    if "m15_n_h_axes" in st.session_state and st.session_state.get("_m15_synced_ny") != cur_ny:
+        st.session_state["m15_n_h_axes"] = cur_ny
+        st.session_state["_m15_synced_ny"] = cur_ny
+
+    c_nx1, c_nx2 = st.columns([1.2, 2.8])
+    with c_nx1:
+        n_x_axes = st.number_input(
+            "عدد المحاور الأفقية X",
+            min_value=2,
+            max_value=20,
+            value=cur_ny,
+            step=1,
+            key="m15_n_h_axes"
+        )
+        n_x_axes = int(n_x_axes)
+    with c_nx2:
+        st.caption("📐 أدخل الأبعاد الرأسية (العمق) بين كل محورين أفقيين متتاليين (م) [المحور الأول X1 = 0.00م]:")
+
+    # مزامنة مفاتيح الواجهة إذا تم تعديل الإحداثيات من خارج القسم
+    if st.session_state.get("_m15_synced_y_axes") != cys:
+        for idx in range(len(cys) - 1):
+            st.session_state[f"m15_y_sp_{idx}"] = float(round(cys[idx + 1] - cys[idx], 2))
+        st.session_state["_m15_synced_y_axes"] = list(cys)
+
+    spacings_y = []
+    n_spans_y = n_x_axes - 1
+    for row_start in range(0, n_spans_y, 3):
+        chunk = range(row_start, min(row_start + 3, n_spans_y))
+        cols = st.columns(3)
+        for ci, idx in enumerate(chunk):
+            if idx < len(cys) - 1:
+                dsp = round(cys[idx + 1] - cys[idx], 2)
+            elif spacings_y:
+                dsp = spacings_y[-1]
+            else:
+                dsp = 3.0
+            if f"m15_y_sp_{idx}" not in st.session_state:
+                st.session_state[f"m15_y_sp_{idx}"] = float(dsp)
+            sp = cols[ci].number_input(
+                f"البعد الرأسي X{idx+1} → X{idx+2}",
+                min_value=0.25,
+                max_value=50.0,
+                value=float(st.session_state[f"m15_y_sp_{idx}"]),
+                step=0.25,
+                format="%.2f",
+                key=f"m15_y_sp_{idx}"
+            )
+            spacings_y.append(float(sp))
+
+    # حساب الإحداثيات التراكمية للمحاور الأفقية
+    y_vals = [0.0]
+    for s in spacings_y:
+        y_vals.append(round(y_vals[-1] + s, 3))
+
+    if y_vals != cys:
+        st.session_state["m15_y_axes"] = y_vals
+        st.session_state["_m15_synced_y_axes"] = list(y_vals)
+        st.session_state["_m15_synced_ny"] = len(y_vals)
         _sanitize_and_prune_grid_data()
         _normalize_wall_keys()
         save_settings()
@@ -4324,9 +4378,9 @@ def _execute_add_column_box(data):
     is_existing = (target_i, target_j) in active_cols
 
     # قراءة إعدادات العمود المحددة من الواجهة
-    model_name = str(st.session_state.get("m15_new_col_model", "C1: 25x60"))
     b_cm = float(st.session_state.get("m15_new_col_b", 25.0))
     t_cm = float(st.session_state.get("m15_new_col_t", 60.0))
+    model_name = str(st.session_state.get("m15_new_col_model", f"C({int(b_cm)}x{int(t_cm)})"))
     cur_dirs = st.session_state.get("m15_col_dirs", {})
     cur_shifts = st.session_state.get("m15_col_shifts", {})
     dir_code = cur_dirs.get((target_i, target_j), "NS")
@@ -4382,10 +4436,27 @@ def _execute_add_column_box(data):
     col_shifted[(target_i, target_j)] = (dx_m * 100.0, dy_m * 100.0)
     st.session_state["m15_col_shifted"] = col_shifted
 
+    # الحفاظ على آخر أبعاد مدخلة كـ default مستمر لباقي الأعمدة
+    st.session_state["m15_col_width_cm"] = b_cm
+    st.session_state["m15_col_length_cm"] = t_cm
+    st.session_state["m15_new_col_b"] = b_cm
+    st.session_state["m15_new_col_t"] = t_cm
+    st.session_state["m15_new_col_model"] = f"C({int(b_cm)}x{int(t_cm)})"
+    st.session_state["_m15_saved_col_b"] = b_cm
+    st.session_state["_m15_saved_col_t"] = t_cm
+    m15_data = st.session_state.get("module_15_data")
+    if isinstance(m15_data, dict):
+        m15_data["col_width_cm"] = b_cm
+        m15_data["col_length_cm"] = t_cm
+        m15_data["new_col_b"] = b_cm
+        m15_data["new_col_t"] = t_cm
+
     if is_existing:
         st.toast(f"🔄 تم تحديث مواصفات العمود {model_name} عند تقاطع Y{target_i+1} × X{target_j+1} بنجاح!", icon="🏗️")
     else:
         st.toast(f"✅ تم إضافة العمود {model_name} عند تقاطع Y{target_i+1} × X{target_j+1} بنجاح!", icon="🏗️")
+    st.session_state.pop("m15_plan_png_b64", None)
+    save_settings()
     st.session_state["m15_add_col_mode"] = True
     st.rerun()
 
@@ -4904,6 +4975,22 @@ def _section_add_columns():
 
     is_add_active = bool(st.session_state.get("m15_add_col_mode", False))
 
+    def _on_col_dims_change():
+        cur_b = float(st.session_state.get("m15_new_col_b", 25.0))
+        cur_t = float(st.session_state.get("m15_new_col_t", 60.0))
+        st.session_state["m15_col_width_cm"] = cur_b
+        st.session_state["m15_col_length_cm"] = cur_t
+        st.session_state["m15_new_col_model"] = f"C({int(cur_b)}x{int(cur_t)})"
+        st.session_state["_m15_saved_col_b"] = cur_b
+        st.session_state["_m15_saved_col_t"] = cur_t
+        m15_data = st.session_state.get("module_15_data")
+        if isinstance(m15_data, dict):
+            m15_data["col_width_cm"] = cur_b
+            m15_data["col_length_cm"] = cur_t
+            m15_data["new_col_b"] = cur_b
+            m15_data["new_col_t"] = cur_t
+        save_settings()
+
     c_b, c_t = st.columns(2)
     with c_b:
         b_val = st.number_input(
@@ -4913,7 +5000,8 @@ def _section_add_columns():
             value=float(st.session_state.get("m15_new_col_b", 25.0)),
             step=5.0,
             key="m15_new_col_b",
-            help="عرض العمود بالسنتمتر"
+            on_change=_on_col_dims_change,
+            help="عرض العمود بالسنتمتر (يتم اعتماده كـ default للأعمدة التالية)"
         )
     with c_t:
         t_val = st.number_input(
@@ -4923,12 +5011,30 @@ def _section_add_columns():
             value=float(st.session_state.get("m15_new_col_t", 60.0)),
             step=5.0,
             key="m15_new_col_t",
-            help="طول العمود بالسنتمتر"
+            on_change=_on_col_dims_change,
+            help="طول العمود بالسنتمتر (يتم اعتماده كـ default للأعمدة التالية)"
         )
-    st.session_state["m15_new_col_model"] = f"C({int(b_val)}x{int(t_val)})"
+
+    cur_b = float(b_val)
+    cur_t = float(t_val)
+    st.session_state["m15_col_width_cm"] = cur_b
+    st.session_state["m15_col_length_cm"] = cur_t
+    st.session_state["m15_new_col_model"] = f"C({int(cur_b)}x{int(cur_t)})"
+
+    if (st.session_state.get("_m15_saved_col_b") != cur_b or 
+        st.session_state.get("_m15_saved_col_t") != cur_t):
+        st.session_state["_m15_saved_col_b"] = cur_b
+        st.session_state["_m15_saved_col_t"] = cur_t
+        m15_data = st.session_state.get("module_15_data")
+        if isinstance(m15_data, dict):
+            m15_data["col_width_cm"] = cur_b
+            m15_data["col_length_cm"] = cur_t
+            m15_data["new_col_b"] = cur_b
+            m15_data["new_col_t"] = cur_t
+        save_settings()
 
     st.markdown("<hr style='margin: 12px 0 14px 0; border: none; border-top: 1px dashed #cbd5e1;'>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size:0.92rem; font-weight:700; color:#ffffff; margin-bottom:10px;'>🎯 أو التحديد التفاعلي بالسحب على المسقط:</div>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:0.92rem; font-weight:700; color:#ffffff; margin-bottom:10px;'>اسقاط اعمدة بسحب صندوق بالماوس</div>", unsafe_allow_html=True)
 
     if not is_add_active:
         if st.button("🎯 تفعيل اختيار عمود بالسحب على المسقط", type="primary", use_container_width=True, key="m15_btn_start_add_col"):
@@ -6333,7 +6439,114 @@ def _compute_plaster_survey():
     }
 
 
+def _compute_wall_bounded_spaces():
+    """
+    حساب المساحات المحصورة بناءً على وجود الحوائط الفعلية (وليس طبقاً للمحاور فقط):
+    - تعتبر الباكية (bay) مساحةً مسماةً إذا كان لها حائط واحد على الأقل على أي ضلع من أضلعها الأربعة.
+    - الحوائط الجزئية (التي لا تمتد من محور إلى محور بالكامل) تُحتسب كحوائط.
+    - المساحات تُرقَّم تسلسلياً بدءاً من S1, S2, S3, ...
+    - تُحسب إحداثيات مركز كل مساحة وأبعادها الداخلية الصافية (بعد خصم سُمك الحوائط).
+    """
+    xs = st.session_state.get("m15_x_axes", [])
+    ys = st.session_state.get("m15_y_axes", [])
+    nx, ny = len(xs), len(ys)
+    if nx < 2 or ny < 2:
+        return []
+
+    all_walls = _get_all_walls()
+    removed_walls = st.session_state.get("m15_wall_removed", set())
+    active_walls = set(wk for wk in all_walls if wk not in removed_walls)
+
+    spaces = []
+    space_idx = 1
+
+    for j in range(ny - 1):
+        y_bot = min(ys[j], ys[j + 1])
+        y_top = max(ys[j], ys[j + 1])
+
+        for i in range(nx - 1):
+            x_left = min(xs[i], xs[i + 1])
+            x_right = max(xs[i], xs[i + 1])
+
+            # مفاتيح الحوائط الأربعة المحيطة بهذه الباكية
+            wk_top   = (i, j + 1, i + 1, j + 1)
+            wk_bot   = (i, j,     i + 1, j)
+            wk_left  = (i, j,     i,     j + 1)
+            wk_right = (i + 1, j, i + 1, j + 1)
+
+            has_top   = wk_top   in active_walls
+            has_bot   = wk_bot   in active_walls
+            has_left  = wk_left  in active_walls
+            has_right = wk_right in active_walls
+
+            # يُعتبر مساحةً إذا وُجد حائط واحد على الأقل على أي ضلع
+            wall_count = sum([has_top, has_bot, has_left, has_right])
+            if wall_count == 0:
+                continue
+
+            # حساب الحدود الداخلية الصافية بعد خصم سُمك الحوائط
+            if has_left:
+                _min_x, _max_x, _c, _th = _get_wall_cross_bounds(wk_left)
+                x_inner_left = _max_x
+            else:
+                x_inner_left = x_left
+
+            if has_right:
+                _min_x, _max_x, _c, _th = _get_wall_cross_bounds(wk_right)
+                x_inner_right = _min_x
+            else:
+                x_inner_right = x_right
+
+            if has_bot:
+                _min_y, _max_y, _c, _th = _get_wall_cross_bounds(wk_bot)
+                y_inner_bot = _max_y
+            else:
+                y_inner_bot = y_bot
+
+            if has_top:
+                _min_y, _max_y, _c, _th = _get_wall_cross_bounds(wk_top)
+                y_inner_top = _min_y
+            else:
+                y_inner_top = y_top
+
+            clear_span_x = max(0.10, x_inner_right - x_inner_left)
+            clear_span_y = max(0.10, y_inner_top - y_inner_bot)
+            clear_area_m2 = round(clear_span_x * clear_span_y, 2)
+            cx = (x_inner_left + x_inner_right) / 2.0
+            cy = (y_inner_bot + y_inner_top) / 2.0
+
+            space_code = f"S{space_idx}"
+            spaces.append({
+                "code": space_code,
+                "name": space_code,
+                "id": space_code,
+                "index": space_idx,
+                "i": i,
+                "j": j,
+                "cx": cx,
+                "cy": cy,
+                "x_inner_left": x_inner_left,
+                "x_inner_right": x_inner_right,
+                "y_inner_bot": y_inner_bot,
+                "y_inner_top": y_inner_top,
+                "span_x": round(clear_span_x, 2),
+                "span_y": round(clear_span_y, 2),
+                "clear_area_m2": clear_area_m2,
+                "wall_count": wall_count,
+                "walls_present": {
+                    "أعلى": has_top,
+                    "أسفل": has_bot,
+                    "يسار": has_left,
+                    "يمين": has_right,
+                }
+            })
+            space_idx += 1
+
+    return spaces
+
+
 def _compute_bays():
+
     """
     حساب وتقسيم المساحات الداخلية (ترقيم وتسمية الباكيات A1, A2, ...):
     - يقوم النظام بحساب المساحات المحصورة بين شبكة المحاور المتقاطعة.
@@ -7071,8 +7284,72 @@ def _section_plaster_walls():
                         st.session_state[f"m15_ext_radio_{f_k}"] = "لا"
                     st.rerun()
 
+    # ════════════════════════════════════════════════════════════
+    # 🏷️ زر تسمية المساحات بناءً على وجود الحوائط الفعلية
+    # ════════════════════════════════════════════════════════════
+    st.markdown("<hr style='margin: 16px 0 14px 0; border: none; border-top: 2px dashed #334155;'>", unsafe_allow_html=True)
+    st.markdown(
+        """<div style='background:linear-gradient(135deg,#0f172a,#1e293b); border:1.5px solid #7c3aed;
+            border-radius:8px; padding:10px 14px; margin-bottom:10px;' dir='rtl'>
+            <b style='color:#c4b5fd; font-size:0.97rem;'>🏷️ تسمية المساحات طبقاً للحوائط:</b><br>
+            <span style='color:#cbd5e1; font-size:0.84rem; line-height:1.7;'>
+            اضغط الزر أدناه لتسمية المساحات الداخلية طبقاً لوجود الحوائط الفعلية وليس طبقاً للمحاور.
+            تُعتبر أي باكية مساحةً مسماةً إذا كان لها حائط واحد على الأقل على أي ضلع من أضلعها الأربعة،
+            حتى لو لم يكتمل الحائط إلى المحاور المجاورة.
+            </span>
+        </div>""",
+        unsafe_allow_html=True
+    )
+
+    named_spaces_cur = st.session_state.get("m15_named_spaces", [])
+    c_name1, c_name2 = st.columns([2, 1])
+    with c_name1:
+        if st.button(
+            "🏷️ اضغط لتسمية المساحات للمحارة",
+            key="m15_btn_label_spaces_by_walls",
+            use_container_width=True,
+            type="primary",
+            help="يحسب الكود المساحات المحصورة بناءً على الحوائط الموجودة ويضعها كتسميات على المسقط الأفقي."
+        ):
+            computed = _compute_wall_bounded_spaces()
+            if computed:
+                st.session_state["m15_named_spaces"] = computed
+                st.session_state.pop("m15_plan_png_b64", None)
+                save_settings()
+                st.toast(f"✅ تم تسمية {len(computed)} مساحة بناءً على الحوائط الموجودة!", icon="🏷️")
+                st.rerun()
+            else:
+                st.toast("⚠️ لا توجد حوائط نشطة لتحديد المساحات. أضف حوائط أولاً.", icon="⚠️")
+
+    with c_name2:
+        if named_spaces_cur:
+            if st.button(
+                "🗑️ حذف التسميات",
+                key="m15_btn_clear_named_spaces",
+                use_container_width=True,
+                help="إزالة جميع تسميات المساحات من المسقط الأفقي."
+            ):
+                st.session_state["m15_named_spaces"] = []
+                st.session_state.pop("m15_plan_png_b64", None)
+                save_settings()
+                st.toast("🗑️ تم حذف جميع تسميات المساحات.", icon="🗑️")
+                st.rerun()
+
+    # عرض التسميات الحالية إن وجدت
+    if named_spaces_cur:
+        n_count = len(named_spaces_cur)
+        st.markdown(
+            f"""<div style='background:rgba(124,58,237,0.12); border:1px solid #7c3aed; border-radius:6px;
+                padding:8px 12px; margin-top:6px; font-size:0.84rem; color:#c4b5fd;' dir='rtl'>
+                ✅ يوجد حالياً <b style='color:#ffffff;'>{n_count} مساحة مسماة</b> معروضة على المسقط الأفقي.
+                (التسميات: {", ".join([s["name"] for s in named_spaces_cur[:8]])}{" ..." if n_count > 8 else ""})
+            </div>""",
+            unsafe_allow_html=True
+        )
+
     # ملخص كميات المحارة التنفيذي السريع في قسم التحديد
     p_summary = _compute_plaster_survey()
+
     if p_summary["rows"]:
         st.markdown(f"""
         <div style='background:linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border:1.5px solid #0284c7; border-radius:8px; padding:12px 16px; margin-top:12px;' dir='rtl'>
@@ -7166,17 +7443,804 @@ def _section_plaster_boq():
         """, unsafe_allow_html=True)
 
 
+_FLOATING_PLAN_CSS = """
+/* Dragging overlay helper: prevents iframes from swallowing mouse movements */
+body.m12-dragging-active iframe {
+    pointer-events: none !important;
+}
+
+#m12-floating-plan-modal {
+    position: fixed;
+    top: 75px;
+    right: 35px;
+    width: 760px;
+    height: 560px;
+    min-width: 280px;
+    min-height: 200px;
+    max-width: 98vw;
+    max-height: 96vh;
+    background: rgba(15, 23, 42, 0.96);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1.5px solid rgba(59, 130, 246, 0.45);
+    border-radius: 12px;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75), 0 0 30px rgba(59, 130, 246, 0.22);
+    z-index: 999999;
+    display: none;
+    flex-direction: column;
+    overflow: visible;
+    resize: none;
+    user-select: none;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Kufi Arabic", sans-serif;
+    direction: rtl;
+    box-sizing: border-box;
+}
+
+#m12-floating-plan-modal.m12-show {
+    display: flex !important;
+}
+
+/* 8-Way Resize Handles */
+.m12-rh {
+    position: absolute;
+    z-index: 120;
+    touch-action: none;
+    box-sizing: border-box;
+}
+.m12-rh-n { top: -6px; left: 24px; right: 24px; height: 10px; cursor: ns-resize; }
+.m12-rh-s { bottom: -6px; left: 24px; right: 24px; height: 10px; cursor: ns-resize; }
+.m12-rh-w { left: -6px; top: 24px; bottom: 24px; width: 10px; cursor: ew-resize; }
+.m12-rh-e { right: -6px; top: 24px; bottom: 24px; width: 10px; cursor: ew-resize; }
+.m12-rh-nw { top: -7px; left: -7px; width: 22px; height: 22px; cursor: nwse-resize; z-index: 125; }
+.m12-rh-ne { top: -7px; right: -7px; width: 22px; height: 22px; cursor: nesw-resize; z-index: 125; }
+.m12-rh-sw { bottom: -7px; left: -7px; width: 22px; height: 22px; cursor: nesw-resize; z-index: 125; }
+.m12-rh-se { bottom: -7px; right: -7px; width: 22px; height: 22px; cursor: nwse-resize; z-index: 125; }
+
+.m12-corner-mark {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    pointer-events: none;
+    opacity: 0.7;
+    transition: opacity 0.15s, border-color 0.15s;
+}
+.m12-rh:hover .m12-corner-mark, .m12-rh.m12-rh-active .m12-corner-mark {
+    opacity: 1;
+    border-color: #60a5fa !important;
+}
+.m12-rh-nw .m12-corner-mark { top: 4px; left: 4px; border-top: 2.5px solid rgba(147, 197, 253, 0.85); border-left: 2.5px solid rgba(147, 197, 253, 0.85); border-top-left-radius: 4px; }
+.m12-rh-ne .m12-corner-mark { top: 4px; right: 4px; border-top: 2.5px solid rgba(147, 197, 253, 0.85); border-right: 2.5px solid rgba(147, 197, 253, 0.85); border-top-right-radius: 4px; }
+.m12-rh-sw .m12-corner-mark { bottom: 4px; left: 4px; border-bottom: 2.5px solid rgba(147, 197, 253, 0.85); border-left: 2.5px solid rgba(147, 197, 253, 0.85); border-bottom-left-radius: 4px; }
+.m12-rh-se .m12-corner-mark { bottom: 4px; right: 4px; border-bottom: 2.5px solid rgba(147, 197, 253, 0.85); border-right: 2.5px solid rgba(147, 197, 253, 0.85); border-bottom-right-radius: 4px; }
+
+.m12-rh-n:hover, .m12-rh-n.m12-rh-active { border-top: 2.5px solid #60a5fa; }
+.m12-rh-s:hover, .m12-rh-s.m12-rh-active { border-bottom: 2.5px solid #60a5fa; }
+.m12-rh-w:hover, .m12-rh-w.m12-rh-active { border-left: 2.5px solid #60a5fa; }
+.m12-rh-e:hover, .m12-rh-e.m12-rh-active { border-right: 2.5px solid #60a5fa; }
+
+.m12-fp-header {
+    position: relative;
+    z-index: 150;
+    background: linear-gradient(90deg, #1e293b 0%, #0f172a 100%);
+    border-bottom: 1.5px solid rgba(59, 130, 246, 0.3);
+    border-top-left-radius: 11px;
+    border-top-right-radius: 11px;
+    padding: 8px 12px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 8px;
+    cursor: grab;
+    direction: rtl;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+}
+.m12-fp-header:active {
+    cursor: grabbing;
+}
+.m12-fp-title-wrap {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #93c5fd;
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+}
+.m12-fp-title-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 1;
+}
+.m12-fp-badge {
+    font-size: 10.5px;
+    background: rgba(59, 130, 246, 0.2);
+    color: #93c5fd;
+    padding: 2px 7px;
+    border-radius: 5px;
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    font-weight: normal;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: ltr;
+    flex-shrink: 1;
+}
+.m12-fp-shortcut-badge {
+    font-size: 10.5px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #e2e8f0;
+    padding: 2px 7px;
+    border-radius: 5px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    font-family: Consolas, monospace;
+    direction: ltr;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.m12-fp-actions {
+    position: relative;
+    z-index: 160;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    direction: ltr;
+    flex-shrink: 0;
+    margin-inline-start: auto;
+    max-width: 100%;
+}
+.m12-fp-btn {
+    position: relative;
+    z-index: 170;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 6px;
+    color: #e2e8f0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    pointer-events: auto !important;
+    font-size: 14px;
+    font-weight: bold;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+    user-select: none;
+    -webkit-user-select: none;
+}
+.m12-fp-btn:hover {
+    background: rgba(59, 130, 246, 0.35);
+    color: #ffffff;
+    border-color: rgba(96, 165, 250, 0.8);
+    transform: scale(1.05);
+}
+.m12-fp-btn-close:hover {
+    background: rgba(239, 68, 68, 0.45) !important;
+    color: #ffffff !important;
+    border-color: rgba(239, 68, 68, 0.8) !important;
+}
+.m12-fp-viewport {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background-color: #070b14;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+    background-size: 20px 20px;
+    cursor: grab;
+    display: flex;
+    border-bottom-left-radius: 11px;
+    border-bottom-right-radius: 11px;
+}
+.m12-fp-viewport:active {
+    cursor: grabbing;
+}
+.m12-fp-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: 0 0;
+    will-change: transform;
+}
+.m12-fp-img {
+    max-width: none;
+    max-height: none;
+    display: block;
+    pointer-events: none;
+    -webkit-user-drag: none;
+    user-select: none;
+    border-radius: 4px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+"""
+
+_FLOATING_PLAN_CONTROLLER_JS = r"""(function() {
+    var doc = document;
+    var win = window;
+    win.__m15FloatingPlanVersion = '__VERSION_TOKEN__';
+
+    var state = {
+        hasImage: false,
+        imgName: 'المسقط المعماري الاسترشادي',
+        imgType: 'image/png',
+        imgB64: '',
+        scale: 1.0,
+        panX: 0,
+        panY: 0,
+        isMax: false,
+        preMax: null,
+        isDraggingWin: false,
+        winStartX: 0,
+        winStartY: 0,
+        isResizing: false,
+        resizeDir: '',
+        rStartMouseX: 0,
+        rStartMouseY: 0,
+        rStartLeft: 0,
+        rStartTop: 0,
+        rStartWidth: 0,
+        rStartHeight: 0,
+        activeHandle: null,
+        isPanning: false,
+        panStartX: 0,
+        panStartY: 0,
+        toastTimer: null
+    };
+
+    function getModal() {
+        return doc.getElementById('m12-floating-plan-modal');
+    }
+
+    var modal = getModal();
+    var wasOpen = false;
+    var prevL = null, prevT = null, prevW = null, prevH = null;
+
+    if (modal && modal.getAttribute('data-v') !== '__VERSION_TOKEN__') {
+        wasOpen = modal.classList.contains('m12-show');
+        prevL = modal.style.left;
+        prevT = modal.style.top;
+        prevW = modal.style.width;
+        prevH = modal.style.height;
+        modal.remove();
+        modal = null;
+    }
+
+    if (!modal) {
+        modal = doc.createElement('div');
+        modal.id = 'm12-floating-plan-modal';
+        modal.setAttribute('data-v', '__VERSION_TOKEN__');
+        modal.innerHTML = `
+            <!-- 8-Way Resize Handles -->
+            <div class="m12-rh m12-rh-n" data-dir="n" title="سحب لتغيير الارتفاع"></div>
+            <div class="m12-rh m12-rh-s" data-dir="s" title="سحب لتغيير الارتفاع"></div>
+            <div class="m12-rh m12-rh-e" data-dir="e" title="سحب لتغيير العرض"></div>
+            <div class="m12-rh m12-rh-w" data-dir="w" title="سحب لتغيير العرض"></div>
+            <div class="m12-rh m12-rh-nw" data-dir="nw" title="سحب لتغيير المقاس"><span class="m12-corner-mark"></span></div>
+            <div class="m12-rh m12-rh-ne" data-dir="ne" title="سحب لتغيير المقاس"><span class="m12-corner-mark"></span></div>
+            <div class="m12-rh m12-rh-sw" data-dir="sw" title="سحب لتغيير المقاس"><span class="m12-corner-mark"></span></div>
+            <div class="m12-rh m12-rh-se" data-dir="se" title="سحب لتغيير المقاس"><span class="m12-corner-mark"></span></div>
+
+            <div class="m12-fp-header" id="m12-fp-header">
+                <div class="m12-fp-title-wrap">
+                    <span style="font-size:16px;">🖼️</span>
+                    <span class="m12-fp-title-text">المسقط المعماري الاسترشادي</span>
+                    <span class="m12-fp-badge" id="m12-fp-name-badge"></span>
+                    <span class="m12-fp-shortcut-badge">Ctrl + Alt + F (ب)</span>
+                    <span class="m12-fp-badge" id="m12-fp-zoom-badge" style="color:#60a5fa; font-weight:700; font-family:Consolas, monospace;">100%</span>
+                </div>
+                <div class="m12-fp-actions">
+                    <button type="button" class="m12-fp-btn" id="m12-fp-btn-zoom-out" title="تصغير (−)" onclick="window.m15FloatingPlan && window.m15FloatingPlan.zoomBy(0.8)">−</button>
+                    <button type="button" class="m12-fp-btn" id="m12-fp-btn-zoom-in" title="تكبير (+)" onclick="window.m15FloatingPlan && window.m15FloatingPlan.zoomBy(1.25)">+</button>
+                    <button type="button" class="m12-fp-btn" id="m12-fp-btn-reset" title="إعادة ضبط (Reset)" onclick="window.m15FloatingPlan && window.m15FloatingPlan.resetView(true)">↺</button>
+                    <button type="button" class="m12-fp-btn" id="m12-fp-btn-max" title="تكبير / استعادة الإطار" onclick="window.m15FloatingPlan && window.m15FloatingPlan.toggleMax()">⛶</button>
+                    <button type="button" class="m12-fp-btn m12-fp-btn-close" id="m12-fp-btn-close" title="إغلاق (Esc)" onclick="window.m15FloatingPlan && window.m15FloatingPlan.close()">×</button>
+                </div>
+            </div>
+            <div class="m12-fp-viewport" id="m12-fp-viewport">
+                <div class="m12-fp-layer" id="m12-fp-layer">
+                    <img class="m12-fp-img" id="m12-fp-img" src="" alt="المسقط المعماري الاسترشادي" />
+                </div>
+                <div id="m12-fp-no-img" style="display:none; position:absolute; inset:0; flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center; direction:rtl; z-index:10; background:rgba(15,23,42,0.94);">
+                    <div style="font-size:42px; margin-bottom:12px;">🖼️</div>
+                    <div style="font-size:16px; font-weight:700; color:#ffffff; margin-bottom:8px;">النافذة العائمة الحرة للمسقط المعماري</div>
+                    <div style="font-size:13px; color:#cbd5e1; max-width:440px; line-height:1.7; background:rgba(30,41,59,0.75); border:1.5px solid rgba(59,130,246,0.35); border-radius:10px; padding:12px 18px; margin-bottom:12px;">
+                        لم يتم تحميل صورة مسقط استرشادي بعد.<br/>
+                        يمكنك رفع صورة من قسم <b>«🖼️ تحميل صورة مسقط افقي استرشادي للمباني»</b>، وستظهر هنا فوراً مع إمكانية التكبير والتصغير وتغيير الحجم والتحريك بحرية تامة أثناء التصميم.
+                    </div>
+                    <div style="font-size:11.5px; color:#60a5fa;">💡 يمكنك الضغط على <b>Ctrl + Alt + F (أو ب)</b> في أي وقت لفتح أو إغلاق هذه النافذة.</div>
+                </div>
+            </div>
+        `;
+        doc.body.appendChild(modal);
+
+        if (prevW) {
+            modal.style.width = prevW;
+            modal.style.height = prevH;
+            modal.style.left = prevL;
+            modal.style.top = prevT;
+            modal.style.right = 'auto';
+            modal.style.bottom = 'auto';
+        }
+        if (wasOpen) {
+            modal.classList.add('m12-show');
+        }
+    }
+
+    function applyTransform(animated) {
+        var layer = doc.getElementById('m12-fp-layer');
+        var zoomVal = doc.getElementById('m12-fp-zoom-badge');
+        if (layer) {
+            layer.style.transition = animated ? 'transform 0.18s cubic-bezier(0.1, 0.9, 0.2, 1)' : 'none';
+            layer.style.transform = 'translate(' + state.panX + 'px, ' + state.panY + 'px) scale(' + state.scale + ')';
+        }
+        if (zoomVal) {
+            zoomVal.textContent = Math.round(state.scale * 100) + '%';
+        }
+    }
+
+    function resetView(animated) {
+        var m = getModal();
+        if (!m) return;
+        var viewport = doc.getElementById('m12-fp-viewport');
+        var img = doc.getElementById('m12-fp-img');
+        if (!viewport || !img) return;
+
+        var vw = viewport.clientWidth || 700;
+        var vh = viewport.clientHeight || 500;
+        var iw = img.naturalWidth || img.width || 800;
+        var ih = img.naturalHeight || img.height || 600;
+        if (!iw || !ih || iw <= 0 || ih <= 0) return;
+
+        var pad = 24;
+        var sX = (vw - pad * 2) / iw;
+        var sY = (vh - pad * 2) / ih;
+        state.scale = Math.min(sX, sY, 1.0);
+        if (state.scale < 0.05) state.scale = 0.5;
+
+        state.panX = (vw - iw * state.scale) / 2;
+        state.panY = (vh - ih * state.scale) / 2;
+        applyTransform(animated);
+    }
+
+    function zoomBy(factor) {
+        var viewport = doc.getElementById('m12-fp-viewport');
+        if (!viewport) return;
+        var vw = viewport.clientWidth || 700;
+        var vh = viewport.clientHeight || 500;
+        var cx = vw / 2;
+        var cy = vh / 2;
+        var newScale = Math.min(Math.max(state.scale * factor, 0.08), 30.0);
+        state.panX = cx - (cx - state.panX) * (newScale / state.scale);
+        state.panY = cy - (cy - state.panY) * (newScale / state.scale);
+        state.scale = newScale;
+        applyTransform(true);
+    }
+
+    function toggleMax() {
+        var m = getModal();
+        if (!m) return;
+        var maxBtn = doc.getElementById('m12-fp-btn-max');
+        if (!state.isMax) {
+            state.preMax = {
+                left: m.style.left,
+                top: m.style.top,
+                width: m.style.width,
+                height: m.style.height,
+                right: m.style.right,
+                bottom: m.style.bottom
+            };
+            m.style.left = '16px';
+            m.style.top = '16px';
+            m.style.width = 'calc(100vw - 32px)';
+            m.style.height = 'calc(100vh - 32px)';
+            m.style.right = 'auto';
+            m.style.bottom = 'auto';
+            state.isMax = true;
+            if (maxBtn) {
+                maxBtn.textContent = '❐';
+                maxBtn.title = 'استعادة الإطار (Restore)';
+            }
+        } else {
+            if (state.preMax) {
+                m.style.left = state.preMax.left;
+                m.style.top = state.preMax.top;
+                m.style.width = state.preMax.width;
+                m.style.height = state.preMax.height;
+                m.style.right = state.preMax.right;
+                m.style.bottom = state.preMax.bottom;
+            }
+            state.isMax = false;
+            if (maxBtn) {
+                maxBtn.textContent = '⛶';
+                maxBtn.title = 'تكبير الإطار (Maximize)';
+            }
+        }
+        setTimeout(function() { resetView(true); }, 120);
+    }
+
+    function close() {
+        var m = getModal();
+        if (m) m.classList.remove('m12-show');
+    }
+
+    function show() {
+        var m = getModal();
+        if (!m) return;
+        syncImageElements();
+        m.classList.add('m12-show');
+        if (state.hasImage) {
+            setTimeout(function() { resetView(false); }, 60);
+        } else {
+            showNoImageToast();
+        }
+    }
+
+    function toggle() {
+        var m = getModal();
+        if (!m) return;
+        if (m.classList.contains('m12-show')) {
+            close();
+        } else {
+            show();
+        }
+    }
+
+    function isOpen() {
+        var m = getModal();
+        return !!(m && m.classList.contains('m12-show'));
+    }
+
+    function syncImageElements() {
+        var m = getModal();
+        if (!m) return;
+        var nameBadge = doc.getElementById('m12-fp-name-badge');
+        var imgEl = doc.getElementById('m12-fp-img');
+        var noImgEl = doc.getElementById('m12-fp-no-img');
+        var layerEl = doc.getElementById('m12-fp-layer');
+
+        if (nameBadge) {
+            nameBadge.textContent = state.hasImage ? state.imgName : 'بانتظار تحميل صورة';
+        }
+        if (state.hasImage && state.imgB64) {
+            if (noImgEl) noImgEl.style.display = 'none';
+            if (layerEl) layerEl.style.display = 'block';
+            if (imgEl) {
+                imgEl.style.display = 'block';
+                var newSrc = 'data:' + state.imgType + ';base64,' + state.imgB64;
+                if (imgEl.src !== newSrc) {
+                    imgEl.src = newSrc;
+                }
+            }
+        } else {
+            if (imgEl) {
+                imgEl.src = '';
+                imgEl.style.display = 'none';
+            }
+            if (layerEl) layerEl.style.display = 'none';
+            if (noImgEl) noImgEl.style.display = 'flex';
+        }
+    }
+
+    function updateImage(hasImg, name, type, b64) {
+        state.hasImage = Boolean(hasImg && b64);
+        state.imgName = name || 'المسقط المعماري الاسترشادي';
+        state.imgType = type || 'image/png';
+        state.imgB64 = b64 || '';
+        syncImageElements();
+    }
+
+    function showNoImageToast() {
+        var t = doc.getElementById('m12-float-no-img-toast');
+        if (!t) {
+            t = doc.createElement('div');
+            t.id = 'm12-float-no-img-toast';
+            t.style.cssText = 'position:fixed; top:28px; left:50%; transform:translateX(-50%) translateY(-20px); background:linear-gradient(135deg, #1e293b, #0f172a); border:1.5px solid #f59e0b; border-radius:10px; padding:12px 22px; color:#ffffff; font-size:13.5px; font-weight:700; z-index:1000000; box-shadow:0 12px 35px rgba(0,0,0,0.65), 0 0 15px rgba(245,158,11,0.25); display:flex; align-items:center; gap:10px; direction:rtl; opacity:0; pointer-events:none; transition:all 0.3s cubic-bezier(0.16,1,0.3,1); font-family:system-ui, -apple-system, sans-serif;';
+            doc.body.appendChild(t);
+        }
+        t.innerHTML = '<span style="font-size:18px;">⚠️</span><span>لم يتم تحميل صورة مسقط استرشادي بعد. يمكنك رفع صورة من قسم <b>«🖼️ تحميل صورة مسقط افقي استرشادي للمباني»</b>.</span>';
+        t.style.opacity = '1';
+        t.style.transform = 'translateX(-50%) translateY(0)';
+        if (state.toastTimer) clearTimeout(state.toastTimer);
+        state.toastTimer = setTimeout(function() {
+            t.style.opacity = '0';
+            t.style.transform = 'translateX(-50%) translateY(-20px)';
+        }, 3800);
+    }
+
+    // Direct element click bindings
+    var bZoomIn = doc.getElementById('m12-fp-btn-zoom-in');
+    if (bZoomIn) bZoomIn.onclick = function() { zoomBy(1.25); };
+    var bZoomOut = doc.getElementById('m12-fp-btn-zoom-out');
+    if (bZoomOut) bZoomOut.onclick = function() { zoomBy(0.8); };
+    var bReset = doc.getElementById('m12-fp-btn-reset');
+    if (bReset) bReset.onclick = function() { resetView(true); };
+    var bMax = doc.getElementById('m12-fp-btn-max');
+    if (bMax) bMax.onclick = function() { toggleMax(); };
+    var bClose = doc.getElementById('m12-fp-btn-close');
+    if (bClose) bClose.onclick = function() { close(); };
+
+    var img = doc.getElementById('m12-fp-img');
+    if (img) {
+        img.onload = function() {
+            resetView(false);
+        };
+    }
+
+    // Header Dragging
+    var header = doc.getElementById('m12-fp-header');
+    if (header && !header._hasDragBound) {
+        header._hasDragBound = true;
+        header.addEventListener('mousedown', function(e) {
+            if (e.target.closest('button') || e.target.closest('.m12-fp-actions')) return;
+            state.isDraggingWin = true;
+            var m = getModal();
+            var rect = m.getBoundingClientRect();
+            m.style.right = 'auto';
+            m.style.bottom = 'auto';
+            m.style.left = rect.left + 'px';
+            m.style.top = rect.top + 'px';
+            state.winStartX = e.clientX - rect.left;
+            state.winStartY = e.clientY - rect.top;
+            header.style.cursor = 'grabbing';
+            doc.body.classList.add('m12-dragging-active');
+        });
+    }
+
+    // Resizing Handles
+    modal.querySelectorAll('.m12-rh').forEach(function(handle) {
+        handle.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            state.isResizing = true;
+            state.resizeDir = handle.getAttribute('data-dir');
+            state.activeHandle = handle;
+            handle.classList.add('m12-rh-active');
+
+            state.rStartMouseX = e.clientX;
+            state.rStartMouseY = e.clientY;
+
+            var m = getModal();
+            var rect = m.getBoundingClientRect();
+            state.rStartLeft = rect.left;
+            state.rStartTop = rect.top;
+            state.rStartWidth = rect.width;
+            state.rStartHeight = rect.height;
+
+            m.style.right = 'auto';
+            m.style.bottom = 'auto';
+            m.style.left = state.rStartLeft + 'px';
+            m.style.top = state.rStartTop + 'px';
+            m.style.width = state.rStartWidth + 'px';
+            m.style.height = state.rStartHeight + 'px';
+
+            doc.body.style.userSelect = 'none';
+            doc.body.style.cursor = win.getComputedStyle(handle).cursor;
+            doc.body.classList.add('m12-dragging-active');
+        });
+    });
+
+    // Viewport Panning & Zooming
+    var viewport = doc.getElementById('m12-fp-viewport');
+    if (viewport && !viewport._hasPanBound) {
+        viewport._hasPanBound = true;
+        viewport.addEventListener('mousedown', function(e) {
+            if (e.button !== 0) return;
+            state.isPanning = true;
+            state.panStartX = e.clientX - state.panX;
+            state.panStartY = e.clientY - state.panY;
+            viewport.style.cursor = 'grabbing';
+            doc.body.classList.add('m12-dragging-active');
+        });
+
+        viewport.addEventListener('wheel', function(e) {
+            e.preventDefault();
+            var rect = viewport.getBoundingClientRect();
+            var mouseX = e.clientX - rect.left;
+            var mouseY = e.clientY - rect.top;
+
+            var factor = e.deltaY < 0 ? 1.15 : 0.87;
+            var newScale = Math.min(Math.max(state.scale * factor, 0.08), 30.0);
+
+            state.panX = mouseX - (mouseX - state.panX) * (newScale / state.scale);
+            state.panY = mouseY - (mouseY - state.panY) * (newScale / state.scale);
+            state.scale = newScale;
+            applyTransform(false);
+        }, { passive: false });
+    }
+
+    // Document MouseMove and MouseUp
+    if (!win._hasM15DocMouseBound) {
+        win._hasM15DocMouseBound = true;
+        doc.addEventListener('mousemove', function(e) {
+            var m = getModal();
+            if (!m) return;
+
+            if (state.isResizing) {
+                e.preventDefault();
+                var dx = e.clientX - state.rStartMouseX;
+                var dy = e.clientY - state.rStartMouseY;
+
+                var minW = 280, minH = 200;
+                var maxW = win.innerWidth - 20;
+                var maxH = win.innerHeight - 20;
+
+                var newWidth = state.rStartWidth;
+                var newHeight = state.rStartHeight;
+                var newLeft = state.rStartLeft;
+                var newTop = state.rStartTop;
+
+                if (state.resizeDir.indexOf('e') !== -1) {
+                    newWidth = Math.min(Math.max(state.rStartWidth + dx, minW), maxW);
+                }
+                if (state.resizeDir.indexOf('w') !== -1) {
+                    var rawW = state.rStartWidth - dx;
+                    if (rawW < minW) {
+                        newWidth = minW;
+                        newLeft = state.rStartLeft + (state.rStartWidth - minW);
+                    } else if (rawW > maxW) {
+                        newWidth = maxW;
+                        newLeft = state.rStartLeft + (state.rStartWidth - maxW);
+                    } else {
+                        newWidth = rawW;
+                        newLeft = state.rStartLeft + dx;
+                    }
+                }
+
+                if (state.resizeDir.indexOf('s') !== -1) {
+                    newHeight = Math.min(Math.max(state.rStartHeight + dy, minH), maxH);
+                }
+                if (state.resizeDir.indexOf('n') !== -1) {
+                    var rawH = state.rStartHeight - dy;
+                    if (rawH < minH) {
+                        newHeight = minH;
+                        newTop = state.rStartTop + (state.rStartHeight - minH);
+                    } else if (rawH > maxH) {
+                        newHeight = maxH;
+                        newTop = state.rStartTop + (state.rStartHeight - maxH);
+                    } else {
+                        newHeight = rawH;
+                        newTop = state.rStartTop + dy;
+                    }
+                }
+
+                m.style.width = newWidth + 'px';
+                m.style.height = newHeight + 'px';
+                m.style.left = newLeft + 'px';
+                m.style.top = newTop + 'px';
+                return;
+            }
+
+            if (state.isDraggingWin) {
+                e.preventDefault();
+                var newL = e.clientX - state.winStartX;
+                var newT = e.clientY - state.winStartY;
+                var maxL = win.innerWidth - 80;
+                var maxT = win.innerHeight - 40;
+                newL = Math.max(-m.offsetWidth + 80, Math.min(newL, maxL));
+                newT = Math.max(0, Math.min(newT, maxT));
+                m.style.left = newL + 'px';
+                m.style.top = newT + 'px';
+                return;
+            }
+
+            if (state.isPanning) {
+                e.preventDefault();
+                state.panX = e.clientX - state.panStartX;
+                state.panY = e.clientY - state.panStartY;
+                applyTransform(false);
+            }
+        });
+
+        doc.addEventListener('mouseup', function(e) {
+            doc.body.classList.remove('m12-dragging-active');
+            if (state.isResizing) {
+                state.isResizing = false;
+                state.resizeDir = '';
+                if (state.activeHandle) {
+                    state.activeHandle.classList.remove('m12-rh-active');
+                    state.activeHandle = null;
+                }
+                doc.body.style.userSelect = '';
+                doc.body.style.cursor = '';
+            }
+            if (state.isDraggingWin) {
+                state.isDraggingWin = false;
+                var header = doc.getElementById('m12-fp-header');
+                if (header) header.style.cursor = 'grab';
+            }
+            if (state.isPanning) {
+                state.isPanning = false;
+                var viewport = doc.getElementById('m12-fp-viewport');
+                if (viewport) viewport.style.cursor = 'grab';
+            }
+        });
+    }
+
+    // Global KeyDown handler
+    function onGlobalKeyDown(e) {
+        if (!e) return;
+        var codeMatches = (e.code === 'KeyF');
+        var keyMatches = (e.key === 'f' || e.key === 'F' || e.key === 'ب' || e.key === 'B' || e.key === 'ـ' || e.key === '[' || e.key === ']' || e.keyCode === 70 || e.which === 70);
+        var isF = codeMatches || keyMatches;
+        var hasAlt = e.altKey || (e.getModifierState && e.getModifierState('Alt'));
+        var hasCtrl = e.ctrlKey || e.metaKey || (e.getModifierState && e.getModifierState('Control'));
+        var hasAltGr = (e.getModifierState && e.getModifierState('AltGraph'));
+        var isToggleShortcut = isF && ((hasCtrl && hasAlt) || hasAltGr || (hasCtrl && e.shiftKey));
+
+        if (isToggleShortcut) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggle();
+            return false;
+        }
+        if (e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27) {
+            if (isOpen()) {
+                e.preventDefault();
+                close();
+            }
+        }
+    }
+
+    win.m15FloatingPlanGlobalKeyDown = onGlobalKeyDown;
+
+    if (win._m15_active_keydown) {
+        try {
+            win.removeEventListener('keydown', win._m15_active_keydown, true);
+            doc.removeEventListener('keydown', win._m15_active_keydown, true);
+        } catch(err) {}
+    }
+    win._m15_active_keydown = onGlobalKeyDown;
+    try { win.addEventListener('keydown', onGlobalKeyDown, true); } catch(err) {}
+    try { doc.addEventListener('keydown', onGlobalKeyDown, true); } catch(err) {}
+
+    // Public API
+    var api = {
+        toggle: toggle,
+        show: show,
+        close: close,
+        isOpen: isOpen,
+        zoomBy: zoomBy,
+        resetView: resetView,
+        toggleMax: toggleMax,
+        updateImage: updateImage
+    };
+
+    win.m15FloatingPlan = api;
+    win.m12FloatingPlan = api;
+    win.m15ToggleFloatingPlan = toggle;
+    win.m12ToggleFloatingPlan = toggle;
+    win.m15ShowFloatingPlan = show;
+    win.m12ShowFloatingPlan = show;
+    win.m15HideFloatingPlan = close;
+    win.m12HideFloatingPlan = close;
+    win.m15UpdateFloatingPlanImage = updateImage;
+    win.m12UpdateFloatingPlanImage = updateImage;
+})();
+"""
+
+
 def _inject_floating_plan_viewer():
     """
     مكون النافذة العائمة الحرة (Floating & Draggable & Resizable Window) للمسقط الاسترشادي:
     - اختصار لوحة المفاتيح الشامل: Ctrl + Alt + F (تبديل Toggle).
     - سحب النافذة بحرية من شريط العنوان في أي مكان على الشاشة (Drag Window).
-    - تغيير مقاس إطار النافذة بحرية (Resize Window).
+    - تغيير مقاس إطار النافذة بحرية من 8 اتجاهات (8-Way Resize Window).
     - تكبير وتصغير فائق السلاسة (Mouse Wheel Zoom متمركز على موضع المؤشر + أزرار + / -).
     - سحب وتحريك الصورة (Pan / Drag) للتنقل بين المحاور والتفاصيل.
     - زر إعادة ضبط (Reset ↺) لإرجاع الصورة للمقاس المتمركز المناسب للإطار.
+    - زر تكبير وتصغير الإطار (Maximize / Restore ⛶).
     - زر إغلاق (×)، مفتاح Esc، أو تكرار Ctrl + Alt + F.
-    - تنبيه ذكي (Toast) يظهر عند طلب العارض دون وجود صورة مرفوعة.
+    - تنفيذ مستقل في النافذة الرئيسية (Parent Realm) غير متأثر بإعادة تشغيل Streamlit إطلاقاً.
     - Zero-lag Client-side بدون أي Rerun لضمان أعلى سلاسة.
     """
     cur_b64 = st.session_state.get("m15_uploaded_image_b64") or st.session_state.get("m12_uploaded_image_b64", "")
@@ -7188,6 +8252,9 @@ def _inject_floating_plan_viewer():
     cur_name_js = json.dumps(cur_name)
     cur_type_js = json.dumps(cur_type)
     cur_b64_js = json.dumps(cur_b64) if has_image else '""'
+
+    CONTROLLER_VERSION = "2026.10.01.v2"
+    js_controller = _FLOATING_PLAN_CONTROLLER_JS.replace("__VERSION_TOKEN__", CONTROLLER_VERSION)
 
     inject_code = f"""
     <!DOCTYPE html>
@@ -7215,756 +8282,50 @@ def _inject_floating_plan_viewer():
         var IMG_NAME = {cur_name_js};
         var IMG_TYPE = {cur_type_js};
         var IMG_B64 = {cur_b64_js};
+        var CONTROLLER_VER = {json.dumps(CONTROLLER_VERSION)};
+        var CONTROLLER_CODE = {json.dumps(js_controller)};
 
-        // 1. Inject or update Styles
+        // 1. Inject or update CSS styles in parentDoc.head
         var styleEl = parentDoc.getElementById('m12-floating-plan-styles');
         if (!styleEl) {{
             styleEl = parentDoc.createElement('style');
             styleEl.id = 'm12-floating-plan-styles';
             parentDoc.head.appendChild(styleEl);
         }}
-        styleEl.textContent = `
-            #m12-floating-plan-modal {{
-                position: fixed;
-                top: 75px;
-                right: 35px;
-                width: 760px;
-                height: 560px;
-                min-width: 280px;
-                min-height: 200px;
-                max-width: 98vw;
-                max-height: 96vh;
-                background: rgba(15, 23, 42, 0.96);
-                backdrop-filter: blur(16px);
-                -webkit-backdrop-filter: blur(16px);
-                border: 1.5px solid rgba(59, 130, 246, 0.45);
-                border-radius: 12px;
-                box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75), 0 0 30px rgba(59, 130, 246, 0.22);
-                z-index: 999999;
-                display: none;
-                flex-direction: column;
-                overflow: visible;
-                resize: none;
-                user-select: none;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Kufi Arabic", sans-serif;
-                direction: rtl;
-                box-sizing: border-box;
-            }}
-            #m12-floating-plan-modal.m12-show {{
-                display: flex !important;
-            }}
+        styleEl.textContent = {json.dumps(_FLOATING_PLAN_CSS)};
 
-            /* 8-Way Resize Handles (الأجناب والأركان) */
-            .m12-rh {{
-                position: absolute;
-                z-index: 120;
-                touch-action: none;
-                box-sizing: border-box;
+        // 2. Inject or update permanent Controller Script in parentDoc.head
+        if (!parentWin.__m15FloatingPlanVersion || parentWin.__m15FloatingPlanVersion !== CONTROLLER_VER) {{
+            var oldScript = parentDoc.getElementById('m12-floating-plan-controller-script');
+            if (oldScript) {{
+                try {{ oldScript.remove(); }} catch(e) {{}}
             }}
-            /* Edges (الأجناب الأربعة) */
-            .m12-rh-n {{
-                top: -5px; left: 16px; right: 16px; height: 10px; cursor: ns-resize;
-            }}
-            .m12-rh-s {{
-                bottom: -5px; left: 16px; right: 16px; height: 10px; cursor: ns-resize;
-            }}
-            .m12-rh-w {{
-                left: -5px; top: 16px; bottom: 16px; width: 10px; cursor: ew-resize;
-            }}
-            .m12-rh-e {{
-                right: -5px; top: 16px; bottom: 16px; width: 10px; cursor: ew-resize;
-            }}
-            /* Corners (الأركان الأربعة) */
-            .m12-rh-nw {{
-                top: -6px; left: -6px; width: 20px; height: 20px; cursor: nwse-resize; z-index: 125;
-            }}
-            .m12-rh-ne {{
-                top: -6px; right: -6px; width: 20px; height: 20px; cursor: nesw-resize; z-index: 125;
-            }}
-            .m12-rh-sw {{
-                bottom: -6px; left: -6px; width: 20px; height: 20px; cursor: nesw-resize; z-index: 125;
-            }}
-            .m12-rh-se {{
-                bottom: -6px; right: -6px; width: 20px; height: 20px; cursor: nwse-resize; z-index: 125;
-            }}
-
-            /* Corner visual indicators */
-            .m12-corner-mark {{
-                position: absolute;
-                width: 9px;
-                height: 9px;
-                pointer-events: none;
-                opacity: 0.7;
-                transition: opacity 0.15s, border-color 0.15s;
-            }}
-            .m12-rh:hover .m12-corner-mark, .m12-rh.m12-rh-active .m12-corner-mark {{
-                opacity: 1;
-                border-color: #60a5fa !important;
-            }}
-            .m12-rh-nw .m12-corner-mark {{ top: 4px; left: 4px; border-top: 2.5px solid rgba(147, 197, 253, 0.85); border-left: 2.5px solid rgba(147, 197, 253, 0.85); border-top-left-radius: 4px; }}
-            .m12-rh-ne .m12-corner-mark {{ top: 4px; right: 4px; border-top: 2.5px solid rgba(147, 197, 253, 0.85); border-right: 2.5px solid rgba(147, 197, 253, 0.85); border-top-right-radius: 4px; }}
-            .m12-rh-sw .m12-corner-mark {{ bottom: 4px; left: 4px; border-bottom: 2.5px solid rgba(147, 197, 253, 0.85); border-left: 2.5px solid rgba(147, 197, 253, 0.85); border-bottom-left-radius: 4px; }}
-            .m12-rh-se .m12-corner-mark {{ bottom: 4px; right: 4px; border-bottom: 2.5px solid rgba(147, 197, 253, 0.85); border-right: 2.5px solid rgba(147, 197, 253, 0.85); border-bottom-right-radius: 4px; }}
-
-            /* Edge highlight lines on hover / active */
-            .m12-rh-n:hover, .m12-rh-n.m12-rh-active {{ border-top: 2.5px solid #60a5fa; }}
-            .m12-rh-s:hover, .m12-rh-s.m12-rh-active {{ border-bottom: 2.5px solid #60a5fa; }}
-            .m12-rh-w:hover, .m12-rh-w.m12-rh-active {{ border-left: 2.5px solid #60a5fa; }}
-            .m12-rh-e:hover, .m12-rh-e.m12-rh-active {{ border-right: 2.5px solid #60a5fa; }}
-
-            .m12-fp-header {{
-                background: linear-gradient(90deg, #1e293b 0%, #0f172a 100%);
-                border-bottom: 1.5px solid rgba(59, 130, 246, 0.3);
-                border-top-left-radius: 11px;
-                border-top-right-radius: 11px;
-                padding: 8px 12px;
-                display: flex;
-                flex-wrap: wrap;
-                align-items: center;
-                justify-content: space-between;
-                gap: 6px 8px;
-                cursor: grab;
-                direction: rtl;
-                flex-shrink: 0;
-                box-sizing: border-box;
-                width: 100%;
-                max-width: 100%;
-            }}
-            .m12-fp-header:active {{
-                cursor: grabbing;
-            }}
-            .m12-fp-title-wrap {{
-                display: flex;
-                align-items: center;
-                flex-wrap: wrap;
-                gap: 6px;
-                font-size: 13px;
-                font-weight: 700;
-                color: #93c5fd;
-                flex: 1 1 auto;
-                min-width: 0;
-                max-width: 100%;
-            }}
-            .m12-fp-title-text {{
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                flex-shrink: 1;
-            }}
-            .m12-fp-badge {{
-                font-size: 10.5px;
-                background: rgba(59, 130, 246, 0.2);
-                color: #93c5fd;
-                padding: 2px 7px;
-                border-radius: 5px;
-                border: 1px solid rgba(59, 130, 246, 0.35);
-                font-weight: normal;
-                max-width: 130px;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-                direction: ltr;
-                flex-shrink: 1;
-            }}
-            .m12-fp-shortcut-badge {{
-                font-size: 10.5px;
-                background: rgba(255, 255, 255, 0.1);
-                color: #e2e8f0;
-                padding: 2px 7px;
-                border-radius: 5px;
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                font-family: Consolas, monospace;
-                direction: ltr;
-                white-space: nowrap;
-                flex-shrink: 0;
-            }}
-            .m12-fp-actions {{
-                display: flex;
-                align-items: center;
-                flex-wrap: wrap;
-                gap: 5px;
-                direction: ltr;
-                flex-shrink: 0;
-                margin-inline-start: auto;
-                max-width: 100%;
-            }}
-            .m12-fp-btn {{
-                background: rgba(255, 255, 255, 0.06);
-                border: 1px solid rgba(255, 255, 255, 0.15);
-                border-radius: 6px;
-                color: #cbd5e1;
-                width: 28px;
-                height: 28px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                cursor: pointer;
-                font-size: 14px;
-                font-weight: bold;
-                transition: all 0.15s ease;
-                flex-shrink: 0;
-            }}
-            .m12-fp-btn:hover {{
-                background: rgba(59, 130, 246, 0.25);
-                color: #93c5fd;
-                border-color: rgba(59, 130, 246, 0.5);
-            }}
-            .m12-fp-btn-close:hover {{
-                background: rgba(239, 68, 68, 0.3) !important;
-                color: #fca5a5 !important;
-                border-color: rgba(239, 68, 68, 0.6) !important;
-            }}
-            .m12-fp-viewport {{
-                flex: 1;
-                position: relative;
-                overflow: hidden;
-                background-color: #070b14;
-                background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
-                background-size: 20px 20px;
-                cursor: grab;
-                display: flex;
-                border-bottom-left-radius: 11px;
-                border-bottom-right-radius: 11px;
-            }}
-            .m12-fp-viewport:active {{
-                cursor: grabbing;
-            }}
-            .m12-fp-layer {{
-                position: absolute;
-                top: 0;
-                left: 0;
-                transform-origin: 0 0;
-                will-change: transform;
-            }}
-            .m12-fp-img {{
-                max-width: none;
-                max-height: none;
-                display: block;
-                pointer-events: none;
-                -webkit-user-drag: none;
-                user-select: none;
-                border-radius: 4px;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-            }}
-        `;
-
-        // 2. Toast Notification Function
-        function showNoImageToast() {{
-            var t = parentDoc.getElementById('m12-float-no-img-toast');
-            if (!t) {{
-                t = parentDoc.createElement('div');
-                t.id = 'm12-float-no-img-toast';
-                t.style.cssText = 'position:fixed; top:28px; left:50%; transform:translateX(-50%) translateY(-20px); background:linear-gradient(135deg, #1e293b, #0f172a); border:1.5px solid #f59e0b; border-radius:10px; padding:12px 22px; color:#ffffff; font-size:13.5px; font-weight:700; z-index:1000000; box-shadow:0 12px 35px rgba(0,0,0,0.65), 0 0 15px rgba(245,158,11,0.25); display:flex; align-items:center; gap:10px; direction:rtl; opacity:0; pointer-events:none; transition:all 0.3s cubic-bezier(0.16,1,0.3,1); font-family:system-ui, -apple-system, sans-serif;';
-                parentDoc.body.appendChild(t);
-            }}
-            t.innerHTML = '<span style="font-size:18px;">⚠️</span><span>لم يتم تحميل صورة مسقط استرشادي بعد. يرجى تحميل صورة أولاً من قسم <b>\\"🖼️ تحميل صورة مسقط افقي استرشادي للمباني\\"</b>.</span>';
-            t.style.opacity = '1';
-            t.style.transform = 'translateX(-50%) translateY(0)';
-            if (parentWin._m15_toast_timer) clearTimeout(parentWin._m15_toast_timer);
-            parentWin._m15_toast_timer = setTimeout(function() {{
-                t.style.opacity = '0';
-                t.style.transform = 'translateX(-50%) translateY(-20px)';
-            }}, 3800);
+            var s = parentDoc.createElement('script');
+            s.id = 'm12-floating-plan-controller-script';
+            s.textContent = CONTROLLER_CODE;
+            parentDoc.head.appendChild(s);
         }}
 
-        // 3. Create or Update Modal Element
-        var modal = parentDoc.getElementById('m12-floating-plan-modal');
-        var wasOpen = false;
-        var prevL = null, prevT = null, prevW = null, prevH = null;
-
-        if (modal && (!modal.querySelector('.m12-rh') || modal.querySelector('.m12-fp-hud') || !modal.querySelector('#m12-fp-zoom-badge'))) {{
-            wasOpen = modal.classList.contains('m12-show');
-            prevL = modal.style.left;
-            prevT = modal.style.top;
-            prevW = modal.style.width;
-            prevH = modal.style.height;
-            modal.remove();
-            modal = null;
-        }}
-
-        if (!modal) {{
-            modal = parentDoc.createElement('div');
-            modal.id = 'm12-floating-plan-modal';
-            modal.innerHTML = `
-                <!-- 8-Way Resize Handles: Edges (الأجناب) & Corners (الأركان) -->
-                <div class="m12-rh m12-rh-n" data-dir="n" title="سحب لتغيير الارتفاع"></div>
-                <div class="m12-rh m12-rh-s" data-dir="s" title="سحب لتغيير الارتفاع"></div>
-                <div class="m12-rh m12-rh-e" data-dir="e" title="سحب لتغيير العرض"></div>
-                <div class="m12-rh m12-rh-w" data-dir="w" title="سحب لتغيير العرض"></div>
-                <div class="m12-rh m12-rh-nw" data-dir="nw" title="سحب لتغيير المقاس"><span class="m12-corner-mark"></span></div>
-                <div class="m12-rh m12-rh-ne" data-dir="ne" title="سحب لتغيير المقاس"><span class="m12-corner-mark"></span></div>
-                <div class="m12-rh m12-rh-sw" data-dir="sw" title="سحب لتغيير المقاس"><span class="m12-corner-mark"></span></div>
-                <div class="m12-rh m12-rh-se" data-dir="se" title="سحب لتغيير المقاس"><span class="m12-corner-mark"></span></div>
-
-                <div class="m12-fp-header" id="m12-fp-header">
-                    <div class="m12-fp-title-wrap">
-                        <span style="font-size:16px;">🖼️</span>
-                        <span class="m12-fp-title-text">المسقط المعماري الاسترشادي</span>
-                        <span class="m12-fp-badge" id="m12-fp-name-badge"></span>
-                        <span class="m12-fp-shortcut-badge">Ctrl + Alt + F (ب)</span>
-                        <span class="m12-fp-badge" id="m12-fp-zoom-badge" style="color:#60a5fa; font-weight:700; font-family:Consolas, monospace;">100%</span>
-                    </div>
-                    <div class="m12-fp-actions">
-                        <button class="m12-fp-btn" id="m12-fp-btn-zoom-out" title="تصغير (−)">−</button>
-                        <button class="m12-fp-btn" id="m12-fp-btn-zoom-in" title="تكبير (+)">+</button>
-                        <button class="m12-fp-btn" id="m12-fp-btn-reset" title="إعادة ضبط (Reset)">↺</button>
-                        <button class="m12-fp-btn" id="m12-fp-btn-max" title="تكبير / استعادة الإطار">⛶</button>
-                        <button class="m12-fp-btn m12-fp-btn-close" id="m12-fp-btn-close" title="إغلاق (Esc)">×</button>
-                    </div>
-                </div>
-                <div class="m12-fp-viewport" id="m12-fp-viewport">
-                    <div class="m12-fp-layer" id="m12-fp-layer">
-                        <img class="m12-fp-img" id="m12-fp-img" src="" alt="المسقط المعماري الاسترشادي" />
-                    </div>
-                    <div id="m12-fp-no-img" style="display:none; position:absolute; inset:0; flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center; direction:rtl; z-index:10; background:rgba(15,23,42,0.94);">
-                        <div style="font-size:42px; margin-bottom:12px;">🖼️</div>
-                        <div style="font-size:16px; font-weight:700; color:#ffffff; margin-bottom:8px;">النافذة العائمة الحرة للمسقط المعماري</div>
-                        <div style="font-size:13px; color:#cbd5e1; max-width:440px; line-height:1.7; background:rgba(30,41,59,0.75); border:1.5px solid rgba(59,130,246,0.35); border-radius:10px; padding:12px 18px; margin-bottom:12px;">
-                            لم يتم تحميل صورة مسقط استرشادي بعد.<br/>
-                            يمكنك رفع صورة من قسم <b>«🖼️ تحميل صورة مسقط افقي استرشادي للمباني»</b> بالجانب الأيمن، وستظهر هنا فوراً مع إمكانية التكبير والتصغير وتغيير الحجم والتحريك بحرية تامة أثناء التصميم.
-                        </div>
-                        <div style="font-size:11.5px; color:#60a5fa;">💡 يمكنك الضغط على <b>Ctrl + Alt + F (أو ب)</b> في أي وقت لفتح أو إغلاق هذه النافذة.</div>
-                    </div>
-                </div>
-            `;
-            parentDoc.body.appendChild(modal);
-
-            if (prevW) {{
-                modal.style.width = prevW;
-                modal.style.height = prevH;
-                modal.style.left = prevL;
-                modal.style.top = prevT;
-                modal.style.right = 'auto';
-                modal.style.bottom = 'auto';
+        // 3. Update Image & Title in controller
+        try {{
+            if (parentWin.m15FloatingPlan && parentWin.m15FloatingPlan.updateImage) {{
+                parentWin.m15FloatingPlan.updateImage(HAS_IMAGE, IMG_NAME, IMG_TYPE, IMG_B64);
+            }} else if (parentWin.m15UpdateFloatingPlanImage) {{
+                parentWin.m15UpdateFloatingPlanImage(HAS_IMAGE, IMG_NAME, IMG_TYPE, IMG_B64);
             }}
-            if (wasOpen) {{
-                modal.classList.add('m12-show');
-            }}
+        }} catch(e) {{}}
 
-            // Bind Internal Events
-            var header = modal.querySelector('#m12-fp-header');
-            var viewport = modal.querySelector('#m12-fp-viewport');
-            var layer = modal.querySelector('#m12-fp-layer');
-            var img = modal.querySelector('#m12-fp-img');
-            var zoomVal = modal.querySelector('#m12-fp-zoom-badge');
-
-            // 8-Way Window Resizing Logic (Edges & Corners)
-            var isResizing = false;
-            var resizeDir = '';
-            var rStartMouseX = 0, rStartMouseY = 0;
-            var rStartLeft = 0, rStartTop = 0, rStartWidth = 0, rStartHeight = 0;
-            var activeHandle = null;
-
-            modal.querySelectorAll('.m12-rh').forEach(function(handle) {{
-                handle.addEventListener('mousedown', function(e) {{
-                    e.preventDefault();
-                    e.stopPropagation();
-                    isResizing = true;
-                    resizeDir = handle.getAttribute('data-dir');
-                    activeHandle = handle;
-                    handle.classList.add('m12-rh-active');
-
-                    rStartMouseX = e.clientX;
-                    rStartMouseY = e.clientY;
-
-                    var rect = modal.getBoundingClientRect();
-                    rStartLeft = rect.left;
-                    rStartTop = rect.top;
-                    rStartWidth = rect.width;
-                    rStartHeight = rect.height;
-
-                    modal.style.right = 'auto';
-                    modal.style.bottom = 'auto';
-                    modal.style.left = rStartLeft + 'px';
-                    modal.style.top = rStartTop + 'px';
-                    modal.style.width = rStartWidth + 'px';
-                    modal.style.height = rStartHeight + 'px';
-
-                    parentDoc.body.style.userSelect = 'none';
-                    parentDoc.body.style.cursor = window.getComputedStyle(handle).cursor;
-                }});
-            }});
-
-            parentDoc.addEventListener('mousemove', function(e) {{
-                if (isResizing) {{
-                    e.preventDefault();
-                    var dx = e.clientX - rStartMouseX;
-                    var dy = e.clientY - rStartMouseY;
-
-                    var minW = 280, minH = 200;
-                    var maxW = parentWin.innerWidth - 20;
-                    var maxH = parentWin.innerHeight - 20;
-
-                    var newWidth = rStartWidth;
-                    var newHeight = rStartHeight;
-                    var newLeft = rStartLeft;
-                    var newTop = rStartTop;
-
-                    // Horizontal resize (E / W)
-                    if (resizeDir.indexOf('e') !== -1) {{
-                        newWidth = Math.min(Math.max(rStartWidth + dx, minW), maxW);
-                    }}
-                    if (resizeDir.indexOf('w') !== -1) {{
-                        var rawW = rStartWidth - dx;
-                        if (rawW < minW) {{
-                            newWidth = minW;
-                            newLeft = rStartLeft + (rStartWidth - minW);
-                        }} else if (rawW > maxW) {{
-                            newWidth = maxW;
-                            newLeft = rStartLeft + (rStartWidth - maxW);
-                        }} else {{
-                            newWidth = rawW;
-                            newLeft = rStartLeft + dx;
-                        }}
-                    }}
-
-                    // Vertical resize (S / N)
-                    if (resizeDir.indexOf('s') !== -1) {{
-                        newHeight = Math.min(Math.max(rStartHeight + dy, minH), maxH);
-                    }}
-                    if (resizeDir.indexOf('n') !== -1) {{
-                        var rawH = rStartHeight - dy;
-                        if (rawH < minH) {{
-                            newHeight = minH;
-                            newTop = rStartTop + (rStartHeight - minH);
-                        }} else if (rawH > maxH) {{
-                            newHeight = maxH;
-                            newTop = rStartTop + (rStartHeight - maxH);
-                        }} else {{
-                            newHeight = rawH;
-                            newTop = rStartTop + dy;
-                        }}
-                    }}
-
-                    modal.style.width = newWidth + 'px';
-                    modal.style.height = newHeight + 'px';
-                    modal.style.left = newLeft + 'px';
-                    modal.style.top = newTop + 'px';
-                }}
-            }});
-
-            parentDoc.addEventListener('mouseup', function(e) {{
-                if (isResizing) {{
-                    isResizing = false;
-                    resizeDir = '';
-                    if (activeHandle) {{
-                        activeHandle.classList.remove('m12-rh-active');
-                        activeHandle = null;
-                    }}
-                    parentDoc.body.style.userSelect = '';
-                    parentDoc.body.style.cursor = '';
-                }}
-            }});
-
-            // Window Dragging
-            var isDraggingWin = false;
-            var winStartX = 0, winStartY = 0;
-
-            header.addEventListener('mousedown', function(e) {{
-                if (e.target.closest('button')) return;
-                isDraggingWin = true;
-                var rect = modal.getBoundingClientRect();
-                modal.style.right = 'auto';
-                modal.style.bottom = 'auto';
-                modal.style.left = rect.left + 'px';
-                modal.style.top = rect.top + 'px';
-                winStartX = e.clientX - rect.left;
-                winStartY = e.clientY - rect.top;
-                header.style.cursor = 'grabbing';
-            }});
-
-            parentDoc.addEventListener('mousemove', function(e) {{
-                if (isDraggingWin) {{
-                    e.preventDefault();
-                    var newL = e.clientX - winStartX;
-                    var newT = e.clientY - winStartY;
-                    var maxL = parentWin.innerWidth - 80;
-                    var maxT = parentWin.innerHeight - 40;
-                    newL = Math.max(-modal.offsetWidth + 80, Math.min(newL, maxL));
-                    newT = Math.max(0, Math.min(newT, maxT));
-                    modal.style.left = newL + 'px';
-                    modal.style.top = newT + 'px';
-                }}
-            }});
-
-            parentDoc.addEventListener('mouseup', function(e) {{
-                if (isDraggingWin) {{
-                    isDraggingWin = false;
-                    header.style.cursor = 'grab';
-                }}
-            }});
-
-            // Pan & Zoom State
-            var scale = 1.0;
-            var panX = 0, panY = 0;
-
-            function applyTransform(animated) {{
-                layer.style.transition = animated ? 'transform 0.18s cubic-bezier(0.1, 0.9, 0.2, 1)' : 'none';
-                layer.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) scale(' + scale + ')';
-                if (zoomVal) {{
-                    zoomVal.textContent = Math.round(scale * 100) + '%';
-                }}
-            }}
-
-            function resetView(animated) {{
-                var vw = viewport.clientWidth || 700;
-                var vh = viewport.clientHeight || 500;
-                var iw = img.naturalWidth || img.width || 800;
-                var ih = img.naturalHeight || img.height || 600;
-                if (!iw || !ih || iw <= 0 || ih <= 0) return;
-
-                var pad = 24;
-                var sX = (vw - pad * 2) / iw;
-                var sY = (vh - pad * 2) / ih;
-                scale = Math.min(sX, sY, 1.0);
-                if (scale < 0.05) scale = 0.5;
-
-                panX = (vw - iw * scale) / 2;
-                panY = (vh - ih * scale) / 2;
-                applyTransform(animated);
-            }}
-
-            modal._m12ResetView = resetView;
-
-            function zoomBy(factor) {{
-                var vw = viewport.clientWidth || 700;
-                var vh = viewport.clientHeight || 500;
-                var cx = vw / 2;
-                var cy = vh / 2;
-                var newScale = Math.min(Math.max(scale * factor, 0.1), 25.0);
-                panX = cx - (cx - panX) * (newScale / scale);
-                panY = cy - (cy - panY) * (newScale / scale);
-                scale = newScale;
-                applyTransform(true);
-            }}
-
-            // Wheel Zoom (Focal Point)
-            viewport.addEventListener('wheel', function(e) {{
-                e.preventDefault();
-                var rect = viewport.getBoundingClientRect();
-                var mouseX = e.clientX - rect.left;
-                var mouseY = e.clientY - rect.top;
-
-                var factor = e.deltaY < 0 ? 1.15 : 0.87;
-                var newScale = Math.min(Math.max(scale * factor, 0.1), 25.0);
-
-                panX = mouseX - (mouseX - panX) * (newScale / scale);
-                panY = mouseY - (mouseY - panY) * (newScale / scale);
-                scale = newScale;
-                applyTransform(false);
-            }}, {{ passive: false }});
-
-            // Viewport Pan (Drag)
-            var isPanning = false;
-            var panStartX = 0, panStartY = 0;
-
-            viewport.addEventListener('mousedown', function(e) {{
-                if (e.button !== 0) return;
-                isPanning = true;
-                panStartX = e.clientX - panX;
-                panStartY = e.clientY - panY;
-                viewport.style.cursor = 'grabbing';
-            }});
-
-            parentDoc.addEventListener('mousemove', function(e) {{
-                if (isPanning) {{
-                    e.preventDefault();
-                    panX = e.clientX - panStartX;
-                    panY = e.clientY - panStartY;
-                    applyTransform(false);
-                }}
-            }});
-
-            parentDoc.addEventListener('mouseup', function(e) {{
-                if (isPanning) {{
-                    isPanning = false;
-                    viewport.style.cursor = 'grab';
-                }}
-            }});
-
-            // Buttons
-            modal.querySelector('#m12-fp-btn-zoom-in').onclick = function() {{ zoomBy(1.25); }};
-            modal.querySelector('#m12-fp-btn-zoom-out').onclick = function() {{ zoomBy(0.8); }};
-            modal.querySelector('#m12-fp-btn-reset').onclick = function() {{ resetView(true); }};
-
-            // Maximize Toggle
-            var isMax = false;
-            var preMax = null;
-            var maxBtn = modal.querySelector('#m12-fp-btn-max');
-            maxBtn.onclick = function() {{
-                if (!isMax) {{
-                    preMax = {{
-                        left: modal.style.left,
-                        top: modal.style.top,
-                        width: modal.style.width,
-                        height: modal.style.height,
-                        right: modal.style.right,
-                        bottom: modal.style.bottom
-                    }};
-                    modal.style.left = '16px';
-                    modal.style.top = '16px';
-                    modal.style.width = 'calc(100vw - 32px)';
-                    modal.style.height = 'calc(100vh - 32px)';
-                    modal.style.right = 'auto';
-                    modal.style.bottom = 'auto';
-                    isMax = true;
-                    maxBtn.textContent = '❐';
-                }} else {{
-                    if (preMax) {{
-                        modal.style.left = preMax.left;
-                        modal.style.top = preMax.top;
-                        modal.style.width = preMax.width;
-                        modal.style.height = preMax.height;
-                        modal.style.right = preMax.right;
-                        modal.style.bottom = preMax.bottom;
-                    }}
-                    isMax = false;
-                    maxBtn.textContent = '⛶';
-                }}
-                setTimeout(function() {{ resetView(true); }}, 120);
-            }};
-
-            // Close Button
-            modal.querySelector('#m12-fp-btn-close').onclick = function() {{
-                modal.classList.remove('m12-show');
-            }};
-
-            img.onload = function() {{
-                resetView(false);
-            }};
-        }}
-
-        // 4. Update Modal Content with Current Image
-        var nameBadge = modal.querySelector('#m12-fp-name-badge');
-        var imgEl = modal.querySelector('#m12-fp-img');
-        var noImgEl = modal.querySelector('#m12-fp-no-img');
-        var layerEl = modal.querySelector('#m12-fp-layer');
-
-        function syncImageElements() {{
-            modal._m12HasImage = HAS_IMAGE;
-            if (nameBadge) {{
-                nameBadge.textContent = HAS_IMAGE ? IMG_NAME : 'بانتظار تحميل صورة';
-            }}
-            if (HAS_IMAGE && IMG_B64) {{
-                if (noImgEl) noImgEl.style.display = 'none';
-                if (layerEl) layerEl.style.display = 'block';
-                if (imgEl) {{
-                    imgEl.style.display = 'block';
-                    var newSrc = 'data:' + IMG_TYPE + ';base64,' + IMG_B64;
-                    if (imgEl.src !== newSrc) {{
-                        imgEl.src = newSrc;
-                    }}
-                }}
-            }} else {{
-                if (imgEl) {{
-                    imgEl.src = '';
-                    imgEl.style.display = 'none';
-                }}
-                if (layerEl) layerEl.style.display = 'none';
-                if (noImgEl) noImgEl.style.display = 'flex';
-            }}
-        }}
-        syncImageElements();
-
-        parentWin.m15UpdateFloatingPlanImage = function(hasImg, name, type, b64) {{
-            HAS_IMAGE = Boolean(hasImg && b64);
-            IMG_NAME = name || 'المسقط المعماري الاسترشادي';
-            IMG_TYPE = type || 'image/png';
-            IMG_B64 = b64 || '';
-            syncImageElements();
-        }};
-        parentWin.m12UpdateFloatingPlanImage = parentWin.m15UpdateFloatingPlanImage;
-
-        // 5. Expose Global Toggle Functions
-        var toggleFn = function() {{
-            if (modal.classList.contains('m12-show')) {{
-                modal.classList.remove('m12-show');
-            }} else {{
-                syncImageElements();
-                modal.classList.add('m12-show');
-                if (modal._m12HasImage) {{
-                    setTimeout(function() {{
-                        if (modal._m12ResetView) modal._m12ResetView(false);
-                    }}, 60);
-                }}
-            }}
-        }};
-
-        parentWin.m15ToggleFloatingPlan = toggleFn;
-        parentWin.m12ToggleFloatingPlan = toggleFn;
-
-        parentWin.m15ShowFloatingPlan = function() {{
-            syncImageElements();
-            modal.classList.add('m12-show');
-            if (modal._m12HasImage) {{
-                setTimeout(function() {{
-                    if (modal._m12ResetView) modal._m12ResetView(false);
-                }}, 60);
-            }}
-        }};
-        parentWin.m12ShowFloatingPlan = parentWin.m15ShowFloatingPlan;
-
-        parentWin.m15HideFloatingPlan = function() {{
-            modal.classList.remove('m12-show');
-        }};
-        parentWin.m12HideFloatingPlan = parentWin.m15HideFloatingPlan;
-
-        // 6. Keyboard Shortcut Listener (Ctrl + Alt + F & Esc)
-        function onGlobalKeyDown(e) {{
-            if (!e) return;
-            // Works for English 'F'/'f' or Arabic 'ب' and code 'KeyF' or keyCode 70
-            var codeMatches = (e.code === 'KeyF');
-            var keyMatches = (e.key === 'f' || e.key === 'F' || e.key === 'ب' || e.key === 'B' || e.key === 'ـ' || e.key === '[' || e.key === ']' || e.keyCode === 70 || e.which === 70);
-            var isF = codeMatches || keyMatches;
-
-            var hasAlt = e.altKey || (e.getModifierState && e.getModifierState('Alt'));
-            var hasCtrl = e.ctrlKey || e.metaKey || (e.getModifierState && e.getModifierState('Control'));
-            var hasAltGr = (e.getModifierState && e.getModifierState('AltGraph'));
-            var isToggleShortcut = isF && ((hasCtrl && hasAlt) || hasAltGr || (hasCtrl && e.shiftKey));
-
-            if (isToggleShortcut) {{
-                e.preventDefault();
-                e.stopPropagation();
-                if (typeof parentWin.m15ToggleFloatingPlan === 'function') {{
-                    parentWin.m15ToggleFloatingPlan();
-                }} else if (typeof parentWin.m12ToggleFloatingPlan === 'function') {{
-                    parentWin.m12ToggleFloatingPlan();
-                }}
-                return false;
-            }}
-            if (e.key === 'Escape' || e.key === 'Esc' || e.keyCode === 27) {{
-                if (modal && modal.classList.contains('m12-show')) {{
-                    e.preventDefault();
-                    modal.classList.remove('m12-show');
-                }}
-            }}
-        }}
-
-        // Clean up previous listener to prevent dead callbacks across Streamlit reruns
-        if (parentWin._m15_active_keydown) {{
-            try {{
-                parentWin.removeEventListener('keydown', parentWin._m15_active_keydown, true);
-                parentDoc.removeEventListener('keydown', parentWin._m15_active_keydown, true);
-                window.removeEventListener('keydown', parentWin._m15_active_keydown, true);
-                document.removeEventListener('keydown', parentWin._m15_active_keydown, true);
-            }} catch(err) {{}}
-        }}
-        parentWin._m15_active_keydown = onGlobalKeyDown;
-
-        try {{ parentWin.addEventListener('keydown', onGlobalKeyDown, true); }} catch(err) {{}}
-        try {{ parentDoc.addEventListener('keydown', onGlobalKeyDown, true); }} catch(err) {{}}
-        try {{ window.addEventListener('keydown', onGlobalKeyDown, true); }} catch(err) {{}}
-        try {{ document.addEventListener('keydown', onGlobalKeyDown, true); }} catch(err) {{}}
-
-        // Also bind to any iframes in parentDoc (such as 3D canvas) so keys aren't swallowed when focused
+        // 4. Ensure child iframes forward keydown events to parentWin.m15FloatingPlan
         try {{
             parentDoc.querySelectorAll('iframe').forEach(function(ifr) {{
                 try {{
-                    if (ifr.contentWindow && ifr.contentDocument) {{
-                        ifr.contentWindow.removeEventListener('keydown', onGlobalKeyDown, true);
-                        ifr.contentWindow.addEventListener('keydown', onGlobalKeyDown, true);
-                        ifr.contentDocument.removeEventListener('keydown', onGlobalKeyDown, true);
-                        ifr.contentDocument.addEventListener('keydown', onGlobalKeyDown, true);
+                    if (ifr.contentWindow && ifr.contentDocument && !ifr._hasM15KeyBound) {{
+                        ifr._hasM15KeyBound = true;
+                        ifr.contentWindow.addEventListener('keydown', function(e) {{
+                            if (parentWin.m15FloatingPlanGlobalKeyDown) {{
+                                parentWin.m15FloatingPlanGlobalKeyDown(e);
+                            }}
+                        }}, true);
                     }}
                 }} catch(e) {{}}
             }});
@@ -8067,37 +8428,27 @@ def _section_upload_image():
         help="اضغط على زر تحميل الصورة لاختيار ملف صورة من جهاز الكمبيوتر"
     )
 
-    last_uploader_file = st.session_state.get("_m15_last_uploader_file")
-    curr_uploader_file = uploaded_file.name if uploaded_file is not None else None
-
     if uploaded_file is not None:
-        img_bytes = uploaded_file.getvalue()
-        img_b64 = base64.b64encode(img_bytes).decode("utf-8")
-        st.session_state["m15_uploaded_image_b64"] = img_b64
-        st.session_state["m15_uploaded_image_name"] = uploaded_file.name
-        st.session_state["m15_uploaded_image_type"] = uploaded_file.type or "image/png"
-        st.session_state["m15_uploaded_image_size_kb"] = round(len(img_bytes) / 1024.0, 1)
+        curr_uploader_file = uploaded_file.name
+        last_uploader_file = st.session_state.get("_m15_last_uploader_file")
+        if curr_uploader_file != last_uploader_file:
+            img_bytes = uploaded_file.getvalue()
+            img_b64 = base64.b64encode(img_bytes).decode("utf-8")
+            st.session_state["m15_uploaded_image_b64"] = img_b64
+            st.session_state["m15_uploaded_image_name"] = uploaded_file.name
+            st.session_state["m15_uploaded_image_type"] = uploaded_file.type or "image/png"
+            st.session_state["m15_uploaded_image_size_kb"] = round(len(img_bytes) / 1024.0, 1)
 
-        try:
-            from PIL import Image as _PILImage
-            with _PILImage.open(io.BytesIO(img_bytes)) as _pimg:
-                st.session_state["m15_uploaded_image_w"] = _pimg.width
-                st.session_state["m15_uploaded_image_h"] = _pimg.height
-        except Exception:
-            st.session_state["m15_uploaded_image_w"] = None
-            st.session_state["m15_uploaded_image_h"] = None
-        st.session_state["_m15_last_uploader_file"] = curr_uploader_file
-        save_settings()
-    elif last_uploader_file is not None and curr_uploader_file is None:
-        st.session_state.pop("m15_uploaded_image_b64", None)
-        st.session_state.pop("m15_uploaded_image_name", None)
-        st.session_state.pop("m15_uploaded_image_type", None)
-        st.session_state.pop("m15_uploaded_image_size_kb", None)
-        st.session_state.pop("m15_uploaded_image_w", None)
-        st.session_state.pop("m15_uploaded_image_h", None)
-        st.session_state["_m15_last_uploader_file"] = None
-        save_settings()
-        st.rerun()
+            try:
+                from PIL import Image as _PILImage
+                with _PILImage.open(io.BytesIO(img_bytes)) as _pimg:
+                    st.session_state["m15_uploaded_image_w"] = _pimg.width
+                    st.session_state["m15_uploaded_image_h"] = _pimg.height
+            except Exception:
+                st.session_state["m15_uploaded_image_w"] = None
+                st.session_state["m15_uploaded_image_h"] = None
+            st.session_state["_m15_last_uploader_file"] = curr_uploader_file
+            save_settings()
 
     cur_b64 = st.session_state.get("m15_uploaded_image_b64")
     cur_name = st.session_state.get("m15_uploaded_image_name", "uploaded_image.png")
@@ -8132,6 +8483,17 @@ def _section_upload_image():
             </div>""",
             unsafe_allow_html=True
         )
+
+        if st.button("🗑️ إزالة الصورة الاسترشادية الحالية", key="m15_btn_remove_uploaded_img", use_container_width=True):
+            st.session_state.pop("m15_uploaded_image_b64", None)
+            st.session_state.pop("m15_uploaded_image_name", None)
+            st.session_state.pop("m15_uploaded_image_type", None)
+            st.session_state.pop("m15_uploaded_image_size_kb", None)
+            st.session_state.pop("m15_uploaded_image_w", None)
+            st.session_state.pop("m15_uploaded_image_h", None)
+            st.session_state["_m15_last_uploader_file"] = None
+            save_settings()
+            st.rerun()
 
 
 def _prepare_3d_scene_data():
@@ -11279,6 +11641,16 @@ def _section_3d_viewer():
         exitMeasureMode();
         return false;
       }
+      try {
+        if (window.parent && window.parent.m15FloatingPlan && window.parent.m15FloatingPlan.isOpen && window.parent.m15FloatingPlan.isOpen()) {
+          e.preventDefault();
+          e.stopPropagation();
+          window.parent.m15FloatingPlan.close();
+          return false;
+        } else if (window.parent && window.parent.m15HideFloatingPlan) {
+          window.parent.m15HideFloatingPlan();
+        }
+      } catch(err) {}
     }
     var codeMatches = (e.code === 'KeyF');
     var keyMatches = (e.key === 'f' || e.key === 'F' || e.key === 'ب' || e.key === 'B' || e.key === 'ـ' || e.key === '[' || e.key === ']' || e.keyCode === 70 || e.which === 70);
@@ -13578,13 +13950,6 @@ def render_masonry_plaster_module():
                             st.rerun()
 
             if is_add_active:
-                st.markdown(
-                    """<div style='background: linear-gradient(135deg, rgba(30, 58, 138, 0.90), rgba(30, 64, 175, 0.90)); border: 2px solid #3b82f6; border-radius: 8px; padding: 8px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;' dir='rtl'>
-                        <span style='font-weight: 700; color: #ffffff; font-size: 0.90rem;'>🎯 <b>وضع إضافة الأعمدة نشط:</b> اختر بالماوس صندوقاً يكون بداخله تقاطع المحورين الواقع العمود بداخله</span>
-                        <span style='background: #3b82f6; color: #ffffff; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 600;'>Esc للإنهاء</span>
-                    </div>""",
-                    unsafe_allow_html=True
-                )
                 _render_interactive_plan(box_mode="add")
             elif is_restore_active:
                 st.markdown(
