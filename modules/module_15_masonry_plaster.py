@@ -15,6 +15,7 @@ from modules.settings import (
     cfg_set,
     save_settings,
     play_warning_sound,
+    ALARM_WAV_B64,
     _ensure_module15_state,
     reset_module_15_state,
 )
@@ -2298,6 +2299,27 @@ def _draw_plan(with_dim=True):
                 if (i_idx, j_idx) not in active_set:
                     ax.plot(ax_x, ax_y, marker="+", markersize=10, markeredgewidth=1.5, color="#0284c7", alpha=0.8, zorder=5.8)
 
+    # ── إسقاط ترقيم وتسمية الباكيات والمساحات الداخلية (A1, A2, ...) على المسقط الأفقي ──
+    bays = _compute_bays()
+    for b in bays:
+        bx, by = b["cx"], b["cy"]
+        b_code = b["id"]
+        # رسم رقم كل مساحة في منتصف الباكية داخل مربع تعريفي بارز ومميز بصرياً
+        ax.text(
+            bx, by, b_code,
+            ha="center", va="center",
+            fontsize=fs_col * 1.15,
+            color="#0369a1",
+            fontweight="heavy",
+            zorder=7.5,
+            bbox=dict(
+                boxstyle="square,pad=0.38",
+                facecolor="#f0f9ff",
+                edgecolor="#0284c7",
+                lw=1.8,
+                alpha=0.95
+            )
+        )
 
     # ── خط أبعاد مؤقت لموضع تحريك الفتحة (نافذة/باب) مع نقطة بداية الحائط ──
     active_move_dim = (st.session_state.get("m15_active_move_dim") if with_dim else None)
@@ -2515,6 +2537,7 @@ def _draw_plan(with_dim=True):
         Patch(facecolor=_CLR_WIN, alpha=0.85, label="شباك (W#)"),
         Patch(facecolor=_CLR_DOOR, alpha=0.90, label="باب (D#)"),
         Patch(facecolor=_CLR_COL, alpha=0.90, label="عمود (C#)"),
+        Patch(facecolor="#f0f9ff", edgecolor="#0284c7", lw=1.5, label="مساحة (A#)"),
         Patch(facecolor="none", edgecolor="#EC4899", hatch="/", lw=0, label="وجه محارة"),
         Line2D([0], [0], color="#94a3b8", ls=":", lw=1.5, label="محذوف"),
         Line2D([0], [0], color="#0f172a", lw=1.2, marker="|", label="خط بعد"),
@@ -6310,20 +6333,216 @@ def _compute_plaster_survey():
     }
 
 
+def _compute_bays():
+    """
+    حساب وتقسيم المساحات الداخلية (ترقيم وتسمية الباكيات A1, A2, ...):
+    - يقوم النظام بحساب المساحات المحصورة بين شبكة المحاور المتقاطعة.
+    - ترتيب المساحات كودياً يبدأ بـ A1, A2, A3, ...
+    - يحدد لكل مساحة إحداثيات المركز والأبعاد الأربعة والحوائط المحددة لها.
+    """
+    xs = st.session_state.get("m15_x_axes", [])
+    ys = st.session_state.get("m15_y_axes", [])
+    nx, ny = len(xs), len(ys)
+    if nx < 2 or ny < 2:
+        return []
+
+    bays = []
+    all_walls = _get_all_walls()
+    removed_walls = st.session_state.get("m15_wall_removed", set())
+    active_walls = set(wk for wk in all_walls if wk not in removed_walls)
+
+    bay_idx = 1
+
+    # فرز المحاور لضمان الترتيب الإحداثي الدقيق
+    # قيم Y (المحاور الأفقية X1, X2...): من j = 0 إلى ny - 2
+    # قيم X (المحاور الرأسية Y1, Y2...): من i = 0 إلى nx - 2
+    for j in range(ny - 1):
+        y_bot = min(ys[j], ys[j + 1])
+        y_top = max(ys[j], ys[j + 1])
+
+        for i in range(nx - 1):
+            x_left = min(xs[i], xs[i + 1])
+            x_right = max(xs[i], xs[i + 1])
+
+            # الحوائط المحيطة بالباكية وأوجهها الداخلية:
+            # 1. أعلى: الحائط الأفقي عند j+1 بين i و i+1 -> الوجه الداخلي نحو الباكية هو "أسفل"
+            # 2. أسفل: الحائط الأفقي عند j بين i و i+1 -> الوجه الداخلي نحو الباكية هو "أعلى"
+            # 3. يسار: الحائط الرأسي عند i بين j و j+1 -> الوجه الداخلي نحو الباكية هو "يمين"
+            # 4. يمين: الحائط الرأسي عند i+1 بين j و j+1 -> الوجه الداخلي نحو الباكية هو "يسار"
+            wk_top = (i, j + 1, i + 1, j + 1)
+            wk_bot = (i, j, i + 1, j)
+            wk_left = (i, j, i, j + 1)
+            wk_right = (i + 1, j, i + 1, j + 1)
+
+            # حساب أوجه الحوائط الداخلية للباكية (Face-to-Face Inner Boundaries):
+            # الوجه الداخلي للحائط الأيسر:
+            if wk_left in active_walls:
+                _min_x, _max_x, _c, _th = _get_wall_cross_bounds(wk_left)
+                x_inner_left = _max_x
+            else:
+                x_inner_left = x_left
+
+            # الوجه الداخلي للحائط الأيمن:
+            if wk_right in active_walls:
+                _min_x, _max_x, _c, _th = _get_wall_cross_bounds(wk_right)
+                x_inner_right = _min_x
+            else:
+                x_inner_right = x_right
+
+            # الوجه الداخلي للحائط السفلي:
+            if wk_bot in active_walls:
+                _min_y, _max_y, _c, _th = _get_wall_cross_bounds(wk_bot)
+                y_inner_bot = _max_y
+            else:
+                y_inner_bot = y_bot
+
+            # الوجه الداخلي للحائط العلوي:
+            if wk_top in active_walls:
+                _min_y, _max_y, _c, _th = _get_wall_cross_bounds(wk_top)
+                y_inner_top = _min_y
+            else:
+                y_inner_top = y_top
+
+            clear_span_x = max(0.10, x_inner_right - x_inner_left)
+            clear_span_y = max(0.10, y_inner_top - y_inner_bot)
+            clear_area_m2 = round(clear_span_x * clear_span_y, 2)
+            cx = (x_inner_left + x_inner_right) / 2.0
+            cy = (y_inner_bot + y_inner_top) / 2.0
+
+            bay_code = f"A{bay_idx}"
+            bays.append({
+                "id": bay_code,
+                "index": bay_idx,
+                "i": i,
+                "j": j,
+                "x_left": x_left,
+                "x_right": x_right,
+                "y_bot": y_bot,
+                "y_top": y_top,
+                "x_inner_left": x_inner_left,
+                "x_inner_right": x_inner_right,
+                "y_inner_bot": y_inner_bot,
+                "y_inner_top": y_inner_top,
+                "span_x": round(clear_span_x, 2),
+                "span_y": round(clear_span_y, 2),
+                "clear_span_x": round(clear_span_x, 2),
+                "clear_span_y": round(clear_span_y, 2),
+                "clear_area_m2": clear_area_m2,
+                "cx": cx,
+                "cy": cy,
+                "walls": {
+                    "أعلى": {"wk": wk_top, "face": "أسفل"},
+                    "أسفل": {"wk": wk_bot, "face": "أعلى"},
+                    "يسار": {"wk": wk_left, "face": "يمين"},
+                    "يمين": {"wk": wk_right, "face": "يسار"},
+                },
+                "label": f"{bay_code} — [X{j+1}-X{j+2} × Y{i+1}-Y{i+2}] ({clear_span_x:.2f}م × {clear_span_y:.2f}م = {clear_area_m2:.2f}م²)"
+            })
+            bay_idx += 1
+
+    return bays
+
+
+def _get_exterior_facades():
+    """
+    تحديد الحوائط الخارجية لواجهات المبنى الأربع:
+    - الواجهة العلوية للمبنى: الحوائط الأفقية الخارجية بأعلى المبنى (الوجه الخارجي: أعلى)
+    - الواجهة السفلية للمبنى: الحوائط الأفقية الخارجية بأسفل المبنى (الوجه الخارجي: أسفل)
+    - الواجهة اليسرى للمبنى: الحوائط الرأسية الخارجية بأقصى اليسار (الوجه الخارجي: يسار)
+    - الواجهة اليمنى للمبنى: الحوائط الرأسية الخارجية بأقصى اليمين (الوجه الخارجي: يمين)
+    مع الحفاظ التام على استقلالية كل حائط باسمه وبياناته وحصره الهندسي دون دمج الكيانات.
+    """
+    xs = st.session_state.get("m15_x_axes", [])
+    ys = st.session_state.get("m15_y_axes", [])
+    nx, ny = len(xs), len(ys)
+    if nx < 2 or ny < 2:
+        return {}
+
+    all_walls = _get_all_walls()
+    removed_walls = st.session_state.get("m15_wall_removed", set())
+    active_walls = [wk for wk in all_walls if wk not in removed_walls]
+
+    h_walls = [wk for wk in active_walls if wk[1] == wk[3]]
+    v_walls = [wk for wk in active_walls if wk[0] == wk[2]]
+
+    facades = {
+        "top": {
+            "key": "top",
+            "name": "الواجهة العلوية للمبنى",
+            "icon": "🔼",
+            "face": "أعلى",
+            "walls": []
+        },
+        "bottom": {
+            "key": "bottom",
+            "name": "الواجهة السفلية للمبنى",
+            "icon": "🔽",
+            "face": "أسفل",
+            "walls": []
+        },
+        "left": {
+            "key": "left",
+            "name": "الواجهة اليسرى للمبنى",
+            "icon": "◀️",
+            "face": "يسار",
+            "walls": []
+        },
+        "right": {
+            "key": "right",
+            "name": "الواجهة اليمنى للمبنى",
+            "icon": "▶️",
+            "face": "يمين",
+            "walls": []
+        },
+    }
+
+    # 1. الواجهة العلوية والسفلية: تجميع الحوائط الأفقية حسب الفترة الأفقية (i1, i2)
+    h_by_span = {}
+    for wk in h_walls:
+        i1, j1, i2, j2 = wk
+        span = (min(i1, i2), max(i1, i2))
+        h_by_span.setdefault(span, []).append(wk)
+
+    for span, w_list in sorted(h_by_span.items()):
+        # أعلى حائط أفقي لهذه الفترة
+        top_w = max(w_list, key=lambda w: w[1])
+        facades["top"]["walls"].append(top_w)
+        # أسفل حائط أفقي لهذه الفترة
+        bot_w = min(w_list, key=lambda w: w[1])
+        facades["bottom"]["walls"].append(bot_w)
+
+    # 2. الواجهة اليسرى واليمنى: تجميع الحوائط الرأسية حسب الفترة الرأسية (j1, j2)
+    v_by_span = {}
+    for wk in v_walls:
+        i1, j1, i2, j2 = wk
+        span = (min(j1, j2), max(j1, j2))
+        v_by_span.setdefault(span, []).append(wk)
+
+    for span, w_list in sorted(v_by_span.items()):
+        # أقصى حائط رأسي باليسار
+        left_w = min(w_list, key=lambda w: w[0])
+        facades["left"]["walls"].append(left_w)
+        # أقصى حائط رأسي باليمين
+        right_w = max(w_list, key=lambda w: w[0])
+        facades["right"]["walls"].append(right_w)
+
+    return facades
+
+
 def _section_plaster_walls():
     """
-    قسم تحديد وحصر حوائط المحارة (Plaster Walls Calculation & Visualization).
-    - اختيار الحائط وتعديل أوجه المحارة.
-    - تحديد الاتجاه ديناميكياً:
-        * حائط أفقي: [أعلى | أسفل]
-        * حائط رأسي: [يمين | يسار]
-    - تفاعل وتحديث بصري لحظي على الـ Canvas.
-    - حصر فوري لمسطحات المحارة والخامات طبقاً للكود المصري.
+    قسم تحديد حوائط المحارة (المساحات الداخلية A1, A2... والواجهات الخارجية الأربع).
+    1. تقسيم المساحات الداخلية (ترقيم وتسمية الباكيات A1, A2, ...).
+    2. واجهة اختيار المحارة الداخلية (المساحات) بخيارات التوجيه:
+       [يمين | يسار | أعلى | أسفل | جميع الأوجه].
+    3. واجهة اختيار المحارة الخارجية (واجهات المبنى الأربع: نعم / لا)
+       مع الحفاظ التام على استقلالية كل حائط باسمه وبياناته وحصره الهندسي دون دمج الكيانات.
+    4. ضوابط فلسفة التهشير (خطوط مائلة 45° ومسافات معيارية بدون إطارات).
     """
     xs = st.session_state.get("m15_x_axes", [])
     ys = st.session_state.get("m15_y_axes", [])
     if len(xs) < 2 or len(ys) < 2:
-        st.info("💡 أدخل على الأقل محورين في كل اتجاه أولاً.")
+        st.info("💡 أدخل على الأقل محورين في كل اتجاه أولاً لحساب المساحات والواجهات.")
         return
 
     all_walls = _get_all_walls()
@@ -6344,204 +6563,550 @@ def _section_plaster_walls():
     st.markdown(
         """<div style='background:rgba(30, 41, 59, 0.75);border:1px solid #334155;border-right:4px solid #3b82f6;
             border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:0.87rem;' dir='rtl'>
-            <b style='color:#ffffff;font-size:0.95rem;'>🎨 تحديد وتعديل أوجه المحارة (Plaster Faces):</b><br>
+            <b style='color:#ffffff;font-size:0.95rem;'>🎨 تحديد حوائط المحارة (المساحات الداخلية والواجهات الخارجية):</b><br>
             <span style='color:#cbd5e1;'>
-            اختر الحائط وحدد الوجه المطلوب لتطبيق تهشير أزرق غامق بخطوط خضراء فوراً على الرسم وحصر الخامات بدقة.
+            حدد محارة المساحات الداخلية (الباكيات A1, A2...) بالاتجاهات الأربعة أو كامل الأوجه، ومحارة الواجهات الخارجية (نعم / لا) مع تطبيق التهشير اللحظي وحصر الخامات بدقة.
             </span>
         </div>""",
         unsafe_allow_html=True
     )
 
-    # 1. قائمة اختيار الحائط
-    def _plaster_wall_label(idx):
-        wk = active_walls[idx]
-        i1, j1, i2, j2 = wk
-        is_h = (j1 == j2)
-        disp = _wall_display_label(wk, cm, wm)
-        cur_faces = plaster_faces_map.get(wk, [])
-        valid_faces = [f for f in cur_faces if (f in (["أعلى", "أسفل"] if is_h else ["يمين", "يسار"]))]
-        if not valid_faces:
-            status = "⚪ بدون محارة"
-        elif len(valid_faces) == 2:
-            status = "🟢 كلا الوجهين"
-        else:
-            status = f"🟢 وجه ({valid_faces[0]})"
-        orient = "أفقي" if is_h else "رأسي"
-        return f"{disp} [{orient}] — {status}"
+    bays = _compute_bays()
 
-    _safe_idx("m15_plaster_sel_wall", len(active_walls))
-    sel_idx = st.selectbox(
-        "اختيار أوجه المحارة (تعديل أوجه المحارة)",
-        options=range(len(active_walls)),
-        format_func=_plaster_wall_label,
-        key="m15_plaster_sel_wall"
-    )
-    sel_wk = active_walls[sel_idx]
-    i1, j1, i2, j2 = sel_wk
-    is_h = (j1 == j2)
-
-    # 2. تحديد الخيارات المتاحة ديناميكياً طبقاً لزاوية ومحور الحائط
-    # إذا كان أفقياً: [أعلى | أسفل]
-    # إذا كان رأسياً: [يمين | يسار]
-    available_options = ["أعلى", "أسفل"] if is_h else ["يمين", "يسار"]
-    current_faces = [f for f in plaster_faces_map.get(sel_wk, []) if f in available_options]
-
-    orient_str = "أفقي (محور X)" if is_h else "رأسي (محور Y)"
+    # تنسيق التبويبات كشبكة متناسقة وأنيقة
     st.markdown(
-        f"<div style='font-size:0.85rem;color:#334155;margin-bottom:4px;' dir='rtl'>"
-        f"<b>محور الحائط:</b> {orient_str} &nbsp;|&nbsp; "
-        f"<b>الخيارات المتاحة:</b> {' | '.join(available_options)}"
-        f"</div>",
+        """<div id='m15_plaster_tabs_marker'></div>
+        <style>
+        /* تنسيق تبويبات المحارة بنظام grid أنيق ومتناسق */
+        div[data-testid="stExpander"]:has(#m15_plaster_tabs_marker) div[data-baseweb="tab-list"],
+        .m15-tabs-2x2 {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)) !important;
+            gap: 8px !important;
+            width: 100% !important;
+        }
+        div[data-testid="stExpander"]:has(#m15_plaster_tabs_marker) button[data-baseweb="tab"],
+        .m15-tabs-2x2 button[data-baseweb="tab"] {
+            width: 100% !important;
+            text-align: center !important;
+            justify-content: center !important;
+            padding: 10px 8px !important;
+            font-size: 0.86rem !important;
+            font-weight: 700 !important;
+            border-radius: 8px !important;
+            border: 1.5px solid #334155 !important;
+            background: rgba(15, 23, 42, 0.75) !important;
+            color: #94a3b8 !important;
+            white-space: normal !important;
+            min-height: 48px !important;
+            box-sizing: border-box !important;
+            transition: all 0.2s ease !important;
+        }
+        div[data-testid="stExpander"]:has(#m15_plaster_tabs_marker) button[data-baseweb="tab"]:hover,
+        .m15-tabs-2x2 button[data-baseweb="tab"]:hover {
+            border-color: #0284c7 !important;
+            color: #ffffff !important;
+            background: rgba(2, 132, 199, 0.22) !important;
+        }
+        div[data-testid="stExpander"]:has(#m15_plaster_tabs_marker) button[data-baseweb="tab"][aria-selected="true"],
+        .m15-tabs-2x2 button[data-baseweb="tab"][aria-selected="true"] {
+            background: linear-gradient(135deg, #1e3a8a, #0284c7) !important;
+            color: #ffffff !important;
+            border-color: #38bdf8 !important;
+            box-shadow: 0 2px 8px rgba(2, 132, 199, 0.35) !important;
+        }
+        div[data-testid="stExpander"]:has(#m15_plaster_tabs_marker) div[data-baseweb="tab-highlight"],
+        .m15-tabs-2x2 div[data-baseweb="tab-highlight"] {
+            display: none !important;
+        }
+        div[data-testid="stExpander"]:has(#m15_plaster_tabs_marker) div[data-baseweb="tab-border"],
+        .m15-tabs-2x2 div[data-baseweb="tab-border"] {
+            display: none !important;
+        }
+        </style>
+        <script>
+        (function() {
+          function applyGrid() {
+            var m = document.getElementById('m15_plaster_tabs_marker');
+            if (!m) return;
+            var exp = m.closest('div[data-testid="stExpander"]') || m.parentElement;
+            if (!exp) return;
+            var tl = exp.querySelector('div[data-baseweb="tab-list"]');
+            if (tl && !tl.classList.contains('m15-tabs-2x2')) {
+              tl.classList.add('m15-tabs-2x2');
+            }
+          }
+          applyGrid();
+          setTimeout(applyGrid, 80);
+          setTimeout(applyGrid, 250);
+        })();
+        </script>
+        """,
         unsafe_allow_html=True
     )
 
-    ms_key = f"m15_plaster_ms_{sel_wk[0]}_{sel_wk[1]}_{sel_wk[2]}_{sel_wk[3]}"
-    ms_stage_key = f"m15_plaster_ms_stage_{sel_wk[0]}_{sel_wk[1]}_{sel_wk[2]}_{sel_wk[3]}"
+    tab_quick, tab_int, tab_ext = st.tabs([
+        "⚡ الاختيار السريع للحوائط الداخلية",
+        "🏠 المحارة الداخلية (المساحات)",
+        "🏢 المحارة الخارجية (الواجهات)"
+    ])
 
-    # ── تطبيق القيمة المُعلَّقة (staged) من الزر قبل رسم الـ widget
-    if ms_stage_key in st.session_state:
-        st.session_state[ms_key] = st.session_state.pop(ms_stage_key)
+    # ════════════════════════════════════════════════════════════
+    # ⚡ التبويب 1: الاختيار السريع للحوائط الداخلية
+    # ════════════════════════════════════════════════════════════
+    with tab_quick:
+        if not bays:
+            st.info("💡 لا توجد مساحات داخلية محصورة بين المحاور.")
+        else:
+            st.markdown(
+                """<div style='background:linear-gradient(135deg,#0f172a,#1e293b); border:1.5px solid #0284c7;
+                    border-radius:8px; padding:12px 16px; margin-bottom:12px;' dir='rtl'>
+                    <b style='color:#38bdf8; font-size:1.0rem;'>⚡ الاختيار السريع للحوائط الداخلية:</b><br>
+                    <span style='color:#cbd5e1; font-size:0.86rem; line-height:1.7;'>
+                    تحكم فوري شامل لتطبيق تهشير المحارة على جميع الأوجه الداخلية لكافة المساحات والباكيات (A1, A2...) دفعة واحدة، أو إلغاء وتفريغ المحارة الداخلية بالكامل، مع التحديث الفوري في رسم المسقط الأفقي المصمم وحسابات الحصر الهندسي.
+                    </span>
+                </div>""",
+                unsafe_allow_html=True
+            )
 
-    # ── تهيئة القيمة الأولى فقط إن لم يوجد ms_key بعد
-    if ms_key not in st.session_state:
-        st.session_state[ms_key] = list(current_faces)
+            # إحصائيات سريعة للباكيات
+            total_bay_faces = len(bays) * 4
+            active_bay_faces = 0
+            for b in bays:
+                for d_n in ["أعلى", "أسفل", "يسار", "يمين"]:
+                    winf = b["walls"][d_n]
+                    if winf["face"] in plaster_faces_map.get(winf["wk"], []):
+                        active_bay_faces += 1
 
-    def _on_plaster_ms_change():
-        new_val = st.session_state.get(ms_key, [])
-        pfm = st.session_state.setdefault("m15_plaster_faces", {})
-        pfm[sel_wk] = list(new_val)
-        st.session_state["m15_plaster_faces"] = pfm
-        save_settings()
+            c_st1, c_st2 = st.columns(2)
+            with c_st1:
+                st.markdown(f"""
+                <div style='background:rgba(2,132,199,0.14); border:1px solid #0284c7; border-radius:6px; padding:8px 10px; text-align:center;'>
+                    <div style='color:#7dd3fc; font-size:0.78rem;'>إجمالي المساحات المعرفة</div>
+                    <div style='color:#ffffff; font-size:1.20rem; font-weight:900;'>{len(bays)} مساحة</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with c_st2:
+                pct = int((active_bay_faces / total_bay_faces * 100)) if total_bay_faces > 0 else 0
+                st.markdown(f"""
+                <div style='background:rgba(16,185,129,0.14); border:1px solid #10b981; border-radius:6px; padding:8px 10px; text-align:center;'>
+                    <div style='color:#6ee7b7; font-size:0.78rem;'>أوجه المحارة الداخلية المحددة</div>
+                    <div style='color:#ffffff; font-size:1.20rem; font-weight:900;'>{active_bay_faces} / {total_bay_faces} ({pct}%)</div>
+                </div>
+                """, unsafe_allow_html=True)
 
-    st.multiselect(
-        "اتجاه المحارة",
-        options=available_options,
-        key=ms_key,
-        on_change=_on_plaster_ms_change,
-        help="اختر وجهاً واحداً أو كلا الوجهين، أو احذف الوجه لإلغاء التحديد."
-    )
+            st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
 
-    # أزرار تحكم سريعة للوجه
-    c_btn1, c_btn2 = st.columns(2)
-    with c_btn1:
-        if st.button("✨ تفعيل كلا الوجهين", key=f"m15_btn_both_{sel_wk[0]}_{sel_wk[1]}_{sel_wk[2]}_{sel_wk[3]}", use_container_width=True):
-            plaster_faces_map[sel_wk] = list(available_options)
-            st.session_state["m15_plaster_faces"] = plaster_faces_map
-            # نستخدم staging key لأن الـ widget رُسم بالفعل في هذا الـ run
-            st.session_state[ms_stage_key] = list(available_options)
-            save_settings()
-            st.rerun()
-    with c_btn2:
-        if st.button("🗑️ إلغاء المحارة لهذا الحائط", key=f"m15_btn_clear_{sel_wk[0]}_{sel_wk[1]}_{sel_wk[2]}_{sel_wk[3]}", use_container_width=True):
-            plaster_faces_map[sel_wk] = []
-            st.session_state["m15_plaster_faces"] = plaster_faces_map
-            # نستخدم staging key لأن الـ widget رُسم بالفعل في هذا الـ run
-            st.session_state[ms_stage_key] = []
-            save_settings()
-            st.rerun()
-
-    # إجراءات جماعية سريعة للمشروع
-    with st.expander("⚡ إجراءات جماعية سريعة لكافة الحوائط", expanded=False):
-        st.markdown(
-            """<style>
-            div[class*="st-key-m15_plaster_all_both"] button,
-            div[class*="st-key-m15_plaster_clear_all"] button,
-            div.st-key-m15_plaster_all_both button,
-            div.st-key-m15_plaster_clear_all button {
-                font-size: 0.78rem !important;
-                padding: 4px 6px !important;
-                height: auto !important;
-                min-height: 2.3rem !important;
-                line-height: 1.25 !important;
-            }
-            div[class*="st-key-m15_plaster_all_both"] button p,
-            div[class*="st-key-m15_plaster_clear_all"] button p,
-            div.st-key-m15_plaster_all_both button p,
-            div.st-key-m15_plaster_clear_all button p,
-            div[class*="st-key-m15_plaster_all_both"] button div,
-            div[class*="st-key-m15_plaster_clear_all"] button div {
-                font-size: 0.78rem !important;
-                line-height: 1.25 !important;
-                white-space: normal !important;
-                overflow: visible !important;
-                text-overflow: clip !important;
-                text-align: center !important;
-            }
-            </style>""",
-            unsafe_allow_html=True
-        )
-        c_all1, c_all2 = st.columns(2)
-        with c_all1:
-            if st.button("➕ تفعيل كلا الوجهين للكل", key="m15_plaster_all_both", use_container_width=True, help="تفعيل محارة كلا الوجهين لكافة الحوائط"):
-                for wk in active_walls:
-                    is_wk_h = (wk[1] == wk[3])
-                    plaster_faces_map[wk] = ["أعلى", "أسفل"] if is_wk_h else ["يمين", "يسار"]
-                st.session_state["m15_plaster_faces"] = plaster_faces_map
-                save_settings()
-                st.rerun()
-        with c_all2:
-            if st.button("🧹 مسح محارة كافة الحوائط", key="m15_plaster_clear_all", use_container_width=True, help="مسح محارة كافة الحوائط"):
-                for wk in active_walls:
-                    plaster_faces_map[wk] = []
-                st.session_state["m15_plaster_faces"] = plaster_faces_map
+            # 1. زر اختيار المحارة الداخلية لجميع المساحات
+            if st.button("✨ اختيار المحارة الداخلية لجميع المساحات", key="m15_btn_select_all_interior_plaster", use_container_width=True):
+                st.session_state.pop("m15_confirm_cancel_all_interior", None)
+                pfm = st.session_state.setdefault("m15_plaster_faces", {})
+                for b in bays:
+                    for d_n in ["أعلى", "أسفل", "يسار", "يمين"]:
+                        winf = b["walls"][d_n]
+                        wk = winf["wk"]
+                        face = winf["face"]
+                        if wk in active_walls:
+                            cur = list(pfm.get(wk, []))
+                            if face not in cur:
+                                cur.append(face)
+                            pfm[wk] = cur
+                st.session_state["m15_plaster_faces"] = pfm
+                # تحديث قيم مربعات الاختيار في تبويب المساحات
+                for b in bays:
+                    bid = b["id"]
+                    st.session_state[f"m15_cb_all_{bid}"] = True
+                    st.session_state[f"m15_cb_top_{bid}"] = True
+                    st.session_state[f"m15_cb_bot_{bid}"] = True
+                    st.session_state[f"m15_cb_left_{bid}"] = True
+                    st.session_state[f"m15_cb_right_{bid}"] = True
                 save_settings()
                 st.rerun()
 
-    # بطاقة فحص سريع للحائط المختار
-    default_h = float(st.session_state.get("m15_default_wall_height", 3.0))
-    sel_len = _wall_length_m(sel_wk)
-    sel_h = _get_wall_height(sel_wk, default_h)
-    sel_active_faces = [f for f in plaster_faces_map.get(sel_wk, []) if f in available_options]
-    n_sel_faces = len(sel_active_faces)
-    sel_gross = sel_len * sel_h * n_sel_faces
+            # 2. زر إلغاء المحارة الداخلية لجميع المساحات
+            st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
+            if st.button("🗑️ إلغاء المحارة الداخلية لجميع المساحات", key="m15_btn_trigger_cancel_interior", use_container_width=True):
+                st.session_state["m15_confirm_cancel_all_interior"] = True
+                st.session_state["m15_play_cancel_whistle"] = True
+                st.session_state["_last_whistle_time"] = 0.0
+                st.rerun()
 
-    sel_op = 0.0
-    for wi in _get_wall_windows(sel_wk):
-        if not wi.get("removed", False):
-            sel_op += float(wi.get("w_m", 1.0)) * float(wi.get("h_m", 1.2))
-    for di in _get_wall_doors(sel_wk):
-        if not di.get("removed", False):
-            sel_op += float(di.get("w_m", 0.9)) * float(di.get("h_m", 2.1))
-    sel_ded = sel_op * n_sel_faces
-    sel_net = max(0.0, sel_gross - sel_ded)
-    sel_sand = (sel_net / 42.0) * 1.05 if sel_net > 0 else 0.0
-    sel_cement_kg = sel_sand * 350.0
-    sel_cement_tons = sel_cement_kg / 1000.0
-    sel_cement_bags = math.ceil(sel_cement_kg / 50.0) if sel_cement_kg > 0 else 0
+            # نافذة / صندوق التأكيد بخلفية حمراء وصافرة تحذيرية وخط عريض واضح (تطلق الصافرة فوراً عند طلب الإلغاء قبل الحذف)
+            if st.session_state.get("m15_confirm_cancel_all_interior", False):
+                if st.session_state.pop("m15_play_cancel_whistle", False):
+                    # تشغيل الصافرة التحذيرية فوراً بمجرد الضغط على الزر وظهور رسالة التحذير
+                    components.html(
+                        f"""
+                        <audio autoplay src="data:audio/wav;base64,{ALARM_WAV_B64}" style="display:none;"></audio>
+                        <script>
+                        (function() {{
+                            try {{
+                                var AudioCtx = window.AudioContext || window.webkitAudioContext;
+                                if (AudioCtx) {{
+                                    var ctx = new AudioCtx();
+                                    if (ctx.state === 'suspended') {{ ctx.resume(); }}
+                                    var t = ctx.currentTime;
+                                    var osc = ctx.createOscillator();
+                                    var gain = ctx.createGain();
+                                    osc.type = 'sine';
+                                    osc.frequency.setValueAtTime(2600.0, t);
+                                    gain.gain.setValueAtTime(0.0001, t);
+                                    gain.gain.linearRampToValueAtTime(0.40, t + 0.015);
+                                    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+                                    osc.connect(gain);
+                                    gain.connect(ctx.destination);
+                                    osc.start(t);
+                                    osc.stop(t + 0.32);
+                                }}
+                            }} catch(e) {{}}
+                        }})();
+                        </script>
+                        """,
+                        height=0,
+                        width=0
+                    )
+                st.markdown(
+                    """<div style='background: linear-gradient(135deg, #7f1d1d, #991b1b);
+                        border: 3px solid #ef4444; border-radius: 12px; padding: 18px 20px;
+                        margin: 14px 0 12px 0; text-align: center; box-shadow: 0 6px 20px rgba(239, 68, 68, 0.45);' dir='rtl'>
+                        <div style='font-size: 2.2rem; margin-bottom: 6px;'>⚠️ 🚨 ⚠️</div>
+                        <div style='color: #ffffff; font-size: 1.25rem; font-weight: 900; line-height: 1.8; margin-bottom: 10px;'>
+                            تأكيد حذف وإلغاء المحارة الداخلية لجميع المساحات والحوائط الداخلية
+                        </div>
+                        <div style='color: #fee2e2; font-size: 0.96rem; font-weight: 700; line-height: 1.6;'>
+                            هل أنت متأكد من رغبتك في حذف محارة جميع الحوائط الداخلية؟<br>
+                            سيتم فوراً إزالة تهشير المحارة من كافة المساحات والباكيات الداخلية في المسقط الأفقي المصمم وتحديث كميات وجداول الحصر فورياً.
+                        </div>
+                    </div>""",
+                    unsafe_allow_html=True
+                )
 
-    st.markdown(
-        f"""<div style='background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1.5px solid #0284c7; border-radius: 8px; padding: 12px 16px; margin: 10px 0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.25);' dir='rtl'>
-            <div style='display:flex; align-items:center; gap:8px; font-weight:bold; color:#38bdf8; font-size:0.92rem; margin-bottom:8px;'>
-                <span>🔍</span>
-                <span>بيانات محارة الحائط المختار ({_wall_display_label(sel_wk, cm, wm)}):</span>
+                c_cf1, c_cf2 = st.columns(2)
+                with c_cf1:
+                    if st.button("🔥 نعم، تأكيد حذف المحارة الداخلية لجميع المساحات", key="m15_btn_confirm_cancel_all_int", use_container_width=True):
+                        pfm = st.session_state.setdefault("m15_plaster_faces", {})
+                        for b in bays:
+                            for d_n in ["أعلى", "أسفل", "يسار", "يمين"]:
+                                winf = b["walls"][d_n]
+                                wk = winf["wk"]
+                                face = winf["face"]
+                                if wk in pfm:
+                                    cur = list(pfm[wk])
+                                    if face in cur:
+                                        cur.remove(face)
+                                    if cur:
+                                        pfm[wk] = cur
+                                    else:
+                                        pfm.pop(wk, None)
+                        st.session_state["m15_plaster_faces"] = pfm
+                        # تحديث قيم مربعات الاختيار في تبويب المساحات
+                        for b in bays:
+                            bid = b["id"]
+                            st.session_state[f"m15_cb_all_{bid}"] = False
+                            st.session_state[f"m15_cb_top_{bid}"] = False
+                            st.session_state[f"m15_cb_bot_{bid}"] = False
+                            st.session_state[f"m15_cb_left_{bid}"] = False
+                            st.session_state[f"m15_cb_right_{bid}"] = False
+                        st.session_state.pop("m15_confirm_cancel_all_interior", None)
+                        st.session_state.pop("m15_play_cancel_whistle", None)
+                        save_settings()
+                        st.rerun()
+
+                with c_cf2:
+                    if st.button("❌ تراجع / إلغاء الأمر", key="m15_btn_cancel_abort", use_container_width=True):
+                        st.session_state.pop("m15_confirm_cancel_all_interior", None)
+                        st.session_state.pop("m15_play_cancel_whistle", None)
+                        st.rerun()
+
+    # ════════════════════════════════════════════════════════════
+    # 🏠 التبويب 2: المحارة الداخلية (المساحات والباكيات A1, A2...)
+    # ════════════════════════════════════════════════════════════
+    with tab_int:
+        if not bays:
+            st.info("💡 لا توجد مساحات داخلية محصورة بين المحاور.")
+        else:
+            # 1. القائمة المنسدلة لاختيار المساحة
+            bay_labels = [b["label"] for b in bays]
+            _safe_idx("m15_sel_bay_idx", len(bays))
+            sel_bay_idx = st.selectbox(
+                "اختر المساحة الداخلية (الباكية)",
+                options=range(len(bays)),
+                format_func=lambda idx: bay_labels[idx],
+                key="m15_sel_bay_idx"
+            )
+            sel_bay = bays[sel_bay_idx]
+            bay_id = sel_bay["id"]
+
+            # معلومات الحوائط المحيطة بالباكية
+            w_top_info = sel_bay["walls"]["أعلى"]
+            w_bot_info = sel_bay["walls"]["أسفل"]
+            w_left_info = sel_bay["walls"]["يسار"]
+            w_right_info = sel_bay["walls"]["يمين"]
+
+            wk_top, f_top = w_top_info["wk"], w_top_info["face"]
+            wk_bot, f_bot = w_bot_info["wk"], w_bot_info["face"]
+            wk_left, f_left = w_left_info["wk"], w_left_info["face"]
+            wk_right, f_right = w_right_info["wk"], w_right_info["face"]
+
+            ex_top = (wk_top in active_walls)
+            ex_bot = (wk_bot in active_walls)
+            ex_left = (wk_left in active_walls)
+            ex_right = (wk_right in active_walls)
+
+            cur_top = (f_top in plaster_faces_map.get(wk_top, [])) if ex_top else False
+            cur_bot = (f_bot in plaster_faces_map.get(wk_bot, [])) if ex_bot else False
+            cur_left = (f_left in plaster_faces_map.get(wk_left, [])) if ex_left else False
+            cur_right = (f_right in plaster_faces_map.get(wk_right, [])) if ex_right else False
+
+            ex_count = sum([ex_top, ex_bot, ex_left, ex_right])
+            on_count = sum([cur_top, cur_bot, cur_left, cur_right])
+            cur_all = (ex_count > 0 and on_count == ex_count)
+
+            name_top = wm.get(wk_top, _wall_display_label(wk_top, cm, wm)) if ex_top else "—"
+            name_bot = wm.get(wk_bot, _wall_display_label(wk_bot, cm, wm)) if ex_bot else "—"
+            name_left = wm.get(wk_left, _wall_display_label(wk_left, cm, wm)) if ex_left else "—"
+            name_right = wm.get(wk_right, _wall_display_label(wk_right, cm, wm)) if ex_right else "—"
+
+            # بطاقة تعريفية للمساحة المحددة
+            st.markdown(f"""
+            <div style='background:linear-gradient(135deg,#0f172a,#1e293b); border:1.5px solid #0284c7; border-radius:8px; padding:10px 14px; margin-bottom:12px;' dir='rtl'>
+                <div style='display:flex; justify-content:space-between; align-items:center;'>
+                    <b style='color:#38bdf8; font-size:1.02rem;'>🏷️ المساحة {bay_id} [الأبعاد: {sel_bay["span_x"]:.2f}م × {sel_bay["span_y"]:.2f}م]</b>
+                    <span style='background:rgba(2,132,199,0.20); color:#7dd3fc; border:1px solid #0284c7; padding:2px 10px; border-radius:12px; font-size:0.80rem; font-weight:bold;'>
+                        المسطح التقريبي: {(sel_bay["span_x"] * sel_bay["span_y"]):.2f} م²
+                    </span>
+                </div>
+                <div style='color:#94a3b8; font-size:0.82rem; margin-top:5px;'>
+                    الحوائط المحيطة: أعلى (<b>{name_top}</b>) | أسفل (<b>{name_bot}</b>) | يسار (<b>{name_left}</b>) | يمين (<b>{name_right}</b>)
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # دالة تحديث وجه محدد
+            def _toggle_bay_face(wk, face, enable):
+                pfm = st.session_state.setdefault("m15_plaster_faces", {})
+                cur = list(pfm.get(wk, []))
+                if enable:
+                    if face not in cur: cur.append(face)
+                else:
+                    if face in cur: cur.remove(face)
+                pfm[wk] = cur
+                st.session_state["m15_plaster_faces"] = pfm
+                save_settings()
+
+            # دالة تفعيل/إلغاء جميع الأوجه للمساحة
+            def _toggle_bay_all(enable):
+                pfm = st.session_state.setdefault("m15_plaster_faces", {})
+                for d_n in ["أعلى", "أسفل", "يسار", "يمين"]:
+                    w_inf = sel_bay["walls"][d_n]
+                    w_k = w_inf["wk"]
+                    f_c = w_inf["face"]
+                    if w_k in active_walls:
+                        cur = list(pfm.get(w_k, []))
+                        if enable:
+                            if f_c not in cur: cur.append(f_c)
+                        else:
+                            if f_c in cur: cur.remove(f_c)
+                        pfm[w_k] = cur
+                st.session_state["m15_plaster_faces"] = pfm
+                save_settings()
+
+            # مفاتيح الويدجت الخاصة بالباكية
+            k_all = f"m15_cb_all_{bay_id}"
+            k_top = f"m15_cb_top_{bay_id}"
+            k_bot = f"m15_cb_bot_{bay_id}"
+            k_left = f"m15_cb_left_{bay_id}"
+            k_right = f"m15_cb_right_{bay_id}"
+
+            # 5. خيار جميع الأوجه (تحديد جميع الأوجه الأربعة دفعة واحدة)
+            def _on_all_change():
+                val = st.session_state.get(k_all, False)
+                _toggle_bay_all(val)
+                st.session_state[k_top] = val if ex_top else False
+                st.session_state[k_bot] = val if ex_bot else False
+                st.session_state[k_left] = val if ex_left else False
+                st.session_state[k_right] = val if ex_right else False
+
+            st.checkbox(
+                "✨ 5. جميع الأوجه (تحديد جميع الأوجه الأربعة دفعة واحدة)",
+                value=cur_all,
+                key=k_all,
+                on_change=_on_all_change,
+                help="تطبيق التهشير على الأوجه الداخلية الأربعة المحيطة بهذه المساحة فوراً."
+            )
+
+            st.markdown("<div style='margin-top:6px; font-weight:bold; font-size:0.88rem; color:#cbd5e1;'>خيارات توجيه المحارة الفردية للمساحة:</div>", unsafe_allow_html=True)
+            col_b1, col_b2 = st.columns(2)
+
+            with col_b1:
+                # 1. يمين
+                def _on_right_change():
+                    _toggle_bay_face(wk_right, f_right, st.session_state.get(k_right, False))
+                lbl_r = f"▶️ 1. يمين (الحائط {name_right})" if ex_right else "▶️ 1. يمين (لا يوجد حائط)"
+                st.checkbox(lbl_r, value=cur_right, key=k_right, on_change=_on_right_change, disabled=not ex_right)
+
+                # 2. يسار
+                def _on_left_change():
+                    _toggle_bay_face(wk_left, f_left, st.session_state.get(k_left, False))
+                lbl_l = f"◀️ 2. يسار (الحائط {name_left})" if ex_left else "◀️ 2. يسار (لا يوجد حائط)"
+                st.checkbox(lbl_l, value=cur_left, key=k_left, on_change=_on_left_change, disabled=not ex_left)
+
+            with col_b2:
+                # 3. أعلى
+                def _on_top_change():
+                    _toggle_bay_face(wk_top, f_top, st.session_state.get(k_top, False))
+                lbl_t = f"🔼 3. أعلى (الحائط {name_top})" if ex_top else "🔼 3. أعلى (لا يوجد حائط)"
+                st.checkbox(lbl_t, value=cur_top, key=k_top, on_change=_on_top_change, disabled=not ex_top)
+
+                # 4. أسفل
+                def _on_bot_change():
+                    _toggle_bay_face(wk_bot, f_bot, st.session_state.get(k_bot, False))
+                lbl_b = f"🔽 4. أسفل (الحائط {name_bot})" if ex_bot else "🔽 4. أسفل (لا يوجد حائط)"
+                st.checkbox(lbl_b, value=cur_bot, key=k_bot, on_change=_on_bot_change, disabled=not ex_bot)
+
+            # أزرار تحكم سريعة إضافية
+            c_q1, c_q2 = st.columns(2)
+            with c_q1:
+                if st.button(f"✨ تفعيل كافة أوجه المساحة {bay_id}", key=f"m15_btn_all_bay_{bay_id}", use_container_width=True):
+                    _toggle_bay_all(True)
+                    st.session_state[k_all] = True
+                    st.session_state[k_top] = ex_top
+                    st.session_state[k_bot] = ex_bot
+                    st.session_state[k_left] = ex_left
+                    st.session_state[k_right] = ex_right
+                    st.rerun()
+            with c_q2:
+                if st.button(f"🧹 تفريغ محارة المساحة {bay_id}", key=f"m15_btn_clear_bay_{bay_id}", use_container_width=True):
+                    _toggle_bay_all(False)
+                    st.session_state[k_all] = False
+                    st.session_state[k_top] = False
+                    st.session_state[k_bot] = False
+                    st.session_state[k_left] = False
+                    st.session_state[k_right] = False
+                    st.rerun()
+
+    # ════════════════════════════════════════════════════════════
+    # 🏢 التبويب 3: المحارة الخارجية (واجهات المبنى)
+    # ════════════════════════════════════════════════════════════
+    with tab_ext:
+        facades = _get_exterior_facades()
+        if not facades:
+            st.info("💡 لا توجد حوائط نشطة لتحديد الواجهات الخارجية.")
+        else:
+            st.markdown(
+                """<div style='color:#cbd5e1; font-size:0.85rem; margin-bottom:10px;' dir='rtl'>
+                نظام مستقل لعزل الواجهات الخارجية مع الحفاظ التام على استقلالية كل حائط باسمه وبياناته وحصره دون دمج:
+                </div>""",
+                unsafe_allow_html=True
+            )
+
+            def _apply_facade(fac_walls, fac_face, is_yes):
+                pfm = st.session_state.setdefault("m15_plaster_faces", {})
+                for wk in fac_walls:
+                    cur = list(pfm.get(wk, []))
+                    if is_yes:
+                        if fac_face not in cur: cur.append(fac_face)
+                    else:
+                        if fac_face in cur: cur.remove(fac_face)
+                    pfm[wk] = cur
+                st.session_state["m15_plaster_faces"] = pfm
+                save_settings()
+
+            for f_key in ["right", "left", "top", "bottom"]:
+                fac = facades[f_key]
+                fac_name = fac["name"]
+                fac_icon = fac["icon"]
+                fac_face = fac["face"]
+                fac_walls = fac["walls"]
+
+                w_names = [wm.get(wk, _wall_display_label(wk, cm, wm)) for wk in fac_walls]
+                total_len = sum(_wall_length_m(wk) for wk in fac_walls)
+                is_active = (all(fac_face in plaster_faces_map.get(wk, []) for wk in fac_walls) if fac_walls else False)
+
+                st.markdown(f"""
+                <div style='background:#1e293b; border:1px solid #334155; border-right:4px solid #3b82f6; border-radius:8px; padding:10px 14px; margin-top:10px; margin-bottom:4px;' dir='rtl'>
+                    <div style='display:flex; justify-content:space-between; align-items:center;'>
+                        <b style='color:#f8fafc; font-size:0.95rem;'>{fac_icon} {fac_name}</b>
+                        <span style='background:#0f172a; color:#38bdf8; padding:2px 10px; border-radius:12px; font-size:0.80rem; border:1px solid #0284c7;'>
+                            الطول: {total_len:.2f}م | {len(fac_walls)} حوائط مستقلة
+                        </span>
+                    </div>
+                    <div style='color:#94a3b8; font-size:0.82rem; margin-top:4px;'>
+                        الحوائط الإنشائية المكونة: <b>{', '.join(w_names) if w_names else 'لا يوجد'}</b> (الوجه الخارجي: <b>{fac_face}</b>)
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                r_key = f"m15_ext_radio_{f_key}"
+                cur_idx = 0 if is_active else 1
+
+                def _make_ext_cb(w_list, f_face, k_radio):
+                    def _cb():
+                        ans = st.session_state.get(k_radio, "لا")
+                        _apply_facade(w_list, f_face, (ans == "نعم"))
+                    return _cb
+
+                st.radio(
+                    f"حالة محارة {fac_name}:",
+                    options=["نعم", "لا"],
+                    index=cur_idx,
+                    horizontal=True,
+                    key=r_key,
+                    on_change=_make_ext_cb(fac_walls, fac_face, r_key),
+                    help=f"تطبيق التهشير على كامل حوائط {fac_name} مع الحفاظ على استقلالية كل حائط."
+                )
+
+            st.divider()
+            c_f_all1, c_f_all2 = st.columns(2)
+            with c_f_all1:
+                if st.button("✨ تفعيل جميع الواجهات الخارجية الأربع (نعم للكل)", key="m15_btn_ext_all_yes", use_container_width=True):
+                    for f_k in ["right", "left", "top", "bottom"]:
+                        _apply_facade(facades[f_k]["walls"], facades[f_k]["face"], True)
+                        st.session_state[f"m15_ext_radio_{f_k}"] = "نعم"
+                    st.rerun()
+            with c_f_all2:
+                if st.button("🧹 إلغاء محارة جميع الواجهات الخارجية (لا للكل)", key="m15_btn_ext_all_no", use_container_width=True):
+                    for f_k in ["right", "left", "top", "bottom"]:
+                        _apply_facade(facades[f_k]["walls"], facades[f_k]["face"], False)
+                        st.session_state[f"m15_ext_radio_{f_k}"] = "لا"
+                    st.rerun()
+
+    # ملخص كميات المحارة التنفيذي السريع في قسم التحديد
+    p_summary = _compute_plaster_survey()
+    if p_summary["rows"]:
+        st.markdown(f"""
+        <div style='background:linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border:1.5px solid #0284c7; border-radius:8px; padding:12px 16px; margin-top:12px;' dir='rtl'>
+            <div style='display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:8px;'>
+                <b style='color:#38bdf8; font-size:0.95rem;'>📊 ملخص كميات المحارة التنفيذية (طبقاً للكود المصري ECP):</b>
+                <span style='background:#0284c7; color:#fff; font-size:0.75rem; font-weight:bold; padding:2px 8px; border-radius:10px;'>
+                    {p_summary['active_walls_count']} حائط مشمول
+                </span>
             </div>
             <div style='display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px; font-size:0.84rem; color:#cbd5e1;'>
-                <div>• الطول: <b style='color:#f8fafc;'>{sel_len:.2f} م</b></div>
-                <div>• الارتفاع: <b style='color:#f8fafc;'>{sel_h:.2f} م</b></div>
-                <div>• الأوجه: <b style='color:#fbbf24;'>{n_sel_faces} وجه ({' + '.join(sel_active_faces) if sel_active_faces else 'لا يوجد'})</b></div>
-                <div>• الإجمالي: <b style='color:#93c5fd;'>{sel_gross:.2f} م²</b></div>
-                <div>• الفتحات المخصومة: <b style='color:#f87171;'>{sel_ded:.2f} م²</b></div>
-                <div>• الصافي: <b style='color:#4ade80; font-size:0.92rem;'>{sel_net:.2f} م²</b></div>
+                <div>• إجمالي المسطح: <b style='color:#93c5fd;'>{p_summary['tot_gross']:.2f} م²</b></div>
+                <div>• الفتحات المخصومة: <b style='color:#f87171;'>{p_summary['tot_ded']:.2f} م²</b></div>
+                <div>• صافي المسطح: <b style='color:#4ade80;'>{p_summary['tot_net']:.2f} م²</b></div>
+                <div>• الرمل (5% هالك): <b style='color:#fde047;'>{p_summary['tot_sand']:.2f} م³</b></div>
+                <div>• الأسمنت: <b style='color:#67e8f9;'>{p_summary['tot_cement_tons']:.2f} طن</b> <span style='color:#94a3b8;'>({p_summary['tot_cement_bags']} شكارة)</span></div>
             </div>
-            <div style='font-size:0.84rem; color:#cbd5e1; margin-top:8px; border-top:1px solid #334155; padding-top:8px;'>
-                📦 <b style='color:#38bdf8;'>الخامات للحائط:</b> رمل: <b style='color:#fde047;'>{sel_sand:.2f} م³</b> &nbsp;|&nbsp; أسمنت: <b style='color:#67e8f9;'>{sel_cement_tons:.2f} طن</b> <span style='color:#94a3b8;'>({sel_cement_bags} شكارة)</span>
-            </div>
-        </div>""",
-        unsafe_allow_html=True
-    )
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown("<div style='font-size:0.82rem;color:#94a3b8;margin-top:8px;text-align:center;'>📋 تم نقل وتخصيص <b>جدول حصر وخامات البياض التفصيلي</b> في قسم منفصل مطوي أسفل المسقط الأفقي قبل قسم الأسعار.</div>", unsafe_allow_html=True)
 
-    st.divider()
 
-    # 4. جدول حصر كميات المحارة
-    st.markdown("<b style='font-size:0.95rem;color:#ffffff;'>📋 جدول حصر حوائط المحارة والخامات (طبقاً للكود المصري):</b>", unsafe_allow_html=True)
-
+def _section_plaster_boq():
+    """
+    قسم منفصل مطوي: جدول الحصر وخامات البياض (طبقاً للكود المصري ECP):
+    - جدول تفصيلي لكل حائط والأوجه المحددة ومساحات الخصم وصافي المسطح والأسمنت والرمل.
+    - ملخص تنفيذي بارز لكميات المحارة الإجمالية.
+    - زر تحميل جدول الحصر بصيغة CSV.
+    """
     p_res = _compute_plaster_survey()
     p_rows = p_res["rows"]
 
     if not p_rows:
-        st.info("💡 لم يتم تفعيل المحارة لأي حائط بعد. قم باختيار أوجه المحارة للحوائط أعلاه لتظهر النتائج والكميات.")
+        st.info("💡 لم يتم تفعيل المحارة لأي حائط بعد. قم باختيار أوجه المحارة من قسم '7️⃣ تحديد حوائط المحارة' لتظهر النتائج والكميات هنا.")
     else:
-        # تجهيز جدول الحصر المطلوب في المواصفات
         display_rows = []
         for r in p_rows:
             display_rows.append({
@@ -6555,7 +7120,7 @@ def _section_plaster_walls():
             })
 
         tot_display = {
-            "الحائط": "✅ الإجمالي",
+            "الحائط": "✅ الإجمالي العام",
             "الوجه المحدد": f"{sum(r['عدد الأوجه'] for r in p_rows)} وجه",
             "إجمالي مسطح المحارة (m^2)": round(p_res["tot_gross"], 2),
             "إجمالي مساحة الفتحات المخصومة (m^2)": round(p_res["tot_ded"], 2),
@@ -6566,7 +7131,7 @@ def _section_plaster_walls():
 
         df_p = pd.DataFrame(display_rows + [tot_display])
         def _st_plaster(row):
-            if row["الحائط"] == "✅ الإجمالي":
+            if row["الحائط"] == "✅ الإجمالي العام":
                 return ["background-color:#1e3a8a;color:white;font-weight:bold"] * len(row)
             return [""] * len(row)
 
@@ -6582,19 +7147,23 @@ def _section_plaster_walls():
             key="m15_dl_plaster_sec"
         )
 
-    # رسالة إرشادية (Information Note)
-    st.markdown(
-        """<div style='background-color:rgba(30,58,138,0.25);border:1px solid #3b82f6;border-right:4px solid #3b82f6;border-radius:8px;padding:12px 16px;margin-top:10px;color:#ffffff;font-size:0.87rem;line-height:1.7;' dir='rtl'>
-            <div style='font-weight:bold;margin-bottom:4px;display:flex;align-items:center;gap:6px;'>
-                <span>💡</span>
-                <span>رسالة إرشادية (Information Note) — الفرضيات ومعدلات الاستهلاك المعتمدة:</span>
+        st.markdown(f"""
+        <div style='background:linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border:1.5px solid #0284c7; border-radius:8px; padding:12px 16px; margin-top:12px;' dir='rtl'>
+            <div style='display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:8px;'>
+                <b style='color:#38bdf8; font-size:0.95rem;'>📊 ملخص كميات المحارة التنفيذية (طبقاً للكود المصري ECP):</b>
+                <span style='background:#0284c7; color:#fff; font-size:0.75rem; font-weight:bold; padding:2px 8px; border-radius:10px;'>
+                    {p_res['active_walls_count']} حائط مشمول
+                </span>
             </div>
-            <div>
-                تم تقدير كميات المونة بناءً على مواصفات الكود المصري لسمك بياض متوسط <b>2 سم</b> شاملاً الطرطشة والملء، بمعدل استهلاك تقريبي: <b>1 m³ رمل + 350 كجم أسمنت لكل 40-45 m² مسطح</b>، مع اعتبار نسبة هالك <b>5%</b>.
+            <div style='display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px; font-size:0.84rem; color:#cbd5e1;'>
+                <div>• إجمالي المسطح: <b style='color:#93c5fd;'>{p_res['tot_gross']:.2f} م²</b></div>
+                <div>• الفتحات المخصومة: <b style='color:#f87171;'>{p_res['tot_ded']:.2f} م²</b></div>
+                <div>• صافي المسطح: <b style='color:#4ade80;'>{p_res['tot_net']:.2f} م²</b></div>
+                <div>• الرمل (5% هالك): <b style='color:#fde047;'>{p_res['tot_sand']:.2f} م³</b></div>
+                <div>• الأسمنت: <b style='color:#67e8f9;'>{p_res['tot_cement_tons']:.2f} طن</b> <span style='color:#94a3b8;'>({p_res['tot_cement_bags']} شكارة)</span></div>
             </div>
-        </div>""",
-        unsafe_allow_html=True
-    )
+        </div>
+        """, unsafe_allow_html=True)
 
 
 def _inject_floating_plan_viewer():
@@ -8453,6 +9022,50 @@ def _section_3d_viewer():
     transition: all 0.15s ease;
   }
   .wbar-btn-cancel:hover { background: #475569; color: #ffffff; }
+
+  /* ── شريط إرشادات أداة القياس ثلاثية الأبعاد (3D Measure Banner) ── */
+  .measure-banner {
+    position: absolute;
+    top: 55px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: transparent; /* خلفية شفافة تماماً 100% لإظهار كامل عناصر المشهد ثلاثي الأبعاد خلفها */
+    border: 1.5px solid #38bdf8;
+    border-radius: 8px;
+    padding: 8px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
+    z-index: 35;
+    user-select: none;
+    color: #ffffff;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.95), 0 2px 8px rgba(0, 0, 0, 0.9);
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+    animation: bounceInDown 0.25s ease-out;
+  }
+  @keyframes bounceInDown {
+    from { opacity: 0; transform: translate(-50%, -20px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+  }
+  .measure-banner-close {
+    background: #334155;
+    color: #cbd5e1;
+    border: 1px solid #475569;
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .measure-banner-close:hover {
+    background: #ef4444;
+    color: #ffffff;
+    border-color: #f87171;
+  }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -8468,6 +9081,8 @@ def _section_3d_viewer():
     <button class="btn-tool" id="btn-fs" title="عرض ملء الشاشة">⛶ ملء الشاشة</button>
     <button class="btn-tool" id="btn-toggle-plan" style="background:#0284c7; border-color:#38bdf8; color:#ffffff; font-weight:700;" title="عرض أو إخفاء المسقط الأفقي المصغر">📐 المسقط الأفقي</button>
     <button class="btn-tool" id="btn-toggle-axes" style="background:#dc2626; border-color:#f87171; color:#ffffff; font-weight:700;" title="إظهار أو إخفاء محاور الشبكة وأسمائها ثلاثية الأبعاد">🔴 المحاور</button>
+    <button class="btn-tool" id="btn-measure" title="أداة قياس تفاعلية ثلاثية الأبعاد بين أي نقطتين">📏 أداة القياس</button>
+    <button class="btn-tool" id="btn-clear-measure" style="display:none; background:#7f1d1d; border-color:#ef4444; color:#ffffff; font-weight:700;" title="مسح القياس والعودة للوضع الافتراضي">🗑️ مسح القياس</button>
   </div>
   <div class="tb-group">
     <span class="badge-legend" style="color:#fca5a5;"><span class="dot" style="background:#dc2626; border:1px solid #ef4444;"></span> محاور (حمراء)</span>
@@ -8475,7 +9090,15 @@ def _section_3d_viewer():
     <span class="badge-legend" style="color:#cbd5e1;"><span class="dot" style="background:#475569; border:1px solid #334155;"></span> أعمدة</span>
     <span class="badge-legend" style="color:#ffffff;"><span class="dot" style="background:#38bdf8; opacity:0.85; border:1px solid #ffffff;"></span> شبابيك (مقبض ⟷)</span>
     <span class="badge-legend" style="color:#f59e0b;"><span class="dot" style="background:#b45309; border:1px solid #f59e0b;"></span> أبواب (مقبض ⟷)</span>
+    <span class="badge-legend" style="color:#38bdf8;"><span class="dot" style="background:#0284c7; border:1px solid #38bdf8;"></span> أداة القياس</span>
   </div>
+</div>
+
+<!-- شريط إرشادات أداة القياس ثلاثية الأبعاد -->
+<div id="measure-banner" class="measure-banner" style="display:none;">
+  <span id="measure-banner-icon">📏</span>
+  <span id="measure-banner-text">وضع القياس ثلاثي الأبعاد: انقر بالزر الأيسر لتحديد نقطة البداية (Point A) • التدوير بالزر الأيمن أو العجلة • اضغط Esc للإلغاء</span>
+  <button id="btn-measure-banner-close" class="measure-banner-close" title="إلغاء وضع القياس">✕</button>
 </div>
 
 <!-- حاوية شارات الأبعاد الثلاثية الأبعاد (باللون اللبني فقط) -->
@@ -8636,14 +9259,15 @@ def _section_3d_viewer():
   const doorEdgeMat = new THREE.LineBasicMaterial({ color: 0x78350f, transparent: true, opacity: 0.90 });
   const doorKnobMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.20, metalness: 0.80 });
 
-  // Handle Materials (Always visible with depthTest false and bright emissive)
+  // Handle Materials (Accurate Depth Testing & Depth Write - Occlusion Aware)
   const handleMat = new THREE.MeshStandardMaterial({
     color: 0xfbbf24,
     emissive: 0xd97706,
     emissiveIntensity: 0.8,
     roughness: 0.2,
     metalness: 0.5,
-    depthTest: false
+    depthTest: true,
+    depthWrite: true
   });
   const handleHoverMat = new THREE.MeshStandardMaterial({
     color: 0x38bdf8,
@@ -8651,7 +9275,8 @@ def _section_3d_viewer():
     emissiveIntensity: 0.9,
     roughness: 0.15,
     metalness: 0.6,
-    depthTest: false
+    depthTest: true,
+    depthWrite: true
   });
   const handleDragMat = new THREE.MeshStandardMaterial({
     color: 0x34d399,
@@ -8659,7 +9284,8 @@ def _section_3d_viewer():
     emissiveIntensity: 0.9,
     roughness: 0.15,
     metalness: 0.6,
-    depthTest: false
+    depthTest: true,
+    depthWrite: true
   });
   const handleWarnMat = new THREE.MeshStandardMaterial({
     color: 0xf87171,
@@ -8667,7 +9293,8 @@ def _section_3d_viewer():
     emissiveIntensity: 1.0,
     roughness: 0.15,
     metalness: 0.6,
-    depthTest: false
+    depthTest: true,
+    depthWrite: true
   });
 
   // Selection Outline Material (Vivid Red)
@@ -8871,9 +9498,9 @@ def _section_3d_viewer():
   // 1. Columns (الأعمدة)
   (data.columns || []).forEach(function(c) {
     const geom = new THREE.BoxGeometry(c.w, c.h, c.d);
-    const mesh = new THREE.Mesh(geom, colMat);
+    const mesh = new THREE.Mesh(geom, colMat.clone());
     mesh.position.set(c.x, c.y, c.z);
-    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geom), colEdgeMat);
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geom), colEdgeMat.clone());
     mesh.add(edges);
     mesh.userData = { elementType: 'column', data: c };
     rootGroup.add(mesh);
@@ -8894,9 +9521,10 @@ def _section_3d_viewer():
     }
 
     const geom = new THREE.BoxGeometry(w.w, w.h, w.d);
-    const mesh = new THREE.Mesh(geom, w.is_parapet ? parapetWallMat : wallMat);
+    const meshMat = (w.is_parapet ? parapetWallMat : wallMat).clone();
+    const mesh = new THREE.Mesh(geom, meshMat);
     mesh.position.set(w.x, w.y, w.z);
-    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geom), wallEdgeMat);
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geom), wallEdgeMat.clone());
     mesh.add(edges);
 
     mesh.userData = {
@@ -8912,7 +9540,7 @@ def _section_3d_viewer():
     selectableObjects.push(mesh);
   });
 
-  // ── إنشاء مقبض ثلاثي الأبعاد بارز وواضح تماماً في وسط الفتحة ──
+  // ── إنشاء مقبض ثلاثي الأبعاد بارز وخاضع لاختبار العمق (Depth-Tested 3D Handle) ──
   function create3DHandle(op, isDoor) {
     const hGroup = new THREE.Group();
     const isH = op.is_h;
@@ -8922,7 +9550,6 @@ def _section_3d_viewer():
     const barRad = 0.055;
     const barGeom = new THREE.CylinderGeometry(barRad, barRad, barLen, 16);
     const barMesh = new THREE.Mesh(barGeom, handleMat);
-    barMesh.renderOrder = 998;
     if (isH) {
       barMesh.rotation.z = Math.PI / 2;
     } else {
@@ -8934,8 +9561,6 @@ def _section_3d_viewer():
     const coneGeom = new THREE.ConeGeometry(0.09, 0.16, 16);
     const cone1 = new THREE.Mesh(coneGeom, handleMat);
     const cone2 = new THREE.Mesh(coneGeom, handleMat);
-    cone1.renderOrder = 998;
-    cone2.renderOrder = 998;
 
     if (isH) {
       cone1.rotation.z = -Math.PI / 2;
@@ -8954,13 +9579,11 @@ def _section_3d_viewer():
     // Center grip sphere
     const sphereGeom = new THREE.SphereGeometry(0.085, 16, 16);
     const sphereMesh = new THREE.Mesh(sphereGeom, handleMat);
-    sphereMesh.renderOrder = 998;
     hGroup.add(sphereMesh);
 
     // Outer prominent ring
     const ringGeom = new THREE.TorusGeometry(0.12, 0.022, 12, 24);
     const ringMesh = new THREE.Mesh(ringGeom, handleMat);
-    ringMesh.renderOrder = 998;
     if (!isH) ringMesh.rotation.y = Math.PI / 2;
     hGroup.add(ringMesh);
 
@@ -8972,14 +9595,12 @@ def _section_3d_viewer():
     );
     const hitBoxMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
     const hitBoxMesh = new THREE.Mesh(hitBoxGeom, hitBoxMat);
-    hitBoxMesh.renderOrder = 998;
     hitBoxMesh.userData = { isHitBox: true, isHandle: true, op: op };
     hGroup.add(hitBoxMesh);
 
     // Position handle at the center of the opening where it is open space (NOT inside lintel!)
     const yHandle = isDoor ? (op.h / 2.0) : op.y;
     hGroup.position.set(op.x, yHandle, op.z);
-    hGroup.renderOrder = 998;
 
     hGroup.userData = {
       isHandle: true,
@@ -9009,9 +9630,9 @@ def _section_3d_viewer():
   // 3. Windows (الشبابيك - كوحدة منفصلة قابلة للتحريك)
   (data.windows || []).forEach(function(win) {
     const geom = new THREE.BoxGeometry(win.w, win.h, win.d);
-    const mesh = new THREE.Mesh(geom, winMat);
+    const mesh = new THREE.Mesh(geom, winMat.clone());
     mesh.position.set(win.x, win.y, win.z);
-    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geom), winEdgeMat);
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geom), winEdgeMat.clone());
     mesh.add(edges);
     mesh.userData = { elementType: 'window', data: win };
     rootGroup.add(mesh);
@@ -9032,14 +9653,14 @@ def _section_3d_viewer():
 
     // Door leaf (ضلفة الباب الخشبية)
     const geom = new THREE.BoxGeometry(door.w, door.h, door.d);
-    const mesh = new THREE.Mesh(geom, doorMat);
-    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geom), doorEdgeMat);
+    const mesh = new THREE.Mesh(geom, doorMat.clone());
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geom), doorEdgeMat.clone());
     mesh.add(edges);
     doorGroup.add(mesh);
 
     // Decorative door knob / handle (أكرة الباب)
     const knobGeom = new THREE.CylinderGeometry(0.02, 0.02, 0.08, 8);
-    const knob = new THREE.Mesh(knobGeom, doorKnobMat);
+    const knob = new THREE.Mesh(knobGeom, doorKnobMat.clone());
     const knobOffset = door.w * 0.35;
     if (door.is_h) {
       knob.rotation.x = Math.PI / 2;
@@ -9051,6 +9672,8 @@ def _section_3d_viewer():
     doorGroup.add(knob);
 
     doorGroup.userData = { elementType: 'door', data: door };
+    mesh.userData = { elementType: 'door', data: door, parentGroup: doorGroup };
+    knob.userData = { elementType: 'door', data: door, parentGroup: doorGroup };
     rootGroup.add(doorGroup);
     selectableObjects.push(mesh);
     openingMeshesById[door.id] = doorGroup;
@@ -9071,6 +9694,154 @@ def _section_3d_viewer():
   // ── Selection Highlight System (تحديد العنصر بلون أحمر وبخطوط سميكة) ──
   let selectedObject = null;
   let highlightWire = null;
+
+  // ── High-Precision Live Hover Bounding Box System (المؤشر البصري اللحظي) ──
+  const hoverBoxGroup = new THREE.Group();
+  hoverBoxGroup.name = "hover_bounding_box_group";
+  hoverBoxGroup.visible = false;
+  scene.add(hoverBoxGroup);
+
+  const hoverWireGeom = new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1));
+  const hoverWireMat = new THREE.LineBasicMaterial({
+    color: 0x00f0ff,
+    linewidth: 2.5,
+    depthTest: true,
+    depthWrite: false,
+    transparent: true,
+    opacity: 0.95
+  });
+  const hoverWireMesh = new THREE.LineSegments(hoverWireGeom, hoverWireMat);
+  hoverWireMesh.renderOrder = 998;
+  hoverBoxGroup.add(hoverWireMesh);
+
+  const hoverFillGeom = new THREE.BoxGeometry(1, 1, 1);
+  const hoverFillMat = new THREE.MeshBasicMaterial({
+    color: 0x00f0ff,
+    transparent: true,
+    opacity: 0.12,
+    depthTest: true,
+    depthWrite: false,
+    side: THREE.DoubleSide
+  });
+  const hoverFillMesh = new THREE.Mesh(hoverFillGeom, hoverFillMat);
+  hoverFillMesh.renderOrder = 997;
+  hoverBoxGroup.add(hoverFillMesh);
+
+  // Corner Accent Brackets for CAD Precision
+  const cornerBracketGeo = new THREE.BufferGeometry();
+  const cornerBracketPositions = new Float32Array(144);
+  cornerBracketGeo.setAttribute('position', new THREE.BufferAttribute(cornerBracketPositions, 3));
+  const cornerBracketMat = new THREE.LineBasicMaterial({
+    color: 0xffffff,
+    linewidth: 3.0,
+    depthTest: true,
+    depthWrite: false,
+    transparent: true,
+    opacity: 0.98
+  });
+  const cornerBracketMesh = new THREE.LineSegments(cornerBracketGeo, cornerBracketMat);
+  cornerBracketMesh.renderOrder = 999;
+  scene.add(cornerBracketMesh);
+  cornerBracketMesh.visible = false;
+
+  function updateHoverBoundingBox(box) {
+    if (!box) {
+      hoverBoxGroup.visible = false;
+      cornerBracketMesh.visible = false;
+      return;
+    }
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+
+    const pad = Math.max(0.012, Math.min(0.035, Math.min(size.x, size.y, size.z) * 0.05));
+    const lenX = size.x + pad * 2;
+    const lenY = size.y + pad * 2;
+    const lenZ = size.z + pad * 2;
+
+    hoverBoxGroup.position.copy(center);
+    hoverBoxGroup.scale.set(lenX, lenY, lenZ);
+    hoverBoxGroup.visible = true;
+
+    const hx = lenX / 2;
+    const hy = lenY / 2;
+    const hz = lenZ / 2;
+    const armX = Math.min(0.20, lenX * 0.28);
+    const armY = Math.min(0.20, lenY * 0.28);
+    const armZ = Math.min(0.20, lenZ * 0.28);
+
+    const corners = [
+      [-1, -1, -1], [1, -1, -1], [-1, 1, -1], [1, 1, -1],
+      [-1, -1, 1],  [1, -1, 1],  [-1, 1, 1],  [1, 1, 1]
+    ];
+
+    let ptr = 0;
+    const pos = cornerBracketPositions;
+    for (let i = 0; i < 8; i++) {
+      const sx = corners[i][0];
+      const sy = corners[i][1];
+      const sz = corners[i][2];
+      const cx = center.x + sx * hx;
+      const cy = center.y + sy * hy;
+      const cz = center.z + sz * hz;
+
+      pos[ptr++] = cx; pos[ptr++] = cy; pos[ptr++] = cz;
+      pos[ptr++] = cx - sx * armX; pos[ptr++] = cy; pos[ptr++] = cz;
+
+      pos[ptr++] = cx; pos[ptr++] = cy; pos[ptr++] = cz;
+      pos[ptr++] = cx; pos[ptr++] = cy - sy * armY; pos[ptr++] = cz;
+
+      pos[ptr++] = cx; pos[ptr++] = cy; pos[ptr++] = cz;
+      pos[ptr++] = cx; pos[ptr++] = cy; pos[ptr++] = cz - sz * armZ;
+    }
+    cornerBracketGeo.attributes.position.needsUpdate = true;
+    cornerBracketMesh.visible = true;
+  }
+
+  function hideHoverBoundingBox() {
+    hoverBoxGroup.visible = false;
+    cornerBracketMesh.visible = false;
+  }
+
+  function applyHoverMeshGlow(obj) {
+    if (!obj || obj === selectedObject) return;
+    obj.traverse(function(child) {
+      if (child.isMesh && child.material && !child.userData.isHitBox) {
+        child.userData = child.userData || {};
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        if (child.userData.origHoverEmissives === undefined) {
+          child.userData.origHoverEmissives = mats.map(function(m) { return m.emissive ? m.emissive.getHex() : null; });
+          child.userData.origHoverEmissiveIntensities = mats.map(function(m) { return m.emissiveIntensity !== undefined ? m.emissiveIntensity : 0.0; });
+        }
+        mats.forEach(function(m) {
+          if (m.emissive) {
+            m.emissive.setHex(0x00f0ff);
+            m.emissiveIntensity = 0.40;
+          }
+        });
+      }
+    });
+  }
+
+  function removeHoverMeshGlow(obj) {
+    if (!obj) return;
+    obj.traverse(function(child) {
+      if (child.isMesh && child.material && child.userData && child.userData.origHoverEmissives) {
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        mats.forEach(function(m, i) {
+          const hex = child.userData.origHoverEmissives[i];
+          const inten = child.userData.origHoverEmissiveIntensities ? child.userData.origHoverEmissiveIntensities[i] : 0.0;
+          if (hex !== null && hex !== undefined && m.emissive) {
+            m.emissive.setHex(hex);
+            m.emissiveIntensity = inten;
+          }
+        });
+        delete child.userData.origHoverEmissives;
+        delete child.userData.origHoverEmissiveIntensities;
+      }
+    });
+  }
 
   function createThickRedSelectionCage(size, center) {
     const group = new THREE.Group();
@@ -9094,7 +9865,8 @@ def _section_3d_viewer():
       emissiveIntensity: 0.95,
       roughness: 0.25,
       metalness: 0.2,
-      depthTest: false,
+      depthTest: true,
+      depthWrite: false,
       transparent: true,
       opacity: 0.95
     });
@@ -9193,6 +9965,742 @@ def _section_3d_viewer():
     });
   }
 
+  // ── أداة القياس التفاعلية ثلاثية الأبعاد (Interactive 3D Measurement & Dimension Tool) ──
+  let isMeasureMode = false;
+  let measureStep = 0; // 0: Idle/Wait Point A, 1: Rubber-band to Point B, 2: Finalized
+  let pointA = new THREE.Vector3();
+  let pointB = new THREE.Vector3();
+  let currentCandidatePoint = new THREE.Vector3();
+  let isCandidateSnapped = false;
+  let snapVertices = [];
+  let firstMeasureObj = null;
+  let activeFaceSnapA = new THREE.Vector3();
+  let activeFaceSnapB = new THREE.Vector3();
+  let isFaceToFaceActive = false;
+
+  // Anchor Markers (A: Start Point, B: End Point)
+  const markerGeoA = new THREE.SphereGeometry(0.065, 16, 16);
+  const markerMatA = new THREE.MeshBasicMaterial({
+    color: 0x00f0ff,
+    depthTest: false,
+    transparent: true,
+    opacity: 0.95
+  });
+  const markerA = new THREE.Mesh(markerGeoA, markerMatA);
+  markerA.renderOrder = 1000;
+  scene.add(markerA);
+  markerA.visible = false;
+
+  const markerGeoB = new THREE.SphereGeometry(0.065, 16, 16);
+  const markerMatB = new THREE.MeshBasicMaterial({
+    color: 0x22c55e,
+    depthTest: false,
+    transparent: true,
+    opacity: 0.95
+  });
+  const markerB = new THREE.Mesh(markerGeoB, markerMatB);
+  markerB.renderOrder = 1000;
+  scene.add(markerB);
+  markerB.visible = false;
+
+  // Dynamic Dimension Line Mesh
+  const measureLineGeo = new THREE.BufferGeometry();
+  const measureLinePositions = new Float32Array(6);
+  measureLineGeo.setAttribute('position', new THREE.BufferAttribute(measureLinePositions, 3));
+  const measureLineMat = new THREE.LineBasicMaterial({
+    color: 0xfbbf24,
+    linewidth: 3,
+    depthTest: false,
+    transparent: true,
+    opacity: 0.95
+  });
+  const measureLineMesh = new THREE.Line(measureLineGeo, measureLineMat);
+  measureLineMesh.renderOrder = 999;
+  scene.add(measureLineMesh);
+  measureLineMesh.visible = false;
+
+  // Witness Ticks Mesh (Architectural CAD Ticks at Point A & Point B)
+  const measureTicksGeo = new THREE.BufferGeometry();
+  const measureTicksPositions = new Float32Array(24);
+  measureTicksGeo.setAttribute('position', new THREE.BufferAttribute(measureTicksPositions, 3));
+  const measureTicksMat = new THREE.LineBasicMaterial({
+    color: 0x38bdf8,
+    linewidth: 2.5,
+    depthTest: false,
+    transparent: true,
+    opacity: 0.95
+  });
+  const measureTicksMesh = new THREE.LineSegments(measureTicksGeo, measureTicksMat);
+  measureTicksMesh.renderOrder = 999;
+  scene.add(measureTicksMesh);
+  measureTicksMesh.visible = false;
+
+  // Smart Vertex Snapping Magnetic Marker Group
+  const snapMarkerGroup = new THREE.Group();
+  snapMarkerGroup.name = "snap_marker_group";
+  const snapMarkerDotGeo = new THREE.SphereGeometry(0.05, 16, 16);
+  const snapMarkerDotMat = new THREE.MeshBasicMaterial({
+    color: 0x00f0ff,
+    depthTest: false,
+    transparent: true,
+    opacity: 0.95
+  });
+  const snapMarkerDot = new THREE.Mesh(snapMarkerDotGeo, snapMarkerDotMat);
+  snapMarkerGroup.add(snapMarkerDot);
+
+  const snapMarkerRingGeo = new THREE.RingGeometry(0.075, 0.105, 32);
+  const snapMarkerRingMat = new THREE.MeshBasicMaterial({
+    color: 0x00f0ff,
+    side: THREE.DoubleSide,
+    depthTest: false,
+    transparent: true,
+    opacity: 0.85
+  });
+  const snapMarkerRing = new THREE.Mesh(snapMarkerRingGeo, snapMarkerRingMat);
+  snapMarkerGroup.add(snapMarkerRing);
+  snapMarkerGroup.renderOrder = 1001;
+  scene.add(snapMarkerGroup);
+  snapMarkerGroup.visible = false;
+
+  // AutoCAD Perpendicular Snapping Marker Group (رمز الزاوية القائمة المعمارية)
+  const perpMarkerGroup = new THREE.Group();
+  perpMarkerGroup.name = "perp_marker_group";
+
+  const perpLinePositions = new Float32Array(24);
+  const perpLineGeo = new THREE.BufferGeometry();
+  perpLineGeo.setAttribute('position', new THREE.BufferAttribute(perpLinePositions, 3));
+  const perpLineMat = new THREE.LineBasicMaterial({
+    color: 0x00f0ff,
+    linewidth: 3,
+    depthTest: false,
+    transparent: true,
+    opacity: 0.95
+  });
+  const perpLineMesh = new THREE.LineSegments(perpLineGeo, perpLineMat);
+  perpLineMesh.renderOrder = 1005;
+  perpMarkerGroup.add(perpLineMesh);
+
+  const perpDotGeo = new THREE.SphereGeometry(0.045, 16, 16);
+  const perpDotMat = new THREE.MeshBasicMaterial({
+    color: 0x00f0ff,
+    depthTest: false,
+    transparent: true,
+    opacity: 0.95
+  });
+  const perpDotMesh = new THREE.Mesh(perpDotGeo, perpDotMat);
+  perpDotMesh.renderOrder = 1006;
+  perpMarkerGroup.add(perpDotMesh);
+
+  scene.add(perpMarkerGroup);
+  perpMarkerGroup.visible = false;
+
+  function updatePerpMarker(perpPoint, dimVector, faceNormal) {
+    const vDim = dimVector.clone().normalize();
+    let vNorm = faceNormal.clone().normalize();
+
+    const camDir = new THREE.Vector3().subVectors(camera.position, perpPoint).normalize();
+    let vWall = new THREE.Vector3().crossVectors(vNorm, camDir).normalize();
+    if (vWall.lengthSq() < 0.05) {
+      let fallbackUp = new THREE.Vector3(0, 1, 0);
+      if (Math.abs(vNorm.y) > 0.85) fallbackUp = new THREE.Vector3(1, 0, 0);
+      vWall = new THREE.Vector3().crossVectors(vNorm, fallbackUp).normalize();
+    }
+
+    const L = 0.22;
+    const s = 0.08;
+    const p = perpLinePositions;
+    let ptr = 0;
+
+    // Segment 1: Arm along wall face (Corner to L * vWall)
+    p[ptr++] = perpPoint.x;
+    p[ptr++] = perpPoint.y;
+    p[ptr++] = perpPoint.z;
+    p[ptr++] = perpPoint.x + vWall.x * L;
+    p[ptr++] = perpPoint.y + vWall.y * L;
+    p[ptr++] = perpPoint.z + vWall.z * L;
+
+    // Segment 2: Arm along dimension line towards Point A (Corner to L * vDim)
+    p[ptr++] = perpPoint.x;
+    p[ptr++] = perpPoint.y;
+    p[ptr++] = perpPoint.z;
+    p[ptr++] = perpPoint.x + vDim.x * L;
+    p[ptr++] = perpPoint.y + vDim.y * L;
+    p[ptr++] = perpPoint.z + vDim.z * L;
+
+    // Segment 3: Inner right-angle box edge 1 (from s * vWall to s * vWall + s * vDim)
+    p[ptr++] = perpPoint.x + vWall.x * s;
+    p[ptr++] = perpPoint.y + vWall.y * s;
+    p[ptr++] = perpPoint.z + vWall.z * s;
+    p[ptr++] = perpPoint.x + vWall.x * s + vDim.x * s;
+    p[ptr++] = perpPoint.y + vWall.y * s + vDim.y * s;
+    p[ptr++] = perpPoint.z + vWall.z * s + vDim.z * s;
+
+    // Segment 4: Inner right-angle box edge 2 (from s * vWall + s * vDim to s * vDim)
+    p[ptr++] = perpPoint.x + vWall.x * s + vDim.x * s;
+    p[ptr++] = perpPoint.y + vWall.y * s + vDim.y * s;
+    p[ptr++] = perpPoint.z + vWall.z * s + vDim.z * s;
+    p[ptr++] = perpPoint.x + vDim.x * s;
+    p[ptr++] = perpPoint.y + vDim.y * s;
+    p[ptr++] = perpPoint.z + vDim.z * s;
+
+    perpLineGeo.attributes.position.needsUpdate = true;
+    perpDotMesh.position.copy(perpPoint);
+    perpMarkerGroup.visible = true;
+  }
+
+  // Dynamic Billboard Text Sprite (Always Faces Camera)
+  const measureCanvas = document.createElement('canvas');
+  measureCanvas.width = 512;
+  measureCanvas.height = 128;
+  const measureCanvasCtx = measureCanvas.getContext('2d');
+  const measureTexture = new THREE.CanvasTexture(measureCanvas);
+  measureTexture.minFilter = THREE.LinearFilter;
+  const measureSpriteMat = new THREE.SpriteMaterial({
+    map: measureTexture,
+    depthTest: false,
+    depthWrite: false,
+    transparent: true
+  });
+  const measureLabelSprite = new THREE.Sprite(measureSpriteMat);
+  measureLabelSprite.renderOrder = 1002;
+  scene.add(measureLabelSprite);
+  measureLabelSprite.visible = false;
+
+  function collectSnapVertices() {
+    snapVertices = [];
+    const vertexSet = new Set();
+    function addPt(x, y, z) {
+      const rx = Math.round(x * 1000) / 1000;
+      const ry = Math.round(y * 1000) / 1000;
+      const rz = Math.round(z * 1000) / 1000;
+      const key = `${rx}_${ry}_${rz}`;
+      if (!vertexSet.has(key)) {
+        vertexSet.add(key);
+        snapVertices.push(new THREE.Vector3(rx, ry, rz));
+      }
+    }
+
+    selectableObjects.forEach(function(obj) {
+      if (!obj || obj.visible === false) return;
+      const box = new THREE.Box3().setFromObject(obj);
+      if (box.isEmpty()) return;
+      const min = box.min;
+      const max = box.max;
+      // 8 bounding box corners
+      addPt(min.x, min.y, min.z);
+      addPt(max.x, min.y, min.z);
+      addPt(min.x, max.y, min.z);
+      addPt(max.x, max.y, min.z);
+      addPt(min.x, min.y, max.z);
+      addPt(max.x, min.y, max.z);
+      addPt(min.x, max.y, max.z);
+      addPt(max.x, max.y, max.z);
+
+      // نقاط منتصف أوجه الحوائط والأعمدة الحقيقية (Face Centers & Face Midpoints)
+      // الوجه 1 والوجه 2 في اتجاه Z (أوجه الحوائط الأفقية والأعمدة)
+      addPt((min.x + max.x) / 2, min.y, min.z);
+      addPt((min.x + max.x) / 2, max.y, min.z);
+      addPt((min.x + max.x) / 2, (min.y + max.y) / 2, min.z);
+
+      addPt((min.x + max.x) / 2, min.y, max.z);
+      addPt((min.x + max.x) / 2, max.y, max.z);
+      addPt((min.x + max.x) / 2, (min.y + max.y) / 2, max.z);
+
+      // الوجه 1 والوجه 2 في اتجاه X (أوجه الحوائط الرأسية والأعمدة)
+      addPt(min.x, min.y, (min.z + max.z) / 2);
+      addPt(min.x, max.y, (min.z + max.z) / 2);
+      addPt(min.x, (min.y + max.y) / 2, (min.z + max.z) / 2);
+
+      addPt(max.x, min.y, (min.z + max.z) / 2);
+      addPt(max.x, max.y, (min.z + max.z) / 2);
+      addPt(max.x, (min.y + max.y) / 2, (min.z + max.z) / 2);
+    });
+  }
+
+  function drawMeasureLabel(dist, ptA, ptB) {
+    const m = dist.toFixed(2);
+    const text = `📏 ${m} م`;
+
+    measureCanvasCtx.clearRect(0, 0, 512, 128);
+
+    // Text centered with high-contrast shadow without any outer frame or border
+    measureCanvasCtx.save();
+    measureCanvasCtx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+    measureCanvasCtx.shadowBlur = 12;
+    measureCanvasCtx.shadowOffsetX = 2;
+    measureCanvasCtx.shadowOffsetY = 3;
+    measureCanvasCtx.font = 'bold 46px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+    measureCanvasCtx.fillStyle = '#ffffff';
+    measureCanvasCtx.textAlign = 'center';
+    measureCanvasCtx.textBaseline = 'middle';
+    measureCanvasCtx.direction = 'rtl';
+    measureCanvasCtx.fillText(text, 256, 64);
+    measureCanvasCtx.restore();
+
+    measureTexture.needsUpdate = true;
+
+    // Position at midpoint elevated slightly
+    const mid = new THREE.Vector3().addVectors(ptA, ptB).multiplyScalar(0.5);
+    mid.y += 0.25;
+    measureLabelSprite.position.copy(mid);
+    measureLabelSprite.visible = true;
+  }
+
+  function updateMeasureGeometry(ptA, ptB, isFinal) {
+    const linePos = measureLinePositions;
+    linePos[0] = ptA.x; linePos[1] = ptA.y; linePos[2] = ptA.z;
+    linePos[3] = ptB.x; linePos[4] = ptB.y; linePos[5] = ptB.z;
+    measureLineGeo.attributes.position.needsUpdate = true;
+    measureLineMesh.visible = true;
+
+    if (isFinal) {
+      measureLineMesh.material.color.setHex(0x38bdf8);
+      const dir = new THREE.Vector3().subVectors(ptB, ptA);
+      const dist = dir.length();
+      if (dist > 0.02) {
+        dir.normalize();
+
+        // Dynamically compute perpendicular direction facing camera so ticks & slashes are always clearly visible
+        let camVec = new THREE.Vector3().subVectors(camera.position, ptA).normalize();
+        let perp = new THREE.Vector3().crossVectors(dir, camVec).normalize();
+        if (perp.lengthSq() < 0.1) {
+          let up = new THREE.Vector3(0, 1, 0);
+          if (Math.abs(dir.dot(up)) > 0.92) up = new THREE.Vector3(1, 0, 0);
+          perp = new THREE.Vector3().crossVectors(dir, up).normalize();
+        }
+
+        const tickLen = 0.22; // Witness tick length 22cm on each side (total 44cm)
+        const slashLen = 0.16; // 45° architectural slash length 16cm on each side
+        const slash = new THREE.Vector3().addVectors(dir, perp).normalize().multiplyScalar(slashLen);
+
+        const tPos = measureTicksPositions;
+        let ptr = 0;
+
+        // Witness Line at Point A (Perpendicular CAD witness line)
+        tPos[ptr++] = ptA.x - perp.x * tickLen; tPos[ptr++] = ptA.y - perp.y * tickLen; tPos[ptr++] = ptA.z - perp.z * tickLen;
+        tPos[ptr++] = ptA.x + perp.x * tickLen; tPos[ptr++] = ptA.y + perp.y * tickLen; tPos[ptr++] = ptA.z + perp.z * tickLen;
+
+        // Architectural 45° Slash Tick at Point A
+        tPos[ptr++] = ptA.x - slash.x; tPos[ptr++] = ptA.y - slash.y; tPos[ptr++] = ptA.z - slash.z;
+        tPos[ptr++] = ptA.x + slash.x; tPos[ptr++] = ptA.y + slash.y; tPos[ptr++] = ptA.z + slash.z;
+
+        // Witness Line at Point B (Perpendicular CAD witness line)
+        tPos[ptr++] = ptB.x - perp.x * tickLen; tPos[ptr++] = ptB.y - perp.y * tickLen; tPos[ptr++] = ptB.z - perp.z * tickLen;
+        tPos[ptr++] = ptB.x + perp.x * tickLen; tPos[ptr++] = ptB.y + perp.y * tickLen; tPos[ptr++] = ptB.z + perp.z * tickLen;
+
+        // Architectural 45° Slash Tick at Point B
+        tPos[ptr++] = ptB.x - slash.x; tPos[ptr++] = ptB.y - slash.y; tPos[ptr++] = ptB.z - slash.z;
+        tPos[ptr++] = ptB.x + slash.x; tPos[ptr++] = ptB.y + slash.y; tPos[ptr++] = ptB.z + slash.z;
+
+        measureTicksGeo.attributes.position.needsUpdate = true;
+        measureTicksMesh.visible = true;
+      }
+    } else {
+      measureLineMesh.material.color.setHex(0xfbbf24);
+      measureTicksMesh.visible = false;
+    }
+  }
+
+  function updateMeasureHover(clientX, clientY) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const halfW = rect.width / 2;
+    const halfH = rect.height / 2;
+
+    // Prepare mouse raycaster
+    mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+
+    const solidHits = raycaster.intersectObjects(selectableObjects, false);
+
+    // 1. In Step 1: Check for Wall-to-Wall Face-to-Face clear measurement (قياس صافي المسافة بين أوجه الحوائط)
+    isFaceToFaceActive = false;
+    let faceSnapNorm = null;
+
+    if (measureStep === 1 && solidHits.length > 0 && firstMeasureObj) {
+      const hitB = solidHits[0];
+      const secondObj = hitB.object;
+
+      if (secondObj && firstMeasureObj !== secondObj) {
+        let tObjA = firstMeasureObj;
+        if (tObjA.userData && tObjA.userData.parentWallGroup) tObjA = tObjA.userData.parentWallGroup;
+        let tObjB = secondObj;
+        if (tObjB.userData && tObjB.userData.parentWallGroup) tObjB = tObjB.userData.parentWallGroup;
+
+        if (tObjA !== tObjB) {
+          const boxA = new THREE.Box3().setFromObject(tObjA);
+          const boxB = new THREE.Box3().setFromObject(tObjB);
+          const centerA = new THREE.Vector3();
+          const centerB = new THREE.Vector3();
+          boxA.getCenter(centerA);
+          boxB.getCenter(centerB);
+          const diff = new THREE.Vector3().subVectors(centerB, centerA);
+
+          const absX = Math.abs(diff.x);
+          const absZ = Math.abs(diff.z);
+
+          if (absZ >= absX && absZ > 0.15) {
+            // Walls separated primarily along Z axis (e.g. horizontal walls X1, X2... or north-south faces)
+            let snapA_z, snapB_z;
+            if (diff.z > 0) {
+              snapA_z = boxA.max.z; // Facing face of Wall 1
+              snapB_z = boxB.min.z; // Facing face of Wall 2
+              faceSnapNorm = new THREE.Vector3(0, 0, -1);
+            } else {
+              snapA_z = boxA.min.z; // Facing face of Wall 1
+              snapB_z = boxB.max.z; // Facing face of Wall 2
+              faceSnapNorm = new THREE.Vector3(0, 0, 1);
+            }
+            const hitPt = hitB.point;
+            activeFaceSnapA.set(hitPt.x, hitPt.y, snapA_z);
+            activeFaceSnapB.set(hitPt.x, hitPt.y, snapB_z);
+            isFaceToFaceActive = true;
+          } else if (absX > absZ && absX > 0.15) {
+            // Walls separated primarily along X axis (e.g. vertical walls Y1, Y2... or east-west faces)
+            let snapA_x, snapB_x;
+            if (diff.x > 0) {
+              snapA_x = boxA.max.x; // Facing face of Wall 1
+              snapB_x = boxB.min.x; // Facing face of Wall 2
+              faceSnapNorm = new THREE.Vector3(-1, 0, 0);
+            } else {
+              snapA_x = boxA.min.x; // Facing face of Wall 1
+              snapB_x = boxB.max.x; // Facing face of Wall 2
+              faceSnapNorm = new THREE.Vector3(1, 0, 0);
+            }
+            const hitPt = hitB.point;
+            activeFaceSnapA.set(snapA_x, hitPt.y, hitPt.z);
+            activeFaceSnapB.set(snapB_x, hitPt.y, hitPt.z);
+            isFaceToFaceActive = true;
+          }
+        }
+      }
+    }
+
+    if (isFaceToFaceActive) {
+      currentCandidatePoint.copy(activeFaceSnapB);
+      markerA.position.copy(activeFaceSnapA);
+      isCandidateSnapped = true;
+
+      // Show AutoCAD Right-Angle Perpendicular Symbol on the face of Wall 2
+      snapMarkerGroup.visible = false;
+      const dirToA = new THREE.Vector3().subVectors(activeFaceSnapA, activeFaceSnapB).normalize();
+      updatePerpMarker(activeFaceSnapB, dirToA, faceSnapNorm);
+
+      updateMeasureGeometry(activeFaceSnapA, activeFaceSnapB, false);
+      const d = activeFaceSnapA.distanceTo(activeFaceSnapB);
+      drawMeasureLabel(d, activeFaceSnapA, activeFaceSnapB);
+
+      const bannerText = document.getElementById('measure-banner-text');
+      if (bannerText) {
+        bannerText.innerHTML = `📐 <b>قياس صافي من وجه الحائط إلى وجه الحائط: ${d.toFixed(2)} م</b> • انقر بالزر الأيسر لتثبيت البعد`;
+      }
+      return;
+    }
+
+    // 2. In Step 1: Detect Perpendicular Snap on General Opposing Surfaces (وضع التعامد العام)
+    let isPerpActive = false;
+    let perpSnapPt = null;
+    let perpFaceNorm = null;
+
+    if (measureStep === 1) {
+      if (solidHits.length > 0 && solidHits[0].face) {
+        const hit = solidHits[0];
+        let norm = hit.face.normal.clone().transformDirection(hit.object.matrixWorld).normalize();
+        if (Math.abs(norm.x) > 0.85) norm.set(Math.sign(norm.x), 0, 0);
+        else if (Math.abs(norm.y) > 0.85) norm.set(0, Math.sign(norm.y), 0);
+        else if (Math.abs(norm.z) > 0.85) norm.set(0, 0, Math.sign(norm.z));
+
+        const dPerp = new THREE.Vector3().subVectors(pointA, hit.point).dot(norm);
+        if (dPerp > 0.10) {
+          const pCandidate = pointA.clone().sub(norm.clone().multiplyScalar(dPerp));
+          if (Math.abs(norm.y) < 0.15) {
+            pCandidate.y = pointA.y;
+          }
+
+          let targetObj = hit.object;
+          if (targetObj.userData && targetObj.userData.parentWallGroup) {
+            targetObj = targetObj.userData.parentWallGroup;
+          }
+          const objBox = new THREE.Box3().setFromObject(targetObj);
+          objBox.expandByScalar(0.35);
+
+          if (objBox.containsPoint(pCandidate)) {
+            const vProjPerp = pCandidate.clone().project(camera);
+            if (vProjPerp.z >= -1 && vProjPerp.z <= 1) {
+              const sx = (vProjPerp.x * halfW) + halfW + rect.left;
+              const sy = -(vProjPerp.y * halfH) + halfH + rect.top;
+              const screenDist = Math.hypot(sx - clientX, sy - clientY);
+              const dist3D = hit.point.distanceTo(pCandidate);
+              if (screenDist < 55 || dist3D < 1.2) {
+                isPerpActive = true;
+                perpSnapPt = pCandidate;
+                perpFaceNorm = norm;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Smart Vertex Snapping (screen space projection strictly on faces)
+    let bestVertex = null;
+    let minScreenDist = 24; // 24px magnetic snap radius
+    const vProj = new THREE.Vector3();
+
+    for (let i = 0; i < snapVertices.length; i++) {
+      const v = snapVertices[i];
+      vProj.copy(v).project(camera);
+      if (vProj.z < -1 || vProj.z > 1) continue;
+      const sx = (vProj.x * halfW) + halfW + rect.left;
+      const sy = -(vProj.y * halfH) + halfH + rect.top;
+      const d = Math.hypot(sx - clientX, sy - clientY);
+      if (d < minScreenDist) {
+        minScreenDist = d;
+        bestVertex = v;
+      }
+    }
+
+    // Verify unoccluded line of sight for vertex
+    if (bestVertex) {
+      const dir = new THREE.Vector3().subVectors(bestVertex, camera.position);
+      const distToV = dir.length();
+      if (distToV > 0.1) {
+        dir.normalize();
+        const snapRay = new THREE.Raycaster(camera.position, dir, 0.1, distToV - 0.08);
+        const occluding = snapRay.intersectObjects(selectableObjects, false);
+        if (occluding.length > 0) {
+          bestVertex = null;
+        }
+      }
+    }
+
+    // Priority: If user hovers directly on an exact vertex (minScreenDist < 12px), snap vertex
+    // Otherwise, if perpendicular alignment is detected, perpendicular snap takes priority!
+    if (isPerpActive && (!bestVertex || minScreenDist >= 12)) {
+      currentCandidatePoint.copy(perpSnapPt);
+      isCandidateSnapped = true;
+
+      // Transform circular marker into AutoCAD right-angle symbol
+      snapMarkerGroup.visible = false;
+      const dirToA = new THREE.Vector3().subVectors(pointA, currentCandidatePoint).normalize();
+      updatePerpMarker(currentCandidatePoint, dirToA, perpFaceNorm);
+
+      const bannerText = document.getElementById('measure-banner-text');
+      if (bannerText) {
+        bannerText.innerHTML = '📐 <b>وضع تعامد قائم 90° (AutoCAD Perpendicular)</b> • انقر بالزر الأيسر لتثبيت نقطة النهاية (Point B) وتوليد خط البعد';
+      }
+    } else {
+      perpMarkerGroup.visible = false;
+
+      if (bestVertex) {
+        currentCandidatePoint.copy(bestVertex);
+        isCandidateSnapped = true;
+      } else {
+        if (solidHits.length > 0) {
+          currentCandidatePoint.copy(solidHits[0].point);
+          isCandidateSnapped = false;
+        } else {
+          const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+          const groundPt = new THREE.Vector3();
+          if (raycaster.ray.intersectPlane(groundPlane, groundPt)) {
+            currentCandidatePoint.copy(groundPt);
+            isCandidateSnapped = false;
+          } else {
+            snapMarkerGroup.visible = false;
+            return;
+          }
+        }
+      }
+
+      snapMarkerGroup.position.copy(currentCandidatePoint);
+      snapMarkerGroup.visible = true;
+
+      if (isCandidateSnapped) {
+        snapMarkerDot.material.color.setHex(0x00f0ff);
+        snapMarkerRing.material.color.setHex(0x00f0ff);
+        snapMarkerGroup.scale.set(1.35, 1.35, 1.35);
+      } else {
+        snapMarkerDot.material.color.setHex(0x38bdf8);
+        snapMarkerRing.material.color.setHex(0x38bdf8);
+        snapMarkerGroup.scale.set(0.85, 0.85, 0.85);
+      }
+      snapMarkerRing.quaternion.copy(camera.quaternion);
+
+      if (measureStep === 1) {
+        const bannerText = document.getElementById('measure-banner-text');
+        if (bannerText) {
+          bannerText.innerHTML = '📏 <b>تم تثبيت نقطة البداية (Point A)</b> • حرّك الفأرة لمعاينة البعد وانقر بالزر الأيسر لتثبيت نقطة النهاية (Point B)';
+        }
+      }
+    }
+
+    // In step 1: Live dynamic rubber-band preview
+    if (measureStep === 1) {
+      updateMeasureGeometry(pointA, currentCandidatePoint, false);
+      const d = pointA.distanceTo(currentCandidatePoint);
+      drawMeasureLabel(d, pointA, currentCandidatePoint);
+    }
+  }
+
+  function handleMeasureClick(clientX, clientY) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    if (measureStep === 0) {
+      pointA.copy(currentCandidatePoint);
+
+      // Identify the clicked solid element (wall, column, etc.)
+      mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObjects(selectableObjects, false);
+      if (hits.length > 0) {
+        firstMeasureObj = hits[0].object;
+      } else {
+        firstMeasureObj = null;
+      }
+
+      markerA.position.copy(pointA);
+      markerA.visible = true;
+      measureStep = 1;
+
+      updateMeasureGeometry(pointA, pointA, false);
+      measureLineMesh.visible = true;
+      drawMeasureLabel(0, pointA, pointA);
+
+      const bannerText = document.getElementById('measure-banner-text');
+      if (bannerText) {
+        bannerText.innerHTML = '📏 <b>تم تحديد الحائط الأول (Point A)</b> • حرّك الفأرة نحو الحائط المقابل للقياس الصافي من وجه الحائط (Point B)';
+      }
+    } else if (measureStep === 1) {
+      // If we are in face-to-face snapping mode, lock the exact facing wall faces
+      if (isFaceToFaceActive) {
+        pointA.copy(activeFaceSnapA);
+        pointB.copy(activeFaceSnapB);
+      } else {
+        pointB.copy(currentCandidatePoint);
+      }
+
+      markerA.position.copy(pointA);
+      markerB.position.copy(pointB);
+      markerB.visible = true;
+      measureStep = 2;
+
+      // Finalize CAD witness lines and line geometry
+      updateMeasureGeometry(pointA, pointB, true);
+      const d = pointA.distanceTo(pointB);
+      drawMeasureLabel(d, pointA, pointB);
+
+      // Hide live hover snap markers
+      snapMarkerGroup.visible = false;
+      perpMarkerGroup.visible = false;
+
+      // Re-enable camera rotation via Left Click for free 3D inspection!
+      controls.mouseButtons = {
+        LEFT: THREE.MOUSE.ROTATE,
+        MIDDLE: THREE.MOUSE.DOLLY,
+        RIGHT: THREE.MOUSE.PAN
+      };
+      renderer.domElement.style.cursor = 'default';
+      container.style.cursor = 'default';
+      document.body.style.cursor = 'default';
+
+      const bannerText = document.getElementById('measure-banner-text');
+      if (bannerText) {
+        bannerText.innerHTML = `✅ تم إتمام القياس الصافي بين أوجه الحوائط: <b>${d.toFixed(2)} م</b> • تم تفعيل التدوير بالزر الأيسر لفحص البعد بحرية`;
+      }
+    }
+  }
+
+  function clearMeasurements() {
+    measureStep = 0;
+    pointA.set(0, 0, 0);
+    pointB.set(0, 0, 0);
+    firstMeasureObj = null;
+    isFaceToFaceActive = false;
+    activeFaceSnapA.set(0, 0, 0);
+    activeFaceSnapB.set(0, 0, 0);
+    if (markerA) markerA.visible = false;
+    if (markerB) markerB.visible = false;
+    if (measureLineMesh) measureLineMesh.visible = false;
+    if (measureTicksMesh) measureTicksMesh.visible = false;
+    if (measureLabelSprite) measureLabelSprite.visible = false;
+    if (snapMarkerGroup) snapMarkerGroup.visible = false;
+    if (perpMarkerGroup) perpMarkerGroup.visible = false;
+  }
+
+  function enterMeasureMode() {
+    isMeasureMode = true;
+    measureStep = 0;
+    clearMeasurements();
+    clearHover();
+    clearSelection();
+
+    collectSnapVertices();
+
+    // Lock Left Click exclusively for picking measurement points
+    // Delegate rotation to Right Click and zoom to Wheel
+    controls.mouseButtons = {
+      LEFT: null,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.ROTATE
+    };
+
+    renderer.domElement.style.cursor = 'crosshair';
+    container.style.cursor = 'crosshair';
+    document.body.style.cursor = 'crosshair';
+
+    const btnM = document.getElementById('btn-measure');
+    if (btnM) {
+      btnM.style.background = '#0284c7';
+      btnM.style.borderColor = '#38bdf8';
+      btnM.style.color = '#ffffff';
+      btnM.style.boxShadow = '0 0 12px rgba(56, 189, 248, 0.6)';
+      btnM.innerHTML = '📏 وضع القياس (نشط)';
+    }
+
+    const btnClear = document.getElementById('btn-clear-measure');
+    if (btnClear) btnClear.style.display = 'inline-flex';
+
+    const banner = document.getElementById('measure-banner');
+    const bannerText = document.getElementById('measure-banner-text');
+    if (banner) banner.style.display = 'flex';
+    if (bannerText) {
+      bannerText.innerHTML = '📏 <b>وضع القياس ثلاثي الأبعاد</b>: انقر بالزر الأيسر لتحديد نقطة البداية (Point A) • التدوير بالزر الأيمن أو العجلة • اضغط Esc للإلغاء';
+    }
+  }
+
+  function exitMeasureMode() {
+    isMeasureMode = false;
+    clearMeasurements();
+
+    // Restore standard OrbitControls behavior
+    controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN
+    };
+
+    renderer.domElement.style.cursor = 'default';
+    container.style.cursor = 'default';
+    document.body.style.cursor = 'default';
+
+    const btnM = document.getElementById('btn-measure');
+    if (btnM) {
+      btnM.style.background = '#1e293b';
+      btnM.style.borderColor = '#475569';
+      btnM.style.color = '#f1f5f9';
+      btnM.style.boxShadow = 'none';
+      btnM.innerHTML = '📏 أداة القياس';
+    }
+
+    const btnClear = document.getElementById('btn-clear-measure');
+    if (btnClear) btnClear.style.display = 'none';
+
+    const banner = document.getElementById('measure-banner');
+    if (banner) banner.style.display = 'none';
+  }
+
   function highlightObjectMeshes(obj) {
     if (!obj) return;
     obj.traverse(function(child) {
@@ -9260,6 +10768,8 @@ def _section_3d_viewer():
   // ── تحديد واختيار العنصر مع إبرازه بلون أحمر وبخطوط سميكة ──
   function setSelection(obj, elemType, elemData) {
     clearSelection();
+    if (obj) removeHoverMeshGlow(obj);
+    hideHoverBoundingBox();
     selectedObject = obj;
 
     const box = new THREE.Box3().setFromObject(obj);
@@ -9590,6 +11100,7 @@ def _section_3d_viewer():
       btnFocus.addEventListener('click', function() {
         controls.target.set(d.handleGroup.position.x, d.handleGroup.position.y, d.handleGroup.position.z);
         controls.update();
+        updateHandlesOcclusion();
         setHandleMaterial(d.handleGroup, handleHoverMat);
       });
     }
@@ -9761,6 +11272,14 @@ def _section_3d_viewer():
   // ── Keyboard shortcut listener for Floating Plan inside 3D canvas (Ctrl + Alt + F & Esc) ──
   window.addEventListener('keydown', function(e) {
     if (!e) return;
+    if (e.key === 'Escape' || e.keyCode === 27) {
+      if (isMeasureMode) {
+        e.preventDefault();
+        e.stopPropagation();
+        exitMeasureMode();
+        return false;
+      }
+    }
     var codeMatches = (e.code === 'KeyF');
     var keyMatches = (e.key === 'f' || e.key === 'F' || e.key === 'ب' || e.key === 'B' || e.key === 'ـ' || e.key === '[' || e.key === ']' || e.keyCode === 70 || e.which === 70);
     var isF = codeMatches || keyMatches;
@@ -10318,111 +11837,411 @@ def _section_3d_viewer():
     setSelection(activeOpening.mesh, elemType, activeOpening);
   }
 
+  // ── High-Precision Raycasting & Hover Tracking System ──
+  let mouseMoved = false;
+  let mouseClientX = -1;
+  let mouseClientY = -1;
+  let isPointerDown = false;
+  let currentHoveredItem = null;
+
+  function resolvePickableElement(hitMesh) {
+    if (!hitMesh) return null;
+    let curr = hitMesh;
+    while (curr && !curr.userData.elementType && curr.parent && curr.parent !== rootGroup && curr.parent !== scene) {
+      curr = curr.parent;
+    }
+    if (!curr || !curr.userData || !curr.userData.elementType) return null;
+
+    const elType = curr.userData.elementType;
+    if (elType === 'wall_piece' || elType === 'wall') {
+      const targetWallGroup = curr.userData.parentWallGroup || (elType === 'wall' ? curr : null);
+      const targetData = (targetWallGroup && targetWallGroup.userData.data) || curr.userData.data;
+      return {
+        object: targetWallGroup,
+        type: 'wall',
+        data: targetData,
+        hitMesh: hitMesh
+      };
+    } else if (elType === 'window') {
+      return {
+        object: curr,
+        type: 'window',
+        data: curr.userData.data,
+        hitMesh: hitMesh
+      };
+    } else if (elType === 'door') {
+      const doorGroup = curr.userData.parentGroup || (curr.isGroup ? curr : curr.parent);
+      const doorData = (doorGroup && doorGroup.userData.data) || curr.userData.data;
+      return {
+        object: doorGroup || curr,
+        type: 'door',
+        data: doorData,
+        hitMesh: hitMesh
+      };
+    } else if (elType === 'column') {
+      return {
+        object: curr,
+        type: 'column',
+        data: curr.userData.data,
+        hitMesh: hitMesh
+      };
+    }
+    return null;
+  }
+
+  // ── اختبار الحجب البصري اللحظي للمقابض وربطها برؤية الحائط (Occlusion & Line of Sight) ──
+  const occRaycaster = new THREE.Raycaster();
+  const occDir = new THREE.Vector3();
+  const occTarget = new THREE.Vector3();
+  const lastCamPos = new THREE.Vector3();
+  const lastCamTarget = new THREE.Vector3();
+
+  function checkCameraChanged() {
+    const moved = (
+      Math.abs(camera.position.x - lastCamPos.x) > 0.001 ||
+      Math.abs(camera.position.y - lastCamPos.y) > 0.001 ||
+      Math.abs(camera.position.z - lastCamPos.z) > 0.001 ||
+      Math.abs(controls.target.x - lastCamTarget.x) > 0.001 ||
+      Math.abs(controls.target.y - lastCamTarget.y) > 0.001 ||
+      Math.abs(controls.target.z - lastCamTarget.z) > 0.001
+    );
+    if (moved) {
+      lastCamPos.copy(camera.position);
+      lastCamTarget.copy(controls.target);
+    }
+    return moved;
+  }
+
+  function updateHandlesOcclusion() {
+    if (!handleMeshes || handleMeshes.length === 0) return;
+
+    for (let i = 0; i < handleMeshes.length; i++) {
+      const hGroup = handleMeshes[i];
+      const op = hGroup.userData && hGroup.userData.op;
+      if (!op) continue;
+
+      // 1. إذا كان المقبض قيد السحب حالياً من قبل المستخدم، يظل مرئياً ومفعلاً
+      if (isDraggingOpening && activeOpening === op) {
+        hGroup.visible = true;
+        continue;
+      }
+
+      // 2. التحقق من حالة الحائط الحاضن للفتحة (Wall Visibility Dependency)
+      const wallKeyStr = JSON.stringify(op.wall_key);
+      const hostWall = wallGroups[wallKeyStr];
+      if (!hostWall || hostWall.visible === false) {
+        hGroup.visible = false;
+        continue;
+      }
+
+      // 3. التحقق من حالة مجسم الفتحة نفسها
+      if (op.mesh && op.mesh.visible === false) {
+        hGroup.visible = false;
+        continue;
+      }
+
+      // 4. اختبار خط الرؤية المباشر من الكاميرا إلى المقبض (Line of Sight Raycast)
+      hGroup.getWorldPosition(occTarget);
+      occDir.subVectors(occTarget, camera.position);
+      const distToHandle = occDir.length();
+      if (distToHandle < 0.10) {
+        hGroup.visible = true;
+        continue;
+      }
+      occDir.normalize();
+
+      occRaycaster.set(camera.position, occDir);
+      occRaycaster.near = 0.1;
+      occRaycaster.far = distToHandle;
+
+      const hits = occRaycaster.intersectObjects(selectableObjects, false);
+      let isBlocked = false;
+
+      for (let j = 0; j < hits.length; j++) {
+        const hit = hits[j];
+        // يجب أن يكون العائق أمام المقبض بمسافة خلوص هندسية
+        if (hit.distance >= distToHandle - 0.15) break;
+
+        // استبعاد مجسم الفتحة نفسها (ضلفة الباب أو زجاج الشباك) من حجب مقبضها الخاص
+        const hitElem = resolvePickableElement(hit.object);
+        if (hitElem && (hitElem.type === 'window' || hitElem.type === 'door')) {
+          if (hitElem.data && hitElem.data.id === op.id) {
+            continue;
+          }
+        }
+
+        // وجود حائط مصمت أو عمود أو كتلة إنشائية أخرى تحجب المقبض بصرياً تماماً
+        isBlocked = true;
+        break;
+      }
+
+      hGroup.visible = !isBlocked;
+    }
+  }
+
+  function performPreciseRaycast(clientX, clientY) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+
+    // 1. حساب تقاطعات الكتل الإنشائية المصمتة أولاً لتحديد عمق العناصر الأمامية
+    const solidIntersects = raycaster.intersectObjects(selectableObjects, false);
+    const closestSolid = (solidIntersects.length > 0) ? solidIntersects[0] : null;
+
+    // 2. التحقق من مقابض التحكم المرئية وغير المحجوبة فقط (Visible & Unoccluded Handles)
+    const visibleHandles = handleMeshes.filter(h => {
+      if (!h.visible) return false;
+      const op = h.userData && h.userData.op;
+      if (op) {
+        const wGroup = wallGroups[JSON.stringify(op.wall_key)];
+        if (wGroup && wGroup.visible === false) return false;
+        if (op.mesh && op.mesh.visible === false) return false;
+      }
+      return true;
+    });
+
+    const handleIntersects = raycaster.intersectObjects(visibleHandles, true);
+    for (let k = 0; k < handleIntersects.length; k++) {
+      const hHit = handleIntersects[k];
+      let hitH = hHit.object;
+      while (hitH && !hitH.userData.isHandle && hitH.parent) {
+        hitH = hitH.parent;
+      }
+      if (hitH && hitH.userData && hitH.userData.isHandle && hitH.visible) {
+        const op = hitH.userData.op;
+        // منع الالتقاط إذا كان هناك حائط مصمت أو عنصر إنشائي يقع أمام المقبض
+        let isOccludedBySolid = false;
+        if (closestSolid && closestSolid.distance < hHit.distance - 0.05) {
+          const solidElem = resolvePickableElement(closestSolid.object);
+          // لا يعتبر محجوباً إذا كان العنصر الأقرب هو مجسم الفتحة نفسها
+          if (!solidElem || !((solidElem.type === 'window' || solidElem.type === 'door') && solidElem.data && op && solidElem.data.id === op.id)) {
+            isOccludedBySolid = true;
+          }
+        }
+
+        if (!isOccludedBySolid) {
+          return {
+            isHandle: true,
+            handleGroup: hitH,
+            op: op,
+            distance: hHit.distance
+          };
+        }
+      }
+    }
+
+    if (!closestSolid) return null;
+
+    // 3. ترتيب التقاط الكتل بحسب المسافة للكاميرا مع حل التداخلات الدقيقة
+    let chosenIntersect = closestSolid;
+    if (solidIntersects.length > 1) {
+      const d0 = solidIntersects[0].distance;
+      const d1 = solidIntersects[1].distance;
+      if (Math.abs(d0 - d1) < 0.002) {
+        const el0 = resolvePickableElement(solidIntersects[0].object);
+        const el1 = resolvePickableElement(solidIntersects[1].object);
+        if (el0 && el1 && el0.object !== el1.object) {
+          if (el1.type === 'window' || el1.type === 'door') {
+            chosenIntersect = solidIntersects[1];
+          } else if (el0.type === 'wall' && el1.type === 'column') {
+            chosenIntersect = solidIntersects[1];
+          }
+        }
+      }
+    }
+
+    const resolved = resolvePickableElement(chosenIntersect.object);
+    if (!resolved) return null;
+    resolved.distance = chosenIntersect.distance;
+    resolved.point = chosenIntersect.point;
+    return resolved;
+  }
+
+  function clearHover() {
+    if (currentHoveredItem) {
+      if (currentHoveredItem.object && currentHoveredItem.object !== selectedObject) {
+        removeHoverMeshGlow(currentHoveredItem.object);
+      }
+      currentHoveredItem = null;
+    }
+    selectableObjects.forEach(function(obj) {
+      if (obj !== selectedObject && obj.userData && obj.userData.origHoverEmissives) {
+        removeHoverMeshGlow(obj);
+      }
+    });
+    hideHoverBoundingBox();
+    handleMeshes.forEach(h => {
+      if (h !== activeHandle) setHandleMaterial(h, handleMat);
+    });
+    document.body.style.cursor = 'default';
+  }
+
+  function updateHoverState(clientX, clientY) {
+    const hit = performPreciseRaycast(clientX, clientY);
+
+    if (!hit) {
+      clearHover();
+      return;
+    }
+
+    if (hit.isHandle) {
+      if (currentHoveredItem && currentHoveredItem.object !== selectedObject) {
+        removeHoverMeshGlow(currentHoveredItem.object);
+      }
+      currentHoveredItem = hit;
+      document.body.style.cursor = 'grab';
+      setHandleMaterial(hit.handleGroup, handleHoverMat);
+
+      if (hit.op && hit.op.mesh) {
+        const box = new THREE.Box3().setFromObject(hit.op.mesh);
+        updateHoverBoundingBox(box);
+      }
+      return;
+    }
+
+    handleMeshes.forEach(h => {
+      if (h !== activeHandle) setHandleMaterial(h, handleMat);
+    });
+
+    document.body.style.cursor = 'pointer';
+
+    if (currentHoveredItem && currentHoveredItem.object === hit.object) {
+      return;
+    }
+
+    if (currentHoveredItem && currentHoveredItem.object && currentHoveredItem.object !== selectedObject) {
+      removeHoverMeshGlow(currentHoveredItem.object);
+    }
+
+    currentHoveredItem = hit;
+
+    if (hit.object === selectedObject) {
+      hideHoverBoundingBox();
+      return;
+    }
+
+    const box = new THREE.Box3().setFromObject(hit.object);
+    updateHoverBoundingBox(box);
+    applyHoverMeshGlow(hit.object);
+  }
+
+  function handleOpeningDrag(clientX, clientY) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+
+    document.body.style.cursor = 'grabbing';
+    if (raycaster.ray.intersectPlane(dragPlane, planeIntersect)) {
+      let delta = 0;
+      if (activeOpening.is_h) {
+        delta = planeIntersect.x - dragStartIntersect.x;
+      } else {
+        delta = -(planeIntersect.z - dragStartIntersect.z);
+      }
+
+      const rawPos = dragStartPos + delta;
+      const clampedPos = Math.max(minSafeLimit, Math.min(maxSafeLimit, rawPos));
+      const isBlocked = (rawPos < minSafeLimit - 0.015 || rawPos > maxSafeLimit + 0.015);
+
+      setHandleMaterial(activeHandle, isBlocked ? handleWarnMat : handleDragMat);
+
+      activeOpening.pos_m = Math.round(clampedPos * 100) / 100;
+
+      const isH = activeOpening.is_h;
+      const newMid = activeOpening.pos_m + activeOpening.w_m / 2.0;
+
+      if (isH) {
+        const newX = activeOpening.x_start_3d + newMid;
+        activeOpening.mesh.position.x = newX;
+        activeHandle.position.x = newX;
+      } else {
+        const newZ = activeOpening.z_start_3d - newMid;
+        activeOpening.mesh.position.z = newZ;
+        activeHandle.position.z = newZ;
+      }
+
+      rebuildWallCuts(JSON.stringify(activeOpening.wall_key));
+      updateDimensionsGeometry(activeOpening);
+
+      if (selectedObject && highlightWire) {
+        const sBox = new THREE.Box3().setFromObject(selectedObject);
+        const sCenter = new THREE.Vector3();
+        sBox.getCenter(sCenter);
+        highlightWire.position.copy(sCenter);
+      }
+
+      const inspPos = document.getElementById('insp-pos-val');
+      if (inspPos) inspPos.innerHTML = `<b>${activeOpening.pos_m.toFixed(2)} م</b>`;
+      const inspEnd = document.getElementById('insp-dist-end-val');
+      if (inspEnd) inspEnd.innerHTML = `${(activeOpening.wall_len - activeOpening.pos_m - activeOpening.w_m).toFixed(2)} م`;
+
+      hasPendingMove = true;
+      lastMovedOp = activeOpening;
+    }
+  }
+
   function onPointerDown(e) {
+    isPointerDown = true;
     pointerDownPos.x = e.clientX;
     pointerDownPos.y = e.clientY;
+
+    if (isMeasureMode && measureStep < 2) {
+      if (e.button === 0) {
+        return; // Left click is strictly reserved for picking measure points
+      }
+    }
 
     const rect = renderer.domElement.getBoundingClientRect();
     mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(mouse, camera);
 
-    // 1. Check if clicked on a 3D Handle Gizmo
-    const handleIntersects = raycaster.intersectObjects(handleMeshes, true);
-    if (handleIntersects.length > 0) {
-      let hitH = handleIntersects[0].object;
-      while (hitH && !hitH.userData.isHandle && hitH.parent) {
-        hitH = hitH.parent;
-      }
-      if (hitH && hitH.userData.isHandle) {
-        startDraggingOpening(hitH.userData.op, e.clientX, e.clientY);
-        return;
-      }
+    // 1. Check if clicked on an unoccluded 3D Handle Gizmo
+    const hit = performPreciseRaycast(e.clientX, e.clientY);
+    if (hit && hit.isHandle) {
+      clearHover();
+      startDraggingOpening(hit.op, e.clientX, e.clientY);
+      return;
     }
   }
 
   function onPointerMove(e) {
-    const rect = renderer.domElement.getBoundingClientRect();
-    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-    raycaster.setFromCamera(mouse, camera);
+    mouseClientX = e.clientX;
+    mouseClientY = e.clientY;
+    mouseMoved = true;
+
+    if (isMeasureMode && measureStep < 2) {
+      updateMeasureHover(e.clientX, e.clientY);
+      return;
+    }
 
     if (isDraggingOpening && activeOpening) {
-      document.body.style.cursor = 'grabbing';
-      if (raycaster.ray.intersectPlane(dragPlane, planeIntersect)) {
-        let delta = 0;
-        if (activeOpening.is_h) {
-          delta = planeIntersect.x - dragStartIntersect.x;
-        } else {
-          delta = -(planeIntersect.z - dragStartIntersect.z);
-        }
-
-        const rawPos = dragStartPos + delta;
-        const clampedPos = Math.max(minSafeLimit, Math.min(maxSafeLimit, rawPos));
-        const isBlocked = (rawPos < minSafeLimit - 0.015 || rawPos > maxSafeLimit + 0.015);
-
-        setHandleMaterial(activeHandle, isBlocked ? handleWarnMat : handleDragMat);
-
-        activeOpening.pos_m = Math.round(clampedPos * 100) / 100;
-
-        const isH = activeOpening.is_h;
-        const newMid = activeOpening.pos_m + activeOpening.w_m / 2.0;
-
-        if (isH) {
-          const newX = activeOpening.x_start_3d + newMid;
-          activeOpening.mesh.position.x = newX;
-          activeHandle.position.x = newX;
-        } else {
-          const newZ = activeOpening.z_start_3d - newMid;
-          activeOpening.mesh.position.z = newZ;
-          activeHandle.position.z = newZ;
-        }
-
-        rebuildWallCuts(JSON.stringify(activeOpening.wall_key));
-        updateDimensionsGeometry(activeOpening);
-
-        if (selectedObject && highlightWire) {
-          const sBox = new THREE.Box3().setFromObject(selectedObject);
-          const sCenter = new THREE.Vector3();
-          sBox.getCenter(sCenter);
-          highlightWire.position.copy(sCenter);
-        }
-
-        const inspPos = document.getElementById('insp-pos-val');
-        if (inspPos) inspPos.innerHTML = `<b>${activeOpening.pos_m.toFixed(2)} م</b>`;
-        const inspEnd = document.getElementById('insp-dist-end-val');
-        if (inspEnd) inspEnd.innerHTML = `${(activeOpening.wall_len - activeOpening.pos_m - activeOpening.w_m).toFixed(2)} م`;
-
-        hasPendingMove = true;
-        lastMovedOp = activeOpening;
-      }
-    } else {
-      // Hover feedback
-      const handleIntersects = raycaster.intersectObjects(handleMeshes, true);
-      if (handleIntersects.length > 0) {
-        document.body.style.cursor = 'grab';
-        let hitH = handleIntersects[0].object;
-        while (hitH && !hitH.userData.isHandle && hitH.parent) {
-          hitH = hitH.parent;
-        }
-        if (hitH && hitH.userData && hitH.userData.op && hitH.userData.op.handleGroup) {
-          setHandleMaterial(hitH.userData.op.handleGroup, handleHoverMat);
-        }
-      } else {
-        handleMeshes.forEach(h => {
-          if (h !== activeHandle) setHandleMaterial(h, handleMat);
-        });
-        const objIntersects = raycaster.intersectObjects(selectableObjects, true);
-        if (objIntersects.length > 0) {
-          document.body.style.cursor = 'pointer';
-        } else {
-          document.body.style.cursor = 'default';
-        }
-      }
+      handleOpeningDrag(e.clientX, e.clientY);
     }
   }
 
   function onPointerUp(e) {
+    isPointerDown = false;
+
+    if (isMeasureMode && measureStep < 2) {
+      if (e.button === 0) {
+        const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+        if (dist < 6) {
+          handleMeasureClick(e.clientX, e.clientY);
+        }
+      }
+      return;
+    }
+
+    if (isMeasureMode && measureStep === 2) {
+      // In measure mode after completing dimension Point B:
+      // Left click is for camera rotation so engineer can inspect dimension from all angles.
+      return;
+    }
+
     if (isDraggingOpening) {
       isDraggingOpening = false;
       controls.enabled = true;
@@ -10440,31 +12259,20 @@ def _section_3d_viewer():
     } else {
       // Click selection: Detect elements or walls as complete units
       const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
-      if (dist < 5) {
-        const intersects = raycaster.intersectObjects(selectableObjects, true);
-        if (intersects.length > 0) {
-          let hit = intersects[0].object;
-          while (hit && !hit.userData.elementType && hit.parent && hit.parent !== rootGroup && hit.parent !== scene) {
-            hit = hit.parent;
-          }
+      if (dist < 5 && e.button === 0) {
+        let targetHit = currentHoveredItem;
+        if (!targetHit || targetHit.isHandle) {
+          targetHit = performPreciseRaycast(e.clientX, e.clientY);
+        }
 
-          if (hit && hit.userData && hit.userData.elementType) {
-            const elType = hit.userData.elementType;
-            if (elType === 'wall_piece' || elType === 'wall') {
-              // اختار الحائط بالكامل كوحدة واحدة متكاملة
-              const targetWallGroup = hit.userData.parentWallGroup || (elType === 'wall' ? hit : null);
-              const targetData = (targetWallGroup && targetWallGroup.userData.data) || hit.userData.data;
-              setSelection(targetWallGroup, 'wall', targetData);
-            } else if (elType === 'window') {
-              setSelection(hit, 'window', hit.userData.data);
-            } else if (elType === 'door') {
-              setSelection(hit, 'door', hit.userData.data);
-            } else if (elType === 'column') {
-              setSelection(hit, 'column', hit.userData.data);
-            }
-          }
-        } else {
+        if (targetHit && !targetHit.isHandle && targetHit.object) {
+          removeHoverMeshGlow(targetHit.object);
+          hideHoverBoundingBox();
+          currentHoveredItem = null;
+          setSelection(targetHit.object, targetHit.type, targetHit.data);
+        } else if (!targetHit || (!targetHit.isHandle && !targetHit.object)) {
           clearSelection();
+          clearHover();
         }
       }
     }
@@ -10473,6 +12281,15 @@ def _section_3d_viewer():
   container.addEventListener('pointerdown', onPointerDown);
   window.addEventListener('pointermove', onPointerMove);
   window.addEventListener('pointerup', onPointerUp);
+  container.addEventListener('pointerleave', function() {
+    mouseMoved = false;
+    if (!isMeasureMode || measureStep === 2) {
+      clearHover();
+    } else {
+      if (snapMarkerGroup) snapMarkerGroup.visible = false;
+      if (perpMarkerGroup) perpMarkerGroup.visible = false;
+    }
+  });
 
   // Camera Setup & State Preservation across Streamlit reruns
   const STORAGE_KEY = 'm15_threejs_camera_state';
@@ -10517,6 +12334,9 @@ def _section_3d_viewer():
   document.getElementById('btn-theme').addEventListener('click', function() {
     isDark = !isDark;
     scene.background.set(isDark ? bgDark : bgLight);
+    hoverWireMat.color.setHex(isDark ? 0x00f0ff : 0x0284c7);
+    hoverFillMat.color.setHex(isDark ? 0x00f0ff : 0x0284c7);
+    cornerBracketMat.color.setHex(isDark ? 0xffffff : 0x0369a1);
   });
 
   document.getElementById('btn-fs').addEventListener('click', function() {
@@ -10540,6 +12360,52 @@ def _section_3d_viewer():
       btnToggleAxes.style.background = axesVisible ? '#dc2626' : '#475569';
       btnToggleAxes.style.borderColor = axesVisible ? '#f87171' : '#64748b';
       btnToggleAxes.textContent = axesVisible ? '🔴 المحاور' : '⚪ المحاور (مخفية)';
+    });
+  }
+
+  // ── زر تشغيل أداة القياس التفاعلية ثلاثية الأبعاد (Measure Tool) ──
+  const btnMeasure = document.getElementById('btn-measure');
+  const btnClearMeasure = document.getElementById('btn-clear-measure');
+  const btnMeasureBannerClose = document.getElementById('btn-measure-banner-close');
+
+  if (btnMeasure) {
+    btnMeasure.addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (!isMeasureMode) {
+        enterMeasureMode();
+      } else if (measureStep === 2) {
+        // Start a fresh new measurement
+        clearMeasurements();
+        measureStep = 0;
+        controls.mouseButtons = {
+          LEFT: null,
+          MIDDLE: THREE.MOUSE.DOLLY,
+          RIGHT: THREE.MOUSE.ROTATE
+        };
+        renderer.domElement.style.cursor = 'crosshair';
+        container.style.cursor = 'crosshair';
+        document.body.style.cursor = 'crosshair';
+        const bannerText = document.getElementById('measure-banner-text');
+        if (bannerText) {
+          bannerText.innerHTML = '📏 <b>قياس جديد</b>: انقر بالزر الأيسر لتحديد نقطة البداية (Point A) • التدوير بالزر الأيمن أو العجلة • اضغط Esc للإلغاء';
+        }
+      } else {
+        exitMeasureMode();
+      }
+    });
+  }
+
+  if (btnClearMeasure) {
+    btnClearMeasure.addEventListener('click', function(e) {
+      e.stopPropagation();
+      exitMeasureMode();
+    });
+  }
+
+  if (btnMeasureBannerClose) {
+    btnMeasureBannerClose.addEventListener('click', function(e) {
+      e.stopPropagation();
+      exitMeasureMode();
     });
   }
 
@@ -10674,9 +12540,29 @@ def _section_3d_viewer():
   function animate() {
     requestAnimationFrame(animate);
     controls.update();
+
+    if (checkCameraChanged()) {
+      updateHandlesOcclusion();
+    }
+
+    if (mouseMoved && !isPointerDown && !isDraggingOpening) {
+      if (!isMeasureMode || measureStep === 2) {
+        updateHoverState(mouseClientX, mouseClientY);
+      }
+      mouseMoved = false;
+    }
+
+    // Dynamic distance-based scaling for billboard dimension sprite
+    if (measureLabelSprite && measureLabelSprite.visible) {
+      const camDist = camera.position.distanceTo(measureLabelSprite.position);
+      const s = Math.max(0.5, Math.min(5.0, camDist * 0.11));
+      measureLabelSprite.scale.set(s * 2.2, s * 0.55, 1.0);
+    }
+
     renderer.render(scene, camera);
     updateDimensionBadgesScreen();
   }
+  updateHandlesOcclusion();
   animate();
 })();
 </script>
@@ -11762,6 +13648,9 @@ def render_masonry_plaster_module():
     st.divider()
     with st.expander("🌐 3D (Data Processing & Rendering) — العارض ثلاثي الأبعاد التفاعلي", expanded=False):
         _section_3d_viewer()
+    st.divider()
+    with st.expander("📋 جدول الحصر وخامات البياض", expanded=False):
+        _section_plaster_boq()
     st.divider()
     with st.expander("8️⃣ اسعار وتكلفة المباني والمحارة", expanded=False):
         _section_survey()
