@@ -165,6 +165,16 @@ def _init_state():
     if "m15_new_wall_thick_choice" not in st.session_state:
         st.session_state["m15_new_wall_thick_choice"] = 12
 
+    m15_cfg_data = cfg.get("module_15_masonry_plaster", {}) if isinstance(cfg.get("module_15_masonry_plaster"), dict) else {}
+    if "m15_price_brick_per_thousand" not in st.session_state:
+        st.session_state["m15_price_brick_per_thousand"] = float(m15_cfg_data.get("price_brick_per_thousand", 2500.0))
+    if "m15_price_sand_per_m3" not in st.session_state:
+        st.session_state["m15_price_sand_per_m3"] = float(m15_cfg_data.get("price_sand_per_m3", 200.0))
+    if "m15_price_cement_per_ton" not in st.session_state:
+        st.session_state["m15_price_cement_per_ton"] = float(m15_cfg_data.get("price_cement_per_ton", 4000.0))
+    if "m15_price_plaster_labor_per_m2" not in st.session_state:
+        st.session_state["m15_price_plaster_labor_per_m2"] = float(m15_cfg_data.get("price_plaster_labor_per_m2", 70.0))
+
     # تنظيف المتغيرات القديمة الخاصة بآلية الإضافة والاستعادة السابقة والمفاتيح المتضاربة
     for old_k in ["m15_add_col_sel", "m15_del_active_col_sel", "m15_confirm_del_col_tab", "m15_col_restore_expander_open"]:
         st.session_state.pop(old_k, None)
@@ -5966,104 +5976,21 @@ def _section_walls():
     active_walls = [wk for wk in all_walls if wk not in removed_walls]
     parapet_walls = set(st.session_state.get("m15_parapet_walls", set()))
 
-    def _on_default_h_change():
-        new_dh = float(st.session_state.get("m15_default_h_input", 3.0))
-        st.session_state["m15_default_wall_height"] = new_dh
-        new_ph = float(st.session_state.get("m15_parapet_wall_height", st.session_state.get("m15_parapet_h_input", 1.0)))
-        wh = st.session_state.get("m15_wall_heights", {})
-        for w_item in _get_all_walls():
-            wh[w_item] = new_ph if _is_parapet_wall(w_item) else new_dh
-        st.session_state["m15_wall_heights"] = wh
-        save_settings()
+    cur_dh = float(st.session_state.get("m15_default_wall_height", 3.0))
+    cur_ph = float(st.session_state.get("m15_parapet_wall_height", 1.0))
 
-    def _on_parapet_h_change():
-        new_ph = float(st.session_state.get("m15_parapet_h_input", 1.0))
-        st.session_state["m15_parapet_wall_height"] = new_ph
-        new_dh = float(st.session_state.get("m15_default_wall_height", st.session_state.get("m15_default_h_input", 3.0)))
-        wh = st.session_state.get("m15_wall_heights", {})
-        for w_item in _get_all_walls():
-            wh[w_item] = new_ph if _is_parapet_wall(w_item) else new_dh
-        st.session_state["m15_wall_heights"] = wh
-        save_settings()
+    # ── 1. القائمة المنسدلة لعرض واختيار الحوائط ──
+    ms_key = f"m15_walls_unified_ms_{len(xs)}_{len(ys)}_{len(all_walls)}"
 
-    # ── 1. مدخلات الارتفاعات الرئيسية (Height Inputs) ──
-    col_h1, col_h2 = st.columns(2)
-    with col_h1:
-        cur_dh = float(st.session_state.get("m15_default_wall_height", 3.0))
-        if "m15_default_h_input" not in st.session_state:
-            st.session_state["m15_default_h_input"] = cur_dh
-        dh = st.number_input(
-            "ارتفاع الحائط (Wall Height)",
-            min_value=0.5,
-            max_value=8.0,
-            value=float(st.session_state.get("m15_default_h_input", cur_dh)),
-            step=0.1,
-            format="%.2f",
-            key="m15_default_h_input",
-            on_change=_on_default_h_change,
-            help="الارتفاع الافتراضي لجميع الحوائط في المشروع كارتفاع أساسي للبثق ثلاثي الأبعاد والحسابات (ترثه L1, L2, ... تلقائياً)"
-        )
-        if abs(dh - cur_dh) > 0.001:
-            st.session_state["m15_default_wall_height"] = dh
-            save_settings()
-
-    with col_h2:
-        cur_ph = float(st.session_state.get("m15_parapet_wall_height", 1.0))
-        if "m15_parapet_h_input" not in st.session_state:
-            st.session_state["m15_parapet_h_input"] = cur_ph
-        ph = st.number_input(
-            "ارتفاع دروة",
-            min_value=0.2,
-            max_value=5.0,
-            value=float(st.session_state.get("m15_parapet_h_input", cur_ph)),
-            step=0.05,
-            format="%.2f",
-            key="m15_parapet_h_input",
-            on_change=_on_parapet_h_change,
-            help="ارتفاع الاستثناء المطبق فقط على الحوائط المحددة كدروة، متجاوزاً القيمة الافتراضية"
-        )
-        if abs(ph - cur_ph) > 0.001:
-            st.session_state["m15_parapet_wall_height"] = ph
-            save_settings()
-
-    # مزامنة سريعة لـ m15_wall_heights لضمان تطابق البيانات
-    wall_heights = st.session_state.get("m15_wall_heights", {})
-    for wk in all_walls:
-        wall_heights[wk] = ph if _is_parapet_wall(wk) else dh
-    st.session_state["m15_wall_heights"] = wall_heights
-
-    st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
-
-    # ── 2. قائمة اختيار متعدد / Check-list لحوائط الدروة ──
-    clean_parapets = {wk for wk in active_walls if wk in parapet_walls}
-    if clean_parapets != parapet_walls:
-        parapet_walls = clean_parapets
-        st.session_state["m15_parapet_walls"] = clean_parapets
-
-    current_selected = [wk for wk in active_walls if wk in parapet_walls]
-
-    # مفتاح ديناميكي يعتمد على عدد المحاور والحوائط لمنع تشوه deserialization عند تغيير المحاور
-    ms_key = f"m15_parapet_ms_{len(xs)}_{len(ys)}_{len(all_walls)}"
-
-    def _on_parapet_ms_change():
-        selected = st.session_state.get(ms_key, [])
-        new_pw = set()
-        for item in selected:
-            t = _safe_coord_tuple(item, 4)
-            if t and t in active_walls:
-                new_pw.add(t)
-        st.session_state["m15_parapet_walls"] = new_pw
-        wh = st.session_state.get("m15_wall_heights", {})
-        c_ph = float(st.session_state.get("m15_parapet_wall_height", st.session_state.get("m15_parapet_h_input", 1.0)))
-        c_dh = float(st.session_state.get("m15_default_wall_height", st.session_state.get("m15_default_h_input", 3.0)))
-        for w_item in _get_all_walls():
-            wh[w_item] = c_ph if w_item in new_pw else c_dh
-        st.session_state["m15_wall_heights"] = wh
-        st.session_state.pop("m15_plan_png_b64", None)
-        save_settings()
-
-    if ms_key not in st.session_state:
-        st.session_state[ms_key] = current_selected
+    # تنظيف القائمة لضمان صحة الإحداثيات والحوائط النشطة
+    cur_sel_raw = st.session_state.get(ms_key, [])
+    valid_sel = []
+    for item in cur_sel_raw:
+        t = _safe_coord_tuple(item, 4)
+        if t and t in active_walls:
+            valid_sel.append(t)
+    if ms_key not in st.session_state or valid_sel != cur_sel_raw:
+        st.session_state[ms_key] = valid_sel
 
     def _format_wall_item(wk):
         t = _safe_coord_tuple(wk, 4)
@@ -6073,385 +6000,224 @@ def _section_walls():
         i1, j1, i2, j2 = t
         cs = cm.get((i1, j1), f"({i1+1},{j1+1})")
         ce = cm.get((i2, j2), f"({i2+1},{j2+1})")
-        return f"{lname}: {cs} \u2192 {ce}"
-
-    st.multiselect(
-        "📋 قائمة اختيار حوائط الدروة:",
-        options=active_walls,
-        format_func=_format_wall_item,
-        key=ms_key,
-        on_change=_on_parapet_ms_change,
-        help="الحوائط المحددة (Checked) تُصنف فوراً كدروة وتأخذ قيمة 'ارتفاع دروة'. الحوائط غير المحددة تستمر تلقائياً باعتماد قيمة 'ارتفاع الحائط'."
-    )
-
-
-
-    # ── نمط دمج أسماء الحوائط المتلاصقة في المسقط الأفقي المصمم ──
-    st.markdown("<hr style='margin: 10px 0; border: none; border-top: 1px dashed #cbd5e1;'>", unsafe_allow_html=True)
-    st.markdown("<div style='font-size:0.90rem; font-weight:700; color:#ffffff; margin-bottom:6px;'>🏷️ نمط تسمية الحوائط المتلاصقة في المسقط الأفقي:</div>", unsafe_allow_html=True)
-    cur_style = st.session_state.get("m15_merged_wall_label_style", "single")
-    style_choice = st.radio(
-        "نمط عرض أسماء الحوائط المتلاصقة على المسقط:",
-        options=["single", "range"],
-        index=0 if cur_style == "single" else 1,
-        format_func=lambda x: "اسم واحد موحد (مثال: L49)" if x == "single" else "نطاق الحوائط المدمجة (مثال: L49-L51)",
-        horizontal=True,
-        key="m15_merged_wall_label_style_radio",
-        label_visibility="collapsed",
-        help="دمج أسماء مجموعات الحوائط المتلاصقة التي لا يفصلها عمود أو حائط متعامد في المسقط الأفقي المصمم."
-    )
-    if style_choice != cur_style:
-        st.session_state["m15_merged_wall_label_style"] = style_choice
-        st.session_state.pop("m15_plan_png_b64", None)
-        save_settings()
-        st.rerun()
-
-    # ── 3. قائمة اختيار وتعديل مواصفات الحوائط (Multi-Wall Inspector & Modifier) ──
-    ms_edit_key = f"m15_walls_edit_ms_{len(xs)}_{len(ys)}_{len(all_walls)}"
-
-    # تنظيف القائمة الحالية لضمان صحة الإحداثيات
-    cur_sel_raw = st.session_state.get(ms_edit_key, [])
-    valid_sel = []
-    for item in cur_sel_raw:
-        t = _safe_coord_tuple(item, 4)
-        if t and t in all_walls:
-            valid_sel.append(t)
-    if ms_edit_key not in st.session_state or valid_sel != cur_sel_raw:
-        st.session_state[ms_edit_key] = valid_sel
-
-    def _format_wall_edit_item(wk):
-        t = _safe_coord_tuple(wk, 4)
-        if not t:
-            return str(wk)
-        lname = wm.get(t, "—")
-        i1, j1, i2, j2 = t
-        cs = cm.get((i1, j1), f"({i1+1},{j1+1})")
-        ce = cm.get((i2, j2), f"({i2+1},{j2+1})")
         th = _get_wall_thickness(t)
-        st_badge = "🗑️ " if t in removed_walls else ("🧱 [دروة] " if _is_parapet_wall(t) else "")
+        st_badge = "🧱 [دروة] " if _is_parapet_wall(t) else ""
         return f"{st_badge}{lname}: {cs} \u2192 {ce} ({th}سم)"
 
-    # أزرار مساعدة سريعة لاختيار الحوائط
-    c_btn1, c_btn2, c_btn3 = st.columns(3)
-    with c_btn1:
-        if st.button("☑️ تحديد الكل", key="m15_btn_select_all_walls", use_container_width=True):
-            st.session_state[ms_edit_key] = list(all_walls)
-            st.rerun()
-    with c_btn2:
-        if st.button("🏢 تحديد الحوائط النشطة", key="m15_btn_select_active_walls", use_container_width=True):
-            st.session_state[ms_edit_key] = [w for w in all_walls if w not in removed_walls]
-            st.rerun()
-    with c_btn3:
-        if st.button("◻️ إلغاء التحديد", key="m15_btn_clear_sel_walls", use_container_width=True):
-            st.session_state[ms_edit_key] = []
-            st.rerun()
-
     sel_walls = st.multiselect(
-        "📋 قائمة اختيار الحوائط لمعاينة وتعديل الخصائص:",
-        options=all_walls,
+        "📋 قائمة الحوائط في المسقط الأفقي:",
+        options=active_walls,
         default=valid_sel,
-        format_func=_format_wall_edit_item,
-        key=ms_edit_key,
-        help="اختر حائطاً أو أكثر لتعديل سُمكه أو تصنيفه كدروة أو حذفه/استعادته دفعة واحدة."
+        format_func=_format_wall_item,
+        key=ms_key,
+        help="اختر حائطاً أو أكثر لمعاينة وتعديل سُمكه أو تصنيفه كدروة وتطبيقه فوراً على رسم المسقط الأفقي المصمم."
     )
 
-    if sel_walls:
-        sel_tuples = [_safe_coord_tuple(w, 4) for w in sel_walls if _safe_coord_tuple(w, 4) in all_walls]
-        act_sel = [w for w in sel_tuples if w not in removed_walls]
-        rem_sel = [w for w in sel_tuples if w in removed_walls]
+    sel_tuples = [_safe_coord_tuple(w, 4) for w in sel_walls if _safe_coord_tuple(w, 4) in active_walls]
+    sel_hash = sum(w[0]*1000 + w[1]*100 + w[2]*10 + w[3] for w in sel_tuples) % 100000 if sel_tuples else 0
 
-        # فحص التعارض مع أي نمط تفاعلي نشط على المسقط
-        active_mode = _get_active_interactive_mode()
-        has_conflict = (active_mode is not None)
+    # ── 2. بطاقة وحاوية جميع المدخلات سوياً بتنسيق موحد ومتوازن ──
+    st.markdown(
+        """<style>
+        div[class*="m15_multi_thick_radio"],
+        div[class*="st-key-m15_multi_parapet_chk"],
+        div.stCheckbox[class*="st-key-m15_multi_parapet_chk"] {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.88) 0%, rgba(15, 23, 42, 0.88) 100%) !important;
+            border: 1.5px solid rgba(148, 163, 184, 0.35) !important;
+            border-radius: 8px !important;
+            padding: 6px 12px !important;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+            min-height: 48px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+            margin: 0 auto !important;
+        }
+        div[class*="m15_multi_thick_radio"] label[data-testid="stWidgetLabel"] p,
+        div[class*="st-key-m15_multi_parapet_chk"] label p,
+        div[class*="st-key-m15_default_h_input"] label[data-testid="stWidgetLabel"] p,
+        div[class*="st-key-m15_parapet_h_input"] label[data-testid="stWidgetLabel"] p {
+            color: #fde047 !important;
+            font-size: 13.5px !important;
+            font-weight: 700 !important;
+            text-align: center !important;
+            margin: 0 0 4px 0 !important;
+            line-height: 1.25 !important;
+            white-space: nowrap !important;
+        }
+        div[class*="st-key-m15_default_h_input"] div[data-testid="stNumberInputContainer"],
+        div[class*="st-key-m15_parapet_h_input"] div[data-testid="stNumberInputContainer"] {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.88) 0%, rgba(15, 23, 42, 0.88) 100%) !important;
+            border: 1.5px solid rgba(148, 163, 184, 0.35) !important;
+            border-radius: 8px !important;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
+            min-height: 48px !important;
+        }
+        div[class*="st-key-m15_default_h_input"] input,
+        div[class*="st-key-m15_parapet_h_input"] input {
+            color: #ffffff !important;
+            font-size: 15px !important;
+            font-weight: 700 !important;
+            text-align: center !important;
+        }
+        div[class*="m15_multi_thick_radio"] div[role="radiogroup"] {
+            display: flex !important;
+            flex-direction: row !important;
+            justify-content: center !important;
+            align-items: center !important;
+            gap: 8px !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        div[class*="m15_multi_thick_radio"] div[role="radiogroup"] > label {
+            background: rgba(51, 65, 85, 0.7) !important;
+            border: 1.2px solid rgba(148, 163, 184, 0.45) !important;
+            border-radius: 6px !important;
+            padding: 3px 8px !important;
+            cursor: pointer !important;
+            margin: 0 !important;
+            display: inline-flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            gap: 6px !important;
+            transition: all 0.2s ease !important;
+        }
+        div[class*="m15_multi_thick_radio"] div[role="radiogroup"] > label div[data-testid="stMarkdownContainer"] p {
+            color: #fde047 !important;
+            font-size: 13px !important;
+            font-weight: 700 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            white-space: nowrap !important;
+        }
+        div[class*="st-key-m15_multi_parapet_chk"] label {
+            display: flex !important;
+            flex-direction: column-reverse !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 4px !important;
+            cursor: pointer !important;
+            margin: 0 auto !important;
+            padding: 0 !important;
+            width: auto !important;
+            background: transparent !important;
+        }
+        </style>""",
+        unsafe_allow_html=True
+    )
 
-        # ── تأكيد حذف الحوائط المحددة ──
-        if act_sel and st.session_state.get("m15_confirm_del_multi_walls"):
-            play_delete_confirmation_whistle(f"m15_del_multi_walls_{tuple(sorted(act_sel))}")
-            st.markdown(
-                f"""<div style='background: #fff1f2; border: 2px solid #e11d48; border-radius: 8px; padding: 10px 14px; margin: 10px 0;' dir='rtl'>
-                    <div style='font-weight: 800; color: #9f1239; font-size: 0.95rem;'>
-                        ⚠️ هل أنت متأكد من رغبتك في حذف عدد <b>{len(act_sel)}</b> حائط محدد؟
-                    </div>
-                    <div style='font-size: 0.82rem; color: #be123c; margin-top: 4px;'>
-                        يمكنك استعادتها في أي وقت من قسم '♻️ استعادة الحوائط المحذوفة'.
-                    </div>
-                </div>""",
-                unsafe_allow_html=True
-            )
-            cyes, cno = st.columns(2)
-            with cyes:
-                if st.button(f"✅ نعم، تأكيد حذف {len(act_sel)} حائط", type="primary", key="m15_conf_del_multi_yes", use_container_width=True, disabled=has_conflict):
-                    for w in act_sel:
-                        removed_walls.add(w)
-                    st.session_state["m15_wall_removed"] = removed_walls
-                    st.session_state.pop("m15_confirm_del_multi_walls", None)
-                    st.session_state.pop("_last_del_confirm_whistle_token", None)
-                    st.session_state.pop("m15_plan_png_b64", None)
-                    save_settings()
-                    st.toast(f"🗑️ تم حذف {len(act_sel)} حائط بنجاح!", icon="🗑️")
-                    st.rerun()
-            with cno:
-                if st.button("❌ إلغاء", key="m15_conf_del_multi_no", use_container_width=True):
-                    st.session_state.pop("m15_confirm_del_multi_walls", None)
-                    st.session_state.pop("_last_del_confirm_whistle_token", None)
-                    st.rerun()
+    st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
 
-        # بطاقة ملخص الحوائط المحددة
-        summary_txt = f"🎯 تم تحديد <b>{len(sel_tuples)}</b> حائط"
-        if rem_sel:
-            summary_txt += f" (<b>{len(act_sel)}</b> نشط | <b>{len(rem_sel)}</b> محذوف)"
+    # ── وضع جميع المدخلات الأربعة سوياً في صف متكامل متوازن ──
+    col_th, col_parapet, col_dh, col_ph = st.columns([1.25, 1.25, 1.0, 1.0], vertical_alignment="center")
+
+    with col_th:
+        th_vals = [_get_wall_thickness(w) for w in sel_tuples] if sel_tuples else [_WALL_THICK]
+        all_12 = bool(sel_tuples and all(t == _WALL_THIN for t in th_vals))
+        cur_th_idx = 0 if all_12 else 1
+        nt = st.radio(
+            "سُمك الحائط",
+            options=[_WALL_THIN, _WALL_THICK],
+            index=cur_th_idx,
+            format_func=lambda v: f"{v} سم",
+            horizontal=True,
+            label_visibility="visible",
+            key=f"m15_multi_thick_radio_{sel_hash}",
+            disabled=not sel_tuples,
+            help="تعديل سُمك الحوائط المحددة (12 سم أو 25 سم) والتفعيل الفوري على المسقط الأفقي المصمم"
+        )
+        if sel_tuples and any(_get_wall_thickness(w) != nt for w in sel_tuples):
+            for w in sel_tuples:
+                wall_thick[w] = nt
+            st.session_state["m15_wall_thickness"] = wall_thick
+            st.session_state.pop("m15_plan_png_b64", None)
+            save_settings()
+            st.rerun()
+
+    with col_parapet:
+        all_p = bool(sel_tuples and all(_is_parapet_wall(w) for w in sel_tuples))
+        new_is_p = st.checkbox(
+            "تفعيل كحائط دروة",
+            value=all_p,
+            key=f"m15_multi_parapet_chk_{sel_hash}",
+            help="عند التحديد، تأخذ الحوائط المحددة ارتفاع الدروة وتظهر كدروة بالمسقط وتُفعل فوراً",
+            disabled=not sel_tuples
+        )
+        if sel_tuples:
+            needs_update = any(_is_parapet_wall(w) != new_is_p for w in sel_tuples)
+            if needs_update:
+                pw_set = set(st.session_state.get("m15_parapet_walls", set()))
+                for w in sel_tuples:
+                    if new_is_p:
+                        pw_set.add(w)
+                    else:
+                        pw_set.discard(w)
+                st.session_state["m15_parapet_walls"] = pw_set
+                wh = st.session_state.get("m15_wall_heights", {})
+                for w_item in all_walls:
+                    wh[w_item] = cur_ph if w_item in pw_set else cur_dh
+                st.session_state["m15_wall_heights"] = wh
+                st.session_state.pop("m15_plan_png_b64", None)
+                save_settings()
+                st.rerun()
+
+    with col_dh:
+        dh = st.number_input(
+            "ارتفاع الحائط (م)",
+            min_value=0.5,
+            max_value=8.0,
+            value=cur_dh,
+            step=0.1,
+            format="%.2f",
+            key="m15_default_h_input",
+            help="الارتفاع الافتراضي لجميع الحوائط الرئيسية وتطبيقه فوراً على الحسابات والبثق"
+        )
+        if abs(dh - cur_dh) > 0.001:
+            st.session_state["m15_default_wall_height"] = dh
+            wh = st.session_state.get("m15_wall_heights", {})
+            pw_set = set(st.session_state.get("m15_parapet_walls", set()))
+            for w_item in all_walls:
+                wh[w_item] = cur_ph if w_item in pw_set else dh
+            st.session_state["m15_wall_heights"] = wh
+            st.session_state.pop("m15_plan_png_b64", None)
+            save_settings()
+            st.rerun()
+
+    with col_ph:
+        ph = st.number_input(
+            "ارتفاع الدروة (م)",
+            min_value=0.2,
+            max_value=5.0,
+            value=cur_ph,
+            step=0.05,
+            format="%.2f",
+            key="m15_parapet_h_input",
+            help="ارتفاع الاستثناء للحوائط المصنفة كدروة وتطبيقه فوراً على الحسابات والبثق"
+        )
+        if abs(ph - cur_ph) > 0.001:
+            st.session_state["m15_parapet_wall_height"] = ph
+            wh = st.session_state.get("m15_wall_heights", {})
+            pw_set = set(st.session_state.get("m15_parapet_walls", set()))
+            for w_item in all_walls:
+                wh[w_item] = ph if w_item in pw_set else cur_dh
+            st.session_state["m15_wall_heights"] = wh
+            st.session_state.pop("m15_plan_png_b64", None)
+            save_settings()
+            st.rerun()
+
+    if sel_tuples:
         st.markdown(
-            f"""<div style='background: rgba(30, 41, 59, 0.85); border: 1px solid #334155; border-radius: 8px; padding: 8px 12px; margin: 8px 0;' dir='rtl'>
-                <div style='color: #38bdf8; font-weight: 700; font-size: 0.88rem;'>{summary_txt}</div>
+            f"""<div style='background: rgba(30, 41, 59, 0.85); border: 1px solid #334155; border-radius: 8px; padding: 6px 12px; margin: 8px 0;' dir='rtl'>
+                <div style='color: #38bdf8; font-weight: 700; font-size: 0.86rem;'>🎯 تم تحديد <b>{len(sel_tuples)}</b> حائط — يتم تطبيق المواصفات والتفعيل الفوري على المسقط المصمم</div>
             </div>""",
             unsafe_allow_html=True
         )
-
-        st.markdown(
-            """<style>
-            /* ═══════════════════════════════════════════════════════════════════
-               1. حاوية وبطاقات سُمك الحائط (العمود الأول)
-               ═══════════════════════════════════════════════════════════════════ */
-            div[class*="m15_multi_thick_radio"],
-            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] {
-                background: linear-gradient(135deg, rgba(30, 41, 59, 0.88) 0%, rgba(15, 23, 42, 0.88) 100%) !important;
-                border: 1.5px solid rgba(148, 163, 184, 0.35) !important;
-                border-radius: 8px !important;
-                padding: 6px 10px !important;
-                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
-                min-height: 48px !important;
-                display: flex !important;
-                flex-direction: column !important;
-                align-items: center !important;
-                justify-content: center !important;
-                width: 100% !important;
-                box-sizing: border-box !important;
-                margin: 0 auto !important;
-            }
-            div[class*="m15_multi_thick_radio"] > div[data-testid="stRadio"] {
-                background: transparent !important;
-                border: none !important;
-                box-shadow: none !important;
-                padding: 0 !important;
-                margin: 0 !important;
-                width: 100% !important;
-            }
-            div[class*="m15_multi_thick_radio"] label[data-testid="stWidgetLabel"],
-            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] label[data-testid="stWidgetLabel"] {
-                display: block !important;
-                width: 100% !important;
-                text-align: center !important;
-                margin: 0 0 5px 0 !important;
-                padding: 0 !important;
-            }
-            div[class*="m15_multi_thick_radio"] label[data-testid="stWidgetLabel"] p,
-            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] label[data-testid="stWidgetLabel"] p {
-                color: #fde047 !important;
-                font-size: 13.5px !important;
-                font-weight: 700 !important;
-                text-align: center !important;
-                margin: 0 !important;
-                line-height: 1.25 !important;
-            }
-            div[class*="m15_multi_thick_radio"] div[role="radiogroup"],
-            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] {
-                display: flex !important;
-                flex-direction: row !important;
-                justify-content: center !important;
-                align-items: center !important;
-                gap: 8px !important;
-                width: 100% !important;
-                margin: 0 !important;
-                padding: 0 !important;
-            }
-            div[class*="m15_multi_thick_radio"] div[role="radiogroup"] > label,
-            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label {
-                background: rgba(51, 65, 85, 0.7) !important;
-                border: 1.2px solid rgba(148, 163, 184, 0.45) !important;
-                border-radius: 6px !important;
-                padding: 3px 8px !important;
-                cursor: pointer !important;
-                margin: 0 !important;
-                display: inline-flex !important;
-                flex-direction: row !important;
-                align-items: center !important;
-                gap: 6px !important;
-                transition: all 0.2s ease !important;
-            }
-            div[class*="m15_multi_thick_radio"] div[role="radiogroup"] > label:hover,
-            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label:hover {
-                border-color: #fde047 !important;
-                background: rgba(51, 65, 85, 0.95) !important;
-            }
-            div[class*="m15_multi_thick_radio"] div[role="radiogroup"] > label[data-selected="true"],
-            div[class*="m15_multi_thick_radio"] div[role="radiogroup"] > label:has(input:checked),
-            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label[data-selected="true"],
-            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) {
-                background: rgba(2, 132, 199, 0.35) !important;
-                border-color: #38bdf8 !important;
-            }
-            div[class*="m15_multi_thick_radio"] div[role="radiogroup"] > label div[data-testid="stMarkdownContainer"] p,
-            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label div[data-testid="stMarkdownContainer"] p {
-                color: #fde047 !important;
-                font-size: 13px !important;
-                font-weight: 700 !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                white-space: nowrap !important;
-            }
-
-            /* ═══════════════════════════════════════════════════════════════════
-               2. بانيل تصنيف كحائط دروة (العمود الثاني)
-               ═══════════════════════════════════════════════════════════════════ */
-            div[class*="st-key-m15_multi_parapet_chk"],
-            div.stCheckbox[class*="st-key-m15_multi_parapet_chk"],
-            div.stCheckbox:has(input[id*="m15_multi_parapet_chk"]),
-            div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stCheckbox"] {
-                background: linear-gradient(135deg, rgba(30, 41, 59, 0.88) 0%, rgba(15, 23, 42, 0.88) 100%) !important;
-                border: 1.5px solid rgba(148, 163, 184, 0.35) !important;
-                border-radius: 8px !important;
-                padding: 6px 12px !important;
-                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3) !important;
-                min-height: 48px !important;
-                display: flex !important;
-                flex-direction: column !important;
-                align-items: center !important;
-                justify-content: center !important;
-                width: 100% !important;
-                box-sizing: border-box !important;
-                margin: 0 auto !important;
-            }
-            div[class*="st-key-m15_multi_parapet_chk"] label,
-            div.stCheckbox[class*="st-key-m15_multi_parapet_chk"] label,
-            div.stCheckbox:has(input[id*="m15_multi_parapet_chk"]) label,
-            div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stCheckbox"] label {
-                display: flex !important;
-                flex-direction: column-reverse !important;
-                align-items: center !important;
-                justify-content: center !important;
-                gap: 4px !important;
-                cursor: pointer !important;
-                margin: 0 auto !important;
-                padding: 0 !important;
-                width: auto !important;
-                background: transparent !important;
-            }
-            div[class*="st-key-m15_multi_parapet_chk"] label p,
-            div.stCheckbox[class*="st-key-m15_multi_parapet_chk"] label p,
-            div.stCheckbox:has(input[id*="m15_multi_parapet_chk"]) label p,
-            div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stCheckbox"] label p {
-                color: #fde047 !important;
-                font-size: 13.5px !important;
-                font-weight: 700 !important;
-                text-align: center !important;
-                line-height: 1.25 !important;
-                white-space: nowrap !important;
-                margin: 0 !important;
-            }
-
-            /* ═══════════════════════════════════════════════════════════════════
-               3. أزرار الحذف/الاستعادة (العمود الثالث)
-               ═══════════════════════════════════════════════════════════════════ */
-            .stButton:has(button[key="m15_btn_del_multi"]) > button,
-            .stButton:has(button[key="m15_btn_restore_multi"]) > button,
-            .stButton:has(button[key="m15_btn_del_multi_dis"]) > button,
-            div[data-testid="stHorizontalBlock"] .stButton > button {
-                min-height: 48px !important;
-                font-size: 14px !important;
-                font-weight: 700 !important;
-                border-radius: 8px !important;
-                padding: 6px 14px !important;
-            }
-            </style>""",
-            unsafe_allow_html=True
-        )
-
-        # صف التحكم التفاعلي في الحوائط المحددة (3 أعمدة متوازنة الارتفاع)
-        c1, c2, c3 = st.columns([1.3, 1.3, 1.0], vertical_alignment="center")
-
-        sel_hash = sum(w[0]*1000 + w[1]*100 + w[2]*10 + w[3] for w in sel_tuples) % 100000
-
-        with c1:
-            th_vals = [_get_wall_thickness(w) for w in act_sel] if act_sel else [_WALL_THICK]
-            all_12 = bool(act_sel and all(t == _WALL_THIN for t in th_vals))
-            cur_th_idx = 0 if all_12 else 1
-
-            nt = st.radio(
-                "سُمك الحوائط",
-                options=[_WALL_THIN, _WALL_THICK],
-                index=cur_th_idx,
-                format_func=lambda v: f"{v} سم",
-                horizontal=True,
-                label_visibility="visible",
-                key=f"m15_multi_thick_radio_{sel_hash}",
-                disabled=not act_sel
-            )
-            if act_sel and any(_get_wall_thickness(w) != nt for w in act_sel):
-                for w in act_sel:
-                    wall_thick[w] = nt
-                st.session_state["m15_wall_thickness"] = wall_thick
-                st.session_state.pop("m15_plan_png_b64", None)
-                save_settings()
-                st.rerun()
-
-        with c2:
-            all_p = bool(act_sel and all(_is_parapet_wall(w) for w in act_sel))
-            new_is_p = st.checkbox(
-                "تفعيل كحوائط دروة",
-                value=all_p,
-                key=f"m15_multi_parapet_chk_{sel_hash}",
-                help="عند التحديد، تأخذ كافة الحوائط المحددة ارتفاع الدروة تلقائياً",
-                disabled=not act_sel
-            )
-            if act_sel:
-                needs_update = any(_is_parapet_wall(w) != new_is_p for w in act_sel)
-                if needs_update:
-                    pw_set = set(st.session_state.get("m15_parapet_walls", set()))
-                    for w in act_sel:
-                        if new_is_p:
-                            pw_set.add(w)
-                        else:
-                            pw_set.discard(w)
-                    st.session_state["m15_parapet_walls"] = pw_set
-                    for w_item in all_walls:
-                        wall_heights[w_item] = ph if w_item in pw_set else dh
-                    st.session_state["m15_wall_heights"] = wall_heights
-                    st.session_state.pop("m15_plan_png_b64", None)
-                    save_settings()
-                    st.rerun()
-
-        with c3:
-            if act_sel:
-                if not st.session_state.get("m15_confirm_del_multi_walls"):
-                    if st.button(f"🗑️ حذف ({len(act_sel)})", key="m15_btn_del_multi", use_container_width=True, disabled=has_conflict, help="حذف الحوائط النشطة المحددة"):
-                        st.session_state["m15_confirm_del_multi_walls"] = True
-                        play_delete_confirmation_whistle(f"m15_del_multi_walls_{tuple(sorted(act_sel))}")
-                        st.rerun()
-                else:
-                    st.button("⏳ تأكيد بالأعلى", key="m15_btn_del_multi_dis", disabled=True, use_container_width=True)
-            elif rem_sel:
-                if st.button(f"♻️ استعادة ({len(rem_sel)})", key="m15_btn_restore_multi", use_container_width=True, type="primary", disabled=has_conflict):
-                    for w in rem_sel:
-                        removed_walls.discard(w)
-                    st.session_state["m15_wall_removed"] = removed_walls
-                    st.session_state.pop("m15_plan_png_b64", None)
-                    save_settings()
-                    st.toast(f"✅ تم استعادة {len(rem_sel)} حائط بنجاح!", icon="♻️")
-                    st.rerun()
-
-        # زر إضافي مريح لاستعادة الحوائط المحذوفة إذا كان التحديد يجمع بين حوائط نشطة ومحذوفة
-        if rem_sel and act_sel:
-            st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
-            if st.button(f"♻️ استعادة الحوائط المحذوفة فقط من التحديد ({len(rem_sel)} حائط)", key="m15_btn_restore_only_rem", use_container_width=True, disabled=has_conflict):
-                for w in rem_sel:
-                    removed_walls.discard(w)
-                st.session_state["m15_wall_removed"] = removed_walls
-                st.session_state.pop("m15_plan_png_b64", None)
-                save_settings()
-                st.toast(f"✅ تم استعادة {len(rem_sel)} حائط بنجاح!", icon="♻️")
-                st.rerun()
     else:
-        st.info("💡 اختر حائطاً أو أكثر من القائمة أعلاه لمعاينة وتعديل سُمكه أو تصنيفه كدروة أو حذفه/استعادته دفعة واحدة.")
+        st.info("💡 اختر حائطاً أو أكثر من القائمة بالأعلى لتعديل سُمكه (12 أو 25 سم) أو تفعيله كحائط دروة فوراً.")
 
     # ── 4. جدول الحوائط مع عمود التصنيف والارتفاع الدقيق ──
     wd = []
@@ -13570,28 +13336,28 @@ def _section_3d_viewer():
 
 
 def _section_survey():
-    # ── 0. خيارات القياس والحصر الهندسي ──
-    len_opts = [
-        "📏 الطول الصافي الخالص بين أوجه الأعمدة (خصم تداخل الأعمدة) [الكود المصري ECP]",
-        "📐 طول المحور كاملاً من السنتر للسنتر (Axis-to-Axis)"
-    ]
-    cur_len_str = st.session_state.get("m15_masonry_len_str", len_opts[0])
-    if cur_len_str not in len_opts:
-        cur_len_str = len_opts[0]
+    # ── اعتماد طريقة قياس أطوال حوائط المباني: الكود المصري ECP (الطول الصافي الخالص بين أوجه الأعمدة) ──
+    len_mode = "clear"
+    st.session_state["m15_masonry_len_mode"] = "clear"
+    st.session_state["m15_masonry_len_str"] = "📏 الطول الصافي الخالص بين أوجه الأعمدة (خصم تداخل الأعمدة) [الكود المصري ECP]"
 
-    chosen_len_str = st.radio(
-        "📐 طريقة قياس أطوال حوائط المباني في الحصر الهندسي:",
-        options=len_opts,
-        index=len_opts.index(cur_len_str),
-        key="m15_len_mode_radio",
-        horizontal=True,
-        help="طبقاً لأصول الحصر بالكود المصري، حوائط المباني تُقاس من وش العمود لوش العمود الصافي بعد خصم مسقط الأعمدة الخرسانية."
+    st.markdown(
+        """<div style='background: linear-gradient(135deg, rgba(30, 58, 138, 0.22) 0%, rgba(15, 23, 42, 0.45) 100%); border: 1.5px solid rgba(59, 130, 246, 0.4); border-right: 5px solid #3b82f6; border-radius: 10px; padding: 12px 18px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;' dir='rtl'>
+            <div style='display: flex; align-items: center; gap: 10px;'>
+                <span style='font-size: 1.35rem;'>📐</span>
+                <div>
+                    <div style='font-weight: bold; font-size: 0.95rem; color: #93c5fd;'>طريقة قياس أطوال حوائط المباني المعتمدة:</div>
+                    <div style='font-size: 0.82rem; color: #cbd5e1; margin-top: 2px;'><b>الكود المصري ECP:</b> الطول الصافي الخالص بين أوجه الأعمدة (خصم تداخل الأعمدة الخرسانية تلقائياً).</div>
+                </div>
+            </div>
+            <span style='background: linear-gradient(135deg, #1e40af, #2563eb); color: #ffffff; font-size: 0.80rem; font-weight: bold; padding: 5px 14px; border-radius: 20px; border: 1px solid #60a5fa;'>
+                📏 الكود المصري: صافي بين أوجه الأعمدة
+            </span>
+        </div>""",
+        unsafe_allow_html=True
     )
-    len_mode = "clear" if "الصافي" in chosen_len_str else "axis"
-    st.session_state["m15_masonry_len_mode"] = len_mode
-    st.session_state["m15_masonry_len_str"] = chosen_len_str
 
-    res = _compute_survey(len_mode=len_mode)
+    res = _compute_survey(len_mode="clear")
     r12 = res["rows_12"]
     r25 = res["rows_25"]
 
@@ -13651,7 +13417,7 @@ def _section_survey():
     total_cement_bags_all = cement_masonry_bags + p_cement_bags
 
     # بطاقة الملخص التنفيذي للحصر الهندسي
-    len_badge = "طول صافي بين الأعمدة" if len_mode == "clear" else "طول المحور كاملاً"
+    len_badge = "الكود المصري: صافي بين أوجه الأعمدة"
     st.markdown(
         f"""<div style='background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1.5px solid #334155; border-radius: 12px; padding: 18px 22px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.25);' dir='rtl'>
         <div style='display:flex; align-items:center; justify-content:space-between; border-bottom: 1px solid #334155; padding-bottom: 12px; margin-bottom: 14px; flex-wrap:wrap; gap:8px;'>
@@ -13887,6 +13653,23 @@ def _section_survey():
             key="m15_price_plaster_labor_per_m2",
             on_change=save_settings
         )
+
+    # التحقق الفوري من أي تعديل في أسعار الخامات والمصنعيات وحفظها في profiles.json فوراً
+    _price_changed = False
+    if float(st.session_state.get("m15_price_brick_per_thousand", 2500.0)) != float(p_brick_in):
+        st.session_state["m15_price_brick_per_thousand"] = float(p_brick_in)
+        _price_changed = True
+    if float(st.session_state.get("m15_price_sand_per_m3", 200.0)) != float(p_sand_in):
+        st.session_state["m15_price_sand_per_m3"] = float(p_sand_in)
+        _price_changed = True
+    if float(st.session_state.get("m15_price_cement_per_ton", 4000.0)) != float(p_cement_in):
+        st.session_state["m15_price_cement_per_ton"] = float(p_cement_in)
+        _price_changed = True
+    if float(st.session_state.get("m15_price_plaster_labor_per_m2", 70.0)) != float(p_plaster_labor_in):
+        st.session_state["m15_price_plaster_labor_per_m2"] = float(p_plaster_labor_in)
+        _price_changed = True
+    if _price_changed:
+        save_settings()
 
     # ── حسابات تكاليف أعمال المباني ──
     brick_thousands = round(bricks_total / 1000.0, 3)

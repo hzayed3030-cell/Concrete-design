@@ -3366,6 +3366,7 @@ else:
             unsafe_allow_html=True,
         )
         if st.button("🏠 العودة إلى قائمة المشاريع", use_container_width=True, key="sb_btn_projects_mgr", help="العودة إلى شاشة إدارة المشاريع الرئيسية"):
+            save_settings()
             st.session_state["nav_view"] = "profile_manager"
             st.session_state["in_module"] = False
             st.rerun()

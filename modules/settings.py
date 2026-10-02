@@ -684,6 +684,7 @@ def get_default_module_15_state() -> dict:
         "price_brick_per_thousand": 2500.0,
         "price_sand_per_m3": 200.0,
         "price_cement_per_ton": 4000.0,
+        "price_plaster_labor_per_m2": 70.0,
         "uploaded_image_b64": "",
         "uploaded_image_name": "",
         "uploaded_image_type": "image/png",
@@ -1723,10 +1724,11 @@ def _clear_widget_cache():
         "module_10_data",
         "module_11_data",
         "module_12_data",
+        "module_15_data",
     }
     keys_to_del = [
         k for k in list(st.session_state.keys())
-        if k not in preserve_keys and not k.startswith("m12_") and not k.startswith("_confirm_")
+        if k not in preserve_keys and not k.startswith("m12_") and not k.startswith("m15_") and not k.startswith("_confirm_")
     ]
     for k in keys_to_del:
         del st.session_state[k]
@@ -2111,6 +2113,7 @@ def _serialize_module_15_state(state: dict) -> dict:
     price_brick = float(state.get("m15_price_brick_per_thousand", 2500.0))
     price_sand = float(state.get("m15_price_sand_per_m3", 200.0))
     price_cement = float(state.get("m15_price_cement_per_ton", 4000.0))
+    price_plaster_labor = float(state.get("m15_price_plaster_labor_per_m2", 70.0))
     uploaded_image_b64 = str(state.get("m15_uploaded_image_b64", ""))
     uploaded_image_name = str(state.get("m15_uploaded_image_name", ""))
     uploaded_image_type = str(state.get("m15_uploaded_image_type", "image/png"))
@@ -2172,6 +2175,7 @@ def _serialize_module_15_state(state: dict) -> dict:
         "price_brick_per_thousand": price_brick,
         "price_sand_per_m3": price_sand,
         "price_cement_per_ton": price_cement,
+        "price_plaster_labor_per_m2": price_plaster_labor,
         "uploaded_image_b64": uploaded_image_b64,
         "uploaded_image_name": uploaded_image_name,
         "uploaded_image_type": uploaded_image_type,
@@ -2328,6 +2332,7 @@ def _deserialize_module_15_state(data: dict) -> dict:
     price_brick = float(data.get("price_brick_per_thousand", schema.get("price_brick_per_thousand", 2500.0)))
     price_sand = float(data.get("price_sand_per_m3", schema.get("price_sand_per_m3", 200.0)))
     price_cement = float(data.get("price_cement_per_ton", schema.get("price_cement_per_ton", 4000.0)))
+    price_plaster_labor = float(data.get("price_plaster_labor_per_m2", schema.get("price_plaster_labor_per_m2", 70.0)))
     uploaded_image_b64 = str(data.get("uploaded_image_b64", schema.get("uploaded_image_b64", "")))
     uploaded_image_name = str(data.get("uploaded_image_name", schema.get("uploaded_image_name", "")))
     uploaded_image_type = str(data.get("uploaded_image_type", schema.get("uploaded_image_type", "image/png")))
@@ -2389,6 +2394,7 @@ def _deserialize_module_15_state(data: dict) -> dict:
         "m15_price_brick_per_thousand": price_brick,
         "m15_price_sand_per_m3": price_sand,
         "m15_price_cement_per_ton": price_cement,
+        "m15_price_plaster_labor_per_m2": price_plaster_labor,
         "m15_uploaded_image_b64": uploaded_image_b64,
         "m15_uploaded_image_name": uploaded_image_name,
         "m15_uploaded_image_type": uploaded_image_type,
@@ -2425,6 +2431,14 @@ def _ensure_module15_state(cfg: dict | None = None) -> None:
             st.session_state["m15_new_col_model"] = f"C({int(st.session_state['m15_new_col_b'])}x{int(st.session_state['m15_new_col_t'])})"
         if "m15_named_spaces" not in st.session_state:
             st.session_state["m15_named_spaces"] = _deserialize_module_15_state(nested).get("m15_named_spaces", [])
+        if "m15_price_brick_per_thousand" not in st.session_state:
+            st.session_state["m15_price_brick_per_thousand"] = float(nested.get("price_brick_per_thousand", 2500.0))
+        if "m15_price_sand_per_m3" not in st.session_state:
+            st.session_state["m15_price_sand_per_m3"] = float(nested.get("price_sand_per_m3", 200.0))
+        if "m15_price_cement_per_ton" not in st.session_state:
+            st.session_state["m15_price_cement_per_ton"] = float(nested.get("price_cement_per_ton", 4000.0))
+        if "m15_price_plaster_labor_per_m2" not in st.session_state:
+            st.session_state["m15_price_plaster_labor_per_m2"] = float(nested.get("price_plaster_labor_per_m2", 70.0))
         return
 
     deserialized = _deserialize_module_15_state(nested)
@@ -2480,6 +2494,14 @@ def reset_module_15_state(cfg: dict | None = None) -> None:
 
 def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
     """Switch active profile, load its data into cfg, and clear widget session cache."""
+    # Ensure any live changes in current active profile are committed before switching
+    current_active = st.session_state.get("_active_profile_name")
+    if current_active and current_active != profile_name and "cfg" in st.session_state:
+        try:
+            save_settings()
+        except Exception:
+            pass
+
     pdata = load_profiles_data()
     profiles = pdata.get("profiles", {})
     if profile_name not in profiles:
@@ -3368,6 +3390,16 @@ def save_settings() -> None:
         st.session_state["module_15_data"] = m15_serialized
     elif "module_15_data" in st.session_state and isinstance(st.session_state["module_15_data"], dict):
         cfg["module_15_masonry_plaster"] = dict(st.session_state["module_15_data"])
+
+    if "module_15_masonry_plaster" in cfg and isinstance(cfg["module_15_masonry_plaster"], dict):
+        if "m15_price_cement_per_ton" in st.session_state:
+            cfg["module_15_masonry_plaster"]["price_cement_per_ton"] = float(st.session_state["m15_price_cement_per_ton"])
+        if "m15_price_brick_per_thousand" in st.session_state:
+            cfg["module_15_masonry_plaster"]["price_brick_per_thousand"] = float(st.session_state["m15_price_brick_per_thousand"])
+        if "m15_price_sand_per_m3" in st.session_state:
+            cfg["module_15_masonry_plaster"]["price_sand_per_m3"] = float(st.session_state["m15_price_sand_per_m3"])
+        if "m15_price_plaster_labor_per_m2" in st.session_state:
+            cfg["module_15_masonry_plaster"]["price_plaster_labor_per_m2"] = float(st.session_state["m15_price_plaster_labor_per_m2"])
     # ── End Module 15 persistence ────────────────────────────────────────────
 
     active_name = get_active_project_name()
