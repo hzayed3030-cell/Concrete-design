@@ -91,7 +91,7 @@ from modules.two_col_footings import render as render_two_col_footings
 from modules.module_9_strap_footing import render_strap_footing_module
 from modules.module_10_diagonal_strap import render_diagonal_strap_module
 from modules.module_11_ground_beam import render_ground_beam_module
-from modules.module_12_brick_survey import render_brick_survey_module
+
 from modules.module_15_masonry_plaster import render_masonry_plaster_module
 from modules.module_13_standalone_flat_slab import render as render_standalone_flat_slab
 from modules.raft_foundations import render_raft_foundations_module
@@ -2381,11 +2381,13 @@ def render_profile_manager():
         copy_badge_html = ""
 
     # Modules badge
-    if len(enabled_mods) < len(ALL_MODULES):
-        short_names = ", ".join([ALL_MODULES[i]["short"] for i in enabled_mods if i in range(len(ALL_MODULES))])
-        custom_badge_html = f'<span style="background: rgba(245, 158, 11, 0.18); color: #b45309; border: 1.5px solid #f59e0b; padding: 3px 10px; border-radius: 14px; font-size: 12.5px; font-weight: 800;">🎛️ مخصص ({len(enabled_mods)}): {short_names}</span>'
+    mod_map = {m["idx"]: m for m in ALL_MODULES}
+    valid_enabled = [i for i in enabled_mods if i in mod_map]
+    if len(valid_enabled) < len(ALL_MODULES):
+        short_names = ", ".join([mod_map[i]["short"] for i in valid_enabled])
+        custom_badge_html = f'<span style="background: rgba(245, 158, 11, 0.18); color: #b45309; border: 1.5px solid #f59e0b; padding: 3px 10px; border-radius: 14px; font-size: 12.5px; font-weight: 800;">🎛️ مخصص ({len(valid_enabled)}): {short_names}</span>'
     else:
-        custom_badge_html = '<span style="background: rgba(2, 132, 199, 0.15); color: #0369a1; border: 1.5px solid #0284c7; padding: 3px 10px; border-radius: 14px; font-size: 12px; font-weight: 800;">🧩 كافة الموديولات (12)</span>'
+        custom_badge_html = f'<span style="background: rgba(2, 132, 199, 0.15); color: #0369a1; border: 1.5px solid #0284c7; padding: 3px 10px; border-radius: 14px; font-size: 12px; font-weight: 800;">🧩 كافة الموديولات ({len(ALL_MODULES)})</span>'
 
     p_last_used_clean = p_last_used[:16] if p_last_used and len(p_last_used) >= 16 else (p_last_used or "-")
     p_updated_clean = p_updated[:16] if p_updated and len(p_updated) >= 16 else (p_updated or "-")
@@ -2810,7 +2812,7 @@ def render_profile_manager():
                     f'• <span style="color: #93c5fd;">موديول 11: البلاطة اللاكمرية المستقلة (Module 11: Standalone - Flat Slabs)</span><br/>'
                     f'• <span style="color: #f472b6;">موديول 12: أقطار وأوزان حديد التسليح (Module 12: Steel Rebar Dimensions & Weights)</span><br/>'
                     f'• <span style="color: #c084fc;">موديول 13: حصر الكميات الخرسانية (Module 13: Concrete Quantity Survey)</span><br/>'
-                    f'• <span style="color: #fb923c;">موديول 14: حصر أعمال الطوب والمحارة (Module 14: Brick & Plastering Survey)</span>'
+                    f'• <span style="color: #fb923c;">موديول 15: اعمال المباني والمحارة (Module 15: Masonry & Plastering Works)</span>'
                     f'</div>'
                     f'</div>'
 
@@ -3158,11 +3160,13 @@ def render_profile_manager():
                 title_shadow = "0 2px 4px rgba(15, 23, 42, 0.95), 0 0 3px rgba(0, 0, 0, 0.90)"
                 badge_html = f'<span style="background: rgba(15, 23, 42, 0.85); color: #f1f5f9; border: 1.5px solid #475569; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 700;">📁 محفوظ #{p_idx}</span>'
 
-            if len(s_enabled_mods) < len(ALL_MODULES):
-                short_names = ", ".join([ALL_MODULES[i]["short"] for i in s_enabled_mods if i in range(len(ALL_MODULES))])
-                custom_badge_html = f'<span style="background: rgba(251, 191, 36, 0.2); color: #fbbf24; border: 1.5px solid #f59e0b; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 800;">🎛️ ({len(s_enabled_mods)}): {short_names}</span>'
+            mod_map = {m["idx"]: m for m in ALL_MODULES}
+            valid_s_enabled = [i for i in s_enabled_mods if i in mod_map]
+            if len(valid_s_enabled) < len(ALL_MODULES):
+                short_names = ", ".join([mod_map[i]["short"] for i in valid_s_enabled])
+                custom_badge_html = f'<span style="background: rgba(251, 191, 36, 0.2); color: #fbbf24; border: 1.5px solid #f59e0b; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 800;">🎛️ ({len(valid_s_enabled)}): {short_names}</span>'
             else:
-                custom_badge_html = '<span style="background: rgba(56, 189, 248, 0.15); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.35); padding: 2px 8px; border-radius: 12px; font-size: 11.5px; font-weight: 700;">🧩 كافة الموديولات (12)</span>'
+                custom_badge_html = f'<span style="background: rgba(56, 189, 248, 0.15); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.35); padding: 2px 8px; border-radius: 12px; font-size: 11.5px; font-weight: 700;">🧩 كافة الموديولات ({len(ALL_MODULES)})</span>'
 
             s_last_used_clean = s_last_used[:16] if s_last_used and len(s_last_used) >= 16 else (s_last_used or "-")
             s_updated_clean = s_updated[:16] if s_updated and len(s_updated) >= 16 else (s_updated or "-")
@@ -3256,7 +3260,7 @@ def render_profile_manager():
 # 1. Fresh application startup: Default to the Projects Manager screen
 if "_app_session_started" not in st.session_state:
     st.session_state["_app_session_started"] = True
-    if "m12_op_move" in st.query_params or st.query_params.get("module") in ["12", "14"]:
+    if "m12_op_move" in st.query_params:
         st.session_state["nav_view"] = "module"
         st.session_state["in_module"] = True
         cfg_set("selected_module_idx", 13)
@@ -3265,11 +3269,11 @@ if "_app_session_started" not in st.session_state:
         st.session_state["in_module"] = False
 
 # 2. Strict Navigation Guard: Once inside a module, modifying ANY input NEVER exits to Projects screen!
-if st.session_state.get("in_module", False) or st.session_state.get("nav_view") == "module" or "m12_op_move" in st.query_params or st.query_params.get("module") in ["12", "14"]:
+if st.session_state.get("in_module", False) or st.session_state.get("nav_view") == "module" or "m12_op_move" in st.query_params:
     current_nav = "module"
     st.session_state["nav_view"] = "module"
     st.session_state["in_module"] = True
-    if "m12_op_move" in st.query_params or st.query_params.get("module") in ["12", "14"]:
+    if "m12_op_move" in st.query_params:
         cfg_set("selected_module_idx", 13)
 else:
     current_nav = "profile_manager"
@@ -3368,12 +3372,13 @@ else:
 
         # Load enabled modules for this specific active project
         proj_enabled_indices = get_project_enabled_modules(active_project_sidebar)
+        mod_map = {m["idx"]: m for m in ALL_MODULES}
         project_module_options = [
-            ALL_MODULES[i]["name"] for i in proj_enabled_indices if i in range(len(ALL_MODULES))
+            mod_map[i]["name"] for i in proj_enabled_indices if i in mod_map
         ]
         if not project_module_options:
             project_module_options = [ALL_MODULES[0]["name"]]
-            proj_enabled_indices = [0]
+            proj_enabled_indices = [ALL_MODULES[0]["idx"]]
 
         # Determine current active selection
         raw_saved_idx = int(cfg_val("selected_module_idx", proj_enabled_indices[0]))
@@ -3459,8 +3464,6 @@ else:
     if not target_k:
         if "Module 15" in module or "masonry_plaster" in module or "اعمال المباني" in module:
             target_k = "masonry_plaster"
-        elif "Module 14" in module or "brick_survey" in module or "طوب" in module or "المحارة" in module:
-            target_k = "brick_survey"
         elif "Module 13" in module or "concrete_survey" in module or ("Concrete" in module and "Survey" in module) or "حصر الكميات" in module:
             target_k = "concrete_survey"
         elif "Module 12" in module or "steel_bars" in module or "Steel Rebar" in module or "أقطار" in module or "اقطار" in module:
@@ -3498,12 +3501,6 @@ else:
             render_masonry_plaster_module()
         except Exception as ex:
             st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 15: {ex}")
-            st.exception(ex)
-    elif mod_key == "brick_survey" or "Module 14" in module or "brick_survey" in module or "طوب" in module or "المحارة" in module:
-        try:
-            render_brick_survey_module()
-        except Exception as ex:
-            st.error(f"⚠️ حدث خطأ أثناء تشغيل موديول 14: {ex}")
             st.exception(ex)
     elif mod_key == "concrete_survey" or "Module 13" in module or "concrete_survey" in module or ("Concrete" in module and "Survey" in module) or "حصر الكميات" in module:
         try:

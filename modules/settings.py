@@ -1517,6 +1517,20 @@ def load_profiles_data() -> dict:
             modified = True
 
         available_indices = [m["idx"] for m in ALL_MODULES if m["idx"] not in deleted_indices]
+        all_module_indices = {m["idx"] for m in ALL_MODULES}
+
+        # Auto-migrate legacy module 13 (old Module 14) -> 14 (Module 15) if present
+        if "enabled_modules" in pdata_dict and isinstance(pdata_dict["enabled_modules"], list):
+            if 13 in pdata_dict["enabled_modules"] and 14 not in pdata_dict["enabled_modules"]:
+                pdata_dict["enabled_modules"] = [14 if i == 13 else i for i in pdata_dict["enabled_modules"]]
+                modified = True
+            elif 13 in pdata_dict["enabled_modules"] and 14 in pdata_dict["enabled_modules"]:
+                pdata_dict["enabled_modules"] = [i for i in pdata_dict["enabled_modules"] if i != 13]
+                modified = True
+
+        if pdata_dict.get("selected_module_idx") == 13:
+            pdata_dict["selected_module_idx"] = 14
+            modified = True
 
         # ── Module 8 / 13-Modules schema migration ───────────────────
         if migrate_module_8_in_project_dict(pdata_dict):
@@ -1525,7 +1539,7 @@ def load_profiles_data() -> dict:
         if "enabled_modules" in pdata_dict and isinstance(pdata_dict["enabled_modules"], list):
             cleaned_enabled = sorted(list(set(
                 int(i) for i in pdata_dict["enabled_modules"]
-                if int(i) in range(len(ALL_MODULES)) and int(i) not in deleted_indices
+                if int(i) in all_module_indices and int(i) not in deleted_indices
             )))
             if not cleaned_enabled and available_indices:
                 cleaned_enabled = [available_indices[0]]
@@ -2577,10 +2591,11 @@ def create_project(
     migrate_module_12_in_project_dict(new_data)
     migrate_module_15_in_project_dict(new_data)
 
+    all_module_indices = {m["idx"] for m in ALL_MODULES}
     # Apply enabled_modules if provided or inherited
     if enabled_modules is not None and isinstance(enabled_modules, list):
-        valid_mods = [int(i) for i in enabled_modules if int(i) in range(len(ALL_MODULES))]
-        new_data["enabled_modules"] = sorted(list(set(valid_mods))) if valid_mods else [0]
+        valid_mods = [int(i) for i in enabled_modules if int(i) in all_module_indices]
+        new_data["enabled_modules"] = sorted(list(set(valid_mods))) if valid_mods else [ALL_MODULES[0]["idx"]]
     elif copy_from and copy_from in profiles and "enabled_modules" in src_data:
         new_data["enabled_modules"] = src_data["enabled_modules"]
     elif "enabled_modules" not in new_data:
@@ -2714,7 +2729,6 @@ ALL_MODULES = [
     {"idx": 10, "key": "standalone_flat_slab", "name": "🏢 Module 11: Standalone - Flat Slabs (البلاطة اللاكمرية المستقلة)", "short": "Module 11"},
     {"idx": 11, "key": "steel_bars", "name": "⚙️ Module 12 — Steel Rebar Dimensions & Weights (أقطار وأوزان حديد التسليح)", "short": "Module 12"},
     {"idx": 12, "key": "concrete_survey", "name": "📊 Module 13 — Concrete Quantity Survey (حصر الكميات الخرسانية)", "short": "Module 13"},
-    {"idx": 13, "key": "brick_survey", "name": "🏠 Module 14: Brick & Plastering Survey (حصر أعمال الطوب والمحارة)", "short": "Module 14"},
     {"idx": 14, "key": "masonry_plaster", "name": "🧱 Module 15: Masonry & Plastering Works (اعمال المباني والمحارة)", "short": "Module 15"},
 ]
 
@@ -2943,7 +2957,7 @@ def get_project_summary(project_name: str) -> dict:
         floors = 1
         module_name = "Circular Tank Foundations"
 
-    elif mod_idx in (10, 11) and "standalone" in str(ALL_MODULES[mod_idx]["key"]):
+    elif mod_idx == 10:
         # ── Module 11: Standalone - Flat Slabs ──
         n_lx = int(data.get("fs_n_lx", 2))
         n_ly = int(data.get("fs_n_ly", 2))
@@ -2976,23 +2990,7 @@ def get_project_summary(project_name: str) -> dict:
         floors = 1
         module_name = "Steel Rebar"
 
-    elif mod_idx in (13, 10):
-        # ── Module 14: Brick & Plastering Survey (حصر أعمال الطوب والمحارة) ──
-        m12 = data.get("module_12_brick_survey", {})
-        xs = m12.get("x_axes", [0.0, 4.0, 8.0])
-        ys = m12.get("y_axes", [0.0, 3.0, 6.0])
-        total_w = float(xs[-1] - xs[0]) if len(xs) >= 2 else 0.0
-        total_h = float(ys[-1] - ys[0]) if len(ys) >= 2 else 0.0
-        area = total_w * total_h
-        n_cols_total = len(m12.get("col_placed", [])) if "col_placed" in m12 else len(xs) * len(ys)
-        n_cols_active = max(0, n_cols_total - len(m12.get("col_removed", [])))
-        n_lx = max(len(xs) - 1, 1)
-        n_ly = max(len(ys) - 1, 1)
-        ts = float(m12.get("default_wall_height", 3.0))
-        floors = 1
-        module_name = "Brick & Plastering Survey"
-
-    elif mod_idx == 14:
+    elif mod_idx in (14, 13):
         # ── Module 15: Masonry & Plastering Works (اعمال المباني والمحارة) ──
         m15 = data.get("module_15_masonry_plaster", {})
         xs = m15.get("x_axes", [0.0, 4.0, 8.0])
@@ -3842,8 +3840,8 @@ MODULE_DATA_KEY_PREFIXES = {
         # Dynamic per-column-type, per-slab, and elements takeoff keys
         "cs_", "surv_", "custom_takeoff_rows",
     ],
-    13: [  # Module 14 — Brick & Plastering Survey
-        "module_12_brick_survey", "m12_", "m14_",
+    14: [  # Module 15 — Masonry & Plastering Works (اعمال المباني والمحارة)
+        "module_15_masonry_plaster", "m15_", "_m15_", "module_15_data",
     ],
 }
 
@@ -3882,12 +3880,12 @@ FUNCTIONAL_DEPENDENCIES: dict[int, list] = {
     10: [], # Module 11 — Standalone - Flat Slabs: 100% Standalone
     11: [], # Module 12 — Steel Rebar: 100% Standalone
     12: [], # Module 13 — Concrete Quantity Survey: 100% Standalone
-    13: [], # Module 14 — Brick & Plastering Survey: 100% Standalone
+    14: [], # Module 15 — Masonry & Plastering Works: 100% Standalone
 }
 
 MODULE_1_REQUIRED_SUBMODULES: set[int] = {1, 2, 3, 4, 5, 6}
 LINKED_MODULE_INDICES: set[int] = {0, 1, 2, 3, 4, 5, 6}
-UNLINKED_MODULE_INDICES: set[int] = {7, 8, 9, 10, 11, 12, 13}
+UNLINKED_MODULE_INDICES: set[int] = {7, 8, 9, 10, 11, 12, 14}
 
 
 def validate_new_project_module_selection(selected_indices: list) -> tuple[bool, list[dict]]:
@@ -3903,7 +3901,8 @@ def validate_new_project_module_selection(selected_indices: list) -> tuple[bool,
     if not selected_indices:
         return False, [{"message": "يرجى اختيار موديول واحد على الأقل للمشروع الجديد."}]
 
-    selected_set = set(int(i) for i in selected_indices if int(i) in range(len(ALL_MODULES)))
+    all_module_indices = {m["idx"] for m in ALL_MODULES}
+    selected_set = set(int(i) for i in selected_indices if int(i) in all_module_indices)
     if not selected_set:
         return False, [{"message": "يرجى اختيار موديول واحد على الأقل للمشروع الجديد."}]
 

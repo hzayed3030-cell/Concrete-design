@@ -1101,89 +1101,6 @@ def show_dialog_m13_concrete_survey():
     st.markdown(html_dialog, unsafe_allow_html=True)
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-#  MODULE 14: BRICK & PLASTERING SURVEY MODAL DIALOG
-# ═══════════════════════════════════════════════════════════════════════════════
-
-@st.dialog("📖 أصول وحسابات حصر أعمال المباني والمحارة والبياض (Brick & Plastering Survey)", width="large")
-def show_dialog_m14_brick_survey():
-    html_dialog = (
-        '<div dir="rtl" style="direction: rtl; text-align: right; font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif; line-height: 1.85; color: #0f172a;">'
-        '<div style="background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #1e40af 100%); color: #ffffff; padding: 20px 24px; border-radius: 12px; margin-bottom: 20px; border: 1.5px solid #3b82f6; box-shadow: 0 6px 18px rgba(15, 23, 42, 0.25);">'
-        '<h3 style="margin: 0 0 10px 0; color: #93c5fd; font-size: 20px; font-weight: 800; display: flex; align-items: center; gap: 8px;">'
-        '<span>🏠 دليل وأصول حصر أعمال المباني والمحارة</span> '
-        '<span dir="ltr" style="font-size: 15px; color: #bfdbfe; font-weight: 600;">(Brick & Plastering Survey Standards)</span>'
-        '</h3>'
-        '<p style="margin: 0; font-size: 14px; color: #e2e8f0; line-height: 1.7;">'
-        'الأصول الهندسية والاشتراطات الفنية المعتمدة لحصر كميات الطوب الأحمر والإسمنتي، واستهلاك المونة الإسمنتية، وقواعد خصم الفتحات، وتكعيب ومساحات أعمال البياض والمحارة الداخلية والخارجية.'
-        '</p>'
-        '</div>'
-
-        '<div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-right: 6px solid #2563eb; border-radius: 10px; padding: 18px 22px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">'
-        '<h4 style="color: #1e40af; margin-top: 0; margin-bottom: 10px; font-size: 16.5px; font-weight: 800;">'
-        '1️⃣ أصول قياس أعمال المباني بالعدد والمكعب والمسطح <span dir="ltr" style="font-size:14px; color:#3b82f6;">(Units of Measurement)</span>'
-        '</h4>'
-        '<ul style="margin-bottom: 6px; padding-right: 22px; line-height: 1.8;">'
-        '<li style="margin-bottom: 8px;">'
-        '<b>الحوائط سمك 25 سم فأكثر (طوبة كاملة):</b> تُحصر هندسياً بالمتر المكعب <span dir="ltr">(m³)</span>، حيث يستهلك المتر المكعب مباني حوالي <span dir="ltr">420 ~ 450 طوبة</span> مقاس <span dir="ltr">25×12×6 cm</span>.'
-        '</li>'
-        '<li>'
-        '<b>القواطيع سمك 12 سم (نصف طوبة):</b> تُحصر هندسياً بالمتر المربع <span dir="ltr">(m²)</span>، حيث يستهلك المتر المربع حوالي <span dir="ltr">55 ~ 58 طوبة</span>.'
-        '</li>'
-        '</ul>'
-        '</div>'
-
-        '<div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-right: 6px solid #16a34a; border-radius: 10px; padding: 18px 22px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">'
-        '<h4 style="color: #15803d; margin-top: 0; margin-bottom: 10px; font-size: 16.5px; font-weight: 800;">'
-        '2️⃣ القواعد القياسية لخصم الفتحات هندسياً <span dir="ltr" style="font-size:14px; color:#16a34a;">(Openings Deduction Criteria)</span>'
-        '</h4>'
-        '<ul style="margin-bottom: 6px; padding-right: 22px; line-height: 1.8;">'
-        '<li style="margin-bottom: 8px;">'
-        '<b>الفتحات الصغيرة (أقل من 0.5 م²):</b> لا تخصم إطلاقاً من مسطح المباني مقابل تكلفة هالك القص وتلبيش الأكتاف.'
-        '</li>'
-        '<li style="margin-bottom: 8px;">'
-        '<b>الفتحات المتوسطة (من 0.5 م² إلى 3.0 م²):</b> يخصم نصف مساحة الفتحة مقابل مصنعيات الجلسات والأعتاب وتأسيس الحلوق.'
-        '</li>'
-        '<li>'
-        '<b>الفتحات الكبيرة (أكبر من 3.0 م²):</b> تخصم مساحة الفتحة بالكامل من مسطح الحائط.'
-        '</li>'
-        '</ul>'
-        '</div>'
-
-        '<div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-right: 6px solid #d97706; border-radius: 10px; padding: 18px 22px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">'
-        '<h4 style="color: #b45309; margin-top: 0; margin-bottom: 10px; font-size: 16.5px; font-weight: 800;">'
-        '3️⃣ استهلاك المونة الإسمنتية ومكوناتها <span dir="ltr" style="font-size:14px; color:#d97706;">(Mortar Consumption & Mix Proportions)</span>'
-        '</h4>'
-        '<ul style="margin-bottom: 6px; padding-right: 22px; line-height: 1.8;">'
-        '<li style="margin-bottom: 8px;">'
-        '<b>حجم المونة الإسمنتية الفعلي:</b> يمثل حجم المونة الفعلي حوالي <span dir="ltr">20% ~ 25%</span> من إجمالي حجم حائط المباني.'
-        '</li>'
-        '<li>'
-        '<b>نسب خلط مونة المباني:</b> يخلط المتر المكعب رمل مع <span dir="ltr">300 ~ 350 kg</span> إسمنت بورتلاندي (حوالي <span dir="ltr">6 ~ 7 شكاير</span> إسمنت لكل متر مكعب رمل ناعم أو حرش).'
-        '</li>'
-        '</ul>'
-        '</div>'
-
-        '<div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-right: 6px solid #7c3aed; border-radius: 10px; padding: 18px 22px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">'
-        '<h4 style="color: #6d28d9; margin-top: 0; margin-bottom: 10px; font-size: 16.5px; font-weight: 800;">'
-        '4️⃣ أصول حصر أعمال المحارة والبياض <span dir="ltr" style="font-size:14px; color:#7c3aed;">(Plastering Take-off Standards)</span>'
-        '</h4>'
-        '<ul style="margin-bottom: 6px; padding-right: 22px; line-height: 1.8;">'
-        '<li style="margin-bottom: 8px;">'
-        '<b>طبقات البياض المتكاملة:</b>'
-        '<br/>• الطرطشة العمومية <span dir="ltr">(Spatterdash)</span>: بمعدل <span dir="ltr">450 kg</span> إسمنت/م³ رمل سمك <span dir="ltr">0.5 cm</span>.'
-        '<br/>• البؤج والأوتار <span dir="ltr">(Screeds & Dots)</span>: لضبط الاستواء والتعامد التام للحوائط.'
-        '<br/>• البطانة والظهارة <span dir="ltr">(Undercoat & Finish Coat)</span>: سمك <span dir="ltr">1.5 ~ 2.0 cm</span> للحوائط و <span dir="ltr">1.0 cm</span> للأسقف.'
-        '</li>'
-        '<li>'
-        '<b>حصر المسطحات:</b> تحصر مساحات المحارة بالمتر المربع الصافي للحوائط والأسقف والواجهات، مع حساب الجوانب <span dir="ltr">(Reveals)</span> لفتحات الأبواب والنوافذ.'
-        '</li>'
-        '</ul>'
-        '</div>'
-        '</div>'
-    )
-    st.markdown(html_dialog, unsafe_allow_html=True)
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  MODULE 15: MASONRY & PLASTERING WORKS MODAL DIALOG
@@ -1329,12 +1246,6 @@ MODULE_PHILOSOPHY_MAP = {
         "help_text": "عرض دليل القواعد الهندسية لحصر وتكعيب الخرسانة المسلحة والعادية ومعدلات استهلاك التسليح",
         "dialog_func": show_dialog_m13_concrete_survey,
     },
-    "brick_survey": {
-        "title": "🏠 Module 14 – Brick & Plastering Survey (حصر وتدقيق أعمال المباني والمحارة)",
-        "btn_text": "📖 الاطلاع على أصول وحسابات حصر أعمال المباني والمحارة والبياض",
-        "help_text": "عرض دليل القواعد الهندسية لحصر أعمال المباني بالمتر المكعب والمربع وخصم الفتحات والمحارة",
-        "dialog_func": show_dialog_m14_brick_survey,
-    },
     "masonry_plaster": {
         "title": "🧱 Module 15 – Masonry & Plastering Works (اعمال المباني والمحارة)",
         "btn_text": "📖 الاطلاع على فلسفة وأصول اسقاط وحصر أعمال المباني والمحارة (ECP 203 & BOQ)",
@@ -1381,14 +1292,13 @@ _KEY_ALIASES = {
     "module 13": "concrete_survey",
     "module_13": "concrete_survey",
     "حصر": "concrete_survey",
-    "module 14": "brick_survey",
-    "module_14": "brick_survey",
-    "طوب": "brick_survey",
-    "المباني": "brick_survey",
     "module 15": "masonry_plaster",
     "module_15": "masonry_plaster",
     "masonry_plaster": "masonry_plaster",
     "اعمال المباني": "masonry_plaster",
+    "طوب": "masonry_plaster",
+    "المباني": "masonry_plaster",
+    "محارة": "masonry_plaster",
 }
 
 
