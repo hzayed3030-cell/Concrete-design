@@ -8173,14 +8173,17 @@ body.m12-dragging-active iframe {
     border-bottom: 1.5px solid rgba(59, 130, 246, 0.3);
     border-top-left-radius: 11px;
     border-top-right-radius: 11px;
-    padding: 8px 12px;
+    padding: 4px 8px;
+    height: 38px;
+    min-height: 38px;
+    max-height: 38px;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
-    justify-content: space-between;
-    gap: 6px 8px;
+    justify-content: flex-end;
+    gap: 6px;
     cursor: grab;
-    direction: rtl;
+    direction: ltr;
     flex-shrink: 0;
     box-sizing: border-box;
     width: 100%;
@@ -8189,62 +8192,16 @@ body.m12-dragging-active iframe {
 .m12-fp-header:active {
     cursor: grabbing;
 }
-.m12-fp-title-wrap {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 6px;
-    font-size: 13px;
-    font-weight: 700;
-    color: #93c5fd;
-    flex: 1 1 auto;
-    min-width: 0;
-    max-width: 100%;
-}
-.m12-fp-title-text {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    flex-shrink: 1;
-}
-.m12-fp-badge {
-    font-size: 10.5px;
-    background: rgba(59, 130, 246, 0.2);
-    color: #93c5fd;
-    padding: 2px 7px;
-    border-radius: 5px;
-    border: 1px solid rgba(59, 130, 246, 0.35);
-    font-weight: normal;
-    max-width: 140px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    direction: ltr;
-    flex-shrink: 1;
-}
-.m12-fp-shortcut-badge {
-    font-size: 10.5px;
-    background: rgba(255, 255, 255, 0.1);
-    color: #e2e8f0;
-    padding: 2px 7px;
-    border-radius: 5px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    font-family: Consolas, monospace;
-    direction: ltr;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
 .m12-fp-actions {
     position: relative;
     z-index: 160;
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
-    gap: 5px;
+    flex-wrap: nowrap;
+    gap: 6px;
     direction: ltr;
     flex-shrink: 0;
     margin-inline-start: auto;
-    max-width: 100%;
 }
 .m12-fp-btn {
     position: relative;
@@ -8253,8 +8210,8 @@ body.m12-dragging-active iframe {
     border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 6px;
     color: #e2e8f0;
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -8379,18 +8336,11 @@ _FLOATING_PLAN_CONTROLLER_JS = r"""(function() {
             <div class="m12-rh m12-rh-se" data-dir="se" title="سحب لتغيير المقاس"><span class="m12-corner-mark"></span></div>
 
             <div class="m12-fp-header" id="m12-fp-header">
-                <div class="m12-fp-title-wrap">
-                    <span style="font-size:16px;">🖼️</span>
-                    <span class="m12-fp-title-text">المسقط المعماري الاسترشادي</span>
-                    <span class="m12-fp-badge" id="m12-fp-name-badge"></span>
-                    <span class="m12-fp-shortcut-badge">Ctrl + Alt + F (ب)</span>
-                    <span class="m12-fp-badge" id="m12-fp-zoom-badge" style="color:#60a5fa; font-weight:700; font-family:Consolas, monospace;">100%</span>
-                </div>
                 <div class="m12-fp-actions">
-                    <button type="button" class="m12-fp-btn" id="m12-fp-btn-zoom-out" title="تصغير (−)" onclick="window.m15FloatingPlan && window.m15FloatingPlan.zoomBy(0.8)">−</button>
                     <button type="button" class="m12-fp-btn" id="m12-fp-btn-zoom-in" title="تكبير (+)" onclick="window.m15FloatingPlan && window.m15FloatingPlan.zoomBy(1.25)">+</button>
-                    <button type="button" class="m12-fp-btn" id="m12-fp-btn-reset" title="إعادة ضبط (Reset)" onclick="window.m15FloatingPlan && window.m15FloatingPlan.resetView(true)">↺</button>
+                    <button type="button" class="m12-fp-btn" id="m12-fp-btn-zoom-out" title="تصغير (−)" onclick="window.m15FloatingPlan && window.m15FloatingPlan.zoomBy(0.8)">−</button>
                     <button type="button" class="m12-fp-btn" id="m12-fp-btn-max" title="تكبير / استعادة الإطار" onclick="window.m15FloatingPlan && window.m15FloatingPlan.toggleMax()">⛶</button>
+                    <button type="button" class="m12-fp-btn" id="m12-fp-btn-reset" title="إعادة ضبط (Reset)" onclick="window.m15FloatingPlan && window.m15FloatingPlan.resetView(true)">↺</button>
                     <button type="button" class="m12-fp-btn m12-fp-btn-close" id="m12-fp-btn-close" title="إغلاق (Esc)" onclick="window.m15FloatingPlan && window.m15FloatingPlan.close()">×</button>
                 </div>
             </div>
@@ -8901,7 +8851,7 @@ def _inject_floating_plan_viewer():
     cur_type_js = json.dumps(cur_type)
     cur_b64_js = json.dumps(cur_b64) if has_image else '""'
 
-    CONTROLLER_VERSION = "2026.10.01.v2"
+    CONTROLLER_VERSION = "2026.10.02.v1"
     js_controller = _FLOATING_PLAN_CONTROLLER_JS.replace("__VERSION_TOKEN__", CONTROLLER_VERSION)
 
     inject_code = f"""
@@ -13755,6 +13705,125 @@ def _section_survey():
     </div>""",
         unsafe_allow_html=True
     )
+
+    # ── بانيل مساحات الفتحات (شبابيك + أبواب) وخصمها من المباني ──
+    # حساب تفصيلي للفتحات على مستوى كل حائط وتصنيفها حسب سُمك الطوب
+    _openings_detail_12 = []   # فتحات الحوائط سمك 12 سم
+    _openings_detail_25 = []   # فتحات الحوائط سمك 25 سم
+    _wins_area_12 = 0.0; _doors_area_12 = 0.0
+    _wins_area_25 = 0.0; _doors_area_25 = 0.0
+    _wins_count_12 = 0; _doors_count_12 = 0
+    _wins_count_25 = 0; _doors_count_25 = 0
+    _removed_walls = st.session_state.get("m15_wall_removed", set())
+    _wm_op = _get_wall_name_map(); _cm_op = _get_col_name_map()
+    for _wk in _get_all_walls():
+        if _wk in _removed_walls:
+            continue
+        _thick = _get_wall_thickness(_wk)
+        _wa, _da = 0.0, 0.0
+        _wc, _dc = 0, 0
+        for _wi in _get_wall_windows(_wk):
+            if not _wi.get("removed", False):
+                _wa += float(_wi.get("w_m", 1.0)) * float(_wi.get("h_m", 1.2))
+                _wc += 1
+        for _di in _get_wall_doors(_wk):
+            if not _di.get("removed", False):
+                _da += float(_di.get("w_m", 0.9)) * float(_di.get("h_m", 2.1))
+                _dc += 1
+        _i1, _j1, _i2, _j2 = _wk
+        _wlbl = f"{_wm_op.get(_wk,'—')}: {_cm_op.get((_i1,_j1),f'({_i1+1},{_j1+1})')}→{_cm_op.get((_i2,_j2),f'({_i2+1},{_j2+1})')}"
+        _detail = {"حائط": _wlbl, "شبابيك (م²)": round(_wa, 2), "أبواب (م²)": round(_da, 2),
+                   "إجمالي الفتحات (م²)": round(_wa + _da, 2), "عدد شبابيك": _wc, "عدد أبواب": _dc}
+        if _thick == _WALL_THIN:
+            _openings_detail_12.append(_detail)
+            _wins_area_12 += _wa; _doors_area_12 += _da
+            _wins_count_12 += _wc; _doors_count_12 += _dc
+        else:
+            _openings_detail_25.append(_detail)
+            _wins_area_25 += _wa; _doors_area_25 += _da
+            _wins_count_25 += _wc; _doors_count_25 += _dc
+
+    _total_op12 = round(_wins_area_12 + _doors_area_12, 2)
+    _total_op25 = round(_wins_area_25 + _doors_area_25, 2)
+    _grand_op   = round(_total_op12 + _total_op25, 2)
+
+    # ─ بانيل تفصيل الفتحات المخصومة ─
+    _rows_wins_doors_html = ""
+    _all_op_detail = [("12 سم", _openings_detail_12), ("25 سم", _openings_detail_25)]
+    for _thick_lbl, _op_list in _all_op_detail:
+        for _row in _op_list:
+            if _row["إجمالي الفتحات (م²)"] > 0:
+                _icon = "🟠" if _thick_lbl == "12 سم" else "🟣"
+                _rows_wins_doors_html += f"""
+<tr style='border-bottom:1px solid #1e293b;'>
+<td style='padding:6px 10px; text-align:right; color:#e2e8f0; font-size:0.82rem;'>{_icon} {_row['حائط']}</td>
+<td style='padding:6px 10px; color:#93c5fd; font-weight:bold; font-size:0.82rem;'>{_thick_lbl}</td>
+<td style='padding:6px 10px; color:#87ceeb; font-size:0.82rem;'>{_row['عدد شبابيك']} ({_row['شبابيك (م²)']:.2f} م²)</td>
+<td style='padding:6px 10px; color:#86efac; font-size:0.82rem;'>{_row['عدد أبواب']} ({_row['أبواب (م²)']:.2f} م²)</td>
+<td style='padding:6px 10px; color:#fbbf24; font-weight:bold; font-size:0.82rem;'>{_row['إجمالي الفتحات (م²)']:.2f} م²</td>
+</tr>"""
+
+    _openings_panel_html = f"""
+<div style='background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); border: 1.5px solid #7c3aed; border-radius: 12px; padding: 16px 20px; margin-top: 14px; margin-bottom: 14px; box-shadow: 0 4px 14px rgba(124,58,237,0.25);' dir='rtl'>
+  <div style='display:flex; align-items:center; justify-content:space-between; border-bottom: 1px solid rgba(124,58,237,0.4); padding-bottom: 10px; margin-bottom: 12px; flex-wrap:wrap; gap:8px;'>
+    <div style='font-weight:bold; font-size:1.02rem; color:#c4b5fd; display:flex; align-items:center; gap:8px;'>
+      <span>🪟</span>
+      <span>بانيل مساحات الفتحات (شبابيك + أبواب) المخصومة من حصر المباني</span>
+    </div>
+    <span style='background: rgba(124,58,237,0.25); color:#ddd6fe; font-size:0.78rem; font-weight:bold; padding:4px 12px; border-radius:20px; border:1px solid #7c3aed;'>خصم تلقائي من كل حائط</span>
+  </div>
+  <div style='display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:14px;'>
+    <div style='background:rgba(249,115,22,0.12); border:1px solid rgba(249,115,22,0.4); border-right:4px solid #f97316; padding:10px 14px; border-radius:8px;'>
+      <div style='font-size:0.80rem; color:#fdba74; font-weight:bold;'>🟠 فتحات طوب 12 سم</div>
+      <div style='font-size:1.20rem; font-weight:bold; color:#ffedd5; margin-top:3px;'>{_total_op12:.2f} <span style='font-size:0.82rem; color:#fed7aa;'>م² مخصوم</span></div>
+      <div style='font-size:0.72rem; color:#94a3b8; margin-top:2px;'>{_wins_count_12} شباك ({_wins_area_12:.2f}م²) + {_doors_count_12} باب ({_doors_area_12:.2f}م²)</div>
+    </div>
+    <div style='background:rgba(168,85,247,0.12); border:1px solid rgba(168,85,247,0.4); border-right:4px solid #a855f7; padding:10px 14px; border-radius:8px;'>
+      <div style='font-size:0.80rem; color:#d8b4fe; font-weight:bold;'>🟣 فتحات طوب 25 سم</div>
+      <div style='font-size:1.20rem; font-weight:bold; color:#faf5ff; margin-top:3px;'>{_total_op25:.2f} <span style='font-size:0.82rem; color:#e9d5ff;'>م² مخصوم</span></div>
+      <div style='font-size:0.72rem; color:#94a3b8; margin-top:2px;'>{_wins_count_25} شباك ({_wins_area_25:.2f}م²) + {_doors_count_25} باب ({_doors_area_25:.2f}م²)</div>
+    </div>
+    <div style='background:rgba(234,179,8,0.12); border:1px solid rgba(234,179,8,0.4); border-right:4px solid #eab308; padding:10px 14px; border-radius:8px;'>
+      <div style='font-size:0.80rem; color:#fde047; font-weight:bold;'>🪟 إجمالي كل الفتحات</div>
+      <div style='font-size:1.20rem; font-weight:bold; color:#fef08a; margin-top:3px;'>{_grand_op:.2f} <span style='font-size:0.82rem; color:#fef9c3;'>م² إجمالي خصم</span></div>
+      <div style='font-size:0.72rem; color:#94a3b8; margin-top:2px;'>{_wins_count_12+_wins_count_25} شباك + {_doors_count_12+_doors_count_25} باب في كل الحوائط</div>
+    </div>
+    <div style='background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.4); border-right:4px solid #10b981; padding:10px 14px; border-radius:8px;'>
+      <div style='font-size:0.80rem; color:#6ee7b7; font-weight:bold;'>📐 مسطح طوب 12 سم الصافي</div>
+      <div style='font-size:1.20rem; font-weight:bold; color:#ecfdf5; margin-top:3px;'>{n12:.2f} <span style='font-size:0.82rem; color:#a7f3d0;'>م² مسطح</span></div>
+      <div style='font-size:0.72rem; color:#94a3b8; margin-top:2px;'>إجمالي {g12:.2f}م² — فتحات {op12:.2f}م² = صافي</div>
+    </div>
+    <div style='background:rgba(236,72,153,0.12); border:1px solid rgba(236,72,153,0.4); border-right:4px solid #ec4899; padding:10px 14px; border-radius:8px;'>
+      <div style='font-size:0.80rem; color:#f472b6; font-weight:bold;'>📦 حجم طوب 25 سم المكعب</div>
+      <div style='font-size:1.20rem; font-weight:bold; color:#fdf2f8; margin-top:3px;'>{v25:.2f} <span style='font-size:0.82rem; color:#fbcfe8;'>م³ مكعب</span></div>
+      <div style='font-size:0.72rem; color:#94a3b8; margin-top:2px;'>صافي مسطح {n25:.2f}م² × سُمك 0.25م — فتحات {op25:.2f}م²</div>
+    </div>
+  </div>"""
+
+    if _rows_wins_doors_html:
+        _openings_panel_html += f"""
+  <details style='margin-top:6px;'>
+    <summary style='cursor:pointer; color:#c4b5fd; font-size:0.84rem; font-weight:bold; padding:6px 4px; list-style:none; display:flex; align-items:center; gap:6px;'>
+      ▶ تفصيل الفتحات لكل حائط (انقر للتوسيع)
+    </summary>
+    <div style='overflow-x:auto; margin-top:10px;'>
+      <table style='width:100%; border-collapse:collapse; font-size:0.82rem; text-align:center;' dir='rtl'>
+        <thead>
+          <tr style='background:rgba(15,23,42,0.9); border-bottom:2px solid #475569;'>
+            <th style='padding:8px 10px; color:#f8fafc; text-align:right;'>الحائط</th>
+            <th style='padding:8px 10px; color:#93c5fd;'>سُمك الطوب</th>
+            <th style='padding:8px 10px; color:#87ceeb;'>الشبابيك</th>
+            <th style='padding:8px 10px; color:#86efac;'>الأبواب</th>
+            <th style='padding:8px 10px; color:#fbbf24;'>إجمالي الخصم</th>
+          </tr>
+        </thead>
+        <tbody>{_rows_wins_doors_html}</tbody>
+      </table>
+    </div>
+  </details>"""
+
+    _openings_panel_html += "</div>"
+    st.html(_openings_panel_html) if hasattr(st, "html") else st.markdown(_openings_panel_html, unsafe_allow_html=True)
 
     # ── قسم مدخلات الأسعار وتكاليف أعمال المباني والمحارة ──
     header_pricing_html = """<div style='background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1.5px solid #3b82f6; border-radius: 12px; padding: 14px 20px; margin-top: 14px; margin-bottom: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.25);' dir='rtl'>

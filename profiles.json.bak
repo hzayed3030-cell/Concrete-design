@@ -5,8 +5,8 @@
       "name": "مباني ومحارة الدور الثالث - هشام زايد",
       "description": "مشروع مباني ومحارة الدور الثالث - هشام زايد",
       "created_at": "2026-10-01 19:21",
-      "updated_at": "2026-10-02 17:36",
-      "last_used_at": "2026-10-02 17:36:33",
+      "updated_at": "2026-10-02 20:36",
+      "last_used_at": "2026-10-02 20:36:33",
       "data": {
         "selected_module_idx": 14,
         "apartment_name": "مباني ومحارة الدور الثالث - هشام زايد",
@@ -2141,6 +2141,26 @@
                 "pos_m": 1.5,
                 "leaf_dir": "أعلى",
                 "hinge_dir": "يسار",
+                "removed": true,
+                "is_preview": false,
+                "has_conflict": false
+              },
+              {
+                "id": "door_24",
+                "kind": "door",
+                "wk": [
+                  3,
+                  9,
+                  6,
+                  9
+                ],
+                "name": "D1-6",
+                "type_label": "D1",
+                "w_m": 0.8,
+                "h_m": 2.1,
+                "pos_m": 1.5,
+                "leaf_dir": "أعلى",
+                "hinge_dir": "يسار",
                 "removed": false,
                 "is_preview": false,
                 "has_conflict": false
@@ -2257,7 +2277,7 @@
               }
             ]
           },
-          "next_op_id": 24,
+          "next_op_id": 25,
           "window_types": [
             {
               "id": "wt_1",
