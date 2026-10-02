@@ -15,6 +15,7 @@ from modules.settings import (
     cfg_set,
     save_settings,
     play_warning_sound,
+    play_delete_confirmation_whistle,
     _ensure_module12_state,
     reset_module_12_state,
 )
@@ -3845,6 +3846,7 @@ def _confirm_delete_wall(wk):
     removed_walls.add(wk)
     st.session_state["m12_wall_removed"] = removed_walls
     st.session_state["m12_pending_delete_wall"] = None
+    st.session_state.pop("_last_del_confirm_whistle_token", None)
     st.session_state.pop("m12_plan_png_b64", None)
     save_settings()
     cm = _get_col_name_map()
@@ -4745,6 +4747,7 @@ def _section_delete_walls():
 
     # 2. بطاقة تأكيد الحذف عند التقاط حائط معلق
     if pending_wk and pending_wk in all_walls:
+        play_delete_confirmation_whistle(f"m12_del_wall_{pending_wk}")
         p_label = _wall_display_label(pending_wk, cm, wm)
         p_len = _wall_length_m(pending_wk)
         p_th = _get_wall_thickness(pending_wk)
@@ -4766,6 +4769,7 @@ def _section_delete_walls():
         with c_sec_n:
             if st.button("❌ إلغاء", key="m12_sec_conf_del_wall_no", use_container_width=True):
                 st.session_state["m12_pending_delete_wall"] = None
+                st.session_state.pop("_last_del_confirm_whistle_token", None)
                 st.rerun()
 
     # 3. اختيار يدوي بديل من القائمة
@@ -4781,6 +4785,7 @@ def _section_delete_walls():
                 target_wk = active_walls[sel_w_idx - 1]
                 if st.button("🗑️ حذف هذا الحائط", key="m12_btn_request_dropdown_del_wall", use_container_width=True):
                     st.session_state["m12_pending_delete_wall"] = target_wk
+                    play_delete_confirmation_whistle(f"m12_del_wall_{target_wk}")
                     st.session_state["m12_del_wall_mode"] = True
                     st.rerun()
 
@@ -4923,10 +4928,11 @@ def _section_columns():
     orig_cname = f"C{sj * len(xs) + si + 1}"
     cname = cn.get((si, sj), orig_cname)
     if is_rem:
-        st.error(f"🗑️ العمود **{orig_cname}** عند تقاطع (Y{si+1}, X{sj+1}) محذوف — يمكنك استعادته من قسم '♻️ استعادة أعمدة' بالسحب على المسقط.")
+        st.info(f"🗑️ العمود **{orig_cname}** عند تقاطع (Y{si+1}, X{sj+1}) محذوف — يمكنك استعادته من قسم '♻️ استعادة أعمدة' بالسحب على المسقط.")
 
     # تأكيد حذف العمود
     if not is_rem and st.session_state.get("m12_confirm_del_col") == (si,sj):
+        play_delete_confirmation_whistle(f"m12_del_col_{si}_{sj}")
         st.warning(f"⚠️ تأكيد حذف العمود {cname}؟ سيتم إزالة العمود الخرساني مع بقاء الحوائط قائمة على المحاور، وتسجيله في سجل المحذوفات.")
         cyes, cno = st.columns(2)
         with cyes:
@@ -4935,17 +4941,21 @@ def _section_columns():
                 removed_cols.add((si,sj)); st.session_state["m12_col_removed"]=removed_cols
                 st.session_state.pop("m12_plan_png_b64", None)
                 save_settings()
-                st.session_state.pop("m12_confirm_del_col",None)
+                st.session_state.pop("m12_confirm_del_col", None)
+                st.session_state.pop("_last_del_confirm_whistle_token", None)
                 st.toast(f"🗑️ تم حذف العمود {cname} وحفظه في سجل استعادة الأعمدة!", icon="🗑️")
                 st.rerun()
         with cno:
             if st.button("❌ إلغاء", key="m12_confirm_del_no", use_container_width=True):
-                st.session_state.pop("m12_confirm_del_col",None); st.rerun()
+                st.session_state.pop("m12_confirm_del_col", None)
+                st.session_state.pop("_last_del_confirm_whistle_token", None)
+                st.rerun()
 
     if not is_rem:
         if st.session_state.get("m12_confirm_del_col") != (si, sj):
             if st.button("🗑️ حذف العمود", key="m12_del_col", use_container_width=True):
                 st.session_state["m12_confirm_del_col"] = (si, sj)
+                play_delete_confirmation_whistle(f"m12_del_col_{si}_{sj}")
                 st.rerun()
     else:
         st.info("💡 استخدم زر '♻️ استعادة أعمدة' لاستعادة هذا العمود بالسحب على المسقط.")
@@ -5135,6 +5145,7 @@ def _section_walls():
 
         # ── تأكيد حذف الحائط ──
         if not is_rem and st.session_state.get("m12_confirm_del_wall") == wk:
+            play_delete_confirmation_whistle(f"m12_del_wall_sec3_{wk}")
             st.warning(f"⚠️ تأكيد حذف الحائط {_wall_display_label(wk, cm, wm)}؟ يمكن استعادته لاحقاً.")
             cyes, cno = st.columns(2)
             with cyes:
@@ -5142,12 +5153,14 @@ def _section_walls():
                     removed_walls.add(wk)
                     st.session_state["m12_wall_removed"] = removed_walls
                     st.session_state.pop("m12_confirm_del_wall", None)
+                    st.session_state.pop("_last_del_confirm_whistle_token", None)
                     st.session_state.pop("m12_plan_png_b64", None)
                     save_settings()
                     st.rerun()
             with cno:
                 if st.button("❌ إلغاء", key="m12_conf_wall_no", use_container_width=True):
                     st.session_state.pop("m12_confirm_del_wall", None)
+                    st.session_state.pop("_last_del_confirm_whistle_token", None)
                     st.rerun()
 
         # ── الاختيارات الثلاث للتحكم في الحائط المختار ──
@@ -5444,12 +5457,13 @@ def _section_walls():
                 if st.session_state.get("m12_confirm_del_wall") != wk:
                     if st.button("🗑️ حذف الحائط", key="m12_del_wall", use_container_width=True):
                         st.session_state["m12_confirm_del_wall"] = wk
+                        play_delete_confirmation_whistle(f"m12_del_wall_sec3_{wk}")
                         st.rerun()
                 else:
                     st.button("⏳ تأكيد الحذف بالأعلى", key="m12_del_wall_dis", disabled=True, use_container_width=True)
 
         if is_rem:
-            st.warning(f"🗑️ الحائط '{_wlbl(sel)}' محذوف حالياً (يظهر كخط استرشادي رمادي فقط ولا يُحسب في الحصر الهندسـي). يمكنك استعادته من قسم '♻️ استعادة الحوائط المحذوفة'.")
+            st.info(f"🗑️ الحائط '{_wlbl(sel)}' محذوف حالياً (يظهر كخط استرشادي رمادي فقط ولا يُحسب في الحصر الهندسـي). يمكنك استعادته من قسم '♻️ استعادة الحوائط المحذوفة'.")
 
     # ── 4. جدول الحوائط مع عمود التصنيف والارتفاع الدقيق ──
     wd = []
@@ -6418,20 +6432,24 @@ def _section_delete_restore_openings():
                         
                         # رسالة تأكيد الحذف الخاصة بالشباك
                         if st.session_state.get(f"m12_del_sec_conf_win_{wid}"):
+                            play_delete_confirmation_whistle(f"m12_del_win_{wid}")
                             st.warning(f"⚠️ تأكيد حذف الشباك {wname} من {wlbl}؟")
                             c_y, c_n = st.columns(2)
                             with c_y:
                                 if st.button(f"💥 تأكيد: حذف الشباك {wname}", key=f"m12_btn_sec_conf_del_win_yes_{wid}", use_container_width=True):
                                     _remove_opening_by_id(wid, "win")
                                     st.session_state.pop(f"m12_del_sec_conf_win_{wid}", None)
+                                    st.session_state.pop("_last_del_confirm_whistle_token", None)
                                     st.rerun()
                             with c_n:
                                 if st.button("❌ إلغاء", key=f"m12_btn_sec_conf_del_win_no_{wid}", use_container_width=True):
                                     st.session_state.pop(f"m12_del_sec_conf_win_{wid}", None)
+                                    st.session_state.pop("_last_del_confirm_whistle_token", None)
                                     st.rerun()
                         else:
                             if st.button(f"🗑️ حذف الشباك {wname}", key=f"m12_btn_sec_del_win_{wid}", use_container_width=True):
                                 st.session_state[f"m12_del_sec_conf_win_{wid}"] = True
+                                play_delete_confirmation_whistle(f"m12_del_win_{wid}")
                                 st.rerun()
 
     # ═══════════════════════════════════════════════════════════════════════
@@ -6481,20 +6499,24 @@ def _section_delete_restore_openings():
                         
                         # رسالة تأكيد الحذف الخاصة بالباب
                         if st.session_state.get(f"m12_del_sec_conf_door_{did}"):
+                            play_delete_confirmation_whistle(f"m12_del_door_{did}")
                             st.warning(f"⚠️ تأكيد حذف الباب {dname} من {wlbl}؟")
                             c_y_d, c_n_d = st.columns(2)
                             with c_y_d:
                                 if st.button(f"💥 تأكيد: حذف الباب {dname}", key=f"m12_btn_sec_conf_del_door_yes_{did}", use_container_width=True):
                                     _remove_opening_by_id(did, "door")
                                     st.session_state.pop(f"m12_del_sec_conf_door_{did}", None)
+                                    st.session_state.pop("_last_del_confirm_whistle_token", None)
                                     st.rerun()
                             with c_n_d:
                                 if st.button("❌ إلغاء", key=f"m12_btn_sec_conf_del_door_no_{did}", use_container_width=True):
                                     st.session_state.pop(f"m12_del_sec_conf_door_{did}", None)
+                                    st.session_state.pop("_last_del_confirm_whistle_token", None)
                                     st.rerun()
                         else:
                             if st.button(f"🗑️ حذف الباب {dname}", key=f"m12_btn_sec_del_door_{did}", use_container_width=True):
                                 st.session_state[f"m12_del_sec_conf_door_{did}"] = True
+                                play_delete_confirmation_whistle(f"m12_del_door_{did}")
                                 st.rerun()
 
 
@@ -10675,6 +10697,7 @@ def render_brick_survey_module():
             if pending_del_w:
                 all_walls = _get_all_walls()
                 if pending_del_w in all_walls:
+                    play_delete_confirmation_whistle(f"m12_plan_del_wall_{pending_del_w}")
                     cm = _get_col_name_map()
                     wm = _get_wall_name_map()
                     p_label = _wall_display_label(pending_del_w, cm, wm)
@@ -10699,6 +10722,7 @@ def render_brick_survey_module():
                     with c_rc_n:
                         if st.button("❌ إلغاء", key="m12_rc_cancel_del_wall_btn", use_container_width=True):
                             st.session_state["m12_pending_delete_wall"] = None
+                            st.session_state.pop("_last_del_confirm_whistle_token", None)
                             st.rerun()
 
             if is_add_active:

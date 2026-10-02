@@ -57,6 +57,7 @@ from modules.settings import (
     validate_batch_module_deletion,
     play_warning_sound,
     play_strong_whistle_siren,
+    play_delete_confirmation_whistle,
     play_system_delete_blocked_sound,
     get_deleted_modules_trash,
     soft_delete_module,
@@ -2139,10 +2140,8 @@ def render_profile_manager():
     # ── Delete Confirmation Dialog (ENLARGED + WARNING BEEP) ───────────────
     if st.session_state.get("_profile_to_delete"):
         del_target = st.session_state["_profile_to_delete"]
-        # Trigger strong emergency warning whistle / siren before the confirmation message
-        if st.session_state.get("_play_strong_whistle_now", True):
-            play_strong_whistle_siren()
-            st.session_state["_play_strong_whistle_now"] = False
+        # Trigger strong emergency warning whistle before the confirmation message
+        play_delete_confirmation_whistle(f"app_del_proj_{del_target}")
         st.markdown(
             f"""
             <div dir="rtl" style="background: linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #3f0a0a 100%); border: 3.5px solid #ef4444; border-radius: 14px; padding: 22px 26px; margin: 12px 0 16px 0; box-shadow: 0 10px 35px rgba(239, 68, 68, 0.45); text-align: right;">
@@ -2186,6 +2185,7 @@ def render_profile_manager():
                 delete_project(del_target)
                 st.session_state["_profile_to_delete"] = None
                 st.session_state.pop("_play_strong_whistle_now", None)
+                st.session_state.pop("_last_del_confirm_whistle_token", None)
                 st.session_state.pop(f"input_sure_del_proj_{del_target}", None)
                 st.success(f"✅ تم حذف المشروع «{del_target}» بالكامل بنجاح.")
                 st.rerun()
@@ -2195,6 +2195,7 @@ def render_profile_manager():
             if st.button("❌ تراجع / إلغاء", key=f"btn_cancel_del_proj_{del_target}", use_container_width=True):
                 st.session_state["_profile_to_delete"] = None
                 st.session_state.pop("_play_strong_whistle_now", None)
+                st.session_state.pop("_last_del_confirm_whistle_token", None)
                 st.session_state.pop(f"input_sure_del_proj_{del_target}", None)
                 st.rerun()
 
@@ -2949,8 +2950,8 @@ def render_profile_manager():
 
                     # Stage 2b: Valid Selection -> "I am sure" Confirmation Dialog
                     elif pending_batch is not None:
-                        play_warning_sound()
                         indices_to_del = pending_batch["indices"]
+                        play_delete_confirmation_whistle(f"app_del_batch_{pname}_{sorted(indices_to_del)}")
                         linked_pairs = pending_batch.get("linked_pairs", [])
 
                         del_names = [
@@ -3014,6 +3015,7 @@ def render_profile_manager():
                             ):
                                 ok, msg = soft_delete_modules_batch(pname, indices_to_del)
                                 st.session_state.pop(f"_pending_batch_del_{pname}", None)
+                                st.session_state.pop("_last_del_confirm_whistle_token", None)
                                 st.session_state[f"_show_delete_mod_{pname}"] = False
                                 if ok:
                                     st.success(f"✅ {msg}")
@@ -3024,6 +3026,7 @@ def render_profile_manager():
                             st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
                             if st.button("❌ تراجع", key=f"btn_cancel_sure_del_{pname}", use_container_width=True):
                                 st.session_state.pop(f"_pending_batch_del_{pname}", None)
+                                st.session_state.pop("_last_del_confirm_whistle_token", None)
                                 st.rerun()
 
                 # Close Delete Drawer button
@@ -3033,6 +3036,7 @@ def render_profile_manager():
                         st.session_state[f"_show_delete_mod_{pname}"] = False
                         st.session_state.pop(f"_pending_batch_del_{pname}", None)
                         st.session_state.pop(f"_batch_warning_{pname}", None)
+                        st.session_state.pop("_last_del_confirm_whistle_token", None)
                         st.rerun()
 
             st.markdown("<hr style='margin:6px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)

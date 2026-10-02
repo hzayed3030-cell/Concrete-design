@@ -691,6 +691,7 @@ def get_default_module_15_state() -> dict:
         "uploaded_image_w": None,
         "uploaded_image_h": None,
         "named_spaces": [],
+        "merged_wall_label_style": "single",
     }
 
 get_default_masonry_plaster_state = get_default_module_15_state
@@ -2164,6 +2165,7 @@ def _serialize_module_15_state(state: dict) -> dict:
         "uploaded_image_w": uploaded_image_w,
         "uploaded_image_h": uploaded_image_h,
         "named_spaces": clean_spaces,
+        "merged_wall_label_style": str(state.get("m15_merged_wall_label_style", "single")),
     }
 
 
@@ -2380,6 +2382,7 @@ def _deserialize_module_15_state(data: dict) -> dict:
         "m15_uploaded_image_w": uploaded_image_w,
         "m15_uploaded_image_h": uploaded_image_h,
         "m15_named_spaces": named_spaces,
+        "m15_merged_wall_label_style": str(data.get("merged_wall_label_style", schema.get("merged_wall_label_style", "single"))),
     }
 
 
@@ -4043,7 +4046,7 @@ ALARM_WAV_B64: str = base64.b64encode(ALARM_WAV_BYTES).decode('ascii')
 _LAST_WHISTLE_TIMESTAMP: float = 0.0
 
 
-def play_warning_sound() -> None:
+def play_warning_sound(force: bool = False) -> None:
     """
     Centralized Warning Sound mechanism for ALL warning messages across the application:
     Emits exactly ONE single sharp whistle (2600 Hz pure piercing tone, 0.28s).
@@ -4059,7 +4062,7 @@ def play_warning_sound() -> None:
     except Exception:
         pass
     last = max(_LAST_WHISTLE_TIMESTAMP, getattr(st, "_last_whistle_time", 0.0), last_sess)
-    if now - last < 2.0:
+    if not force and (now - last < 2.0):
         return
     _LAST_WHISTLE_TIMESTAMP = now
     st._last_whistle_time = now
@@ -4071,35 +4074,42 @@ def play_warning_sound() -> None:
 
     try:
         import streamlit.components.v1 as components
-        js_code = """
+        force_js = "true" if force else "false"
+        js_code = f"""
         <html>
         <head><meta charset="utf-8"></head>
         <body style="margin:0;padding:0;overflow:hidden;background:transparent;">
         <script>
-        (function() {
-            try {
+        (function() {{
+            try {{
                 var now = Date.now();
-                // 1. Guard against duplicate play in parent window / React re-mounts
-                try {
-                    if (window.top && window.top !== window) {
-                        var topLast = window.top.__last_warning_whistle || 0;
-                        if (now - topLast < 2000) return;
-                        window.top.__last_warning_whistle = now;
-                    }
-                } catch(e) {}
+                var force = {force_js};
+                if (!force) {{
+                    // 1. Guard against duplicate play in parent window / React re-mounts
+                    try {{
+                        if (window.top && window.top !== window) {{
+                            var topLast = window.top.__last_warning_whistle || 0;
+                            if (now - topLast < 2000) return;
+                            window.top.__last_warning_whistle = now;
+                        }}
+                    }} catch(e) {{}}
 
-                // 2. Guard against duplicate play across iframe contexts via sessionStorage
-                try {
-                    var sessLast = parseInt(sessionStorage.getItem('__last_whistle_ts') || '0');
-                    if (now - sessLast < 2000) return;
-                    sessionStorage.setItem('__last_whistle_ts', now.toString());
-                } catch(e) {}
+                    // 2. Guard against duplicate play across iframe contexts via sessionStorage
+                    try {{
+                        var sessLast = parseInt(sessionStorage.getItem('__last_whistle_ts') || '0');
+                        if (now - sessLast < 2000) return;
+                        sessionStorage.setItem('__last_whistle_ts', now.toString());
+                    }} catch(e) {{}}
+                }} else {{
+                    try {{ if (window.top) window.top.__last_warning_whistle = now; }} catch(e) {{}}
+                    try {{ sessionStorage.setItem('__last_whistle_ts', now.toString()); }} catch(e) {{}}
+                }}
 
                 // 3. Synthesize exactly ONE single sharp whistle
                 var AudioCtx = window.AudioContext || window.webkitAudioContext;
                 if (!AudioCtx) return;
                 var ctx = new AudioCtx();
-                if (ctx.state === 'suspended') { ctx.resume(); }
+                if (ctx.state === 'suspended') {{ ctx.resume(); }}
 
                 var t = ctx.currentTime;
                 var dur = 0.28;
@@ -4120,8 +4130,8 @@ def play_warning_sound() -> None:
 
                 osc.start(t);
                 osc.stop(t + dur);
-            } catch(e) {}
-        })();
+            }} catch(e) {{}}
+        }})();
         </script>
         </body>
         </html>
@@ -4240,11 +4250,38 @@ play_system_delete_blocked_sound = play_warning_sound
 play_sharp_whistle_alert = play_warning_sound
 
 
+def play_delete_confirmation_whistle(token: str = "") -> None:
+    """
+    Emits the warning whistle once immediately before / when a delete confirmation dialog or card
+    is displayed to the user across ANY module.
+
+    Guarantees:
+    - Sounds strictly ONCE per confirmation prompt instance (using a token stored in session_state).
+    - Prevents repeating on subsequent re-renders while the user is looking at the confirmation dialog.
+    - Sounds BEFORE the confirmation prompt, and NEVER after deletion.
+    - Token can be any identifier (e.g., 'del_wall_(0,0,1,0)', 'del_col_1_2', 'del_proj_MyProj', etc.).
+    """
+    try:
+        if not hasattr(st, "session_state"):
+            play_warning_sound(force=True)
+            return
+        last_token = st.session_state.get("_last_del_confirm_whistle_token")
+        if token and last_token == token:
+            # Already whistled for this confirmation instance
+            return
+        if token:
+            st.session_state["_last_del_confirm_whistle_token"] = token
+        play_warning_sound(force=True)
+    except Exception:
+        play_warning_sound()
+
+
 def _install_unified_warning_hook() -> None:
     """
     Installs a global automatic hook on st.warning and st.error so that any warning or error
     displayed across ANY module automatically plays the single sharp whistle sound.
     Includes a 2.0s debounce to guarantee strictly one sound per user interaction.
+    Excludes post-deletion status / trash notifications so no whistle sounds after deletion.
     """
     if getattr(st, "_unified_whistle_hooked", False):
         return
@@ -4263,12 +4300,24 @@ def _install_unified_warning_hook() -> None:
         if now - last >= 2.0:
             play_warning_sound()
 
+    def _is_post_deletion_msg(body) -> bool:
+        try:
+            s = str(body)
+            # Never whistle for messages indicating something is already deleted or in trash
+            if any(k in s for k in ["محذوف حالياً", "محذوف —", "محذوف -", "تم الحذف بنجاح", "تم حذف", "تمت عملية الحذف", "سجل المحذوفات"]):
+                return True
+        except Exception:
+            pass
+        return False
+
     def _hooked_st_warning(body, *args, **kwargs):
-        _trigger_debounced_whistle()
+        if not _is_post_deletion_msg(body):
+            _trigger_debounced_whistle()
         return _orig_st_warning(body, *args, **kwargs)
 
     def _hooked_st_error(body, *args, **kwargs):
-        _trigger_debounced_whistle()
+        if not _is_post_deletion_msg(body):
+            _trigger_debounced_whistle()
         return _orig_st_error(body, *args, **kwargs)
 
     st.warning = _hooked_st_warning

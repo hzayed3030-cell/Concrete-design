@@ -15,6 +15,7 @@ from modules.settings import (
     cfg_set,
     save_settings,
     play_warning_sound,
+    play_delete_confirmation_whistle,
     ALARM_WAV_B64,
     _ensure_module15_state,
     reset_module_15_state,
@@ -34,7 +35,7 @@ M15_SHIFT_Y_OPTIONS = [
     "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)",
     "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)",
 ]
-_CLR_WALL_12="#EFA368"; _CLR_WALL_25="#8B1A1A"
+_CLR_WALL_12="#EFA368"; _CLR_WALL_25="#8B1A1A"; _CLR_WALL_PARAPET="#0284C7"
 _CLR_COL="#2F4F8F"; _CLR_COL_REMOVED="#BBBBBB"
 _CLR_WIN="#87CEEB"; _CLR_DOOR="#2E7D32"
 _CLR_AXIS_X="#E53935"; _CLR_AXIS_Y="#1565C0"
@@ -159,6 +160,10 @@ def _init_state():
         st.session_state["m15_add_door_mode"] = False
     if "m15_named_spaces" not in st.session_state:
         st.session_state["m15_named_spaces"] = []
+    if "m15_merged_wall_label_style" not in st.session_state:
+        st.session_state["m15_merged_wall_label_style"] = "single"
+    if "m15_new_wall_thick_choice" not in st.session_state:
+        st.session_state["m15_new_wall_thick_choice"] = 12
 
     # تنظيف المتغيرات القديمة الخاصة بآلية الإضافة والاستعادة السابقة والمفاتيح المتضاربة
     for old_k in ["m15_add_col_sel", "m15_del_active_col_sel", "m15_confirm_del_col_tab", "m15_col_restore_expander_open"]:
@@ -583,8 +588,9 @@ def _wall_display_label(w_key, cm, wm):
 def _compute_effective_walls():
     """
     يحسب الحوائط الفعالة لموديول 15:
-    - كل حائط يمتد بدقة من تقاطع محوري (x, y) إلى أقرب تقاطع مجاور له (x, y) على نفس المحور.
-    - لا يتم دمج الحوائط المتصلة إطلاقاً، بل تعتبر كل مسافة بين تقاطعين متجاورين حائطاً مستقلاً وله اسم منفصل (L1, L2...).
+    - دمج الحوائط المتلاصقة على نفس الاستقامة في حائط واحد متصل وبطول إجمالي موحد،
+      طالما لا يفصل بينها عمود نشط أو حائط متعامد، وتتطابق في السُمك وحالة الدروة والحذف.
+    - يتيح ذلك إسقاط الشبابيك والأبواب على كامل طول الحائط المدمج (مثل L49 بطول 3.8م).
     """
     placed = st.session_state.get("m15_walls_placed", [])
     xs = st.session_state.get("m15_x_axes", [])
@@ -612,17 +618,123 @@ def _compute_effective_walls():
                 if 0 <= k < ny - 1 and 0 <= i1 < nx:
                     v_intervals.setdefault(i1, set()).add((k, k + 1))
 
+    active_cols = set(_get_active_columns())
+    removed_walls = st.session_state.get("m15_wall_removed", set())
+
+    def _is_unit_removed(s):
+        if not removed_walls:
+            return False
+        if s in removed_walls:
+            return True
+        i1, j1, i2, j2 = s
+        for rw in removed_walls:
+            t = _safe_coord_tuple(rw, 4)
+            if not t:
+                continue
+            ri1, rj1, ri2, rj2 = t
+            if j1 == j2 == rj1 == rj2:
+                if min(ri1, ri2) <= min(i1, i2) and max(ri1, ri2) >= max(i1, i2):
+                    return True
+            elif i1 == i2 == ri1 == ri2:
+                if min(rj1, rj2) <= min(j1, j2) and max(rj1, rj2) >= max(j1, j2):
+                    return True
+        return False
+
+    def _has_active_perp_at_h(k, j):
+        if k in v_intervals:
+            if j > 0 and (j - 1, j) in v_intervals[k]:
+                if not _is_unit_removed((k, j - 1, k, j)):
+                    return True
+            if j < ny - 1 and (j, j + 1) in v_intervals[k]:
+                if not _is_unit_removed((k, j, k, j + 1)):
+                    return True
+        return False
+
+    def _has_active_perp_at_v(i, k):
+        if k in h_intervals:
+            if i > 0 and (i - 1, i) in h_intervals[k]:
+                if not _is_unit_removed((i - 1, k, i, k)):
+                    return True
+            if i < nx - 1 and (i, i + 1) in h_intervals[k]:
+                if not _is_unit_removed((i, k, i + 1, k)):
+                    return True
+        return False
+
     effective = []
 
-    # الحوائط الأفقية: كل مسافة بين تقاطعين متجاورين تمثل حائطاً مستقلاً تماماً
+    # 1. دمج الحوائط الأفقية المتلاصقة
     for j in sorted(h_intervals.keys()):
-        for seg in sorted(list(h_intervals[j])):
-            effective.append((seg[0], j, seg[1], j))
+        unit_list = sorted(list(h_intervals[j]), key=lambda u: u[0])
+        if not unit_list:
+            continue
+        cur_start_i, cur_end_i = unit_list[0]
+        cur_seg = (cur_start_i, j, cur_end_i, j)
+        cur_rem = _is_unit_removed(cur_seg)
+        cur_th = _get_wall_thickness(cur_seg)
+        cur_pw = _is_parapet_wall(cur_seg)
 
-    # الحوائط الرأسية: كل مسافة بين تقاطعين متجاورين تمثل حائطاً مستقلاً تماماً
+        for nxt in unit_list[1:]:
+            nxt_start_i, nxt_end_i = nxt
+            if nxt_start_i == cur_end_i:
+                mid_k = cur_end_i
+                nxt_seg = (nxt_start_i, j, nxt_end_i, j)
+                nxt_rem = _is_unit_removed(nxt_seg)
+                nxt_th = _get_wall_thickness(nxt_seg)
+                nxt_pw = _is_parapet_wall(nxt_seg)
+
+                has_col = (mid_k, j) in active_cols
+                has_perp = _has_active_perp_at_h(mid_k, j)
+                same_state = (cur_rem == nxt_rem) and (cur_th == nxt_th) and (cur_pw == nxt_pw)
+
+                if not has_col and not has_perp and same_state:
+                    cur_end_i = nxt_end_i
+                    continue
+
+            effective.append((cur_start_i, j, cur_end_i, j))
+            cur_start_i, cur_end_i = nxt_start_i, nxt_end_i
+            cur_seg = (cur_start_i, j, cur_end_i, j)
+            cur_rem = _is_unit_removed(cur_seg)
+            cur_th = _get_wall_thickness(cur_seg)
+            cur_pw = _is_parapet_wall(cur_seg)
+
+        effective.append((cur_start_i, j, cur_end_i, j))
+
+    # 2. دمج الحوائط الرأسية المتلاصقة
     for i in sorted(v_intervals.keys()):
-        for seg in sorted(list(v_intervals[i])):
-            effective.append((i, seg[0], i, seg[1]))
+        unit_list = sorted(list(v_intervals[i]), key=lambda u: u[0])
+        if not unit_list:
+            continue
+        cur_start_j, cur_end_j = unit_list[0]
+        cur_seg = (i, cur_start_j, i, cur_end_j)
+        cur_rem = _is_unit_removed(cur_seg)
+        cur_th = _get_wall_thickness(cur_seg)
+        cur_pw = _is_parapet_wall(cur_seg)
+
+        for nxt in unit_list[1:]:
+            nxt_start_j, nxt_end_j = nxt
+            if nxt_start_j == cur_end_j:
+                mid_k = cur_end_j
+                nxt_seg = (i, nxt_start_j, i, nxt_end_j)
+                nxt_rem = _is_unit_removed(nxt_seg)
+                nxt_th = _get_wall_thickness(nxt_seg)
+                nxt_pw = _is_parapet_wall(nxt_seg)
+
+                has_col = (i, mid_k) in active_cols
+                has_perp = _has_active_perp_at_v(i, mid_k)
+                same_state = (cur_rem == nxt_rem) and (cur_th == nxt_th) and (cur_pw == nxt_pw)
+
+                if not has_col and not has_perp and same_state:
+                    cur_end_j = nxt_end_j
+                    continue
+
+            effective.append((i, cur_start_j, i, cur_end_j))
+            cur_start_j, cur_end_j = nxt_start_j, nxt_end_j
+            cur_seg = (i, cur_start_j, i, cur_end_j)
+            cur_rem = _is_unit_removed(cur_seg)
+            cur_th = _get_wall_thickness(cur_seg)
+            cur_pw = _is_parapet_wall(cur_seg)
+
+        effective.append((i, cur_start_j, i, cur_end_j))
 
     return effective
 
@@ -630,6 +742,33 @@ def _compute_effective_walls():
 def _get_all_walls():
     """كافة الحوائط الفعالة لموديول 15 (كل فترة بين تقاطعين متجاورين حائط مستقل)."""
     return _compute_effective_walls()
+
+
+def _get_wall_for_segment(seg, walls_list=None):
+    """
+    إرجاع الحائط الفعلي (المدمج أو المنفصل) من قائمة الحوائط الذي يغطي القطعة المعطاة (i1, j1, i2, j2).
+    """
+    t = _safe_coord_tuple(seg, 4)
+    if not t:
+        return None
+    if walls_list is None:
+        walls_list = _get_all_walls()
+    i1, j1, i2, j2 = t
+    if j1 == j2:
+        si_min, si_max = min(i1, i2), max(i1, i2)
+        for w in walls_list:
+            if w[1] == w[3] == j1:
+                wi_min, wi_max = min(w[0], w[2]), max(w[0], w[2])
+                if wi_min <= si_min and wi_max >= si_max:
+                    return w
+    else:
+        sj_min, sj_max = min(j1, j2), max(j1, j2)
+        for w in walls_list:
+            if w[0] == w[2] == i1:
+                wj_min, wj_max = min(w[1], w[3]), max(w[1], w[3])
+                if wj_min <= sj_min and wj_max >= sj_max:
+                    return w
+    return None
 
 
 
@@ -661,10 +800,173 @@ def _get_active_columns():
     ]
 
 
+def _get_merged_wall_display_groups():
+    """
+    تجميع الحوائط المتلاصقة على نفس الاستقامة في المسقط الأفقي المصمم:
+    - الحوائط المتلاصقة التي لا يفصلها عمود نشط ولا حائط متعامد عليها،
+      والتي تشترك في نفس السُمك ونفس حالة الدروة،
+      يتم دمجها في مجموعة واحدة لوضع اسم واحد موحد لها في منتصف الحائط المدمج.
+    """
+    xs = st.session_state.get("m15_x_axes", [])
+    ys = st.session_state.get("m15_y_axes", [])
+    removed_walls = st.session_state.get("m15_wall_removed", set())
+    all_walls = _get_all_walls()
+    active_walls = [w for w in all_walls if w not in removed_walls]
+    if not active_walls or len(xs) < 2 or len(ys) < 2:
+        return []
+
+    active_cols = set(_get_active_columns())
+    active_set = set(active_walls)
+    parapet_set = set(st.session_state.get("m15_parapet_walls", set()))
+
+    groups = []
+
+    # 1. الحوائط الأفقية مجمعة حسب خط المحور Y_j
+    h_by_j = {}
+    for w in active_walls:
+        if w[1] == w[3]:
+            h_by_j.setdefault(w[1], []).append(w)
+
+    for j, segs in sorted(h_by_j.items()):
+        segs.sort(key=lambda x: (min(x[0], x[2]), max(x[0], x[2])))
+        cur_group = [segs[0]]
+        for nxt in segs[1:]:
+            prev = cur_group[-1]
+            prev_x_max = max(prev[0], prev[2])
+            nxt_x_min = min(nxt[0], nxt[2])
+            if prev_x_max == nxt_x_min:
+                mid_pt = (prev_x_max, j)
+                has_col = mid_pt in active_cols
+                # فحص الحوائط المتعامدة (الرأسية) التي تلتقي عند نقطة الاتصال
+                has_perp = (
+                    (prev_x_max, j - 1, prev_x_max, j) in active_set or
+                    (prev_x_max, j, prev_x_max, j + 1) in active_set
+                )
+                same_th = (_get_wall_thickness(prev) == _get_wall_thickness(nxt))
+                same_parapet = ((prev in parapet_set) == (nxt in parapet_set))
+                if not has_col and not has_perp and same_th and same_parapet:
+                    cur_group.append(nxt)
+                    continue
+            groups.append(cur_group)
+            cur_group = [nxt]
+        if cur_group:
+            groups.append(cur_group)
+
+    # 2. الحوائط الرأسية مجمعة حسب خط المحور X_i
+    v_by_i = {}
+    for w in active_walls:
+        if w[0] == w[2]:
+            v_by_i.setdefault(w[0], []).append(w)
+
+    for i, segs in sorted(v_by_i.items()):
+        segs.sort(key=lambda x: (min(x[1], x[3]), max(x[1], x[3])))
+        cur_group = [segs[0]]
+        for nxt in segs[1:]:
+            prev = cur_group[-1]
+            prev_y_max = max(prev[1], prev[3])
+            nxt_y_min = min(nxt[1], nxt[3])
+            if prev_y_max == nxt_y_min:
+                mid_pt = (i, prev_y_max)
+                has_col = mid_pt in active_cols
+                # فحص الحوائط المتعامدة (الأفقية) التي تلتقي عند نقطة الاتصال
+                has_perp = (
+                    (i - 1, prev_y_max, i, prev_y_max) in active_set or
+                    (i, prev_y_max, i + 1, prev_y_max) in active_set
+                )
+                same_th = (_get_wall_thickness(prev) == _get_wall_thickness(nxt))
+                same_parapet = ((prev in parapet_set) == (nxt in parapet_set))
+                if not has_col and not has_perp and same_th and same_parapet:
+                    cur_group.append(nxt)
+                    continue
+            groups.append(cur_group)
+            cur_group = [nxt]
+        if cur_group:
+            groups.append(cur_group)
+
+    return groups
+
+
+def _sync_wall_stores_to_effective_walls():
+    """
+    مزامنة وتوحيد بيانات الحوائط (السمك، الارتفاع، الدروة، الحذف، والفتحات)
+    مع الحوائط الفعالة المدمجة الحالية لضمان بقاء الفتحات على الحائط المدمج بكامل طوله.
+    """
+    xs = st.session_state.get("m15_x_axes", [])
+    ys = st.session_state.get("m15_y_axes", [])
+    if len(xs) < 2 or len(ys) < 2:
+        return
+
+    eff_walls = _compute_effective_walls()
+    if not eff_walls:
+        return
+
+    wt = st.session_state.get("m15_wall_thickness", {})
+    wh = st.session_state.get("m15_wall_heights", {})
+    pw = set(st.session_state.get("m15_parapet_walls", set()))
+
+    for ew in eff_walls:
+        if ew not in wt:
+            wt[ew] = _get_wall_thickness(ew)
+        if ew not in wh:
+            wh[ew] = _get_wall_height(ew)
+        if _is_parapet_wall(ew):
+            pw.add(ew)
+
+    st.session_state["m15_wall_thickness"] = wt
+    st.session_state["m15_wall_heights"] = wh
+    st.session_state["m15_parapet_walls"] = pw
+
+    for kind_key in ["m15_windows", "m15_doors"]:
+        store = st.session_state.get(kind_key, {})
+        new_store = {}
+        for old_wk, ops in list(store.items()):
+            t = _safe_coord_tuple(old_wk, 4)
+            if not t or not ops:
+                continue
+            matched_eff = _get_wall_for_segment(t, eff_walls)
+            target_wk = matched_eff if matched_eff else t
+            offset = 0.0
+            if matched_eff and matched_eff != t:
+                if t[1] == t[3] == matched_eff[1] == matched_eff[3]:
+                    offset = abs(xs[min(t[0], t[2])] - xs[min(matched_eff[0], matched_eff[2])])
+                elif t[0] == t[2] == matched_eff[0] == matched_eff[2]:
+                    offset = abs(ys[min(t[1], t[3])] - ys[min(matched_eff[1], matched_eff[3])])
+
+            target_list = new_store.setdefault(target_wk, [])
+            seen_ids = set(op.get("id") for op in target_list if op.get("id"))
+            for op in ops:
+                oid = op.get("id")
+                if oid and oid in seen_ids:
+                    continue
+                if oid:
+                    seen_ids.add(oid)
+                op_c = dict(op)
+                op_c["wk"] = target_wk
+                if matched_eff and matched_eff != t and offset > 0:
+                    op_c["pos_m"] = round(float(op.get("pos_m", 0.0)) + offset, 2)
+                target_list.append(op_c)
+
+        st.session_state[kind_key] = new_store
+
+    # 4. مزامنة وتوحيد أوجه المحارة مع الحوائط الفعالة المدمجة
+    pf = st.session_state.get("m15_plaster_faces", {})
+    new_pf = {}
+    for old_wk, faces in pf.items():
+        t = _safe_coord_tuple(old_wk, 4)
+        if not t or not faces:
+            continue
+        matched_eff = _get_wall_for_segment(t, eff_walls)
+        target_wk = matched_eff if matched_eff else t
+        cur_list = new_pf.setdefault(target_wk, [])
+        for f in faces:
+            if f not in cur_list:
+                cur_list.append(f)
+    st.session_state["m15_plaster_faces"] = new_pf
+
+
 def _normalize_wall_keys():
     """
-    تسوية مفاتيح الحوائط القديمة المدمجة لضمان تقسيمها إلى مفاتيح فردية بين المحاور المتجاورة
-    بحيث لا تضيع أي بيانات سمك أو شبابيك أو أبواب من جلسات سابقة مع الحماية من تجاوز حدود المحاور.
+    تسوية مفاتيح الحوائط لضمان مطابقتها لحدود شبكة المحاور الحالية وتوحيد الفتحات على الحوائط المدمجة.
     """
     xs = st.session_state.get("m15_x_axes", [])
     ys = st.session_state.get("m15_y_axes", [])
@@ -673,7 +975,7 @@ def _normalize_wall_keys():
     if nx < 2 or ny < 2:
         return
 
-    # 0. تسوية قائمة الحوائط الموضوعة (m15_walls_placed) لتكون بين كل تقاطعين متجاورين
+    # 0. تسوية قائمة الحوائط الموضوعة (m15_walls_placed)
     placed = st.session_state.get("m15_walls_placed", [])
     new_placed = []
     for item in placed:
@@ -708,18 +1010,8 @@ def _normalize_wall_keys():
         t = _safe_coord_tuple(wk, 4)
         if not t:
             continue
-        i1, j1, i2, j2 = t
-        if j1 == j2 and abs(i2 - i1) > 1:
-            for i in range(min(i1, i2), max(i1, i2)):
-                if i + 1 < nx:
-                    new_wt[(i, j1, i + 1, j1)] = val
-        elif i1 == i2 and abs(j2 - j1) > 1:
-            for j in range(min(j1, j2), max(j1, j2)):
-                if j + 1 < ny:
-                    new_wt[(i1, j, i1, j + 1)] = val
-        else:
-            if max(i1, i2) < nx and max(j1, j2) < ny:
-                new_wt[t] = val
+        if max(t[0], t[2]) < nx and max(t[1], t[3]) < ny:
+            new_wt[t] = val
     st.session_state["m15_wall_thickness"] = new_wt
 
     # 2. تسوية ارتفاعات الحوائط
@@ -729,18 +1021,8 @@ def _normalize_wall_keys():
         t = _safe_coord_tuple(wk, 4)
         if not t:
             continue
-        i1, j1, i2, j2 = t
-        if j1 == j2 and abs(i2 - i1) > 1:
-            for i in range(min(i1, i2), max(i1, i2)):
-                if i + 1 < nx:
-                    new_wh[(i, j1, i + 1, j1)] = val
-        elif i1 == i2 and abs(j2 - j1) > 1:
-            for j in range(min(j1, j2), max(j1, j2)):
-                if j + 1 < ny:
-                    new_wh[(i1, j, i1, j + 1)] = val
-        else:
-            if max(i1, i2) < nx and max(j1, j2) < ny:
-                new_wh[t] = val
+        if max(t[0], t[2]) < nx and max(t[1], t[3]) < ny:
+            new_wh[t] = val
     st.session_state["m15_wall_heights"] = new_wh
 
     # 2.5 تسوية حوائط الدروة
@@ -750,18 +1032,8 @@ def _normalize_wall_keys():
         t = _safe_coord_tuple(wk, 4)
         if not t:
             continue
-        i1, j1, i2, j2 = t
-        if j1 == j2 and abs(i2 - i1) > 1:
-            for i in range(min(i1, i2), max(i1, i2)):
-                if i + 1 < nx:
-                    new_pw.add((i, j1, i + 1, j1))
-        elif i1 == i2 and abs(j2 - j1) > 1:
-            for j in range(min(j1, j2), max(j1, j2)):
-                if j + 1 < ny:
-                    new_pw.add((i1, j, i1, j + 1))
-        else:
-            if max(i1, i2) < nx and max(j1, j2) < ny:
-                new_pw.add(t)
+        if max(t[0], t[2]) < nx and max(t[1], t[3]) < ny:
+            new_pw.add(t)
     st.session_state["m15_parapet_walls"] = new_pw
 
     # 3. تسوية الحوائط المحذوفة
@@ -771,63 +1043,12 @@ def _normalize_wall_keys():
         t = _safe_coord_tuple(wk, 4)
         if not t:
             continue
-        i1, j1, i2, j2 = t
-        if j1 == j2 and abs(i2 - i1) > 1:
-            for i in range(min(i1, i2), max(i1, i2)):
-                if i + 1 < nx:
-                    new_rw.add((i, j1, i + 1, j1))
-        elif i1 == i2 and abs(j2 - j1) > 1:
-            for j in range(min(j1, j2), max(j1, j2)):
-                if j + 1 < ny:
-                    new_rw.add((i1, j, i1, j + 1))
-        else:
-            if max(i1, i2) < nx and max(j1, j2) < ny:
-                new_rw.add(t)
+        if max(t[0], t[2]) < nx and max(t[1], t[3]) < ny:
+            new_rw.add(t)
     st.session_state["m15_wall_removed"] = new_rw
 
-    # 4. تسوية الشبابيك والأبواب
-    for kind_key in ["m15_windows", "m15_doors"]:
-        store = st.session_state.get(kind_key, {})
-        new_store = {}
-        for wk, ops in list(store.items()):
-            t = _safe_coord_tuple(wk, 4)
-            if not t:
-                continue
-            i1, j1, i2, j2 = t
-            is_h = (j1 == j2)
-            span_len = abs(i2 - i1) if is_h else abs(j2 - j1)
-            if span_len > 1:
-                for op in ops:
-                    p = float(op.get("pos_m", 0.0))
-                    cur_start = 0.0
-                    if is_h:
-                        for i in range(min(i1, i2), max(i1, i2)):
-                            if i + 1 >= nx:
-                                break
-                            seg_len = abs(xs[i + 1] - xs[i])
-                            if cur_start <= p <= (cur_start + seg_len + 0.01) or i == max(i1, i2) - 1:
-                                sub_wk = (i, j1, i + 1, j1)
-                                op_copy = dict(op)
-                                op_copy["pos_m"] = round(max(0.0, min(seg_len, p - cur_start)), 2)
-                                new_store.setdefault(sub_wk, []).append(op_copy)
-                                break
-                            cur_start += seg_len
-                    else:
-                        for j in range(min(j1, j2), max(j1, j2)):
-                            if j + 1 >= ny:
-                                break
-                            seg_len = abs(ys[j + 1] - ys[j])
-                            if cur_start <= p <= (cur_start + seg_len + 0.01) or j == max(j1, j2) - 1:
-                                sub_wk = (i1, j, i1, j + 1)
-                                op_copy = dict(op)
-                                op_copy["pos_m"] = round(max(0.0, min(seg_len, p - cur_start)), 2)
-                                new_store.setdefault(sub_wk, []).append(op_copy)
-                                break
-                            cur_start += seg_len
-            else:
-                if ops and max(i1, i2) < nx and max(j1, j2) < ny:
-                    new_store[t] = list(ops)
-        st.session_state[kind_key] = new_store
+    # 4. مزامنة الفتحات مع الحوائط المدمجة
+    _sync_wall_stores_to_effective_walls()
 
     # 5. تسوية أوجه المحارة المحددة
     pf = st.session_state.get("m15_plaster_faces", {})
@@ -836,18 +1057,8 @@ def _normalize_wall_keys():
         t = _safe_coord_tuple(wk, 4)
         if not t:
             continue
-        i1, j1, i2, j2 = t
-        if j1 == j2 and abs(i2 - i1) > 1:
-            for i in range(min(i1, i2), max(i1, i2)):
-                if i + 1 < nx:
-                    new_pf[(i, j1, i + 1, j1)] = list(val)
-        elif i1 == i2 and abs(j2 - j1) > 1:
-            for j in range(min(j1, j2), max(j1, j2)):
-                if j + 1 < ny:
-                    new_pf[(i1, j, i1, j + 1)] = list(val)
-        else:
-            if max(i1, i2) < nx and max(j1, j2) < ny:
-                new_pf[t] = list(val)
+        if max(t[0], t[2]) < nx and max(t[1], t[3]) < ny:
+            new_pf[t] = list(val)
     st.session_state["m15_plaster_faces"] = new_pf
 
 def _wall_length_m(wk):
@@ -1764,10 +1975,25 @@ def _get_wall_height(w_key, default_h=None):
     """
     تحديد ارتفاع الحائط وفق قواعد المشروع:
     1. الحوائط المحددة كدروة (Parapet) تأخذ دائماً قيمة مدخل 'ارتفاع دروة' (Parapet Height).
-    2. باقي الحوائط ترث تلقائياً القيمة الافتراضية من مدخل 'ارتفاع الحائط' (Wall Height).
+    2. فحص مصفوفة ارتفاعات الحوائط المخصصة (m15_wall_heights) للحائط أو أجزائه.
+    3. إذا لم يوجد ارتفاع مخصص، استخدام الارتفاع الافتراضي (Wall Height).
     """
     if _is_parapet_wall(w_key):
         return float(st.session_state.get("m15_parapet_wall_height", st.session_state.get("m15_parapet_h_input", 1.0)))
+    wh_map = st.session_state.get("m15_wall_heights", {})
+    if w_key in wh_map:
+        return float(wh_map[w_key])
+    t = _safe_coord_tuple(w_key, 4)
+    if t:
+        i1, j1, i2, j2 = t
+        if j1 == j2:
+            for i in range(min(i1, i2), max(i1, i2)):
+                if (i, j1, i + 1, j1) in wh_map:
+                    return float(wh_map[(i, j1, i + 1, j1)])
+        else:
+            for j in range(min(j1, j2), max(j1, j2)):
+                if (i1, j, i1, j + 1) in wh_map:
+                    return float(wh_map[(i1, j, i1, j + 1)])
     if default_h is not None:
         return float(default_h)
     return float(st.session_state.get("m15_default_wall_height", st.session_state.get("m15_default_h_input", 3.0)))
@@ -1937,7 +2163,13 @@ def _draw_plan(with_dim=True):
         thick = _get_wall_thickness(wk)
         cross_min, cross_max, cross_c, thick_m = _get_wall_cross_bounds(wk)
         half_t = thick_m / 2.0
-        color = _CLR_WALL_12 if thick == _WALL_THIN else _CLR_WALL_25
+        is_p = _is_parapet_wall(wk)
+        if is_p:
+            color = _CLR_WALL_PARAPET
+        elif thick == _WALL_THIN:
+            color = _CLR_WALL_12
+        else:
+            color = _CLR_WALL_25
         is_h = (j1 == j2)
         wlen = _wall_length_m(wk)
         lname = wm.get(wk, "")
@@ -1947,7 +2179,9 @@ def _draw_plan(with_dim=True):
         else:
             if is_h: rx = min(xs[i1], xs[i2]); ry = cross_min; rw = abs(xs[i2] - xs[i1]); rh = thick_m
             else: rx = cross_min; ry = min(ys[j1], ys[j2]); rw = thick_m; rh = abs(ys[j2] - ys[j1])
-            ax.add_patch(patches.Rectangle((rx, ry), rw, rh, lw=1.0, edgecolor="#333333", facecolor=color, alpha=0.85, zorder=2))
+            edge_clr = "#0369a1" if is_p else "#333333"
+            edge_lw = 1.3 if is_p else 1.0
+            ax.add_patch(patches.Rectangle((rx, ry), rw, rh, lw=edge_lw, edgecolor=edge_clr, facecolor=color, alpha=0.88, zorder=2))
 
             # ── رسم أوجه المحارة بخطوط مائلة وردية واسعة فقط (بدون أي إطار أو خطوط حدود) ──
             plaster_faces_map = st.session_state.get("m15_plaster_faces", {})
@@ -1981,25 +2215,6 @@ def _draw_plan(with_dim=True):
                             lw=0, edgecolor="#EC4899", facecolor="none",
                             hatch="/", alpha=1.0, zorder=3.5
                         ))
-
-            mx = rx + rw / 2; my = ry + rh / 2
-            # كتابة اسم الحائط فقط دون الطول (تم الاكتفاء بخطوط الأبعاد الخارجية)
-            label_text = lname
-            if label_text:
-                is_parapet = _is_parapet_wall(wk)
-                if is_parapet:
-                    label_text += " [دروة]"
-                t_box_edge = "#0284c7" if is_parapet else "#cbd5e1"
-                t_box_bg = "#f0f9ff" if is_parapet else "#ffffff"
-                t_color = "#0369a1" if is_parapet else "#1e293b"
-                if is_h:
-                    ax.text(mx, cross_max + half_t * 1.5, label_text, ha="center", va="bottom",
-                            fontsize=fs_wall, color=t_color, fontweight="bold", zorder=5,
-                            bbox=dict(boxstyle="round,pad=0.18", facecolor=t_box_bg, edgecolor=t_box_edge, lw=0.8 if is_parapet else 0.6, alpha=0.92))
-                else:
-                    ax.text(cross_max + half_t * 1.5, my, label_text, ha="left", va="center",
-                            fontsize=fs_wall, color=t_color, fontweight="bold", zorder=5,
-                            bbox=dict(boxstyle="round,pad=0.18", facecolor=t_box_bg, edgecolor=t_box_edge, lw=0.8 if is_parapet else 0.6, alpha=0.92))
         wins = _get_wall_windows(wk)
         if not removed and wins:
             wlen = _wall_length_m(wk)
@@ -2271,6 +2486,46 @@ def _draw_plan(with_dim=True):
                         theta1, theta2 = (270, 360) if sdir == 1 else (180, 270)
                         ax.add_patch(patches.Arc((x_ref, hy), 2 * pd_w, 2 * pd_w, angle=0,
                                                  theta1=theta1, theta2=theta2, color=pd_clr, lw=1.2, ls="--", zorder=5))
+
+    # ── كتابة أسماء الحوائط المدمجة على المسقط الأفقي المصمم ──
+    # دمج أسماء الحوائط المتلاصقة التي لا يفصلها عمود ولا حائط متعامد في اسم واحد بمنتصف الحائط
+    merged_groups = _get_merged_wall_display_groups()
+    merge_style = st.session_state.get("m15_merged_wall_label_style", "single")
+    for grp in merged_groups:
+        names = [wm.get(s, "") for s in grp if wm.get(s, "")]
+        if not names:
+            continue
+        first_seg = grp[0]
+        i1, j1, i2, j2 = first_seg
+        is_h = (j1 == j2)
+        cross_min, cross_max, cross_c, thick_m = _get_wall_cross_bounds(first_seg)
+        half_t = thick_m / 2.0
+        is_parapet = any(_is_parapet_wall(s) for s in grp)
+
+        if len(names) > 1 and merge_style == "range":
+            base_name = f"{names[0]}-{names[-1]}"
+        else:
+            base_name = names[0]
+
+        label_text = f"{base_name} [حائط دروة]" if is_parapet else base_name
+        t_box_edge = "#0284c7" if is_parapet else "#cbd5e1"
+        t_box_bg = "#e0f2fe" if is_parapet else "#ffffff"
+        t_color = "#0369a1" if is_parapet else "#1e293b"
+
+        if is_h:
+            min_x = min(min(xs[s[0]], xs[s[2]]) for s in grp)
+            max_x = max(max(xs[s[0]], xs[s[2]]) for s in grp)
+            mx = (min_x + max_x) / 2.0
+            ax.text(mx, cross_max + half_t * 1.5, label_text, ha="center", va="bottom",
+                    fontsize=fs_wall, color=t_color, fontweight="bold", zorder=5,
+                    bbox=dict(boxstyle="round,pad=0.18", facecolor=t_box_bg, edgecolor=t_box_edge, lw=0.8 if is_parapet else 0.6, alpha=0.92))
+        else:
+            min_y = min(min(ys[s[1]], ys[s[3]]) for s in grp)
+            max_y = max(max(ys[s[1]], ys[s[3]]) for s in grp)
+            my = (min_y + max_y) / 2.0
+            ax.text(cross_max + half_t * 1.5, my, label_text, ha="left", va="center",
+                    fontsize=fs_wall, color=t_color, fontweight="bold", zorder=5,
+                    bbox=dict(boxstyle="round,pad=0.18", facecolor=t_box_bg, edgecolor=t_box_edge, lw=0.8 if is_parapet else 0.6, alpha=0.92))
 
     col_size = _get_col_size()
     for (i, j) in _get_active_columns():
@@ -2544,6 +2799,7 @@ def _draw_plan(with_dim=True):
     leg = [
         Patch(facecolor=_CLR_WALL_12, alpha=0.85, label="حائط 12سم"),
         Patch(facecolor=_CLR_WALL_25, alpha=0.85, label="حائط 25سم"),
+        Patch(facecolor=_CLR_WALL_PARAPET, alpha=0.90, label="حائط دروة"),
         Patch(facecolor=_CLR_WIN, alpha=0.85, label="شباك (W#)"),
         Patch(facecolor=_CLR_DOOR, alpha=0.90, label="باب (D#)"),
         Patch(facecolor=_CLR_COL, alpha=0.90, label="عمود (C#)"),
@@ -2722,7 +2978,7 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     bbox_info["walls"] = walls_list
     bbox_json = json.dumps(bbox_info)
     mode_str = box_mode or ""
-    box_banner_display = "none" if box_mode == "add" else ("flex" if box_mode else "none")
+    box_banner_display = "none"
     viewport_box_class = "box-mode" if box_mode else ""
     if box_mode == "delete_wall":
         hint_text_toolbar = "🗑️ اسحب صندوقاً حول الحائط لحذفه"
@@ -2857,7 +3113,7 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     top: 10px;
     left: 10px;
     z-index: 1005;
-    display: {box_banner_display};
+    display: none !important;
     align-items: center;
     gap: 10px;
     background: {banner_bg};
@@ -2956,8 +3212,8 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     <span class="tb-hint">{hint_text_toolbar}</span>
   </div>
 
-  <!-- Guidance banner for Box Selection Mode -->
-  <div class="box-mode-banner" id="box-mode-banner">
+  <!-- Guidance banner for Box Selection Mode (hidden) -->
+  <div class="box-mode-banner" id="box-mode-banner" style="display:none !important;">
     <span style="font-size: 1.15rem;">{banner_icon}</span>
     <span class="box-banner-text">{box_hint}</span>
     <button class="btn-box-exit" id="btn-box-exit" title="إنهاء (Esc)">⏹️ إنهاء (Esc)</button>
@@ -3773,10 +4029,15 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     components.html(html_content, height=viewer_h, scrolling=False)
 
 
-def _compute_survey():
-    removed_walls=st.session_state["m15_wall_removed"]
-    default_h=float(st.session_state.get("m15_default_wall_height",3.0))
-    cm=_get_col_name_map(); wm=_get_wall_name_map(); rows_12=[]; rows_25=[]
+def _compute_survey(len_mode=None):
+    removed_walls = st.session_state.get("m15_wall_removed", set())
+    default_h = float(st.session_state.get("m15_default_wall_height", 3.0))
+    if len_mode is None:
+        len_mode = st.session_state.get("m15_masonry_len_mode", "clear")
+    cm = _get_col_name_map()
+    wm = _get_wall_name_map()
+    rows_12 = []
+    rows_25 = []
 
     brick_size_v = st.session_state.get("m15_brick_size", "25×12×6")
     mortar_v = float(st.session_state.get("m15_mortar_thickness_cm", 1.0))
@@ -3788,31 +4049,59 @@ def _compute_survey():
         b_l, b_w, b_h = _parse_brick_size(brick_size_v)
 
     for wk in _get_all_walls():
-        if wk in removed_walls: continue
-        thick=_get_wall_thickness(wk); length=_wall_length_m(wk)
-        height=_get_wall_height(wk,default_h); gross=length*height
-        op=0.0
+        if wk in removed_walls:
+            continue
+        thick = _get_wall_thickness(wk)
+        axis_len = _wall_length_m(wk)
+        col1_l, col2_l, _, _, wlen = _get_column_bounds_along_wall(wk)
+        clear_len = max(0.0, col2_l - col1_l)
+        col_ded = round(axis_len - clear_len, 2)
+        calc_len = clear_len if len_mode == "clear" else axis_len
+        height = _get_wall_height(wk, default_h)
+        gross = calc_len * height
+
+        op = 0.0
         for wi in _get_wall_windows(wk):
-            if not wi.get("removed", False): op += float(wi.get("w_m", 1.0)) * float(wi.get("h_m", 1.2))
+            if not wi.get("removed", False):
+                op += float(wi.get("w_m", 1.0)) * float(wi.get("h_m", 1.2))
         for di in _get_wall_doors(wk):
-            if not di.get("removed", False): op += float(di.get("w_m", 0.9)) * float(di.get("h_m", 2.1))
-        net=max(0.0,gross-op); vol=net*(thick/100.0)
-        i1,j1,i2,j2=wk
-        cs=cm.get((i1,j1),f"({i1+1},{j1+1})"); ce=cm.get((i2,j2),f"({i2+1},{j2+1})")
-        lname=wm.get(wk,"—"); display=f"{lname}: {cs}\u2192{ce}"
+            if not di.get("removed", False):
+                op += float(di.get("w_m", 0.9)) * float(di.get("h_m", 2.1))
+
+        net = max(0.0, gross - op)
+        vol = net * (thick / 100.0)
+        i1, j1, i2, j2 = wk
+        cs = cm.get((i1, j1), f"({i1+1},{j1+1})")
+        ce = cm.get((i2, j2), f"({i2+1},{j2+1})")
+        lname = wm.get(wk, "—")
+        display = f"{lname}: {cs}\u2192{ce}"
         brick_cnt = _compute_brick_qty(net, thick, b_l, b_w, b_h, mortar_v)
-        row={"الحائط":display,"الطول (م)":round(length,2),"الارتفاع (م)":round(height,2),
-             "المساحة الإجمالية (م2)":round(gross,2),"مساحة الفتحات (م2)":round(op,2),
-             "المساحة الصافية (م2)":round(net,2),"حجم الطوب (م3)":round(vol,2),
-             "عدد الطوب (وحدة)": brick_cnt}
-        (rows_12 if thick==_WALL_THIN else rows_25).append(row)
-    return {"rows_12":rows_12,"rows_25":rows_25}
+
+        row = {
+            "الحائط": display,
+            "طول المحور (م)": round(axis_len, 2),
+            "خصم الأعمدة (م)": round(col_ded, 2) if len_mode == "clear" else 0.0,
+            "طول المباني الصافي (م)": round(calc_len, 2),
+            "الارتفاع (م)": round(height, 2),
+            "المساحة الإجمالية (م2)": round(gross, 2),
+            "مساحة الفتحات (م2)": round(op, 2),
+            "المساحة الصافية (م2)": round(net, 2),
+            "حجم الطوب (م3)": round(vol, 2),
+            "عدد الطوب (وحدة)": brick_cnt,
+        }
+        (rows_12 if thick == _WALL_THIN else rows_25).append(row)
+
+    return {"rows_12": rows_12, "rows_25": rows_25, "len_mode": len_mode}
+
 
 def _totals_row(rows):
-    if not rows: return {}
-    tot={k:"" for k in rows[0]}; tot["الحائط"]="✅ الإجمالي"
-    for k in ["المساحة الإجمالية (م2)","مساحة الفتحات (م2)","المساحة الصافية (م2)","حجم الطوب (م3)"]:
-        tot[k]=round(sum(r.get(k,0) for r in rows),2)
+    if not rows:
+        return {}
+    tot = {k: "" for k in rows[0]}
+    tot["الحائط"] = "✅ الإجمالي"
+    for k in ["طول المحور (م)", "خصم الأعمدة (م)", "طول المباني الصافي (م)", "المساحة الإجمالية (م2)", "مساحة الفتحات (م2)", "المساحة الصافية (م2)", "حجم الطوب (م3)"]:
+        if k in rows[0]:
+            tot[k] = round(sum(r.get(k, 0) for r in rows), 2)
     if "عدد الطوب (وحدة)" in rows[0]:
         tot["عدد الطوب (وحدة)"] = int(sum(r.get("عدد الطوب (وحدة)", 0) for r in rows))
     return tot
@@ -4042,6 +4331,60 @@ def _section_opening_types():
             st.session_state["m15_door_types"] = door_types
             save_settings()
 
+
+def _get_active_interactive_mode():
+    """
+    إرجاع معلومات النمط التفاعلي النشط حالياً على المسقط الأفقي (إن وجد).
+    Return dict: {'key': ..., 'name': ..., 'type': 'إسقاط'|'حذف'|'استعادة'} or None
+    """
+    modes = [
+        {"key": "m15_add_wall_mode", "name": "إسقاط الحوائط", "type": "إسقاط"},
+        {"key": "m15_add_col_mode", "name": "إسقاط الأعمدة", "type": "إسقاط"},
+        {"key": "m15_add_win_mode", "name": "إسقاط الشبابيك", "type": "إسقاط"},
+        {"key": "m15_add_door_mode", "name": "إسقاط الأبواب", "type": "إسقاط"},
+        {"key": "m15_del_wall_mode", "name": "حذف الحوائط", "type": "حذف"},
+        {"key": "m15_restore_col_mode", "name": "استعادة الأعمدة", "type": "استعادة"},
+    ]
+    for m in modes:
+        if st.session_state.get(m["key"], False):
+            return m
+    return None
+
+
+def _close_all_interactive_modes():
+    """إغلاق كافة الأنماط التفاعلية دفعة واحدة."""
+    st.session_state["m15_add_col_mode"] = False
+    st.session_state["m15_restore_col_mode"] = False
+    st.session_state["m15_del_wall_mode"] = False
+    st.session_state["m15_add_wall_mode"] = False
+    st.session_state["m15_add_win_mode"] = False
+    st.session_state["m15_add_door_mode"] = False
+    st.session_state["m15_pending_delete_wall"] = None
+    save_settings()
+
+
+def _render_mode_conflict_warning(current_op_name, active_mode_info, context_key=""):
+    """
+    عرض رسالة تحذيرية بعدم إمكانية بدء أو تنفيذ العملية الحالية لوجود نمط تفاعلي نشط آخر،
+    مع زر مريح لإنهاء أو إغلاق النمط النشط فوراً.
+    """
+    active_name = active_mode_info.get("name", "أخرى")
+    warning_html = f"""<div style='background:rgba(239, 68, 68, 0.12); border:1.5px solid #ef4444; border-right:4px solid #ef4444; border-radius:8px; padding:12px 14px; margin:10px 0 12px 0;' dir='rtl'>
+        <div style='display:flex; align-items:center; gap:8px;'>
+            <span style='font-size:1.15rem;'>⚠️</span>
+            <span style='color:#f87171; font-weight:800; font-size:0.92rem;'>تنبيه: لا يمكن بدء العملية</span>
+        </div>
+        <div style='color:#fecaca; font-size:0.87rem; line-height:1.6; margin-top:6px;'>
+            لا يمكن بدء عملية <b>{current_op_name}</b> نظراً لأن نمط <b>{active_name}</b> لا يزال نشطاً حالياً على المسقط الأفقي.<br>
+            يُرجى إنهاء أو إغلاق نمط <b>{active_name}</b> أولاً لتتمكن من تفعيل {current_op_name}.
+        </div>
+    </div>"""
+    st.markdown(warning_html, unsafe_allow_html=True)
+    if st.button(f"⏹️ إغلاق نمط {active_name} الآن", key=f"m15_force_close_active_{context_key}", use_container_width=True):
+        _close_all_interactive_modes()
+        st.rerun()
+
+
 def _section_add_walls():
     """
     قسم إسقاط الحوائط على المحاور (Interactive Wall Placement):
@@ -4065,7 +4408,7 @@ def _section_add_walls():
         thick_choice = st.radio(
             "سمك الحائط المطلوب:",
             options=[12, 25],
-            index=1,
+            index=0,
             format_func=lambda x: f"{x} سم ({'نصف طوبة' if x == 12 else 'طوبة كاملة'})",
             horizontal=True,
             key="m15_new_wall_thick_choice"
@@ -4083,20 +4426,18 @@ def _section_add_walls():
         st.session_state["m15_default_wall_height"] = wall_h
 
     st.markdown("<hr style='margin: 12px 0 14px 0; border: none; border-top: 1px dashed #cbd5e1;'>", unsafe_allow_html=True)
-    st.markdown(
-        """<div style='background:rgba(30,58,138,0.25);border:1px solid #3b82f6;border-radius:6px;padding:8px 12px;margin-bottom:12px;color:#e2e8f0;font-size:0.86rem;line-height:1.5;'>
-        💡 <b>قاعدة إسقاط الحوائط:</b> يمتد الحائط دائماً من تقاطع محوري (x, y) إلى أقرب تقاطع مجاور له ويُسمى باسم مستقل (مثل L1, L2...). عند سحب الماوس عبر أكثر من تقاطع يتم إنشاء حائط منفصل ومستقل لكل باكية بين تقاطعين متجاورين تلقائياً.
-        </div>""",
-        unsafe_allow_html=True
-    )
     st.markdown("<div style='font-size:0.92rem; font-weight:700; color:#ffffff; margin-bottom:10px;'>🎯 إسقاط الحائط بسحب الماوس في المكان المطلوب في المسقط الأفقي:</div>", unsafe_allow_html=True)
 
-    if not is_add_wall_active:
+    active_mode = _get_active_interactive_mode()
+    has_conflict = (active_mode is not None and active_mode.get("key") != "m15_add_wall_mode")
+
+    if has_conflict:
+        _render_mode_conflict_warning("إسقاط الحوائط", active_mode, context_key="add_walls")
+        st.button("🎯 تفعيل إسقاط الحائط بسحب الماوس في المسقط", type="primary", use_container_width=True, key="m15_btn_start_add_wall", disabled=True)
+    elif not is_add_wall_active:
         if st.button("🎯 تفعيل إسقاط الحائط بسحب الماوس في المسقط", type="primary", use_container_width=True, key="m15_btn_start_add_wall"):
+            _close_all_interactive_modes()
             st.session_state["m15_add_wall_mode"] = True
-            st.session_state["m15_add_col_mode"] = False
-            st.session_state["m15_restore_col_mode"] = False
-            st.session_state["m15_del_wall_mode"] = False
             st.rerun()
     else:
         if st.button("⏹️ إنهاء وضع إسقاط الحوائط (Esc)", key="m15_btn_exit_add_wall", use_container_width=True):
@@ -4281,6 +4622,7 @@ def _confirm_delete_wall(wk):
     removed_walls.add(wk)
     st.session_state["m15_wall_removed"] = removed_walls
     st.session_state["m15_pending_delete_wall"] = None
+    st.session_state.pop("_last_del_confirm_whistle_token", None)
     st.session_state.pop("m15_plan_png_b64", None)
     save_settings()
     cm = _get_col_name_map()
@@ -4849,7 +5191,7 @@ def _handle_sync_payload(payload_str=None):
                 placed_list = list(st.session_state.get("m15_walls_placed", []))
                 wt = dict(st.session_state.get("m15_wall_thickness", {}))
                 wh = dict(st.session_state.get("m15_wall_heights", {}))
-                th_val = int(st.session_state.get("m15_new_wall_thick_choice", 25))
+                th_val = int(st.session_state.get("m15_new_wall_thick_choice", 12))
                 h_val = float(st.session_state.get("m15_new_wall_height_choice", st.session_state.get("m15_default_wall_height", 3.0)))
                 removed_walls = set(st.session_state.get("m15_wall_removed", set()))
 
@@ -5036,12 +5378,16 @@ def _section_add_columns():
     st.markdown("<hr style='margin: 12px 0 14px 0; border: none; border-top: 1px dashed #cbd5e1;'>", unsafe_allow_html=True)
     st.markdown("<div style='font-size:0.92rem; font-weight:700; color:#ffffff; margin-bottom:10px;'>اسقاط اعمدة بسحب صندوق بالماوس</div>", unsafe_allow_html=True)
 
-    if not is_add_active:
+    active_mode = _get_active_interactive_mode()
+    has_conflict = (active_mode is not None and active_mode.get("key") != "m15_add_col_mode")
+
+    if has_conflict:
+        _render_mode_conflict_warning("إسقاط الأعمدة", active_mode, context_key="add_cols")
+        st.button("🎯 تفعيل اختيار عمود بالسحب على المسقط", type="primary", use_container_width=True, key="m15_btn_start_add_col", disabled=True)
+    elif not is_add_active:
         if st.button("🎯 تفعيل اختيار عمود بالسحب على المسقط", type="primary", use_container_width=True, key="m15_btn_start_add_col"):
+            _close_all_interactive_modes()
             st.session_state["m15_add_col_mode"] = True
-            st.session_state["m15_restore_col_mode"] = False
-            st.session_state["m15_add_wall_mode"] = False
-            st.session_state["m15_del_wall_mode"] = False
             st.rerun()
     else:
         if st.button("⏹️ إنهاء وضع الإضافة (Esc)", key="m15_btn_exit_add_col", use_container_width=True):
@@ -5257,10 +5603,16 @@ def _section_restore_columns():
 
     st.markdown("<div style='font-size:0.95rem; font-weight:700; color:#ffffff; margin-top:8px; margin-bottom:16px;'>♻️ استعادة الأعمدة المحذوفة على المسقط</div>", unsafe_allow_html=True)
 
-    if not is_restore_active:
+    active_mode = _get_active_interactive_mode()
+    has_conflict = (active_mode is not None and active_mode.get("key") != "m15_restore_col_mode")
+
+    if has_conflict:
+        _render_mode_conflict_warning("استعادة الأعمدة", active_mode, context_key="restore_cols")
+        st.button("♻️ استعادة عمود على المسقط الأفقي", type="primary", use_container_width=True, key="m15_btn_start_restore_col", disabled=True)
+    elif not is_restore_active:
         if st.button("♻️ استعادة عمود على المسقط الأفقي", type="primary", use_container_width=True, key="m15_btn_start_restore_col"):
+            _close_all_interactive_modes()
             st.session_state["m15_restore_col_mode"] = True
-            st.session_state["m15_add_col_mode"] = False
             st.rerun()
     else:
         st.markdown(
@@ -5336,25 +5688,18 @@ def _section_delete_walls():
     st.markdown("<div style='font-size:0.95rem; font-weight:700; color:#ffffff; margin-top:8px; margin-bottom:16px;'>🗑️ حذف حوائط (Interactive Box Selection)</div>", unsafe_allow_html=True)
 
     # 1. زر تفعيل نمط التحديد بالصندوق على المسقط الأفقي
-    if not is_del_wall_active:
+    active_mode = _get_active_interactive_mode()
+    has_conflict = (active_mode is not None and active_mode.get("key") != "m15_del_wall_mode")
+
+    if has_conflict:
+        _render_mode_conflict_warning("حذف الحوائط", active_mode, context_key="del_walls")
+        st.button("🎯 اختيار حائط للحذف على المسقط الأفقي", type="primary", use_container_width=True, key="m15_btn_start_del_wall", disabled=True)
+    elif not is_del_wall_active:
         if st.button("🎯 اختيار حائط للحذف على المسقط الأفقي", type="primary", use_container_width=True, key="m15_btn_start_del_wall"):
+            _close_all_interactive_modes()
             st.session_state["m15_del_wall_mode"] = True
-            st.session_state["m15_add_col_mode"] = False
-            st.session_state["m15_restore_col_mode"] = False
             st.rerun()
     else:
-        st.markdown(
-            """<div style='background: linear-gradient(135deg, #fef2f2, #fee2e2); border: 2px solid #ef4444; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px;' dir='rtl'>
-                <div style='display: flex; align-items: center; gap: 8px; font-weight: 700; color: #991b1b; font-size: 0.92rem;'>
-                    <span>🗑️</span>
-                    <span>اسحب مربعاً بالماوس ليشمل الحائط المراد حذفه في المسقط الأفقي</span>
-                </div>
-                <div style='font-size: 0.80rem; color: #b91c1c; margin-top: 4px;'>
-                    عند إفلات الماوس، ستظهر رسالة تأكيد الحائط. يستمر النمط نشطاً لحذف حوائط أخرى تباعاً.
-                </div>
-            </div>""",
-            unsafe_allow_html=True
-        )
         if st.button("⏹️ إنهاء وضع الحذف (Esc)", key="m15_btn_exit_del_wall", use_container_width=True):
             st.session_state["m15_del_wall_mode"] = False
             st.session_state["m15_pending_delete_wall"] = None
@@ -5362,17 +5707,11 @@ def _section_delete_walls():
 
     # 2. بطاقة تأكيد الحذف عند التقاط حائط معلق
     if pending_wk and pending_wk in all_walls:
-        p_label = _wall_display_label(pending_wk, cm, wm)
-        p_len = _wall_length_m(pending_wk)
-        p_th = _get_wall_thickness(pending_wk)
+        play_delete_confirmation_whistle(f"m15_del_wall_{pending_wk}")
+        w_name = wm.get(pending_wk, "—")
         st.markdown(
-            f"""<div style='background: #fff1f2; border: 2px solid #e11d48; border-radius: 8px; padding: 10px 14px; margin: 10px 0;' dir='rtl'>
-                <div style='font-weight: 800; color: #9f1239; font-size: 0.95rem; margin-bottom: 4px;'>
-                    ⚠️ هل أنت متأكد من رغبتك في حذف الحائط: <b>{p_label}</b>؟
-                </div>
-                <div style='font-size: 0.82rem; color: #be123c;'>
-                    الطول: <b>{p_len:.2f} م</b> | السُمك: <b>{p_th} سم</b>
-                </div>
+            f"""<div style='background: #fff1f2; border: 2px solid #e11d48; border-radius: 8px; padding: 10px 14px; margin: 10px 0; font-weight: 800; color: #9f1239; font-size: 0.95rem;' dir='rtl'>
+                ⚠️ تأكيد حذف الحائط <b>{w_name}</b>
             </div>""",
             unsafe_allow_html=True
         )
@@ -5383,6 +5722,7 @@ def _section_delete_walls():
         with c_sec_n:
             if st.button("❌ إلغاء", key="m15_sec_conf_del_wall_no", use_container_width=True):
                 st.session_state["m15_pending_delete_wall"] = None
+                st.session_state.pop("_last_del_confirm_whistle_token", None)
                 st.rerun()
 
     # 3. اختيار يدوي بديل من القائمة
@@ -5396,10 +5736,14 @@ def _section_delete_walls():
             sel_w_idx = st.selectbox("الحائط المراد حذفه:", options=wall_options, format_func=_fmt_w, key="m15_dropdown_del_wall")
             if sel_w_idx != 0:
                 target_wk = active_walls[sel_w_idx - 1]
-                if st.button("🗑️ حذف هذا الحائط", key="m15_btn_request_dropdown_del_wall", use_container_width=True):
-                    st.session_state["m15_pending_delete_wall"] = target_wk
-                    st.session_state["m15_del_wall_mode"] = True
-                    st.rerun()
+                if has_conflict:
+                    st.button("🗑️ حذف هذا الحائط", key="m15_btn_request_dropdown_del_wall", use_container_width=True, disabled=True, help="لا يمكن الحذف لوجود نمط نشط على المسقط")
+                else:
+                    if st.button("🗑️ حذف هذا الحائط", key="m15_btn_request_dropdown_del_wall", use_container_width=True):
+                        st.session_state["m15_pending_delete_wall"] = target_wk
+                        play_delete_confirmation_whistle(f"m15_del_wall_{target_wk}")
+                        st.session_state["m15_del_wall_mode"] = True
+                        st.rerun()
 
     if removed_walls:
         st.caption("💡 لاستعادة أي من الحوائط المحذوفة، تفضل بفتح قسم **'♻️ استعادة الحوائط المحذوفة'** بالأسفل.")
@@ -5447,7 +5791,12 @@ def _section_restore_walls():
 
     st.info(f"💡 يوجد حالياً **{rem_count}** حائط محذوف في سجل المحذوفات. يمكنك استعادتها فردياً أو استعادة الكل دفعة واحدة:")
 
-    if st.button("♻️ استعادة جميع الحوائط المحذوفة", key="m15_sec_restore_all_walls", type="primary", use_container_width=True):
+    active_mode = _get_active_interactive_mode()
+    has_conflict = (active_mode is not None)
+    if has_conflict:
+        _render_mode_conflict_warning("استعادة الحوائط المحذوفة", active_mode, context_key="restore_walls")
+
+    if st.button("♻️ استعادة جميع الحوائط المحذوفة", key="m15_sec_restore_all_walls", type="primary", use_container_width=True, disabled=has_conflict):
         st.session_state["m15_wall_removed"] = set()
         st.session_state["m15_pending_delete_wall"] = None
         st.session_state.pop("m15_plan_png_b64", None)
@@ -5469,7 +5818,7 @@ def _section_restore_walls():
                 )
             with rc_col2:
                 btn_k = f"m15_restore_wall_btn_{r_wk[0]}_{r_wk[1]}_{r_wk[2]}_{r_wk[3]}"
-                if st.button("♻️ استعادة", key=btn_k, use_container_width=True):
+                if st.button("♻️ استعادة", key=btn_k, use_container_width=True, disabled=has_conflict):
                     removed_walls.discard(r_wk)
                     st.session_state["m15_wall_removed"] = removed_walls
                     st.session_state.pop("m15_plan_png_b64", None)
@@ -5533,29 +5882,39 @@ def _section_columns():
     orig_cname = f"C{sj * len(xs) + si + 1}"
     cname = cn.get((si, sj), orig_cname)
     if is_rem:
-        st.error(f"🗑️ العمود **{orig_cname}** عند تقاطع (Y{si+1}, X{sj+1}) محذوف — يمكنك استعادته من قسم '♻️ استعادة أعمدة' بالسحب على المسقط.")
+        st.info(f"🗑️ العمود **{orig_cname}** عند تقاطع (Y{si+1}, X{sj+1}) محذوف — يمكنك استعادته من قسم '♻️ استعادة أعمدة' بالسحب على المسقط.")
+
+    active_mode = _get_active_interactive_mode()
+    has_conflict = (active_mode is not None)
+    if has_conflict:
+        _render_mode_conflict_warning("حذف الأعمدة", active_mode, context_key="del_cols")
 
     # تأكيد حذف العمود
     if not is_rem and st.session_state.get("m15_confirm_del_col") == (si,sj):
+        play_delete_confirmation_whistle(f"m15_del_col_{si}_{sj}")
         st.warning(f"⚠️ تأكيد حذف العمود {cname}؟ سيتم إزالة العمود الخرساني مع بقاء الحوائط قائمة على المحاور، وتسجيله في سجل المحذوفات.")
         cyes, cno = st.columns(2)
         with cyes:
-            if st.button("✅ نعم، تأكيد حذف العمود", type="primary", key="m15_confirm_del_yes", use_container_width=True):
+            if st.button("✅ نعم، تأكيد حذف العمود", type="primary", key="m15_confirm_del_yes", use_container_width=True, disabled=has_conflict):
                 _record_col_deletion(si, sj)
                 removed_cols.add((si,sj)); st.session_state["m15_col_removed"]=removed_cols
                 st.session_state.pop("m15_plan_png_b64", None)
                 save_settings()
-                st.session_state.pop("m15_confirm_del_col",None)
+                st.session_state.pop("m15_confirm_del_col", None)
+                st.session_state.pop("_last_del_confirm_whistle_token", None)
                 st.toast(f"🗑️ تم حذف العمود {cname} وحفظه في سجل استعادة الأعمدة!", icon="🗑️")
                 st.rerun()
         with cno:
             if st.button("❌ إلغاء", key="m15_confirm_del_no", use_container_width=True):
-                st.session_state.pop("m15_confirm_del_col",None); st.rerun()
+                st.session_state.pop("m15_confirm_del_col", None)
+                st.session_state.pop("_last_del_confirm_whistle_token", None)
+                st.rerun()
 
     if not is_rem:
         if st.session_state.get("m15_confirm_del_col") != (si, sj):
-            if st.button("🗑️ حذف العمود", key="m15_del_col", use_container_width=True):
+            if st.button("🗑️ حذف العمود", key="m15_del_col", use_container_width=True, disabled=has_conflict):
                 st.session_state["m15_confirm_del_col"] = (si, sj)
+                play_delete_confirmation_whistle(f"m15_del_col_{si}_{sj}")
                 st.rerun()
     else:
         st.info("💡 استخدم زر '♻️ استعادة أعمدة' لاستعادة هذا العمود بالسحب على المسقط.")
@@ -5700,6 +6059,7 @@ def _section_walls():
         for w_item in _get_all_walls():
             wh[w_item] = c_ph if w_item in new_pw else c_dh
         st.session_state["m15_wall_heights"] = wh
+        st.session_state.pop("m15_plan_png_b64", None)
         save_settings()
 
     if ms_key not in st.session_state:
@@ -5726,47 +6086,133 @@ def _section_walls():
 
 
 
-    # ── 3. فاحص ومعدل الحائط الفردي (Single Wall Inspector) ──
-    _safe_idx("m15_sel_wall", len(all_walls) + 1)
-    def _wlbl(k):
-        if k == 0:
-            return "لم يتم اختيار حائط"
-        wk = all_walls[k - 1]
-        st2 = "🗑️ " if wk in removed_walls else ("🧱 [دروة] " if _is_parapet_wall(wk) else "")
-        return st2 + _wall_display_label(wk, cm, wm)
+    # ── نمط دمج أسماء الحوائط المتلاصقة في المسقط الأفقي المصمم ──
+    st.markdown("<hr style='margin: 10px 0; border: none; border-top: 1px dashed #cbd5e1;'>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:0.90rem; font-weight:700; color:#ffffff; margin-bottom:6px;'>🏷️ نمط تسمية الحوائط المتلاصقة في المسقط الأفقي:</div>", unsafe_allow_html=True)
+    cur_style = st.session_state.get("m15_merged_wall_label_style", "single")
+    style_choice = st.radio(
+        "نمط عرض أسماء الحوائط المتلاصقة على المسقط:",
+        options=["single", "range"],
+        index=0 if cur_style == "single" else 1,
+        format_func=lambda x: "اسم واحد موحد (مثال: L49)" if x == "single" else "نطاق الحوائط المدمجة (مثال: L49-L51)",
+        horizontal=True,
+        key="m15_merged_wall_label_style_radio",
+        label_visibility="collapsed",
+        help="دمج أسماء مجموعات الحوائط المتلاصقة التي لا يفصلها عمود أو حائط متعامد في المسقط الأفقي المصمم."
+    )
+    if style_choice != cur_style:
+        st.session_state["m15_merged_wall_label_style"] = style_choice
+        st.session_state.pop("m15_plan_png_b64", None)
+        save_settings()
+        st.rerun()
 
-    sel = st.selectbox("اختر حائطاً لمعاينة وتعديل خصائصه", options=range(len(all_walls) + 1), format_func=_wlbl, key="m15_sel_wall")
-    if sel != 0:
-        wk = all_walls[sel - 1]
-        is_rem = wk in removed_walls
-        tc = _get_wall_thickness(wk)
-        wlen = _wall_length_m(wk)
-        is_p_wall = _is_parapet_wall(wk)
+    # ── 3. قائمة اختيار وتعديل مواصفات الحوائط (Multi-Wall Inspector & Modifier) ──
+    ms_edit_key = f"m15_walls_edit_ms_{len(xs)}_{len(ys)}_{len(all_walls)}"
 
-        # ── تأكيد حذف الحائط ──
-        if not is_rem and st.session_state.get("m15_confirm_del_wall") == wk:
-            st.warning(f"⚠️ تأكيد حذف الحائط {_wall_display_label(wk, cm, wm)}؟ يمكن استعادته لاحقاً.")
+    # تنظيف القائمة الحالية لضمان صحة الإحداثيات
+    cur_sel_raw = st.session_state.get(ms_edit_key, [])
+    valid_sel = []
+    for item in cur_sel_raw:
+        t = _safe_coord_tuple(item, 4)
+        if t and t in all_walls:
+            valid_sel.append(t)
+    if ms_edit_key not in st.session_state or valid_sel != cur_sel_raw:
+        st.session_state[ms_edit_key] = valid_sel
+
+    def _format_wall_edit_item(wk):
+        t = _safe_coord_tuple(wk, 4)
+        if not t:
+            return str(wk)
+        lname = wm.get(t, "—")
+        i1, j1, i2, j2 = t
+        cs = cm.get((i1, j1), f"({i1+1},{j1+1})")
+        ce = cm.get((i2, j2), f"({i2+1},{j2+1})")
+        th = _get_wall_thickness(t)
+        st_badge = "🗑️ " if t in removed_walls else ("🧱 [دروة] " if _is_parapet_wall(t) else "")
+        return f"{st_badge}{lname}: {cs} \u2192 {ce} ({th}سم)"
+
+    # أزرار مساعدة سريعة لاختيار الحوائط
+    c_btn1, c_btn2, c_btn3 = st.columns(3)
+    with c_btn1:
+        if st.button("☑️ تحديد الكل", key="m15_btn_select_all_walls", use_container_width=True):
+            st.session_state[ms_edit_key] = list(all_walls)
+            st.rerun()
+    with c_btn2:
+        if st.button("🏢 تحديد الحوائط النشطة", key="m15_btn_select_active_walls", use_container_width=True):
+            st.session_state[ms_edit_key] = [w for w in all_walls if w not in removed_walls]
+            st.rerun()
+    with c_btn3:
+        if st.button("◻️ إلغاء التحديد", key="m15_btn_clear_sel_walls", use_container_width=True):
+            st.session_state[ms_edit_key] = []
+            st.rerun()
+
+    sel_walls = st.multiselect(
+        "📋 قائمة اختيار الحوائط لمعاينة وتعديل الخصائص:",
+        options=all_walls,
+        default=valid_sel,
+        format_func=_format_wall_edit_item,
+        key=ms_edit_key,
+        help="اختر حائطاً أو أكثر لتعديل سُمكه أو تصنيفه كدروة أو حذفه/استعادته دفعة واحدة."
+    )
+
+    if sel_walls:
+        sel_tuples = [_safe_coord_tuple(w, 4) for w in sel_walls if _safe_coord_tuple(w, 4) in all_walls]
+        act_sel = [w for w in sel_tuples if w not in removed_walls]
+        rem_sel = [w for w in sel_tuples if w in removed_walls]
+
+        # فحص التعارض مع أي نمط تفاعلي نشط على المسقط
+        active_mode = _get_active_interactive_mode()
+        has_conflict = (active_mode is not None)
+
+        # ── تأكيد حذف الحوائط المحددة ──
+        if act_sel and st.session_state.get("m15_confirm_del_multi_walls"):
+            play_delete_confirmation_whistle(f"m15_del_multi_walls_{tuple(sorted(act_sel))}")
+            st.markdown(
+                f"""<div style='background: #fff1f2; border: 2px solid #e11d48; border-radius: 8px; padding: 10px 14px; margin: 10px 0;' dir='rtl'>
+                    <div style='font-weight: 800; color: #9f1239; font-size: 0.95rem;'>
+                        ⚠️ هل أنت متأكد من رغبتك في حذف عدد <b>{len(act_sel)}</b> حائط محدد؟
+                    </div>
+                    <div style='font-size: 0.82rem; color: #be123c; margin-top: 4px;'>
+                        يمكنك استعادتها في أي وقت من قسم '♻️ استعادة الحوائط المحذوفة'.
+                    </div>
+                </div>""",
+                unsafe_allow_html=True
+            )
             cyes, cno = st.columns(2)
             with cyes:
-                if st.button("✅ نعم، تأكيد حذف الحائط", type="primary", key="m15_conf_wall_yes", use_container_width=True):
-                    removed_walls.add(wk)
+                if st.button(f"✅ نعم، تأكيد حذف {len(act_sel)} حائط", type="primary", key="m15_conf_del_multi_yes", use_container_width=True, disabled=has_conflict):
+                    for w in act_sel:
+                        removed_walls.add(w)
                     st.session_state["m15_wall_removed"] = removed_walls
-                    st.session_state.pop("m15_confirm_del_wall", None)
+                    st.session_state.pop("m15_confirm_del_multi_walls", None)
+                    st.session_state.pop("_last_del_confirm_whistle_token", None)
                     st.session_state.pop("m15_plan_png_b64", None)
                     save_settings()
+                    st.toast(f"🗑️ تم حذف {len(act_sel)} حائط بنجاح!", icon="🗑️")
                     st.rerun()
             with cno:
-                if st.button("❌ إلغاء", key="m15_conf_wall_no", use_container_width=True):
-                    st.session_state.pop("m15_confirm_del_wall", None)
+                if st.button("❌ إلغاء", key="m15_conf_del_multi_no", use_container_width=True):
+                    st.session_state.pop("m15_confirm_del_multi_walls", None)
+                    st.session_state.pop("_last_del_confirm_whistle_token", None)
                     st.rerun()
 
-        # ── الاختيارات الثلاث للتحكم في الحائط المختار ──
+        # بطاقة ملخص الحوائط المحددة
+        summary_txt = f"🎯 تم تحديد <b>{len(sel_tuples)}</b> حائط"
+        if rem_sel:
+            summary_txt += f" (<b>{len(act_sel)}</b> نشط | <b>{len(rem_sel)}</b> محذوف)"
+        st.markdown(
+            f"""<div style='background: rgba(30, 41, 59, 0.85); border: 1px solid #334155; border-radius: 8px; padding: 8px 12px; margin: 8px 0;' dir='rtl'>
+                <div style='color: #38bdf8; font-weight: 700; font-size: 0.88rem;'>{summary_txt}</div>
+            </div>""",
+            unsafe_allow_html=True
+        )
+
         st.markdown(
             """<style>
             /* ═══════════════════════════════════════════════════════════════════
                1. حاوية وبطاقات سُمك الحائط (العمود الأول)
                ═══════════════════════════════════════════════════════════════════ */
-            div[class*="m15_wall_thick_radio"],
+            div[class*="m15_multi_thick_radio"],
             div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] {
                 background: linear-gradient(135deg, rgba(30, 41, 59, 0.88) 0%, rgba(15, 23, 42, 0.88) 100%) !important;
                 border: 1.5px solid rgba(148, 163, 184, 0.35) !important;
@@ -5782,7 +6228,7 @@ def _section_walls():
                 box-sizing: border-box !important;
                 margin: 0 auto !important;
             }
-            div[class*="m15_wall_thick_radio"] > div[data-testid="stRadio"] {
+            div[class*="m15_multi_thick_radio"] > div[data-testid="stRadio"] {
                 background: transparent !important;
                 border: none !important;
                 box-shadow: none !important;
@@ -5790,8 +6236,7 @@ def _section_walls():
                 margin: 0 !important;
                 width: 100% !important;
             }
-            /* عنوان سُمك الحائط داخل أعلى البانيل */
-            div[class*="m15_wall_thick_radio"] label[data-testid="stWidgetLabel"],
+            div[class*="m15_multi_thick_radio"] label[data-testid="stWidgetLabel"],
             div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] label[data-testid="stWidgetLabel"] {
                 display: block !important;
                 width: 100% !important;
@@ -5799,7 +6244,7 @@ def _section_walls():
                 margin: 0 0 5px 0 !important;
                 padding: 0 !important;
             }
-            div[class*="m15_wall_thick_radio"] label[data-testid="stWidgetLabel"] p,
+            div[class*="m15_multi_thick_radio"] label[data-testid="stWidgetLabel"] p,
             div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] label[data-testid="stWidgetLabel"] p {
                 color: #fde047 !important;
                 font-size: 13.5px !important;
@@ -5808,8 +6253,7 @@ def _section_walls():
                 margin: 0 !important;
                 line-height: 1.25 !important;
             }
-            /* صف خيارات الراديو */
-            div[class*="m15_wall_thick_radio"] div[role="radiogroup"],
+            div[class*="m15_multi_thick_radio"] div[role="radiogroup"],
             div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] {
                 display: flex !important;
                 flex-direction: row !important;
@@ -5820,8 +6264,7 @@ def _section_walls():
                 margin: 0 !important;
                 padding: 0 !important;
             }
-            /* بطاقات خيارات سُمك الحائط (12 سم و 25 سم) */
-            div[class*="m15_wall_thick_radio"] div[role="radiogroup"] > label,
+            div[class*="m15_multi_thick_radio"] div[role="radiogroup"] > label,
             div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label {
                 background: rgba(51, 65, 85, 0.7) !important;
                 border: 1.2px solid rgba(148, 163, 184, 0.45) !important;
@@ -5835,67 +6278,19 @@ def _section_walls():
                 gap: 6px !important;
                 transition: all 0.2s ease !important;
             }
-            div[class*="m15_wall_thick_radio"] div[role="radiogroup"] > label:hover,
+            div[class*="m15_multi_thick_radio"] div[role="radiogroup"] > label:hover,
             div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label:hover {
                 border-color: #fde047 !important;
                 background: rgba(51, 65, 85, 0.95) !important;
             }
-            div[class*="m15_wall_thick_radio"] div[role="radiogroup"] > label[data-selected="true"],
-            div[class*="m15_wall_thick_radio"] div[role="radiogroup"] > label:has(input:checked),
+            div[class*="m15_multi_thick_radio"] div[role="radiogroup"] > label[data-selected="true"],
+            div[class*="m15_multi_thick_radio"] div[role="radiogroup"] > label:has(input:checked),
             div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label[data-selected="true"],
             div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) {
                 background: rgba(2, 132, 199, 0.35) !important;
                 border-color: #38bdf8 !important;
             }
-            /* دوائر الراديو الخارجية - بيضاء ناصعة مع إطار رمادي واضح */
-            div[class*="m15_wall_thick_radio"] div[role="radiogroup"] > label div[class*="etak9234"],
-            div[class*="m15_wall_thick_radio"] div[role="radiogroup"] > label > div > div > div:first-child,
-            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label div[class*="etak9234"],
-            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label > div > div > div:first-child {
-                background-color: #ffffff !important;
-                border: 2px solid #94a3b8 !important;
-                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35) !important;
-                border-radius: 50% !important;
-                width: 16px !important;
-                height: 16px !important;
-                min-width: 16px !important;
-                min-height: 16px !important;
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-            }
-            /* الدائرة الخارجية عند الاختيار */
-            div[class*="m15_wall_thick_radio"] div[role="radiogroup"] > label[data-selected="true"] div[class*="etak9234"],
-            div[class*="m15_wall_thick_radio"] div[role="radiogroup"] > label:has(input:checked) div[class*="etak9234"],
-            div[class*="m15_wall_thick_radio"] div[role="radiogroup"] > label[data-selected="true"] > div > div > div:first-child,
-            div[class*="m15_wall_thick_radio"] div[role="radiogroup"] > label:has(input:checked) > div > div > div:first-child,
-            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label[data-selected="true"] div[class*="etak9234"],
-            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) div[class*="etak9234"] {
-                border-color: #0284c7 !important;
-                background-color: #ffffff !important;
-                box-shadow: 0 0 8px rgba(2, 132, 199, 0.6) !important;
-            }
-            /* النقطة الداخلية */
-            div[class*="m15_wall_thick_radio"] div[role="radiogroup"] > label div[class*="etak9235"],
-            div[class*="m15_wall_thick_radio"] div[role="radiogroup"] > label > div > div > div:first-child > div,
-            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label div[class*="etak9235"],
-            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label > div > div > div:first-child > div {
-                background-color: #ffffff !important;
-                border-radius: 50% !important;
-                width: 7px !important;
-                height: 7px !important;
-            }
-            /* النقطة الداخلية عند الاختيار - أزرق سماوي */
-            div[class*="m15_wall_thick_radio"] div[role="radiogroup"] > label[data-selected="true"] div[class*="etak9235"],
-            div[class*="m15_wall_thick_radio"] div[role="radiogroup"] > label:has(input:checked) div[class*="etak9235"],
-            div[class*="m15_wall_thick_radio"] div[role="radiogroup"] > label[data-selected="true"] > div > div > div:first-child > div,
-            div[class*="m15_wall_thick_radio"] div[role="radiogroup"] > label:has(input:checked) > div > div > div:first-child > div,
-            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label[data-selected="true"] div[class*="etak9235"],
-            div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) div[class*="etak9235"] {
-                background-color: #0284c7 !important;
-            }
-            /* نصوص خيارات الراديو (12 سم و 25 سم) - استهداف دقيق لـ p فقط دون المساس بـ span */
-            div[class*="m15_wall_thick_radio"] div[role="radiogroup"] > label div[data-testid="stMarkdownContainer"] p,
+            div[class*="m15_multi_thick_radio"] div[role="radiogroup"] > label div[data-testid="stMarkdownContainer"] p,
             div[data-testid="stHorizontalBlock"] > div:first-child div[data-testid="stRadio"] div[role="radiogroup"] > label div[data-testid="stMarkdownContainer"] p {
                 color: #fde047 !important;
                 font-size: 13px !important;
@@ -5908,9 +6303,9 @@ def _section_walls():
             /* ═══════════════════════════════════════════════════════════════════
                2. بانيل تصنيف كحائط دروة (العمود الثاني)
                ═══════════════════════════════════════════════════════════════════ */
-            div[class*="st-key-m15_single_parapet_chk"],
-            div.stCheckbox[class*="st-key-m15_single_parapet_chk"],
-            div.stCheckbox:has(input[id*="m15_single_parapet_chk"]),
+            div[class*="st-key-m15_multi_parapet_chk"],
+            div.stCheckbox[class*="st-key-m15_multi_parapet_chk"],
+            div.stCheckbox:has(input[id*="m15_multi_parapet_chk"]),
             div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stCheckbox"] {
                 background: linear-gradient(135deg, rgba(30, 41, 59, 0.88) 0%, rgba(15, 23, 42, 0.88) 100%) !important;
                 border: 1.5px solid rgba(148, 163, 184, 0.35) !important;
@@ -5926,9 +6321,9 @@ def _section_walls():
                 box-sizing: border-box !important;
                 margin: 0 auto !important;
             }
-            div[class*="st-key-m15_single_parapet_chk"] label,
-            div.stCheckbox[class*="st-key-m15_single_parapet_chk"] label,
-            div.stCheckbox:has(input[id*="m15_single_parapet_chk"]) label,
+            div[class*="st-key-m15_multi_parapet_chk"] label,
+            div.stCheckbox[class*="st-key-m15_multi_parapet_chk"] label,
+            div.stCheckbox:has(input[id*="m15_multi_parapet_chk"]) label,
             div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stCheckbox"] label {
                 display: flex !important;
                 flex-direction: column-reverse !important;
@@ -5941,9 +6336,9 @@ def _section_walls():
                 width: auto !important;
                 background: transparent !important;
             }
-            div[class*="st-key-m15_single_parapet_chk"] label p,
-            div.stCheckbox[class*="st-key-m15_single_parapet_chk"] label p,
-            div.stCheckbox:has(input[id*="m15_single_parapet_chk"]) label p,
+            div[class*="st-key-m15_multi_parapet_chk"] label p,
+            div.stCheckbox[class*="st-key-m15_multi_parapet_chk"] label p,
+            div.stCheckbox:has(input[id*="m15_multi_parapet_chk"]) label p,
             div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stCheckbox"] label p {
                 color: #fde047 !important;
                 font-size: 13.5px !important;
@@ -5953,44 +6348,13 @@ def _section_walls():
                 white-space: nowrap !important;
                 margin: 0 !important;
             }
-            /* مربع الاختيار (Checkbox Square) - أبيض ناصع مع إطار رمادي واضح */
-            div[class*="st-key-m15_single_parapet_chk"] label div[class*="ew2p8o3"],
-            div[class*="st-key-m15_single_parapet_chk"] label > div:not([data-testid="stWidgetLabel"]),
-            div.stCheckbox:has(input[id*="m15_single_parapet_chk"]) label div[class*="ew2p8o3"],
-            div.stCheckbox:has(input[id*="m15_single_parapet_chk"]) label > div:not([data-testid="stWidgetLabel"]),
-            div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stCheckbox"] label > div:not([data-testid="stWidgetLabel"]) {
-                background-color: #ffffff !important;
-                border: 2px solid #94a3b8 !important;
-                border-radius: 4px !important;
-                width: 17px !important;
-                height: 17px !important;
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
-                margin: 0 !important;
-            }
-            /* عند تفعيل حائط دروة (Checked) */
-            div[class*="st-key-m15_single_parapet_chk"] label:has(input:checked) div[class*="ew2p8o3"],
-            div[class*="st-key-m15_single_parapet_chk"] label:has(input:checked) > div:not([data-testid="stWidgetLabel"]),
-            div.stCheckbox:has(input[id*="m15_single_parapet_chk"]) label:has(input:checked) div[class*="ew2p8o3"],
-            div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stCheckbox"] label:has(input:checked) > div:not([data-testid="stWidgetLabel"]) {
-                background-color: #0284c7 !important;
-                border-color: #38bdf8 !important;
-                box-shadow: 0 0 8px rgba(2, 132, 199, 0.5) !important;
-            }
-            div[class*="st-key-m15_single_parapet_chk"] label:has(input:checked) svg polyline,
-            div.stCheckbox:has(input[id*="m15_single_parapet_chk"]) label:has(input:checked) svg polyline,
-            div[data-testid="stHorizontalBlock"] > div:nth-child(2) div[data-testid="stCheckbox"] label:has(input:checked) svg polyline {
-                stroke: #ffffff !important;
-            }
 
             /* ═══════════════════════════════════════════════════════════════════
-               3. زر الحذف/الاستعادة (العمود الثالث)
+               3. أزرار الحذف/الاستعادة (العمود الثالث)
                ═══════════════════════════════════════════════════════════════════ */
-            .stButton:has(button[key="m15_del_wall"]) > button,
-            .stButton:has(button[key="m15_restore_wall"]) > button,
-            .stButton:has(button[key="m15_del_wall_dis"]) > button,
+            .stButton:has(button[key="m15_btn_del_multi"]) > button,
+            .stButton:has(button[key="m15_btn_restore_multi"]) > button,
+            .stButton:has(button[key="m15_btn_del_multi_dis"]) > button,
             div[data-testid="stHorizontalBlock"] .stButton > button {
                 min-height: 48px !important;
                 font-size: 14px !important;
@@ -6002,64 +6366,92 @@ def _section_walls():
             unsafe_allow_html=True
         )
 
-        # صف التحكم التفاعلي في الحائط المختار (3 أعمدة متوازنة الارتفاع)
+        # صف التحكم التفاعلي في الحوائط المحددة (3 أعمدة متوازنة الارتفاع)
         c1, c2, c3 = st.columns([1.3, 1.3, 1.0], vertical_alignment="center")
+
+        sel_hash = sum(w[0]*1000 + w[1]*100 + w[2]*10 + w[3] for w in sel_tuples) % 100000
+
         with c1:
+            th_vals = [_get_wall_thickness(w) for w in act_sel] if act_sel else [_WALL_THICK]
+            all_12 = bool(act_sel and all(t == _WALL_THIN for t in th_vals))
+            cur_th_idx = 0 if all_12 else 1
+
             nt = st.radio(
-                "سُمك الحائط",
+                "سُمك الحوائط",
                 options=[_WALL_THIN, _WALL_THICK],
-                index=0 if tc == _WALL_THIN else 1,
+                index=cur_th_idx,
                 format_func=lambda v: f"{v} سم",
                 horizontal=True,
                 label_visibility="visible",
-                key=f"m15_wall_thick_radio_{wk[0]}_{wk[1]}_{wk[2]}_{wk[3]}",
-                disabled=is_rem
+                key=f"m15_multi_thick_radio_{sel_hash}",
+                disabled=not act_sel
             )
-            if nt != tc and not is_rem:
-                wall_thick[wk] = nt
+            if act_sel and any(_get_wall_thickness(w) != nt for w in act_sel):
+                for w in act_sel:
+                    wall_thick[w] = nt
                 st.session_state["m15_wall_thickness"] = wall_thick
-                save_settings()
-
-        with c2:
-            new_is_p = st.checkbox(
-                "تفعيل كحائط دروة",
-                value=is_p_wall,
-                key=f"m15_single_parapet_chk_{wk[0]}_{wk[1]}_{wk[2]}_{wk[3]}",
-                help="عند التحديد، يأخذ هذا الحائط ارتفاع دروة تلقائياً",
-                disabled=is_rem
-            )
-            if new_is_p != is_p_wall and not is_rem:
-                pw_set = set(st.session_state.get("m15_parapet_walls", set()))
-                if new_is_p:
-                    pw_set.add(wk)
-                else:
-                    pw_set.discard(wk)
-                st.session_state["m15_parapet_walls"] = pw_set
-                for w_item in all_walls:
-                    wall_heights[w_item] = ph if w_item in pw_set else dh
-                st.session_state["m15_wall_heights"] = wall_heights
+                st.session_state.pop("m15_plan_png_b64", None)
                 save_settings()
                 st.rerun()
 
+        with c2:
+            all_p = bool(act_sel and all(_is_parapet_wall(w) for w in act_sel))
+            new_is_p = st.checkbox(
+                "تفعيل كحوائط دروة",
+                value=all_p,
+                key=f"m15_multi_parapet_chk_{sel_hash}",
+                help="عند التحديد، تأخذ كافة الحوائط المحددة ارتفاع الدروة تلقائياً",
+                disabled=not act_sel
+            )
+            if act_sel:
+                needs_update = any(_is_parapet_wall(w) != new_is_p for w in act_sel)
+                if needs_update:
+                    pw_set = set(st.session_state.get("m15_parapet_walls", set()))
+                    for w in act_sel:
+                        if new_is_p:
+                            pw_set.add(w)
+                        else:
+                            pw_set.discard(w)
+                    st.session_state["m15_parapet_walls"] = pw_set
+                    for w_item in all_walls:
+                        wall_heights[w_item] = ph if w_item in pw_set else dh
+                    st.session_state["m15_wall_heights"] = wall_heights
+                    st.session_state.pop("m15_plan_png_b64", None)
+                    save_settings()
+                    st.rerun()
+
         with c3:
-            if is_rem:
-                if st.button("♻️ استعادة الحائط", key="m15_restore_wall", use_container_width=True, type="primary"):
-                    removed_walls.discard(wk)
+            if act_sel:
+                if not st.session_state.get("m15_confirm_del_multi_walls"):
+                    if st.button(f"🗑️ حذف ({len(act_sel)})", key="m15_btn_del_multi", use_container_width=True, disabled=has_conflict, help="حذف الحوائط النشطة المحددة"):
+                        st.session_state["m15_confirm_del_multi_walls"] = True
+                        play_delete_confirmation_whistle(f"m15_del_multi_walls_{tuple(sorted(act_sel))}")
+                        st.rerun()
+                else:
+                    st.button("⏳ تأكيد بالأعلى", key="m15_btn_del_multi_dis", disabled=True, use_container_width=True)
+            elif rem_sel:
+                if st.button(f"♻️ استعادة ({len(rem_sel)})", key="m15_btn_restore_multi", use_container_width=True, type="primary", disabled=has_conflict):
+                    for w in rem_sel:
+                        removed_walls.discard(w)
                     st.session_state["m15_wall_removed"] = removed_walls
                     st.session_state.pop("m15_plan_png_b64", None)
                     save_settings()
-                    st.toast(f"✅ تم استعادة الحائط {_wall_display_label(wk, cm, wm)} بنجاح!", icon="♻️")
+                    st.toast(f"✅ تم استعادة {len(rem_sel)} حائط بنجاح!", icon="♻️")
                     st.rerun()
-            else:
-                if st.session_state.get("m15_confirm_del_wall") != wk:
-                    if st.button("🗑️ حذف الحائط", key="m15_del_wall", use_container_width=True):
-                        st.session_state["m15_confirm_del_wall"] = wk
-                        st.rerun()
-                else:
-                    st.button("⏳ تأكيد الحذف بالأعلى", key="m15_del_wall_dis", disabled=True, use_container_width=True)
 
-        if is_rem:
-            st.warning(f"🗑️ الحائط '{_wlbl(sel)}' محذوف حالياً (يظهر كخط استرشادي رمادي فقط ولا يُحسب في الحصر الهندسـي). يمكنك استعادته من قسم '♻️ استعادة الحوائط المحذوفة'.")
+        # زر إضافي مريح لاستعادة الحوائط المحذوفة إذا كان التحديد يجمع بين حوائط نشطة ومحذوفة
+        if rem_sel and act_sel:
+            st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
+            if st.button(f"♻️ استعادة الحوائط المحذوفة فقط من التحديد ({len(rem_sel)} حائط)", key="m15_btn_restore_only_rem", use_container_width=True, disabled=has_conflict):
+                for w in rem_sel:
+                    removed_walls.discard(w)
+                st.session_state["m15_wall_removed"] = removed_walls
+                st.session_state.pop("m15_plan_png_b64", None)
+                save_settings()
+                st.toast(f"✅ تم استعادة {len(rem_sel)} حائط بنجاح!", icon="♻️")
+                st.rerun()
+    else:
+        st.info("💡 اختر حائطاً أو أكثر من القائمة أعلاه لمعاينة وتعديل سُمكه أو تصنيفه كدروة أو حذفه/استعادته دفعة واحدة.")
 
     # ── 4. جدول الحوائط مع عمود التصنيف والارتفاع الدقيق ──
     wd = []
@@ -6125,14 +6517,16 @@ def _section_add_windows():
 
     st.markdown("<div style='font-size:0.92rem; font-weight:700; color:#ffffff; margin-top:8px; margin-bottom:10px;'>🎯 إسقاط الشباك بالماوس على المسقط الأفقي:</div>", unsafe_allow_html=True)
 
-    if not is_add_win_active:
+    active_mode = _get_active_interactive_mode()
+    has_conflict = (active_mode is not None and active_mode.get("key") != "m15_add_win_mode")
+
+    if has_conflict:
+        _render_mode_conflict_warning("إسقاط الشبابيك", active_mode, context_key="add_wins")
+        st.button("🎯 تفعيل إسقاط الشباك بالماوس على الحائط", type="primary", use_container_width=True, key="m15_btn_start_add_win", disabled=True)
+    elif not is_add_win_active:
         if st.button("🎯 تفعيل إسقاط الشباك بالماوس على الحائط", type="primary", use_container_width=True, key="m15_btn_start_add_win"):
+            _close_all_interactive_modes()
             st.session_state["m15_add_win_mode"] = True
-            st.session_state["m15_add_door_mode"] = False
-            st.session_state["m15_add_col_mode"] = False
-            st.session_state["m15_restore_col_mode"] = False
-            st.session_state["m15_add_wall_mode"] = False
-            st.session_state["m15_del_wall_mode"] = False
             st.rerun()
     else:
         if st.button("⏹️ إنهاء وضع إسقاط الشبابيك (Esc)", key="m15_btn_exit_add_win", use_container_width=True):
@@ -6195,14 +6589,16 @@ def _section_add_doors():
 
     st.markdown("<div style='font-size:0.92rem; font-weight:700; color:#ffffff; margin-top:8px; margin-bottom:10px;'>🎯 إسقاط الباب بالماوس على المسقط الأفقي:</div>", unsafe_allow_html=True)
 
-    if not is_add_door_active:
+    active_mode = _get_active_interactive_mode()
+    has_conflict = (active_mode is not None and active_mode.get("key") != "m15_add_door_mode")
+
+    if has_conflict:
+        _render_mode_conflict_warning("إسقاط الأبواب", active_mode, context_key="add_doors")
+        st.button("🎯 تفعيل إسقاط الباب بالماوس على الحائط", type="primary", use_container_width=True, key="m15_btn_start_add_door", disabled=True)
+    elif not is_add_door_active:
         if st.button("🎯 تفعيل إسقاط الباب بالماوس على الحائط", type="primary", use_container_width=True, key="m15_btn_start_add_door"):
+            _close_all_interactive_modes()
             st.session_state["m15_add_door_mode"] = True
-            st.session_state["m15_add_win_mode"] = False
-            st.session_state["m15_add_col_mode"] = False
-            st.session_state["m15_restore_col_mode"] = False
-            st.session_state["m15_add_wall_mode"] = False
-            st.session_state["m15_del_wall_mode"] = False
             st.rerun()
     else:
         if st.button("⏹️ إنهاء وضع إسقاط الأبواب (Esc)", key="m15_btn_exit_add_door", use_container_width=True):
@@ -6222,6 +6618,181 @@ def _section_add_doors():
 <div style='color:#4ade80;font-size:0.80rem;margin-top:4px;'>💡 لتحريك موضع أي باب وتعديل موضعه بعد إسقاطه، يمكنك سحبه مباشرة في <b>العارض ثلاثي الأبعاد 3D</b> بالأسفل.</div>
 </div>"""
         st.html(panel_door_html) if hasattr(st, "html") else st.markdown(panel_door_html, unsafe_allow_html=True)
+
+
+def _section_delete_openings():
+    """
+    قسم حذف الشبابيك والأبواب:
+    - اختيار الشباك أو الباب المراد حذفه من قائمة منسدلة.
+    - عرض بطاقة تأكيد أنيقة للمستخدم لتأكيد عملية الحذف.
+    - عند التأكيد يتم وضع علامة الحذف ونقل الفتحة تلقائياً إلى قسم '♻️ استعادة الشبابيك والأبواب المحذوفة'.
+    """
+    _ensure_opening_names()
+    active_wins = _get_active_windows_list()
+    active_doors = _get_active_doors_list()
+
+    st.markdown("<div style='font-size:0.95rem; font-weight:700; color:#ffffff; margin-top:8px; margin-bottom:12px;'>🗑️ حذف الشبابيك والأبواب</div>", unsafe_allow_html=True)
+
+    if not active_wins and not active_doors:
+        st.info("ℹ️ لا توجد شبابيك أو أبواب نشطة حالياً على المسقط لإجراء الحذف.")
+        return
+
+    cm = _get_col_name_map()
+    wm = _get_wall_name_map()
+    wm_win = _get_window_name_map()
+    wm_door = _get_door_name_map()
+
+    active_mode = _get_active_interactive_mode()
+    has_conflict = (active_mode is not None)
+    if has_conflict:
+        _render_mode_conflict_warning("حذف الشبابيك والأبواب", active_mode, context_key="del_openings")
+
+    c_stat1, c_stat2 = st.columns(2)
+    with c_stat1:
+        st.caption(f"🪟 إجمالي الشبابيك النشطة: **{len(active_wins)}**")
+    with c_stat2:
+        st.caption(f"🚪 إجمالي الأبواب النشطة: **{len(active_doors)}**")
+
+    filter_type = st.radio(
+        "تصفية نوع الفتحة المراد حذفها:",
+        options=["الكل", "شبابيك فقط 🪟", "أبواب فقط 🚪"],
+        horizontal=True,
+        key="m15_del_op_filter_choice"
+    )
+
+    items = []
+    if filter_type in ["الكل", "شبابيك فقط 🪟"]:
+        for (_, _, w, wk) in active_wins:
+            w_id = w.get("id")
+            w_name = wm_win.get(w_id) or w.get("name", "W")
+            w_lbl = _wall_display_label(wk, cm, wm)
+            w_w = float(w.get("w_m", 1.0))
+            w_h = float(w.get("h_m", 1.2))
+            w_pos = float(w.get("pos_m", 0.0))
+            w_sill = float(w.get("sill_m", 0.9))
+            items.append({
+                "id": w_id,
+                "kind": "win",
+                "kind_ar": "شباك",
+                "icon": "🪟",
+                "name": w_name,
+                "wk": wk,
+                "wall_label": w_lbl,
+                "w_m": w_w,
+                "h_m": w_h,
+                "pos_m": w_pos,
+                "sill_m": w_sill,
+                "display": f"🪟 شباك {w_name} — حائط [{w_lbl}] (عرض {w_w*100:.0f}سم × ارتفاع {w_h*100:.0f}سم | موضع: {w_pos:.2f}م)"
+            })
+
+    if filter_type in ["الكل", "أبواب فقط 🚪"]:
+        for (_, _, d, wk) in active_doors:
+            d_id = d.get("id")
+            d_name = wm_door.get(d_id) or d.get("name", "D")
+            d_lbl = _wall_display_label(wk, cm, wm)
+            d_w = float(d.get("w_m", 0.9))
+            d_h = float(d.get("h_m", 2.1))
+            d_pos = float(d.get("pos_m", 0.0))
+            items.append({
+                "id": d_id,
+                "kind": "door",
+                "kind_ar": "باب",
+                "icon": "🚪",
+                "name": d_name,
+                "wk": wk,
+                "wall_label": d_lbl,
+                "w_m": d_w,
+                "h_m": d_h,
+                "pos_m": d_pos,
+                "display": f"🚪 باب {d_name} — حائط [{d_lbl}] (عرض {d_w*100:.0f}سم × ارتفاع {d_h*100:.0f}سم | موضع: {d_pos:.2f}م)"
+            })
+
+    if not items:
+        st.info("ℹ️ لا توجد عناصر مطابقة للتصفية المختارة.")
+        return
+
+    # قائمة منسدلة لاختيار الفتحة
+    options_idx = [0] + list(range(1, len(items) + 1))
+    def _format_opening_item(i):
+        if i == 0:
+            return "-- اختر الشباك أو الباب المراد حذفه --"
+        return items[i - 1]["display"]
+
+    cur_idx = st.session_state.get("m15_sel_delete_opening_idx", 0)
+    if cur_idx >= len(options_idx):
+        cur_idx = 0
+        st.session_state["m15_sel_delete_opening_idx"] = 0
+
+    sel_idx = st.selectbox(
+        "🎯 اختر الشباك أو الباب المراد حذفه من القائمة المنسدلة:",
+        options=options_idx,
+        index=cur_idx,
+        format_func=_format_opening_item,
+        key="m15_sel_delete_opening_idx"
+    )
+
+    if sel_idx != 0:
+        chosen = items[sel_idx - 1]
+        kind_title = "الشباك" if chosen["kind"] == "win" else "الباب"
+        play_delete_confirmation_whistle(f"m15_del_op_{chosen['id']}_{chosen['kind']}")
+        st.markdown(
+            f"""<div style='background: #fff1f2; border: 2px solid #e11d48; border-radius: 8px; padding: 10px 14px; margin: 10px 0;' dir='rtl'>
+                <div style='font-weight: 800; color: #9f1239; font-size: 0.95rem; margin-bottom: 4px;'>
+                    ⚠️ هل أنت متأكد من رغبتك في حذف {kind_title}: <b>{chosen["name"]}</b>؟
+                </div>
+                <div style='font-size: 0.84rem; color: #be123c;'>
+                    الحائط: <b>{chosen["wall_label"]}</b> | الأبعاد: <b>{chosen["w_m"]*100:.0f}سم × {chosen["h_m"]*100:.0f}سم</b> | الموضع: <b>{chosen["pos_m"]:.2f}م</b>
+                </div>
+                <div style='font-size: 0.78rem; color: #e11d48; margin-top: 4px;'>
+                    💡 سيتم نقل الفتحة إلى قسم <b>«♻️ استعادة الشبابيك والأبواب المحذوفة»</b> ويمكنك استعادتها في أي وقت.
+                </div>
+            </div>""",
+            unsafe_allow_html=True
+        )
+
+        c_yes, c_no = st.columns(2)
+        with c_yes:
+            if st.button(f"🗑️ نعم، تأكيد حذف {chosen['name']}", key="m15_btn_conf_del_op", type="primary", use_container_width=True, disabled=has_conflict):
+                _remove_opening_by_id(chosen["id"], kind=chosen["kind"])
+                st.session_state["m15_sel_delete_opening_idx"] = 0
+                st.session_state.pop("_last_del_confirm_whistle_token", None)
+                st.session_state.pop("m15_plan_png_b64", None)
+                save_settings()
+                st.toast(f"🗑️ تم حذف {kind_title} {chosen['name']} بنجاح ونقله إلى قسم الاستعادة!", icon="🗑️")
+                st.rerun()
+        with c_no:
+            if st.button("❌ إلغاء", key="m15_btn_cancel_del_op", use_container_width=True):
+                st.session_state["m15_sel_delete_opening_idx"] = 0
+                st.session_state.pop("_last_del_confirm_whistle_token", None)
+                st.rerun()
+
+    # خيار حذف جماعي إضافي
+    st.markdown("<hr style='margin: 16px 0 10px 0; border: none; border-top: 1px dashed rgba(255,255,255,0.15);'>", unsafe_allow_html=True)
+    with st.expander("⚠️ خيارات الحذف الجماعي للفتحات", expanded=False):
+        st.caption("يمكنك حذف كافة الشبابيك أو الأبواب دفعة واحدة ونقلها جميعاً إلى قسم الاستعادة:")
+        c_all_w, c_all_d = st.columns(2)
+        with c_all_w:
+            if active_wins and st.button("🗑️ حذف جميع الشبابيك القائمة", key="m15_btn_del_all_wins", use_container_width=True, disabled=has_conflict):
+                win_store = st.session_state.get("m15_windows", {})
+                for wk in win_store:
+                    for w in win_store[wk]:
+                        w["removed"] = True
+                _resequence_openings()
+                st.session_state.pop("m15_plan_png_b64", None)
+                save_settings()
+                st.toast("🗑️ تم حذف جميع الشبابيك ونقلها إلى قسم الاستعادة بنجاح!", icon="🗑️")
+                st.rerun()
+        with c_all_d:
+            if active_doors and st.button("🗑️ حذف جميع الأبواب القائمة", key="m15_btn_del_all_doors", use_container_width=True, disabled=has_conflict):
+                door_store = st.session_state.get("m15_doors", {})
+                for wk in door_store:
+                    for d in door_store[wk]:
+                        d["removed"] = True
+                _resequence_openings()
+                st.session_state.pop("m15_plan_png_b64", None)
+                save_settings()
+                st.toast("🗑️ تم حذف جميع الأبواب ونقلها إلى قسم الاستعادة بنجاح!", icon="🗑️")
+                st.rerun()
 
 
 def _section_restore_openings():
@@ -6256,7 +6827,12 @@ def _section_restore_openings():
     with c2:
         st.caption(f"🚪 الأبواب المحذوفة: **{n_doors}**")
 
-    if st.button("♻️ استعادة جميع الشبابيك والأبواب المحذوفة", key="m15_btn_restore_all_openings", type="primary", use_container_width=True):
+    active_mode = _get_active_interactive_mode()
+    has_conflict = (active_mode is not None)
+    if has_conflict:
+        _render_mode_conflict_warning("استعادة الشبابيك والأبواب", active_mode, context_key="restore_openings")
+
+    if st.button("♻️ استعادة جميع الشبابيك والأبواب المحذوفة", key="m15_btn_restore_all_openings", type="primary", use_container_width=True, disabled=has_conflict):
         win_store = st.session_state.get("m15_windows", {})
         for wk in win_store:
             for w in win_store[wk]:
@@ -6320,7 +6896,7 @@ def _section_restore_openings():
                 target_wk = wall_choices[chosen_w_idx] if wall_choices else orig_wk
 
             with rc2:
-                if st.button(f"♻️ استعادة {op_name}", key=f"m15_btn_restore_single_op_{op_id}_{idx}", use_container_width=True):
+                if st.button(f"♻️ استعادة {op_name}", key=f"m15_btn_restore_single_op_{op_id}_{idx}", use_container_width=True, disabled=has_conflict):
                     _restore_opening(item, target_wk)
                     st.session_state.pop("m15_plan_png_b64", None)
                     save_settings()
@@ -6328,12 +6904,15 @@ def _section_restore_openings():
                     st.rerun()
 
 
-def _compute_plaster_survey():
+def _compute_plaster_survey(deduction_rule=None):
     """
-    حساب حصر كميات ومواد أعمال البياض (المحارة) طبقاً للكود المصري لأعمال البياض:
+    حساب حصر كميات ومواد أعمال البياض (المحارة) طبقاً للكود المصري لأعمال البياض (ECP):
     - حساب مساحة كل وجه محدد (Gross Area = Length × Height).
-    - حصر الفتحات (الأبواب والشبابيك) وخصمها لكل وجه محدد (Deductions = Σ (w × h)).
-    - صافي المسطح (Net Area = Gross - Deductions).
+    - قواعد خصم الفتحات:
+        1. الكود المصري ECP: الفتحات حتى 4.00 م² لا تُخصم إطلاقاً (عوضاً عن بياض الجوانب والأكتاف والسوك والجلسات).
+           والفتحات أكبر من 4.00 م² يُخصم ما زاد عن 4.00 م² فقط.
+        2. الحصر الصافي الكامل (Net): تُخصم كامل مساحات الفتحات 100%.
+    - صافي المسطح النهائي (Net Area = Gross - Deductions).
     - استهلاك الرمل: 1 م³ رمل لكل 42 م² مسطح صافي، مع 5% هالك تشغيل:
         Sand_m3 = (Net Area / 42.0) * 1.05
     - استهلاك الأسمنت: 350 كجم أسمنت لكل 1 م³ رمل (7 شكاير / م³):
@@ -6341,6 +6920,9 @@ def _compute_plaster_survey():
         Cement_tons = Cement_kg / 1000.0
         Cement_bags = ceil(Cement_kg / 50.0)
     """
+    if deduction_rule is None:
+        deduction_rule = st.session_state.get("m15_plaster_deduction_rule", "ecp")
+
     all_walls = _get_all_walls()
     removed_walls = st.session_state.get("m15_wall_removed", set())
     plaster_faces_map = st.session_state.get("m15_plaster_faces", {})
@@ -6350,6 +6932,7 @@ def _compute_plaster_survey():
 
     rows = []
     tot_gross = 0.0
+    tot_op_gross = 0.0
     tot_ded = 0.0
     tot_net = 0.0
     tot_sand = 0.0
@@ -6375,16 +6958,28 @@ def _compute_plaster_survey():
         face_gross = length * height
         wall_gross = face_gross * n_faces
 
-        # حصر الفتحات النشطة على الحائط
-        single_face_op = 0.0
+        # حصر الفتحات النشطة على الحائط وتطبيق قواعد الخصم
+        single_face_op_gross = 0.0
+        single_face_ded = 0.0
         for wi in _get_wall_windows(wk):
             if not wi.get("removed", False):
-                single_face_op += float(wi.get("w_m", 1.0)) * float(wi.get("h_m", 1.2))
+                area = float(wi.get("w_m", 1.0)) * float(wi.get("h_m", 1.2))
+                single_face_op_gross += area
+                if deduction_rule == "ecp":
+                    single_face_ded += max(0.0, area - 4.0) if area > 4.0 else 0.0
+                else:
+                    single_face_ded += area
         for di in _get_wall_doors(wk):
             if not di.get("removed", False):
-                single_face_op += float(di.get("w_m", 0.9)) * float(di.get("h_m", 2.1))
+                area = float(di.get("w_m", 0.9)) * float(di.get("h_m", 2.1))
+                single_face_op_gross += area
+                if deduction_rule == "ecp":
+                    single_face_ded += max(0.0, area - 4.0) if area > 4.0 else 0.0
+                else:
+                    single_face_ded += area
 
-        wall_ded = single_face_op * n_faces
+        wall_op_gross = single_face_op_gross * n_faces
+        wall_ded = single_face_ded * n_faces
         wall_net = max(0.0, wall_gross - wall_ded)
 
         # استهلاك الرمل والأسمنت طبقاً للكود المصري
@@ -6409,7 +7004,8 @@ def _compute_plaster_survey():
             "الطول (م)": round(length, 2),
             "الارتفاع (م)": round(height, 2),
             "إجمالي مسطح المحارة (m^2)": round(wall_gross, 2),
-            "إجمالي مساحة الفتحات المخصومة (m^2)": round(wall_ded, 2),
+            "إجمالي مساحة الفتحات (m^2)": round(wall_op_gross, 2),
+            "الفتحات المخصومة المعتمدة (m^2)": round(wall_ded, 2),
             "صافي مسطح المحارة النهائي (m^2)": round(wall_net, 2),
             "كمية الرمل المطلوبة (m^3)": round(sand_m3, 2),
             "كمية الأسمنت (طن)": round(cement_tons, 2),
@@ -6418,6 +7014,7 @@ def _compute_plaster_survey():
         })
 
         tot_gross += wall_gross
+        tot_op_gross += wall_op_gross
         tot_ded += wall_ded
         tot_net += wall_net
         tot_sand += sand_m3
@@ -6429,6 +7026,7 @@ def _compute_plaster_survey():
     return {
         "rows": rows,
         "tot_gross": tot_gross,
+        "tot_op_gross": tot_op_gross,
         "tot_ded": tot_ded,
         "tot_net": tot_net,
         "tot_sand": tot_sand,
@@ -6436,6 +7034,7 @@ def _compute_plaster_survey():
         "tot_cement_tons": tot_cement_tons,
         "tot_cement_bags": tot_cement_bags,
         "active_walls_count": len(rows),
+        "deduction_rule": deduction_rule,
     }
 
 
@@ -6474,10 +7073,15 @@ def _compute_wall_bounded_spaces():
             wk_left  = (i, j,     i,     j + 1)
             wk_right = (i + 1, j, i + 1, j + 1)
 
-            has_top   = wk_top   in active_walls
-            has_bot   = wk_bot   in active_walls
-            has_left  = wk_left  in active_walls
-            has_right = wk_right in active_walls
+            w_top   = _get_wall_for_segment(wk_top, active_walls)
+            w_bot   = _get_wall_for_segment(wk_bot, active_walls)
+            w_left  = _get_wall_for_segment(wk_left, active_walls)
+            w_right = _get_wall_for_segment(wk_right, active_walls)
+
+            has_top   = w_top is not None
+            has_bot   = w_bot is not None
+            has_left  = w_left is not None
+            has_right = w_right is not None
 
             # يُعتبر مساحةً إذا وُجد حائط واحد على الأقل على أي ضلع
             wall_count = sum([has_top, has_bot, has_left, has_right])
@@ -6486,25 +7090,25 @@ def _compute_wall_bounded_spaces():
 
             # حساب الحدود الداخلية الصافية بعد خصم سُمك الحوائط
             if has_left:
-                _min_x, _max_x, _c, _th = _get_wall_cross_bounds(wk_left)
+                _min_x, _max_x, _c, _th = _get_wall_cross_bounds(w_left)
                 x_inner_left = _max_x
             else:
                 x_inner_left = x_left
 
             if has_right:
-                _min_x, _max_x, _c, _th = _get_wall_cross_bounds(wk_right)
+                _min_x, _max_x, _c, _th = _get_wall_cross_bounds(w_right)
                 x_inner_right = _min_x
             else:
                 x_inner_right = x_right
 
             if has_bot:
-                _min_y, _max_y, _c, _th = _get_wall_cross_bounds(wk_bot)
+                _min_y, _max_y, _c, _th = _get_wall_cross_bounds(w_bot)
                 y_inner_bot = _max_y
             else:
                 y_inner_bot = y_bot
 
             if has_top:
-                _min_y, _max_y, _c, _th = _get_wall_cross_bounds(wk_top)
+                _min_y, _max_y, _c, _th = _get_wall_cross_bounds(w_top)
                 y_inner_top = _min_y
             else:
                 y_inner_top = y_top
@@ -6562,7 +7166,7 @@ def _compute_bays():
     bays = []
     all_walls = _get_all_walls()
     removed_walls = st.session_state.get("m15_wall_removed", set())
-    active_walls = set(wk for wk in all_walls if wk not in removed_walls)
+    active_walls = [wk for wk in all_walls if wk not in removed_walls]
 
     bay_idx = 1
 
@@ -6587,31 +7191,32 @@ def _compute_bays():
             wk_left = (i, j, i, j + 1)
             wk_right = (i + 1, j, i + 1, j + 1)
 
+            w_top = _get_wall_for_segment(wk_top, active_walls)
+            w_bot = _get_wall_for_segment(wk_bot, active_walls)
+            w_left = _get_wall_for_segment(wk_left, active_walls)
+            w_right = _get_wall_for_segment(wk_right, active_walls)
+
             # حساب أوجه الحوائط الداخلية للباكية (Face-to-Face Inner Boundaries):
-            # الوجه الداخلي للحائط الأيسر:
-            if wk_left in active_walls:
-                _min_x, _max_x, _c, _th = _get_wall_cross_bounds(wk_left)
+            if w_left:
+                _min_x, _max_x, _c, _th = _get_wall_cross_bounds(w_left)
                 x_inner_left = _max_x
             else:
                 x_inner_left = x_left
 
-            # الوجه الداخلي للحائط الأيمن:
-            if wk_right in active_walls:
-                _min_x, _max_x, _c, _th = _get_wall_cross_bounds(wk_right)
+            if w_right:
+                _min_x, _max_x, _c, _th = _get_wall_cross_bounds(w_right)
                 x_inner_right = _min_x
             else:
                 x_inner_right = x_right
 
-            # الوجه الداخلي للحائط السفلي:
-            if wk_bot in active_walls:
-                _min_y, _max_y, _c, _th = _get_wall_cross_bounds(wk_bot)
+            if w_bot:
+                _min_y, _max_y, _c, _th = _get_wall_cross_bounds(w_bot)
                 y_inner_bot = _max_y
             else:
                 y_inner_bot = y_bot
 
-            # الوجه الداخلي للحائط العلوي:
-            if wk_top in active_walls:
-                _min_y, _max_y, _c, _th = _get_wall_cross_bounds(wk_top)
+            if w_top:
+                _min_y, _max_y, _c, _th = _get_wall_cross_bounds(w_top)
                 y_inner_top = _min_y
             else:
                 y_inner_top = y_top
@@ -6644,10 +7249,10 @@ def _compute_bays():
                 "cx": cx,
                 "cy": cy,
                 "walls": {
-                    "أعلى": {"wk": wk_top, "face": "أسفل"},
-                    "أسفل": {"wk": wk_bot, "face": "أعلى"},
-                    "يسار": {"wk": wk_left, "face": "يمين"},
-                    "يمين": {"wk": wk_right, "face": "يسار"},
+                    "أعلى": {"wk": w_top or wk_top, "face": "أسفل", "exists": (w_top is not None)},
+                    "أسفل": {"wk": w_bot or wk_bot, "face": "أعلى", "exists": (w_bot is not None)},
+                    "يسار": {"wk": w_left or wk_left, "face": "يمين", "exists": (w_left is not None)},
+                    "يمين": {"wk": w_right or wk_right, "face": "يسار", "exists": (w_right is not None)},
                 },
                 "label": f"{bay_code} — [X{j+1}-X{j+2} × Y{i+1}-Y{i+2}] ({clear_span_x:.2f}م × {clear_span_y:.2f}م = {clear_area_m2:.2f}م²)"
             })
@@ -6709,35 +7314,43 @@ def _get_exterior_facades():
         },
     }
 
-    # 1. الواجهة العلوية والسفلية: تجميع الحوائط الأفقية حسب الفترة الأفقية (i1, i2)
-    h_by_span = {}
-    for wk in h_walls:
-        i1, j1, i2, j2 = wk
-        span = (min(i1, i2), max(i1, i2))
-        h_by_span.setdefault(span, []).append(wk)
+    # 1. الواجهات الأفقية (العلوية والسفلية):
+    # لكل فترة أفقية بين محورين متجاورين (i إلى i+1):
+    top_walls_order = []
+    bot_walls_order = []
+    for i in range(nx - 1):
+        covering = [w for w in h_walls if min(w[0], w[2]) <= i and max(w[0], w[2]) >= i + 1]
+        if covering:
+            # أعلى حائط أفقي لهذه الفترة (أقصى Y)
+            tw = max(covering, key=lambda w: w[1])
+            if tw not in top_walls_order:
+                top_walls_order.append(tw)
+            # أسفل حائط أفقي لهذه الفترة (أدنى Y)
+            bw = min(covering, key=lambda w: w[1])
+            if bw not in bot_walls_order:
+                bot_walls_order.append(bw)
 
-    for span, w_list in sorted(h_by_span.items()):
-        # أعلى حائط أفقي لهذه الفترة
-        top_w = max(w_list, key=lambda w: w[1])
-        facades["top"]["walls"].append(top_w)
-        # أسفل حائط أفقي لهذه الفترة
-        bot_w = min(w_list, key=lambda w: w[1])
-        facades["bottom"]["walls"].append(bot_w)
+    facades["top"]["walls"] = top_walls_order
+    facades["bottom"]["walls"] = bot_walls_order
 
-    # 2. الواجهة اليسرى واليمنى: تجميع الحوائط الرأسية حسب الفترة الرأسية (j1, j2)
-    v_by_span = {}
-    for wk in v_walls:
-        i1, j1, i2, j2 = wk
-        span = (min(j1, j2), max(j1, j2))
-        v_by_span.setdefault(span, []).append(wk)
+    # 2. الواجهات الرأسية (اليسرى واليمنى):
+    # لكل فترة رأسية بين محورين متجاورين (j إلى j+1):
+    left_walls_order = []
+    right_walls_order = []
+    for j in range(ny - 1):
+        covering = [w for w in v_walls if min(w[1], w[3]) <= j and max(w[1], w[3]) >= j + 1]
+        if covering:
+            # أقصى يسار (أقل X)
+            lw = min(covering, key=lambda w: w[0])
+            if lw not in left_walls_order:
+                left_walls_order.append(lw)
+            # أقصى يمين (أكبر X)
+            rw = max(covering, key=lambda w: w[0])
+            if rw not in right_walls_order:
+                right_walls_order.append(rw)
 
-    for span, w_list in sorted(v_by_span.items()):
-        # أقصى حائط رأسي باليسار
-        left_w = min(w_list, key=lambda w: w[0])
-        facades["left"]["walls"].append(left_w)
-        # أقصى حائط رأسي باليمين
-        right_w = max(w_list, key=lambda w: w[0])
-        facades["right"]["walls"].append(right_w)
+    facades["left"]["walls"] = left_walls_order
+    facades["right"]["walls"] = right_walls_order
 
     return facades
 
@@ -7375,10 +7988,35 @@ def _section_plaster_boq():
     """
     قسم منفصل مطوي: جدول الحصر وخامات البياض (طبقاً للكود المصري ECP):
     - جدول تفصيلي لكل حائط والأوجه المحددة ومساحات الخصم وصافي المسطح والأسمنت والرمل.
+    - خيار تحديد أسلوب خصم الفتحات (الكود المصري ECP مقابل الخصم الصافي الكامل).
     - ملخص تنفيذي بارز لكميات المحارة الإجمالية.
     - زر تحميل جدول الحصر بصيغة CSV.
     """
-    p_res = _compute_plaster_survey()
+    # ── أسلوب حصر وخصم الفتحات في أعمال البياض ──
+    rule_opts = [
+        "📐 الكود المصري ECP (الفتحات ≤ 4.0 م² لا تُخصم، وما زاد عنها يُخصم الفارق)",
+        "✂️ الحصر الصافي الكامل (خصم كامل مساحة الفتحات دون استثناء)"
+    ]
+    cur_rule_str = st.session_state.get("m15_plaster_deduction_rule_str", rule_opts[0])
+    if cur_rule_str not in rule_opts:
+        cur_rule_str = rule_opts[0]
+
+    col_r1, col_r2 = st.columns([2.2, 1.0], vertical_alignment="center")
+    with col_r1:
+        chosen_rule_str = st.radio(
+            "📐 طريقة خصم فتحات الأبواب والشبابيك في حصر البياض:",
+            options=rule_opts,
+            index=rule_opts.index(cur_rule_str),
+            key="m15_plaster_rule_radio",
+            horizontal=True,
+            help="طبقاً للكود المصري للبياض، الفتحات حتى 4 م² لا تخصم لأن مساحتها تقابل تكلفة ومسطح بياض الجوانب والأكتاف والسوك والجلسات."
+        )
+    with col_r2:
+        rule_key = "ecp" if "الكود المصري" in chosen_rule_str else "net"
+        st.session_state["m15_plaster_deduction_rule"] = rule_key
+        st.session_state["m15_plaster_deduction_rule_str"] = chosen_rule_str
+
+    p_res = _compute_plaster_survey(deduction_rule=rule_key)
     p_rows = p_res["rows"]
 
     if not p_rows:
@@ -7389,21 +8027,29 @@ def _section_plaster_boq():
             display_rows.append({
                 "الحائط": r["الحائط"],
                 "الوجه المحدد": r["الوجه المحدد"],
-                "إجمالي مسطح المحارة (m^2)": r["إجمالي مسطح المحارة (m^2)"],
-                "إجمالي مساحة الفتحات المخصومة (m^2)": r["إجمالي مساحة الفتحات المخصومة (m^2)"],
-                "صافي مسطح المحارة النهائي (m^2)": r["صافي مسطح المحارة النهائي (m^2)"],
-                "كمية الرمل المطلوبة (m^3)": r["كمية الرمل المطلوبة (m^3)"],
-                "كمية الأسمنت المطلوبة": r["كمية الأسمنت المطلوبة"],
+                "عدد الأوجه": r["عدد الأوجه"],
+                "الطول (م)": r["الطول (م)"],
+                "الارتفاع (م)": r["الارتفاع (م)"],
+                "إجمالي المسطح (م²)": r["إجمالي مسطح المحارة (m^2)"],
+                "مساحة الفتحات (م²)": r["إجمالي مساحة الفتحات (m^2)"],
+                "الخصم المعتمد (م²)": r["الفتحات المخصومة المعتمدة (m^2)"],
+                "صافي مسطح المحارة (م²)": r["صافي مسطح المحارة النهائي (m^2)"],
+                "الرمل المطلوب (م³)": r["كمية الرمل المطلوبة (m^3)"],
+                "الأسمنت المطلوب": r["كمية الأسمنت المطلوبة"],
             })
 
         tot_display = {
             "الحائط": "✅ الإجمالي العام",
             "الوجه المحدد": f"{sum(r['عدد الأوجه'] for r in p_rows)} وجه",
-            "إجمالي مسطح المحارة (m^2)": round(p_res["tot_gross"], 2),
-            "إجمالي مساحة الفتحات المخصومة (m^2)": round(p_res["tot_ded"], 2),
-            "صافي مسطح المحارة النهائي (m^2)": round(p_res["tot_net"], 2),
-            "كمية الرمل المطلوبة (m^3)": round(p_res["tot_sand"], 2),
-            "كمية الأسمنت المطلوبة": f"{p_res['tot_cement_tons']:.2f} طن ({p_res['tot_cement_bags']} شكارة)",
+            "عدد الأوجه": sum(r["عدد الأوجه"] for r in p_rows),
+            "الطول (م)": round(sum(r["الطول (م)"] for r in p_rows), 2),
+            "الارتفاع (م)": "—",
+            "إجمالي المسطح (م²)": round(p_res["tot_gross"], 2),
+            "مساحة الفتحات (م²)": round(p_res["tot_op_gross"], 2),
+            "الخصم المعتمد (م²)": round(p_res["tot_ded"], 2),
+            "صافي مسطح المحارة (م²)": round(p_res["tot_net"], 2),
+            "الرمل المطلوب (م³)": round(p_res["tot_sand"], 2),
+            "الأسمنت المطلوب": f"{p_res['tot_cement_tons']:.2f} طن ({p_res['tot_cement_bags']} شكارة)",
         }
 
         df_p = pd.DataFrame(display_rows + [tot_display])
@@ -7424,18 +8070,20 @@ def _section_plaster_boq():
             key="m15_dl_plaster_sec"
         )
 
+        rule_badge = "الكود المصري ECP (خصم الفتحات > 4م²)" if rule_key == "ecp" else "الحصر الصافي الكامل (خصم كافة الفتحات)"
         st.markdown(f"""
-        <div style='background:linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border:1.5px solid #0284c7; border-radius:8px; padding:12px 16px; margin-top:12px;' dir='rtl'>
-            <div style='display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:8px;'>
-                <b style='color:#38bdf8; font-size:0.95rem;'>📊 ملخص كميات المحارة التنفيذية (طبقاً للكود المصري ECP):</b>
-                <span style='background:#0284c7; color:#fff; font-size:0.75rem; font-weight:bold; padding:2px 8px; border-radius:10px;'>
+        <div style='background:linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border:1.5px solid #0284c7; border-radius:8px; padding:14px 18px; margin-top:12px;' dir='rtl'>
+            <div style='display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:10px;'>
+                <b style='color:#38bdf8; font-size:0.98rem;'>📊 ملخص كميات المحارة التنفيذية ({rule_badge}):</b>
+                <span style='background:#0284c7; color:#fff; font-size:0.75rem; font-weight:bold; padding:3px 10px; border-radius:12px;'>
                     {p_res['active_walls_count']} حائط مشمول
                 </span>
             </div>
-            <div style='display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px; font-size:0.84rem; color:#cbd5e1;'>
-                <div>• إجمالي المسطح: <b style='color:#93c5fd;'>{p_res['tot_gross']:.2f} م²</b></div>
-                <div>• الفتحات المخصومة: <b style='color:#f87171;'>{p_res['tot_ded']:.2f} م²</b></div>
-                <div>• صافي المسطح: <b style='color:#4ade80;'>{p_res['tot_net']:.2f} م²</b></div>
+            <div style='display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:10px; font-size:0.86rem; color:#cbd5e1;'>
+                <div>• إجمالي مسطح البياض: <b style='color:#93c5fd;'>{p_res['tot_gross']:.2f} م²</b></div>
+                <div>• إجمالي الفتحات: <b style='color:#fbbf24;'>{p_res['tot_op_gross']:.2f} م²</b></div>
+                <div>• الخصم المعتمد: <b style='color:#f87171;'>{p_res['tot_ded']:.2f} م²</b></div>
+                <div>• صافي مسطح البياض: <b style='color:#4ade80;'>{p_res['tot_net']:.2f} م²</b></div>
                 <div>• الرمل (5% هالك): <b style='color:#fde047;'>{p_res['tot_sand']:.2f} م³</b></div>
                 <div>• الأسمنت: <b style='color:#67e8f9;'>{p_res['tot_cement_tons']:.2f} طن</b> <span style='color:#94a3b8;'>({p_res['tot_cement_bags']} شكارة)</span></div>
             </div>
@@ -9608,7 +10256,7 @@ def _section_3d_viewer():
 
   // Materials
   const wallMat = new THREE.MeshStandardMaterial({ color: 0xd4d4d8, roughness: 0.80, metalness: 0.05 });
-  const parapetWallMat = new THREE.MeshStandardMaterial({ color: 0xbac7d5, roughness: 0.80, metalness: 0.05 });
+  const parapetWallMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.70, metalness: 0.10 });
   const wallEdgeMat = new THREE.LineBasicMaterial({ color: 0x94a3b8, transparent: true, opacity: 0.60 });
 
   const colMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.90, metalness: 0.10 });
@@ -12972,7 +13620,28 @@ def _section_3d_viewer():
 
 
 def _section_survey():
-    res = _compute_survey()
+    # ── 0. خيارات القياس والحصر الهندسي ──
+    len_opts = [
+        "📏 الطول الصافي الخالص بين أوجه الأعمدة (خصم تداخل الأعمدة) [الكود المصري ECP]",
+        "📐 طول المحور كاملاً من السنتر للسنتر (Axis-to-Axis)"
+    ]
+    cur_len_str = st.session_state.get("m15_masonry_len_str", len_opts[0])
+    if cur_len_str not in len_opts:
+        cur_len_str = len_opts[0]
+
+    chosen_len_str = st.radio(
+        "📐 طريقة قياس أطوال حوائط المباني في الحصر الهندسي:",
+        options=len_opts,
+        index=len_opts.index(cur_len_str),
+        key="m15_len_mode_radio",
+        horizontal=True,
+        help="طبقاً لأصول الحصر بالكود المصري، حوائط المباني تُقاس من وش العمود لوش العمود الصافي بعد خصم مسقط الأعمدة الخرسانية."
+    )
+    len_mode = "clear" if "الصافي" in chosen_len_str else "axis"
+    st.session_state["m15_masonry_len_mode"] = len_mode
+    st.session_state["m15_masonry_len_str"] = chosen_len_str
+
+    res = _compute_survey(len_mode=len_mode)
     r12 = res["rows_12"]
     r25 = res["rows_25"]
 
@@ -12987,21 +13656,21 @@ def _section_survey():
     n25 = sum(r.get("المساحة الصافية (م2)", 0.0) for r in r25)
     v25 = sum(r.get("حجم الطوب (م3)", 0.0) for r in r25)
 
-    total_openings = op12 + op25
+    total_openings_masonry = op12 + op25
 
-    # 3. حسابات المونة ومواد البناء طبقاً للكود المصري ECP:
+    # 3. حسابات المونة ومواد البناء للمباني طبقاً للكود المصري ECP:
     # - مباني 12 سم (نصف طوبة): 0.025 م3 رمل / م2 مسطح
     # - مباني 25 سم (طوبة كاملة): 0.200 م3 رمل / م3 مكعب
     # - نسبة هالك تشغيل طبيعي: 5% (× 1.05)
     sand_12 = n12 * 0.025
     sand_25 = v25 * 0.200
-    sand_net = sand_12 + sand_25
-    sand_total = sand_net * 1.05
+    sand_net_masonry = sand_12 + sand_25
+    sand_total_masonry = sand_net_masonry * 1.05
 
-    # محتوى الأسمنت في المونة طبقاً للكود المصري: 350 كجم أسمنت لكل 1 م3 رمل (7 شكاير / م3)
-    cement_kg = sand_total * 350.0
-    cement_tons = cement_kg / 1000.0
-    cement_bags = math.ceil(cement_kg / 50.0) if cement_kg > 0 else 0
+    # محتوى الأسمنت في مونة المباني: 350 كجم أسمنت لكل 1 م3 رمل (7 شكاير / م3)
+    cement_masonry_kg = sand_total_masonry * 350.0
+    cement_masonry_tons = cement_masonry_kg / 1000.0
+    cement_masonry_bags = math.ceil(cement_masonry_kg / 50.0) if cement_masonry_kg > 0 else 0
 
     # ── حساب عدد الطوب بناءً على النوع والمقاس المحدد من المستخدم (BOQ) ──
     brick_size_v = st.session_state.get("m15_brick_size", "25×12×6")
@@ -13019,60 +13688,67 @@ def _section_survey():
     brick_type_display = st.session_state.get("m15_brick_type", "")
     brick_size_display = f"{b_l:.0f}×{b_w:.0f}×{b_h:.0f} سم" if brick_size_v == _CUSTOM_SIZE_LABEL else f"{brick_size_v} سم"
 
+    # ── 4. حسابات حصر المحارة التوريدي والتنفيذي ──
+    p_res = _compute_plaster_survey()
+    p_net_m2 = p_res["tot_net"]
+    p_sand_m3 = p_res["tot_sand"]
+    p_cement_tons = p_res["tot_cement_tons"]
+    p_cement_bags = p_res["tot_cement_bags"]
 
+    # ── 5. إجماليات الخامات المشتركة لكامل المشروع (مباني + محارة) ──
+    total_sand_all = sand_total_masonry + p_sand_m3
+    total_cement_tons_all = cement_masonry_tons + p_cement_tons
+    total_cement_bags_all = cement_masonry_bags + p_cement_bags
 
-    # بطاقة الملخص التنفيذي للحصر (الأرقام المطلوبة كخطوط مباشرة وواضحة)
+    # بطاقة الملخص التنفيذي للحصر الهندسي
+    len_badge = "طول صافي بين الأعمدة" if len_mode == "clear" else "طول المحور كاملاً"
     st.markdown(
         f"""<div style='background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1.5px solid #334155; border-radius: 12px; padding: 18px 22px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.25);' dir='rtl'>
-        <div style='display:flex; align-items:center; justify-content:space-between; border-bottom: 1px solid #334155; padding-bottom: 12px; margin-bottom: 14px;'>
+        <div style='display:flex; align-items:center; justify-content:space-between; border-bottom: 1px solid #334155; padding-bottom: 12px; margin-bottom: 14px; flex-wrap:wrap; gap:8px;'>
             <div style='font-weight:bold; font-size:1.05rem; color:#f8fafc; display:flex; align-items:center; gap:8px;'>
                 <span>📋</span>
-                <span>الملخص الهندسي لحصر أعمال المباني والخامات (طبقاً للكود المصري ECP)</span>
+                <span>الملخص الهندسي الموحد لحصر أعمال المباني والمحارة والخامات (الكود المصري ECP)</span>
             </div>
             <span style='background: linear-gradient(135deg, #1e40af, #2563eb); color:#ffffff; font-size:0.80rem; font-weight:bold; padding:4px 12px; border-radius:20px; border:1px solid #60a5fa;'>
-                حسابات دقيقة للمواد
+                {len_badge}
             </span>
         </div>
-        <div style='display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:12px;'>
+        <div style='display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:12px;'>
             <div style='background: rgba(249, 115, 22, 0.12); border: 1px solid rgba(249, 115, 22, 0.35); border-right: 4px solid #f97316; padding: 12px 14px; border-radius: 8px;'>
-                <div style='font-size:0.84rem; color:#fdba74; font-weight:bold;'>1️⃣ إجمالي مسطح طوب 12 سم (شامل الفتحات):</div>
-                <div style='font-size:1.35rem; font-weight:bold; color:#ffedd5; margin-top:4px;'>{g12:.2f} <span style='font-size:0.85rem; font-weight:normal; color:#fed7aa;'>م² مسطح</span></div>
-            </div>
-            <div style='background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); border-right: 4px solid #10b981; padding: 12px 14px; border-radius: 8px;'>
-                <div style='font-size:0.84rem; color:#6ee7b7; font-weight:bold;'>2️⃣ مساحة فتحات الأبواب والشبابيك:</div>
-                <div style='font-size:1.35rem; font-weight:bold; color:#ecfdf5; margin-top:4px;'>{op12:.2f} <span style='font-size:0.85rem; font-weight:normal; color:#a7f3d0;'>م² (لحوائط 12سم)</span> &nbsp;<span style='font-size:0.75rem; color:#94a3b8;'>(الإجمالي العام: {total_openings:.2f} م²)</span></div>
-            </div>
-            <div style='background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.40); border-right: 4px solid #3b82f6; padding: 12px 14px; border-radius: 8px;'>
-                <div style='font-size:0.84rem; color:#93c5fd; font-weight:bold;'>3️⃣ صافي إجمالي مسطح طوب 12 سم:</div>
-                <div style='font-size:1.35rem; font-weight:bold; color:#eff6ff; margin-top:4px;'>{n12:.2f} <span style='font-size:0.85rem; font-weight:normal; color:#bfdbfe;'>م² مسطح صافي</span></div>
+                <div style='font-size:0.84rem; color:#fdba74; font-weight:bold;'>🧱 1️⃣ حصر مباني طوب 12 سم:</div>
+                <div style='font-size:1.30rem; font-weight:bold; color:#ffedd5; margin-top:4px;'>{n12:.2f} <span style='font-size:0.85rem; font-weight:normal; color:#fed7aa;'>م² مسطح صافي</span></div>
+                <div style='font-size:0.75rem; color:#94a3b8; margin-top:3px;'>إجمالي شامل الفتحات: {g12:.2f} م² | فتحات: {op12:.2f} م²</div>
             </div>
             <div style='background: rgba(236, 72, 153, 0.12); border: 1px solid rgba(236, 72, 153, 0.35); border-right: 4px solid #ec4899; padding: 12px 14px; border-radius: 8px;'>
-                <div style='font-size:0.84rem; color:#f472b6; font-weight:bold;'>4️⃣ صافي إجمالي مكعب طوب 25 سم:</div>
-                <div style='font-size:1.35rem; font-weight:bold; color:#fdf2f8; margin-top:4px;'>{v25:.2f} <span style='font-size:0.85rem; font-weight:normal; color:#fbcfe8;'>م³ مكعب صافي</span></div>
+                <div style='font-size:0.84rem; color:#f472b6; font-weight:bold;'>🏗️ 2️⃣ حصر مباني طوب 25 سم:</div>
+                <div style='font-size:1.30rem; font-weight:bold; color:#fdf2f8; margin-top:4px;'>{v25:.2f} <span style='font-size:0.85rem; font-weight:normal; color:#fbcfe8;'>م³ مكعب صافي</span></div>
+                <div style='font-size:0.75rem; color:#94a3b8; margin-top:3px;'>صافي المسطح: {n25:.2f} م² | فتحات: {op25:.2f} م²</div>
+            </div>
+            <div style='background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.35); border-right: 4px solid #10b981; padding: 12px 14px; border-radius: 8px;'>
+                <div style='font-size:0.84rem; color:#6ee7b7; font-weight:bold;'>🎨 3️⃣ صافي مسطح أعمال المحارة:</div>
+                <div style='font-size:1.30rem; font-weight:bold; color:#ecfdf5; margin-top:4px;'>{p_net_m2:.2f} <span style='font-size:0.85rem; font-weight:normal; color:#a7f3d0;'>م² مسطح معتمد</span></div>
+                <div style='font-size:0.75rem; color:#94a3b8; margin-top:3px;'>إجمالي الأوجه: {p_res['tot_gross']:.2f} م² | خصم الفتحات: {p_res['tot_ded']:.2f} م²</div>
+            </div>
+            <div style='background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.40); border-right: 4px solid #3b82f6; padding: 12px 14px; border-radius: 8px;'>
+                <div style='font-size:0.84rem; color:#93c5fd; font-weight:bold;'>🧱 4️⃣ إجمالي عدد الطوب المطلوب:</div>
+                <div style='font-size:1.30rem; font-weight:bold; color:#eff6ff; margin-top:4px;'>{bricks_total:,} <span style='font-size:0.85rem; font-weight:normal; color:#bfdbfe;'>وحدة طوب</span></div>
+                <div style='font-size:0.75rem; color:#94a3b8; margin-top:3px;'>{brick_type_display} | {brick_size_display} | مونة {mortar_v}سم</div>
             </div>
         </div>
         <div style='margin-top:14px; background: rgba(15, 23, 42, 0.80); border: 1px solid #334155; border-radius: 8px; padding: 12px 16px; display:flex; align-items:center; justify-content:space-around; flex-wrap:wrap; gap:16px;'>
             <div style='display:flex; align-items:center; gap:10px;'>
                 <span style='font-size:1.6rem;'>🏜️</span>
                 <div>
-                    <div style='font-size:0.80rem; color:#cbd5e1; font-weight:bold;'>5️⃣ إجمالي الرمل المطلوب للمباني (شامل 5% هالك):</div>
-                    <div style='font-size:1.25rem; font-weight:bold; color:#fbbf24;'>{sand_total:.2f} <span style='font-size:0.85rem; color:#fde68a;'>م³</span></div>
+                    <div style='font-size:0.80rem; color:#cbd5e1; font-weight:bold;'>5️⃣ إجمالي الرمل الكلي (مباني {sand_total_masonry:.2f} + محارة {p_sand_m3:.2f}):</div>
+                    <div style='font-size:1.25rem; font-weight:bold; color:#fbbf24;'>{total_sand_all:.2f} <span style='font-size:0.85rem; color:#fde68a;'>م³ شامل 5% هالك</span></div>
                 </div>
             </div>
             <div style='height:36px; width:1px; background-color:#334155;'></div>
             <div style='display:flex; align-items:center; gap:10px;'>
                 <span style='font-size:1.6rem;'>🏗️</span>
                 <div>
-                    <div style='font-size:0.80rem; color:#cbd5e1; font-weight:bold;'>6️⃣ إجمالي الأسمنت المطلوب (محتوى 350 كجم/م³):</div>
-                    <div style='font-size:1.25rem; font-weight:bold; color:#38bdf8;'>{cement_tons:.2f} <span style='font-size:0.85rem; color:#bae6fd;'>طن</span> &nbsp;<span style='font-size:0.85rem; color:#e2e8f0; font-weight:normal;'>({cement_bags} شكارة سعة 50 كجم)</span></div>
-                </div>
-            </div>
-            <div style='height:36px; width:1px; background-color:#334155;'></div>
-            <div style='display:flex; align-items:center; gap:10px;'>
-                <span style='font-size:1.6rem;'>🧱</span>
-                <div>
-                    <div style='font-size:0.80rem; color:#cbd5e1; font-weight:bold;'>عدد الطوب المطلوب ({brick_type_display} | {brick_size_display} | مونة {mortar_v}سم):</div>
-                    <div style='font-size:1.25rem; font-weight:bold; color:#4ade80;'>{bricks_total:,} <span style='font-size:0.85rem; color:#bbf7d0;'>وحدة طوب</span></div>
+                    <div style='font-size:0.80rem; color:#cbd5e1; font-weight:bold;'>6️⃣ إجمالي الأسمنت الكلي (مباني {cement_masonry_tons:.2f}ط + محارة {p_cement_tons:.2f}ط):</div>
+                    <div style='font-size:1.25rem; font-weight:bold; color:#38bdf8;'>{total_cement_tons_all:.2f} <span style='font-size:0.85rem; color:#bae6fd;'>طن</span> &nbsp;<span style='font-size:0.85rem; color:#e2e8f0; font-weight:normal;'>({total_cement_bags_all} شكارة 50 كجم)</span></div>
                 </div>
             </div>
         </div>
@@ -13080,32 +13756,32 @@ def _section_survey():
         unsafe_allow_html=True
     )
 
-    # ── قسم مدخلات الأسعار وتكاليف أعمال المباني ──
+    # ── قسم مدخلات الأسعار وتكاليف أعمال المباني والمحارة ──
     header_pricing_html = """<div style='background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1.5px solid #3b82f6; border-radius: 12px; padding: 14px 20px; margin-top: 14px; margin-bottom: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.25);' dir='rtl'>
 <div style='display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;'>
 <div style='font-weight:bold; font-size:1.02rem; color:#60a5fa; display:flex; align-items:center; gap:8px;'>
 <span>💵</span>
-<span>مدخلات أسعار خامات ومصنعيات المباني (تسعير بنود الأعمال)</span>
+<span>مدخلات أسعار خامات ومصنعيات المباني والمحارة (تسعير بنود المقايسة)</span>
 </div>
 <span style='background: rgba(59, 130, 246, 0.2); color:#93c5fd; font-size:0.78rem; font-weight:bold; padding:4px 12px; border-radius:20px; border:1px solid #3b82f6;'>
-تحديث لحظي للتكلفة
+تسعير فوري متكامل
 </span>
 </div>
 <div style='color:#cbd5e1; font-size:0.83rem; margin-top: 6px;'>
-أدخل أسعار التوريد والتشوين والمصنعيات لحساب تكلفة أعمال الطوب بدقة وتفصيل:
+أدخل أسعار التوريد والتشوين والمصنعيات لحساب تكلفة أعمال المباني والمحارة بدقة وتفصيل:
 </div>
 </div>"""
     st.html(header_pricing_html) if hasattr(st, "html") else st.markdown(header_pricing_html, unsafe_allow_html=True)
 
-    col_pr1, col_pr2, col_pr3 = st.columns(3)
+    col_pr1, col_pr2, col_pr3, col_pr4 = st.columns(4)
     with col_pr1:
         p_brick_in = st.number_input(
-            "🧱 سعر الاف الطوب مونة وتشوين واجرة (ج.م / 1000 طوبة)",
+            "🧱 سعر الألف طوبة توريد وتشوين (ج.م / 1000)",
             min_value=0.0,
             max_value=1000000.0,
             value=float(st.session_state.get("m15_price_brick_per_thousand", 2500.0)),
             step=50.0,
-            help="سعر الألف طوبة شاملاً التوريد والمونة والتشوين والأجرة (المصنعية)",
+            help="سعر الألف طوبة شاملاً التوريد والتشوين والمصنعية بالموقع",
             key="m15_price_brick_per_thousand",
             on_change=save_settings
         )
@@ -13116,108 +13792,114 @@ def _section_survey():
             max_value=100000.0,
             value=float(st.session_state.get("m15_price_sand_per_m3", 200.0)),
             step=10.0,
-            help="سعر المتر المكعب للرمل شاملاً التشوين في الموقع",
+            help="سعر المتر المكعب للرمل شاملاً التشوين في الموقع لكافة الأعمال",
             key="m15_price_sand_per_m3",
             on_change=save_settings
         )
     with col_pr3:
         p_cement_in = st.number_input(
-            "🏗️ سعر طن الاسمنت (ج.م / طن)",
+            "🏗️ سعر طن الأسمنت (ج.م / طن)",
             min_value=0.0,
             max_value=100000.0,
             value=float(st.session_state.get("m15_price_cement_per_ton", 4000.0)),
             step=50.0,
-            help="سعر طن الأسمنت البورتلاندي العادي",
+            help="سعر طن الأسمنت البورتلاندي العادي شاملاً التشوين",
             key="m15_price_cement_per_ton",
             on_change=save_settings
         )
+    with col_pr4:
+        p_plaster_labor_in = st.number_input(
+            "🎨 سعر مصنعية بياض المحارة (ج.م / م²)",
+            min_value=0.0,
+            max_value=10000.0,
+            value=float(st.session_state.get("m15_price_plaster_labor_per_m2", 70.0)),
+            step=5.0,
+            help="أجرة مصنعية المبيض للمتر المسطح (طرطشة وبؤج وأوتار ومحارة)",
+            key="m15_price_plaster_labor_per_m2",
+            on_change=save_settings
+        )
 
-    # ── حسابات تكاليف أعمال الطوب طبقاً لمدخلات المستخدم والكميات المحصورة ──
-    # 1) حساب تكلفة الطوب بضرب الكمية بالآلاف (مثلاً 20 ألف طوبة) في السعر المدخل
+    # ── حسابات تكاليف أعمال المباني ──
     brick_thousands = round(bricks_total / 1000.0, 3)
     cost_brick = round(brick_thousands * p_brick_in, 2)
+    sand_masonry_qty = round(sand_total_masonry, 2)
+    cost_sand_masonry = round(sand_masonry_qty * p_sand_in, 2)
+    cement_masonry_qty = round(cement_masonry_tons, 3)
+    cost_cement_masonry = round(cement_masonry_qty * p_cement_in, 2)
+    cost_masonry_total = round(cost_brick + cost_sand_masonry + cost_cement_masonry, 2)
 
-    # 2) حساب تكلفة متر الرمل = كمية المتر بالمتر المكعب مضروباً في سعر المتر بالتشوين الذي تم إدخاله
-    sand_qty = round(sand_total, 2)
-    cost_sand = round(sand_qty * p_sand_in, 2)
+    # ── حسابات تكاليف أعمال المحارة ──
+    plaster_area_qty = round(p_net_m2, 2)
+    cost_plaster_labor = round(plaster_area_qty * p_plaster_labor_in, 2)
+    sand_plaster_qty = round(p_sand_m3, 2)
+    cost_sand_plaster = round(sand_plaster_qty * p_sand_in, 2)
+    cement_plaster_qty = round(p_cement_tons, 3)
+    cost_cement_plaster = round(cement_plaster_qty * p_cement_in, 2)
+    cost_plaster_total = round(cost_plaster_labor + cost_sand_plaster + cost_cement_plaster, 2)
 
-    # 3) حساب تكلفة الأسمنت بضرب الكمية بالطن في السعر للطن طبقاً للمدخلات
-    cement_qty = round(cement_tons, 3)
-    cost_cement = round(cement_qty * p_cement_in, 2)
+    # ── التكلفة الإجمالية العامة للمشروع (المباني + المحارة) ──
+    grand_total_cost = round(cost_masonry_total + cost_plaster_total, 2)
+    cost_sand_all = round((sand_masonry_qty + sand_plaster_qty) * p_sand_in, 2)
+    cost_cement_all = round((cement_masonry_qty + cement_plaster_qty) * p_cement_in, 2)
 
-    # 4) حساب إجمالي التكلفة للطوب
-    cost_brick_total = round(cost_brick + cost_sand + cost_cement, 2)
-
-    # ── بانيل مخرجات أعمال الطوب ──
+    # ── بانيل مخرجات وتكاليف أعمال المباني والمحارة ──
     panel_cost_html = f"""<div style='background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%); border: 2px solid #6366f1; border-radius: 12px; padding: 18px 22px; margin-bottom: 18px; box-shadow: 0 6px 20px rgba(99, 102, 241, 0.25);' dir='rtl'>
 <div style='display:flex; align-items:center; justify-content:space-between; border-bottom: 1px solid rgba(99, 102, 241, 0.4); padding-bottom: 12px; margin-bottom: 14px; flex-wrap:wrap; gap:8px;'>
 <div style='font-weight:900; font-size:1.10rem; color:#ffffff; display:flex; align-items:center; gap:8px;'>
 <span>📊</span>
-<span>بانيل مخرجات وتكاليف أعمال الطوب (حساب تكلفة الطوب والرمل والأسمنت)</span>
+<span>بانيل مخرجات وتكاليف أعمال المباني والمحارة (التسعير التقديري الشامل)</span>
 </div>
 <span style='background: linear-gradient(135deg, #4f46e5, #7c3aed); color:#ffffff; font-size:0.80rem; font-weight:bold; padding:4px 14px; border-radius:20px; border:1px solid #a5b4fc; box-shadow: 0 2px 8px rgba(79, 70, 229, 0.4);'>
-نتائج التسعير التقديري
+نتائج التسعير النهائي
 </span>
 </div>
-<div style='display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:12px; margin-bottom: 14px;'>
-<div style='background: rgba(30, 41, 59, 0.85); border: 1.5px solid rgba(249, 115, 22, 0.5); border-right: 5px solid #f97316; padding: 14px 16px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);'>
+<div style='display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:12px; margin-bottom: 14px;'>
+<div style='background: rgba(30, 41, 59, 0.85); border: 1.5px solid rgba(249, 115, 22, 0.5); border-right: 5px solid #f97316; padding: 14px 16px; border-radius: 10px;'>
 <div style='display:flex; align-items:center; justify-content:space-between;'>
-<span style='font-size:0.85rem; color:#fdba74; font-weight:bold;'>🧱 1️⃣ تكلفة الطوب:</span>
-<span style='font-size:0.75rem; color:#94a3b8; background:rgba(249,115,22,0.15); padding:2px 8px; border-radius:6px;'>{brick_thousands:.3f} ألف طوبة</span>
+<span style='font-size:0.85rem; color:#fdba74; font-weight:bold;'>🧱 1️⃣ إجمالي تكلفة المباني:</span>
+<span style='font-size:0.75rem; color:#94a3b8; background:rgba(249,115,22,0.15); padding:2px 8px; border-radius:6px;'>طوب + مونة</span>
 </div>
-<div style='font-size:1.40rem; font-weight:900; color:#ffedd5; margin-top:6px;'>
-{cost_brick:,.2f} <span style='font-size:0.85rem; font-weight:normal; color:#fed7aa;'>ج.م</span>
+<div style='font-size:1.35rem; font-weight:900; color:#ffedd5; margin-top:6px;'>
+{cost_masonry_total:,.2f} <span style='font-size:0.85rem; font-weight:normal; color:#fed7aa;'>ج.م</span>
 </div>
-<div style='font-size:0.76rem; color:#cbd5e1; margin-top:4px;'>
-المعادلة: {brick_thousands:.3f} ألف × {p_brick_in:,.2f} ج.م
-</div>
-<div style='font-size:0.72rem; color:#94a3b8; margin-top:2px;'>
-(إجمالي: {bricks_total:,} طوبة)
+<div style='font-size:0.75rem; color:#cbd5e1; margin-top:4px;'>
+طوب ({cost_brick:,.0f}) + رمل ({cost_sand_masonry:,.0f}) + أسمنت ({cost_cement_masonry:,.0f})
 </div>
 </div>
-<div style='background: rgba(30, 41, 59, 0.85); border: 1.5px solid rgba(234, 179, 8, 0.5); border-right: 5px solid #eab308; padding: 14px 16px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);'>
+<div style='background: rgba(30, 41, 59, 0.85); border: 1.5px solid rgba(14, 165, 233, 0.5); border-right: 5px solid #0ea5e9; padding: 14px 16px; border-radius: 10px;'>
 <div style='display:flex; align-items:center; justify-content:space-between;'>
-<span style='font-size:0.85rem; color:#fde047; font-weight:bold;'>🏜️ 2️⃣ تكلفة الرمل بالتشوين:</span>
-<span style='font-size:0.75rem; color:#94a3b8; background:rgba(234,179,8,0.15); padding:2px 8px; border-radius:6px;'>{sand_qty:.2f} م³</span>
+<span style='font-size:0.85rem; color:#7dd3fc; font-weight:bold;'>🎨 2️⃣ إجمالي تكلفة المحارة:</span>
+<span style='font-size:0.75rem; color:#94a3b8; background:rgba(14,165,233,0.15); padding:2px 8px; border-radius:6px;'>مصنعية + خامات</span>
 </div>
-<div style='font-size:1.40rem; font-weight:900; color:#fef08a; margin-top:6px;'>
-{cost_sand:,.2f} <span style='font-size:0.85rem; font-weight:normal; color:#fef9c3;'>ج.م</span>
+<div style='font-size:1.35rem; font-weight:900; color:#e0f2fe; margin-top:6px;'>
+{cost_plaster_total:,.2f} <span style='font-size:0.85rem; font-weight:normal; color:#bae6fd;'>ج.م</span>
 </div>
-<div style='font-size:0.76rem; color:#cbd5e1; margin-top:4px;'>
-المعادلة: {sand_qty:.2f} م³ × {p_sand_in:,.2f} ج.م
-</div>
-<div style='font-size:0.72rem; color:#94a3b8; margin-top:2px;'>
-(شامل 5% نسبة هالك تشغيل)
+<div style='font-size:0.75rem; color:#cbd5e1; margin-top:4px;'>
+مصنعية ({cost_plaster_labor:,.0f}) + رمل ({cost_sand_plaster:,.0f}) + أسمنت ({cost_cement_plaster:,.0f})
 </div>
 </div>
-<div style='background: rgba(30, 41, 59, 0.85); border: 1.5px solid rgba(56, 189, 248, 0.5); border-right: 5px solid #38bdf8; padding: 14px 16px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.2);'>
+<div style='background: rgba(30, 41, 59, 0.85); border: 1.5px solid rgba(234, 179, 8, 0.5); border-right: 5px solid #eab308; padding: 14px 16px; border-radius: 10px;'>
 <div style='display:flex; align-items:center; justify-content:space-between;'>
-<span style='font-size:0.85rem; color:#7dd3fc; font-weight:bold;'>🏗️ 3️⃣ تكلفة الأسمنت:</span>
-<span style='font-size:0.75rem; color:#94a3b8; background:rgba(56,189,248,0.15); padding:2px 8px; border-radius:6px;'>{cement_qty:.3f} طن</span>
+<span style='font-size:0.85rem; color:#fde047; font-weight:bold;'>📦 3️⃣ إجمالي الخامات المشتركة:</span>
+<span style='font-size:0.75rem; color:#94a3b8; background:rgba(234,179,8,0.15); padding:2px 8px; border-radius:6px;'>رمل + أسمنت</span>
 </div>
-<div style='font-size:1.40rem; font-weight:900; color:#e0f2fe; margin-top:6px;'>
-{cost_cement:,.2f} <span style='font-size:0.85rem; font-weight:normal; color:#bae6fd;'>ج.م</span>
+<div style='font-size:1.35rem; font-weight:900; color:#fef08a; margin-top:6px;'>
+{(cost_sand_all + cost_cement_all):,.2f} <span style='font-size:0.85rem; font-weight:normal; color:#fef9c3;'>ج.م</span>
 </div>
-<div style='font-size:0.76rem; color:#cbd5e1; margin-top:4px;'>
-المعادلة: {cement_qty:.3f} طن × {p_cement_in:,.2f} ج.م
-</div>
-<div style='font-size:0.72rem; color:#94a3b8; margin-top:2px;'>
-({cement_bags} شكارة زنة 50 كجم)
+<div style='font-size:0.75rem; color:#cbd5e1; margin-top:4px;'>
+رمل كلي ({cost_sand_all:,.0f} ج.م) + أسمنت كلي ({cost_cement_all:,.0f} ج.م)
 </div>
 </div>
-<div style='background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(6, 78, 59, 0.4)); border: 2px solid #10b981; border-right: 6px solid #10b981; padding: 14px 16px; border-radius: 10px; box-shadow: 0 4px 14px rgba(16,185,129,0.3);'>
+<div style='background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(6, 78, 59, 0.5)); border: 2px solid #10b981; border-right: 6px solid #10b981; padding: 14px 16px; border-radius: 10px; box-shadow: 0 4px 14px rgba(16,185,129,0.3);'>
 <div style='display:flex; align-items:center; justify-content:space-between;'>
-<span style='font-size:0.88rem; color:#6ee7b7; font-weight:900;'>💰 4️⃣ إجمالي التكلفة للطوب:</span>
-<span style='font-size:0.75rem; color:#ecfdf5; background:#059669; padding:2px 8px; border-radius:6px; font-weight:bold;'>المجموع الكلي</span>
+<span style='font-size:0.88rem; color:#6ee7b7; font-weight:900;'>💰 4️⃣ الإجمالي العام الشامل:</span>
+<span style='font-size:0.75rem; color:#ecfdf5; background:#059669; padding:2px 8px; border-radius:6px; font-weight:bold;'>المشروع كاملاً</span>
 </div>
 <div style='font-size:1.55rem; font-weight:900; color:#a7f3d0; margin-top:6px;'>
-{cost_brick_total:,.2f} <span style='font-size:0.90rem; font-weight:bold; color:#6ee7b7;'>ج.م</span>
+{grand_total_cost:,.2f} <span style='font-size:0.90rem; font-weight:bold; color:#6ee7b7;'>ج.م</span>
 </div>
-<div style='font-size:0.76rem; color:#e2e8f0; margin-top:4px;'>
-طوب ({cost_brick:,.0f}) + رمل ({cost_sand:,.0f}) + أسمنت ({cost_cement:,.0f})
-</div>
-<div style='font-size:0.72rem; color:#a7f3d0; margin-top:2px;'>
-(إجمالي توريد ومونة وتشوين وأجرة)
+<div style='font-size:0.75rem; color:#e2e8f0; margin-top:4px;'>
+مباني ({cost_masonry_total:,.0f}) + محارة ({cost_plaster_total:,.0f})
 </div>
 </div>
 </div>
@@ -13225,46 +13907,86 @@ def _section_survey():
 <table style='width:100%; border-collapse:collapse; font-size:0.85rem; text-align:center;' dir='rtl'>
 <thead>
 <tr style='background:rgba(15,23,42,0.9); border-bottom:2px solid #475569;'>
-<th style='padding:9px 10px; color:#f8fafc; text-align:right;'>بند التكلفة</th>
+<th style='padding:9px 10px; color:#f8fafc; text-align:right;'>بند التكلفة والمقايسة</th>
 <th style='padding:9px 10px; color:#cbd5e1;'>الكمية المحصورة</th>
 <th style='padding:9px 10px; color:#cbd5e1;'>الوحدة</th>
-<th style='padding:9px 10px; color:#fbbf24;'>سعر الوحدة المدخل (ج.م)</th>
+<th style='padding:9px 10px; color:#fbbf24;'>سعر الوحدة (ج.م)</th>
 <th style='padding:9px 10px; color:#93c5fd; text-align:right;'>معادلة الحساب التفصيلية</th>
 <th style='padding:9px 10px; color:#4ade80;'>إجمالي التكلفة (ج.م)</th>
 </tr>
 </thead>
 <tbody>
 <tr style='background:rgba(30,41,59,0.5); border-bottom:1px solid #334155;'>
-<td style='padding:8px 10px; text-align:right; font-weight:bold; color:#fdba74;'>🧱 توريد ومصنعية الطوب (مونة وتشوين وأجرة)</td>
+<td style='padding:8px 10px; text-align:right; font-weight:bold; color:#fdba74;'>🧱 1. توريد وتشوين الطوب</td>
 <td style='padding:8px 10px; color:#f1f5f9; font-weight:bold;'>{brick_thousands:.3f}</td>
 <td style='padding:8px 10px; color:#cbd5e1;'>ألف طوبة ({bricks_total:,} طوبة)</td>
 <td style='padding:8px 10px; color:#fbbf24; font-weight:bold;'>{p_brick_in:,.2f}</td>
-<td style='padding:8px 10px; text-align:right; color:#cbd5e1;'>{brick_thousands:.3f} ألف طوبة × {p_brick_in:,.2f} ج.م</td>
+<td style='padding:8px 10px; text-align:right; color:#cbd5e1;'>{brick_thousands:.3f} ألف × {p_brick_in:,.2f} ج.م</td>
 <td style='padding:8px 10px; font-weight:bold; color:#ffedd5;'>{cost_brick:,.2f}</td>
 </tr>
 <tr style='background:rgba(30,41,59,0.3); border-bottom:1px solid #334155;'>
-<td style='padding:8px 10px; text-align:right; font-weight:bold; color:#fde047;'>🏜️ رمل المباني (شامل 5% هالك بالتشوين)</td>
-<td style='padding:8px 10px; color:#f1f5f9; font-weight:bold;'>{sand_qty:.2f}</td>
+<td style='padding:8px 10px; text-align:right; font-weight:bold; color:#fde047;'>🏜️ 2. رمل مونة المباني (شامل 5% هالك)</td>
+<td style='padding:8px 10px; color:#f1f5f9; font-weight:bold;'>{sand_masonry_qty:.2f}</td>
 <td style='padding:8px 10px; color:#cbd5e1;'>متر مكعب (م³)</td>
 <td style='padding:8px 10px; color:#fbbf24; font-weight:bold;'>{p_sand_in:,.2f}</td>
-<td style='padding:8px 10px; text-align:right; color:#cbd5e1;'>{sand_qty:.2f} م³ × {p_sand_in:,.2f} ج.م</td>
-<td style='padding:8px 10px; font-weight:bold; color:#fef08a;'>{cost_sand:,.2f}</td>
+<td style='padding:8px 10px; text-align:right; color:#cbd5e1;'>{sand_masonry_qty:.2f} م³ × {p_sand_in:,.2f} ج.م</td>
+<td style='padding:8px 10px; font-weight:bold; color:#fef08a;'>{cost_sand_masonry:,.2f}</td>
 </tr>
 <tr style='background:rgba(30,41,59,0.5); border-bottom:1px solid #334155;'>
-<td style='padding:8px 10px; text-align:right; font-weight:bold; color:#7dd3fc;'>🏗️ أسمنت مونة المباني (محتوى 350 كجم/م³)</td>
-<td style='padding:8px 10px; color:#f1f5f9; font-weight:bold;'>{cement_qty:.3f}</td>
-<td style='padding:8px 10px; color:#cbd5e1;'>طن ({cement_bags} شكارة)</td>
+<td style='padding:8px 10px; text-align:right; font-weight:bold; color:#7dd3fc;'>🏗️ 3. أسمنت مونة المباني (350 كجم/م³)</td>
+<td style='padding:8px 10px; color:#f1f5f9; font-weight:bold;'>{cement_masonry_qty:.3f}</td>
+<td style='padding:8px 10px; color:#cbd5e1;'>طن ({cement_masonry_bags} شكارة)</td>
 <td style='padding:8px 10px; color:#fbbf24; font-weight:bold;'>{p_cement_in:,.2f}</td>
-<td style='padding:8px 10px; text-align:right; color:#cbd5e1;'>{cement_qty:.3f} طن × {p_cement_in:,.2f} ج.م</td>
-<td style='padding:8px 10px; font-weight:bold; color:#e0f2fe;'>{cost_cement:,.2f}</td>
+<td style='padding:8px 10px; text-align:right; color:#cbd5e1;'>{cement_masonry_qty:.3f} طن × {p_cement_in:,.2f} ج.م</td>
+<td style='padding:8px 10px; font-weight:bold; color:#e0f2fe;'>{cost_cement_masonry:,.2f}</td>
+</tr>
+<tr style='background:rgba(249,115,22,0.18); font-weight:bold; border-bottom:2px solid #f97316;'>
+<td style='padding:9px 10px; text-align:right; color:#fdba74;'>⬅️ إجمالي بند أعمال المباني</td>
+<td style='padding:9px 10px; color:#e2e8f0;'>—</td>
+<td style='padding:9px 10px; color:#e2e8f0;'>—</td>
+<td style='padding:9px 10px; color:#fde047;'>—</td>
+<td style='padding:9px 10px; text-align:right; color:#fed7aa;'>مجموع (الطوب + رمل المباني + أسمنت المباني)</td>
+<td style='padding:9px 10px; color:#ffedd5; font-size:1.02rem;'>{cost_masonry_total:,.2f} ج.م</td>
+</tr>
+<tr style='background:rgba(30,41,59,0.5); border-bottom:1px solid #334155;'>
+<td style='padding:8px 10px; text-align:right; font-weight:bold; color:#38bdf8;'>🎨 4. مصنعية بياض المحارة (أجرة المبيض)</td>
+<td style='padding:8px 10px; color:#f1f5f9; font-weight:bold;'>{plaster_area_qty:.2f}</td>
+<td style='padding:8px 10px; color:#cbd5e1;'>متر مسطح (م²)</td>
+<td style='padding:8px 10px; color:#fbbf24; font-weight:bold;'>{p_plaster_labor_in:,.2f}</td>
+<td style='padding:8px 10px; text-align:right; color:#cbd5e1;'>{plaster_area_qty:.2f} م² × {p_plaster_labor_in:,.2f} ج.م</td>
+<td style='padding:8px 10px; font-weight:bold; color:#bae6fd;'>{cost_plaster_labor:,.2f}</td>
+</tr>
+<tr style='background:rgba(30,41,59,0.3); border-bottom:1px solid #334155;'>
+<td style='padding:8px 10px; text-align:right; font-weight:bold; color:#fde047;'>🏜️ 5. رمل بياض المحارة (شامل 5% هالك)</td>
+<td style='padding:8px 10px; color:#f1f5f9; font-weight:bold;'>{sand_plaster_qty:.2f}</td>
+<td style='padding:8px 10px; color:#cbd5e1;'>متر مكعب (م³)</td>
+<td style='padding:8px 10px; color:#fbbf24; font-weight:bold;'>{p_sand_in:,.2f}</td>
+<td style='padding:8px 10px; text-align:right; color:#cbd5e1;'>{sand_plaster_qty:.2f} م³ × {p_sand_in:,.2f} ج.م</td>
+<td style='padding:8px 10px; font-weight:bold; color:#fef08a;'>{cost_sand_plaster:,.2f}</td>
+</tr>
+<tr style='background:rgba(30,41,59,0.5); border-bottom:1px solid #334155;'>
+<td style='padding:8px 10px; text-align:right; font-weight:bold; color:#7dd3fc;'>🏗️ 6. أسمنت بياض المحارة (350 كجم/م³)</td>
+<td style='padding:8px 10px; color:#f1f5f9; font-weight:bold;'>{cement_plaster_qty:.3f}</td>
+<td style='padding:8px 10px; color:#cbd5e1;'>طن ({p_cement_bags} شكارة)</td>
+<td style='padding:8px 10px; color:#fbbf24; font-weight:bold;'>{p_cement_in:,.2f}</td>
+<td style='padding:8px 10px; text-align:right; color:#cbd5e1;'>{cement_plaster_qty:.3f} طن × {p_cement_in:,.2f} ج.م</td>
+<td style='padding:8px 10px; font-weight:bold; color:#e0f2fe;'>{cost_cement_plaster:,.2f}</td>
+</tr>
+<tr style='background:rgba(14,165,233,0.18); font-weight:bold; border-bottom:2px solid #0ea5e9;'>
+<td style='padding:9px 10px; text-align:right; color:#7dd3fc;'>⬅️ إجمالي بند أعمال المحارة</td>
+<td style='padding:9px 10px; color:#e2e8f0;'>—</td>
+<td style='padding:9px 10px; color:#e2e8f0;'>—</td>
+<td style='padding:9px 10px; color:#fde047;'>—</td>
+<td style='padding:9px 10px; text-align:right; color:#bae6fd;'>مجموع (مصنعية المحارة + رمل المحارة + أسمنت المحارة)</td>
+<td style='padding:9px 10px; color:#e0f2fe; font-size:1.02rem;'>{cost_plaster_total:,.2f} ج.م</td>
 </tr>
 <tr style='background:linear-gradient(90deg, #1e3a8a, #065f46); font-weight:900;'>
-<td style='padding:11px 10px; text-align:right; color:#ffffff; font-size:0.92rem;'>✅ إجمالي التكلفة لأعمال الطوب والمباني</td>
-<td style='padding:11px 10px; color:#e2e8f0;'>—</td>
-<td style='padding:11px 10px; color:#e2e8f0;'>—</td>
-<td style='padding:11px 10px; color:#fde047;'>—</td>
-<td style='padding:11px 10px; text-align:right; color:#bae6fd;'>مجموع بنود (الطوب + الرمل + الأسمنت)</td>
-<td style='padding:11px 10px; color:#a7f3d0; font-size:1.15rem; font-weight:900;'>{cost_brick_total:,.2f} ج.م</td>
+<td style='padding:12px 10px; text-align:right; color:#ffffff; font-size:0.95rem;'>🏆 الإجمالي العام الشامل للمشروع (المباني + المحارة)</td>
+<td style='padding:12px 10px; color:#e2e8f0;'>—</td>
+<td style='padding:12px 10px; color:#e2e8f0;'>—</td>
+<td style='padding:12px 10px; color:#fde047;'>—</td>
+<td style='padding:12px 10px; text-align:right; color:#bae6fd;'>إجمالي أعمال المباني ({cost_masonry_total:,.2f}) + إجمالي أعمال المحارة ({cost_plaster_total:,.2f})</td>
+<td style='padding:12px 10px; color:#a7f3d0; font-size:1.20rem; font-weight:900;'>{grand_total_cost:,.2f} ج.م</td>
 </tr>
 </tbody>
 </table>
@@ -13273,17 +13995,17 @@ def _section_survey():
     st.html(panel_cost_html) if hasattr(st, "html") else st.markdown(panel_cost_html, unsafe_allow_html=True)
 
     # 6. رسالة توضيحية لطريقة حساب كمية الرمل والأسمنت طبقاً للكود المصري
-    with st.expander("💡 6️⃣ رسالة توضيحية: طريقة حساب كميات الرمل والأسمنت طبقاً للكود المصري وأصول التنفيذ", expanded=False):
+    with st.expander("💡 6️⃣ رسالة توضيحية: طريقة حساب كميات الرمل والأسمنت والمحارة طبقاً للكود المصري وأصول التنفيذ", expanded=False):
         st.markdown(
             f"""<div dir='rtl' style='direction: rtl !important; text-align: right !important; line-height: 1.85; font-size: 0.90rem; color: #f1f5f9; background: rgba(15, 23, 42, 0.6); border: 1px solid #334155; border-radius: 8px; padding: 14px 18px;'>
             <p style='direction: rtl !important; text-align: right !important; font-weight: bold; color: #38bdf8; margin-bottom: 12px; font-size: 0.92rem;'>
-                استندت الحسابات التقديرية لكميات المونة ومواد البناء إلى المواصفات الفنية لبنود الأعمال بالكود المصري للبناء وأصول الصناعة:
+                استندت الحسابات التقديرية لكميات المونة ومواد البناء وأعمال المحارة إلى المواصفات الفنية بالكود المصري للبناء وأصول الصناعة:
             </p>
             <ol style='direction: rtl !important; text-align: right !important; padding-right: 25px; padding-left: 0; margin: 0 0 12px 0;'>
                 <li style='direction: rtl !important; text-align: right !important; margin-bottom: 12px; color: #e2e8f0;'>
                     <b style='color: #fdba74;'>أعمال مباني طوب سمك 12 سم (نصف طوبة):</b>
                     <div style='padding-right: 12px; margin-top: 4px; color: #cbd5e1; direction: rtl !important; text-align: right !important;'>
-                        • تُحصر هندسياً بالمتر المسطح (م²).<br>
+                        • تُحصر هندسياً بالمتر المسطح (م²). الطول الصافي يُقاس من وش العمود لوش العمود الخالص.<br>
                         • المساحة الصافية = المساحة الإجمالية للمسقط مطروحاً منها مساحة فتحات الأبواب والشبابيك.<br>
                         • معدل استهلاك الرمل لمونة البناء = <b style='color: #fde68a;'>0.025 م³ رمل</b> لكل 1 م² مسطح مباني.<br>
                         • حساب عدد الطوب = يُحسب بدقة هندسية لكل حائط استناداً إلى المقاس المختار (<b style='color: #60a5fa;'>{brick_type_display} | {brick_size_display}</b>) وفاصل مونة <b style='color: #a78bfa;'>{mortar_v} سم</b>.
@@ -13293,16 +14015,17 @@ def _section_survey():
                     <b style='color: #f472b6;'>أعمال مباني طوب سمك 25 سم (طوبة كاملة):</b>
                     <div style='padding-right: 12px; margin-top: 4px; color: #cbd5e1; direction: rtl !important; text-align: right !important;'>
                         • تُحصر هندسياً بالمتر المكعب (م³ = المساحة الصافية × 0.25 م).<br>
-                        • معدل استهلاك الرمل لمونة البناء = <b style='color: #fde68a;'>0.200 م³ رمل</b> لكل 1 م³ مكعب مباني (نسبة العراميس والمداميك).<br>
-                        • حساب عدد الطوب = يُحسب بدقة هندسية لكل حائط استناداً إلى المقاس المختار (<b style='color: #60a5fa;'>{brick_type_display} | {brick_size_display}</b>) وفاصل مونة <b style='color: #a78bfa;'>{mortar_v} سم</b>.
+                        • معدل استهلاك الرمل لمونة البناء = <b style='color: #fde68a;'>0.200 م³ رمل</b> لكل 1 م³ مكعب مباني.<br>
+                        • حساب عدد الطوب = يُحسب بدقة هندسية استناداً إلى المقاس المختار وفاصل المونة.
                     </div>
                 </li>
                 <li style='direction: rtl !important; text-align: right !important; margin-bottom: 12px; color: #e2e8f0;'>
-                    <b style='color: #38bdf8;'>نسبة خلط الأسمنت في مونة البناء (طبقاً لاشتراطات الكود المصري):</b>
+                    <b style='color: #38bdf8;'>أعمال بياض المحارة (طبقاً للكود المصري ECP):</b>
                     <div style='padding-right: 12px; margin-top: 4px; color: #cbd5e1; direction: rtl !important; text-align: right !important;'>
-                        • نسبة الخلط القياسية لمونة ربط الطوب هي <b style='color: #bae6fd;'>350 كجم أسمنت بورتلاندي عادي لكل 1 م³ رمل</b> نظيف متدرج (ما يعادل <b style='color: #bae6fd;'>7 شكاير أسمنت</b> زنة 50 كجم لكل متر مكعب رمل).<br>
-                        • إجمالي وزن الأسمنت (كجم) = حجم الرمل الإجمالي (م³) × 350 كجم.<br>
-                        • وزن الأسمنت بالطن = الأسمنت (كجم) ÷ 1000، وعدد الشكاير = سقف تقريبي (الأسمنت كجم ÷ 50).
+                        • سُمك البياض المتوسط 2 سم شاملاً الطرطشة العمومية وبؤج وأوتار والملء والتخشين.<br>
+                        • معدل استهلاك الرمل: <b style='color: #fde68a;'>1 م³ رمل لكل 42 م² مسطح صافي</b> (شامل 5% نسبة هالك تشغيل).<br>
+                        • محتوى الأسمنت القياسي للبياض: <b style='color: #bae6fd;'>350 كجم أسمنت لكل 1 م³ رمل</b> (7 شكاير أسمنت زنة 50 كجم).<br>
+                        • قواعد خصم الفتحات: الفتحات حتى 4.00 م² لا تُخصم في الكود المصري وتعتبر مقابلاً لسوك وأكتاف الفتحات.
                     </div>
                 </li>
                 <li style='direction: rtl !important; text-align: right !important; margin-bottom: 6px; color: #e2e8f0;'>
@@ -13316,7 +14039,7 @@ def _section_survey():
             unsafe_allow_html=True
         )
 
-    t12, t25, tpl, tmat = st.tabs(["🧱 طوب 12 سم", "🏗️ طوب 25 سم", "🪣 ملخص المحارة", "📦 مقايسة الخامات والمونة"])
+    t12, t25, tpl, tmat = st.tabs(["🧱 طوب 12 سم", "🏗️ طوب 25 سم", "🪣 حصر المحارة", "📦 مقايسة الخامات والمونة"])
 
     def _rt(rows, lbl):
         if not rows:
@@ -13348,10 +14071,9 @@ def _section_survey():
 
     with tpl:
         st.markdown("<b style='font-size:1.05rem;color:#ffffff;'>🪣 حصر كميات ومواد أعمال البياض (المحارة)</b>", unsafe_allow_html=True)
-        p_res = _compute_plaster_survey()
         p_rows = p_res["rows"]
         if not p_rows:
-            st.info("💡 لم يتم تفعيل أوجه المحارة لأي حائط بعد. يرجى التوجه إلى قسم '9️⃣ تحديد حوائط المحارة' بالقائمة الجانبية لتحديد الأوجه المطلوبة.")
+            st.info("💡 لم يتم تفعيل أوجه المحارة لأي حائط بعد. يرجى التوجه إلى قسم '7️⃣ تحديد حوائط المحارة' بالقائمة الجانبية لتحديد الأوجه المطلوبة.")
             ar = r12 + r25
             if ar:
                 tn = sum(r.get("المساحة الصافية (م2)", 0.0) for r in ar)
@@ -13369,21 +14091,29 @@ def _section_survey():
                 display_rows.append({
                     "الحائط": r["الحائط"],
                     "الوجه المحدد": r["الوجه المحدد"],
-                    "إجمالي مسطح المحارة (m^2)": r["إجمالي مسطح المحارة (m^2)"],
-                    "إجمالي مساحة الفتحات المخصومة (m^2)": r["إجمالي مساحة الفتحات المخصومة (m^2)"],
-                    "صافي مسطح المحارة النهائي (m^2)": r["صافي مسطح المحارة النهائي (m^2)"],
-                    "كمية الرمل المطلوبة (m^3)": r["كمية الرمل المطلوبة (m^3)"],
-                    "كمية الأسمنت المطلوبة": r["كمية الأسمنت المطلوبة"],
+                    "عدد الأوجه": r["عدد الأوجه"],
+                    "الطول (م)": r["الطول (م)"],
+                    "الارتفاع (م)": r["الارتفاع (م)"],
+                    "إجمالي المسطح (م²)": r["إجمالي مسطح المحارة (m^2)"],
+                    "مساحة الفتحات (م²)": r["إجمالي مساحة الفتحات (m^2)"],
+                    "الخصم المعتمد (م²)": r["الفتحات المخصومة المعتمدة (m^2)"],
+                    "صافي مسطح المحارة (م²)": r["صافي مسطح المحارة النهائي (m^2)"],
+                    "كمية الرمل (م³)": r["كمية الرمل المطلوبة (m^3)"],
+                    "الأسمنت المطلوب": r["كمية الأسمنت المطلوبة"],
                 })
 
             tot_display = {
                 "الحائط": "✅ الإجمالي",
                 "الوجه المحدد": f"{sum(r['عدد الأوجه'] for r in p_rows)} وجه",
-                "إجمالي مسطح المحارة (m^2)": round(p_res["tot_gross"], 2),
-                "إجمالي مساحة الفتحات المخصومة (m^2)": round(p_res["tot_ded"], 2),
-                "صافي مسطح المحارة النهائي (m^2)": round(p_res["tot_net"], 2),
-                "كمية الرمل المطلوبة (m^3)": round(p_res["tot_sand"], 2),
-                "كمية الأسمنت المطلوبة": f"{p_res['tot_cement_tons']:.2f} طن ({p_res['tot_cement_bags']} شكارة)",
+                "عدد الأوجه": sum(r["عدد الأوجه"] for r in p_rows),
+                "الطول (م)": round(sum(r["الطول (م)"] for r in p_rows), 2),
+                "الارتفاع (م)": "—",
+                "إجمالي المسطح (م²)": round(p_res["tot_gross"], 2),
+                "مساحة الفتحات (م²)": round(p_res["tot_op_gross"], 2),
+                "الخصم المعتمد (م²)": round(p_res["tot_ded"], 2),
+                "صافي مسطح المحارة (م²)": round(p_res["tot_net"], 2),
+                "كمية الرمل (م³)": round(p_res["tot_sand"], 2),
+                "الأسمنت المطلوب": f"{p_res['tot_cement_tons']:.2f} طن ({p_res['tot_cement_bags']} شكارة)",
             }
 
             df_p = pd.DataFrame(display_rows + [tot_display])
@@ -13408,17 +14138,17 @@ def _section_survey():
                 """<div style='background-color:rgba(30,58,138,0.25);border:1px solid #3b82f6;border-right:4px solid #3b82f6;border-radius:8px;padding:12px 16px;margin-top:10px;color:#ffffff;font-size:0.87rem;line-height:1.7;' dir='rtl'>
                     <div style='font-weight:bold;margin-bottom:4px;display:flex;align-items:center;gap:6px;'>
                         <span>💡</span>
-                        <span>رسالة إرشادية (Information Note) — الفرضيات ومعدلات الاستهلاك المعتمدة:</span>
+                        <span>مواصفات حصر المحارة المعتمدة بالكود المصري ECP:</span>
                     </div>
                     <div>
-                        تم تقدير كميات المونة بناءً على مواصفات الكود المصري لسمك بياض متوسط <b>2 سم</b> شاملاً الطرطشة والملء، بمعدل استهلاك تقريبي: <b>1 m³ رمل + 350 كجم أسمنت لكل 40-45 m² مسطح</b>، مع اعتبار نسبة هالك <b>5%</b>.
+                        تم تقدير كميات المونة بناءً على سمك بياض متوسط <b>2 سم</b> شاملاً الطرطشة وبؤج وأوتار والملء والتخشين، بمعدل استهلاك: <b>1 m³ رمل + 350 كجم أسمنت لكل 42 m² مسطح</b>، مع اعتبار نسبة هالك <b>5%</b>. الفتحات حتى 4 م² لا تخصم طبقاً للكود المصري.
                     </div>
                 </div>""",
                 unsafe_allow_html=True
             )
 
     with tmat:
-        st.markdown("### 📦 مقايسة خامات المونة ومواد البناء (طبقاً للكود المصري)")
+        st.markdown("### 📦 مقايسة خامات المونة ومواد البناء الشاملة (طبقاً للكود المصري)")
         brick_col_name = f"عدد الطوب ({brick_type_display} | {brick_size_display})"
         mat_rows = [
             {
@@ -13442,39 +14172,42 @@ def _section_survey():
                 brick_col_name: bricks_25,
             },
             {
-                "بند الأعمال": "✅ الإجمالي الكلي لمواد البناء",
+                "بند الأعمال": "⬅️ إجمالي مواد أعمال المباني",
                 "الوحدة": "—",
                 "الكمية الصافية": "—",
-                "رمل صافي (م³)": round(sand_net, 2),
-                "رمل مع الهالك 5% (م³)": round(sand_total, 2),
-                "أسمنت (طن)": round(cement_tons, 2),
-                "شكاير أسمنت (50كجم)": cement_bags,
+                "رمل صافي (م³)": round(sand_net_masonry, 2),
+                "رمل مع الهالك 5% (م³)": round(sand_total_masonry, 2),
+                "أسمنت (طن)": round(cement_masonry_tons, 2),
+                "شكاير أسمنت (50كجم)": cement_masonry_bags,
                 brick_col_name: bricks_total,
             }
         ]
 
         if p_res["active_walls_count"] > 0:
-            mat_rows.insert(-1, {
+            mat_rows.append({
                 "بند الأعمال": "بياض محارة (أوجه الحوائط المحددة - سمك 2 سم شامل الطرطشة)",
                 "الوحدة": "م² مسطح",
-                "الكمية الصافية": round(p_res["tot_net"], 2),
-                "رمل صافي (م³)": round(p_res["tot_sand"] / 1.05, 2),
-                "رمل مع الهالك 5% (م³)": round(p_res["tot_sand"], 2),
-                "أسمنت (طن)": round(p_res["tot_cement_tons"], 2),
-                "شكاير أسمنت (50كجم)": p_res["tot_cement_bags"],
+                "الكمية الصافية": round(p_net_m2, 2),
+                "رمل صافي (م³)": round(p_sand_m3 / 1.05, 2),
+                "رمل مع الهالك 5% (م³)": round(p_sand_m3, 2),
+                "أسمنت (طن)": round(p_cement_tons, 2),
+                "شكاير أسمنت (50كجم)": p_cement_bags,
                 brick_col_name: "—",
             })
-            total_sand_all = sand_total + p_res["tot_sand"]
-            total_cement_tons_all = cement_tons + p_res["tot_cement_tons"]
-            total_cement_bags_all = cement_bags + p_res["tot_cement_bags"]
-            mat_rows[-1]["بند الأعمال"] = "✅ الإجمالي العام (مباني + محارة)"
-            mat_rows[-1]["رمل مع الهالك 5% (م³)"] = round(total_sand_all, 2)
-            mat_rows[-1]["أسمنت (طن)"] = round(total_cement_tons_all, 2)
-            mat_rows[-1]["شكاير أسمنت (50كجم)"] = total_cement_bags_all
+            mat_rows.append({
+                "بند الأعمال": "✅ الإجمالي العام لكامل المشروع (مباني + محارة)",
+                "الوحدة": "—",
+                "الكمية الصافية": "—",
+                "رمل صافي (م³)": round(sand_net_masonry + (p_sand_m3 / 1.05), 2),
+                "رمل مع الهالك 5% (م³)": round(total_sand_all, 2),
+                "أسمنت (طن)": round(total_cement_tons_all, 2),
+                "شكاير أسمنت (50كجم)": total_cement_bags_all,
+                brick_col_name: bricks_total,
+            })
 
         df_mat = pd.DataFrame(mat_rows)
         def _st_mat(row):
-            if row["بند الأعمال"] == "✅ الإجمالي الكلي لمواد البناء" or row["بند الأعمال"] == "✅ الإجمالي العام (مباني + محارة)":
+            if "الإجمالي العام" in str(row["بند الأعمال"]) or "إجمالي مواد" in str(row["بند الأعمال"]):
                 return ["background-color:#1e3a8a;color:white;font-weight:bold"] * len(row)
             return [""] * len(row)
         st.dataframe(df_mat.style.apply(_st_mat, axis=1).format(lambda v: f"{v:.2f}" if isinstance(v, float) else v), use_container_width=True, hide_index=True)
@@ -13801,24 +14534,26 @@ def render_masonry_plaster_module():
         is_add_wall_active = bool(st.session_state.get("m15_add_wall_mode", False))
         with st.expander("2️⃣ إسقاط الحوائط على المحاور", expanded=is_add_wall_active): _section_add_walls()
         with st.expander("➕ إضافة الأعمدة على المحاور", expanded=is_add_active): _section_add_columns()
-        with st.expander("📐 ضبط اتجاهات وضرب الأعمدة", expanded=False): _section_column_orientations()
-        with st.expander("🗑️ حذف الأعمدة", expanded=False): _section_columns()
-        with st.expander("♻️ استعادة أعمدة (Interactive)", expanded=is_restore_active): _section_restore_columns()
-        with st.expander("🗑️ حذف حوائط", expanded=is_del_wall_active): _section_delete_walls()
-        with st.expander("♻️ استعادة الحوائط المحذوفة", expanded=False): _section_restore_walls()
-        with st.expander("3️⃣ تحديد مواصفات وتعديل الحوائط", expanded=False): _section_walls()
         with st.expander("🚪🪟 نماذج الشبابيك والأبواب", expanded=False):
             _section_opening_types()
         with st.expander("4️⃣ إسقاط الشبابيك", expanded=is_add_win_active):
             _section_add_windows()
         with st.expander("5️⃣ إسقاط الأبواب", expanded=is_add_door_active):
             _section_add_doors()
+        with st.expander("3️⃣ تحديد مواصفات وتعديل الحوائط", expanded=False): _section_walls()
+        with st.expander("📐 ضبط اتجاهات وضرب الأعمدة", expanded=False): _section_column_orientations()
+        with st.expander("🗑️ حذف الشبابيك والأبواب", expanded=False):
+            _section_delete_openings()
+        with st.expander("🗑️ حذف حوائط", expanded=is_del_wall_active): _section_delete_walls()
+        with st.expander("🗑️ حذف الأعمدة", expanded=False): _section_columns()
+        with st.expander("♻️ استعادة الحوائط المحذوفة", expanded=False): _section_restore_walls()
+        with st.expander("♻️ استعادة أعمدة (Interactive)", expanded=is_restore_active): _section_restore_columns()
         with st.expander("♻️ استعادة الشبابيك والأبواب المحذوفة", expanded=False):
             _section_restore_openings()
-        with st.expander("6️⃣ أنواع مقاسات الطوب", expanded=False):
-            _section_brick_type()
         with st.expander("7️⃣ تحديد حوائط المحارة", expanded=False):
             _section_plaster_walls()
+        with st.expander("6️⃣ أنواع مقاسات الطوب", expanded=False):
+            _section_brick_type()
 
     with rc:
         st.markdown(
@@ -13851,23 +14586,7 @@ def render_masonry_plaster_module():
             buf_clean = _draw_plan(with_dim=False)
             b64_clean = base64.b64encode(buf_clean.getvalue()).decode("utf-8")
 
-            # شريط التنبيه المعماري العلوي مع اختفاء تدريجي تلقائي
-            st.markdown(
-                f"""<div id="m15_dim_banner_container" style='background: linear-gradient(135deg, rgba(30, 58, 138, 0.92), rgba(30, 64, 175, 0.92)); border: 1.5px solid #3b82f6;
-                border-radius: 8px; padding: 8px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; transition: all 0.4s ease;' dir='rtl'>
-                    <div style='display: flex; align-items: center; gap: 8px;'>
-                        <span style='font-size: 1.2rem;'>📏</span>
-                        <span style='font-weight: 700; color: #ffffff; font-size: 0.90rem;'>
-                            خط أبعاد موضع {kind_ar} <b>{name}</b>: البعد عن بداية الحائط = <b>{pos_m:.2f}م</b>
-                        </span>
-                    </div>
-                    <div style='background: #3b82f6; color: #ffffff; padding: 3px 10px; border-radius: 12px; font-size: 0.78rem; font-weight: 600; white-space: nowrap;'>
-                        ⏱️ يختفي تلقائياً خلال {rem_sec} ثوانٍ
-                    </div>
-                </div>""",
-                unsafe_allow_html=True
-            )
-
+            # إظهار المسقط مع خطوط الأبعاد مباشرة وبدون أي بانيلات
             st.markdown(
                 f"""<div style="width: 100%; text-align: center; background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);">
                     <img id="m15_plan_static_img" src="data:image/png;base64,{b64_dim}" style="width: 100%; max-width: 100%; height: auto; display: block; border-radius: 6px;" />
@@ -13923,20 +14642,13 @@ def render_masonry_plaster_module():
             if pending_del_w:
                 all_walls = _get_all_walls()
                 if pending_del_w in all_walls:
-                    cm = _get_col_name_map()
+                    play_delete_confirmation_whistle(f"m15_plan_del_wall_{pending_del_w}")
                     wm = _get_wall_name_map()
-                    p_label = _wall_display_label(pending_del_w, cm, wm)
-                    p_len = _wall_length_m(pending_del_w)
-                    p_th = _get_wall_thickness(pending_del_w)
+                    w_name = wm.get(pending_del_w, "—")
                     st.markdown(
                         f"""<div style='background: linear-gradient(135deg, #fff1f2, #ffe4e6); border: 2px solid #f43f5e;
-                        border-radius: 8px; padding: 10px 16px; margin-bottom: 8px;' dir='rtl'>
-                            <div style='font-weight: 800; color: #9f1239; font-size: 0.95rem; margin-bottom: 4px;'>
-                                ⚠️ هل أنت متأكد من رغبتك في حذف الحائط: <b>{p_label}</b>؟
-                            </div>
-                            <div style='font-size: 0.82rem; color: #be123c;'>
-                                الطول: <b>{p_len:.2f} م</b> | السُمك: <b>{p_th} سم</b>
-                            </div>
+                        border-radius: 8px; padding: 8px 16px; margin-bottom: 8px; font-weight: 800; color: #9f1239; font-size: 0.95rem;' dir='rtl'>
+                            ⚠️ تأكيد حذف الحائط <b>{w_name}</b>
                         </div>""",
                         unsafe_allow_html=True
                     )
@@ -13947,54 +14659,20 @@ def render_masonry_plaster_module():
                     with c_rc_n:
                         if st.button("❌ إلغاء", key="m15_rc_cancel_del_wall_btn", use_container_width=True):
                             st.session_state["m15_pending_delete_wall"] = None
+                            st.session_state.pop("_last_del_confirm_whistle_token", None)
                             st.rerun()
 
             if is_add_active:
                 _render_interactive_plan(box_mode="add")
             elif is_restore_active:
-                st.markdown(
-                    """<div style='background: linear-gradient(135deg, #ecfdf5, #d1fae5); border: 2px solid #10b981; border-radius: 8px; padding: 8px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;' dir='rtl'>
-                        <span style='font-weight: 700; color: #065f46; font-size: 0.90rem;'>♻️ <b>وضع استعادة الأعمدة نشط:</b> اسحب مربعاً بالماوس يحتوي على تقاطع المحورين المراد استعادة العمود عنده</span>
-                        <span style='background: #10b981; color: #ffffff; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 600;'>Esc للإنهاء</span>
-                    </div>""",
-                    unsafe_allow_html=True
-                )
                 _render_interactive_plan(box_mode="restore")
             elif is_del_wall_active:
-                st.markdown(
-                    """<div style='background: linear-gradient(135deg, #fef2f2, #fee2e2); border: 2px solid #ef4444; border-radius: 8px; padding: 8px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;' dir='rtl'>
-                        <span style='font-weight: 700; color: #991b1b; font-size: 0.90rem;'>🗑️ <b>وضع حذف الحوائط نشط:</b> اختر بالماوس صندوقاً يكون بداخله الحائط المراد حذفه</span>
-                        <span style='background: #ef4444; color: #ffffff; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 600;'>Esc للإنهاء</span>
-                    </div>""",
-                    unsafe_allow_html=True
-                )
                 _render_interactive_plan(box_mode="delete_wall")
             elif is_add_wall_active:
-                st.markdown(
-                    """<div style='background: linear-gradient(135deg, #fef3c7, #fde68a); border: 2px solid #f59e0b; border-radius: 8px; padding: 8px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;' dir='rtl'>
-                        <span style='font-weight: 700; color: #92400e; font-size: 0.90rem;'>🧱 <b>وضع إسقاط الحوائط نشط:</b> اسحب بالماوس لتحديد بداية ونهاية الحائط المطلوب إسقاطه</span>
-                        <span style='background: #f59e0b; color: #ffffff; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 600;'>Esc للإنهاء</span>
-                    </div>""",
-                    unsafe_allow_html=True
-                )
                 _render_interactive_plan(box_mode="add_wall")
             elif is_add_win_active:
-                st.markdown(
-                    """<div style='background: linear-gradient(135deg, rgba(14, 165, 233, 0.90), rgba(2, 132, 199, 0.90)); border: 2px solid #0284c7; border-radius: 8px; padding: 8px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;' dir='rtl'>
-                        <span style='font-weight: 700; color: #ffffff; font-size: 0.90rem;'>🪟 <b>وضع إسقاط الشبابيك نشط:</b> انقر أو اسحب بالماوس فوق الحائط لإسقاط الشباك في منتصفه تلقائياً</span>
-                        <span style='background: #0284c7; color: #ffffff; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 600;'>Esc للإنهاء</span>
-                    </div>""",
-                    unsafe_allow_html=True
-                )
                 _render_interactive_plan(box_mode="add_window")
             elif is_add_door_active:
-                st.markdown(
-                    """<div style='background: linear-gradient(135deg, rgba(34, 197, 94, 0.90), rgba(22, 163, 74, 0.90)); border: 2px solid #16a34a; border-radius: 8px; padding: 8px 14px; margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between;' dir='rtl'>
-                        <span style='font-weight: 700; color: #ffffff; font-size: 0.90rem;'>🚪 <b>وضع إسقاط الأبواب نشط:</b> انقر أو اسحب بالماوس فوق الحائط لإسقاط الباب في منتصفه تلقائياً</span>
-                        <span style='background: #16a34a; color: #ffffff; padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: 600;'>Esc للإنهاء</span>
-                    </div>""",
-                    unsafe_allow_html=True
-                )
                 _render_interactive_plan(box_mode="add_door")
             else:
                 st.image(_draw_plan(with_dim=False), use_container_width=True)
@@ -14002,11 +14680,11 @@ def render_masonry_plaster_module():
                 f"""<div style='font-size:0.78rem;margin-top:3px;display:flex;gap:12px;flex-wrap:wrap;'>
                     <span style='color:{_CLR_WALL_12};font-weight:bold;'>■ حائط 12سم</span>
                     <span style='color:{_CLR_WALL_25};font-weight:bold;'>■ حائط 25سم</span>
+                    <span style='color:{_CLR_WALL_PARAPET};font-weight:bold;'>■ حائط دروة</span>
                     <span style='color:{_CLR_WIN};font-weight:bold;'>■ شباك (W#)</span>
                     <span style='color:{_CLR_DOOR};font-weight:bold;'>■ باب (D#)</span>
                     <span style='color:{_CLR_COL};font-weight:bold;'>■ عمود (C#)</span>
                     <span style='color:#EC4899;font-weight:bold;'>▨ وجه محارة (وردي)</span>
-                    <span style='color:#ffffff;font-weight:bold;'><span style='color:#38bdf8;'>■</span> حائط دروة [دروة]</span>
                     <span style='color:#222;font-weight:bold;'>■ حائط (L#)</span>
                     <span style='color:#888;font-weight:bold;'>┄ خط استرشادي (محذوف)</span>
                 </div>""",unsafe_allow_html=True)
