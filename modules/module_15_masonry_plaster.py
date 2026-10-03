@@ -2096,6 +2096,261 @@ def _get_wall_doors(w_key):
                     collected.append(dc)
     return collected
 
+def _apply_smart_plan_labels(
+    ax, fig_w, fig_h, xs, ys,
+    door_labels, win_labels, col_labels, wall_labels,
+    obstacles, active_walls_set,
+    fs_door=11.2, fs_win=11.9, fs_col=14.0, fs_wall=11.9
+):
+    """
+    محرك التوزيع الذكي لنصوص المسقط المعماري (Smart Label Placement & Collision Resolution Engine):
+    - منع أي تداخل بين أسماء الأعمدة (C#)، الحوائط (L#)، الشبابيك (W#)، والأبواب (D#).
+    - تحليل أرباع الفراغ حول الأعمدة لتحديد الزوايا الحرة الخالية من تقاطعات الحوائط.
+    - استكشاف الأطوال الحرة على امتداد الحائط واختيار الموضع الأنسب بعيداً عن الفتحات والأعمدة.
+    - اختيار أفضل جهة لكتابة اسم الشباك (أعلى/أسفل أو يمين/يسار) مع معالجة خطوط الإرشاد (Leader Lines) عند الضيق.
+    - إحاطة جميع الأسماء بشارات معمارية هندسية واضحة ومتباينة الألوان (Pill Badges) تمنع التداخل مع الخطوط والتهشيرات.
+    """
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+    span_x = max(1.0, xlim[1] - xlim[0])
+    span_y = max(1.0, ylim[1] - ylim[0])
+
+    m_pt_x = span_x / (fig_w * 72.0 * 0.82)
+    m_pt_y = span_y / (fig_h * 72.0 * 0.82)
+
+    placed_boxes = []
+
+    def _overlap_area(b1, b2, margin=0.04):
+        dx = min(b1[2], b2[2]) - max(b1[0], b2[0]) + margin
+        dy = min(b1[3], b2[3]) - max(b1[1], b2[1]) + margin
+        if dx > 0 and dy > 0:
+            return dx * dy
+        return 0.0
+
+    def _compute_bbox(x, y, text, fsz, ha, va, pad=0.06):
+        w_m = max(0.28, len(str(text)) * 0.58 * fsz * m_pt_x) + pad * 2
+        h_m = max(0.22, fsz * 1.20 * m_pt_y) + pad * 2
+        if ha == "left": x0 = x; x1 = x + w_m
+        elif ha == "right": x0 = x - w_m; x1 = x
+        else: x0 = x - w_m / 2.0; x1 = x + w_m / 2.0
+        if va == "bottom": y0 = y; y1 = y + h_m
+        elif va == "top": y0 = y - h_m; y1 = y
+        else: y0 = y - h_m / 2.0; y1 = y + h_m / 2.0
+        return [x0, y0, x1, y1]
+
+    # 1. الأبواب (Door Labels)
+    for d in door_labels:
+        txt = d["text"]
+        if not txt: continue
+        xc = d["x_c"]
+        yc = d["y_c"]
+        clr = d.get("door_clr", "#B45309")
+        cand_box = _compute_bbox(xc, yc, txt, fs_door, "center", "center")
+        ax.text(xc, yc, txt, ha="center", va="center", fontsize=fs_door,
+                color=clr, fontweight="bold", zorder=6.5,
+                bbox=dict(boxstyle="round,pad=0.20", facecolor="#FFFBEB", edgecolor="#D97706", lw=0.9, alpha=0.94))
+        placed_boxes.append(cand_box)
+
+    # 2. الأعمدة (Column Labels)
+    for c in col_labels:
+        txt = c["text"]
+        if not txt: continue
+        cx, cy = c["cx"], c["cy"]
+        cw, ch = c["cw"], c["ch"]
+        ci, cj = c["grid"]
+        clr = c.get("color", "#1E1B4B")
+        is_pending = c.get("is_pending", False)
+
+        has_N = any(wk in active_walls_set for wk in [(ci, cj, ci, cj+1), (ci, cj+1, ci, cj)])
+        has_S = any(wk in active_walls_set for wk in [(ci, cj, ci, cj-1), (ci, cj-1, ci, cj)])
+        has_E = any(wk in active_walls_set for wk in [(ci, cj, ci+1, cj), (ci+1, cj, ci, cj)])
+        has_W = any(wk in active_walls_set for wk in [(ci-1, cj, ci, cj), (ci, cj, ci-1, cj)])
+
+        pad_x = cw / 2.0 + 0.12
+        pad_y = ch / 2.0 + 0.12
+
+        candidates = [
+            ("NE", cx + pad_x, cy + pad_y, "left", "bottom", (has_N or has_E), (not has_N and not has_E)),
+            ("NW", cx - pad_x, cy + pad_y, "right", "bottom", (has_N or has_W), (not has_N and not has_W)),
+            ("SE", cx + pad_x, cy - pad_y, "left", "top", (has_S or has_E), (not has_S and not has_E)),
+            ("SW", cx - pad_x, cy - pad_y, "right", "top", (has_S or has_W), (not has_S and not has_W)),
+            ("N",  cx, cy + pad_y + 0.05, "center", "bottom", has_N, not has_N),
+            ("S",  cx, cy - pad_y - 0.05, "center", "top", has_S, not has_S),
+            ("E",  cx + pad_x + 0.05, cy, "left", "center", has_E, not has_E),
+            ("W",  cx - pad_x - 0.05, cy, "right", "center", has_W, not has_W),
+        ]
+
+        best_cand = None
+        best_score = float("inf")
+        best_box = None
+
+        for (qname, qx, qy, qha, qva, has_w, is_clear) in candidates:
+            box = _compute_bbox(qx, qy, txt, fs_col, qha, qva)
+            score = 0.0
+            for pb in placed_boxes:
+                ov = _overlap_area(box, pb)
+                if ov > 0: score += 10000.0 * ov + 5000.0
+            for ob in obstacles:
+                ov = _overlap_area(box, ob)
+                if ov > 0: score += 800.0 * ov + 200.0
+            if has_w: score += 180.0
+            if is_clear: score -= 80.0
+            if qname == "NE": score -= 20.0
+            if score < best_score:
+                best_score = score
+                best_cand = (qx, qy, qha, qva, False)
+                best_box = box
+
+        if best_score > 500.0:
+            for (qname, qx, qy, qha, qva, has_w, is_clear) in candidates:
+                ext_qx = cx + (qx - cx) * 1.8
+                ext_qy = cy + (qy - cy) * 1.8
+                box = _compute_bbox(ext_qx, ext_qy, txt, fs_col, qha, qva)
+                score = 50.0
+                for pb in placed_boxes:
+                    ov = _overlap_area(box, pb)
+                    if ov > 0: score += 10000.0 * ov + 5000.0
+                for ob in obstacles:
+                    ov = _overlap_area(box, ob)
+                    if ov > 0: score += 800.0 * ov
+                if score < best_score:
+                    best_score = score
+                    best_cand = (ext_qx, ext_qy, qha, qva, True)
+                    best_box = box
+
+        fx, fy, fha, fva, leader = best_cand
+        bg_col = "#FEE2E2" if is_pending else "#EEF2FF"
+        edge_col = "#DC2626" if is_pending else "#6366F1"
+        if leader:
+            ax.annotate("", xy=(cx, cy), xytext=(fx, fy),
+                        arrowprops=dict(arrowstyle="-", color="#94A3B8", lw=0.7, ls=":"), zorder=6.8)
+        ax.text(fx, fy, txt, ha=fha, va=fva, fontsize=fs_col, color=clr, fontweight="bold", zorder=7.2,
+                bbox=dict(boxstyle="round,pad=0.20", facecolor=bg_col, edgecolor=edge_col, lw=0.9, alpha=0.94))
+        placed_boxes.append(best_box)
+
+    # 3. الشبابيك (Window Labels)
+    for w in win_labels:
+        txt = w["text"]
+        if not txt: continue
+        is_h = w["is_h"]
+        cmin = w["cross_min"]
+        cmax = w["cross_max"]
+        ht = w["half_t"]
+        wx = w["wx"]
+        wy = w["wy"]
+        ww = w["ww"]
+        wh2 = w["wh2"]
+        clr = w.get("color", "#003366")
+        w_mid_x = wx + ww / 2.0
+        w_mid_y = wy + wh2 / 2.0
+        pad_offset = ht * 1.5 + 0.15
+
+        if is_h:
+            candidates = [
+                (w_mid_x, cmin - pad_offset, "center", "top", False),
+                (w_mid_x, cmax + pad_offset, "center", "bottom", False),
+                (w_mid_x, cmin - pad_offset - 0.35, "center", "top", True),
+                (w_mid_x, cmax + pad_offset + 0.35, "center", "bottom", True),
+                (w_mid_x - 0.30, cmin - pad_offset, "center", "top", False),
+                (w_mid_x + 0.30, cmin - pad_offset, "center", "top", False),
+            ]
+        else:
+            candidates = [
+                (cmin - pad_offset, w_mid_y, "right", "center", False),
+                (cmax + pad_offset, w_mid_y, "left", "center", False),
+                (cmin - pad_offset - 0.35, w_mid_y, "right", "center", True),
+                (cmax + pad_offset + 0.35, w_mid_y, "left", "center", True),
+                (cmin - pad_offset, w_mid_y - 0.30, "right", "center", False),
+                (cmin - pad_offset, w_mid_y + 0.30, "right", "center", False),
+            ]
+
+        best_cand = None
+        best_score = float("inf")
+        best_box = None
+
+        for (qx, qy, qha, qva, is_ext) in candidates:
+            box = _compute_bbox(qx, qy, txt, fs_win, qha, qva)
+            score = 30.0 if is_ext else 0.0
+            for pb in placed_boxes:
+                ov = _overlap_area(box, pb)
+                if ov > 0: score += 10000.0 * ov + 5000.0
+            for ob in obstacles:
+                ov = _overlap_area(box, ob)
+                if ov > 0: score += 800.0 * ov
+            if score < best_score:
+                best_score = score
+                best_cand = (qx, qy, qha, qva, is_ext)
+                best_box = box
+
+        fx, fy, fha, fva, leader = best_cand
+        if leader:
+            ax.annotate("", xy=(w_mid_x, w_mid_y), xytext=(fx, fy),
+                        arrowprops=dict(arrowstyle="-", color="#94A3B8", lw=0.7, ls=":"), zorder=6.8)
+        ax.text(fx, fy, txt, ha=fha, va=fva, fontsize=fs_win, color=clr, fontweight="bold", zorder=7.0,
+                bbox=dict(boxstyle="round,pad=0.18", facecolor="#F0F9FF", edgecolor="#0284C7", lw=0.8, alpha=0.92))
+        placed_boxes.append(best_box)
+
+    # 4. الحوائط (Wall Labels)
+    for wl in wall_labels:
+        txt = wl["text"]
+        if not txt: continue
+        is_h = wl["is_h"]
+        cmin = wl["cross_min"]
+        cmax = wl["cross_max"]
+        ht = wl["half_t"]
+        t_col = wl.get("t_color", "#1E293B")
+        bg_col = wl.get("t_box_bg", "#FFFFFF")
+        edge_col = wl.get("t_box_edge", "#CBD5E1")
+        is_p = wl.get("is_parapet", False)
+        min_c = wl["min_coord"]
+        max_c = wl["max_coord"]
+        w_len = max_c - min_c
+        t_samples = [0.50, 0.35, 0.65, 0.22, 0.78, 0.15, 0.85]
+        pad_offset = ht * 1.5 + 0.15
+
+        candidates = []
+        for t in t_samples:
+            pos = min_c + t * w_len
+            t_pen = abs(t - 0.50) * 40.0
+            if is_h:
+                candidates.append((pos, cmax + pad_offset, "center", "bottom", t_pen, False))
+                candidates.append((pos, cmin - pad_offset, "center", "top", t_pen + 10.0, False))
+                candidates.append((pos, cmax + pad_offset + 0.35, "center", "bottom", t_pen + 35.0, True))
+                candidates.append((pos, cmin - pad_offset - 0.35, "center", "top", t_pen + 45.0, True))
+            else:
+                candidates.append((cmax + pad_offset, pos, "left", "center", t_pen, False))
+                candidates.append((cmin - pad_offset, pos, "right", "center", t_pen + 10.0, False))
+                candidates.append((cmax + pad_offset + 0.35, pos, "left", "center", t_pen + 35.0, True))
+                candidates.append((cmin - pad_offset - 0.35, pos, "right", "center", t_pen + 45.0, True))
+
+        best_cand = None
+        best_score = float("inf")
+        best_box = None
+
+        for (qx, qy, qha, qva, t_pen, is_ext) in candidates:
+            box = _compute_bbox(qx, qy, txt, fs_wall, qha, qva)
+            score = t_pen
+            for pb in placed_boxes:
+                ov = _overlap_area(box, pb)
+                if ov > 0: score += 10000.0 * ov + 5000.0
+            for ob in obstacles:
+                ov = _overlap_area(box, ob)
+                if ov > 0: score += 700.0 * ov
+            if score < best_score:
+                best_score = score
+                best_cand = (qx, qy, qha, qva, is_ext)
+                best_box = box
+
+        fx, fy, fha, fva, leader = best_cand
+        if leader:
+            anc_x = fx if is_h else (cmin + ht)
+            anc_y = (cmin + ht) if is_h else fy
+            ax.annotate("", xy=(anc_x, anc_y), xytext=(fx, fy),
+                        arrowprops=dict(arrowstyle="-", color="#94A3B8", lw=0.7, ls=":"), zorder=6.8)
+        ax.text(fx, fy, txt, ha=fha, va=fva, fontsize=fs_wall, color=t_col, fontweight="bold", zorder=7.1,
+                bbox=dict(boxstyle="round,pad=0.18", facecolor=bg_col, edgecolor=edge_col, lw=0.8 if is_p else 0.6, alpha=0.92))
+        placed_boxes.append(best_box)
+
 def _draw_plan(with_dim=True):
     xs=st.session_state["m15_x_axes"]; ys=st.session_state["m15_y_axes"]
     removed_cols=st.session_state["m15_col_removed"]
@@ -2107,6 +2362,7 @@ def _draw_plan(with_dim=True):
     wm_door = _get_door_name_map()
     del_win_ids = {item["id"] for item in _get_all_deleted_openings() if item["kind"] == "win"}
     del_door_ids = {item["id"] for item in _get_all_deleted_openings() if item["kind"] == "door"}
+    pending_del = st.session_state.get("m15_pending_delete")
     if not xs or not ys:
         fig,ax=plt.subplots(figsize=(6,4))
         ax.text(0.5,0.5,"No axes yet",ha="center",va="center",fontsize=round(14*1.4,1),transform=ax.transAxes)
@@ -2138,7 +2394,7 @@ def _draw_plan(with_dim=True):
     x_bub_left     = x_dim_left_tot - d_bub
 
     x_dim_right_bay = x_max + d_bay
-    x_dim_right_tot = x_dim_right_bay + d_tot
+    x_dim_right_tot = x_dim_right_bay - d_tot
     x_bub_right     = x_dim_right_tot + d_bub
 
     margin_x = d_bay + d_tot + d_bub + cad_bubble_r + 0.35
@@ -2168,6 +2424,13 @@ def _draw_plan(with_dim=True):
     for y in ys:
         ax.plot([x_bub_left, x_bub_right], [y, y], color=_CLR_AXIS_X, lw=0.9, ls="--", alpha=0.50, zorder=1)
 
+    active_walls_set = set(w for w in _get_all_walls() if w not in removed_walls)
+    plan_obstacles = []
+    plan_door_labels = []
+    plan_win_labels = []
+    plan_wall_labels = []
+    plan_col_labels = []
+
     for wk in _get_all_walls():
         i1, j1, i2, j2 = wk; removed = wk in removed_walls
         thick = _get_wall_thickness(wk)
@@ -2189,9 +2452,25 @@ def _draw_plan(with_dim=True):
         else:
             if is_h: rx = min(xs[i1], xs[i2]); ry = cross_min; rw = abs(xs[i2] - xs[i1]); rh = thick_m
             else: rx = cross_min; ry = min(ys[j1], ys[j2]); rw = thick_m; rh = abs(ys[j2] - ys[j1])
+            plan_obstacles.append([rx, ry, rx + rw, ry + rh])
             edge_clr = "#0369a1" if is_p else "#333333"
             edge_lw = 1.3 if is_p else 1.0
-            ax.add_patch(patches.Rectangle((rx, ry), rw, rh, lw=edge_lw, edgecolor=edge_clr, facecolor=color, alpha=0.88, zorder=2))
+
+            tgt_w = tuple(int(x) for x in pending_del.get("target", ())) if (pending_del and pending_del.get("kind") == "wall" and pending_del.get("target")) else ()
+            is_pending_wall = (bool(tgt_w) and (tgt_w == wk or (len(tgt_w) == 4 and (tgt_w[2], tgt_w[3], tgt_w[0], tgt_w[1]) == wk)))
+            if is_pending_wall:
+                ax.add_patch(patches.Rectangle((rx, ry), rw, rh, lw=1.0, edgecolor="#fca5a5", facecolor="#fee2e2", alpha=0.35, zorder=2))
+                ecx = rx + rw / 2.0
+                ecy = ry + rh / 2.0
+                ew = (rw * 1.06 + 0.35) if is_h else max(rw * 3.5, 0.75)
+                eh = max(rh * 3.5, 0.75) if is_h else (rh * 1.06 + 0.35)
+                ax.add_patch(patches.Ellipse((ecx, ecy), ew, eh, edgecolor="#dc2626", facecolor=(239/255, 68/255, 68/255, 0.10), lw=2.8, ls="--", zorder=8))
+                ax.text(ecx, ecy + eh / 2.0 + 0.14, "قيد الحذف", ha="center", va="bottom",
+                        fontsize=fs_wall * 1.15, color="#991b1b", fontweight="heavy", zorder=9,
+                        bbox=dict(boxstyle="round,pad=0.25", facecolor="#fee2e2", edgecolor="#dc2626", lw=1.8, alpha=0.98))
+                plan_obstacles.append([ecx - ew / 2.0, ecy - eh / 2.0, ecx + ew / 2.0, ecy + eh / 2.0 + 0.35])
+            else:
+                ax.add_patch(patches.Rectangle((rx, ry), rw, rh, lw=edge_lw, edgecolor=edge_clr, facecolor=color, alpha=0.88, zorder=2))
 
             # ── رسم أوجه المحارة بخطوط مائلة وردية واسعة فقط (بدون أي إطار أو خطوط حدود) ──
             plaster_faces_map = st.session_state.get("m15_plaster_faces", {})
@@ -2238,7 +2517,18 @@ def _draw_plan(with_dim=True):
                 w_errs = _validate_opening_coords(wk, wname or "شباك", "win", w_w, float(winfo.get("h_m", 1.2)), w_pos, current_op_id=winfo.get("id"))
                 w_edge = "#D32F2F" if w_errs else "#004488"
                 w_lw = 2.2 if w_errs else 1.2
-                ax.add_patch(patches.Rectangle((wx, wy), ww, wh2, lw=w_lw, edgecolor=w_edge, facecolor=_CLR_WIN, alpha=0.88, zorder=4))
+                tgt_w_str = str(pending_del.get("target", "")) if (pending_del and pending_del.get("kind") == "win") else ""
+                is_pending_win = (bool(tgt_w_str) and tgt_w_str in [str(winfo.get("id")), str(wname), str(winfo.get("name", ""))])
+                if is_pending_win:
+                    ax.add_patch(patches.Rectangle((wx, wy), ww, wh2, lw=1.2, edgecolor="#fca5a5", facecolor="#fee2e2", alpha=0.40, zorder=4))
+                    ew = max(ww * 1.5, 0.70)
+                    eh = max(wh2 * 1.5, 0.70)
+                    ax.add_patch(patches.Ellipse((wx + ww / 2, wy + wh2 / 2), ew, eh, edgecolor="#dc2626", facecolor=(239/255, 68/255, 68/255, 0.12), lw=2.4, ls="--", zorder=8.5))
+                    ax.text(wx + ww / 2, wy + wh2 / 2 + eh / 2 + 0.14, "قيد الحذف", ha="center", va="bottom",
+                            fontsize=fs_win * 1.15, color="#991b1b", fontweight="heavy", zorder=9,
+                            bbox=dict(boxstyle="round,pad=0.22", facecolor="#fee2e2", edgecolor="#dc2626", lw=1.6, alpha=0.98))
+                else:
+                    ax.add_patch(patches.Rectangle((wx, wy), ww, wh2, lw=w_lw, edgecolor=w_edge, facecolor=_CLR_WIN, alpha=0.88, zorder=4))
                 if wname:
                     pk = round(w_pos, 2)
                     win_groups.setdefault(pk, {"names": [], "has_err": False, "wx": wx, "ww": ww, "wy": wy, "wh2": wh2})
@@ -2248,10 +2538,13 @@ def _draw_plan(with_dim=True):
             for pk, g in win_groups.items():
                 w_label = " / ".join(g["names"])
                 t_col = "#B71C1C" if (g["has_err"] or len(g["names"]) > 1) else "#003366"
-                if is_h:
-                    ax.text(g["wx"] + g["ww"] / 2, cross_min - half_t * 1.5, w_label, ha="center", va="top", fontsize=fs_win, color=t_col, fontweight="bold", zorder=6)
-                else:
-                    ax.text(cross_min - half_t * 1.5, g["wy"] + g["wh2"] / 2, w_label, ha="right", va="center", fontsize=fs_win, color=t_col, fontweight="bold", zorder=6)
+                plan_win_labels.append({
+                    "text": w_label,
+                    "wx": g["wx"], "wy": g["wy"], "ww": g["ww"], "wh2": g["wh2"],
+                    "is_h": is_h, "color": t_col,
+                    "cross_min": cross_min, "cross_max": cross_max, "half_t": half_t
+                })
+                plan_obstacles.append([g["wx"], g["wy"], g["wx"] + g["ww"], g["wy"] + g["wh2"]])
 
 
         doors = _get_wall_doors(wk)
@@ -2263,6 +2556,8 @@ def _draw_plan(with_dim=True):
                 d_w = float(dinfo.get("w_m", 0.9)); d_pos = float(dinfo.get("pos_m", (wlen - d_w) / 2)); hd = d_w / 2
                 dt = min(door_t, d_w * 0.15)
                 dname = wm_door.get(dinfo.get("id")) or dinfo.get("name", "")
+                tgt_d_str = str(pending_del.get("target", "")) if (pending_del and pending_del.get("kind") == "door") else ""
+                is_pending_door = (bool(tgt_d_str) and tgt_d_str in [str(dinfo.get("id")), str(dname), str(dinfo.get("name", ""))])
                 if is_h:
                     x_start = min(xs[i1], xs[i2])
                     x0 = x_start + d_pos
@@ -2276,17 +2571,23 @@ def _draw_plan(with_dim=True):
                     if leaf_d not in ["أعلى", "أسفل"]: leaf_d = def_leaf
                     
                     d_errs = _validate_opening_coords(wk, dname or "باب", "door", d_w, float(dinfo.get("h_m", 2.1)), d_pos, leaf_dir=leaf_d, current_op_id=dinfo.get("id"))
-                    door_clr = "#D32F2F" if d_errs else _CLR_DOOR
+                    door_clr = "#fca5a5" if is_pending_door else ("#D32F2F" if d_errs else _CLR_DOOR)
+                    door_alpha = 0.40 if is_pending_door else 1.0
                     door_lw = 2.4 if d_errs else 1.8
                     
                     # تفريغ فتحة الباب في الحائط
                     ax.add_patch(patches.Rectangle((x0, cross_min - 0.002), d_w, thick_m + 0.004,
-                                                   facecolor="#F8F8F8", edgecolor="none", zorder=3))
+                                                   facecolor="#fee2e2" if is_pending_door else "#F8F8F8", edgecolor="none", zorder=3))
                     # خطي الحلق عند طرفي الفتحة
-                    ax.plot([x0, x0], [cross_min, cross_max], color="#D32F2F" if d_errs else "#333333", lw=1.2 if d_errs else 1.0, zorder=3.5)
-                    ax.plot([x1, x1], [cross_min, cross_max], color="#D32F2F" if d_errs else "#333333", lw=1.2 if d_errs else 1.0, zorder=3.5)
+                    ax.plot([x0, x0], [cross_min, cross_max], color="#D32F2F" if d_errs else "#333333", lw=1.2 if d_errs else 1.0, alpha=door_alpha, zorder=3.5)
+                    ax.plot([x1, x1], [cross_min, cross_max], color="#D32F2F" if d_errs else "#333333", lw=1.2 if d_errs else 1.0, alpha=door_alpha, zorder=3.5)
                     if dname:
-                        ax.text(x_c, y_c, dname, ha="center", va="center", fontsize=fs_door, color=door_clr, fontweight="bold", zorder=6)
+                        plan_door_labels.append({
+                            "text": dname, "x_c": x_c, "y_c": y_c, "d_w": d_w, "is_h": True,
+                            "door_clr": door_clr, "leaf_d": leaf_d,
+                            "cross_min": cross_min, "cross_max": cross_max, "half_t": half_t
+                        })
+                        plan_obstacles.append([x0, cross_min, x1, cross_max])
                     
                     sdir = 1 if leaf_d == "أعلى" else -1
                     y_ref = cross_max if sdir == 1 else cross_min
@@ -2297,22 +2598,31 @@ def _draw_plan(with_dim=True):
                     
                     if hinge_d == "يسار":
                         hx = x0; opp_x = x1
-                        ax.plot([hx, hx], [y_ref, y_tip], color=door_clr, lw=door_lw, zorder=5)
-                        ax.plot([hx + dt, hx + dt], [y_ref, y_tip], color=door_clr, lw=door_lw, zorder=5)
-                        ax.plot([hx, hx + dt], [y_tip, y_tip], color=door_clr, lw=door_lw * 0.8, zorder=5)
-                        ax.plot([hx, opp_x], [y_tip, y_ref], color=door_clr, lw=1.3, ls="-", zorder=5)
+                        ax.plot([hx, hx], [y_ref, y_tip], color=door_clr, lw=door_lw, alpha=door_alpha, zorder=5)
+                        ax.plot([hx + dt, hx + dt], [y_ref, y_tip], color=door_clr, lw=door_lw, alpha=door_alpha, zorder=5)
+                        ax.plot([hx, hx + dt], [y_tip, y_tip], color=door_clr, lw=door_lw * 0.8, alpha=door_alpha, zorder=5)
+                        ax.plot([hx, opp_x], [y_tip, y_ref], color=door_clr, lw=1.3, ls="-", alpha=door_alpha, zorder=5)
                         theta1, theta2 = (0, 90) if sdir == 1 else (270, 360)
                         ax.add_patch(patches.Arc((hx, y_ref), 2 * d_w, 2 * d_w, angle=0,
-                                                 theta1=theta1, theta2=theta2, color=door_clr, lw=1.0, ls="--", zorder=5))
+                                                 theta1=theta1, theta2=theta2, color=door_clr, lw=1.0, ls="--", alpha=door_alpha, zorder=5))
                     else: # يمين
                         hx = x1; opp_x = x0
-                        ax.plot([hx, hx], [y_ref, y_tip], color=door_clr, lw=door_lw, zorder=5)
-                        ax.plot([hx - dt, hx - dt], [y_ref, y_tip], color=door_clr, lw=door_lw, zorder=5)
-                        ax.plot([hx - dt, hx], [y_tip, y_tip], color=door_clr, lw=door_lw * 0.8, zorder=5)
-                        ax.plot([hx, opp_x], [y_tip, y_ref], color=door_clr, lw=1.3, ls="-", zorder=5)
+                        ax.plot([hx, hx], [y_ref, y_tip], color=door_clr, lw=door_lw, alpha=door_alpha, zorder=5)
+                        ax.plot([hx - dt, hx - dt], [y_ref, y_tip], color=door_clr, lw=door_lw, alpha=door_alpha, zorder=5)
+                        ax.plot([hx - dt, hx], [y_tip, y_tip], color=door_clr, lw=door_lw * 0.8, alpha=door_alpha, zorder=5)
+                        ax.plot([hx, opp_x], [y_tip, y_ref], color=door_clr, lw=1.3, ls="-", alpha=door_alpha, zorder=5)
                         theta1, theta2 = (90, 180) if sdir == 1 else (180, 270)
                         ax.add_patch(patches.Arc((hx, y_ref), 2 * d_w, 2 * d_w, angle=0,
-                                                 theta1=theta1, theta2=theta2, color=door_clr, lw=1.0, ls="--", zorder=5))
+                                                 theta1=theta1, theta2=theta2, color=door_clr, lw=1.0, ls="--", alpha=door_alpha, zorder=5))
+                    
+                    if is_pending_door:
+                        ew = max(d_w * 1.5, 0.90)
+                        eh = max(d_w * 1.5, 0.90)
+                        ax.add_patch(patches.Ellipse((x_c, y_c), ew, eh, edgecolor="#dc2626", facecolor=(239/255, 68/255, 68/255, 0.12), lw=2.4, ls="--", zorder=8.5))
+                        ax.text(x_c, y_c + eh / 2 + 0.14, "قيد الحذف", ha="center", va="bottom",
+                                fontsize=fs_door * 1.15, color="#991b1b", fontweight="heavy", zorder=9,
+                                bbox=dict(boxstyle="round,pad=0.22", facecolor="#fee2e2", edgecolor="#dc2626", lw=1.6, alpha=0.98))
+                        plan_obstacles.append([x_c - ew / 2.0, y_c - eh / 2.0, x_c + ew / 2.0, y_c + eh / 2.0 + 0.35])
                 else:
                     y_start = min(ys[j1], ys[j2])
                     y0 = y_start + d_pos
@@ -2326,17 +2636,23 @@ def _draw_plan(with_dim=True):
                     if leaf_d not in ["يمين", "يسار"]: leaf_d = def_leaf
                     
                     d_errs = _validate_opening_coords(wk, dname or "باب", "door", d_w, float(dinfo.get("h_m", 2.1)), d_pos, leaf_dir=leaf_d, current_op_id=dinfo.get("id"))
-                    door_clr = "#D32F2F" if d_errs else _CLR_DOOR
+                    door_clr = "#fca5a5" if is_pending_door else ("#D32F2F" if d_errs else _CLR_DOOR)
+                    door_alpha = 0.40 if is_pending_door else 1.0
                     door_lw = 2.4 if d_errs else 1.8
                     
                     # تفريغ فتحة الباب في الحائط
                     ax.add_patch(patches.Rectangle((cross_min - 0.002, y0), thick_m + 0.004, d_w,
-                                                   facecolor="#F8F8F8", edgecolor="none", zorder=3))
+                                                    facecolor="#fee2e2" if is_pending_door else "#F8F8F8", edgecolor="none", zorder=3))
                     # خطي الحلق عند طرفي الفتحة
-                    ax.plot([cross_min, cross_max], [y0, y0], color="#D32F2F" if d_errs else "#333333", lw=1.2 if d_errs else 1.0, zorder=3.5)
-                    ax.plot([cross_min, cross_max], [y1, y1], color="#D32F2F" if d_errs else "#333333", lw=1.2 if d_errs else 1.0, zorder=3.5)
+                    ax.plot([cross_min, cross_max], [y0, y0], color="#D32F2F" if d_errs else "#333333", lw=1.2 if d_errs else 1.0, alpha=door_alpha, zorder=3.5)
+                    ax.plot([cross_min, cross_max], [y1, y1], color="#D32F2F" if d_errs else "#333333", lw=1.2 if d_errs else 1.0, alpha=door_alpha, zorder=3.5)
                     if dname:
-                        ax.text(x_c, y_c, dname, ha="center", va="center", fontsize=fs_door, color=door_clr, fontweight="bold", zorder=6)
+                        plan_door_labels.append({
+                            "text": dname, "x_c": x_c, "y_c": y_c, "d_w": d_w, "is_h": False,
+                            "door_clr": door_clr, "leaf_d": leaf_d,
+                            "cross_min": cross_min, "cross_max": cross_max, "half_t": half_t
+                        })
+                        plan_obstacles.append([cross_min, y0, cross_max, y1])
                     
                     sdir = 1 if leaf_d == "يمين" else -1
                     x_ref = cross_max if sdir == 1 else cross_min
@@ -2347,22 +2663,30 @@ def _draw_plan(with_dim=True):
                     
                     if hinge_d == "أسفل":
                         hy = y0; opp_y = y1
-                        ax.plot([x_ref, x_tip], [hy, hy], color=door_clr, lw=door_lw, zorder=5)
-                        ax.plot([x_ref, x_tip], [hy + dt, hy + dt], color=door_clr, lw=door_lw, zorder=5)
-                        ax.plot([x_tip, x_tip], [hy, hy + dt], color=door_clr, lw=door_lw * 0.8, zorder=5)
-                        ax.plot([x_tip, x_ref], [hy, opp_y], color=door_clr, lw=1.3, ls="-", zorder=5)
+                        ax.plot([x_ref, x_tip], [hy, hy], color=door_clr, lw=door_lw, alpha=door_alpha, zorder=5)
+                        ax.plot([x_ref, x_tip], [hy + dt, hy + dt], color=door_clr, lw=door_lw, alpha=door_alpha, zorder=5)
+                        ax.plot([x_tip, x_tip], [hy, hy + dt], color=door_clr, lw=door_lw * 0.8, alpha=door_alpha, zorder=5)
+                        ax.plot([x_tip, x_ref], [hy, opp_y], color=door_clr, lw=1.3, ls="-", alpha=door_alpha, zorder=5)
                         theta1, theta2 = (0, 90) if sdir == 1 else (90, 180)
                         ax.add_patch(patches.Arc((x_ref, hy), 2 * d_w, 2 * d_w, angle=0,
-                                                 theta1=theta1, theta2=theta2, color=door_clr, lw=1.0, ls="--", zorder=5))
+                                                 theta1=theta1, theta2=theta2, color=door_clr, lw=1.0, ls="--", alpha=door_alpha, zorder=5))
                     else: # أعلى
                         hy = y1; opp_y = y0
-                        ax.plot([x_ref, x_tip], [hy, hy], color=door_clr, lw=door_lw, zorder=5)
-                        ax.plot([x_ref, x_tip], [hy - dt, hy - dt], color=door_clr, lw=door_lw, zorder=5)
-                        ax.plot([x_tip, x_tip], [hy - dt, hy], color=door_clr, lw=door_lw * 0.8, zorder=5)
-                        ax.plot([x_tip, x_ref], [hy, opp_y], color=door_clr, lw=1.3, ls="-", zorder=5)
+                        ax.plot([x_ref, x_tip], [hy, hy], color=door_clr, lw=door_lw, alpha=door_alpha, zorder=5)
+                        ax.plot([x_ref, x_tip], [hy - dt, hy - dt], color=door_clr, lw=door_lw, alpha=door_alpha, zorder=5)
+                        ax.plot([x_tip, x_tip], [hy - dt, hy], color=door_clr, lw=door_lw * 0.8, alpha=door_alpha, zorder=5)
+                        ax.plot([x_tip, x_ref], [hy, opp_y], color=door_clr, lw=1.3, ls="-", alpha=door_alpha, zorder=5)
                         theta1, theta2 = (270, 360) if sdir == 1 else (180, 270)
                         ax.add_patch(patches.Arc((x_ref, hy), 2 * d_w, 2 * d_w, angle=0,
-                                                 theta1=theta1, theta2=theta2, color=door_clr, lw=1.0, ls="--", zorder=5))
+                                                 theta1=theta1, theta2=theta2, color=door_clr, lw=1.0, ls="--", alpha=door_alpha, zorder=5))
+                    
+                    if is_pending_door:
+                        ew = max(d_w * 1.5, 0.90)
+                        eh = max(d_w * 1.5, 0.90)
+                        ax.add_patch(patches.Ellipse((x_c, y_c), ew, eh, edgecolor="#dc2626", facecolor=(239/255, 68/255, 68/255, 0.12), lw=2.4, ls="--", zorder=8.5))
+                        ax.text(x_c, y_c + eh / 2 + 0.14, "قيد الحذف", ha="center", va="bottom",
+                                fontsize=fs_door * 1.15, color="#991b1b", fontweight="heavy", zorder=9,
+                                bbox=dict(boxstyle="round,pad=0.22", facecolor="#fee2e2", edgecolor="#dc2626", lw=1.6, alpha=0.98))
 
         # ── رسم الكائن الافتراضي المؤقت (Preview / Ghost Instance Object) على الحائط ──
         preview_op = st.session_state.get("m15_preview_opening")
@@ -2518,35 +2842,75 @@ def _draw_plan(with_dim=True):
             base_name = names[0]
 
         label_text = f"{base_name} [حائط دروة]" if is_parapet else base_name
-        t_box_edge = "#0284c7" if is_parapet else "#cbd5e1"
-        t_box_bg = "#e0f2fe" if is_parapet else "#ffffff"
-        t_color = "#0369a1" if is_parapet else "#1e293b"
-
-        if is_h:
-            min_x = min(min(xs[s[0]], xs[s[2]]) for s in grp)
-            max_x = max(max(xs[s[0]], xs[s[2]]) for s in grp)
-            mx = (min_x + max_x) / 2.0
-            ax.text(mx, cross_max + half_t * 1.5, label_text, ha="center", va="bottom",
-                    fontsize=fs_wall, color=t_color, fontweight="bold", zorder=5,
-                    bbox=dict(boxstyle="round,pad=0.18", facecolor=t_box_bg, edgecolor=t_box_edge, lw=0.8 if is_parapet else 0.6, alpha=0.92))
+        tgt_w = tuple(int(x) for x in pending_del.get("target", ())) if (pending_del and pending_del.get("kind") == "wall" and pending_del.get("target")) else ()
+        is_grp_pending = any(
+            bool(tgt_w) and (tgt_w == s or (len(tgt_w) == 4 and (tgt_w[2], tgt_w[3], tgt_w[0], tgt_w[1]) == s))
+            for s in grp
+        )
+        if is_grp_pending:
+            t_box_edge = "#dc2626"
+            t_box_bg = "#fee2e2"
+            t_color = "#991b1b"
+        elif is_parapet:
+            t_box_edge = "#0284c7"
+            t_box_bg = "#e0f2fe"
+            t_color = "#0369a1"
         else:
-            min_y = min(min(ys[s[1]], ys[s[3]]) for s in grp)
-            max_y = max(max(ys[s[1]], ys[s[3]]) for s in grp)
-            my = (min_y + max_y) / 2.0
-            ax.text(cross_max + half_t * 1.5, my, label_text, ha="left", va="center",
-                    fontsize=fs_wall, color=t_color, fontweight="bold", zorder=5,
-                    bbox=dict(boxstyle="round,pad=0.18", facecolor=t_box_bg, edgecolor=t_box_edge, lw=0.8 if is_parapet else 0.6, alpha=0.92))
+            t_box_edge = "#cbd5e1"
+            t_box_bg = "#ffffff"
+            t_color = "#1e293b"
+
+        min_x = min(min(xs[s[0]], xs[s[2]]) for s in grp)
+        max_x = max(max(xs[s[0]], xs[s[2]]) for s in grp)
+        min_y = min(min(ys[s[1]], ys[s[3]]) for s in grp)
+        max_y = max(max(ys[s[1]], ys[s[3]]) for s in grp)
+        plan_wall_labels.append({
+            "text": label_text,
+            "is_h": is_h,
+            "min_coord": min_x if is_h else min_y,
+            "max_coord": max_x if is_h else max_y,
+            "cross_min": cross_min, "cross_max": cross_max, "half_t": half_t,
+            "t_color": t_color, "t_box_bg": t_box_bg, "t_box_edge": t_box_edge,
+            "is_parapet": is_parapet
+        })
 
     col_size = _get_col_size()
     for (i, j) in _get_active_columns():
         cx, cy = _col_center(i, j)
         cw, ch = _get_col_wh(i, j)
-        ax.add_patch(patches.Rectangle((cx - cw / 2, cy - ch / 2), cw, ch, lw=1.0, edgecolor="#000022", facecolor=_CLR_COL, alpha=0.92, zorder=6))
+        tgt_c = tuple(int(x) for x in pending_del.get("target", ())) if (pending_del and pending_del.get("kind") == "col" and pending_del.get("target")) else ()
+        is_pending_col = (bool(tgt_c) and tgt_c == (i, j))
+        if is_pending_col:
+            ax.add_patch(patches.Rectangle((cx - cw / 2, cy - ch / 2), cw, ch, lw=1.2, edgecolor="#fca5a5", facecolor="#fee2e2", alpha=0.40, zorder=6))
+            ew = max(cw * 1.6, 0.75)
+            eh = max(ch * 1.6, 0.75)
+            ax.add_patch(patches.Ellipse((cx, cy), ew, eh, edgecolor="#dc2626", facecolor=(239/255, 68/255, 68/255, 0.12), lw=2.4, ls="--", zorder=8.5))
+            ax.text(cx, cy + eh / 2 + 0.14, "قيد الحذف", ha="center", va="bottom",
+                    fontsize=fs_col * 1.15, color="#991b1b", fontweight="heavy", zorder=9,
+                    bbox=dict(boxstyle="round,pad=0.22", facecolor="#fee2e2", edgecolor="#dc2626", lw=1.6, alpha=0.98))
+            plan_obstacles.append([cx - ew / 2.0, cy - eh / 2.0, cx + ew / 2.0, cy + eh / 2.0 + 0.35])
+        else:
+            ax.add_patch(patches.Rectangle((cx - cw / 2, cy - ch / 2), cw, ch, lw=1.0, edgecolor="#000022", facecolor=_CLR_COL, alpha=0.92, zorder=6))
         cname = cm.get((i, j), "")
         if cname:
-            # كتابة اسم العمود أعلى يمين العمود الموجود في الرسم
-            ax.text(cx + cw / 2 + col_size * 0.15, cy + ch / 2 + col_size * 0.15, cname,
-                    ha="left", va="bottom", fontsize=fs_col, color="#1A1A6E", fontweight="bold", zorder=7)
+            col_lbl_clr = "#991b1b" if is_pending_col else "#1A1A6E"
+            plan_col_labels.append({
+                "text": cname, "grid": (i, j), "cx": cx, "cy": cy, "cw": cw, "ch": ch,
+                "color": col_lbl_clr, "is_pending": is_pending_col
+            })
+        plan_obstacles.append([cx - cw / 2.0, cy - ch / 2.0, cx + cw / 2.0, cy + ch / 2.0])
+
+    # ── تطبيق خوارزمية التوزيع الذكي ومنع تداخل أسماء العناصر ──
+    _apply_smart_plan_labels(
+        ax=ax, fig_w=fig_w, fig_h=fig_h, xs=xs, ys=ys,
+        door_labels=plan_door_labels,
+        win_labels=plan_win_labels,
+        col_labels=plan_col_labels,
+        wall_labels=plan_wall_labels,
+        obstacles=plan_obstacles,
+        active_walls_set=active_walls_set,
+        fs_door=fs_door, fs_win=fs_win, fs_col=fs_col, fs_wall=fs_wall
+    )
 
     # ── علامات بصرية توضيحية أثناء وضع استعادة الأعمدة (عرض الأعمدة المحذوفة كأشباح استرشادية) ──
     if st.session_state.get("m15_restore_col_mode", False):
@@ -2814,26 +3178,27 @@ def _draw_plan(with_dim=True):
         Patch(facecolor=_CLR_DOOR, alpha=0.90, label="باب (D#)"),
         Patch(facecolor=_CLR_COL, alpha=0.90, label="عمود (C#)"),
         Patch(facecolor="#f0f9ff", edgecolor="#0284c7", lw=1.5, label="مساحة (A#)"),
-        Patch(facecolor="none", edgecolor="#EC4899", hatch="/", lw=0, label="وجه محارة"),
-        Line2D([0], [0], color="#94a3b8", ls=":", lw=1.5, label="محذوف"),
-        Line2D([0], [0], color="#0f172a", lw=1.2, marker="|", label="خط بعد"),
+        Patch(facecolor="none", edgecolor="#EC4899", hatch="/", lw=1.5, label="وجه محارة"),
+        Line2D([0], [0], color="#94a3b8", ls=":", lw=round(1.5 * 1.8, 1), label="محذوف"),
+        Line2D([0], [0], color="#0f172a", lw=round(1.2 * 1.8, 1), marker="|", markersize=round(7 * 1.8, 1), label="خط بعد"),
     ]
     ax.legend(
         handles=leg,
         loc="lower center",
         bbox_to_anchor=(0.5, 1.01),
-        ncol=len(leg),
-        fontsize=round(fs_leg * 0.80, 1),
+        ncol=5,
+        fontsize=round(fs_leg * 0.80 * 1.8, 1),
         frameon=True,
         framealpha=0.96,
         edgecolor="#cbd5e1",
         facecolor="#ffffff",
         borderaxespad=0.15,
-        columnspacing=0.8,
-        handletextpad=0.35,
-        handlelength=1.2,
+        columnspacing=1.0,
+        handletextpad=0.4,
+        handlelength=1.4,
+        handleheight=0.9,
     )
-    ax.set_title("Floor Plan — Module 15: Brick & Plastering Survey", fontsize=fs_title, fontweight="bold", pad=36)
+    ax.set_title("Floor Plan — Module 15: Brick & Plastering Survey", fontsize=fs_title, fontweight="bold", pad=76)
 
     plt.tight_layout()
     pos = ax.get_position()
@@ -2979,6 +3344,84 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
                 "removed": wk in removed_walls
             })
 
+    active_cols_list = []
+    for (ci, cj) in _get_active_columns():
+        if ci < len(xs) and cj < len(ys):
+            cw, ch = _get_col_wh(ci, cj)
+            active_cols_list.append({
+                "i": ci,
+                "j": cj,
+                "name": cm.get((ci, cj), f"C({ci+1},{cj+1})"),
+                "cx": round(float(xs[ci]), 3),
+                "cy": round(float(ys[cj]), 3),
+                "w": round(float(cw), 3),
+                "h": round(float(ch), 3)
+            })
+
+    active_wins_data = []
+    wm_win = _get_window_name_map()
+    for (_, _, win, wk) in _get_active_windows_list():
+        w_id = win.get("id")
+        w_w = float(win.get("w_m", 1.0))
+        w_pos = float(win.get("pos_m", 0.0))
+        i1, j1, i2, j2 = wk
+        is_h = (j1 == j2)
+        cross_min, cross_max, cross_c, thick_m = _get_wall_cross_bounds(wk)
+        if is_h:
+            wx = min(xs[i1], xs[i2]) + w_pos
+            wy = cross_min
+            ww = w_w
+            wh = thick_m
+        else:
+            wx = cross_min
+            wy = min(ys[j1], ys[j2]) + w_pos
+            ww = thick_m
+            wh = w_w
+        active_wins_data.append({
+            "id": w_id,
+            "name": wm_win.get(w_id) or win.get("name", "شباك"),
+            "wk": list(wk),
+            "cx": round(wx + ww / 2.0, 3),
+            "cy": round(wy + wh / 2.0, 3),
+            "w": round(ww, 3),
+            "h": round(wh, 3),
+            "w_m": round(w_w, 2),
+            "h_m": round(float(win.get("h_m", 1.2)), 2),
+            "pos_m": round(w_pos, 2)
+        })
+
+    active_doors_data = []
+    wm_door = _get_door_name_map()
+    for (_, _, door, wk) in _get_active_doors_list():
+        d_id = door.get("id")
+        d_w = float(door.get("w_m", 0.9))
+        d_pos = float(door.get("pos_m", 0.0))
+        i1, j1, i2, j2 = wk
+        is_h = (j1 == j2)
+        cross_min, cross_max, cross_c, thick_m = _get_wall_cross_bounds(wk)
+        if is_h:
+            dx = min(xs[i1], xs[i2]) + d_pos
+            dy = cross_min
+            dw = d_w
+            dh = thick_m
+        else:
+            dx = cross_min
+            dy = min(ys[j1], ys[j2]) + d_pos
+            dw = thick_m
+            dh = d_w
+        active_doors_data.append({
+            "id": d_id,
+            "name": wm_door.get(d_id) or door.get("name", "باب"),
+            "wk": list(wk),
+            "cx": round(dx + dw / 2.0, 3),
+            "cy": round(dy + dh / 2.0, 3),
+            "w": round(dw, 3),
+            "h": round(dh, 3),
+            "w_m": round(d_w, 2),
+            "h_m": round(float(door.get("h_m", 2.1)), 2),
+            "pos_m": round(d_pos, 2)
+        })
+
     bbox_info = dict(st.session_state.get("m15_plan_bbox_info", {
         "x0": 0.05, "y0": 0.05, "x1": 0.95, "y1": 0.95,
         "xlim": [min(xs) - 1.5, max(xs) + 1.5] if xs else [0, 10],
@@ -2986,12 +3429,15 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
         "xs": list(xs), "ys": list(ys)
     }))
     bbox_info["walls"] = walls_list
+    bbox_info["columns"] = active_cols_list
+    bbox_info["windows"] = active_wins_data
+    bbox_info["doors"] = active_doors_data
     bbox_json = json.dumps(bbox_info)
     mode_str = box_mode or ""
     box_banner_display = "none"
     viewport_box_class = "box-mode" if box_mode else ""
-    if box_mode == "delete_wall":
-        hint_text_toolbar = "🗑️ اسحب صندوقاً حول الحائط لحذفه"
+    if box_mode == "delete_element" or box_mode == "delete_wall":
+        hint_text_toolbar = "🗑️ اسحب صندوقاً حول الحائط أو العمود أو الشباك أو الباب لحذفه"
     elif box_mode == "add_wall":
         hint_text_toolbar = "🧱 اسحب لتحديد بداية ونهاية الحائط المطلوب"
     elif box_mode == "add_window":
@@ -3213,6 +3659,7 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
   <!-- Floating CAD Toolbar -->
   <div class="cad-toolbar">
     <button class="tb-btn tb-btn-fp" id="btn-toggle-floating-plan" title="عرض / إخفاء المسقط المعماري الاسترشادي (Ctrl + Alt + F)">🖼️ المسقط الاسترشادي</button>
+    <button class="tb-btn" id="btn-cad-del-element" style="background:#fee2e2; border-color:#f87171; color:#991b1b; font-weight:700;" title="تحديد عنصر بالماوس لحذفه (حائط / عمود / شباك / باب)">🗑️ حذف بالماوس</button>
     <button class="tb-btn" id="btn-zoom-in" title="تكبير (Zoom In)">🔍➕ تكبير</button>
     <button class="tb-btn" id="btn-zoom-out" title="تصغير (Zoom Out)">🔍➖ تصغير</button>
     <button class="tb-btn" id="btn-reset" title="استعادة المركز والحجم الطبيعي (Reset 100%)">🔄 ضبط</button>
@@ -3306,6 +3753,14 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
         if (pWin.m15ToggleFloatingPlan) pWin.m15ToggleFloatingPlan();
         else if (pWin.m12ToggleFloatingPlan) pWin.m12ToggleFloatingPlan();
       }} catch(err) {{}}
+    }});
+  }}
+
+  var btnCadDel = document.getElementById('btn-cad-del-element');
+  if (btnCadDel) {{
+    btnCadDel.addEventListener('click', function(e) {{
+      e.stopPropagation();
+      syncToStreamlit({{ action: 'enter_box_mode', mode: 'delete_element', ts: Date.now() }});
     }});
   }}
 
@@ -3595,6 +4050,115 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     return list;
   }}
 
+  function findElementInBox(bounds) {{
+    if (!bboxInfo) return null;
+    const bCx = (bounds.xmin + bounds.xmax) / 2.0;
+    const bCy = (bounds.ymin + bounds.ymax) / 2.0;
+
+    // 1. Windows (small objects)
+    if (bboxInfo.windows) {{
+      for (let idx = 0; idx < bboxInfo.windows.length; idx++) {{
+        const win = bboxInfo.windows[idx];
+        const minX = win.cx - win.w / 2.0;
+        const maxX = win.cx + win.w / 2.0;
+        const minY = win.cy - win.h / 2.0;
+        const maxY = win.cy + win.h / 2.0;
+        if (!(maxX < bounds.xmin || minX > bounds.xmax || maxY < bounds.ymin || minY > bounds.ymax) ||
+            (win.cx >= bounds.xmin && win.cx <= bounds.xmax && win.cy >= bounds.ymin && win.cy <= bounds.ymax)) {{
+          return {{ kind: 'win', target: win.id, name: win.name, item: win }};
+        }}
+      }}
+    }}
+
+    // 2. Doors (small objects)
+    if (bboxInfo.doors) {{
+      for (let idx = 0; idx < bboxInfo.doors.length; idx++) {{
+        const d = bboxInfo.doors[idx];
+        const minX = d.cx - d.w / 2.0;
+        const maxX = d.cx + d.w / 2.0;
+        const minY = d.cy - d.h / 2.0;
+        const maxY = d.cy + d.h / 2.0;
+        if (!(maxX < bounds.xmin || minX > bounds.xmax || maxY < bounds.ymin || minY > bounds.ymax) ||
+            (d.cx >= bounds.xmin && d.cx <= bounds.xmax && d.cy >= bounds.ymin && d.cy <= bounds.ymax)) {{
+          return {{ kind: 'door', target: d.id, name: d.name, item: d }};
+        }}
+      }}
+    }}
+
+    // 3. Columns
+    if (bboxInfo.columns) {{
+      for (let idx = 0; idx < bboxInfo.columns.length; idx++) {{
+        const col = bboxInfo.columns[idx];
+        const minX = col.cx - col.w / 2.0;
+        const maxX = col.cx + col.w / 2.0;
+        const minY = col.cy - col.h / 2.0;
+        const maxY = col.cy + col.h / 2.0;
+        if (!(maxX < bounds.xmin || minX > bounds.xmax || maxY < bounds.ymin || minY > bounds.ymax) ||
+            (col.cx >= bounds.xmin && col.cx <= bounds.xmax && col.cy >= bounds.ymin && col.cy <= bounds.ymax)) {{
+          return {{ kind: 'col', target: [col.i, col.j], name: col.name, item: col }};
+        }}
+      }}
+    }}
+
+    // 4. Walls
+    const wall = findWallInBox(bounds);
+    if (wall) {{
+      return {{ kind: 'wall', target: wall.wk, name: wall.name || wall.label, item: wall }};
+    }}
+
+    return null;
+  }}
+
+  function findClosestElement(wx, wy, maxDist) {{
+    if (!bboxInfo) return null;
+    let dist = maxDist || 0.85;
+    let best = null;
+
+    // Check windows
+    if (bboxInfo.windows) {{
+      for (let idx = 0; idx < bboxInfo.windows.length; idx++) {{
+        const win = bboxInfo.windows[idx];
+        const d = Math.hypot(wx - win.cx, wy - win.cy);
+        if (d < dist) {{
+          dist = d;
+          best = {{ kind: 'win', target: win.id, name: win.name, item: win }};
+        }}
+      }}
+    }}
+
+    // Check doors
+    if (bboxInfo.doors) {{
+      for (let idx = 0; idx < bboxInfo.doors.length; idx++) {{
+        const door = bboxInfo.doors[idx];
+        const d = Math.hypot(wx - door.cx, wy - door.cy);
+        if (d < dist) {{
+          dist = d;
+          best = {{ kind: 'door', target: door.id, name: door.name, item: door }};
+        }}
+      }}
+    }}
+
+    // Check columns
+    if (bboxInfo.columns) {{
+      for (let idx = 0; idx < bboxInfo.columns.length; idx++) {{
+        const col = bboxInfo.columns[idx];
+        const d = Math.hypot(wx - col.cx, wy - col.cy);
+        if (d < dist) {{
+          dist = d;
+          best = {{ kind: 'col', target: [col.i, col.j], name: col.name, item: col }};
+        }}
+      }}
+    }}
+
+    // Check walls
+    const wall = findClosestWall(wx, wy, dist);
+    if (wall) {{
+      best = {{ kind: 'wall', target: wall.wk, name: wall.name || wall.label, item: wall }};
+    }}
+
+    return best;
+  }}
+
   // ── Mouse & Interaction Handlers ──
   viewport.addEventListener('mousedown', function(e) {{
     if (e.target.closest('.cad-toolbar') || e.target.closest('#box-mode-banner')) return;
@@ -3612,8 +4176,8 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
       selBox.style.width = '0px';
       selBox.style.height = '0px';
       selBox.style.display = 'block';
-      if (currentBoxMode === 'delete_wall') {{
-        selBadge.textContent = 'اسحب لتحديد الحائط المراد حذفه...';
+      if (currentBoxMode === 'delete_element' || currentBoxMode === 'delete_wall') {{
+        selBadge.textContent = 'اسحب لتحديد العنصر المراد حذفه (حائط / عمود / شباك / باب)...';
         selBadge.style.background = '#dc2626';
       }} else if (currentBoxMode === 'add_wall') {{
         selBadge.textContent = 'اسحب لتحديد بداية ونهاية الحائط...';
@@ -3655,13 +4219,14 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
 
       const bounds = getBoxWorldBounds(Math.min(boxStartX, curX), Math.min(boxStartY, curY), width, height);
       if (bounds) {{
-        if (currentBoxMode === 'delete_wall') {{
-          const wall = findWallInBox(bounds);
-          if (wall) {{
-            selBadge.innerHTML = '🗑️ الحائط المحدد: ' + (wall.name || wall.label);
+        if (currentBoxMode === 'delete_element' || currentBoxMode === 'delete_wall') {{
+          const elem = findElementInBox(bounds);
+          if (elem) {{
+            const kName = (elem.kind === 'col') ? 'العمود' : ((elem.kind === 'win') ? 'الشباك' : ((elem.kind === 'door') ? 'الباب' : 'الحائط'));
+            selBadge.innerHTML = '🗑️ ' + kName + ': ' + elem.name;
             selBadge.style.background = '#dc2626';
           }} else {{
-            selBadge.innerHTML = 'اسحب ليشمل الحائط المراد حذفه';
+            selBadge.innerHTML = 'اسحب ليشمل العنصر المراد حذفه';
             selBadge.style.background = '#0f172a';
           }}
         }} else if (currentBoxMode === 'add_window' || currentBoxMode === 'add_door') {{
@@ -3760,7 +4325,31 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
       const width = Math.abs(curX - boxStartX);
       const height = Math.abs(curY - boxStartY);
 
-      if (currentBoxMode === 'delete_wall' || currentBoxMode === 'add_window' || currentBoxMode === 'add_door') {{
+      if (currentBoxMode === 'delete_element' || currentBoxMode === 'delete_wall') {{
+        let elem = null;
+        if (width >= 4 || height >= 4) {{
+          const bounds = getBoxWorldBounds(minX, minY, Math.max(width, 10), Math.max(height, 10));
+          if (bounds) {{
+            elem = findElementInBox(bounds);
+          }}
+        }}
+        if (!elem) {{
+          const pt = screenToWorld(boxStartX, boxStartY);
+          if (pt) {{
+            elem = findClosestElement(pt.x, pt.y, 0.85);
+          }}
+        }}
+        if (elem) {{
+          syncToStreamlit({{
+            action: 'select_pending_delete',
+            kind: elem.kind,
+            target: elem.target,
+            name: elem.name,
+            mode: currentBoxMode,
+            ts: Date.now()
+          }});
+        }}
+      }} else if (currentBoxMode === 'add_window' || currentBoxMode === 'add_door') {{
         let wall = null;
         if (width >= 4 || height >= 4) {{
           const bounds = getBoxWorldBounds(minX, minY, Math.max(width, 10), Math.max(height, 10));
@@ -3775,9 +4364,7 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
           }}
         }}
         if (wall) {{
-          let act = 'select_delete_wall_box';
-          if (currentBoxMode === 'add_window') act = 'add_window_box';
-          else if (currentBoxMode === 'add_door') act = 'add_door_box';
+          let act = (currentBoxMode === 'add_window') ? 'add_window_box' : 'add_door_box';
           syncToStreamlit({{
             action: act,
             wk: wall.wk,
@@ -4642,6 +5229,430 @@ def _confirm_delete_wall(wk):
     st.rerun()
 
 
+def _cancel_pending_delete():
+    st.session_state["m15_pending_delete"] = None
+    st.session_state["m15_pending_delete_wall"] = None
+    st.session_state.pop("_last_del_confirm_whistle_token", None)
+    st.session_state.pop("m15_plan_png_b64", None)
+
+def _set_pending_delete(kind, target, name=None):
+    xs = st.session_state.get("m15_x_axes", [])
+    ys = st.session_state.get("m15_y_axes", [])
+    cm = _get_col_name_map()
+    wm = _get_wall_name_map()
+    wm_win = _get_window_name_map()
+    wm_door = _get_door_name_map()
+
+    details = {}
+    title_kind = ""
+
+    if kind == "wall":
+        wk = tuple(int(x) for x in target)
+        all_walls = _get_all_walls()
+        if wk not in all_walls:
+            rev = (wk[2], wk[3], wk[0], wk[1])
+            if rev in all_walls:
+                wk = rev
+        title_kind = "حائط مباني"
+        w_lbl = _wall_display_label(wk, cm, wm)
+        w_name = wm.get(wk) or w_lbl
+        w_len = _wall_length_m(wk)
+        w_th = _get_wall_thickness(wk)
+        is_p = _is_parapet_wall(wk)
+        details = {
+            "الاسم المعتمد": f"<b>{w_name}</b>" + (" (حائط دروة)" if is_p else ""),
+            "المحاور": f"من {cm.get((wk[0], wk[1]), f'({wk[0]+1},{wk[1]+1})')} إلى {cm.get((wk[2], wk[3]), f'({wk[2]+1},{wk[3]+1})')}",
+            "الطول المحوري": f"{w_len:.2f} م",
+            "سُمك الحائط": f"{w_th} سم"
+        }
+        st.session_state["m15_pending_delete"] = {
+            "kind": "wall",
+            "target": wk,
+            "name": w_name,
+            "title_kind": title_kind,
+            "details": details
+        }
+        st.session_state["m15_pending_delete_wall"] = wk
+
+    elif kind == "col":
+        ci, cj = int(target[0]), int(target[1])
+        title_kind = "عمود خرساني"
+        orig_cname = f"C{cj * len(xs) + ci + 1}"
+        cname = name or cm.get((ci, cj), orig_cname)
+        cw, ch = _get_col_wh(ci, cj)
+        props = st.session_state.get("m15_col_props", {}).get((ci, cj), {})
+        d_code = props.get("dir_code") or st.session_state.get("m15_col_dirs", {}).get((ci, cj), "NS")
+        orient_lbl = "رأسي (N-S)" if d_code == "NS" else "أفقي (E-W)"
+        details = {
+            "الاسم المعتمد": f"<b>{cname}</b>",
+            "موقع التقاطع": f"المحور X{ci+1} ({xs[ci]:.2f}م) × المحور Y{cj+1} ({ys[cj]:.2f}م)",
+            "أبعاد القطاع الخرساني": f"{int(min(cw, ch)*100)} سم × {int(max(cw, ch)*100)} سم",
+            "الاتجاه والضرب": orient_lbl
+        }
+        st.session_state["m15_pending_delete"] = {
+            "kind": "col",
+            "target": (ci, cj),
+            "name": cname,
+            "title_kind": title_kind,
+            "details": details
+        }
+
+    elif kind == "win":
+        w_id = str(target)
+        title_kind = "شباك"
+        matched_win = None
+        matched_wk = None
+        for (_, _, win, wk) in _get_active_windows_list():
+            if str(win.get("id")) == w_id:
+                matched_win = win
+                matched_wk = wk
+                break
+        wname = name or (wm_win.get(w_id) if matched_win else "شباك")
+        if matched_win and matched_wk:
+            w_w = float(matched_win.get("w_m", 1.0))
+            w_h = float(matched_win.get("h_m", 1.2))
+            w_pos = float(matched_win.get("pos_m", 0.0))
+            w_sill = float(matched_win.get("sill_m", 0.9))
+            w_lbl = _wall_display_label(matched_wk, cm, wm)
+            details = {
+                "الاسم والرمز": f"<b>{wname}</b>",
+                "الحائط المستضيف": f"{w_lbl}",
+                "أبعاد الفتحة": f"عرض {w_w*100:.0f} سم × ارتفاع {w_h*100:.0f} سم",
+                "الموضع وجلسة الشباك": f"يبعد {w_pos:.2f} م عن بداية الحائط | جلسة: {w_sill:.2f} م"
+            }
+        else:
+            details = {"الاسم والرمز": f"<b>{wname}</b>"}
+        st.session_state["m15_pending_delete"] = {
+            "kind": "win",
+            "target": w_id,
+            "name": wname,
+            "title_kind": title_kind,
+            "details": details
+        }
+
+    elif kind == "door":
+        d_id = str(target)
+        title_kind = "باب"
+        matched_door = None
+        matched_wk = None
+        for (_, _, door, wk) in _get_active_doors_list():
+            if str(door.get("id")) == d_id:
+                matched_door = door
+                matched_wk = wk
+                break
+        dname = name or (wm_door.get(d_id) if matched_door else "باب")
+        if matched_door and matched_wk:
+            d_w = float(matched_door.get("w_m", 0.9))
+            d_h = float(matched_door.get("h_m", 2.1))
+            d_pos = float(matched_door.get("pos_m", 0.0))
+            d_lbl = _wall_display_label(matched_wk, cm, wm)
+            details = {
+                "الاسم والرمز": f"<b>{dname}</b>",
+                "الحائط المستضيف": f"{d_lbl}",
+                "أبعاد الفتحة": f"عرض {d_w*100:.0f} سم × ارتفاع {d_h*100:.0f} سم",
+                "الموضع والاتجاه": f"يبعد {d_pos:.2f} م عن بداية الحائط"
+            }
+        else:
+            details = {"الاسم والرمز": f"<b>{dname}</b>"}
+        st.session_state["m15_pending_delete"] = {
+            "kind": "door",
+            "target": d_id,
+            "name": dname,
+            "title_kind": title_kind,
+            "details": details
+        }
+
+    st.session_state.pop("m15_plan_png_b64", None)
+    save_settings()
+
+def _confirm_pending_delete(pending):
+    if not pending:
+        return
+    kind = pending.get("kind")
+    target = pending.get("target")
+    name = pending.get("name", "العنصر")
+
+    if kind == "wall":
+        wk = tuple(int(x) for x in target)
+        removed_walls = st.session_state.get("m15_wall_removed", set())
+        if not isinstance(removed_walls, set):
+            removed_walls = set(removed_walls)
+        removed_walls.add(wk)
+        st.session_state["m15_wall_removed"] = removed_walls
+        st.toast(f"🗑️ تم حذف الحائط ({name}) ونقله لقسم استعادة الحوائط!", icon="🧱")
+
+    elif kind == "col":
+        ci, cj = int(target[0]), int(target[1])
+        _record_col_deletion(ci, cj)
+        removed_cols = st.session_state.get("m15_col_removed", set())
+        if not isinstance(removed_cols, set):
+            removed_cols = set(removed_cols)
+        removed_cols.add((ci, cj))
+        st.session_state["m15_col_removed"] = removed_cols
+        st.toast(f"🗑️ تم حذف العمود ({name}) ونقله لقسم استعادة الأعمدة!", icon="🏛️")
+
+    elif kind == "win":
+        _remove_opening_by_id(str(target), kind="win")
+        st.toast(f"🗑️ تم حذف الشباك ({name}) ونقله لقسم استعادة الفتحات!", icon="🪟")
+
+    elif kind == "door":
+        _remove_opening_by_id(str(target), kind="door")
+        st.toast(f"🗑️ تم حذف الباب ({name}) ونقله لقسم استعادة الفتحات!", icon="🚪")
+
+    _cancel_pending_delete()
+    save_settings()
+    st.rerun()
+
+def _cleanup_floating_delete_panel():
+    """تنظيف وإزالة البانيل العائم لتأكيد الحذف من الصفحة عند إلغاء أو إنهاء الحذف."""
+    js_cleanup = """
+    <script>
+    (function() {
+      try {
+        if (window.parent && window.parent.document) {
+          var old = window.parent.document.getElementById("m15_floating_delete_panel");
+          if (old) old.remove();
+        }
+      } catch(e) {}
+    })();
+    </script>
+    """
+    components.html(js_cleanup, height=0, width=0)
+
+def _render_floating_delete_panel(pending):
+    """
+    بانيل شفاف عائم بحجم صغير ومختصر جداً أسفل الشاشة، قابل للتحريك بالماوس،
+    لعرض اسم العنصر المراد حذفه وتأكيد أو إلغاء الحذف دون حجب المسقط الأفقي.
+    """
+    if not pending:
+        return
+    token = f"m15_whistle_{pending.get('kind')}_{pending.get('target')}"
+    play_delete_confirmation_whistle(token)
+
+    title_k = pending.get("title_kind", "العنصر")
+    name = pending.get("name", "")
+    esc_title = str(title_k).replace("'", "\\'").replace('"', '&quot;')
+    esc_name = str(name).replace("'", "\\'").replace('"', '&quot;')
+
+    js_code = f"""
+    <script>
+    (function() {{
+      try {{
+        if (!window.parent || !window.parent.document) return;
+        var pDoc = window.parent.document;
+        var pWin = window.parent;
+
+        var old = pDoc.getElementById("m15_floating_delete_panel");
+        if (old) old.remove();
+
+        var panel = pDoc.createElement("div");
+        panel.id = "m15_floating_delete_panel";
+        panel.style.cssText = `
+          position: fixed !important;
+          bottom: 24px !important;
+          left: 50% !important;
+          transform: translateX(-50%) !important;
+          z-index: 99999999 !important;
+          background: rgba(15, 23, 42, 0.86) !important;
+          backdrop-filter: blur(14px) !important;
+          -webkit-backdrop-filter: blur(14px) !important;
+          border: 1.5px solid rgba(239, 68, 68, 0.85) !important;
+          border-radius: 40px !important;
+          padding: 6px 16px 6px 12px !important;
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 18px rgba(239, 68, 68, 0.3) !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 12px !important;
+          direction: rtl !important;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", Tahoma, sans-serif !important;
+          user-select: none !important;
+          color: #ffffff !important;
+          min-width: 310px !important;
+          max-width: 92vw !important;
+          box-sizing: border-box !important;
+          cursor: default !important;
+        `;
+
+        panel.innerHTML = `
+          <div id="m15_del_drag_handle" style="display:flex; align-items:center; cursor:grab; color:#94a3b8; padding:3px 4px; user-select:none;" title="اضغط واسحب لتحريك البانيل بالماوس في أي مكان على الشاشة">
+            <svg width="14" height="20" viewBox="0 0 14 20" fill="currentColor">
+              <circle cx="4" cy="4" r="1.8" />
+              <circle cx="10" cy="4" r="1.8" />
+              <circle cx="4" cy="10" r="1.8" />
+              <circle cx="10" cy="10" r="1.8" />
+              <circle cx="4" cy="16" r="1.8" />
+              <circle cx="10" cy="16" r="1.8" />
+            </svg>
+          </div>
+          <div style="display:flex; align-items:center; gap:7px; font-size:13.5px; font-weight:700; color:#f8fafc; white-space:nowrap; flex:1;">
+            <span style="color:#ef4444; font-size:16px;">⚠️</span>
+            <span>حذف {esc_title}:</span>
+            <span style="color:#fca5a5; font-weight:800; background:rgba(239,68,68,0.22); padding:2px 8px; border-radius:6px; border:1px solid rgba(239,68,68,0.4);">{esc_name}</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button id="m15_btn_float_confirm_del" type="button" style="
+              background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+              color: #ffffff !important;
+              border: 1px solid #b91c1c !important;
+              border-radius: 20px !important;
+              padding: 6px 14px !important;
+              font-size: 13px !important;
+              font-weight: 800 !important;
+              cursor: pointer !important;
+              white-space: nowrap !important;
+              box-shadow: 0 2px 8px rgba(220, 38, 38, 0.4) !important;
+              display: flex !important;
+              align-items: center !important;
+              gap: 4px !important;
+            ">
+              🗑️ تأكيد
+            </button>
+            <button id="m15_btn_float_cancel_del" type="button" style="
+              background: rgba(255, 255, 255, 0.12) !important;
+              color: #e2e8f0 !important;
+              border: 1px solid rgba(255, 255, 255, 0.25) !important;
+              border-radius: 20px !important;
+              padding: 6px 12px !important;
+              font-size: 13px !important;
+              font-weight: 700 !important;
+              cursor: pointer !important;
+              white-space: nowrap !important;
+              display: flex !important;
+              align-items: center !important;
+              gap: 4px !important;
+            ">
+              ❌ إلغاء
+            </button>
+          </div>
+        `;
+
+        pDoc.body.appendChild(panel);
+
+        var handle = panel.querySelector('#m15_del_drag_handle');
+        var isDragging = false;
+        var startX = 0, startY = 0;
+        var initialLeft = 0, initialTop = 0;
+
+        function startDrag(e) {{
+          if (e.target.closest('button')) return;
+          isDragging = true;
+          startX = e.clientX;
+          startY = e.clientY;
+          var rect = panel.getBoundingClientRect();
+          initialLeft = rect.left;
+          initialTop = rect.top;
+          panel.style.transition = 'none';
+          panel.style.transform = 'none';
+          panel.style.bottom = 'auto';
+          panel.style.left = initialLeft + 'px';
+          panel.style.top = initialTop + 'px';
+          if (handle) handle.style.cursor = 'grabbing';
+          panel.style.cursor = 'grabbing';
+          pWin.addEventListener('mousemove', onDrag, {{ passive: false }});
+          pWin.addEventListener('mouseup', endDrag);
+          pDoc.addEventListener('mousemove', onDrag, {{ passive: false }});
+          pDoc.addEventListener('mouseup', endDrag);
+          e.preventDefault();
+        }}
+
+        function onDrag(e) {{
+          if (!isDragging) return;
+          var dx = e.clientX - startX;
+          var dy = e.clientY - startY;
+          var maxLeft = Math.max(10, (pWin.innerWidth || pDoc.documentElement.clientWidth) - panel.offsetWidth - 15);
+          var maxTop = Math.max(10, (pWin.innerHeight || pDoc.documentElement.clientHeight) - panel.offsetHeight - 15);
+          var newLeft = Math.min(Math.max(10, initialLeft + dx), maxLeft);
+          var newTop = Math.min(Math.max(10, initialTop + dy), maxTop);
+          panel.style.left = newLeft + 'px';
+          panel.style.top = newTop + 'px';
+          e.preventDefault();
+        }}
+
+        function endDrag() {{
+          isDragging = false;
+          if (handle) handle.style.cursor = 'grab';
+          panel.style.cursor = 'default';
+          panel.style.transition = 'box-shadow 0.2s, border-color 0.2s';
+          pWin.removeEventListener('mousemove', onDrag);
+          pWin.removeEventListener('mouseup', endDrag);
+          pDoc.removeEventListener('mousemove', onDrag);
+          pDoc.removeEventListener('mouseup', endDrag);
+        }}
+
+        handle.addEventListener('mousedown', startDrag);
+        panel.addEventListener('mousedown', function(e) {{
+          if (!e.target.closest('button')) startDrag(e);
+        }});
+
+        function syncToStreamlit(payload) {{
+          try {{
+            var jsonStr = JSON.stringify(payload);
+            var synced = false;
+            var input = pDoc.querySelector('input[aria-label="m15_3d_sync_payload"]');
+            if (!input) input = pDoc.querySelector('div[data-testid="stTextInput"] input');
+            if (input) {{
+              var proto = (pWin.HTMLInputElement || window.HTMLInputElement).prototype;
+              var desc = Object.getOwnPropertyDescriptor(proto, 'value');
+              if (desc && desc.set) {{
+                desc.set.call(input, jsonStr);
+              }} else {{
+                input.value = jsonStr;
+              }}
+              if (input._valueTracker) input._valueTracker.setValue('');
+              input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+              input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+              input.dispatchEvent(new KeyboardEvent('keydown', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
+              input.dispatchEvent(new KeyboardEvent('keyup', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
+              input.dispatchEvent(new Event('blur', {{ bubbles: true }}));
+              synced = true;
+            }}
+            if (!synced) {{
+              if (pWin.location) {{
+                var pUrl = new URL(pWin.location.href);
+                pUrl.searchParams.set('m15_op_move', jsonStr);
+                pUrl.searchParams.set('module', '12');
+                pWin.location.href = pUrl.toString();
+              }}
+            }}
+          }} catch(err) {{
+            console.error("sync error in float panel:", err);
+          }}
+        }}
+
+        var btnConfirm = panel.querySelector('#m15_btn_float_confirm_del');
+        var btnCancel = panel.querySelector('#m15_btn_float_cancel_del');
+
+        if (btnConfirm) {{
+          btnConfirm.onclick = function(e) {{
+            e.stopPropagation();
+            btnConfirm.disabled = true;
+            btnConfirm.innerText = 'جارٍ الحذف...';
+            syncToStreamlit({{ action: 'confirm_pending_delete', ts: Date.now() }});
+            setTimeout(function() {{ try {{ panel.remove(); }} catch(err){{}} }}, 300);
+          }};
+        }}
+
+        if (btnCancel) {{
+          btnCancel.onclick = function(e) {{
+            e.stopPropagation();
+            btnCancel.disabled = true;
+            btnCancel.innerText = 'جارٍ الإلغاء...';
+            syncToStreamlit({{ action: 'cancel_pending_delete', ts: Date.now() }});
+            setTimeout(function() {{ try {{ panel.remove(); }} catch(err){{}} }}, 200);
+          }};
+        }}
+
+      }} catch(e) {{
+        console.error("m15 floating delete panel error:", e);
+      }}
+    }})();
+    </script>
+    """
+    components.html(js_code, height=0, width=0)
+
+# توافق مع أي استدعاء قديم
+_render_delete_confirmation_modal = _render_floating_delete_panel
+
 def _execute_select_delete_wall_box(data):
     """التقاط الحائط المحدد بواسطة الصندوق وتخزينه كحائط معلق لطلب تأكيد الحذف."""
     wk_raw = data.get("wk")
@@ -5182,9 +6193,38 @@ def _handle_sync_payload(payload_str=None):
             st.session_state["m15_add_wall_mode"] = False
             st.session_state["m15_add_win_mode"] = False
             st.session_state["m15_add_door_mode"] = False
-            st.session_state["m15_pending_delete_wall"] = None
+            _cancel_pending_delete()
             save_settings()
             st.rerun()
+
+        elif action == "enter_box_mode":
+            mode_req = data.get("mode", "")
+            if mode_req == "delete_element":
+                _close_all_interactive_modes()
+                st.session_state["m15_del_wall_mode"] = True
+                save_settings()
+                st.toast("🗑️ تم تفعيل وضع التحديد بالماوس لحذف العناصر — اسحب صندوقاً حول أي عنصر!", icon="🎯")
+                st.rerun()
+
+        elif action == "select_pending_delete":
+            k = data.get("kind")
+            tgt = data.get("target")
+            nm = data.get("name")
+            if k and tgt:
+                _set_pending_delete(k, tgt, name=nm)
+                st.rerun()
+
+        elif action == "confirm_pending_delete":
+            p = st.session_state.get("m15_pending_delete")
+            if p:
+                _confirm_pending_delete(p)
+            return
+
+        elif action == "cancel_pending_delete":
+            _cancel_pending_delete()
+            save_settings()
+            st.rerun()
+            return
 
         elif action in ["add_window_box", "add_window"]:
             _execute_add_window_box(data)
@@ -5241,7 +6281,12 @@ def _handle_sync_payload(payload_str=None):
                 st.rerun()
 
         elif action in ["select_delete_wall_box", "select_delete_wall"]:
-            _execute_select_delete_wall_box(data)
+            wk_raw = data.get("wk")
+            if wk_raw:
+                _set_pending_delete("wall", wk_raw, name=data.get("name"))
+                st.rerun()
+            else:
+                _execute_select_delete_wall_box(data)
 
         elif action in ["confirm_delete_wall_box", "confirm_delete_wall"]:
             _execute_confirm_delete_wall_box(data)
@@ -5717,23 +6762,7 @@ def _section_delete_walls():
 
     # 2. بطاقة تأكيد الحذف عند التقاط حائط معلق
     if pending_wk and pending_wk in all_walls:
-        play_delete_confirmation_whistle(f"m15_del_wall_{pending_wk}")
-        w_name = wm.get(pending_wk, "—")
-        st.markdown(
-            f"""<div style='background: #fff1f2; border: 2px solid #e11d48; border-radius: 8px; padding: 10px 14px; margin: 10px 0; font-weight: 800; color: #9f1239; font-size: 0.95rem;' dir='rtl'>
-                ⚠️ تأكيد حذف الحائط <b>{w_name}</b>
-            </div>""",
-            unsafe_allow_html=True
-        )
-        c_sec_y, c_sec_n = st.columns(2)
-        with c_sec_y:
-            if st.button("✅ نعم، تأكيد حذف الحائط", key="m15_sec_conf_del_wall_yes", type="primary", use_container_width=True):
-                _confirm_delete_wall(pending_wk)
-        with c_sec_n:
-            if st.button("❌ إلغاء", key="m15_sec_conf_del_wall_no", use_container_width=True):
-                st.session_state["m15_pending_delete_wall"] = None
-                st.session_state.pop("_last_del_confirm_whistle_token", None)
-                st.rerun()
+        _set_pending_delete("wall", pending_wk)
 
     # 3. اختيار يدوي بديل من القائمة
     if active_walls:
@@ -5750,9 +6779,7 @@ def _section_delete_walls():
                     st.button("🗑️ حذف هذا الحائط", key="m15_btn_request_dropdown_del_wall", use_container_width=True, disabled=True, help="لا يمكن الحذف لوجود نمط نشط على المسقط")
                 else:
                     if st.button("🗑️ حذف هذا الحائط", key="m15_btn_request_dropdown_del_wall", use_container_width=True):
-                        st.session_state["m15_pending_delete_wall"] = target_wk
-                        play_delete_confirmation_whistle(f"m15_del_wall_{target_wk}")
-                        st.session_state["m15_del_wall_mode"] = True
+                        _set_pending_delete("wall", target_wk)
                         st.rerun()
 
     if removed_walls:
@@ -5899,33 +6926,10 @@ def _section_columns():
     if has_conflict:
         _render_mode_conflict_warning("حذف الأعمدة", active_mode, context_key="del_cols")
 
-    # تأكيد حذف العمود
-    if not is_rem and st.session_state.get("m15_confirm_del_col") == (si,sj):
-        play_delete_confirmation_whistle(f"m15_del_col_{si}_{sj}")
-        st.warning(f"⚠️ تأكيد حذف العمود {cname}؟ سيتم إزالة العمود الخرساني مع بقاء الحوائط قائمة على المحاور، وتسجيله في سجل المحذوفات.")
-        cyes, cno = st.columns(2)
-        with cyes:
-            if st.button("✅ نعم، تأكيد حذف العمود", type="primary", key="m15_confirm_del_yes", use_container_width=True, disabled=has_conflict):
-                _record_col_deletion(si, sj)
-                removed_cols.add((si,sj)); st.session_state["m15_col_removed"]=removed_cols
-                st.session_state.pop("m15_plan_png_b64", None)
-                save_settings()
-                st.session_state.pop("m15_confirm_del_col", None)
-                st.session_state.pop("_last_del_confirm_whistle_token", None)
-                st.toast(f"🗑️ تم حذف العمود {cname} وحفظه في سجل استعادة الأعمدة!", icon="🗑️")
-                st.rerun()
-        with cno:
-            if st.button("❌ إلغاء", key="m15_confirm_del_no", use_container_width=True):
-                st.session_state.pop("m15_confirm_del_col", None)
-                st.session_state.pop("_last_del_confirm_whistle_token", None)
-                st.rerun()
-
     if not is_rem:
-        if st.session_state.get("m15_confirm_del_col") != (si, sj):
-            if st.button("🗑️ حذف العمود", key="m15_del_col", use_container_width=True, disabled=has_conflict):
-                st.session_state["m15_confirm_del_col"] = (si, sj)
-                play_delete_confirmation_whistle(f"m15_del_col_{si}_{sj}")
-                st.rerun()
+        if st.button("🗑️ حذف العمود", key="m15_del_col", use_container_width=True, disabled=has_conflict):
+            _set_pending_delete("col", (si, sj), name=cname)
+            st.rerun()
     else:
         st.info("💡 استخدم زر '♻️ استعادة أعمدة' لاستعادة هذا العمود بالسحب على المسقط.")
 
@@ -6216,8 +7220,6 @@ def _section_walls():
             </div>""",
             unsafe_allow_html=True
         )
-    else:
-        st.info("💡 اختر حائطاً أو أكثر من القائمة بالأعلى لتعديل سُمكه (12 أو 25 سم) أو تفعيله كحائط دروة فوراً.")
 
     # ── 4. جدول الحوائط مع عمود التصنيف والارتفاع الدقيق ──
     wd = []
@@ -6299,20 +7301,6 @@ def _section_add_windows():
             st.session_state["m15_add_win_mode"] = False
             st.rerun()
 
-    active_wins = _get_active_windows_list()
-    wm_win = _get_window_name_map()
-    cm = _get_col_name_map()
-    wm = _get_wall_name_map()
-    if active_wins:
-        wins_str = ", ".join([f"<b>{wm_win.get(w.get('id'), w.get('name', 'W'))}</b> [{_wall_display_label(wk, cm, wm)}]" for (_, _, w, wk) in active_wins[:12]])
-        extra_wins = f" و <b>{len(active_wins)-12}</b> شبابيك أخرى..." if len(active_wins) > 12 else ""
-        panel_win_html = f"""<div style='background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.3);border-radius:8px;padding:10px 14px;margin-top:12px;' dir='rtl'>
-<div style='color:#ffffff;font-weight:bold;font-size:0.9rem;margin-bottom:4px;'>ℹ️ إجمالي الشبابيك القائمة على المسقط ({len(active_wins)}):</div>
-<div style='color:#e2e8f0;font-size:0.84rem;line-height:1.6;'>{wins_str}{extra_wins}</div>
-<div style='color:#38bdf8;font-size:0.80rem;margin-top:4px;'>💡 لتحريك موضع أي شباك بعد إسقاطه، يمكنك سحبه وتعديل موضعه مباشرة في <b>العارض ثلاثي الأبعاد 3D</b> بالأسفل.</div>
-</div>"""
-        st.html(panel_win_html) if hasattr(st, "html") else st.markdown(panel_win_html, unsafe_allow_html=True)
-
 
 def _section_add_doors():
     """
@@ -6370,20 +7358,6 @@ def _section_add_doors():
         if st.button("⏹️ إنهاء وضع إسقاط الأبواب (Esc)", key="m15_btn_exit_add_door", use_container_width=True):
             st.session_state["m15_add_door_mode"] = False
             st.rerun()
-
-    active_doors = _get_active_doors_list()
-    wm_door = _get_door_name_map()
-    cm = _get_col_name_map()
-    wm = _get_wall_name_map()
-    if active_doors:
-        doors_str = ", ".join([f"<b>{wm_door.get(d.get('id'), d.get('name', 'D'))}</b> [{_wall_display_label(wk, cm, wm)}]" for (_, _, d, wk) in active_doors[:12]])
-        extra_doors = f" و <b>{len(active_doors)-12}</b> أبواب أخرى..." if len(active_doors) > 12 else ""
-        panel_door_html = f"""<div style='background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:10px 14px;margin-top:12px;' dir='rtl'>
-<div style='color:#ffffff;font-weight:bold;font-size:0.9rem;margin-bottom:4px;'>ℹ️ إجمالي الأبواب القائمة على المسقط ({len(active_doors)}):</div>
-<div style='color:#e2e8f0;font-size:0.84rem;line-height:1.6;'>{doors_str}{extra_doors}</div>
-<div style='color:#4ade80;font-size:0.80rem;margin-top:4px;'>💡 لتحريك موضع أي باب وتعديل موضعه بعد إسقاطه، يمكنك سحبه مباشرة في <b>العارض ثلاثي الأبعاد 3D</b> بالأسفل.</div>
-</div>"""
-        st.html(panel_door_html) if hasattr(st, "html") else st.markdown(panel_door_html, unsafe_allow_html=True)
 
 
 def _section_delete_openings():
@@ -6484,15 +7458,9 @@ def _section_delete_openings():
             return "-- اختر الشباك أو الباب المراد حذفه --"
         return items[i - 1]["display"]
 
-    cur_idx = st.session_state.get("m15_sel_delete_opening_idx", 0)
-    if cur_idx >= len(options_idx):
-        cur_idx = 0
-        st.session_state["m15_sel_delete_opening_idx"] = 0
-
     sel_idx = st.selectbox(
         "🎯 اختر الشباك أو الباب المراد حذفه من القائمة المنسدلة:",
         options=options_idx,
-        index=cur_idx,
         format_func=_format_opening_item,
         key="m15_sel_delete_opening_idx"
     )
@@ -6500,65 +7468,11 @@ def _section_delete_openings():
     if sel_idx != 0:
         chosen = items[sel_idx - 1]
         kind_title = "الشباك" if chosen["kind"] == "win" else "الباب"
-        play_delete_confirmation_whistle(f"m15_del_op_{chosen['id']}_{chosen['kind']}")
-        st.markdown(
-            f"""<div style='background: #fff1f2; border: 2px solid #e11d48; border-radius: 8px; padding: 10px 14px; margin: 10px 0;' dir='rtl'>
-                <div style='font-weight: 800; color: #9f1239; font-size: 0.95rem; margin-bottom: 4px;'>
-                    ⚠️ هل أنت متأكد من رغبتك في حذف {kind_title}: <b>{chosen["name"]}</b>؟
-                </div>
-                <div style='font-size: 0.84rem; color: #be123c;'>
-                    الحائط: <b>{chosen["wall_label"]}</b> | الأبعاد: <b>{chosen["w_m"]*100:.0f}سم × {chosen["h_m"]*100:.0f}سم</b> | الموضع: <b>{chosen["pos_m"]:.2f}م</b>
-                </div>
-                <div style='font-size: 0.78rem; color: #e11d48; margin-top: 4px;'>
-                    💡 سيتم نقل الفتحة إلى قسم <b>«♻️ استعادة الشبابيك والأبواب المحذوفة»</b> ويمكنك استعادتها في أي وقت.
-                </div>
-            </div>""",
-            unsafe_allow_html=True
-        )
+        if st.button(f"🗑️ حذف {kind_title} {chosen['name']}", key="m15_btn_req_del_op", type="primary", use_container_width=True, disabled=has_conflict):
+            _set_pending_delete(chosen["kind"], chosen["id"], name=chosen["name"])
+            st.rerun()
 
-        c_yes, c_no = st.columns(2)
-        with c_yes:
-            if st.button(f"🗑️ نعم، تأكيد حذف {chosen['name']}", key="m15_btn_conf_del_op", type="primary", use_container_width=True, disabled=has_conflict):
-                _remove_opening_by_id(chosen["id"], kind=chosen["kind"])
-                st.session_state["m15_sel_delete_opening_idx"] = 0
-                st.session_state.pop("_last_del_confirm_whistle_token", None)
-                st.session_state.pop("m15_plan_png_b64", None)
-                save_settings()
-                st.toast(f"🗑️ تم حذف {kind_title} {chosen['name']} بنجاح ونقله إلى قسم الاستعادة!", icon="🗑️")
-                st.rerun()
-        with c_no:
-            if st.button("❌ إلغاء", key="m15_btn_cancel_del_op", use_container_width=True):
-                st.session_state["m15_sel_delete_opening_idx"] = 0
-                st.session_state.pop("_last_del_confirm_whistle_token", None)
-                st.rerun()
 
-    # خيار حذف جماعي إضافي
-    st.markdown("<hr style='margin: 16px 0 10px 0; border: none; border-top: 1px dashed rgba(255,255,255,0.15);'>", unsafe_allow_html=True)
-    with st.expander("⚠️ خيارات الحذف الجماعي للفتحات", expanded=False):
-        st.caption("يمكنك حذف كافة الشبابيك أو الأبواب دفعة واحدة ونقلها جميعاً إلى قسم الاستعادة:")
-        c_all_w, c_all_d = st.columns(2)
-        with c_all_w:
-            if active_wins and st.button("🗑️ حذف جميع الشبابيك القائمة", key="m15_btn_del_all_wins", use_container_width=True, disabled=has_conflict):
-                win_store = st.session_state.get("m15_windows", {})
-                for wk in win_store:
-                    for w in win_store[wk]:
-                        w["removed"] = True
-                _resequence_openings()
-                st.session_state.pop("m15_plan_png_b64", None)
-                save_settings()
-                st.toast("🗑️ تم حذف جميع الشبابيك ونقلها إلى قسم الاستعادة بنجاح!", icon="🗑️")
-                st.rerun()
-        with c_all_d:
-            if active_doors and st.button("🗑️ حذف جميع الأبواب القائمة", key="m15_btn_del_all_doors", use_container_width=True, disabled=has_conflict):
-                door_store = st.session_state.get("m15_doors", {})
-                for wk in door_store:
-                    for d in door_store[wk]:
-                        d["removed"] = True
-                _resequence_openings()
-                st.session_state.pop("m15_plan_png_b64", None)
-                save_settings()
-                st.toast("🗑️ تم حذف جميع الأبواب ونقلها إلى قسم الاستعادة بنجاح!", icon="🗑️")
-                st.rerun()
 
 
 def _section_restore_openings():
@@ -8711,86 +9625,89 @@ def _section_upload_image():
     """
     st.markdown(
         """<style>
-        .m12-upload-card {
-            background: linear-gradient(135deg, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.90) 100%);
-            border: 1.5px solid rgba(148, 163, 184, 0.28);
-            border-radius: 10px;
-            padding: 12px 16px;
-            margin-bottom: 12px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-        }
         div[data-testid="stFileUploader"] {
-            width: 100% !important;
-            margin-top: 4px !important;
-            margin-bottom: 10px !important;
+            width: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
         }
+        div[data-testid="stFileUploader"] section[data-testid="stFileUploaderDropzone"],
         div[data-testid="stFileUploader"] section {
-            padding: 16px 20px !important;
-            border-radius: 10px !important;
-            border: 2px dashed #3b82f6 !important;
-            background: rgba(30, 41, 59, 0.55) !important;
-            transition: all 0.25s ease !important;
-            text-align: center !important;
+            background: transparent !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            min-height: unset !important;
+            box-shadow: none !important;
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            justify-content: flex-start !important;
         }
-        div[data-testid="stFileUploader"] section:hover {
-            border-color: #60a5fa !important;
-            background: rgba(30, 41, 59, 0.85) !important;
+        div[data-testid="stFileUploader"] svg {
+            display: none !important;
+        }
+        div[data-testid="stFileUploaderDropzoneInstructions"] {
+            display: none !important;
+        }
+        div[data-testid="stFileUploader"] section > div {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        div[data-testid="stFileUploader"] ul,
+        div[data-testid="stFileUploaderFile"] {
+            display: none !important;
         }
         div[data-testid="stFileUploader"] button[data-testid="baseButton-secondary"] {
-            background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
             color: #ffffff !important;
             border: 1px solid #60a5fa !important;
-            border-radius: 8px !important;
-            padding: 10px 28px !important;
+            border-radius: 6px !important;
+            padding: 2px 14px !important;
+            height: 28px !important;
+            min-height: 28px !important;
+            line-height: 22px !important;
             font-size: 0px !important;
-            box-shadow: 0 3px 10px rgba(37, 99, 235, 0.40) !important;
+            box-shadow: 0 2px 6px rgba(37, 99, 235, 0.30) !important;
             cursor: pointer !important;
-            position: relative !important;
+            margin: 0 !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
             transition: all 0.2s ease !important;
         }
         div[data-testid="stFileUploader"] button[data-testid="baseButton-secondary"]::after {
-            content: "📁 تحميل الصورة";
-            font-size: 14.5px !important;
-            font-weight: 700 !important;
+            content: "Upload";
+            font-size: 13px !important;
+            font-weight: 600 !important;
             color: #ffffff !important;
             display: inline-block !important;
+            letter-spacing: 0.3px !important;
         }
         div[data-testid="stFileUploader"] button[data-testid="baseButton-secondary"]:hover {
-            background: linear-gradient(135deg, #1d4ed8, #1e40af) !important;
-            transform: translateY(-2px) !important;
-            box-shadow: 0 6px 16px rgba(37, 99, 235, 0.55) !important;
-        }
-        .m12-img-container {
-            width: 100% !important;
-            border-radius: 10px !important;
-            overflow: hidden !important;
-            border: 1.5px solid #334155 !important;
-            background: #0b1120 !important;
-            box-shadow: 0 6px 20px rgba(0,0,0,0.35) !important;
-            margin-top: 10px !important;
-            padding: 6px !important;
-            text-align: center !important;
-        }
-        .m12-img-container img {
-            width: 100% !important;
-            height: auto !important;
-            border-radius: 6px !important;
-            display: block !important;
-            margin: 0 auto !important;
-            object-fit: contain !important;
+            background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%) !important;
+            border-color: #93c5fd !important;
+            transform: translateY(-1px) !important;
+            box-shadow: 0 4px 10px rgba(37, 99, 235, 0.45) !important;
         }
         </style>""",
         unsafe_allow_html=True
     )
 
-    # أداة تحميل الصورة من الهارد ديسك
-    uploaded_file = st.file_uploader(
-        "تحميل الصورة",
-        type=["png", "jpg", "jpeg", "webp", "bmp", "svg", "tiff"],
-        key="m15_user_hard_drive_image",
-        label_visibility="collapsed",
-        help="اضغط على زر تحميل الصورة لاختيار ملف صورة من جهاز الكمبيوتر"
-    )
+    cur_b64 = st.session_state.get("m15_uploaded_image_b64")
+    cur_name = st.session_state.get("m15_uploaded_image_name", "")
+
+    col_up, col_name = st.columns([0.30, 0.70], gap="small")
+    with col_up:
+        uploaded_file = st.file_uploader(
+            "Upload",
+            type=["png", "jpg", "jpeg", "webp", "bmp", "svg", "tiff"],
+            key="m15_user_hard_drive_image",
+            label_visibility="collapsed",
+            help="اضغط لاختيار صورة من جهاز الكمبيوتر"
+        )
 
     if uploaded_file is not None:
         curr_uploader_file = uploaded_file.name
@@ -8813,51 +9730,23 @@ def _section_upload_image():
                 st.session_state["m15_uploaded_image_h"] = None
             st.session_state["_m15_last_uploader_file"] = curr_uploader_file
             save_settings()
+            st.rerun()
 
-    cur_b64 = st.session_state.get("m15_uploaded_image_b64")
-    cur_name = st.session_state.get("m15_uploaded_image_name", "uploaded_image.png")
-    cur_type = st.session_state.get("m15_uploaded_image_type", "image/png")
-    cur_size = st.session_state.get("m15_uploaded_image_size_kb", 0.0)
-    cur_w = st.session_state.get("m15_uploaded_image_w")
-    cur_h = st.session_state.get("m15_uploaded_image_h")
-    dim_str = f"{cur_w}×{cur_h} px" if cur_w and cur_h else ""
-
-    # زر النافذة العائمة السريع التفاعلي
-    float_btn_html = """<div style='margin-top:6px; margin-bottom:12px; width:100%;' dir='rtl'>
-        <button type='button' id='m15_btn_open_floating' onclick='(function(){ var fn = (window.parent && window.parent.m15ToggleFloatingPlan) || (window.parent && window.parent.m12ToggleFloatingPlan) || window.m15ToggleFloatingPlan || window.m12ToggleFloatingPlan; if(fn) fn(); })()'
-        style='width:100%; display:flex; align-items:center; justify-content:space-between; background:linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #0f172a 100%); color:#ffffff; border:1.5px solid #60a5fa; border-radius:9px; padding:9px 13px; font-weight:700; font-size:13px; cursor:pointer; box-shadow:0 4px 14px rgba(37, 99, 235, 0.35); transition:all 0.2s ease;'>
-            <span style='display:flex; align-items:center; gap:8px;'>
-                <span style='font-size:16px;'>🖼️</span>
-                <span>النافذة العائمة الحرة للمسقط</span>
-            </span>
-            <span style='background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.32); border-radius:5px; padding:2px 7px; font-size:10.5px; font-family:Consolas, monospace; letter-spacing:0.5px;'>Ctrl + Alt + F (ب)</span>
-        </button>
-    </div>"""
-    st.html(float_btn_html) if hasattr(st, "html") else st.markdown(float_btn_html, unsafe_allow_html=True)
+    if cur_b64 and cur_name:
+        with col_name:
+            st.markdown(
+                f"""<div style='display:flex; align-items:center; height:28px; font-size:11.5px; color:#cbd5e1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;' title='{cur_name}' dir='ltr'>
+                    📄 {cur_name}
+                </div>""",
+                unsafe_allow_html=True
+            )
 
     if cur_b64:
-        preview_html = f"""<div style='width:100%;text-align:center;background:#0b1120;border:1.5px solid #334155;border-radius:10px;padding:6px;box-shadow:0 4px 14px rgba(0,0,0,0.35);margin-top:4px;margin-bottom:8px;'>
+        cur_type = st.session_state.get("m15_uploaded_image_type", "image/png")
+        preview_html = f"""<div style='width:100%;text-align:center;background:#0b1120;border:1px solid #334155;border-radius:8px;padding:3px;margin-top:4px;margin-bottom:6px;'>
 <img src='data:{cur_type};base64,{cur_b64}' style='width:100%;max-height:360px;height:auto;display:block;border-radius:6px;object-fit:contain;margin:0 auto;' alt='{cur_name}' />
 </div>"""
         st.html(preview_html) if hasattr(st, "html") else st.markdown(preview_html, unsafe_allow_html=True)
-
-        st.markdown(
-            f"""<div style='font-size:0.80rem;color:#cbd5e1;margin-bottom:8px;' dir='rtl'>
-                📄 <b>{cur_name}</b> | الحجم: <b style='color:#ffffff;'>{cur_size:.1f} KB</b> {('| الأبعاد: <b style="color:#ffffff;">' + dim_str + '</b>') if dim_str else ''}
-            </div>""",
-            unsafe_allow_html=True
-        )
-
-        if st.button("🗑️ إزالة الصورة الاسترشادية الحالية", key="m15_btn_remove_uploaded_img", use_container_width=True):
-            st.session_state.pop("m15_uploaded_image_b64", None)
-            st.session_state.pop("m15_uploaded_image_name", None)
-            st.session_state.pop("m15_uploaded_image_type", None)
-            st.session_state.pop("m15_uploaded_image_size_kb", None)
-            st.session_state.pop("m15_uploaded_image_w", None)
-            st.session_state.pop("m15_uploaded_image_h", None)
-            st.session_state["_m15_last_uploader_file"] = None
-            save_settings()
-            st.rerun()
 
 
 def _prepare_3d_scene_data():
@@ -14888,7 +15777,7 @@ def render_masonry_plaster_module():
 
     lc,rc=st.columns([0.82,1.65],gap="medium")
     with lc:
-        with st.expander("🖼️ تحميل صورة مسقط افقي استرشادي للمباني", expanded=False):
+        with st.expander("🖼️ تحميل صورة مسقط افقي استرشادي للمباني [ Ctrl + Alt + F ب ]", expanded=False):
             _section_upload_image()
         with st.expander("1️⃣ شبكة المحاور", expanded=False): _section_axes()
         is_add_wall_active = bool(st.session_state.get("m15_add_wall_mode", False))
@@ -14923,10 +15812,16 @@ def render_masonry_plaster_module():
             unsafe_allow_html=True
         )
 
+        pending_del = st.session_state.get("m15_pending_delete")
+        if pending_del:
+            _render_floating_delete_panel(pending_del)
+        else:
+            _cleanup_floating_delete_panel()
+
         active_dim = st.session_state.get("m15_active_move_dim")
         is_active_dim = False
         dim_elapsed = 0.0
-        if active_dim:
+        if active_dim and not pending_del:
             dim_elapsed = time.time() - float(active_dim.get("ts", 0.0))
             if dim_elapsed < 4.2:
                 is_active_dim = True
@@ -14998,36 +15893,14 @@ def render_masonry_plaster_module():
             except Exception:
                 pass
         else:
-            pending_del_w = st.session_state.get("m15_pending_delete_wall")
-            if pending_del_w:
-                all_walls = _get_all_walls()
-                if pending_del_w in all_walls:
-                    play_delete_confirmation_whistle(f"m15_plan_del_wall_{pending_del_w}")
-                    wm = _get_wall_name_map()
-                    w_name = wm.get(pending_del_w, "—")
-                    st.markdown(
-                        f"""<div style='background: linear-gradient(135deg, #fff1f2, #ffe4e6); border: 2px solid #f43f5e;
-                        border-radius: 8px; padding: 8px 16px; margin-bottom: 8px; font-weight: 800; color: #9f1239; font-size: 0.95rem;' dir='rtl'>
-                            ⚠️ تأكيد حذف الحائط <b>{w_name}</b>
-                        </div>""",
-                        unsafe_allow_html=True
-                    )
-                    c_rc_y, c_rc_n = st.columns([1.2, 1.0])
-                    with c_rc_y:
-                        if st.button("✅ نعم، تأكيد حذف الحائط", type="primary", key="m15_rc_conf_del_wall_btn", use_container_width=True):
-                            _confirm_delete_wall(pending_del_w)
-                    with c_rc_n:
-                        if st.button("❌ إلغاء", key="m15_rc_cancel_del_wall_btn", use_container_width=True):
-                            st.session_state["m15_pending_delete_wall"] = None
-                            st.session_state.pop("_last_del_confirm_whistle_token", None)
-                            st.rerun()
-
             if is_add_active:
                 _render_interactive_plan(box_mode="add")
             elif is_restore_active:
                 _render_interactive_plan(box_mode="restore")
             elif is_del_wall_active:
                 _render_interactive_plan(box_mode="delete_wall")
+            elif pending_del:
+                _render_interactive_plan(box_mode="delete_wall" if is_del_wall_active else None)
             elif is_add_wall_active:
                 _render_interactive_plan(box_mode="add_wall")
             elif is_add_win_active:
