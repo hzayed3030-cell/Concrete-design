@@ -9,6 +9,7 @@ column reactions, and engineering sign-off blocks.
 
 import io
 import os
+import math
 import shutil
 import base64
 import tempfile
@@ -2038,6 +2039,801 @@ def generate_ground_slab_report_html(
         <div class="sig-box">
             <div class="sig-title">اعتماد الاستشاري (Consultant):</div>
             <div style="margin-top:20px; color:#94a3b8;">الختم والتاريخ: ______________</div>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>
+"""
+    return html_content
+
+
+def generate_masonry_plaster_report_html(
+    project_name: str = "ECP Masonry & Plaster Design",
+    owner_name: Optional[str] = None,
+    img_plan_b64: Optional[str] = None,
+    masonry_summary: Optional[Dict[str, Any]] = None,
+    plaster_summary: Optional[Dict[str, Any]] = None,
+    total_materials: Optional[Dict[str, Any]] = None,
+    pricing_summary: Optional[Dict[str, Any]] = None,
+    walls_12_rows: Optional[List[Dict[str, Any]]] = None,
+    walls_25_rows: Optional[List[Dict[str, Any]]] = None,
+    openings_details: Optional[List[Dict[str, Any]]] = None,
+    plaster_rows: Optional[List[Dict[str, Any]]] = None,
+    materials_rows: Optional[List[Dict[str, Any]]] = None,
+    pricing_rows: Optional[List[Dict[str, Any]]] = None,
+    brick_type_display: str = "الطوب الأحمر الطفلي",
+    brick_size_display: str = "25×12×6 سم",
+    mortar_cm: float = 1.0,
+    deduction_rule_str: str = "الكود المصري ECP",
+    include_inputs: bool = False,
+    inputs_data: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Generates a print-ready, professional HTML/PDF calculation sheet for
+    Module 15 (Masonry & Plaster Works - أعمال المباني والمحارة وحصر الكميات والمقايسة)
+    according to Egyptian Code of Practice ECP 203 & ECP Plaster/Masonry Specs.
+    """
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    ms = masonry_summary or {}
+    ps = plaster_summary or {}
+    tm = total_materials or {}
+    pr = pricing_summary or {}
+
+    n12 = ms.get("n12", 0.0)
+    g12 = ms.get("g12", 0.0)
+    op12 = ms.get("op12", 0.0)
+    n25 = ms.get("n25", 0.0)
+    g25 = ms.get("g25", 0.0)
+    op25 = ms.get("op25", 0.0)
+    v25 = ms.get("v25", 0.0)
+    bricks_12 = ms.get("bricks_12", 0)
+    bricks_25 = ms.get("bricks_25", 0)
+    bricks_total = ms.get("bricks_total", 0)
+    sand_total_masonry = ms.get("sand_total_masonry", 0.0)
+    cement_masonry_tons = ms.get("cement_masonry_tons", 0.0)
+    cement_masonry_bags = ms.get("cement_masonry_bags", 0)
+
+    p_net_m2 = ps.get("tot_net", 0.0)
+    p_gross_m2 = ps.get("tot_gross", 0.0)
+    p_ded_m2 = ps.get("tot_ded", 0.0)
+    p_sand_m3 = ps.get("tot_sand", 0.0)
+    p_cement_tons = ps.get("tot_cement_tons", 0.0)
+    p_cement_bags = ps.get("tot_cement_bags", 0)
+    p_active_walls = ps.get("active_walls_count", 0)
+
+    total_sand_all = tm.get("total_sand_all", 0.0)
+    total_cement_tons_all = tm.get("total_cement_tons_all", 0.0)
+    total_cement_bags_all = tm.get("total_cement_bags_all", 0)
+
+    cost_masonry_total = pr.get("cost_masonry_total", 0.0)
+    cost_plaster_total = pr.get("cost_plaster_total", 0.0)
+    grand_total_cost = pr.get("grand_total_cost", 0.0)
+
+    owner_html = ""
+    if owner_name and str(owner_name).strip():
+        owner_html = f"""<div style="font-size: 1.0rem; font-weight: 700; color: #1e3a8a; margin: 4px 0 6px 0;"><b>اسم المالك:</b> <span style="color:#0f172a; font-weight: 800;">{str(owner_name).strip()}</span></div>"""
+
+    # Section Inputs (when include_inputs is True)
+    inputs_section_html = ""
+    if include_inputs and inputs_data:
+        x_axes_info = inputs_data.get("x_axes_info", [])
+        y_axes_info = inputs_data.get("y_axes_info", [])
+        cols_list = inputs_data.get("columns_list", [])
+        wins_models = inputs_data.get("windows_models", [])
+        doors_models = inputs_data.get("doors_models", [])
+
+        axes_table = ""
+        if x_axes_info or y_axes_info:
+            axes_table = f"""
+            <table class="data-table" style="width:100%; border-collapse:collapse; margin-top:6px; font-size:0.85rem;">
+                <thead>
+                    <tr>
+                        <th style="text-align:right;">الاتجاه</th>
+                        <th>عدد المحاور</th>
+                        <th>تسميات المحاور</th>
+                        <th style="text-align:right;">الإحداثيات والمسافات البينية (م)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td style="font-weight:700; text-align:right; color:#c2410c;">المحاور الرأسية (X-Axes)</td>
+                        <td class="val-cell">{len(x_axes_info)}</td>
+                        <td class="val-cell">{inputs_data.get('x_axes_labels', '—')}</td>
+                        <td style="text-align:right;"><span dir="ltr">{inputs_data.get('x_axes_spans', '—')}</span></td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight:700; text-align:right; color:#0284c7;">المحاور الأفقية (Y-Axes)</td>
+                        <td class="val-cell">{len(y_axes_info)}</td>
+                        <td class="val-cell">{inputs_data.get('y_axes_labels', '—')}</td>
+                        <td style="text-align:right;"><span dir="ltr">{inputs_data.get('y_axes_spans', '—')}</span></td>
+                    </tr>
+                </tbody>
+            </table>
+            """
+
+        cols_table = ""
+        if cols_list:
+            c_trs = ""
+            for c in cols_list:
+                c_trs += f"""
+                <tr>
+                    <td style="font-weight:700; text-align:right; color:#1e40af;">{c.get('name', '—')}</td>
+                    <td class="val-cell">{c.get('axis_coord', '—')}</td>
+                    <td class="val-cell"><span dir="ltr">{c.get('b', 30):.0f} × {c.get('t', 60):.0f} cm</span></td>
+                    <td class="val-cell">{c.get('orient', 'رأسي')}</td>
+                    <td class="val-cell">{c.get('shift', 'متمركز')}</td>
+                </tr>
+                """
+            cols_table = f"""
+            <table class="data-table" style="width:100%; border-collapse:collapse; margin-top:6px; font-size:0.85rem;">
+                <thead>
+                    <tr>
+                        <th style="text-align:right;">العمود</th>
+                        <th>الموقع على المحاور</th>
+                        <th>القطاع (عرض × عمق)</th>
+                        <th>اتجاه ضرب العمود</th>
+                        <th>الترحيل عن المحور</th>
+                    </tr>
+                </thead>
+                <tbody>{c_trs}</tbody>
+            </table>
+            """
+
+        openings_table = ""
+        if wins_models or doors_models:
+            op_m_trs = ""
+            for wm in wins_models:
+                op_m_trs += f"""
+                <tr>
+                    <td style="font-weight:700; text-align:right; color:#0284c7;">شباك ({wm.get('name', '—')})</td>
+                    <td class="val-cell"><span dir="ltr">{wm.get('w_m', 1.0):.2f} م</span></td>
+                    <td class="val-cell"><span dir="ltr">{wm.get('h_m', 1.2):.2f} م</span></td>
+                    <td class="val-cell"><span dir="ltr">{wm.get('area_m2', 1.2):.2f} م²</span></td>
+                    <td class="val-cell"><span dir="ltr">{wm.get('sill_m', 1.0):.2f} م</span></td>
+                    <td class="val-cell">{wm.get('count', 0)}</td>
+                </tr>
+                """
+            for dm in doors_models:
+                op_m_trs += f"""
+                <tr>
+                    <td style="font-weight:700; text-align:right; color:#15803d;">باب ({dm.get('name', '—')})</td>
+                    <td class="val-cell"><span dir="ltr">{dm.get('w_m', 0.9):.2f} م</span></td>
+                    <td class="val-cell"><span dir="ltr">{dm.get('h_m', 2.1):.2f} م</span></td>
+                    <td class="val-cell"><span dir="ltr">{dm.get('area_m2', 1.89):.2f} م²</span></td>
+                    <td class="val-cell">0.00 م</td>
+                    <td class="val-cell">{dm.get('count', 0)}</td>
+                </tr>
+                """
+            openings_table = f"""
+            <table class="data-table" style="width:100%; border-collapse:collapse; margin-top:6px; font-size:0.85rem;">
+                <thead>
+                    <tr>
+                        <th style="text-align:right;">نموذج الفتحة</th>
+                        <th>العرض</th>
+                        <th>الارتفاع</th>
+                        <th>المساحة</th>
+                        <th>ارتفاع الجلسة</th>
+                        <th>العدد المنفذ</th>
+                    </tr>
+                </thead>
+                <tbody>{op_m_trs}</tbody>
+            </table>
+            """
+
+        inputs_section_html = f"""
+        <div class="section-title">3. جدول بيانات ومدخلات التصميم والمشروع (Design Inputs & Specifications)</div>
+        <div style="margin-bottom: 16px; page-break-inside: avoid;">
+            <div class="subsection-title">3.1 شبكة المحاور الإنشائية والمسافات البينية:</div>
+            {axes_table}
+            <div class="subsection-title" style="margin-top:12px;">3.2 جدول نماذج وتوصيف الأعمدة الخرسانية ({len(cols_list)} عمود):</div>
+            {cols_table}
+            <div class="subsection-title" style="margin-top:12px;">3.3 جدول نماذج ومقاسات فتحات الشبابيك والأبواب:</div>
+            {openings_table}
+        </div>
+        """
+
+    # 1. 2D Plan Drawing Box
+    plan_drawing_html = ""
+    if img_plan_b64:
+        plan_drawing_html = f"""
+        <div class="section-title">2. المخطط الهندسي للمسقط الأفقي المصمم (Designed Plan & Structural Layout)</div>
+        <div style="margin: 14px 0 20px 0; border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 12px; background: #ffffff; box-shadow: 0 2px 6px rgba(0,0,0,0.05); text-align: center; page-break-inside: avoid;">
+            <div style="font-size: 0.95rem; font-weight: 700; color: #1e3a8a; margin-bottom: 8px; text-align: right; border-bottom: 2px solid #3b82f6; padding-bottom: 4px; display:flex; justify-content:space-between; align-items:center;">
+                <span>📐 المسقط الأفقي التنفيذي متضمناً المحاور، الحوائط، الأعمدة، الشبابيك والأبواب، وأوجه المحارة</span>
+                <span style="font-size:0.85rem; color:#64748b;" dir="ltr">ECP Architectural & Structural Layout</span>
+            </div>
+            <img src="data:image/png;base64,{img_plan_b64}" alt="ECP Designed Plan" style="max-width: 100%; height: auto; border-radius: 6px;" />
+            <div style="font-size:0.80rem; margin-top:8px; display:flex; gap:14px; justify-content:center; flex-wrap:wrap; color:#334155; font-weight:bold;">
+                <span style="color:#EFA368;">■ حائط 12سم</span>
+                <span style="color:#8B1A1A;">■ حائط 25سم</span>
+                <span style="color:#0284C7;">■ حائط دروة</span>
+                <span style="color:#87CEEB;">■ شباك (W#)</span>
+                <span style="color:#2E7D32;">■ باب (D#)</span>
+                <span style="color:#2F4F8F;">■ عمود (C#)</span>
+                <span style="color:#EC4899;">▨ وجه محارة (وردي)</span>
+            </div>
+        </div>
+        """
+
+    # 2. Table: Walls 12 cm
+    rows_12_html = ""
+    if walls_12_rows:
+        for r in walls_12_rows:
+            rows_12_html += f"""
+            <tr>
+                <td style="font-weight:700; text-align:right;">{r.get('الحائط', '—')}</td>
+                <td class="val-cell"><span dir="ltr">{r.get('طول المحور (م)', 0.0):.2f}</span></td>
+                <td class="val-cell"><span dir="ltr">{r.get('خصم الأعمدة (م)', 0.0):.2f}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#c2410c;"><span dir="ltr">{r.get('طول المباني الصافي (م)', 0.0):.2f}</span></td>
+                <td class="val-cell"><span dir="ltr">{r.get('الارتفاع (م)', 0.0):.2f}</span></td>
+                <td class="val-cell"><span dir="ltr">{r.get('المساحة الإجمالية (م2)', 0.0):.2f}</span></td>
+                <td class="val-cell" style="color:#dc2626;"><span dir="ltr">{r.get('مساحة الفتحات (م2)', 0.0):.2f}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#15803d;"><span dir="ltr">{r.get('المساحة الصافية (م2)', 0.0):.2f}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#1e40af;"><span dir="ltr">{r.get('عدد الطوب (وحدة)', 0):,}</span></td>
+            </tr>
+            """
+        # Total row
+        rows_12_html += f"""
+        <tr style="background:#e0f2fe; font-weight:800; border-top:2px solid #0284c7;">
+            <td style="text-align:right; color:#0369a1;">✅ إجمالي مباني 12 سم</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell"><span dir="ltr">{g12:.2f}</span></td>
+            <td class="val-cell" style="color:#b91c1c;"><span dir="ltr">{op12:.2f}</span></td>
+            <td class="val-cell" style="color:#15803d; font-size:1.0rem;"><span dir="ltr">{n12:.2f} م²</span></td>
+            <td class="val-cell" style="color:#1e40af; font-size:1.0rem;"><span dir="ltr">{bricks_12:,} طوبة</span></td>
+        </tr>
+        """
+    else:
+        rows_12_html = "<tr><td colspan='9' style='text-align:center; padding:12px; color:#64748b;'>لا توجد حوائط سمك 12 سم نشطة</td></tr>"
+
+    # 3. Table: Walls 25 cm
+    rows_25_html = ""
+    if walls_25_rows:
+        for r in walls_25_rows:
+            rows_25_html += f"""
+            <tr>
+                <td style="font-weight:700; text-align:right;">{r.get('الحائط', '—')}</td>
+                <td class="val-cell"><span dir="ltr">{r.get('طول المحور (م)', 0.0):.2f}</span></td>
+                <td class="val-cell"><span dir="ltr">{r.get('خصم الأعمدة (م)', 0.0):.2f}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#701a75;"><span dir="ltr">{r.get('طول المباني الصافي (م)', 0.0):.2f}</span></td>
+                <td class="val-cell"><span dir="ltr">{r.get('الارتفاع (م)', 0.0):.2f}</span></td>
+                <td class="val-cell"><span dir="ltr">{r.get('المساحة الإجمالية (م2)', 0.0):.2f}</span></td>
+                <td class="val-cell" style="color:#dc2626;"><span dir="ltr">{r.get('مساحة الفتحات (م2)', 0.0):.2f}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#15803d;"><span dir="ltr">{r.get('المساحة الصافية (م2)', 0.0):.2f}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#b45309;"><span dir="ltr">{r.get('حجم الطوب (م3)', 0.0):.2f}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#1e40af;"><span dir="ltr">{r.get('عدد الطوب (وحدة)', 0):,}</span></td>
+            </tr>
+            """
+        # Total row
+        rows_25_html += f"""
+        <tr style="background:#fce7f3; font-weight:800; border-top:2px solid #db2777;">
+            <td style="text-align:right; color:#9d174d;">✅ إجمالي مباني 25 سم</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell"><span dir="ltr">{g25:.2f}</span></td>
+            <td class="val-cell" style="color:#b91c1c;"><span dir="ltr">{op25:.2f}</span></td>
+            <td class="val-cell" style="color:#15803d;"><span dir="ltr">{n25:.2f} م²</span></td>
+            <td class="val-cell" style="color:#b45309; font-size:1.0rem;"><span dir="ltr">{v25:.2f} م³</span></td>
+            <td class="val-cell" style="color:#1e40af; font-size:1.0rem;"><span dir="ltr">{bricks_25:,} طوبة</span></td>
+        </tr>
+        """
+    else:
+        rows_25_html = "<tr><td colspan='10' style='text-align:center; padding:12px; color:#64748b;'>لا توجد حوائط سمك 25 سم نشطة</td></tr>"
+
+    # 4. Openings breakdown table
+    openings_html = ""
+    if openings_details and len(openings_details) > 0:
+        op_tr = ""
+        tot_op_all = sum(o.get("إجمالي الفتحات (م²)", 0.0) for o in openings_details)
+        tot_wins_all = sum(o.get("عدد شبابيك", 0) for o in openings_details)
+        tot_doors_all = sum(o.get("عدد أبواب", 0) for o in openings_details)
+        for o in openings_details:
+            if o.get("إجمالي الفتحات (م²)", 0.0) > 0:
+                op_tr += f"""
+                <tr>
+                    <td style="font-weight:700; text-align:right;">{o.get('حائط', '—')}</td>
+                    <td class="val-cell"><span dir="ltr">{o.get('سُمك', '—')}</span></td>
+                    <td class="val-cell"><span dir="ltr">{o.get('عدد شبابيك', 0)} ({o.get('شبابيك (م²)', 0.0):.2f} م²)</span></td>
+                    <td class="val-cell"><span dir="ltr">{o.get('عدد أبواب', 0)} ({o.get('أبواب (م²)', 0.0):.2f} م²)</span></td>
+                    <td class="val-cell" style="font-weight:700; color:#b45309;"><span dir="ltr">{o.get('إجمالي الفتحات (م²)', 0.0):.2f} م²</span></td>
+                </tr>
+                """
+        op_tr += f"""
+        <tr style="background:#f1f5f9; font-weight:800; border-top:2px solid #475569;">
+            <td style="text-align:right;">✅ إجمالي الفتحات المخصومة</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell"><span dir="ltr">{tot_wins_all} شباك</span></td>
+            <td class="val-cell"><span dir="ltr">{tot_doors_all} باب</span></td>
+            <td class="val-cell" style="color:#b45309; font-size:1.0rem;"><span dir="ltr">{tot_op_all:.2f} م²</span></td>
+        </tr>
+        """
+        openings_html = f"""
+        <div class="section-title">5. تفصيل مساحات الفتحات (الأبواب والشبابيك) المخصومة من أعمال المباني</div>
+        <table class="data-table" style="width:100%; border-collapse:collapse; margin-top:8px;">
+            <thead>
+                <tr>
+                    <th style="text-align:right;">الحائط</th>
+                    <th>سُمك الطوب</th>
+                    <th>الشبابيك ومساحتها</th>
+                    <th>الأبواب ومساحتها</th>
+                    <th>إجمالي المساحة المخصومة</th>
+                </tr>
+            </thead>
+            <tbody>
+                {op_tr}
+            </tbody>
+        </table>
+        """
+
+    # 5. Plaster Survey Table
+    plaster_table_html = ""
+    if plaster_rows and len(plaster_rows) > 0:
+        p_tr = ""
+        for r in plaster_rows:
+            p_tr += f"""
+            <tr>
+                <td style="font-weight:700; text-align:right;">{r.get('الحائط', '—')}</td>
+                <td class="val-cell">{r.get('الوجه المحدد', '—')}</td>
+                <td class="val-cell"><span dir="ltr">{r.get('عدد الأوجه', 1)}</span></td>
+                <td class="val-cell"><span dir="ltr">{r.get('الطول (م)', 0.0):.2f}</span></td>
+                <td class="val-cell"><span dir="ltr">{r.get('الارتفاع (م)', 0.0):.2f}</span></td>
+                <td class="val-cell"><span dir="ltr">{r.get('إجمالي مسطح المحارة (m^2)', 0.0):.2f}</span></td>
+                <td class="val-cell"><span dir="ltr">{r.get('إجمالي مساحة الفتحات (m^2)', 0.0):.2f}</span></td>
+                <td class="val-cell" style="color:#dc2626;"><span dir="ltr">{r.get('الفتحات المخصومة المعتمدة (m^2)', 0.0):.2f}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#15803d;"><span dir="ltr">{r.get('صافي مسطح المحارة النهائي (m^2)', 0.0):.2f}</span></td>
+                <td class="val-cell"><span dir="ltr">{r.get('كمية الرمل المطلوبة (m^3)', 0.0):.2f}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#1e40af;">{r.get('كمية الأسمنت المطلوبة', '—')}</td>
+            </tr>
+            """
+        p_tr += f"""
+        <tr style="background:#e0f2fe; font-weight:800; border-top:2px solid #0284c7;">
+            <td style="text-align:right; color:#0369a1;">✅ إجمالي أعمال المحارة</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell"><span dir="ltr">{sum(r.get('عدد الأوجه', 0) for r in plaster_rows)}</span></td>
+            <td class="val-cell"><span dir="ltr">{sum(r.get('الطول (م)', 0.0) for r in plaster_rows):.2f}</span></td>
+            <td class="val-cell">—</td>
+            <td class="val-cell"><span dir="ltr">{p_gross_m2:.2f}</span></td>
+            <td class="val-cell"><span dir="ltr">{ps.get('tot_op_gross', 0.0):.2f}</span></td>
+            <td class="val-cell" style="color:#b91c1c;"><span dir="ltr">{p_ded_m2:.2f}</span></td>
+            <td class="val-cell" style="color:#15803d; font-size:1.0rem;"><span dir="ltr">{p_net_m2:.2f} م²</span></td>
+            <td class="val-cell" style="color:#b45309;"><span dir="ltr">{p_sand_m3:.2f} م³</span></td>
+            <td class="val-cell" style="color:#1e40af;"><span dir="ltr">{p_cement_tons:.2f} طن ({p_cement_bags} شكارة)</span></td>
+        </tr>
+        """
+        plaster_table_html = f"""
+        <div class="section-title">6. جدول حصر كميات ومواد أعمال البياض (المحارة) طبقاً للكود المصري ECP</div>
+        <table class="data-table" style="width:100%; border-collapse:collapse; margin-top:8px;">
+            <thead>
+                <tr>
+                    <th style="text-align:right;">الحائط</th>
+                    <th>الوجه المحدد</th>
+                    <th>عدد الأوجه</th>
+                    <th>الطول (م)</th>
+                    <th>الارتفاع (م)</th>
+                    <th>إجمالي المسطح (م²)</th>
+                    <th>مسطح الفتحات (م²)</th>
+                    <th>الخصم المعتمد (م²)</th>
+                    <th>صافي المسطح (م²)</th>
+                    <th>الرمل المطلوب (م³)</th>
+                    <th>الأسمنت المطلوب</th>
+                </tr>
+            </thead>
+            <tbody>
+                {p_tr}
+            </tbody>
+        </table>
+        """
+    else:
+        plaster_table_html = f"""
+        <div class="section-title">6. جدول حصر أعمال البياض (المحارة)</div>
+        <div style="padding:14px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:8px; text-align:center; color:#64748b;">
+            لم يتم تفعيل أوجه المحارة لأي حائط في هذا المسقط.
+        </div>
+        """
+
+    # 6. Materials BOQ Table
+    mat_rows_html = ""
+    if materials_rows and len(materials_rows) > 0:
+        for r in materials_rows:
+            is_tot = "الإجمالي" in str(r.get("بند الأعمال", "")) or "إجمالي" in str(r.get("بند الأعمال", ""))
+            style = "background:#e2e8f0; font-weight:800;" if is_tot else ""
+            b_cnt = r.get(f"عدد الطوب ({brick_type_display} | {brick_size_display})", r.get("عدد الطوب", "—"))
+            mat_rows_html += f"""
+            <tr style="{style}">
+                <td style="font-weight:700; text-align:right;">{r.get('بند الأعمال', '—')}</td>
+                <td class="val-cell">{r.get('الوحدة', '—')}</td>
+                <td class="val-cell"><span dir="ltr">{r.get('الكمية الصافية', '—')}</span></td>
+                <td class="val-cell"><span dir="ltr">{r.get('رمل صافي (م³)', '—')}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#b45309;"><span dir="ltr">{r.get('رمل مع الهالك 5% (م³)', '—')}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#0284c7;"><span dir="ltr">{r.get('أسمنت (طن)', '—')}</span></td>
+                <td class="val-cell"><span dir="ltr">{r.get('شكاير أسمنت (50كجم)', '—')}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#1e40af;"><span dir="ltr">{b_cnt}</span></td>
+            </tr>
+            """
+    else:
+        # Default fallback rows
+        mat_rows_html = f"""
+        <tr>
+            <td style="font-weight:700; text-align:right;">مباني طوب سمك 12 سم (نصف طوبة)</td>
+            <td class="val-cell">م² مسطح</td>
+            <td class="val-cell"><span dir="ltr">{n12:.2f}</span></td>
+            <td class="val-cell"><span dir="ltr">{n12 * 0.025:.2f}</span></td>
+            <td class="val-cell" style="font-weight:700; color:#b45309;"><span dir="ltr">{n12 * 0.025 * 1.05:.2f}</span></td>
+            <td class="val-cell" style="font-weight:700; color:#0284c7;"><span dir="ltr">{(n12 * 0.025 * 1.05 * 350)/1000.0:.2f}</span></td>
+            <td class="val-cell"><span dir="ltr">{math.ceil((n12 * 0.025 * 1.05 * 350)/50.0) if n12>0 else 0}</span></td>
+            <td class="val-cell" style="font-weight:700; color:#1e40af;"><span dir="ltr">{bricks_12:,}</span></td>
+        </tr>
+        <tr>
+            <td style="font-weight:700; text-align:right;">مباني طوب سمك 25 سم (طوبة كاملة)</td>
+            <td class="val-cell">م³ مكعب</td>
+            <td class="val-cell"><span dir="ltr">{v25:.2f}</span></td>
+            <td class="val-cell"><span dir="ltr">{v25 * 0.200:.2f}</span></td>
+            <td class="val-cell" style="font-weight:700; color:#b45309;"><span dir="ltr">{v25 * 0.200 * 1.05:.2f}</span></td>
+            <td class="val-cell" style="font-weight:700; color:#0284c7;"><span dir="ltr">{(v25 * 0.200 * 1.05 * 350)/1000.0:.2f}</span></td>
+            <td class="val-cell"><span dir="ltr">{math.ceil((v25 * 0.200 * 1.05 * 350)/50.0) if v25>0 else 0}</span></td>
+            <td class="val-cell" style="font-weight:700; color:#1e40af;"><span dir="ltr">{bricks_25:,}</span></td>
+        </tr>
+        <tr style="background:#e0f2fe; font-weight:800;">
+            <td style="text-align:right; color:#0369a1;">⬅️ إجمالي مواد أعمال المباني</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell"><span dir="ltr">{sand_total_masonry/1.05:.2f}</span></td>
+            <td class="val-cell" style="color:#b45309;"><span dir="ltr">{sand_total_masonry:.2f}</span></td>
+            <td class="val-cell" style="color:#0284c7;"><span dir="ltr">{cement_masonry_tons:.2f}</span></td>
+            <td class="val-cell"><span dir="ltr">{cement_masonry_bags}</span></td>
+            <td class="val-cell" style="color:#1e40af;"><span dir="ltr">{bricks_total:,}</span></td>
+        </tr>
+        """
+        if p_active_walls > 0:
+            mat_rows_html += f"""
+            <tr>
+                <td style="font-weight:700; text-align:right;">بياض محارة (سمك 2 سم شامل الطرطشة)</td>
+                <td class="val-cell">م² مسطح</td>
+                <td class="val-cell"><span dir="ltr">{p_net_m2:.2f}</span></td>
+                <td class="val-cell"><span dir="ltr">{p_sand_m3/1.05:.2f}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#b45309;"><span dir="ltr">{p_sand_m3:.2f}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#0284c7;"><span dir="ltr">{p_cement_tons:.2f}</span></td>
+                <td class="val-cell"><span dir="ltr">{p_cement_bags}</span></td>
+                <td class="val-cell">—</td>
+            </tr>
+            <tr style="background:#ecfdf5; font-weight:900; border-top:2px solid #059669;">
+                <td style="text-align:right; color:#047857; font-size:1.0rem;">✅ الإجمالي العام لكامل المشروع (مباني + محارة)</td>
+                <td class="val-cell">—</td>
+                <td class="val-cell">—</td>
+                <td class="val-cell"><span dir="ltr">{(sand_total_masonry/1.05) + (p_sand_m3/1.05):.2f}</span></td>
+                <td class="val-cell" style="color:#b45309; font-size:1.0rem;"><span dir="ltr">{total_sand_all:.2f} م³</span></td>
+                <td class="val-cell" style="color:#0284c7; font-size:1.0rem;"><span dir="ltr">{total_cement_tons_all:.2f} طن</span></td>
+                <td class="val-cell" style="font-size:1.0rem;"><span dir="ltr">{total_cement_bags_all} شكارة</span></td>
+                <td class="val-cell" style="color:#1e40af; font-size:1.0rem;"><span dir="ltr">{bricks_total:,} طوبة</span></td>
+            </tr>
+            """
+
+    # 7. Pricing Table
+    p_brick_in = pr.get("p_brick_in", 2500.0)
+    p_sand_in = pr.get("p_sand_in", 200.0)
+    p_cement_in = pr.get("p_cement_in", 4000.0)
+    p_plaster_labor_in = pr.get("p_plaster_labor_in", 70.0)
+    brick_thousands = round(bricks_total / 1000.0, 3)
+    cost_brick = pr.get("cost_brick", round(brick_thousands * p_brick_in, 2))
+    cost_sand_masonry = pr.get("cost_sand_masonry", round(sand_total_masonry * p_sand_in, 2))
+    cost_cement_masonry = pr.get("cost_cement_masonry", round(cement_masonry_tons * p_cement_in, 2))
+    cost_plaster_labor = pr.get("cost_plaster_labor", round(p_net_m2 * p_plaster_labor_in, 2))
+    cost_sand_plaster = pr.get("cost_sand_plaster", round(p_sand_m3 * p_sand_in, 2))
+    cost_cement_plaster = pr.get("cost_cement_plaster", round(p_cement_tons * p_cement_in, 2))
+    cost_sand_all = pr.get("cost_sand_all", round(total_sand_all * p_sand_in, 2))
+    cost_cement_all = pr.get("cost_cement_all", round(total_cement_tons_all * p_cement_in, 2))
+
+    pricing_table_html = f"""
+    <div class="section-title">8. جدول تسعير المقايسة والتكلفة التقديرية الشاملة (Cost Estimation & BOQ)</div>
+    <table class="data-table" style="width:100%; border-collapse:collapse; margin-top:8px;">
+        <thead>
+            <tr>
+                <th style="text-align:right;">بند التكلفة والمقايسة</th>
+                <th>الكمية المحصورة</th>
+                <th>الوحدة</th>
+                <th>سعر الوحدة (ج.م)</th>
+                <th style="text-align:right;">معادلة الحساب التفصيلية</th>
+                <th>إجمالي التكلفة (ج.م)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td style="text-align:right; font-weight:bold; color:#c2410c;">🧱 1. توريد وتشوين الطوب</td>
+                <td class="val-cell"><span dir="ltr">{brick_thousands:.3f}</span></td>
+                <td>ألف طوبة ({bricks_total:,})</td>
+                <td class="val-cell"><span dir="ltr">{p_brick_in:,.2f}</span></td>
+                <td style="text-align:right;"><span dir="ltr">{brick_thousands:.3f}</span> ألف × <span dir="ltr">{p_brick_in:,.2f}</span> ج.م</td>
+                <td class="val-cell" style="font-weight:bold; color:#c2410c;"><span dir="ltr">{cost_brick:,.2f}</span></td>
+            </tr>
+            <tr>
+                <td style="text-align:right; font-weight:bold; color:#b45309;">🏜️ 2. رمل مونة المباني (شامل 5% هالك)</td>
+                <td class="val-cell"><span dir="ltr">{sand_total_masonry:.2f}</span></td>
+                <td>متر مكعب (م³)</td>
+                <td class="val-cell"><span dir="ltr">{p_sand_in:,.2f}</span></td>
+                <td style="text-align:right;"><span dir="ltr">{sand_total_masonry:.2f}</span> م³ × <span dir="ltr">{p_sand_in:,.2f}</span> ج.م</td>
+                <td class="val-cell" style="font-weight:bold; color:#b45309;"><span dir="ltr">{cost_sand_masonry:,.2f}</span></td>
+            </tr>
+            <tr>
+                <td style="text-align:right; font-weight:bold; color:#0284c7;">🏗️ 3. أسمنت مونة المباني (350 كجم/م³)</td>
+                <td class="val-cell"><span dir="ltr">{cement_masonry_tons:.3f}</span></td>
+                <td>طن ({cement_masonry_bags} شكارة)</td>
+                <td class="val-cell"><span dir="ltr">{p_cement_in:,.2f}</span></td>
+                <td style="text-align:right;"><span dir="ltr">{cement_masonry_tons:.3f}</span> طن × <span dir="ltr">{p_cement_in:,.2f}</span> ج.م</td>
+                <td class="val-cell" style="font-weight:bold; color:#0284c7;"><span dir="ltr">{cost_cement_masonry:,.2f}</span></td>
+            </tr>
+            <tr style="background:#ffedd5; font-weight:800; border-top:1.5px solid #ea580c;">
+                <td style="text-align:right; color:#c2410c;">⬅️ إجمالي بند أعمال المباني</td>
+                <td class="val-cell">—</td>
+                <td>—</td>
+                <td class="val-cell">—</td>
+                <td style="text-align:right;">مجموع (الطوب + رمل المباني + أسمنت المباني)</td>
+                <td class="val-cell" style="font-weight:900; color:#c2410c; font-size:1.0rem;"><span dir="ltr">{cost_masonry_total:,.2f} ج.م</span></td>
+            </tr>
+            <tr>
+                <td style="text-align:right; font-weight:bold; color:#0284c7;">🎨 4. مصنعية بياض المحارة (أجرة المبيض)</td>
+                <td class="val-cell"><span dir="ltr">{p_net_m2:.2f}</span></td>
+                <td>متر مسطح (م²)</td>
+                <td class="val-cell"><span dir="ltr">{p_plaster_labor_in:,.2f}</span></td>
+                <td style="text-align:right;"><span dir="ltr">{p_net_m2:.2f}</span> م² × <span dir="ltr">{p_plaster_labor_in:,.2f}</span> ج.م</td>
+                <td class="val-cell" style="font-weight:bold; color:#0284c7;"><span dir="ltr">{cost_plaster_labor:,.2f}</span></td>
+            </tr>
+            <tr>
+                <td style="text-align:right; font-weight:bold; color:#b45309;">🏜️ 5. رمل بياض المحارة (شامل 5% هالك)</td>
+                <td class="val-cell"><span dir="ltr">{p_sand_m3:.2f}</span></td>
+                <td>متر مكعب (م³)</td>
+                <td class="val-cell"><span dir="ltr">{p_sand_in:,.2f}</span></td>
+                <td style="text-align:right;"><span dir="ltr">{p_sand_m3:.2f}</span> م³ × <span dir="ltr">{p_sand_in:,.2f}</span> ج.م</td>
+                <td class="val-cell" style="font-weight:bold; color:#b45309;"><span dir="ltr">{cost_sand_plaster:,.2f}</span></td>
+            </tr>
+            <tr>
+                <td style="text-align:right; font-weight:bold; color:#0284c7;">🏗️ 6. أسمنت بياض المحارة (350 كجم/م³)</td>
+                <td class="val-cell"><span dir="ltr">{p_cement_tons:.3f}</span></td>
+                <td>طن ({p_cement_bags} شكارة)</td>
+                <td class="val-cell"><span dir="ltr">{p_cement_in:,.2f}</span></td>
+                <td style="text-align:right;"><span dir="ltr">{p_cement_tons:.3f}</span> طن × <span dir="ltr">{p_cement_in:,.2f}</span> ج.م</td>
+                <td class="val-cell" style="font-weight:bold; color:#0284c7;"><span dir="ltr">{cost_cement_plaster:,.2f}</span></td>
+            </tr>
+            <tr style="background:#e0f2fe; font-weight:800; border-top:1.5px solid #0284c7;">
+                <td style="text-align:right; color:#0369a1;">⬅️ إجمالي بند أعمال المحارة</td>
+                <td class="val-cell">—</td>
+                <td>—</td>
+                <td class="val-cell">—</td>
+                <td style="text-align:right;">مجموع (مصنعية المحارة + رمل المحارة + أسمنت المحارة)</td>
+                <td class="val-cell" style="font-weight:900; color:#0369a1; font-size:1.0rem;"><span dir="ltr">{cost_plaster_total:,.2f} ج.م</span></td>
+            </tr>
+            <tr style="background:linear-gradient(90deg, #1e3a8a, #065f46); color:#ffffff; font-weight:900;">
+                <td style="text-align:right; color:#ffffff; font-size:1.0rem;">🏆 الإجمالي العام الشامل للمشروع (المباني + المحارة)</td>
+                <td class="val-cell" style="color:#ffffff;">—</td>
+                <td style="color:#ffffff;">—</td>
+                <td class="val-cell" style="color:#ffffff;">—</td>
+                <td style="text-align:right; color:#e0f2fe;">إجمالي أعمال المباني ({cost_masonry_total:,.2f}) + إجمالي أعمال المحارة ({cost_plaster_total:,.2f})</td>
+                <td class="val-cell" style="color:#86efac; font-size:1.25rem; font-weight:900;"><span dir="ltr">{grand_total_cost:,.2f} ج.م</span></td>
+            </tr>
+        </tbody>
+    </table>
+    """
+    report_heading_title = "مذكرة التصميم وحصر الكميات والمقايسة الشاملة — جميع المدخلات والمخرجات" if include_inputs else "مذكرة حصر الكميات والمقايسة التقديرية — مخرجات أعمال المباني والمحارة"
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{report_heading_title} — {project_name}</title>
+    {_get_base_report_css()}
+    <style>
+        .badge-tag {{
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.80rem;
+            font-weight: 700;
+        }}
+        .kpi-card {{
+            border-radius: 8px;
+            padding: 12px 14px;
+            border: 1px solid #cbd5e1;
+            page-break-inside: avoid;
+        }}
+        .kpi-title {{ font-size: 0.82rem; font-weight: 700; color: #475569; }}
+        .kpi-val {{ font-size: 1.25rem; font-weight: 800; margin-top: 4px; }}
+        .kpi-sub {{ font-size: 0.75rem; color: #64748b; margin-top: 2px; }}
+    </style>
+</head>
+<body>
+
+<div class="report-container">
+
+    <!-- Action Bar (hidden in print) -->
+    <div class="action-bar no-print">
+        <div style="font-weight:700; font-size:1.0rem; display:flex; align-items:center; gap:8px;">
+            <span>🧱</span>
+            <span>{report_heading_title} (الكود المصري ECP)</span>
+        </div>
+        <button class="btn-print" onclick="window.print()">
+            🖨️ طباعة المذكرة / تصدير PDF
+        </button>
+    </div>
+
+    <!-- Report Header Block -->
+    <div class="report-header">
+        <div class="header-title">
+            <h1>{report_heading_title}</h1>
+            <div style="margin-top:6px; display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <span class="code-badge">الكود المصري ECP للمباني والبياض</span>
+                <span style="font-size:0.92rem; color:#334155;">المشروع: <b style="color:#1e3a8a;">{project_name}</b></span>
+                <span style="font-size:0.85rem; background:#f1f5f9; padding:2px 8px; border-radius:6px; border:1px solid #cbd5e1; color:#475569;">
+                    نوع الطوب: <b>{brick_type_display} ({brick_size_display})</b> | مونة <b>{mortar_cm} سم</b>
+                </span>
+            </div>
+            {owner_html}
+        </div>
+        <div class="header-meta">
+            <div><b>تاريخ التصدير:</b> {now_str}</div>
+            <div><b>قياس المباني:</b> صافي خالص بين الأعمدة (ECP)</div>
+            <div><b>خصم المحارة:</b> {deduction_rule_str}</div>
+        </div>
+    </div>
+
+    <!-- Section 1: Executive KPI Cards -->
+    <div class="section-title">1. الملخص الهندسي التنفيذي لحصر المباني والمحارة والخامات التوريدية</div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin: 12px 0 18px 0;">
+        <div class="kpi-card" style="background:#fff7ed; border-right:4px solid #ea580c;">
+            <div class="kpi-title" style="color:#c2410c;">🧱 مسطح مباني 12 سم (نصف طوبة)</div>
+            <div class="kpi-val" style="color:#9a3412;"><span dir="ltr">{n12:.2f}</span> م² مسطح</div>
+            <div class="kpi-sub">إجمالي {g12:.2f} م² | فتحات {op12:.2f} م²</div>
+        </div>
+        <div class="kpi-card" style="background:#fdf2f8; border-right:4px solid #db2777;">
+            <div class="kpi-title" style="color:#be185d;">🏗️ مكعب مباني 25 سم (طوبة كاملة)</div>
+            <div class="kpi-val" style="color:#9d174d;"><span dir="ltr">{v25:.2f}</span> م³ مكعب</div>
+            <div class="kpi-sub">صافي المسطح: {n25:.2f} م² | فتحات {op25:.2f} م²</div>
+        </div>
+        <div class="kpi-card" style="background:#f0fdf4; border-right:4px solid #16a34a;">
+            <div class="kpi-title" style="color:#15803d;">🎨 صافي مسطح أعمال المحارة</div>
+            <div class="kpi-val" style="color:#166534;"><span dir="ltr">{p_net_m2:.2f}</span> م² معتمد</div>
+            <div class="kpi-sub">إجمالي {p_gross_m2:.2f} م² | خصم {p_ded_m2:.2f} م² ({p_active_walls} حائط)</div>
+        </div>
+        <div class="kpi-card" style="background:#eff6ff; border-right:4px solid #2563eb;">
+            <div class="kpi-title" style="color:#1d4ed8;">🧱 4️⃣ إجمالي عدد الطوب المطلوب</div>
+            <div class="kpi-val" style="color:#1e40af;"><span dir="ltr">{bricks_total:,}</span> طوبة</div>
+            <div class="kpi-sub">{brick_type_display} ({brick_size_display})</div>
+            <div style="margin-top:6px; padding-top:6px; border-top:1px dashed #bfdbfe; font-size:0.82rem; font-weight:bold; color:#1e40af;">
+                💵 السعر التقديري: <span dir="ltr">{cost_brick:,.2f}</span> ج.م <span style="font-size:0.73rem; font-weight:normal; color:#475569;">({brick_thousands:.3f} ألف × {p_brick_in:,.0f} ج.م)</span>
+            </div>
+        </div>
+        <div class="kpi-card" style="background:#fefce8; border-right:4px solid #ca8a04;">
+            <div class="kpi-title" style="color:#a16207;">🏜️ 5️⃣ إجمالي الرمل الكلي للمشروع</div>
+            <div class="kpi-val" style="color:#854d0e;"><span dir="ltr">{total_sand_all:.2f}</span> م³</div>
+            <div class="kpi-sub">مباني ({sand_total_masonry:.2f}م³) + محارة ({p_sand_m3:.2f}م³) شامل 5% هالك</div>
+            <div style="margin-top:6px; padding-top:6px; border-top:1px dashed #fef08a; font-size:0.80rem; font-weight:bold; color:#a16207;">
+                💵 السعر التقديري: <span dir="ltr">{cost_sand_all:,.2f}</span> ج.م <span style="font-size:0.73rem; font-weight:normal; color:#475569;">({total_sand_all:.2f} م³ × {p_sand_in:,.0f} ج.م)</span>
+            </div>
+        </div>
+        <div class="kpi-card" style="background:#f0f9ff; border-right:4px solid #0284c7;">
+            <div class="kpi-title" style="color:#0369a1;">🏗️ 6️⃣ إجمالي الأسمنت الكلي للمشروع</div>
+            <div class="kpi-val" style="color:#075985;"><span dir="ltr">{total_cement_tons_all:.2f}</span> طن</div>
+            <div class="kpi-sub">{total_cement_bags_all} شكارة 50كجم (مباني {cement_masonry_tons:.2f}ط + محارة {p_cement_tons:.2f}ط)</div>
+            <div style="margin-top:6px; padding-top:6px; border-top:1px dashed #bae6fd; font-size:0.80rem; font-weight:bold; color:#0369a1;">
+                💵 السعر التقديري: <span dir="ltr">{cost_cement_all:,.2f}</span> ج.م <span style="font-size:0.73rem; font-weight:normal; color:#475569;">({total_cement_tons_all:.2f} طن × {p_cement_in:,.0f} ج.م)</span>
+            </div>
+        </div>
+        <div class="kpi-card" style="background:#f0fdf4; border:2px solid #16a34a; border-right:5px solid #15803d; grid-column: 1 / -1;">
+            <div class="kpi-title" style="color:#15803d; font-size:0.90rem;">💰 الإجمالي المالي التقديري الشامل للمشروع (المباني + المحارة)</div>
+            <div class="kpi-val" style="color:#166534; font-size:1.55rem;"><span dir="ltr">{grand_total_cost:,.2f}</span> ج.م</div>
+            <div class="kpi-sub" style="color:#334155; font-size:0.82rem;">إجمالي أعمال المباني ({cost_masonry_total:,.2f} ج.م) + إجمالي أعمال المحارة ({cost_plaster_total:,.2f} ج.م)</div>
+        </div>
+    </div>
+
+    <!-- Section 2: Plan Drawing Box -->
+    {plan_drawing_html}
+
+    {inputs_section_html}
+
+    <!-- Section 3: Walls 12 cm Takeoff -->
+    <div class="section-title">3. جدول حصر كميات أعمال مباني طوب سمك 12 سم (نصف طوبة — بالمتر المسطح م²)</div>
+    <table class="data-table" style="width:100%; border-collapse:collapse; margin-top:8px;">
+        <thead>
+            <tr>
+                <th style="text-align:right;">الحائط</th>
+                <th>طول المحور (م)</th>
+                <th>خصم الأعمدة (م)</th>
+                <th>طول المباني الصافي (م)</th>
+                <th>الارتفاع (م)</th>
+                <th>المساحة الإجمالية (م²)</th>
+                <th>مساحة الفتحات (م²)</th>
+                <th>المساحة الصافية (م²)</th>
+                <th>عدد الطوب (وحدة)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {rows_12_html}
+        </tbody>
+    </table>
+
+    <!-- Section 4: Walls 25 cm Takeoff -->
+    <div class="section-title">4. جدول حصر كميات أعمال مباني طوب سمك 25 سم (طوبة كاملة — بالمتر المكعب م³)</div>
+    <table class="data-table" style="width:100%; border-collapse:collapse; margin-top:8px;">
+        <thead>
+            <tr>
+                <th style="text-align:right;">الحائط</th>
+                <th>طول المحور (م)</th>
+                <th>خصم الأعمدة (م)</th>
+                <th>طول المباني الصافي (م)</th>
+                <th>الارتفاع (م)</th>
+                <th>المساحة الإجمالية (م²)</th>
+                <th>مساحة الفتحات (م²)</th>
+                <th>المساحة الصافية (م²)</th>
+                <th>حجم الطوب (م³)</th>
+                <th>عدد الطوب (وحدة)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {rows_25_html}
+        </tbody>
+    </table>
+
+    <!-- Section 5: Openings Detail -->
+    {openings_html}
+
+    <!-- Section 6: Plaster Survey -->
+    {plaster_table_html}
+
+    <!-- Section 7: Materials BOQ -->
+    <div class="section-title">7. مقايسة خامات المونة ومواد البناء الشاملة (طبقاً للكود المصري وأصول الصناعة)</div>
+    <table class="data-table" style="width:100%; border-collapse:collapse; margin-top:8px;">
+        <thead>
+            <tr>
+                <th style="text-align:right;">بند الأعمال</th>
+                <th>الوحدة</th>
+                <th>الكمية الصافية</th>
+                <th>رمل صافي (م³)</th>
+                <th>رمل مع الهالك 5% (م³)</th>
+                <th>أسمنت (طن)</th>
+                <th>شكاير أسمنت (50كجم)</th>
+                <th>عدد الطوب المطلوب</th>
+            </tr>
+        </thead>
+        <tbody>
+            {mat_rows_html}
+        </tbody>
+    </table>
+
+    <!-- Section 8: Pricing Table -->
+    {pricing_table_html}
+
+    <!-- Section 9: ECP Engineering Notes & Specifications -->
+    <div class="section-title">9. الملاحظات الفنية والاشتراطات الهندسية المعتمدة (ECP Technical Specs)</div>
+    <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:16px 20px; font-size:0.86rem; line-height:1.8; color:#334155; margin-top:10px; page-break-inside: avoid;">
+        <ol style="padding-right:20px; margin:0;">
+            <li><b>قياس أطوال حوائط المباني:</b> تم الاعتماد على الطول الصافي الخالص بين أوجه الأعمدة الخرسانية بعد خصم تداخلات قطاعات الأعمدة آلياً طبقاً للمواصفات الفنية للكود المصري.</li>
+            <li><b>مونة أعمال المباني:</b> تم احتساب نسبة خلط المونة بمعدل <b>350 كجم أسمنت بورتلاندي عادي لكل 1 م³ رمل حرش نظيف</b> (ما يعادل 7 شكاير أسمنت)، مع إضافة <b>5% نسبة هالك تشغيل طبيعي</b>.</li>
+            <li><b>حصر أعمال البياض (المحارة):</b> سمك البياض المعتمد <b>2.0 سم</b> شاملاً الطرطشة العمومية المسمارية، البؤج، الأوتار، البطانة والضهارة. معدل استهلاك الرمل: <b>1 م³ رمل لكل 42 م² مسطح بياض</b> بمحتوى أسمنت 350 كجم/م³.</li>
+            <li><b>قواعد خصم الفتحات في المحارة:</b> الفتحات حتى مساحة <b>4.00 م² لا تُخصم</b> طبقاً للكود المصري وتعتبر مقابلاً لمصنعية وخامات السوك والأكتاف والجلسات. والفتحات التي تتجاوز مساحتها 4.00 م² يُخصم الفارق الزائد عن 4.00 م² فقط.</li>
+            <li><b>الأسعار والمقايسة:</b> الأسعار المذكورة تقديرية استرشادية بناءً على المدخلات المحددة بالموقع، وتعتبر ملزمة متى اعتمدت في العقد التنفيذي.</li>
+        </ol>
+    </div>
+
+    <!-- Sign-off Block -->
+    <div class="signature-block" style="display:flex; justify-content:space-between; margin-top:30px; padding-top:16px; border-top:2px solid #cbd5e1; page-break-inside: avoid;">
+        <div class="sig-box" style="flex:1; text-align:center; padding:10px;">
+            <div class="sig-title" style="font-weight:700; color:#1e3a8a;">مهندس المكتب الفني / الحصر:</div>
+            <div style="margin-top:28px; color:#94a3b8;">التوقيع: ___________________</div>
+        </div>
+        <div class="sig-box" style="flex:1; text-align:center; padding:10px;">
+            <div class="sig-title" style="font-weight:700; color:#1e3a8a;">مهندس التنفيذ وإدارة المشروع:</div>
+            <div style="margin-top:28px; color:#94a3b8;">التوقيع: ___________________</div>
+        </div>
+        <div class="sig-box" style="flex:1; text-align:center; padding:10px;">
+            <div class="sig-title" style="font-weight:700; color:#1e3a8a;">اعتماد الاستشاري المشرف:</div>
+            <div style="margin-top:28px; color:#94a3b8;">الختم والتاريخ: ______________</div>
         </div>
     </div>
 

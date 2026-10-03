@@ -13416,6 +13416,14 @@ def _section_survey():
     total_cement_tons_all = cement_masonry_tons + p_cement_tons
     total_cement_bags_all = cement_masonry_bags + p_cement_bags
 
+    # أسعار الخامات لحساب التكلفة في البانيلات
+    p_brick_val = float(st.session_state.get("m15_price_brick_per_thousand", 2500.0))
+    p_sand_val = float(st.session_state.get("m15_price_sand_per_m3", 200.0))
+    p_cement_val = float(st.session_state.get("m15_price_cement_per_ton", 4000.0))
+    cost_brick_est = (bricks_total / 1000.0) * p_brick_val
+    cost_sand_est = total_sand_all * p_sand_val
+    cost_cement_est = total_cement_tons_all * p_cement_val
+
     # بطاقة الملخص التنفيذي للحصر الهندسي
     len_badge = "الكود المصري: صافي بين أوجه الأعمدة"
     st.markdown(
@@ -13449,6 +13457,9 @@ def _section_survey():
                 <div style='font-size:0.84rem; color:#93c5fd; font-weight:bold;'>🧱 4️⃣ إجمالي عدد الطوب المطلوب:</div>
                 <div style='font-size:1.30rem; font-weight:bold; color:#eff6ff; margin-top:4px;'>{bricks_total:,} <span style='font-size:0.85rem; font-weight:normal; color:#bfdbfe;'>وحدة طوب</span></div>
                 <div style='font-size:0.75rem; color:#94a3b8; margin-top:3px;'>{brick_type_display} | {brick_size_display} | مونة {mortar_v}سم</div>
+                <div style='font-size:0.82rem; color:#93c5fd; font-weight:bold; margin-top:5px; padding-top:4px; border-top:1px dashed rgba(59,130,246,0.4);'>
+                    💵 السعر التقديري: {cost_brick_est:,.2f} ج.م <span style='font-size:0.70rem; color:#cbd5e1; font-weight:normal;'>({(bricks_total/1000.0):.3f} ألف × {p_brick_val:,.0f} ج.م)</span>
+                </div>
             </div>
         </div>
         <div style='margin-top:14px; background: rgba(15, 23, 42, 0.80); border: 1px solid #334155; border-radius: 8px; padding: 12px 16px; display:flex; align-items:center; justify-content:space-around; flex-wrap:wrap; gap:16px;'>
@@ -13457,6 +13468,7 @@ def _section_survey():
                 <div>
                     <div style='font-size:0.80rem; color:#cbd5e1; font-weight:bold;'>5️⃣ إجمالي الرمل الكلي (مباني {sand_total_masonry:.2f} + محارة {p_sand_m3:.2f}):</div>
                     <div style='font-size:1.25rem; font-weight:bold; color:#fbbf24;'>{total_sand_all:.2f} <span style='font-size:0.85rem; color:#fde68a;'>م³ شامل 5% هالك</span></div>
+                    <div style='font-size:0.80rem; color:#fef08a; font-weight:bold; margin-top:3px;'>💵 السعر التقديري: {cost_sand_est:,.2f} ج.م <span style='font-size:0.70rem; color:#cbd5e1; font-weight:normal;'>({total_sand_all:.2f} م³ × {p_sand_val:,.0f} ج.م)</span></div>
                 </div>
             </div>
             <div style='height:36px; width:1px; background-color:#334155;'></div>
@@ -13465,6 +13477,7 @@ def _section_survey():
                 <div>
                     <div style='font-size:0.80rem; color:#cbd5e1; font-weight:bold;'>6️⃣ إجمالي الأسمنت الكلي (مباني {cement_masonry_tons:.2f}ط + محارة {p_cement_tons:.2f}ط):</div>
                     <div style='font-size:1.25rem; font-weight:bold; color:#38bdf8;'>{total_cement_tons_all:.2f} <span style='font-size:0.85rem; color:#bae6fd;'>طن</span> &nbsp;<span style='font-size:0.85rem; color:#e2e8f0; font-weight:normal;'>({total_cement_bags_all} شكارة 50 كجم)</span></div>
+                    <div style='font-size:0.80rem; color:#7dd3fc; font-weight:bold; margin-top:3px;'>💵 السعر التقديري: {cost_cement_est:,.2f} ج.م <span style='font-size:0.70rem; color:#cbd5e1; font-weight:normal;'>({total_cement_tons_all:.2f} طن × {p_cement_val:,.0f} ج.م)</span></div>
                 </div>
             </div>
         </div>
@@ -14322,7 +14335,502 @@ def _apply_3d_opening_move(payload_str=None):
                         pass
 
 
+def _trigger_browser_download(file_bytes: bytes, filename: str):
+    """
+    يقوم بتنزيل الملف عبر المتصفح مباشرة وفتح نافذة الحفظ (Save Dialog)
+    باستخدام JavaScript و Blob بدون الحاجة لزر تحميل وسيط.
+    """
+    import streamlit.components.v1 as components
+    b64 = base64.b64encode(file_bytes).decode("utf-8")
+    js_code = f"""
+    <script>
+    (function() {{
+        try {{
+            var b64Data = "{b64}";
+            var byteChars = atob(b64Data);
+            var byteNums = new Array(byteChars.length);
+            for (var i = 0; i < byteChars.length; i++) {{
+                byteNums[i] = byteChars.charCodeAt(i);
+            }}
+            var byteArray = new Uint8Array(byteNums);
+            var blob = new Blob([byteArray], {{type: "application/pdf"}});
+            var blobUrl = URL.createObjectURL(blob);
+            
+            var targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+            var a = targetDoc.createElement("a");
+            a.href = blobUrl;
+            a.download = "{filename}";
+            a.target = "_blank";
+            targetDoc.body.appendChild(a);
+            a.click();
+            setTimeout(function() {{
+                try {{ targetDoc.body.removeChild(a); }} catch(e) {{}}
+                URL.revokeObjectURL(blobUrl);
+            }}, 4000);
+        }} catch(err) {{
+            console.error("Auto download failed:", err);
+            var aFallback = document.createElement("a");
+            aFallback.href = "data:application/pdf;base64,{b64}";
+            aFallback.download = "{filename}";
+            document.body.appendChild(aFallback);
+            aFallback.click();
+        }}
+    }})();
+    </script>
+    """
+    components.html(js_code, height=0, width=0)
+
+
+def _section_export_pdf():
+    """
+    قسم حفظ وتصدير مخرجات الموديول 15 (أعمال المباني والمحارة) كملف PDF وملف HTML مستقل.
+    يقع بعد جميع أقسام الموديول.
+    """
+    from modules.report_generator import generate_masonry_plaster_report_html, html_to_pdf_bytes
+    from modules.settings import get_safe_profile_filename_prefix, get_active_profile_name
+
+    active_proj = get_active_profile_name() or "Masonry_Plaster_Project"
+    prefix = get_safe_profile_filename_prefix()
+
+    # 1. إعداد مخطط المسقط الأفقي المصمم بصيغة Base64
+    buf_plan = _draw_plan(with_dim=True)
+    img_plan_b64 = base64.b64encode(buf_plan.getvalue()).decode("utf-8") if buf_plan else None
+
+    # 2. حساب حصر المباني
+    res_survey = _compute_survey(len_mode="clear")
+    r12 = res_survey.get("rows_12", [])
+    r25 = res_survey.get("rows_25", [])
+
+    g12 = sum(r.get("المساحة الإجمالية (م2)", 0.0) for r in r12)
+    op12 = sum(r.get("مساحة الفتحات (م2)", 0.0) for r in r12)
+    n12 = sum(r.get("المساحة الصافية (م2)", 0.0) for r in r12)
+
+    g25 = sum(r.get("المساحة الإجمالية (م2)", 0.0) for r in r25)
+    op25 = sum(r.get("مساحة الفتحات (م2)", 0.0) for r in r25)
+    n25 = sum(r.get("المساحة الصافية (م2)", 0.0) for r in r25)
+    v25 = sum(r.get("حجم الطوب (م3)", 0.0) for r in r25)
+
+    sand_12 = n12 * 0.025
+    sand_25 = v25 * 0.200
+    sand_net_masonry = sand_12 + sand_25
+    sand_total_masonry = sand_net_masonry * 1.05
+
+    cement_masonry_kg = sand_total_masonry * 350.0
+    cement_masonry_tons = cement_masonry_kg / 1000.0
+    cement_masonry_bags = math.ceil(cement_masonry_kg / 50.0) if cement_masonry_kg > 0 else 0
+
+    brick_size_v = st.session_state.get("m15_brick_size", "25×12×6")
+    mortar_v = float(st.session_state.get("m15_mortar_thickness_cm", 1.0))
+    if brick_size_v == _CUSTOM_SIZE_LABEL:
+        b_l = float(st.session_state.get("m15_brick_custom_l", 25.0))
+        b_w = float(st.session_state.get("m15_brick_custom_w", 12.0))
+        b_h = float(st.session_state.get("m15_brick_custom_h", 6.0))
+    else:
+        b_l, b_w, b_h = _parse_brick_size(brick_size_v)
+
+    bricks_12 = _compute_brick_qty(n12, _WALL_THIN, b_l, b_w, b_h, mortar_v)
+    bricks_25 = _compute_brick_qty(n25, _WALL_THICK, b_l, b_w, b_h, mortar_v)
+    bricks_total = bricks_12 + bricks_25
+    brick_type_display = st.session_state.get("m15_brick_type", "الطوب الأحمر الطفلي")
+    brick_size_display = f"{b_l:.0f}×{b_w:.0f}×{b_h:.0f} سم" if brick_size_v == _CUSTOM_SIZE_LABEL else f"{brick_size_v} سم"
+
+    # 3. حساب حصر المحارة
+    p_res = _compute_plaster_survey()
+    p_rows = p_res.get("rows", [])
+    p_net_m2 = p_res.get("tot_net", 0.0)
+    p_gross_m2 = p_res.get("tot_gross", 0.0)
+    p_ded_m2 = p_res.get("tot_ded", 0.0)
+    p_sand_m3 = p_res.get("tot_sand", 0.0)
+    p_cement_tons = p_res.get("tot_cement_tons", 0.0)
+    p_cement_bags = p_res.get("tot_cement_bags", 0)
+    p_active_walls = p_res.get("active_walls_count", 0)
+    deduction_rule_str = st.session_state.get("m15_plaster_deduction_rule_str", "الكود المصري ECP")
+
+    # 4. إجماليات الخامات
+    total_sand_all = sand_total_masonry + p_sand_m3
+    total_cement_tons_all = cement_masonry_tons + p_cement_tons
+    total_cement_bags_all = cement_masonry_bags + p_cement_bags
+
+    # 5. حسابات التكاليف والأسعار
+    p_brick_in = float(st.session_state.get("m15_price_brick_per_thousand", 2500.0))
+    p_sand_in = float(st.session_state.get("m15_price_sand_per_m3", 200.0))
+    p_cement_in = float(st.session_state.get("m15_price_cement_per_ton", 4000.0))
+    p_plaster_labor_in = float(st.session_state.get("m15_price_plaster_labor_per_m2", 70.0))
+
+    brick_thousands = round(bricks_total / 1000.0, 3)
+    cost_brick = round(brick_thousands * p_brick_in, 2)
+    cost_sand_masonry = round(sand_total_masonry * p_sand_in, 2)
+    cost_cement_masonry = round(cement_masonry_tons * p_cement_in, 2)
+    cost_masonry_total = round(cost_brick + cost_sand_masonry + cost_cement_masonry, 2)
+
+    cost_plaster_labor = round(p_net_m2 * p_plaster_labor_in, 2)
+    cost_sand_plaster = round(p_sand_m3 * p_sand_in, 2)
+    cost_cement_plaster = round(p_cement_tons * p_cement_in, 2)
+    cost_plaster_total = round(cost_plaster_labor + cost_sand_plaster + cost_cement_plaster, 2)
+
+    grand_total_cost = round(cost_masonry_total + cost_plaster_total, 2)
+
+    # 6. تفصيل الفتحات
+    openings_detail_list = []
+    removed_walls = st.session_state.get("m15_wall_removed", set())
+    wm_op = _get_wall_name_map()
+    cm_op = _get_col_name_map()
+    for wk in _get_all_walls():
+        if wk in removed_walls:
+            continue
+        thick = _get_wall_thickness(wk)
+        wa, da = 0.0, 0.0
+        wc, dc = 0, 0
+        for wi in _get_wall_windows(wk):
+            if not wi.get("removed", False):
+                wa += float(wi.get("w_m", 1.0)) * float(wi.get("h_m", 1.2))
+                wc += 1
+        for di in _get_wall_doors(wk):
+            if not di.get("removed", False):
+                da += float(di.get("w_m", 0.9)) * float(di.get("h_m", 2.1))
+                dc += 1
+        if (wa + da) > 0:
+            i1, j1, i2, j2 = wk
+            wlbl = f"{wm_op.get(wk,'—')}: {cm_op.get((i1,j1),f'({i1+1},{j1+1})')}→{cm_op.get((i2,j2),f'({i2+1},{j2+1})')}"
+            openings_detail_list.append({
+                "حائط": wlbl,
+                "سُمك": f"{thick} سم",
+                "شبابيك (م²)": round(wa, 2),
+                "أبواب (م²)": round(da, 2),
+                "إجمالي الفتحات (م²)": round(wa + da, 2),
+                "عدد شبابيك": wc,
+                "عدد أبواب": dc,
+            })
+
+    # 7. صفوف الخامات
+    brick_col_name = f"عدد الطوب ({brick_type_display} | {brick_size_display})"
+    materials_rows_list = [
+        {
+            "بند الأعمال": f"مباني طوب سمك {_WALL_THIN} سم (نصف طوبة)",
+            "الوحدة": "م² مسطح",
+            "الكمية الصافية": round(n12, 2),
+            "رمل صافي (م³)": round(sand_12, 2),
+            "رمل مع الهالك 5% (م³)": round(sand_12 * 1.05, 2),
+            "أسمنت (طن)": round((sand_12 * 1.05 * 350) / 1000.0, 2),
+            "شكاير أسمنت (50كجم)": math.ceil((sand_12 * 1.05 * 350) / 50.0) if n12 > 0 else 0,
+            brick_col_name: bricks_12,
+        },
+        {
+            "بند الأعمال": f"مباني طوب سمك {_WALL_THICK} سم (طوبة كاملة)",
+            "الوحدة": "م³ مكعب",
+            "الكمية الصافية": round(v25, 2),
+            "رمل صافي (م³)": round(sand_25, 2),
+            "رمل مع الهالك 5% (م³)": round(sand_25 * 1.05, 2),
+            "أسمنت (طن)": round((sand_25 * 1.05 * 350) / 1000.0, 2),
+            "شكاير أسمنت (50كجم)": math.ceil((sand_25 * 1.05 * 350) / 50.0) if v25 > 0 else 0,
+            brick_col_name: bricks_25,
+        },
+        {
+            "بند الأعمال": "⬅️ إجمالي مواد أعمال المباني",
+            "الوحدة": "—",
+            "الكمية الصافية": "—",
+            "رمل صافي (م³)": round(sand_net_masonry, 2),
+            "رمل مع الهالك 5% (م³)": round(sand_total_masonry, 2),
+            "أسمنت (طن)": round(cement_masonry_tons, 2),
+            "شكاير أسمنت (50كجم)": cement_masonry_bags,
+            brick_col_name: bricks_total,
+        }
+    ]
+    if p_active_walls > 0:
+        materials_rows_list.append({
+            "بند الأعمال": "بياض محارة (سمك 2 سم شامل الطرطشة وبؤج وأوتار)",
+            "الوحدة": "م² مسطح",
+            "الكمية الصافية": round(p_net_m2, 2),
+            "رمل صافي (م³)": round(p_sand_m3 / 1.05, 2),
+            "رمل مع الهالك 5% (م³)": round(p_sand_m3, 2),
+            "أسمنت (طن)": round(p_cement_tons, 2),
+            "شكاير أسمنت (50كجم)": p_cement_bags,
+            brick_col_name: "—",
+        })
+        materials_rows_list.append({
+            "بند الأعمال": "✅ الإجمالي العام لكامل المشروع (مباني + محارة)",
+            "الوحدة": "—",
+            "الكمية الصافية": "—",
+            "رمل صافي (م³)": round(sand_net_masonry + (p_sand_m3 / 1.05), 2),
+            "رمل مع الهالك 5% (م³)": round(total_sand_all, 2),
+            "أسمنت (طن)": round(total_cement_tons_all, 2),
+            "شكاير أسمنت (50كجم)": total_cement_bags_all,
+            brick_col_name: bricks_total,
+        })
+
+    masonry_summary_dict = {
+        "n12": n12, "g12": g12, "op12": op12,
+        "n25": n25, "g25": g25, "op25": op25, "v25": v25,
+        "bricks_12": bricks_12, "bricks_25": bricks_25, "bricks_total": bricks_total,
+        "sand_total_masonry": sand_total_masonry,
+        "cement_masonry_tons": cement_masonry_tons,
+        "cement_masonry_bags": cement_masonry_bags,
+    }
+    plaster_summary_dict = {
+        "tot_net": p_net_m2, "tot_gross": p_gross_m2, "tot_ded": p_ded_m2,
+        "tot_sand": p_sand_m3, "tot_cement_tons": p_cement_tons, "tot_cement_bags": p_cement_bags,
+        "tot_op_gross": p_res.get("tot_op_gross", 0.0),
+        "active_walls_count": p_active_walls,
+    }
+    total_materials_dict = {
+        "total_sand_all": total_sand_all,
+        "total_cement_tons_all": total_cement_tons_all,
+        "total_cement_bags_all": total_cement_bags_all,
+    }
+    pricing_summary_dict = {
+        "p_brick_in": p_brick_in, "p_sand_in": p_sand_in,
+        "p_cement_in": p_cement_in, "p_plaster_labor_in": p_plaster_labor_in,
+        "cost_brick": cost_brick, "cost_sand_masonry": cost_sand_masonry,
+        "cost_cement_masonry": cost_cement_masonry, "cost_masonry_total": cost_masonry_total,
+        "cost_plaster_labor": cost_plaster_labor, "cost_sand_plaster": cost_sand_plaster,
+        "cost_cement_plaster": cost_cement_plaster, "cost_plaster_total": cost_plaster_total,
+        "cost_sand_all": round(total_sand_all * p_sand_in, 2),
+        "cost_cement_all": round(total_cement_tons_all * p_cement_in, 2),
+        "grand_total_cost": grand_total_cost,
+    }
+
+    # 7. تجميع بيانات ومدخلات التصميم والمشروع بالكامل
+    xs = st.session_state.get("m15_x_axes", [])
+    ys = st.session_state.get("m15_y_axes", [])
+    x_labels = ", ".join([f"X{i+1}" for i in range(len(xs))]) if xs else "—"
+    y_labels = ", ".join([f"Y{j+1}" for j in range(len(ys))]) if ys else "—"
+    x_spans = " | ".join([f"X{i+1} ({xs[i]:.2f}م)" for i in range(len(xs))]) if xs else "—"
+    y_spans = " | ".join([f"Y{j+1} ({ys[j]:.2f}م)" for j in range(len(ys))]) if ys else "—"
+
+    col_map = _get_col_name_map()
+    cols_list = []
+    for (i, j) in _get_active_columns():
+        c_name = col_map.get((i, j), f"C({i+1},{j+1})")
+        cw, ch = _get_col_wh(i, j)
+        props = st.session_state.get("m15_col_props", {}).get((i, j), {})
+        d_code = props.get("dir_code") or st.session_state.get("m15_col_dirs", {}).get((i, j), "NS")
+        orient_lbl = "رأسي (N-S)" if d_code == "NS" else "أفقي (E-W)"
+        sh_x = st.session_state.get("m15_col_shift_x", {}).get((i, j), "متمركز")
+        sh_y = st.session_state.get("m15_col_shift_y", {}).get((i, j), "متمركز")
+        shift_lbl = f"{sh_x} / {sh_y}" if (sh_x != "متمركز" or sh_y != "متمركز") else "متمركز"
+        cols_list.append({
+            "name": c_name,
+            "axis_coord": f"X{i+1} / Y{j+1} ({xs[i]:.2f}, {ys[j]:.2f})" if i < len(xs) and j < len(ys) else f"({i+1},{j+1})",
+            "b": round(min(cw, ch) * 100, 1),
+            "t": round(max(cw, ch) * 100, 1),
+            "orient": orient_lbl,
+            "shift": shift_lbl
+        })
+
+    active_wins = _get_active_windows_list()
+    win_models_dict = {}
+    for (_, _, win, _) in active_wins:
+        t_lbl = win.get("type_label") or win.get("name", "W1").split("-")[0]
+        w_m = float(win.get("w_m", 1.0))
+        h_m = float(win.get("h_m", 1.2))
+        sill_m = float(win.get("sill_m", 1.0))
+        if t_lbl not in win_models_dict:
+            win_models_dict[t_lbl] = {
+                "name": t_lbl,
+                "w_m": w_m,
+                "h_m": h_m,
+                "area_m2": round(w_m * h_m, 2),
+                "sill_m": sill_m,
+                "count": 0
+            }
+        win_models_dict[t_lbl]["count"] += 1
+    windows_models = list(win_models_dict.values())
+
+    active_doors = _get_active_doors_list()
+    door_models_dict = {}
+    for (_, _, door, _) in active_doors:
+        t_lbl = door.get("type_label") or door.get("name", "D1").split("-")[0]
+        w_m = float(door.get("w_m", 0.9))
+        h_m = float(door.get("h_m", 2.1))
+        if t_lbl not in door_models_dict:
+            door_models_dict[t_lbl] = {
+                "name": t_lbl,
+                "w_m": w_m,
+                "h_m": h_m,
+                "area_m2": round(w_m * h_m, 2),
+                "count": 0
+            }
+        door_models_dict[t_lbl]["count"] += 1
+    doors_models = list(door_models_dict.values())
+
+    inputs_data = {
+        "x_axes_info": xs,
+        "y_axes_info": ys,
+        "x_axes_labels": x_labels,
+        "x_axes_spans": x_spans,
+        "y_axes_labels": y_labels,
+        "y_axes_spans": y_spans,
+        "columns_list": cols_list,
+        "windows_models": windows_models,
+        "doors_models": doors_models,
+    }
+
+    # تقرير المخرجات فقط
+    report_html_outputs = generate_masonry_plaster_report_html(
+        project_name=active_proj,
+        img_plan_b64=img_plan_b64,
+        masonry_summary=masonry_summary_dict,
+        plaster_summary=plaster_summary_dict,
+        total_materials=total_materials_dict,
+        pricing_summary=pricing_summary_dict,
+        walls_12_rows=r12,
+        walls_25_rows=r25,
+        openings_details=openings_detail_list,
+        plaster_rows=p_rows,
+        materials_rows=materials_rows_list,
+        brick_type_display=brick_type_display,
+        brick_size_display=brick_size_display,
+        mortar_cm=mortar_v,
+        deduction_rule_str=deduction_rule_str,
+        include_inputs=False,
+    )
+
+    # تقرير جميع المدخلات والمخرجات بالكامل
+    report_html_all = generate_masonry_plaster_report_html(
+        project_name=active_proj,
+        img_plan_b64=img_plan_b64,
+        masonry_summary=masonry_summary_dict,
+        plaster_summary=plaster_summary_dict,
+        total_materials=total_materials_dict,
+        pricing_summary=pricing_summary_dict,
+        walls_12_rows=r12,
+        walls_25_rows=r25,
+        openings_details=openings_detail_list,
+        plaster_rows=p_rows,
+        materials_rows=materials_rows_list,
+        brick_type_display=brick_type_display,
+        brick_size_display=brick_size_display,
+        mortar_cm=mortar_v,
+        deduction_rule_str=deduction_rule_str,
+        include_inputs=True,
+        inputs_data=inputs_data,
+    )
+
+    # تنسيق رسالة التحميل في منتصف الشاشة بخلفية معتمة
+    spinner_modal_css = """
+    <style>
+    div[data-testid="stSpinner"] {
+        position: fixed !important;
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -50%) !important;
+        z-index: 9999999 !important;
+        background: rgba(15, 23, 42, 0.96) !important;
+        color: #ffffff !important;
+        padding: 26px 48px !important;
+        border-radius: 20px !important;
+        border: 2px solid #3b82f6 !important;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(59, 130, 246, 0.5) !important;
+        font-size: 1.35rem !important;
+        font-weight: 800 !important;
+        text-align: center !important;
+        direction: rtl !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 18px !important;
+        min-width: 320px !important;
+    }
+    div[data-testid="stSpinner"] > div {
+        border-top-color: #3b82f6 !important;
+        border-right-color: #60a5fa !important;
+        width: 38px !important;
+        height: 38px !important;
+        border-width: 4px !important;
+    }
+    div[data-testid="stSpinner"]::before {
+        content: "";
+        position: fixed;
+        top: -200vh;
+        left: -200vw;
+        width: 400vw;
+        height: 400vh;
+        background: rgba(0, 0, 0, 0.65);
+        backdrop-filter: blur(5px);
+        z-index: -1;
+        pointer-events: all;
+    }
+    </style>
+    """
+    st.markdown(spinner_modal_css, unsafe_allow_html=True)
+
+    st.markdown(
+        f"""<div style='background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+        border: 2px solid #3b82f6; border-radius: 14px; padding: 20px 24px; margin-top: 22px; margin-bottom: 24px;
+        box-shadow: 0 8px 24px rgba(59, 130, 246, 0.25);' dir='rtl'>
+        <div style='display:flex; align-items:center; justify-content:space-between; border-bottom: 1.5px solid rgba(59, 130, 246, 0.4); padding-bottom: 14px; margin-bottom: 16px; flex-wrap:wrap; gap:10px;'>
+            <div style='display:flex; align-items:center; gap:12px;'>
+                <span style='font-size:1.8rem;'>💾</span>
+                <div>
+                    <div style='font-weight:900; font-size:1.15rem; color:#ffffff;'>
+                        حفظ وتصدير تقرير ومخرجات الموديول 15 (ECP Masonry & Plaster Calculation Sheet)
+                    </div>
+                    <div style='font-size:0.83rem; color:#94a3b8; margin-top:2px;'>
+                        تصدير هندسي شامل ومتكامل: المخطط التنفيذي 2D + جداول الحصر + مقايسة الخامات + التسعير المالي
+                    </div>
+                </div>
+            </div>
+            <span style='background: linear-gradient(135deg, #1d4ed8, #2563eb); color:#ffffff; font-size:0.80rem; font-weight:bold; padding:5px 16px; border-radius:20px; border:1px solid #60a5fa;'>
+                📄 تصدير رسمي معتمد (PDF & HTML)
+            </span>
+        </div>
+        <div style='color:#cbd5e1; font-size:0.88rem; line-height:1.75; margin-bottom:16px;'>
+            يتضمن ملف التقرير المُصدَّر:
+            <ul style='margin: 6px 0 0 20px; padding: 0; color:#e2e8f0; font-size:0.85rem;'>
+                <li>📐 <b>المسقط الأفقي المصمم عالي الدقة (2D Plan):</b> موضحاً عليه المحاور، أبعاد الحوائط، الأعمدة، الشبابيك والأبواب، وأوجه المحارة المميزة بالألوان.</li>
+                <li>🧱 <b>جداول حصر أعمال المباني التفصيلية:</b> لمباني 12 سم (م²) ومباني 25 سم (م³) متضمنة طول المحور، خصم الأعمدة الخالص، المساحات وعدد الطوب.</li>
+                <li>🎨 <b>جدول حصر أعمال المحارة (البياض):</b> لكل حائط مع الأوجه ومساحات الفتحات والخصم المعتمد طبقاً للكود المصري ECP والكميات.</li>
+                <li>📦 <b>مقايسة الخامات والمونة الشاملة:</b> رمل صافي وشامل الهالك 5%، أسمنت بالطن والشكاير، وعدد الطوب الإجمالي.</li>
+                <li>💰 <b>جدول التسعير والمقايسة المالية التقديرية:</b> إجمالي بند المباني، إجمالي بند المحارة، والإجمالي العام الشامل للمشروع.</li>
+            </ul>
+        </div>
+    </div>""",
+        unsafe_allow_html=True
+    )
+
+    pdf_fname_outputs = f"{prefix}ECP_Masonry_Plaster_Outputs.pdf"
+    pdf_fname_all = f"{prefix}ECP_Masonry_Plaster_Full_Report.pdf"
+    html_fname = f"{prefix}ECP_Masonry_Plaster_Calculation_Sheet.html"
+
+    c_exp1, c_exp2, c_exp3, c_exp4 = st.columns([1.3, 1.6, 1.3, 0.8], gap="medium")
+
+    with c_exp1:
+        if st.button("📕 تصدير ملف المخرجات PDF", key="m15_btn_export_pdf_outputs", type="primary", use_container_width=True):
+            with st.spinner("جاري تحميل الملف"):
+                pdf_bytes_out = html_to_pdf_bytes(report_html_outputs)
+            if pdf_bytes_out:
+                _trigger_browser_download(pdf_bytes_out, pdf_fname_outputs)
+                st.toast("✅ تم تصدير ملف المخرجات PDF بنجاح وفتح نافذة الحفظ!", icon="📕")
+            else:
+                st.error("تعذر إنشاء ملف الـ PDF تلقائياً، يمكنك تنزيل ملف الـ HTML وفتحه للطباعة كـ PDF مباشرة.")
+
+    with c_exp2:
+        if st.button("📑 تصدير جميع المدخلات والمخرجات ملف pdf", key="m15_btn_export_pdf_all", type="secondary", use_container_width=True):
+            with st.spinner("جاري تحميل الملف"):
+                pdf_bytes_all = html_to_pdf_bytes(report_html_all)
+            if pdf_bytes_all:
+                _trigger_browser_download(pdf_bytes_all, pdf_fname_all)
+                st.toast("✅ تم تصدير جميع المدخلات والمخرجات PDF بنجاح وفتح نافذة الحفظ!", icon="📑")
+            else:
+                st.error("تعذر إنشاء ملف الـ PDF تلقائياً، يمكنك تنزيل ملف الـ HTML وفتحه للطباعة كـ PDF مباشرة.")
+
+    with c_exp3:
+        st.download_button(
+            label="🌐 حفظ التقرير بصيغة HTML (فتح بالمتصفح)",
+            data=report_html_all.encode("utf-8"),
+            file_name=html_fname,
+            mime="text/html",
+            key="m15_btn_download_html",
+            use_container_width=True,
+        )
+
+    with c_exp4:
+        if st.button("🔄 تحديث التقرير", key="m15_btn_refresh_report", use_container_width=True):
+            st.rerun()
+
+
 def render_masonry_plaster_module():
+
     """نقطة الدخول الرئيسية للـ Module 12."""
     st.session_state["nav_view"] = "module"
     st.session_state["in_module"] = True
@@ -14549,6 +15057,8 @@ def render_masonry_plaster_module():
     st.divider()
     with st.expander("8️⃣ اسعار وتكلفة المباني والمحارة", expanded=False):
         _section_survey()
+    _section_export_pdf()
     save_settings()
     _inject_floating_plan_viewer()
+
 
