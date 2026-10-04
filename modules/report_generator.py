@@ -2070,6 +2070,7 @@ def generate_masonry_plaster_report_html(
     deduction_rule_str: str = "الكود المصري ECP",
     include_inputs: bool = False,
     inputs_data: Optional[Dict[str, Any]] = None,
+    only_summary_and_plan: bool = False,
 ) -> str:
     """
     Generates a print-ready, professional HTML/PDF calculation sheet for
@@ -2620,7 +2621,255 @@ def generate_masonry_plaster_report_html(
         </tbody>
     </table>
     """
-    report_heading_title = "مذكرة التصميم وحصر الكميات والمقايسة الشاملة — جميع المدخلات والمخرجات" if include_inputs else "مذكرة حصر الكميات والمقايسة التقديرية — مخرجات أعمال المباني والمحارة"
+    report_heading_title = "مذكرة التصميم وحصر الكميات والمقايسة الشاملة — جميع المدخلات والمخرجات" if include_inputs else ("تقرير مخرجات المسقط والملخص التنفيذي — أعمال المباني والمحارة" if only_summary_and_plan else "مذكرة حصر الكميات والمقايسة التقديرية — مخرجات أعمال المباني والمحارة")
+
+    if only_summary_and_plan:
+        html_content = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{report_heading_title} — {project_name}</title>
+    {_get_base_report_css()}
+    <style>
+        @media print {{
+            .page-break {{
+                page-break-before: always !important;
+                break-before: page !important;
+            }}
+            body {{
+                padding: 0 !important;
+                margin: 0 !important;
+            }}
+            .report-container {{
+                padding: 10px 14px !important;
+            }}
+        }}
+    </style>
+</head>
+<body>
+
+<div class="report-container">
+
+    <!-- Action Bar (hidden in print) -->
+    <div class="action-bar no-print">
+        <div style="font-weight:700; font-size:1.0rem; display:flex; align-items:center; gap:8px;">
+            <span>🧱</span>
+            <span>{report_heading_title} (الكود المصري ECP)</span>
+        </div>
+        <button class="btn-print" onclick="window.print()">
+            🖨️ طباعة المذكرة / تصدير PDF
+        </button>
+    </div>
+
+    <!-- ==================== الصفحة الأولى: المسقط الأفقي المصمم ==================== -->
+    <div style="page-break-after: always; break-after: page;">
+        <!-- Header Page 1 -->
+        <div class="report-header" style="margin-bottom: 10px; padding-bottom: 8px;">
+            <div class="header-title">
+                <h1 style="font-size: 1.35rem; color:#1e3a8a;">المخطط الهندسي للمسقط الأفقي المصمم (Designed Plan & Structural Layout)</h1>
+                <div style="margin-top:4px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <span class="code-badge">الكود المصري ECP للمباني والبياض</span>
+                    <span style="font-size:0.85rem; color:#334155;">المشروع: <b style="color:#1e3a8a;">{project_name}</b></span>
+                    <span style="font-size:0.80rem; background:#f1f5f9; padding:2px 8px; border-radius:6px; border:1px solid #cbd5e1; color:#475569;">
+                        نوع الطوب: <b>{brick_type_display} ({brick_size_display})</b> | مونة <b>{mortar_cm} سم</b>
+                    </span>
+                </div>
+                {owner_html}
+            </div>
+            <div class="header-meta" style="font-size: 0.80rem;">
+                <div><b>تاريخ التصدير:</b> {now_str}</div>
+                <div><b>قياس المباني:</b> صافي خالص بين الأعمدة (ECP)</div>
+                <div><b>الصفحة:</b> 1 من 2 (المسقط الأفقي المصمم)</div>
+            </div>
+        </div>
+
+        <!-- Plan Image Box -->
+        <div style="border: 1.5px solid #cbd5e1; border-radius: 8px; padding: 10px; background: #ffffff; text-align: center;">
+            <div style="font-size: 0.90rem; font-weight: 700; color: #1e3a8a; margin-bottom: 6px; text-align: right; border-bottom: 1.5px solid #3b82f6; padding-bottom: 4px; display:flex; justify-content:space-between; align-items:center;">
+                <span>📐 المسقط الأفقي التنفيذي متضمناً المحاور، الحوائط، الأعمدة، الشبابيك والأبواب، وأوجه المحارة</span>
+                <span style="font-size:0.80rem; color:#64748b;" dir="ltr">Designed Plan & Structural Layout</span>
+            </div>
+            <img src="data:image/png;base64,{img_plan_b64}" alt="ECP Designed Plan" style="max-width: 100%; max-height: 200mm; object-fit: contain; border-radius: 6px;" />
+            <div style="font-size:0.78rem; margin-top:6px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap; color:#334155; font-weight:bold;">
+                <span style="color:#EFA368;">■ حائط 12سم</span>
+                <span style="color:#8B1A1A;">■ حائط 25سم</span>
+                <span style="color:#0284C7;">■ حائط دروة</span>
+                <span style="color:#87CEEB;">■ شباك (W#)</span>
+                <span style="color:#2E7D32;">■ باب (D#)</span>
+                <span style="color:#2F4F8F;">■ عمود (C#)</span>
+                <span style="color:#EC4899;">▨ وجه محارة (وردي)</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== الصفحة الثانية: بانيلات الإجماليات التنفيذية ==================== -->
+    <div class="page-break" style="padding-top: 6px;">
+        <!-- Header Page 2 -->
+        <div class="report-header" style="margin-bottom: 12px; padding-bottom: 8px;">
+            <div class="header-title">
+                <h1 style="font-size: 1.35rem; color:#1e3a8a;">1. الملخص الهندسي التنفيذي لحصر المباني والمحارة والخامات التوريدية</h1>
+                <div style="margin-top:4px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <span class="code-badge">الكود المصري ECP للمباني والبياض</span>
+                    <span style="font-size:0.85rem; color:#334155;">المشروع: <b style="color:#1e3a8a;">{project_name}</b></span>
+                </div>
+            </div>
+            <div class="header-meta" style="font-size: 0.80rem;">
+                <div><b>تاريخ التصدير:</b> {now_str}</div>
+                <div><b>الصفحة:</b> 2 من 2 (لوحة الإجماليات التنفيذية)</div>
+            </div>
+        </div>
+
+        <div style="background: #1e3a8a; color:#ffffff; font-size:1.05rem; font-weight:bold; padding:8px 14px; border-radius:6px; margin: 8px 0 14px 0; text-align:right;">
+            1. الملخص الهندسي التنفيذي لحصر المباني والمحارة والخامات التوريدية
+        </div>
+
+        <!-- 3 Top Cards (Masonry 12cm, Masonry 25cm, Plaster) -->
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-bottom: 12px;">
+            <!-- Card 1: مسطح مباني 12 سم -->
+            <div style="background:#ffffff; border:1.5px solid #fdba74; border-top:4px solid #ea580c; border-radius:10px; padding:14px 12px; text-align:center;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <span style="font-size:0.85rem; font-weight:700; color:#c2410c; background:#ffedd5; padding:2px 8px; border-radius:4px;">مسطح مباني 12 سم (نصف طوبة)</span>
+                    <span style="font-size:1.15rem;">🧱</span>
+                </div>
+                <div style="font-size:1.6rem; font-weight:900; color:#1e293b; margin:8px 0 4px 0;">
+                    <span dir="ltr">{n12:.2f}</span> <span style="font-size:1.1rem; color:#ea580c;">م² مسطح</span>
+                </div>
+                <div style="font-size:0.80rem; color:#64748b; margin-top:2px;">
+                    إجمالي {g12:.2f} م² | فتحات {op12:.2f} م²
+                </div>
+            </div>
+
+            <!-- Card 2: مكعب مباني 25 سم -->
+            <div style="background:#ffffff; border:1.5px solid #f9a8d4; border-top:4px solid #db2777; border-radius:10px; padding:14px 12px; text-align:center;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <span style="font-size:0.85rem; font-weight:700; color:#be185d; background:#fce7f3; padding:2px 8px; border-radius:4px;">مكعب مباني 25 سم (طوبة كاملة)</span>
+                    <span style="font-size:1.15rem;">🏗️</span>
+                </div>
+                <div style="font-size:1.6rem; font-weight:900; color:#be185d; margin:8px 0 4px 0;">
+                    <span dir="ltr">{v25:.2f}</span> <span style="font-size:1.1rem; color:#be185d;">م³ مكعب</span>
+                </div>
+                <div style="font-size:0.80rem; color:#64748b; margin-top:2px;">
+                    صافي المسطح: {n25:.2f} م² | فتحات {op25:.2f} م²
+                </div>
+            </div>
+
+            <!-- Card 3: صافي مسطح أعمال المحارة -->
+            <div style="background:#ffffff; border:1.5px solid #86efac; border-top:4px solid #16a34a; border-radius:10px; padding:14px 12px; text-align:center;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <span style="font-size:0.85rem; font-weight:700; color:#15803d; background:#dcfce7; padding:2px 8px; border-radius:4px;">صافي مسطح أعمال المحارة</span>
+                    <span style="font-size:1.15rem;">🎨</span>
+                </div>
+                <div style="font-size:1.6rem; font-weight:900; color:#15803d; margin:8px 0 4px 0;">
+                    <span dir="ltr">{p_net_m2:.2f}</span> <span style="font-size:1.1rem; color:#15803d;">م² معتمد</span>
+                </div>
+                <div style="font-size:0.80rem; color:#64748b; margin-top:2px;">
+                    إجمالي {p_gross_m2:.2f} م² | خصم {p_ded_m2:.2f} م² ({p_active_walls} حائط)
+                </div>
+            </div>
+        </div>
+
+        <!-- 3 Middle Cards (Bricks Qty & Price, Sand Qty & Price, Cement Qty & Price) -->
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-bottom: 14px;">
+            <!-- Card 4: إجمالي عدد الطوب -->
+            <div style="background:#ffffff; border:1.5px solid #93c5fd; border-right:4px solid #2563eb; border-radius:10px; padding:14px 12px; text-align:center;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:0.85rem; font-weight:700; color:#1d4ed8;">🧱 4️⃣ إجمالي عدد الطوب المطلوب</span>
+                    <span style="font-size:1.15rem;">🧱</span>
+                </div>
+                <div style="font-size:1.6rem; font-weight:900; color:#1e40af; margin:8px 0 2px 0;">
+                    <span dir="ltr">{bricks_total:,}</span> <span style="font-size:1.1rem;">طوبة</span>
+                </div>
+                <div style="font-size:0.76rem; color:#64748b; margin-bottom:6px;">
+                    {brick_type_display} ({brick_size_display})
+                </div>
+                <div style="padding-top:6px; border-top:1px dashed #bfdbfe; font-size:0.82rem; font-weight:bold; color:#1e40af;">
+                    💵 السعر التقديري: <span dir="ltr">{cost_brick:,.2f}</span> ج.م
+                    <div style="font-size:0.72rem; font-weight:normal; color:#64748b; margin-top:2px;">
+                        ({brick_thousands:.3f} ألف × {p_brick_in:,.0f} ج.م)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 5: إجمالي الرمل الكلي -->
+            <div style="background:#ffffff; border:1.5px solid #fde047; border-right:4px solid #ca8a04; border-radius:10px; padding:14px 12px; text-align:center;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:0.85rem; font-weight:700; color:#a16207;">🏜️ 5️⃣ إجمالي الرمل الكلي للمشروع</span>
+                    <span style="font-size:1.15rem;">🏜️</span>
+                </div>
+                <div style="font-size:1.6rem; font-weight:900; color:#854d0e; margin:8px 0 2px 0;">
+                    <span dir="ltr">{total_sand_all:.2f}</span> <span style="font-size:1.1rem;">م³</span>
+                </div>
+                <div style="font-size:0.76rem; color:#64748b; margin-bottom:6px;">
+                    مباني ({sand_total_masonry:.2f}م³) + محارة ({p_sand_m3:.2f}م³) شامل 5% هالك
+                </div>
+                <div style="padding-top:6px; border-top:1px dashed #fef08a; font-size:0.82rem; font-weight:bold; color:#a16207;">
+                    💵 السعر التقديري: <span dir="ltr">{cost_sand_all:,.2f}</span> ج.م
+                    <div style="font-size:0.72rem; font-weight:normal; color:#64748b; margin-top:2px;">
+                        ({total_sand_all:.2f} م³ × {p_sand_in:,.0f} ج.م)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 6: إجمالي الأسمنت الكلي -->
+            <div style="background:#ffffff; border:1.5px solid #7dd3fc; border-right:4px solid #0284c7; border-radius:10px; padding:14px 12px; text-align:center;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:0.85rem; font-weight:700; color:#0369a1;">🏗️ 6️⃣ إجمالي الأسمنت الكلي للمشروع</span>
+                    <span style="font-size:1.15rem;">🏗️</span>
+                </div>
+                <div style="font-size:1.6rem; font-weight:900; color:#075985; margin:8px 0 2px 0;">
+                    <span dir="ltr">{total_cement_tons_all:.2f}</span> <span style="font-size:1.1rem;">طن</span>
+                </div>
+                <div style="font-size:0.76rem; color:#64748b; margin-bottom:6px;">
+                    {total_cement_bags_all} شكارة 50كجم (مباني {cement_masonry_tons:.2f}ط + محارة {p_cement_tons:.2f}ط)
+                </div>
+                <div style="padding-top:6px; border-top:1px dashed #bae6fd; font-size:0.82rem; font-weight:bold; color:#0369a1;">
+                    💵 السعر التقديري: <span dir="ltr">{cost_cement_all:,.2f}</span> ج.م
+                    <div style="font-size:0.72rem; font-weight:normal; color:#64748b; margin-top:2px;">
+                        ({total_cement_tons_all:.2f} طن × {p_cement_in:,.0f} ج.م)
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Full Width Card: الإجمالي المالي التقديري الشامل للمشروع -->
+        <div style="background:#ffffff; border:2px solid #16a34a; border-radius:12px; padding:16px 20px; text-align:center; box-shadow:0 3px 10px rgba(22, 163, 74, 0.12); margin-bottom: 20px;">
+            <div style="font-size:1.05rem; font-weight:800; color:#15803d; margin-bottom:6px; display:flex; justify-content:center; align-items:center; gap:8px;">
+                <span>💰</span>
+                <span>الإجمالي المالي التقديري الشامل للمشروع (المباني + المحارة)</span>
+                <span>💰</span>
+            </div>
+            <div style="font-size:2.0rem; font-weight:900; color:#166534; margin:6px 0;">
+                <span dir="ltr">{grand_total_cost:,.2f}</span> <span style="font-size:1.3rem;">ج.م</span>
+            </div>
+            <div style="font-size:0.88rem; color:#475569; margin-top:4px;">
+                إجمالي أعمال المباني (<span dir="ltr">{cost_masonry_total:,.2f}</span> ج.م) + إجمالي أعمال المحارة (<span dir="ltr">{cost_plaster_total:,.2f}</span> ج.م)
+            </div>
+        </div>
+
+        <!-- Sign-off Block on Page 2 -->
+        <div class="signature-block" style="display:flex; justify-content:space-between; margin-top:20px; padding-top:14px; border-top:2px solid #cbd5e1;">
+            <div class="sig-box" style="flex:1; text-align:center; padding:10px;">
+                <div class="sig-title" style="font-weight:700; color:#1e3a8a;">مهندس المكتب الفني / الحصر:</div>
+                <div style="margin-top:24px; color:#94a3b8;">التوقيع: ___________________</div>
+            </div>
+            <div class="sig-box" style="flex:1; text-align:center; padding:10px;">
+                <div class="sig-title" style="font-weight:700; color:#1e3a8a;">مهندس التنفيذ وإدارة المشروع:</div>
+                <div style="margin-top:24px; color:#94a3b8;">التوقيع: ___________________</div>
+            </div>
+            <div class="sig-box" style="flex:1; text-align:center; padding:10px;">
+                <div class="sig-title" style="font-weight:700; color:#1e3a8a;">اعتماد الاستشاري المشرف:</div>
+                <div style="margin-top:24px; color:#94a3b8;">الختم والتاريخ: ______________</div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>
+"""
+        return html_content
 
     html_content = f"""<!DOCTYPE html>
 <html lang="ar" dir="rtl">

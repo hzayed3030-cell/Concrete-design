@@ -15554,7 +15554,7 @@ def _section_export_pdf():
         "doors_models": doors_models,
     }
 
-    # تقرير المخرجات فقط
+    # تقرير المخرجات فقط (صفحتين فقط: المسقط الأفقي المصمم + بانيلات الإجماليات)
     report_html_outputs = generate_masonry_plaster_report_html(
         project_name=active_proj,
         img_plan_b64=img_plan_b64,
@@ -15572,6 +15572,7 @@ def _section_export_pdf():
         mortar_cm=mortar_v,
         deduction_rule_str=deduction_rule_str,
         include_inputs=False,
+        only_summary_and_plan=True,
     )
 
     # تقرير جميع المدخلات والمخرجات بالكامل
@@ -15626,6 +15627,7 @@ def _section_export_pdf():
         width: 38px !important;
         height: 38px !important;
         border-width: 4px !important;
+        border-style: solid !important;
     }
     div[data-testid="stSpinner"]::before {
         content: "";
@@ -15639,83 +15641,119 @@ def _section_export_pdf():
         z-index: -1;
         pointer-events: all;
     }
+
+    /* توحيد ألوان وخلفيات وخطوط جميع أزرار التصدير: خلفية حمراء ونصوص بيضاء */
+    .st-key-m15_btn_export_pdf_outputs button,
+    .st-key-m15_btn_export_pdf_all button,
+    .st-key-m15_btn_download_html button,
+    div[class*="st-key-m15_btn_export_pdf_"] button,
+    div[class*="st-key-m15_btn_download_html"] button {
+        background: #dc2626 !important;
+        background-color: #dc2626 !important;
+        color: #ffffff !important;
+        border: 1.5px solid #b91c1c !important;
+        border-radius: 8px !important;
+        font-weight: 700 !important;
+        box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3) !important;
+        transition: all 0.2s ease !important;
+    }
+    .st-key-m15_btn_export_pdf_outputs button *,
+    .st-key-m15_btn_export_pdf_all button *,
+    .st-key-m15_btn_download_html button *,
+    div[class*="st-key-m15_btn_export_pdf_"] button *,
+    div[class*="st-key-m15_btn_download_html"] button * {
+        color: #ffffff !important;
+        font-weight: 700 !important;
+    }
+    .st-key-m15_btn_export_pdf_outputs button:hover,
+    .st-key-m15_btn_export_pdf_all button:hover,
+    .st-key-m15_btn_download_html button:hover,
+    div[class*="st-key-m15_btn_export_pdf_"] button:hover,
+    div[class*="st-key-m15_btn_download_html"] button:hover {
+        background: #b91c1c !important;
+        background-color: #b91c1c !important;
+        color: #ffffff !important;
+        border-color: #991b1b !important;
+        box-shadow: 0 4px 14px rgba(220, 38, 38, 0.5) !important;
+        transform: translateY(-1px) !important;
+    }
     </style>
     """
     st.markdown(spinner_modal_css, unsafe_allow_html=True)
-
-    st.markdown(
-        f"""<div style='background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
-        border: 2px solid #3b82f6; border-radius: 14px; padding: 20px 24px; margin-top: 22px; margin-bottom: 24px;
-        box-shadow: 0 8px 24px rgba(59, 130, 246, 0.25);' dir='rtl'>
-        <div style='display:flex; align-items:center; justify-content:space-between; border-bottom: 1.5px solid rgba(59, 130, 246, 0.4); padding-bottom: 14px; margin-bottom: 16px; flex-wrap:wrap; gap:10px;'>
-            <div style='display:flex; align-items:center; gap:12px;'>
-                <span style='font-size:1.8rem;'>💾</span>
-                <div>
-                    <div style='font-weight:900; font-size:1.15rem; color:#ffffff;'>
-                        حفظ وتصدير تقرير ومخرجات الموديول 15 (ECP Masonry & Plaster Calculation Sheet)
-                    </div>
-                    <div style='font-size:0.83rem; color:#94a3b8; margin-top:2px;'>
-                        تصدير هندسي شامل ومتكامل: المخطط التنفيذي 2D + جداول الحصر + مقايسة الخامات + التسعير المالي
-                    </div>
-                </div>
-            </div>
-            <span style='background: linear-gradient(135deg, #1d4ed8, #2563eb); color:#ffffff; font-size:0.80rem; font-weight:bold; padding:5px 16px; border-radius:20px; border:1px solid #60a5fa;'>
-                📄 تصدير رسمي معتمد (PDF & HTML)
-            </span>
-        </div>
-        <div style='color:#cbd5e1; font-size:0.88rem; line-height:1.75; margin-bottom:16px;'>
-            يتضمن ملف التقرير المُصدَّر:
-            <ul style='margin: 6px 0 0 20px; padding: 0; color:#e2e8f0; font-size:0.85rem;'>
-                <li>📐 <b>المسقط الأفقي المصمم عالي الدقة (2D Plan):</b> موضحاً عليه المحاور، أبعاد الحوائط، الأعمدة، الشبابيك والأبواب، وأوجه المحارة المميزة بالألوان.</li>
-                <li>🧱 <b>جداول حصر أعمال المباني التفصيلية:</b> لمباني 12 سم (م²) ومباني 25 سم (م³) متضمنة طول المحور، خصم الأعمدة الخالص، المساحات وعدد الطوب.</li>
-                <li>🎨 <b>جدول حصر أعمال المحارة (البياض):</b> لكل حائط مع الأوجه ومساحات الفتحات والخصم المعتمد طبقاً للكود المصري ECP والكميات.</li>
-                <li>📦 <b>مقايسة الخامات والمونة الشاملة:</b> رمل صافي وشامل الهالك 5%، أسمنت بالطن والشكاير، وعدد الطوب الإجمالي.</li>
-                <li>💰 <b>جدول التسعير والمقايسة المالية التقديرية:</b> إجمالي بند المباني، إجمالي بند المحارة، والإجمالي العام الشامل للمشروع.</li>
-            </ul>
-        </div>
-    </div>""",
-        unsafe_allow_html=True
-    )
 
     pdf_fname_outputs = f"{prefix}ECP_Masonry_Plaster_Outputs.pdf"
     pdf_fname_all = f"{prefix}ECP_Masonry_Plaster_Full_Report.pdf"
     html_fname = f"{prefix}ECP_Masonry_Plaster_Calculation_Sheet.html"
 
-    c_exp1, c_exp2, c_exp3, c_exp4 = st.columns([1.3, 1.6, 1.3, 0.8], gap="medium")
+    # 1. قسم "تصدير ملفات المدخلات والمخرجات" يظهر كـ Expander مطوي افتراضياً
+    with st.expander("تصدير ملفات المدخلات والمخرجات", expanded=False):
+        # أزرار التصدير في الأعلى (3 أزرار متناسقة بدون زر التحديث)
+        c_exp1, c_exp2, c_exp3 = st.columns([1.3, 1.6, 1.4], gap="medium")
 
-    with c_exp1:
-        if st.button("📕 تصدير ملف المخرجات PDF", key="m15_btn_export_pdf_outputs", type="primary", use_container_width=True):
-            with st.spinner("جاري تحميل الملف"):
-                pdf_bytes_out = html_to_pdf_bytes(report_html_outputs)
-            if pdf_bytes_out:
-                _trigger_browser_download(pdf_bytes_out, pdf_fname_outputs)
-                st.toast("✅ تم تصدير ملف المخرجات PDF بنجاح وفتح نافذة الحفظ!", icon="📕")
-            else:
-                st.error("تعذر إنشاء ملف الـ PDF تلقائياً، يمكنك تنزيل ملف الـ HTML وفتحه للطباعة كـ PDF مباشرة.")
+        with c_exp1:
+            if st.button("📕 تصدير ملف المخرجات PDF", key="m15_btn_export_pdf_outputs", type="primary", use_container_width=True):
+                with st.spinner("جاري تحميل الملف"):
+                    pdf_bytes_out = html_to_pdf_bytes(report_html_outputs)
+                if pdf_bytes_out:
+                    _trigger_browser_download(pdf_bytes_out, pdf_fname_outputs)
+                    st.toast("✅ تم تصدير ملف المخرجات PDF بنجاح وفتح نافذة الحفظ!", icon="📕")
+                else:
+                    st.error("تعذر إنشاء ملف الـ PDF تلقائياً، يمكنك تنزيل ملف الـ HTML وفتحه للطباعة كـ PDF مباشرة.")
 
-    with c_exp2:
-        if st.button("📑 تصدير جميع المدخلات والمخرجات ملف pdf", key="m15_btn_export_pdf_all", type="secondary", use_container_width=True):
-            with st.spinner("جاري تحميل الملف"):
-                pdf_bytes_all = html_to_pdf_bytes(report_html_all)
-            if pdf_bytes_all:
-                _trigger_browser_download(pdf_bytes_all, pdf_fname_all)
-                st.toast("✅ تم تصدير جميع المدخلات والمخرجات PDF بنجاح وفتح نافذة الحفظ!", icon="📑")
-            else:
-                st.error("تعذر إنشاء ملف الـ PDF تلقائياً، يمكنك تنزيل ملف الـ HTML وفتحه للطباعة كـ PDF مباشرة.")
+        with c_exp2:
+            if st.button("📑 تصدير جميع المدخلات والمخرجات ملف pdf", key="m15_btn_export_pdf_all", type="primary", use_container_width=True):
+                with st.spinner("جاري تحميل الملف"):
+                    pdf_bytes_all = html_to_pdf_bytes(report_html_all)
+                if pdf_bytes_all:
+                    _trigger_browser_download(pdf_bytes_all, pdf_fname_all)
+                    st.toast("✅ تم تصدير جميع المدخلات والمخرجات PDF بنجاح وفتح نافذة الحفظ!", icon="📑")
+                else:
+                    st.error("تعذر إنشاء ملف الـ PDF تلقائياً، يمكنك تنزيل ملف الـ HTML وفتحه للطباعة كـ PDF مباشرة.")
 
-    with c_exp3:
-        st.download_button(
-            label="🌐 حفظ التقرير بصيغة HTML (فتح بالمتصفح)",
-            data=report_html_all.encode("utf-8"),
-            file_name=html_fname,
-            mime="text/html",
-            key="m15_btn_download_html",
-            use_container_width=True,
+        with c_exp3:
+            st.download_button(
+                label="🌐 حفظ التقرير بصيغة HTML (فتح بالمتصفح)",
+                data=report_html_all.encode("utf-8"),
+                file_name=html_fname,
+                mime="text/html",
+                key="m15_btn_download_html",
+                use_container_width=True,
+            )
+
+        # 2. بانيل حفظ وتصدير تقرير ومخرجات الموديول 15 أسفل الأزرار بتنسيق من اليمين لليسار
+        st.markdown(
+            f"""<div style='background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+            border: 2px solid #3b82f6; border-radius: 14px; padding: 20px 24px; margin-top: 20px; margin-bottom: 12px;
+            box-shadow: 0 8px 24px rgba(59, 130, 246, 0.25); text-align: right;' dir='rtl'>
+            <div style='display:flex; align-items:center; justify-content:space-between; border-bottom: 1.5px solid rgba(59, 130, 246, 0.4); padding-bottom: 14px; margin-bottom: 16px; flex-wrap:wrap; gap:10px; direction:rtl;'>
+                <div style='display:flex; align-items:center; gap:12px; text-align:right; direction:rtl;'>
+                    <span style='font-size:1.8rem;'>💾</span>
+                    <div style='text-align:right; direction:rtl;'>
+                        <div style='font-weight:900; font-size:1.15rem; color:#ffffff; text-align:right; direction:rtl;'>
+                            حفظ وتصدير تقرير ومخرجات الموديول 15 (ECP Masonry & Plaster Calculation Sheet)
+                        </div>
+                        <div style='font-size:0.83rem; color:#94a3b8; margin-top:2px; text-align:right; direction:rtl;'>
+                            تصدير هندسي شامل ومتكامل: المخطط التنفيذي 2D + جداول الحصر + مقايسة الخامات + التسعير المالي
+                        </div>
+                    </div>
+                </div>
+                <span style='background: linear-gradient(135deg, #1d4ed8, #2563eb); color:#ffffff; font-size:0.80rem; font-weight:bold; padding:5px 16px; border-radius:20px; border:1px solid #60a5fa;'>
+                    📄 تصدير رسمي معتمد (PDF & HTML)
+                </span>
+            </div>
+            <div style='color:#cbd5e1; font-size:0.88rem; line-height:1.75; margin-bottom:16px; text-align:right; direction:rtl;'>
+                يتضمن ملف التقرير المُصدَّر:
+                <ul style='margin: 6px 20px 0 0; padding: 0; color:#e2e8f0; font-size:0.85rem; text-align:right; direction:rtl;'>
+                    <li>📐 <b>المسقط الأفقي المصمم عالي الدقة (2D Plan):</b> موضحاً عليه المحاور، أبعاد الحوائط، الأعمدة، الشبابيك والأبواب، وأوجه المحارة المميزة بالألوان.</li>
+                    <li>🧱 <b>جداول حصر أعمال المباني التفصيلية:</b> لمباني 12 سم (م²) ومباني 25 سم (م³) متضمنة طول المحور، خصم الأعمدة الخالص، المساحات وعدد الطوب.</li>
+                    <li>🎨 <b>جدول حصر أعمال المحارة (البياض):</b> لكل حائط مع الأوجه ومساحات الفتحات والخصم المعتمد طبقاً للكود المصري ECP والكميات.</li>
+                    <li>📦 <b>مقايسة الخامات والمونة الشاملة:</b> رمل صافي وشامل الهالك 5%، أسمنت بالطن والشكاير، وعدد الطوب الإجمالي.</li>
+                    <li>💰 <b>جدول التسعير والمقايسة المالية التقديرية:</b> إجمالي بند المباني، إجمالي بند المحارة، والإجمالي العام الشامل للمشروع.</li>
+                </ul>
+            </div>
+        </div>""",
+            unsafe_allow_html=True
         )
-
-    with c_exp4:
-        if st.button("🔄 تحديث التقرير", key="m15_btn_refresh_report", use_container_width=True):
-            st.rerun()
 
 
 def render_masonry_plaster_module():
@@ -15928,8 +15966,9 @@ def render_masonry_plaster_module():
     with st.expander("📋 جدول الحصر وخامات البياض", expanded=False):
         _section_plaster_boq()
     st.divider()
-    with st.expander("8️⃣ اسعار وتكلفة المباني والمحارة", expanded=False):
+    with st.expander("8️⃣ حصر وتكلفة اعمال الطوب والمحارة", expanded=False):
         _section_survey()
+    st.divider()
     _section_export_pdf()
     save_settings()
     _inject_floating_plan_viewer()
