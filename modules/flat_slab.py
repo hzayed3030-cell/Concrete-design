@@ -31,6 +31,7 @@ import streamlit as st
 import pandas as pd
 from modules import settings as S
 from modules.table_styler import render_styled_table
+from modules import extra_steel_zones as XZ
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -4236,7 +4237,8 @@ def generate_flat_slab_column_caps_sketch(
     else:
         # Sort by Y ascending, then X ascending to alternate Above/Below along each row
         needed_caps_sorted = sorted(needed_caps, key=lambda c: (round(col_dict[c["id"]][1], 2), col_dict[c["id"]][0]))
-        row_counts = {}
+        placed_boxes = []
+
         for c_info in needed_caps_sorted:
             cid = c_info["id"]
             cx, cy, ci, cj = col_dict[cid]
@@ -4244,8 +4246,10 @@ def generate_flat_slab_column_caps_sketch(
             n_ext = c_info.get("n_extra", 6)
             dia_ext = c_info.get("dia_extra", 12)
 
-            cap_w = L_ext
-            cap_h = min(Lx_spans[min(ci, len(Lx_spans)-1)], Ly_spans[min(cj, len(Ly_spans)-1)]) * 0.45
+            Lx_cap = c_info.get("L_extra_x", c_info.get("L_extra", 3.0))
+            Ly_cap = c_info.get("L_extra_y", round(2.0 * 0.30 * Ly_spans[min(cj, len(Ly_spans)-1)] + col_d_m, 2))
+            cap_w = Lx_cap
+            cap_h = Ly_cap
             cap_rect = patches.Rectangle(
                 (cx - cap_w/2.0, cy - cap_h/2.0), cap_w, cap_h,
                 lw=2.0, edgecolor="#dc2626", facecolor="#fee2e2", alpha=0.55, linestyle="--", zorder=4
@@ -4259,36 +4263,100 @@ def generate_flat_slab_column_caps_sketch(
 
             bar_x = cx + col_w_m/2.0 + 0.15
             ax_plan.plot([bar_x, bar_x], [cy - cap_h/2.0, cy + cap_h/2.0], color="#b91c1c", lw=4.0, zorder=6)
-            ax_plan.plot([bar_x, bar_x - 0.25], [cy - cap_h/2.0, cy - cap_h/2.0], color="#b91c1c", lw=3.0, zorder=6)
-            ax_plan.plot([bar_x, bar_x - 0.25], [cy + cap_h/2.0, cy + cap_h/2.0], color="#b91c1c", lw=3.0, zorder=6)
+            ax_plan.plot([bar_x - 0.25, bar_x], [cy - cap_h/2.0, cy - cap_h/2.0], color="#b91c1c", lw=3.0, zorder=6)
+            ax_plan.plot([bar_x - 0.25, bar_x], [cy + cap_h/2.0, cy + cap_h/2.0], color="#b91c1c", lw=3.0, zorder=6)
 
-            # Determine row index by cj (grid row index) so all columns on the same row alternate cleanly
-            row_key = cj
-            k_in_row = row_counts.get(row_key, 0)
-            row_counts[row_key] = k_in_row + 1
+            bpm_x = c_info.get("bars_per_m_x", c_info.get("bars_per_m", 3))
+            bpm_y = c_info.get("bars_per_m_y", c_info.get("bars_per_m", 3))
+            nx = c_info.get("n_extra_x", math.ceil(bpm_x * cap_h))
+            ny = c_info.get("n_extra_y", math.ceil(bpm_y * cap_w))
 
-            is_above = (k_in_row % 2 == 0)
-            # Boundary check allowing placement outside slab boundary if space permits before dimensions
-            if is_above and (cy + cap_h/2.0 + 0.4 > y_slab_max + 1.2):
-                is_above = False
-            elif not is_above and (cy - cap_h/2.0 - 0.4 < (y_slab_min - dim_offset_bot) + 0.5):
-                is_above = True
+            tag_text = (
+                f"X: {bpm_x}Φ{dia_ext} /m' - Total {nx}\n"
+                f"Y: {bpm_y}Φ{dia_ext} /m' - Total {ny}\n"
+                f"Zone: {cap_w:.2f} × {cap_h:.2f} m"
+            )
 
-            if is_above:
-                tag_y = cy + cap_h/2.0 + 0.35
-                va_pos = "bottom"
-            else:
-                tag_y = cy - cap_h/2.0 - 0.35
-                va_pos = "top"
+            font_sz = 8.5 if (cap_w < 2.2 or min(Lx_spans) < 2.0) else 9.0
+            pad_sz = 0.20 if (cap_w < 2.2 or min(Lx_spans) < 2.0) else 0.25
 
-            font_sz = 11.0 if (cap_w < 2.2 or min(Lx_spans) < 2.0) else 12.5
-            pad_sz = 0.28 if (cap_w < 2.2 or min(Lx_spans) < 2.0) else 0.35
+            # Approximate width and height of the 3-line annotation box in slab meters
+            box_w = max(1.65, min(2.10, 0.45 * max(len(line) for line in tag_text.split("\n")) * 0.18))
+            box_h = 0.82
+
+            # Candidate positions around the cap (Top, Bottom, Right, Left, Top-Offset, Bottom-Offset)
+            candidates = [
+                (cx, cy + cap_h/2.0 + 0.45, "center", "bottom", False),
+                (cx, cy - cap_h/2.0 - 0.45, "center", "top", False),
+                (cx + cap_w/2.0 + box_w/2.0 + 0.35, cy, "center", "center", True),
+                (cx - cap_w/2.0 - box_w/2.0 - 0.35, cy, "center", "center", True),
+                (cx, cy + cap_h/2.0 + 1.25, "center", "bottom", True),
+                (cx, cy - cap_h/2.0 - 1.25, "center", "top", True),
+                (cx + 0.85, cy + cap_h/2.0 + 0.55, "center", "bottom", True),
+                (cx - 0.85, cy + cap_h/2.0 + 0.55, "center", "bottom", True),
+            ]
+
+            chosen_pos = None
+            min_penalty = 1e9
+
+            for cand_x, cand_y, ha, va, needs_lead in candidates:
+                # Calculate bounding box of this candidate
+                cb_x0 = cand_x - box_w / 2.0
+                cb_x1 = cand_x + box_w / 2.0
+                if va == "bottom":
+                    cb_y0 = cand_y
+                    cb_y1 = cand_y + box_h
+                elif va == "top":
+                    cb_y0 = cand_y - box_h
+                    cb_y1 = cand_y
+                else:
+                    cb_y0 = cand_y - box_h / 2.0
+                    cb_y1 = cand_y + box_h / 2.0
+
+                # Penalty if candidate exceeds drawing bounds
+                penalty = 0.0
+                if cb_y1 > y_slab_max + 1.8:
+                    penalty += 50.0
+                if cb_y0 < y_slab_min - dim_offset_bot + 0.2:
+                    penalty += 50.0
+                if cb_x0 < x_slab_min - 1.5 or cb_x1 > x_slab_max + 1.5:
+                    penalty += 30.0
+
+                # Collision penalty against all already placed boxes
+                for pb_x0, pb_x1, pb_y0, pb_y1 in placed_boxes:
+                    # Check overlap with margin
+                    ov_x = max(0.0, min(cb_x1, pb_x1) - max(cb_x0, pb_x0) + 0.15)
+                    ov_y = max(0.0, min(cb_y1, pb_y1) - max(cb_y0, pb_y0) + 0.15)
+                    if ov_x > 0.0 and ov_y > 0.0:
+                        penalty += 1000.0 + (ov_x * ov_y) * 500.0
+
+                if needs_lead:
+                    penalty += 5.0
+
+                if penalty < min_penalty:
+                    min_penalty = penalty
+                    chosen_pos = (cand_x, cand_y, ha, va, needs_lead, (cb_x0, cb_x1, cb_y0, cb_y1))
+                    if penalty < 0.01:
+                        break
+
+            best_x, best_y, best_ha, best_va, use_leader, best_bbox = chosen_pos
+            placed_boxes.append(best_bbox)
+
+            # Draw leader line if displaced from default near-cap position
+            if use_leader or abs(best_x - cx) > 0.4 or abs(best_y - cy) > (cap_h/2.0 + 0.8):
+                ax_plan.annotate(
+                    "",
+                    xy=(cx, cy + (cap_h/2.0 if best_y > cy else -cap_h/2.0)),
+                    xytext=(best_x, best_y),
+                    arrowprops=dict(arrowstyle="-", color="#dc2626", lw=1.0, ls=":")
+                )
+
             ax_plan.text(
-                cx, tag_y,
-                f"{n_ext} Φ {dia_ext} (L = {cap_w:.2f} m)\nZone: {cap_w:.2f} m × {cap_h:.2f} m",
-                ha="center", va=va_pos, fontsize=font_sz, fontweight="bold", color="#991b1b", zorder=8,
-                linespacing=1.25,
-                bbox=dict(boxstyle=f"round,pad={pad_sz}", facecolor="#ffffff", edgecolor="#dc2626", lw=1.8)
+                best_x, best_y,
+                tag_text,
+                ha=best_ha, va=best_va, fontsize=font_sz, fontweight="bold", color="#991b1b", zorder=8,
+                linespacing=1.15,
+                bbox=dict(boxstyle=f"round,pad={pad_sz}", facecolor="#ffffff", edgecolor="#dc2626", lw=1.3)
             )
 
     dim_y = y_slab_min - dim_offset_bot
@@ -6871,12 +6939,28 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
             edge_c = "#d97706"
             face_c = "#fef3c7"
 
+            has_bbox = ("x0" in b_info and "x1" in b_info and "y0" in b_info and "y1" in b_info)
+            if has_bbox:
+                bx0, bx1 = b_info["x0"], b_info["x1"]
+                by0, by1 = b_info["y0"], b_info["y1"]
+                cx = (bx0 + bx1) / 2.0
+                cy = (by0 + by1) / 2.0
+
             if dir_req == "X":
-                area_w = L_ext
-                area_h = W_bay * 0.88
+                if has_bbox:
+                    area_w = (bx1 - bx0)
+                    area_h = (by1 - by0) * 0.90
+                    rx = bx0
+                    ry = cy - area_h / 2.0
+                else:
+                    area_w = L_ext
+                    area_h = W_bay * 0.88
+                    rx = cx - area_w / 2.0
+                    ry = cy - area_h / 2.0
                 area_rect = patches.Rectangle(
-                    (cx - area_w/2.0, cy - area_h/2.0), area_w, area_h,
-                    lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.60, linestyle="--", zorder=3
+                    (rx, ry), area_w, area_h,
+                    lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.45,
+                    hatch="///", linestyle="--", zorder=3
                 )
                 ax_plan.add_patch(area_rect)
 
@@ -6897,17 +6981,31 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
 
                 ax_plan.text(
                     cx, tag_y,
-                    f"{n_ext} Φ {dia_ext}  (L = {L_ext:.2f} m)",
+                    (
+                        f"Zone {b_info.get('bars_per_m', n_ext)} Φ {dia_ext} / m'\n"
+                        f"(Total: {n_ext} Φ {dia_ext}, L = {L_ext:.2f} m)"
+                        if b_info.get("bars_per_m", 0) > 0
+                        else f"{n_ext} Φ {dia_ext} (L = {L_ext:.2f} m)"
+                    ),
                     ha="center", va="center", fontsize=f_sz, fontweight="bold", color="#b45309", zorder=8,
-                    rotation=0,
+                    rotation=0, multialignment="center",
                     bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
                 )
             else:
-                area_w = W_bay * 0.88
-                area_h = L_ext
+                if has_bbox:
+                    area_w = (bx1 - bx0) * 0.90
+                    area_h = (by1 - by0)
+                    rx = cx - area_w / 2.0
+                    ry = by0
+                else:
+                    area_w = W_bay * 0.88
+                    area_h = L_ext
+                    rx = cx - area_w / 2.0
+                    ry = cy - area_h / 2.0
                 area_rect = patches.Rectangle(
-                    (cx - area_w/2.0, cy - area_h/2.0), area_w, area_h,
-                    lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.60, linestyle="--", zorder=3
+                    (rx, ry), area_w, area_h,
+                    lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.45,
+                    hatch="\\\\\\", linestyle="--", zorder=3
                 )
                 ax_plan.add_patch(area_rect)
 
@@ -6921,9 +7019,14 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
                 tag_x = (cx - 0.45) if W_bay >= 1.5 else cx
                 ax_plan.text(
                     tag_x, cy,
-                    f"{n_ext} Φ {dia_ext}  (L = {L_ext:.2f} m)",
+                    (
+                        f"Zone {b_info.get('bars_per_m', n_ext)} Φ {dia_ext} / m'\n"
+                        f"(Total: {n_ext} Φ {dia_ext}, L = {L_ext:.2f} m)"
+                        if b_info.get("bars_per_m", 0) > 0
+                        else f"{n_ext} Φ {dia_ext} (L = {L_ext:.2f} m)"
+                    ),
                     ha="center", va="center", fontsize=f_sz, fontweight="bold", color="#b45309", zorder=8,
-                    rotation=90,
+                    rotation=90, multialignment="center",
                     bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
                 )
     else:
@@ -7317,12 +7420,28 @@ def generate_flat_slab_top_mesh_extra_sketch(
             edge_c = "#2563eb"
             face_c = "#dbeafe"
 
+            has_bbox = ("x0" in b_info and "x1" in b_info and "y0" in b_info and "y1" in b_info)
+            if has_bbox:
+                bx0, bx1 = b_info["x0"], b_info["x1"]
+                by0, by1 = b_info["y0"], b_info["y1"]
+                cx = (bx0 + bx1) / 2.0
+                cy = (by0 + by1) / 2.0
+
             if dir_req == "X":
-                area_w = L_ext
-                area_h = W_bay * 0.88
+                if has_bbox:
+                    area_w = (bx1 - bx0)
+                    area_h = (by1 - by0) * 0.90
+                    rx = bx0
+                    ry = cy - area_h / 2.0
+                else:
+                    area_w = L_ext
+                    area_h = W_bay * 0.88
+                    rx = cx - area_w / 2.0
+                    ry = cy - area_h / 2.0
                 area_rect = patches.Rectangle(
-                    (cx - area_w/2.0, cy - area_h/2.0), area_w, area_h,
-                    lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.60, linestyle="--", zorder=3
+                    (rx, ry), area_w, area_h,
+                    lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.45,
+                    hatch="///", linestyle="--", zorder=3
                 )
                 ax_plan.add_patch(area_rect)
 
@@ -7343,17 +7462,31 @@ def generate_flat_slab_top_mesh_extra_sketch(
 
                 ax_plan.text(
                     cx, tag_y,
-                    f"{n_ext} Φ {dia_ext}  (L = {L_ext:.2f} m)",
+                    (
+                        f"Zone {b_info.get('bars_per_m', n_ext)} Φ {dia_ext} / m'\n"
+                        f"(Total: {n_ext} Φ {dia_ext}, L = {L_ext:.2f} m)"
+                        if b_info.get("bars_per_m", 0) > 0
+                        else f"{n_ext} Φ {dia_ext} (L = {L_ext:.2f} m)"
+                    ),
                     ha="center", va="center", fontsize=f_sz, fontweight="bold", color="#1d4ed8", zorder=8,
-                    rotation=0,
+                    rotation=0, multialignment="center",
                     bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
                 )
             else:
-                area_w = W_bay * 0.88
-                area_h = L_ext
+                if has_bbox:
+                    area_w = (bx1 - bx0) * 0.90
+                    area_h = (by1 - by0)
+                    rx = cx - area_w / 2.0
+                    ry = by0
+                else:
+                    area_w = W_bay * 0.88
+                    area_h = L_ext
+                    rx = cx - area_w / 2.0
+                    ry = cy - area_h / 2.0
                 area_rect = patches.Rectangle(
-                    (cx - area_w/2.0, cy - area_h/2.0), area_w, area_h,
-                    lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.60, linestyle="--", zorder=3
+                    (rx, ry), area_w, area_h,
+                    lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.45,
+                    hatch="\\\\\\", linestyle="--", zorder=3
                 )
                 ax_plan.add_patch(area_rect)
 
@@ -7367,9 +7500,14 @@ def generate_flat_slab_top_mesh_extra_sketch(
                 tag_x = (cx - 0.45) if W_bay >= 1.5 else cx
                 ax_plan.text(
                     tag_x, cy,
-                    f"{n_ext} Φ {dia_ext}  (L = {L_ext:.2f} m)",
+                    (
+                        f"Zone {b_info.get('bars_per_m', n_ext)} Φ {dia_ext} / m'\n"
+                        f"(Total: {n_ext} Φ {dia_ext}, L = {L_ext:.2f} m)"
+                        if b_info.get("bars_per_m", 0) > 0
+                        else f"{n_ext} Φ {dia_ext} (L = {L_ext:.2f} m)"
+                    ),
                     ha="center", va="center", fontsize=f_sz, fontweight="bold", color="#1d4ed8", zorder=8,
-                    rotation=90,
+                    rotation=90, multialignment="center",
                     bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
                 )
     else:
@@ -7748,8 +7886,10 @@ def generate_flat_slab_master_steel_layout_sketch(
             ax_plan.plot([bx_c - L_ext/2.0, bx_c - L_ext/2.0], [by_c - 0.2, by_c + 0.2], color="#d97706", lw=2.5, zorder=6)
             ax_plan.plot([bx_c + L_ext/2.0, bx_c + L_ext/2.0], [by_c - 0.2, by_c + 0.2], color="#d97706", lw=2.5, zorder=6)
             ax_plan.text(
-                bx_c, by_c - 0.40, f"Btm Extra: {callout} (L={L_ext:.2f}m)",
+                bx_c, by_c - 0.40,
+                f"Btm Extra:\n{callout}",
                 ha="center", va="top", fontsize=9.5, fontweight="bold", color="#b45309", zorder=8,
+                multialignment="center",
                 bbox=dict(boxstyle="round,pad=0.25", facecolor="#fffbeb", edgecolor="#f59e0b", lw=1.2)
             )
         else:
@@ -7757,8 +7897,10 @@ def generate_flat_slab_master_steel_layout_sketch(
             ax_plan.plot([bx_c - 0.2, bx_c + 0.2], [by_c - L_ext/2.0, by_c - L_ext/2.0], color="#d97706", lw=2.5, zorder=6)
             ax_plan.plot([bx_c - 0.2, bx_c + 0.2], [by_c + L_ext/2.0, by_c + L_ext/2.0], color="#d97706", lw=2.5, zorder=6)
             ax_plan.text(
-                bx_c + 0.40, by_c, f"Btm Extra: {callout}\n(L={L_ext:.2f}m)",
+                bx_c + 0.40, by_c,
+                f"Btm Extra:\n{callout}",
                 ha="left", va="center", fontsize=9.5, fontweight="bold", color="#b45309", zorder=8,
+                multialignment="left",
                 bbox=dict(boxstyle="round,pad=0.25", facecolor="#fffbeb", edgecolor="#f59e0b", lw=1.2)
             )
 
@@ -8343,25 +8485,41 @@ def calculate_extra_top_steel_at_columns(
         As_tot_req = calc_As(M_neg_col, w_cs, d_cm, Fcu, Fy, ts_cm)
         As_req_m = As_tot_req / w_cs
 
-        # Extra steel required over base top mesh
+        # Extra steel required over base top mesh (per metre of the cap distribution width)
         As_extra_m = max(0.0, As_req_m - mesh_top_prov_cm2m)
-        As_extra_tot = As_extra_m * w_cs
 
-        if As_extra_m > 0.05:
-            n_extra = max(2, math.ceil(As_extra_tot / a_extra_bar))
-            is_needed = True
-        else:
-            n_extra = 0
-            is_needed = False
+        # Directional column strip widths and lengths
+        w_cs_x = max(0.5, ly_adj / 2.0)  # distribution width along Y for bars running in X
+        w_cs_y = max(0.5, lx_adj / 2.0)  # distribution width along X for bars running in Y
 
-        # Development length
-        span_gov = max(lx_adj, ly_adj)
         if ctype == "Corner":
-            L_extra = round(0.30 * span_gov + col["bc"] / 100.0, 2)
+            Lx_extra_raw = round(0.30 * lx_adj + col["bc"] / 100.0, 2)
+            Ly_extra_raw = round(0.30 * ly_adj + col["tc"] / 100.0, 2)
         elif ctype == "Edge":
-            L_extra = round(0.30 * span_gov * 2.0 * 0.75 + col["bc"] / 100.0, 2)
+            Lx_extra_raw = round(0.30 * lx_adj * 1.5 + col["bc"] / 100.0, 2)
+            Ly_extra_raw = round(0.30 * ly_adj * 1.5 + col["tc"] / 100.0, 2)
         else:
-            L_extra = round(2.0 * 0.30 * span_gov + col["bc"] / 100.0, 2)
+            Lx_extra_raw = round(2.0 * 0.30 * lx_adj + col["bc"] / 100.0, 2)
+            Ly_extra_raw = round(2.0 * 0.30 * ly_adj + col["tc"] / 100.0, 2)
+
+        # X-direction bars (length = Lx_cap, distributed across w_cs_x)
+        cap_des_x = XZ.design_cap(As_extra_m, extra_dia_mm, w_cs_x, Lx_extra_raw)
+        # Y-direction bars (length = Ly_cap, distributed across w_cs_y)
+        cap_des_y = XZ.design_cap(As_extra_m, extra_dia_mm, w_cs_y, Ly_extra_raw)
+
+        is_needed = cap_des_x["is_needed"] or cap_des_y["is_needed"]
+        bpm_x = cap_des_x["bars_per_m"]
+        bpm_y = cap_des_y["bars_per_m"]
+        n_extra_x = cap_des_x["n_total"]
+        n_extra_y = cap_des_y["n_total"]
+        Lx_extra = cap_des_x["L_bar"]
+        Ly_extra = cap_des_y["L_bar"]
+
+        callout_combined = (
+            f"X: {bpm_x} Φ{extra_dia_mm}/m' (Total: {n_extra_x} Φ{extra_dia_mm}, L={Lx_extra:.2f}m) | "
+            f"Y: {bpm_y} Φ{extra_dia_mm}/m' (Total: {n_extra_y} Φ{extra_dia_mm}, L={Ly_extra:.2f}m)"
+            if is_needed else "Mesh is Sufficient (الشبكة تكفي)"
+        )
 
         col_extras.append({
             "id": cid,
@@ -8375,10 +8533,21 @@ def calculate_extra_top_steel_at_columns(
             "As_req (cm²/m)": As_req_m,
             "As_mesh (cm²/m)": mesh_top_prov_cm2m,
             "As_extra (cm²/m)": As_extra_m,
-            "n_extra": n_extra,
+            "As_extra_prov (cm²/m)": max(cap_des_x["As_extra_prov_m"], cap_des_y["As_extra_prov_m"]),
+            "bars_per_m": bpm_x,
+            "bars_per_m_x": bpm_x,
+            "bars_per_m_y": bpm_y,
+            "cap_width": w_cs_x,
+            "cap_width_x": w_cs_x,
+            "cap_width_y": w_cs_y,
+            "n_extra": n_extra_x + n_extra_y,
+            "n_extra_x": n_extra_x,
+            "n_extra_y": n_extra_y,
             "dia_extra": extra_dia_mm,
-            "L_extra": L_extra,
-            "callout": f"+{n_extra} Φ{extra_dia_mm} (L={L_extra:.2f}m)" if is_needed else "Mesh is Sufficient (الشبكة تكفي)",
+            "L_extra": Lx_extra,
+            "L_extra_x": Lx_extra,
+            "L_extra_y": Ly_extra,
+            "callout": callout_combined,
             "is_needed": is_needed,
             "x_min": col.get("x_min"),
             "y_min": col.get("y_min"),
@@ -8473,7 +8642,11 @@ def calculate_boq(Lx_spans, Ly_spans, cantilevers, ts_cm, mesh_btm_n, mesh_btm_d
         if ce.get("is_needed"):
             dia = ce["dia_extra"]
             col_extra_dia_used = dia
-            l_ext = ce["n_extra"] * ce["L_extra"] * 1.06
+            nx = ce.get("n_extra_x", ce.get("n_extra", 0) // 2)
+            ny = ce.get("n_extra_y", ce.get("n_extra", 0) // 2)
+            lx = ce.get("L_extra_x", ce.get("L_extra", 3.0))
+            ly = ce.get("L_extra_y", ce.get("L_extra", 3.0))
+            l_ext = (nx * lx + ny * ly) * 1.06
             len_col_extra_m += l_ext
             _, w_k = add_steel(dia, l_ext, "كابات حديد إضافي علوي (Top Caps @ Columns)")
             steel_col_extra_kg += w_k
@@ -10575,10 +10748,17 @@ def render(is_standalone: bool = False):
             Mu_pos_m_y = max(M_cs_y / max(0.1, w_cs_y), M_ms_y / max(0.1, ms_w_y))
 
             # X-direction Bottom Extra Check & Record
-            a_bar = bar_area(strip_bottom_extra_dia)
-            n_b_x = max(2, math.ceil((delta_As_x * span_ly) / a_bar))
-            L_ext_x = round(0.70 * span_lx, 2)
-            req_extra_x = (delta_As_x > 0.05 or (is_enlarged and span_lx >= span_ly))
+            _Ld_btm_x = XZ.development_length(strip_bottom_extra_dia, Fcu, Fy, top_bar=False)
+            req_extra_x = (delta_As_x > 0.05)
+            if req_extra_x:
+                _bpm_x = XZ.bars_per_meter(delta_As_x, strip_bottom_extra_dia)
+                n_b_x = XZ.total_bars(_bpm_x, span_ly)
+                _L_raw_x = 0.70 * span_lx + 2.0 * _Ld_btm_x
+                L_ext_x = XZ.round_up_length(_L_raw_x)
+            else:
+                _bpm_x = 0
+                n_b_x = 0
+                L_ext_x = round(0.70 * span_lx, 2)
             is_ext_x = (i == 0) or (i == len(Lx_calc) - 1)
             span_type_x = "باكية مكبرة (Enlarged)" if is_enlarged else ("بحر طرفي (Exterior)" if is_ext_x else "بحر داخلي (Interior)")
 
@@ -10592,18 +10772,29 @@ def render(is_standalone: bool = False):
                 "W_bay": span_ly,
                 "cx": cx,
                 "cy": cy,
+                "x0": x_l,
+                "x1": x_r,
+                "y0": y_b,
+                "y1": y_t,
                 "Mo": Mo_x,
                 "M_pos": M_pos_x,
                 "Mu_pos_m": Mu_pos_m_x,
                 "As_req_m": max(As_cs_m_x, As_ms_m_x),
                 "As_prov_m": prov_btm_mesh_cm2m,
                 "delta_As": delta_As_x,
+                "bars_per_m": _bpm_x,
                 "n_extra": n_b_x if req_extra_x else 0,
                 "dia_extra": strip_bottom_extra_dia,
                 "L_extra": L_ext_x if req_extra_x else 0.0,
+                "Ld": _Ld_btm_x,
                 "is_enlarged": is_enlarged,
                 "is_needed": req_extra_x,
-                "callout": f"+{n_b_x} Φ{strip_bottom_extra_dia} (X-Dir, L={L_ext_x}m)" if req_extra_x else f"الشبكة الأساسية ({mesh_btm_str}) كافية ومغطية بالكامل ✅",
+                "callout": (
+                    XZ.callout_text(_bpm_x, n_b_x, strip_bottom_extra_dia)
+                    + f"\n(L = {L_ext_x:.2f} m | Ld = {_Ld_btm_x:.2f} m)"
+                    if req_extra_x and _bpm_x > 0
+                    else f"الشبكة الأساسية ({mesh_btm_str}) كافية ومغطية بالكامل ✅"
+                ),
                 "L_cut": f"{L_ext_x:.2f} m" if req_extra_x else "—",
             }
             all_panels_x_design.append(item_x)
@@ -10613,9 +10804,17 @@ def render(is_standalone: bool = False):
                     enlarged_bays_info.append(item_x)
 
             # Y-direction Bottom Extra Check & Record
-            n_b_y = max(2, math.ceil((delta_As_y * span_lx) / a_bar))
-            L_ext_y = round(0.70 * span_ly, 2)
-            req_extra_y = (delta_As_y > 0.05 or (is_enlarged and span_ly > span_lx))
+            _Ld_btm_y = XZ.development_length(strip_bottom_extra_dia, Fcu, Fy, top_bar=False)
+            req_extra_y = (delta_As_y > 0.05)
+            if req_extra_y:
+                _bpm_y = XZ.bars_per_meter(delta_As_y, strip_bottom_extra_dia)
+                n_b_y = XZ.total_bars(_bpm_y, span_lx)
+                _L_raw_y = 0.70 * span_ly + 2.0 * _Ld_btm_y
+                L_ext_y = XZ.round_up_length(_L_raw_y)
+            else:
+                _bpm_y = 0
+                n_b_y = 0
+                L_ext_y = round(0.70 * span_ly, 2)
             is_ext_y = (j == 0) or (j == len(Ly_calc) - 1)
             span_type_y = "باكية مكبرة (Enlarged)" if is_enlarged else ("بحر طرفي (Exterior)" if is_ext_y else "بحر داخلي (Interior)")
 
@@ -10629,18 +10828,29 @@ def render(is_standalone: bool = False):
                 "W_bay": span_lx,
                 "cx": cx,
                 "cy": cy,
+                "x0": x_l,
+                "x1": x_r,
+                "y0": y_b,
+                "y1": y_t,
                 "Mo": Mo_y,
                 "M_pos": M_pos_y,
                 "Mu_pos_m": Mu_pos_m_y,
                 "As_req_m": max(As_cs_m_y, As_ms_m_y),
                 "As_prov_m": prov_btm_mesh_cm2m,
                 "delta_As": delta_As_y,
+                "bars_per_m": _bpm_y,
                 "n_extra": n_b_y if req_extra_y else 0,
                 "dia_extra": strip_bottom_extra_dia,
                 "L_extra": L_ext_y if req_extra_y else 0.0,
+                "Ld": _Ld_btm_y,
                 "is_enlarged": is_enlarged,
                 "is_needed": req_extra_y,
-                "callout": f"+{n_b_y} Φ{strip_bottom_extra_dia} (Y-Dir, L={L_ext_y}m)" if req_extra_y else f"الشبكة الأساسية ({mesh_btm_str}) كافية ومغطية بالكامل ✅",
+                "callout": (
+                    XZ.callout_text(_bpm_y, n_b_y, strip_bottom_extra_dia)
+                    + f"\n(L = {L_ext_y:.2f} m | Ld = {_Ld_btm_y:.2f} m)"
+                    if req_extra_y and _bpm_y > 0
+                    else f"الشبكة الأساسية ({mesh_btm_str}) كافية ومغطية بالكامل ✅"
+                ),
                 "L_cut": f"{L_ext_y:.2f} m" if req_extra_y else "—",
             }
             all_panels_y_design.append(item_y)
@@ -10648,6 +10858,12 @@ def render(is_standalone: bool = False):
                 btm_extra_spans.append(item_y)
                 if is_enlarged and (not req_extra_x):
                     enlarged_bays_info.append(item_y)
+
+    # Multi-Bay Contour Merging: Cluster adjacent/continuous demand bays into single enveloped macro zones
+    btm_x_merged = XZ.cluster_and_merge_bays([b for b in btm_extra_spans if b.get("dir") == "X"])
+    btm_y_merged = XZ.cluster_and_merge_bays([b for b in btm_extra_spans if b.get("dir") == "Y"])
+    if btm_x_merged or btm_y_merged:
+        btm_extra_spans = btm_x_merged + btm_y_merged
 
 
     # Global max clear span & code minimum thickness
@@ -10705,9 +10921,10 @@ def render(is_standalone: bool = False):
 
             # X-direction Top Slab Extra Check
             if delta_As_x > 0.05:
-                a_bar = bar_area(col_extra_dia)
-                n_b_x = max(2, math.ceil((delta_As_x * span_ly) / a_bar))
-                L_ext_x = round(0.60 * span_lx, 2)
+                _Ld_top_x = XZ.development_length(col_extra_dia, Fcu, Fy, top_bar=True)
+                _bpm_top_x = XZ.bars_per_meter(delta_As_x, col_extra_dia)
+                n_b_x = XZ.total_bars(_bpm_top_x, span_ly)
+                L_ext_x = XZ.round_up_length(0.60 * span_lx + 2.0 * _Ld_top_x)
                 top_extra_slab_bays.append({
                     "panel_id": pid,
                     "bay_label": f"Bay X{i+1}-X{i+2} / Y{j+1}-Y{j+2} (X-Dir)",
@@ -10716,17 +10933,28 @@ def render(is_standalone: bool = False):
                     "W_bay": span_ly,
                     "cx": cx,
                     "cy": cy,
+                    "x0": x_l,
+                    "x1": x_r,
+                    "y0": y_b,
+                    "y1": y_t,
+                    "bars_per_m": _bpm_top_x,
                     "n_extra": n_b_x,
                     "dia_extra": col_extra_dia,
                     "L_extra": L_ext_x,
-                    "callout": f"+{n_b_x} Φ{col_extra_dia} (X-Dir, L={L_ext_x}m)"
+                    "Ld": _Ld_top_x,
+                    "is_needed": True,
+                    "callout": (
+                        XZ.callout_text(_bpm_top_x, n_b_x, col_extra_dia)
+                        + f"\n(L = {L_ext_x:.2f} m | Ld = {_Ld_top_x:.2f} m)"
+                    ),
                 })
 
             # Y-direction Top Slab Extra Check
             if delta_As_y > 0.05:
-                a_bar = bar_area(col_extra_dia)
-                n_b_y = max(2, math.ceil((delta_As_y * span_lx) / a_bar))
-                L_ext_y = round(0.60 * span_ly, 2)
+                _Ld_top_y = XZ.development_length(col_extra_dia, Fcu, Fy, top_bar=True)
+                _bpm_top_y = XZ.bars_per_meter(delta_As_y, col_extra_dia)
+                n_b_y = XZ.total_bars(_bpm_top_y, span_lx)
+                L_ext_y = XZ.round_up_length(0.60 * span_ly + 2.0 * _Ld_top_y)
                 top_extra_slab_bays.append({
                     "panel_id": pid,
                     "bay_label": f"Bay X{i+1}-X{i+2} / Y{j+1}-Y{j+2} (Y-Dir)",
@@ -10735,11 +10963,27 @@ def render(is_standalone: bool = False):
                     "W_bay": span_lx,
                     "cx": cx,
                     "cy": cy,
+                    "x0": x_l,
+                    "x1": x_r,
+                    "y0": y_b,
+                    "y1": y_t,
+                    "bars_per_m": _bpm_top_y,
                     "n_extra": n_b_y,
                     "dia_extra": col_extra_dia,
                     "L_extra": L_ext_y,
-                    "callout": f"+{n_b_y} Φ{col_extra_dia} (Y-Dir, L={L_ext_y}m)"
+                    "Ld": _Ld_top_y,
+                    "is_needed": True,
+                    "callout": (
+                        XZ.callout_text(_bpm_top_y, n_b_y, col_extra_dia)
+                        + f"\n(L = {L_ext_y:.2f} m | Ld = {_Ld_top_y:.2f} m)"
+                    ),
                 })
+
+    # Multi-Bay Contour Merging for Top Extra in Middle Strips
+    top_x_merged = XZ.cluster_and_merge_bays([b for b in top_extra_slab_bays if b.get("dir") == "X"])
+    top_y_merged = XZ.cluster_and_merge_bays([b for b in top_extra_slab_bays if b.get("dir") == "Y"])
+    if top_x_merged or top_y_merged:
+        top_extra_slab_bays = top_x_merged + top_y_merged
 
     # 7. Cantilever Reinforcement
     cant_rft_list = calculate_cantilever_reinforcement(cantilevers, Wu, d, Fcu, Fy, ts, bottom_mesh_dia)

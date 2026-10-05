@@ -5,8 +5,8 @@
       "name": "فلات سلاب الثالث - هشام",
       "description": "مشروع فلات سلاب الثالث - هشام",
       "created_at": "2026-10-05 10:35",
-      "updated_at": "2026-10-05 12:47",
-      "last_used_at": "2026-10-05 12:47:38",
+      "updated_at": "2026-10-05 16:29",
+      "last_used_at": "2026-10-05 16:29:23",
       "data": {
         "selected_module_idx": 10,
         "apartment_name": "فلات سلاب الثالث - هشام",
@@ -741,7 +741,7 @@
         "fs_col_tot_pu_corner": 22.830339137111867,
         "fs_col_tot_pu_edge": 37.370908436313144,
         "fs_col_tot_pu_int": 44.784127246650975,
-        "fs_deficit_contour_view_mode_idx": 1,
+        "fs_deficit_contour_view_mode_idx": 0,
         "fs_moment_contour_view_mode_idx": 1,
         "_schema_mod8_migrated": true,
         "enabled_modules": [
