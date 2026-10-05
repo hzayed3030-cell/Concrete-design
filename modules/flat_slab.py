@@ -4281,12 +4281,13 @@ def generate_flat_slab_column_caps_sketch(
                 tag_y = cy - cap_h/2.0 - 0.35
                 va_pos = "top"
 
-            font_sz = 11.5 if (cap_w < 2.2 or min(Lx_spans) < 2.0) else 13.0
+            font_sz = 11.0 if (cap_w < 2.2 or min(Lx_spans) < 2.0) else 12.5
             pad_sz = 0.28 if (cap_w < 2.2 or min(Lx_spans) < 2.0) else 0.35
             ax_plan.text(
                 cx, tag_y,
-                f"{n_ext} Φ {dia_ext}  (L = {cap_w:.2f} m)",
+                f"{n_ext} Φ {dia_ext} (L = {cap_w:.2f} m)\nZone: {cap_w:.2f} m × {cap_h:.2f} m",
                 ha="center", va=va_pos, fontsize=font_sz, fontweight="bold", color="#991b1b", zorder=8,
+                linespacing=1.25,
                 bbox=dict(boxstyle=f"round,pad={pad_sz}", facecolor="#ffffff", edgecolor="#dc2626", lw=1.8)
             )
 
@@ -8200,7 +8201,9 @@ def calculate_punching_shear(columns, Lx_spans, Ly_spans, cantilevers, Wu, d_cm,
         bc, tc = col["bc"], col["tc"]
         ctype = col["type"]
 
-        if "Pu" in col and col["Pu"] is not None:
+        if "Pu_slab" in col and col["Pu_slab"] is not None:
+            Pu = col["Pu_slab"]
+        elif "Pu" in col and col["Pu"] is not None:
             Pu = col["Pu"]
         else:
             if i == 0:
@@ -10354,7 +10357,9 @@ def render(is_standalone: bool = False):
             col_atrib += cant_R * cant_T
 
         c["Atrib_0"] = max(0.0, col_atrib)
-        c["Pu_0"] = Wu * c["Atrib_0"] * col_sf_val
+        c["Pu_slab_0"] = Wu * c["Atrib_0"]
+        c["Pu_slab"] = c["Pu_slab_0"]
+        c["Pu_0"] = c["Pu_slab_0"] * col_sf_val
         c["Pu"] = c["Pu_0"]
 
     # If columns were removed, transfer their load to surviving active columns
@@ -10362,12 +10367,14 @@ def render(is_standalone: bool = False):
     if _removed_col_objs and _active_cols:
         for rcol in _removed_col_objs:
             rx, ry = rcol["x"], rcol["y"]
-            r_load = rcol["Pu_0"]
-            if r_load > 0:
+            r_load_slab = rcol.get("Pu_slab_0", 0.0)
+            r_load = rcol.get("Pu_0", 0.0)
+            if r_load > 0 or r_load_slab > 0:
                 dists = [math.hypot(c["x"] - rx, c["y"] - ry) for c in _active_cols]
                 weights = [1.0 / (dist + 0.1) for dist in dists]
                 tot_w = sum(weights)
                 for idx, c in enumerate(_active_cols):
+                    c["Pu_slab"] += (weights[idx] / tot_w) * r_load_slab
                     c["Pu"] += (weights[idx] / tot_w) * r_load
 
     # ── Multi-Bay & Merged-Bay Moments Analysis (X & Y) ──────────────────────
