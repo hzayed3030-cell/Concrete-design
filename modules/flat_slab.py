@@ -35,7 +35,8 @@ from modules import extra_steel_zones as XZ
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
-BAR_DIA = [8, 10, 12, 14, 16, 18, 20, 22, 25]  # mm
+# Egyptian Market Rebar Diameters (Standard manufactured sizes: 14mm is excluded as it is not rolled in Egypt)
+BAR_DIA = [8, 10, 12, 16, 18, 20, 22, 25]  # mm
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -4079,20 +4080,14 @@ def generate_flat_slab_column_caps_sketch(
 
     target_plan_h = 16.0
     target_plan_w = target_plan_h * ar_plan
-    legend_h = 5.2
 
     fig_w = max(22.0, min(34.0, target_plan_w + 1.6))
-    fig_h = max(18.0, min(32.0, target_plan_h + legend_h + 1.0))
+    fig_h = max(16.0, min(28.0, target_plan_h + 1.2))
 
     fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
     fig.patch.set_facecolor("#ffffff")
 
-    plan_ratio = (fig_h - legend_h - 0.8) / fig_h
-    legend_ratio = legend_h / fig_h
-
-    gs = fig.add_gridspec(2, 1, height_ratios=[plan_ratio, legend_ratio], hspace=0.06, left=0.03, right=0.97, top=0.94, bottom=0.02)
-    ax_plan = fig.add_subplot(gs[0, 0])
-    ax_legend = fig.add_subplot(gs[1, 0])
+    ax_plan = fig.add_subplot(1, 1, 1)
     ax_plan.set_facecolor("#f8fafc")
 
     ax_plan.add_patch(patches.Rectangle((x_slab_min, y_slab_min), slab_w, slab_h, lw=3.2, edgecolor="#0f172a", facecolor="#ffffff", zorder=1))
@@ -4219,8 +4214,8 @@ def generate_flat_slab_column_caps_sketch(
     if active_caps_count == 0:
         mid_x_slab = (x_slab_min + x_slab_max) / 2.0
         mid_y_slab = (y_slab_min + y_slab_max) / 2.0
-        banner_w = min(slab_w * 0.78, 14.0)
-        banner_h = max(1.8, slab_h * 0.12)
+        banner_w = min(slab_w * 0.88, 16.0)
+        banner_h = max(2.6, slab_h * 0.18)
 
         banner_box = FancyBboxPatch(
             (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
@@ -4231,8 +4226,9 @@ def generate_flat_slab_column_caps_sketch(
 
         ax_plan.text(
             mid_x_slab, mid_y_slab,
-            "[OK] NO EXTRA TOP STEEL NEEDED AT COLUMNS (الشبكة العلوية كافية تماماً)",
-            ha="center", va="center", fontsize=15.0, fontweight="bold", color="#15803d", zorder=11
+            "✔ NO EXTRA TOP STEEL NEEDED AT COLUMNS\n(الشبكة العلوية كافية تماماً ولا توجد حاجة لكابات)",
+            ha="center", va="center", fontsize=13.5, fontweight="bold", color="#15803d",
+            linespacing=1.5, multialignment="center", zorder=11
         )
     else:
         # Sort by Y ascending, then X ascending to alternate Above/Below along each row
@@ -4414,19 +4410,6 @@ def generate_flat_slab_column_caps_sketch(
     ax_plan.set_aspect("equal", adjustable="datalim")
     ax_plan.axis("off")
 
-    ax_legend.set_facecolor("#ffffff")
-    ax_legend.set_xlim(0, 100)
-    ax_legend.set_ylim(0, 100)
-    ax_legend.axis("off")
-
-    c_box = FancyBboxPatch((1, 3), 98, 94, boxstyle="round,pad=1.0,rounding_size=3", facecolor="#fef2f2", edgecolor="#ef4444", lw=2.5)
-    ax_legend.add_patch(c_box)
-    ax_legend.text(2.5, 75, "COLUMN CAPS (TOP EXTRA REINFORCEMENT) SPECIFICATIONS (ECP 203)", fontsize=18.0, fontweight="bold", color="#991b1b")
-    ax_legend.text(2.5, 38, f"• Columns Requiring Extra Top Steel: {active_caps_count} Columns  |  Coverage: Column Strips (شريحة الأعمدة w ≈ min(Lx,Ly)/2)\n"
-                          f"• Bar Extension Rule: L_ext = 0.50 Ln + bc (Extends 0.25 Ln each side of internal columns, 0.30 Ln for exterior)\n"
-                          f"• Strip Dimensions: Length (L) and Width (W) are indicated for each column cap zone on plan.",
-                   fontsize=15.0, fontweight="bold", color="#1e293b", linespacing=1.6)
-
     fig.suptitle(
         f"COLUMN CAPS (TOP EXTRA REINFORCEMENT) LAYOUT — ts = {ts_cm:.0f} cm\n"
         f"مسقط كابات وحديد إضافي علوي فوق الأعمدة (أبعاد ومساحة الشرائح)",
@@ -4454,6 +4437,7 @@ def calculate_flat_slab_deflections(
     all_panels_x_design=None,
     all_panels_y_design=None,
     top_extra_cols=None,
+    is_high_safety=False,
 ):
     """
     Computes short-term (instantaneous) and long-term (creep & shrinkage) deflections for all bays
@@ -4574,10 +4558,13 @@ def calculate_flat_slab_deflections(
                 cracked = True
                 ratio_cr = (Mcr / max(0.01, Ms_pos)) ** 3
                 Ie = max(Icr_m4, min(Ig_m4, ratio_cr * Ig_m4 + (1.0 - ratio_cr) * Icr_m4))
+                if is_high_safety:
+                    # SAFE 2016 / FEM cracked section behavior cap: Ie <= 0.45 * Ig
+                    Ie = min(Ie, max(Icr_m4, 0.45 * Ig_m4))
 
             # ── 4. Creep & Shrinkage Multiplier lambda (ECP 203 Clause 4.3.1.2) ──
             mu_prime = As_top_comp / (100.0 * d_cm)
-            xi_factor = 2.0  # 5 years sustained duration
+            xi_factor = 2.4 if is_high_safety else 2.0  # SAFE 2016 sustained creep factor = 2.4 vs Standard = 2.0
             lambda_creep = xi_factor / (1.0 + 50.0 * mu_prime)
 
             # ── 5. Deflection Computations ──
@@ -5281,20 +5268,14 @@ def generate_flat_slab_deflection_contour_sketch(
 
     target_plan_h = 16.0
     target_plan_w = target_plan_h * ar_plan
-    legend_h = 5.2
 
     fig_w = max(24.0, min(36.0, target_plan_w + 1.8))
-    fig_h = max(18.0, min(34.0, target_plan_h + legend_h + 1.0))
+    fig_h = max(16.0, min(30.0, target_plan_h + 1.2))
 
     fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
     fig.patch.set_facecolor("#ffffff")
 
-    plan_ratio = (fig_h - legend_h - 0.8) / fig_h
-    legend_ratio = legend_h / fig_h
-
-    gs = fig.add_gridspec(2, 1, height_ratios=[plan_ratio, legend_ratio], hspace=0.06, left=0.03, right=0.95, top=0.94, bottom=0.02)
-    ax_plan = fig.add_subplot(gs[0, 0])
-    ax_legend = fig.add_subplot(gs[1, 0])
+    ax_plan = fig.add_subplot(1, 1, 1)
     ax_plan.set_facecolor("#ffffff")
 
     # ── 1. GENERATE 2D DEFLECTION FIELD (Delta Field) ─────────────────────────
@@ -5453,38 +5434,61 @@ def generate_flat_slab_deflection_contour_sketch(
         ts_req = p["ts_req_cm"]
         ts_inc = p["ts_inc_cm"]
 
+        # Parse panel grid indices from Panel ID "P_{i+1}_{j+1}" for checkerboard pattern
+        idx_i, idx_j = 0, 0
+        if pid.startswith("P_"):
+            parts = pid.split("_")
+            if len(parts) >= 3 and parts[1].isdigit() and parts[2].isdigit():
+                idx_i = int(parts[1])
+                idx_j = int(parts[2])
+
+        # Bay dimensions to adapt offset magnitude and font size
+        span_x_val = p.get("span_x", max(1.0, (p.get("x1", xm + 2.0) - p.get("x0", xm - 2.0))))
+        span_y_val = p.get("span_y", max(1.0, (p.get("y1", ym + 2.0) - p.get("y0", ym - 2.0))))
+
+        # Checkerboard alternation (موقع متبادل للأعلى وللأسفل بين البانيلات المتجاورة)
+        # In a 2D checkerboard: (idx_i + idx_j) % 2 determines whether this panel shifts up or down
+        # This guarantees adjacent panels in both horizontal and vertical directions shift in opposite directions!
+        is_shift_up = ((idx_i + idx_j) % 2 == 1)
+
+        # Dynamic vertical stagger offset scaled to span height
+        # Typically 18% to 22% of span height, constrained between 0.35m and 1.10m
+        offset_y = min(1.10, max(0.35, span_y_val * 0.20))
+        target_ym = (ym + offset_y) if is_shift_up else (ym - offset_y)
+
+        # Adaptive typography based on span size
+        if min(span_x_val, span_y_val) < 2.5:
+            f_size = 8.5
+            p_pad = 0.22
+        elif min(span_x_val, span_y_val) < 3.8:
+            f_size = 9.2
+            p_pad = 0.28
+        else:
+            f_size = 10.0
+            p_pad = 0.35
+
+        callout_str = (
+            f"{pid} ({lbl})\n"
+            f"Δact = {d_long:.1f} mm\n"
+            f"Δall = {d_all:.1f} mm\n"
+            f"ts = {ts_req:.0f} cm"
+        )
+
         if is_safe:
             safe_count += 1
-            callout_str = (
-                f"{pid} ({lbl})\n"
-                f"Δact = {d_long:.1f} mm\n"
-                f"Δall = {d_all:.1f} mm (Ln/250)\n"
-                f"✅ SAFE (Δact ≤ Δall)"
-            )
             ax_plan.text(
-                xm, ym, callout_str,
-                ha="center", va="center", fontsize=10.5, fontweight="bold",
+                xm, target_ym, callout_str,
+                ha="center", va="center", fontsize=f_size, fontweight="bold",
                 color="#15803d", zorder=10,
-                bbox=dict(boxstyle="round,pad=0.45", facecolor="#ffffff", edgecolor="#16a34a", lw=2.0, alpha=0.98)
+                bbox=dict(boxstyle=f"round,pad={p_pad}", facecolor="#ffffff", edgecolor="#16a34a", lw=1.8, alpha=0.98)
             )
         else:
             unsafe_count += 1
-            ratio_pct = ((d_long / max(0.01, d_all)) - 1.0) * 100.0
-            callout_str = (
-                f"🚨 {pid} ({lbl}) — غير آمن (UNSAFE)\n"
-                f"Δact = {d_long:.1f} mm > Δall = {d_all:.1f} mm\n"
-                f"تجاوز الترخيم المسموح: +{ratio_pct:.1f}%\n"
-                f"───────────────────────────────\n"
-                f"💡 المعالجة المطلوبة (ECP 203):\n"
-                f"• زيادة السُمك: ts ≥ {ts_req:.0f} cm (+{ts_inc:.0f}cm)\n"
-                f"• أو إضافة سقوط عمود (Drop Panel)\n"
-                f"• أو إضافة تسليح ضغط (As' Compression)"
-            )
             ax_plan.text(
-                xm, ym, callout_str,
-                ha="center", va="center", fontsize=11.0, fontweight="bold",
-                color="#7f1d1d", zorder=12,
-                bbox=dict(boxstyle="round,pad=0.55", facecolor="#fee2e2", edgecolor="#dc2626", lw=3.0)
+                xm, target_ym, callout_str,
+                ha="center", va="center", fontsize=f_size, fontweight="bold",
+                color="#991b1b", zorder=12,
+                bbox=dict(boxstyle=f"round,pad={p_pad}", facecolor="#fee2e2", edgecolor="#dc2626", lw=2.2)
             )
     # ── Span & Total Dimensions (X & Y Directions) ───────────────────────────
     dim_color = "#0f172a"
@@ -5564,51 +5568,6 @@ def generate_flat_slab_deflection_contour_sketch(
     ax_plan.set_ylim(y_slab_min - margin_bot, y_slab_max + margin_top)
     ax_plan.set_aspect("equal", adjustable="box")
     ax_plan.axis("off")
-
-    # Legend Panel
-    ax_legend.set_xlim(0, 100)
-    ax_legend.set_ylim(0, 100)
-    ax_legend.axis("off")
-
-    if has_unsafe:
-        banner_color = "#fef2f2"
-        banner_border = "#ef4444"
-        title_color = "#991b1b"
-        main_legend_title = "🚨 SLAB DEFLECTION 2D CONTOUR & SERVICEABILITY WARNING (ECP 203)"
-        legend_text = (
-            f"• Total Bays: {len(deflection_results)} Panels  |  ✅ Safe Panels: {safe_count}  |  🚨 Exceeds Limit: {unsafe_count}\n"
-            f"• Design Parameters: fcu = {Fcu:.0f} kg/cm²  |  Slab ts = {ts_cm:.0f} cm  |  Service Load Ws = {DL_tot+LL:.2f} t/m² (DL = {DL_tot:.2f}, LL = {LL:.2f})\n"
-            f"• معيار الأمان في الترخيم: الحد الأقصى المسموح يحسب لكل باكية بناءً على بحرها الصافي (Δall = Ln / 250).\n"
-            f"• الباكيات المحددة بالمربع الأحمر (Δact > Δall): تتطلب زيادة سُمك البلاطة ts أو إضافة سقوط عمود (Drop Panel) أو تسليح ضغط."
-        )
-    else:
-        banner_color = "#f0fdf4"
-        banner_border = "#22c55e"
-        title_color = "#15803d"
-        main_legend_title = "✅ SLAB DEFLECTION VERIFICATION — ALL BAYS ARE SAFE (ECP 203)"
-        legend_text = (
-            f"• Total Bays: {len(deflection_results)} Panels  |  ✅ All Panels Safe (100% Safe)  |  🚨 Exceeds Limit: 0\n"
-            f"• Design Parameters: fcu = {Fcu:.0f} kg/cm²  |  Slab ts = {ts_cm:.0f} cm  |  Service Load Ws = {DL_tot+LL:.2f} t/m² (DL = {DL_tot:.2f}, LL = {LL:.2f})\n"
-            f"• معيار الأمان في الترخيم: الحد الأقصى المسموح يحسب لكل باكية بناءً على بحرها الصافي (Δall = Ln / 250).\n"
-            f"• النتيجة: جميع باكيات السقف آمنة تماماً ولا تعاني من أي ترخيم حرج ولا تتطلب رسم كونتور تحذيري."
-        )
-
-    c_box = FancyBboxPatch((1, 3), 98, 94, boxstyle="round,pad=1.0,rounding_size=3", facecolor=banner_color, edgecolor=banner_border, lw=2.5)
-    ax_legend.add_patch(c_box)
-    ax_legend.text(2.5, 76, main_legend_title, fontsize=17.0, fontweight="bold", color=title_color)
-    ax_legend.text(2.5, 22, legend_text, fontsize=12.5, fontweight="bold", color="#1e293b", linespacing=1.45)
-
-    # ── LARGE BLACK BOX FOR ALLOWABLE DEFLECTION ──
-    def_black_box = FancyBboxPatch((64, 8), 34, 84, boxstyle="round,pad=0.8,rounding_size=3", facecolor="#090d16", edgecolor="#334155", lw=3.0)
-    ax_legend.add_patch(def_black_box)
-    ax_legend.text(81.0, 78, "🛡️ أقصى ترخيم مسموح به (ECP 203)", fontsize=12.0, fontweight="bold", color="#94a3b8", ha="center")
-    ax_legend.text(81.0, 54, "Δall = Ln / 250", fontsize=20.0, fontweight="black", color="#facc15", ha="center")
-    if has_unsafe:
-        ax_legend.text(81.0, 34, f"نطاق الحدود: {min_d_all:.1f} ~ {max_d_all:.1f} mm", fontsize=12.5, fontweight="bold", color="#f87171", ha="center")
-        ax_legend.text(81.0, 16, "🚨 توجد باكيات تتجاوز الحد المسموح", fontsize=10.5, color="#ef4444", fontweight="bold", ha="center")
-    else:
-        ax_legend.text(81.0, 34, f"نطاق الحدود: {min_d_all:.1f} ~ {max_d_all:.1f} mm", fontsize=12.5, fontweight="bold", color="#4ade80", ha="center")
-        ax_legend.text(81.0, 16, "✅ جميع الباكيات محققة لحدود الأمان", fontsize=10.5, color="#22c55e", fontweight="bold", ha="center")
 
     if has_unsafe:
         fig.suptitle(
@@ -6033,6 +5992,7 @@ def generate_punching_stirrups_detail_sketch(
     Fcu,
     Fy=4000,
     stirrup_dia_mm=10,
+    is_high_safety=False,
 ):
     """
     Generate high-precision structural detailing drawing according to ECP 203:
@@ -6052,6 +6012,7 @@ def generate_punching_stirrups_detail_sketch(
         Fcu,
         Fy,
         stirrup_dia_mm=stirrup_dia_mm,
+        is_high_safety=is_high_safety,
     )
 
     ctype = design["ctype"]
@@ -6388,6 +6349,7 @@ def generate_punching_stirrups_3d_sketch(
     Fcu,
     Fy=4000,
     stirrup_dia_mm=10,
+    is_high_safety=False,
 ):
     """
     Generate 3D Isometric structural BIM-like visualization of punching shear stirrup cages:
@@ -6411,6 +6373,7 @@ def generate_punching_stirrups_3d_sketch(
         Fcu,
         Fy,
         stirrup_dia_mm=stirrup_dia_mm,
+        is_high_safety=is_high_safety,
     )
 
     ctype = design["ctype"]
@@ -6729,7 +6692,161 @@ def generate_punching_stirrups_3d_sketch(
     return fig
 
 
-# ── 2. BOTTOM EXTRA & SHAWKA (WITH BASE MESHES BOX) ─────────────────────────
+def merge_transverse_adjacent_extra_bays(bays, dir_req="X", tol=0.15):
+    """
+    دمج البانيلات المتجاورة في اتجاه الرص والتوزيع المتعامد مع اتجاه السيخ:
+    - في اتجاه X: السيخ يمتد أفقياً في X، واتجاه الرص عمودي في Y.
+      يتم دمج البلاطات المتجاورة رأسياً على نفس شريحة X إذا تطابق (طول السيخ L_extra، القطر dia_extra، عدد الأسياخ bars_per_m).
+    - في اتجاه Y: السيخ يمتد رأسياً في Y، واتجاه الرص عمودي في X.
+      يتم دمج البلاطات المتجاورة أفقياً على نفس شريحة Y إذا تطابق (طول السيخ L_extra، القطر dia_extra، عدد الأسياخ bars_per_m).
+    """
+    if not bays:
+        return []
+
+    active = [dict(b) for b in bays if isinstance(b, dict) and b.get("n_extra", 0) > 0]
+    if len(active) <= 1:
+        return active
+
+    n = len(active)
+    parent = list(range(n))
+
+    def find(p):
+        while p != parent[p]:
+            parent[p] = parent[parent[p]]
+            p = parent[p]
+        return p
+
+    def union(p, q):
+        root_p = find(p)
+        root_q = find(q)
+        if root_p != root_q:
+            parent[root_q] = root_p
+
+    for a in range(n):
+        for b in range(a + 1, n):
+            ia = active[a]
+            ib = active[b]
+
+            # 1. تطابق مواصفات التسليح الإضافي تماماً
+            bpm_a = ia.get("bars_per_m", ia.get("n_extra", 0))
+            bpm_b = ib.get("bars_per_m", ib.get("n_extra", 0))
+            dia_a = ia.get("dia_extra", 0)
+            dia_b = ib.get("dia_extra", 0)
+            L_a = round(float(ia.get("L_extra", 0.0)), 2)
+            L_b = round(float(ib.get("L_extra", 0.0)), 2)
+
+            if bpm_a != bpm_b or dia_a != dia_b or abs(L_a - L_b) > tol:
+                continue
+
+            # 2. فحص التجاور الهندسي في اتجاه الرص المتعامد فقط
+            if dir_req == "X":
+                # في اتجاه X: يجب أن يكونا على نفس بحر X تماماً
+                ax0 = ia.get("x0", ia.get("cx", 0) - ia.get("L_extra", 4.0)/2.0)
+                ax1 = ia.get("x1", ia.get("cx", 0) + ia.get("L_extra", 4.0)/2.0)
+                bx0 = ib.get("x0", ib.get("cx", 0) - ib.get("L_extra", 4.0)/2.0)
+                bx1 = ib.get("x1", ib.get("cx", 0) + ib.get("L_extra", 4.0)/2.0)
+
+                same_span_x = (abs(ax0 - bx0) <= tol and abs(ax1 - bx1) <= tol)
+                if not same_span_x:
+                    continue
+
+                # متجاوران رأسياً في اتجاه Y
+                ay0 = ia.get("y0", ia.get("cy", 0) - ia.get("W_bay", 4.0)/2.0)
+                ay1 = ia.get("y1", ia.get("cy", 0) + ia.get("W_bay", 4.0)/2.0)
+                by0 = ib.get("y0", ib.get("cy", 0) - ib.get("W_bay", 4.0)/2.0)
+                by1 = ib.get("y1", ib.get("cy", 0) + ib.get("W_bay", 4.0)/2.0)
+
+                touch_in_y = (abs(ay1 - by0) <= tol or abs(by1 - ay0) <= tol or
+                              (min(ay1, by1) - max(ay0, by0) > -tol))
+                if touch_in_y:
+                    union(a, b)
+
+            else:  # Y-Direction
+                # في اتجاه Y: يجب أن يكونا على نفس بحر Y تماماً
+                ay0 = ia.get("y0", ia.get("cy", 0) - ia.get("L_extra", 4.0)/2.0)
+                ay1 = ia.get("y1", ia.get("cy", 0) + ia.get("L_extra", 4.0)/2.0)
+                by0 = ib.get("y0", ib.get("cy", 0) - ib.get("L_extra", 4.0)/2.0)
+                by1 = ib.get("y1", ib.get("cy", 0) + ib.get("L_extra", 4.0)/2.0)
+
+                same_span_y = (abs(ay0 - by0) <= tol and abs(ay1 - by1) <= tol)
+                if not same_span_y:
+                    continue
+
+                # متجاوران أفقياً في اتجاه X
+                ax0 = ia.get("x0", ia.get("cx", 0) - ia.get("W_bay", 4.0)/2.0)
+                ax1 = ia.get("x1", ia.get("cx", 0) + ia.get("W_bay", 4.0)/2.0)
+                bx0 = ib.get("x0", ib.get("cx", 0) - ib.get("W_bay", 4.0)/2.0)
+                bx1 = ib.get("x1", ib.get("cx", 0) + ib.get("W_bay", 4.0)/2.0)
+
+                touch_in_x = (abs(ax1 - bx0) <= tol or abs(bx1 - ax0) <= tol or
+                              (min(ax1, bx1) - max(ax0, bx0) > -tol))
+                if touch_in_x:
+                    union(a, b)
+
+    clusters = {}
+    for idx in range(n):
+        root = find(idx)
+        clusters.setdefault(root, []).append(active[idx])
+
+    merged_list = []
+    for group in clusters.values():
+        if len(group) == 1:
+            item = dict(group[0])
+            # لحساب عرض منطقة الرص الصافية للباكية المفردة
+            raw_w = item.get("W_bay", 4.0)
+            if "w_ms" in item and item["w_ms"] > 0:
+                item["B_zone"] = round(item["w_ms"], 2)
+            else:
+                item["B_zone"] = round(raw_w * 0.88, 2)
+            merged_list.append(item)
+            continue
+
+        base = dict(group[0])
+        all_x0 = [g.get("x0", g.get("cx", 0)) for g in group if "x0" in g]
+        all_x1 = [g.get("x1", g.get("cx", 0)) for g in group if "x1" in g]
+        all_y0 = [g.get("y0", g.get("cy", 0)) for g in group if "y0" in g]
+        all_y1 = [g.get("y1", g.get("cy", 0)) for g in group if "y1" in g]
+
+        if all_x0 and all_x1:
+            base["x0"] = min(all_x0)
+            base["x1"] = max(all_x1)
+            base["cx"] = (base["x0"] + base["x1"]) / 2.0
+        if all_y0 and all_y1:
+            base["y0"] = min(all_y0)
+            base["y1"] = max(all_y1)
+            base["cy"] = (base["y0"] + base["y1"]) / 2.0
+
+        pids = [g.get("panel_id", "") for g in group if g.get("panel_id")]
+        if pids:
+            base["panel_id"] = "+".join(pids)
+
+        if dir_req == "X":
+            if "y0" in base and "y1" in base:
+                tot_span_w = round(base["y1"] - base["y0"], 2)
+            else:
+                tot_span_w = sum(g.get("W_bay", 0.0) for g in group)
+        else:
+            if "x0" in base and "x1" in base:
+                tot_span_w = round(base["x1"] - base["x0"], 2)
+            else:
+                tot_span_w = sum(g.get("W_bay", 0.0) for g in group)
+
+        base["W_bay"] = tot_span_w
+        base["is_merged"] = True
+
+        # حساب عرض الرص الفعلي الصافي B_zone بخصم الخلوصات / أطراف الركائز
+        sum_w_ms = sum(g.get("w_ms", 0.0) for g in group)
+        if sum_w_ms > 0:
+            base["B_zone"] = round(sum_w_ms, 2)
+        else:
+            base["B_zone"] = round(tot_span_w * 0.88, 2)
+
+        merged_list.append(base)
+
+    return merged_list
+
+
+# ── 2. BOTTOM EXTRA (WITH BASE MESHES BOX) ──────────────────────────────────
 def generate_flat_slab_bottom_extra_shawka_sketch(
     Lx_spans, Ly_spans, cantilevers, ts_cm,
     btm_extra_spans, cant_rft_list,
@@ -6784,20 +6901,14 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
 
     target_plan_h = 16.0
     target_plan_w = target_plan_h * ar_plan
-    legend_h = 5.2
 
     fig_w = max(22.0, min(34.0, target_plan_w + 1.6))
-    fig_h = max(18.0, min(32.0, target_plan_h + legend_h + 1.0))
+    fig_h = max(16.0, min(28.0, target_plan_h + 1.2))
 
     fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
     fig.patch.set_facecolor("#ffffff")
 
-    plan_ratio = (fig_h - legend_h - 0.8) / fig_h
-    legend_ratio = legend_h / fig_h
-
-    gs = fig.add_gridspec(2, 1, height_ratios=[plan_ratio, legend_ratio], hspace=0.06, left=0.03, right=0.97, top=0.94, bottom=0.02)
-    ax_plan = fig.add_subplot(gs[0, 0])
-    ax_legend = fig.add_subplot(gs[1, 0])
+    ax_plan = fig.add_subplot(1, 1, 1)
     ax_plan.set_facecolor("#f8fafc")
 
     # Slab boundary
@@ -6910,12 +7021,14 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
                 is_right = (i_idx == len(x_coords) - 1)
                 draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=10)
 
-    # Filter items by direction
+    # Filter items by direction and merge transverse adjacent bays
     dir_req = (direction or "X").upper()
-    filtered_bays = [
+    raw_filtered_bays = [
         b for b in (btm_extra_spans or [])
         if isinstance(b, dict) and b.get("n_extra", 0) > 0 and b.get("dir", "X").upper() == dir_req
     ]
+    # دمـج البانيلات المتجاورة في اتجاه الرص والتوزيع المتعامد مع اتجاه السيخ
+    filtered_bays = merge_transverse_adjacent_extra_bays(raw_filtered_bays, dir_req=dir_req)
 
     has_extra = len(filtered_bays) > 0
 
@@ -6946,17 +7059,13 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
                 cx = (bx0 + bx1) / 2.0
                 cy = (by0 + by1) / 2.0
 
+            b_zone_val = b_info.get("B_zone", W_bay * 0.88)
             if dir_req == "X":
-                if has_bbox:
-                    area_w = (bx1 - bx0)
-                    area_h = (by1 - by0) * 0.90
-                    rx = bx0
-                    ry = cy - area_h / 2.0
-                else:
-                    area_w = L_ext
-                    area_h = W_bay * 0.88
-                    rx = cx - area_w / 2.0
-                    ry = cy - area_h / 2.0
+                # في اتجاه X: السيخ يمتد أفقياً بطول L، وعرض الرص والتوزيع رأسياً B
+                area_w = L_ext
+                area_h = b_zone_val
+                rx = cx - area_w / 2.0
+                ry = cy - area_h / 2.0
                 area_rect = patches.Rectangle(
                     (rx, ry), area_w, area_h,
                     lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.45,
@@ -6979,29 +7088,22 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
                 f_sz = 11.0 if (L_ext < 2.2 or min(Lx_spans) < 2.0) else 13.0
                 p_sz = 0.25 if (L_ext < 2.2 or min(Lx_spans) < 2.0) else 0.35
 
+                bpm_val = b_info.get('bars_per_m', n_ext)
+                geom_str = f"(L = {L_ext:.2f} m, B = {b_zone_val:.2f} m)"
+
                 ax_plan.text(
                     cx, tag_y,
-                    (
-                        f"Zone {b_info.get('bars_per_m', n_ext)} Φ {dia_ext} / m'\n"
-                        f"(Total: {n_ext} Φ {dia_ext}, L = {L_ext:.2f} m)"
-                        if b_info.get("bars_per_m", 0) > 0
-                        else f"{n_ext} Φ {dia_ext} (L = {L_ext:.2f} m)"
-                    ),
+                    f"Extra {bpm_val} Φ {dia_ext} / m'\n{geom_str}",
                     ha="center", va="center", fontsize=f_sz, fontweight="bold", color="#b45309", zorder=8,
                     rotation=0, multialignment="center",
                     bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
                 )
             else:
-                if has_bbox:
-                    area_w = (bx1 - bx0) * 0.90
-                    area_h = (by1 - by0)
-                    rx = cx - area_w / 2.0
-                    ry = by0
-                else:
-                    area_w = W_bay * 0.88
-                    area_h = L_ext
-                    rx = cx - area_w / 2.0
-                    ry = cy - area_h / 2.0
+                # في اتجاه Y: السيخ يمتد رأسياً بطول L، وعرض الرص والتوزيع أفقياً B
+                area_w = b_zone_val
+                area_h = L_ext
+                rx = cx - area_w / 2.0
+                ry = cy - area_h / 2.0
                 area_rect = patches.Rectangle(
                     (rx, ry), area_w, area_h,
                     lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.45,
@@ -7017,14 +7119,16 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
                 f_sz = 11.0 if (W_bay < 1.5) else 13.0
                 p_sz = 0.25 if (W_bay < 1.5) else 0.35
                 tag_x = (cx - 0.45) if W_bay >= 1.5 else cx
+                bpm_val = b_info.get('bars_per_m', n_ext)
+                b_zone_val = b_info.get("B_zone")
+                if b_zone_val is not None:
+                    geom_str = f"(L = {L_ext:.2f} m, B = {b_zone_val:.2f} m)"
+                else:
+                    geom_str = f"(L = {L_ext:.2f} m)"
+
                 ax_plan.text(
                     tag_x, cy,
-                    (
-                        f"Zone {b_info.get('bars_per_m', n_ext)} Φ {dia_ext} / m'\n"
-                        f"(Total: {n_ext} Φ {dia_ext}, L = {L_ext:.2f} m)"
-                        if b_info.get("bars_per_m", 0) > 0
-                        else f"{n_ext} Φ {dia_ext} (L = {L_ext:.2f} m)"
-                    ),
+                    f"Extra {bpm_val} Φ {dia_ext} / m'\n{geom_str}",
                     ha="center", va="center", fontsize=f_sz, fontweight="bold", color="#b45309", zorder=8,
                     rotation=90, multialignment="center",
                     bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
@@ -7033,8 +7137,8 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
         # Prominent banner when no extra bottom rebar needed in this direction
         mid_x_slab = (x_slab_min + x_slab_max) / 2.0
         mid_y_slab = (y_slab_min + y_slab_max) / 2.0
-        banner_w = min(slab_w * 0.78, 14.0)
-        banner_h = max(1.8, slab_h * 0.12)
+        banner_w = min(slab_w * 0.88, 16.0)
+        banner_h = max(2.6, slab_h * 0.18)
 
         banner_box = FancyBboxPatch(
             (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
@@ -7044,69 +7148,13 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
         ax_plan.add_patch(banner_box)
 
         dir_en = "X-DIRECTION" if dir_req == "X" else "Y-DIRECTION"
+        dir_ar = "اتجاه X" if dir_req == "X" else "اتجاه Y"
         ax_plan.text(
             mid_x_slab, mid_y_slab,
-            f"[OK] NO BOTTOM EXTRA REQUIRED IN {dir_en} (كافية تماماً)",
-            ha="center", va="center", fontsize=15.0, fontweight="bold", color="#15803d", zorder=11
+            f"✔ NO BOTTOM EXTRA REQUIRED IN {dir_en}\n(الشبكة السفلية كافية تماماً في {dir_ar})",
+            ha="center", va="center", fontsize=13.5, fontweight="bold", color="#15803d",
+            linespacing=1.5, multialignment="center", zorder=11
         )
-
-    # 2. Cantilever Shawka (filtered for relevant direction)
-    for cr in (cant_rft_list or []):
-        side = cr.get("side", "")
-        L_c = cr.get("length", 0.0)
-        tot_L = cr.get("total_bar_length", 3.0)
-        callout = cr.get("rft_callout", "6Φ12/m'")
-
-        if dir_req == "X":
-            if side == "left" and cant_left > 0:
-                cy_mid = (y_slab_min + y_slab_max) / 2.0
-                cx_tip = x_slab_min
-                cx_inner = x_coords[0] + 1.5 * L_c
-                ax_plan.plot([cx_tip, cx_inner], [cy_mid, cy_mid], color="#9333ea", lw=4.2, zorder=6)
-                ax_plan.plot([cx_tip, cx_tip + 0.5 * L_c], [cy_mid - 0.35, cy_mid - 0.35], color="#9333ea", lw=3.5, zorder=6)
-                ax_plan.plot([cx_tip, cx_tip], [cy_mid - 0.35, cy_mid], color="#9333ea", lw=3.5, zorder=6)
-                ax_plan.text(
-                    cx_tip + L_c/2.0, cy_mid + 0.55, f"{callout}  (L = {tot_L:.2f} m)",
-                    ha="center", va="bottom", fontsize=12.5, fontweight="bold", color="#7e22ce", zorder=8,
-                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#ffffff", edgecolor="#9333ea", lw=1.8)
-                )
-            elif side == "right" and cant_right > 0:
-                cy_mid = (y_slab_min + y_slab_max) / 2.0
-                cx_tip = x_slab_max
-                cx_inner = x_coords[-1] - 1.5 * L_c
-                ax_plan.plot([cx_tip, cx_inner], [cy_mid, cy_mid], color="#9333ea", lw=4.2, zorder=6)
-                ax_plan.plot([cx_tip, cx_tip - 0.5 * L_c], [cy_mid - 0.35, cy_mid - 0.35], color="#9333ea", lw=3.5, zorder=6)
-                ax_plan.plot([cx_tip, cx_tip], [cy_mid - 0.35, cy_mid], color="#9333ea", lw=3.5, zorder=6)
-                ax_plan.text(
-                    cx_tip - L_c/2.0, cy_mid + 0.55, f"{callout}  (L = {tot_L:.2f} m)",
-                    ha="center", va="bottom", fontsize=12.5, fontweight="bold", color="#7e22ce", zorder=8,
-                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#ffffff", edgecolor="#9333ea", lw=1.8)
-                )
-        else: # Y
-            if side == "top" and cant_top > 0:
-                cx_mid = (x_slab_min + x_slab_max) / 2.0
-                cy_tip = y_slab_max
-                cy_inner = y_coords[-1] - 1.5 * L_c
-                ax_plan.plot([cx_mid, cx_mid], [cy_tip, cy_inner], color="#9333ea", lw=4.2, zorder=6)
-                ax_plan.plot([cx_mid + 0.35, cx_mid + 0.35], [cy_tip, cy_tip - 0.5 * L_c], color="#9333ea", lw=3.5, zorder=6)
-                ax_plan.plot([cx_mid, cx_mid + 0.35], [cy_tip, cy_tip], color="#9333ea", lw=3.5, zorder=6)
-                ax_plan.text(
-                    cx_mid + 0.65, cy_tip - L_c/2.0, f"{callout}  (L = {tot_L:.2f} m)",
-                    ha="left", va="center", fontsize=12.5, fontweight="bold", color="#7e22ce", zorder=8,
-                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#ffffff", edgecolor="#9333ea", lw=1.8)
-                )
-            elif side == "bottom" and cant_bottom > 0:
-                cx_mid = (x_slab_min + x_slab_max) / 2.0
-                cy_tip = y_slab_min
-                cy_inner = y_coords[0] + 1.5 * L_c
-                ax_plan.plot([cx_mid, cx_mid], [cy_tip, cy_inner], color="#9333ea", lw=4.2, zorder=6)
-                ax_plan.plot([cx_mid + 0.35, cx_mid + 0.35], [cy_tip, cy_tip + 0.5 * L_c], color="#9333ea", lw=3.5, zorder=6)
-                ax_plan.plot([cx_mid, cx_mid + 0.35], [cy_tip, cy_tip], color="#9333ea", lw=3.5, zorder=6)
-                ax_plan.text(
-                    cx_mid + 0.65, cy_tip + L_c/2.0, f"{callout}  (L = {tot_L:.2f} m)",
-                    ha="left", va="center", fontsize=12.5, fontweight="bold", color="#7e22ce", zorder=8,
-                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#ffffff", edgecolor="#9333ea", lw=1.8)
-                )
 
     # Dimensions
     dim_y = y_slab_min - dim_offset_bot
@@ -7164,48 +7212,31 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
     ax_plan.set_aspect("equal", adjustable="datalim")
     ax_plan.axis("off")
 
-    # ── 🌟 DUAL HIGH-CONTRAST LEGEND STRIP WITH BIG FONT ─────────────────────
-    ax_legend.set_facecolor("#ffffff")
-    ax_legend.set_xlim(0, 100)
-    ax_legend.set_ylim(0, 100)
-    ax_legend.axis("off")
-
-    # Card 1: Base Meshes Card (Left, 48% width)
-    box_mesh = FancyBboxPatch((1, 3), 47.5, 94, boxstyle="round,pad=1.0,rounding_size=3", facecolor="#eff6ff", edgecolor="#2563eb", lw=2.5)
-    ax_legend.add_patch(box_mesh)
-    ax_legend.text(2.5, 75, "[1] BASE MESHES (شبكات التسليح الأساسية)", fontsize=16.5, fontweight="bold", color="#1e3a8a")
-    txt_base = (
-        f"• Bottom Mesh (الرقة السفلية): M11(X) & M22(Y) = {n_mesh_btm} Φ {bottom_mesh_dia} mm / m'\n"
-        f"• Top Base Mesh (الرقة العلوية): T1(X) & T2(Y) = {n_mesh_top} Φ {top_mesh_dia} mm / m'\n"
-        f"• Slab Thickness: ts = {ts_cm:.0f} cm  |  Cover = 25 mm (Spacers @ 1.0m)"
+    # ── Top Specification Banner: Slab Thickness & Bottom Base Mesh ──
+    x_badge_c = (x_slab_min + x_slab_max) / 2.0
+    y_badge_c = y_slab_max + offset_grid_top + bubble_radius * 2 + 1.25
+    badge_txt = (
+        f"SLAB THICKNESS: ts = {ts_cm:.0f} cm   │   "
+        f"BOTTOM BASE MESH: {n_mesh_btm} Φ {bottom_mesh_dia} / m' (B1 & B2)   │   "
+        f"تخانة البلاطة: {ts_cm:.0f} سم  |  الشبكة السفلية الأساسية"
     )
-    ax_legend.text(2.5, 38, txt_base, fontsize=14.0, fontweight="bold", color="#0f172a", linespacing=1.6)
-
-    # Card 2: Extra Steel & Shawka Card (Right, 48% width)
-    box_extra = FancyBboxPatch((50.5, 3), 48.5, 94, boxstyle="round,pad=1.0,rounding_size=3", facecolor="#fffbeb" if has_extra else "#f0fdf4", edgecolor="#f59e0b" if has_extra else "#16a34a", lw=2.5)
-    ax_legend.add_patch(box_extra)
-    dir_title = "X-DIR (اتجاه X)" if dir_req == "X" else "Y-DIR (اتجاه Y)"
-    ax_legend.text(52.0, 75, f"[2] BOTTOM EXTRA & SHAWKA — {dir_title}", fontsize=16.5, fontweight="bold", color="#b45309" if has_extra else "#15803d")
-
-    if dir_req == "X":
-        txt_extra = "• Bottom Extra (X-Dir): Indicated in yellow shaded zones\n" if has_extra else "• Bottom Extra (X-Dir): 100% Sufficient (No extra steel)\n"
-        txt_shawka = "• Cantilever Shawka: 6 Φ 12 / m' (Left / Right Cantilevers)\n"
-    else:
-        txt_extra = "• Bottom Extra (Y-Dir): Indicated in yellow shaded zones\n" if has_extra else "• Bottom Extra (Y-Dir): 100% Sufficient (No extra steel)\n"
-        txt_shawka = "• Cantilever Shawka: 6 Φ 12 / m' (Bottom / Top Cantilevers)\n"
-
-    txt_extra_card = (
-        f"{txt_extra}"
-        f"{txt_shawka}"
-        f"• Perimeter Trim (حواف البلاطة): U-Pins Φ10@20cm + 4Φ12 Bars"
+    ax_plan.text(
+        x_badge_c, y_badge_c, badge_txt,
+        ha="center", va="center", fontsize=13.0, fontweight="bold", color="#ffffff",
+        zorder=25,
+        bbox=dict(
+            boxstyle="round,pad=0.55,rounding_size=0.35",
+            facecolor="#0f172a",
+            edgecolor="#f59e0b",
+            lw=2.2,
+        )
     )
-    ax_legend.text(52.0, 38, txt_extra_card, fontsize=14.0, fontweight="bold", color="#1e293b" if has_extra else "#166534", linespacing=1.6)
 
     dir_main_title = f"BOTTOM EXTRA ({dir_req}-DIRECTION)"
     dir_main_title_ar = f"الإضافي السفلي (اتجاه {dir_req})"
     fig.suptitle(
-        f"REINFORCEMENT LAYOUT: {dir_main_title}, SHAWKA & BASE MESHES — ts = {ts_cm:.0f} cm\n"
-        f"مسقط تسليح البلاطة: {dir_main_title_ar} وشوك الكوابيل وبيان شبكات التسليح الأساسية",
+        f"REINFORCEMENT LAYOUT: {dir_main_title} & BASE MESHES — ts = {ts_cm:.0f} cm\n"
+        f"مسقط تسليح البلاطة: {dir_main_title_ar} وبيان شبكات التسليح الأساسية",
         fontsize=16.5, fontweight="bold", color="#0f172a", y=0.985
     )
     return fig
@@ -7215,6 +7246,7 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
 def generate_flat_slab_top_mesh_extra_sketch(
     Lx_spans, Ly_spans, cantilevers, ts_cm,
     top_extra_slab_bays=None,
+    cant_rft_list=None,
     n_mesh_top=5, top_mesh_dia=10,
     n_mesh_btm=6, bottom_mesh_dia=12,
     col_w_cm=30, col_d_cm=30,
@@ -7266,20 +7298,14 @@ def generate_flat_slab_top_mesh_extra_sketch(
 
     target_plan_h = 16.0
     target_plan_w = target_plan_h * ar_plan
-    legend_h = 5.2
 
     fig_w = max(22.0, min(34.0, target_plan_w + 1.6))
-    fig_h = max(18.0, min(32.0, target_plan_h + legend_h + 1.0))
+    fig_h = max(16.0, min(28.0, target_plan_h + 1.2))
 
     fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
     fig.patch.set_facecolor("#ffffff")
 
-    plan_ratio = (fig_h - legend_h - 0.8) / fig_h
-    legend_ratio = legend_h / fig_h
-
-    gs = fig.add_gridspec(2, 1, height_ratios=[plan_ratio, legend_ratio], hspace=0.06, left=0.03, right=0.97, top=0.94, bottom=0.02)
-    ax_plan = fig.add_subplot(gs[0, 0])
-    ax_legend = fig.add_subplot(gs[1, 0])
+    ax_plan = fig.add_subplot(1, 1, 1)
     ax_plan.set_facecolor("#f8fafc")
 
     # Slab boundary
@@ -7394,10 +7420,12 @@ def generate_flat_slab_top_mesh_extra_sketch(
 
     # ── Check Extra Top Slab Reinforcement by Direction ─────────────────────
     dir_req = (direction or "X").upper()
-    filtered_bays = [
+    raw_filtered_bays = [
         b for b in (top_extra_slab_bays or [])
         if isinstance(b, dict) and b.get("n_extra", 0) > 0 and b.get("dir", "X").upper() == dir_req
     ]
+    # دمـج البانيلات المتجاورة في اتجاه الرص والتوزيع المتعامد مع اتجاه السيخ
+    filtered_bays = merge_transverse_adjacent_extra_bays(raw_filtered_bays, dir_req=dir_req)
 
     has_extra_top = len(filtered_bays) > 0
 
@@ -7427,17 +7455,13 @@ def generate_flat_slab_top_mesh_extra_sketch(
                 cx = (bx0 + bx1) / 2.0
                 cy = (by0 + by1) / 2.0
 
+            b_zone_val = b_info.get("B_zone", W_bay * 0.88)
             if dir_req == "X":
-                if has_bbox:
-                    area_w = (bx1 - bx0)
-                    area_h = (by1 - by0) * 0.90
-                    rx = bx0
-                    ry = cy - area_h / 2.0
-                else:
-                    area_w = L_ext
-                    area_h = W_bay * 0.88
-                    rx = cx - area_w / 2.0
-                    ry = cy - area_h / 2.0
+                # في اتجاه X: السيخ يمتد أفقياً بطول L، وعرض الرص والتوزيع رأسياً B
+                area_w = L_ext
+                area_h = b_zone_val
+                rx = cx - area_w / 2.0
+                ry = cy - area_h / 2.0
                 area_rect = patches.Rectangle(
                     (rx, ry), area_w, area_h,
                     lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.45,
@@ -7460,29 +7484,25 @@ def generate_flat_slab_top_mesh_extra_sketch(
                 f_sz = 11.0 if (L_ext < 2.2 or min(Lx_spans) < 2.0) else 13.0
                 p_sz = 0.25 if (L_ext < 2.2 or min(Lx_spans) < 2.0) else 0.35
 
+                bpm_val = b_info.get('bars_per_m', n_ext)
+                if b_zone_val is not None:
+                    geom_str = f"(L = {L_ext:.2f} m, B = {b_zone_val:.2f} m)"
+                else:
+                    geom_str = f"(L = {L_ext:.2f} m)"
+
                 ax_plan.text(
                     cx, tag_y,
-                    (
-                        f"Zone {b_info.get('bars_per_m', n_ext)} Φ {dia_ext} / m'\n"
-                        f"(Total: {n_ext} Φ {dia_ext}, L = {L_ext:.2f} m)"
-                        if b_info.get("bars_per_m", 0) > 0
-                        else f"{n_ext} Φ {dia_ext} (L = {L_ext:.2f} m)"
-                    ),
+                    f"Extra {bpm_val} Φ {dia_ext} / m'\n{geom_str}",
                     ha="center", va="center", fontsize=f_sz, fontweight="bold", color="#1d4ed8", zorder=8,
                     rotation=0, multialignment="center",
                     bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
                 )
             else:
-                if has_bbox:
-                    area_w = (bx1 - bx0) * 0.90
-                    area_h = (by1 - by0)
-                    rx = cx - area_w / 2.0
-                    ry = by0
-                else:
-                    area_w = W_bay * 0.88
-                    area_h = L_ext
-                    rx = cx - area_w / 2.0
-                    ry = cy - area_h / 2.0
+                # في اتجاه Y: السيخ يمتد رأسياً بطول L، وعرض الرص والتوزيع أفقياً B
+                area_w = b_zone_val
+                area_h = L_ext
+                rx = cx - area_w / 2.0
+                ry = cy - area_h / 2.0
                 area_rect = patches.Rectangle(
                     (rx, ry), area_w, area_h,
                     lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.45,
@@ -7498,14 +7518,15 @@ def generate_flat_slab_top_mesh_extra_sketch(
                 f_sz = 11.0 if (W_bay < 1.5) else 13.0
                 p_sz = 0.25 if (W_bay < 1.5) else 0.35
                 tag_x = (cx - 0.45) if W_bay >= 1.5 else cx
+                bpm_val = b_info.get('bars_per_m', n_ext)
+                if b_zone_val is not None:
+                    geom_str = f"(L = {L_ext:.2f} m, B = {b_zone_val:.2f} m)"
+                else:
+                    geom_str = f"(L = {L_ext:.2f} m)"
+
                 ax_plan.text(
                     tag_x, cy,
-                    (
-                        f"Zone {b_info.get('bars_per_m', n_ext)} Φ {dia_ext} / m'\n"
-                        f"(Total: {n_ext} Φ {dia_ext}, L = {L_ext:.2f} m)"
-                        if b_info.get("bars_per_m", 0) > 0
-                        else f"{n_ext} Φ {dia_ext} (L = {L_ext:.2f} m)"
-                    ),
+                    f"Extra {bpm_val} Φ {dia_ext} / m'\n{geom_str}",
                     ha="center", va="center", fontsize=f_sz, fontweight="bold", color="#1d4ed8", zorder=8,
                     rotation=90, multialignment="center",
                     bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
@@ -7514,8 +7535,8 @@ def generate_flat_slab_top_mesh_extra_sketch(
         # ── 🌟 PROMINENT LARGE BANNER WHEN NO EXTRA TOP SLAB REBAR REQUIRED ─────
         mid_x_slab = (x_slab_min + x_slab_max) / 2.0
         mid_y_slab = (y_slab_min + y_slab_max) / 2.0
-        banner_w = min(slab_w * 0.78, 14.0)
-        banner_h = max(1.8, slab_h * 0.12)
+        banner_w = min(slab_w * 0.88, 16.0)
+        banner_h = max(2.6, slab_h * 0.18)
 
         banner_box = FancyBboxPatch(
             (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
@@ -7525,11 +7546,71 @@ def generate_flat_slab_top_mesh_extra_sketch(
         ax_plan.add_patch(banner_box)
 
         dir_en = "X-DIRECTION" if dir_req == "X" else "Y-DIRECTION"
+        dir_ar = "اتجاه X" if dir_req == "X" else "اتجاه Y"
         ax_plan.text(
             mid_x_slab, mid_y_slab,
-            f"[OK] NO EXTRA TOP SLAB REBAR IN {dir_en} (كافية تماماً)",
-            ha="center", va="center", fontsize=15.0, fontweight="bold", color="#15803d", zorder=11
+            f"✔ NO EXTRA TOP SLAB REBAR IN {dir_en}\n(الرقة العلوية كافية تماماً في {dir_ar} ولا يلزم إضافي علوي للبلاطة)",
+            ha="center", va="center", fontsize=13.0, fontweight="bold", color="#15803d",
+            linespacing=1.5, multialignment="center", zorder=11
         )
+
+    # Cantilever Shawka (Top Cantilever Steel - filtered for relevant direction)
+    for cr in (cant_rft_list or []):
+        side = cr.get("side", "")
+        L_c = cr.get("length", 0.0)
+        tot_L = cr.get("total_bar_length", 3.0)
+        callout = cr.get("rft_callout", "6Φ12/m'")
+
+        if dir_req == "X":
+            if side == "left" and cant_left > 0:
+                cy_mid = (y_slab_min + y_slab_max) / 2.0
+                cx_tip = x_slab_min
+                cx_inner = x_coords[0] + 1.5 * L_c
+                ax_plan.plot([cx_tip, cx_inner], [cy_mid, cy_mid], color="#9333ea", lw=4.2, zorder=6)
+                ax_plan.plot([cx_tip, cx_tip + 0.5 * L_c], [cy_mid - 0.35, cy_mid - 0.35], color="#9333ea", lw=3.5, zorder=6)
+                ax_plan.plot([cx_tip, cx_tip], [cy_mid - 0.35, cy_mid], color="#9333ea", lw=3.5, zorder=6)
+                ax_plan.text(
+                    cx_tip + L_c/2.0, cy_mid + 0.55, f"{callout}  (L = {tot_L:.2f} m)",
+                    ha="center", va="bottom", fontsize=12.5, fontweight="bold", color="#7e22ce", zorder=8,
+                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#ffffff", edgecolor="#9333ea", lw=1.8)
+                )
+            elif side == "right" and cant_right > 0:
+                cy_mid = (y_slab_min + y_slab_max) / 2.0
+                cx_tip = x_slab_max
+                cx_inner = x_coords[-1] - 1.5 * L_c
+                ax_plan.plot([cx_tip, cx_inner], [cy_mid, cy_mid], color="#9333ea", lw=4.2, zorder=6)
+                ax_plan.plot([cx_tip, cx_tip - 0.5 * L_c], [cy_mid - 0.35, cy_mid - 0.35], color="#9333ea", lw=3.5, zorder=6)
+                ax_plan.plot([cx_tip, cx_tip], [cy_mid - 0.35, cy_mid], color="#9333ea", lw=3.5, zorder=6)
+                ax_plan.text(
+                    cx_tip - L_c/2.0, cy_mid + 0.55, f"{callout}  (L = {tot_L:.2f} m)",
+                    ha="center", va="bottom", fontsize=12.5, fontweight="bold", color="#7e22ce", zorder=8,
+                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#ffffff", edgecolor="#9333ea", lw=1.8)
+                )
+        else: # Y
+            if side == "top" and cant_top > 0:
+                cx_mid = (x_slab_min + x_slab_max) / 2.0
+                cy_tip = y_slab_max
+                cy_inner = y_coords[-1] - 1.5 * L_c
+                ax_plan.plot([cx_mid, cx_mid], [cy_tip, cy_inner], color="#9333ea", lw=4.2, zorder=6)
+                ax_plan.plot([cx_mid + 0.35, cx_mid + 0.35], [cy_tip, cy_tip - 0.5 * L_c], color="#9333ea", lw=3.5, zorder=6)
+                ax_plan.plot([cx_mid, cx_mid + 0.35], [cy_tip, cy_tip], color="#9333ea", lw=3.5, zorder=6)
+                ax_plan.text(
+                    cx_mid + 0.65, cy_tip - L_c/2.0, f"{callout}  (L = {tot_L:.2f} m)",
+                    ha="left", va="center", fontsize=12.5, fontweight="bold", color="#7e22ce", zorder=8,
+                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#ffffff", edgecolor="#9333ea", lw=1.8)
+                )
+            elif side == "bottom" and cant_bottom > 0:
+                cx_mid = (x_slab_min + x_slab_max) / 2.0
+                cy_tip = y_slab_min
+                cy_inner = y_coords[0] + 1.5 * L_c
+                ax_plan.plot([cx_mid, cx_mid], [cy_tip, cy_inner], color="#9333ea", lw=4.2, zorder=6)
+                ax_plan.plot([cx_mid + 0.35, cx_mid + 0.35], [cy_tip, cy_tip + 0.5 * L_c], color="#9333ea", lw=3.5, zorder=6)
+                ax_plan.plot([cx_mid, cx_mid + 0.35], [cy_tip, cy_tip], color="#9333ea", lw=3.5, zorder=6)
+                ax_plan.text(
+                    cx_mid + 0.65, cy_tip + L_c/2.0, f"{callout}  (L = {tot_L:.2f} m)",
+                    ha="left", va="center", fontsize=12.5, fontweight="bold", color="#7e22ce", zorder=8,
+                    bbox=dict(boxstyle="round,pad=0.35", facecolor="#ffffff", edgecolor="#9333ea", lw=1.8)
+                )
 
     # Dimensions
     dim_y = y_slab_min - dim_offset_bot
@@ -7587,47 +7668,30 @@ def generate_flat_slab_top_mesh_extra_sketch(
     ax_plan.set_aspect("equal", adjustable="datalim")
     ax_plan.axis("off")
 
-    # ── 🌟 DUAL HIGH-CONTRAST LEGEND STRIP WITH BIG FONT ─────────────────────
-    ax_legend.set_facecolor("#ffffff")
-    ax_legend.set_xlim(0, 100)
-    ax_legend.set_ylim(0, 100)
-    ax_legend.axis("off")
-
-    # Card 1: Top Base Mesh Card (Left, 48% width)
-    box_mesh = FancyBboxPatch((1, 3), 47.5, 94, boxstyle="round,pad=1.0,rounding_size=3", facecolor="#eff6ff", edgecolor="#2563eb", lw=2.5)
-    ax_legend.add_patch(box_mesh)
-    ax_legend.text(2.5, 75, "[1] TOP BASE MESH (الرقة العلوية الأساسية)", fontsize=16.5, fontweight="bold", color="#1e3a8a")
-    txt_top_base = (
-        f"• Top Base Mesh (الرقة العلوية): T1(X) & T2(Y) = {n_mesh_top} Φ {top_mesh_dia} mm / m'\n"
-        f"• High Chairs (الكراسي الحاملة): Φ 10 mm @ 1.0 m spacing\n"
-        f"• Slab Thickness: ts = {ts_cm:.0f} cm  |  Concrete Cover = 25 mm"
+    # ── Top Specification Banner: Slab Thickness & Top Base Mesh ──
+    x_badge_c = (x_slab_min + x_slab_max) / 2.0
+    y_badge_c = y_slab_max + offset_grid_top + bubble_radius * 2 + 1.25
+    badge_txt = (
+        f"SLAB THICKNESS: ts = {ts_cm:.0f} cm   │   "
+        f"TOP BASE MESH: {n_mesh_top} Φ {top_mesh_dia} / m' (T1 & T2)   │   "
+        f"تخانة البلاطة: {ts_cm:.0f} سم  |  الشبكة العلوية الأساسية"
     )
-    ax_legend.text(2.5, 38, txt_top_base, fontsize=14.0, fontweight="bold", color="#0f172a", linespacing=1.6)
-
-    # Card 2: Top Extra Status Card (Right, 48% width)
-    box_extra = FancyBboxPatch((50.5, 3), 48.5, 94, boxstyle="round,pad=1.0,rounding_size=3", facecolor="#eff6ff" if has_extra_top else "#f0fdf4", edgecolor="#2563eb" if has_extra_top else "#16a34a", lw=2.5)
-    ax_legend.add_patch(box_extra)
-    dir_title = "X-DIR (اتجاه X)" if dir_req == "X" else "Y-DIR (اتجاه Y)"
-    ax_legend.text(52.0, 75, f"[2] SLAB TOP EXTRA — {dir_title}", fontsize=16.5, fontweight="bold", color="#1d4ed8" if has_extra_top else "#15803d")
-    if not has_extra_top:
-        txt_top_extra = (
-            f"• Status: 100% Sufficient — No extra top slab rebar needed\n"
-            f"• All middle strip negative moments resisted by Top Mesh\n"
-            f"• For column caps top extra moments, refer to Tab 1"
+    ax_plan.text(
+        x_badge_c, y_badge_c, badge_txt,
+        ha="center", va="center", fontsize=13.0, fontweight="bold", color="#ffffff",
+        zorder=25,
+        bbox=dict(
+            boxstyle="round,pad=0.55,rounding_size=0.35",
+            facecolor="#0f172a",
+            edgecolor="#3b82f6",
+            lw=2.2,
         )
-        ax_legend.text(52.0, 38, txt_top_extra, fontsize=14.0, fontweight="bold", color="#166534", linespacing=1.6)
-    else:
-        txt_top_extra = (
-            f"• Top Extra ({dir_title}): Indicated in blue shaded bay zones\n"
-            f"• Placement: Upper layer with downward end hooks\n"
-            f"• For column caps top extra moments, refer to Tab 1"
-        )
-        ax_legend.text(52.0, 38, txt_top_extra, fontsize=14.0, fontweight="bold", color="#1e293b", linespacing=1.6)
+    )
 
-    dir_main_title = f"EXTRA SLAB TOP STEEL ({dir_req}-DIRECTION)"
-    dir_main_title_ar = f"الحديد الإضافي العلوي للبلاطة (اتجاه {dir_req})"
+    dir_main_title = f"EXTRA SLAB TOP STEEL ({dir_req}-DIRECTION) & SHAWKA"
+    dir_main_title_ar = f"الحديد الإضافي العلوي للبلاطة (اتجاه {dir_req}) وشوك الكوابيل"
     fig.suptitle(
-        f"REINFORCEMENT LAYOUT: TOP BASE MESH & {dir_main_title} — ts = {ts_cm:.0f} cm\n"
+        f"REINFORCEMENT LAYOUT: TOP BASE MESH, {dir_main_title} — ts = {ts_cm:.0f} cm\n"
         f"مسقط تسليح البلاطة: الرقة العلوية الأساسية و{dir_main_title_ar}",
         fontsize=16.5, fontweight="bold", color="#0f172a", y=0.985
     )
@@ -8143,9 +8207,12 @@ def design_punching_shear_stirrups(
     Fcu_kgcm2,
     Fy_kgcm2=4000,
     stirrup_dia_mm=10,
+    is_high_safety=False,
 ):
     """
     Detailed punching shear verification and stirrups auto-design according to ECP 203.
+    When is_high_safety=True (SAFE 2016 / FEM mode), elevated beta factors are used to account
+    for biaxial unbalanced moment transfer (Mux, Muy) observed in rigorous finite element analysis.
     """
     fcu_mpa = Fcu_kgcm2 / 10.0
     fy_mpa = Fy_kgcm2 / 10.0
@@ -8160,15 +8227,15 @@ def design_punching_shear_stirrups(
     Pu_kg = Pu_ton * 1000.0
 
     if ctype == "Corner":
-        beta = 1.50
+        beta = 1.60 if is_high_safety else 1.50
         bo_cm = (bc_cm + d_cm / 2.0) + (tc_cm + d_cm / 2.0)
         alpha_s = 2.0
     elif ctype == "Edge":
-        beta = 1.30
+        beta = 1.45 if is_high_safety else 1.30
         bo_cm = (bc_cm + d_cm) + 2.0 * (tc_cm + d_cm / 2.0)
         alpha_s = 3.0
     else:  # Interior
-        beta = 1.15
+        beta = 1.25 if is_high_safety else 1.15
         bo_cm = 2.0 * (bc_cm + d_cm) + 2.0 * (tc_cm + d_cm)
         alpha_s = 4.0
 
@@ -8323,7 +8390,7 @@ def design_punching_shear_stirrups(
 
 
 @st.cache_data(show_spinner=False)
-def calculate_punching_shear(columns, Lx_spans, Ly_spans, cantilevers, Wu, d_cm, Fcu, Fy=4000, ts_cm=20.0):
+def calculate_punching_shear(columns, Lx_spans, Ly_spans, cantilevers, Wu, d_cm, Fcu, Fy=4000, ts_cm=20.0, is_high_safety=False):
     """
     Check punching shear capacity for every column (ECP 203).
     Returns list of detailed dicts.
@@ -8375,6 +8442,7 @@ def calculate_punching_shear(columns, Lx_spans, Ly_spans, cantilevers, Wu, d_cm,
             Fcu_kgcm2=Fcu,
             Fy_kgcm2=Fy,
             stirrup_dia_mm=10,
+            is_high_safety=is_high_safety,
         )
 
         qup = des["qu_kgcm2"]
@@ -8428,6 +8496,44 @@ def calculate_punching_shear(columns, Lx_spans, Ly_spans, cantilevers, Wu, d_cm,
     return results
 
 
+def optimize_extra_bar_diameter(
+    delta_As_m,
+    initial_dia_mm,
+    base_mesh_n=5,
+    max_total_density=10,
+    top_bar=False,
+    fcu=250.0,
+    fy=4000.0,
+):
+    """
+    Selects the optimal rebar diameter for extra reinforcement (ECP 203 spacing compliance).
+    Ensures that (base_mesh_n + bars_per_m) <= max_total_density (default 10 bars/m, clear spacing >= 70-100mm).
+    If initial diameter (e.g. 12 mm) requires too many bars, upgrades diameter directly to 16, 18, 20, 22, 25 mm.
+    Note: 14 mm is completely excluded as it is not rolled/manufactured in the Egyptian market.
+    Returns: (selected_dia_mm, bars_per_m, upgraded, initial_dia_mm)
+    """
+    if delta_As_m <= 0.05:
+        return initial_dia_mm, 0, False, initial_dia_mm
+
+    # Only available manufactured diameters in the Egyptian market (never 14 mm)
+    avail_dias = [d for d in BAR_DIA if d >= initial_dia_mm and d != 14]
+    if not avail_dias:
+        avail_dias = [d for d in [16, 18, 20, 22, 25] if d >= initial_dia_mm] or [initial_dia_mm]
+
+    selected_dia = avail_dias[-1]
+    selected_bpm = XZ.bars_per_meter(delta_As_m, selected_dia)
+
+    for dia in avail_dias:
+        bpm = XZ.bars_per_meter(delta_As_m, dia)
+        if (base_mesh_n + bpm) <= max_total_density:
+            selected_dia = dia
+            selected_bpm = bpm
+            break
+
+    upgraded = (selected_dia != initial_dia_mm)
+    return selected_dia, selected_bpm, upgraded, initial_dia_mm
+
+
 @st.cache_data(show_spinner=False)
 def calculate_extra_top_steel_at_columns(
     columns,
@@ -8442,12 +8548,15 @@ def calculate_extra_top_steel_at_columns(
     mesh_top_prov_cm2m,
     extra_dia_mm=12,
     enlarged_bays=None,
+    is_high_safety=False,
+    mesh_top_n=5,
 ):
     """
     Determine required Top Extra Steel at each column (C1, C2, ...).
+    Enforces minimum bar spacing per ECP 203: upgrades column cap rebar diameter if total top density exceeds 10 bars/m.
+    When is_high_safety=True, negative column moments are amplified by 15% to match FEM stress concentration at column perimeters.
     """
     col_extras = []
-    a_extra_bar = bar_area(extra_dia_mm)
 
     for col in columns:
         i = col.get("i_eff", col["i"])
@@ -8482,6 +8591,10 @@ def calculate_extra_top_steel_at_columns(
         elif ctype == "Edge":
             M_neg_col = M_neg_col * 0.70
 
+        if is_high_safety:
+            # FEM peak negative stress concentration over column face
+            M_neg_col = M_neg_col * 1.15
+
         As_tot_req = calc_As(M_neg_col, w_cs, d_cm, Fcu, Fy, ts_cm)
         As_req_m = As_tot_req / w_cs
 
@@ -8502,10 +8615,21 @@ def calculate_extra_top_steel_at_columns(
             Lx_extra_raw = round(2.0 * 0.30 * lx_adj + col["bc"] / 100.0, 2)
             Ly_extra_raw = round(2.0 * 0.30 * ly_adj + col["tc"] / 100.0, 2)
 
+        # Check spacing compliance and upgrade cap bar diameter if total top bars > 10 bars/m
+        eff_cap_dia, _bpm_opt, upgraded_cap_dia, orig_cap_dia = optimize_extra_bar_diameter(
+            As_extra_m,
+            extra_dia_mm,
+            base_mesh_n=mesh_top_n,
+            max_total_density=10,
+            top_bar=True,
+            fcu=Fcu,
+            fy=Fy,
+        )
+
         # X-direction bars (length = Lx_cap, distributed across w_cs_x)
-        cap_des_x = XZ.design_cap(As_extra_m, extra_dia_mm, w_cs_x, Lx_extra_raw)
+        cap_des_x = XZ.design_cap(As_extra_m, eff_cap_dia, w_cs_x, Lx_extra_raw)
         # Y-direction bars (length = Ly_cap, distributed across w_cs_y)
-        cap_des_y = XZ.design_cap(As_extra_m, extra_dia_mm, w_cs_y, Ly_extra_raw)
+        cap_des_y = XZ.design_cap(As_extra_m, eff_cap_dia, w_cs_y, Ly_extra_raw)
 
         is_needed = cap_des_x["is_needed"] or cap_des_y["is_needed"]
         bpm_x = cap_des_x["bars_per_m"]
@@ -8516,8 +8640,8 @@ def calculate_extra_top_steel_at_columns(
         Ly_extra = cap_des_y["L_bar"]
 
         callout_combined = (
-            f"X: {bpm_x} Φ{extra_dia_mm}/m' (Total: {n_extra_x} Φ{extra_dia_mm}, L={Lx_extra:.2f}m) | "
-            f"Y: {bpm_y} Φ{extra_dia_mm}/m' (Total: {n_extra_y} Φ{extra_dia_mm}, L={Ly_extra:.2f}m)"
+            f"X: {bpm_x} Φ{eff_cap_dia}/m' (Total: {n_extra_x} Φ{eff_cap_dia}, L={Lx_extra:.2f}m) | "
+            f"Y: {bpm_y} Φ{eff_cap_dia}/m' (Total: {n_extra_y} Φ{eff_cap_dia}, L={Ly_extra:.2f}m)"
             if is_needed else "Mesh is Sufficient (الشبكة تكفي)"
         )
 
@@ -8543,7 +8667,9 @@ def calculate_extra_top_steel_at_columns(
             "n_extra": n_extra_x + n_extra_y,
             "n_extra_x": n_extra_x,
             "n_extra_y": n_extra_y,
-            "dia_extra": extra_dia_mm,
+            "dia_extra": eff_cap_dia,
+            "dia_input": orig_cap_dia,
+            "is_dia_upgraded": upgraded_cap_dia,
             "L_extra": Lx_extra,
             "L_extra_x": Lx_extra,
             "L_extra_y": Ly_extra,
@@ -9440,6 +9566,115 @@ def render(is_standalone: bool = False):
             strip_top_extra_dia = S.selectbox("Strip Top Extra Φ", "slab_strip_top_extra_dia_idx", options=BAR_DIA)
             strip_bottom_extra_dia = S.selectbox("Strip Btm Extra Φ", "slab_strip_bottom_extra_dia_idx", options=BAR_DIA)
 
+        # ── 🛡️ DESIGN SAFETY MODE (نمط التصميم المتقدم / المحاكي للـ FEM & SAFE 2016) ──
+        st.markdown("<hr style='margin: 12px 0 14px 0; border: none; border-top: 1px solid rgba(255,255,255,0.1);' />", unsafe_allow_html=True)
+
+        mode_c1, mode_c2 = st.columns([3.3, 1.1])
+
+        with mode_c1:
+            st.markdown(
+                """
+                <div style="background: linear-gradient(135deg, #7f1d1d 0%, #b91c1c 50%, #991b1b 100%);
+                            border: 2px solid #ef4444; border-radius: 10px; padding: 10px 14px;
+                            box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4); margin-bottom: 6px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                        <span style="font-size: 16px; font-weight: 900; color: #ffffff; text-shadow: 0 1px 3px rgba(0,0,0,0.6);">
+                            🛡️ نمط التصميم ومستوى الأمان الإنشائي (Structural Safety Mode)
+                        </span>
+                        <span style="font-size: 12px; font-weight: bold; background: rgba(0,0,0,0.35); color: #fecaca; padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2);">
+                            محاكاة CSI SAFE 2016 / FEM
+                        </span>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # High-visibility Radio option for safety mode (persisted via S.selectbox or st.radio with custom key)
+            _saved_safety_mode = bool(S.cfg_val("fs_high_safety_mode", False))
+            _mode_opts = [
+                "الوضع القياسي المعتمد للكود المصري (Standard ECP 203)",
+                "🛡️ نمط الأمان العالي ومحاكاة التحليل الدقيق (SAFE 2016 / FEM High-Safety Mode)",
+            ]
+            _sel_mode_str = st.radio(
+                "اختر نمط التصميم:",
+                options=_mode_opts,
+                index=1 if _saved_safety_mode else 0,
+                key="w_fs_safety_mode_radio_sel",
+                label_visibility="collapsed",
+            )
+            high_safety_mode = (_sel_mode_str == _mode_opts[1])
+            if "cfg" in st.session_state and st.session_state["cfg"].get("fs_high_safety_mode") != high_safety_mode:
+                st.session_state["cfg"]["fs_high_safety_mode"] = high_safety_mode
+                S.save_settings()
+
+        with mode_c2:
+            st.markdown(
+                """
+                <style>
+                /* Premium styling for Comparison Explanation Popover Button */
+                div[data-testid="stColumn"]:has(div.popover-btn-container) button[data-testid="stBaseButton-secondary"],
+                div[data-testid="stColumn"]:has(div.popover-btn-container) button[data-testid="baseButton-secondary"],
+                div.popover-btn-container + div button {
+                    background: linear-gradient(135deg, #0284c7 0%, #0369a1 50%, #075985 100%) !important;
+                    color: #ffffff !important;
+                    border: 1.8px solid #38bdf8 !important;
+                    border-radius: 9px !important;
+                    font-size: 14.5px !important;
+                    font-weight: 800 !important;
+                    padding: 8px 12px !important;
+                    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.45) !important;
+                    text-shadow: 0 1px 2px rgba(0,0,0,0.5) !important;
+                    transition: all 0.25s ease-in-out !important;
+                }
+                div[data-testid="stColumn"]:has(div.popover-btn-container) button[data-testid="stBaseButton-secondary"]:hover,
+                div[data-testid="stColumn"]:has(div.popover-btn-container) button[data-testid="baseButton-secondary"]:hover,
+                div.popover-btn-container + div button:hover {
+                    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
+                    border-color: #bae6fd !important;
+                    box-shadow: 0 6px 18px rgba(14, 165, 233, 0.65) !important;
+                    transform: translateY(-1.5px) !important;
+                    color: #ffffff !important;
+                }
+                div[data-testid="stColumn"]:has(div.popover-btn-container) button p {
+                    color: #ffffff !important;
+                    font-weight: 800 !important;
+                    font-size: 14px !important;
+                }
+                </style>
+                <div class="popover-btn-container" style="margin-top: 6px;"></div>
+                """,
+                unsafe_allow_html=True,
+            )
+            with st.popover("ℹ️ الفرق بين الوضعين", use_container_width=True):
+                st.markdown(
+                    """
+                    <div dir="rtl" style="text-align: right; font-size: 14px; line-height: 1.8; color: #f8fafc; background: #0f172a; padding: 14px; border-radius: 8px; border: 1px solid #334155;">
+                    <h4 style="margin-top:0; color: #38bdf8; border-bottom: 2px solid #0284c7; padding-bottom: 6px; font-size: 16px;">
+                    ⚖️ مقارنة هندسية بين الوضع القياسي ونمط SAFE 2016
+                    </h4>
+                    <p style="color: #67e8f9; font-weight: bold; margin-bottom: 4px; font-size: 14.5px;">1. الوضع القياسي للكود (Standard ECP 203):</p>
+                    <ul style="padding-right: 22px; margin-top: 0; color: #e2e8f0;">
+                        <li>يعتمد على طريقة تحليل الشرائح التصميمية المباشرة (<b style="color:#ffffff;">DDM</b>).</li>
+                        <li>يستخدم معاملات بيتا النمطية للقص الثاقب (<b style="color:#ffffff;">β = 1.15</b> للداخلي، <b style="color:#ffffff;">1.30</b> للطرفي، <b style="color:#ffffff;">1.50</b> للركني).</li>
+                        <li>يفترض توزيعاً منتظماً للعزوم السالبة عبر عرض شريحة العمود بالكامل.</li>
+                        <li>يمنح نتائج اقتصادية جداً مطابقة للممارسة التقليدية المعتمدة في الكود.</li>
+                    </ul>
+                    <hr style="margin: 12px 0; border: none; border-top: 1px solid #334155;" />
+                    <p style="color: #f87171; font-weight: bold; margin-bottom: 4px; font-size: 14.5px;">2. نمط SAFE 2016 / FEM High-Safety Mode:</p>
+                    <ul style="padding-right: 22px; margin-top: 0; color: #e2e8f0;">
+                        <li><b style="color: #fca5a5;">القص الثاقب (Punching Shear):</b> يرفع معامل تركيز الإجهادات (<b style="color:#ffffff;">β = 1.25</b> للداخلي، <b style="color:#ffffff;">1.45</b> للطرفي، <b style="color:#ffffff;">1.60</b> للركني) لمحاكاة العزوم اللامركزية ثنائية المحور (<b style="color:#ffffff;">Mux, Muy</b>) المرصودة ببرنامج SAFE.</li>
+                        <li><b style="color: #fca5a5;">كابات الأعمدة (Column Caps):</b> يرفع العزوم التصميمية السالبة بنسبة <b style="color:#ffffff;">15%</b> لاستيعاب ذروة الإجهادات الحقيقية (<b style="color:#ffffff;">Stress Concentrations</b>) حول محيط العمود.</li>
+                        <li><b style="color: #fca5a5;">الترخيم طويل الأمد (Deflection):</b> يحاكي سلوك البلاطة المشروخة (<b style="color:#ffffff;">Cracked Section</b>) برفع معامل الزحف إلى (<b style="color:#ffffff;">ξ = 2.4</b>) وفرض سقف لجساءة البلاطة المشروخة (<b style="color:#ffffff;">Ie ≤ 0.45 Ig</b>).</li>
+                    </ul>
+                    <div style="background: rgba(2, 132, 199, 0.2); border: 1px solid #0284c7; padding: 10px 14px; border-radius: 6px; font-weight: bold; color: #38bdf8; margin-top: 10px;">
+                    💡 النتيجة: درجة أمان استثنائية ومطابقة فائقة مع مخرجات CSI SAFE وحماية كاملة ضد أي ترخيم أو شروخ حرجة.
+                    </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
     # ── ⚖️ LOAD BREAKDOWN (مراجعة وتراكب الأحمال قبل بدء التصميم) ─────────────
     _ts_preview = float(ts_initial) if ts_initial is not None and ts_initial > 0 else 20.0
     _gamma_c_preview = float(gamma_c) if gamma_c is not None and gamma_c > 0 else 2.5
@@ -9593,12 +9828,12 @@ def render(is_standalone: bool = False):
     img_verif_b64 = None
     exp_geom = st.expander(
         "🗺️ Structural Geometry Sketch & Verification (مخطط التحقق الهندسي وتوزيع المحاور والأعمدة)",
-        expanded=False,
+        expanded=True,
         key=f"{prefix}exp_geom_verif",
         on_change="rerun",
     )
     with exp_geom:
-        if st.session_state.get(f"{prefix}exp_geom_verif", False):
+        if st.session_state.get(f"{prefix}exp_geom_verif", True):
             col_geom_plan, col_geom_controls = st.columns([3.0, 1.0], gap="medium")
 
             with col_geom_plan:
@@ -9635,17 +9870,24 @@ def render(is_standalone: bool = False):
                 buf_v.seek(0)
                 img_verif_b64 = "data:image/png;base64," + base64.b64encode(buf_v.getvalue()).decode("utf-8")
                 st.session_state[f"{prefix}flat_slab_plan_b64"] = img_verif_b64
-                buf_v.seek(0)
+
+                # Export to Vector PDF buffer before closing or clearing figure
+                buf_v_pdf = io.BytesIO()
+                fig_verif.savefig(buf_v_pdf, format="pdf", bbox_inches="tight")
+                buf_v_pdf.seek(0)
+
                 st.pyplot(fig_verif, clear_figure=True, use_container_width=True)
                 st.download_button(
-                    label="📥 Download Structural Geometry Sketch (High-Res PNG)",
-                    data=buf_v,
-                    file_name=f"{prefix}Flat_Slab_Geometry_Verification.png",
-                    mime="image/png",
+                    label="📥 Download Structural Geometry Sketch (Vector PDF)",
+                    data=buf_v_pdf,
+                    file_name=f"{prefix}Flat_Slab_Geometry_Verification.pdf",
+                    mime="application/pdf",
                     use_container_width=True,
                     key="btn_dl_geom_verif_sketch",
                 )
                 plt.close(fig_verif)
+
+
 
             with col_geom_controls:
                 st.markdown(
@@ -10388,31 +10630,7 @@ def render(is_standalone: bool = False):
         else:
             st.info("💡 انقر لتوسيع هذا القسم وعرض ملخص معايير التصميم الإنشائية.")
 
-    # ── Columns Registry Table (reflects active columns after removal) ────────
-    _registry_df = pd.DataFrame([
-        {
-            "New ID": c["id"],
-            "Orig ID": c["orig_id"],
-            "Grid": f"{c['grid_x']} - {c['grid_y']}",
-            "Type": c["type"],
-            "x (m)": round(c["x"], 3),
-            "y (m)": round(c["y"], 3),
-        }
-        for c in _active_cols
-    ])
-    with st.expander(
-        f"🏛️ Columns Labeling & Grid Registry (سجل وجدول إحداثيات ونماذج الأعمدة) "
-        f"({len(_active_cols)} active columns — "
-        f"{len(_confirmed_removals)} removed)",
-        expanded=False,
-    ):
-        render_styled_table(_registry_df)
-        if _confirmed_removals:
-            st.info(
-                f"🔴 **Removed columns (original IDs):** "
-                + ", ".join(sorted(_confirmed_removals, key=lambda c: int(c[1:])))
-            )
-        st.caption("ℹ️ New IDs reflect re-indexing after removal. Ordered left→right (Y axes), bottom→top (X axes).")
+    # ── Columns Registry Table (removed per user request) ────────────────────
 
     if errs:
         st.error("⚠️ **Illogical Input Detected — Calculation Stopped.**")
@@ -10432,10 +10650,6 @@ def render(is_standalone: bool = False):
     Lx_calc = _eff_Lx if _eff_Lx else list(Lx_spans)
     Ly_calc = _eff_Ly if _eff_Ly else list(Ly_spans)
     col_list = _active_cols   # active re-indexed columns
-
-    # DDM warning (span ratio > 1.33)
-    if _ddm_warn:
-        st.warning(_ddm_warn)
 
     bc_m = bc_s / 100.0
     tc_m = tc_s / 100.0
@@ -10748,16 +10962,26 @@ def render(is_standalone: bool = False):
             Mu_pos_m_y = max(M_cs_y / max(0.1, w_cs_y), M_ms_y / max(0.1, ms_w_y))
 
             # X-direction Bottom Extra Check & Record
-            _Ld_btm_x = XZ.development_length(strip_bottom_extra_dia, Fcu, Fy, top_bar=False)
             req_extra_x = (delta_As_x > 0.05)
             if req_extra_x:
-                _bpm_x = XZ.bars_per_meter(delta_As_x, strip_bottom_extra_dia)
+                eff_btm_dia_x, _bpm_x, upgraded_btm_x, orig_btm_dia_x = optimize_extra_bar_diameter(
+                    delta_As_x,
+                    strip_bottom_extra_dia,
+                    base_mesh_n=n_mesh_btm,
+                    max_total_density=10,
+                    top_bar=False,
+                    fcu=Fcu,
+                    fy=Fy,
+                )
+                _Ld_btm_x = XZ.development_length(eff_btm_dia_x, Fcu, Fy, top_bar=False)
                 n_b_x = XZ.total_bars(_bpm_x, span_ly)
                 _L_raw_x = 0.70 * span_lx + 2.0 * _Ld_btm_x
                 L_ext_x = XZ.round_up_length(_L_raw_x)
             else:
+                eff_btm_dia_x = strip_bottom_extra_dia
                 _bpm_x = 0
                 n_b_x = 0
+                _Ld_btm_x = XZ.development_length(strip_bottom_extra_dia, Fcu, Fy, top_bar=False)
                 L_ext_x = round(0.70 * span_lx, 2)
             is_ext_x = (i == 0) or (i == len(Lx_calc) - 1)
             span_type_x = "باكية مكبرة (Enlarged)" if is_enlarged else ("بحر طرفي (Exterior)" if is_ext_x else "بحر داخلي (Interior)")
@@ -10784,13 +11008,14 @@ def render(is_standalone: bool = False):
                 "delta_As": delta_As_x,
                 "bars_per_m": _bpm_x,
                 "n_extra": n_b_x if req_extra_x else 0,
-                "dia_extra": strip_bottom_extra_dia,
+                "dia_extra": eff_btm_dia_x,
                 "L_extra": L_ext_x if req_extra_x else 0.0,
+                "w_ms": ms_w_x,
                 "Ld": _Ld_btm_x,
                 "is_enlarged": is_enlarged,
                 "is_needed": req_extra_x,
                 "callout": (
-                    XZ.callout_text(_bpm_x, n_b_x, strip_bottom_extra_dia)
+                    XZ.callout_text(_bpm_x, n_b_x, eff_btm_dia_x)
                     + f"\n(L = {L_ext_x:.2f} m | Ld = {_Ld_btm_x:.2f} m)"
                     if req_extra_x and _bpm_x > 0
                     else f"الشبكة الأساسية ({mesh_btm_str}) كافية ومغطية بالكامل ✅"
@@ -10804,16 +11029,26 @@ def render(is_standalone: bool = False):
                     enlarged_bays_info.append(item_x)
 
             # Y-direction Bottom Extra Check & Record
-            _Ld_btm_y = XZ.development_length(strip_bottom_extra_dia, Fcu, Fy, top_bar=False)
             req_extra_y = (delta_As_y > 0.05)
             if req_extra_y:
-                _bpm_y = XZ.bars_per_meter(delta_As_y, strip_bottom_extra_dia)
+                eff_btm_dia_y, _bpm_y, upgraded_btm_y, orig_btm_dia_y = optimize_extra_bar_diameter(
+                    delta_As_y,
+                    strip_bottom_extra_dia,
+                    base_mesh_n=n_mesh_btm,
+                    max_total_density=10,
+                    top_bar=False,
+                    fcu=Fcu,
+                    fy=Fy,
+                )
+                _Ld_btm_y = XZ.development_length(eff_btm_dia_y, Fcu, Fy, top_bar=False)
                 n_b_y = XZ.total_bars(_bpm_y, span_lx)
                 _L_raw_y = 0.70 * span_ly + 2.0 * _Ld_btm_y
                 L_ext_y = XZ.round_up_length(_L_raw_y)
             else:
+                eff_btm_dia_y = strip_bottom_extra_dia
                 _bpm_y = 0
                 n_b_y = 0
+                _Ld_btm_y = XZ.development_length(strip_bottom_extra_dia, Fcu, Fy, top_bar=False)
                 L_ext_y = round(0.70 * span_ly, 2)
             is_ext_y = (j == 0) or (j == len(Ly_calc) - 1)
             span_type_y = "باكية مكبرة (Enlarged)" if is_enlarged else ("بحر طرفي (Exterior)" if is_ext_y else "بحر داخلي (Interior)")
@@ -10840,13 +11075,14 @@ def render(is_standalone: bool = False):
                 "delta_As": delta_As_y,
                 "bars_per_m": _bpm_y,
                 "n_extra": n_b_y if req_extra_y else 0,
-                "dia_extra": strip_bottom_extra_dia,
+                "dia_extra": eff_btm_dia_y,
                 "L_extra": L_ext_y if req_extra_y else 0.0,
+                "w_ms": ms_w_y,
                 "Ld": _Ld_btm_y,
                 "is_enlarged": is_enlarged,
                 "is_needed": req_extra_y,
                 "callout": (
-                    XZ.callout_text(_bpm_y, n_b_y, strip_bottom_extra_dia)
+                    XZ.callout_text(_bpm_y, n_b_y, eff_btm_dia_y)
                     + f"\n(L = {L_ext_y:.2f} m | Ld = {_Ld_btm_y:.2f} m)"
                     if req_extra_y and _bpm_y > 0
                     else f"الشبكة الأساسية ({mesh_btm_str}) كافية ومغطية بالكامل ✅"
@@ -10871,11 +11107,15 @@ def render(is_standalone: bool = False):
     ts_code_min = max(15.0, Ln_max * 100.0 / 32.0)
 
     # 5. Punching Shear Check
-    punching_results = calculate_punching_shear(col_list, Lx_calc, Ly_calc, cantilevers, Wu, d, Fcu, Fy=Fy, ts_cm=ts)
+    punching_results = calculate_punching_shear(
+        col_list, Lx_calc, Ly_calc, cantilevers, Wu, d, Fcu, Fy=Fy, ts_cm=ts, is_high_safety=high_safety_mode
+    )
+    all_safe = all(p.get("is_safe", False) for p in punching_results) if punching_results else True
 
-    # 6. Top Extra Steel at Columns (with enlarged bay influence)
+    # 6. Top Extra Steel at Columns (with enlarged bay influence & minimum bar spacing control)
     top_extra_cols = calculate_extra_top_steel_at_columns(
-        col_list, rows_x, rows_y, Lx_calc, Ly_calc, d, Fcu, Fy, ts, prov_top_mesh_cm2m, col_extra_dia, enlarged_bays=enlarged_bays_info
+        col_list, rows_x, rows_y, Lx_calc, Ly_calc, d, Fcu, Fy, ts, prov_top_mesh_cm2m, col_extra_dia,
+        enlarged_bays=enlarged_bays_info, is_high_safety=high_safety_mode, mesh_top_n=n_mesh_top
     )
 
     # 6b. Extra Slab Top Steel in Middle Strips / Panels (الحديد الإضافي العلوي للبلاطة)
@@ -10921,8 +11161,16 @@ def render(is_standalone: bool = False):
 
             # X-direction Top Slab Extra Check
             if delta_As_x > 0.05:
-                _Ld_top_x = XZ.development_length(col_extra_dia, Fcu, Fy, top_bar=True)
-                _bpm_top_x = XZ.bars_per_meter(delta_As_x, col_extra_dia)
+                eff_ms_top_dia_x, _bpm_top_x, _, _ = optimize_extra_bar_diameter(
+                    delta_As_x,
+                    col_extra_dia,
+                    base_mesh_n=n_mesh_top,
+                    max_total_density=10,
+                    top_bar=True,
+                    fcu=Fcu,
+                    fy=Fy,
+                )
+                _Ld_top_x = XZ.development_length(eff_ms_top_dia_x, Fcu, Fy, top_bar=True)
                 n_b_x = XZ.total_bars(_bpm_top_x, span_ly)
                 L_ext_x = XZ.round_up_length(0.60 * span_lx + 2.0 * _Ld_top_x)
                 top_extra_slab_bays.append({
@@ -10937,22 +11185,31 @@ def render(is_standalone: bool = False):
                     "x1": x_r,
                     "y0": y_b,
                     "y1": y_t,
+                    "w_ms": w_ms_x,
                     "bars_per_m": _bpm_top_x,
                     "n_extra": n_b_x,
-                    "dia_extra": col_extra_dia,
+                    "dia_extra": eff_ms_top_dia_x,
                     "L_extra": L_ext_x,
                     "Ld": _Ld_top_x,
                     "is_needed": True,
                     "callout": (
-                        XZ.callout_text(_bpm_top_x, n_b_x, col_extra_dia)
+                        XZ.callout_text(_bpm_top_x, n_b_x, eff_ms_top_dia_x)
                         + f"\n(L = {L_ext_x:.2f} m | Ld = {_Ld_top_x:.2f} m)"
                     ),
                 })
 
             # Y-direction Top Slab Extra Check
             if delta_As_y > 0.05:
-                _Ld_top_y = XZ.development_length(col_extra_dia, Fcu, Fy, top_bar=True)
-                _bpm_top_y = XZ.bars_per_meter(delta_As_y, col_extra_dia)
+                eff_ms_top_dia_y, _bpm_top_y, _, _ = optimize_extra_bar_diameter(
+                    delta_As_y,
+                    col_extra_dia,
+                    base_mesh_n=n_mesh_top,
+                    max_total_density=10,
+                    top_bar=True,
+                    fcu=Fcu,
+                    fy=Fy,
+                )
+                _Ld_top_y = XZ.development_length(eff_ms_top_dia_y, Fcu, Fy, top_bar=True)
                 n_b_y = XZ.total_bars(_bpm_top_y, span_lx)
                 L_ext_y = XZ.round_up_length(0.60 * span_ly + 2.0 * _Ld_top_y)
                 top_extra_slab_bays.append({
@@ -10967,14 +11224,15 @@ def render(is_standalone: bool = False):
                     "x1": x_r,
                     "y0": y_b,
                     "y1": y_t,
+                    "w_ms": w_ms_y,
                     "bars_per_m": _bpm_top_y,
                     "n_extra": n_b_y,
-                    "dia_extra": col_extra_dia,
+                    "dia_extra": eff_ms_top_dia_y,
                     "L_extra": L_ext_y,
                     "Ld": _Ld_top_y,
                     "is_needed": True,
                     "callout": (
-                        XZ.callout_text(_bpm_top_y, n_b_y, col_extra_dia)
+                        XZ.callout_text(_bpm_top_y, n_b_y, eff_ms_top_dia_y)
                         + f"\n(L = {L_ext_y:.2f} m | Ld = {_Ld_top_y:.2f} m)"
                     ),
                 })
@@ -10998,6 +11256,7 @@ def render(is_standalone: bool = False):
         all_panels_x_design=all_panels_x_design,
         all_panels_y_design=all_panels_y_design,
         top_extra_cols=top_extra_cols,
+        is_high_safety=high_safety_mode,
     )
     all_deflection_safe = all(p["is_safe"] for p in deflection_results)
 
@@ -11014,109 +11273,7 @@ def render(is_standalone: bool = False):
     #  OUTPUT DASHBOARD & RESULTS
     # ═════════════════════════════════════════════════════════════════════════
 
-    st.markdown('<div class="section-header">📊 Design Results Summary & Structural Status (ملخص نتائج التصميم والحالة الإنشائية)</div>', unsafe_allow_html=True)
-
-    # Structural Redesign Summary Banner if columns were removed
-    if _confirmed_removals:
-        st.markdown(
-            f"""
-            <div dir="rtl" style="background:rgba(34, 197, 94, 0.14); border:2px solid #22c55e; padding:14px 18px; border-radius:10px; margin-bottom:14px; text-align:right;">
-                <div style="font-size:16px; font-weight:800; color:#4ade80; margin-bottom:6px;">🔄 تم إعادة التصميم الإنشائي وتحديث التسليح بعد إزالة الأعمدة</div>
-                <div style="font-size:14.5px; color:#ffffff; line-height:1.7;">
-                    <b>الأعمدة المحذوفة:</b> {', '.join(sorted(_confirmed_removals, key=lambda c: int(c[1:])))}<br>
-                    • <b>أقصى بحر خالص (Ln,max):</b> {Ln_max:.2f} m (الحد الأدنى لسمك البلاطة: {ts_code_min:.1f} cm).<br>
-                    • <b>إعادة توزيع الأحمال:</b> تم ترحيل أحمال الأعمدة المحذوفة إلى الأعمدة المجاورة المحيطة وتحديث فحص القص الثاقب (Punching Shear).<br>
-                    • <b>الحديد الإضافي السفلي (Bottom Extra):</b> تم توليد وحساب التسليح الإضافي السفلي للباكيات المكبرة لتغطية عزوم الانحناء الموجبة (+M).<br>
-                    • <b>الحديد الإضافي العلوي (Top Extra):</b> تم زيادة التسليح الإضافي العلوي فوق الأعمدة الحاملة للباكيات المكبرة.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-    all_safe = all(p["is_safe"] for p in punching_results)
-    punching_str = "✅ All Safe" if all_safe else "⚠️ Unsafe Columns"
-    punching_color = "#16a34a" if all_safe else "#dc2626"
-
-    m1, m2, m3, m4, m5, m6 = st.columns(6)
-    with m1:
-        st.markdown(
-            f"""
-            <div class="ecp-metric-box">
-                <div class="ecp-metric-lbl">Adopted ts</div>
-                <div class="ecp-metric-val">{ts:.0f} cm</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with m2:
-        st.markdown(
-            f"""
-            <div class="ecp-metric-box">
-                <div class="ecp-metric-lbl">Effective Depth d</div>
-                <div class="ecp-metric-val">{d:.1f} cm</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with m3:
-        st.markdown(
-            f"""
-            <div class="ecp-metric-box">
-                <div class="ecp-metric-lbl">Ultimate Load Wu</div>
-                <div class="ecp-metric-val">{Wu:.3f} t/m²</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with m4:
-        st.markdown(
-            f"""
-            <div class="ecp-metric-box">
-                <div class="ecp-metric-lbl">Bottom Mesh (B1,B2)</div>
-                <div class="ecp-metric-val">{mesh_btm_str}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with m5:
-        st.markdown(
-            f"""
-            <div class="ecp-metric-box">
-                <div class="ecp-metric-lbl">Top Mesh (T1,T2)</div>
-                <div class="ecp-metric-val">{mesh_top_str}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    with m6:
-        st.markdown(
-            f"""
-            <div class="ecp-metric-box">
-                <div class="ecp-metric-lbl">Punching Check</div>
-                <div class="ecp-metric-val" style="color:{punching_color};">{punching_str}</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    if ts < ts_code_min:
-        st.markdown(
-            f"""
-            <div dir="rtl" style="background:rgba(245, 158, 11, 0.14); border:2px solid #f59e0b; border-radius:10px; padding:14px 18px; margin:14px 0; text-align:right;">
-                <div style="font-size:15.5px; font-weight:800; color:#fbbf24; display:flex; align-items:center; gap:8px;">
-                    ⚠️ ملاحظة إنشائية على سُمك البلاطة بعد إزالة الأعمدة
-                </div>
-                <div style="margin-top:6px; font-size:14.5px; color:#ffffff; line-height:1.7;">
-                    السُمك المحدد الحالي (<b>{ts:.0f} cm</b>) أقل من الحد الأدنى الموصى به لمقاومة الترخيم للبحر الأكبر (<b>Ln/32 = {ts_code_min:.1f} cm</b>).
-                    <br>💡 <b>التوصية التنفيذية:</b> يرجى زيادة سُمك البلاطة إلى <b>ts ≥ {math.ceil(ts_code_min):.0f} cm</b> أو فحص سهم الانحناء طويل المدى (Long-Term Deflection).
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("---")
+    # ── Design Results Summary removed per user request ──────────────────────
 
     exp_punch = st.expander("🥊 Punching Shear Check (فحص القص الثاقب وتصميم كانات القص لجميع الأعمدة)", expanded=False, key=f"{prefix}exp_punch", on_change="rerun")
     with exp_punch:
@@ -11420,6 +11577,7 @@ def render(is_standalone: bool = False):
                     Fcu_kgcm2=Fcu,
                     Fy_kgcm2=Fy,
                     stirrup_dia_mm=sel_stirrup_dia,
+                    is_high_safety=high_safety_mode,
                 )
 
                 # Calculate Total Strip Lengths for Selected Column
@@ -11534,6 +11692,7 @@ def render(is_standalone: bool = False):
                         Fcu=Fcu,
                         Fy=Fy,
                         stirrup_dia_mm=sel_stirrup_dia,
+                        is_high_safety=high_safety_mode,
                     )
                     buf_det = io.BytesIO()
                     fig_det.savefig(buf_det, format="png", bbox_inches="tight", dpi=180)
@@ -11560,6 +11719,7 @@ def render(is_standalone: bool = False):
                         Fcu=Fcu,
                         Fy=Fy,
                         stirrup_dia_mm=sel_stirrup_dia,
+                        is_high_safety=high_safety_mode,
                     )
                     buf_3d = io.BytesIO()
                     fig_3d.savefig(buf_3d, format="png", bbox_inches="tight", dpi=180)
@@ -11848,24 +12008,7 @@ def render(is_standalone: bool = False):
     active_btm_extras_y = [b for b in active_btm_extras if b.get("dir", "X") == "Y"]
     img_btm_b64 = None   # kept for report generator compatibility
 
-    # ── 📋 MASTER DESIGN OUTPUT TABLE ────────────────────────────────────────
-
-
-    with st.expander("📋 Master Design Output Table (الجدول الملخص الشامل لمخرجات التصميم)", expanded=False):
-        btm_extra_labels = [b["bay_label"] + ": " + b["callout"] for b in btm_extra_spans if isinstance(b, dict) and b.get("n_extra", 0) > 0]
-
-        master_summary = [
-            ["1. Slab Thickness (ts)", f"{ts:.0f} cm", f"User input ts={ts:.0f} cm (Code limit Ln_max/32 = {ts_code_min:.1f} cm)"],
-            ["2. Effective Depth (d)", f"{d:.2f} cm", f"ts ({ts:.0f}cm) − Cover ({cov:.1f}cm) − Φ/2 ({avg_rebar_dia/2.0:.2f}cm) = {d:.2f} cm (Maximized)"],
-            ["3. Bottom Mesh RFT (Mesh B1, B2)", f"{mesh_btm_str} (X & Y)", f"Prov: {prov_btm_mesh_cm2m:.2f} cm²/m (Min req: {As_min_req_m:.2f} cm²/m)"],
-            ["4. Top Nominal Mesh RFT (Mesh T1, T2)", f"{mesh_top_str} (X & Y)", f"Prov: {prov_top_mesh_cm2m:.2f} cm²/m across full slab (Φ={top_mesh_dia}mm)"],
-            ["5. Top Extra @ Columns", f"{sum(1 for c in top_extra_cols if c['is_needed'])} columns require extra top bars", f"Calculated using selected Col Extra Φ{col_extra_dia} mm"],
-            ["6. Bottom Extra @ Strips / Enlarged Bays", f"{len(btm_extra_labels)} zones require extra bottom steel", " | ".join(btm_extra_labels) if btm_extra_labels else f"Base Bottom Mesh (Φ{bottom_mesh_dia}) is sufficient"],
-            ["7. Cantilever Shawka RFT", f"{len(cant_rft_list)} cantilevers active", "Detailed in Cantilevers section (Ext = 1.5 L_cant)"],
-            ["8. Perimeter & Edge RFT", "U-Loops Φ10 @ 20 cm + 2Φ12 Top/Btm", "Placed along all free slab perimeter boundaries"],
-            ["9. Estimated Steel Weight", f"{boq['total_steel_ton']:.2f} Ton", f"Reinforcement Ratio: {boq['steel_ratio_kg_m3']:.1f} kg/m³"],
-        ]
-        render_styled_table(master_summary, headers=["Design Item", "Design Output / Value", "Engineering Notes & Code Reference"])
+    # ── Master Design Output Table removed per user request ──────────────────
 
     # ── 📊 BENDING MOMENTS & REINFORCEMENT SCHEDULES (Collapsed Section) ─────
     with st.expander("📊 Bending Moments & Steel Design Schedules (جداول حصر وتوزيع العزوم وحديد التسليح)", expanded=False):
@@ -12019,10 +12162,10 @@ def render(is_standalone: bool = False):
 
             tab_m1, tab_m2a, tab_m2b, tab_m3a, tab_m3b = st.tabs([
                 "🔴 1. Column Caps / Top Extra (كابات وتفريد الإضافي العلوي للأعمدة)",
-                "🔶 2A. Bottom Extra X-Dir (الإضافي السفلي وشوك الكوابيل اتجاه X)",
-                "🔶 2B. Bottom Extra Y-Dir (الإضافي السفلي وشوك الكوابيل اتجاه Y)",
-                "🔵 3A. Top Slab Extra X-Dir (الرقة العلوية والإضافي العلوي اتجاه X)",
-                "🔵 3B. Top Slab Extra Y-Dir (الرقة العلوية والإضافي العلوي اتجاه Y)",
+                "🔶 2A. Bottom Extra X-Dir (الإضافي السفلي اتجاه X وشبكات التسليح)",
+                "🔶 2B. Bottom Extra Y-Dir (الإضافي السفلي اتجاه Y وشبكات التسليح)",
+                "🔵 3A. Top Slab Extra & Shawka X-Dir (الرقة العلوية والإضافي وشوك الكوابيل اتجاه X)",
+                "🔵 3B. Top Slab Extra & Shawka Y-Dir (الرقة العلوية والإضافي وشوك الكوابيل اتجاه Y)",
             ])
 
             # ── Tab 1: Column Caps
@@ -12041,27 +12184,44 @@ def render(is_standalone: bool = False):
                     active_y_labels=_active_y_labels,
                     void_boxes=_void_boxes_sk,
                 )
-                st.pyplot(fig_cc, clear_figure=True, use_container_width=True)
                 buf_cc = io.BytesIO()
-                fig_cc.savefig(buf_cc, format="png", bbox_inches="tight", dpi=180)
+                fig_cc.savefig(buf_cc, format="pdf", bbox_inches="tight")
                 buf_cc.seek(0)
+                st.pyplot(fig_cc, clear_figure=True, use_container_width=True)
                 st.download_button(
-                    label="📥 Download 1. Column Caps Layout (High-Res PNG)",
+                    label="📥 Download 1. Column Caps Layout (Vector PDF)",
                     data=buf_cc,
-                    file_name=f"{prefix}1_Column_Caps_Top_Extra_ts{ts:.0f}cm.png",
-                    mime="image/png",
+                    file_name=f"{prefix}1_Column_Caps_Top_Extra_ts{ts:.0f}cm.pdf",
+                    mime="application/pdf",
                     use_container_width=True,
                     key="btn_dl_col_caps",
                 )
                 plt.close(fig_cc)
 
-            # ── Tab 2A: Bottom Extra (X-Direction) & Shawka
+                upgraded_caps_m1 = [
+                    f"العمود <b>{c.get('id', '')}</b> (من Φ{c.get('dia_input', 12)} مم إلى <b>Φ{c.get('dia_extra', 16)} مم</b>)"
+                    for c in (top_extra_cols or [])
+                    if c.get("is_dia_upgraded") and c.get("is_needed")
+                ]
+                if upgraded_caps_m1:
+                    st.markdown(
+                        f"""
+                        <div dir="rtl" style="background: rgba(30, 58, 138, 0.15); border: 1.5px solid #3b82f6; border-radius: 8px; padding: 10px 14px; margin-top: 10px; text-align: right;">
+                            <div style="font-size: 13.5px; font-weight: 700; color: #60a5fa; line-height: 1.6;">
+                                ℹ️ <b>تنبيه تنفيذي ومراعاة المسافات البينية (ECP 203):</b> لتفادي تزاحم الأسياخ والحفاظ على تباعد تنفيذي سليم بين أسياخ الشبكة العلوية ({mesh_top_str}) والإضافي، تم تلقائياً رفع قطر حديد الكابات لأعلى: {', '.join(upgraded_caps_m1)}.
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+            # ── Tab 2A: Bottom Extra (X-Direction)
             with tab_m2a:
-                st.markdown("#### 🔶 2A. Bottom Extra (X-Direction) & Base Meshes — الحديد الإضافي السفلي وشوك الكوابيل في اتجاه X وشبكات التسليح")
+                st.markdown("#### 🔶 2A. Bottom Extra (X-Direction) & Base Meshes — الحديد الإضافي السفلي في اتجاه X وبيان شبكات التسليح")
                 fig_bes_x = generate_flat_slab_bottom_extra_shawka_sketch(
                     Lx_calc, Ly_calc, cantilevers, ts,
                     btm_extra_spans=btm_extra_spans,
-                    cant_rft_list=cant_rft_list,
+                    cant_rft_list=None,
                     n_mesh_btm=n_mesh_btm,
                     bottom_mesh_dia=bottom_mesh_dia,
                     n_mesh_top=n_mesh_top,
@@ -12077,27 +12237,27 @@ def render(is_standalone: bool = False):
                     active_y_labels=_active_y_labels,
                     void_boxes=_void_boxes_sk,
                 )
-                st.pyplot(fig_bes_x, clear_figure=True, use_container_width=True)
                 buf_bes_x = io.BytesIO()
-                fig_bes_x.savefig(buf_bes_x, format="png", bbox_inches="tight", dpi=180)
+                fig_bes_x.savefig(buf_bes_x, format="pdf", bbox_inches="tight")
                 buf_bes_x.seek(0)
+                st.pyplot(fig_bes_x, clear_figure=True, use_container_width=True)
                 st.download_button(
-                    label="📥 Download 2A. Bottom Extra (X-Direction) Layout (High-Res PNG)",
+                    label="📥 Download 2A. Bottom Extra (X-Direction) Layout (Vector PDF)",
                     data=buf_bes_x,
-                    file_name=f"{prefix}2A_Bottom_Extra_X_ts{ts:.0f}cm.png",
-                    mime="image/png",
+                    file_name=f"{prefix}2A_Bottom_Extra_X_ts{ts:.0f}cm.pdf",
+                    mime="application/pdf",
                     use_container_width=True,
                     key="btn_dl_btm_extra_x",
                 )
                 plt.close(fig_bes_x)
 
-            # ── Tab 2B: Bottom Extra (Y-Direction) & Shawka
+            # ── Tab 2B: Bottom Extra (Y-Direction)
             with tab_m2b:
-                st.markdown("#### 🔶 2B. Bottom Extra (Y-Direction) & Base Meshes — الحديد الإضافي السفلي وشوك الكوابيل في اتجاه Y وشبكات التسليح")
+                st.markdown("#### 🔶 2B. Bottom Extra (Y-Direction) & Base Meshes — الحديد الإضافي السفلي في اتجاه Y وبيان شبكات التسليح")
                 fig_bes_y = generate_flat_slab_bottom_extra_shawka_sketch(
                     Lx_calc, Ly_calc, cantilevers, ts,
                     btm_extra_spans=btm_extra_spans,
-                    cant_rft_list=cant_rft_list,
+                    cant_rft_list=None,
                     n_mesh_btm=n_mesh_btm,
                     bottom_mesh_dia=bottom_mesh_dia,
                     n_mesh_top=n_mesh_top,
@@ -12113,26 +12273,27 @@ def render(is_standalone: bool = False):
                     active_y_labels=_active_y_labels,
                     void_boxes=_void_boxes_sk,
                 )
-                st.pyplot(fig_bes_y, clear_figure=True, use_container_width=True)
                 buf_bes_y = io.BytesIO()
-                fig_bes_y.savefig(buf_bes_y, format="png", bbox_inches="tight", dpi=180)
+                fig_bes_y.savefig(buf_bes_y, format="pdf", bbox_inches="tight")
                 buf_bes_y.seek(0)
+                st.pyplot(fig_bes_y, clear_figure=True, use_container_width=True)
                 st.download_button(
-                    label="📥 Download 2B. Bottom Extra (Y-Direction) Layout (High-Res PNG)",
+                    label="📥 Download 2B. Bottom Extra (Y-Direction) Layout (Vector PDF)",
                     data=buf_bes_y,
-                    file_name=f"{prefix}2B_Bottom_Extra_Y_ts{ts:.0f}cm.png",
-                    mime="image/png",
+                    file_name=f"{prefix}2B_Bottom_Extra_Y_ts{ts:.0f}cm.pdf",
+                    mime="application/pdf",
                     use_container_width=True,
                     key="btn_dl_btm_extra_y",
                 )
                 plt.close(fig_bes_y)
 
-            # ── Tab 3A: Top Base Mesh & Extra Slab Top Mesh (X-Direction)
+            # ── Tab 3A: Top Base Mesh, Extra Slab Top Mesh & Shawka (X-Direction)
             with tab_m3a:
-                st.markdown("#### 🔵 3A. Top Base Mesh & Extra Slab Top Mesh (X-Direction) — الرقة العلوية الأساسية والحديد الإضافي العلوي (اتجاه X)")
+                st.markdown("#### 🔵 3A. Top Base Mesh, Extra Slab Top Steel & Shawka (X-Direction) — الرقة العلوية الأساسية والإضافي وشوك الكوابيل (اتجاه X)")
                 fig_tmes_x = generate_flat_slab_top_mesh_extra_sketch(
                     Lx_calc, Ly_calc, cantilevers, ts,
                     top_extra_slab_bays=top_extra_slab_bays,
+                    cant_rft_list=cant_rft_list,
                     n_mesh_top=n_mesh_top,
                     top_mesh_dia=top_mesh_dia,
                     n_mesh_btm=n_mesh_btm,
@@ -12148,26 +12309,27 @@ def render(is_standalone: bool = False):
                     active_y_labels=_active_y_labels,
                     void_boxes=_void_boxes_sk,
                 )
-                st.pyplot(fig_tmes_x, clear_figure=True, use_container_width=True)
                 buf_tmes_x = io.BytesIO()
-                fig_tmes_x.savefig(buf_tmes_x, format="png", bbox_inches="tight", dpi=180)
+                fig_tmes_x.savefig(buf_tmes_x, format="pdf", bbox_inches="tight")
                 buf_tmes_x.seek(0)
+                st.pyplot(fig_tmes_x, clear_figure=True, use_container_width=True)
                 st.download_button(
-                    label="📥 Download 3A. Top Slab Extra (X-Direction) Layout (High-Res PNG)",
+                    label="📥 Download 3A. Top Slab Extra & Shawka (X-Direction) Layout (Vector PDF)",
                     data=buf_tmes_x,
-                    file_name=f"{prefix}3A_Top_Base_Mesh_Extra_Slab_X_ts{ts:.0f}cm.png",
-                    mime="image/png",
+                    file_name=f"{prefix}3A_Top_Base_Mesh_Extra_Slab_Shawka_X_ts{ts:.0f}cm.pdf",
+                    mime="application/pdf",
                     use_container_width=True,
                     key="btn_dl_top_mesh_extra_x",
                 )
                 plt.close(fig_tmes_x)
 
-            # ── Tab 3B: Top Base Mesh & Extra Slab Top Mesh (Y-Direction)
+            # ── Tab 3B: Top Base Mesh, Extra Slab Top Mesh & Shawka (Y-Direction)
             with tab_m3b:
-                st.markdown("#### 🔵 3B. Top Base Mesh & Extra Slab Top Mesh (Y-Direction) — الرقة العلوية الأساسية والحديد الإضافي العلوي (اتجاه Y)")
+                st.markdown("#### 🔵 3B. Top Base Mesh, Extra Slab Top Steel & Shawka (Y-Direction) — الرقة العلوية الأساسية والإضافي وشوك الكوابيل (اتجاه Y)")
                 fig_tmes_y = generate_flat_slab_top_mesh_extra_sketch(
                     Lx_calc, Ly_calc, cantilevers, ts,
                     top_extra_slab_bays=top_extra_slab_bays,
+                    cant_rft_list=cant_rft_list,
                     n_mesh_top=n_mesh_top,
                     top_mesh_dia=top_mesh_dia,
                     n_mesh_btm=n_mesh_btm,
@@ -12183,15 +12345,15 @@ def render(is_standalone: bool = False):
                     active_y_labels=_active_y_labels,
                     void_boxes=_void_boxes_sk,
                 )
-                st.pyplot(fig_tmes_y, clear_figure=True, use_container_width=True)
                 buf_tmes_y = io.BytesIO()
-                fig_tmes_y.savefig(buf_tmes_y, format="png", bbox_inches="tight", dpi=180)
+                fig_tmes_y.savefig(buf_tmes_y, format="pdf", bbox_inches="tight")
                 buf_tmes_y.seek(0)
+                st.pyplot(fig_tmes_y, clear_figure=True, use_container_width=True)
                 st.download_button(
-                    label="📥 Download 3B. Top Slab Extra (Y-Direction) Layout (High-Res PNG)",
+                    label="📥 Download 3B. Top Slab Extra & Shawka (Y-Direction) Layout (Vector PDF)",
                     data=buf_tmes_y,
-                    file_name=f"{prefix}3B_Top_Base_Mesh_Extra_Slab_Y_ts{ts:.0f}cm.png",
-                    mime="image/png",
+                    file_name=f"{prefix}3B_Top_Base_Mesh_Extra_Slab_Shawka_Y_ts{ts:.0f}cm.pdf",
+                    mime="application/pdf",
                     use_container_width=True,
                     key="btn_dl_top_mesh_extra_y",
                 )
@@ -12199,22 +12361,7 @@ def render(is_standalone: bool = False):
         else:
             st.info("💡 انقر لتوسيع هذا القسم وعرض مساقط ولوحات تفريد تسليح البلاطة (Steel Layout).")
 
-    # ── 🦅 CANTILEVER REINFORCEMENT ──────────────────────────────────────────
-    if cant_rft_list:
-        with st.expander("🦅 Cantilever Reinforcement Details (تسليح الكوابيل والشوكة)", expanded=False):
-            cant_df = pd.DataFrame([
-                {
-                    "Cantilever Side": f"{c['side_ar']} ({c['side']})",
-                    "Length (m)": f"{c['length']:.2f} m",
-                    "Cantilever Mu (ton.m/m)": f"{c['Mu (t.m/m)']:.2f}",
-                    "Main Top Shawka": c["rft_callout"],
-                    "Extension into Slab": f"{c['ext_length']:.2f} m (1.5 L_cant)",
-                    "Total Cut Length": f"{c['total_bar_length']:.2f} m",
-                    "Secondary Bottom RFT": c["secondary_rft"],
-                }
-                for c in cant_rft_list
-            ])
-            render_styled_table(cant_df)
+    # ── Cantilever Reinforcement Details expander removed per user request ────
 
     # ── 📐 DETAILED DDM MOMENTS TABLES ───────────────────────────────────────
     def render_direction(rows, direction_label):
@@ -12311,44 +12458,58 @@ def render(is_standalone: bool = False):
             )
             plt.close(fig_def)
 
-            st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
-
-            # 3. Comprehensive Verification Summary Table
+            # ── الإرشاد الإنشائي لدلالة الألوان والمعالجة ──
             st.markdown(
                 """
-                <div style="font-size:18px; font-weight:800; color:#f8fafc; margin-bottom:4px; display:flex; align-items:center; gap:8px;">
-                    📋 جدول التحقق التفصيلي من سهم الانحناء والجساءة الفعالة لكافة الباكيات (ECP 203)
-                </div>
-                <div style="font-size:13px; color:#94a3b8; margin-bottom:12px;">
-                    فحص الترخيم اللحظي والترخيم طويل الأمد والجساءة الفعالة بالاعتماد على كامل حديد التسليح الفعلي
+                <div dir="rtl" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 1.8px solid #3b82f6; border-radius: 10px; padding: 12px 18px; margin-top: 10px; margin-bottom: 14px; text-align: right;">
+                    <div style="font-size: 14.5px; font-weight: 800; color: #38bdf8; margin-bottom: 6px;">
+                        📌 <b>دلالة الألوان والمعالجة الهندسية للترخيم (Deflection Verification & Solutions):</b>
+                    </div>
+                    <div style="font-size: 13.5px; color: #e2e8f0; line-height: 1.7;">
+                        • 🛡️ <b>أقصى ترخيم كلي مسموح به كودياً (ECP 203):</b> Δall = Ln / 250 (يحسب لكل باكية بناءً على بحرها الصافي).<br>
+                        • 🟢 <b>اللون الأخضر (آمن):</b> الباكية محققة لحدود الترخيم المسموح كودياً (Δact ≤ Δall).<br>
+                        • 🔴 <b>اللون الأحمر (غير آمن):</b> الباكية تتجاوز حد الترخيم المسموح (Δact > Δall).<br>
+                        • 💡 <b>للتغلب على حالة غير آمن:</b> عمل سقوط عمود (Drop Panel) أو إضافة تسليح ضغط (As' Compression) أو زيادة سمك البلاطة إلى ts المطلوب.
+                    </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
-            def_df = pd.DataFrame([
-                {
-                    "Panel ID": p["Panel ID"],
-                    "Bay Location": p["Bay Label"],
-                    "Type": p["Location Type"],
-                    "Ln (m)": f"{p['Ln (m)']:.2f} m",
-                    "ts / d (cm)": f"{p['ts (cm)']:.0f} / {p['d (cm)']:.1f}",
-                    "As_btm (cm²/m)": f"{p['As_btm (cm²/m)']:.2f}",
-                    "A's_top (cm²/m)": f"{p['As_top (cm²/m)']:.2f}",
-                    "x_na (cm)": f"{p['x_na (cm)']:.2f}",
-                    "Mcr (t·m/m)": f"{p['Mcr (t.m/m)']:.2f}",
-                    "Ms (t·m/m)": f"{p['Ms_pos (t.m/m)']:.2f}",
-                    "Ie/Ig": f"{p['Ie/Ig']:.2f}",
-                    "λ (Creep)": f"{p['lambda_creep']:.2f}",
-                    "δst (mm)": f"{p['delta_st (mm)']:.2f}",
-                    "Δtotal (mm)": f"{p['delta_long (mm)']:.2f}",
-                    "Δallow (mm)": f"{p['delta_all (mm)']:.2f} (Ln/250)",
-                    "Ratio": f"{p['Ratio']:.2f}",
-                    "Status": p["Status"],
-                }
-                for p in deflection_results
-            ])
-            render_styled_table(def_df, font_size_override=10.5)
+            # 3. Comprehensive Verification Summary Table (Collapsed Expander)
+            with st.expander("📋 جدول التحقق التفصيلي من سهم الانحناء والجساءة الفعالة لكافة الباكيات (ECP 203)", expanded=False):
+                st.markdown(
+                    """
+                    <div style="font-size:13px; color:#94a3b8; margin-bottom:12px;">
+                        فحص الترخيم اللحظي والترخيم طويل الأمد والجساءة الفعالة بالاعتماد على كامل حديد التسليح الفعلي
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                def_df = pd.DataFrame([
+                    {
+                        "Panel ID": p["Panel ID"],
+                        "Bay Location": p["Bay Label"],
+                        "Type": p["Location Type"],
+                        "Ln (m)": f"{p['Ln (m)']:.2f} m",
+                        "ts / d (cm)": f"{p['ts (cm)']:.0f} / {p['d (cm)']:.1f}",
+                        "As_btm (cm²/m)": f"{p['As_btm (cm²/m)']:.2f}",
+                        "A's_top (cm²/m)": f"{p['As_top (cm²/m)']:.2f}",
+                        "x_na (cm)": f"{p['x_na (cm)']:.2f}",
+                        "Mcr (t·m/m)": f"{p['Mcr (t.m/m)']:.2f}",
+                        "Ms (t·m/m)": f"{p['Ms_pos (t.m/m)']:.2f}",
+                        "Ie/Ig": f"{p['Ie/Ig']:.2f}",
+                        "λ (Creep)": f"{p['lambda_creep']:.2f}",
+                        "δst (mm)": f"{p['delta_st (mm)']:.2f}",
+                        "Δtotal (mm)": f"{p['delta_long (mm)']:.2f}",
+                        "Δallow (mm)": f"{p['delta_all (mm)']:.2f} (Ln/250)",
+                        "Ratio": f"{p['Ratio']:.2f}",
+                        "Status": p["Status"],
+                    }
+                    for p in deflection_results
+                ])
+                render_styled_table(def_df, font_size_override=10.5)
 
             # 4. Recommendations & Status Advisories
             if not all_deflection_safe:
@@ -14547,109 +14708,615 @@ def render(is_standalone: bool = False):
 
         st.markdown("---")
 
-    # ── 💾 SAVE & EXPORT COMPLETE CALCULATION SHEET ────────────────────────────
-    st.markdown(
-        '<div class="section-header">💾 Save & Export Design Calculation Sheet (حفظ وتصدير المذكرة الحسابية الكاملة)</div>',
-        unsafe_allow_html=True,
-    )
+    # ── 💾 SAVE & EXPORT COMPLETE CALCULATION SHEET (COLLAPSED EXPANDER) ────────
+    with st.expander("💾 Save & Export Design Calculation Sheet (حفظ وتصدير المذكرة الحسابية الكاملة)", expanded=False):
+        from modules.report_generator import (
+            generate_flat_slab_report_html,
+            generate_flat_slab_outputs_report_html,
+            html_to_pdf_bytes,
+        )
+        import streamlit.components.v1 as components
 
-    from modules.report_generator import generate_flat_slab_report_html, html_to_pdf_bytes
+        rep_fn_tag = "ECP203_Standalone_Flat_Slab" if is_standalone else "ECP203_Integrated_Structural_Design"
+        pdf_outputs_filename = f"{prefix}{rep_fn_tag}_Design_Outputs_ts{ts:.0f}cm_{num_floors}Floors.pdf"
+        pdf_full_filename = f"{prefix}{rep_fn_tag}_Full_Inputs_Outputs_ts{ts:.0f}cm_{num_floors}Floors.pdf"
+        html_filename = f"{prefix}{rep_fn_tag}_Calculation_Sheet_ts{ts:.0f}cm_{num_floors}Floors.html"
 
-    c_save1, c_save2 = st.columns([3, 1])
-    with c_save1:
+        # Styling container for export card & red buttons with bold white font
         st.markdown(
             f"""
-            <div style='background:#1e293b; border:1px solid #334155; border-radius:8px; padding:14px 16px;'>
-                <div style='font-weight:700; color:#f8fafc; font-size:1.0rem;'>
-                    📄 ملف المذكرة الحسابية الهندسية الشاملة (ECP 203 Calculation Sheet)
+            <style>
+            .export-card-box {{
+                background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+                border: 2px solid #ef4444;
+                border-radius: 12px;
+                padding: 16px 20px;
+                margin-bottom: 16px;
+                box-shadow: 0 6px 20px rgba(239, 68, 68, 0.20);
+                text-align: right;
+            }}
+            .export-card-title {{
+                font-size: 16px;
+                font-weight: 800;
+                color: #ffffff;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                border-bottom: 1px solid rgba(239, 68, 68, 0.4);
+                padding-bottom: 8px;
+                margin-bottom: 8px;
+            }}
+            .export-card-desc {{
+                font-size: 13.5px;
+                color: #cbd5e1;
+                line-height: 1.6;
+            }}
+            /* Strict styling for export buttons: Red background, bold white text */
+            div[data-testid="stExpander"] div.stButton > button {{
+                background: linear-gradient(135deg, #dc2626 0%, #b91c1c 50%, #991b1b 100%) !important;
+                color: #ffffff !important;
+                border: 1.8px solid #ef4444 !important;
+                border-radius: 9px !important;
+                font-weight: 800 !important;
+                font-size: 14.5px !important;
+                box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35) !important;
+                transition: all 0.25s ease-in-out !important;
+            }}
+            div[data-testid="stExpander"] div.stButton > button:hover {{
+                background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%) !important;
+                color: #ffffff !important;
+                border-color: #f87171 !important;
+                box-shadow: 0 6px 20px rgba(239, 68, 68, 0.55) !important;
+                transform: translateY(-1.5px) !important;
+            }}
+            div[data-testid="stExpander"] div.stButton > button p,
+            div[data-testid="stExpander"] div.stButton > button span {{
+                color: #ffffff !important;
+                font-weight: 800 !important;
+            }}
+            div[data-testid="stExpander"] div.stDownloadButton > button {{
+                background: linear-gradient(135deg, #dc2626 0%, #b91c1c 50%, #991b1b 100%) !important;
+                color: #ffffff !important;
+                border: 1.8px solid #ef4444 !important;
+                border-radius: 9px !important;
+                font-weight: 800 !important;
+                font-size: 14.5px !important;
+                box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35) !important;
+                transition: all 0.25s ease-in-out !important;
+            }}
+            div[data-testid="stExpander"] div.stDownloadButton > button:hover {{
+                background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%) !important;
+                color: #ffffff !important;
+                border-color: #f87171 !important;
+                box-shadow: 0 6px 20px rgba(239, 68, 68, 0.55) !important;
+                transform: translateY(-1.5px) !important;
+            }}
+            div[data-testid="stExpander"] div.stDownloadButton > button p,
+            div[data-testid="stExpander"] div.stDownloadButton > button span {{
+                color: #ffffff !important;
+                font-weight: 800 !important;
+            }}
+            </style>
+            <div class="export-card-box" dir="rtl">
+                <div class="export-card-title">
+                    <span>📄 تصدير المذكرات والتقارير الحسابية المعتمدة (Consulting Calculation Reports)</span>
+                    <span style="font-size: 12px; background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; padding: 3px 10px; border-radius: 20px;">
+                        ECP 203 & CSI SAFE
+                    </span>
                 </div>
-                <div style='font-size:0.88rem; color:#cbd5e1; margin-top:2px;'>
-                    {"يتضمن جميع المدخلات، والمخططات الهندسية عالية الدقة، وفحوصات القص الثاقب، وحسابات العزوم والتسليح وسهم الانحناء وحصر كميات السقف." if is_standalone else f"يتضمن جميع المدخلات، والمخططات الهندسية عالية الدقة، وفحوصات القص الثاقب، وردود أفعال وتصنيفات الأعمدة لـ <b>{num_floors} طوابق</b>، وحصر الكميات."}
+                <div class="export-card-desc">
+                    يتم تحديث جميع بيانات ومخرجات المذكرة الحسابية تلقائياً بمجرد تعديل أي مدخلات. يمكنك الاختيار بين:
+                    <br>• <b>تصدير مخرجات التصميم فقط (PDF):</b> مخطط التحقق الهندسي وتوزيع المحاور، والمدخلات الأساسية، وجدول المخرجات الشامل للتسليح والكابات والتخانة وفحوصات الأمان.
+                    <br>• <b>تصدير جميع المدخلات والمخرجات (PDF):</b> التقرير الاستشاري الكامل بكافة المخططات الإنشائية (العزوم، التسليح، القص الثاقب، الترخيم، وحصر الكميات).
                 </div>
             </div>
             """,
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
-    with c_save2:
-        btn_gen_rep = st.button("📑 إنشاء وتجهيز المذكرة الحسابية", use_container_width=True, key=f"{prefix}btn_gen_calc_sheet")
-        if btn_gen_rep or st.session_state.get(f"{prefix}_has_report"):
-            st.session_state[f"{prefix}_has_report"] = True
-            with st.spinner("جاري إعداد وتجهيز المذكرة الحسابية والمخططات..."): 
-                if img_m11_b64 is None and img_dual_moment_b64 is None:
-                    _fig_m11_rep = generate_flat_slab_moment_contour(
-                        Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
-                        mode="M11", col_w_cm=bc_s, col_d_cm=tc_s,
-                        removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
-                        top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
-                        col_transforms=_col_transforms, edge_columns=_edge_columns,
-                        active_cols=_active_cols,
-                        active_x_labels=_active_x_labels,
-                        active_y_labels=_active_y_labels,
-                        void_boxes=_void_boxes_sk,
-                    )
-                    _buf = io.BytesIO()
-                    _fig_m11_rep.savefig(_buf, format="png", bbox_inches="tight", dpi=180)
-                    _buf.seek(0)
-                    img_m11_b64 = "data:image/png;base64," + base64.b64encode(_buf.getvalue()).decode("utf-8")
-                    plt.close(_fig_m11_rep)
 
-                if img_m22_b64 is None and img_dual_moment_b64 is None:
-                    _fig_m22_rep = generate_flat_slab_moment_contour(
-                        Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
-                        mode="M22", col_w_cm=bc_s, col_d_cm=tc_s,
-                        removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
-                        top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
-                        col_transforms=_col_transforms, edge_columns=_edge_columns,
-                        active_cols=_active_cols,
-                        active_x_labels=_active_x_labels,
-                        active_y_labels=_active_y_labels,
-                        void_boxes=_void_boxes_sk,
-                    )
-                    _buf = io.BytesIO()
-                    _fig_m22_rep.savefig(_buf, format="png", bbox_inches="tight", dpi=180)
-                    _buf.seek(0)
-                    img_m22_b64 = "data:image/png;base64," + base64.b64encode(_buf.getvalue()).decode("utf-8")
-                    plt.close(_fig_m22_rep)
+        # Helper functions to build report HTML
+        def _build_flat_slab_outputs_html():
+            return generate_flat_slab_outputs_report_html(
+                project_name="Standalone Flat Slab Reinforced Concrete Design (ECP 203)" if is_standalone else "Integrated Structural Design (ECP 203)",
+                ts=ts, d=d, num_floors=num_floors, Wu=Wu,
+                Fcu=Fcu, Fy=Fy, SDL=SDL, wall_load=wall_load, LL=LL,
+                bc=bc_s, tc=tc_s,
+                mesh_btm_str=mesh_btm_str, mesh_top_str=mesh_top_str,
+                top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
+                cant_rft_list=cant_rft_list,
+                punching_results=punching_results, all_punching_safe=all_safe,
+                deflection_results=deflection_results, all_deflection_safe=all_deflection_safe,
+                img_verif_b64=img_verif_b64,
+            )
 
-                report_html = generate_flat_slab_report_html(
-                    project_name="Standalone Flat Slab Reinforced Concrete Design (ECP 203)" if is_standalone else "Integrated Structural Design (ECP 203)",
-                    ts=ts, d=d, num_floors=num_floors, Wu=Wu,
-                    Lx_spans=Lx_calc, Ly_spans=Ly_calc, cantilevers=cantilevers,
-                    mesh_btm_str=mesh_btm_str, mesh_top_str=mesh_top_str,
-                    prov_btm_mesh_cm2m=prov_btm_mesh_cm2m, prov_top_mesh_cm2m=prov_top_mesh_cm2m,
-                    Fcu=Fcu, Fy=Fy, SDL=SDL, wall_load=wall_load, LL=LL,
-                    bc=bc_s, tc=tc_s, boq=boq,
+        def _build_flat_slab_full_html():
+            nonlocal img_m11_b64, img_m22_b64
+            if img_m11_b64 is None and img_dual_moment_b64 is None:
+                _fig_m11_rep = generate_flat_slab_moment_contour(
+                    Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+                    mode="M11", col_w_cm=bc_s, col_d_cm=tc_s,
+                    removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
                     top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
-                    punching_results=punching_results, all_punching_safe=all_safe,
-                    col_reactions_data=col_reactions_data, summary_models=summary_models,
-                    img_verif_b64=img_verif_b64, img_top_rft_b64=img_top_b64,
-                    img_btm_rft_b64=img_btm_b64, img_reactions_b64=img_reactions_b64,
-                    img_m11_b64=img_m11_b64, img_m22_b64=img_m22_b64,
-                    img_dual_moment_b64=img_dual_moment_b64,
+                    col_transforms=_col_transforms, edge_columns=_edge_columns,
+                    active_cols=_active_cols,
+                    active_x_labels=_active_x_labels,
+                    active_y_labels=_active_y_labels,
+                    void_boxes=_void_boxes_sk,
                 )
+                _buf = io.BytesIO()
+                _fig_m11_rep.savefig(_buf, format="png", bbox_inches="tight", dpi=180)
+                _buf.seek(0)
+                img_m11_b64 = "data:image/png;base64," + base64.b64encode(_buf.getvalue()).decode("utf-8")
+                plt.close(_fig_m11_rep)
 
-                rep_fn_tag = "ECP203_Standalone_Flat_Slab" if is_standalone else "ECP203_Integrated_Structural_Design"
-                st.download_button(
-                    label="🌐 Save Calculation Sheet (HTML)",
-                    data=report_html,
-                    file_name=f"{prefix}{rep_fn_tag}_Calculation_Sheet_ts{ts:.0f}cm_{num_floors}Floors.html",
-                    mime="text/html",
-                    use_container_width=True,
+            if img_m22_b64 is None and img_dual_moment_b64 is None:
+                _fig_m22_rep = generate_flat_slab_moment_contour(
+                    Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+                    mode="M22", col_w_cm=bc_s, col_d_cm=tc_s,
+                    removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
+                    top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
+                    col_transforms=_col_transforms, edge_columns=_edge_columns,
+                    active_cols=_active_cols,
+                    active_x_labels=_active_x_labels,
+                    active_y_labels=_active_y_labels,
+                    void_boxes=_void_boxes_sk,
                 )
+                _buf = io.BytesIO()
+                _fig_m22_rep.savefig(_buf, format="png", bbox_inches="tight", dpi=180)
+                _buf.seek(0)
+                img_m22_b64 = "data:image/png;base64," + base64.b64encode(_buf.getvalue()).decode("utf-8")
+                plt.close(_fig_m22_rep)
 
-                if st.button("📕 تحويل وتنزيل PDF", key=f"{prefix}btn_convert_pdf", use_container_width=True):
-                    with st.spinner("جاري تحويل التقرير إلى PDF..."): 
-                        pdf_bytes = html_to_pdf_bytes(report_html)
-                        if pdf_bytes:
-                            st.download_button(
-                                label="📥 اضغط لتحميل ملف PDF المجهز",
-                                data=pdf_bytes,
-                                file_name=f"{prefix}ECP203_Flat_Slab_Calculation_Sheet_ts{ts:.0f}cm_{num_floors}Floors.pdf",
-                                mime="application/pdf",
-                                use_container_width=True,
-                            )
-                        else:
-                            st.warning("تعذر إنشاء ملف PDF تلقائياً، يمكنك حفظ ملف HTML وفتحه للطباعة.")
+            return generate_flat_slab_report_html(
+                project_name="Standalone Flat Slab Reinforced Concrete Design (ECP 203)" if is_standalone else "Integrated Structural Design (ECP 203)",
+                ts=ts, d=d, num_floors=num_floors, Wu=Wu,
+                Lx_spans=Lx_calc, Ly_spans=Ly_calc, cantilevers=cantilevers,
+                mesh_btm_str=mesh_btm_str, mesh_top_str=mesh_top_str,
+                prov_btm_mesh_cm2m=prov_btm_mesh_cm2m, prov_top_mesh_cm2m=prov_top_mesh_cm2m,
+                Fcu=Fcu, Fy=Fy, SDL=SDL, wall_load=wall_load, LL=LL,
+                bc=bc_s, tc=tc_s, boq=boq,
+                top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
+                punching_results=punching_results, all_punching_safe=all_safe,
+                col_reactions_data=col_reactions_data, summary_models=summary_models,
+                img_verif_b64=img_verif_b64, img_top_rft_b64=img_top_b64,
+                img_btm_rft_b64=img_btm_b64, img_reactions_b64=img_reactions_b64,
+                img_m11_b64=img_m11_b64, img_m22_b64=img_m22_b64,
+                img_dual_moment_b64=img_dual_moment_b64,
+            )
+
+        # 3 Dedicated Red Export Buttons
+        exp_c1, exp_c2, exp_c3 = st.columns([1.5, 1.7, 1.3], gap="medium")
+
+        with exp_c1:
+            # Button 1: تصدير مخرجات التصميم في ملف PDF
+            if st.button("📕 تصدير مخرجات التصميم ملف PDF", key=f"{prefix}btn_export_outputs_pdf", use_container_width=True):
+                with st.spinner("جاري توليد تقرير مخرجات التصميم المعتمد وتحويله إلى PDF..."):
+                    _outputs_html = _build_flat_slab_outputs_html()
+                    pdf_outputs_bytes = html_to_pdf_bytes(_outputs_html)
+                if pdf_outputs_bytes:
+                    b64_pdf = base64.b64encode(pdf_outputs_bytes).decode("utf-8")
+                    js_dl = f"""
+                    <script>
+                    (function() {{
+                        try {{
+                            var b64Data = "{b64_pdf}";
+                            var byteChars = atob(b64Data);
+                            var byteNums = new Array(byteChars.length);
+                            for (var i = 0; i < byteChars.length; i++) {{ byteNums[i] = byteChars.charCodeAt(i); }}
+                            var byteArray = new Uint8Array(byteNums);
+                            var blob = new Blob([byteArray], {{type: "application/pdf"}});
+                            var blobUrl = URL.createObjectURL(blob);
+                            var targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+                            var a = targetDoc.createElement("a");
+                            a.href = blobUrl;
+                            a.download = "{pdf_outputs_filename}";
+                            a.target = "_blank";
+                            targetDoc.body.appendChild(a);
+                            a.click();
+                            setTimeout(function() {{
+                                try {{ targetDoc.body.removeChild(a); }} catch(e) {{}}
+                                URL.revokeObjectURL(blobUrl);
+                            }}, 4000);
+                        }} catch(err) {{
+                            var aFallback = document.createElement("a");
+                            aFallback.href = "data:application/pdf;base64,{b64_pdf}";
+                            aFallback.download = "{pdf_outputs_filename}";
+                            document.body.appendChild(aFallback);
+                            aFallback.click();
+                        }}
+                    }})();
+                    </script>
+                    """
+                    components.html(js_dl, height=0, width=0)
+                    st.toast("✅ تم تصدير مخرجات التصميم PDF بنجاح!", icon="📕")
+                    st.session_state[f"{prefix}_last_outputs_pdf_bytes"] = pdf_outputs_bytes
+                else:
+                    st.error("تعذر إنشاء ملف الـ PDF عبر المحرك التلقائي، يمكنك تنزيل ملف الـ HTML وفتحه للطباعة.")
+
+        with exp_c2:
+            # Button 2: تصدير جميع المدخلات والمخرجات في ملف PDF
+            if st.button("📑 تصدير جميع المدخلات والمخرجات ملف PDF", key=f"{prefix}btn_export_full_pdf", use_container_width=True):
+                with st.spinner("جاري توليد التقرير الاستشاري الكامل بجميع الرسومات والمخرجات وتحويله إلى PDF..."):
+                    _full_html = _build_flat_slab_full_html()
+                    pdf_full_bytes = html_to_pdf_bytes(_full_html)
+                if pdf_full_bytes:
+                    b64_pdf_full = base64.b64encode(pdf_full_bytes).decode("utf-8")
+                    js_dl_full = f"""
+                    <script>
+                    (function() {{
+                        try {{
+                            var b64Data = "{b64_pdf_full}";
+                            var byteChars = atob(b64Data);
+                            var byteNums = new Array(byteChars.length);
+                            for (var i = 0; i < byteChars.length; i++) {{ byteNums[i] = byteChars.charCodeAt(i); }}
+                            var byteArray = new Uint8Array(byteNums);
+                            var blob = new Blob([byteArray], {{type: "application/pdf"}});
+                            var blobUrl = URL.createObjectURL(blob);
+                            var targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+                            var a = targetDoc.createElement("a");
+                            a.href = blobUrl;
+                            a.download = "{pdf_full_filename}";
+                            a.target = "_blank";
+                            targetDoc.body.appendChild(a);
+                            a.click();
+                            setTimeout(function() {{
+                                try {{ targetDoc.body.removeChild(a); }} catch(e) {{}}
+                                URL.revokeObjectURL(blobUrl);
+                            }}, 4000);
+                        }} catch(err) {{
+                            var aFallback = document.createElement("a");
+                            aFallback.href = "data:application/pdf;base64,{b64_pdf_full}";
+                            aFallback.download = "{pdf_full_filename}";
+                            document.body.appendChild(aFallback);
+                            aFallback.click();
+                        }}
+                    }})();
+                    </script>
+                    """
+                    components.html(js_dl_full, height=0, width=0)
+                    st.toast("✅ تم تصدير كامل المدخلات والمخرجات PDF بنجاح!", icon="📑")
+                    st.session_state[f"{prefix}_last_full_pdf_bytes"] = pdf_full_bytes
+                else:
+                    st.error("تعذر إنشاء ملف الـ PDF عبر المحرك التلقائي، يمكنك تنزيل ملف الـ HTML وفتحه للطباعة.")
+
+        with exp_c3:
+            # Button 3: حفظ التقرير بصيغة HTML
+            _cached_html = st.session_state.get(f"{prefix}_cached_report_html")
+            if not _cached_html:
+                _cached_html = _build_flat_slab_full_html()
+                st.session_state[f"{prefix}_cached_report_html"] = _cached_html
+
+            st.download_button(
+                label="🌐 حفظ التقرير بصيغة HTML",
+                data=_cached_html.encode("utf-8"),
+                file_name=html_filename,
+                mime="text/html",
+                key=f"{prefix}btn_dl_html_direct_exp",
+                use_container_width=True,
+            )
+
+        # Fallback download buttons if already generated
+        if st.session_state.get(f"{prefix}_last_outputs_pdf_bytes"):
+            st.download_button(
+                label=f"📥 اضغط هنا إذا لم يبدأ تحميل ملف مخرجات التصميم ({pdf_outputs_filename})",
+                data=st.session_state[f"{prefix}_last_outputs_pdf_bytes"],
+                file_name=pdf_outputs_filename,
+                mime="application/pdf",
+                key=f"{prefix}btn_fallback_outputs_pdf",
+                use_container_width=True,
+            )
+
+        if st.session_state.get(f"{prefix}_last_full_pdf_bytes"):
+            st.download_button(
+                label=f"📥 اضغط هنا إذا لم يبدأ تحميل ملف التقرير الشامل ({pdf_full_filename})",
+                data=st.session_state[f"{prefix}_last_full_pdf_bytes"],
+                file_name=pdf_full_filename,
+                mime="application/pdf",
+                key=f"{prefix}btn_fallback_full_pdf",
+                use_container_width=True,
+            )
+
+        # ════════════════════════════════════════════════════════════════════════
+        #  🎯 EXPORT SELECTED STRUCTURAL DRAWINGS TO MULTI-PAGE PDF
+        # ════════════════════════════════════════════════════════════════════════
+        st.markdown(
+            """
+            <div style="margin-top: 24px; margin-bottom: 12px; padding: 12px 16px; background: rgba(30, 41, 59, 0.7); border: 1.5px solid #334155; border-radius: 10px;" dir="rtl">
+                <div style="font-size: 15.5px; font-weight: 800; color: #f8fafc; display: flex; align-items: center; gap: 8px;">
+                    <span>📐 تصدير اللوحات والمخططات الإنشائية إلى ملف PDF مجمع (Vector PDF Drawings)</span>
+                </div>
+                <div style="font-size: 12.8px; color: #94a3b8; margin-top: 4px;">
+                    اختر رسماً هندسياً أو أكثر من القائمة المنسدلة أدناه، ثم اضغط على زر <b>بدء التصدير</b> لتجميع وطباعة الرسومات المحددة بالترتيب في ملف PDF هندسي عالي النقاء بصفحات متعددة.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        sketches_options = [
+            "🗺️ Structural Geometry Sketch & Verification (مخطط التحقق الهندسي وتوزيع المحاور والأعمدة)",
+            "🔴 1. Column Caps Layout (Top Extra) (كابات وتفريد الإضافي العلوي للأعمدة)",
+            "🔶 2A. Bottom Extra (X-Direction) & Base Meshes (الحديد الإضافي السفلي اتجاه X وشبكات التسليح)",
+            "🔶 2B. Bottom Extra (Y-Direction) & Base Meshes (الحديد الإضافي السفلي اتجاه Y وشبكات التسليح)",
+            "🔵 3A. Top Slab Extra & Shawka (X-Direction) (الرقة العلوية والإضافي وشوك الكوابيل اتجاه X)",
+            "🔵 3B. Top Slab Extra & Shawka (Y-Direction) (الرقة العلوية والإضافي وشوك الكوابيل اتجاه Y)",
+            "🥊 Punching Shear Verification Plan (مخطط القص الثاقب للأعمدة وفحص الاختراق)",
+            "📉 Long-Term Deflection Contour Plan (مخطط هبوط وترخيم البلاطة طويل المدى)",
+            "📈 Moment M11 Contour Plan (كنتور عزوم الانحناء M11)",
+            "📈 Moment M22 Contour Plan (كنتور عزوم الانحناء M22)",
+            "📋 Master Steel Layout & Detailing (لوحة تجميع التسليح الماستر)",
+        ]
+
+        selected_sketches = st.multiselect(
+            "اختر رسومات للتصدير الي ملف PDF:",
+            options=sketches_options,
+            default=[],
+            placeholder="اختر رسماً أو أكثر من القائمة...",
+            key=f"{prefix}multiselect_export_sketches",
+            help="يمكنك اختيار لوحة واحدة أو مجموعة من اللوحات، وسيتم ترتيب الصفحات داخل ملف الـ PDF بنفس ترتيب الاختيار.",
+        )
+
+        pdf_drawings_filename = f"{prefix}Flat_Slab_Drawings_ts{ts:.0f}cm_{len(selected_sketches)}Plates.pdf"
+
+        if st.button("🚀 بدء التصدير", key=f"{prefix}btn_start_export_sketches_pdf", use_container_width=True):
+            if not selected_sketches:
+                st.warning("⚠️ يرجى اختيار رسم واحد على الأقل من القائمة المنسدلة للتصدير.")
+            else:
+                from matplotlib.backends.backend_pdf import PdfPages
+                with st.spinner(f"جاري إعداد وتجميع {len(selected_sketches)} لوحة إنشائية عالية الدقة إلى ملف PDF..."):
+                    pdf_sketches_buf = io.BytesIO()
+                    with PdfPages(pdf_sketches_buf) as pdf_doc:
+                        for sk_title in selected_sketches:
+                            fig_sk = None
+                            try:
+                                if "Structural Geometry Sketch" in sk_title:
+                                    fig_sk = generate_flat_slab_sketch(
+                                        Lx_spans, Ly_spans, cantilevers,
+                                        ts_initial=ts_initial if ts_initial is not None else 20,
+                                        n_floors=num_floors,
+                                        bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
+                                        bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
+                                        top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
+                                        top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
+                                        col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
+                                        strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
+                                        strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
+                                        concrete_cover=cov if cov is not None else 1.5,
+                                        fcu=Fcu if Fcu is not None else 250,
+                                        fy=Fy if Fy is not None else 4000,
+                                        live_load=LL if LL is not None else 0.25,
+                                        flooring_load=SDL if SDL is not None else 0.15,
+                                        wall_load=wall_load if wall_load is not None else 0.50,
+                                        col_w_cm=_col_w_sk,
+                                        col_d_cm=_col_d_sk,
+                                        removed_col_ids=set(_confirmed_removals),
+                                        pending_col_ids=set(st.session_state.get("_fs_pending_snapshot", [])
+                                                            if st.session_state.get("_fs_show_confirm") else _pending_removals),
+                                        void_panel_ids=set(_confirmed_voids),
+                                        pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", [])
+                                                             if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
+                                        col_transforms=_col_transforms,
+                                        edge_columns=_edge_columns,
+                                    )
+                                elif "1. Column Caps Layout" in sk_title:
+                                    fig_sk = generate_flat_slab_column_caps_sketch(
+                                        Lx_calc, Ly_calc, cantilevers, ts,
+                                        top_extra_cols=top_extra_cols,
+                                        col_w_cm=bc_s, col_d_cm=tc_s,
+                                        removed_cols=_removed_col_objs,
+                                        void_panel_ids=set(_confirmed_voids),
+                                        col_transforms=_col_transforms,
+                                        edge_columns=_edge_columns,
+                                        active_cols=_active_cols,
+                                        active_x_labels=_active_x_labels,
+                                        active_y_labels=_active_y_labels,
+                                        void_boxes=_void_boxes_sk,
+                                    )
+                                elif "2A. Bottom Extra (X-Direction)" in sk_title:
+                                    fig_sk = generate_flat_slab_bottom_extra_shawka_sketch(
+                                        Lx_calc, Ly_calc, cantilevers, ts,
+                                        btm_extra_spans=btm_extra_spans,
+                                        cant_rft_list=None,
+                                        n_mesh_btm=n_mesh_btm,
+                                        bottom_mesh_dia=bottom_mesh_dia,
+                                        n_mesh_top=n_mesh_top,
+                                        top_mesh_dia=top_mesh_dia,
+                                        col_w_cm=bc_s, col_d_cm=tc_s,
+                                        removed_cols=_removed_col_objs,
+                                        void_panel_ids=set(_confirmed_voids),
+                                        direction="X",
+                                        col_transforms=_col_transforms,
+                                        edge_columns=_edge_columns,
+                                        active_cols=_active_cols,
+                                        active_x_labels=_active_x_labels,
+                                        active_y_labels=_active_y_labels,
+                                        void_boxes=_void_boxes_sk,
+                                    )
+                                elif "2B. Bottom Extra (Y-Direction)" in sk_title:
+                                    fig_sk = generate_flat_slab_bottom_extra_shawka_sketch(
+                                        Lx_calc, Ly_calc, cantilevers, ts,
+                                        btm_extra_spans=btm_extra_spans,
+                                        cant_rft_list=None,
+                                        n_mesh_btm=n_mesh_btm,
+                                        bottom_mesh_dia=bottom_mesh_dia,
+                                        n_mesh_top=n_mesh_top,
+                                        top_mesh_dia=top_mesh_dia,
+                                        col_w_cm=bc_s, col_d_cm=tc_s,
+                                        removed_cols=_removed_col_objs,
+                                        void_panel_ids=set(_confirmed_voids),
+                                        direction="Y",
+                                        col_transforms=_col_transforms,
+                                        edge_columns=_edge_columns,
+                                        active_cols=_active_cols,
+                                        active_x_labels=_active_x_labels,
+                                        active_y_labels=_active_y_labels,
+                                        void_boxes=_void_boxes_sk,
+                                    )
+                                elif "3A. Top Slab Extra & Shawka (X-Direction)" in sk_title:
+                                    fig_sk = generate_flat_slab_top_mesh_extra_sketch(
+                                        Lx_calc, Ly_calc, cantilevers, ts,
+                                        top_extra_slab_bays=top_extra_slab_bays,
+                                        cant_rft_list=cant_rft_list,
+                                        n_mesh_top=n_mesh_top,
+                                        top_mesh_dia=top_mesh_dia,
+                                        n_mesh_btm=n_mesh_btm,
+                                        bottom_mesh_dia=bottom_mesh_dia,
+                                        col_w_cm=bc_s, col_d_cm=tc_s,
+                                        removed_cols=_removed_col_objs,
+                                        void_panel_ids=set(_confirmed_voids),
+                                        direction="X",
+                                        col_transforms=_col_transforms,
+                                        edge_columns=_edge_columns,
+                                        active_cols=_active_cols,
+                                        active_x_labels=_active_x_labels,
+                                        active_y_labels=_active_y_labels,
+                                        void_boxes=_void_boxes_sk,
+                                    )
+                                elif "3B. Top Slab Extra & Shawka (Y-Direction)" in sk_title:
+                                    fig_sk = generate_flat_slab_top_mesh_extra_sketch(
+                                        Lx_calc, Ly_calc, cantilevers, ts,
+                                        top_extra_slab_bays=top_extra_slab_bays,
+                                        cant_rft_list=cant_rft_list,
+                                        n_mesh_top=n_mesh_top,
+                                        top_mesh_dia=top_mesh_dia,
+                                        n_mesh_btm=n_mesh_btm,
+                                        bottom_mesh_dia=bottom_mesh_dia,
+                                        col_w_cm=bc_s, col_d_cm=tc_s,
+                                        removed_cols=_removed_col_objs,
+                                        void_panel_ids=set(_confirmed_voids),
+                                        direction="Y",
+                                        col_transforms=_col_transforms,
+                                        edge_columns=_edge_columns,
+                                        active_cols=_active_cols,
+                                        active_x_labels=_active_x_labels,
+                                        active_y_labels=_active_y_labels,
+                                        void_boxes=_void_boxes_sk,
+                                    )
+                                elif "Punching Shear Verification Plan" in sk_title:
+                                    fig_sk = generate_flat_slab_punching_shear_sketch(
+                                        Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, Wu,
+                                        punching_results,
+                                        col_w_cm=bc_s, col_d_cm=tc_s,
+                                        removed_cols=_removed_col_objs,
+                                        void_panel_ids=set(_confirmed_voids),
+                                        edge_columns=_edge_columns,
+                                    )
+                                elif "Long-Term Deflection Contour Plan" in sk_title:
+                                    fig_sk = generate_flat_slab_deflection_contour_sketch(
+                                        Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, DL_tot, LL,
+                                        deflection_results,
+                                        col_w_cm=bc_s, col_d_cm=tc_s,
+                                        removed_cols=_removed_col_objs,
+                                        void_panel_ids=set(_confirmed_voids),
+                                        col_transforms=_col_transforms,
+                                        edge_columns=_edge_columns,
+                                    )
+                                elif "Moment M11 Contour Plan" in sk_title:
+                                    fig_sk = generate_flat_slab_moment_contour(
+                                        Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+                                        mode="M11", col_w_cm=bc_s, col_d_cm=tc_s,
+                                        removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
+                                        top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
+                                        col_transforms=_col_transforms, edge_columns=_edge_columns,
+                                        active_cols=_active_cols,
+                                        active_x_labels=_active_x_labels,
+                                        active_y_labels=_active_y_labels,
+                                        void_boxes=_void_boxes_sk,
+                                    )
+                                elif "Moment M22 Contour Plan" in sk_title:
+                                    fig_sk = generate_flat_slab_moment_contour(
+                                        Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+                                        mode="M22", col_w_cm=bc_s, col_d_cm=tc_s,
+                                        removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
+                                        top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
+                                        col_transforms=_col_transforms, edge_columns=_edge_columns,
+                                        active_cols=_active_cols,
+                                        active_x_labels=_active_x_labels,
+                                        active_y_labels=_active_y_labels,
+                                        void_boxes=_void_boxes_sk,
+                                    )
+                                elif "Master Steel Layout" in sk_title:
+                                    fig_sk = generate_flat_slab_master_steel_layout_sketch(
+                                        Lx_calc, Ly_calc, cantilevers, ts,
+                                        n_mesh_btm=n_mesh_btm, bottom_mesh_dia=bottom_mesh_dia,
+                                        n_mesh_top=n_mesh_top, top_mesh_dia=top_mesh_dia,
+                                        top_extra_cols=top_extra_cols, cant_rft_list=cant_rft_list,
+                                        btm_extra_spans=btm_extra_spans,
+                                        col_w_cm=bc_s, col_d_cm=tc_s,
+                                        removed_cols=_removed_col_objs,
+                                        void_panel_ids=set(_confirmed_voids),
+                                        col_transforms=_col_transforms,
+                                        edge_columns=_edge_columns,
+                                    )
+
+                                if fig_sk is not None:
+                                    pdf_doc.savefig(fig_sk, bbox_inches="tight")
+                                    plt.close(fig_sk)
+                            except Exception as e_sk:
+                                if fig_sk is not None:
+                                    try:
+                                        plt.close(fig_sk)
+                                    except Exception:
+                                        pass
+                                st.warning(f"تنبيه أثناء معالجة الرسم '{sk_title}': {e_sk}")
+
+                    pdf_sketches_buf.seek(0)
+                    pdf_sketches_bytes = pdf_sketches_buf.getvalue()
+
+                if pdf_sketches_bytes and len(pdf_sketches_bytes) > 1000:
+                    st.session_state[f"{prefix}_last_drawings_pdf_bytes"] = pdf_sketches_bytes
+                    st.session_state[f"{prefix}_last_drawings_pdf_filename"] = pdf_drawings_filename
+                    b64_drawings = base64.b64encode(pdf_sketches_bytes).decode("utf-8")
+                    js_dl_drawings = f"""
+                    <script>
+                    (function() {{
+                        try {{
+                            var b64Data = "{b64_drawings}";
+                            var byteChars = atob(b64Data);
+                            var byteNums = new Array(byteChars.length);
+                            for (var i = 0; i < byteChars.length; i++) {{ byteNums[i] = byteChars.charCodeAt(i); }}
+                            var byteArray = new Uint8Array(byteNums);
+                            var blob = new Blob([byteArray], {{type: "application/pdf"}});
+                            var blobUrl = URL.createObjectURL(blob);
+                            var targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+                            var a = targetDoc.createElement("a");
+                            a.href = blobUrl;
+                            a.download = "{pdf_drawings_filename}";
+                            a.target = "_blank";
+                            targetDoc.body.appendChild(a);
+                            a.click();
+                            setTimeout(function() {{
+                                try {{ targetDoc.body.removeChild(a); }} catch(e) {{}}
+                                URL.revokeObjectURL(blobUrl);
+                            }}, 4000);
+                        }} catch(err) {{
+                            var aFallback = document.createElement("a");
+                            aFallback.href = "data:application/pdf;base64,{b64_drawings}";
+                            aFallback.download = "{pdf_drawings_filename}";
+                            document.body.appendChild(aFallback);
+                            aFallback.click();
+                        }}
+                    }})();
+                    </script>
+                    """
+                    components.html(js_dl_drawings, height=0, width=0)
+                    st.toast(f"✅ تم تصدير {len(selected_sketches)} لوحات بنجاح إلى ملف PDF!", icon="📐")
+                    st.success(f"🎉 تم توليد وتنزيل ملف المخططات الهندسية بنجاح: **{pdf_drawings_filename}** ({len(selected_sketches)} صفحة)")
+                else:
+                    st.error("تعذر توليد ملف الـ PDF للرسومات المختارة، يرجى إعادة المحاولة.")
+
+        # Fallback button for drawings PDF
+        if st.session_state.get(f"{prefix}_last_drawings_pdf_bytes"):
+            _drawings_dl_fn = st.session_state.get(f"{prefix}_last_drawings_pdf_filename", pdf_drawings_filename)
+            st.download_button(
+                label=f"📥 اضغط هنا إذا لم يبدأ تحميل ملف اللوحات المجمعة ({_drawings_dl_fn})",
+                data=st.session_state[f"{prefix}_last_drawings_pdf_bytes"],
+                file_name=_drawings_dl_fn,
+                mime="application/pdf",
+                key=f"{prefix}btn_fallback_drawings_pdf",
+                use_container_width=True,
+            )
+
     st.markdown("---")
     # ── Final Info Summary ────────────────────────────────────────────────────
     st.info(

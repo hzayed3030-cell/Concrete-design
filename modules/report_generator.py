@@ -932,6 +932,241 @@ def generate_flat_slab_report_html(
     return html_content
 
 
+def generate_flat_slab_outputs_report_html(
+    project_name: str,
+    ts: float,
+    d: float,
+    num_floors: int,
+    Wu: float,
+    Fcu: float,
+    Fy: float,
+    SDL: float,
+    wall_load: float,
+    LL: float,
+    bc: float,
+    tc: float,
+    mesh_btm_str: str,
+    mesh_top_str: str,
+    top_extra_cols: List[Dict[str, Any]],
+    btm_extra_spans: List[Dict[str, Any]],
+    cant_rft_list: Optional[List[Dict[str, Any]]] = None,
+    punching_results: Optional[List[Dict[str, Any]]] = None,
+    all_punching_safe: bool = True,
+    deflection_results: Optional[List[Dict[str, Any]]] = None,
+    all_deflection_safe: bool = True,
+    img_verif_b64: Optional[str] = None,
+) -> str:
+    """
+    Generates a concise, high-level Output Summary calculation sheet (تقرير مخرجات التصميم المعتمد).
+    Contains:
+    1. Structural Geometry Layout & Verification Sketch
+    2. Primary Design Inputs & Material Properties
+    3. Comprehensive Design Outputs Table:
+       - Slab Thickness ts & d
+       - Bottom & Top Primary Meshes
+       - Column Top Extra Steel (Caps / كابات الأعمدة)
+       - Bay Bottom Extra Steel (الحديد الإضافي السفلي)
+       - Top Slab Middle Strip Extra Steel (الحديد الإضافي العلوي للبلاطة)
+       - Cantilever Reinforcement (الشوك)
+       - Punching Shear & Long-term Deflection Safety Verification
+    """
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    
+    # 1. Inputs Section
+    inputs_html = f"""
+    <div class="info-grid">
+        <div class="info-card">
+            <div class="card-lbl">Slab Thickness (ts)</div>
+            <div class="card-val">{ts:.0f} cm  <span style="font-size:0.8rem; color:#64748b;">(d = {d:.1f} cm)</span></div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Number of Floors (عدد الأدوار)</div>
+            <div class="card-val">{num_floors} Floors</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Ultimate Load (Wu)</div>
+            <div class="card-val">{Wu:.3f} t/m²</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Materials (Fcu / Fy)</div>
+            <div class="card-val">{Fcu:.0f} / {Fy:.0f} kg/cm²</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Standard Column (bc × tc)</div>
+            <div class="card-val">{bc:.0f} × {tc:.0f} cm</div>
+        </div>
+        <div class="info-card">
+            <div class="card-lbl">Loads (SDL / LL / Walls)</div>
+            <div class="card-val">{SDL:.2f} / {LL:.2f} / {wall_load:.2f} t/m²</div>
+        </div>
+    </div>
+    """
+
+    # 2. Geometry Sketch
+    drawing_html = ""
+    if img_verif_b64:
+        drawing_html = f"""
+        <div class="drawing-box">
+            <img src="{img_verif_b64}" alt="Structural Geometry Sketch & Verification Card">
+            <div class="drawing-caption">مخطط التحقق الهندسي وتوزيع المحاور والأعمدة (Structural Geometry & Column Layout Plan)</div>
+        </div>
+        """
+
+    # 3. Master Design Outputs Table
+    # Filter active top extra at columns
+    active_top_cols = [c for c in top_extra_cols if c.get("is_needed", False) and c.get("n_extra", 0) > 0]
+    top_cols_summary = []
+    for c in active_top_cols:
+        col_lbl = c.get("col_label", f"C{c.get('i', 0)+1}-{c.get('j', 0)+1}")
+        top_cols_summary.append(f"<b>{col_lbl}:</b> {c.get('callout', '')}")
+    top_cols_str = "<br>".join(top_cols_summary) if top_cols_summary else "الشبكة العلوية كافية ولا حاجة لكابات إضافية ✅"
+
+    # Filter active bottom extra
+    active_btm_spans = [b for b in btm_extra_spans if b.get("is_needed", False) and b.get("n_extra", 0) > 0]
+    btm_spans_summary = []
+    for b in active_btm_spans:
+        bay_lbl = b.get("bay_label", f"Bay {b.get('panel_id', '')}")
+        btm_spans_summary.append(f"<b>{bay_lbl} [{b.get('dir', 'X')}]:</b> {b.get('callout', '')}")
+    btm_spans_str = "<br>".join(btm_spans_summary) if btm_spans_summary else "الشبكة السفلية كافية وتغطي كامل عزوم منتصف البحر ✅"
+
+    # Cantilevers summary
+    cant_summary = []
+    if cant_rft_list:
+        for c in cant_rft_list:
+            cant_summary.append(f"<b>{c.get('side_ar', c.get('side', ''))} (L={c.get('length', 0):.2f}m):</b> شوكة {c.get('rft_callout', '')} (طول القطع: {c.get('total_bar_length', 0):.2f}m)")
+    cant_str = "<br>".join(cant_summary) if cant_summary else "لا توجد كوابيل (No Cantilevers)"
+
+    # Punching summary
+    unsafe_punch = [p for p in (punching_results or []) if not p.get("is_safe", True)]
+    if not punching_results or len(unsafe_punch) == 0:
+        punch_status_html = "<span style='color:#16a34a; font-weight:bold;'>✅ جميع الأعمدة آمنة تماماً بمقاومة الخرسانة بمفردها (qu ≤ qcup)</span>"
+    else:
+        unsafe_names = ", ".join([p.get("Column ID", "") for p in unsafe_punch])
+        punch_status_html = f"<span style='color:#dc2626; font-weight:bold;'>⚠️ يوجد {len(unsafe_punch)} عمود يتطلب كانات قص ثاقب أو زيادة السُمك: ({unsafe_names})</span>"
+
+    # Deflection summary
+    unsafe_def = [d_p for d_p in (deflection_results or []) if not d_p.get("is_safe", True)]
+    if not deflection_results or len(unsafe_def) == 0:
+        def_status_html = "<span style='color:#16a34a; font-weight:bold;'>✅ جميع الباكيات آمنة ومحققة لحدود الكود لسهم الانحناء طويل الأمد (Δtotal ≤ Ln/250)</span>"
+    else:
+        unsafe_p_names = ", ".join([d_p.get("Panel ID", "") for d_p in unsafe_def])
+        def_status_html = f"<span style='color:#dc2626; font-weight:bold;'>⚠️ تجاوز سهم الانحناء المسموح في {len(unsafe_def)} باكية: ({unsafe_p_names})</span>"
+
+    outputs_table_html = f"""
+    <table>
+        <thead>
+            <tr>
+                <th style="width:25%;">عنصر المخرجات الإنشائية (Output Component)</th>
+                <th style="width:45%;">المواصفات والكميات المعتمدة (Adopted Specification & Rebar)</th>
+                <th style="width:30%;">الملاحظات وحالة الأمان الكودية (Code Verification)</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><b>1. تخانة البلاطة والعمق الفعال (Thickness & Depth)</b></td>
+                <td><b>ts = {ts:.0f} cm</b>  │  <b>d = {d:.1f} cm</b></td>
+                <td>يحقق متطلبات الصلابة الكودية ECP 203</td>
+            </tr>
+            <tr>
+                <td><b>2. الشبكة السفلية الأساسية (Bottom Mesh B1, B2)</b></td>
+                <td style="color:#1d4ed8; font-weight:bold; font-size:1.0rem;">{mesh_btm_str}</td>
+                <td>رقة سفلية موحدة تغطي العزوم الموجبة بالكامل (+M)</td>
+            </tr>
+            <tr>
+                <td><b>3. الشبكة العلوية الأساسية (Top Mesh T1, T2)</b></td>
+                <td style="color:#1d4ed8; font-weight:bold; font-size:1.0rem;">{mesh_top_str}</td>
+                <td>رقة علوية موحدة لمقاومة الانكماش والعزوم السالبة</td>
+            </tr>
+            <tr>
+                <td><b>4. كابات الأعمدة والحديد الإضافي العلوي (Top Extra at Columns)</b></td>
+                <td style="line-height:1.7;">{top_cols_str}</td>
+                <td>لتغطية ذروة العزوم السالبة (-M) فوق رؤوس الأعمدة</td>
+            </tr>
+            <tr>
+                <td><b>5. الحديد الإضافي السفلي بالباكيات (Bottom Extra in Panels)</b></td>
+                <td style="line-height:1.7;">{btm_spans_str}</td>
+                <td>لتغطية عزوم البحور المكبرة والأطراف الحرة</td>
+            </tr>
+            <tr>
+                <td><b>6. تسليح الكوابيل والشوكة (Cantilever Reinforcement)</b></td>
+                <td style="line-height:1.7;">{cant_str}</td>
+                <td>امتداد الشوكة 1.5 مرة طول الكابولي داخل السقف</td>
+            </tr>
+            <tr>
+                <td><b>7. التحقق من القص الثاقب (Punching Shear Safety)</b></td>
+                <td colspan="2">{punch_status_html}</td>
+            </tr>
+            <tr>
+                <td><b>8. التحقق من الترخيم طويل الأمد (Long-term Deflection)</b></td>
+                <td colspan="2">{def_status_html}</td>
+            </tr>
+        </tbody>
+    </table>
+    """
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>ECP 203 - Flat Slab Design Outputs Summary</title>
+    {_get_base_report_css()}
+</head>
+<body>
+
+<div class="report-container">
+
+    <!-- Top Action Bar -->
+    <div class="action-bar no-print">
+        <div style="font-weight:700; font-size:1.05rem;">📕 تقرير مخرجات التصميم الإنشائي — Flat Slab Design Outputs</div>
+        <button class="btn-print" onclick="window.print();">🖨️ طباعة المخرجات / حفظ كـ PDF</button>
+    </div>
+
+    <!-- Report Header -->
+    <div class="report-header">
+        <div class="header-title">
+            <h1>تقرير مخرجات التصميم الإنشائي للبلاطات اللاكمرية (Flat Slab)</h1>
+            <span class="code-badge">الكود المصري ECP 203-2018 │ مخرجات معتمدة للمكاتب الاستشارية</span>
+        </div>
+        <div class="header-meta">
+            <div><b>المشروع:</b> {project_name}</div>
+            <div><b>تاريخ التوليد:</b> {now_str}</div>
+            <div><b>عدد الطوابق:</b> {num_floors} طوابق</div>
+        </div>
+    </div>
+
+    <!-- Section 1: Sketch & Inputs -->
+    <div class="section-title">1. المخطط الهندسي ومدخلات التصميم الأساسية (Geometry Sketch & Primary Inputs)</div>
+    {drawing_html}
+    {inputs_html}
+
+    <!-- Section 2: Master Outputs -->
+    <div class="section-title page-break">2. جدول مخرجات التصميم والتسليح المعتمد (Master Design & Reinforcement Outputs)</div>
+    {outputs_table_html}
+
+    <!-- Sign-off Block -->
+    <div class="signature-block">
+        <div class="sig-box">
+            <div class="sig-title">مهندس التصميم الإنشائي (Designer):</div>
+            <div style="margin-top:20px; color:#94a3b8;">التوقيع: ___________________</div>
+        </div>
+        <div class="sig-box">
+            <div class="sig-title">المراجعة الهندسية (Reviewer):</div>
+            <div style="margin-top:20px; color:#94a3b8;">التوقيع: ___________________</div>
+        </div>
+        <div class="sig-box">
+            <div class="sig-title">اعتماد المكتب الاستشاري (Consultant Approval):</div>
+            <div style="margin-top:20px; color:#94a3b8;">الختم والتاريخ: ______________</div>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>
+"""
+    return html_content
+
+
 def generate_column_report_html(
     project_name: str,
     b: float,

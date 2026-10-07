@@ -3788,6 +3788,27 @@ def checkbox(label: str, cfg_key: str, **kwargs):
     return res
 
 
+def toggle(label: str, cfg_key: str, default: bool = False, **kwargs):
+    """Drop-in replacement for st.toggle that persists the boolean value."""
+    widget_key = f"w_{cfg_key}"
+    saved = cfg_val(cfg_key)
+    if saved is not None:
+        kwargs["value"] = bool(saved)
+    elif "value" not in kwargs:
+        kwargs["value"] = bool(default)
+
+    res = st.toggle(
+        label,
+        key=widget_key,
+        on_change=_make_on_change(cfg_key, widget_key),
+        **kwargs,
+    )
+    if res is not None and "cfg" in st.session_state and st.session_state["cfg"].get(cfg_key) != res:
+        st.session_state["cfg"][cfg_key] = res
+        save_settings()
+    return res
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  MODULE SOFT-DELETE / RESTORE SYSTEM
 # ═══════════════════════════════════════════════════════════════════════════════

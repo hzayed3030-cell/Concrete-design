@@ -3208,7 +3208,7 @@ def render_3d_bim_viewer(
     """
     Renders the Integrated 3D Structural BIM & Rebar Viewer inside Module 1.
     """
-    with st.expander("🏢 3D Integrated BIM & Rebar Viewer (عارض النماذج الإنشائية ثلاثي الأبعاد والحديد)", expanded=True):
+    with st.expander("🏢 3D Integrated BIM & Rebar Viewer (عارض النماذج الإنشائية ثلاثي الأبعاد والحديد)", expanded=False):
         scene_data = extract_bim_3d_scene_data(
             Lx_calc=Lx_calc,
             Ly_calc=Ly_calc,
@@ -5119,7 +5119,7 @@ def render_standalone_flat_slab_3d_bim_viewer(
     """
     Renders the 3D BIM & Rebar Viewer for Module 13: Standalone Flat Slabs.
     """
-    with st.expander("🏢 3D Integrated BIM & Rebar Viewer (عارض النماذج الإنشائية ثلاثي الأبعاد والحديد)", expanded=True):
+    with st.expander("🏢 3D Integrated BIM & Rebar Viewer (عارض النماذج الإنشائية ثلاثي الأبعاد والحديد)", expanded=False):
         scene_data = extract_bim_3d_scene_data(
             Lx_calc=Lx_calc,
             Ly_calc=Ly_calc,

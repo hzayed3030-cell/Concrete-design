@@ -1985,89 +1985,20 @@ def render_profile_manager():
                             unsafe_allow_html=True,
                         )
 
-                    # Action Buttons in Step 1
-                    c_next, c_cancel, _ = st.columns([1.8, 1.2, 5.0])
+                    # Action Buttons
+                    c_next, c_cancel, _ = st.columns([2.2, 1.2, 4.6])
                     with c_next:
                         btn_next_disabled = not is_valid_sel or not new_p_name.strip()
                         if st.button(
-                            "➡️ متابعة والتأكيد (Next)",
+                            "🚀 متابعة وتأكيد إنشاء المشروع (Create & Open)",
                             type="primary",
                             use_container_width=True,
                             disabled=btn_next_disabled,
-                            help="انتقل إلى شاشة تأكيد الموديولات وبدء المشروع" if not btn_next_disabled else "يرجى تصحيح اختيار الموديولات وإدخال اسم المشروع أولاً",
+                            help="إنشاء المشروع الجديد وفتحه للعمل فوراً" if not btn_next_disabled else "يرجى تصحيح اختيار الموديولات وإدخال اسم المشروع أولاً",
+                            key="btn_create_proj_direct",
                         ):
-                            st.session_state["_new_proj_selected_indices"] = selected_module_indices
-                            st.session_state["_new_proj_step"] = 2
-                            st.rerun()
-                    with c_cancel:
-                        if st.button("❌ إلغاء", key="btn_cancel_step1", use_container_width=True):
-                            st.session_state["show_create_profile_form"] = False
-                            st.session_state["_new_proj_step"] = 1
-                            st.session_state.pop("_new_proj_saved_name", None)
-                            st.session_state.pop("_new_proj_selected_indices", None)
-                            for m in ALL_MODULES:
-                                st.session_state.pop(f"chk_new_proj_{m['idx']}", None)
-                            st.rerun()
-
-                elif curr_step == 2:
-                    # ── Step 2: Confirmation & Default Values Initialization ────────
-                    p_name_final = st.session_state.get("_new_proj_saved_name", f"مشروع {len(projects) + 1}").strip()
-                    chosen_indices = st.session_state.get("_new_proj_selected_indices", [0])
-
-                    # 1. New Project Confirmation Card
-                    selected_mods_html = "".join([
-                        f"""<li style="margin: 3px 0; color: #ffffff; font-size: 13.5px; display: flex; align-items: center; gap: 8px; line-height: 1.25; word-break: break-word;">
-                            <span style="color: #4ade80; font-size: 16px; line-height: 1;">✓</span>
-                            <span style="flex: 1; word-break: break-word;">{m['name']}</span>
-                        </li>"""
-                        for m in ALL_MODULES if m["idx"] in chosen_indices
-                    ])
-
-                    st.markdown(
-                        f"""
-                        <div style="background: linear-gradient(135deg, #064e3b 0%, #065f46 100%); border: 2px solid #34d399; border-radius: 12px; padding: 18px 22px; margin-bottom: 12px; box-shadow: 0 4px 20px rgba(52, 211, 153, 0.25);">
-                            <div style="font-weight: 900; font-size: 19px; color: #ffffff; display: flex; align-items: center; gap: 10px; border-bottom: 1.5px solid rgba(52, 211, 153, 0.4); padding-bottom: 8px;">
-                                <span style="font-size: 22px;">📋</span>
-                                <span>New Project Confirmation (تأكيد إنشاء المشروع)</span>
-                            </div>
-                            <div style="color: #d1fae5; font-size: 16px; font-weight: 700; margin: 10px 0 6px 0;">
-                                اسم المشروع: <b style="color: #fef08a; font-size: 18px;">«{p_name_final}»</b>
-                            </div>
-                            <div style="color: #ffffff; font-size: 14.5px; font-weight: 600; margin-bottom: 8px;">
-                                The following Modules will be opened in the new Project (الموديولات التي سيتم فتحها وتفعيلها في المشروع):
-                            </div>
-                            <div style="background: rgba(0, 0, 0, 0.25); border-radius: 8px; padding: 10px 16px;">
-                                <ul style="margin: 0; padding: 0; list-style: none;">
-                                    {selected_mods_html}
-                                </ul>
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-                    # 2. Explanatory Message about Default Values (⚠️ New Modules Initialization)
-                    st.markdown(
-                        """
-                        <div style="background: linear-gradient(135deg, #0c2d48 0%, #145da0 100%); border: 2px solid #38bdf8; border-radius: 12px; padding: 18px 22px; margin-bottom: 16px; box-shadow: 0 4px 20px rgba(56, 189, 248, 0.25);">
-                            <div style="color: #38bdf8; font-weight: 900; font-size: 18px; display: flex; align-items: center; gap: 10px; border-bottom: 1.5px solid rgba(56, 189, 248, 0.4); padding-bottom: 8px;">
-                                <span style="font-size: 22px;">⚠️</span>
-                                <span>New Modules Initialization (بدء الموديولات بالقيم الافتراضية)</span>
-                            </div>
-                            <div style="color: #f0f9ff; font-size: 14.5px; line-height: 1.7; margin-top: 10px; font-weight: 500;">
-                                <p style="margin: 4px 0;">• <b>The selected Modules will be opened with their initial default values and recommended starting parameters provided by the system.</b></p>
-                                <p style="margin: 4px 0; color: #bae6fd;">• <i>These are only default/initial values and do not represent final project inputs or design results.</i></p>
-                                <p style="margin: 4px 0;">• <b>After entering the actual project inputs, the Modules will perform the required calculations and design according to the applicable design code (ECP 203), calculation procedures, and design steps implemented in the system.</b></p>
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-                    # Action Buttons in Step 2
-                    c_create, c_back, c_cancel2, _ = st.columns([2.2, 1.6, 1.2, 3.0])
-                    with c_create:
-                        if st.button("🚀 إنشاء المشروع وتفعيله (Create Project)", type="primary", use_container_width=True, key="btn_confirm_create_proj"):
+                            p_name_final = new_p_name.strip()
+                            chosen_indices = selected_module_indices
                             # Clean Creation: strictly using ECP_DEFAULTS (copy_from=None)
                             created_name = create_project(p_name_final, copy_from=None, enabled_modules=chosen_indices)
                             set_project_enabled_modules(created_name, chosen_indices)
@@ -2084,12 +2015,8 @@ def render_profile_manager():
                             st.session_state["_force_module_idx"] = chosen_indices[0]
                             st.success(f"✅ تم إنشاء وتفعيل المشروع الجديد «{created_name}» بنجاح!")
                             st.rerun()
-                    with c_back:
-                        if st.button("↩️ تعديل الاختيار (Back)", use_container_width=True, key="btn_back_step1"):
-                            st.session_state["_new_proj_step"] = 1
-                            st.rerun()
-                    with c_cancel2:
-                        if st.button("❌ إلغاء", key="btn_cancel_step2", use_container_width=True):
+                    with c_cancel:
+                        if st.button("❌ إلغاء", key="btn_cancel_step1", use_container_width=True):
                             st.session_state["show_create_profile_form"] = False
                             st.session_state["_new_proj_step"] = 1
                             st.session_state.pop("_new_proj_saved_name", None)
