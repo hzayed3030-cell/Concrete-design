@@ -142,6 +142,15 @@ ECP_DEFAULTS: dict = {
     "fs_void_panels": [],
     "fs_col_transforms": {},
     "fs_edge_columns": {},
+    "fs_zero_col_mode": False,
+    "fs_placed_cols": None,
+    "fs_col_props": {},
+    "fs_new_col_b": 30.0,
+    "fs_new_col_t": 50.0,
+    "fs_new_col_dir": "اتجاه Y",
+    "fs_new_col_sx": "متمركز على المحور (Centered)",
+    "fs_new_col_sy": "متمركز على المحور (Centered)",
+    "_schema_mod8_removed": True,
 
     # Customs Module – Concrete Survey, Flat Slabs & Material Prices
     "cs_n_types": 2,
@@ -1087,67 +1096,16 @@ def _deserialize_module_12_state(data: dict) -> dict:
 
 def migrate_remove_module_8_in_project_dict(pdata_dict: dict) -> bool:
     """
-    Seamless migration patch for removing Module 8 (Building Foundations & Overlap Layout):
-    Module 8 is removed from the active modules list.
-    Any index == 7 is removed.
-    Any index > 7 is decremented by 1 (8->7, 9->8, 10->9, 11->10, 12->11).
+    Legacy migration stub: all current modules (0..12, 14) use fixed canonical indices
+    (where idx 7 = Module 8 Raft Foundations, idx 8 = Module 9 Ground Slabs,
+    idx 9 = Module 10 Circular Tank, idx 10 = Module 11 Standalone Flat Slabs).
+    Never decrement indices > 7 or strip idx 7.
     """
     if not isinstance(pdata_dict, dict):
         return False
-    if pdata_dict.get("_schema_mod8_removed", False):
-        return False
-
-    modified = False
-
-    # 1. Migrate enabled_modules
-    curr_enabled = pdata_dict.get("enabled_modules")
-    if isinstance(curr_enabled, list):
-        new_enabled = []
-        for idx in curr_enabled:
-            if idx == 7:
-                continue
-            elif idx > 7:
-                new_enabled.append(idx - 1)
-            else:
-                new_enabled.append(idx)
-        new_enabled = sorted(list(set(new_enabled)))
-        if new_enabled != curr_enabled:
-            pdata_dict["enabled_modules"] = new_enabled
-            modified = True
-
-    # 2. Migrate deleted_modules_trash
-    trash = pdata_dict.get("deleted_modules_trash")
-    if isinstance(trash, dict) and trash:
-        new_trash = {}
-        for k_str, entry in trash.items():
-            try:
-                k_int = int(k_str)
-                if k_int == 7:
-                    continue
-                elif k_int > 7:
-                    new_k_int = k_int - 1
-                    if isinstance(entry, dict):
-                        entry["module_idx"] = new_k_int
-                    new_trash[str(new_k_int)] = entry
-                else:
-                    new_trash[k_str] = entry
-            except Exception:
-                new_trash[k_str] = entry
-        pdata_dict["deleted_modules_trash"] = new_trash
-        modified = True
-
-    # 3. Migrate selected_module_idx
-    sel_idx = pdata_dict.get("selected_module_idx")
-    if isinstance(sel_idx, int):
-        if sel_idx == 7:
-            pdata_dict["selected_module_idx"] = 0
-            modified = True
-        elif sel_idx > 7:
-            pdata_dict["selected_module_idx"] = sel_idx - 1
-            modified = True
-
-    pdata_dict["_schema_mod8_removed"] = True
-    return True
+    if not pdata_dict.get("_schema_mod8_removed", False):
+        pdata_dict["_schema_mod8_removed"] = True
+    return False
 
 
 migrate_module_8_in_project_dict = migrate_remove_module_8_in_project_dict
@@ -1234,6 +1192,12 @@ def migrate_module_15_in_project_dict(pdata_dict: dict) -> bool:
 def get_default_project_state(project_name: str = "", owner_name: str = "") -> dict:
     """Return fresh default project state with all module schemas initialized."""
     d = dict(ECP_DEFAULTS)
+    d["_schema_mod8_removed"] = True
+    # New projects start in Zero Column State (empty grid without pre-generated columns)
+    d["fs_zero_col_mode"] = True
+    d["fs_placed_cols"] = []
+    d["fs_col_props"] = {}
+    d["fs_removed_cols"] = []
     d["module_9_strap_footing"] = get_default_module_9_state()
     d["module_10_diagonal_strap"] = get_default_module_10_state()
     d["module_11_ground_beam"] = get_default_module_11_state()
@@ -2618,10 +2582,14 @@ def create_project(
     if enabled_modules is not None and isinstance(enabled_modules, list):
         valid_mods = [int(i) for i in enabled_modules if int(i) in all_module_indices]
         new_data["enabled_modules"] = sorted(list(set(valid_mods))) if valid_mods else [ALL_MODULES[0]["idx"]]
+        new_data["selected_module_idx"] = new_data["enabled_modules"][0]
     elif copy_from and copy_from in profiles and "enabled_modules" in src_data:
         new_data["enabled_modules"] = src_data["enabled_modules"]
+        if new_data.get("selected_module_idx") not in new_data["enabled_modules"] and new_data["enabled_modules"]:
+            new_data["selected_module_idx"] = new_data["enabled_modules"][0]
     elif "enabled_modules" not in new_data:
         new_data["enabled_modules"] = [m["idx"] for m in ALL_MODULES]
+        new_data["selected_module_idx"] = new_data["enabled_modules"][0]
 
     new_data["apartment_name"] = name
     new_data["cs_project_name"] = name
@@ -2700,12 +2668,10 @@ def delete_project(project_name: str) -> bool:
     profiles.pop(project_name)
 
     if not profiles:
-        # Recreate a clean default project
+        # Recreate a clean default project in Zero Column State
         now_str = _get_now_str()
         def_name = "مشروع 1"
-        def_data = dict(ECP_DEFAULTS)
-        def_data["apartment_name"] = def_name
-        def_data["cs_project_name"] = def_name
+        def_data = get_default_project_state(project_name=def_name)
         profiles[def_name] = {
             "name": def_name,
             "description": "مشروع افتراضي 1",
@@ -2992,9 +2958,16 @@ def get_project_summary(project_name: str) -> dict:
         total_w = sum(lx_spans) + c_left + c_right
         total_h = sum(ly_spans) + c_btm + c_top
         area = total_w * total_h
-        n_cols_total = (n_lx + 1) * (n_ly + 1)
         removed_cols = data.get("fs_removed_cols", [])
-        n_cols_active = n_cols_total - len(removed_cols) if isinstance(removed_cols, list) else n_cols_total
+        removed_list = removed_cols if isinstance(removed_cols, list) else []
+        if bool(data.get("fs_zero_col_mode", False)) or isinstance(data.get("fs_placed_cols"), list):
+            placed_cols = data.get("fs_placed_cols") or []
+            placed_list = placed_cols if isinstance(placed_cols, list) else []
+            n_cols_total = len(placed_list)
+            n_cols_active = len([c for c in placed_list if c not in removed_list])
+        else:
+            n_cols_total = (n_lx + 1) * (n_ly + 1)
+            n_cols_active = max(0, n_cols_total - len(removed_list))
         ts = float(data.get("slab_ts_initial", 20.0))
         floors = int(data.get("slab_n_floors", 1))
         module_name = "Standalone - Flat Slabs"
@@ -3045,9 +3018,16 @@ def get_project_summary(project_name: str) -> dict:
         total_h = sum(ly_spans) + c_btm + c_top
         area = total_w * total_h
 
-        n_cols_total = (n_lx + 1) * (n_ly + 1)
         removed_cols = data.get("fs_removed_cols", [])
-        n_cols_active = n_cols_total - len(removed_cols) if isinstance(removed_cols, list) else n_cols_total
+        removed_list = removed_cols if isinstance(removed_cols, list) else []
+        if bool(data.get("fs_zero_col_mode", False)) or isinstance(data.get("fs_placed_cols"), list):
+            placed_cols = data.get("fs_placed_cols") or []
+            placed_list = placed_cols if isinstance(placed_cols, list) else []
+            n_cols_total = len(placed_list)
+            n_cols_active = len([c for c in placed_list if c not in removed_list])
+        else:
+            n_cols_total = (n_lx + 1) * (n_ly + 1)
+            n_cols_active = max(0, n_cols_total - len(removed_list))
 
         ts = float(data.get("slab_ts_initial", 20.0))
         floors = int(data.get("slab_n_floors", 1))
@@ -3473,8 +3453,7 @@ def reset_settings() -> None:
     Reset the active profile's configuration to standard ECP defaults.
     """
     active_name = get_active_profile_name()
-    cfg = dict(ECP_DEFAULTS)
-    cfg["apartment_name"] = active_name
+    cfg = get_default_project_state(project_name=active_name)
     _clear_m12_session_keys()
     _clear_m15_session_keys()
     cfg["module_12_brick_survey"] = get_default_module_12_state()
@@ -3821,6 +3800,8 @@ MODULE_DATA_KEY_PREFIXES = {
         "fs_lx_", "fs_ly_",
         "fs_cant_left", "fs_cant_right", "fs_cant_bottom", "fs_cant_top",
         "fs_removed_cols", "fs_void_panels",
+        "fs_zero_col_mode", "fs_placed_cols", "fs_col_props",
+        "fs_col_transforms", "fs_edge_columns", "fs_new_col_",
         "fs_col_pu_int", "fs_col_pu_edge", "fs_col_pu_corner",
         "fs_col_tot_pu_int", "fs_col_tot_pu_edge", "fs_col_tot_pu_corner",
         "fs_building_columns", "fs_col_b", "fs_col_c", "fs_Lx_spans", "fs_Ly_spans",

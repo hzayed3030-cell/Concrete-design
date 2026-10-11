@@ -14,6 +14,7 @@ Units: ton, m, kg, cm, kg/cm²
 
 import os
 import io
+import json
 import base64
 import math
 import functools
@@ -531,8 +532,61 @@ def draw_column_label_beside(ax, rx, ry, rw, rh, cx, cy, label_text, is_right_ed
 
 
 
+def _normalize_fs_placed_set(placed_cols, x_coords, y_coords):
+    """
+    Normalize placed_cols into a set of original column IDs (e.g. {'C1', 'C5'})
+    and a set of (i, j) tuples. Supports 'C1', '0,1', [0, 1], (0, 1), or 'Y1-X2'.
+    """
+    placed_orig_ids = set()
+    placed_ij = set()
+    if not placed_cols:
+        return placed_orig_ids, placed_ij
+
+    n_xi = len(x_coords)
+    n_yj = len(y_coords)
+    for item in placed_cols:
+        if isinstance(item, (list, tuple)) and len(item) == 2:
+            try:
+                ii, jj = int(item[0]), int(item[1])
+                if 0 <= ii < n_xi and 0 <= jj < n_yj:
+                    placed_ij.add((ii, jj))
+                    placed_orig_ids.add(f"C{jj * n_xi + ii + 1}")
+            except (ValueError, TypeError):
+                pass
+        elif isinstance(item, str):
+            s = item.strip()
+            if s.upper().startswith("C") and s[1:].isdigit():
+                cid = f"C{int(s[1:])}"
+                idx0 = int(s[1:]) - 1
+                if 0 <= idx0 < n_xi * n_yj:
+                    placed_orig_ids.add(cid)
+                    placed_ij.add((idx0 % n_xi, idx0 // n_xi))
+            elif "," in s:
+                parts = s.replace("(", "").replace(")", "").replace("[", "").replace("]", "").split(",")
+                if len(parts) == 2:
+                    try:
+                        ii, jj = int(parts[0].strip()), int(parts[1].strip())
+                        if 0 <= ii < n_xi and 0 <= jj < n_yj:
+                            placed_ij.add((ii, jj))
+                            placed_orig_ids.add(f"C{jj * n_xi + ii + 1}")
+                    except (ValueError, TypeError):
+                        pass
+    return placed_orig_ids, placed_ij
+
+
 @st.cache_data(show_spinner=False)
-def get_flat_slab_columns(Lx_spans, Ly_spans, bc_cm=30, tc_cm=30, removed_ids=None, col_transforms=None, edge_columns=None):
+def get_flat_slab_columns(
+    Lx_spans,
+    Ly_spans,
+    bc_cm=30,
+    tc_cm=30,
+    removed_ids=None,
+    col_transforms=None,
+    edge_columns=None,
+    placed_cols=None,
+    zero_col_mode=False,
+    col_props=None,
+):
     """
     Generate structured registry of columns C1, C2, ...
     Ordered: left to right (Y axes, i-direction), bottom to top (X axes, j-direction).
@@ -540,18 +594,22 @@ def get_flat_slab_columns(Lx_spans, Ly_spans, bc_cm=30, tc_cm=30, removed_ids=No
     Args:
         Lx_spans:       List of span lengths in X-direction (m).
         Ly_spans:       List of span lengths in Y-direction (m).
-        bc_cm:          Column width (cm).
-        tc_cm:          Column depth (cm).
+        bc_cm:          Default column width (cm).
+        tc_cm:          Default column depth (cm).
         removed_ids:    Optional set/list of column IDs to remove (e.g. {"C3", "C7"}).
                         IDs refer to the *original* numbering before any removal.
         col_transforms: Optional dict mapping column ID (orig_id or id) to its
                         transform dict: {"direction", "shift_x", "shift_y"}.
         edge_columns:   Optional dict mapping column ID (orig_id or id) to its
                         edge definition dict: {"is_edge": "Yes"/"No", "direction": str}.
+        placed_cols:    Optional list/set of selectively placed columns (orig_id or (i,j)).
+        zero_col_mode:  If True (new philosophy), no columns are generated automatically;
+                        only columns explicitly in placed_cols are active.
+        col_props:      Optional dict mapping orig_id or "i,j" to per-column {"b_cm", "t_cm", ...}.
 
     Returns:
         active_columns:  List of dicts for remaining columns (re-indexed C1, C2, ...).
-        all_columns:     Full list of dicts including removed ones (removed=True flag).
+        all_columns:     Full list of dicts including removed/unplaced ones (removed=True flag).
         eff_Lx_spans:    Effective Lx spans for DDM after axis merging.
         eff_Ly_spans:    Effective Ly spans for DDM after axis merging.
         ddm_warning:     String warning if DDM span ratio > 1.33, else None.
@@ -568,6 +626,9 @@ def get_flat_slab_columns(Lx_spans, Ly_spans, bc_cm=30, tc_cm=30, removed_ids=No
     n_xi = len(x_coords)
     n_yj = len(y_coords)
 
+    is_selective = bool(zero_col_mode) or (placed_cols is not None)
+    placed_orig_ids, placed_ij = _normalize_fs_placed_set(placed_cols, x_coords, y_coords)
+
     # ── Build ALL columns with original IDs ──────────────────────────────────
     all_columns = []
     col_count = 1
@@ -578,20 +639,45 @@ def get_flat_slab_columns(Lx_spans, Ly_spans, bc_cm=30, tc_cm=30, removed_ids=No
             col_type  = "Corner" if is_corner else ("Edge" if is_edge else "Interior")
             orig_id   = f"C{col_count}"
 
-            c_trans = (col_transforms or {}).get(orig_id, {})
-            geom = compute_column_geometry(x, y, bc_cm, tc_cm, c_trans)
+            if is_selective:
+                is_placed = (orig_id in placed_orig_ids) or ((i, j) in placed_ij)
+                is_removed = (not is_placed) or (orig_id in removed_set)
+            else:
+                is_placed = True
+                is_removed = (orig_id in removed_set)
 
-            edge_info = (edge_columns or {}).get(orig_id, {})
-            is_edge_req = isinstance(edge_info, dict) and edge_info.get("is_edge") == "Yes"
-            edge_dir_req = edge_info.get("direction", "") if is_edge_req else ""
+            # Per-column custom dimensions and orientation (only for active placed columns)
+            c_prop = {}
+            if not is_removed and isinstance(col_props, dict):
+                c_prop = col_props.get(orig_id) or col_props.get(f"{i},{j}") or col_props.get((i, j)) or {}
+            c_bc = float(c_prop.get("b_cm", bc_cm)) if isinstance(c_prop, dict) and c_prop.get("b_cm") else float(bc_cm)
+            c_tc = float(c_prop.get("t_cm", tc_cm)) if isinstance(c_prop, dict) and c_prop.get("t_cm") else float(tc_cm)
+
+            c_trans = {}
+            if not is_removed:
+                c_trans = dict((col_transforms or {}).get(orig_id) or (col_transforms or {}).get(f"{i},{j}") or {})
+                if isinstance(c_prop, dict):
+                    if not c_trans.get("direction") and c_prop.get("direction"):
+                        c_trans["direction"] = c_prop["direction"]
+                    if not c_trans.get("shift_x") and c_prop.get("shift_x"):
+                        c_trans["shift_x"] = c_prop["shift_x"]
+                    if not c_trans.get("shift_y") and c_prop.get("shift_y"):
+                        c_trans["shift_y"] = c_prop["shift_y"]
+
+            geom = compute_column_geometry(x, y, c_bc, c_tc, c_trans)
+
             is_edge_col = False
             edge_dir = ""
-            if is_edge_req and edge_dir_req:
-                slab_bounds_local = {"min_x": x_coords[0], "max_x": x_coords[-1], "min_y": y_coords[0], "max_y": y_coords[-1]}
-                is_valid, _ = validate_edge_column_offset(geom, edge_dir_req, slab_bounds=slab_bounds_local)
-                if is_valid:
-                    is_edge_col = True
-                    edge_dir = edge_dir_req
+            if not is_removed:
+                edge_info = (edge_columns or {}).get(orig_id, {})
+                is_edge_req = isinstance(edge_info, dict) and edge_info.get("is_edge") == "Yes"
+                edge_dir_req = edge_info.get("direction", "") if is_edge_req else ""
+                if is_edge_req and edge_dir_req:
+                    slab_bounds_local = {"min_x": x_coords[0], "max_x": x_coords[-1], "min_y": y_coords[0], "max_y": y_coords[-1]}
+                    is_valid, _ = validate_edge_column_offset(geom, edge_dir_req, slab_bounds=slab_bounds_local)
+                    if is_valid:
+                        is_edge_col = True
+                        edge_dir = edge_dir_req
 
             all_columns.append({
                 "id":        orig_id,
@@ -608,6 +694,8 @@ def get_flat_slab_columns(Lx_spans, Ly_spans, bc_cm=30, tc_cm=30, removed_ids=No
                 "type":      col_type,
                 "bc":        geom["bc"],
                 "tc":        geom["tc"],
+                "b_cm":      c_bc,
+                "t_cm":      c_tc,
                 "direction": geom["direction"],
                 "shift_x":   geom["shift_x"],
                 "shift_y":   geom["shift_y"],
@@ -625,7 +713,8 @@ def get_flat_slab_columns(Lx_spans, Ly_spans, bc_cm=30, tc_cm=30, removed_ids=No
                 "center_y":  geom["center_y"],
                 "is_edge_col": is_edge_col,
                 "edge_dir":    edge_dir,
-                "removed":   orig_id in removed_set,
+                "placed":    is_placed,
+                "removed":   is_removed,
             })
             col_count += 1
 
@@ -759,6 +848,8 @@ def generate_flat_slab_sketch(
     col_transforms=None,    # dict mapping column ID -> {"direction", "shift_x", "shift_y"}
     edge_columns=None,      # dict mapping column ID -> {"is_edge": "Yes"/"No", "direction": str}
     void_boxes=None,        # list of (vx1, vx2, vy1, vy2, area) confirmed physical boxes
+    col_props=None,         # dict mapping column ID or "i,j" -> {"b_cm", "t_cm", "direction", ...}
+    show_add_markers=False, # if True, draw target markers (+) at unplaced intersections
 ):
     """
     Generate the confirmatory geometric sketch for the flat slab with detailed Data Card.
@@ -976,16 +1067,41 @@ def generate_flat_slab_sketch(
     # Draw columns
     for orig_id, info in orig_to_info.items():
         x, y = info["x"], info["y"]
+        i_idx, j_idx = info["i"], info["j"]
         is_removed = orig_id in _removed
         is_pending = orig_id in _pending
         label = new_label.get(orig_id)
 
         if is_removed:
-            # Completely omitted / removed from drawing after confirmation
+            if show_add_markers:
+                # Draw interactive target marker (+) at unplaced intersection (Module 12/15 style)
+                mk_r = max(0.16, min(slab_w, slab_h) * 0.018)
+                mk_circ = Circle(
+                    (x, y), radius=mk_r,
+                    facecolor="#e0f2fe", edgecolor="#0284c7",
+                    lw=1.4, linestyle="--", alpha=0.92, zorder=4
+                )
+                ax_plan.add_patch(mk_circ)
+                ax_plan.plot([x - mk_r * 0.65, x + mk_r * 0.65], [y, y], color="#0284c7", lw=1.6, zorder=5)
+                ax_plan.plot([x, x], [y - mk_r * 0.65, y + mk_r * 0.65], color="#0284c7", lw=1.6, zorder=5)
             continue
 
-        c_trans = (col_transforms or {}).get(orig_id, {})
-        geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+        c_prop = {}
+        if isinstance(col_props, dict):
+            c_prop = col_props.get(orig_id) or col_props.get(f"{i_idx},{j_idx}") or col_props.get((i_idx, j_idx)) or {}
+        c_w_use = float(c_prop.get("b_cm", col_w_cm)) if isinstance(c_prop, dict) and c_prop.get("b_cm") else float(col_w_cm)
+        c_d_use = float(c_prop.get("t_cm", col_d_cm)) if isinstance(c_prop, dict) and c_prop.get("t_cm") else float(col_d_cm)
+
+        c_trans = dict((col_transforms or {}).get(orig_id) or (col_transforms or {}).get(f"{i_idx},{j_idx}") or {})
+        if isinstance(c_prop, dict):
+            if not c_trans.get("direction") and c_prop.get("direction"):
+                c_trans["direction"] = c_prop["direction"]
+            if not c_trans.get("shift_x") and c_prop.get("shift_x"):
+                c_trans["shift_x"] = c_prop["shift_x"]
+            if not c_trans.get("shift_y") and c_prop.get("shift_y"):
+                c_trans["shift_y"] = c_prop["shift_y"]
+
+        geom = compute_column_geometry(x, y, c_w_use, c_d_use, c_trans)
         rx = geom["x_min"]
         ry = geom["y_min"]
         rw = geom["width_m"]
@@ -1103,6 +1219,22 @@ def generate_flat_slab_sketch(
     ax_plan.axis("off")
 
     fig.tight_layout(pad=0.08)
+    try:
+        pos = ax_plan.get_position()
+        xlim = ax_plan.get_xlim()
+        ylim = ax_plan.get_ylim()
+        st.session_state["_fs_plan_bbox_info"] = {
+            "x0": float(pos.x0),
+            "y0": float(pos.y0),
+            "x1": float(pos.x1),
+            "y1": float(pos.y1),
+            "xlim": [float(xlim[0]), float(xlim[1])],
+            "ylim": [float(ylim[0]), float(ylim[1])],
+            "xs": [float(xv) for xv in x_coords],
+            "ys": [float(yv) for yv in y_coords],
+        }
+    except Exception:
+        pass
     return fig
 
 
@@ -2335,10 +2467,14 @@ def build_slab_moment_field(
     grid_res=220,
     void_boxes=None,
     btm_extra_spans=None,
+    active_cols=None,
+    removed_cols=None,
 ):
     """
     Reconstructs continuous 2D moment fields M11(x, y) and M22(x, y)
     in moment intensity units (t·m/m') from DDM calculation values.
+    Supports intelligent merging of adjacent bays that lack intermediate column supports,
+    rendering unified, continuous moment contours across merged spans (e.g., between X1 and X3).
     Returns (X, Y, M11, M22, M11_raw, M22_raw).
     """
     cant_L = cantilevers.get("left", 0.0)
@@ -2375,10 +2511,7 @@ def build_slab_moment_field(
     h_cs_y = min(Lx_avg, Ly_avg) / 4.0
     h_cs_x = min(Lx_avg, Ly_avg) / 4.0
 
-    # ── 1. Calculate M11(x, y) (Moments along X-direction in t·m/m) ───────────
-    dist_to_y_axes = np.min(np.abs(Y[:, :, np.newaxis] - np.array(y_coords)), axis=2)
-    w_cs_11 = np.cos(np.pi / 2.0 * np.clip(dist_to_y_axes / (h_cs_y * 1.35), 0.0, 1.0)) ** 2
-
+    # ── 1. Cantilever Outlines & Moments ─────────────────────────────────────
     if cant_L > 0:
         mask_cL = (X < x_coords[0])
         M11[mask_cL] = -0.5 * Wu * np.maximum(0.0, X[mask_cL] - x_min) ** 2
@@ -2386,70 +2519,6 @@ def build_slab_moment_field(
     if cant_R > 0:
         mask_cR = (X > x_coords[-1])
         M11[mask_cR] = -0.5 * Wu * np.maximum(0.0, x_max - X[mask_cR]) ** 2
-
-    for i, lx in enumerate(Lx_spans):
-        x_left = x_coords[i]
-        x_right = x_coords[i+1]
-        mask_span = (X >= x_left) & (X <= x_right)
-        if not np.any(mask_span):
-            continue
-
-        r_info = rows_x[min(i, len(rows_x)-1)] if rows_x else {}
-        cs_w = max(0.1, r_info.get("cs_w", min(lx, Ly_avg) / 2.0))
-        ms_w = max(0.1, r_info.get("ms_w", max(0.1, Ly_avg - cs_w)))
-
-        # Normalized moment intensities in t·m/m' (divided by strip width)
-        m_cs_pos = r_info.get("cs_pos", 0.60 * r_info.get("M_pos", 10.0)) / cs_w
-        m_ms_pos = r_info.get("ms_pos", 0.40 * r_info.get("M_pos", 10.0)) / ms_w
-
-        if i == 0:
-            cant_m = 0.5 * Wu * (cant_L ** 2)
-            m_cs_neg_L = max(r_info.get("cs_neg_ext", 0.0) / cs_w, cant_m)
-            m_ms_neg_L = max(r_info.get("ms_neg_ext", 0.0) / ms_w, cant_m)
-        else:
-            m_cs_neg_L = r_info.get("cs_neg_int", 0.75 * r_info.get("Mo", 10.0) * 0.65) / cs_w
-            m_ms_neg_L = r_info.get("ms_neg_int", 0.25 * r_info.get("Mo", 10.0) * 0.65) / ms_w
-
-        if i == len(Lx_spans) - 1:
-            cant_m = 0.5 * Wu * (cant_R ** 2)
-            m_cs_neg_R = max(r_info.get("cs_neg_ext", 0.0) / cs_w, cant_m)
-            m_ms_neg_R = max(r_info.get("ms_neg_ext", 0.0) / ms_w, cant_m)
-        else:
-            m_cs_neg_R = r_info.get("cs_neg_int", 0.75 * r_info.get("Mo", 10.0) * 0.65) / cs_w
-            m_ms_neg_R = r_info.get("ms_neg_int", 0.25 * r_info.get("Mo", 10.0) * 0.65) / ms_w
-
-        xi = (X[mask_span] - x_left) / max(0.001, lx)
-        M_cs = -m_cs_neg_L * (1.0 - xi) - m_cs_neg_R * xi + 4.0 * (m_cs_pos + (m_cs_neg_L + m_cs_neg_R) / 2.0) * xi * (1.0 - xi)
-        M_ms = -m_ms_neg_L * (1.0 - xi) - m_ms_neg_R * xi + 4.0 * (m_ms_pos + (m_ms_neg_L + m_ms_neg_R) / 2.0) * xi * (1.0 - xi)
-
-        w = w_cs_11[mask_span]
-        M11[mask_span] = w * M_cs + (1.0 - w) * M_ms
-
-    # Apply perpendicular tributary variation across Y for M11 (so each strip and bay reflects its true span width)
-    if Ly_spans and len(y_coords) >= 2:
-        y_nodes = []
-        trib_y_nodes = []
-        for j_idx, ly_val in enumerate(Ly_spans):
-            y_l = y_coords[j_idx]
-            y_r = y_coords[j_idx + 1]
-            y_m = (y_l + y_r) / 2.0
-            t_l = Ly_spans[0] / 2.0 if j_idx == 0 else (Ly_spans[j_idx - 1] + Ly_spans[j_idx]) / 2.0
-            t_m = ly_val
-            t_r = Ly_spans[-1] / 2.0 if j_idx == len(Ly_spans) - 1 else (Ly_spans[j_idx] + Ly_spans[j_idx + 1]) / 2.0
-            if j_idx == 0:
-                y_nodes.append(y_l)
-                trib_y_nodes.append(t_l)
-            y_nodes.extend([y_m, y_r])
-            trib_y_nodes.extend([t_m, t_r])
-
-        scale_11 = np.interp(Y, y_nodes, trib_y_nodes) / max(0.1, Ly_avg)
-        # Smoothly apply variation within realistic structural bounds (0.55 to 1.35)
-        scale_11 = np.clip(scale_11, 0.55, 1.35)
-        M11 = M11 * scale_11
-
-    # ── 2. Calculate M22(x, y) (Moments along Y-direction in t·m/m) ───────────
-    dist_to_x_axes = np.min(np.abs(X[:, :, np.newaxis] - np.array(x_coords)), axis=2)
-    w_cs_22 = np.cos(np.pi / 2.0 * np.clip(dist_to_x_axes / (h_cs_x * 1.35), 0.0, 1.0)) ** 2
 
     if cant_B > 0:
         mask_cB = (Y < y_coords[0])
@@ -2459,71 +2528,279 @@ def build_slab_moment_field(
         mask_cT = (Y > y_coords[-1])
         M22[mask_cT] = -0.5 * Wu * np.maximum(0.0, y_max - Y[mask_cT]) ** 2
 
-    for j, ly in enumerate(Ly_spans):
-        y_bot = y_coords[j]
-        y_top = y_coords[j+1]
-        mask_span = (Y >= y_bot) & (Y <= y_top)
-        if not np.any(mask_span):
+    # ── 2. Detect Column Support Grid Status ─────────────────────────────────
+    rem_set = set()
+    rem_coords = set()
+    if removed_cols:
+        for item in removed_cols:
+            if isinstance(item, str):
+                rem_set.add(item)
+            elif isinstance(item, dict):
+                if "orig_id" in item:
+                    rem_set.add(item["orig_id"])
+                if "id" in item:
+                    rem_set.add(item["id"])
+                if "x" in item and "y" in item:
+                    rem_coords.add((round(float(item["x"]), 2), round(float(item["y"]), 2)))
+
+    active_col_set = set()
+    active_col_coords = set()
+    if active_cols:
+        for c in active_cols:
+            if isinstance(c, dict):
+                cid = c.get("orig_id", c.get("id"))
+                if cid:
+                    active_col_set.add(cid)
+                cx = c.get("grid_x_m", c.get("x"))
+                cy = c.get("grid_y_m", c.get("y"))
+                if cx is not None and cy is not None:
+                    active_col_coords.add((round(float(cx), 2), round(float(cy), 2)))
+
+    def is_vertex_col_active(i_idx, j_idx):
+        if not active_cols and not removed_cols:
+            return True
+        gx = x_coords[i_idx]
+        gy = y_coords[j_idx]
+        cid = f"C{j_idx * len(x_coords) + i_idx + 1}"
+        if active_col_set or active_col_coords:
+            return (cid in active_col_set) or ((round(gx, 2), round(gy, 2)) in active_col_coords)
+        if rem_set or rem_coords:
+            return (cid not in rem_set) and ((round(gx, 2), round(gy, 2)) not in rem_coords)
+        return True
+
+    # ── 3. Detect Void Panels ────────────────────────────────────────────────
+    void_set = set(void_panel_ids) if void_panel_ids else set()
+
+    def is_panel_void(i_idx, j_idx):
+        pid = f"P_{i_idx+1}_{j_idx+1}"
+        if pid in void_set:
+            return True
+        if void_boxes:
+            px1, px2 = x_coords[i_idx], x_coords[i_idx+1]
+            py1, py2 = y_coords[j_idx], y_coords[j_idx+1]
+            for (vx1, vx2, vy1, vy2, *_) in void_boxes:
+                ov_x = max(0.0, min(px2, vx2) - max(px1, vx1))
+                ov_y = max(0.0, min(py2, vy2) - max(py1, vy1))
+                if ov_x * ov_y > 0.60 * max(0.01, (px2 - px1) * (py2 - py1)):
+                    return True
+        return False
+
+    # ── 4. Detect Multi-Bay Clusters / Merged Macro-Panels ────────────────────
+    solid_panels = []
+    panel_map = {}
+    for j_idx in range(len(Ly_spans)):
+        for i_idx in range(len(Lx_spans)):
+            if not is_panel_void(i_idx, j_idx):
+                pid = f"P_{i_idx+1}_{j_idx+1}"
+                solid_panels.append((i_idx, j_idx, pid))
+                panel_map[(i_idx, j_idx)] = pid
+
+    adj = {pid: set() for _, _, pid in solid_panels}
+    for i_idx, j_idx, pid in solid_panels:
+        # Check right neighbor across boundary at x_{i+1}:
+        if (i_idx + 1, j_idx) in panel_map:
+            c_bot = is_vertex_col_active(i_idx + 1, j_idx)
+            c_top = is_vertex_col_active(i_idx + 1, j_idx + 1)
+            # If not supported at both ends by active columns, merge horizontally:
+            if not (c_bot and c_top):
+                nbr_pid = panel_map[(i_idx + 1, j_idx)]
+                adj[pid].add(nbr_pid)
+                adj[nbr_pid].add(pid)
+        # Check top neighbor across boundary at y_{j+1}:
+        if (i_idx, j_idx + 1) in panel_map:
+            c_left = is_vertex_col_active(i_idx, j_idx + 1)
+            c_right = is_vertex_col_active(i_idx + 1, j_idx + 1)
+            # If not supported at both ends by active columns, merge vertically:
+            if not (c_left and c_right):
+                nbr_pid = panel_map[(i_idx, j_idx + 1)]
+                adj[pid].add(nbr_pid)
+                adj[nbr_pid].add(pid)
+
+    # Connected components
+    visited = set()
+    components = []
+    for _, _, pid in solid_panels:
+        if pid not in visited:
+            comp = []
+            queue = [pid]
+            visited.add(pid)
+            while queue:
+                curr = queue.pop(0)
+                comp.append(curr)
+                for nbr in adj[curr]:
+                    if nbr not in visited:
+                        visited.add(nbr)
+                        queue.append(nbr)
+            components.append(comp)
+
+    # ── 5. Generate Continuous Positive Moment Ribbons (M11 & M22) ───────────
+    # 5a. M22: Spans in Y-direction, forms continuous horizontal ribbons across X:
+    for j_idx, ly_val in enumerate(Ly_spans):
+        y_bot = y_coords[j_idx]
+        y_top = y_coords[j_idx + 1]
+        L_span_y = max(0.5, y_top - y_bot)
+
+        solid_i = [i_idx for i_idx in range(len(Lx_spans)) if not is_panel_void(i_idx, j_idx)]
+        if not solid_i:
             continue
 
-        r_info = rows_y[min(j, len(rows_y)-1)] if rows_y else {}
-        cs_w = max(0.1, r_info.get("cs_w", min(ly, Lx_avg) / 2.0))
-        ms_w = max(0.1, r_info.get("ms_w", max(0.1, Lx_avg - cs_w)))
+        # Group contiguous solid spans along X:
+        contiguous_groups_x = []
+        curr_g = [solid_i[0]]
+        for idx in solid_i[1:]:
+            if idx == curr_g[-1] + 1:
+                curr_g.append(idx)
+            else:
+                contiguous_groups_x.append(curr_g)
+                curr_g = [idx]
+        contiguous_groups_x.append(curr_g)
 
-        # Normalized moment intensities in t·m/m' (divided by strip width)
-        m_cs_pos = r_info.get("cs_pos", 0.60 * r_info.get("M_pos", 10.0)) / cs_w
-        m_ms_pos = r_info.get("ms_pos", 0.40 * r_info.get("M_pos", 10.0)) / ms_w
-
-        if j == 0:
-            cant_m = 0.5 * Wu * (cant_B ** 2)
-            m_cs_neg_B = max(r_info.get("cs_neg_ext", 0.0) / cs_w, cant_m)
-            m_ms_neg_B = max(r_info.get("ms_neg_ext", 0.0) / ms_w, cant_m)
+        # Governing design positive moment for this Y-span:
+        if rows_y and j_idx < len(rows_y):
+            r_y = rows_y[j_idx]
+            m_pos_22 = (r_y.get("cs_pos", 0.60 * r_y.get("M_pos", 10.0)) / max(0.1, r_y.get("cs_w", min(ly_val, Lx_avg) / 2.0)))
         else:
-            m_cs_neg_B = r_info.get("cs_neg_int", 0.75 * r_info.get("Mo", 10.0) * 0.65) / cs_w
-            m_ms_neg_B = r_info.get("ms_neg_int", 0.25 * r_info.get("Mo", 10.0) * 0.65) / ms_w
+            m_pos_22 = 0.52 * Wu * (min(L_span_y, 6.0) ** 2) / 8.0
 
-        if j == len(Ly_spans) - 1:
-            cant_m = 0.5 * Wu * (cant_T ** 2)
-            m_cs_neg_T = max(r_info.get("cs_neg_ext", 0.0) / cs_w, cant_m)
-            m_ms_neg_T = max(r_info.get("ms_neg_ext", 0.0) / ms_w, cant_m)
+        for group in contiguous_groups_x:
+            x_start = x_coords[group[0]]
+            x_end = x_coords[group[-1] + 1]
+            L_ribbon_x = max(0.5, x_end - x_start)
+
+            mask_seg = (X >= x_start - 1e-4) & (X <= x_end + 1e-4) & (Y >= y_bot - 1e-4) & (Y <= y_top + 1e-4)
+            if not np.any(mask_seg):
+                continue
+
+            eta = np.clip((Y[mask_seg] - y_bot) / L_span_y, 0.0, 1.0)
+            xi_trans = np.clip((X[mask_seg] - x_start) / L_ribbon_x, 0.0, 1.0)
+
+            # Smooth parabolic sagging along Y across the entire span:
+            fy = 4.0 * eta * (1.0 - eta)
+            # Continuous smooth ribbon across X without dropping at internal grid lines:
+            fx_ribbon = 0.75 + 0.25 * (np.sin(np.pi * xi_trans) ** 0.5)
+
+            M22[mask_seg] = np.maximum(M22[mask_seg], m_pos_22 * (fy ** 0.85) * fx_ribbon)
+
+    # 5b. M11: Spans in X-direction, forms continuous vertical ribbons across Y:
+    for i_idx, lx_val in enumerate(Lx_spans):
+        x_left = x_coords[i_idx]
+        x_right = x_coords[i_idx + 1]
+        L_span_x = max(0.5, x_right - x_left)
+
+        solid_j = [j_idx for j_idx in range(len(Ly_spans)) if not is_panel_void(i_idx, j_idx)]
+        if not solid_j:
+            continue
+
+        # Group contiguous solid spans along Y:
+        contiguous_groups_y = []
+        curr_g = [solid_j[0]]
+        for idx in solid_j[1:]:
+            if idx == curr_g[-1] + 1:
+                curr_g.append(idx)
+            else:
+                contiguous_groups_y.append(curr_g)
+                curr_g = [idx]
+        contiguous_groups_y.append(curr_g)
+
+        # Governing design positive moment for this X-span:
+        if rows_x and i_idx < len(rows_x):
+            r_x = rows_x[i_idx]
+            m_pos_11 = (r_x.get("cs_pos", 0.60 * r_x.get("M_pos", 10.0)) / max(0.1, r_x.get("cs_w", min(lx_val, Ly_avg) / 2.0)))
         else:
-            m_cs_neg_T = r_info.get("cs_neg_int", 0.75 * r_info.get("Mo", 10.0) * 0.65) / cs_w
-            m_ms_neg_T = r_info.get("ms_neg_int", 0.25 * r_info.get("Mo", 10.0) * 0.65) / ms_w
+            m_pos_11 = 0.52 * Wu * (min(L_span_x, 6.0) ** 2) / 8.0
 
-        eta = (Y[mask_span] - y_bot) / max(0.001, ly)
-        M_cs = -m_cs_neg_B * (1.0 - eta) - m_cs_neg_T * eta + 4.0 * (m_cs_pos + (m_cs_neg_B + m_cs_neg_T) / 2.0) * eta * (1.0 - eta)
-        M_ms = -m_ms_neg_B * (1.0 - eta) - m_ms_neg_T * eta + 4.0 * (m_ms_pos + (m_ms_neg_B + m_ms_neg_T) / 2.0) * eta * (1.0 - eta)
+        for group in contiguous_groups_y:
+            y_start = y_coords[group[0]]
+            y_end = y_coords[group[-1] + 1]
+            L_ribbon_y = max(0.5, y_end - y_start)
 
-        w = w_cs_22[mask_span]
-        M22[mask_span] = w * M_cs + (1.0 - w) * M_ms
+            mask_seg = (X >= x_left - 1e-4) & (X <= x_right + 1e-4) & (Y >= y_start - 1e-4) & (Y <= y_end + 1e-4)
+            if not np.any(mask_seg):
+                continue
 
-    # Apply perpendicular tributary variation across X for M22 (so each vertical strip reflects its true span width)
-    if Lx_spans and len(x_coords) >= 2:
-        x_nodes = []
-        trib_x_nodes = []
-        for i_idx, lx_val in enumerate(Lx_spans):
-            x_l = x_coords[i_idx]
-            x_r = x_coords[i_idx + 1]
-            x_m = (x_l + x_r) / 2.0
-            t_l = Lx_spans[0] / 2.0 if i_idx == 0 else (Lx_spans[i_idx - 1] + Lx_spans[i_idx]) / 2.0
-            t_m = lx_val
-            t_r = Lx_spans[-1] / 2.0 if i_idx == len(Lx_spans) - 1 else (Lx_spans[i_idx] + Lx_spans[i_idx + 1]) / 2.0
-            if i_idx == 0:
-                x_nodes.append(x_l)
-                trib_x_nodes.append(t_l)
-            x_nodes.extend([x_m, x_r])
-            trib_x_nodes.extend([t_m, t_r])
+            xi = np.clip((X[mask_seg] - x_left) / L_span_x, 0.0, 1.0)
+            eta_trans = np.clip((Y[mask_seg] - y_start) / L_ribbon_y, 0.0, 1.0)
 
-        scale_22 = np.interp(X, x_nodes, trib_x_nodes) / max(0.1, Lx_avg)
-        scale_22 = np.clip(scale_22, 0.55, 1.35)
-        M22 = M22 * scale_22
+            # Smooth parabolic sagging along X across the entire span:
+            fx = 4.0 * xi * (1.0 - xi)
+            # Continuous smooth ribbon across Y without dropping at internal grid lines:
+            fy_ribbon = 0.75 + 0.25 * (np.sin(np.pi * eta_trans) ** 0.5)
 
-    # ── 2b. Adjust positive moment intensity in enlarged bays (after column removal) ──
+            M11[mask_seg] = np.maximum(M11[mask_seg], m_pos_11 * (fx ** 0.85) * fy_ribbon)
+
+    # ── 5c. Continuous Positive Moment Bridging Across Deleted/Absent Columns ─
+    h_bridge_y = max(1.2, Ly_avg * 0.45)
+    h_bridge_x = max(1.2, Lx_avg * 0.45)
+    for j_idx, gy in enumerate(y_coords):
+        for i_idx, gx in enumerate(x_coords):
+            if is_vertex_col_active(i_idx, j_idx):
+                continue
+            # Bridge M11 continuously across gx when internal column at (i_idx, j_idx) is absent
+            if 0 < i_idx < len(x_coords) - 1:
+                if not (j_idx < len(Ly_spans) and is_panel_void(i_idx - 1, j_idx) and is_panel_void(i_idx, j_idx)):
+                    x_l_m = x_coords[i_idx - 1]
+                    x_r_m = x_coords[i_idx + 1]
+                    L_merged_x = max(0.5, x_r_m - x_l_m)
+                    m_pos_11_a = (rows_x[i_idx - 1].get("cs_pos", 10.0) / max(0.1, rows_x[i_idx - 1].get("cs_w", 2.0))) if (rows_x and i_idx - 1 < len(rows_x)) else (0.50 * Wu * (Lx_avg ** 2) / 8.0)
+                    m_pos_11_b = (rows_x[min(i_idx, len(rows_x) - 1)].get("cs_pos", 10.0) / max(0.1, rows_x[min(i_idx, len(rows_x) - 1)].get("cs_w", 2.0))) if rows_x else m_pos_11_a
+                    m_pos_merged_x = max(m_pos_11_a, m_pos_11_b) * (0.50 / 0.35)
+                    mask_bx = (X >= x_l_m - 1e-4) & (X <= x_r_m + 1e-4) & (np.abs(Y - gy) <= h_bridge_y)
+                    if np.any(mask_bx):
+                        xi_m = np.clip((X[mask_bx] - x_l_m) / L_merged_x, 0.0, 1.0)
+                        fx_m = 4.0 * xi_m * (1.0 - xi_m)
+                        wy_m = np.clip(1.0 - (np.abs(Y[mask_bx] - gy) / h_bridge_y) ** 1.5, 0.0, 1.0)
+                        M11[mask_bx] = np.maximum(M11[mask_bx], m_pos_merged_x * (fx_m ** 0.85) * wy_m)
+            # Bridge M22 continuously across gy when internal column at (i_idx, j_idx) is absent
+            if 0 < j_idx < len(y_coords) - 1:
+                if not (i_idx < len(Lx_spans) and is_panel_void(i_idx, j_idx - 1) and is_panel_void(i_idx, j_idx)):
+                    y_b_m = y_coords[j_idx - 1]
+                    y_t_m = y_coords[j_idx + 1]
+                    L_merged_y = max(0.5, y_t_m - y_b_m)
+                    m_pos_22_a = (rows_y[j_idx - 1].get("cs_pos", 10.0) / max(0.1, rows_y[j_idx - 1].get("cs_w", 2.0))) if (rows_y and j_idx - 1 < len(rows_y)) else (0.50 * Wu * (Ly_avg ** 2) / 8.0)
+                    m_pos_22_b = (rows_y[min(j_idx, len(rows_y) - 1)].get("cs_pos", 10.0) / max(0.1, rows_y[min(j_idx, len(rows_y) - 1)].get("cs_w", 2.0))) if rows_y else m_pos_22_a
+                    m_pos_merged_y = max(m_pos_22_a, m_pos_22_b) * (0.50 / 0.35)
+                    mask_by = (Y >= y_b_m - 1e-4) & (Y <= y_t_m + 1e-4) & (np.abs(X - gx) <= h_bridge_x)
+                    if np.any(mask_by):
+                        eta_m = np.clip((Y[mask_by] - y_b_m) / L_merged_y, 0.0, 1.0)
+                        fy_m = 4.0 * eta_m * (1.0 - eta_m)
+                        wx_m = np.clip(1.0 - (np.abs(X[mask_by] - gx) / h_bridge_x) ** 1.5, 0.0, 1.0)
+                        M22[mask_by] = np.maximum(M22[mask_by], m_pos_merged_y * (fy_m ** 0.85) * wx_m)
+
+    # ── 6. Localized Negative Moments at Active Column Supports ───────────────
+    active_column_coords = []
+    if active_cols is not None:
+        for c in active_cols:
+            cx = c.get("grid_x_m", c.get("x"))
+            cy = c.get("grid_y_m", c.get("y"))
+            if cx is not None and cy is not None:
+                active_column_coords.append((float(cx), float(cy)))
+    else:
+        for j_idx, y in enumerate(y_coords):
+            for i_idx, x in enumerate(x_coords):
+                if is_vertex_col_active(i_idx, j_idx):
+                    active_column_coords.append((x, y))
+
+    # Base design negative moment intensity
+    m_neg_peak_x = 0.75 * Wu * (Lx_avg ** 2) / 8.0 * 0.65 / max(0.1, h_cs_x) if Lx_avg else 8.0
+    m_neg_peak_y = 0.75 * Wu * (Ly_avg ** 2) / 8.0 * 0.65 / max(0.1, h_cs_y) if Ly_avg else 8.0
+    if rows_x:
+        m_neg_peak_x = max(m_neg_peak_x, max((r.get("cs_neg_int", 10.0) / max(0.1, r.get("cs_w", 2.0))) for r in rows_x))
+    if rows_y:
+        m_neg_peak_y = max(m_neg_peak_y, max((r.get("cs_neg_int", 10.0) / max(0.1, r.get("cs_w", 2.0))) for r in rows_y))
+
+    r_col_eff = max(0.75, min(Lx_avg, Ly_avg) * 0.18)
+    for (cx, cy) in active_column_coords:
+        dist_sq = (X - cx) ** 2 + (Y - cy) ** 2
+        near_mask = dist_sq <= (r_col_eff * 2.2) ** 2
+        if np.any(near_mask):
+            w_neg = np.exp(-0.5 * (np.sqrt(dist_sq[near_mask]) / (r_col_eff * 0.52)) ** 2)
+            M11[near_mask] = M11[near_mask] - m_neg_peak_x * w_neg
+            M22[near_mask] = M22[near_mask] - m_neg_peak_y * w_neg
+
+    # ── 7. Adjust Positive Moment in Bays Requiring Extra Steel ───────────────
     if btm_extra_spans:
         ratio_enl = 0.50 / 0.35
         for item in btm_extra_spans:
-            if not item.get("is_enlarged", False):
-                continue
             item_dir = item.get("dir", "Y")
             cx = item.get("cx", None)
             cy = item.get("cy", None)
@@ -2539,7 +2816,13 @@ def build_slab_moment_field(
                 py2 = cy + w_bay / 2.0
                 mask_bay = (X >= px1 - 0.02) & (X <= px2 + 0.02) & (Y >= py1 - 0.02) & (Y <= py2 + 0.02)
                 pos_mask = mask_bay & (M11 > 0)
-                M11[pos_mask] = M11[pos_mask] * ratio_enl
+                if item.get("is_enlarged", False):
+                    M11[pos_mask] = M11[pos_mask] * ratio_enl
+                mu_peak = item.get("Mu_pos_m", 0.0)
+                if mu_peak > 0 and np.any(pos_mask):
+                    cur_max = float(np.nanmax(M11[pos_mask]))
+                    if cur_max < mu_peak:
+                        M11[pos_mask] = M11[pos_mask] * (mu_peak / max(0.1, cur_max))
             elif item_dir == "Y":
                 px1 = cx - w_bay / 2.0
                 px2 = cx + w_bay / 2.0
@@ -2547,13 +2830,19 @@ def build_slab_moment_field(
                 py2 = cy + span_len / 2.0
                 mask_bay = (X >= px1 - 0.02) & (X <= px2 + 0.02) & (Y >= py1 - 0.02) & (Y <= py2 + 0.02)
                 pos_mask = mask_bay & (M22 > 0)
-                M22[pos_mask] = M22[pos_mask] * ratio_enl
+                if item.get("is_enlarged", False):
+                    M22[pos_mask] = M22[pos_mask] * ratio_enl
+                mu_peak = item.get("Mu_pos_m", 0.0)
+                if mu_peak > 0 and np.any(pos_mask):
+                    cur_max = float(np.nanmax(M22[pos_mask]))
+                    if cur_max < mu_peak:
+                        M22[pos_mask] = M22[pos_mask] * (mu_peak / max(0.1, cur_max))
 
     # Keep unmasked copies for sampling support values
     M11_raw = np.copy(M11)
     M22_raw = np.copy(M22)
 
-    # ── 3. Mask Void Openings ────────────────────────────────────────────────
+    # ── 8. Mask Void Openings ────────────────────────────────────────────────
     if void_boxes:
         for (vx1, vx2, vy1, vy2, *_) in void_boxes:
             v_mask = (X >= vx1) & (X <= vx2) & (Y >= vy1) & (Y <= vy2)
@@ -2684,6 +2973,8 @@ def generate_flat_slab_moment_contour(
         Lx_spans, Ly_spans, cantilevers, rows_x, rows_y, Wu,
         void_panel_ids=void_panel_ids, void_boxes=void_boxes,
         btm_extra_spans=btm_extra_spans,
+        active_cols=active_cols,
+        removed_cols=removed_cols,
     )
 
     M_field = M11 if mode == "M11" else M22
@@ -2709,24 +3000,17 @@ def generate_flat_slab_moment_contour(
 
     target_plan_h = 16.5
     target_plan_w = target_plan_h * ar_plan
-    legend_h = 4.0
 
     fig_w = max(24.0, min(36.0, target_plan_w + 1.6))
-    fig_h = max(18.0, min(36.0, target_plan_h + legend_h + 1.2))
-
-    plan_ratio = (fig_h - legend_h - 1.0) / fig_h
-    legend_ratio = legend_h / fig_h
+    fig_h = max(16.0, min(32.0, target_plan_h + 1.4))
 
     fig = plt.figure(figsize=(fig_w, fig_h), dpi=100, facecolor="#ffffff")
     gs = fig.add_gridspec(
-        2, 1,
-        height_ratios=[plan_ratio, legend_ratio],
-        hspace=0.05,
-        left=0.02, right=0.96, top=0.94, bottom=0.02
+        1, 1,
+        left=0.02, right=0.96, top=0.92, bottom=0.02
     )
 
     ax_plan = fig.add_subplot(gs[0, 0])
-    ax_legend = fig.add_subplot(gs[1, 0])
 
     ax_plan.set_facecolor("#ffffff")
 
@@ -2751,7 +3035,7 @@ def generate_flat_slab_moment_contour(
         ax_plan.contour(X, Y, M_field, levels=[0.0], colors="#000000", linewidths=2.2, linestyles="--", zorder=3)
 
     # Colorbar
-    cbar_ax = fig.add_axes([0.965, 0.32, 0.015, 0.58])
+    cbar_ax = fig.add_axes([0.965, 0.12, 0.015, 0.74])
     cbar = fig.colorbar(cs, cax=cbar_ax)
     dir_txt = "X-Direction (↔ M11)" if mode == "M11" else "Y-Direction (↕ M22)"
     cbar.set_label(f"Bending Moment {mode} (t·m/m) | عزم الانحناء [{dir_txt}]", fontsize=14, weight="bold", labelpad=12)
@@ -3039,68 +3323,6 @@ def generate_flat_slab_moment_contour(
     ax_plan.set_aspect("equal", adjustable="box")
     ax_plan.axis("off")
 
-    # ── 2. ENGINEERING TITLE BLOCK & COLOR LEGEND (ax_legend) ────────────────
-    ax_legend.set_facecolor("#ffffff")
-    ax_legend.axis("off")
-    ax_legend.set_xlim(0, 1)
-    ax_legend.set_ylim(0, 1)
-
-    legend_bg = FancyBboxPatch(
-        (0.005, 0.02), 0.99, 0.96,
-        boxstyle="round,pad=0.02,rounding_size=0.025",
-        linewidth=2.4, edgecolor="#0f172a", facecolor="#f8fafc", zorder=1
-    )
-    ax_legend.add_patch(legend_bg)
-
-    cards_info = [
-        (
-            f"MOMENT FIELD ({mode})\n(مصفوفة العزوم الممثلة)",
-            f"{'X-Direction (Horizontal Spans M11)' if mode=='M11' else 'Y-Direction (Vertical Spans M22)'}\nBased on ECP 203 Direct Design Method",
-            "#1e40af", "#dbeafe", "#2563eb"
-        ),
-        (
-            "SIGN CONVENTION\n(اصطلاح إشارات العزوم)",
-            "(+) +M (Warm Colors): Sagging / Bottom Tension\n(-) -M (Cool Colors): Hogging / Top Tension @ Cols",
-            "#b45309", "#fef3c7", "#d97706"
-        ),
-        (
-            "STRIP DISTRIBUTION\n(توزيع شرائح الأعمدة والوسط)",
-            "Column Strip: 75% Neg. / 60% Pos. Moments\nMiddle Strip: 25% Neg. / 40% Pos. Moments",
-            "#15803d", "#dcfce7", "#16a34a"
-        ),
-        (
-            "EXTREME VALUES & CAPACITY\n(القيم القصوى وطاقة الشبكة)",
-            (
-                f"Max Pos (+M): +{m_max:.2f} t·m/m  (M⁺_cap: {calc_moment_capacity_btm(prov_btm_mesh_cm2m, d_cm, Fcu, Fy):.2f})\n"
-                f"Max Neg (-M): {m_min:.2f} t·m/m" + (f"  (M⁻_cap: {calc_moment_capacity_btm(prov_top_mesh_cm2m, d_cm, Fcu, Fy):.2f})" if prov_top_mesh_cm2m else "")
-            ) if (prov_btm_mesh_cm2m and d_cm and Fcu and Fy) else (
-                f"Max Pos (+M): +{m_max:.2f} t.m/m\nMax Neg (-M): {m_min:.2f} t.m/m"
-            ),
-            "#0f172a", "#f1f5f9", "#64748b"
-        ),
-    ]
-
-    x_box_w = 0.235
-    x_box_gap = 0.012
-    x_start = 0.015
-
-    for k, (title, content, t_color, bg_color, border_color) in enumerate(cards_info):
-        bx = x_start + k * (x_box_w + x_box_gap)
-        ibox = FancyBboxPatch(
-            (bx, 0.04), x_box_w, 0.92,
-            boxstyle="round,pad=0.015,rounding_size=0.02",
-            linewidth=1.6, edgecolor=border_color, facecolor=bg_color, zorder=2
-        )
-        ax_legend.add_patch(ibox)
-        ax_legend.text(
-            bx + x_box_w / 2.0, 0.74, title,
-            ha="center", va="center", fontsize=15.0, weight="bold", color=t_color, linespacing=1.2, zorder=3
-        )
-        ax_legend.text(
-            bx + x_box_w / 2.0, 0.28, content,
-            ha="center", va="center", fontsize=14.0, color="#1e293b", weight="normal", linespacing=1.25, zorder=3
-        )
-
     dir_txt_ar = "اتجاه المحور الأفقي X" if mode == "M11" else "اتجاه المحور الرأسي Y"
     main_title = f"2D BENDING MOMENT CONTOUR MAP — {mode} (المخطط اللوني لمصفوفة عزوم الانحناء — {dir_txt_ar})"
 
@@ -3145,6 +3367,7 @@ def generate_flat_slab_dual_moment_contour(
     edge_columns=None,
     btm_extra_spans=None,
     void_boxes=None,
+    active_cols=None,
 ):
     """
     Renders dual side-by-side engineering contour maps for both M11 and M22 on a unified canvas.
@@ -3176,6 +3399,8 @@ def generate_flat_slab_dual_moment_contour(
         Lx_spans, Ly_spans, cantilevers, rows_x, rows_y, Wu,
         void_panel_ids=void_panel_ids, void_boxes=void_boxes,
         btm_extra_spans=btm_extra_spans,
+        active_cols=active_cols,
+        removed_cols=removed_cols,
     )
 
     bubble_radius = max(0.40, min(slab_w, slab_h) * 0.030)
@@ -3373,6 +3598,8 @@ def generate_moment_deficit_contour(
         Lx_spans, Ly_spans, cantilevers, rows_x, rows_y, Wu,
         void_panel_ids=void_panel_ids, void_boxes=void_boxes,
         btm_extra_spans=btm_extra_spans,
+        active_cols=active_cols,
+        removed_cols=removed_cols,
     )
 
     M_field = M11 if mode == "M11" else M22
@@ -3399,24 +3626,14 @@ def generate_moment_deficit_contour(
     cs_half_y = max(1.20, min(Lx_avg, Ly_avg) * 0.32)
 
     is_cap_zone = np.zeros_like(X, dtype=bool)
-    if active_cols:
-        col_x_set = set()
-        col_y_set = set()
+    if active_cols is not None:
         for c in active_cols:
             cx, cy = float(c["x"]), float(c["y"])
-            col_x_set.add(cx)
-            col_y_set.add(cy)
             cw = float(c.get("width_m", c.get("bc", 30) / 100.0))
             ch = float(c.get("height_m", c.get("tc", 30) / 100.0))
             rx = max(cs_half_x, cw / 2.0 + 0.85)
             ry = max(cs_half_y, ch / 2.0 + 0.85)
             is_cap_zone |= ((np.abs(X - cx) <= rx) & (np.abs(Y - cy) <= ry))
-
-        # Also cover the direct column strip strips connecting columns along support axes
-        for ya in col_y_set:
-            is_cap_zone |= (np.abs(Y - ya) <= cs_half_y * 0.90)
-        for xa in col_x_set:
-            is_cap_zone |= (np.abs(X - xa) <= cs_half_x * 0.90)
     else:
         for x in x_coords:
             for y in y_coords:
@@ -3526,7 +3743,39 @@ def generate_moment_deficit_contour(
 
             contour_groups = []
 
-            # 1. Identify distinct contour groups directly from contour line segments if available
+            # 0. Primary source: Directly register known deficit bays from btm_extra_spans
+            # This ensures that any engineered bay requiring extra steel has its exact peak deficit labeled
+            if btm_extra_spans:
+                target_dir = "X" if mode == "M11" else "Y"
+                for sp in btm_extra_spans:
+                    if not isinstance(sp, dict):
+                        continue
+                    if sp.get("dir", target_dir) != target_dir:
+                        continue
+                    if not sp.get("is_needed", True) and sp.get("n_extra", 0) <= 0:
+                        continue
+                    sp_cx = sp.get("cx")
+                    sp_cy = sp.get("cy")
+                    sp_w = sp.get("span_len", 0.0) if target_dir == "X" else sp.get("W_bay", 0.0)
+                    sp_h = sp.get("W_bay", 0.0) if target_dir == "X" else sp.get("span_len", 0.0)
+                    if sp_cx is not None and sp_cy is not None and sp_w > 0 and sp_h > 0:
+                        b_mask = (X >= sp_cx - sp_w / 2.0 - 0.15) & (X <= sp_cx + sp_w / 2.0 + 0.15) & (Y >= sp_cy - sp_h / 2.0 - 0.15) & (Y <= sp_cy + sp_h / 2.0 + 0.15)
+                        b_vals = M_delta[b_mask]
+                        valid_b = b_vals[~np.isnan(b_vals)]
+                        if len(valid_b) > 0 and np.max(valid_b) > 0.08:
+                            bp_val = float(np.max(valid_b))
+                            b_peak_idx = np.nanargmax(np.where(b_mask, M_delta, -np.inf))
+                            b_iy, b_ix = np.unravel_index(b_peak_idx, M_delta.shape)
+                            b_px = float(X[b_iy, b_ix])
+                            b_py = float(Y[b_iy, b_ix])
+                            contour_groups.append({
+                                "px": b_px,
+                                "py": b_py,
+                                "top_y": min(y_slab_max - 0.30, b_py + sp_h * 0.25),
+                                "pval": bp_val,
+                            })
+
+            # 1. Identify distinct contour groups directly from contour line segments across all levels
             if "cs_lines" in locals() and cs_lines is not None and hasattr(cs_lines, "allsegs") and len(cs_lines.allsegs) > 0:
                 for segs in cs_lines.allsegs:
                     if len(segs) > 0:
@@ -3548,7 +3797,7 @@ def generate_moment_deficit_contour(
                             iy, ix = np.unravel_index(peak_idx, M_delta.shape)
                             px = float(X[iy, ix])
                             py = float(Y[iy, ix])
-                            top_y = max_y
+                            top_y = min(y_slab_max - 0.30, max_y)
                             
                             if not any(np.hypot(px - g["px"], py - g["py"]) < 1.2 for g in contour_groups):
                                 contour_groups.append({
@@ -3557,42 +3806,40 @@ def generate_moment_deficit_contour(
                                     "top_y": top_y,
                                     "pval": pval,
                                 })
-                        if contour_groups:
-                            break
 
-            # 2. Local peak detection if contour segments didn't yield groups
-            if not contour_groups:
-                Z = np.copy(M_delta)
-                Z = np.where(np.isnan(Z), -np.inf, Z)
-                Z_pad = np.pad(Z, 2, mode="constant", constant_values=-np.inf)
-                is_max = np.ones_like(Z, dtype=bool)
-                for dy in range(-2, 3):
-                    for dx in range(-2, 3):
-                        if dy == 0 and dx == 0:
-                            continue
-                        is_max &= (Z >= Z_pad[2 + dy : Z_pad.shape[0] - 2 + dy, 2 + dx : Z_pad.shape[1] - 2 + dx])
-                
-                is_max &= (Z > 0.15)
-                raw_peaks = [
-                    (float(X[iy, ix]), float(Y[iy, ix]), float(Z[iy, ix]))
-                    for iy, ix in np.argwhere(is_max)
-                ]
-                raw_peaks.sort(key=lambda p: p[2], reverse=True)
-                
-                for px, py, pval in raw_peaks:
-                    if not any(np.hypot(px - g["px"], py - g["py"]) < 1.2 for g in contour_groups):
-                        # Find highest edge of contour island in vicinity
-                        x_vic = (np.abs(X[0, :] - px) <= 0.40)
-                        sub_Z = Z[:, x_vic]
-                        sub_Y = Y[:, x_vic]
-                        top_m = (sub_Z >= 0.05) & (sub_Y >= py)
-                        top_y = float(np.max(sub_Y[top_m])) if np.any(top_m) else (py + 0.40)
-                        contour_groups.append({
-                            "px": px,
-                            "py": py,
-                            "top_y": top_y,
-                            "pval": pval,
-                        })
+            # 2. Local peak detection across the 2D delta field
+            Z = np.copy(M_delta)
+            Z = np.where(np.isnan(Z), -np.inf, Z)
+            Z_pad = np.pad(Z, 2, mode="constant", constant_values=-np.inf)
+            is_max = np.ones_like(Z, dtype=bool)
+            for dy in range(-2, 3):
+                for dx in range(-2, 3):
+                    if dy == 0 and dx == 0:
+                        continue
+                    is_max &= (Z >= Z_pad[2 + dy : Z_pad.shape[0] - 2 + dy, 2 + dx : Z_pad.shape[1] - 2 + dx])
+            
+            is_max &= (Z > 0.15)
+            raw_peaks = [
+                (float(X[iy, ix]), float(Y[iy, ix]), float(Z[iy, ix]))
+                for iy, ix in np.argwhere(is_max)
+            ]
+            raw_peaks.sort(key=lambda p: p[2], reverse=True)
+            
+            for px, py, pval in raw_peaks:
+                if not any(np.hypot(px - g["px"], py - g["py"]) < 1.2 for g in contour_groups):
+                    # Find highest edge of contour island in vicinity
+                    x_vic = (np.abs(X[0, :] - px) <= 0.40)
+                    sub_Z = Z[:, x_vic]
+                    sub_Y = Y[:, x_vic]
+                    top_m = (sub_Z >= 0.05) & (sub_Y >= py)
+                    top_y = float(np.max(sub_Y[top_m])) if np.any(top_m) else (py + 0.40)
+                    top_y = min(y_slab_max - 0.30, top_y)
+                    contour_groups.append({
+                        "px": px,
+                        "py": py,
+                        "top_y": top_y,
+                        "pval": pval,
+                    })
 
             # 3. Fallback to global peak if still empty but deficit exists
             if not contour_groups and max_delta > 0.15:
@@ -3601,7 +3848,7 @@ def generate_moment_deficit_contour(
                 contour_groups.append({
                     "px": float(X[iy_max, ix_max]),
                     "py": float(Y[iy_max, ix_max]),
-                    "top_y": float(Y[iy_max, ix_max]) + 0.40,
+                    "top_y": min(y_slab_max - 0.30, float(Y[iy_max, ix_max]) + 0.40),
                     "pval": float(max_delta),
                 })
 
@@ -3611,7 +3858,7 @@ def generate_moment_deficit_contour(
                 py = g["py"]
                 pval = g["pval"]
                 top_y = g["top_y"]
-                y_label = top_y + 0.25
+                y_label = min(y_slab_max - 0.15, top_y + 0.25)
 
                 # Render text cleanly with white halo matching user design
                 txt = ax_plan.text(
@@ -4434,10 +4681,14 @@ def generate_flat_slab_column_caps_sketch(
 
     active_caps_count = 0
     needed_caps = []
+    mesh_inc_caps = []
     for c_info in (top_extra_cols or []):
         cid = c_info["id"]
-        if cid in col_dict and c_info.get("is_needed", False):
-            needed_caps.append(c_info)
+        if cid in col_dict:
+            if c_info.get("is_needed", False):
+                needed_caps.append(c_info)
+            elif c_info.get("needs_mesh_inc", False):
+                mesh_inc_caps.append(c_info)
 
     active_caps_count = len(needed_caps)
 
@@ -4447,19 +4698,38 @@ def generate_flat_slab_column_caps_sketch(
         banner_w = min(slab_w * 0.88, 16.0)
         banner_h = max(2.6, slab_h * 0.18)
 
-        banner_box = FancyBboxPatch(
-            (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
-            boxstyle="round,pad=0.5,rounding_size=0.6",
-            facecolor="#f0fdf4", edgecolor="#16a34a", lw=2.6, zorder=10
-        )
-        ax_plan.add_patch(banner_box)
+        if mesh_inc_caps:
+            max_delta_c = max(c.get("As_extra (cm²/m)", 0.0) for c in mesh_inc_caps)
+            max_inc_c = max(c.get("rec_inc_bars", 1) for c in mesh_inc_caps)
+            max_tot_c = max(c.get("rec_total_mesh", 6) for c in mesh_inc_caps)
+            t_dia_c = mesh_inc_caps[0].get("top_mesh_dia", 10)
+            banner_box = FancyBboxPatch(
+                (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
+                boxstyle="round,pad=0.5,rounding_size=0.6",
+                facecolor="#fffbeb", edgecolor="#d97706", lw=2.6, zorder=10
+            )
+            ax_plan.add_patch(banner_box)
+            ax_plan.text(
+                mid_x_slab, mid_y_slab,
+                f"⚠ ΔAs_max = {max_delta_c:.2f} cm²/m < 3Φ12/m (3.39 cm²/m) — NO EXTRA CAPS DRAWN\n"
+                f"(الفرق أقل من 3Φ12/م — يُطلب زيادة الشبكة العلوية بالمدخلات بمقدار +{max_inc_c} Φ{t_dia_c}/m' لتصبح {max_tot_c} Φ{t_dia_c}/m')",
+                ha="center", va="center", fontsize=12.5, fontweight="bold", color="#b45309",
+                linespacing=1.5, multialignment="center", zorder=11
+            )
+        else:
+            banner_box = FancyBboxPatch(
+                (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
+                boxstyle="round,pad=0.5,rounding_size=0.6",
+                facecolor="#f0fdf4", edgecolor="#16a34a", lw=2.6, zorder=10
+            )
+            ax_plan.add_patch(banner_box)
 
-        ax_plan.text(
-            mid_x_slab, mid_y_slab,
-            "✔ NO EXTRA TOP STEEL NEEDED AT COLUMNS\n(الشبكة العلوية كافية تماماً ولا توجد حاجة لكابات)",
-            ha="center", va="center", fontsize=13.5, fontweight="bold", color="#15803d",
-            linespacing=1.5, multialignment="center", zorder=11
-        )
+            ax_plan.text(
+                mid_x_slab, mid_y_slab,
+                "✔ NO EXTRA TOP STEEL NEEDED AT COLUMNS\n(الشبكة العلوية كافية تماماً ولا توجد حاجة لكابات)",
+                ha="center", va="center", fontsize=13.5, fontweight="bold", color="#15803d",
+                linespacing=1.5, multialignment="center", zorder=11
+            )
     else:
         # Sort by Y ascending, then X ascending to alternate Above/Below along each row
         needed_caps_sorted = sorted(needed_caps, key=lambda c: (round(col_dict[c["id"]][1], 2), col_dict[c["id"]][0]))
@@ -5458,6 +5728,10 @@ def generate_flat_slab_deflection_contour_sketch(
     void_panel_ids=None,
     col_transforms=None,
     edge_columns=None,
+    void_boxes=None,
+    active_cols=None,
+    active_x_labels=None,
+    active_y_labels=None,
 ):
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
 
@@ -5530,14 +5804,20 @@ def generate_flat_slab_deflection_contour_sketch(
         sin_y = np.sin(np.pi * np.clip((Y_m - y0) / max(0.1, span_y), 0.0, 1.0))
         Delta_field += mask * (d_val * sin_x * sin_y)
 
-    for j in range(len(Ly_spans)):
-        for i in range(len(Lx_spans)):
-            pid = f"P_{i+1}_{j+1}"
-            if pid in _voids:
-                px0, px1 = x_coords[i], x_coords[i+1]
-                py0, py1 = y_coords[j], y_coords[j+1]
-                v_mask = (X_m >= px0) & (X_m <= px1) & (Y_m >= py0) & (Y_m <= py1)
-                Delta_field[v_mask] = np.nan
+    if void_boxes:
+        for (vx1, vx2, vy1, vy2, *rest) in void_boxes:
+            v_mask = (X_m >= vx1) & (X_m <= vx2) & (Y_m >= vy1) & (Y_m <= vy2)
+            Delta_field[v_mask] = np.nan
+    elif void_panel_ids:
+        _voids = set(void_panel_ids) if void_panel_ids else set()
+        for j in range(len(Ly_spans)):
+            for i in range(len(Lx_spans)):
+                pid = f"P_{i+1}_{j+1}"
+                if pid in _voids:
+                    px0, px1 = x_coords[i], x_coords[i+1]
+                    py0, py1 = y_coords[j], y_coords[j+1]
+                    v_mask = (X_m >= px0) & (X_m <= px1) & (Y_m >= py0) & (Y_m <= py1)
+                    Delta_field[v_mask] = np.nan
 
     # ── Check if any panel is unsafe ──
     has_unsafe = any(not p["is_safe"] for p in deflection_results)
@@ -5584,33 +5864,54 @@ def generate_flat_slab_deflection_contour_sketch(
         ax_plan.add_patch(patches.Rectangle((x_slab_min, y_coords[-1]), slab_w, cant_top, lw=1.8, edgecolor="#4f46e5", facecolor="none", linestyle="--", zorder=4))
 
     # Voids
-    for j in range(len(Ly_spans)):
-        for i in range(len(Lx_spans)):
-            pid = f"P_{i+1}_{j+1}"
-            if pid in _voids:
-                px0, px1 = x_coords[i], x_coords[i+1]
-                py0, py1 = y_coords[j], y_coords[j+1]
-                pw, ph = px1 - px0, py1 - py0
-                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=5)
-                ax_plan.add_patch(v_rect)
-                ax_plan.plot([px0, px1], [py0, py1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=5)
-                ax_plan.plot([px0, px1], [py1, py0], color="#ef4444", linestyle="--", linewidth=1.8, zorder=5)
-                ax_plan.text(px0 + pw/2, py0 + ph/2, "VOID\n(منور)", ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=6, bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4))
+    if void_boxes:
+        for (vx1, vx2, vy1, vy2, *rest) in void_boxes:
+            pw, ph = vx2 - vx1, vy2 - vy1
+            varea = rest[0] if rest else (pw * ph)
+            v_rect = patches.Rectangle((vx1, vy1), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=5)
+            ax_plan.add_patch(v_rect)
+            ax_plan.plot([vx1, vx2], [vy1, vy2], color="#ef4444", linestyle="--", linewidth=1.8, zorder=5)
+            ax_plan.plot([vx1, vx2], [vy2, vy1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=5)
+            ax_plan.text(
+                vx1 + pw / 2.0, vy1 + ph / 2.0, f"VOID (منور)\n{varea:.1f} m²",
+                ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=6,
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4)
+            )
+    elif void_panel_ids:
+        _voids = set(void_panel_ids) if void_panel_ids else set()
+        for j in range(len(Ly_spans)):
+            for i in range(len(Lx_spans)):
+                pid = f"P_{i+1}_{j+1}"
+                if pid in _voids:
+                    px0, px1 = x_coords[i], x_coords[i+1]
+                    py0, py1 = y_coords[j], y_coords[j+1]
+                    pw, ph = px1 - px0, py1 - py0
+                    v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=5)
+                    ax_plan.add_patch(v_rect)
+                    ax_plan.plot([px0, px1], [py0, py1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=5)
+                    ax_plan.plot([px0, px1], [py1, py0], color="#ef4444", linestyle="--", linewidth=1.8, zorder=5)
+                    ax_plan.text(
+                        px0 + pw / 2.0, py0 + ph / 2.0, f"VOID (منور)\n{pw * ph:.1f} m²",
+                        ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=6,
+                        bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4)
+                    )
 
     # Grid lines & bubbles
-    for idx, x in enumerate(x_coords):
+    axes_x_info, axes_y_info = build_grid_axes_info(x_coords, y_coords, active_cols, active_x_labels, active_y_labels)
+
+    for x, lbl_x in axes_x_info:
         y_top_ext = y_slab_max + offset_grid_top
         ax_plan.plot([x, x], [y_slab_min - 0.5, y_top_ext], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.8, zorder=5)
         bub = Circle((x, y_top_ext), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=7)
         ax_plan.add_patch(bub)
-        ax_plan.text(x, y_top_ext, f"Y{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=8)
+        ax_plan.text(x, y_top_ext, lbl_x, color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=8)
 
-    for idx, y in enumerate(y_coords):
+    for y, lbl_y in axes_y_info:
         x_left_ext = x_slab_min - offset_grid_left
         ax_plan.plot([x_left_ext, x_slab_max + 0.5], [y, y], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.8, zorder=5)
         bub = Circle((x_left_ext, y), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=7)
         ax_plan.add_patch(bub)
-        ax_plan.text(x_left_ext, y, f"X{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=8)
+        ax_plan.text(x_left_ext, y, lbl_y, color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=8)
 
     # Columns
     _col_transforms_def = col_transforms or {}
@@ -5829,6 +6130,10 @@ def generate_flat_slab_punching_shear_sketch(
     removed_cols=None,
     void_panel_ids=None,
     edge_columns=None,
+    void_boxes=None,
+    active_cols=None,
+    active_x_labels=None,
+    active_y_labels=None,
 ):
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
 
@@ -5904,15 +6209,20 @@ def generate_flat_slab_punching_shear_sketch(
         Qup_field += qup_val * np.exp(-dist_sq / (2.0 * (sigma_punch ** 2)))
 
     # Mask voids
-    _voids = set(void_panel_ids) if void_panel_ids else set()
-    for j in range(len(Ly_spans)):
-        for i in range(len(Lx_spans)):
-            pid = f"P_{i+1}_{j+1}"
-            if pid in _voids:
-                px0, px1 = x_coords[i], x_coords[i+1]
-                py0, py1 = y_coords[j], y_coords[j+1]
-                v_mask = (X_m >= px0) & (X_m <= px1) & (Y_m >= py0) & (Y_m <= py1)
-                Qup_field[v_mask] = np.nan
+    if void_boxes:
+        for (vx1, vx2, vy1, vy2, *rest) in void_boxes:
+            v_mask = (X_m >= vx1) & (X_m <= vx2) & (Y_m >= vy1) & (Y_m <= vy2)
+            Qup_field[v_mask] = np.nan
+    elif void_panel_ids:
+        _voids = set(void_panel_ids) if void_panel_ids else set()
+        for j in range(len(Ly_spans)):
+            for i in range(len(Lx_spans)):
+                pid = f"P_{i+1}_{j+1}"
+                if pid in _voids:
+                    px0, px1 = x_coords[i], x_coords[i+1]
+                    py0, py1 = y_coords[j], y_coords[j+1]
+                    v_mask = (X_m >= px0) & (X_m <= px1) & (Y_m >= py0) & (Y_m <= py1)
+                    Qup_field[v_mask] = np.nan
 
     qcup_sample = punching_results[0].get("qcup (kg/cm²)", 10.5) if punching_results else 10.5
     qup_max = float(np.nanmax(Qup_field)) if np.any(~np.isnan(Qup_field)) else qcup_sample
@@ -5952,33 +6262,54 @@ def generate_flat_slab_punching_shear_sketch(
         ax_plan.add_patch(patches.Rectangle((x_slab_min, y_coords[-1]), slab_w, cant_top, lw=1.8, edgecolor="#4f46e5", facecolor="none", linestyle="--", zorder=4))
 
     # Voids
-    for j in range(len(Ly_spans)):
-        for i in range(len(Lx_spans)):
-            pid = f"P_{i+1}_{j+1}"
-            if pid in _voids:
-                px0, px1 = x_coords[i], x_coords[i+1]
-                py0, py1 = y_coords[j], y_coords[j+1]
-                pw, ph = px1 - px0, py1 - py0
-                v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=5)
-                ax_plan.add_patch(v_rect)
-                ax_plan.plot([px0, px1], [py0, py1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=5)
-                ax_plan.plot([px0, px1], [py1, py0], color="#ef4444", linestyle="--", linewidth=1.8, zorder=5)
-                ax_plan.text(px0 + pw/2, py0 + ph/2, "VOID\n(منور)", ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=6, bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4))
+    if void_boxes:
+        for (vx1, vx2, vy1, vy2, *rest) in void_boxes:
+            pw, ph = vx2 - vx1, vy2 - vy1
+            varea = rest[0] if rest else (pw * ph)
+            v_rect = patches.Rectangle((vx1, vy1), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=5)
+            ax_plan.add_patch(v_rect)
+            ax_plan.plot([vx1, vx2], [vy1, vy2], color="#ef4444", linestyle="--", linewidth=1.8, zorder=5)
+            ax_plan.plot([vx1, vx2], [vy2, vy1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=5)
+            ax_plan.text(
+                vx1 + pw / 2.0, vy1 + ph / 2.0, f"VOID (منور)\n{varea:.1f} m²",
+                ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=6,
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4)
+            )
+    elif void_panel_ids:
+        _voids = set(void_panel_ids) if void_panel_ids else set()
+        for j in range(len(Ly_spans)):
+            for i in range(len(Lx_spans)):
+                pid = f"P_{i+1}_{j+1}"
+                if pid in _voids:
+                    px0, px1 = x_coords[i], x_coords[i+1]
+                    py0, py1 = y_coords[j], y_coords[j+1]
+                    pw, ph = px1 - px0, py1 - py0
+                    v_rect = patches.Rectangle((px0, py0), pw, ph, facecolor="#ffffff", edgecolor="#ef4444", lw=2.2, zorder=5)
+                    ax_plan.add_patch(v_rect)
+                    ax_plan.plot([px0, px1], [py0, py1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=5)
+                    ax_plan.plot([px0, px1], [py1, py0], color="#ef4444", linestyle="--", linewidth=1.8, zorder=5)
+                    ax_plan.text(
+                        px0 + pw / 2.0, py0 + ph / 2.0, f"VOID (منور)\n{pw * ph:.1f} m²",
+                        ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b91c1c", zorder=6,
+                        bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.4)
+                    )
 
     # Grid lines & bubbles
-    for idx, x in enumerate(x_coords):
+    axes_x_info, axes_y_info = build_grid_axes_info(x_coords, y_coords, active_cols, active_x_labels, active_y_labels)
+
+    for x, lbl_x in axes_x_info:
         y_top_ext = y_slab_max + offset_grid_top
         ax_plan.plot([x, x], [y_slab_min - 0.5, y_top_ext], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.8, zorder=5)
         bub = Circle((x, y_top_ext), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=7)
         ax_plan.add_patch(bub)
-        ax_plan.text(x, y_top_ext, f"Y{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=8)
+        ax_plan.text(x, y_top_ext, lbl_x, color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=8)
 
-    for idx, y in enumerate(y_coords):
+    for y, lbl_y in axes_y_info:
         x_left_ext = x_slab_min - offset_grid_left
         ax_plan.plot([x_left_ext, x_slab_max + 0.5], [y, y], color="#dc2626", linestyle=":", linewidth=1.8, alpha=0.8, zorder=5)
         bub = Circle((x_left_ext, y), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=2.4, zorder=7)
         ax_plan.add_patch(bub)
-        ax_plan.text(x_left_ext, y, f"X{idx+1}", color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=8)
+        ax_plan.text(x_left_ext, y, lbl_y, color="#991b1b", fontsize=16, weight="bold", ha="center", va="center", zorder=8)
 
     # Dimensions
     dim_y = y_slab_min - dim_offset_bot
@@ -7091,6 +7422,7 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
     active_x_labels=None,
     active_y_labels=None,
     void_boxes=None,
+    mesh_inc_bays=None,
 ):
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
 
@@ -7370,21 +7702,40 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
         banner_w = min(slab_w * 0.88, 16.0)
         banner_h = max(2.6, slab_h * 0.18)
 
-        banner_box = FancyBboxPatch(
-            (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
-            boxstyle="round,pad=0.5,rounding_size=0.6",
-            facecolor="#f0fdf4", edgecolor="#16a34a", lw=2.6, zorder=10
-        )
-        ax_plan.add_patch(banner_box)
-
         dir_en = "X-DIRECTION" if dir_req == "X" else "Y-DIRECTION"
         dir_ar = "اتجاه X" if dir_req == "X" else "اتجاه Y"
-        ax_plan.text(
-            mid_x_slab, mid_y_slab,
-            f"✔ NO BOTTOM EXTRA REQUIRED IN {dir_en}\n(الشبكة السفلية كافية تماماً في {dir_ar})",
-            ha="center", va="center", fontsize=13.5, fontweight="bold", color="#15803d",
-            linespacing=1.5, multialignment="center", zorder=11
-        )
+
+        if mesh_inc_bays:
+            max_inc = max(int(b.get("rec_inc_bars", 1)) for b in mesh_inc_bays)
+            rec_tot = max(int(b.get("rec_total_mesh", n_mesh_btm + max_inc)) for b in mesh_inc_bays)
+            max_def = max(float(b.get("delta_As", 0.0)) for b in mesh_inc_bays)
+            banner_box = FancyBboxPatch(
+                (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
+                boxstyle="round,pad=0.5,rounding_size=0.6",
+                facecolor="#fffbeb", edgecolor="#d97706", lw=2.6, zorder=10
+            )
+            ax_plan.add_patch(banner_box)
+            ax_plan.text(
+                mid_x_slab, mid_y_slab,
+                f"⚠ SMALL DEFICIT IN {dir_en} (ΔAs = {max_def:.2f} < 3Φ12 = 3.39 cm²/m)\n"
+                f"Increase Input Bottom Mesh by +{max_inc} Φ {bottom_mesh_dia}/m  →  Use {rec_tot} Φ {bottom_mesh_dia}/m\n"
+                f"(فرق التسليح في {dir_ar} أقل من 3Φ12/م — يُرجى زيادة الشبكة السفلية بالمدخلات إلى {rec_tot}Φ{bottom_mesh_dia}/م)",
+                ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b45309",
+                linespacing=1.45, multialignment="center", zorder=11
+            )
+        else:
+            banner_box = FancyBboxPatch(
+                (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
+                boxstyle="round,pad=0.5,rounding_size=0.6",
+                facecolor="#f0fdf4", edgecolor="#16a34a", lw=2.6, zorder=10
+            )
+            ax_plan.add_patch(banner_box)
+            ax_plan.text(
+                mid_x_slab, mid_y_slab,
+                f"✔ NO BOTTOM EXTRA REQUIRED IN {dir_en}\n(الشبكة السفلية كافية تماماً في {dir_ar})",
+                ha="center", va="center", fontsize=13.5, fontweight="bold", color="#15803d",
+                linespacing=1.5, multialignment="center", zorder=11
+            )
 
     # Dimensions
     dim_y = y_slab_min - dim_offset_bot
@@ -7768,21 +8119,44 @@ def generate_flat_slab_top_mesh_extra_sketch(
         banner_w = min(slab_w * 0.88, 16.0)
         banner_h = max(2.6, slab_h * 0.18)
 
-        banner_box = FancyBboxPatch(
-            (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
-            boxstyle="round,pad=0.5,rounding_size=0.6",
-            facecolor="#f0fdf4", edgecolor="#16a34a", lw=2.6, zorder=10
-        )
-        ax_plan.add_patch(banner_box)
-
         dir_en = "X-DIRECTION" if dir_req == "X" else "Y-DIRECTION"
         dir_ar = "اتجاه X" if dir_req == "X" else "اتجاه Y"
-        ax_plan.text(
-            mid_x_slab, mid_y_slab,
-            f"✔ NO EXTRA TOP SLAB REBAR IN {dir_en}\n(الرقة العلوية كافية تماماً في {dir_ar} ولا يلزم إضافي علوي للبلاطة)",
-            ha="center", va="center", fontsize=13.0, fontweight="bold", color="#15803d",
-            linespacing=1.5, multialignment="center", zorder=11
-        )
+
+        mesh_inc_top_bays = [
+            b for b in (top_extra_slab_bays or [])
+            if isinstance(b, dict) and b.get("needs_mesh_inc", False) and b.get("dir", "X").upper() == dir_req
+        ]
+        if mesh_inc_top_bays:
+            max_inc = max(int(b.get("rec_inc_bars", 1)) for b in mesh_inc_top_bays)
+            rec_tot = max(int(b.get("rec_total_mesh", n_mesh_top + max_inc)) for b in mesh_inc_top_bays)
+            max_def = max(float(b.get("delta_As", 0.0)) for b in mesh_inc_top_bays)
+            banner_box = FancyBboxPatch(
+                (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
+                boxstyle="round,pad=0.5,rounding_size=0.6",
+                facecolor="#fffbeb", edgecolor="#d97706", lw=2.6, zorder=10
+            )
+            ax_plan.add_patch(banner_box)
+            ax_plan.text(
+                mid_x_slab, mid_y_slab,
+                f"⚠ SMALL TOP SLAB DEFICIT IN {dir_en} (ΔAs = {max_def:.2f} < 3Φ12 = 3.39 cm²/m)\n"
+                f"Increase Input Top Mesh by +{max_inc} Φ {top_mesh_dia}/m  →  Use {rec_tot} Φ {top_mesh_dia}/m\n"
+                f"(فرق تسليح شرائح الوسط في {dir_ar} أقل من 3Φ12/م — يُرجى زيادة الشبكة العلوية بالمدخلات إلى {rec_tot}Φ{top_mesh_dia}/م)",
+                ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b45309",
+                linespacing=1.45, multialignment="center", zorder=11
+            )
+        else:
+            banner_box = FancyBboxPatch(
+                (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
+                boxstyle="round,pad=0.5,rounding_size=0.6",
+                facecolor="#f0fdf4", edgecolor="#16a34a", lw=2.6, zorder=10
+            )
+            ax_plan.add_patch(banner_box)
+            ax_plan.text(
+                mid_x_slab, mid_y_slab,
+                f"✔ NO EXTRA TOP SLAB REBAR IN {dir_en}\n(الرقة العلوية كافية تماماً في {dir_ar} ولا يلزم إضافي علوي للبلاطة)",
+                ha="center", va="center", fontsize=13.0, fontweight="bold", color="#15803d",
+                linespacing=1.5, multialignment="center", zorder=11
+            )
 
     # Cantilever Shawka (Top Cantilever Steel - filtered for relevant direction)
     for cr in (cant_rft_list or []):
@@ -8394,11 +8768,11 @@ def ddm_moments(Wu, L_perp, Ln, is_exterior):
 @st.cache_data(show_spinner=False)
 def calc_As(M_ton_m, width_m, d_cm, Fcu, Fy, ts):
     """
-    Required steel area (cm²) for the full strip width.
+    Required steel area (cm²) for the full strip width strictly to resist the applied moment.
     """
     width_m = max(0.10, float(width_m))
     if M_ton_m <= 0:
-        M_ton_m = 0.001
+        return 0.0
     M_kg_cm  = M_ton_m * 100_000.0
     w_cm     = width_m * 100.0
     a_est    = 0.1 * d_cm
@@ -8407,8 +8781,7 @@ def calc_As(M_ton_m, width_m, d_cm, Fcu, Fy, ts):
     a_ref    = (As_est * Fy) / (0.85 * Fcu * max(1.0, w_cm))
     denom_ref = max(0.1, (d_cm - a_ref / 2.0))
     As_ref   = M_kg_cm / (0.9 * Fy * denom_ref)
-    As_min   = 0.0018 * w_cm * ts
-    return max(As_ref, As_min)
+    return As_ref
 
 
 @st.cache_data(show_spinner=False)
@@ -8742,7 +9115,7 @@ def optimize_extra_bar_diameter(
     Note: 14 mm is completely excluded as it is not rolled/manufactured in the Egyptian market.
     Returns: (selected_dia_mm, bars_per_m, upgraded, initial_dia_mm)
     """
-    if delta_As_m <= 0.05:
+    if delta_As_m < XZ.EXTRA_STEEL_THRESHOLD_CM2_M:
         return initial_dia_mm, 0, False, initial_dia_mm
 
     # Only available manufactured diameters in the Egyptian market (never 14 mm)
@@ -8780,13 +9153,17 @@ def calculate_extra_top_steel_at_columns(
     enlarged_bays=None,
     is_high_safety=False,
     mesh_top_n=5,
+    top_mesh_dia=10,
 ):
     """
     Determine required Top Extra Steel at each column (C1, C2, ...).
-    Enforces minimum bar spacing per ECP 203: upgrades column cap rebar diameter if total top density exceeds 10 bars/m.
-    When is_high_safety=True, negative column moments are amplified by 15% to match FEM stress concentration at column perimeters.
+    Applies the two-case philosophy:
+      - Case 1 (0 < As_extra_m < 3 Φ 12 / m): Do not place column cap extra bars; advise increasing input top mesh.
+      - Case 2 (As_extra_m >= 3 Φ 12 / m): Calculate required column cap extra bars and draw on Steel Layout plan.
     """
     col_extras = []
+    thresh_cm2m = XZ.EXTRA_STEEL_THRESHOLD_CM2_M
+    a_bar_top_mesh = bar_area(top_mesh_dia)
 
     for col in columns:
         i = col.get("i_eff", col["i"])
@@ -8845,6 +9222,14 @@ def calculate_extra_top_steel_at_columns(
             Lx_extra_raw = round(2.0 * 0.30 * lx_adj + col["bc"] / 100.0, 2)
             Ly_extra_raw = round(2.0 * 0.30 * ly_adj + col["tc"] / 100.0, 2)
 
+        needs_mesh_inc = (0.05 < As_extra_m < thresh_cm2m)
+        if needs_mesh_inc:
+            rec_inc_bars = max(1, int(math.ceil(round(As_extra_m / a_bar_top_mesh, 6))))
+            rec_total_mesh = int(mesh_top_n) + rec_inc_bars
+        else:
+            rec_inc_bars = 0
+            rec_total_mesh = int(mesh_top_n)
+
         # Check spacing compliance and upgrade cap bar diameter if total top bars > 10 bars/m
         eff_cap_dia, _bpm_opt, upgraded_cap_dia, orig_cap_dia = optimize_extra_bar_diameter(
             As_extra_m,
@@ -8869,11 +9254,18 @@ def calculate_extra_top_steel_at_columns(
         Lx_extra = cap_des_x["L_bar"]
         Ly_extra = cap_des_y["L_bar"]
 
-        callout_combined = (
-            f"X: {bpm_x} Φ{eff_cap_dia}/m' (Total: {n_extra_x} Φ{eff_cap_dia}, L={Lx_extra:.2f}m) | "
-            f"Y: {bpm_y} Φ{eff_cap_dia}/m' (Total: {n_extra_y} Φ{eff_cap_dia}, L={Ly_extra:.2f}m)"
-            if is_needed else "Mesh is Sufficient (الشبكة تكفي)"
-        )
+        if is_needed:
+            callout_combined = (
+                f"X: {bpm_x} Φ{eff_cap_dia}/m' (Total: {n_extra_x} Φ{eff_cap_dia}, L={Lx_extra:.2f}m) | "
+                f"Y: {bpm_y} Φ{eff_cap_dia}/m' (Total: {n_extra_y} Φ{eff_cap_dia}, L={Ly_extra:.2f}m)"
+            )
+        elif needs_mesh_inc:
+            callout_combined = (
+                f"⚠️ فرق التسليح ({As_extra_m:.2f} cm²/m) أقل من 3Φ12/m ({thresh_cm2m:.2f} cm²/m) — "
+                f"يُوصى بزيادة الشبكة العلوية بالمدخلات بمقدار +{rec_inc_bars} Φ{top_mesh_dia}/m' لتصبح {rec_total_mesh} Φ{top_mesh_dia}/m'"
+            )
+        else:
+            callout_combined = "Mesh is Sufficient (الشبكة تكفي)"
 
         col_extras.append({
             "id": cid,
@@ -8905,6 +9297,10 @@ def calculate_extra_top_steel_at_columns(
             "L_extra_y": Ly_extra,
             "callout": callout_combined,
             "is_needed": is_needed,
+            "needs_mesh_inc": needs_mesh_inc,
+            "rec_inc_bars": rec_inc_bars,
+            "rec_total_mesh": rec_total_mesh,
+            "top_mesh_dia": top_mesh_dia,
             "x_min": col.get("x_min"),
             "y_min": col.get("y_min"),
             "x_max": col.get("x_max"),
@@ -9323,6 +9719,1771 @@ def show_design_philosophy_dialog():
         '</div>'
     )
     st.markdown(html_dialog, unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  ➕ INTERACTIVE MOUSE COLUMN PLACEMENT ENGINE (MODULE 12/15 COMPATIBLE)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+FS_SHIFT_X_OPTIONS = [
+    "متمركز على المحور (Centered)",
+    "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
+    "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
+]
+
+FS_SHIFT_Y_OPTIONS = [
+    "متمركز على المحور (Centered)",
+    "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
+    "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
+]
+
+
+def _compute_adaptive_fs_col_transform(
+    i: int,
+    j: int,
+    n_xi: int,
+    n_yj: int,
+    Lx_spans: list,
+    Ly_spans: list,
+    cantilevers: dict,
+    dir_mode: str = "تلقائي تكيفي حسب الموقع والمسارات (Auto Adaptive)",
+    sx_mode: str = "تلقائي تكيفي مع حدود البلاطة والمحاور (Auto)",
+    sy_mode: str = "تلقائي تكيفي مع حدود البلاطة والمحاور (Auto)",
+) -> dict:
+    """
+    ربط أبعاد وتوجيه الأعمدة (Orientation & Dimensions) وترحيل المحاور (±6 cm)
+    بنفس الشروط والبارامترات الهندسية المتبعة في موديول 12 (أعمال المباني واللياسة)
+    لضمان التوافق مع المسارات المعمارية ونقاط الارتكاز وحدود البلاطة.
+    """
+    cant_l = float((cantilevers or {}).get("left", 0.0) or 0.0)
+    cant_r = float((cantilevers or {}).get("right", 0.0) or 0.0)
+    cant_b = float((cantilevers or {}).get("bottom", 0.0) or 0.0)
+    cant_t = float((cantilevers or {}).get("top", 0.0) or 0.0)
+
+    # 1. تحديد اتجاه ضرب العمود (Orientation)
+    if "اتجاه X" in str(dir_mode) or "أفقي" in str(dir_mode):
+        direction = "اتجاه X"
+    elif "اتجاه Y" in str(dir_mode) or "رأسي" in str(dir_mode):
+        direction = "اتجاه Y"
+    else:
+        # توجيه تكيفي ذكي حسب موقع التقاطع على مسارات المحاور وحدود البلاطة
+        is_left_or_right = i in (0, n_xi - 1)
+        is_bot_or_top = j in (0, n_yj - 1)
+        if is_bot_or_top and not is_left_or_right:
+            direction = "اتجاه X"
+        elif is_left_or_right and not is_bot_or_top:
+            direction = "اتجاه Y"
+        else:
+            adj_lx = Lx_spans[min(i, len(Lx_spans) - 1)] if Lx_spans else 5.0
+            adj_ly = Ly_spans[min(j, len(Ly_spans) - 1)] if Ly_spans else 5.0
+            direction = "اتجاه X" if adj_lx >= adj_ly else "اتجاه Y"
+
+    # 2. تحديد الترحيل الأفقي X (مواءمة وجه العمود مع حائط 12 سم عند المحاور الطرفية ±6 سم)
+    if sx_mode in FS_SHIFT_X_OPTIONS:
+        shift_x = sx_mode
+    else:
+        if i == 0 and cant_l <= 0.05:
+            shift_x = FS_SHIFT_X_OPTIONS[1]  # جسم العمود يميناً (-6 cm)
+        elif i == n_xi - 1 and cant_r <= 0.05:
+            shift_x = FS_SHIFT_X_OPTIONS[2]  # جسم العمود يساراً (+6 cm)
+        else:
+            shift_x = FS_SHIFT_X_OPTIONS[0]  # متمركز على المحور
+
+    # 3. تحديد الترحيل الرأسي Y (مواءمة وجه العمود مع حائط 12 سم عند المحاور الطرفية ±6 سم)
+    if sy_mode in FS_SHIFT_Y_OPTIONS:
+        shift_y = sy_mode
+    else:
+        if j == 0 and cant_b <= 0.05:
+            shift_y = FS_SHIFT_Y_OPTIONS[1]  # جسم العمود لأعلى (-6 cm)
+        elif j == n_yj - 1 and cant_t <= 0.05:
+            shift_y = FS_SHIFT_Y_OPTIONS[2]  # جسم العمود لأسفل (+6 cm)
+        else:
+            shift_y = FS_SHIFT_Y_OPTIONS[0]  # متمركز على المحور
+
+    return {
+        "direction": direction,
+        "shift_x": shift_x,
+        "shift_y": shift_y,
+    }
+
+
+def _ensure_fs_selective_mode_initialized(Lx_spans: list, Ly_spans: list) -> tuple:
+    """
+    ضمان تهيئة قائمة الأعمدة المسقطة (fs_placed_cols) مع الحفاظ الكامل على التوافقية العكسية:
+    - إذا كان المشروع جديداً (fs_zero_col_mode=True)، تكون القائمة فارغة [] افتراضياً.
+    - إذا كان المشروع قديماً (Legacy) وبدأ المستخدم في تعديله عبر قسم الإضافة الانتقائية،
+      يتم الاحتفاظ بالأعمدة النشطة الحالية في fs_placed_cols قبل الإضافة عليها.
+    """
+    cfg = st.session_state.setdefault("cfg", {})
+    n_xi = len(Lx_spans) + 1
+    n_yj = len(Ly_spans) + 1
+    zero_mode = bool(cfg.get("fs_zero_col_mode", False))
+    placed_raw = cfg.get("fs_placed_cols", None)
+    removed_raw = cfg.get("fs_removed_cols", [])
+    if not isinstance(removed_raw, list):
+        removed_raw = []
+
+    if not zero_mode and placed_raw is None:
+        # مشروع قديم (Legacy): نحتفظ بالأعمدة القائمة حالياً غير المحذوفة عند التفاعل
+        all_orig = [f"C{k}" for k in range(1, n_xi * n_yj + 1)]
+        placed_list = [cid for cid in all_orig if cid not in removed_raw]
+        cfg["fs_zero_col_mode"] = True
+        cfg["fs_placed_cols"] = placed_list
+    else:
+        cfg["fs_zero_col_mode"] = True
+        if not isinstance(placed_raw, list):
+            placed_list = []
+            cfg["fs_placed_cols"] = placed_list
+        else:
+            placed_list = list(placed_raw)
+
+    return cfg, placed_list, removed_raw
+
+
+def _place_fs_columns_at_intersections(
+    targets_ij: list,
+    Lx_spans: list,
+    Ly_spans: list,
+    cantilevers: dict,
+    b_cm: float = None,
+    t_cm: float = None,
+    dir_mode: str = None,
+    sx_mode: str = None,
+    sy_mode: str = None,
+) -> tuple:
+    """
+    إسقاط وتحديث عمود أو مجموعة أعمدة عند تقاطعات المحاور المحددة [(i, j), ...]
+    وربط أبعادها وتوجيهها وترحيلها بخصائص موديول 12 ونظام البلاطة اللاكمرية.
+    """
+    if not targets_ij:
+        return 0, 0, []
+
+    n_xi = len(Lx_spans) + 1
+    n_yj = len(Ly_spans) + 1
+    cfg, placed_list, removed_list = _ensure_fs_selective_mode_initialized(Lx_spans, Ly_spans)
+
+    if b_cm is None:
+        b_cm = float(st.session_state.get("fs_new_col_b", cfg.get("fs_new_col_b", cfg.get("slab_bc", 30.0))))
+    if t_cm is None:
+        t_cm = float(st.session_state.get("fs_new_col_t", cfg.get("fs_new_col_t", cfg.get("slab_tc", 50.0))))
+    if dir_mode is None:
+        dir_mode = str(st.session_state.get("fs_new_col_dir", cfg.get("fs_new_col_dir", "تلقائي تكيفي حسب الموقع والمسارات (Auto Adaptive)")))
+    if sx_mode is None:
+        sx_mode = str(st.session_state.get("fs_new_col_sx", cfg.get("fs_new_col_sx", "تلقائي تكيفي مع حدود البلاطة والمحاور (Auto)")))
+    if sy_mode is None:
+        sy_mode = str(st.session_state.get("fs_new_col_sy", cfg.get("fs_new_col_sy", "تلقائي تكيفي مع حدود البلاطة والمحاور (Auto)")))
+
+    col_props = cfg.get("fs_col_props", {})
+    if not isinstance(col_props, dict):
+        col_props = {}
+    col_transforms = cfg.get("fs_col_transforms", {})
+    if not isinstance(col_transforms, dict):
+        col_transforms = {}
+
+    model_name = f"C({int(round(b_cm))}x{int(round(t_cm))})"
+    added_count = 0
+    updated_count = 0
+    labels_placed = []
+
+    for (ti, tj) in targets_ij:
+        if not (0 <= ti < n_xi and 0 <= tj < n_yj):
+            continue
+        orig_id = f"C{tj * n_xi + ti + 1}"
+        was_active = (orig_id in placed_list) and (orig_id not in removed_list)
+
+        if orig_id not in placed_list:
+            placed_list.append(orig_id)
+        if orig_id in removed_list:
+            removed_list = [c for c in removed_list if c != orig_id]
+
+        adaptive_tr = _compute_adaptive_fs_col_transform(
+            ti, tj, n_xi, n_yj, Lx_spans, Ly_spans, cantilevers,
+            dir_mode=dir_mode, sx_mode=sx_mode, sy_mode=sy_mode,
+        )
+
+        col_props[orig_id] = {
+            "model": model_name,
+            "b_cm": float(b_cm),
+            "t_cm": float(t_cm),
+            "direction": adaptive_tr["direction"],
+            "shift_x": adaptive_tr["shift_x"],
+            "shift_y": adaptive_tr["shift_y"],
+            "i": int(ti),
+            "j": int(tj),
+        }
+        col_transforms[orig_id] = {
+            "direction": adaptive_tr["direction"],
+            "shift_x": adaptive_tr["shift_x"],
+            "shift_y": adaptive_tr["shift_y"],
+        }
+
+        if was_active:
+            updated_count += 1
+        else:
+            added_count += 1
+        labels_placed.append(f"Y{ti+1}×X{tj+1}")
+
+    # ترتيب الأعمدة الموضوعة حسب ترقيمها الأصلي C1, C2, ...
+    placed_list = sorted(list(set(placed_list)), key=lambda c: int(c[1:]) if str(c).startswith("C") and str(c)[1:].isdigit() else 9999)
+    cfg["fs_placed_cols"] = placed_list
+    cfg["fs_removed_cols"] = removed_list
+    cfg["fs_col_props"] = col_props
+    cfg["fs_col_transforms"] = col_transforms
+    cfg["fs_new_col_b"] = float(b_cm)
+    cfg["fs_new_col_t"] = float(t_cm)
+    cfg["fs_new_col_dir"] = dir_mode
+    cfg["fs_new_col_sx"] = sx_mode
+    cfg["fs_new_col_sy"] = sy_mode
+
+    S.save_settings()
+    return added_count, updated_count, labels_placed
+
+
+def _execute_fs_add_column_box(
+    data: dict,
+    Lx_spans: list,
+    Ly_spans: list,
+    cantilevers: dict,
+    trigger_rerun: bool = False,
+):
+    """
+    تنفيذ إسقاط ورسم العمود (أو مجموعة الأعمدة) عند التقاطع المحدد بالماوس (نقر أو سحب صندوق)
+    بنفس فلسفة موديول 12 (أعمال المباني واللياسة) مع تنفيذ فوري على المسقط الأفقي.
+    """
+    x_coords = [0.0]
+    for lx in Lx_spans:
+        x_coords.append(x_coords[-1] + lx)
+    y_coords = [0.0]
+    for ly in Ly_spans:
+        y_coords.append(y_coords[-1] + ly)
+
+    if not x_coords or not y_coords:
+        return
+
+    targets_ij = []
+    inter_list = data.get("intersections")
+    if isinstance(inter_list, list) and len(inter_list) > 0:
+        for item in inter_list:
+            if isinstance(item, dict) and "i" in item and "j" in item:
+                try:
+                    ii, jj = int(item["i"]), int(item["j"])
+                    if 0 <= ii < len(x_coords) and 0 <= jj < len(y_coords):
+                        targets_ij.append((ii, jj))
+                except (ValueError, TypeError):
+                    pass
+            elif isinstance(item, (list, tuple)) and len(item) == 2:
+                try:
+                    ii, jj = int(item[0]), int(item[1])
+                    if 0 <= ii < len(x_coords) and 0 <= jj < len(y_coords):
+                        targets_ij.append((ii, jj))
+                except (ValueError, TypeError):
+                    pass
+
+    if not targets_ij:
+        gi = data.get("grid_i")
+        gj = data.get("grid_j")
+        if gi is not None and gj is not None:
+            try:
+                ii, jj = int(gi), int(gj)
+                if 0 <= ii < len(x_coords) and 0 <= jj < len(y_coords):
+                    targets_ij.append((ii, jj))
+            except (ValueError, TypeError):
+                pass
+
+    if not targets_ij:
+        box = data.get("box", [])
+        if isinstance(box, list) and len(box) == 4:
+            xmin, xmax, ymin, ymax = [float(v) for v in box]
+            multi_box = bool(data.get("multi", st.session_state.get("fs_box_multi_select", True)))
+            candidates = []
+            for i, x in enumerate(x_coords):
+                if xmin <= x <= xmax:
+                    for j, y in enumerate(y_coords):
+                        if ymin <= y <= ymax:
+                            candidates.append((i, j))
+            if not candidates:
+                for i, x in enumerate(x_coords):
+                    if (xmin - 0.55) <= x <= (xmax + 0.55):
+                        for j, y in enumerate(y_coords):
+                            if (ymin - 0.55) <= y <= (ymax + 0.55):
+                                candidates.append((i, j))
+            if candidates:
+                if multi_box and len(candidates) > 1:
+                    targets_ij = candidates
+                else:
+                    cx = (xmin + xmax) / 2.0
+                    cy = (ymin + ymax) / 2.0
+                    candidates.sort(key=lambda item: math.hypot(x_coords[item[0]] - cx, y_coords[item[1]] - cy))
+                    targets_ij = [candidates[0]]
+
+    if not targets_ij:
+        st.toast("⚠️ لم يتم تحديد تقاطع محاور صحيح داخل حدود الصندوق.", icon="⚠️")
+        return
+
+    added_n, updated_n, labels_placed = _place_fs_columns_at_intersections(
+        targets_ij, Lx_spans, Ly_spans, cantilevers
+    )
+    b_cm = float(st.session_state.get("fs_new_col_b", S.cfg_val("fs_new_col_b", 30.0)))
+    t_cm = float(st.session_state.get("fs_new_col_t", S.cfg_val("fs_new_col_t", 50.0)))
+    model_name = f"C({int(round(b_cm))}x{int(round(t_cm))})"
+
+    if len(labels_placed) == 1:
+        if added_n > 0:
+            st.toast(f"✅ تم إسقاط العمود {model_name} عند تقاطع {labels_placed[0]} بنجاح!", icon="🏗️")
+        else:
+            st.toast(f"🔄 تم تحديث مواصفات العمود {model_name} عند تقاطع {labels_placed[0]} بنجاح!", icon="🏗️")
+    else:
+        st.toast(
+            f"✅ تم إسقاط/تحديث {len(labels_placed)} أعمدة ({model_name}) عند التقاطعات: {', '.join(labels_placed[:5])}{'...' if len(labels_placed) > 5 else ''}!",
+            icon="🏗️",
+        )
+
+    st.session_state["fs_add_col_mode"] = True
+    if trigger_rerun:
+        st.rerun()
+
+
+def _on_fs_sync_input_change():
+    """
+    Callback يُنفَّذ فور وصول إشارة الإسقاط بالماوس من المسقط الأفقي قبل بناء أي عنصر واجهة،
+    مما يسمح بتفريغ الحقل بأمان تام وتنفيذ الإسقاط الفوري في نفس دورة التشغيل.
+    """
+    raw = st.session_state.get("fs_col_sync_input", "")
+    if raw:
+        st.session_state["_fs_queued_sync_payload"] = raw
+        st.session_state["fs_col_sync_input"] = ""
+
+
+def _handle_fs_sync_payload(Lx_spans: list, Ly_spans: list, cantilevers: dict, payload_str: str = None):
+    """
+    معالجة أوامر الإسقاط التفاعلي للأعمدة القادمة من لوحة المسقط الأفقي (JS Bridge / Query Params).
+    """
+    val = payload_str
+    if not val:
+        val = st.session_state.pop("_fs_queued_sync_payload", None)
+    if not val:
+        val = st.session_state.get("fs_col_sync_input")
+    from_query = False
+    if not val and "fs_col_op" in st.query_params:
+        val = st.query_params["fs_col_op"]
+        from_query = True
+
+    if not val:
+        return
+
+    try:
+        data = json.loads(val) if isinstance(val, str) else val
+        if not isinstance(data, dict):
+            return
+
+        # منع تكرار تنفيذ نفس الإشارة مرتين
+        op_ts = data.get("ts")
+        if op_ts is not None:
+            if st.session_state.get("_fs_last_processed_sync_ts") == op_ts:
+                return
+            st.session_state["_fs_last_processed_sync_ts"] = op_ts
+
+        action = str(data.get("action", "")).lower()
+
+        if from_query:
+            if "fs_col_op" in st.query_params:
+                try:
+                    del st.query_params["fs_col_op"]
+                except Exception:
+                    pass
+
+        try:
+            st.session_state["fs_col_sync_input"] = ""
+        except Exception:
+            pass
+
+        if action == "exit_box_mode":
+            st.session_state["fs_add_col_mode"] = False
+            S.save_settings()
+        elif action == "enter_box_mode":
+            st.session_state["fs_add_col_mode"] = True
+            S.save_settings()
+        elif action in ("add_column_box", "add_column"):
+            _execute_fs_add_column_box(
+                data, Lx_spans, Ly_spans, cantilevers, trigger_rerun=False
+            )
+    except Exception:
+        pass
+
+
+def _render_fs_interactive_plan(
+    fig_verif,
+    x_coords: list,
+    y_coords: list,
+    box_mode: str = None,
+    multi_box: bool = True,
+    viewer_id: str = "fs_cad_viewer",
+):
+    """
+    عرض المسقط الأفقي تفاعلياً لنظام Flat Slab مع دعم كامل لنمط التحديد بصندوق الماوس (Box Selection Mode)
+    والتنفيذ المرئي الفوري (0ms Instant Canvas Preview + Live Streamlit Sync) مطابقاً لموديول 12.
+    """
+    import streamlit.components.v1 as components
+
+    if box_mode is None and st.session_state.get("fs_add_col_mode", False):
+        box_mode = "add"
+
+    if box_mode == "add":
+        box_hint = "اسحب صندوقاً بالماوس أو انقر مباشرة على تقاطع المحورين لإسقاط العمود فوراً"
+        banner_border = "#3b82f6"
+        banner_bg = "linear-gradient(135deg, rgba(239, 246, 255, 0.98), rgba(219, 234, 254, 0.98))"
+        banner_txt = "#1e40af"
+        banner_icon = "🎯"
+        box_border = "2px dashed #0284c7"
+        box_bg = "rgba(2, 132, 199, 0.20)"
+    else:
+        box_hint = ""
+        banner_border = "#94a3b8"
+        banner_bg = "rgba(255, 255, 255, 0.95)"
+        banner_txt = "#1e293b"
+        banner_icon = ""
+        box_border = "1.5px dashed #0284c7"
+        box_bg = "rgba(2, 132, 199, 0.15)"
+
+    # حفظ الصورة بدون bbox_inches="tight" لضمان التطابق الرياضي التام مع ax_plan.get_position()
+    buf_cad = io.BytesIO()
+    fig_verif.savefig(buf_cad, format="png", dpi=145)
+    buf_cad.seek(0)
+    b64_img = base64.b64encode(buf_cad.getvalue()).decode("utf-8")
+
+    # قراءة أبعاد وإحداثيات المحور الفعلي بعد الرسم الفعلي (savefig) لضمان دقة 100%
+    try:
+        if fig_verif.axes:
+            _ax_p = fig_verif.axes[0]
+            _pos = _ax_p.get_position()
+            _xl = _ax_p.get_xlim()
+            _yl = _ax_p.get_ylim()
+            st.session_state["_fs_plan_bbox_info"] = {
+                "x0": float(_pos.x0),
+                "y0": float(_pos.y0),
+                "x1": float(_pos.x1),
+                "y1": float(_pos.y1),
+                "xlim": [float(_xl[0]), float(_xl[1])],
+                "ylim": [float(_yl[0]), float(_yl[1])],
+                "xs": [float(x) for x in x_coords],
+                "ys": [float(y) for y in y_coords],
+            }
+    except Exception:
+        pass
+
+    bbox_info = dict(st.session_state.get("_fs_plan_bbox_info", {}))
+    if not bbox_info:
+        bbox_info = {
+            "x0": 0.05, "y0": 0.05, "x1": 0.95, "y1": 0.95,
+            "xlim": [0.0, float(x_coords[-1] if x_coords else 10.0)],
+            "ylim": [0.0, float(y_coords[-1] if y_coords else 10.0)],
+            "xs": [float(x) for x in x_coords],
+            "ys": [float(y) for y in y_coords],
+        }
+    bbox_info["multi_select"] = bool(multi_box)
+    cur_b_cm = float(st.session_state.get("fs_new_col_b", S.cfg_val("fs_new_col_b", 30.0)))
+    cur_t_cm = float(st.session_state.get("fs_new_col_t", S.cfg_val("fs_new_col_t", 50.0)))
+    cur_dir = str(st.session_state.get("fs_new_col_dir", S.cfg_val("fs_new_col_dir", "اتجاه Y")))
+    bbox_info["col_b_m"] = cur_b_cm / 100.0
+    bbox_info["col_t_m"] = cur_t_cm / 100.0
+    bbox_info["col_dir"] = cur_dir
+    bbox_json = json.dumps(bbox_info)
+    mode_js = f'"{box_mode}"' if box_mode else "null"
+    cursor_css = "crosshair" if box_mode else "grab"
+
+    span_x = max(x_coords) - min(x_coords) if x_coords else 10.0
+    span_y = max(y_coords) - min(y_coords) if y_coords else 10.0
+    ratio = (span_y + 3.0) / max(span_x + 3.0, 1.0)
+    viewer_h = int(max(520, min(780, 680 * ratio)))
+
+    banner_html = ""
+    if box_mode:
+        banner_html = f"""
+        <div id="box-mode-banner" dir="rtl">
+          <span style="font-size:1.15rem;">{banner_icon}</span>
+          <span>{box_hint}</span>
+          <button class="banner-exit-btn" id="btn-exit-mode" title="إنهاء الوضع التفاعلي (Esc)">✕ إنهاء (Esc)</button>
+        </div>
+        """
+
+    html_code = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{
+    background: transparent;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }}
+  #cad-viewport {{
+    position: relative;
+    width: 100%;
+    height: {viewer_h - 12}px;
+    background: #f8fafc;
+    border: 2px solid {banner_border if box_mode else '#cbd5e1'};
+    border-radius: 12px;
+    overflow: hidden;
+    cursor: {cursor_css};
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }}
+  #cad-viewport.panning {{ cursor: grabbing !important; }}
+  #cad-canvas {{
+    transform-origin: center center;
+    transition: transform 0.06s ease-out;
+    will-change: transform;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    position: relative;
+  }}
+  #img-stage {{
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    max-width: 98%;
+    max-height: 98%;
+  }}
+  #plan-img {{
+    display: block;
+    max-width: 100%;
+    max-height: {viewer_h - 28}px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    pointer-events: none;
+    border-radius: 6px;
+    background: #ffffff;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+  }}
+  #instant-overlay {{
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 25;
+    overflow: visible;
+  }}
+  .instant-col-marker {{
+    position: absolute;
+    transform: translate(-50%, -50%);
+    background: rgba(16, 185, 129, 0.88);
+    border: 2px solid #064e3b;
+    border-radius: 2px;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 900;
+    white-space: nowrap;
+    animation: colPop 0.18s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  }}
+  @keyframes colPop {{
+    0% {{ transform: translate(-50%, -50%) scale(0.3); opacity: 0.2; }}
+    100% {{ transform: translate(-50%, -50%) scale(1.0); opacity: 1.0; }}
+  }}
+  #instant-status-pill {{
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 60;
+    background: rgba(15, 23, 42, 0.92);
+    color: #34d399;
+    border: 1.5px solid #10b981;
+    border-radius: 999px;
+    padding: 6px 18px;
+    font-size: 0.84rem;
+    font-weight: 800;
+    direction: rtl;
+    display: none;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.28);
+  }}
+  #selection-box {{
+    position: absolute;
+    border: {box_border};
+    background: {box_bg};
+    pointer-events: none;
+    display: none;
+    z-index: 50;
+    border-radius: 4px;
+    box-shadow: 0 0 12px rgba(2, 132, 199, 0.35);
+  }}
+  #selection-badge {{
+    position: absolute;
+    top: -30px;
+    right: 0;
+    background: #0284c7;
+    color: #fff;
+    font-size: 0.76rem;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 5px;
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    direction: rtl;
+  }}
+  #box-mode-banner {{
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 40;
+    background: {banner_bg};
+    border: 2px solid {banner_border};
+    color: {banner_txt};
+    padding: 7px 16px;
+    border-radius: 10px;
+    font-size: 0.84rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+    direction: rtl;
+    white-space: nowrap;
+  }}
+  .banner-exit-btn {{
+    background: #ef4444;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+    margin-right: 6px;
+  }}
+  .banner-exit-btn:hover {{ background: #dc2626; }}
+  .cad-toolbar {{
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 30;
+    display: flex;
+    gap: 5px;
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(6px);
+    padding: 5px 8px;
+    border-radius: 9px;
+    border: 1px solid #cbd5e1;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    align-items: center;
+  }}
+  .cad-btn {{
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #1e293b;
+    border-radius: 6px;
+    padding: 4px 9px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    text-decoration: none;
+  }}
+  .cad-btn:hover {{
+    background: #eff6ff;
+    border-color: #3b82f6;
+    color: #1d4ed8;
+  }}
+  .zoom-badge {{
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #475569;
+    min-width: 44px;
+    text-align: center;
+    background: #f1f5f9;
+    padding: 3px 6px;
+    border-radius: 5px;
+  }}
+</style>
+</head>
+<body>
+<div id="cad-viewport">
+  {banner_html}
+  <div class="cad-toolbar" dir="rtl">
+    <button class="cad-btn" id="btn-zoom-in" title="تكبير (Zoom In)">➕</button>
+    <span class="zoom-badge" id="zoom-level">100%</span>
+    <button class="cad-btn" id="btn-zoom-out" title="تصغير (Zoom Out)">➖</button>
+    <button class="cad-btn" id="btn-reset" title="إعادة الضبط (Reset)">🔄 ضبط</button>
+    <button class="cad-btn" id="btn-fullscreen" title="ملء الشاشة (Fullscreen)">⛶</button>
+    <a class="cad-btn" id="btn-download" href="data:image/png;base64,{b64_img}" download="Flat_Slab_Interactive_Plan.png" title="حفظ المسقط كصورة">💾</a>
+  </div>
+  <div id="selection-box"><div id="selection-badge">اسحب لتحديد تقاطع المحورين</div></div>
+  <div id="instant-status-pill">⚡ تم إسقاط العمود فوراً — جاري تحديث اللوحة الهندسية...</div>
+  <div id="cad-canvas">
+    <div id="img-stage">
+      <img id="plan-img" src="data:image/png;base64,{b64_img}" alt="Flat Slab Plan" draggable="false" />
+      <div id="instant-overlay"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {{
+  const viewport = document.getElementById('cad-viewport');
+  const canvas = document.getElementById('cad-canvas');
+  const planImg = document.getElementById('plan-img');
+  const instantOverlay = document.getElementById('instant-overlay');
+  const statusPill = document.getElementById('instant-status-pill');
+  const selBox = document.getElementById('selection-box');
+  const selBadge = document.getElementById('selection-badge');
+  const zoomBadge = document.getElementById('zoom-level');
+  const exitBtn = document.getElementById('btn-exit-mode');
+
+  const currentBoxMode = {mode_js};
+  const bboxInfo = {bbox_json};
+
+  let scale = 1.0;
+  let panX = 0;
+  let panY = 0;
+  let isDragging = false;
+  let startX = 0;
+  let startY = 0;
+  let isBoxSelecting = false;
+  let boxStartX = 0;
+  let boxStartY = 0;
+
+  function updateTransform() {{
+    canvas.style.transform = `translate(${{panX}}px, ${{panY}}px) scale(${{scale}})`;
+    zoomBadge.textContent = Math.round(scale * 100) + '%';
+  }}
+
+  function applyZoom(factor, clientX, clientY) {{
+    const newScale = Math.min(Math.max(scale * factor, 0.35), 8.0);
+    if (clientX !== undefined && clientY !== undefined) {{
+      const rect = viewport.getBoundingClientRect();
+      const cx = clientX - rect.left - rect.width / 2;
+      const cy = clientY - rect.top - rect.height / 2;
+      panX = cx - (cx - panX) * (newScale / scale);
+      panY = cy - (cy - panY) * (newScale / scale);
+    }}
+    scale = newScale;
+    updateTransform();
+  }}
+
+  document.getElementById('btn-zoom-in').addEventListener('click', (e) => {{ e.stopPropagation(); applyZoom(1.25); }});
+  document.getElementById('btn-zoom-out').addEventListener('click', (e) => {{ e.stopPropagation(); applyZoom(0.8); }});
+  document.getElementById('btn-reset').addEventListener('click', (e) => {{
+    e.stopPropagation();
+    scale = 1.0; panX = 0; panY = 0;
+    updateTransform();
+  }});
+  document.getElementById('btn-fullscreen').addEventListener('click', (e) => {{
+    e.stopPropagation();
+    if (!document.fullscreenElement) viewport.requestFullscreen().catch(() => {{}});
+    else document.exitFullscreen().catch(() => {{}});
+  }});
+
+  function drawInstantColumnsOnCanvas(intersectionsList) {{
+    if (!instantOverlay || !bboxInfo || !bboxInfo.xlim || !bboxInfo.ylim) return;
+    const xSpan = bboxInfo.xlim[1] - bboxInfo.xlim[0];
+    const ySpan = bboxInfo.ylim[1] - bboxInfo.ylim[0];
+    const axW = bboxInfo.x1 - bboxInfo.x0;
+    const axH = bboxInfo.y1 - bboxInfo.y0;
+    if (xSpan <= 0 || ySpan <= 0) return;
+
+    const b_m = bboxInfo.col_b_m || 0.30;
+    const t_m = bboxInfo.col_t_m || 0.50;
+    const isX = String(bboxInfo.col_dir || '').includes('X') || String(bboxInfo.col_dir || '').includes('أفقي');
+    const colW_m = isX ? Math.max(b_m, t_m) : Math.min(b_m, t_m);
+    const colH_m = isX ? Math.min(b_m, t_m) : Math.max(b_m, t_m);
+
+    const wPct = Math.max(1.8, (colW_m / xSpan) * axW * 100.0);
+    const hPct = Math.max(1.8, (colH_m / ySpan) * axH * 100.0);
+
+    intersectionsList.forEach(function(it) {{
+      const u = bboxInfo.x0 + ((it.x - bboxInfo.xlim[0]) / xSpan) * axW;
+      const v = bboxInfo.y0 + ((it.y - bboxInfo.ylim[0]) / ySpan) * axH;
+      const marker = document.createElement('div');
+      marker.className = 'instant-col-marker';
+      marker.style.left = (u * 100.0) + '%';
+      marker.style.top = ((1.0 - v) * 100.0) + '%';
+      marker.style.width = wPct + '%';
+      marker.style.height = hPct + '%';
+      marker.textContent = 'Y' + (it.i + 1) + '×X' + (it.j + 1);
+      instantOverlay.appendChild(marker);
+    }});
+
+    if (statusPill) {{
+      statusPill.textContent = intersectionsList.length === 1
+        ? ('⚡ تم إسقاط العمود عند Y' + (intersectionsList[0].i + 1) + ' × X' + (intersectionsList[0].j + 1) + ' — جاري تحديث اللوحة...')
+        : ('⚡ تم إسقاط ' + intersectionsList.length + ' أعمدة فوراً — جاري تحديث اللوحة...');
+      statusPill.style.display = 'block';
+    }}
+  }}
+
+  function syncToStreamlit(payloadObj) {{
+    try {{
+      const jsonStr = JSON.stringify(payloadObj);
+      let synced = false;
+      try {{
+        if (window.parent && window.parent.document) {{
+          const pDoc = window.parent.document;
+          let input = pDoc.querySelector('input[aria-label="fs_col_sync_payload"]')
+                   || pDoc.querySelector('.st-key-fs_col_sync_input input')
+                   || pDoc.querySelector('div[class*="st-key-fs_col_sync_input"] input');
+          if (input) {{
+            input.focus();
+            const proto = (window.parent.HTMLInputElement || window.HTMLInputElement).prototype;
+            const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+            if (desc && desc.set) desc.set.call(input, jsonStr);
+            else input.value = jsonStr;
+            if (input._valueTracker) input._valueTracker.setValue('');
+            input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+            input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+            input.dispatchEvent(new KeyboardEvent('keydown', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
+            input.dispatchEvent(new KeyboardEvent('keypress', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
+            input.dispatchEvent(new KeyboardEvent('keyup', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
+            input.blur();
+            input.dispatchEvent(new Event('blur', {{ bubbles: true }}));
+            synced = true;
+          }}
+        }}
+      }} catch(e) {{ console.warn("React bridge error:", e); }}
+
+      if (!synced) {{
+        try {{
+          if (window.parent && window.parent.location) {{
+            const pUrl = new URL(window.parent.location.href);
+            pUrl.searchParams.set('fs_col_op', jsonStr);
+            window.parent.location.href = pUrl.toString();
+          }}
+        }} catch(e) {{}}
+      }}
+    }} catch(err) {{ console.error("syncToStreamlit error:", err); }}
+  }}
+
+  function screenToWorld(clientX, clientY) {{
+    if (!bboxInfo || !bboxInfo.xlim || !planImg) return null;
+    const imgRect = planImg.getBoundingClientRect();
+    if (imgRect.width <= 0 || imgRect.height <= 0) return null;
+
+    const imgX = clientX - imgRect.left;
+    const imgY = clientY - imgRect.top;
+    const u = imgX / imgRect.width;
+    const v = 1.0 - (imgY / imgRect.height);
+
+    const xSpan = bboxInfo.xlim[1] - bboxInfo.xlim[0];
+    const ySpan = bboxInfo.ylim[1] - bboxInfo.ylim[0];
+    const axW = bboxInfo.x1 - bboxInfo.x0;
+    const axH = bboxInfo.y1 - bboxInfo.y0;
+
+    const worldX = bboxInfo.xlim[0] + ((u - bboxInfo.x0) / axW) * xSpan;
+    const worldY = bboxInfo.ylim[0] + ((v - bboxInfo.y0) / axH) * ySpan;
+    return {{ x: worldX, y: worldY }};
+  }}
+
+  function getBoxWorldBounds(cLeft, cTop, cWidth, cHeight) {{
+    const p1 = screenToWorld(cLeft, cTop);
+    const p2 = screenToWorld(cLeft + cWidth, cTop + cHeight);
+    if (!p1 || !p2) return null;
+    return {{
+      xmin: Math.min(p1.x, p2.x),
+      xmax: Math.max(p1.x, p2.x),
+      ymin: Math.min(p1.y, p2.y),
+      ymax: Math.max(p1.y, p2.y)
+    }};
+  }}
+
+  function findIntersectionsInBox(bounds) {{
+    if (!bboxInfo || !bboxInfo.xs || !bboxInfo.ys) return [];
+    const strictList = [];
+    for (let i = 0; i < bboxInfo.xs.length; i++) {{
+      const x = bboxInfo.xs[i];
+      if (x >= bounds.xmin && x <= bounds.xmax) {{
+        for (let j = 0; j < bboxInfo.ys.length; j++) {{
+          const y = bboxInfo.ys[j];
+          if (y >= bounds.ymin && y <= bounds.ymax) {{
+            strictList.push({{ i: i, j: j, x: x, y: y }});
+          }}
+        }}
+      }}
+    }}
+    if (strictList.length > 0) return strictList;
+
+    const expList = [];
+    for (let i = 0; i < bboxInfo.xs.length; i++) {{
+      const x = bboxInfo.xs[i];
+      if (x >= bounds.xmin - 0.55 && x <= bounds.xmax + 0.55) {{
+        for (let j = 0; j < bboxInfo.ys.length; j++) {{
+          const y = bboxInfo.ys[j];
+          if (y >= bounds.ymin - 0.55 && y <= bounds.ymax + 0.55) {{
+            expList.push({{ i: i, j: j, x: x, y: y }});
+          }}
+        }}
+      }}
+    }}
+    if (expList.length <= 1) return expList;
+    const cx = (bounds.xmin + bounds.xmax) / 2.0;
+    const cy = (bounds.ymin + bounds.ymax) / 2.0;
+    expList.sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy));
+    return [expList[0]];
+  }}
+
+  function findClosestIntersection(wx, wy, maxDist) {{
+    if (!bboxInfo || !bboxInfo.xs || !bboxInfo.ys) return null;
+    let best = null;
+    let minDist = maxDist || 1.15;
+    for (let i = 0; i < bboxInfo.xs.length; i++) {{
+      for (let j = 0; j < bboxInfo.ys.length; j++) {{
+        const d = Math.hypot(bboxInfo.xs[i] - wx, bboxInfo.ys[j] - wy);
+        if (d < minDist) {{
+          minDist = d;
+          best = {{ i: i, j: j, x: bboxInfo.xs[i], y: bboxInfo.ys[j] }};
+        }}
+      }}
+    }}
+    return best;
+  }}
+
+  viewport.addEventListener('mousedown', function(e) {{
+    if (e.target.closest('.cad-toolbar') || e.target.closest('#box-mode-banner')) return;
+    if (currentBoxMode) {{
+      isBoxSelecting = true;
+      isDragging = false;
+      const vRect = viewport.getBoundingClientRect();
+      boxStartX = e.clientX;
+      boxStartY = e.clientY;
+      selBox.style.left = (boxStartX - vRect.left) + 'px';
+      selBox.style.top = (boxStartY - vRect.top) + 'px';
+      selBox.style.width = '0px';
+      selBox.style.height = '0px';
+      selBox.style.display = 'block';
+      selBadge.textContent = 'اسحب أو انقر لتحديد تقاطع المحورين...';
+      selBadge.style.background = '#0f172a';
+      e.preventDefault();
+      return;
+    }}
+    isDragging = true;
+    startX = e.clientX - panX;
+    startY = e.clientY - panY;
+    viewport.classList.add('panning');
+  }});
+
+  window.addEventListener('mousemove', function(e) {{
+    if (currentBoxMode && isBoxSelecting) {{
+      const vRect = viewport.getBoundingClientRect();
+      const curX = e.clientX;
+      const curY = e.clientY;
+      const left = Math.min(boxStartX, curX) - vRect.left;
+      const top = Math.min(boxStartY, curY) - vRect.top;
+      const width = Math.abs(curX - boxStartX);
+      const height = Math.abs(curY - boxStartY);
+
+      selBox.style.left = left + 'px';
+      selBox.style.top = top + 'px';
+      selBox.style.width = width + 'px';
+      selBox.style.height = height + 'px';
+
+      const bounds = getBoxWorldBounds(Math.min(boxStartX, curX), Math.min(boxStartY, curY), width, height);
+      if (bounds) {{
+        const list = findIntersectionsInBox(bounds);
+        if (list.length === 1) {{
+          selBadge.innerHTML = '📍 تقاطع المحاور: Y' + (list[0].i + 1) + ' × X' + (list[0].j + 1);
+          selBadge.style.background = '#0284c7';
+        }} else if (list.length > 1) {{
+          if (bboxInfo.multi_select) {{
+            const tags = list.slice(0, 4).map(it => 'Y' + (it.i + 1) + '×X' + (it.j + 1)).join(' ، ');
+            selBadge.innerHTML = '📍 إسقاط ' + list.length + ' أعمدة: ' + tags + (list.length > 4 ? '...' : '');
+            selBadge.style.background = '#0284c7';
+          }} else {{
+            const cx = (bounds.xmin + bounds.xmax) / 2.0;
+            const cy = (bounds.ymin + bounds.ymax) / 2.0;
+            list.sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy));
+            selBadge.innerHTML = '📍 تقاطع المحاور: Y' + (list[0].i + 1) + ' × X' + (list[0].j + 1);
+            selBadge.style.background = '#0284c7';
+          }}
+        }} else {{
+          selBadge.innerHTML = 'اسحب ليشمل تقاطع المحورين';
+          selBadge.style.background = '#0f172a';
+        }}
+      }}
+      e.preventDefault();
+      return;
+    }}
+    if (isDragging) {{
+      panX = e.clientX - startX;
+      panY = e.clientY - startY;
+      updateTransform();
+    }}
+  }});
+
+  window.addEventListener('mouseup', function(e) {{
+    if (currentBoxMode && isBoxSelecting) {{
+      isBoxSelecting = false;
+      selBox.style.display = 'none';
+      const curX = e.clientX;
+      const curY = e.clientY;
+      const minX = Math.min(boxStartX, curX);
+      const minY = Math.min(boxStartY, curY);
+      const width = Math.abs(curX - boxStartX);
+      const height = Math.abs(curY - boxStartY);
+
+      if (width >= 4 || height >= 4) {{
+        const bounds = getBoxWorldBounds(minX, minY, Math.max(width, 10), Math.max(height, 10));
+        if (bounds) {{
+          let list = findIntersectionsInBox(bounds);
+          if (!bboxInfo.multi_select && list.length > 1) {{
+            const cx = (bounds.xmin + bounds.xmax) / 2.0;
+            const cy = (bounds.ymin + bounds.ymax) / 2.0;
+            list.sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy));
+            list = [list[0]];
+          }}
+          if (list.length > 0) {{
+            drawInstantColumnsOnCanvas(list);
+            syncToStreamlit({{
+              action: 'add_column_box',
+              box: [bounds.xmin, bounds.xmax, bounds.ymin, bounds.ymax],
+              grid_i: list.length === 1 ? list[0].i : null,
+              grid_j: list.length === 1 ? list[0].j : null,
+              intersections: list.map(it => ({{ i: it.i, j: it.j }})),
+              multi: Boolean(bboxInfo.multi_select),
+              ts: Date.now()
+            }});
+          }}
+        }}
+      }} else {{
+        const pt = screenToWorld(boxStartX, boxStartY);
+        if (pt) {{
+          const inter = findClosestIntersection(pt.x, pt.y, 1.15);
+          if (inter) {{
+            drawInstantColumnsOnCanvas([inter]);
+            syncToStreamlit({{
+              action: 'add_column_box',
+              box: [pt.x - 0.5, pt.x + 0.5, pt.y - 0.5, pt.y + 0.5],
+              grid_i: inter.i,
+              grid_j: inter.j,
+              intersections: [{{ i: inter.i, j: inter.j }}],
+              multi: false,
+              ts: Date.now()
+            }});
+          }}
+        }}
+      }}
+      e.preventDefault();
+      return;
+    }}
+    if (isDragging) {{
+      isDragging = false;
+      viewport.classList.remove('panning');
+    }}
+  }});
+
+  window.addEventListener('keydown', function(e) {{
+    if ((e && (e.key === 'Escape' || e.keyCode === 27)) && currentBoxMode) {{
+      syncToStreamlit({{ action: 'exit_box_mode', ts: Date.now() }});
+    }}
+  }});
+
+  if (exitBtn) {{
+    exitBtn.addEventListener('click', function(e) {{
+      e.stopPropagation();
+      syncToStreamlit({{ action: 'exit_box_mode', ts: Date.now() }});
+    }});
+  }}
+
+  viewport.addEventListener('wheel', function(e) {{
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.15 : 0.87;
+    applyZoom(factor, e.clientX, e.clientY);
+  }}, {{ passive: false }});
+}})();
+</script>
+</body>
+</html>"""
+
+    components.html(html_code, height=viewer_h, scrolling=False)
+
+
+def _section_fs_add_columns(
+    prefix: str,
+    Lx_spans: list,
+    Ly_spans: list,
+    cantilevers: dict,
+    _bc_col: float,
+    _tc_col: float,
+    _active_cols: list,
+    _all_cols: list,
+    _effective_removed_ids: set,
+    _confirmed_voids: list,
+    _col_transforms: dict,
+    _edge_columns: dict,
+    _col_props: dict,
+    _void_boxes_sk: list,
+    ts_initial: float,
+    num_floors: int,
+    bottom_mesh_dia: int,
+    n_btm_mesh_usr: int,
+    top_mesh_dia: int,
+    n_top_mesh_usr: int,
+    col_extra_dia: int,
+    strip_top_extra_dia: int,
+    strip_bottom_extra_dia: int,
+    cov: float,
+    Fcu: float,
+    Fy: float,
+    LL: float,
+    SDL: float,
+    wall_load: float,
+):
+    """
+    قسم '➕ إضافة الأعمدة على المحاور' لنظام Flat Slab:
+    يتبع نفس فلسفة ومنطق التوليد والإسقاط التفاعلي بالماوس المتبع في موديول 12 (أعمال المباني واللياسة).
+    """
+    x_coords = [0.0]
+    for lx in Lx_spans:
+        x_coords.append(x_coords[-1] + lx)
+    y_coords = [0.0]
+    for ly in Ly_spans:
+        y_coords.append(y_coords[-1] + ly)
+
+    n_xi = len(x_coords)
+    n_yj = len(y_coords)
+    n_total_intersections = n_xi * n_yj
+    n_active = len(_active_cols)
+
+    cfg = st.session_state.setdefault("cfg", {})
+    is_add_active = bool(st.session_state.get("fs_add_col_mode", False))
+
+    col_left_ctrl, col_right_plan = st.columns([1.05, 1.95], gap="medium")
+
+    with col_left_ctrl:
+        active_col_ids = [c["id"] for c in _active_cols]
+        active_col_labels = {
+            c["id"]: f"{c['id']} ({c.get('grid_x', '')} × {c.get('grid_y', '')} — {c.get('width_cm', _bc_col):.0f}×{c.get('height_cm', _tc_col):.0f} سم)"
+            for c in _active_cols
+        }
+        active_id_to_orig = {c["id"]: c["orig_id"] for c in _active_cols}
+        active_id_to_ij = {c["id"]: (c["i"], c["j"]) for c in _active_cols}
+
+        # ══════════════════════════════════════════════════════════════════════
+        # 1️⃣ القسم الفرعي الأول: إسقاط الأعمدة (Collapsed افتراضياً)
+        # ══════════════════════════════════════════════════════════════════════
+        with st.expander(
+            "🎯 1- إسقاط الأعمدة",
+            expanded=False,
+            key=f"{prefix}sub_exp_drop_cols",
+        ):
+            def _on_fs_col_dims_change():
+                cur_b = float(st.session_state.get("fs_new_col_b", _bc_col))
+                cur_t = float(st.session_state.get("fs_new_col_t", _tc_col))
+                st.session_state.setdefault("cfg", {})["fs_new_col_b"] = cur_b
+                st.session_state["cfg"]["fs_new_col_t"] = cur_t
+                S.save_settings()
+
+            init_b = float(st.session_state.get("fs_new_col_b", cfg.get("fs_new_col_b", _bc_col)))
+            init_t = float(st.session_state.get("fs_new_col_t", cfg.get("fs_new_col_t", _tc_col)))
+
+            c_b, c_t = st.columns(2)
+            with c_b:
+                b_val = st.number_input(
+                    "العرض b (سم):",
+                    min_value=12.0,
+                    max_value=250.0,
+                    value=init_b,
+                    step=5.0,
+                    key="fs_new_col_b",
+                    on_change=_on_fs_col_dims_change,
+                    help="عرض العمود بالسنتمتر (يُعتمد كـ default للأعمدة التي يتم إسقاطها بالماوس).",
+                )
+            with c_t:
+                t_val = st.number_input(
+                    "الطول t (سم):",
+                    min_value=15.0,
+                    max_value=350.0,
+                    value=init_t,
+                    step=5.0,
+                    key="fs_new_col_t",
+                    on_change=_on_fs_col_dims_change,
+                    help="طول العمود بالسنتمتر (يُعتمد كـ default للأعمدة التي يتم إسقاطها بالماوس).",
+                )
+
+            ADAPTIVE_DIR_OPTIONS = [
+                "تلقائي تكيفي حسب الموقع والمسارات (Auto Adaptive)",
+                "رأسي (اتجاه Y)",
+                "أفقي (اتجاه X)",
+            ]
+            ADAPTIVE_SX_OPTIONS = ["تلقائي تكيفي مع حدود البلاطة والمحاور (Auto)"] + FS_SHIFT_X_OPTIONS
+            ADAPTIVE_SY_OPTIONS = ["تلقائي تكيفي مع حدود البلاطة والمحاور (Auto)"] + FS_SHIFT_Y_OPTIONS
+
+            saved_dir = str(cfg.get("fs_new_col_dir", ADAPTIVE_DIR_OPTIONS[0]))
+            saved_sx = str(cfg.get("fs_new_col_sx", ADAPTIVE_SX_OPTIONS[0]))
+            saved_sy = str(cfg.get("fs_new_col_sy", ADAPTIVE_SY_OPTIONS[0]))
+
+            sel_dir_mode = st.selectbox(
+                "📐 اتجاه ضرب العمود (Orientation):",
+                options=ADAPTIVE_DIR_OPTIONS,
+                index=ADAPTIVE_DIR_OPTIONS.index(saved_dir) if saved_dir in ADAPTIVE_DIR_OPTIONS else 0,
+                key="fs_new_col_dir",
+                help="ربط توجيه العمود تلقائياً بالمسارات المعمارية والمحاور الطرفية أو تثبيته في اتجاه X أو Y.",
+            )
+            sel_sx_mode = st.selectbox(
+                "↔️ الترحيل الأفقي (X) عن المحور الرأسي:",
+                options=ADAPTIVE_SX_OPTIONS,
+                index=ADAPTIVE_SX_OPTIONS.index(saved_sx) if saved_sx in ADAPTIVE_SX_OPTIONS else 0,
+                key="fs_new_col_sx",
+                help="مواءمة وجه العمود مع حوائط المباني (إزاحة ±6 سم) أو التمركز على المحور كما في موديول 12.",
+            )
+            sel_sy_mode = st.selectbox(
+                "↕️ الترحيل الرأسي (Y) عن المحور الأفقي:",
+                options=ADAPTIVE_SY_OPTIONS,
+                index=ADAPTIVE_SY_OPTIONS.index(saved_sy) if saved_sy in ADAPTIVE_SY_OPTIONS else 0,
+                key="fs_new_col_sy",
+                help="مواءمة وجه العمود مع حوائط المباني (إزاحة ±6 سم) أو التمركز على المحور كما في موديول 12.",
+            )
+
+            cfg["fs_new_col_b"] = float(b_val)
+            cfg["fs_new_col_t"] = float(t_val)
+            cfg["fs_new_col_dir"] = sel_dir_mode
+            cfg["fs_new_col_sx"] = sel_sx_mode
+            cfg["fs_new_col_sy"] = sel_sy_mode
+
+            st.markdown("<hr style='margin: 10px 0; border: none; border-top: 1px dashed #cbd5e1;'>", unsafe_allow_html=True)
+            st.markdown("<div dir='rtl' style='font-size:0.95rem; font-weight:800; color:#1e3a8a; margin-bottom:6px;'>🖱️ اسقاط اعمدة بسحب صندوق بالماوس (Interactive Box Selection)</div>", unsafe_allow_html=True)
+
+            multi_box_flag = st.checkbox(
+                "📦 السماح بإسقاط عدة أعمدة دفعة واحدة عند سحب الصندوق على أكثر من تقاطع / محور",
+                value=bool(st.session_state.get("fs_box_multi_select", True)),
+                key="fs_box_multi_select",
+                help="عند التفعيل يمكنك سحب صندوق بالماوس على محور كامل أو عدة تقاطعات لإسقاط أعمدة عليها جميعاً في خطوة واحدة.",
+            )
+
+            if not is_add_active:
+                if st.button("🎯 تفعيل اختيار عمود بالسحب على المسقط", type="primary", use_container_width=True, key=f"{prefix}btn_start_add_col"):
+                    st.session_state["fs_add_col_mode"] = True
+                    st.rerun()
+            else:
+                if st.button("⏹️ إنهاء وضع الإضافة (Esc)", use_container_width=True, key=f"{prefix}btn_exit_add_col"):
+                    st.session_state["fs_add_col_mode"] = False
+                    st.rerun()
+
+        # ── خط فاصل باللون الأخضر يفصل بين قسم إسقاط الأعمدة وقسم تعديل الأعمدة ──
+        st.markdown(
+            "<div style='margin: 12px 0 12px 0; height: 6px; background: linear-gradient(90deg, #15803d 0%, #22c55e 50%, #15803d 100%); border-radius: 4px; box-shadow: 0 2px 6px rgba(22, 163, 74, 0.35);'></div>",
+            unsafe_allow_html=True,
+        )
+
+        # ══════════════════════════════════════════════════════════════════════
+        # 2️⃣ القسم الفرعي الثاني: تعديل الأعمدة (Collapsed افتراضياً)
+        # ══════════════════════════════════════════════════════════════════════
+        with st.expander(
+            "🛠️ 2- تعديل الأعمدة",
+            expanded=False,
+            key=f"{prefix}sub_exp_edit_cols",
+        ):
+            if not active_col_ids:
+                st.info("لا توجد أعمدة فعّالة حالياً على المسقط لتعديل ضربها أو ترحيلها.")
+            else:
+                edit_col_id = st.selectbox(
+                    "اسم العمود",
+                    options=active_col_ids,
+                    format_func=lambda cid: active_col_labels.get(cid, cid),
+                    key=f"{prefix}edit_col_select",
+                    help="اختر العمود المراد تعديل اتجاه ضربه أو ترحيله على المحاور.",
+                )
+
+                tgt_col_obj = next((c for c in _active_cols if c["id"] == edit_col_id), _active_cols[0])
+                tgt_orig_id = tgt_col_obj["orig_id"]
+                tgt_ij = (tgt_col_obj["i"], tgt_col_obj["j"])
+                tgt_ij_str = f"{tgt_ij[0]},{tgt_ij[1]}"
+
+                col_transforms_curr = cfg.get("fs_col_transforms", {})
+                if not isinstance(col_transforms_curr, dict):
+                    col_transforms_curr = {}
+
+                saved_trans_raw = (
+                    col_transforms_curr.get(tgt_orig_id)
+                    or col_transforms_curr.get(tgt_ij_str)
+                    or {
+                        "direction": tgt_col_obj.get("direction", "اتجاه X"),
+                        "shift_x": tgt_col_obj.get("shift_x", "متمركز على المحور (Centered)"),
+                        "shift_y": tgt_col_obj.get("shift_y", "متمركز على المحور (Centered)"),
+                    }
+                )
+                norm_trans_edit = normalize_col_transform(saved_trans_raw)
+
+                EDIT_DIR_OPTIONS = ["اتجاه X", "اتجاه Y"]
+                EDIT_SX_OPTIONS = list(FS_SHIFT_X_OPTIONS)
+                EDIT_SY_OPTIONS = list(FS_SHIFT_Y_OPTIONS)
+
+                idx_edit_dir = EDIT_DIR_OPTIONS.index(norm_trans_edit["direction"]) if norm_trans_edit["direction"] in EDIT_DIR_OPTIONS else 0
+                idx_edit_sx = EDIT_SX_OPTIONS.index(norm_trans_edit["shift_x"]) if norm_trans_edit["shift_x"] in EDIT_SX_OPTIONS else 0
+                idx_edit_sy = EDIT_SY_OPTIONS.index(norm_trans_edit["shift_y"]) if norm_trans_edit["shift_y"] in EDIT_SY_OPTIONS else 0
+
+                edit_sel_dir = st.selectbox(
+                    "ضرب العمود",
+                    options=EDIT_DIR_OPTIONS,
+                    index=idx_edit_dir,
+                    key=f"{prefix}edit_dir_widget_{tgt_orig_id}",
+                    help="اتجاه البعد الأكبر للعمود D (موازٍ لمحور X أو لمحور Y).",
+                )
+                edit_sel_sx = st.selectbox(
+                    "الترحيل الأفقي (X)",
+                    options=EDIT_SX_OPTIONS,
+                    index=idx_edit_sx,
+                    key=f"{prefix}edit_sx_widget_{tgt_orig_id}",
+                    help="الترحيل الأفقي للعمود بالنسبة للمحور الرأسي (±6 سم أو متمركز).",
+                )
+                edit_sel_sy = st.selectbox(
+                    "الترحيل الرأسي (Y)",
+                    options=EDIT_SY_OPTIONS,
+                    index=idx_edit_sy,
+                    key=f"{prefix}edit_sy_widget_{tgt_orig_id}",
+                    help="الترحيل الرأسي للعمود بالنسبة للمحور الأفقي (±6 سم أو متمركز).",
+                )
+
+                # فحص حالة عمود الجار (Edge Column) للعمود المختار
+                edge_cols_curr = cfg.get("fs_edge_columns", {})
+                if not isinstance(edge_cols_curr, dict):
+                    edge_cols_curr = {}
+                saved_edge_edit = edge_cols_curr.get(tgt_orig_id, {})
+                if not isinstance(saved_edge_edit, dict):
+                    saved_edge_edit = {}
+                saved_is_edge_edit = saved_edge_edit.get("is_edge", "No")
+                if saved_is_edge_edit not in ["No", "Yes"]:
+                    saved_is_edge_edit = "No"
+
+                curr_trans_preview = {
+                    "direction": edit_sel_dir,
+                    "shift_x": edit_sel_sx,
+                    "shift_y": edit_sel_sy,
+                }
+                col_geom_prev = compute_column_geometry(
+                    tgt_col_obj.get("grid_x_m", tgt_col_obj.get("x", 0.0)),
+                    tgt_col_obj.get("grid_y_m", tgt_col_obj.get("y", 0.0)),
+                    float(tgt_col_obj.get("b_cm", _bc_col)),
+                    float(tgt_col_obj.get("t_cm", _tc_col)),
+                    curr_trans_preview,
+                )
+
+                gx_col_e = tgt_col_obj.get("grid_x_m", tgt_col_obj.get("x", 0.0))
+                gy_col_e = tgt_col_obj.get("grid_y_m", tgt_col_obj.get("y", 0.0))
+                min_x_e = x_coords[0] if x_coords else 0.0
+                max_x_e = x_coords[-1] if x_coords else 0.0
+                min_y_e = y_coords[0] if y_coords else 0.0
+                max_y_e = y_coords[-1] if y_coords else 0.0
+                cant_l_e = float(cantilevers.get("left", 0.0) or 0.0) if isinstance(cantilevers, dict) else 0.0
+                cant_r_e = float(cantilevers.get("right", 0.0) or 0.0) if isinstance(cantilevers, dict) else 0.0
+                cant_b_e = float(cantilevers.get("bottom", 0.0) or 0.0) if isinstance(cantilevers, dict) else 0.0
+                cant_t_e = float(cantilevers.get("top", 0.0) or 0.0) if isinstance(cantilevers, dict) else 0.0
+
+                slab_bounds_e = {
+                    "min_x": min_x_e,
+                    "max_x": max_x_e,
+                    "min_y": min_y_e,
+                    "max_y": max_y_e,
+                    "cant_left": cant_l_e,
+                    "cant_right": cant_r_e,
+                    "cant_bottom": cant_b_e,
+                    "cant_top": cant_t_e,
+                }
+
+                tol_e = 0.05
+                is_grid_left_e   = (gx_col_e <= min_x_e + tol_e)
+                is_grid_right_e  = (gx_col_e >= max_x_e - tol_e)
+                is_grid_bottom_e = (gy_col_e <= min_y_e + tol_e)
+                is_grid_top_e    = (gy_col_e >= max_y_e - tol_e)
+
+                on_left_e   = is_grid_left_e and (cant_l_e <= tol_e)
+                on_right_e  = is_grid_right_e and (cant_r_e <= tol_e)
+                on_bottom_e = is_grid_bottom_e and (cant_b_e <= tol_e)
+                on_top_e    = is_grid_top_e and (cant_t_e <= tol_e)
+                can_be_edge_e = bool(on_left_e or on_right_e or on_bottom_e or on_top_e)
+
+                avail_faces_e = []
+                if on_left_e:
+                    avail_faces_e.append("Left")
+                if on_right_e:
+                    avail_faces_e.append("Right")
+                if on_bottom_e:
+                    avail_faces_e.append("Bottom")
+                if on_top_e:
+                    avail_faces_e.append("Top")
+
+                real_edge_dirs_e = list(avail_faces_e)
+                if "Bottom" in avail_faces_e and "Left" in avail_faces_e:
+                    real_edge_dirs_e.append("Bottom + Left")
+                if "Bottom" in avail_faces_e and "Right" in avail_faces_e:
+                    real_edge_dirs_e.append("Bottom + Right")
+                if "Top" in avail_faces_e and "Left" in avail_faces_e:
+                    real_edge_dirs_e.append("Top + Left")
+                if "Top" in avail_faces_e and "Right" in avail_faces_e:
+                    real_edge_dirs_e.append("Top + Right")
+
+                SEL_DIR_PH_E = "-- اختر اتجاه الجار --"
+                raw_saved_edge_dir_e = str(saved_edge_edit.get("direction", "") or "").strip()
+                if len(real_edge_dirs_e) == 1:
+                    edge_dir_opts_e = [SEL_DIR_PH_E] + real_edge_dirs_e
+                    saved_edge_dir_e = raw_saved_edge_dir_e if raw_saved_edge_dir_e in real_edge_dirs_e else real_edge_dirs_e[0]
+                elif len(real_edge_dirs_e) > 1:
+                    edge_dir_opts_e = [SEL_DIR_PH_E] + real_edge_dirs_e
+                    saved_edge_dir_e = raw_saved_edge_dir_e if raw_saved_edge_dir_e in real_edge_dirs_e else SEL_DIR_PH_E
+                else:
+                    edge_dir_opts_e = [SEL_DIR_PH_E]
+                    saved_edge_dir_e = SEL_DIR_PH_E
+
+                idx_edge_dir_e = edge_dir_opts_e.index(saved_edge_dir_e) if saved_edge_dir_e in edge_dir_opts_e else 0
+                is_edge_valid_e = False
+                edge_val_errs_e = []
+
+                idx_is_edge_e = 1 if saved_is_edge_edit == "Yes" else 0
+                edit_sel_is_edge = st.selectbox(
+                    "عمود جار",
+                    options=["No", "Yes"],
+                    index=idx_is_edge_e,
+                    key=f"{prefix}edit_is_edge_widget_{tgt_orig_id}",
+                    help="تحديد ما إذا كان العمود يعتبر عمود جار (Edge Column) أم لا.",
+                )
+
+                edit_sel_edge_dir = ""
+                if edit_sel_is_edge == "Yes":
+                    if not can_be_edge_e:
+                        is_edge_valid_e = False
+                        if not (is_grid_left_e or is_grid_right_e or is_grid_bottom_e or is_grid_top_e):
+                            edge_val_errs_e = [
+                                "لا يجوز اعتبار هذا العمود عمود جار: لأنه عمود داخلي (Interior Column) يقع داخل حدود مساحة المسقط الأفقي ومحاط ببحور بلاطة من جميع الجهات."
+                            ]
+                        else:
+                            edge_val_errs_e = [
+                                "لا يجوز اعتبار هذا العمود عمود جار: لوجود كابولي (بروز بلاطة Cantilever) خارج محور العمود يمنع ملاصقته لحد الجار."
+                            ]
+                    else:
+                        w_edge_dir_key = f"{prefix}edit_edge_dir_widget_{tgt_orig_id}"
+                        if w_edge_dir_key in st.session_state and st.session_state[w_edge_dir_key] not in edge_dir_opts_e:
+                            st.session_state[w_edge_dir_key] = saved_edge_dir_e
+                        edit_sel_edge_dir = st.selectbox(
+                            "اتجاه الجار",
+                            options=edge_dir_opts_e,
+                            index=idx_edge_dir_e,
+                            key=w_edge_dir_key,
+                            help="اتجاه وجه/أوجه الجار بالنسبة لحدود المسقط.",
+                        )
+                        if edit_sel_edge_dir == SEL_DIR_PH_E or edit_sel_edge_dir not in real_edge_dirs_e:
+                            is_edge_valid_e = False
+                            st.markdown(
+                                "<div dir='rtl' style='direction:rtl;text-align:right;background:#eff6ff;border:1.5px solid #3b82f6;color:#1e40af;padding:7px 10px;border-radius:6px;font-size:12.5px;font-weight:bold;margin-top:4px;margin-bottom:4px;line-height:1.45;'>ℹ️ يرجى اختيار اتجاه الجار (Edge Direction) من القائمة أعلاه لتحديد أوجه الجور.</div>",
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            is_edge_valid_e, edge_val_errs_e = validate_edge_column_offset(
+                                col_geom_prev, edit_sel_edge_dir, slab_bounds=slab_bounds_e
+                            )
+
+                has_real_dir_e = bool(edit_sel_is_edge == "Yes" and can_be_edge_e and edit_sel_edge_dir in real_edge_dirs_e)
+                new_edge_entry = {
+                    "is_edge": edit_sel_is_edge,
+                    "direction": edit_sel_edge_dir if has_real_dir_e else "",
+                    "is_valid": bool(is_edge_valid_e and has_real_dir_e),
+                }
+
+                trans_changed_e = (
+                    edit_sel_dir != norm_trans_edit["direction"]
+                    or edit_sel_sx != norm_trans_edit["shift_x"]
+                    or edit_sel_sy != norm_trans_edit["shift_y"]
+                )
+                edge_changed_e = (
+                    saved_edge_edit.get("is_edge", "No") != new_edge_entry["is_edge"]
+                    or str(saved_edge_edit.get("direction", "") or "").strip() != new_edge_entry["direction"]
+                    or bool(saved_edge_edit.get("is_valid", False)) != new_edge_entry["is_valid"]
+                )
+
+                if trans_changed_e or edge_changed_e:
+                    if trans_changed_e:
+                        upd_trans_map = dict(col_transforms_curr)
+                        new_trans_entry = {
+                            "direction": edit_sel_dir,
+                            "shift_x": edit_sel_sx,
+                            "shift_y": edit_sel_sy,
+                        }
+                        upd_trans_map[tgt_orig_id] = new_trans_entry
+                        upd_trans_map[tgt_ij_str] = dict(new_trans_entry)
+                        cfg["fs_col_transforms"] = upd_trans_map
+
+                        col_props_curr = cfg.get("fs_col_props", {})
+                        if not isinstance(col_props_curr, dict):
+                            col_props_curr = {}
+                        for _k_p in (tgt_orig_id, tgt_ij_str):
+                            _existing_p = dict(col_props_curr.get(_k_p, {})) if isinstance(col_props_curr.get(_k_p), dict) else {
+                                "b_cm": float(tgt_col_obj.get("b_cm", _bc_col)),
+                                "t_cm": float(tgt_col_obj.get("t_cm", _tc_col)),
+                            }
+                            _existing_p["direction"] = edit_sel_dir
+                            _existing_p["shift_x"] = edit_sel_sx
+                            _existing_p["shift_y"] = edit_sel_sy
+                            col_props_curr[_k_p] = _existing_p
+                        cfg["fs_col_props"] = col_props_curr
+
+                        st.session_state[f"_fs_dir_widget_{tgt_orig_id}"] = edit_sel_dir
+                        st.session_state[f"_fs_sx_widget_{tgt_orig_id}"] = edit_sel_sx
+                        st.session_state[f"_fs_sy_widget_{tgt_orig_id}"] = edit_sel_sy
+
+                    if edge_changed_e:
+                        upd_edge_map = dict(edge_cols_curr)
+                        upd_edge_map[tgt_orig_id] = new_edge_entry
+                        cfg["fs_edge_columns"] = upd_edge_map
+                        st.session_state[f"_fs_is_edge_widget_{tgt_orig_id}"] = edit_sel_is_edge
+                        if has_real_dir_e:
+                            st.session_state[f"_fs_edge_dir_widget_{tgt_orig_id}"] = edit_sel_edge_dir
+
+                    S.save_settings()
+                    st.rerun()
+
+                # عرض رسائل التحقق الهندسي وتشغيل الصافرة بعد استقرار الـ rerun حتى لا تُبتلع الصافرة
+                if edge_val_errs_e:
+                    play_sharp_whistle_alert()
+                    for _err_e in edge_val_errs_e:
+                        st.markdown(
+                            f"<div dir='rtl' style='direction:rtl;text-align:right;background:#fef2f2;border:1.5px solid #ef4444;color:#991b1b;padding:6px 10px;border-radius:6px;font-size:12.5px;font-weight:bold;margin-top:4px;margin-bottom:4px;line-height:1.45;'>⚠️ {_err_e}</div>",
+                            unsafe_allow_html=True,
+                        )
+
+                # بطاقة ملخص حالة العمود المختار (القطاع والترحيل وحالة الجار)
+                _sx_v = curr_trans_preview.get("shift_x", "")
+                _off_x_txt = "-6 cm" if ("يميناً" in _sx_v or _sx_v.startswith("يمين")) else ("+6 cm" if ("يساراً" in _sx_v or _sx_v.startswith("يسار")) else "0 cm")
+                _sy_v = curr_trans_preview.get("shift_y", "")
+                _off_y_txt = "-6 cm" if ("لأعلى" in _sy_v or _sy_v.startswith("أعلى")) else ("+6 cm" if ("لأسفل" in _sy_v or _sy_v.startswith("أسفل")) else "0 cm")
+
+                if not can_be_edge_e:
+                    _edge_badge_html = "<span style='color:#64748b;'>⚪ عمود داخلي (Interior Column)</span>"
+                elif edit_sel_is_edge == "Yes":
+                    if not has_real_dir_e:
+                        _edge_badge_html = "<span style='color:#2563eb;'>⏳ بانتظار اختيار اتجاه الجار</span>"
+                    elif is_edge_valid_e:
+                        _edge_badge_html = f"<span style='color:#db2777;font-weight:800;'>🌸 عمود جار ({edit_sel_edge_dir}) — خط بينك مهشر</span>"
+                    else:
+                        _edge_badge_html = "<span style='color:#b91c1c;'>⚠️ غير محقق لشرط بروز الجار (≤ 6 سم)</span>"
+                else:
+                    _edge_badge_html = "<span style='color:#64748b;'>⚪ عمود محيطي غير ملاصق لجار</span>"
+
+                st.markdown(
+                    f"""
+                    <div dir='rtl' style='direction:rtl;text-align:right;background:#f8fafc;border:1px solid #cbd5e1;padding:7px 11px;border-radius:7px;margin-top:6px;font-size:12.5px;font-weight:700;color:#0f172a;line-height:1.55;'>
+                        📐 القطاع الحالي: <span style='color:#0f766e;'><bdi dir='ltr'>{col_geom_prev['width_cm']:.0f} × {col_geom_prev['height_cm']:.0f} cm</bdi></span>
+                        &nbsp;|&nbsp; 📍 الترحيل: <span style='color:#b45309;'><bdi dir='ltr'>X = {_off_x_txt} , Y = {_off_y_txt}</bdi></span><br>
+                        🏛️ حالة الجار: {_edge_badge_html}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+        # ── خط فاصل باللون الأخضر يفصل بين قسم تعديل الأعمدة وقسم حذف الأعمدة ──
+        st.markdown(
+            "<div style='margin: 12px 0 12px 0; height: 6px; background: linear-gradient(90deg, #15803d 0%, #22c55e 50%, #15803d 100%); border-radius: 4px; box-shadow: 0 2px 6px rgba(22, 163, 74, 0.35);'></div>",
+            unsafe_allow_html=True,
+        )
+
+        # ══════════════════════════════════════════════════════════════════════
+        # 3️⃣ القسم الفرعي الثالث: حذف الأعمدة (Collapsed افتراضياً)
+        # ══════════════════════════════════════════════════════════════════════
+        with st.expander(
+            "🗑️ 3- حذف الأعمدة",
+            expanded=False,
+            key=f"{prefix}sub_exp_del_cols",
+        ):
+            del_ver = int(st.session_state.get("_fs_del_col_ver", 0))
+            selected_del_ids = st.multiselect(
+                "حذف اعمدة",
+                options=active_col_ids,
+                default=[],
+                format_func=lambda cid: active_col_labels.get(cid, cid),
+                key=f"{prefix}sel_perm_delete_cols_{del_ver}",
+                placeholder="اختر عموداً أو أكثر من الأعمدة الموجودة على الرسم للحذف النهائي...",
+                disabled=not active_col_ids,
+                help="اختر الأعمدة المراد حذفها نهائياً من المسقط الأفقي والحسابات الإنشائية.",
+            )
+
+            pending_del_orig_ids = {
+                active_id_to_orig[cid]
+                for cid in selected_del_ids
+                if cid in active_id_to_orig
+            }
+
+            if selected_del_ids:
+                cur_siren_sel = tuple(selected_del_ids)
+                if st.session_state.get("_fs_last_del_siren_sel") != cur_siren_sel:
+                    st.session_state["_fs_last_del_siren_sel"] = cur_siren_sel
+                    import streamlit.components.v1 as _siren_comp
+                    _siren_comp.html(
+                        f"""<script>
+                        (function() {{
+                            try {{
+                                let AudioCtx = null;
+                                try {{
+                                    AudioCtx = (window.parent && (window.parent.AudioContext || window.parent.webkitAudioContext)) || window.AudioContext || window.webkitAudioContext;
+                                }} catch (err) {{
+                                    AudioCtx = window.AudioContext || window.webkitAudioContext;
+                                }}
+                                if (!AudioCtx) return;
+                                const ctx = new AudioCtx();
+                                if (ctx.state === 'suspended') ctx.resume();
+                                const now = ctx.currentTime;
+                                const osc = ctx.createOscillator();
+                                const gain = ctx.createGain();
+                                osc.type = 'sawtooth';
+                                osc.frequency.setValueAtTime(620, now);
+                                osc.frequency.linearRampToValueAtTime(980, now + 0.14);
+                                osc.frequency.linearRampToValueAtTime(580, now + 0.28);
+                                osc.frequency.linearRampToValueAtTime(980, now + 0.42);
+                                gain.gain.setValueAtTime(0.001, now);
+                                gain.gain.exponentialRampToValueAtTime(0.24, now + 0.02);
+                                gain.gain.setValueAtTime(0.24, now + 0.38);
+                                gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.45);
+                                osc.connect(gain);
+                                gain.connect(ctx.destination);
+                                osc.start(now);
+                                osc.stop(now + 0.46);
+                            }} catch (e) {{}}
+                        }})();
+                        // siren_ts={len(cur_siren_sel)}_{"_".join(cur_siren_sel)}
+                        </script>""",
+                        height=0,
+                    )
+
+                del_details_html = " ، ".join(
+                    f"<b>{cid}</b> <span style='font-size:12px;color:#991b1b;'>({ _active_cols[active_col_ids.index(cid)].get('grid_x', '') }×{ _active_cols[active_col_ids.index(cid)].get('grid_y', '') })</span>"
+                    for cid in selected_del_ids
+                    if cid in active_col_ids
+                )
+                st.markdown(
+                    f"""
+                    <div dir='rtl' style='direction:rtl; text-align:right; background:#fef2f2; border:2px solid #dc2626; border-right:6px solid #dc2626; padding:10px 14px; border-radius:8px; margin-top:8px; margin-bottom:10px; box-shadow:0 2px 6px rgba(220,38,38,0.12);'>
+                        <div style='font-size:14.5px; font-weight:800; color:#991b1b; margin-bottom:4px;'>
+                            🚨 تحذير: حذف نهائي للأعمدة المختارة ({len(selected_del_ids)} عمود)
+                        </div>
+                        <div style='font-size:13px; color:#7f1d1d; line-height:1.65; font-weight:600;'>
+                            الأعمدة المحددة للحذف النهائي: {del_details_html}<br>
+                            • سيتم حذف هذه الأعمدة <b>نهائياً وبدون إمكانية استعادتها</b> مع عدم تبقي أي أثر لها في حسابات العزوم والقص والأحمال.<br>
+                            • عند التأكيد سيتم فوراً تعديل رسم المسقط الأفقي، وإعادة ترتيب أسماء الأعمدة المتبقية تسلسلياً، وإعادة التصميم بالكامل.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                c_del_yes, c_del_cancel = st.columns([1.4, 1.0], gap="small")
+                with c_del_yes:
+                    if st.button(
+                        "🗑️ تأكيد الحذف النهائي وإعادة التصميم",
+                        type="primary",
+                        use_container_width=True,
+                        key=f"{prefix}btn_confirm_perm_del_{del_ver}",
+                    ):
+                        cfg_obj, placed_list, _ = _ensure_fs_selective_mode_initialized(Lx_spans, Ly_spans)
+                        new_placed = [oid for oid in placed_list if oid not in pending_del_orig_ids]
+                        cfg_obj["fs_zero_col_mode"] = True
+                        cfg_obj["fs_placed_cols"] = new_placed
+                        cfg_obj["fs_removed_cols"] = []
+
+                        # مسح أي أثر للأعمدة المحذوفة من القواميس المخزنة نهائياً
+                        col_props_dict = cfg_obj.get("fs_col_props", {})
+                        if isinstance(col_props_dict, dict):
+                            for cid in selected_del_ids:
+                                oid = active_id_to_orig.get(cid)
+                                ij = active_id_to_ij.get(cid)
+                                if oid:
+                                    col_props_dict.pop(oid, None)
+                                if ij:
+                                    col_props_dict.pop(f"{ij[0]},{ij[1]}", None)
+                                    col_props_dict.pop(ij, None)
+                            cfg_obj["fs_col_props"] = col_props_dict
+
+                        col_trans_dict = cfg_obj.get("fs_col_transforms", {})
+                        if isinstance(col_trans_dict, dict):
+                            for cid in selected_del_ids:
+                                oid = active_id_to_orig.get(cid)
+                                ij = active_id_to_ij.get(cid)
+                                if oid:
+                                    col_trans_dict.pop(oid, None)
+                                if ij:
+                                    col_trans_dict.pop(f"{ij[0]},{ij[1]}", None)
+                                    col_trans_dict.pop(ij, None)
+                            cfg_obj["fs_col_transforms"] = col_trans_dict
+
+                        edge_cols_dict = cfg_obj.get("fs_edge_columns", {})
+                        if isinstance(edge_cols_dict, dict):
+                            for cid in selected_del_ids:
+                                oid = active_id_to_orig.get(cid)
+                                if oid:
+                                    edge_cols_dict.pop(oid, None)
+                                edge_cols_dict.pop(cid, None)
+                            cfg_obj["fs_edge_columns"] = edge_cols_dict
+
+                        st.session_state["_fs_pending_removals"] = []
+                        st.session_state["_fs_pending_snapshot"] = []
+                        st.session_state["_fs_show_confirm"] = False
+                        st.session_state["_fs_last_del_siren_sel"] = ()
+                        st.session_state["_fs_del_col_ver"] = del_ver + 1
+
+                        S.save_settings()
+                        st.toast(
+                            f"🗑️ تم الحذف النهائي لـ {len(selected_del_ids)} عمود وإعادة ترتيب أسماء الأعمدة وتحديث التصميم بنجاح!",
+                            icon="✅",
+                        )
+                        st.rerun()
+                with c_del_cancel:
+                    if st.button(
+                        "↩️ إلغاء",
+                        use_container_width=True,
+                        key=f"{prefix}btn_cancel_perm_del_{del_ver}",
+                    ):
+                        st.session_state["_fs_last_del_siren_sel"] = ()
+                        st.session_state["_fs_del_col_ver"] = del_ver + 1
+                        st.rerun()
+            else:
+                st.session_state["_fs_last_del_siren_sel"] = ()
+
+    with col_right_plan:
+        fig_interactive = generate_flat_slab_sketch(
+            Lx_spans, Ly_spans, cantilevers,
+            ts_initial=ts_initial if ts_initial is not None else 20,
+            n_floors=num_floors,
+            bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
+            bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
+            top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
+            top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
+            col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
+            strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
+            strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
+            concrete_cover=cov if cov is not None else 1.5,
+            fcu=Fcu if Fcu is not None else 250,
+            fy=Fy if Fy is not None else 4000,
+            live_load=LL if LL is not None else 0.25,
+            flooring_load=SDL if SDL is not None else 0.15,
+            wall_load=wall_load if wall_load is not None else 0.50,
+            col_w_cm=_bc_col,
+            col_d_cm=_tc_col,
+            removed_col_ids=_effective_removed_ids,
+            pending_col_ids=pending_del_orig_ids,
+            void_panel_ids=set(_confirmed_voids),
+            pending_void_ids=set(),
+            col_transforms=_col_transforms,
+            edge_columns=_edge_columns,
+            void_boxes=_void_boxes_sk,
+            col_props=_col_props,
+            show_add_markers=True,
+        )
+        _render_fs_interactive_plan(
+            fig_interactive,
+            x_coords=x_coords,
+            y_coords=y_coords,
+            box_mode="add" if is_add_active else None,
+            multi_box=multi_box_flag,
+        )
+        plt.close(fig_interactive)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -9905,46 +12066,6 @@ def render(is_standalone: bool = False):
                     unsafe_allow_html=True,
                 )
 
-    # ── ⚖️ LOAD BREAKDOWN (مراجعة وتراكب الأحمال قبل بدء التصميم) ─────────────
-    _ts_preview = float(ts_initial) if ts_initial is not None and ts_initial > 0 else 20.0
-    _gamma_c_preview = float(gamma_c) if gamma_c is not None and gamma_c > 0 else 2.5
-    _sdl_preview = float(SDL) if SDL is not None and SDL >= 0 else 0.0
-    _wl_preview = float(wall_load) if wall_load is not None and wall_load >= 0 else 0.0
-    _ll_preview = float(LL) if LL is not None and LL >= 0 else 0.0
-
-    _sw_preview = _gamma_c_preview * (_ts_preview / 100.0)
-    _dl_tot_preview = _sw_preview + _sdl_preview + _wl_preview
-    _wu_preview = 1.4 * _dl_tot_preview + 1.6 * _ll_preview
-
-    with st.expander("⚖️ Load Breakdown & Combinations (ملخص وتجميع الأحمال التصميمية للسقف)", expanded=False):
-        ld_df_preview = pd.DataFrame({
-            "Load Component (مكون الحمل)": [
-                "1. Slab Self-Weight (الوزن الذاتي للبلاطة)  OW = γc × ts",
-                "2. Super-Imposed Dead Load (التشطيبات والأرضيات)  SDL",
-                "3. Wall Load (أحمال القواطيع والحوائط)  WL",
-                "4. Total Dead Load (إجمالي الحمل الميت)  DL = OW + SDL + WL",
-                "5. Live Load (الحمل الحي التشغيلي)  LL",
-                "6. Ultimate Design Load (الحمل التصميمي الأقصى)  Wu = 1.4 DL + 1.6 LL",
-            ],
-            "Value (ton/m²)": [
-                f"{_sw_preview:.4f} t/m²",
-                f"{_sdl_preview:.4f} t/m²",
-                f"{_wl_preview:.4f} t/m²",
-                f"{_dl_tot_preview:.4f} t/m²",
-                f"{_ll_preview:.4f} t/m²",
-                f"{_wu_preview:.4f} t/m²",
-            ],
-            "Calculation Formula & Code Reference (المعادلة والملاحظات الإنشائية)": [
-                f"حساب تلقائي: {_ts_preview:.0f} cm × {_gamma_c_preview:.2f} t/m³",
-                "مدخل من المستخدم (User Input)",
-                "مدخل من المستخدم (User Input)",
-                "OW + SDL + WL (مجموع الأحمال الدائمة)",
-                "مدخل من المستخدم (User Input)",
-                "تراكب الأحمال الأقصى طبقاً للكود المصري ECP 203",
-            ],
-        })
-        render_styled_table(ld_df_preview)
-
     # ── ③ INPUT VALIDATION ───────────────────────────────────────────────────
     errs = []
     if bc_s is None or bc_s <= 0:         errs.append(f"Column Width bc must be > 0 (got {bc_s}).")
@@ -9985,7 +12106,42 @@ def render(is_standalone: bool = False):
         st.session_state["_fs_pending_snapshot"]     = []
         st.session_state["_fs_pending_void_snapshot"] = []
 
-    # ── 5b. Load confirmed column & void removals from persistent cfg ────────
+    # ── 5b. Process interactive mouse column drop BEFORE loading column state ──
+    _handle_fs_sync_payload(Lx_spans, Ly_spans, cantilevers)
+
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stTextInput"]:has(input[aria-label="fs_col_sync_payload"]),
+        div:has(> div > div > input[aria-label="fs_col_sync_payload"]),
+        .st-key-fs_col_sync_input {
+            position: fixed !important; left: -9999px !important; top: -9999px !important;
+            width: 1px !important; height: 1px !important; opacity: 0 !important;
+            overflow: hidden !important; pointer-events: none !important; z-index: -9999 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    _fs_sync_val = st.text_input(
+        "fs_col_sync_payload",
+        value="",
+        key="fs_col_sync_input",
+        label_visibility="collapsed",
+        on_change=_on_fs_sync_input_change,
+    )
+    if _fs_sync_val:
+        _handle_fs_sync_payload(Lx_spans, Ly_spans, cantilevers, _fs_sync_val)
+
+    # ── Load confirmed column & void removals + selective placement state ─────
+    _zero_col_mode = bool(S.cfg_val("fs_zero_col_mode", False))
+    _placed_cols_raw = S.cfg_val("fs_placed_cols", None)
+    if not isinstance(_placed_cols_raw, list) and _placed_cols_raw is not None:
+        _placed_cols_raw = None
+
+    _col_props = S.cfg_val("fs_col_props", {})
+    _col_props = _col_props if isinstance(_col_props, dict) else {}
+
     _confirmed_raw = S.cfg_val("fs_removed_cols", [])
     _confirmed_raw = _confirmed_raw if isinstance(_confirmed_raw, list) else []
 
@@ -10003,6 +12159,7 @@ def render(is_standalone: bool = False):
         Lx_spans, Ly_spans, bc_cm=_bc_col, tc_cm=_tc_col,
         col_transforms=_col_transforms,
         edge_columns=_edge_columns,
+        col_props=_col_props,
     )
     _valid_orig_ids = {c["orig_id"] for c in _all_cols_ref}
     # فلترة آمنة للعرض والتحليل فقط دون مسح مدخلات المستخدم من ملف الإعدادات وقاعدة البيانات
@@ -10044,673 +12201,67 @@ def render(is_standalone: bool = False):
     }
     st.session_state["_fs_current_slab_bounds"] = _slab_bounds_current
 
-    # ── 5c. Build active columns with confirmed removals applied ─────────────
+    # ── 5c. Build active columns with selective placement & removals applied ──
     _active_cols, _all_cols, _eff_Lx, _eff_Ly, _ddm_warn = get_flat_slab_columns(
         Lx_spans, Ly_spans, bc_cm=_bc_col, tc_cm=_tc_col,
         removed_ids=set(_confirmed_removals),
         col_transforms=_col_transforms,
         edge_columns=_edge_columns,
+        placed_cols=_placed_cols_raw,
+        zero_col_mode=_zero_col_mode,
+        col_props=_col_props,
     )
+    _effective_removed_ids = {c["orig_id"] for c in _all_cols if c["removed"]}
     _col_w_sk = _bc_col
     _col_d_sk = _tc_col
-    _removed_col_objs_sk = [c for c in _all_cols if c["orig_id"] in set(_confirmed_removals)]
+    _removed_col_objs_sk = [c for c in _all_cols if c["orig_id"] in _effective_removed_ids]
     _orig_panels_sk = get_flat_slab_panels(Lx_spans, Ly_spans)
     _void_boxes_sk = [
         (p["x1"], p["x2"], p["y1"], p["y2"], p["area"])
         for p in _orig_panels_sk if p["id"] in set(_confirmed_voids)
     ]
 
-    img_verif_b64 = None
-    exp_geom = st.expander(
-        "🗺️ Structural Geometry Sketch & Verification (مخطط التحقق الهندسي وتوزيع المحاور والأعمدة)",
-        expanded=False,
-        key=f"{prefix}exp_geom_verif",
-        on_change="rerun",
-    )
-    with exp_geom:
-        if st.session_state.get(f"{prefix}exp_geom_verif", False):
-            col_geom_plan, col_geom_controls = st.columns([3.0, 1.0], gap="medium")
-
-            with col_geom_plan:
-                fig_verif = generate_flat_slab_sketch(
-                    Lx_spans, Ly_spans, cantilevers,
-                    ts_initial=ts_initial if ts_initial is not None else 20,
-                    n_floors=num_floors,
-                    bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
-                    bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
-                    top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
-                    top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
-                    col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
-                    strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
-                    strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
-                    concrete_cover=cov if cov is not None else 1.5,
-                    fcu=Fcu if Fcu is not None else 250,
-                    fy=Fy if Fy is not None else 4000,
-                    live_load=LL if LL is not None else 0.25,
-                    flooring_load=SDL if SDL is not None else 0.15,
-                    wall_load=wall_load if wall_load is not None else 0.50,
-                    col_w_cm=_col_w_sk,
-                    col_d_cm=_col_d_sk,
-                    removed_col_ids=set(_confirmed_removals),
-                    pending_col_ids=set(st.session_state.get("_fs_pending_snapshot", [])
-                                        if st.session_state.get("_fs_show_confirm") else _pending_removals),
-                    void_panel_ids=set(_confirmed_voids),
-                    pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", [])
-                                         if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
-                    col_transforms=_col_transforms,
-                    edge_columns=_edge_columns,
-                    void_boxes=_void_boxes_sk,
-                )
-                buf_v = io.BytesIO()
-                fig_verif.savefig(buf_v, format="png", bbox_inches="tight", dpi=180)
-                buf_v.seek(0)
-                img_verif_b64 = "data:image/png;base64," + base64.b64encode(buf_v.getvalue()).decode("utf-8")
-                st.session_state[f"{prefix}flat_slab_plan_b64"] = img_verif_b64
-
-                # Export to Vector PDF buffer before closing or clearing figure
-                buf_v_pdf = io.BytesIO()
-                fig_verif.savefig(buf_v_pdf, format="pdf", bbox_inches="tight")
-                buf_v_pdf.seek(0)
-
-                st.pyplot(fig_verif, clear_figure=True, use_container_width=True)
-                st.download_button(
-                    label="📥 Download Structural Geometry Sketch (Vector PDF)",
-                    data=buf_v_pdf,
-                    file_name=f"{prefix}Flat_Slab_Geometry_Verification.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                    key="btn_dl_geom_verif_sketch",
-                )
-                plt.close(fig_verif)
-
-
-
-            with col_geom_controls:
-                st.markdown(
-                    """
-                    <style>
-                    /* Scoped ultra-compact styling for Column Orientation & Offsets panel */
-                    div[data-testid="stColumn"]:nth-of-type(2),
-                    .stColumn:nth-of-type(2) {
-                        display: flex !important;
-                        flex-direction: column !important;
-                        height: 100% !important;
-                    }
-
-                    div[data-testid="stColumn"]:nth-of-type(2) > div[data-testid="stVerticalBlock"],
-                    .stColumn:nth-of-type(2) > div[data-testid="stVerticalBlock"] {
-                        display: flex !important;
-                        flex-direction: column !important;
-                        flex: 1 1 auto !important;
-                        height: 100% !important;
-                        justify-content: flex-start !important;
-                    }
-
-                    div[class*="st-key-_fs_col_orientation"],
-                    div[class*="st-key-_fs_dir_widget"],
-                    div[class*="st-key-_fs_sx_widget"],
-                    div[class*="st-key-_fs_sy_widget"],
-                    div[class*="st-key-_fs_is_edge_widget"],
-                    div[class*="st-key-_fs_edge_dir_widget"],
-                    div[data-testid="stColumn"]:nth-of-type(2) div[data-testid="stSelectbox"],
-                    div[data-testid="column"]:nth-of-type(2) div[data-testid="stSelectbox"] {
-                        margin-bottom: 2px !important;
-                    }
-
-                    /* Light yellow labels for dropdowns (75% scale: ~13.5px) */
-                    div:has(.fs-col-ctrl-card) label,
-                    div:has(.fs-col-ctrl-card) label p,
-                    div:has(.fs-col-ctrl-card) [data-testid="stWidgetLabel"] p,
-                    div[class*="st-key-_fs_"] label,
-                    div[class*="st-key-_fs_"] label p,
-                    div[data-testid="stColumn"]:nth-of-type(2) div[data-testid="stSelectbox"] label p,
-                    div[data-testid="column"]:nth-of-type(2) div[data-testid="stSelectbox"] label p {
-                        font-size: 13.5px !important;
-                        font-weight: 800 !important;
-                        color: #eab308 !important; /* Light Yellow */
-                        text-shadow: 0 0 1px #a16207;
-                        margin-bottom: 1px !important;
-                        padding: 0 !important;
-                        line-height: 1.15 !important;
-                    }
-
-                    /* Scaled font size (11px) for input box text inside column 2 dropdowns */
-                    div[class*="st-key-_fs_"] input,
-                    div[class*="st-key-_fs_"] .react-aria-Input,
-                    div[class*="st-key-_fs_"] .e1fp86qc1,
-                    div[class*="st-key-_fs_sx_widget"] input,
-                    div[class*="st-key-_fs_sy_widget"] input,
-                    div[class*="st-key-_fs_dir_widget"] input,
-                    div[class*="st-key-_fs_is_edge_widget"] input,
-                    div[class*="st-key-_fs_edge_dir_widget"] input,
-                    div[class*="st-key-_fs_col_orientation_name_select"] input,
-                    div[data-testid="stColumn"]:nth-of-type(2) div[data-testid="stSelectbox"] input,
-                    div[data-testid="stColumn"]:nth-of-type(2) .react-aria-Input,
-                    div[data-testid="stColumn"]:nth-of-type(2) .e1fp86qc1,
-                    div[data-testid="column"]:nth-of-type(2) div[data-testid="stSelectbox"] input,
-                    div[data-testid="column"]:nth-of-type(2) .react-aria-Input,
-                    div[data-testid="column"]:nth-of-type(2) .e1fp86qc1,
-                    div:has(.fs-col-ctrl-card) input,
-                    div:has(.fs-col-ctrl-card) .react-aria-Input,
-                    /* Fallbacks for older BaseWeb versions */
-                    div[class*="st-key-_fs_"] div[data-baseweb="select"] *,
-                    div[data-testid="stColumn"]:nth-of-type(2) div[data-testid="stSelectbox"] div[data-baseweb="select"] * {
-                        font-size: 11px !important;
-                        font-weight: 600 !important;
-                        line-height: 1.25 !important;
-                        padding-left: 5px !important;
-                        padding-right: 5px !important;
-                        padding-top: 2px !important;
-                        padding-bottom: 2px !important;
-                    }
-
-                    /* Dropdown popover options list (11px to match input boxes) */
-                    div[data-testid="stSelectboxVirtualDropdown"] [role="option"],
-                    div[data-testid="stSelectboxVirtualDropdown"] [role="option"] *,
-                    div[data-testid="stSelectboxVirtualDropdown"] .react-aria-ListBoxItem,
-                    div[data-testid="stSelectboxVirtualDropdown"] .react-aria-ListBoxItem *,
-                    div[data-testid="stSelectboxVirtualDropdown"] .e1fp86qc7,
-                    div[data-testid="stSelectboxVirtualDropdown"] .e1fp86qc7 *,
-                    div[data-testid="stSelectboxVirtualDropdown"] .e1fp86qc8,
-                    div[data-testid="stSelectboxVirtualDropdown"] li,
-                    div[data-testid="stSelectboxVirtualDropdown"] li *,
-                    div[data-baseweb="popover"] ul[role="listbox"] li[role="option"],
-                    div[data-baseweb="popover"] ul[role="listbox"] li[role="option"] *,
-                    li[role="option"],
-                    li[role="option"] * {
-                        font-size: 11px !important;
-                        font-weight: 600 !important;
-                        line-height: 1.25 !important;
-                        padding-top: 3px !important;
-                        padding-bottom: 3px !important;
-                        padding-left: 6px !important;
-                        padding-right: 6px !important;
-                    }
-
-
-                    .fs-bottom-panel {
-                        direction: rtl !important;
-                        text-align: right !important;
-                        margin-top: auto !important;
-                        margin-bottom: 65px !important;
-                    }
-
-                    .fs-bottom-panel * {
-                        text-align: right !important;
-                    }
-                    </style>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-                _active_col_names = [c["id"] for c in _active_cols]
-                if not _active_col_names:
-                    st.info("لا توجد أعمدة فعّالة في المسقط الحالي.")
-                else:
-                    _col_transforms_current = S.cfg_val("fs_col_transforms", {})
-                    if not isinstance(_col_transforms_current, dict):
-                        _col_transforms_current = {}
-
-                    _col_label_map = {c["id"]: f"{c.get('grid_x', '')}-{c.get('grid_y', '')}" for c in _active_cols}
-                    selected_col_name = st.selectbox(
-                        "اسم العمود",
-                        options=_active_col_names,
-                        format_func=lambda cid: f"{cid} ({_col_label_map.get(cid, '')})" if cid in _col_label_map else cid,
-                        key="_fs_col_orientation_name_select",
-                        help="اختر العمود المراد ضبط ضربه وترحيله من المسقط الأفقي الحالي.",
-                    )
-
-                    _tgt_col = next((c for c in _active_cols if c["id"] == selected_col_name), _active_cols[0])
-                    _tgt_orig_id = _tgt_col["orig_id"]
-
-                    _saved_trans = _col_transforms_current.get(_tgt_orig_id, {})
-                    _norm_trans = normalize_col_transform(_saved_trans)
-
-                    DIR_OPTIONS = ['اتجاه X', 'اتجاه Y']
-                    SHIFT_X_OPTIONS = [
-                        'متمركز على المحور (Centered)',
-                        'جسم العمود يميناً (الوجه يسار المحور -6 cm)',
-                        'جسم العمود يساراً (الوجه يمين المحور +6 cm)',
-                    ]
-                    SHIFT_Y_OPTIONS = [
-                        'متمركز على المحور (Centered)',
-                        'جسم العمود لأعلى (الوجه أسفل المحور -6 cm)',
-                        'جسم العمود لأسفل (الوجه أعلى المحور +6 cm)',
-                    ]
-
-                    idx_dir = DIR_OPTIONS.index(_norm_trans["direction"]) if _norm_trans["direction"] in DIR_OPTIONS else 0
-                    idx_sx  = SHIFT_X_OPTIONS.index(_norm_trans["shift_x"]) if _norm_trans["shift_x"] in SHIFT_X_OPTIONS else 0
-                    idx_sy  = SHIFT_Y_OPTIONS.index(_norm_trans["shift_y"]) if _norm_trans["shift_y"] in SHIFT_Y_OPTIONS else 0
-
-                    sel_dir = st.selectbox(
-                        "ضرب العمود",
-                        options=DIR_OPTIONS,
-                        index=idx_dir,
-                        key=f"_fs_dir_widget_{_tgt_orig_id}",
-                        help="اتجاه البعد الأكبر D (موازٍ لمحور X أو لمحور Y).",
-                    )
-
-                    sel_sx = st.selectbox(
-                        "الترحيل الأفقي (X)",
-                        options=SHIFT_X_OPTIONS,
-                        index=idx_sx,
-                        key=f"_fs_sx_widget_{_tgt_orig_id}",
-                        help="الترحيل الأفقي بالنسبة للمحور الرأسي X.",
-                    )
-
-                    sel_sy = st.selectbox(
-                        "الترحيل الرأسي (Y)",
-                        options=SHIFT_Y_OPTIONS,
-                        index=idx_sy,
-                        key=f"_fs_sy_widget_{_tgt_orig_id}",
-                        help="الترحيل الرأسي بالنسبة للمحور الأفقي Y.",
-                    )
-
-                    _edge_columns_current = S.cfg_val("fs_edge_columns", {})
-                    if not isinstance(_edge_columns_current, dict):
-                        _edge_columns_current = {}
-
-                    _saved_edge = _edge_columns_current.get(_tgt_orig_id, {})
-                    if not isinstance(_saved_edge, dict):
-                        _saved_edge = {}
-
-                    _saved_is_edge = _saved_edge.get("is_edge", "No")
-                    if _saved_is_edge not in ["No", "Yes"]:
-                        _saved_is_edge = "No"
-
-                    _curr_trans_state = {
-                        "direction": sel_dir,
-                        "shift_x": sel_sx,
-                        "shift_y": sel_sy,
-                    }
-                    _col_geom_preview = compute_column_geometry(
-                        _tgt_col.get("grid_x_m", _tgt_col.get("x", 0.0)),
-                        _tgt_col.get("grid_y_m", _tgt_col.get("y", 0.0)),
-                        _bc_col, _tc_col,
-                        _curr_trans_state,
-                    )
-
-                    # ── فحص مطابقة إحداثيات العمود لحدود مساحة الرسم والمسقط ──
-                    _gx_col = _tgt_col.get("grid_x_m", _tgt_col.get("x", 0.0))
-                    _gy_col = _tgt_col.get("grid_y_m", _tgt_col.get("y", 0.0))
-                    _min_x_ref = _slab_bounds_current.get("min_x", 0.0)
-                    _max_x_ref = _slab_bounds_current.get("max_x", 0.0)
-                    _min_y_ref = _slab_bounds_current.get("min_y", 0.0)
-                    _max_y_ref = _slab_bounds_current.get("max_y", 0.0)
-                    _cant_l = float(_slab_bounds_current.get("cant_left", 0.0) or 0.0)
-                    _cant_r = float(_slab_bounds_current.get("cant_right", 0.0) or 0.0)
-                    _cant_b = float(_slab_bounds_current.get("cant_bottom", 0.0) or 0.0)
-                    _cant_t = float(_slab_bounds_current.get("cant_top", 0.0) or 0.0)
-
-                    _TOL_EDGE = 0.05
-                    _is_on_left   = (_gx_col <= _min_x_ref + _TOL_EDGE) and (_cant_l <= _TOL_EDGE)
-                    _is_on_right  = (_gx_col >= _max_x_ref - _TOL_EDGE) and (_cant_r <= _TOL_EDGE)
-                    _is_on_bottom = (_gy_col <= _min_y_ref + _TOL_EDGE) and (_cant_b <= _TOL_EDGE)
-                    _is_on_top    = (_gy_col >= _max_y_ref - _TOL_EDGE) and (_cant_t <= _TOL_EDGE)
-
-                    _can_be_edge_column = bool(_is_on_left or _is_on_right or _is_on_bottom or _is_on_top)
-
-                    # ── حصر اتجاهات الجار المسموح بها هندسياً والمطلة على الحدود الخارجية فقط ──
-                    _avail_faces = []
-                    if _is_on_left:
-                        _avail_faces.append("Left")
-                    if _is_on_right:
-                        _avail_faces.append("Right")
-                    if _is_on_bottom:
-                        _avail_faces.append("Bottom")
-                    if _is_on_top:
-                        _avail_faces.append("Top")
-
-                    REAL_EDGE_DIR_OPTIONS = []
-                    for _face in ["Left", "Right", "Bottom", "Top"]:
-                        if _face in _avail_faces:
-                            REAL_EDGE_DIR_OPTIONS.append(_face)
-
-                    if "Bottom" in _avail_faces and "Left" in _avail_faces:
-                        REAL_EDGE_DIR_OPTIONS.append("Bottom + Left")
-                    if "Bottom" in _avail_faces and "Right" in _avail_faces:
-                        REAL_EDGE_DIR_OPTIONS.append("Bottom + Right")
-                    if "Top" in _avail_faces and "Left" in _avail_faces:
-                        REAL_EDGE_DIR_OPTIONS.append("Top + Left")
-                    if "Top" in _avail_faces and "Right" in _avail_faces:
-                        REAL_EDGE_DIR_OPTIONS.append("Top + Right")
-
-                    SELECT_DIR_PLACEHOLDER = "-- اختر اتجاه الجار --"
-                    _raw_saved_dir = _saved_edge.get("direction", "")
-
-                    if len(REAL_EDGE_DIR_OPTIONS) == 1:
-                        # إذا كان هناك اتجاه خارجي وحيد ممكن هندسياً (مثل عمود طرفي على محور Y1)، يتم اختياره تلقائياً
-                        EDGE_DIR_OPTIONS = [SELECT_DIR_PLACEHOLDER] + REAL_EDGE_DIR_OPTIONS
-                        _saved_edge_dir = _raw_saved_dir if _raw_saved_dir in REAL_EDGE_DIR_OPTIONS else REAL_EDGE_DIR_OPTIONS[0]
-                    else:
-                        EDGE_DIR_OPTIONS = [SELECT_DIR_PLACEHOLDER] + REAL_EDGE_DIR_OPTIONS
-                        _saved_edge_dir = _raw_saved_dir if _raw_saved_dir in REAL_EDGE_DIR_OPTIONS else SELECT_DIR_PLACEHOLDER
-
-                    idx_edge_dir = EDGE_DIR_OPTIONS.index(_saved_edge_dir) if _saved_edge_dir in EDGE_DIR_OPTIONS else 0
-
-                    _is_edge_valid = False
-                    _edge_validation_errors = []
-
-                    if _can_be_edge_column:
-                        idx_is_edge = 1 if _saved_is_edge == "Yes" else 0
-                        sel_is_edge = st.selectbox(
-                            "عمود جار",
-                            options=["No", "Yes"],
-                            index=idx_is_edge,
-                            key=f"_fs_is_edge_widget_{_tgt_orig_id}",
-                            help="تحديد ما إذا كان العمود يعتبر عمود جار (Edge Column) أم لا.",
-                        )
-
-                        sel_edge_dir = _saved_edge_dir
-                        if sel_is_edge == "Yes":
-                            _widget_dir_key = f"_fs_edge_dir_widget_{_tgt_orig_id}"
-                            if _widget_dir_key in st.session_state and st.session_state[_widget_dir_key] not in EDGE_DIR_OPTIONS:
-                                st.session_state[_widget_dir_key] = _saved_edge_dir
-                            sel_edge_dir = st.selectbox(
-                                "اتجاه الجار",
-                                options=EDGE_DIR_OPTIONS,
-                                index=idx_edge_dir,
-                                key=_widget_dir_key,
-                                help="اتجاه وجه/أوجه الجار في المسقط بالنسبة لحدود المسقط.",
-                            )
-                            if sel_edge_dir == SELECT_DIR_PLACEHOLDER or sel_edge_dir not in REAL_EDGE_DIR_OPTIONS:
-                                _is_edge_valid = False
-                                st.markdown(
-                                    """
-                                    <div dir='rtl' style='direction:rtl;text-align:right;background:#eff6ff;border:1.5px solid #3b82f6;color:#1e40af;padding:8px 12px;border-radius:6px;font-size:13px;font-weight:bold;margin-top:6px;margin-bottom:6px;line-height:1.45;'>
-                                        ℹ️ يرجى اختيار اتجاه الجار (Edge Direction) من القائمة أعلاه لتحديد أوجه الجور.
-                                    </div>
-                                    """,
-                                    unsafe_allow_html=True,
-                                )
-                            else:
-                                _is_edge_valid, _edge_validation_errors = validate_edge_column_offset(_col_geom_preview, sel_edge_dir, slab_bounds=_slab_bounds_current)
-                                if _edge_validation_errors:
-                                    play_sharp_whistle_alert()
-                                    for _err in _edge_validation_errors:
-                                        st.markdown(
-                                            f"""
-                                            <div dir='rtl' style='direction:rtl;text-align:right;background:#fef2f2;border:1.5px solid #ef4444;color:#991b1b;padding:8px 12px;border-radius:6px;font-size:13px;font-weight:bold;margin-top:6px;margin-bottom:6px;line-height:1.45;box-shadow:0 1px 2px rgba(239,68,68,0.1);'>
-                                                ⚠️ {_err}
-                                            </div>
-                                            """,
-                                            unsafe_allow_html=True,
-                                        )
-                        else:
-                            sel_edge_dir = ""
-                            _is_edge_valid = False
-                            _edge_validation_errors = []
-                    else:
-                        sel_is_edge = "No"
-                        sel_edge_dir = ""
-                        _is_edge_valid = False
-                        _edge_validation_errors = []
-
-                    _trans_changed = (sel_dir != _norm_trans["direction"] or sel_sx != _norm_trans["shift_x"] or sel_sy != _norm_trans["shift_y"])
-                    _edge_changed = (
-                        sel_is_edge != _saved_is_edge
-                        or (sel_is_edge == "Yes" and (sel_edge_dir != _raw_saved_dir or sel_edge_dir not in REAL_EDGE_DIR_OPTIONS))
-                    )
-
-                    if _trans_changed or _edge_changed:
-                        if _trans_changed:
-                            _updated_map = dict(_col_transforms_current)
-                            _new_data = {
-                                "direction": sel_dir,
-                                "shift_x": sel_sx,
-                                "shift_y": sel_sy,
-                            }
-                            _updated_map[_tgt_orig_id] = _new_data
-                            st.session_state.setdefault("cfg", {})["fs_col_transforms"] = _updated_map
-
-                        if _edge_changed:
-                            _has_real_dir = (sel_is_edge == "Yes" and sel_edge_dir in REAL_EDGE_DIR_OPTIONS)
-                            _updated_edge_map = dict(_edge_columns_current)
-                            _new_edge_data = {
-                                "is_edge": sel_is_edge,
-                                "direction": sel_edge_dir if _has_real_dir else "",
-                                "is_valid": _is_edge_valid and _has_real_dir,
-                            }
-                            _updated_edge_map[_tgt_orig_id] = _new_edge_data
-                            st.session_state.setdefault("cfg", {})["fs_edge_columns"] = _updated_edge_map
-
-                        S.save_settings()
-                        st.rerun()
-
-
-                    _sx_val = _curr_trans_state.get("shift_x", "")
-                    if "جسم العمود يميناً" in _sx_val or _sx_val.startswith("يمين"):
-                        _offset_x_display = "-6 cm"
-                    elif "جسم العمود يساراً" in _sx_val or _sx_val.startswith("يسار"):
-                        _offset_x_display = "+6 cm"
-                    else:
-                        _offset_x_display = "0 cm"
-
-                    _sy_val = _curr_trans_state.get("shift_y", "")
-                    if "جسم العمود لأعلى" in _sy_val or _sy_val.startswith("أعلى"):
-                        _offset_y_display = "-6 cm"
-                    elif "جسم العمود لأسفل" in _sy_val or _sy_val.startswith("أسفل"):
-                        _offset_y_display = "+6 cm"
-                    else:
-                        _offset_y_display = "0 cm"
-
-                    # Dynamic vertical spacer pushing the lower status panel
-                    st.markdown("<div style='flex:1 1 auto; min-height:25px;'></div>", unsafe_allow_html=True)
-
-                    _edge_status_html = ""
-                    if not _can_be_edge_column:
-                        _edge_status_html = "<div dir='rtl' style='direction:rtl;text-align:right;font-size:14px;color:#64748b;font-weight:bold;margin-top:6px;'>⚪ عمود داخلي (Interior Column — يقع داخل مساحة المسقط)</div>"
-                    elif sel_is_edge == "Yes":
-                        if sel_edge_dir not in REAL_EDGE_DIR_OPTIONS or sel_edge_dir == SELECT_DIR_PLACEHOLDER:
-                            _edge_status_html = "<div dir='rtl' style='direction:rtl;text-align:right;font-size:13px;color:#2563eb;font-weight:bold;margin-top:6px;background:#eff6ff;border:1px solid #bfdbfe;padding:5px 10px;border-radius:6px;'>⏳ بانتظار اختيار اتجاه الجار (Edge Direction)</div>"
-                        elif _is_edge_valid:
-                            _is_corner_dir = ("+" in sel_edge_dir)
-                            _edge_type_lbl = "عمود جار ركني (Corner Column)" if _is_corner_dir else "عمود جار طرفي (Edge Column)"
-                            _edge_status_html = f"<div dir='rtl' style='direction:rtl;text-align:right;font-size:14px;color:#0f172a;font-weight:bold;margin-top:6px;'>🌸 {_edge_type_lbl}: <span style='color:#db2777;font-weight:800;'><bdi dir='ltr'>{sel_edge_dir}</bdi></span> <span style='color:#be185d;font-size:12px;font-weight:600;'>(خط بينك مهشر)</span></div>"
-                        else:
-                            _err_reason = _edge_validation_errors[0] if _edge_validation_errors else f"الاتجاه المختار {sel_edge_dir} غير مسموح"
-                            _edge_status_html = f"<div dir='rtl' style='direction:rtl;text-align:right;font-size:13px;color:#b91c1c;font-weight:bold;margin-top:6px;background:#fef2f2;border:1px solid #fecaca;padding:5px 10px;border-radius:6px;line-height:1.4;'>⚠️ {_err_reason}</div>"
-                    else:
-                        _edge_status_html = "<div dir='rtl' style='direction:rtl;text-align:right;font-size:14px;color:#64748b;font-weight:bold;margin-top:6px;'>⚪ عمود محيطي غير ملاصق لجار (Non-Edge Column)</div>"
-
-                    # Lower status panel raised upwards by 3 lines (~65px)
-                    _orig_tag = f" <span style='font-size:15px;font-weight:normal;color:#64748b;'><bdi dir='rtl'>(الأصل: {_tgt_orig_id})</bdi></span>" if _tgt_orig_id != selected_col_name else ""
-                    _panel_card_html = (
-                        f"<div class='fs-bottom-panel' dir='rtl' style='direction:rtl;text-align:right;background:#ffffff;border:1.5px solid #cbd5e1;padding:10px 14px;border-radius:8px;margin-top:auto;margin-bottom:65px;box-shadow:0 1px 3px rgba(0,0,0,0.05);'>"
-                        f"<div dir='rtl' style='direction:rtl;text-align:right;font-size:21px;font-weight:bold;color:#0f172a;margin-bottom:6px;line-height:1.4;'>"
-                        f"🏛️ اسم العمود: <span style='color:#1d4ed8;font-size:22px;font-weight:bold;'><bdi dir='ltr'>{selected_col_name}</bdi></span> <span style='font-size:15px;font-weight:normal;color:#64748b;'><bdi dir='ltr'>({_tgt_col.get('grid_x', '')} - {_tgt_col.get('grid_y', '')})</bdi></span>{_orig_tag}"
-                        f"</div>"
-                        f"<div dir='rtl' style='direction:rtl;text-align:right;font-size:21px;font-weight:bold;color:#0f172a;margin-bottom:6px;line-height:1.4;'>"
-                        f"📐 قطاع العمود: <span style='color:#0f766e;font-size:22px;font-weight:bold;'><bdi dir='ltr'>{_col_geom_preview['width_cm']:.0f} × {_col_geom_preview['height_cm']:.0f} cm</bdi></span>"
-                        f"</div>"
-                        f"<div dir='rtl' style='direction:rtl;text-align:right;font-size:14px;color:#0f172a;font-weight:bold;margin-top:6px;'>"
-                        f"📍 الترحيل عن المحاور: <span style='color:#eab308;text-shadow:0 0 1px #a16207;'><bdi dir='ltr'>X = {_offset_x_display}</bdi></span> | <span style='color:#eab308;text-shadow:0 0 1px #a16207;'><bdi dir='ltr'>Y = {_offset_y_display}</bdi></span>"
-                        f"</div>"
-                        f"{_edge_status_html}"
-                        f"</div>"
-                    )
-                    st.markdown(_panel_card_html, unsafe_allow_html=True)
-
-            # ── ملخص الأبعاد ─────────────────────────────────────────────────────
-            n_total_cols  = (len(Lx_spans) + 1) * (len(Ly_spans) + 1)
-            n_active_cols = len(_active_cols)
-            tot_w_val = sum(Lx_spans) + cant_left + cant_right
-            tot_h_val = sum(Ly_spans) + cant_bottom + cant_top
-            n_p_total  = len(_all_panels)
-            n_p_active = len(_active_panels)
-            n_p_voids  = len(_void_panels)
-            p_val_str  = f"{n_p_active} active / {n_p_total} total" if not n_p_voids else f"{n_p_active} act / {n_p_voids} voids"
-
-            g1, g2, g3, g4 = st.columns(4)
-            with g1:
-                st.markdown(f"""<div class="ecp-metric-box">
-                    <div class="ecp-metric-lbl">Total Width (X-dir)</div>
-                    <div class="ecp-metric-val">{tot_w_val:.2f} m</div></div>""",
-                    unsafe_allow_html=True)
-            with g2:
-                st.markdown(f"""<div class="ecp-metric-box">
-                    <div class="ecp-metric-lbl">Total Height (Y-dir)</div>
-                    <div class="ecp-metric-val">{tot_h_val:.2f} m</div></div>""",
-                    unsafe_allow_html=True)
-            with g3:
-                st.markdown(f"""<div class="ecp-metric-box">
-                    <div class="ecp-metric-lbl">No. of Columns</div>
-                    <div class="ecp-metric-val">{n_active_cols} active / {n_total_cols} total</div></div>""",
-                    unsafe_allow_html=True)
-            with g4:
-                st.markdown(f"""<div class="ecp-metric-box">
-                    <div class="ecp-metric-lbl">No. of Panels</div>
-                    <div class="ecp-metric-val">{p_val_str}</div></div>""",
-                    unsafe_allow_html=True)
-        else:
-            st.info("💡 انقر لتوسيع هذا القسم وعرض مخطط التحقق الهندسي وتوزيع المحاور والأعمدة.")
-
-    # ── 5e. Column Removal Panel ─────────────────────────────────────────────
-
+    # ── 5c-bis. SECTION: 🏛️ Columns Layout & Management (إدارة وتوقيع الأعمدة) ──
     with st.expander(
-        f"🗑️ Column Removal & Re-indexing (تعديل وحذف الأعمدة وتحديث الترقيم) "
-        f"{'— ' + str(len(_confirmed_removals)) + ' columns removed' if _confirmed_removals else ''}",
-        expanded=bool(st.session_state.get("_fs_show_confirm", False)),
+        f"🏛️ Columns Layout & Management (إدارة وتوقيع الأعمدة — {len(_active_cols)} / {len(_all_cols)} عمود فعّال)",
+        expanded=True,
+        key=f"{prefix}exp_add_del_cols",
     ):
-        st.markdown(
-            """
-            <div dir='rtl' style='direction:rtl;text-align:right;background:#fffbeb;border-left:5px solid #f59e0b;padding:12px 16px;
-                        border-radius:6px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06);'>
-                <div style='font-size:15px;font-weight:800;color:#0f172a;margin-bottom:5px;line-height:1.4;'>
-                    📋 يرجى مراجعة مخطط الأعمدة أعلاه.
-                </div>
-                <div style='font-size:13.5px;color:#1e293b;line-height:1.65;font-weight:600;'>
-                    حدّد الأعمدة التي تريد حذفها من الشبكة الإنشائية (بأرقامها الأصلية).<br>
-                    بعد التأكيد: سيُعاد رسم المخطط وترقيم الأعمدة وإعادة جميع حسابات التصميم تلقائياً.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
+        _section_fs_add_columns(
+            prefix=prefix,
+            Lx_spans=Lx_spans,
+            Ly_spans=Ly_spans,
+            cantilevers=cantilevers,
+            _bc_col=_bc_col,
+            _tc_col=_tc_col,
+            _active_cols=_active_cols,
+            _all_cols=_all_cols,
+            _effective_removed_ids=_effective_removed_ids,
+            _confirmed_voids=_confirmed_voids,
+            _col_transforms=_col_transforms,
+            _edge_columns=_edge_columns,
+            _col_props=_col_props,
+            _void_boxes_sk=_void_boxes_sk,
+            ts_initial=ts_initial,
+            num_floors=num_floors,
+            bottom_mesh_dia=bottom_mesh_dia,
+            n_btm_mesh_usr=n_btm_mesh_usr,
+            top_mesh_dia=top_mesh_dia,
+            n_top_mesh_usr=n_top_mesh_usr,
+            col_extra_dia=col_extra_dia,
+            strip_top_extra_dia=strip_top_extra_dia,
+            strip_bottom_extra_dia=strip_bottom_extra_dia,
+            cov=cov,
+            Fcu=Fcu,
+            Fy=Fy,
+            LL=LL,
+            SDL=SDL,
+            wall_load=wall_load,
         )
 
-        _all_orig_sorted = sorted(_valid_orig_ids, key=lambda c: int(c[1:]))
-        _options_for_removal = [
-            cid for cid in _all_orig_sorted if cid not in _confirmed_removals
-        ]
-        _options_labels = {
-            cid: f"{cid} ({next((c['type'] for c in _all_cols if c['orig_id']==cid), '?')})"
-            for cid in _options_for_removal
-        }
+    img_verif_b64 = None
 
-        # ── Persistent confirm-mode flag ──────────────────────────────────────
-        _show_confirm = st.session_state.get("_fs_show_confirm", False)
-
-        if not _show_confirm:
-            # ── Selection mode ────────────────────────────────────────────────
-            _selected = st.multiselect(
-                "🔍 Select columns to remove (اختر الأعمدة للحذف):",
-                options=_options_for_removal,
-                default=[p for p in _pending_removals if p in _options_for_removal],
-                format_func=lambda cid: _options_labels.get(cid, cid),
-                key="_fs_col_select_widget",
-                help="يمكنك اختيار أي عمود بغض النظر عن موقعه (داخلي، حافّي، زاوية).",
-            )
-            st.session_state["_fs_pending_removals"] = _selected
-
-            _btn_col, _ = st.columns([1, 2])
-            with _btn_col:
-                if st.button(
-                    "🔍 Review & Confirm Removal",
-                    key="_fs_btn_review",
-                    use_container_width=True,
-                    disabled=not _selected,
-                ):
-                    st.session_state["_fs_show_confirm"]     = True
-                    st.session_state["_fs_pending_snapshot"] = list(_selected)
-                    st.rerun()
-
-        else:
-            # ── Confirmation gate (persistent across re-renders) ──────────────
-            _snapshot = st.session_state.get("_fs_pending_snapshot", [])
-
-            st.warning(
-                "⚠️ **Pending Removal Confirmation**\n\n"
-                "سيتم حذف الأعمدة التالية نهائياً من النموذج الإنشائي:\n\n"
-                + "\n".join(
-                    f"- **{cid}** ({next((c['type'] for c in _all_cols if c['orig_id']==cid), '?')})"
-                    for cid in sorted(_snapshot, key=lambda c: int(c[1:]))
-                )
-            )
-
-            if _snapshot:
-                _trial_removed = set(_confirmed_removals) | set(_snapshot)
-                _, _, _trial_Lx, _trial_Ly, _trial_warn = get_flat_slab_columns(
-                    Lx_spans, Ly_spans, bc_cm=_bc_col, tc_cm=_tc_col,
-                    removed_ids=_trial_removed,
-                    col_transforms=_col_transforms,
-                    edge_columns=_edge_columns,
-                )
-                if _trial_Lx and _trial_Ly:
-                    st.info(
-                        f"📐 **Effective spans after removal:**  "
-                        f"Lx = [{', '.join(f'{v:.2f}m' for v in _trial_Lx)}]  |  "
-                        f"Ly = [{', '.join(f'{v:.2f}m' for v in _trial_Ly)}]"
-                    )
-                if _trial_warn:
-                    st.warning(_trial_warn)
-
-            _conf_a, _conf_b, _ = st.columns([1, 1, 2])
-            with _conf_a:
-                if st.button("✅ Yes — Confirm & Redesign",
-                             key="_fs_btn_yes", use_container_width=True):
-                    _new_confirmed = list(set(_confirmed_removals) | set(_snapshot))
-                    st.session_state.setdefault("cfg", {})["fs_removed_cols"] = _new_confirmed
-                    S.save_settings()
-                    st.session_state["_fs_pending_removals"] = []
-                    st.session_state["_fs_pending_snapshot"] = []
-                    st.session_state["_fs_show_confirm"]     = False
-                    st.rerun()
-            with _conf_b:
-                if st.button("↩️ Cancel", key="_fs_btn_cancel", use_container_width=True):
-                    st.session_state["_fs_pending_removals"] = []
-                    st.session_state["_fs_pending_snapshot"] = []
-                    st.session_state["_fs_show_confirm"]     = False
-                    st.rerun()
-
-        # ── Restore section ───────────────────────────────────────────────────
-        if _confirmed_removals:
-            st.markdown("---")
-            st.markdown("**🔄 Restore Removed Columns (استعادة أعمدة محذوفة):**")
-            _removed_labels = {
-                cid: f"{cid} (originally {next((c['type'] for c in _all_cols if c['orig_id']==cid), '?')})"
-                for cid in sorted(_confirmed_removals, key=lambda c: int(c[1:]))
-            }
-            _to_restore = st.multiselect(
-                "Choose columns to restore (اختر الأعمدة لاستعادتها):",
-                options=sorted(_confirmed_removals, key=lambda c: int(c[1:])),
-                format_func=lambda cid: _removed_labels.get(cid, cid),
-                key="_fs_restore_widget",
-            )
-            _rst_a, _ = st.columns([1, 3])
-            with _rst_a:
-                if st.button("♻️ Restore Selected", key="_fs_btn_restore",
-                             use_container_width=True, disabled=not _to_restore):
-                    _new_confirmed = [c for c in _confirmed_removals if c not in _to_restore]
-                    st.session_state.setdefault("cfg", {})["fs_removed_cols"] = _new_confirmed
-                    S.save_settings()
-                    st.session_state["_fs_pending_removals"] = []
-                    st.session_state["_fs_show_confirm"]     = False
-                    st.rerun()
-
-            st.markdown("---")
-            _del_a, _ = st.columns([1, 3])
-            with _del_a:
-                if st.button(
-                    "🗑️ Reset — Restore ALL Columns",
-                    key="_fs_btn_clear_all", use_container_width=True,
-                    help="Restore all removed columns and return to full grid.",
-                ):
-                    st.session_state.setdefault("cfg", {})["fs_removed_cols"] = []
-                    S.save_settings()
-                    st.session_state["_fs_pending_removals"] = []
-                    st.session_state["_fs_show_confirm"]     = False
-                    st.rerun()
-
+    # ── 5e. Column Removal is now unified inside '➕ إضافة وحذف الأعمدة على المحاور' ──
 
     # ── 5f. Panel / Void Removal Expander ─────────────────────────────────────
     with st.expander(
@@ -10838,33 +12389,73 @@ def render(is_standalone: bool = False):
                     st.session_state["_fs_show_void_confirm"] = False
                     st.rerun()
 
-    # ── 5g. DESIGN CRITERIA SUMMARY ──────────────────────────────────────────
-    with st.expander("📋 Design Criteria Summary (ملخص معايير التصميم الإنشائية)", expanded=False, key=f"{prefix}exp_data_card", on_change="rerun"):
-        if st.session_state.get(f"{prefix}exp_data_card", False):
-            st.markdown(
-                '<div class="section-header">📋 ملخص معايير التصميم الإنشائية (Design Criteria Summary)</div>',
-                unsafe_allow_html=True,
-            )
-            _avg_rebar_cm = (bottom_mesh_dia if bottom_mesh_dia else 12) / 10.0
-            _d_eff_val = (ts_initial if ts_initial else 20) - (cov if cov else 1.5) - (_avg_rebar_cm / 2.0)
+    # ── 5g. DESIGN CRITERIA & LOADS SUMMARY (Merged Section) ─────────────────
+    with st.expander("📋 Design Criteria & Loads Summary (ملخص معايير التصميم والأحمال)", expanded=False, key=f"{prefix}exp_data_card"):
+        _ts_preview = float(ts_initial) if ts_initial is not None and ts_initial > 0 else 20.0
+        _gamma_c_preview = float(gamma_c) if gamma_c is not None and gamma_c > 0 else 2.5
+        _sdl_preview = float(SDL) if SDL is not None and SDL >= 0 else 0.0
+        _wl_preview = float(wall_load) if wall_load is not None and wall_load >= 0 else 0.0
+        _ll_preview = float(LL) if LL is not None and LL >= 0 else 0.0
 
-            render_styled_table(pd.DataFrame([
-                {"Parameter / المعيار": "Concrete Grade (Fcu)", "Value / القيمة": f"{Fcu if Fcu else 250} kg/cm²", "Category": "Materials"},
-                {"Parameter / المعيار": "Steel Yield (Fy)", "Value / القيمة": f"{Fy if Fy else 4000} kg/cm²", "Category": "Materials"},
-                {"Parameter / المعيار": "Concrete Cover (الغلاف الخرساني)", "Value / القيمة": f"{cov if cov else 1.5} cm", "Category": "Materials"},
-                {"Parameter / المعيار": "Initial Slab Thickness (ts)", "Value / القيمة": f"{ts_initial if ts_initial else 20} cm  (d ≈ {_d_eff_val:.1f} cm)", "Category": "Geometry"},
-                {"Parameter / المعيار": "Structural System", "Value / القيمة": "Standalone Floor (سقف مستقل)" if num_floors == 1 else f"{num_floors} Floors (طوابق)", "Category": "Geometry"},
-                {"Parameter / المعيار": "Live Load (LL)", "Value / القيمة": f"{LL if LL else 0.25} t/m²", "Category": "Loading"},
-                {"Parameter / المعيار": "Superimposed Dead Load (SDL)", "Value / القيمة": f"{SDL if SDL else 0.15} t/m²", "Category": "Loading"},
-                {"Parameter / المعيار": "Wall Load (WL)", "Value / القيمة": f"{wall_load if wall_load else 0.50} t/m²", "Category": "Loading"},
-                {"Parameter / المعيار": "Bottom Mesh (الرقة السفلية B1, B2)", "Value / القيمة": f"{int(n_btm_mesh_usr) if n_btm_mesh_usr else 5} Φ {bottom_mesh_dia if bottom_mesh_dia else 12} / m'", "Category": "Reinforcement"},
-                {"Parameter / المعيار": "Top Mesh (الرقة العلوية T1, T2)", "Value / القيمة": f"{int(n_top_mesh_usr) if n_top_mesh_usr else 5} Φ {top_mesh_dia if top_mesh_dia else 10} / m'", "Category": "Reinforcement"},
-                {"Parameter / المعيار": "Column Extra Top Rebar", "Value / القيمة": f"Φ {col_extra_dia if col_extra_dia else 12} mm", "Category": "Reinforcement"},
-                {"Parameter / المعيار": "Strip Extra Top / Btm Rebar", "Value / القيمة": f"Φ {strip_top_extra_dia if strip_top_extra_dia else 12} / Φ {strip_bottom_extra_dia if strip_bottom_extra_dia else 12} mm", "Category": "Reinforcement"},
-                {"Parameter / المعيار": "Default Column Dimensions", "Value / القيمة": f"{_col_w_sk} cm × {_col_d_sk} cm", "Category": "Columns"},
-            ]))
-        else:
-            st.info("💡 انقر لتوسيع هذا القسم وعرض ملخص معايير التصميم الإنشائية.")
+        _sw_preview = _gamma_c_preview * (_ts_preview / 100.0)
+        _dl_tot_preview = _sw_preview + _sdl_preview + _wl_preview
+        _wu_preview = 1.4 * _dl_tot_preview + 1.6 * _ll_preview
+
+        st.markdown(
+            '<div class="section-header">⚖️ 1. ملخص وتجميع الأحمال التصميمية للسقف (Load Breakdown & Combinations)</div>',
+            unsafe_allow_html=True,
+        )
+        ld_df_preview = pd.DataFrame({
+            "Load Component (مكون الحمل)": [
+                "1. Slab Self-Weight (الوزن الذاتي للبلاطة)  OW = γc × ts",
+                "2. Super-Imposed Dead Load (التشطيبات والأرضيات)  SDL",
+                "3. Wall Load (أحمال القواطيع والحوائط)  WL",
+                "4. Total Dead Load (إجمالي الحمل الميت)  DL = OW + SDL + WL",
+                "5. Live Load (الحمل الحي التشغيلي)  LL",
+                "6. Ultimate Design Load (الحمل التصميمي الأقصى)  Wu = 1.4 DL + 1.6 LL",
+            ],
+            "Value (ton/m²)": [
+                f"{_sw_preview:.4f} t/m²",
+                f"{_sdl_preview:.4f} t/m²",
+                f"{_wl_preview:.4f} t/m²",
+                f"{_dl_tot_preview:.4f} t/m²",
+                f"{_ll_preview:.4f} t/m²",
+                f"{_wu_preview:.4f} t/m²",
+            ],
+            "Calculation Formula & Code Reference (المعادلة والملاحظات الإنشائية)": [
+                f"حساب تلقائي: {_ts_preview:.0f} cm × {_gamma_c_preview:.2f} t/m³",
+                "مدخل من المستخدم (User Input)",
+                "مدخل من المستخدم (User Input)",
+                "OW + SDL + WL (مجموع الأحمال الدائمة)",
+                "مدخل من المستخدم (User Input)",
+                "تراكب الأحمال الأقصى طبقاً للكود المصري ECP 203",
+            ],
+        })
+        render_styled_table(ld_df_preview)
+
+        st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
+        st.markdown(
+            '<div class="section-header">📋 2. ملخص معايير التصميم الإنشائية (Design Criteria Summary)</div>',
+            unsafe_allow_html=True,
+        )
+        _avg_rebar_cm = (bottom_mesh_dia if bottom_mesh_dia else 12) / 10.0
+        _d_eff_val = (ts_initial if ts_initial else 20) - (cov if cov else 1.5) - (_avg_rebar_cm / 2.0)
+
+        render_styled_table(pd.DataFrame([
+            {"Parameter / المعيار": "Concrete Grade (Fcu)", "Value / القيمة": f"{Fcu if Fcu else 250} kg/cm²", "Category": "Materials"},
+            {"Parameter / المعيار": "Steel Yield (Fy)", "Value / القيمة": f"{Fy if Fy else 4000} kg/cm²", "Category": "Materials"},
+            {"Parameter / المعيار": "Concrete Cover (الغلاف الخرساني)", "Value / القيمة": f"{cov if cov else 1.5} cm", "Category": "Materials"},
+            {"Parameter / المعيار": "Initial Slab Thickness (ts)", "Value / القيمة": f"{ts_initial if ts_initial else 20} cm  (d ≈ {_d_eff_val:.1f} cm)", "Category": "Geometry"},
+            {"Parameter / المعيار": "Structural System", "Value / القيمة": "Standalone Floor (سقف مستقل)" if num_floors == 1 else f"{num_floors} Floors (طوابق)", "Category": "Geometry"},
+            {"Parameter / المعيار": "Live Load (LL)", "Value / القيمة": f"{LL if LL else 0.25} t/m²", "Category": "Loading"},
+            {"Parameter / المعيار": "Superimposed Dead Load (SDL)", "Value / القيمة": f"{SDL if SDL else 0.15} t/m²", "Category": "Loading"},
+            {"Parameter / المعيار": "Wall Load (WL)", "Value / القيمة": f"{wall_load if wall_load else 0.50} t/m²", "Category": "Loading"},
+            {"Parameter / المعيار": "Bottom Mesh (الرقة السفلية B1, B2)", "Value / القيمة": f"{int(n_btm_mesh_usr) if n_btm_mesh_usr else 5} Φ {bottom_mesh_dia if bottom_mesh_dia else 12} / m'", "Category": "Reinforcement"},
+            {"Parameter / المعيار": "Top Mesh (الرقة العلوية T1, T2)", "Value / القيمة": f"{int(n_top_mesh_usr) if n_top_mesh_usr else 5} Φ {top_mesh_dia if top_mesh_dia else 10} / m'", "Category": "Reinforcement"},
+            {"Parameter / المعيار": "Column Extra Top Rebar", "Value / القيمة": f"Φ {col_extra_dia if col_extra_dia else 12} mm", "Category": "Reinforcement"},
+            {"Parameter / المعيار": "Strip Extra Top / Btm Rebar", "Value / القيمة": f"Φ {strip_top_extra_dia if strip_top_extra_dia else 12} / Φ {strip_bottom_extra_dia if strip_bottom_extra_dia else 12} mm", "Category": "Reinforcement"},
+            {"Parameter / المعيار": "Default Column Dimensions", "Value / القيمة": f"{_col_w_sk} cm × {_col_d_sk} cm", "Category": "Columns"},
+        ]))
 
     # ── Columns Registry Table (removed per user request) ────────────────────
 
@@ -10875,7 +12466,10 @@ def render(is_standalone: bool = False):
         return
 
     if not _active_cols:
-        st.error("❌ No active columns remain — please restore at least one column to proceed with design.")
+        st.info(
+            "🏛️ **حالة الشبكة الفارغة (Zero Column State):** لوحة المحاور الحالية لا تحتوي على أي أعمدة مسقطة بعد. "
+            "يرجى استخدام قسم **«🏛️ Columns Layout & Management (إدارة وتوقيع الأعمدة)»** أعلاه لإسقاط الأعمدة بالماوس لبدء الحسابات التصميمية."
+        )
         return
 
     # ═════════════════════════════════════════════════════════════════════════
@@ -11197,8 +12791,19 @@ def render(is_standalone: bool = False):
             delta_As_y = max(delta_As_cs_y, delta_As_ms_y)
             Mu_pos_m_y = max(M_cs_y / max(0.1, w_cs_y), M_ms_y / max(0.1, ms_w_y))
 
-            # X-direction Bottom Extra Check & Record
-            req_extra_x = (delta_As_x > 0.05)
+            _thresh_3phi12 = XZ.EXTRA_STEEL_THRESHOLD_CM2_M
+            _a_bar_btm_mesh = bar_area(bottom_mesh_dia)
+
+            # X-direction Bottom Extra Check & Record (2-Case Philosophy vs 3Φ12/m threshold)
+            req_extra_x = (delta_As_x >= _thresh_3phi12)
+            needs_mesh_inc_x = (0.05 < delta_As_x < _thresh_3phi12)
+            if needs_mesh_inc_x:
+                rec_inc_bars_x = max(1, int(math.ceil(round(delta_As_x / _a_bar_btm_mesh, 6))))
+                rec_total_mesh_x = int(n_mesh_btm) + rec_inc_bars_x
+            else:
+                rec_inc_bars_x = 0
+                rec_total_mesh_x = int(n_mesh_btm)
+
             if req_extra_x:
                 eff_btm_dia_x, _bpm_x, upgraded_btm_x, orig_btm_dia_x = optimize_extra_bar_diameter(
                     delta_As_x,
@@ -11221,6 +12826,16 @@ def render(is_standalone: bool = False):
                 L_ext_x = round(0.70 * span_lx, 2)
             is_ext_x = (i == 0) or (i == len(Lx_calc) - 1)
             span_type_x = "باكية مكبرة (Enlarged)" if is_enlarged else ("بحر طرفي (Exterior)" if is_ext_x else "بحر داخلي (Interior)")
+
+            if req_extra_x and _bpm_x > 0:
+                callout_x = XZ.callout_text(_bpm_x, n_b_x, eff_btm_dia_x) + f"\n(L = {L_ext_x:.2f} m | Ld = {_Ld_btm_x:.2f} m)"
+            elif needs_mesh_inc_x:
+                callout_x = (
+                    f"⚠️ فرق التسليح ({delta_As_x:.2f} cm²/m) أقل من 3Φ12/m ({_thresh_3phi12:.2f} cm²/m) — "
+                    f"يُوصى بزيادة الشبكة السفلية بالمدخلات بمقدار +{rec_inc_bars_x} Φ{bottom_mesh_dia}/m' لتصبح {rec_total_mesh_x} Φ{bottom_mesh_dia}/m'"
+                )
+            else:
+                callout_x = f"الشبكة الأساسية ({mesh_btm_str}) كافية ومغطية بالكامل ✅"
 
             item_x = {
                 "panel_id": pid,
@@ -11250,22 +12865,29 @@ def render(is_standalone: bool = False):
                 "Ld": _Ld_btm_x,
                 "is_enlarged": is_enlarged,
                 "is_needed": req_extra_x,
-                "callout": (
-                    XZ.callout_text(_bpm_x, n_b_x, eff_btm_dia_x)
-                    + f"\n(L = {L_ext_x:.2f} m | Ld = {_Ld_btm_x:.2f} m)"
-                    if req_extra_x and _bpm_x > 0
-                    else f"الشبكة الأساسية ({mesh_btm_str}) كافية ومغطية بالكامل ✅"
-                ),
+                "needs_mesh_inc": needs_mesh_inc_x,
+                "rec_inc_bars": rec_inc_bars_x,
+                "rec_total_mesh": rec_total_mesh_x,
+                "mesh_dia": bottom_mesh_dia,
+                "callout": callout_x,
                 "L_cut": f"{L_ext_x:.2f} m" if req_extra_x else "—",
             }
             all_panels_x_design.append(item_x)
             if req_extra_x:
                 btm_extra_spans.append(item_x)
-                if is_enlarged:
-                    enlarged_bays_info.append(item_x)
+            if is_enlarged:
+                enlarged_bays_info.append(item_x)
 
-            # Y-direction Bottom Extra Check & Record
-            req_extra_y = (delta_As_y > 0.05)
+            # Y-direction Bottom Extra Check & Record (2-Case Philosophy vs 3Φ12/m threshold)
+            req_extra_y = (delta_As_y >= _thresh_3phi12)
+            needs_mesh_inc_y = (0.05 < delta_As_y < _thresh_3phi12)
+            if needs_mesh_inc_y:
+                rec_inc_bars_y = max(1, int(math.ceil(round(delta_As_y / _a_bar_btm_mesh, 6))))
+                rec_total_mesh_y = int(n_mesh_btm) + rec_inc_bars_y
+            else:
+                rec_inc_bars_y = 0
+                rec_total_mesh_y = int(n_mesh_btm)
+
             if req_extra_y:
                 eff_btm_dia_y, _bpm_y, upgraded_btm_y, orig_btm_dia_y = optimize_extra_bar_diameter(
                     delta_As_y,
@@ -11288,6 +12910,16 @@ def render(is_standalone: bool = False):
                 L_ext_y = round(0.70 * span_ly, 2)
             is_ext_y = (j == 0) or (j == len(Ly_calc) - 1)
             span_type_y = "باكية مكبرة (Enlarged)" if is_enlarged else ("بحر طرفي (Exterior)" if is_ext_y else "بحر داخلي (Interior)")
+
+            if req_extra_y and _bpm_y > 0:
+                callout_y = XZ.callout_text(_bpm_y, n_b_y, eff_btm_dia_y) + f"\n(L = {L_ext_y:.2f} m | Ld = {_Ld_btm_y:.2f} m)"
+            elif needs_mesh_inc_y:
+                callout_y = (
+                    f"⚠️ فرق التسليح ({delta_As_y:.2f} cm²/m) أقل من 3Φ12/m ({_thresh_3phi12:.2f} cm²/m) — "
+                    f"يُوصى بزيادة الشبكة السفلية بالمدخلات بمقدار +{rec_inc_bars_y} Φ{bottom_mesh_dia}/m' لتصبح {rec_total_mesh_y} Φ{bottom_mesh_dia}/m'"
+                )
+            else:
+                callout_y = f"الشبكة الأساسية ({mesh_btm_str}) كافية ومغطية بالكامل ✅"
 
             item_y = {
                 "panel_id": pid,
@@ -11317,19 +12949,18 @@ def render(is_standalone: bool = False):
                 "Ld": _Ld_btm_y,
                 "is_enlarged": is_enlarged,
                 "is_needed": req_extra_y,
-                "callout": (
-                    XZ.callout_text(_bpm_y, n_b_y, eff_btm_dia_y)
-                    + f"\n(L = {L_ext_y:.2f} m | Ld = {_Ld_btm_y:.2f} m)"
-                    if req_extra_y and _bpm_y > 0
-                    else f"الشبكة الأساسية ({mesh_btm_str}) كافية ومغطية بالكامل ✅"
-                ),
+                "needs_mesh_inc": needs_mesh_inc_y,
+                "rec_inc_bars": rec_inc_bars_y,
+                "rec_total_mesh": rec_total_mesh_y,
+                "mesh_dia": bottom_mesh_dia,
+                "callout": callout_y,
                 "L_cut": f"{L_ext_y:.2f} m" if req_extra_y else "—",
             }
             all_panels_y_design.append(item_y)
             if req_extra_y:
                 btm_extra_spans.append(item_y)
-                if is_enlarged and (not req_extra_x):
-                    enlarged_bays_info.append(item_y)
+            if is_enlarged and (not req_extra_x):
+                enlarged_bays_info.append(item_y)
 
     # Multi-Bay Contour Merging: Cluster adjacent/continuous demand bays into single enveloped macro zones
     btm_x_merged = XZ.cluster_and_merge_bays([b for b in btm_extra_spans if b.get("dir") == "X"])
@@ -11351,11 +12982,15 @@ def render(is_standalone: bool = False):
     # 6. Top Extra Steel at Columns (with enlarged bay influence & minimum bar spacing control)
     top_extra_cols = calculate_extra_top_steel_at_columns(
         col_list, rows_x, rows_y, Lx_calc, Ly_calc, d, Fcu, Fy, ts, prov_top_mesh_cm2m, col_extra_dia,
-        enlarged_bays=enlarged_bays_info, is_high_safety=high_safety_mode, mesh_top_n=n_mesh_top
+        enlarged_bays=enlarged_bays_info, is_high_safety=high_safety_mode, mesh_top_n=n_mesh_top,
+        top_mesh_dia=top_mesh_dia,
     )
 
     # 6b. Extra Slab Top Steel in Middle Strips / Panels (الحديد الإضافي العلوي للبلاطة)
     top_extra_slab_bays = []
+    top_slab_mesh_inc_bays = []
+    _thresh_3phi12_top = XZ.EXTRA_STEEL_THRESHOLD_CM2_M
+    _a_bar_top_mesh = bar_area(top_mesh_dia)
     for j in range(len(Ly_calc)):
         for i in range(len(Lx_calc)):
             pid = f"P_{i+1}_{j+1}"
@@ -11395,8 +13030,8 @@ def render(is_standalone: bool = False):
             As_m_ms_y = As_req_ms_y / w_ms_y
             delta_As_y = max(0.0, As_m_ms_y - prov_top_mesh_cm2m)
 
-            # X-direction Top Slab Extra Check
-            if delta_As_x > 0.05:
+            # X-direction Top Slab Extra Check (2-Case Philosophy vs 3Φ12/m threshold)
+            if delta_As_x >= _thresh_3phi12_top:
                 eff_ms_top_dia_x, _bpm_top_x, _, _ = optimize_extra_bar_diameter(
                     delta_As_x,
                     col_extra_dia,
@@ -11433,9 +13068,23 @@ def render(is_standalone: bool = False):
                         + f"\n(L = {L_ext_x:.2f} m | Ld = {_Ld_top_x:.2f} m)"
                     ),
                 })
+            elif 0.05 < delta_As_x < _thresh_3phi12_top:
+                rec_inc_top_x = max(1, int(math.ceil(round(delta_As_x / _a_bar_top_mesh, 6))))
+                rec_tot_top_x = int(n_mesh_top) + rec_inc_top_x
+                top_slab_mesh_inc_bays.append({
+                    "panel_id": pid,
+                    "bay_label": f"Bay X{i+1}-X{i+2} / Y{j+1}-Y{j+2} (X-Dir)",
+                    "dir": "X",
+                    "As_req_m": As_m_ms_x,
+                    "As_prov_m": prov_top_mesh_cm2m,
+                    "delta_As": delta_As_x,
+                    "rec_inc_bars": rec_inc_top_x,
+                    "rec_total_mesh": rec_tot_top_x,
+                    "mesh_dia": top_mesh_dia,
+                })
 
-            # Y-direction Top Slab Extra Check
-            if delta_As_y > 0.05:
+            # Y-direction Top Slab Extra Check (2-Case Philosophy vs 3Φ12/m threshold)
+            if delta_As_y >= _thresh_3phi12_top:
                 eff_ms_top_dia_y, _bpm_top_y, _, _ = optimize_extra_bar_diameter(
                     delta_As_y,
                     col_extra_dia,
@@ -11471,6 +13120,20 @@ def render(is_standalone: bool = False):
                         XZ.callout_text(_bpm_top_y, n_b_y, eff_ms_top_dia_y)
                         + f"\n(L = {L_ext_y:.2f} m | Ld = {_Ld_top_y:.2f} m)"
                     ),
+                })
+            elif 0.05 < delta_As_y < _thresh_3phi12_top:
+                rec_inc_top_y = max(1, int(math.ceil(round(delta_As_y / _a_bar_top_mesh, 6))))
+                rec_tot_top_y = int(n_mesh_top) + rec_inc_top_y
+                top_slab_mesh_inc_bays.append({
+                    "panel_id": pid,
+                    "bay_label": f"Bay X{i+1}-X{i+2} / Y{j+1}-Y{j+2} (Y-Dir)",
+                    "dir": "Y",
+                    "As_req_m": As_m_ms_y,
+                    "As_prov_m": prov_top_mesh_cm2m,
+                    "delta_As": delta_As_y,
+                    "rec_inc_bars": rec_inc_top_y,
+                    "rec_total_mesh": rec_tot_top_y,
+                    "mesh_dia": top_mesh_dia,
                 })
 
     # Multi-Bay Contour Merging for Top Extra in Middle Strips
@@ -11585,12 +13248,16 @@ def render(is_standalone: bool = False):
 
             with tab_punch_plan:
                 fig_punch = generate_flat_slab_punching_shear_sketch(
-                    Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, Wu,
+                    Lx_spans, Ly_spans, cantilevers, ts, d, Fcu, Wu,
                     punching_results,
                     col_w_cm=bc_s, col_d_cm=tc_s,
                     removed_cols=_removed_col_objs,
                     void_panel_ids=set(_confirmed_voids),
                     edge_columns=_edge_columns,
+                    void_boxes=_void_boxes_sk,
+                    active_cols=_active_cols,
+                    active_x_labels=_active_x_labels,
+                    active_y_labels=_active_y_labels,
                 )
                 buf_punch = io.BytesIO()
                 fig_punch.savefig(buf_punch, format="png", bbox_inches="tight", dpi=180)
@@ -12054,6 +13721,46 @@ def render(is_standalone: bool = False):
     img_m22_b64 = None
     img_dual_moment_b64 = None
 
+    # ── Case 1 Tracking: Small Deficits (0.05 < ΔAs < 3Φ12/m = 3.393 cm²/m) ──
+    mesh_inc_top_cols = [c for c in top_extra_cols if c.get("needs_mesh_inc", False)]
+    mesh_inc_btm_x = [bx for bx in all_panels_x_design if bx.get("needs_mesh_inc", False)]
+    mesh_inc_btm_y = [by for by in all_panels_y_design if by.get("needs_mesh_inc", False)]
+    mesh_inc_top_slab_x = [tb for tb in top_slab_mesh_inc_bays if isinstance(tb, dict) and tb.get("dir", "X") == "X"] + [tb for tb in top_extra_slab_bays if isinstance(tb, dict) and tb.get("needs_mesh_inc", False) and tb.get("dir", "X") == "X"]
+    mesh_inc_top_slab_y = [tb for tb in top_slab_mesh_inc_bays if isinstance(tb, dict) and tb.get("dir", "X") == "Y"] + [tb for tb in top_extra_slab_bays if isinstance(tb, dict) and tb.get("needs_mesh_inc", False) and tb.get("dir", "X") == "Y"]
+
+    _ltr_badge = "dir='ltr' style='unicode-bidi:isolate; display:inline-block; font-weight:800; background:rgba(217,119,6,0.12); padding:0px 6px; border-radius:4px; color:#92400e; font-family:Segoe UI, Arial, sans-serif;'"
+    _ltr_inline = "dir='ltr' style='unicode-bidi:isolate; display:inline-block; font-weight:800;'"
+
+    _case1_msgs = []
+    if mesh_inc_top_cols or mesh_inc_top_slab_x or mesh_inc_top_slab_y:
+        _all_top_inc = mesh_inc_top_cols + mesh_inc_top_slab_x + mesh_inc_top_slab_y
+        _max_inc_top = max(int(item.get("rec_inc_bars", 1)) for item in _all_top_inc)
+        _rec_tot_top = max(int(item.get("rec_total_mesh", n_mesh_top + _max_inc_top)) for item in _all_top_inc)
+        _max_def_top = max(float(item.get("As_extra (cm²/m)", item.get("delta_As", 0.0))) for item in _all_top_inc)
+        _dirs_top = []
+        if mesh_inc_top_cols or mesh_inc_top_slab_x:
+            _dirs_top.append("اتجاه <span dir='ltr' style='unicode-bidi:isolate;'>X</span>")
+        if mesh_inc_top_cols or mesh_inc_top_slab_y:
+            _dirs_top.append("اتجاه <span dir='ltr' style='unicode-bidi:isolate;'>Y</span>")
+        _dirs_top_str = " و ".join(_dirs_top)
+        _case1_msgs.append(
+            f"<li style='margin-bottom:6px;'>🔴 <b>الشبكة العلوية (<span {_ltr_inline}>Top Mesh</span> — {_dirs_top_str}):</b> أقصى فرق تسليح مطلوب لمقاومة العزم السالب يبلغ <span {_ltr_badge}>ΔAs = {_max_def_top:.2f} cm²/m</span> (وهو أقل من مساحة <span {_ltr_badge}>3 Φ 12 / m' = 3.39 cm²/m</span>) — يُوصى بزيادة عدد أسياخ الشبكة العلوية بالمدخلات بمقدار <span {_ltr_badge}>+{_max_inc_top} Φ {top_mesh_dia} / m'</span> لتصبح <span {_ltr_badge}>{_rec_tot_top} Φ {top_mesh_dia} / m'</span> (أي <span {_ltr_inline}>{_rec_tot_top}</span> أسياخ قطر <span {_ltr_inline}>{top_mesh_dia} mm</span> في المتر) بدلاً من <span {_ltr_badge}>{n_mesh_top} Φ {top_mesh_dia} / m'</span>، دون الحاجة لتفريد حديد إضافي علوي في هذه المواضع.</li>"
+        )
+    if mesh_inc_btm_x or mesh_inc_btm_y:
+        _all_btm_inc = mesh_inc_btm_x + mesh_inc_btm_y
+        _max_inc_btm = max(int(item.get("rec_inc_bars", 1)) for item in _all_btm_inc)
+        _rec_tot_btm = max(int(item.get("rec_total_mesh", n_mesh_btm + _max_inc_btm)) for item in _all_btm_inc)
+        _max_def_btm = max(float(item.get("delta_As", 0.0)) for item in _all_btm_inc)
+        _dirs_btm = []
+        if mesh_inc_btm_x:
+            _dirs_btm.append("اتجاه <span dir='ltr' style='unicode-bidi:isolate;'>X</span>")
+        if mesh_inc_btm_y:
+            _dirs_btm.append("اتجاه <span dir='ltr' style='unicode-bidi:isolate;'>Y</span>")
+        _dirs_str = " و ".join(_dirs_btm)
+        _case1_msgs.append(
+            f"<li style='margin-bottom:4px;'>🔶 <b>الشبكة السفلية (<span {_ltr_inline}>Bottom Mesh</span> — {_dirs_str}):</b> أقصى فرق تسليح مطلوب لمقاومة العزم الموجب يبلغ <span {_ltr_badge}>ΔAs = {_max_def_btm:.2f} cm²/m</span> (وهو أقل من مساحة <span {_ltr_badge}>3 Φ 12 / m' = 3.39 cm²/m</span>) — يُوصى بزيادة عدد أسياخ الشبكة السفلية بالمدخلات بمقدار <span {_ltr_badge}>+{_max_inc_btm} Φ {bottom_mesh_dia} / m'</span> لتصبح <span {_ltr_badge}>{_rec_tot_btm} Φ {bottom_mesh_dia} / m'</span> (أي <span {_ltr_inline}>{_rec_tot_btm}</span> أسياخ قطر <span {_ltr_inline}>{bottom_mesh_dia} mm</span> في المتر) بدلاً من <span {_ltr_badge}>{n_mesh_btm} Φ {bottom_mesh_dia} / m'</span>، دون الحاجة لتفريد حديد إضافي سفلي في هذه الباكيات.</li>"
+        )
+
     exp_mom = st.expander(
         "📊 1. 2D Bending Moment Matrix & Color Contours (مصفوفة العزوم والمخطط اللوني M11 & M22)",
         expanded=False,
@@ -12062,6 +13769,22 @@ def render(is_standalone: bool = False):
     )
     with exp_mom:
         if st.session_state.get(f"{prefix}exp_moments_contour", False):
+            if _case1_msgs:
+                S.play_warning_sound()
+                st.markdown(
+                    f"""
+                    <div dir="rtl" style="background:#fffbeb; border:2px solid #d97706; border-radius:10px; padding:14px 18px; margin:6px 0 14px 0; text-align:right; box-shadow:0 2px 8px rgba(217,119,6,0.12);">
+                        <div style="font-size:1.02rem; font-weight:800; color:#b45309; margin-bottom:8px;">
+                            ⚠️ توصية اقتصادية لضبط حديد الشبكة بالمدخلات (فرق التسليح <span {_ltr_inline}>ΔAs</span> أقل من <span {_ltr_badge}>3 Φ 12 / m' = 3.39 cm²/m</span>):
+                        </div>
+                        <ul style="margin:0; padding-right:20px; color:#78350f; font-size:1.02rem; line-height:1.85;">
+                            {''.join(_case1_msgs)}
+                        </ul>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
             moment_view_mode = S.radio(
                 "👁️ Select Moment View Mode (اختر اتجاه عزم الانحناء للعرض):",
                 "fs_moment_contour_view_mode_idx",
@@ -12150,114 +13873,6 @@ def render(is_standalone: bool = False):
         else:
             st.info("💡 انقر لتوسيع هذا القسم وعرض مصفوفة العزوم والمخططات اللونية الكنتورية (M11 & M22).")
 
-    # ── 📊 1b. MOMENT DEFICIT CONTOUR (العزوم الزائدة التي تحتاج حديد إضافي) ──
-    exp_def = st.expander(
-        "📊 1b. Bending Moment Deficit Contour — Bottom & Top العزوم الزائدة التي تحتاج حديد اضافي",
-        expanded=False,
-        key=f"{prefix}exp_deficit_check",
-        on_change="rerun",
-    )
-    with exp_def:
-        if st.session_state.get(f"{prefix}exp_deficit_check", False):
-            tab_def_caps, tab_def_top_bays, tab_def_btm = st.tabs([
-                "👑 1. Column Caps — العزوم التي تحتاج كابات أعلى الأعمدة (−M)",
-                "🔵 2. Top Mesh (Bays) — الحديد العلوي الإضافي بالباكيات (منفصل تماماً عن الكابات −M)",
-                "🟠 3. Bottom Mesh — Extra Bottom Steel (الحديد السفلي: فحص كفاية الشبكة السفلية +M)",
-            ])
-
-            def _render_deficit_layer_panel(layer_id: str, layer_As: float, layer_str_code: str, cat_title_ar: str, extra_title_ar: str, tab_dir_key: str):
-                dir_col, _ = st.columns([1, 1])
-                with dir_col:
-                    view_mode = S.radio(
-                        f"👁️ Select Direction ({cat_title_ar}):",
-                        f"fs_def_{tab_dir_key}_mode_idx",
-                        options=[
-                            "↔️ M11 — X-Direction (فارق عزوم M11 الأفقي)",
-                            "↕️ M22 — Y-Direction (فارق عزوم M22 الرأسي)",
-                        ],
-                        index=0,
-                    )
-                _mode = "M11" if "M11" in view_mode else "M22"
-                fig_res, has_def_res, max_d_res, m_cap_res = generate_moment_deficit_contour(
-                    Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
-                    prov_btm_mesh_cm2m=layer_As,
-                    d_cm=d,
-                    Fcu=Fcu,
-                    Fy=Fy,
-                    mode=_mode,
-                    col_w_cm=bc_s,
-                    col_d_cm=tc_s,
-                    removed_cols=_removed_col_objs,
-                    void_panel_ids=set(_confirmed_voids),
-                    col_transforms=_col_transforms,
-                    edge_columns=_edge_columns,
-                    btm_extra_spans=btm_extra_spans,
-                    void_boxes=_void_boxes_sk,
-                    mesh_btm_str=layer_str_code,
-                    layer=layer_id,
-                    active_cols=_active_cols,
-                    active_x_labels=_active_x_labels,
-                    active_y_labels=_active_y_labels,
-                )
-                if not has_def_res:
-                    st.markdown(
-                        f"""
-                        <div style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-                                    border: 2.5px solid #16a34a; border-radius: 12px;
-                                    padding: 16px 22px; margin: 12px 0 16px 0;
-                                    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.12); text-align: center;">
-                            <div style="font-size: 1.35rem; font-weight: 900; color: #15803d; margin-bottom: 6px;">
-                                ✅ دلتا الإضافي = صفر (ΔM = 0.00 t·m/m') — {cat_title_ar} كافية تماماً ولا يوجد أي عجز
-                            </div>
-                            <div style="font-size: 1.05rem; font-weight: 700; color: #166534;">
-                                طاقة تحمل الشبكة الأساسية: Mcap = {m_cap_res:.3f} t·m/m' | كامل النطاق آمن ومغطى بنسبة 100% بدون الحاجة لأي حديد إضافي
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                else:
-                    st.markdown(
-                        f"""
-                        <div style="background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-                                    border: 2.5px solid #dc2626; border-radius: 12px;
-                                    padding: 16px 22px; margin: 12px 0 16px 0;
-                                    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.12); text-align: center;">
-                            <div style="font-size: 1.35rem; font-weight: 900; color: #991b1b; margin-bottom: 6px;">
-                                ⚠️ يتطلب وضع {extra_title_ar} بالمناطق الملونة فقط | أقصى فارق عزم زائد: Max ΔM = +{max_d_res:.2f} t·m/m'
-                            </div>
-                            <div style="font-size: 1.05rem; font-weight: 700; color: #7f1d1d;">
-                                طاقة تحمل الشبكة الأساسية: Mcap = {m_cap_res:.3f} t·m/m' | المناطق البيضاء كافية تماماً (دلتا = 0) ولا تتطلب أي حديد إضافي
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                st.pyplot(fig_res, clear_figure=True, use_container_width=True)
-                buf_res = io.BytesIO()
-                fig_res.savefig(buf_res, format="png", bbox_inches="tight", dpi=180)
-                buf_res.seek(0)
-                st.download_button(
-                    label=f"📥 Download Deficit Contour ({layer_id.title()} - {_mode}) Plan (High-Res PNG)",
-                    data=buf_res,
-                    file_name=f"{prefix}Flat_Slab_{layer_id.title()}_Deficit_{_mode}_ts{ts:.0f}cm.png",
-                    mime="image/png",
-                    use_container_width=True,
-                    key=f"btn_dl_def_{layer_id}_{tab_dir_key}",
-                )
-                plt.close(fig_res)
-
-            with tab_def_caps:
-                _render_deficit_layer_panel("caps", prov_top_mesh_cm2m, mesh_top_str, "كابات أعلى الأعمدة", "حديد كابات علوي إضافي أعلى الأعمدة", "caps")
-
-            with tab_def_top_bays:
-                _render_deficit_layer_panel("top_bays", prov_top_mesh_cm2m, mesh_top_str, "الشبكة العلوية بالباكيات", "حديد علوي إضافي بالباكيات والبحور", "top_bays")
-
-            with tab_def_btm:
-                _render_deficit_layer_panel("bottom", prov_btm_mesh_cm2m, mesh_btm_str, "الشبكة السفلية بالباكيات", "حديد سفلي إضافي بمنتصف البحور", "bottom")
-        else:
-            st.info("💡 انقر لتوسيع هذا القسم وعرض كونتور العزوم الزائدة عن طاقة الشبكة الأساسية العلوية والسفلية (مناطق الحديد الإضافي).")
-
     # ── 🟢 2. TOP REINFORCEMENT PLAN (Initialized for exports) ────────────────
     img_top_b64 = None
 
@@ -12266,8 +13881,6 @@ def render(is_standalone: bool = False):
     active_btm_extras_x = [b for b in active_btm_extras if b.get("dir", "X") == "X"]
     active_btm_extras_y = [b for b in active_btm_extras if b.get("dir", "X") == "Y"]
     img_btm_b64 = None   # kept for report generator compatibility
-
-    # ── Master Design Output Table removed per user request ──────────────────
 
     # ── 📊 BENDING MOMENTS & REINFORCEMENT SCHEDULES (Collapsed Section) ─────
     with st.expander("📊 Bending Moments & Steel Design Schedules (جداول حصر وتوزيع العزوم وحديد التسليح)", expanded=False):
@@ -12295,7 +13908,7 @@ def render(is_standalone: bool = False):
 
         with tab_tbl_top:
             if active_top_extra:
-                st.markdown(f"##### 🔴 جدول الأعمدة التي تحتاج إلى حديد إضافي علوي ({len(active_top_extra)} أعمدة):")
+                st.markdown(f"##### 🔴 جدول الأعمدة التي تحتاج إلى حديد إضافي علوي (ΔAs ≥ 3Φ12/m = 3.39 cm²/m — عدد {len(active_top_extra)} أعمدة):")
                 top_table_rows = []
                 for c in active_top_extra:
                     as_req_val = float(c["As_req (cm²/m)"])
@@ -12313,7 +13926,26 @@ def render(is_standalone: bool = False):
                         "حالة التسليح": "🚨 يتطلب حديد إضافي علوي",
                     })
                 render_styled_table(top_table_rows)
-            else:
+            if mesh_inc_top_cols:
+                st.markdown(f"##### ⚠️ أعمدة بها فرق تسليح طفيف أقل من 3Φ12/م (0.05 < ΔAs < 3.39 cm²/m — عدد {len(mesh_inc_top_cols)} أعمدة — يُعالج بزيادة الشبكة العلوية بالمدخلات):")
+                top_inc_rows = []
+                for c in mesh_inc_top_cols:
+                    as_req_val = float(c["As_req (cm²/m)"])
+                    as_mesh_val = float(c["As_mesh (cm²/m)"])
+                    delta_as_val = max(0.0, as_req_val - as_mesh_val)
+                    top_inc_rows.append({
+                        "موضع ورقم العمود (Location / ID)": f"{c['id']} — Grid ({c['grid']})",
+                        "نوع وموضع الركيزة (Support Type)": c["type"],
+                        "العزم السالب التصميمي Mu⁻ (ton·m/m)": f"{c['Mu_neg (t.m)']:.2f}",
+                        "التسليح المطلوب كلياً As_req (cm²/m)": f"{as_req_val:.2f}",
+                        "مقاومة الشبكة العلوية As_mesh (cm²/m)": f"{as_mesh_val:.2f}",
+                        "فرق التسليح ΔAs (cm²/m)": f"{delta_as_val:.2f} (< 3.39)",
+                        "الزيادة المطلوبة بالمدخلات": f"+{c.get('rec_inc_bars', 1)} Φ {top_mesh_dia} / m",
+                        "الشبكة العلوية المقترحة بالمدخلات": f"{c.get('rec_total_mesh', n_mesh_top + 1)} Φ {top_mesh_dia} / m",
+                        "حالة التسليح": "⚠️ زيادة الشبكة بالمدخلات (بدون إضافي)",
+                    })
+                render_styled_table(top_inc_rows)
+            if not active_top_extra and not mesh_inc_top_cols:
                 st.markdown(
                     f"""
                     <div style="background:#f0fdf4; border:2px solid #16a34a; border-radius:8px; padding:16px 20px; text-align:center; margin:8px 0;">
@@ -12326,7 +13958,7 @@ def render(is_standalone: bool = False):
 
         with tab_tbl_btm_x:
             if active_btm_x:
-                st.markdown(f"##### ↔️ جدول الباكيات التي تحتاج إلى حديد إضافي سفلي في الاتجاه الأفقي X ({len(active_btm_x)} باكية):")
+                st.markdown(f"##### ↔️ جدول الباكيات التي تحتاج إلى حديد إضافي سفلي في الاتجاه الأفقي X (ΔAs ≥ 3Φ12/m = 3.39 cm²/m — عدد {len(active_btm_x)} باكية):")
                 btm_x_table_rows = []
                 for bx in active_btm_x:
                     btm_x_table_rows.append({
@@ -12343,7 +13975,24 @@ def render(is_standalone: bool = False):
                         "حالة التسليح": "🚨 يتطلب حديد إضافي سفلي",
                     })
                 render_styled_table(btm_x_table_rows)
-            else:
+            if mesh_inc_btm_x:
+                st.markdown(f"##### ⚠️ باكيات اتجاه X بها فرق تسليح طفيف أقل من 3Φ12/م (0.05 < ΔAs < 3.39 cm²/m — عدد {len(mesh_inc_btm_x)} باكية — يُعالج بزيادة الشبكة السفلية بالمدخلات):")
+                btm_x_inc_rows = []
+                for bx in mesh_inc_btm_x:
+                    btm_x_inc_rows.append({
+                        "مكان وموضع الباكية (Bay Location)": bx["bay_label"],
+                        "نوع البحر (Span Classification)": bx["span_type"],
+                        "طول البحر L (m)": f"{bx['span_len']:.2f} m",
+                        "العزم الموجب التصميمي Mu⁺ (ton·m/m)": f"{bx.get('Mu_pos_m', bx['M_pos']):.2f}",
+                        "التسليح السفلي المطلوب As_req (cm²/m)": f"{bx['As_req_m']:.2f}",
+                        "تسليح الشبكة السفلية As_prov (cm²/m)": f"{bx['As_prov_m']:.2f}",
+                        "فارق التسليح ΔAs (cm²/m)": f"{bx['delta_As']:.2f} (< 3.39)",
+                        "الزيادة المطلوبة بالمدخلات": f"+{bx.get('rec_inc_bars', 1)} Φ {bottom_mesh_dia} / m",
+                        "الشبكة السفلية المقترحة بالمدخلات": f"{bx.get('rec_total_mesh', n_mesh_btm + 1)} Φ {bottom_mesh_dia} / m",
+                        "حالة التسليح": "⚠️ زيادة الشبكة بالمدخلات (بدون إضافي)",
+                    })
+                render_styled_table(btm_x_inc_rows)
+            if not active_btm_x and not mesh_inc_btm_x:
                 st.markdown(
                     f"""
                     <div style="background:#f0fdf4; border:2px solid #16a34a; border-radius:8px; padding:16px 20px; text-align:center; margin:8px 0;">
@@ -12356,7 +14005,7 @@ def render(is_standalone: bool = False):
 
         with tab_tbl_btm_y:
             if active_btm_y:
-                st.markdown(f"##### ↕️ جدول الباكيات التي تحتاج إلى حديد إضافي سفلي في الاتجاه الرأسي Y ({len(active_btm_y)} باكية):")
+                st.markdown(f"##### ↕️ جدول الباكيات التي تحتاج إلى حديد إضافي سفلي في الاتجاه الرأسي Y (ΔAs ≥ 3Φ12/m = 3.39 cm²/m — عدد {len(active_btm_y)} باكية):")
                 btm_y_table_rows = []
                 for by in active_btm_y:
                     btm_y_table_rows.append({
@@ -12373,7 +14022,24 @@ def render(is_standalone: bool = False):
                         "حالة التسليح": "🚨 يتطلب حديد إضافي سفلي",
                     })
                 render_styled_table(btm_y_table_rows)
-            else:
+            if mesh_inc_btm_y:
+                st.markdown(f"##### ⚠️ باكيات اتجاه Y بها فرق تسليح طفيف أقل من 3Φ12/م (0.05 < ΔAs < 3.39 cm²/m — عدد {len(mesh_inc_btm_y)} باكية — يُعالج بزيادة الشبكة السفلية بالمدخلات):")
+                btm_y_inc_rows = []
+                for by in mesh_inc_btm_y:
+                    btm_y_inc_rows.append({
+                        "مكان وموضع الباكية (Bay Location)": by["bay_label"],
+                        "نوع البحر (Span Classification)": by["span_type"],
+                        "طول البحر L (m)": f"{by['span_len']:.2f} m",
+                        "العزم الموجب التصميمي Mu⁺ (ton·m/m)": f"{by.get('Mu_pos_m', by['M_pos']):.2f}",
+                        "التسليح السفلي المطلوب As_req (cm²/m)": f"{by['As_req_m']:.2f}",
+                        "تسليح الشبكة السفلية As_prov (cm²/m)": f"{by['As_prov_m']:.2f}",
+                        "فارق التسليح ΔAs (cm²/m)": f"{by['delta_As']:.2f} (< 3.39)",
+                        "الزيادة المطلوبة بالمدخلات": f"+{by.get('rec_inc_bars', 1)} Φ {bottom_mesh_dia} / m",
+                        "الشبكة السفلية المقترحة بالمدخلات": f"{by.get('rec_total_mesh', n_mesh_btm + 1)} Φ {bottom_mesh_dia} / m",
+                        "حالة التسليح": "⚠️ زيادة الشبكة بالمدخلات (بدون إضافي)",
+                    })
+                render_styled_table(btm_y_inc_rows)
+            if not active_btm_y and not mesh_inc_btm_y:
                 st.markdown(
                     f"""
                     <div style="background:#f0fdf4; border:2px solid #16a34a; border-radius:8px; padding:16px 20px; text-align:center; margin:8px 0;">
@@ -12412,7 +14078,7 @@ def render(is_standalone: bool = False):
                 <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 14px 20px; border-radius: 10px; margin-bottom: 15px; border-left: 5px solid #3b82f6;">
                     <div style="color: #60a5fa; font-weight: bold; font-size: 1.15rem;">📐 المخططات التنفيذية لتسليح البلاطة (Executive Rebar Plans)</div>
                     <div style="color: #cbd5e1; font-size: 0.92rem; margin-top: 4px;">
-                        تم فصل كل طبقة ونوع تسليح في رسم هندسي مستقل عالي الدقة بخط كبير وواضح مع كود الألوان والمواصفات وحصر الأطوال والأوزان في تبويبات متجاورة.
+                        يتم رسم وتوقيع الحديد الإضافي على المسقط الأفقي فقط عندما يكون فرق مساحة التسليح المطلوبة لمقاومة العزم (ΔAs ≥ 3 Φ 12 / m = 3.39 cm²/m)، أما الفروق الطفيفة الأقل من ذلك فيُوصى بتغطيتها مباشرة عن طريق زيادة شبكة التسليح بالمدخلات.
                     </div>
                 </div>
                 """,
@@ -12430,6 +14096,17 @@ def render(is_standalone: bool = False):
             # ── Tab 1: Column Caps
             with tab_m1:
                 st.markdown("#### 🔴 1. Column Caps Layout (Top Extra) — كابات الحديد الإضافي العلوي فوق الأعمدة (أبعاد ومساحة الشرائح)")
+                if mesh_inc_top_cols:
+                    _max_inc_c = max(int(c.get("rec_inc_bars", 1)) for c in mesh_inc_top_cols)
+                    _rec_tot_c = max(int(c.get("rec_total_mesh", n_mesh_top + _max_inc_c)) for c in mesh_inc_top_cols)
+                    _max_def_c = max(float(c.get("As_extra (cm²/m)", 0.0)) for c in mesh_inc_top_cols)
+                    _cols_ids_str = "، ".join(f"{c['id']}" for c in mesh_inc_top_cols)
+                    st.warning(
+                        f"⚠️ **تنبيه ضبط الشبكة العلوية بالمدخلات:** الأعمدة ({_cols_ids_str}) بها فرق تسليح سالب طفيف "
+                        f"(`ΔAs = {_max_def_c:.2f} cm²/m` وهو أقل من مساحة `3 Φ 12 / m = 3.39 cm²/m`). "
+                        f"لذلك لم يتم رسم حديد إضافي لها على المسقط، ويُطلب زيادة **الشبكة العلوية بالمدخلات** بمقدار "
+                        f"**+{_max_inc_c} Φ {top_mesh_dia} / m** لتصبح **{_rec_tot_c} Φ {top_mesh_dia} / m** بدلاً من ({mesh_top_str})."
+                    )
                 fig_cc = generate_flat_slab_column_caps_sketch(
                     Lx_calc, Ly_calc, cantilevers, ts,
                     top_extra_cols=top_extra_cols,
@@ -12477,6 +14154,16 @@ def render(is_standalone: bool = False):
             # ── Tab 2A: Bottom Extra (X-Direction)
             with tab_m2a:
                 st.markdown("#### 🔶 2A. Bottom Extra (X-Direction) & Base Meshes — الحديد الإضافي السفلي في اتجاه X وبيان شبكات التسليح")
+                if mesh_inc_btm_x:
+                    _max_inc_bx = max(int(b.get("rec_inc_bars", 1)) for b in mesh_inc_btm_x)
+                    _rec_tot_bx = max(int(b.get("rec_total_mesh", n_mesh_btm + _max_inc_bx)) for b in mesh_inc_btm_x)
+                    _max_def_bx = max(float(b.get("delta_As", 0.0)) for b in mesh_inc_btm_x)
+                    st.warning(
+                        f"⚠️ **تنبيه ضبط الشبكة السفلية بالمدخلات (اتجاه X):** يوجد عدد ({len(mesh_inc_btm_x)}) باكية بها فرق تسليح سفلي طفيف "
+                        f"(`ΔAs = {_max_def_bx:.2f} cm²/m` وهو أقل من مساحة `3 Φ 12 / m = 3.39 cm²/m`). "
+                        f"لذلك لم يتم رسم حديد إضافي لها على المسقط، ويُطلب زيادة **الشبكة السفلية بالمدخلات** بمقدار "
+                        f"**+{_max_inc_bx} Φ {bottom_mesh_dia} / m** لتصبح **{_rec_tot_bx} Φ {bottom_mesh_dia} / m** بدلاً من ({mesh_btm_str})."
+                    )
                 fig_bes_x = generate_flat_slab_bottom_extra_shawka_sketch(
                     Lx_calc, Ly_calc, cantilevers, ts,
                     btm_extra_spans=btm_extra_spans,
@@ -12495,6 +14182,7 @@ def render(is_standalone: bool = False):
                     active_x_labels=_active_x_labels,
                     active_y_labels=_active_y_labels,
                     void_boxes=_void_boxes_sk,
+                    mesh_inc_bays=mesh_inc_btm_x,
                 )
                 buf_bes_x = io.BytesIO()
                 fig_bes_x.savefig(buf_bes_x, format="pdf", bbox_inches="tight")
@@ -12513,6 +14201,16 @@ def render(is_standalone: bool = False):
             # ── Tab 2B: Bottom Extra (Y-Direction)
             with tab_m2b:
                 st.markdown("#### 🔶 2B. Bottom Extra (Y-Direction) & Base Meshes — الحديد الإضافي السفلي في اتجاه Y وبيان شبكات التسليح")
+                if mesh_inc_btm_y:
+                    _max_inc_by = max(int(b.get("rec_inc_bars", 1)) for b in mesh_inc_btm_y)
+                    _rec_tot_by = max(int(b.get("rec_total_mesh", n_mesh_btm + _max_inc_by)) for b in mesh_inc_btm_y)
+                    _max_def_by = max(float(b.get("delta_As", 0.0)) for b in mesh_inc_btm_y)
+                    st.warning(
+                        f"⚠️ **تنبيه ضبط الشبكة السفلية بالمدخلات (اتجاه Y):** يوجد عدد ({len(mesh_inc_btm_y)}) باكية بها فرق تسليح سفلي طفيف "
+                        f"(`ΔAs = {_max_def_by:.2f} cm²/m` وهو أقل من مساحة `3 Φ 12 / m = 3.39 cm²/m`). "
+                        f"لذلك لم يتم رسم حديد إضافي لها على المسقط، ويُطلب زيادة **الشبكة السفلية بالمدخلات** بمقدار "
+                        f"**+{_max_inc_by} Φ {bottom_mesh_dia} / m** لتصبح **{_rec_tot_by} Φ {bottom_mesh_dia} / m** بدلاً من ({mesh_btm_str})."
+                    )
                 fig_bes_y = generate_flat_slab_bottom_extra_shawka_sketch(
                     Lx_calc, Ly_calc, cantilevers, ts,
                     btm_extra_spans=btm_extra_spans,
@@ -12531,6 +14229,7 @@ def render(is_standalone: bool = False):
                     active_x_labels=_active_x_labels,
                     active_y_labels=_active_y_labels,
                     void_boxes=_void_boxes_sk,
+                    mesh_inc_bays=mesh_inc_btm_y,
                 )
                 buf_bes_y = io.BytesIO()
                 fig_bes_y.savefig(buf_bes_y, format="pdf", bbox_inches="tight")
@@ -12549,6 +14248,15 @@ def render(is_standalone: bool = False):
             # ── Tab 3A: Top Base Mesh, Extra Slab Top Mesh & Shawka (X-Direction)
             with tab_m3a:
                 st.markdown("#### 🔵 3A. Top Base Mesh, Extra Slab Top Steel & Shawka (X-Direction) — الرقة العلوية الأساسية والإضافي وشوك الكوابيل (اتجاه X)")
+                if mesh_inc_top_slab_x:
+                    _max_inc_tx = max(int(b.get("rec_inc_bars", 1)) for b in mesh_inc_top_slab_x)
+                    _rec_tot_tx = max(int(b.get("rec_total_mesh", n_mesh_top + _max_inc_tx)) for b in mesh_inc_top_slab_x)
+                    _max_def_tx = max(float(b.get("delta_As", 0.0)) for b in mesh_inc_top_slab_x)
+                    st.warning(
+                        f"⚠️ **تنبيه ضبط الشبكة العلوية بالمدخلات (شرائح الوسط اتجاه X):** فرق التسليح العلوي المطلوب "
+                        f"(`ΔAs = {_max_def_tx:.2f} cm²/m` أقل من `3 Φ 12 / m = 3.39 cm²/m`). "
+                        f"يُطلب زيادة **الشبكة العلوية بالمدخلات** بمقدار **+{_max_inc_tx} Φ {top_mesh_dia} / m** لتصبح **{_rec_tot_tx} Φ {top_mesh_dia} / m**."
+                    )
                 fig_tmes_x = generate_flat_slab_top_mesh_extra_sketch(
                     Lx_calc, Ly_calc, cantilevers, ts,
                     top_extra_slab_bays=top_extra_slab_bays,
@@ -12585,6 +14293,15 @@ def render(is_standalone: bool = False):
             # ── Tab 3B: Top Base Mesh, Extra Slab Top Mesh & Shawka (Y-Direction)
             with tab_m3b:
                 st.markdown("#### 🔵 3B. Top Base Mesh, Extra Slab Top Steel & Shawka (Y-Direction) — الرقة العلوية الأساسية والإضافي وشوك الكوابيل (اتجاه Y)")
+                if mesh_inc_top_slab_y:
+                    _max_inc_ty = max(int(b.get("rec_inc_bars", 1)) for b in mesh_inc_top_slab_y)
+                    _rec_tot_ty = max(int(b.get("rec_total_mesh", n_mesh_top + _max_inc_ty)) for b in mesh_inc_top_slab_y)
+                    _max_def_ty = max(float(b.get("delta_As", 0.0)) for b in mesh_inc_top_slab_y)
+                    st.warning(
+                        f"⚠️ **تنبيه ضبط الشبكة العلوية بالمدخلات (شرائح الوسط اتجاه Y):** فرق التسليح العلوي المطلوب "
+                        f"(`ΔAs = {_max_def_ty:.2f} cm²/m` أقل من `3 Φ 12 / m = 3.39 cm²/m`). "
+                        f"يُطلب زيادة **الشبكة العلوية بالمدخلات** بمقدار **+{_max_inc_ty} Φ {top_mesh_dia} / m** لتصبح **{_rec_tot_ty} Φ {top_mesh_dia} / m**."
+                    )
                 fig_tmes_y = generate_flat_slab_top_mesh_extra_sketch(
                     Lx_calc, Ly_calc, cantilevers, ts,
                     top_extra_slab_bays=top_extra_slab_bays,
@@ -12622,57 +14339,6 @@ def render(is_standalone: bool = False):
 
     # ── Cantilever Reinforcement Details expander removed per user request ────
 
-    # ── 📐 DETAILED DDM MOMENTS TABLES ───────────────────────────────────────
-    def render_direction(rows, direction_label):
-        with st.expander(f"📐 Bending Moments & Reinforcement — {direction_label} (عزوم الانحناء والتسليح)", expanded=False):
-            moment_rows = []
-            steel_rows  = []
-
-            for r in rows:
-                sl  = r["span_label"]
-                st_ = r["span_type"]
-                cs_w = r["cs_w"]
-                ms_w = r["ms_w"]
-                tot_w = max(0.1, cs_w + ms_w)
-                moment_rows += [
-                    [f"{sl}  [{st_}]  Total Static Mo", f"{r['Mo']:.3f}", f"{tot_w:.2f}", f"{r['Mo']/tot_w:.2f}"],
-                    [f"  ↳ Neg. Ext.  (M_neg_ext)", f"{r['M_neg_ext']:.3f}", "—", "—"],
-                    [f"  ↳ Positive   (M_pos)",     f"{r['M_pos']:.3f}",     f"{tot_w:.2f}", f"{r['M_pos']/tot_w:.2f}"],
-                    [f"  ↳ Neg. Int.  (M_neg_int)", f"{r['M_neg_int']:.3f}", "—", "—"],
-                    [f"    ↳ Col.Strip neg.ext",  f"{r['cs_neg_ext']:.3f}", f"{cs_w:.2f}", f"{r['cs_neg_ext']/max(0.1, cs_w):.2f}"],
-                    [f"    ↳ Mid.Strip neg.ext",  f"{r['ms_neg_ext']:.3f}", f"{ms_w:.2f}", f"{r['ms_neg_ext']/max(0.1, ms_w):.2f}"],
-                    [f"    ↳ Col.Strip pos",      f"{r['cs_pos']:.3f}",     f"{cs_w:.2f}", f"{r['cs_pos']/max(0.1, cs_w):.2f}"],
-                    [f"    ↳ Mid.Strip pos",      f"{r['ms_pos']:.3f}",     f"{ms_w:.2f}", f"{r['ms_pos']/max(0.1, ms_w):.2f}"],
-                    [f"    ↳ Col.Strip neg.int",  f"{r['cs_neg_int']:.3f}", f"{cs_w:.2f}", f"{r['cs_neg_int']/max(0.1, cs_w):.2f}"],
-                    [f"    ↳ Mid.Strip neg.int",  f"{r['ms_neg_int']:.3f}", f"{ms_w:.2f}", f"{r['ms_neg_int']/max(0.1, ms_w):.2f}"],
-                ]
-
-                def steel_entry(label, As_req, w_m):
-                    n, sp, prov, as_m = fmt_steel(As_req, w_m * 100.0, bottom_mesh_dia)
-                    return [
-                        f"{sl} | {label}",
-                        f"{As_req:.2f}",
-                        f"{as_m:.2f}",
-                        f"{n} Φ{bottom_mesh_dia} / m",
-                        f"@ {sp} cm",
-                        f"{prov:.3f}",
-                    ]
-
-                steel_rows += [
-                    steel_entry(f"Col.Strip TOP (neg.ext)  w={r['cs_w']:.1f}m", r["As_cs_neg_ext"], r["cs_w"]),
-                    steel_entry(f"Col.Strip BTM (pos)      w={r['cs_w']:.1f}m", r["As_cs_pos"],     r["cs_w"]),
-                    steel_entry(f"Col.Strip TOP (neg.int)  w={r['cs_w']:.1f}m", r["As_cs_neg_int"], r["cs_w"]),
-                    steel_entry(f"Mid.Strip TOP (neg.ext)  w={r['ms_w']:.1f}m", r["As_ms_neg_ext"], r["ms_w"]),
-                    steel_entry(f"Mid.Strip BTM (pos)      w={r['ms_w']:.1f}m", r["As_ms_pos"],     r["ms_w"]),
-                    steel_entry(f"Mid.Strip TOP (neg.int)  w={r['ms_w']:.1f}m", r["As_ms_neg_int"], r["ms_w"]),
-                ]
-
-            render_styled_table(moment_rows, headers=["Strip / Location", "Total Moment (ton·m)", "Strip Width (m)", "Moment Intensity (ton·m/m') | كثافة العزم"])
-            render_styled_table(steel_rows, headers=["Zone", "Total As_req (cm²)", "As/m (cm²/m)", "Bars / meter", "Spacing", "As_prov/m (cm²/m)"])
-
-    render_direction(rows_x, "X-Direction (spanning across Lx spans)")
-    render_direction(rows_y, "Y-Direction (spanning across Ly spans)")
-
     exp_defl = st.expander("📉 Final Deflection Verification (التحقق الإنشائي النهائي من سهم الانحناء والترخيم طويل الأمد)", expanded=False, key=f"{prefix}exp_deflection", on_change="rerun")
     with exp_defl:
         if st.session_state.get(f"{prefix}exp_deflection", False):
@@ -12700,6 +14366,10 @@ def render(is_standalone: bool = False):
                 void_panel_ids=set(_confirmed_voids),
                 col_transforms=_col_transforms,
                 edge_columns=_edge_columns,
+                void_boxes=_void_boxes_sk,
+                active_cols=_active_cols,
+                active_x_labels=_active_x_labels,
+                active_y_labels=_active_y_labels,
             )
             st.pyplot(fig_def, clear_figure=True, use_container_width=True)
 
@@ -14861,7 +16531,7 @@ def render(is_standalone: bool = False):
             layout_sketch_b64=st.session_state.get(f"{prefix}flat_slab_plan_b64", ""),
         )
 
-        with st.expander("📊 Approximate Quantity Survey (الحصر التقريبي لكميات ومواد السقف)", expanded=True):
+        with st.expander("📊 Approximate Quantity Survey (الحصر التقريبي لكميات ومواد السقف)", expanded=False):
             st.markdown(
                 f"""
                 <div style="background:#f8fafc; border-left:4px solid #0284c7; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
@@ -15189,12 +16859,16 @@ def render(is_standalone: bool = False):
             _img_punch = None
             try:
                 _f = generate_flat_slab_punching_shear_sketch(
-                    Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, Wu,
+                    Lx_spans, Ly_spans, cantilevers, ts, d, Fcu, Wu,
                     punching_results,
                     col_w_cm=bc_s, col_d_cm=tc_s,
                     removed_cols=_removed_col_objs,
                     void_panel_ids=set(_confirmed_voids),
                     edge_columns=_edge_columns,
+                    void_boxes=_void_boxes_sk,
+                    active_cols=_active_cols,
+                    active_x_labels=_active_x_labels,
+                    active_y_labels=_active_y_labels,
                 )
                 _img_punch = _fig_to_b64(_f)
             except Exception:
@@ -15211,6 +16885,10 @@ def render(is_standalone: bool = False):
                     void_panel_ids=set(_confirmed_voids),
                     col_transforms=_col_transforms,
                     edge_columns=_edge_columns,
+                    void_boxes=_void_boxes_sk,
+                    active_cols=_active_cols,
+                    active_x_labels=_active_x_labels,
+                    active_y_labels=_active_y_labels,
                 )
                 _img_defl = _fig_to_b64(_f)
             except Exception:
@@ -15674,7 +17352,7 @@ def render(is_standalone: bool = False):
                                         wall_load=wall_load if wall_load is not None else 0.50,
                                         col_w_cm=_col_w_sk,
                                         col_d_cm=_col_d_sk,
-                                        removed_col_ids=set(_confirmed_removals),
+                                        removed_col_ids=_effective_removed_ids,
                                         pending_col_ids=set(st.session_state.get("_fs_pending_snapshot", [])
                                                             if st.session_state.get("_fs_show_confirm") else _pending_removals),
                                         void_panel_ids=set(_confirmed_voids),
@@ -15682,6 +17360,7 @@ def render(is_standalone: bool = False):
                                                              if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
                                         col_transforms=_col_transforms,
                                         edge_columns=_edge_columns,
+                                        col_props=_col_props,
                                     )
                                 elif "1. Column Caps Layout" in sk_title:
                                     fig_sk = generate_flat_slab_column_caps_sketch(
@@ -15779,12 +17458,16 @@ def render(is_standalone: bool = False):
                                     )
                                 elif "Punching Shear Verification Plan" in sk_title:
                                     fig_sk = generate_flat_slab_punching_shear_sketch(
-                                        Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, Wu,
+                                        Lx_spans, Ly_spans, cantilevers, ts, d, Fcu, Wu,
                                         punching_results,
                                         col_w_cm=bc_s, col_d_cm=tc_s,
                                         removed_cols=_removed_col_objs,
                                         void_panel_ids=set(_confirmed_voids),
                                         edge_columns=_edge_columns,
+                                        void_boxes=_void_boxes_sk,
+                                        active_cols=_active_cols,
+                                        active_x_labels=_active_x_labels,
+                                        active_y_labels=_active_y_labels,
                                     )
                                 elif "Long-Term Deflection Contour Plan" in sk_title:
                                     fig_sk = generate_flat_slab_deflection_contour_sketch(
@@ -15795,6 +17478,10 @@ def render(is_standalone: bool = False):
                                         void_panel_ids=set(_confirmed_voids),
                                         col_transforms=_col_transforms,
                                         edge_columns=_edge_columns,
+                                        void_boxes=_void_boxes_sk,
+                                        active_cols=_active_cols,
+                                        active_x_labels=_active_x_labels,
+                                        active_y_labels=_active_y_labels,
                                     )
                                 elif "Moment M11 Contour Plan" in sk_title:
                                     fig_sk = generate_flat_slab_moment_contour(

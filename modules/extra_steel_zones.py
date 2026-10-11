@@ -21,10 +21,11 @@ Units: m, cm, kg/cm2, ton.m (same as flat_slab.py).  Pure python + numpy only.
 import math
 import numpy as np
 
-MIN_BARS_PER_M = 3          # minimum executable density of additional bars
+MIN_BARS_PER_M = 1          # no artificial 3-bar minimum floor
 GAP_MERGE_M = 1.0           # demand zones closer than this are merged
 MIN_ZONE_LEN_M = 0.25       # zones shorter than this are ignored
-DELTA_AS_TOL = 0.05         # cm2/m  (same tolerance used by the legacy code)
+DELTA_AS_TOL = 0.05         # cm2/m  (minimum numerical tolerance)
+EXTRA_STEEL_THRESHOLD_CM2_M = 3.0 * (math.pi * (1.2 ** 2) / 4.0)  # Area of 3 Φ 12 mm/m ≈ 3.3929 cm²/m
 
 # Hogging (negative) support moment ratios of the DDM, as a fraction of Mo
 DDM_NEG_INTERIOR = 0.65
@@ -62,7 +63,9 @@ def round_up_length(length_m, step=None):
     return round(math.ceil(round(length_m / step, 6)) * step, 2)
 
 
-def bars_per_meter(as_per_m_cm2, dia_mm, min_bpm=MIN_BARS_PER_M):
+def bars_per_meter(as_per_m_cm2, dia_mm, min_bpm=1):
+    if as_per_m_cm2 <= DELTA_AS_TOL:
+        return 0
     a_bar = bar_area_cm2(dia_mm)
     return max(int(math.ceil(round(as_per_m_cm2 / a_bar, 6))), int(min_bpm))
 
@@ -170,7 +173,7 @@ def subtract_intervals(seg, blockers):
 def _finish_zone(u0, u1, m_max, as_mesh_m, dia_mm, d_cm, fcu, fy, zone_width, top_bar):
     as_req = as_required_per_m(m_max, d_cm, fcu, fy)
     delta = max(0.0, as_req - as_mesh_m)
-    if delta <= DELTA_AS_TOL:
+    if delta < EXTRA_STEEL_THRESHOLD_CM2_M:
         return None
     bpm = bars_per_meter(delta, dia_mm)
     tot = total_bars(bpm, zone_width)
@@ -257,8 +260,8 @@ def design_top_field_zones(Mo, Ln, left_exterior, right_exterior, peak_per_m,
 
 
 def design_cap(as_extra_m, dia_mm, cap_width, l_extra_raw):
-    """Column cap: density per metre over the distribution width, min 3 bars/m'."""
-    if as_extra_m <= DELTA_AS_TOL:
+    """Column cap: density per metre over the distribution width (when delta_As >= 3 Phi 12 / m)."""
+    if as_extra_m < EXTRA_STEEL_THRESHOLD_CM2_M:
         return dict(is_needed=False, bars_per_m=0, n_total=0,
                     L_bar=round_up_length(l_extra_raw), As_extra_prov_m=0.0)
     bpm = bars_per_meter(as_extra_m, dia_mm)
@@ -366,7 +369,7 @@ def cluster_and_merge_bays(bays, gap_tol=1.0):
         y_max = max(b["_y1"] for b in group)
 
         # Governing maximum bars/m'
-        gov_bpm = max(b.get("bars_per_m", 3) for b in group)
+        gov_bpm = max(b.get("bars_per_m", 1) for b in group)
         gov_bpm = max(gov_bpm, MIN_BARS_PER_M)
 
         if dir_b == "X":
@@ -404,6 +407,8 @@ def cluster_and_merge_bays(bays, gap_tol=1.0):
             "L_extra": L_ext,
             "Ld": ld,
             "is_needed": True,
+            "is_enlarged": any(b.get("is_enlarged", False) for b in group),
+            "Mu_pos_m": max((b.get("Mu_pos_m", 0.0) for b in group), default=0.0),
             "bays_count": len(group),
             "callout": (
                 f"Unified Zone: {gov_bpm} Φ {dia} / m'\n"

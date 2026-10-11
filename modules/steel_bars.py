@@ -68,16 +68,19 @@ def render() -> None:
 
         rows = []
         for b in BARS:
-            d   = b["dia_mm"]
-            w   = b["weight_kgm"]
-            a   = b["area_cm2"]
-            per = f"{w:.3f}"
+            d       = b["dia_mm"]
+            w       = b["weight_kgm"]
+            a       = b["area_cm2"]
+            per     = f"{w:.3f}"
+            w12     = w * 12
+            bars_ton_12m = 1000.0 / w12 if w12 > 0 else 0
             rows.append({
                 "القطر Ø (mm)":              d,
                 "المساحة المستعرضة (cm²)":   f"{a:.3f}",
                 "الوزن / متر طولي (kg/m)":  per,
-                "الوزن / 12م (kg/bar)":      f"{w * 12:.2f}",
+                "الوزن / 12م (kg/bar)":      f"{w12:.2f}",
                 "الوزن / 6م  (kg/bar)":      f"{w * 6:.2f}",
+                "عدد الأسياخ في الطن (12م)":  f"{round(bars_ton_12m):d} سيخ ({bars_ton_12m:.1f})",
                 "القطر بالسم (cm)":           f"{d / 10:.1f}",
             })
 
@@ -87,7 +90,8 @@ def render() -> None:
         st.caption(
             "الكثافة المستخدمة: **7,850 kg/m³**  |  "
             "المساحة = π × d² / 4  |  "
-            "الوزن = المساحة (m²) × الكثافة"
+            "الوزن = المساحة (m²) × الكثافة  |  "
+            "عدد الأسياخ في الطن (طول 12م) = 1000 كجم / وزن السيخ 12م"
         )
 
         # Grade info
