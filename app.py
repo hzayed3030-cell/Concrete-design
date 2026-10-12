@@ -1743,14 +1743,30 @@ def render_profile_manager():
                                     msg_final = user_text
 
                                 with st.spinner(f"⏳ جاري رفع التحديثات باسم «{msg_final}» إلى GitHub..."):
+                                    git_env = os.environ.copy()
+                                    git_env["PYTHONIOENCODING"] = "utf-8"
+                                    git_env["LC_ALL"] = "C.UTF-8"
+
+                                    # Remove stale index.lock if left behind by an interrupted process
+                                    lock_file = os.path.join(app_dir, ".git", "index.lock")
+                                    if os.path.exists(lock_file):
+                                        try:
+                                            os.remove(lock_file)
+                                        except OSError:
+                                            pass
+
                                     # 1. git add -A
-                                    subprocess.run(["git", "add", "-A"], cwd=app_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
-                                    # 2. git commit --allow-empty -m
-                                    res_commit = subprocess.run(["git", "commit", "--allow-empty", "-m", msg_final], cwd=app_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
-                                    # 2.5. git pull --rebase to integrate any remote commits first
-                                    subprocess.run(["git", "pull", "--rebase", "origin", "main"], cwd=app_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
-                                    # 3. git push
-                                    res_push = subprocess.run(["git", "push", "origin", "main"], cwd=app_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
+                                    subprocess.run(["git", "add", "-A"], cwd=app_dir, env=git_env, capture_output=True, text=True, encoding="utf-8", errors="replace")
+                                    # 2. git commit --allow-empty -m (supports both Arabic & English UTF-8 messages)
+                                    res_commit = subprocess.run(["git", "commit", "--allow-empty", "-m", msg_final], cwd=app_dir, env=git_env, capture_output=True, text=True, encoding="utf-8", errors="replace")
+                                    # 2.5. git pull --rebase --autostash to safely integrate remote commits even if profiles.json updated
+                                    subprocess.run(["git", "pull", "--rebase", "--autostash", "origin", "main"], cwd=app_dir, env=git_env, capture_output=True, text=True, encoding="utf-8", errors="replace")
+                                    # 3. git push (with automatic retry on transient network/SSL hiccup)
+                                    res_push = subprocess.run(["git", "push", "origin", "main"], cwd=app_dir, env=git_env, capture_output=True, text=True, encoding="utf-8", errors="replace")
+                                    if res_push.returncode != 0:
+                                        subprocess.run(["git", "add", "-A"], cwd=app_dir, env=git_env, capture_output=True, text=True, encoding="utf-8", errors="replace")
+                                        subprocess.run(["git", "pull", "--rebase", "--autostash", "origin", "main"], cwd=app_dir, env=git_env, capture_output=True, text=True, encoding="utf-8", errors="replace")
+                                        res_push = subprocess.run(["git", "push", "origin", "main"], cwd=app_dir, env=git_env, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
                                     if res_push.returncode == 0:
                                         st.session_state["git_push_success_msg"] = f"✅ تم رفع وتحديث المشروع إلى GitHub بنجاح! باسم التعديل: «{msg_final}»"
