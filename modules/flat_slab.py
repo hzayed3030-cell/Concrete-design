@@ -33,6 +33,12 @@ import pandas as pd
 from modules import settings as S
 from modules.table_styler import render_styled_table
 from modules import extra_steel_zones as XZ
+from modules.extra_steel_zones import (
+    calculate_additional_reinforcement,
+    format_additional_rebar_annotations,
+    PanelRebarDetail,
+    build_bay_rebar_detail_object,
+)
 
 
 # ── Constants ────────────────────────────────────────────────────────────────
@@ -1301,10 +1307,10 @@ def generate_flat_slab_data_card(
         ("Slab Thickness (ts)", f"{ts_initial:.0f} cm  (d = {d_eff_sketch:.1f} cm)", "#0f172a"),
         ("Structural System", "Standalone Floor (سقف مستقل)", "#1e40af") if n_floors == 1 else ("No. of Floors", f"{n_floors} Floors (طوابق)", "#1e40af"),
         ("Concrete Cover", f"{concrete_cover:.1f} cm  (15 mm)", "#334155"),
-        ("Bottom Mesh (B1, B2)", f"{bottom_mesh_n} Φ {bottom_mesh_dia} / m'", "#1d4ed8"),
-        ("Top Mesh (T1, T2)", f"{top_mesh_n} Φ {top_mesh_dia} / m'", "#1d4ed8"),
-        ("Col Extra Top Φ", f"Φ {col_extra_dia} mm", "#15803d"),
-        ("Strip Extra Top / Btm", f"Φ {strip_top_extra_dia} / Φ {strip_bottom_extra_dia} mm", "#15803d"),
+        ("Bottom Mesh (B1, B2)", f"{bottom_mesh_n}Ø{bottom_mesh_dia} /m", "#1d4ed8"),
+        ("Top Mesh (T1, T2)", f"{top_mesh_n}Ø{top_mesh_dia} /m", "#1d4ed8"),
+        ("Col Extra Top Ø", f"Ø{col_extra_dia} mm", "#15803d"),
+        ("Strip Extra Top / Btm", f"Ø{strip_top_extra_dia} / Ø{strip_bottom_extra_dia} mm", "#15803d"),
         ("Materials (fcu / fy)", f"{int(fcu_kg)} / {int(fy_kg)} kg/cm²", "#334155"),
         ("Superimposed DL (SDL)", f"{flooring_load:.2f} t/m²", "#b45309"),
         ("Wall Load (WL)", f"{wall_load:.2f} t/m²", "#b45309"),
@@ -1537,9 +1543,10 @@ def generate_flat_slab_top_rft_sketch(
                 tag_y = y - patch_h / 2.0 - 0.24
                 va_mode = "top"
 
+            bpm_ext = col_data.get("bars_per_m", n_ext)
             ax_plan.text(
                 x, tag_y,
-                f"+{n_ext}Φ{dia_ext} Top (L={l_ext:.2f}m)",
+                f"{bpm_ext}Ø{dia_ext} /m - L = {l_ext:.2f} m",
                 color="#14532d", fontsize=13.5, ha="center", va=va_mode,
                 weight="bold",
                 bbox=dict(boxstyle="round,pad=0.30", facecolor="#ffffff", edgecolor="#16a34a", lw=1.6, alpha=0.98),
@@ -1694,7 +1701,7 @@ def generate_flat_slab_top_rft_sketch(
         ("TOP REINFORCEMENT\n(الحديد العلوي الأساسي)", f"Base Mesh: {mesh_top_str} (T1, T2)\nContinuous across full slab area", "#15803d", "#dcfce7", "#16a34a"),
         ("TOP EXTRA @ COLUMNS\n(إضافي الأعمدة)", "High-Yield Rebar over columns\nCut length L ≈ 0.30L from each side", "#15803d", "#dcfce7", "#16a34a"),
         ("CANTILEVERS\n(تسليح الكوابيل)", "Shawka RFT (الشوكة الرئيسية)\nExtends 1.5 L_cant inside slab", "#b45309", "#fef3c7", "#d97706"),
-        ("CODE NOTES (ECP 203)\n(ملاحظات الكود)", "Perimeter: U-Pins Φ10@20cm + 2Φ12\nLap Splice >= 50Φ | Cover = 15mm", "#0f172a", "#f1f5f9", "#64748b"),
+        ("CODE NOTES (ECP 203)\n(ملاحظات الكود)", "Perimeter: U-Pins 5Ø10 /m + 2Ø12\nLap Splice >= 50Ø | Cover = 15mm", "#0f172a", "#f1f5f9", "#64748b"),
     ]
 
     x_box_w = 0.235
@@ -1937,6 +1944,7 @@ def generate_flat_slab_bottom_rft_sketch(
             dir_label = be.get("dir", "X")
             span_len = be.get("span_len", 6.0)
 
+            bpm_b = be.get("bars_per_m", n_b)
             if dir_label == "X":
                 box_w = min(max(l_b * 0.55, 3.2), span_len * 0.55)
                 box_h = min(max(slab_h * 0.12, 1.5), min_span_y * 0.35)
@@ -1950,7 +1958,7 @@ def generate_flat_slab_bottom_rft_sketch(
                 ))
                 ax_plan.text(
                     draw_bx, draw_by,
-                    f"+{n_b}Φ{dia_b} Btm Extra (X) — [→ X-Dir]\n(L={l_b:.2f}m)",
+                    f"{bpm_b}Ø{dia_b} /m Btm Extra (X)\n(L = {l_b:.2f} m)",
                     color="#1e40af", fontsize=13.5, weight="bold", ha="center", va="center",
                     rotation=0,
                     bbox=dict(boxstyle="round,pad=0.32", facecolor="#ffffff", edgecolor="#2563eb", lw=1.6, alpha=0.98),
@@ -1969,7 +1977,7 @@ def generate_flat_slab_bottom_rft_sketch(
                 ))
                 ax_plan.text(
                     draw_bx, draw_by,
-                    f"+{n_b}Φ{dia_b} Btm Extra (Y) — [↑ Y-Dir]\n(L={l_b:.2f}m)",
+                    f"{bpm_b}Ø{dia_b} /m Btm Extra (Y)\n(L = {l_b:.2f} m)",
                     color="#1d4ed8", fontsize=13.5, weight="bold", ha="center", va="center",
                     rotation=90,
                     bbox=dict(boxstyle="round,pad=0.32", facecolor="#ffffff", edgecolor="#1d4ed8", lw=1.6, alpha=0.98),
@@ -2797,10 +2805,12 @@ def build_slab_moment_field(
             M11[near_mask] = M11[near_mask] - m_neg_peak_x * w_neg
             M22[near_mask] = M22[near_mask] - m_neg_peak_y * w_neg
 
-    # ── 7. Adjust Positive Moment in Bays Requiring Extra Steel ───────────────
+    # ── 7. Adjust Positive Moment in Enlarged Bays (if any) ──────────────────
     if btm_extra_spans:
         ratio_enl = 0.50 / 0.35
         for item in btm_extra_spans:
+            if not item.get("is_enlarged", False):
+                continue
             item_dir = item.get("dir", "Y")
             cx = item.get("cx", None)
             cy = item.get("cy", None)
@@ -2816,13 +2826,7 @@ def build_slab_moment_field(
                 py2 = cy + w_bay / 2.0
                 mask_bay = (X >= px1 - 0.02) & (X <= px2 + 0.02) & (Y >= py1 - 0.02) & (Y <= py2 + 0.02)
                 pos_mask = mask_bay & (M11 > 0)
-                if item.get("is_enlarged", False):
-                    M11[pos_mask] = M11[pos_mask] * ratio_enl
-                mu_peak = item.get("Mu_pos_m", 0.0)
-                if mu_peak > 0 and np.any(pos_mask):
-                    cur_max = float(np.nanmax(M11[pos_mask]))
-                    if cur_max < mu_peak:
-                        M11[pos_mask] = M11[pos_mask] * (mu_peak / max(0.1, cur_max))
+                M11[pos_mask] = M11[pos_mask] * ratio_enl
             elif item_dir == "Y":
                 px1 = cx - w_bay / 2.0
                 px2 = cx + w_bay / 2.0
@@ -2830,13 +2834,7 @@ def build_slab_moment_field(
                 py2 = cy + span_len / 2.0
                 mask_bay = (X >= px1 - 0.02) & (X <= px2 + 0.02) & (Y >= py1 - 0.02) & (Y <= py2 + 0.02)
                 pos_mask = mask_bay & (M22 > 0)
-                if item.get("is_enlarged", False):
-                    M22[pos_mask] = M22[pos_mask] * ratio_enl
-                mu_peak = item.get("Mu_pos_m", 0.0)
-                if mu_peak > 0 and np.any(pos_mask):
-                    cur_max = float(np.nanmax(M22[pos_mask]))
-                    if cur_max < mu_peak:
-                        M22[pos_mask] = M22[pos_mask] * (mu_peak / max(0.1, cur_max))
+                M22[pos_mask] = M22[pos_mask] * ratio_enl
 
     # Keep unmasked copies for sampling support values
     M11_raw = np.copy(M11)
@@ -4278,7 +4276,7 @@ def generate_flat_slab_rebar_bending_details(
             "bg": "#eff6ff", "border": "#3b82f6",
             "draw_func": "m11_btm",
             "dia": mesh_btm_dia, "count": n_runs_m11, "L_cut": L_bar_m11,
-            "density": f"{mesh_btm_n} Φ{mesh_btm_dia}/m'",
+            "density": f"{mesh_btm_n}Ø{mesh_btm_dia} /m",
             "cov_area": f"{area_m11:.1f} m² (Full Slab Width Wx={total_w:.2f}m)",
             "tot_len": f"{tot_len_m11_btm:,.1f} m'", "weight": f"{wt_m11_btm/1000.0:.3f} Ton ({wt_m11_btm:,.0f} kg)",
             "notes": "Straight continuous bottom bar extending 15 cm past exterior support centerline."
@@ -4289,7 +4287,7 @@ def generate_flat_slab_rebar_bending_details(
             "bg": "#eff6ff", "border": "#3b82f6",
             "draw_func": "m22_btm",
             "dia": mesh_btm_dia, "count": n_runs_m22, "L_cut": L_bar_m22,
-            "density": f"{mesh_btm_n} Φ{mesh_btm_dia}/m'",
+            "density": f"{mesh_btm_n}Ø{mesh_btm_dia} /m",
             "cov_area": f"{area_m22:.1f} m² (Full Slab Height Wy={total_h:.2f}m)",
             "tot_len": f"{tot_len_m22_btm:,.1f} m'", "weight": f"{wt_m22_btm/1000.0:.3f} Ton ({wt_m22_btm:,.0f} kg)",
             "notes": "Straight continuous bottom bar spanning across Ly spans perpendicular to M11."
@@ -4300,7 +4298,7 @@ def generate_flat_slab_rebar_bending_details(
             "bg": "#f0fdf4", "border": "#22c55e",
             "draw_func": "top_mesh",
             "dia": mesh_top_dia, "count": n_runs_top_x + n_runs_top_y, "L_cut": (L_bar_top_x + L_bar_top_y)/2.0,
-            "density": f"{mesh_top_n} Φ{mesh_top_dia}/m' (X & Y)",
+            "density": f"{mesh_top_n}Ø{mesh_top_dia} /m (X & Y)",
             "cov_area": f"{slab_area:.1f} m² (Full Top Slab Surface)",
             "tot_len": f"{tot_len_top:,.1f} m'", "weight": f"{wt_top_mesh/1000.0:.3f} Ton ({wt_top_mesh:,.0f} kg)",
             "notes": "Top nominal crack-control mesh with 90° standard down-hooks at slab boundary edges."
@@ -4333,7 +4331,7 @@ def generate_flat_slab_rebar_bending_details(
             "bg": "#faf5ff", "border": "#a855f7",
             "draw_func": "cantilever",
             "dia": 12, "count": tot_cant_bars if tot_cant_bars else "— (0)", "L_cut": cant_rft_list[0]["total_bar_length"] if cant_rft_list else 3.5,
-            "density": "6 Φ12 / m' + Secondary 5Φ10/m'" if tot_cant_bars else "No cantilevers defined",
+            "density": "6Ø12 /m + Secondary 5Ø10 /m" if tot_cant_bars else "No cantilevers defined",
             "cov_area": f"{cant_area:.1f} m² (Cantilever Overhangs)" if cant_area else "0.0 m²",
             "tot_len": f"{tot_cant_len:,.1f} m'" if tot_cant_len else "0.0 m'", "weight": f"{wt_cant/1000.0:.3f} Ton ({wt_cant:,.0f} kg)" if wt_cant else "0.00 Ton",
             "notes": "Main top Shawka extends 1.5 L_cant into slab + edge loop + 0.5 L_cant bottom return leg."
@@ -4344,7 +4342,7 @@ def generate_flat_slab_rebar_bending_details(
             "bg": "#f8fafc", "border": "#64748b",
             "draw_func": "upins",
             "dia": 10, "count": n_upins, "L_cut": l_upin_each,
-            "density": "U-Pins Φ10 @ 20 cm + 4Φ12 Edge Bars",
+            "density": "U-Pins 5Ø10 /m + 4Ø12 Edge Bars",
             "cov_area": f"Perimeter = {perim:.1f} m' (All Free Boundary Edges)",
             "tot_len": f"{tot_upins_len:,.1f} m'", "weight": f"{wt_upins/1000.0:.3f} Ton ({wt_upins:,.0f} kg)",
             "notes": "U-shaped hairpins enclosing slab edge depth ts with 2 top & 2 bottom longitudinal bars."
@@ -4396,7 +4394,7 @@ def generate_flat_slab_rebar_bending_details(
             ax.plot([85, 85], [56, 64], color="#1e40af", lw=3.0)
             ax.annotate("", xy=(85, 52), xytext=(15, 52), arrowprops=dict(arrowstyle="<->", color="#1e40af", lw=1.8))
             ax.text(50, 48, f"Cutting Length L = {p['L_cut']:.2f} m'  (Total Width Wx = {total_w:.2f} m)", ha="center", va="center", fontsize=10.5, fontweight="bold", color="#1e40af")
-            ax.text(50, 66, f"Straight Bottom Bar — Φ {p['dia']} mm", ha="center", va="center", fontsize=10.0, fontweight="bold", color="#0f172a")
+            ax.text(50, 66, f"Straight Bottom Bar — Ø{p['dia']} mm", ha="center", va="center", fontsize=10.0, fontweight="bold", color="#0f172a")
 
         elif dfunc == "m22_btm":
             ax.plot([15, 85], [60, 60], color="#1e40af", lw=4.5, solid_capstyle="round")
@@ -4404,7 +4402,7 @@ def generate_flat_slab_rebar_bending_details(
             ax.plot([85, 85], [56, 64], color="#1e40af", lw=3.0)
             ax.annotate("", xy=(85, 52), xytext=(15, 52), arrowprops=dict(arrowstyle="<->", color="#1e40af", lw=1.8))
             ax.text(50, 48, f"Cutting Length L = {p['L_cut']:.2f} m'  (Total Height Wy = {total_h:.2f} m)", ha="center", va="center", fontsize=10.5, fontweight="bold", color="#1e40af")
-            ax.text(50, 66, f"Straight Bottom Bar — Φ {p['dia']} mm", ha="center", va="center", fontsize=10.0, fontweight="bold", color="#0f172a")
+            ax.text(50, 66, f"Straight Bottom Bar — Ø{p['dia']} mm", ha="center", va="center", fontsize=10.0, fontweight="bold", color="#0f172a")
 
         elif dfunc == "top_mesh":
             ax.plot([20, 80], [64, 64], color="#16a34a", lw=4.0)
@@ -4414,7 +4412,7 @@ def generate_flat_slab_rebar_bending_details(
             ax.text(86, 58, f"Hook {ts_cm-5:.0f}cm", ha="center", va="center", fontsize=8.5, color="#15803d")
             ax.annotate("", xy=(80, 47), xytext=(20, 47), arrowprops=dict(arrowstyle="<->", color="#16a34a", lw=1.8))
             ax.text(50, 43, f"Span Length L ≈ {p['L_cut']:.2f} m'", ha="center", va="center", fontsize=10.5, fontweight="bold", color="#15803d")
-            ax.text(50, 70, f"Top Mesh Bar with 90° Down-Hooks — Φ {p['dia']} mm", ha="center", va="center", fontsize=10.0, fontweight="bold", color="#0f172a")
+            ax.text(50, 70, f"Top Mesh Bar with 90° Down-Hooks — Ø{p['dia']} mm", ha="center", va="center", fontsize=10.0, fontweight="bold", color="#0f172a")
 
         elif dfunc == "col_caps":
             ax.plot([22, 78], [64, 64], color="#dc2626", lw=4.5)
@@ -4426,7 +4424,7 @@ def generate_flat_slab_rebar_bending_details(
             ax.annotate("", xy=(78, 50), xytext=(50, 50), arrowprops=dict(arrowstyle="<->", color="#dc2626", lw=1.5))
             ax.text(36, 46, "0.25 Ln", ha="center", va="center", fontsize=9.5, fontweight="bold", color="#dc2626")
             ax.text(64, 46, "0.25 Ln", ha="center", va="center", fontsize=9.5, fontweight="bold", color="#dc2626")
-            ax.text(50, 70, f"Top Extra Cap Bar — Φ {p['dia']} mm (L_ext = {p['L_cut']:.2f} m)", ha="center", va="center", fontsize=10.0, fontweight="bold", color="#991b1b")
+            ax.text(50, 70, f"Top Extra Cap Bar — Ø{p['dia']} mm (L_ext = {p['L_cut']:.2f} m)", ha="center", va="center", fontsize=10.0, fontweight="bold", color="#991b1b")
 
         elif dfunc == "btm_extra":
             ax.plot([25, 75], [60, 60], color="#d97706", lw=5.0)
@@ -4438,7 +4436,7 @@ def generate_flat_slab_rebar_bending_details(
             ax.text(88, 75, "Col B", ha="center", va="center", fontsize=8.5, color="#64748b")
             ax.annotate("", xy=(75, 52), xytext=(25, 52), arrowprops=dict(arrowstyle="<->", color="#d97706", lw=1.8))
             ax.text(50, 48, f"Cut Length L_ext ≈ 0.80 Ln = {p['L_cut']:.2f} m'", ha="center", va="center", fontsize=10.0, fontweight="bold", color="#b45309")
-            ax.text(50, 67, f"Bottom Extra Bar (Mid-Span) — Φ {p['dia']} mm", ha="center", va="center", fontsize=10.0, fontweight="bold", color="#0f172a")
+            ax.text(50, 67, f"Bottom Extra Bar (Mid-Span) — Ø{p['dia']} mm", ha="center", va="center", fontsize=10.0, fontweight="bold", color="#0f172a")
 
         elif dfunc == "cantilever":
             ax.plot([15, 80], [66, 66], color="#9333ea", lw=4.0)
@@ -4462,7 +4460,7 @@ def generate_flat_slab_rebar_bending_details(
             ax.text(50, 71, "Top Leg 35cm", ha="center", va="center", fontsize=8.5, color="#475569")
             ax.text(50, 49, "Bottom Leg 35cm", ha="center", va="center", fontsize=8.5, color="#475569")
             ax.text(86, 60, f"{ts_cm-5:.0f}cm", ha="left", va="center", fontsize=8.5, color="#475569")
-            ax.text(50, 43, f"Cutting Length = {p['L_cut']:.2f} m' + 4Φ12 Edge Bars", ha="center", va="center", fontsize=9.5, fontweight="bold", color="#1e293b")
+            ax.text(50, 43, f"Cutting Length = {p['L_cut']:.2f} m' + 4Ø12 Edge Bars", ha="center", va="center", fontsize=9.5, fontweight="bold", color="#1e293b")
 
         elif dfunc == "chairs":
             ax.plot([25, 35], [52, 52], color="#334155", lw=4.0)
@@ -4693,110 +4691,207 @@ def generate_flat_slab_column_caps_sketch(
     active_caps_count = len(needed_caps)
 
     if active_caps_count == 0:
+        import textwrap
         mid_x_slab = (x_slab_min + x_slab_max) / 2.0
         mid_y_slab = (y_slab_min + y_slab_max) / 2.0
-        banner_w = min(slab_w * 0.88, 16.0)
-        banner_h = max(2.6, slab_h * 0.18)
 
         if mesh_inc_caps:
             max_delta_c = max(c.get("As_extra (cm²/m)", 0.0) for c in mesh_inc_caps)
             max_inc_c = max(c.get("rec_inc_bars", 1) for c in mesh_inc_caps)
             max_tot_c = max(c.get("rec_total_mesh", 6) for c in mesh_inc_caps)
             t_dia_c = mesh_inc_caps[0].get("top_mesh_dia", 10)
-            banner_box = FancyBboxPatch(
-                (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
-                boxstyle="round,pad=0.5,rounding_size=0.6",
-                facecolor="#fffbeb", edgecolor="#d97706", lw=2.6, zorder=10
+            ar_line = textwrap.fill(
+                "فرق التسليح طفيف — يُطلب زيادة الشبكة العلوية بالمدخلات",
+                width=32,
             )
-            ax_plan.add_patch(banner_box)
             ax_plan.text(
                 mid_x_slab, mid_y_slab,
-                f"⚠ ΔAs_max = {max_delta_c:.2f} cm²/m < 3Φ12/m (3.39 cm²/m) — NO EXTRA CAPS DRAWN\n"
-                f"(الفرق أقل من 3Φ12/م — يُطلب زيادة الشبكة العلوية بالمدخلات بمقدار +{max_inc_c} Φ{t_dia_c}/m' لتصبح {max_tot_c} Φ{t_dia_c}/m')",
-                ha="center", va="center", fontsize=12.5, fontweight="bold", color="#b45309",
-                linespacing=1.5, multialignment="center", zorder=11
+                f"⚠ ΔAs_max = {max_delta_c:.2f} cm²/m < 3Ø12 /m\n"
+                f"Use {max_tot_c}Ø{t_dia_c} /m (+{max_inc_c}Ø{t_dia_c} /m)\n"
+                f"({ar_line})",
+                ha="center", va="center", fontsize=10.0, fontweight="bold", color="#b45309",
+                linespacing=1.45, multialignment="center", zorder=11,
+                bbox=dict(boxstyle="round,pad=0.45,rounding_size=0.35", facecolor="#fffbeb", edgecolor="#d97706", lw=1.8, alpha=0.95),
             )
         else:
-            banner_box = FancyBboxPatch(
-                (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
-                boxstyle="round,pad=0.5,rounding_size=0.6",
-                facecolor="#f0fdf4", edgecolor="#16a34a", lw=2.6, zorder=10
+            ar_line = textwrap.fill(
+                "الشبكة العلوية كافية تماماً لمقاومة العزوم ولا توجد حاجة لكابات",
+                width=30,
             )
-            ax_plan.add_patch(banner_box)
-
             ax_plan.text(
                 mid_x_slab, mid_y_slab,
-                "✔ NO EXTRA TOP STEEL NEEDED AT COLUMNS\n(الشبكة العلوية كافية تماماً ولا توجد حاجة لكابات)",
-                ha="center", va="center", fontsize=13.5, fontweight="bold", color="#15803d",
-                linespacing=1.5, multialignment="center", zorder=11
+                f"✔ NO EXTRA TOP STEEL NEEDED\n({ar_line})",
+                ha="center", va="center", fontsize=10.5, fontweight="bold", color="#15803d",
+                linespacing=1.45, multialignment="center", zorder=11,
+                bbox=dict(boxstyle="round,pad=0.45,rounding_size=0.35", facecolor="#f0fdf4", edgecolor="#16a34a", lw=1.8, alpha=0.95),
             )
     else:
-        # Sort by Y ascending, then X ascending to alternate Above/Below along each row
+        # ── خوارزمية التوزيع التبادلي (الشطرنج 2D Checkerboard) ومنع التداخل الهندسي للبانيلات ──
         needed_caps_sorted = sorted(needed_caps, key=lambda c: (round(col_dict[c["id"]][1], 2), col_dict[c["id"]][0]))
+
+        # تجميع الأعمدة في صفوف أفقية لحساب ترتيب الشطرنج (row_idx, seq_idx) بدقة حتى مع حذف بعض الأعمدة
+        row_y_clusters = []
+        for c_item in needed_caps_sorted:
+            cy_val = col_dict[c_item["id"]][1]
+            if not row_y_clusters or abs(cy_val - row_y_clusters[-1]) > 0.35:
+                row_y_clusters.append(cy_val)
+
+        col_checker_map = {}
+        for r_idx, ry_val in enumerate(row_y_clusters):
+            row_cols = [
+                c_item for c_item in needed_caps_sorted
+                if abs(col_dict[c_item["id"]][1] - ry_val) <= 0.35
+            ]
+            row_cols.sort(key=lambda c_item: col_dict[c_item["id"]][0])
+            for s_idx, c_item in enumerate(row_cols):
+                col_checker_map[c_item["id"]] = (r_idx, s_idx)
+
+        # تسجيل مواقع الأعمدة ومربعات أسمائها (C1, C2...) كعوائق لمنع تغطيتها ببانيلات التسليح
+        col_obstacle_boxes = []
+        for cid_obs, (cx_o, cy_o, _, _) in col_dict.items():
+            col_obstacle_boxes.append((
+                cx_o - col_w_m / 2.0 - 0.08,
+                cx_o + col_w_m / 2.0 + 0.08,
+                cy_o - col_d_m / 2.0 - 0.08,
+                cy_o + col_d_m / 2.0 + 0.08,
+            ))
+            is_right_o = (cx_o >= x_coords[-1] - 0.1)
+            lbl_x_o = (cx_o - col_w_m / 2.0 - 0.35) if is_right_o else (cx_o + col_w_m / 2.0 + 0.35)
+            col_obstacle_boxes.append((lbl_x_o - 0.38, lbl_x_o + 0.38, cy_o - 0.25, cy_o + 0.25))
+
         placed_boxes = []
 
         for c_info in needed_caps_sorted:
             cid = c_info["id"]
             cx, cy, ci, cj = col_dict[cid]
-            L_ext = c_info.get("L_extra", 3.0)
-            n_ext = c_info.get("n_extra", 6)
-            dia_ext = c_info.get("dia_extra", 12)
+            r_idx, s_idx = col_checker_map.get(cid, (cj, ci))
+            # التبادل الشطرنجي (Checkerboard): يتناوب بين (أعلى العمود) و(أسفل العمود) أفقياً ورأسياً
+            is_checker_up = ((r_idx + s_idx) % 2 == 0)
 
-            Lx_cap = c_info.get("L_extra_x", c_info.get("L_extra", 3.0))
-            Ly_cap = c_info.get("L_extra_y", round(2.0 * 0.30 * Ly_spans[min(cj, len(Ly_spans)-1)] + col_d_m, 2))
-            cap_w = Lx_cap
-            cap_h = Ly_cap
+            dia_ext = int(c_info.get("dia_extra", 12) or 12)
+            dia_x = int(c_info.get("dia_extra_x", dia_ext) or dia_ext)
+            dia_y = int(c_info.get("dia_extra_y", dia_ext) or dia_ext)
+
+            # Adjacent span extensions (>= 0.25 L_max from column face into adjacent bays, bounded by slab edges)
+            lx_left = Lx_spans[ci - 1] if (ci > 0 and ci - 1 < len(Lx_spans)) else 0.0
+            lx_right = Lx_spans[ci] if (ci < len(Lx_spans)) else 0.0
+            ly_bot = Ly_spans[cj - 1] if (cj > 0 and cj - 1 < len(Ly_spans)) else 0.0
+            ly_top = Ly_spans[cj] if (cj < len(Ly_spans)) else 0.0
+
+            lx_max_adj = max(lx_left, lx_right, Lx_spans[0] if Lx_spans else 4.0)
+            ly_max_adj = max(ly_bot, ly_top, Ly_spans[0] if Ly_spans else 4.0)
+
+            ext_x = max(0.25 * lx_max_adj, 0.45)
+            ext_y = max(0.25 * ly_max_adj, 0.45)
+
+            def_x0 = max(x_slab_min, cx - col_w_m / 2.0 - (ext_x if lx_left > 0 else (min(cant_left, ext_x) if cant_left > 0 else 0.0)))
+            def_x1 = min(x_slab_max, cx + col_w_m / 2.0 + (ext_x if lx_right > 0 else (min(cant_right, ext_x) if cant_right > 0 else 0.0)))
+            def_y0 = max(y_slab_min, cy - col_d_m / 2.0 - (ext_y if ly_bot > 0 else (min(cant_bottom, ext_y) if cant_bottom > 0 else 0.0)))
+            def_y1 = min(y_slab_max, cy + col_d_m / 2.0 + (ext_y if ly_top > 0 else (min(cant_top, ext_y) if cant_top > 0 else 0.0)))
+
+            x_bar_0 = float(c_info.get("x_bar_0", def_x0))
+            x_bar_1 = float(c_info.get("x_bar_1", def_x1))
+            y_bar_0 = float(c_info.get("y_bar_0", def_y0))
+            y_bar_1 = float(c_info.get("y_bar_1", def_y1))
+
+            cap_w = max(0.40, x_bar_1 - x_bar_0)
+            cap_h = max(0.40, y_bar_1 - y_bar_0)
+            Lx_cap = float(c_info.get("L_extra_x", round(cap_w, 2)))
+            Ly_cap = float(c_info.get("L_extra_y", round(cap_h, 2)))
+
             cap_rect = patches.Rectangle(
-                (cx - cap_w/2.0, cy - cap_h/2.0), cap_w, cap_h,
-                lw=2.0, edgecolor="#dc2626", facecolor="#fee2e2", alpha=0.55, linestyle="--", zorder=4
+                (x_bar_0, y_bar_0), cap_w, cap_h,
+                lw=2.0, edgecolor="#dc2626", facecolor="#fee2e2", alpha=0.45,
+                hatch="xx", linestyle="--", zorder=4
             )
             ax_plan.add_patch(cap_rect)
 
-            bar_y = cy + col_d_m/2.0 + 0.15
-            ax_plan.plot([cx - cap_w/2.0, cx + cap_w/2.0], [bar_y, bar_y], color="#b91c1c", lw=4.0, zorder=6)
-            ax_plan.plot([cx - cap_w/2.0, cx - cap_w/2.0], [bar_y, bar_y - 0.25], color="#b91c1c", lw=3.0, zorder=6)
-            ax_plan.plot([cx + cap_w/2.0, cx + cap_w/2.0], [bar_y, bar_y - 0.25], color="#b91c1c", lw=3.0, zorder=6)
+            bpm_x = int(c_info.get("bars_per_m_x", c_info.get("bars_per_m", 0)) or 0)
+            bpm_y = int(c_info.get("bars_per_m_y", c_info.get("bars_per_m", 0)) or 0)
 
-            bar_x = cx + col_w_m/2.0 + 0.15
-            ax_plan.plot([bar_x, bar_x], [cy - cap_h/2.0, cy + cap_h/2.0], color="#b91c1c", lw=4.0, zorder=6)
-            ax_plan.plot([bar_x - 0.25, bar_x], [cy - cap_h/2.0, cy - cap_h/2.0], color="#b91c1c", lw=3.0, zorder=6)
-            ax_plan.plot([bar_x - 0.25, bar_x], [cy + cap_h/2.0, cy + cap_h/2.0], color="#b91c1c", lw=3.0, zorder=6)
+            if bpm_x > 0:
+                bar_y = min(y_bar_1 - 0.08, max(y_bar_0 + 0.08, cy + (col_d_m / 2.0 + 0.12 if ly_top >= ly_bot else -(col_d_m / 2.0 + 0.12))))
+                hook_dy = -0.22 if bar_y >= cy else 0.22
+                ax_plan.plot([x_bar_0, x_bar_1], [bar_y, bar_y], color="#b91c1c", lw=3.8, zorder=6)
+                ax_plan.plot([x_bar_0, x_bar_0], [bar_y, bar_y + hook_dy], color="#b91c1c", lw=2.8, zorder=6)
+                ax_plan.plot([x_bar_1, x_bar_1], [bar_y, bar_y + hook_dy], color="#b91c1c", lw=2.8, zorder=6)
 
-            bpm_x = c_info.get("bars_per_m_x", c_info.get("bars_per_m", 3))
-            bpm_y = c_info.get("bars_per_m_y", c_info.get("bars_per_m", 3))
-            nx = c_info.get("n_extra_x", math.ceil(bpm_x * cap_h))
-            ny = c_info.get("n_extra_y", math.ceil(bpm_y * cap_w))
+            if bpm_y > 0:
+                bar_x = min(x_bar_1 - 0.08, max(x_bar_0 + 0.08, cx + (col_w_m / 2.0 + 0.12 if lx_right >= lx_left else -(col_w_m / 2.0 + 0.12))))
+                hook_dx = -0.22 if bar_x >= cx else 0.22
+                ax_plan.plot([bar_x, bar_x], [y_bar_0, y_bar_1], color="#1d4ed8", lw=3.8, zorder=6)
+                ax_plan.plot([bar_x, bar_x + hook_dx], [y_bar_0, y_bar_0], color="#1d4ed8", lw=2.8, zorder=6)
+                ax_plan.plot([bar_x, bar_x + hook_dx], [y_bar_1, y_bar_1], color="#1d4ed8", lw=2.8, zorder=6)
 
-            tag_text = (
-                f"X: {bpm_x}Φ{dia_ext} /m' - Total {nx}\n"
-                f"Y: {bpm_y}Φ{dia_ext} /m' - Total {ny}\n"
-                f"Zone: {cap_w:.2f} × {cap_h:.2f} m"
-            )
+            if bpm_x > 0 and bpm_y > 0:
+                if bpm_x == bpm_y and dia_x == dia_y and abs(Lx_cap - Ly_cap) < 0.08:
+                    tag_text = f"{bpm_x}Ø{dia_x} /m - L = {Lx_cap:.2f} m"
+                else:
+                    tag_text = (
+                        f"X: {bpm_x}Ø{dia_x} /m - L = {Lx_cap:.2f} m\n"
+                        f"Y: {bpm_y}Ø{dia_y} /m - L = {Ly_cap:.2f} m"
+                    )
+            elif bpm_x > 0:
+                tag_text = f"{bpm_x}Ø{dia_x} /m - L = {Lx_cap:.2f} m"
+            else:
+                tag_text = f"{bpm_y}Ø{dia_y} /m - L = {Ly_cap:.2f} m"
 
-            font_sz = 8.5 if (cap_w < 2.2 or min(Lx_spans) < 2.0) else 9.0
-            pad_sz = 0.20 if (cap_w < 2.2 or min(Lx_spans) < 2.0) else 0.25
+            min_span_xy = min(min(Lx_spans) if Lx_spans else 4.0, min(Ly_spans) if Ly_spans else 4.0)
+            font_sz = 8.2 if (cap_w < 2.2 or min_span_xy < 2.5) else 9.0
+            pad_sz = 0.18 if (cap_w < 2.2 or min_span_xy < 2.5) else 0.22
 
-            # Approximate width and height of the 3-line annotation box in slab meters
-            box_w = max(1.65, min(2.10, 0.45 * max(len(line) for line in tag_text.split("\n")) * 0.18))
-            box_h = 0.82
+            # تقدير الأبعاد الحقيقية لصندوق النص بوحدات الرسم (متر) لمنع أي تداخل فعلي
+            lines_split = tag_text.split("\n")
+            max_chars = max(len(line) for line in lines_split)
+            n_lines = len(lines_split)
+            char_w_m = max(0.115, total_w * 0.0068) * (font_sz / 9.0)
+            line_h_m = max(0.36, total_h * 0.021) * (font_sz / 9.0)
+            box_w = max(2.15, max_chars * char_w_m + 0.45)
+            box_h = n_lines * line_h_m + 0.26
 
-            # Candidate positions around the cap (Top, Bottom, Right, Left, Top-Offset, Bottom-Offset)
-            candidates = [
-                (cx, cy + cap_h/2.0 + 0.45, "center", "bottom", False),
-                (cx, cy - cap_h/2.0 - 0.45, "center", "top", False),
-                (cx + cap_w/2.0 + box_w/2.0 + 0.35, cy, "center", "center", True),
-                (cx - cap_w/2.0 - box_w/2.0 - 0.35, cy, "center", "center", True),
-                (cx, cy + cap_h/2.0 + 1.25, "center", "bottom", True),
-                (cx, cy - cap_h/2.0 - 1.25, "center", "top", True),
-                (cx + 0.85, cy + cap_h/2.0 + 0.55, "center", "bottom", True),
-                (cx - 0.85, cy + cap_h/2.0 + 0.55, "center", "bottom", True),
+            zone_cx = 0.5 * (x_bar_0 + x_bar_1)
+            zone_cy = 0.5 * (y_bar_0 + y_bar_1)
+
+            # إزاحة أفقية طفيفة داخل الكاب عند القرب من حواف البلاطة
+            pref_x = zone_cx
+            if cx <= x_coords[0] + 0.15 and lx_right > 0:
+                pref_x = max(zone_cx, cx + 0.25)
+            elif cx >= x_coords[-1] - 0.15 and lx_left > 0:
+                pref_x = min(zone_cx, cx - 0.25)
+
+            # مواقع أعلى وأسفل العمود طبقاً لنمط الشطرنج (Checkerboard)
+            up_pos_list = [
+                (pref_x, cy + col_d_m / 2.0 + 0.34, "center", "bottom", False, 0.0),
+                (pref_x, max(cy + col_d_m / 2.0 + 0.55, y_bar_1 - box_h * 0.35), "center", "bottom", True, 2.0),
+                (pref_x, y_bar_1 + 0.16, "center", "bottom", True, 4.0),
+                (pref_x - 0.55, cy + col_d_m / 2.0 + 0.38, "center", "bottom", True, 5.0),
+                (pref_x + 0.55, cy + col_d_m / 2.0 + 0.38, "center", "bottom", True, 5.0),
+            ]
+            dn_pos_list = [
+                (pref_x, cy - col_d_m / 2.0 - 0.34, "center", "top", False, 0.0),
+                (pref_x, min(cy - col_d_m / 2.0 - 0.55, y_bar_0 + box_h * 0.35), "center", "top", True, 2.0),
+                (pref_x, y_bar_0 - 0.16, "center", "top", True, 4.0),
+                (pref_x - 0.55, cy - col_d_m / 2.0 - 0.38, "center", "top", True, 5.0),
+                (pref_x + 0.55, cy - col_d_m / 2.0 - 0.38, "center", "top", True, 5.0),
+            ]
+            side_pos_list = [
+                (x_bar_1 + box_w / 2.0 + 0.18, cy + (0.28 if is_checker_up else -0.28), "center", "center", True, 12.0),
+                (x_bar_0 - box_w / 2.0 - 0.18, cy + (0.28 if is_checker_up else -0.28), "center", "center", True, 12.0),
+                (x_bar_1 - box_w * 0.25, y_bar_1 + 0.22, "center", "bottom", True, 14.0),
+                (x_bar_0 + box_w * 0.25, y_bar_1 + 0.22, "center", "bottom", True, 14.0),
+                (x_bar_1 - box_w * 0.25, y_bar_0 - 0.22, "center", "top", True, 14.0),
+                (x_bar_0 + box_w * 0.25, y_bar_0 - 0.22, "center", "top", True, 14.0),
             ]
 
-            chosen_pos = None
-            min_penalty = 1e9
+            if is_checker_up:
+                candidates = up_pos_list + [(x, y, ha, va, ld, p + 22.0) for (x, y, ha, va, ld, p) in dn_pos_list] + side_pos_list
+            else:
+                candidates = dn_pos_list + [(x, y, ha, va, ld, p + 22.0) for (x, y, ha, va, ld, p) in up_pos_list] + side_pos_list
 
-            for cand_x, cand_y, ha, va, needs_lead in candidates:
-                # Calculate bounding box of this candidate
+            chosen_pos = None
+            min_penalty = 1e12
+
+            for cand_x, cand_y, ha, va, needs_lead, base_pen in candidates:
                 cb_x0 = cand_x - box_w / 2.0
                 cb_x1 = cand_x + box_w / 2.0
                 if va == "bottom":
@@ -4809,25 +4904,31 @@ def generate_flat_slab_column_caps_sketch(
                     cb_y0 = cand_y - box_h / 2.0
                     cb_y1 = cand_y + box_h / 2.0
 
-                # Penalty if candidate exceeds drawing bounds
-                penalty = 0.0
-                if cb_y1 > y_slab_max + 1.8:
-                    penalty += 50.0
-                if cb_y0 < y_slab_min - dim_offset_bot + 0.2:
-                    penalty += 50.0
-                if cb_x0 < x_slab_min - 1.5 or cb_x1 > x_slab_max + 1.5:
-                    penalty += 30.0
+                penalty = float(base_pen)
 
-                # Collision penalty against all already placed boxes
+                # حدود اللوحة وخطوط الأبعاد ودوائر المحاور
+                if cb_y1 > y_slab_max + offset_grid_top - bubble_radius - 0.15:
+                    penalty += 250.0 + (cb_y1 - (y_slab_max + offset_grid_top - bubble_radius)) * 200.0
+                if cb_y0 < y_slab_min - dim_offset_bot + 0.35:
+                    penalty += 250.0 + ((y_slab_min - dim_offset_bot + 0.35) - cb_y0) * 200.0
+                if cb_x0 < x_slab_min - offset_grid_left + bubble_radius + 0.15:
+                    penalty += 200.0
+                if cb_x1 > x_slab_max + dim_offset_right - 0.15:
+                    penalty += 200.0
+
+                # فحص التداخل مع الأعمدة ومربعات أسماء الأعمدة
+                for ox0, ox1, oy0, oy1 in col_obstacle_boxes:
+                    ov_ox = max(0.0, min(cb_x1, ox1) - max(cb_x0, ox0))
+                    ov_oy = max(0.0, min(cb_y1, oy1) - max(cb_y0, oy0))
+                    if ov_ox > 0.0 and ov_oy > 0.0:
+                        penalty += 600.0 + (ov_ox * ov_oy) * 400.0
+
+                # فحص التداخل الصارم مع البانيلات الموضوعة مسبقاً
                 for pb_x0, pb_x1, pb_y0, pb_y1 in placed_boxes:
-                    # Check overlap with margin
-                    ov_x = max(0.0, min(cb_x1, pb_x1) - max(cb_x0, pb_x0) + 0.15)
-                    ov_y = max(0.0, min(cb_y1, pb_y1) - max(cb_y0, pb_y0) + 0.15)
+                    ov_x = max(0.0, min(cb_x1, pb_x1) - max(cb_x0, pb_x0) + 0.18)
+                    ov_y = max(0.0, min(cb_y1, pb_y1) - max(cb_y0, pb_y0) + 0.14)
                     if ov_x > 0.0 and ov_y > 0.0:
-                        penalty += 1000.0 + (ov_x * ov_y) * 500.0
-
-                if needs_lead:
-                    penalty += 5.0
+                        penalty += 5000.0 + (ov_x * ov_y) * 2500.0
 
                 if penalty < min_penalty:
                     min_penalty = penalty
@@ -4838,21 +4939,23 @@ def generate_flat_slab_column_caps_sketch(
             best_x, best_y, best_ha, best_va, use_leader, best_bbox = chosen_pos
             placed_boxes.append(best_bbox)
 
-            # Draw leader line if displaced from default near-cap position
-            if use_leader or abs(best_x - cx) > 0.4 or abs(best_y - cy) > (cap_h/2.0 + 0.8):
+            # رسم خط إشارة رفيع إذا ابتعد البانيل عن وجه العمود
+            box_center_y = 0.5 * (best_bbox[2] + best_bbox[3])
+            if use_leader or math.hypot(best_x - cx, box_center_y - cy) > (max(col_w_m, col_d_m) * 0.85 + box_h * 0.65):
                 ax_plan.annotate(
                     "",
-                    xy=(cx, cy + (cap_h/2.0 if best_y > cy else -cap_h/2.0)),
-                    xytext=(best_x, best_y),
-                    arrowprops=dict(arrowstyle="-", color="#dc2626", lw=1.0, ls=":")
+                    xy=(cx, cy),
+                    xytext=(best_x, box_center_y),
+                    arrowprops=dict(arrowstyle="-", color="#dc2626", lw=1.1, ls="--"),
+                    zorder=9,
                 )
 
             ax_plan.text(
                 best_x, best_y,
                 tag_text,
-                ha=best_ha, va=best_va, fontsize=font_sz, fontweight="bold", color="#991b1b", zorder=8,
-                linespacing=1.15,
-                bbox=dict(boxstyle=f"round,pad={pad_sz}", facecolor="#ffffff", edgecolor="#dc2626", lw=1.3)
+                ha=best_ha, va=best_va, fontsize=font_sz, fontweight="bold", color="#991b1b", zorder=11,
+                linespacing=1.18,
+                bbox=dict(boxstyle=f"round,pad={pad_sz}", facecolor="#ffffff", edgecolor="#dc2626", lw=1.4, alpha=0.96)
             )
 
     dim_y = y_slab_min - dim_offset_bot
@@ -5350,7 +5453,7 @@ def solve_deflection_optimization(
                     "n_bars": nb,
                     "As_prop": as_prop,
                     "As_added": max(0.0, as_prop - As_curr),
-                    "config": f"{nb} Φ{dia}/m (تسليح سفلي رئيسي)",
+                    "config": f"{nb}Ø{dia} /m",
                     "delta_tot": res_p["delta_tot_mm"],
                     "is_safe": True,
                     "feasible": True,
@@ -5366,7 +5469,7 @@ def solve_deflection_optimization(
             "n_bars": 10,
             "As_prop": 10 * bar_area(available_dias[-1]),
             "As_added": 0.0,
-            "config": f"تجاوز الحد الأقصى (10 Φ{available_dias[-1]}/م أو As_max)",
+            "config": f"10Ø{available_dias[-1]} /m (Exceeds As_max)",
             "delta_tot": compute_single_bay_deflection(
                 min(As_max, 10 * bar_area(available_dias[-1])), As_prime_curr, ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu
             )["delta_tot_mm"],
@@ -5392,7 +5495,7 @@ def solve_deflection_optimization(
                     "dia": dia,
                     "n_bars": nb,
                     "As_prime_prop": as_prime_prop,
-                    "config": f"{nb} Φ{dia}/m (حديد ضغط علوي)",
+                    "config": f"{nb}Ø{dia} /m",
                     "delta_tot": res_p["delta_tot_mm"],
                     "is_safe": True,
                     "feasible": True,
@@ -5408,7 +5511,7 @@ def solve_deflection_optimization(
             "dia": available_dias[-1],
             "n_bars": 10,
             "As_prime_prop": 10 * bar_area(available_dias[-1]),
-            "config": f"تجاوز الحد الأقصى (10 Φ{available_dias[-1]}/م)",
+            "config": f"10Ø{available_dias[-1]} /m (Exceeds Max)",
             "delta_tot": compute_single_bay_deflection(
                 As_curr, 10 * bar_area(available_dias[-1]), ts_cm, d_cm, Ln_m, Ws_tm2, DL_ratio, kd, m_denom, Fcu
             )["delta_tot_mm"],
@@ -6174,18 +6277,18 @@ def generate_flat_slab_punching_shear_sketch(
 
     target_plan_h = 16.0
     target_plan_w = target_plan_h * ar_plan
-    legend_h = 5.2
+    legend_h = 1.55
 
     fig_w = max(24.0, min(36.0, target_plan_w + 1.8))
-    fig_h = max(18.0, min(34.0, target_plan_h + legend_h + 1.0))
+    fig_h = max(16.0, min(32.0, target_plan_h + legend_h + 0.6))
 
     fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
     fig.patch.set_facecolor("#ffffff")
 
-    plan_ratio = (fig_h - legend_h - 0.8) / fig_h
+    plan_ratio = (fig_h - legend_h - 0.4) / fig_h
     legend_ratio = legend_h / fig_h
 
-    gs = fig.add_gridspec(2, 1, height_ratios=[plan_ratio, legend_ratio], hspace=0.06, left=0.03, right=0.95, top=0.94, bottom=0.02)
+    gs = fig.add_gridspec(2, 1, height_ratios=[plan_ratio, legend_ratio], hspace=0.025, left=0.03, right=0.95, top=0.94, bottom=0.01)
     ax_plan = fig.add_subplot(gs[0, 0])
     ax_legend = fig.add_subplot(gs[1, 0])
     ax_plan.set_facecolor("#ffffff")
@@ -6243,7 +6346,7 @@ def generate_flat_slab_punching_shear_sketch(
         ax_plan.contour(X_m, Y_m, Qup_field, levels=[qcup_sample], colors="#b91c1c", linewidths=2.6, linestyles="-.", zorder=3)
 
     # Colorbar
-    cbar_ax = fig.add_axes([0.955, 0.32, 0.015, 0.56])
+    cbar_ax = fig.add_axes([0.955, 0.16, 0.015, 0.72])
     cbar = fig.colorbar(cs, cax=cbar_ax)
     cbar.set_label("Punching Shear Stress Qup (kg/cm²) | إجهاد القص الثاقب", fontsize=13.5, weight="bold", labelpad=12)
     cbar.ax.tick_params(labelsize=11.5)
@@ -6484,8 +6587,8 @@ def generate_flat_slab_punching_shear_sketch(
                 f"Qup = {qup:.2f} kg/cm² (> Qcup)\n"
                 f"------------------------\n"
                 f"المعالجة المطلوبة (ECP 203):\n"
-                f"• كانات قص: + {n_studs} Φ10 / عمود\n"
-                f"• أو زيادة السُمك: ts ≥ {ts_req:.0f} cm (+{ts_inc:.0f}cm)"
+                f"Shear Stirrups: {n_studs}Ø10 /m\n"
+                f"Or Slab Thickness: ts ≥ {ts_req:.0f} cm (+{ts_inc:.0f}cm)"
             )
             ax_plan.text(
                 tag_x, tag_y, callout_str,
@@ -6507,7 +6610,7 @@ def generate_flat_slab_punching_shear_sketch(
     ax_plan.set_aspect("equal", adjustable="box")
     ax_plan.axis("off")
 
-    # Legend Panel
+    # Compact Bottom Panel (Qcup Value & Simple Calculation Explanation)
     ax_legend.set_xlim(0, 100)
     ax_legend.set_ylim(0, 100)
     ax_legend.axis("off")
@@ -6516,24 +6619,32 @@ def generate_flat_slab_punching_shear_sketch(
     banner_border = "#ef4444" if unsafe_count > 0 else "#cbd5e1"
     title_color = "#991b1b" if unsafe_count > 0 else "#1e3a8a"
 
-    c_box = FancyBboxPatch((1, 3), 98, 94, boxstyle="round,pad=1.0,rounding_size=3", facecolor=banner_color, edgecolor=banner_border, lw=2.5)
-    ax_legend.add_patch(c_box)
-    ax_legend.text(2.5, 76, f"PUNCHING SHEAR 2D CONTOUR & STRESS VERIFICATION (ECP 203)", fontsize=17.5, fontweight="bold", color=title_color)
-
-    legend_text = (
-        f"• Total Columns: {len(punching_results)} Cols  |  Safe Columns: {safe_count}  |  Unsafe Columns: {unsafe_count}\n"
-        f"• Design Parameters: fcu = {Fcu:.0f} kg/cm²  |  Slab ts = {ts_cm:.0f} cm  |  Effective Depth d = {d_cm:.1f} cm  |  Wu = {Wu:.2f} t/m²\n"
-        f"• خريطة الكونتور توضح تركيز وتدرج إجهادات القص الثاقب Qup حول الأعمدة (تدرج من الأصفر إلى الأحمر الداكن).\n"
-        f"• الأعمدة الحمراء (Qup > Qcup): غير آمنة وموضح أعلاها كانات القص المطلوبة (Shear Studs) أو سُمك الخرسانة البديل."
+    c_box = FancyBboxPatch(
+        (0.5, 6), 99.0, 88,
+        boxstyle="round,pad=0.35,rounding_size=2.0",
+        facecolor=banner_color, edgecolor=banner_border, lw=2.0
     )
-    ax_legend.text(2.5, 22, legend_text, fontsize=12.5, fontweight="bold", color="#1e293b", linespacing=1.45)
+    ax_legend.add_patch(c_box)
 
-    # ── LARGE BLACK BOX FOR QCUP (مربع كبير باللون الأسود مرة واحدة فقط) ───────
-    qcup_black_box = FancyBboxPatch((64, 8), 34, 84, boxstyle="round,pad=0.8,rounding_size=3", facecolor="#090d16", edgecolor="#334155", lw=3.0)
+    formula_line = (
+        f"Qcup = {qcup_sample:.2f} kg/cm²   |   ECP 203: Qcup = min [ 0.316 √(fcu/γc) , 0.316(0.5 + a/b)√(fcu/γc) , 0.8(α·d/bo + 0.2)√(fcu/γc) , 17.0 ]   "
+        f"(fcu = {Fcu:.0f} kg/cm², γc = 1.5, d = {d_cm:.1f} cm)"
+    )
+    ar_expl_line = (
+        "طريقة حساب أقصى إجهاد قص ثاقب للخرسانة بدون كانات: يُؤخذ القيمة الأصغر من معادلات الكود أعلاه بدلالة مقاومة الخرسانة والعمق الفعال ومحيط القص الحرج"
+    )
+    ax_legend.text(1.8, 66, formula_line, fontsize=11.2, fontweight="bold", color=title_color, va="center", ha="left")
+    ax_legend.text(1.8, 28, ar_expl_line, fontsize=11.5, fontweight="bold", color="#1e293b", va="center", ha="left")
+
+    # ── COMPACT BLACK BADGE FOR QCUP ─────────────────────────────────────────
+    qcup_black_box = FancyBboxPatch(
+        (74.5, 12), 24.2, 76,
+        boxstyle="round,pad=0.35,rounding_size=2.0",
+        facecolor="#090d16", edgecolor="#334155", lw=2.2
+    )
     ax_legend.add_patch(qcup_black_box)
-    ax_legend.text(81.0, 78, "أقصى إجهاد خرسانة مسموح (ECP 203)", fontsize=12.0, fontweight="bold", color="#94a3b8", ha="center")
-    ax_legend.text(81.0, 50, f"Qcup = {qcup_sample:.2f}", fontsize=22.0, fontweight="black", color="#facc15", ha="center")
-    ax_legend.text(81.0, 24, f"kg/cm²", fontsize=13.0, fontweight="bold", color="#38bdf8", ha="center")
+    ax_legend.text(86.6, 63, f"Qcup = {qcup_sample:.2f} kg/cm²", fontsize=15.5, fontweight="black", color="#facc15", ha="center", va="center")
+    ax_legend.text(86.6, 28, f"= 0.316 √(fcu / 1.5)  [Safe: {safe_count} | Unsafe: {unsafe_count}]", fontsize=10.5, fontweight="bold", color="#38bdf8", ha="center", va="center")
 
     fig.suptitle(
         f"PUNCHING SHEAR 2D CONTOUR MAP (Qup) — ts = {ts_cm:.0f} cm  |  ALLOWABLE LIMIT: Qcup = {qcup_sample:.2f} kg/cm²\n"
@@ -6690,7 +6801,7 @@ def generate_punching_stirrups_detail_sketch(
 
     if leg_x_all:
         ax_plan.scatter(leg_x_all, leg_y_all, s=55, color="#b91c1c", edgecolor="#ffffff", lw=1.5, zorder=7,
-                        label=f"Stirrup Vertical Legs ({n_legs} legs/row, Φ{stirrup_dia_mm})")
+                        label=f"Stirrup Vertical Legs ({n_legs} legs/row, Ø{stirrup_dia_mm})")
 
     # Column Box
     col_patch = patches.Rectangle((c_x0, c_y0), bc, tc, facecolor="#1e293b", edgecolor="#0f172a", lw=3.0, zorder=8, hatch="///")
@@ -6766,7 +6877,7 @@ def generate_punching_stirrups_detail_sketch(
         ("Max Shear Limit qu,max", f"{design['qu_max_kgcm2']:.2f} kg/cm²"),
         ("-----------------------------", "-----------------------------"),
         ("Stirrup Layout Direction", f"{strip_dir_desc}"),
-        ("Stirrup Diameter", f"Φ{stirrup_dia_mm} mm (High-Tensile Steel)"),
+        ("Stirrup Diameter", f"Ø{stirrup_dia_mm} mm (High-Tensile Steel)"),
         ("Row Spacing s", f"{s_cm:.1f} cm (<= d/2 = {d/2:.1f} cm <= 15cm)"),
         ("Distance to 1st Stirrup s0", f"{s0_cm:.1f} cm (<= d/4 = {d/4:.1f} cm)"),
         ("Number of Rows (N_rows)", f"{n_rows} concentric rows / arm"),
@@ -6874,7 +6985,7 @@ def generate_punching_stirrups_detail_sketch(
     if stirrup_xs_left:
         target_sx = stirrup_xs_left[0]
         ax_sec.annotate(
-            f"Closed Stirrups (كانات مغلقة)\nΦ{stirrup_dia_mm} mm @ {s_cm:.1f} cm ({n_rows} stirrups / arm)",
+            f"Closed Stirrups (كانات مغلقة)\nØ{stirrup_dia_mm} mm @ {s_cm:.1f} cm ({n_rows} stirrups / arm)",
             xy=(target_sx, ts / 2.0), xytext=(target_sx - 20.0, ts + 8.0),
             arrowprops=dict(facecolor="#dc2626", edgecolor="#dc2626", arrowstyle="->", lw=1.8),
             fontsize=9.8, weight="bold", color="#991b1b", ha="right", va="center",
@@ -6882,7 +6993,7 @@ def generate_punching_stirrups_detail_sketch(
         )
 
         ax_sec.annotate(
-            "Top & Bottom Hanger Bars (2Φ10 أسياخ تعليق)",
+            "Top & Bottom Hanger Bars: 2Ø10\n(أسياخ تعليق الكانات)",
             xy=(target_sx, top_bar_y), xytext=(target_sx - 18.0, -8.0),
             arrowprops=dict(facecolor="#1e3a8a", edgecolor="#1e3a8a", arrowstyle="->", lw=1.6),
             fontsize=9.5, weight="bold", color="#1e3a8a", ha="right", va="center",
@@ -6917,7 +7028,7 @@ def generate_punching_stirrups_3d_sketch(
     - 3D Concrete Slab slice (semi-transparent volume with top/bottom mesh representation)
     - 3D Column shaft below slab with vertical rebars extending upward and column ties
     - 3D Closed Stirrups hoops in X and Y directions with 135-degree hook bends
-    - 3D Longitudinal Top and Bottom Hanger Rebars (4Φ10)
+    - 3D Longitudinal Top and Bottom Hanger Rebars (4Ø10)
     - 3D Critical shear perimeter wireframe at d/2
     - 3D Dimensions, strip lengths (L_strip,X & L_strip,Y), spacing s and s0
     - Complete technical detailing schedule panel on the right
@@ -7187,9 +7298,9 @@ def generate_punching_stirrups_3d_sketch(
         plt.Line2D([0], [0], color="#1e293b", lw=3.4),
     ]
     ax_3d.legend(custom_lines, [
-        f"X-Dir Closed Stirrups (Φ{stirrup_dia_mm} @ {s_cm:.0f} cm)",
-        f"Y-Dir Closed Stirrups (Φ{stirrup_dia_mm} @ {s_cm:.0f} cm)",
-        f"Top & Bottom Hanger Bars (4Φ10 Rebars)",
+        f"X-Dir Closed Stirrups (Ø{stirrup_dia_mm} @ {s_cm:.0f} cm)",
+        f"Y-Dir Closed Stirrups (Ø{stirrup_dia_mm} @ {s_cm:.0f} cm)",
+        f"Top & Bottom Hanger Bars (4Ø10 Rebars)",
         f"1st Critical Perimeter @ d/2 ({crit_w:.0f}×{crit_h:.0f} cm)",
         f"Column Shaft & Vertical Bars ({bc:.0f}×{tc:.0f} cm)",
     ], loc="upper left", fontsize=9.5, framealpha=0.96, facecolor="#ffffff", edgecolor="#cbd5e1")
@@ -7222,13 +7333,13 @@ def generate_punching_stirrups_3d_sketch(
         ("Max Allowable qu,max", f"{design['qu_max_kgcm2']:.2f} kg/cm²"),
         ("-----------------------------", "-----------------------------"),
         ("Stirrup 3D Cages Layout", f"{strip_dir_desc}"),
-        ("Stirrup Diameter (القطر)", f"Φ{stirrup_dia_mm} mm (High-Tensile Steel)"),
+        ("Stirrup Diameter (القطر)", f"Ø{stirrup_dia_mm} mm (High-Tensile Steel)"),
         ("Spacing between cages s", f"{s_cm:.1f} cm (<= d/2 = {d/2:.1f} cm <= 15cm)"),
         ("First Stirrup Distance s0", f"{s0_cm:.1f} cm (<= d/4 = {d/4:.1f} cm)"),
         ("Number of Stirrup Rows", f"{n_rows} rows / arm ({row_positions})"),
         ("Vertical Legs per Cage (n)", f"{n_legs} vertical branches / row"),
         ("Total Column Stirrup Legs", f"{total_legs} vertical branches total"),
-        ("Top/Bottom Hanger Rebar", f"4Φ10 (أسياخ تعليق وتثبيت الكانات)"),
+        ("Top/Bottom Hanger Rebar", f"4Ø10 (Top & Bottom Hanger Rebars)"),
         ("Required Steel Area Ast,req", f"{design['Ast_req_mm2']:.1f} mm² ({design['Ast_req_cm2']:.2f} cm²)"),
         ("Provided Steel Area Ast,prov", f"{design['Ast_prov_mm2']:.1f} mm² ({design['Ast_prov_mm2']/100:.2f} cm²)"),
         ("Total X-Strip Length (L_strip,X)", f"{L_strip_x:.1f} cm"),
@@ -7255,156 +7366,24 @@ def generate_punching_stirrups_3d_sketch(
 
 def merge_transverse_adjacent_extra_bays(bays, dir_req="X", tol=0.15):
     """
-    دمج البانيلات المتجاورة في اتجاه الرص والتوزيع المتعامد مع اتجاه السيخ:
-    - في اتجاه X: السيخ يمتد أفقياً في X، واتجاه الرص عمودي في Y.
-      يتم دمج البلاطات المتجاورة رأسياً على نفس شريحة X إذا تطابق (طول السيخ L_extra، القطر dia_extra، عدد الأسياخ bars_per_m).
-    - في اتجاه Y: السيخ يمتد رأسياً في Y، واتجاه الرص عمودي في X.
-      يتم دمج البلاطات المتجاورة أفقياً على نفس شريحة Y إذا تطابق (طول السيخ L_extra، القطر dia_extra، عدد الأسياخ bars_per_m).
+    معالجة كل باكية إنشائية (P_i_j) بشكل منفصل تماماً (Independent Bay Detailing):
+    عدم دمج البواكي المتجاورة ككتلة واحدة مجمعة، وتحديد عرض التوزيع في الثلث الأوسط للباكية (Mid-strip).
     """
     if not bays:
         return []
 
-    active = [dict(b) for b in bays if isinstance(b, dict) and b.get("n_extra", 0) > 0]
-    if len(active) <= 1:
-        return active
-
-    n = len(active)
-    parent = list(range(n))
-
-    def find(p):
-        while p != parent[p]:
-            parent[p] = parent[parent[p]]
-            p = parent[p]
-        return p
-
-    def union(p, q):
-        root_p = find(p)
-        root_q = find(q)
-        if root_p != root_q:
-            parent[root_q] = root_p
-
-    for a in range(n):
-        for b in range(a + 1, n):
-            ia = active[a]
-            ib = active[b]
-
-            # 1. تطابق مواصفات التسليح الإضافي تماماً
-            bpm_a = ia.get("bars_per_m", ia.get("n_extra", 0))
-            bpm_b = ib.get("bars_per_m", ib.get("n_extra", 0))
-            dia_a = ia.get("dia_extra", 0)
-            dia_b = ib.get("dia_extra", 0)
-            L_a = round(float(ia.get("L_extra", 0.0)), 2)
-            L_b = round(float(ib.get("L_extra", 0.0)), 2)
-
-            if bpm_a != bpm_b or dia_a != dia_b or abs(L_a - L_b) > tol:
-                continue
-
-            # 2. فحص التجاور الهندسي في اتجاه الرص المتعامد فقط
-            if dir_req == "X":
-                # في اتجاه X: يجب أن يكونا على نفس بحر X تماماً
-                ax0 = ia.get("x0", ia.get("cx", 0) - ia.get("L_extra", 4.0)/2.0)
-                ax1 = ia.get("x1", ia.get("cx", 0) + ia.get("L_extra", 4.0)/2.0)
-                bx0 = ib.get("x0", ib.get("cx", 0) - ib.get("L_extra", 4.0)/2.0)
-                bx1 = ib.get("x1", ib.get("cx", 0) + ib.get("L_extra", 4.0)/2.0)
-
-                same_span_x = (abs(ax0 - bx0) <= tol and abs(ax1 - bx1) <= tol)
-                if not same_span_x:
-                    continue
-
-                # متجاوران رأسياً في اتجاه Y
-                ay0 = ia.get("y0", ia.get("cy", 0) - ia.get("W_bay", 4.0)/2.0)
-                ay1 = ia.get("y1", ia.get("cy", 0) + ia.get("W_bay", 4.0)/2.0)
-                by0 = ib.get("y0", ib.get("cy", 0) - ib.get("W_bay", 4.0)/2.0)
-                by1 = ib.get("y1", ib.get("cy", 0) + ib.get("W_bay", 4.0)/2.0)
-
-                touch_in_y = (abs(ay1 - by0) <= tol or abs(by1 - ay0) <= tol or
-                              (min(ay1, by1) - max(ay0, by0) > -tol))
-                if touch_in_y:
-                    union(a, b)
-
-            else:  # Y-Direction
-                # في اتجاه Y: يجب أن يكونا على نفس بحر Y تماماً
-                ay0 = ia.get("y0", ia.get("cy", 0) - ia.get("L_extra", 4.0)/2.0)
-                ay1 = ia.get("y1", ia.get("cy", 0) + ia.get("L_extra", 4.0)/2.0)
-                by0 = ib.get("y0", ib.get("cy", 0) - ib.get("L_extra", 4.0)/2.0)
-                by1 = ib.get("y1", ib.get("cy", 0) + ib.get("L_extra", 4.0)/2.0)
-
-                same_span_y = (abs(ay0 - by0) <= tol and abs(ay1 - by1) <= tol)
-                if not same_span_y:
-                    continue
-
-                # متجاوران أفقياً في اتجاه X
-                ax0 = ia.get("x0", ia.get("cx", 0) - ia.get("W_bay", 4.0)/2.0)
-                ax1 = ia.get("x1", ia.get("cx", 0) + ia.get("W_bay", 4.0)/2.0)
-                bx0 = ib.get("x0", ib.get("cx", 0) - ib.get("W_bay", 4.0)/2.0)
-                bx1 = ib.get("x1", ib.get("cx", 0) + ib.get("W_bay", 4.0)/2.0)
-
-                touch_in_x = (abs(ax1 - bx0) <= tol or abs(bx1 - ax0) <= tol or
-                              (min(ax1, bx1) - max(ax0, bx0) > -tol))
-                if touch_in_x:
-                    union(a, b)
-
-    clusters = {}
-    for idx in range(n):
-        root = find(idx)
-        clusters.setdefault(root, []).append(active[idx])
-
-    merged_list = []
-    for group in clusters.values():
-        if len(group) == 1:
-            item = dict(group[0])
-            # لحساب عرض منطقة الرص الصافية للباكية المفردة
-            raw_w = item.get("W_bay", 4.0)
-            if "w_ms" in item and item["w_ms"] > 0:
-                item["B_zone"] = round(item["w_ms"], 2)
-            else:
-                item["B_zone"] = round(raw_w * 0.88, 2)
-            merged_list.append(item)
+    independent_list = []
+    for b in bays:
+        if not isinstance(b, dict) or b.get("n_extra", 0) <= 0:
             continue
+        item = dict(b)
+        raw_w = float(item.get("W_bay", 4.0))
+        item["is_merged"] = False
+        if "B_zone" not in item or float(item.get("B_zone") or 0) <= 0:
+            item["B_zone"] = round(raw_w * 0.45, 2)
+        independent_list.append(item)
 
-        base = dict(group[0])
-        all_x0 = [g.get("x0", g.get("cx", 0)) for g in group if "x0" in g]
-        all_x1 = [g.get("x1", g.get("cx", 0)) for g in group if "x1" in g]
-        all_y0 = [g.get("y0", g.get("cy", 0)) for g in group if "y0" in g]
-        all_y1 = [g.get("y1", g.get("cy", 0)) for g in group if "y1" in g]
-
-        if all_x0 and all_x1:
-            base["x0"] = min(all_x0)
-            base["x1"] = max(all_x1)
-            base["cx"] = (base["x0"] + base["x1"]) / 2.0
-        if all_y0 and all_y1:
-            base["y0"] = min(all_y0)
-            base["y1"] = max(all_y1)
-            base["cy"] = (base["y0"] + base["y1"]) / 2.0
-
-        pids = [g.get("panel_id", "") for g in group if g.get("panel_id")]
-        if pids:
-            base["panel_id"] = "+".join(pids)
-
-        if dir_req == "X":
-            if "y0" in base and "y1" in base:
-                tot_span_w = round(base["y1"] - base["y0"], 2)
-            else:
-                tot_span_w = sum(g.get("W_bay", 0.0) for g in group)
-        else:
-            if "x0" in base and "x1" in base:
-                tot_span_w = round(base["x1"] - base["x0"], 2)
-            else:
-                tot_span_w = sum(g.get("W_bay", 0.0) for g in group)
-
-        base["W_bay"] = tot_span_w
-        base["is_merged"] = True
-
-        # حساب عرض الرص الفعلي الصافي B_zone بخصم الخلوصات / أطراف الركائز
-        sum_w_ms = sum(g.get("w_ms", 0.0) for g in group)
-        if sum_w_ms > 0:
-            base["B_zone"] = round(sum_w_ms, 2)
-        else:
-            base["B_zone"] = round(tot_span_w * 0.88, 2)
-
-        merged_list.append(base)
-
-    return merged_list
+    return independent_list
 
 
 # ── 2. BOTTOM EXTRA (WITH BASE MESHES BOX) ──────────────────────────────────
@@ -7583,28 +7562,27 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
                 is_right = (i_idx == len(x_coords) - 1)
                 draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=10)
 
-    # Filter items by direction and merge transverse adjacent bays
+    # Filter items by direction (Independent Bay Detailing per Panel P_i_j)
     dir_req = (direction or "X").upper()
     raw_filtered_bays = [
         b for b in (btm_extra_spans or [])
         if isinstance(b, dict) and b.get("n_extra", 0) > 0 and b.get("dir", "X").upper() == dir_req
     ]
-    # دمـج البانيلات المتجاورة في اتجاه الرص والتوزيع المتعامد مع اتجاه السيخ
     filtered_bays = merge_transverse_adjacent_extra_bays(raw_filtered_bays, dir_req=dir_req)
 
     has_extra = len(filtered_bays) > 0
 
     if has_extra:
-        # Sort bays by row to alternate vertical placement across horizontal bays in X
         filtered_bays_sorted = sorted(filtered_bays, key=lambda b: (round(b.get("cy", b.get("mid_y", 0.0)), 1), b.get("cx", b.get("mid_x", 0.0))))
-        b_row_counts = {}
         for b_info in filtered_bays_sorted:
             pid = b_info.get("panel_id", "")
             if pid in _voids:
                 continue
 
-            L_ext = b_info.get("L_extra", 4.5)
-            W_bay = b_info.get("W_bay", b_info.get("strip_w", 4.5))
+            span_len_b = float(b_info.get("span_len", 4.5))
+            L_ext_raw = float(b_info.get("L_extra", 0.68 * span_len_b))
+            L_ext = min(L_ext_raw, 0.72 * span_len_b)
+            W_bay = float(b_info.get("W_bay", b_info.get("strip_w", 4.5)))
             n_ext = b_info.get("n_extra", 6)
             dia_ext = b_info.get("dia_extra", 12)
             cx = b_info.get("cx", b_info.get("mid_x", 0.0))
@@ -7621,86 +7599,91 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
                 cx = (bx0 + bx1) / 2.0
                 cy = (by0 + by1) / 2.0
 
-            b_zone_val = b_info.get("B_zone", W_bay * 0.88)
+            # Mid-strip distribution width strictly inside the bay (middle third / 0.45 * W_bay)
+            b_zone_val = min(float(b_info.get("B_zone", W_bay * 0.45)), W_bay * 0.50)
+            bpm_val = int(b_info.get("bars_per_m", n_ext) or 1)
+            tag_short_b = f"{bpm_val}Ø{int(dia_ext)} /m"
+            bay_annot_text = f"{tag_short_b} - L = {L_ext:.2f} m\n(B = {b_zone_val:.2f} m)"
+
             if dir_req == "X":
-                # في اتجاه X: السيخ يمتد أفقياً بطول L، وعرض الرص والتوزيع رأسياً B
+                # في اتجاه X: السيخ يمتد أفقياً في منتصف بحر الباكية بطول L، وعرض التوزيع في الثلث الأوسط B
                 area_w = L_ext
                 area_h = b_zone_val
                 rx = cx - area_w / 2.0
                 ry = cy - area_h / 2.0
                 area_rect = patches.Rectangle(
                     (rx, ry), area_w, area_h,
-                    lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.45,
+                    lw=2.0, edgecolor=edge_c, facecolor=face_c, alpha=0.45,
                     hatch="///", linestyle="--", zorder=3
                 )
                 ax_plan.add_patch(area_rect)
 
-                y_bar = cy + 0.35
-                ax_plan.plot([cx - L_ext/2.0, cx + L_ext/2.0], [y_bar, y_bar], color=line_c, lw=4.5, solid_capstyle="round", zorder=6)
-                ax_plan.plot([cx - L_ext/2.0, cx - L_ext/2.0], [y_bar - 0.25, y_bar + 0.25], color=line_c, lw=3.0, zorder=6)
-                ax_plan.plot([cx + L_ext/2.0, cx + L_ext/2.0], [y_bar - 0.25, y_bar + 0.25], color=line_c, lw=3.0, zorder=6)
+                y_bar = cy + min(0.32, area_h * 0.25)
+                ax_plan.plot([cx - L_ext/2.0, cx + L_ext/2.0], [y_bar, y_bar], color=line_c, lw=4.2, solid_capstyle="round", zorder=6)
+                ax_plan.plot([cx - L_ext/2.0, cx - L_ext/2.0], [y_bar - 0.18, y_bar + 0.18], color=line_c, lw=2.8, zorder=6)
+                ax_plan.plot([cx + L_ext/2.0, cx + L_ext/2.0], [y_bar - 0.18, y_bar + 0.18], color=line_c, lw=2.8, zorder=6)
 
-                # Vertical stagger to prevent horizontal badge collision in narrow bays
-                row_k = round(cy, 1)
-                k_idx = b_row_counts.get(row_k, 0)
-                b_row_counts[row_k] = k_idx + 1
+                # خط مدى التوزيع العمودي داخل الثلث الأوسط للباكية (Mid-strip Distribution Line)
+                ax_plan.annotate(
+                    "",
+                    xy=(cx, ry + area_h),
+                    xytext=(cx, ry),
+                    arrowprops=dict(arrowstyle="<->", color=line_c, lw=1.6, ls=":"),
+                    zorder=5,
+                )
 
-                is_stagger = (k_idx % 2 == 1)
-                tag_y = (cy - 0.45) if not is_stagger else (cy + 1.10)
-                f_sz = 11.0 if (L_ext < 2.2 or min(Lx_spans) < 2.0) else 13.0
-                p_sz = 0.25 if (L_ext < 2.2 or min(Lx_spans) < 2.0) else 0.35
-
-                bpm_val = b_info.get('bars_per_m', n_ext)
-                geom_str = f"(L = {L_ext:.2f} m, B = {b_zone_val:.2f} m)"
+                f_sz = 9.5 if (L_ext < 2.2 or min(Lx_spans) < 2.0) else 10.8
+                p_sz = 0.22 if (L_ext < 2.2 or min(Lx_spans) < 2.0) else 0.28
 
                 ax_plan.text(
-                    cx, tag_y,
-                    f"Extra {bpm_val} Φ {dia_ext} / m'\n{geom_str}",
+                    cx, cy - min(0.18, area_h * 0.12),
+                    bay_annot_text,
                     ha="center", va="center", fontsize=f_sz, fontweight="bold", color="#b45309", zorder=8,
                     rotation=0, multialignment="center",
-                    bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
+                    bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.6, alpha=0.96)
                 )
             else:
-                # في اتجاه Y: السيخ يمتد رأسياً بطول L، وعرض الرص والتوزيع أفقياً B
+                # في اتجاه Y: السيخ يمتد رأسياً في منتصف بحر الباكية بطول L، وعرض التوزيع في الثلث الأوسط B
                 area_w = b_zone_val
                 area_h = L_ext
                 rx = cx - area_w / 2.0
                 ry = cy - area_h / 2.0
                 area_rect = patches.Rectangle(
                     (rx, ry), area_w, area_h,
-                    lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.45,
+                    lw=2.0, edgecolor=edge_c, facecolor=face_c, alpha=0.45,
                     hatch="\\\\\\", linestyle="--", zorder=3
                 )
                 ax_plan.add_patch(area_rect)
 
-                x_bar = cx + 0.35
-                ax_plan.plot([x_bar, x_bar], [cy - L_ext/2.0, cy + L_ext/2.0], color=line_c, lw=4.5, solid_capstyle="round", zorder=6)
-                ax_plan.plot([x_bar - 0.25, x_bar + 0.25], [cy - L_ext/2.0, cy - L_ext/2.0], color=line_c, lw=3.0, zorder=6)
-                ax_plan.plot([x_bar - 0.25, x_bar + 0.25], [cy + L_ext/2.0, cy + L_ext/2.0], color=line_c, lw=3.0, zorder=6)
+                x_bar = cx + min(0.32, area_w * 0.25)
+                ax_plan.plot([x_bar, x_bar], [cy - L_ext/2.0, cy + L_ext/2.0], color=line_c, lw=4.2, solid_capstyle="round", zorder=6)
+                ax_plan.plot([x_bar - 0.18, x_bar + 0.18], [cy - L_ext/2.0, cy - L_ext/2.0], color=line_c, lw=2.8, zorder=6)
+                ax_plan.plot([x_bar - 0.18, x_bar + 0.18], [cy + L_ext/2.0, cy + L_ext/2.0], color=line_c, lw=2.8, zorder=6)
 
-                f_sz = 11.0 if (W_bay < 1.5) else 13.0
-                p_sz = 0.25 if (W_bay < 1.5) else 0.35
-                tag_x = (cx - 0.45) if W_bay >= 1.5 else cx
-                bpm_val = b_info.get('bars_per_m', n_ext)
-                b_zone_val = b_info.get("B_zone")
-                if b_zone_val is not None:
-                    geom_str = f"(L = {L_ext:.2f} m, B = {b_zone_val:.2f} m)"
-                else:
-                    geom_str = f"(L = {L_ext:.2f} m)"
+                # خط مدى التوزيع الأفقي داخل الثلث الأوسط للباكية (Mid-strip Distribution Line)
+                ax_plan.annotate(
+                    "",
+                    xy=(rx + area_w, cy),
+                    xytext=(rx, cy),
+                    arrowprops=dict(arrowstyle="<->", color=line_c, lw=1.6, ls=":"),
+                    zorder=5,
+                )
+
+                f_sz = 9.5 if (W_bay < 1.5) else 10.8
+                p_sz = 0.22 if (W_bay < 1.5) else 0.28
 
                 ax_plan.text(
-                    tag_x, cy,
-                    f"Extra {bpm_val} Φ {dia_ext} / m'\n{geom_str}",
+                    cx, cy,
+                    bay_annot_text,
                     ha="center", va="center", fontsize=f_sz, fontweight="bold", color="#b45309", zorder=8,
-                    rotation=90, multialignment="center",
-                    bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
+                    rotation=0, multialignment="center",
+                    bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.6, alpha=0.96)
                 )
     else:
-        # Prominent banner when no extra bottom rebar needed in this direction
+        # Compact wrapped banner when no extra bottom rebar needed in this direction
+        import textwrap
         mid_x_slab = (x_slab_min + x_slab_max) / 2.0
         mid_y_slab = (y_slab_min + y_slab_max) / 2.0
-        banner_w = min(slab_w * 0.88, 16.0)
-        banner_h = max(2.6, slab_h * 0.18)
 
         dir_en = "X-DIRECTION" if dir_req == "X" else "Y-DIRECTION"
         dir_ar = "اتجاه X" if dir_req == "X" else "اتجاه Y"
@@ -7709,32 +7692,30 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
             max_inc = max(int(b.get("rec_inc_bars", 1)) for b in mesh_inc_bays)
             rec_tot = max(int(b.get("rec_total_mesh", n_mesh_btm + max_inc)) for b in mesh_inc_bays)
             max_def = max(float(b.get("delta_As", 0.0)) for b in mesh_inc_bays)
-            banner_box = FancyBboxPatch(
-                (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
-                boxstyle="round,pad=0.5,rounding_size=0.6",
-                facecolor="#fffbeb", edgecolor="#d97706", lw=2.6, zorder=10
+            ar_line = textwrap.fill(
+                f"فرق التسليح في {dir_ar} طفيف — يُرجى زيادة الشبكة السفلية بالمدخلات",
+                width=32,
             )
-            ax_plan.add_patch(banner_box)
             ax_plan.text(
                 mid_x_slab, mid_y_slab,
-                f"⚠ SMALL DEFICIT IN {dir_en} (ΔAs = {max_def:.2f} < 3Φ12 = 3.39 cm²/m)\n"
-                f"Increase Input Bottom Mesh by +{max_inc} Φ {bottom_mesh_dia}/m  →  Use {rec_tot} Φ {bottom_mesh_dia}/m\n"
-                f"(فرق التسليح في {dir_ar} أقل من 3Φ12/م — يُرجى زيادة الشبكة السفلية بالمدخلات إلى {rec_tot}Φ{bottom_mesh_dia}/م)",
-                ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b45309",
-                linespacing=1.45, multialignment="center", zorder=11
+                f"⚠ SMALL DEFICIT IN {dir_en} (ΔAs = {max_def:.2f} cm²/m)\n"
+                f"Use {rec_tot}Ø{bottom_mesh_dia} /m (+{max_inc}Ø{bottom_mesh_dia} /m)\n"
+                f"({ar_line})",
+                ha="center", va="center", fontsize=10.0, fontweight="bold", color="#b45309",
+                linespacing=1.45, multialignment="center", zorder=11,
+                bbox=dict(boxstyle="round,pad=0.45,rounding_size=0.35", facecolor="#fffbeb", edgecolor="#d97706", lw=1.8, alpha=0.95),
             )
         else:
-            banner_box = FancyBboxPatch(
-                (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
-                boxstyle="round,pad=0.5,rounding_size=0.6",
-                facecolor="#f0fdf4", edgecolor="#16a34a", lw=2.6, zorder=10
+            ar_line = textwrap.fill(
+                f"الشبكة السفلية كافية تماماً لمقاومة العزوم في {dir_ar}",
+                width=28,
             )
-            ax_plan.add_patch(banner_box)
             ax_plan.text(
                 mid_x_slab, mid_y_slab,
-                f"✔ NO BOTTOM EXTRA REQUIRED IN {dir_en}\n(الشبكة السفلية كافية تماماً في {dir_ar})",
-                ha="center", va="center", fontsize=13.5, fontweight="bold", color="#15803d",
-                linespacing=1.5, multialignment="center", zorder=11
+                f"✔ NO BOTTOM EXTRA ({dir_en})\n({ar_line})",
+                ha="center", va="center", fontsize=10.5, fontweight="bold", color="#15803d",
+                linespacing=1.45, multialignment="center", zorder=11,
+                bbox=dict(boxstyle="round,pad=0.45,rounding_size=0.35", facecolor="#f0fdf4", edgecolor="#16a34a", lw=1.8, alpha=0.95),
             )
 
     # Dimensions
@@ -7798,7 +7779,7 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
     y_badge_c = y_slab_max + offset_grid_top + bubble_radius * 2 + 1.25
     badge_txt = (
         f"SLAB THICKNESS: ts = {ts_cm:.0f} cm   │   "
-        f"BOTTOM BASE MESH: {n_mesh_btm} Φ {bottom_mesh_dia} / m' (B1 & B2)   │   "
+        f"BOTTOM BASE MESH: {n_mesh_btm}Ø{bottom_mesh_dia} /m (B1 & B2)   │   "
         f"تخانة البلاطة: {ts_cm:.0f} سم  |  الشبكة السفلية الأساسية"
     )
     ax_plan.text(
@@ -7839,6 +7820,7 @@ def generate_flat_slab_top_mesh_extra_sketch(
     active_x_labels=None,
     active_y_labels=None,
     void_boxes=None,
+    top_extra_cols=None,
 ):
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
 
@@ -8000,19 +7982,19 @@ def generate_flat_slab_top_mesh_extra_sketch(
                 draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=10)
 
     # ── Check Extra Top Slab Reinforcement by Direction ─────────────────────
+    # ملاحظة هندسية: الحديد الإضافي العلوي المقاوم للعزوم السالبة أعلى الأعمدة (Column Caps)
+    # يُرسم حصرياً في تبويبة "1. Column Caps / Top Extra" ولا يُكرر رسمه في تبويبات 3A أو 3B.
     dir_req = (direction or "X").upper()
     raw_filtered_bays = [
         b for b in (top_extra_slab_bays or [])
         if isinstance(b, dict) and b.get("n_extra", 0) > 0 and b.get("dir", "X").upper() == dir_req
     ]
-    # دمـج البانيلات المتجاورة في اتجاه الرص والتوزيع المتعامد مع اتجاه السيخ
     filtered_bays = merge_transverse_adjacent_extra_bays(raw_filtered_bays, dir_req=dir_req)
 
     has_extra_top = len(filtered_bays) > 0
 
     if has_extra_top:
         filtered_bays_sorted = sorted(filtered_bays, key=lambda b: (round(b.get("cy", (y_coords[0] + y_coords[-1])/2.0), 1), b.get("cx", (x_coords[0] + x_coords[-1])/2.0)))
-        b_row_counts = {}
         for b_info in filtered_bays_sorted:
             pid = b_info.get("panel_id", "")
             if pid in _voids:
@@ -8036,91 +8018,99 @@ def generate_flat_slab_top_mesh_extra_sketch(
                 cx = (bx0 + bx1) / 2.0
                 cy = (by0 + by1) / 2.0
 
-            b_zone_val = b_info.get("B_zone", W_bay * 0.88)
+            b_zone_val = b_info.get("B_zone", b_info.get("dist_width_m", W_bay * 0.45))
+            bpm_val = int(b_info.get("bars_per_m", n_ext) or 1)
+            tag_lbl_t = f"{bpm_val}Ø{int(dia_ext)} /m - L = {L_ext:.2f} m"
+
             if dir_req == "X":
-                # في اتجاه X: السيخ يمتد أفقياً بطول L، وعرض الرص والتوزيع رأسياً B
                 area_w = L_ext
                 area_h = b_zone_val
                 rx = cx - area_w / 2.0
                 ry = cy - area_h / 2.0
                 area_rect = patches.Rectangle(
                     (rx, ry), area_w, area_h,
-                    lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.45,
+                    lw=2.0, edgecolor=edge_c, facecolor=face_c, alpha=0.42,
                     hatch="///", linestyle="--", zorder=3
                 )
                 ax_plan.add_patch(area_rect)
 
-                y_bar = cy + 0.35
-                ax_plan.plot([cx - L_ext/2.0, cx + L_ext/2.0], [y_bar, y_bar], color=line_c, lw=4.5, solid_capstyle="round", zorder=6)
-                ax_plan.plot([cx - L_ext/2.0, cx - L_ext/2.0], [y_bar, y_bar - 0.35], color=line_c, lw=3.0, zorder=6)
-                ax_plan.plot([cx + L_ext/2.0, cx + L_ext/2.0], [y_bar, y_bar - 0.35], color=line_c, lw=3.0, zorder=6)
+                y_bar = cy + min(0.32, area_h * 0.22)
+                ax_plan.plot([cx - L_ext/2.0, cx + L_ext/2.0], [y_bar, y_bar], color=line_c, lw=4.2, solid_capstyle="round", zorder=6)
+                ax_plan.plot([cx - L_ext/2.0, cx - L_ext/2.0], [y_bar, y_bar - 0.30], color=line_c, lw=2.8, zorder=6)
+                ax_plan.plot([cx + L_ext/2.0, cx + L_ext/2.0], [y_bar, y_bar - 0.30], color=line_c, lw=2.8, zorder=6)
 
-                # Vertical stagger to prevent horizontal badge collision in narrow bays
-                row_k = round(cy, 1)
-                k_idx = b_row_counts.get(row_k, 0)
-                b_row_counts[row_k] = k_idx + 1
+                ax_plan.annotate(
+                    "",
+                    xy=(cx, ry + area_h),
+                    xytext=(cx, ry),
+                    arrowprops=dict(arrowstyle="<->", color=line_c, lw=1.6, ls=":"),
+                    zorder=5,
+                )
 
-                is_stagger = (k_idx % 2 == 1)
-                tag_y = (cy - 0.45) if not is_stagger else (cy + 1.10)
-                f_sz = 11.0 if (L_ext < 2.2 or min(Lx_spans) < 2.0) else 13.0
-                p_sz = 0.25 if (L_ext < 2.2 or min(Lx_spans) < 2.0) else 0.35
-
-                bpm_val = b_info.get('bars_per_m', n_ext)
-                if b_zone_val is not None:
-                    geom_str = f"(L = {L_ext:.2f} m, B = {b_zone_val:.2f} m)"
-                else:
-                    geom_str = f"(L = {L_ext:.2f} m)"
+                f_sz = 9.5 if (L_ext < 2.2 or min(Lx_spans) < 2.0) else 10.5
+                p_sz = 0.22 if (L_ext < 2.2 or min(Lx_spans) < 2.0) else 0.28
 
                 ax_plan.text(
-                    cx, tag_y,
-                    f"Extra {bpm_val} Φ {dia_ext} / m'\n{geom_str}",
+                    cx, cy,
+                    tag_lbl_t,
                     ha="center", va="center", fontsize=f_sz, fontweight="bold", color="#1d4ed8", zorder=8,
                     rotation=0, multialignment="center",
-                    bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
+                    bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.6, alpha=0.96)
                 )
             else:
-                # في اتجاه Y: السيخ يمتد رأسياً بطول L، وعرض الرص والتوزيع أفقياً B
                 area_w = b_zone_val
                 area_h = L_ext
                 rx = cx - area_w / 2.0
                 ry = cy - area_h / 2.0
                 area_rect = patches.Rectangle(
                     (rx, ry), area_w, area_h,
-                    lw=2.2, edgecolor=edge_c, facecolor=face_c, alpha=0.45,
+                    lw=2.0, edgecolor=edge_c, facecolor=face_c, alpha=0.42,
                     hatch="\\\\\\", linestyle="--", zorder=3
                 )
                 ax_plan.add_patch(area_rect)
 
-                x_bar = cx + 0.35
-                ax_plan.plot([x_bar, x_bar], [cy - L_ext/2.0, cy + L_ext/2.0], color=line_c, lw=4.5, solid_capstyle="round", zorder=6)
-                ax_plan.plot([x_bar - 0.35, x_bar], [cy - L_ext/2.0, cy - L_ext/2.0], color=line_c, lw=3.0, zorder=6)
-                ax_plan.plot([x_bar - 0.35, x_bar], [cy + L_ext/2.0, cy + L_ext/2.0], color=line_c, lw=3.0, zorder=6)
+                x_bar = cx + min(0.32, area_w * 0.22)
+                ax_plan.plot([x_bar, x_bar], [cy - L_ext/2.0, cy + L_ext/2.0], color=line_c, lw=4.2, solid_capstyle="round", zorder=6)
+                ax_plan.plot([x_bar - 0.30, x_bar], [cy - L_ext/2.0, cy - L_ext/2.0], color=line_c, lw=2.8, zorder=6)
+                ax_plan.plot([x_bar - 0.30, x_bar], [cy + L_ext/2.0, cy + L_ext/2.0], color=line_c, lw=2.8, zorder=6)
 
-                f_sz = 11.0 if (W_bay < 1.5) else 13.0
-                p_sz = 0.25 if (W_bay < 1.5) else 0.35
-                tag_x = (cx - 0.45) if W_bay >= 1.5 else cx
-                bpm_val = b_info.get('bars_per_m', n_ext)
-                if b_zone_val is not None:
-                    geom_str = f"(L = {L_ext:.2f} m, B = {b_zone_val:.2f} m)"
-                else:
-                    geom_str = f"(L = {L_ext:.2f} m)"
+                ax_plan.annotate(
+                    "",
+                    xy=(rx + area_w, cy),
+                    xytext=(rx, cy),
+                    arrowprops=dict(arrowstyle="<->", color=line_c, lw=1.6, ls=":"),
+                    zorder=5,
+                )
+
+                f_sz = 9.5 if (W_bay < 1.5) else 10.5
+                p_sz = 0.22 if (W_bay < 1.5) else 0.28
 
                 ax_plan.text(
-                    tag_x, cy,
-                    f"Extra {bpm_val} Φ {dia_ext} / m'\n{geom_str}",
+                    cx, cy,
+                    tag_lbl_t,
                     ha="center", va="center", fontsize=f_sz, fontweight="bold", color="#1d4ed8", zorder=8,
-                    rotation=90, multialignment="center",
-                    bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.8)
+                    rotation=0, multialignment="center",
+                    bbox=dict(boxstyle=f"round,pad={p_sz}", facecolor="#ffffff", edgecolor=edge_c, lw=1.6, alpha=0.96)
                 )
     else:
-        # ── 🌟 PROMINENT LARGE BANNER WHEN NO EXTRA TOP SLAB REBAR REQUIRED ─────
+        # ── Compact wrapped banner when no extra top slab rebar required ─────
+        import textwrap
         mid_x_slab = (x_slab_min + x_slab_max) / 2.0
         mid_y_slab = (y_slab_min + y_slab_max) / 2.0
-        banner_w = min(slab_w * 0.88, 16.0)
-        banner_h = max(2.6, slab_h * 0.18)
 
         dir_en = "X-DIRECTION" if dir_req == "X" else "Y-DIRECTION"
         dir_ar = "اتجاه X" if dir_req == "X" else "اتجاه Y"
+
+        if dir_req == "X":
+            has_shawka_in_dir = (cant_left > 0 or cant_right > 0) or any(
+                cr.get("side") in ("left", "right") and float(cr.get("length", 0.0) or 0.0) > 0
+                for cr in (cant_rft_list or [])
+            )
+        else:
+            has_shawka_in_dir = (cant_top > 0 or cant_bottom > 0) or any(
+                cr.get("side") in ("top", "bottom") and float(cr.get("length", 0.0) or 0.0) > 0
+                for cr in (cant_rft_list or [])
+            )
 
         mesh_inc_top_bays = [
             b for b in (top_extra_slab_bays or [])
@@ -8130,32 +8120,46 @@ def generate_flat_slab_top_mesh_extra_sketch(
             max_inc = max(int(b.get("rec_inc_bars", 1)) for b in mesh_inc_top_bays)
             rec_tot = max(int(b.get("rec_total_mesh", n_mesh_top + max_inc)) for b in mesh_inc_top_bays)
             max_def = max(float(b.get("delta_As", 0.0)) for b in mesh_inc_top_bays)
-            banner_box = FancyBboxPatch(
-                (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
-                boxstyle="round,pad=0.5,rounding_size=0.6",
-                facecolor="#fffbeb", edgecolor="#d97706", lw=2.6, zorder=10
+            ar_line = textwrap.fill(
+                f"فرق تسليح شرائح الوسط في {dir_ar} أقل من 3Ø12 /m — يُرجى زيادة الشبكة العلوية بالمدخلات إلى {rec_tot}Ø{top_mesh_dia} /m",
+                width=34,
             )
-            ax_plan.add_patch(banner_box)
+            shawka_line = "\nيحتاج التصميم الي شوك كما بالرسم" if has_shawka_in_dir else ""
             ax_plan.text(
                 mid_x_slab, mid_y_slab,
-                f"⚠ SMALL TOP SLAB DEFICIT IN {dir_en} (ΔAs = {max_def:.2f} < 3Φ12 = 3.39 cm²/m)\n"
-                f"Increase Input Top Mesh by +{max_inc} Φ {top_mesh_dia}/m  →  Use {rec_tot} Φ {top_mesh_dia}/m\n"
-                f"(فرق تسليح شرائح الوسط في {dir_ar} أقل من 3Φ12/م — يُرجى زيادة الشبكة العلوية بالمدخلات إلى {rec_tot}Φ{top_mesh_dia}/م)",
-                ha="center", va="center", fontsize=12.0, fontweight="bold", color="#b45309",
-                linespacing=1.45, multialignment="center", zorder=11
+                f"⚠ SMALL TOP SLAB DEFICIT IN {dir_en} (ΔAs = {max_def:.2f} cm²/m)\n"
+                f"Use {rec_tot}Ø{top_mesh_dia} /m (Add {max_inc}Ø{top_mesh_dia} /m)\n"
+                f"({ar_line}){shawka_line}",
+                ha="center", va="center", fontsize=10.0, fontweight="bold", color="#b45309",
+                linespacing=1.45, multialignment="center", zorder=11,
+                bbox=dict(boxstyle="round,pad=0.45,rounding_size=0.35", facecolor="#fffbeb", edgecolor="#d97706", lw=1.8, alpha=0.95),
             )
         else:
-            banner_box = FancyBboxPatch(
-                (mid_x_slab - banner_w/2.0, mid_y_slab - banner_h/2.0), banner_w, banner_h,
-                boxstyle="round,pad=0.5,rounding_size=0.6",
-                facecolor="#f0fdf4", edgecolor="#16a34a", lw=2.6, zorder=10
-            )
-            ax_plan.add_patch(banner_box)
+            if has_shawka_in_dir:
+                ar_line = textwrap.fill(
+                    f"الرقة العلوية كافية لمقاومة العزوم في {dir_ar}",
+                    width=28,
+                )
+                panel_txt = (
+                    f"✔ TOP MESH SUFFICIENT ({dir_en})\n"
+                    f"({ar_line})\n"
+                    f"يحتاج التصميم الي شوك كما بالرسم"
+                )
+            else:
+                ar_line = textwrap.fill(
+                    f"الرقة العلوية كافية تماماً لمقاومة العزوم في {dir_ar} ولا يلزم إضافي علوي للبلاطة",
+                    width=28,
+                )
+                panel_txt = (
+                    f"✔ NO EXTRA TOP REBAR ({dir_en})\n"
+                    f"({ar_line})"
+                )
             ax_plan.text(
                 mid_x_slab, mid_y_slab,
-                f"✔ NO EXTRA TOP SLAB REBAR IN {dir_en}\n(الرقة العلوية كافية تماماً في {dir_ar} ولا يلزم إضافي علوي للبلاطة)",
-                ha="center", va="center", fontsize=13.0, fontweight="bold", color="#15803d",
-                linespacing=1.5, multialignment="center", zorder=11
+                panel_txt,
+                ha="center", va="center", fontsize=10.5, fontweight="bold", color="#15803d",
+                linespacing=1.45, multialignment="center", zorder=11,
+                bbox=dict(boxstyle="round,pad=0.45,rounding_size=0.35", facecolor="#f0fdf4", edgecolor="#16a34a", lw=1.8, alpha=0.95),
             )
 
     # Cantilever Shawka (Top Cantilever Steel - filtered for relevant direction)
@@ -8163,7 +8167,7 @@ def generate_flat_slab_top_mesh_extra_sketch(
         side = cr.get("side", "")
         L_c = cr.get("length", 0.0)
         tot_L = cr.get("total_bar_length", 3.0)
-        callout = cr.get("rft_callout", "6Φ12/m'")
+        callout = cr.get("rft_callout", "6Ø12 /m")
 
         if dir_req == "X":
             if side == "left" and cant_left > 0:
@@ -8277,7 +8281,7 @@ def generate_flat_slab_top_mesh_extra_sketch(
     y_badge_c = y_slab_max + offset_grid_top + bubble_radius * 2 + 1.25
     badge_txt = (
         f"SLAB THICKNESS: ts = {ts_cm:.0f} cm   │   "
-        f"TOP BASE MESH: {n_mesh_top} Φ {top_mesh_dia} / m' (T1 & T2)   │   "
+        f"TOP BASE MESH: {n_mesh_top}Ø{top_mesh_dia} /m (T1 & T2)   │   "
         f"تخانة البلاطة: {ts_cm:.0f} سم  |  الشبكة العلوية الأساسية"
     )
     ax_plan.text(
@@ -8473,8 +8477,8 @@ def generate_flat_slab_master_steel_layout_sketch(
                     arrowprops=dict(arrowstyle="<->", color="#2563eb", lw=3.0), zorder=5)
     ax_plan.text(bm_x0 + 0.8, bm_y0 - 0.55,
                 f"BOTTOM MESH (BTM)\n"
-                f"M11 (X): {n_mesh_btm} Φ{bottom_mesh_dia}/m'\n"
-                f"M22 (Y): {n_mesh_btm} Φ{bottom_mesh_dia}/m'",
+                f"M11 (X): {n_mesh_btm}Ø{bottom_mesh_dia} /m\n"
+                f"M22 (Y): {n_mesh_btm}Ø{bottom_mesh_dia} /m",
                 ha="center", va="top", fontsize=10.0, fontweight="bold", color="#1e40af", zorder=7,
                 bbox=dict(boxstyle="round,pad=0.35", facecolor="#eff6ff", edgecolor="#3b82f6", lw=1.5))
 
@@ -8489,11 +8493,11 @@ def generate_flat_slab_master_steel_layout_sketch(
                     arrowprops=dict(arrowstyle="<->", color="#16a34a", lw=2.5, ls="--"), zorder=5)
     ax_plan.text(tm_x0 + 0.5, tm_y0 + 1.75,
                 f"TOP BASE MESH (TOP)\n"
-                f"T1 & T2: {n_mesh_top} Φ{top_mesh_dia}/m' (X & Y)",
+                f"T1 & T2: {n_mesh_top}Ø{top_mesh_dia} /m (X & Y)",
                 ha="center", va="bottom", fontsize=10.0, fontweight="bold", color="#15803d", zorder=7,
                 bbox=dict(boxstyle="round,pad=0.35", facecolor="#f0fdf4", edgecolor="#22c55e", lw=1.5))
 
-    # 6. Column Caps (Top Extra Reinforcement over columns)
+    # 6. Column Caps (Top Extra Reinforcement over columns extending into adjacent bays)
     for c_info in (top_extra_cols or []):
         if not c_info.get("is_needed"):
             continue
@@ -8501,48 +8505,55 @@ def generate_flat_slab_master_steel_layout_sketch(
         if cid not in col_dict:
             continue
         cx, cy, ci, cj = col_dict[cid]
-        L_ext = c_info.get("L_extra", 3.0)
-        n_ext = c_info.get("n_extra", 6)
-        dia_ext = c_info.get("dia_extra", 12)
-        callout = c_info.get("callout", f"{n_ext}Φ{dia_ext}")
+        L_ext = float(c_info.get("L_extra", 3.0))
+        dia_ext = int(c_info.get("dia_extra", 12))
+        bpm_c = int(c_info.get("bars_per_m", 1) or 1)
 
-        cap_w = L_ext
-        cap_h = min(Lx_spans[min(ci, len(Lx_spans)-1)], Ly_spans[min(cj, len(Ly_spans)-1)]) * 0.45
+        adj_lx = Lx_spans[min(ci, len(Lx_spans)-1)]
+        adj_ly = Ly_spans[min(cj, len(Ly_spans)-1)]
+        ext_x = max(0.30 * adj_lx, 0.25 * adj_lx + col_w_m / 2.0)
+        xb0 = float(c_info.get("x_bar_0", max(x_slab_min + 0.05, cx - ext_x)))
+        xb1 = float(c_info.get("x_bar_1", min(x_slab_max - 0.05, cx + ext_x)))
+        cap_w = round(xb1 - xb0, 2)
+        cap_h = min(adj_lx, adj_ly) * 0.45
+        yb0 = max(y_slab_min + 0.05, cy - cap_h / 2.0)
+        yb1 = min(y_slab_max - 0.05, cy + cap_h / 2.0)
+
         cap_rect = patches.Rectangle(
-            (cx - cap_w/2.0, cy - cap_h/2.0), cap_w, cap_h,
-            linewidth=1.5, edgecolor="#dc2626", facecolor="#fee2e2", alpha=0.55, linestyle="--", zorder=4
+            (xb0, yb0), xb1 - xb0, yb1 - yb0,
+            linewidth=1.5, edgecolor="#dc2626", facecolor="#fee2e2", alpha=0.45,
+            hatch="xx", linestyle="--", zorder=4
         )
         ax_plan.add_patch(cap_rect)
 
         bar_y = cy + col_d_m/2.0 + 0.15
-        ax_plan.plot([cx - cap_w/2.0, cx + cap_w/2.0], [bar_y, bar_y], color="#dc2626", lw=3.0, zorder=6)
-        ax_plan.plot([cx - cap_w/2.0, cx - cap_w/2.0], [bar_y, bar_y - 0.25], color="#dc2626", lw=2.5, zorder=6)
-        ax_plan.plot([cx + cap_w/2.0, cx + cap_w/2.0], [bar_y, bar_y - 0.25], color="#dc2626", lw=2.5, zorder=6)
+        ax_plan.plot([xb0, xb1], [bar_y, bar_y], color="#dc2626", lw=3.0, zorder=6)
+        ax_plan.plot([xb0, xb0], [bar_y, bar_y - 0.22], color="#dc2626", lw=2.5, zorder=6)
+        ax_plan.plot([xb1, xb1], [bar_y, bar_y - 0.22], color="#dc2626", lw=2.5, zorder=6)
 
-        is_above = ((ci + cj) % 2 == 0)
-        tag_y = (cy + cap_h/2.0 + 0.30) if is_above else (cy - cap_h/2.0 - 0.30)
-        va_pos = "bottom" if is_above else "top"
+        ty_lbl = yb1 + 0.20 if (yb1 + 0.55 <= y_slab_max) else yb0 - 0.20
+        va_lbl = "bottom" if (yb1 + 0.55 <= y_slab_max) else "top"
         ax_plan.text(
-            cx, tag_y, f"Top Cap: {callout} (L={L_ext:.2f}m)",
-            ha="center", va=va_pos, fontsize=9.5, fontweight="bold", color="#991b1b", zorder=8,
-            bbox=dict(boxstyle="round,pad=0.25", facecolor="#ffffff", edgecolor="#dc2626", lw=1.2)
+            min(max((xb0 + xb1) / 2.0, x_slab_min + 1.0), x_slab_max - 1.0), ty_lbl,
+            f"{bpm_c}Ø{dia_ext} /m - L = {cap_w:.2f} m",
+            ha="center", va=va_lbl, fontsize=8.8, fontweight="bold", color="#991b1b", zorder=11,
+            bbox=dict(boxstyle="round,pad=0.22", facecolor="#ffffff", edgecolor="#dc2626", lw=1.2, alpha=0.95)
         )
 
-    # 7. Additional Bottom Steel in Bays
+    # 7. Additional Bottom Steel per Independent Bay (Mid-strip)
     for b_info in (btm_extra_spans or []):
         if not isinstance(b_info, dict) or b_info.get("n_extra", 0) <= 0:
             continue
-        span_len = b_info.get("span_len", 5.0)
-        Ln = b_info.get("Ln", span_len - 0.6)
-        L_ext = b_info.get("L_extra", Ln * 0.8)
-        n_ext = b_info.get("n_extra", 6)
-        dia_ext = b_info.get("dia_extra", 12)
-        callout = b_info.get("callout", f"{n_ext}Φ{dia_ext}")
+        span_len = float(b_info.get("span_len", 5.0))
+        Ln = float(b_info.get("Ln", span_len - 0.6))
+        L_ext = min(float(b_info.get("L_extra", Ln * 0.68)), 0.72 * span_len)
+        dia_ext = int(b_info.get("dia_extra", 12))
+        bpm_b = int(b_info.get("bars_per_m", 1) or 1)
         dir_b = b_info.get("dir", "X")
         bay_lbl = b_info.get("bay_label", "")
 
-        bx_c = (x_coords[0] + x_coords[-1]) / 2.0
-        by_c = (y_coords[0] + y_coords[-1]) / 2.0
+        bx_c = b_info.get("cx", (x_coords[0] + x_coords[-1]) / 2.0)
+        by_c = b_info.get("cy", (y_coords[0] + y_coords[-1]) / 2.0)
         for i in range(len(Lx_spans)):
             for j in range(len(Ly_spans)):
                 if f"X{i+1}" in bay_lbl and f"Y{j+1}" in bay_lbl:
@@ -8550,26 +8561,26 @@ def generate_flat_slab_master_steel_layout_sketch(
                     by_c = (y_coords[j] + y_coords[j+1]) / 2.0
 
         if dir_b == "X":
-            ax_plan.plot([bx_c - L_ext/2.0, bx_c + L_ext/2.0], [by_c, by_c], color="#d97706", lw=3.8, solid_capstyle="round", zorder=6)
-            ax_plan.plot([bx_c - L_ext/2.0, bx_c - L_ext/2.0], [by_c - 0.2, by_c + 0.2], color="#d97706", lw=2.5, zorder=6)
-            ax_plan.plot([bx_c + L_ext/2.0, bx_c + L_ext/2.0], [by_c - 0.2, by_c + 0.2], color="#d97706", lw=2.5, zorder=6)
+            ax_plan.plot([bx_c - L_ext/2.0, bx_c + L_ext/2.0], [by_c, by_c], color="#d97706", lw=3.6, solid_capstyle="round", zorder=6)
+            ax_plan.plot([bx_c - L_ext/2.0, bx_c - L_ext/2.0], [by_c - 0.18, by_c + 0.18], color="#d97706", lw=2.4, zorder=6)
+            ax_plan.plot([bx_c + L_ext/2.0, bx_c + L_ext/2.0], [by_c - 0.18, by_c + 0.18], color="#d97706", lw=2.4, zorder=6)
             ax_plan.text(
-                bx_c, by_c - 0.40,
-                f"Btm Extra:\n{callout}",
-                ha="center", va="top", fontsize=9.5, fontweight="bold", color="#b45309", zorder=8,
+                bx_c, by_c,
+                f"{bpm_b}Ø{dia_ext} /m - L = {L_ext:.2f} m",
+                ha="center", va="center", fontsize=8.8, fontweight="bold", color="#b45309", zorder=8,
                 multialignment="center",
-                bbox=dict(boxstyle="round,pad=0.25", facecolor="#fffbeb", edgecolor="#f59e0b", lw=1.2)
+                bbox=dict(boxstyle="round,pad=0.22", facecolor="#fffbeb", edgecolor="#f59e0b", lw=1.2, alpha=0.95)
             )
         else:
-            ax_plan.plot([bx_c, bx_c], [by_c - L_ext/2.0, by_c + L_ext/2.0], color="#d97706", lw=3.8, solid_capstyle="round", zorder=6)
-            ax_plan.plot([bx_c - 0.2, bx_c + 0.2], [by_c - L_ext/2.0, by_c - L_ext/2.0], color="#d97706", lw=2.5, zorder=6)
-            ax_plan.plot([bx_c - 0.2, bx_c + 0.2], [by_c + L_ext/2.0, by_c + L_ext/2.0], color="#d97706", lw=2.5, zorder=6)
+            ax_plan.plot([bx_c, bx_c], [by_c - L_ext/2.0, by_c + L_ext/2.0], color="#d97706", lw=3.6, solid_capstyle="round", zorder=6)
+            ax_plan.plot([bx_c - 0.18, bx_c + 0.18], [by_c - L_ext/2.0, by_c - L_ext/2.0], color="#d97706", lw=2.4, zorder=6)
+            ax_plan.plot([bx_c - 0.18, bx_c + 0.18], [by_c + L_ext/2.0, by_c + L_ext/2.0], color="#d97706", lw=2.4, zorder=6)
             ax_plan.text(
-                bx_c + 0.40, by_c,
-                f"Btm Extra:\n{callout}",
-                ha="left", va="center", fontsize=9.5, fontweight="bold", color="#b45309", zorder=8,
-                multialignment="left",
-                bbox=dict(boxstyle="round,pad=0.25", facecolor="#fffbeb", edgecolor="#f59e0b", lw=1.2)
+                bx_c, by_c,
+                f"{bpm_b}Ø{dia_ext} /m - L = {L_ext:.2f} m",
+                ha="center", va="center", fontsize=8.8, fontweight="bold", color="#b45309", zorder=8,
+                multialignment="center",
+                bbox=dict(boxstyle="round,pad=0.22", facecolor="#fffbeb", edgecolor="#f59e0b", lw=1.2, alpha=0.95)
             )
 
     # 8. Cantilever Shawka Rebar (Overhang Zones)
@@ -8577,7 +8588,7 @@ def generate_flat_slab_master_steel_layout_sketch(
         side = cr.get("side", "")
         L_c = cr.get("length", 0.0)
         tot_L = cr.get("total_bar_length", 3.0)
-        callout = cr.get("rft_callout", "6Φ12/m'")
+        callout = cr.get("rft_callout", "6Ø12 /m")
 
         if side == "left" and cant_left > 0:
             cy_mid = (y_slab_min + y_slab_max) / 2.0
@@ -8609,7 +8620,7 @@ def generate_flat_slab_master_steel_layout_sketch(
     perim_tag_y = y_slab_min + 0.4
     ax_plan.text(
         perim_tag_x, perim_tag_y,
-        "Perimeter Trim: U-Pins Φ10@20cm + 4Φ12 Edge Bars",
+        "Perimeter Trim: U-Pins 5Ø10 /m + 4Ø12 Edge Bars",
         ha="right", va="bottom", fontsize=9.5, fontweight="bold", color="#475569", zorder=8,
         bbox=dict(boxstyle="round,pad=0.3", facecolor="#f8fafc", edgecolor="#64748b", lw=1.2)
     )
@@ -8679,12 +8690,12 @@ def generate_flat_slab_master_steel_layout_sketch(
     legend_cards = [
         {
             "title": "1. BOTTOM MESH (M11 & M22)",
-            "content": f"• M11 (X-dir): {n_mesh_btm} Φ{bottom_mesh_dia}/m'\n• M22 (Y-dir): {n_mesh_btm} Φ{bottom_mesh_dia}/m'\n• Straight continuous bars (Cover=2.5cm)",
+            "content": f"• M11 (X-dir): {n_mesh_btm}Ø{bottom_mesh_dia} /m\n• M22 (Y-dir): {n_mesh_btm}Ø{bottom_mesh_dia} /m\n• Straight continuous bars (Cover=2.5cm)",
             "bg": "#eff6ff", "border": "#3b82f6",
         },
         {
             "title": "2. TOP BASE MESH (T1 & T2)",
-            "content": f"• T1 & T2 (X & Y): {n_mesh_top} Φ{top_mesh_dia}/m'\n• Shrinkage & crack control mesh\n• Standard 90° down-hooks at slab edge",
+            "content": f"• T1 & T2 (X & Y): {n_mesh_top}Ø{top_mesh_dia} /m\n• Shrinkage & crack control mesh\n• Standard 90° down-hooks at slab edge",
             "bg": "#f0fdf4", "border": "#22c55e",
         },
         {
@@ -8694,7 +8705,7 @@ def generate_flat_slab_master_steel_layout_sketch(
         },
         {
             "title": "4. BOTTOM EXTRA & SHAWKA",
-            "content": f"• Btm Extra: Centered @ large bays (0.80Ln)\n• Shawka: Main 6Φ12/m' extends 1.5 L_cant\n• U-Pins: Φ10@20cm + 4Φ12 Edge perimeter",
+            "content": f"• Btm Extra: Centered @ large bays (0.80Ln)\n• Shawka: Main 6Ø12 /m extends 1.5 L_cant\n• U-Pins: 5Ø10 /m + 4Ø12 Edge perimeter",
             "bg": "#fffbeb", "border": "#f59e0b",
         },
     ]
@@ -9115,7 +9126,7 @@ def optimize_extra_bar_diameter(
     Note: 14 mm is completely excluded as it is not rolled/manufactured in the Egyptian market.
     Returns: (selected_dia_mm, bars_per_m, upgraded, initial_dia_mm)
     """
-    if delta_As_m < XZ.EXTRA_STEEL_THRESHOLD_CM2_M:
+    if delta_As_m <= 1e-4:
         return initial_dia_mm, 0, False, initial_dia_mm
 
     # Only available manufactured diameters in the Egyptian market (never 14 mm)
@@ -9154,81 +9165,102 @@ def calculate_extra_top_steel_at_columns(
     is_high_safety=False,
     mesh_top_n=5,
     top_mesh_dia=10,
+    col_moments_map=None,
+    cantilevers=None,
 ):
     """
-    Determine required Top Extra Steel at each column (C1, C2, ...).
-    Applies the two-case philosophy:
-      - Case 1 (0 < As_extra_m < 3 Φ 12 / m): Do not place column cap extra bars; advise increasing input top mesh.
-      - Case 2 (As_extra_m >= 3 Φ 12 / m): Calculate required column cap extra bars and draw on Steel Layout plan.
+    Determine required Top Extra Steel at each column head (C1, C2, ...) based on:
+      1. Concentrated negative moment around column head M_neg_max (matching 2D Moment Contour Map).
+      2. Excess negative moment ΔM^- = |M_neg_max| - M_cap_top.
+      3. Required top additional steel As_top_add and bars/m in X and Y directions.
+      4. Extension into adjacent bays by at least 0.25 * L_max_adj from column face (or Ld),
+         bounded by slab edges for corner/edge columns.
     """
     col_extras = []
-    thresh_cm2m = XZ.EXTRA_STEEL_THRESHOLD_CM2_M
-    a_bar_top_mesh = bar_area(top_mesh_dia)
+    M_cap_top_m = XZ.mu_capacity_per_m(mesh_top_prov_cm2m, d_cm, Fcu, Fy)
+
+    x_coords = [0.0]
+    for lx in Lx_spans:
+        x_coords.append(x_coords[-1] + lx)
+    y_coords = [0.0]
+    for ly in Ly_spans:
+        y_coords.append(y_coords[-1] + ly)
+
+    cants = cantilevers or {}
+    x_slab_min = x_coords[0] - float(cants.get("left", 0.0))
+    x_slab_max = x_coords[-1] + float(cants.get("right", 0.0))
+    y_slab_min = y_coords[0] - float(cants.get("bottom", 0.0))
+    y_slab_max = y_coords[-1] + float(cants.get("top", 0.0))
 
     for col in columns:
         i = col.get("i_eff", col["i"])
         j = col.get("j_eff", col["j"])
         cid = col["id"]
         ctype = col["type"]
+        cx = float(col["x"])
+        cy = float(col["y"])
 
-        # Adjacent spans
-        lx_adj = Lx_spans[min(max(0, i), len(Lx_spans) - 1)]
-        ly_adj = Ly_spans[min(max(0, j), len(Ly_spans) - 1)]
+        # Adjacent spans in X and Y around this column
+        adj_lx_list = []
+        if i > 0 and (i - 1) < len(Lx_spans):
+            adj_lx_list.append(float(Lx_spans[i - 1]))
+        if i < len(Lx_spans):
+            adj_lx_list.append(float(Lx_spans[i]))
+        lx_adj = max(adj_lx_list) if adj_lx_list else float(Lx_spans[min(max(0, i), len(Lx_spans) - 1)])
+
+        adj_ly_list = []
+        if j > 0 and (j - 1) < len(Ly_spans):
+            adj_ly_list.append(float(Ly_spans[j - 1]))
+        if j < len(Ly_spans):
+            adj_ly_list.append(float(Ly_spans[j]))
+        ly_adj = max(adj_ly_list) if adj_ly_list else float(Ly_spans[min(max(0, j), len(Ly_spans) - 1)])
+
         w_cs = max(0.5, min(lx_adj, ly_adj) / 2.0)
+        w_cs_x = max(0.5, min(ly_adj * 0.45, ly_adj / 2.0))
+        w_cs_y = max(0.5, min(lx_adj * 0.45, lx_adj / 2.0))
 
-        # Peak negative moment at this column
-        mx_cand = rows_x[min(max(0, i), len(rows_x) - 1)]["cs_neg_int"] if rows_x else 1.0
-        my_cand = rows_y[min(max(0, j), len(rows_y) - 1)]["cs_neg_int"] if rows_y else 1.0
-        M_neg_col = max(mx_cand, my_cand)
-
-        # If column is adjacent to an enlarged bay, adjust negative moment
-        if enlarged_bays:
-            for eb in enlarged_bays:
-                # Check proximity
-                if math.hypot(col["x"] - eb.get("mid_x", 0), col["y"] - eb.get("mid_y", 0)) <= eb.get("span_len", 6.0) * 0.75:
-                    M_neg_from_enlarged = 0.65 * eb.get("Mo", 0.0)
-                    if M_neg_from_enlarged > M_neg_col:
-                        M_neg_col = M_neg_from_enlarged
-                        span_gov_candidate = eb.get("span_len", lx_adj)
-                        if span_gov_candidate > max(lx_adj, ly_adj):
-                            lx_adj = span_gov_candidate
-
-        if ctype == "Corner":
-            M_neg_col = M_neg_col * 0.40
-        elif ctype == "Edge":
-            M_neg_col = M_neg_col * 0.70
-
-        if is_high_safety:
-            # FEM peak negative stress concentration over column face
-            M_neg_col = M_neg_col * 1.15
-
-        As_tot_req = calc_As(M_neg_col, w_cs, d_cm, Fcu, Fy, ts_cm)
-        As_req_m = As_tot_req / w_cs
-
-        # Extra steel required over base top mesh (per metre of the cap distribution width)
-        As_extra_m = max(0.0, As_req_m - mesh_top_prov_cm2m)
-
-        # Directional column strip widths and lengths
-        w_cs_x = max(0.5, ly_adj / 2.0)  # distribution width along Y for bars running in X
-        w_cs_y = max(0.5, lx_adj / 2.0)  # distribution width along X for bars running in Y
-
-        if ctype == "Corner":
-            Lx_extra_raw = round(0.30 * lx_adj + col["bc"] / 100.0, 2)
-            Ly_extra_raw = round(0.30 * ly_adj + col["tc"] / 100.0, 2)
-        elif ctype == "Edge":
-            Lx_extra_raw = round(0.30 * lx_adj * 1.5 + col["bc"] / 100.0, 2)
-            Ly_extra_raw = round(0.30 * ly_adj * 1.5 + col["tc"] / 100.0, 2)
+        # Extract peak negative moment per meter at column head (matching 2D Contour Map M⁻)
+        if col_moments_map and cid in col_moments_map:
+            cm_entry = col_moments_map[cid]
+            Mu_neg_x_m = abs(float(cm_entry.get("M_neg_x_m", 0.0)))
+            Mu_neg_y_m = abs(float(cm_entry.get("M_neg_y_m", 0.0)))
+            Mu_neg_m = max(Mu_neg_x_m, Mu_neg_y_m)
+            M_neg_col = Mu_neg_m * w_cs
         else:
-            Lx_extra_raw = round(2.0 * 0.30 * lx_adj + col["bc"] / 100.0, 2)
-            Ly_extra_raw = round(2.0 * 0.30 * ly_adj + col["tc"] / 100.0, 2)
+            is_ext_x = (i == 0) or (i >= len(Lx_spans))
+            is_ext_y = (j == 0) or (j >= len(Ly_spans))
+            row_x_curr = rows_x[min(max(0, i if i < len(rows_x) else i - 1), len(rows_x) - 1)] if rows_x else {}
+            row_y_curr = rows_y[min(max(0, j if j < len(rows_y) else j - 1), len(rows_y) - 1)] if rows_y else {}
+            mx_cand = row_x_curr.get("cs_neg_ext" if is_ext_x else "cs_neg_int", 1.0)
+            my_cand = row_y_curr.get("cs_neg_ext" if is_ext_y else "cs_neg_int", 1.0)
+            M_neg_col = max(mx_cand, my_cand)
+            if enlarged_bays:
+                for eb in enlarged_bays:
+                    if math.hypot(cx - eb.get("mid_x", 0), cy - eb.get("mid_y", 0)) <= eb.get("span_len", 6.0) * 0.75:
+                        M_neg_from_enlarged = 0.65 * eb.get("Mo", 0.0)
+                        if M_neg_from_enlarged > M_neg_col:
+                            M_neg_col = M_neg_from_enlarged
+            if is_high_safety:
+                M_neg_col = M_neg_col * 1.15
+            Mu_neg_x_m = abs(mx_cand) / max(0.5, float(row_x_curr.get("cs_w", w_cs)))
+            Mu_neg_y_m = abs(my_cand) / max(0.5, float(row_y_curr.get("cs_w", w_cs)))
+            Mu_neg_m = max(Mu_neg_x_m, Mu_neg_y_m, abs(M_neg_col) / w_cs)
 
-        needs_mesh_inc = (0.05 < As_extra_m < thresh_cm2m)
-        if needs_mesh_inc:
-            rec_inc_bars = max(1, int(math.ceil(round(As_extra_m / a_bar_top_mesh, 6))))
-            rec_total_mesh = int(mesh_top_n) + rec_inc_bars
-        else:
-            rec_inc_bars = 0
-            rec_total_mesh = int(mesh_top_n)
+        As_req_m = XZ.as_required_per_m(Mu_neg_m, d_cm, Fcu, Fy)
+
+        # Initial capacity check against M_cap_top_m
+        init_res = calculate_additional_reinforcement(
+            M_applied=Mu_neg_m,
+            M_mesh=M_cap_top_m,
+            bar_diameter=extra_dia_mm,
+            base_bars_count=mesh_top_n,
+            d_cm=d_cm,
+            fcu=Fcu,
+            fy=Fy,
+            base_bar_diameter=top_mesh_dia,
+        )
+        As_extra_m = init_res.As_add_req
+        delta_M_m = init_res.delta_M
 
         # Check spacing compliance and upgrade cap bar diameter if total top bars > 10 bars/m
         eff_cap_dia, _bpm_opt, upgraded_cap_dia, orig_cap_dia = optimize_extra_bar_diameter(
@@ -9241,46 +9273,99 @@ def calculate_extra_top_steel_at_columns(
             fy=Fy,
         )
 
-        # X-direction bars (length = Lx_cap, distributed across w_cs_x)
-        cap_des_x = XZ.design_cap(As_extra_m, eff_cap_dia, w_cs_x, Lx_extra_raw)
-        # Y-direction bars (length = Ly_cap, distributed across w_cs_y)
-        cap_des_y = XZ.design_cap(As_extra_m, eff_cap_dia, w_cs_y, Ly_extra_raw)
+        # Finalize additional reinforcement with selected diameter (governing & directional)
+        final_res = calculate_additional_reinforcement(
+            M_applied=Mu_neg_m,
+            M_mesh=M_cap_top_m,
+            bar_diameter=eff_cap_dia,
+            base_bars_count=mesh_top_n,
+            d_cm=d_cm,
+            fcu=Fcu,
+            fy=Fy,
+            base_bar_diameter=top_mesh_dia,
+        )
+        final_res_x = calculate_additional_reinforcement(
+            M_applied=Mu_neg_x_m if Mu_neg_x_m > 0 else Mu_neg_m,
+            M_mesh=M_cap_top_m,
+            bar_diameter=eff_cap_dia,
+            base_bars_count=mesh_top_n,
+            d_cm=d_cm,
+            fcu=Fcu,
+            fy=Fy,
+            base_bar_diameter=top_mesh_dia,
+        )
+        final_res_y = calculate_additional_reinforcement(
+            M_applied=Mu_neg_y_m if Mu_neg_y_m > 0 else Mu_neg_m,
+            M_mesh=M_cap_top_m,
+            bar_diameter=eff_cap_dia,
+            base_bars_count=mesh_top_n,
+            d_cm=d_cm,
+            fcu=Fcu,
+            fy=Fy,
+            base_bar_diameter=top_mesh_dia,
+        )
+        n_add, tag_label = final_res
 
-        is_needed = cap_des_x["is_needed"] or cap_des_y["is_needed"]
-        bpm_x = cap_des_x["bars_per_m"]
-        bpm_y = cap_des_y["bars_per_m"]
-        n_extra_x = cap_des_x["n_total"]
-        n_extra_y = cap_des_y["n_total"]
-        Lx_extra = cap_des_x["L_bar"]
-        Ly_extra = cap_des_y["L_bar"]
+        # Compute adjacent-bay bar extensions: >= max(0.25 * L_max_adj, Ld) from column face, bounded by slab edges
+        Ld_top = XZ.development_length(eff_cap_dia, Fcu, Fy, top_bar=True)
+        bc_m_col = float(col.get("width_m") or (col.get("bc", 30.0) / 100.0))
+        tc_m_col = float(col.get("height_m") or (col.get("tc", 30.0) / 100.0))
+
+        ext_x_from_center = max(0.30 * lx_adj, 0.25 * lx_adj + bc_m_col / 2.0, Ld_top + bc_m_col / 2.0)
+        ext_y_from_center = max(0.30 * ly_adj, 0.25 * ly_adj + tc_m_col / 2.0, Ld_top + tc_m_col / 2.0)
+
+        x_bar_0 = round(max(x_slab_min + 0.05, cx - ext_x_from_center), 2)
+        x_bar_1 = round(min(x_slab_max - 0.05, cx + ext_x_from_center), 2)
+        y_bar_0 = round(max(y_slab_min + 0.05, cy - ext_y_from_center), 2)
+        y_bar_1 = round(min(y_slab_max - 0.05, cy + ext_y_from_center), 2)
+
+        Lx_extra = XZ.round_up_length(max(0.8, x_bar_1 - x_bar_0))
+        Ly_extra = XZ.round_up_length(max(0.8, y_bar_1 - y_bar_0))
+
+        bpm_x = final_res_x.n_add if final_res_x.n_add > 0 else n_add
+        bpm_y = final_res_y.n_add if final_res_y.n_add > 0 else n_add
+        is_needed = (n_add > 0) or (bpm_x > 0) or (bpm_y > 0)
+        if not is_needed:
+            bpm_x = 0
+            bpm_y = 0
+
+        needs_mesh_inc = False
+        rec_inc_bars = 0
+        rec_total_mesh = int(mesh_top_n)
+
+        n_extra_x = XZ.total_bars(bpm_x, w_cs_x) if bpm_x > 0 else 0
+        n_extra_y = XZ.total_bars(bpm_y, w_cs_y) if bpm_y > 0 else 0
+
+        tag_lbl_x = f"{bpm_x}Ø{eff_cap_dia} /m - L = {Lx_extra:.2f} m" if bpm_x > 0 else ""
+        tag_lbl_y = f"{bpm_y}Ø{eff_cap_dia} /m - L = {Ly_extra:.2f} m" if bpm_y > 0 else ""
 
         if is_needed:
             callout_combined = (
-                f"X: {bpm_x} Φ{eff_cap_dia}/m' (Total: {n_extra_x} Φ{eff_cap_dia}, L={Lx_extra:.2f}m) | "
-                f"Y: {bpm_y} Φ{eff_cap_dia}/m' (Total: {n_extra_y} Φ{eff_cap_dia}, L={Ly_extra:.2f}m)"
-            )
-        elif needs_mesh_inc:
-            callout_combined = (
-                f"⚠️ فرق التسليح ({As_extra_m:.2f} cm²/m) أقل من 3Φ12/m ({thresh_cm2m:.2f} cm²/m) — "
-                f"يُوصى بزيادة الشبكة العلوية بالمدخلات بمقدار +{rec_inc_bars} Φ{top_mesh_dia}/m' لتصبح {rec_total_mesh} Φ{top_mesh_dia}/m'"
+                f"{max(bpm_x, bpm_y)}Ø{eff_cap_dia} /m - L = {max(Lx_extra, Ly_extra):.2f} m "
+                f"(X: {bpm_x}Ø{eff_cap_dia} /m, L={Lx_extra:.2f}m | Y: {bpm_y}Ø{eff_cap_dia} /m, L={Ly_extra:.2f}m)"
             )
         else:
-            callout_combined = "Mesh is Sufficient (الشبكة تكفي)"
+            callout_combined = final_res.full_label
 
         col_extras.append({
             "id": cid,
-            "x": col["x"],
-            "y": col["y"],
+            "x": cx,
+            "y": cy,
             "i": col.get("i", i),
             "j": col.get("j", j),
             "grid": f"{col['grid_x']} - {col['grid_y']}",
             "type": ctype,
-            "Mu_neg (t.m)": M_neg_col,
+            "Mu_neg (t.m)": round(M_neg_col, 2),
+            "Mu_neg_m (t.m/m)": round(Mu_neg_m, 2),
+            "Mu_neg_x_m (t.m/m)": round(Mu_neg_x_m, 2),
+            "Mu_neg_y_m (t.m/m)": round(Mu_neg_y_m, 2),
+            "M_cap_m (t.m/m)": M_cap_top_m,
+            "delta_M_m (t.m/m)": delta_M_m,
             "As_req (cm²/m)": As_req_m,
             "As_mesh (cm²/m)": mesh_top_prov_cm2m,
             "As_extra (cm²/m)": As_extra_m,
-            "As_extra_prov (cm²/m)": max(cap_des_x["As_extra_prov_m"], cap_des_y["As_extra_prov_m"]),
-            "bars_per_m": bpm_x,
+            "As_extra_prov (cm²/m)": final_res.As_add_prov,
+            "bars_per_m": max(bpm_x, bpm_y),
             "bars_per_m_x": bpm_x,
             "bars_per_m_y": bpm_y,
             "cap_width": w_cs_x,
@@ -9292,14 +9377,26 @@ def calculate_extra_top_steel_at_columns(
             "dia_extra": eff_cap_dia,
             "dia_input": orig_cap_dia,
             "is_dia_upgraded": upgraded_cap_dia,
-            "L_extra": Lx_extra,
+            "L_extra": max(Lx_extra, Ly_extra),
             "L_extra_x": Lx_extra,
             "L_extra_y": Ly_extra,
+            "x_bar_0": x_bar_0,
+            "x_bar_1": x_bar_1,
+            "y_bar_0": y_bar_0,
+            "y_bar_1": y_bar_1,
+            "tag_label": tag_label,
+            "tag_label_x": tag_lbl_x or tag_label,
+            "tag_label_y": tag_lbl_y or tag_label,
+            "full_annotation": final_res.full_label,
+            "full_annotation_x": final_res_x.full_label,
+            "full_annotation_y": final_res_y.full_label,
             "callout": callout_combined,
             "is_needed": is_needed,
             "needs_mesh_inc": needs_mesh_inc,
             "rec_inc_bars": rec_inc_bars,
             "rec_total_mesh": rec_total_mesh,
+            "base_bars_count": int(mesh_top_n),
+            "base_mesh_dia": int(top_mesh_dia),
             "top_mesh_dia": top_mesh_dia,
             "x_min": col.get("x_min"),
             "y_min": col.get("y_min"),
@@ -9307,8 +9404,8 @@ def calculate_extra_top_steel_at_columns(
             "y_max": col.get("y_max"),
             "width_m": col.get("width_m"),
             "height_m": col.get("height_m"),
-            "center_x": col.get("center_x", col["x"]),
-            "center_y": col.get("center_y", col["y"]),
+            "center_x": col.get("center_x", cx),
+            "center_y": col.get("center_y", cy),
             "bc": col.get("bc"),
             "tc": col.get("tc"),
         })
@@ -9339,10 +9436,10 @@ def calculate_cantilever_reinforcement(cantilevers, Wu, d_cm, Fcu, Fy, ts_cm, ba
                 "length": L_c,
                 "Mu (t.m/m)": M_u,
                 "As_req (cm²/m)": As_req_m,
-                "rft_callout": f"{n_bars} Φ{bar_dia_mm} / m'",
+                "rft_callout": f"{n_bars}Ø{bar_dia_mm} /m",
                 "ext_length": ext_len,
                 "total_bar_length": total_bar_l,
-                "secondary_rft": "5 Φ10 / m'",
+                "secondary_rft": "5Ø10 /m",
             })
     return cant_rft
 
@@ -9448,29 +9545,29 @@ def calculate_boq(Lx_spans, Ly_spans, cantilevers, ts_cm, mesh_btm_n, mesh_btm_d
     items = [
         {
             "item_name": "الشبكة الأساسية السفلية (Bottom Base Mesh B1, B2)",
-            "dia_str": f"Φ {mesh_btm_dia} mm",
+            "dia_str": f"Ø{mesh_btm_dia} mm",
             "dia_mm": mesh_btm_dia,
             "length_m": len_btm_m,
             "weight_kg": steel_btm_kg,
             "weight_ton": steel_btm_kg / 1000.0,
             "qty_str": f"{steel_btm_kg / 1000.0:.2f} Ton ({steel_btm_kg:,.0f} kg)",
             "length_str": f"{len_btm_m:,.1f} m'",
-            "spec": f"{mesh_btm_n} Φ{mesh_btm_dia} / m' في الاتجاهين X & Y (فرش وغطاء سفلي)",
+            "spec": f"{mesh_btm_n}Ø{mesh_btm_dia} /m في الاتجاهين X & Y (فرش وغطاء سفلي)",
         },
         {
             "item_name": "الشبكة الأساسية العلوية (Top Base Mesh T1, T2)",
-            "dia_str": f"Φ {mesh_top_dia} mm",
+            "dia_str": f"Ø{mesh_top_dia} mm",
             "dia_mm": mesh_top_dia,
             "length_m": len_top_m,
             "weight_kg": steel_top_kg,
             "weight_ton": steel_top_kg / 1000.0,
             "qty_str": f"{steel_top_kg / 1000.0:.2f} Ton ({steel_top_kg:,.0f} kg)",
             "length_str": f"{len_top_m:,.1f} m'",
-            "spec": f"{mesh_top_n} Φ{mesh_top_dia} / m' في الاتجاهين X & Y بكامل المسطح",
+            "spec": f"{mesh_top_n}Ø{mesh_top_dia} /m في الاتجاهين X & Y بكامل المسطح",
         },
         {
             "item_name": "كابات حديد إضافي علوي فوق الأعمدة (Additional Top Caps)",
-            "dia_str": f"Φ {col_extra_dia_used or 12} mm" if steel_col_extra_kg > 0 else "—",
+            "dia_str": f"Ø{col_extra_dia_used or 12} mm" if steel_col_extra_kg > 0 else "—",
             "dia_mm": col_extra_dia_used if steel_col_extra_kg > 0 else None,
             "length_m": len_col_extra_m,
             "weight_kg": steel_col_extra_kg,
@@ -9481,7 +9578,7 @@ def calculate_boq(Lx_spans, Ly_spans, cantilevers, ts_cm, mesh_btm_n, mesh_btm_d
         },
         {
             "item_name": "حديد إضافي سفلي بالباكيات (Additional Bottom Steel in Bays)",
-            "dia_str": f"Φ {btm_extra_dia_used or 12} mm" if steel_btm_extra_kg > 0 else "—",
+            "dia_str": f"Ø{btm_extra_dia_used or 12} mm" if steel_btm_extra_kg > 0 else "—",
             "dia_mm": btm_extra_dia_used if steel_btm_extra_kg > 0 else None,
             "length_m": len_btm_extra_m,
             "weight_kg": steel_btm_extra_kg,
@@ -9495,26 +9592,26 @@ def calculate_boq(Lx_spans, Ly_spans, cantilevers, ts_cm, mesh_btm_n, mesh_btm_d
     if steel_cant_kg > 0:
         items.append({
             "item_name": "تسليح الكوابيل والشوكة (Cantilever Shawka & Secondary)",
-            "dia_str": f"Φ {cant_dia_used or 12} mm",
+            "dia_str": f"Ø{cant_dia_used or 12} mm",
             "dia_mm": cant_dia_used or 12,
             "length_m": len_cant_m,
             "weight_kg": steel_cant_kg,
             "weight_ton": steel_cant_kg / 1000.0,
             "qty_str": f"{steel_cant_kg / 1000.0:.2f} Ton ({steel_cant_kg:,.0f} kg)",
             "length_str": f"{len_cant_m:,.1f} m'",
-            "spec": "شوك علوية رئيسية تمتد 1.5 طول الكابولي داخل البلاطة + ثانوي 5Φ10/m'",
+            "spec": "شوك علوية رئيسية تمتد 1.5 طول الكابولي داخل البلاطة + ثانوي 5Ø10 /m",
         })
 
     items.append({
         "item_name": "حديد رجل الغلق ودبابيس الأطراف (Perimeter U-Pins & Edge Bars)",
-        "dia_str": "Φ 10 & Φ 12 mm",
+        "dia_str": "Ø10 & Ø12 mm",
         "dia_mm": 10,
         "length_m": len_edge_m,
         "weight_kg": steel_edge_kg,
         "weight_ton": steel_edge_kg / 1000.0,
         "qty_str": f"{steel_edge_kg / 1000.0:.2f} Ton ({steel_edge_kg:,.0f} kg)",
         "length_str": f"{len_edge_m:,.1f} m'",
-        "spec": "دبابيس U-Pins Φ10 كل 20 سم + 2Φ12 سفلي و 2Φ12 علوي على كامل المحيط",
+        "spec": "دبابيس U-Pins 5Ø10 /m + 2Ø12 سفلي و 2Ø12 علوي على كامل المحيط",
     })
 
     items.append({
@@ -9539,7 +9636,7 @@ def calculate_boq(Lx_spans, Ly_spans, cantilevers, ts_cm, mesh_btm_n, mesh_btm_d
         apps_str = " + ".join(sorted(d_data["apps"]))
         by_dia_rows.append({
             "dia_mm": dia,
-            "dia_str": f"Φ {dia} mm",
+            "dia_str": f"Ø{dia} mm",
             "unit_w_kg_m": bar_unit_weight(dia),
             "length_m": l_m,
             "length_str": f"{l_m:,.1f} m'",
@@ -11957,6 +12054,47 @@ def render(is_standalone: bool = False):
             strip_top_extra_dia = S.selectbox("Strip Top Extra Φ", "slab_strip_top_extra_dia_idx", options=BAR_DIA)
             strip_bottom_extra_dia = S.selectbox("Strip Btm Extra Φ", "slab_strip_bottom_extra_dia_idx", options=BAR_DIA)
 
+        # ── فحص الحد الأدنى الكودي لعدد أسياخ الشبكة السفلية والعلوية (ECP 203: ρ_min = 0.18%) ──
+        _ts_chk_step2 = float(ts_initial) if ts_initial is not None else 20.0
+        _as_min_step2 = 0.0018 * 100.0 * _ts_chk_step2
+        _n_btm_min_s2 = max(5, math.ceil(_as_min_step2 / bar_area(bottom_mesh_dia)))
+        _n_top_min_s2 = max(5, math.ceil(_as_min_step2 / bar_area(top_mesh_dia)))
+        _n_btm_in_s2  = int(n_btm_mesh_usr) if n_btm_mesh_usr else _n_btm_min_s2
+        _n_top_in_s2  = int(n_top_mesh_usr) if n_top_mesh_usr else 5
+
+        _step2_min_lines = []
+        if _n_btm_in_s2 < _n_btm_min_s2:
+            _step2_min_lines.append(
+                f"<div>⚠️ عدد أسياخ <b>الشبكة السفلية</b> المدخل "
+                f"(<span dir='ltr' style='unicode-bidi:isolate; display:inline-block; background:rgba(0,0,0,0.28); padding:2px 10px; border-radius:6px; border:1.5px solid #fecaca; font-size:1.42rem; font-weight:900; margin:0 4px;'>{_n_btm_in_s2} Ø {bottom_mesh_dia} / m</span>) "
+                f"أقل من الحد الأدنى الكودي (<span dir='ltr' style='unicode-bidi:isolate; display:inline-block;'>ECP 203: ρ_min = 0.18%</span>) "
+                f"— الحد الأدنى المطلوب: "
+                f"<span dir='ltr' style='unicode-bidi:isolate; display:inline-block; background:#ffffff; color:#991b1b; padding:2px 12px; border-radius:6px; font-size:1.42rem; font-weight:900; margin:0 4px;'>{_n_btm_min_s2} Ø {bottom_mesh_dia} / m</span></div>"
+            )
+        if _n_top_in_s2 < _n_top_min_s2:
+            _step2_min_lines.append(
+                f"<div>⚠️ عدد أسياخ <b>الشبكة العلوية</b> المدخل "
+                f"(<span dir='ltr' style='unicode-bidi:isolate; display:inline-block; background:rgba(0,0,0,0.28); padding:2px 10px; border-radius:6px; border:1.5px solid #fecaca; font-size:1.42rem; font-weight:900; margin:0 4px;'>{_n_top_in_s2} Ø {top_mesh_dia} / m</span>) "
+                f"أقل من الحد الأدنى الكودي (<span dir='ltr' style='unicode-bidi:isolate; display:inline-block;'>ECP 203: ρ_min = 0.18%</span>) "
+                f"— الحد الأدنى المطلوب: "
+                f"<span dir='ltr' style='unicode-bidi:isolate; display:inline-block; background:#ffffff; color:#991b1b; padding:2px 12px; border-radius:6px; font-size:1.42rem; font-weight:900; margin:0 4px;'>{_n_top_min_s2} Ø {top_mesh_dia} / m</span></div>"
+            )
+        if _step2_min_lines:
+            S.play_warning_sound()
+            st.markdown(
+                f"""
+                <div dir="rtl" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 50%, #991b1b 100%);
+                            border: 3px solid #fecaca; border-radius: 14px; padding: 18px 26px;
+                            margin: 14px auto; max-width: 960px; text-align: center;
+                            box-shadow: 0 8px 26px rgba(220, 38, 38, 0.55);">
+                    <div style="color: #ffffff; font-size: 1.38rem; font-weight: 900; line-height: 2.0; text-shadow: 0 1px 3px rgba(0,0,0,0.45); display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: center;">
+                        {''.join(_step2_min_lines)}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
         # ── 🛡️ DESIGN SAFETY MODE (نمط التصميم المتقدم / المحاكي للـ FEM & SAFE 2016) ──
         st.markdown("<hr style='margin: 12px 0 14px 0; border: none; border-top: 1px solid rgba(255,255,255,0.1);' />", unsafe_allow_html=True)
 
@@ -12495,24 +12633,51 @@ def render(is_standalone: bool = False):
 
     As_min_req_m   = 0.0018 * 100.0 * ts
     n_mesh_btm_min = max(5, math.ceil(As_min_req_m / bar_area(bottom_mesh_dia)))
+    n_mesh_top_min = max(5, math.ceil(As_min_req_m / bar_area(top_mesh_dia)))
 
-    # ── الشبكة السفلية: أخذ قيمة المستخدم مع تطبيق الحد الأدنى الكودي ─────────
+    # ── الشبكة السفلية والعلوية: فحص الحد الأدنى الكودي (ECP 203: ρ_min = 0.18%) ──
     _n_btm_usr = int(n_btm_mesh_usr) if n_btm_mesh_usr else n_mesh_btm_min
-    if _n_btm_usr < n_mesh_btm_min:
-        st.warning(
-            f"⚠️ عدد أسياخ الشبكة السفلية المدخل ({_n_btm_usr} Φ{bottom_mesh_dia}) "
-            f"أقل من الحد الأدنى الكودي (ECP 203: ρ_min = 0.18%) "
-            f"— سيُطبَّق الحد الأدنى تلقائياً: **{n_mesh_btm_min} Φ{bottom_mesh_dia} / m'**"
-        )
-    n_mesh_btm = max(_n_btm_usr, n_mesh_btm_min)
+    _n_top_usr = int(n_top_mesh_usr) if n_top_mesh_usr else 5
 
+    _min_mesh_alert_lines = []
+    if _n_btm_usr < n_mesh_btm_min:
+        _min_mesh_alert_lines.append(
+            f"<div>⚠️ عدد أسياخ <b>الشبكة السفلية</b> المدخل "
+            f"(<span dir='ltr' style='unicode-bidi:isolate; display:inline-block; background:rgba(0,0,0,0.28); padding:2px 10px; border-radius:6px; border:1.5px solid #fecaca; font-size:1.42rem; font-weight:900; margin:0 4px;'>{_n_btm_usr} Ø {bottom_mesh_dia} / m</span>) "
+            f"أقل من الحد الأدنى الكودي (<span dir='ltr' style='unicode-bidi:isolate; display:inline-block;'>ECP 203: ρ_min = 0.18%</span>) "
+            f"— سيُطبَّق الحد الأدنى تلقائياً: "
+            f"<span dir='ltr' style='unicode-bidi:isolate; display:inline-block; background:#ffffff; color:#991b1b; padding:2px 12px; border-radius:6px; font-size:1.42rem; font-weight:900; margin:0 4px;'>{n_mesh_btm_min} Ø {bottom_mesh_dia} / m</span></div>"
+        )
+    if _n_top_usr < n_mesh_top_min:
+        _min_mesh_alert_lines.append(
+            f"<div>⚠️ عدد أسياخ <b>الشبكة العلوية</b> المدخل "
+            f"(<span dir='ltr' style='unicode-bidi:isolate; display:inline-block; background:rgba(0,0,0,0.28); padding:2px 10px; border-radius:6px; border:1.5px solid #fecaca; font-size:1.42rem; font-weight:900; margin:0 4px;'>{_n_top_usr} Ø {top_mesh_dia} / m</span>) "
+            f"أقل من الحد الأدنى الكودي (<span dir='ltr' style='unicode-bidi:isolate; display:inline-block;'>ECP 203: ρ_min = 0.18%</span>) "
+            f"— الحد الأدنى الكودي المطلوب: "
+            f"<span dir='ltr' style='unicode-bidi:isolate; display:inline-block; background:#ffffff; color:#991b1b; padding:2px 12px; border-radius:6px; font-size:1.42rem; font-weight:900; margin:0 4px;'>{n_mesh_top_min} Ø {top_mesh_dia} / m</span></div>"
+        )
+
+    _min_mesh_alert_html = ""
+    if _min_mesh_alert_lines:
+        _min_mesh_alert_html = f"""
+        <div dir="rtl" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 50%, #991b1b 100%);
+                    border: 3px solid #fecaca; border-radius: 14px; padding: 18px 26px;
+                    margin: 14px auto; max-width: 960px; text-align: center;
+                    box-shadow: 0 8px 26px rgba(220, 38, 38, 0.55);">
+            <div style="color: #ffffff; font-size: 1.38rem; font-weight: 900; line-height: 2.0; text-shadow: 0 1px 3px rgba(0,0,0,0.45); display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: center;">
+                {''.join(_min_mesh_alert_lines)}
+            </div>
+        </div>
+        """
+
+    n_mesh_btm = max(_n_btm_usr, n_mesh_btm_min)
     prov_btm_mesh_cm2m = n_mesh_btm * bar_area(bottom_mesh_dia)
-    mesh_btm_str = f"{n_mesh_btm} Φ{bottom_mesh_dia} / m'"
+    mesh_btm_str = f"{n_mesh_btm}Ø{bottom_mesh_dia} /m"
 
     # ── الشبكة العلوية: قيمة المستخدم مباشرة ────────────────────────────────────
-    n_mesh_top = int(n_top_mesh_usr) if n_top_mesh_usr else 5
+    n_mesh_top = _n_top_usr
     prov_top_mesh_cm2m = n_mesh_top * bar_area(top_mesh_dia)
-    mesh_top_str = f"{n_mesh_top} Φ{top_mesh_dia} / m'"
+    mesh_top_str = f"{n_mesh_top}Ø{top_mesh_dia} /m"
 
     # ── Load Redistribution & Tributary Calculation (with Void Deductions) ───
     cant_L = cantilevers.get("left", 0.0)
@@ -12722,10 +12887,23 @@ def render(is_standalone: bool = False):
         for p in _orig_panels_sk if p["id"] in set(_confirmed_voids)
     ]
 
-    # 3. Detect and calculate Bottom Extra Steel per Panel Bay (بين المحاور داخل كل باكية)
+    # 3. Detect and calculate Bottom Extra Steel per Independent Panel Bay (P_i_j) & Column-Head Top Steel
     rem_coords_set = {(c["x"], c["y"]) for c in (_removed_col_objs or [])}
     all_panels_x_design = []
     all_panels_y_design = []
+    M_cap_btm_m = XZ.mu_capacity_per_m(prov_btm_mesh_cm2m, d, Fcu, Fy)
+    M_cap_top_m = XZ.mu_capacity_per_m(prov_top_mesh_cm2m, d, Fcu, Fy)
+
+    # Pre-compute 2D Moment Field so each bay P_i_j and column head C_k uses the exact contour moment M⁺ / M⁻
+    X_mf, Y_mf, _M11_mf, _M22_mf, M11_raw_mf, M22_raw_mf = build_slab_moment_field(
+        Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+        void_panel_ids=set(_confirmed_voids),
+        void_boxes=_void_boxes_sk,
+        active_cols=_active_cols,
+        removed_cols=_removed_col_objs,
+    )
+
+    bay_geom_records = []
 
     for j in range(len(Ly_calc)):
         for i in range(len(Lx_calc)):
@@ -12757,55 +12935,69 @@ def render(is_standalone: bool = False):
             # Check if this panel borders any removed column (enlarged bay)
             is_enlarged = bool(rem_coords_set.intersection({(x_l, y_b), (x_r, y_b), (x_l, y_t), (x_r, y_t)}))
 
-            # X-direction Bending
+            # Extract exact peak positive moment M⁺ inside bay boundaries (matching 2D Contour Map)
+            ix_m = int(np.argmin(np.abs(X_mf[0, :] - cx)))
+            iy_m = int(np.argmin(np.abs(Y_mf[:, 0] - cy)))
+            m11_mid_val = float(M11_raw_mf[iy_m, ix_m])
+            m22_mid_val = float(M22_raw_mf[iy_m, ix_m])
+
+            # X-direction Bending (M11+)
             Mo_x = Wu * span_ly * (Ln_x ** 2) / 8.0
             M_pos_x = (0.50 if is_enlarged else 0.35) * Mo_x
             w_cs_x = min(span_lx, span_ly) / 2.0
             M_cs_x = 0.60 * M_pos_x
-            As_cs_req_x = calc_As(M_cs_x, w_cs_x, d, Fcu, Fy, ts)
-            As_cs_m_x = As_cs_req_x / w_cs_x
-            delta_As_cs_x = max(0.0, As_cs_m_x - prov_btm_mesh_cm2m)
-
             ms_w_x = max(0.1, span_ly - w_cs_x)
             M_ms_x = 0.40 * M_pos_x
-            As_ms_req_x = calc_As(M_ms_x, ms_w_x, d, Fcu, Fy, ts)
-            As_ms_m_x = As_ms_req_x / ms_w_x
-            delta_As_ms_x = max(0.0, As_ms_m_x - prov_btm_mesh_cm2m)
-            delta_As_x = max(delta_As_cs_x, delta_As_ms_x)
-            Mu_pos_m_x = max(M_cs_x / max(0.1, w_cs_x), M_ms_x / max(0.1, ms_w_x))
+            ddm_pos_m_x = max(M_cs_x / max(0.1, w_cs_x), M_ms_x / max(0.1, ms_w_x))
+            Mu_pos_m_x = round(max(m11_mid_val, ddm_pos_m_x if m11_mid_val <= 0 else m11_mid_val), 2)
+            As_req_m_x = XZ.as_required_per_m(Mu_pos_m_x, d, Fcu, Fy)
 
-            # Y-direction Bending
+            init_btm_x = calculate_additional_reinforcement(
+                M_applied=Mu_pos_m_x,
+                M_mesh=M_cap_btm_m,
+                bar_diameter=strip_bottom_extra_dia,
+                base_bars_count=n_mesh_btm,
+                d_cm=d,
+                fcu=Fcu,
+                fy=Fy,
+                base_bar_diameter=bottom_mesh_dia,
+            )
+            delta_As_x = init_btm_x.As_add_req
+            delta_M_x = init_btm_x.delta_M
+
+            # Y-direction Bending (M22+)
             Mo_y = Wu * span_lx * (Ln_y ** 2) / 8.0
             M_pos_y = (0.50 if is_enlarged else 0.35) * Mo_y
             w_cs_y = min(span_lx, span_ly) / 2.0
             M_cs_y = 0.60 * M_pos_y
-            As_cs_req_y = calc_As(M_cs_y, w_cs_y, d, Fcu, Fy, ts)
-            As_cs_m_y = As_cs_req_y / w_cs_y
-            delta_As_cs_y = max(0.0, As_cs_m_y - prov_btm_mesh_cm2m)
-
             ms_w_y = max(0.1, span_lx - w_cs_y)
             M_ms_y = 0.40 * M_pos_y
-            As_ms_req_y = calc_As(M_ms_y, ms_w_y, d, Fcu, Fy, ts)
-            As_ms_m_y = As_ms_req_y / ms_w_y
-            delta_As_ms_y = max(0.0, As_ms_m_y - prov_btm_mesh_cm2m)
-            delta_As_y = max(delta_As_cs_y, delta_As_ms_y)
-            Mu_pos_m_y = max(M_cs_y / max(0.1, w_cs_y), M_ms_y / max(0.1, ms_w_y))
+            ddm_pos_m_y = max(M_cs_y / max(0.1, w_cs_y), M_ms_y / max(0.1, ms_w_y))
+            Mu_pos_m_y = round(max(m22_mid_val, ddm_pos_m_y if m22_mid_val <= 0 else m22_mid_val), 2)
+            As_req_m_y = XZ.as_required_per_m(Mu_pos_m_y, d, Fcu, Fy)
 
-            _thresh_3phi12 = XZ.EXTRA_STEEL_THRESHOLD_CM2_M
-            _a_bar_btm_mesh = bar_area(bottom_mesh_dia)
+            init_btm_y = calculate_additional_reinforcement(
+                M_applied=Mu_pos_m_y,
+                M_mesh=M_cap_btm_m,
+                bar_diameter=strip_bottom_extra_dia,
+                base_bars_count=n_mesh_btm,
+                d_cm=d,
+                fcu=Fcu,
+                fy=Fy,
+                base_bar_diameter=bottom_mesh_dia,
+            )
+            delta_As_y = init_btm_y.As_add_req
+            delta_M_y = init_btm_y.delta_M
 
-            # X-direction Bottom Extra Check & Record (2-Case Philosophy vs 3Φ12/m threshold)
-            req_extra_x = (delta_As_x >= _thresh_3phi12)
-            needs_mesh_inc_x = (0.05 < delta_As_x < _thresh_3phi12)
-            if needs_mesh_inc_x:
-                rec_inc_bars_x = max(1, int(math.ceil(round(delta_As_x / _a_bar_btm_mesh, 6))))
-                rec_total_mesh_x = int(n_mesh_btm) + rec_inc_bars_x
-            else:
-                rec_inc_bars_x = 0
-                rec_total_mesh_x = int(n_mesh_btm)
+            # X-direction Bottom Extra Capacity Check & Rebar Calculation per Bay
+            req_extra_x = (init_btm_x.n_add > 0)
+            needs_mesh_inc_x = False
+            rec_inc_bars_x = 0
+            rec_total_mesh_x = int(n_mesh_btm)
+            B_zone_x = round(0.45 * span_ly, 2)
 
             if req_extra_x:
-                eff_btm_dia_x, _bpm_x, upgraded_btm_x, orig_btm_dia_x = optimize_extra_bar_diameter(
+                eff_btm_dia_x, _, upgraded_btm_x, orig_btm_dia_x = optimize_extra_bar_diameter(
                     delta_As_x,
                     strip_bottom_extra_dia,
                     base_mesh_n=n_mesh_btm,
@@ -12814,28 +13006,36 @@ def render(is_standalone: bool = False):
                     fcu=Fcu,
                     fy=Fy,
                 )
+                final_btm_x = calculate_additional_reinforcement(
+                    M_applied=Mu_pos_m_x,
+                    M_mesh=M_cap_btm_m,
+                    bar_diameter=eff_btm_dia_x,
+                    base_bars_count=n_mesh_btm,
+                    d_cm=d,
+                    fcu=Fcu,
+                    fy=Fy,
+                    base_bar_diameter=bottom_mesh_dia,
+                )
+                _bpm_x, tag_lbl_x = final_btm_x
+                full_lbl_x = final_btm_x.full_label
                 _Ld_btm_x = XZ.development_length(eff_btm_dia_x, Fcu, Fy, top_bar=False)
-                n_b_x = XZ.total_bars(_bpm_x, span_ly)
-                _L_raw_x = 0.70 * span_lx + 2.0 * _Ld_btm_x
+                n_b_x = XZ.total_bars(_bpm_x, B_zone_x)
+                # Curtailment length inside bay: clear span Ln minus curtailment or 0.65~0.68 L
+                _L_raw_x = min(0.68 * span_lx, max(0.60 * span_lx, Ln_x - 0.30))
                 L_ext_x = XZ.round_up_length(_L_raw_x)
+                callout_x = f"{tag_lbl_x} - L = {L_ext_x:.2f} m (B = {B_zone_x:.2f} m)"
             else:
                 eff_btm_dia_x = strip_bottom_extra_dia
                 _bpm_x = 0
                 n_b_x = 0
+                tag_lbl_x = ""
+                full_lbl_x = init_btm_x.full_label
                 _Ld_btm_x = XZ.development_length(strip_bottom_extra_dia, Fcu, Fy, top_bar=False)
-                L_ext_x = round(0.70 * span_lx, 2)
+                L_ext_x = round(0.65 * span_lx, 2)
+                callout_x = f"الشبكة الأساسية ({mesh_btm_str}) كافية ومغطية بالكامل ✅"
+
             is_ext_x = (i == 0) or (i == len(Lx_calc) - 1)
             span_type_x = "باكية مكبرة (Enlarged)" if is_enlarged else ("بحر طرفي (Exterior)" if is_ext_x else "بحر داخلي (Interior)")
-
-            if req_extra_x and _bpm_x > 0:
-                callout_x = XZ.callout_text(_bpm_x, n_b_x, eff_btm_dia_x) + f"\n(L = {L_ext_x:.2f} m | Ld = {_Ld_btm_x:.2f} m)"
-            elif needs_mesh_inc_x:
-                callout_x = (
-                    f"⚠️ فرق التسليح ({delta_As_x:.2f} cm²/m) أقل من 3Φ12/m ({_thresh_3phi12:.2f} cm²/m) — "
-                    f"يُوصى بزيادة الشبكة السفلية بالمدخلات بمقدار +{rec_inc_bars_x} Φ{bottom_mesh_dia}/m' لتصبح {rec_total_mesh_x} Φ{bottom_mesh_dia}/m'"
-                )
-            else:
-                callout_x = f"الشبكة الأساسية ({mesh_btm_str}) كافية ومغطية بالكامل ✅"
 
             item_x = {
                 "panel_id": pid,
@@ -12845,6 +13045,7 @@ def render(is_standalone: bool = False):
                 "span_len": span_lx,
                 "Ln": Ln_x,
                 "W_bay": span_ly,
+                "B_zone": B_zone_x,
                 "cx": cx,
                 "cy": cy,
                 "x0": x_l,
@@ -12854,21 +13055,29 @@ def render(is_standalone: bool = False):
                 "Mo": Mo_x,
                 "M_pos": M_pos_x,
                 "Mu_pos_m": Mu_pos_m_x,
-                "As_req_m": max(As_cs_m_x, As_ms_m_x),
+                "M_applied_m": Mu_pos_m_x,
+                "M_cap_m": M_cap_btm_m,
+                "delta_M_m": delta_M_x,
+                "As_req_m": As_req_m_x,
                 "As_prov_m": prov_btm_mesh_cm2m,
                 "delta_As": delta_As_x,
                 "bars_per_m": _bpm_x,
                 "n_extra": n_b_x if req_extra_x else 0,
                 "dia_extra": eff_btm_dia_x,
                 "L_extra": L_ext_x if req_extra_x else 0.0,
-                "w_ms": ms_w_x,
+                "w_ms": B_zone_x,
                 "Ld": _Ld_btm_x,
                 "is_enlarged": is_enlarged,
                 "is_needed": req_extra_x,
+                "is_merged": False,
                 "needs_mesh_inc": needs_mesh_inc_x,
                 "rec_inc_bars": rec_inc_bars_x,
                 "rec_total_mesh": rec_total_mesh_x,
+                "base_bars_count": int(n_mesh_btm),
+                "base_mesh_dia": int(bottom_mesh_dia),
                 "mesh_dia": bottom_mesh_dia,
+                "tag_label": tag_lbl_x,
+                "full_annotation": full_lbl_x,
                 "callout": callout_x,
                 "L_cut": f"{L_ext_x:.2f} m" if req_extra_x else "—",
             }
@@ -12878,18 +13087,15 @@ def render(is_standalone: bool = False):
             if is_enlarged:
                 enlarged_bays_info.append(item_x)
 
-            # Y-direction Bottom Extra Check & Record (2-Case Philosophy vs 3Φ12/m threshold)
-            req_extra_y = (delta_As_y >= _thresh_3phi12)
-            needs_mesh_inc_y = (0.05 < delta_As_y < _thresh_3phi12)
-            if needs_mesh_inc_y:
-                rec_inc_bars_y = max(1, int(math.ceil(round(delta_As_y / _a_bar_btm_mesh, 6))))
-                rec_total_mesh_y = int(n_mesh_btm) + rec_inc_bars_y
-            else:
-                rec_inc_bars_y = 0
-                rec_total_mesh_y = int(n_mesh_btm)
+            # Y-direction Bottom Extra Capacity Check & Rebar Calculation per Bay
+            req_extra_y = (init_btm_y.n_add > 0)
+            needs_mesh_inc_y = False
+            rec_inc_bars_y = 0
+            rec_total_mesh_y = int(n_mesh_btm)
+            B_zone_y = round(0.45 * span_lx, 2)
 
             if req_extra_y:
-                eff_btm_dia_y, _bpm_y, upgraded_btm_y, orig_btm_dia_y = optimize_extra_bar_diameter(
+                eff_btm_dia_y, _, upgraded_btm_y, orig_btm_dia_y = optimize_extra_bar_diameter(
                     delta_As_y,
                     strip_bottom_extra_dia,
                     base_mesh_n=n_mesh_btm,
@@ -12898,28 +13104,35 @@ def render(is_standalone: bool = False):
                     fcu=Fcu,
                     fy=Fy,
                 )
+                final_btm_y = calculate_additional_reinforcement(
+                    M_applied=Mu_pos_m_y,
+                    M_mesh=M_cap_btm_m,
+                    bar_diameter=eff_btm_dia_y,
+                    base_bars_count=n_mesh_btm,
+                    d_cm=d,
+                    fcu=Fcu,
+                    fy=Fy,
+                    base_bar_diameter=bottom_mesh_dia,
+                )
+                _bpm_y, tag_lbl_y = final_btm_y
+                full_lbl_y = final_btm_y.full_label
                 _Ld_btm_y = XZ.development_length(eff_btm_dia_y, Fcu, Fy, top_bar=False)
-                n_b_y = XZ.total_bars(_bpm_y, span_lx)
-                _L_raw_y = 0.70 * span_ly + 2.0 * _Ld_btm_y
+                n_b_y = XZ.total_bars(_bpm_y, B_zone_y)
+                _L_raw_y = min(0.68 * span_ly, max(0.60 * span_ly, Ln_y - 0.30))
                 L_ext_y = XZ.round_up_length(_L_raw_y)
+                callout_y = f"{tag_lbl_y} - L = {L_ext_y:.2f} m (B = {B_zone_y:.2f} m)"
             else:
                 eff_btm_dia_y = strip_bottom_extra_dia
                 _bpm_y = 0
                 n_b_y = 0
+                tag_lbl_y = ""
+                full_lbl_y = init_btm_y.full_label
                 _Ld_btm_y = XZ.development_length(strip_bottom_extra_dia, Fcu, Fy, top_bar=False)
-                L_ext_y = round(0.70 * span_ly, 2)
+                L_ext_y = round(0.65 * span_ly, 2)
+                callout_y = f"الشبكة الأساسية ({mesh_btm_str}) كافية ومغطية بالكامل ✅"
+
             is_ext_y = (j == 0) or (j == len(Ly_calc) - 1)
             span_type_y = "باكية مكبرة (Enlarged)" if is_enlarged else ("بحر طرفي (Exterior)" if is_ext_y else "بحر داخلي (Interior)")
-
-            if req_extra_y and _bpm_y > 0:
-                callout_y = XZ.callout_text(_bpm_y, n_b_y, eff_btm_dia_y) + f"\n(L = {L_ext_y:.2f} m | Ld = {_Ld_btm_y:.2f} m)"
-            elif needs_mesh_inc_y:
-                callout_y = (
-                    f"⚠️ فرق التسليح ({delta_As_y:.2f} cm²/m) أقل من 3Φ12/m ({_thresh_3phi12:.2f} cm²/m) — "
-                    f"يُوصى بزيادة الشبكة السفلية بالمدخلات بمقدار +{rec_inc_bars_y} Φ{bottom_mesh_dia}/m' لتصبح {rec_total_mesh_y} Φ{bottom_mesh_dia}/m'"
-                )
-            else:
-                callout_y = f"الشبكة الأساسية ({mesh_btm_str}) كافية ومغطية بالكامل ✅"
 
             item_y = {
                 "panel_id": pid,
@@ -12929,6 +13142,7 @@ def render(is_standalone: bool = False):
                 "span_len": span_ly,
                 "Ln": Ln_y,
                 "W_bay": span_lx,
+                "B_zone": B_zone_y,
                 "cx": cx,
                 "cy": cy,
                 "x0": x_l,
@@ -12938,21 +13152,29 @@ def render(is_standalone: bool = False):
                 "Mo": Mo_y,
                 "M_pos": M_pos_y,
                 "Mu_pos_m": Mu_pos_m_y,
-                "As_req_m": max(As_cs_m_y, As_ms_m_y),
+                "M_applied_m": Mu_pos_m_y,
+                "M_cap_m": M_cap_btm_m,
+                "delta_M_m": delta_M_y,
+                "As_req_m": As_req_m_y,
                 "As_prov_m": prov_btm_mesh_cm2m,
                 "delta_As": delta_As_y,
                 "bars_per_m": _bpm_y,
                 "n_extra": n_b_y if req_extra_y else 0,
                 "dia_extra": eff_btm_dia_y,
                 "L_extra": L_ext_y if req_extra_y else 0.0,
-                "w_ms": ms_w_y,
+                "w_ms": B_zone_y,
                 "Ld": _Ld_btm_y,
                 "is_enlarged": is_enlarged,
                 "is_needed": req_extra_y,
+                "is_merged": False,
                 "needs_mesh_inc": needs_mesh_inc_y,
                 "rec_inc_bars": rec_inc_bars_y,
                 "rec_total_mesh": rec_total_mesh_y,
+                "base_bars_count": int(n_mesh_btm),
+                "base_mesh_dia": int(bottom_mesh_dia),
                 "mesh_dia": bottom_mesh_dia,
+                "tag_label": tag_lbl_y,
+                "full_annotation": full_lbl_y,
                 "callout": callout_y,
                 "L_cut": f"{L_ext_y:.2f} m" if req_extra_y else "—",
             }
@@ -12962,12 +13184,31 @@ def render(is_standalone: bool = False):
             if is_enlarged and (not req_extra_x):
                 enlarged_bays_info.append(item_y)
 
-    # Multi-Bay Contour Merging: Cluster adjacent/continuous demand bays into single enveloped macro zones
-    btm_x_merged = XZ.cluster_and_merge_bays([b for b in btm_extra_spans if b.get("dir") == "X"])
-    btm_y_merged = XZ.cluster_and_merge_bays([b for b in btm_extra_spans if b.get("dir") == "Y"])
-    if btm_x_merged or btm_y_merged:
-        btm_extra_spans = btm_x_merged + btm_y_merged
+            bay_geom_records.append({
+                "panel_id": pid,
+                "bay_label": f"Bay X{i+1}-X{i+2} / Y{j+1}-Y{j+2}",
+                "grid_x_range": (f"X{i+1}", f"X{i+2}"),
+                "grid_y_range": (f"Y{j+1}", f"Y{j+2}"),
+                "corner_columns": [c["id"] for c in (col_bl, col_br, col_tl, col_tr) if c],
+                "x0": x_l,
+                "x1": x_r,
+                "y0": y_b,
+                "y1": y_t,
+                "Lx": span_lx,
+                "Ly": span_ly,
+                "Ln_x": Ln_x,
+                "Ln_y": Ln_y,
+                "M_pos_x_m": Mu_pos_m_x,
+                "M_pos_y_m": Mu_pos_m_y,
+                "item_x": item_x,
+                "item_y": item_y,
+            })
 
+    # Preserve each bay P_i_j independently (no macro-merging across bays)
+    btm_x_indep = XZ.cluster_and_merge_bays([b for b in btm_extra_spans if b.get("dir") == "X"])
+    btm_y_indep = XZ.cluster_and_merge_bays([b for b in btm_extra_spans if b.get("dir") == "Y"])
+    if btm_x_indep or btm_y_indep:
+        btm_extra_spans = btm_x_indep + btm_y_indep
 
     # Global max clear span & code minimum thickness
     Ln_max = max(all_Ln) if all_Ln else max(max(Ln_x_all), max(Ln_y_all))
@@ -12979,168 +13220,59 @@ def render(is_standalone: bool = False):
     )
     all_safe = all(p.get("is_safe", False) for p in punching_results) if punching_results else True
 
-    # 6. Top Extra Steel at Columns (with enlarged bay influence & minimum bar spacing control)
+    # 6. Top Extra Steel at Columns: Extract concentrated negative moments M⁻ from 2D Moment Field at each column head
+    col_moments_map = {}
+    for c_obj in col_list:
+        cx_c, cy_c = float(c_obj["x"]), float(c_obj["y"])
+        ix_c = int(np.argmin(np.abs(X_mf[0, :] - cx_c)))
+        iy_c = int(np.argmin(np.abs(Y_mf[:, 0] - cy_c)))
+        m11_neg_c = abs(min(0.0, float(M11_raw_mf[iy_c, ix_c])))
+        m22_neg_c = abs(min(0.0, float(M22_raw_mf[iy_c, ix_c])))
+        col_moments_map[c_obj["id"]] = {
+            "M_neg_x_m": round(m11_neg_c, 2),
+            "M_neg_y_m": round(m22_neg_c, 2),
+        }
+
     top_extra_cols = calculate_extra_top_steel_at_columns(
         col_list, rows_x, rows_y, Lx_calc, Ly_calc, d, Fcu, Fy, ts, prov_top_mesh_cm2m, col_extra_dia,
         enlarged_bays=enlarged_bays_info, is_high_safety=high_safety_mode, mesh_top_n=n_mesh_top,
-        top_mesh_dia=top_mesh_dia,
+        top_mesh_dia=top_mesh_dia, col_moments_map=col_moments_map, cantilevers=cantilevers,
     )
 
-    # 6b. Extra Slab Top Steel in Middle Strips / Panels (الحديد الإضافي العلوي للبلاطة)
+    # Build structured PanelRebarDetail objects per independent bay P_i_j
+    top_col_by_id = {tc["id"]: tc for tc in top_extra_cols}
+    bay_rebar_objects = []
+    for bg in bay_geom_records:
+        corner_col_heads = [top_col_by_id[cid] for cid in bg["corner_columns"] if cid in top_col_by_id]
+        bay_obj = build_bay_rebar_detail_object(
+            panel_id=bg["panel_id"],
+            bay_label=bg["bay_label"],
+            grid_x_range=bg["grid_x_range"],
+            grid_y_range=bg["grid_y_range"],
+            corner_columns=bg["corner_columns"],
+            x0=bg["x0"],
+            x1=bg["x1"],
+            y0=bg["y0"],
+            y1=bg["y1"],
+            Lx=bg["Lx"],
+            Ly=bg["Ly"],
+            Ln_x=bg["Ln_x"],
+            Ln_y=bg["Ln_y"],
+            M_pos_x_m=bg["M_pos_x_m"],
+            M_pos_y_m=bg["M_pos_y_m"],
+            M_cap_btm_m=M_cap_btm_m,
+            btm_rebar_x=bg["item_x"],
+            btm_rebar_y=bg["item_y"],
+            top_column_heads=corner_col_heads,
+        )
+        bay_rebar_objects.append(bay_obj)
+
+    # 6b. Extra Slab Top Steel in Middle Strips / Panels:
+    # الحديد العلوي الإضافي المقاوم للعزوم السالبة يُرسم حصرياً أعلى الأعمدة (كابات)
+    # في تبويبة "1. Column Caps / Top Extra"، ولا يُرسم أي حديد إضافي يخص العزوم السالبة
+    # في تبويبات 3A أو 3B.
     top_extra_slab_bays = []
     top_slab_mesh_inc_bays = []
-    _thresh_3phi12_top = XZ.EXTRA_STEEL_THRESHOLD_CM2_M
-    _a_bar_top_mesh = bar_area(top_mesh_dia)
-    for j in range(len(Ly_calc)):
-        for i in range(len(Lx_calc)):
-            pid = f"P_{i+1}_{j+1}"
-            if pid in _confirmed_voids:
-                continue
-            x_l, x_r = x_eff_coords[i], x_eff_coords[i+1]
-            y_b, y_t = y_eff_coords[j], y_eff_coords[j+1]
-            span_lx = Lx_calc[i]
-            span_ly = Ly_calc[j]
-            cx = (x_l + x_r) / 2.0
-            cy = (y_b + y_t) / 2.0
-
-            col_bl = next((c for c in _active_cols if c["i"] == _active_xi[i] and c["j"] == _active_yj[j]), None) if (i < len(_active_xi) and j < len(_active_yj)) else None
-            col_br = next((c for c in _active_cols if c["i"] == _active_xi[i + 1] and c["j"] == _active_yj[j]), None) if ((i + 1) < len(_active_xi) and j < len(_active_yj)) else None
-            col_tl = next((c for c in _active_cols if c["i"] == _active_xi[i] and c["j"] == _active_yj[j + 1]), None) if (i < len(_active_xi) and (j + 1) < len(_active_yj)) else None
-            col_tr = next((c for c in _active_cols if c["i"] == _active_xi[i + 1] and c["j"] == _active_yj[j + 1]), None) if ((i + 1) < len(_active_xi) and (j + 1) < len(_active_yj)) else None
-
-            left_x_max = max([c["x_max"] for c in (col_bl, col_tl) if c], default=x_l + bc_m / 2.0)
-            right_x_min = min([c["x_min"] for c in (col_br, col_tr) if c], default=x_r - bc_m / 2.0)
-            Ln_x = max(0.5, right_x_min - left_x_max)
-
-            bot_y_max = max([c["y_max"] for c in (col_bl, col_br) if c], default=y_b + tc_m / 2.0)
-            top_y_min = min([c["y_min"] for c in (col_tl, col_tr) if c], default=y_t - tc_m / 2.0)
-            Ln_y = max(0.5, top_y_min - bot_y_max)
-
-            Mo_x = Wu * span_ly * (Ln_x ** 2) / 8.0
-            M_neg_ms_x = 0.25 * Mo_x
-            w_ms_x = max(0.1, span_ly - min(span_lx, span_ly) / 2.0)
-            As_req_ms_x = calc_As(M_neg_ms_x, w_ms_x, d, Fcu, Fy, ts)
-            As_m_ms_x = As_req_ms_x / w_ms_x
-            delta_As_x = max(0.0, As_m_ms_x - prov_top_mesh_cm2m)
-
-            Mo_y = Wu * span_lx * (Ln_y ** 2) / 8.0
-            M_neg_ms_y = 0.25 * Mo_y
-            w_ms_y = max(0.1, span_lx - min(span_lx, span_ly) / 2.0)
-            As_req_ms_y = calc_As(M_neg_ms_y, w_ms_y, d, Fcu, Fy, ts)
-            As_m_ms_y = As_req_ms_y / w_ms_y
-            delta_As_y = max(0.0, As_m_ms_y - prov_top_mesh_cm2m)
-
-            # X-direction Top Slab Extra Check (2-Case Philosophy vs 3Φ12/m threshold)
-            if delta_As_x >= _thresh_3phi12_top:
-                eff_ms_top_dia_x, _bpm_top_x, _, _ = optimize_extra_bar_diameter(
-                    delta_As_x,
-                    col_extra_dia,
-                    base_mesh_n=n_mesh_top,
-                    max_total_density=10,
-                    top_bar=True,
-                    fcu=Fcu,
-                    fy=Fy,
-                )
-                _Ld_top_x = XZ.development_length(eff_ms_top_dia_x, Fcu, Fy, top_bar=True)
-                n_b_x = XZ.total_bars(_bpm_top_x, span_ly)
-                L_ext_x = XZ.round_up_length(0.60 * span_lx + 2.0 * _Ld_top_x)
-                top_extra_slab_bays.append({
-                    "panel_id": pid,
-                    "bay_label": f"Bay X{i+1}-X{i+2} / Y{j+1}-Y{j+2} (X-Dir)",
-                    "dir": "X",
-                    "span_len": span_lx,
-                    "W_bay": span_ly,
-                    "cx": cx,
-                    "cy": cy,
-                    "x0": x_l,
-                    "x1": x_r,
-                    "y0": y_b,
-                    "y1": y_t,
-                    "w_ms": w_ms_x,
-                    "bars_per_m": _bpm_top_x,
-                    "n_extra": n_b_x,
-                    "dia_extra": eff_ms_top_dia_x,
-                    "L_extra": L_ext_x,
-                    "Ld": _Ld_top_x,
-                    "is_needed": True,
-                    "callout": (
-                        XZ.callout_text(_bpm_top_x, n_b_x, eff_ms_top_dia_x)
-                        + f"\n(L = {L_ext_x:.2f} m | Ld = {_Ld_top_x:.2f} m)"
-                    ),
-                })
-            elif 0.05 < delta_As_x < _thresh_3phi12_top:
-                rec_inc_top_x = max(1, int(math.ceil(round(delta_As_x / _a_bar_top_mesh, 6))))
-                rec_tot_top_x = int(n_mesh_top) + rec_inc_top_x
-                top_slab_mesh_inc_bays.append({
-                    "panel_id": pid,
-                    "bay_label": f"Bay X{i+1}-X{i+2} / Y{j+1}-Y{j+2} (X-Dir)",
-                    "dir": "X",
-                    "As_req_m": As_m_ms_x,
-                    "As_prov_m": prov_top_mesh_cm2m,
-                    "delta_As": delta_As_x,
-                    "rec_inc_bars": rec_inc_top_x,
-                    "rec_total_mesh": rec_tot_top_x,
-                    "mesh_dia": top_mesh_dia,
-                })
-
-            # Y-direction Top Slab Extra Check (2-Case Philosophy vs 3Φ12/m threshold)
-            if delta_As_y >= _thresh_3phi12_top:
-                eff_ms_top_dia_y, _bpm_top_y, _, _ = optimize_extra_bar_diameter(
-                    delta_As_y,
-                    col_extra_dia,
-                    base_mesh_n=n_mesh_top,
-                    max_total_density=10,
-                    top_bar=True,
-                    fcu=Fcu,
-                    fy=Fy,
-                )
-                _Ld_top_y = XZ.development_length(eff_ms_top_dia_y, Fcu, Fy, top_bar=True)
-                n_b_y = XZ.total_bars(_bpm_top_y, span_lx)
-                L_ext_y = XZ.round_up_length(0.60 * span_ly + 2.0 * _Ld_top_y)
-                top_extra_slab_bays.append({
-                    "panel_id": pid,
-                    "bay_label": f"Bay X{i+1}-X{i+2} / Y{j+1}-Y{j+2} (Y-Dir)",
-                    "dir": "Y",
-                    "span_len": span_ly,
-                    "W_bay": span_lx,
-                    "cx": cx,
-                    "cy": cy,
-                    "x0": x_l,
-                    "x1": x_r,
-                    "y0": y_b,
-                    "y1": y_t,
-                    "w_ms": w_ms_y,
-                    "bars_per_m": _bpm_top_y,
-                    "n_extra": n_b_y,
-                    "dia_extra": eff_ms_top_dia_y,
-                    "L_extra": L_ext_y,
-                    "Ld": _Ld_top_y,
-                    "is_needed": True,
-                    "callout": (
-                        XZ.callout_text(_bpm_top_y, n_b_y, eff_ms_top_dia_y)
-                        + f"\n(L = {L_ext_y:.2f} m | Ld = {_Ld_top_y:.2f} m)"
-                    ),
-                })
-            elif 0.05 < delta_As_y < _thresh_3phi12_top:
-                rec_inc_top_y = max(1, int(math.ceil(round(delta_As_y / _a_bar_top_mesh, 6))))
-                rec_tot_top_y = int(n_mesh_top) + rec_inc_top_y
-                top_slab_mesh_inc_bays.append({
-                    "panel_id": pid,
-                    "bay_label": f"Bay X{i+1}-X{i+2} / Y{j+1}-Y{j+2} (Y-Dir)",
-                    "dir": "Y",
-                    "As_req_m": As_m_ms_y,
-                    "As_prov_m": prov_top_mesh_cm2m,
-                    "delta_As": delta_As_y,
-                    "rec_inc_bars": rec_inc_top_y,
-                    "rec_total_mesh": rec_tot_top_y,
-                    "mesh_dia": top_mesh_dia,
-                })
-
-    # Multi-Bay Contour Merging for Top Extra in Middle Strips
-    top_x_merged = XZ.cluster_and_merge_bays([b for b in top_extra_slab_bays if b.get("dir") == "X"])
-    top_y_merged = XZ.cluster_and_merge_bays([b for b in top_extra_slab_bays if b.get("dir") == "Y"])
-    if top_x_merged or top_y_merged:
-        top_extra_slab_bays = top_x_merged + top_y_merged
 
     # 7. Cantilever Reinforcement
     cant_rft_list = calculate_cantilever_reinforcement(cantilevers, Wu, d, Fcu, Fy, ts, bottom_mesh_dia)
@@ -13908,49 +14040,30 @@ def render(is_standalone: bool = False):
 
         with tab_tbl_top:
             if active_top_extra:
-                st.markdown(f"##### 🔴 جدول الأعمدة التي تحتاج إلى حديد إضافي علوي (ΔAs ≥ 3Φ12/m = 3.39 cm²/m — عدد {len(active_top_extra)} أعمدة):")
+                st.markdown(f"##### 🔴 جدول الأعمدة التي تحتاج إلى حديد إضافي علوي (Mu⁻ > M_cap = {M_cap_top_m:.2f} t·m/m — عدد {len(active_top_extra)} أعمدة):")
                 top_table_rows = []
                 for c in active_top_extra:
                     as_req_val = float(c["As_req (cm²/m)"])
                     as_mesh_val = float(c["As_mesh (cm²/m)"])
-                    delta_as_val = max(0.0, as_req_val - as_mesh_val)
+                    delta_as_val = float(c.get("As_extra (cm²/m)", max(0.0, as_req_val - as_mesh_val)))
                     top_table_rows.append({
                         "موضع ورقم العمود (Location / ID)": f"{c['id']} — Grid ({c['grid']})",
                         "نوع وموضع الركيزة (Support Type)": c["type"],
-                        "العزم السالب التصميمي Mu⁻ (ton·m/m)": f"{c['Mu_neg (t.m)']:.2f}",
-                        "التسليح المطلوب كلياً As_req (cm²/m)": f"{as_req_val:.2f}",
-                        "مقاومة الشبكة العلوية As_mesh (cm²/m)": f"{as_mesh_val:.2f}",
-                        "فرق التسليح الإضافي ΔAs (cm²/m)": f"{delta_as_val:.2f}",
-                        "الحديد المطلوب لتغطية العزم (Rebar Selection)": c["callout"],
+                        "العزم السالب المطبق Mu⁻ (ton·m/m)": f"{c.get('Mu_neg_m (t.m/m)', c['Mu_neg (t.m)']):.2f}",
+                        "سعة الشبكة الأساسية M_cap (ton·m/m)": f"{c.get('M_cap_m (t.m/m)', M_cap_top_m):.2f}",
+                        "فرق العزم الزائد ΔM (ton·m/m)": f"{c.get('delta_M_m (t.m/m)', 0.0):.2f}",
+                        "فرق التسليح الإضافي As,add (cm²/m)": f"{delta_as_val:.2f}",
+                        "التوصيف الهندسي الكامل (Annotation)": c.get("full_annotation", c["callout"]),
+                        "وسم الرسم على المخطط (Text Label)": c.get("tag_label", c["callout"]),
                         "طول الامتداد والتفريد L_ext (m)": f"{c['L_extra']:.2f} m",
-                        "حالة التسليح": "🚨 يتطلب حديد إضافي علوي",
                     })
                 render_styled_table(top_table_rows)
-            if mesh_inc_top_cols:
-                st.markdown(f"##### ⚠️ أعمدة بها فرق تسليح طفيف أقل من 3Φ12/م (0.05 < ΔAs < 3.39 cm²/m — عدد {len(mesh_inc_top_cols)} أعمدة — يُعالج بزيادة الشبكة العلوية بالمدخلات):")
-                top_inc_rows = []
-                for c in mesh_inc_top_cols:
-                    as_req_val = float(c["As_req (cm²/m)"])
-                    as_mesh_val = float(c["As_mesh (cm²/m)"])
-                    delta_as_val = max(0.0, as_req_val - as_mesh_val)
-                    top_inc_rows.append({
-                        "موضع ورقم العمود (Location / ID)": f"{c['id']} — Grid ({c['grid']})",
-                        "نوع وموضع الركيزة (Support Type)": c["type"],
-                        "العزم السالب التصميمي Mu⁻ (ton·m/m)": f"{c['Mu_neg (t.m)']:.2f}",
-                        "التسليح المطلوب كلياً As_req (cm²/m)": f"{as_req_val:.2f}",
-                        "مقاومة الشبكة العلوية As_mesh (cm²/m)": f"{as_mesh_val:.2f}",
-                        "فرق التسليح ΔAs (cm²/m)": f"{delta_as_val:.2f} (< 3.39)",
-                        "الزيادة المطلوبة بالمدخلات": f"+{c.get('rec_inc_bars', 1)} Φ {top_mesh_dia} / m",
-                        "الشبكة العلوية المقترحة بالمدخلات": f"{c.get('rec_total_mesh', n_mesh_top + 1)} Φ {top_mesh_dia} / m",
-                        "حالة التسليح": "⚠️ زيادة الشبكة بالمدخلات (بدون إضافي)",
-                    })
-                render_styled_table(top_inc_rows)
-            if not active_top_extra and not mesh_inc_top_cols:
+            else:
                 st.markdown(
                     f"""
                     <div style="background:#f0fdf4; border:2px solid #16a34a; border-radius:8px; padding:16px 20px; text-align:center; margin:8px 0;">
-                        <div style="color:#15803d; font-size:1.15rem; font-weight:800; margin-bottom:4px;">✅ لا توجد أعمدة تحتاج إلى حديد إضافي علوي</div>
-                        <div style="color:#334155; font-size:0.95rem;">الشبكة العلوية الأساسية ({mesh_top_str}) تغطي بالكامل كافة العزوم السالبة (-M) فوق جميع أعمدة السقف.</div>
+                        <div style="color:#15803d; font-size:1.15rem; font-weight:800; margin-bottom:4px;">✅ لا توجد أعمدة تحتاج إلى حديد إضافي علوي (Mu ≤ M_cap)</div>
+                        <div style="color:#334155; font-size:0.95rem;">الشبكة العلوية الأساسية ({mesh_top_str} — سعة M_cap = {M_cap_top_m:.2f} t·m/m) تغطي بالكامل كافة العزوم السالبة (-M) فوق جميع أعمدة السقف.</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -13958,46 +14071,28 @@ def render(is_standalone: bool = False):
 
         with tab_tbl_btm_x:
             if active_btm_x:
-                st.markdown(f"##### ↔️ جدول الباكيات التي تحتاج إلى حديد إضافي سفلي في الاتجاه الأفقي X (ΔAs ≥ 3Φ12/m = 3.39 cm²/m — عدد {len(active_btm_x)} باكية):")
+                st.markdown(f"##### ↔️ جدول الباكيات التي تحتاج إلى حديد إضافي سفلي في الاتجاه الأفقي X (M11⁺ > M_cap = {M_cap_btm_m:.2f} t·m/m — عدد {len(active_btm_x)} باكية):")
                 btm_x_table_rows = []
                 for bx in active_btm_x:
                     btm_x_table_rows.append({
                         "مكان وموضع الباكية (Bay Location)": bx["bay_label"],
                         "نوع البحر (Span Classification)": bx["span_type"],
-                        "طول البحر L (m)": f"{bx['span_len']:.2f} m",
-                        "البحر الصافي Ln (m)": f"{bx['Ln']:.2f} m",
-                        "العزم الموجب التصميمي Mu⁺ (ton·m/m)": f"{bx.get('Mu_pos_m', bx['M_pos']):.2f} (كلي {bx['M_pos']:.1f} t.m)",
-                        "التسليح السفلي المطلوب As_req (cm²/m)": f"{bx['As_req_m']:.2f}",
-                        "تسليح الشبكة السفلية As_prov (cm²/m)": f"{bx['As_prov_m']:.2f}",
-                        "فارق التسليح ΔAs (cm²/m)": f"{bx['delta_As']:.2f}",
-                        "الحديد الإضافي المطلوب (Bottom Rebar)": bx["callout"],
+                        "طول البحر L / الصافي Ln (m)": f"{bx['span_len']:.2f} / {bx['Ln']:.2f} m",
+                        "العزم المطبق M11⁺ (ton·m/m)": f"{bx.get('Mu_pos_m', bx['M_pos']):.2f}",
+                        "سعة الشبكة السفلية M_cap (ton·m/m)": f"{bx.get('M_cap_m', M_cap_btm_m):.2f}",
+                        "فرق العزم الزائد ΔM (ton·m/m)": f"{bx.get('delta_M_m', 0.0):.2f}",
+                        "مساحة الإضافي المطلوبة As,add (cm²/m)": f"{bx['delta_As']:.2f}",
+                        "التوصيف الهندسي الكامل (Annotation)": bx.get("full_annotation", bx["callout"]),
+                        "وسم الرسم على المخطط (Text Label)": bx.get("tag_label", bx["callout"]),
                         "طول التقطيع والتفريد L_cut (m)": bx["L_cut"],
-                        "حالة التسليح": "🚨 يتطلب حديد إضافي سفلي",
                     })
                 render_styled_table(btm_x_table_rows)
-            if mesh_inc_btm_x:
-                st.markdown(f"##### ⚠️ باكيات اتجاه X بها فرق تسليح طفيف أقل من 3Φ12/م (0.05 < ΔAs < 3.39 cm²/m — عدد {len(mesh_inc_btm_x)} باكية — يُعالج بزيادة الشبكة السفلية بالمدخلات):")
-                btm_x_inc_rows = []
-                for bx in mesh_inc_btm_x:
-                    btm_x_inc_rows.append({
-                        "مكان وموضع الباكية (Bay Location)": bx["bay_label"],
-                        "نوع البحر (Span Classification)": bx["span_type"],
-                        "طول البحر L (m)": f"{bx['span_len']:.2f} m",
-                        "العزم الموجب التصميمي Mu⁺ (ton·m/m)": f"{bx.get('Mu_pos_m', bx['M_pos']):.2f}",
-                        "التسليح السفلي المطلوب As_req (cm²/m)": f"{bx['As_req_m']:.2f}",
-                        "تسليح الشبكة السفلية As_prov (cm²/m)": f"{bx['As_prov_m']:.2f}",
-                        "فارق التسليح ΔAs (cm²/m)": f"{bx['delta_As']:.2f} (< 3.39)",
-                        "الزيادة المطلوبة بالمدخلات": f"+{bx.get('rec_inc_bars', 1)} Φ {bottom_mesh_dia} / m",
-                        "الشبكة السفلية المقترحة بالمدخلات": f"{bx.get('rec_total_mesh', n_mesh_btm + 1)} Φ {bottom_mesh_dia} / m",
-                        "حالة التسليح": "⚠️ زيادة الشبكة بالمدخلات (بدون إضافي)",
-                    })
-                render_styled_table(btm_x_inc_rows)
-            if not active_btm_x and not mesh_inc_btm_x:
+            else:
                 st.markdown(
                     f"""
                     <div style="background:#f0fdf4; border:2px solid #16a34a; border-radius:8px; padding:16px 20px; text-align:center; margin:8px 0;">
-                        <div style="color:#15803d; font-size:1.15rem; font-weight:800; margin-bottom:4px;">✅ لا توجد باكيات تحتاج إلى حديد إضافي سفلي في الاتجاه الأفقي X</div>
-                        <div style="color:#334155; font-size:0.95rem;">الشبكة السفلية الأساسية ({mesh_btm_str}) تغطي بالكامل كافة العزوم الموجبة (+M) لجميع بحور الاتجاه الأفقي X.</div>
+                        <div style="color:#15803d; font-size:1.15rem; font-weight:800; margin-bottom:4px;">✅ لا توجد باكيات تحتاج إلى حديد إضافي سفلي في الاتجاه الأفقي X (M11⁺ ≤ M_cap)</div>
+                        <div style="color:#334155; font-size:0.95rem;">الشبكة السفلية الأساسية ({mesh_btm_str} — سعة M_cap = {M_cap_btm_m:.2f} t·m/m) تغطي بالكامل كافة العزوم الموجبة (+M11) لجميع بحور الاتجاه الأفقي X.</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -14005,46 +14100,28 @@ def render(is_standalone: bool = False):
 
         with tab_tbl_btm_y:
             if active_btm_y:
-                st.markdown(f"##### ↕️ جدول الباكيات التي تحتاج إلى حديد إضافي سفلي في الاتجاه الرأسي Y (ΔAs ≥ 3Φ12/m = 3.39 cm²/m — عدد {len(active_btm_y)} باكية):")
+                st.markdown(f"##### ↕️ جدول الباكيات التي تحتاج إلى حديد إضافي سفلي في الاتجاه الرأسي Y (M22⁺ > M_cap = {M_cap_btm_m:.2f} t·m/m — عدد {len(active_btm_y)} باكية):")
                 btm_y_table_rows = []
                 for by in active_btm_y:
                     btm_y_table_rows.append({
                         "مكان وموضع الباكية (Bay Location)": by["bay_label"],
                         "نوع البحر (Span Classification)": by["span_type"],
-                        "طول البحر L (m)": f"{by['span_len']:.2f} m",
-                        "البحر الصافي Ln (m)": f"{by['Ln']:.2f} m",
-                        "العزم الموجب التصميمي Mu⁺ (ton·m/m)": f"{by.get('Mu_pos_m', by['M_pos']):.2f} (كلي {by['M_pos']:.1f} t.m)",
-                        "التسليح السفلي المطلوب As_req (cm²/m)": f"{by['As_req_m']:.2f}",
-                        "تسليح الشبكة السفلية As_prov (cm²/m)": f"{by['As_prov_m']:.2f}",
-                        "فارق التسليح ΔAs (cm²/m)": f"{by['delta_As']:.2f}",
-                        "الحديد الإضافي المطلوب (Bottom Rebar)": by["callout"],
+                        "طول البحر L / الصافي Ln (m)": f"{by['span_len']:.2f} / {by['Ln']:.2f} m",
+                        "العزم المطبق M22⁺ (ton·m/m)": f"{by.get('Mu_pos_m', by['M_pos']):.2f}",
+                        "سعة الشبكة السفلية M_cap (ton·m/m)": f"{by.get('M_cap_m', M_cap_btm_m):.2f}",
+                        "فرق العزم الزائد ΔM (ton·m/m)": f"{by.get('delta_M_m', 0.0):.2f}",
+                        "مساحة الإضافي المطلوبة As,add (cm²/m)": f"{by['delta_As']:.2f}",
+                        "التوصيف الهندسي الكامل (Annotation)": by.get("full_annotation", by["callout"]),
+                        "وسم الرسم على المخطط (Text Label)": by.get("tag_label", by["callout"]),
                         "طول التقطيع والتفريد L_cut (m)": by["L_cut"],
-                        "حالة التسليح": "🚨 يتطلب حديد إضافي سفلي",
                     })
                 render_styled_table(btm_y_table_rows)
-            if mesh_inc_btm_y:
-                st.markdown(f"##### ⚠️ باكيات اتجاه Y بها فرق تسليح طفيف أقل من 3Φ12/م (0.05 < ΔAs < 3.39 cm²/m — عدد {len(mesh_inc_btm_y)} باكية — يُعالج بزيادة الشبكة السفلية بالمدخلات):")
-                btm_y_inc_rows = []
-                for by in mesh_inc_btm_y:
-                    btm_y_inc_rows.append({
-                        "مكان وموضع الباكية (Bay Location)": by["bay_label"],
-                        "نوع البحر (Span Classification)": by["span_type"],
-                        "طول البحر L (m)": f"{by['span_len']:.2f} m",
-                        "العزم الموجب التصميمي Mu⁺ (ton·m/m)": f"{by.get('Mu_pos_m', by['M_pos']):.2f}",
-                        "التسليح السفلي المطلوب As_req (cm²/m)": f"{by['As_req_m']:.2f}",
-                        "تسليح الشبكة السفلية As_prov (cm²/m)": f"{by['As_prov_m']:.2f}",
-                        "فارق التسليح ΔAs (cm²/m)": f"{by['delta_As']:.2f} (< 3.39)",
-                        "الزيادة المطلوبة بالمدخلات": f"+{by.get('rec_inc_bars', 1)} Φ {bottom_mesh_dia} / m",
-                        "الشبكة السفلية المقترحة بالمدخلات": f"{by.get('rec_total_mesh', n_mesh_btm + 1)} Φ {bottom_mesh_dia} / m",
-                        "حالة التسليح": "⚠️ زيادة الشبكة بالمدخلات (بدون إضافي)",
-                    })
-                render_styled_table(btm_y_inc_rows)
-            if not active_btm_y and not mesh_inc_btm_y:
+            else:
                 st.markdown(
                     f"""
                     <div style="background:#f0fdf4; border:2px solid #16a34a; border-radius:8px; padding:16px 20px; text-align:center; margin:8px 0;">
-                        <div style="color:#15803d; font-size:1.15rem; font-weight:800; margin-bottom:4px;">✅ لا توجد باكيات تحتاج إلى حديد إضافي سفلي في الاتجاه الرأسي Y</div>
-                        <div style="color:#334155; font-size:0.95rem;">الشبكة السفلية الأساسية ({mesh_btm_str}) تغطي بالكامل كافة العزوم الموجبة (+M) لجميع بحور الاتجاه الرأسي Y.</div>
+                        <div style="color:#15803d; font-size:1.15rem; font-weight:800; margin-bottom:4px;">✅ لا توجد باكيات تحتاج إلى حديد إضافي سفلي في الاتجاه الرأسي Y (M22⁺ ≤ M_cap)</div>
+                        <div style="color:#334155; font-size:0.95rem;">الشبكة السفلية الأساسية ({mesh_btm_str} — سعة M_cap = {M_cap_btm_m:.2f} t·m/m) تغطي بالكامل كافة العزوم الموجبة (+M22) لجميع بحور الاتجاه الرأسي Y.</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -14053,12 +14130,15 @@ def render(is_standalone: bool = False):
     exp_stl = st.expander("🗺️ Steel Layout (مسقط أفقي لتسليح البلاطة)", expanded=False, key=f"{prefix}exp_steel_layout", on_change="rerun")
     with exp_stl:
         if st.session_state.get(f"{prefix}exp_steel_layout", False):
+            if _min_mesh_alert_html:
+                S.play_warning_sound()
+                st.markdown(_min_mesh_alert_html, unsafe_allow_html=True)
             st.markdown(
-                """
+                f"""
                 <style>
                 /* Allow tabs in Steel Layout to wrap titles cleanly and display side-by-side */
                 div[data-testid="stTabs"] button[role="tab"],
-                div[data-baseweb="tab-list"] button {
+                div[data-baseweb="tab-list"] button {{
                     white-space: normal !important;
                     text-align: center !important;
                     height: auto !important;
@@ -14067,18 +14147,27 @@ def render(is_standalone: bool = False):
                     font-weight: 600 !important;
                     line-height: 1.25 !important;
                     font-size: 0.88rem !important;
-                }
+                }}
                 div[data-testid="stTabs"] div[role="tablist"],
-                div[data-baseweb="tab-list"] {
+                div[data-baseweb="tab-list"] {{
                     display: flex !important;
                     flex-wrap: wrap !important;
                     gap: 4px !important;
-                }
+                }}
                 </style>
-                <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 14px 20px; border-radius: 10px; margin-bottom: 15px; border-left: 5px solid #3b82f6;">
-                    <div style="color: #60a5fa; font-weight: bold; font-size: 1.15rem;">📐 المخططات التنفيذية لتسليح البلاطة (Executive Rebar Plans)</div>
-                    <div style="color: #cbd5e1; font-size: 0.92rem; margin-top: 4px;">
-                        يتم رسم وتوقيع الحديد الإضافي على المسقط الأفقي فقط عندما يكون فرق مساحة التسليح المطلوبة لمقاومة العزم (ΔAs ≥ 3 Φ 12 / m = 3.39 cm²/m)، أما الفروق الطفيفة الأقل من ذلك فيُوصى بتغطيتها مباشرة عن طريق زيادة شبكة التسليح بالمدخلات.
+                <div dir="rtl" style="background: linear-gradient(135deg, #4b5563 0%, #374151 100%); border: 1.5px solid #9ca3af; padding: 16px 22px; border-radius: 12px; margin-bottom: 16px; border-right: 6px solid #60a5fa; text-align: right;">
+                    <div style="color: #ffffff; font-weight: 900; font-size: 1.22rem; margin-bottom: 8px;">📐 فلسفة تفريد التسليح الإضافي على المسقط الأفقي (Capacity-Based Additional Rebar Detailing)</div>
+                    <div style="color: #f3f4f6; font-size: 1.06rem; margin-top: 6px; line-height: 2.05;">
+                        • <b>سعة العزم للشبكة الأساسية (<span dir="ltr" style="unicode-bidi:isolate; display:inline-block;">M_cap</span>):</b>
+                        الشبكة السفلية
+                        <span dir="ltr" style="unicode-bidi:isolate; display:inline-block; font-size:1.25rem; font-weight:900; color:#fef08a; background:rgba(17,24,39,0.55); border:1.8px solid #facc15; padding:2px 12px; border-radius:8px; margin:0 6px; font-family:'Segoe UI', Tahoma, Arial, sans-serif; letter-spacing:0.6px;">{n_mesh_btm} Ø {bottom_mesh_dia} / m</span>
+                        تقاوم حتى
+                        <span dir="ltr" style="unicode-bidi:isolate; display:inline-block; font-size:1.12rem; font-weight:800; color:#7dd3fc; background:rgba(17,24,39,0.5); border:1px solid #38bdf8; padding:2px 9px; border-radius:6px; margin:0 4px;">M_cap,btm = {M_cap_btm_m:.2f} t·m/m</span>،
+                        والشبكة العلوية
+                        <span dir="ltr" style="unicode-bidi:isolate; display:inline-block; font-size:1.25rem; font-weight:900; color:#fef08a; background:rgba(17,24,39,0.55); border:1.8px solid #facc15; padding:2px 12px; border-radius:8px; margin:0 6px; font-family:'Segoe UI', Tahoma, Arial, sans-serif; letter-spacing:0.6px;">{n_mesh_top} Ø {top_mesh_dia} / m</span>
+                        تقاوم حتى
+                        <span dir="ltr" style="unicode-bidi:isolate; display:inline-block; font-size:1.12rem; font-weight:800; color:#7dd3fc; background:rgba(17,24,39,0.5); border:1px solid #38bdf8; padding:2px 9px; border-radius:6px; margin:0 4px;">M_cap,top = {M_cap_top_m:.2f} t·m/m</span>.<br>
+                        • <b>تحديد الحديد الإضافي (<span dir="ltr" style="unicode-bidi:isolate; display:inline-block;">ΔM = Mu - M_cap</span>):</b> عند زيادة العزم المطبق (<b dir="ltr" style="unicode-bidi:isolate; display:inline-block;">M11</b> للاتجاه <b dir="ltr" style="unicode-bidi:isolate; display:inline-block;">X</b> أو <b dir="ltr" style="unicode-bidi:isolate; display:inline-block;">M22</b> للاتجاه <b dir="ltr" style="unicode-bidi:isolate; display:inline-block;">Y</b>) عن <b dir="ltr" style="unicode-bidi:isolate; display:inline-block;">M_cap</b>، يتم حساب مساحة الحديد الإضافي المطلوبة <b dir="ltr" style="unicode-bidi:isolate; display:inline-block;">As,add</b> وتقريبها لأقرب عدد صحيح عملي من الأسياخ في المتر (<b>+1 سيخ/م</b> للفروق البسيطة، أو <b>+2، +3 أسياخ/م فأكثر</b> للفروق المتوسطة والكبيرة)، مع تهشير منطقة تركيز العزم ووضع الوسم (<b>Tag</b>) في منتصف مسافة التوزيع.
                     </div>
                 </div>
                 """,
@@ -14275,6 +14364,7 @@ def render(is_standalone: bool = False):
                     active_x_labels=_active_x_labels,
                     active_y_labels=_active_y_labels,
                     void_boxes=_void_boxes_sk,
+                    top_extra_cols=None,
                 )
                 buf_tmes_x = io.BytesIO()
                 fig_tmes_x.savefig(buf_tmes_x, format="pdf", bbox_inches="tight")
@@ -14320,6 +14410,7 @@ def render(is_standalone: bool = False):
                     active_x_labels=_active_x_labels,
                     active_y_labels=_active_y_labels,
                     void_boxes=_void_boxes_sk,
+                    top_extra_cols=None,
                 )
                 buf_tmes_y = io.BytesIO()
                 fig_tmes_y.savefig(buf_tmes_y, format="pdf", bbox_inches="tight")
@@ -15108,8 +15199,8 @@ def render(is_standalone: bool = False):
                             "العدد في المسقط (Count)": f"{count} عمود",
                             "القطاع b × t (cm)": f"{b_cm:.0f} × {t_cm:.0f}",
                             "حجم الخرسانة (m³)": f"{vol_total:.2f} m³",
-                            "التسليح الرئيسي (Main Steel)": f"{n_b}Φ{phi_m} ({tot_w_main:,.1f} kg)",
-                            "الكانات (Stirrups)": f"{n_st_m}Φ{phi_st}/m' ({tot_w_st:,.1f} kg)",
+                            "التسليح الرئيسي (Main Steel)": f"{n_b}Ø{phi_m} ({tot_w_main:,.1f} kg)",
+                            "الكانات (Stirrups)": f"{n_st_m}Ø{phi_st} /m ({tot_w_st:,.1f} kg)",
                             "إجمالي وزن الحديد (Ton)": f"{tot_w_steel/1000.0:.3f} Ton",
                             "معدل التسليح (kg/m³)": f"{ratio_kg_m3:.1f} kg/m³",
                         })
