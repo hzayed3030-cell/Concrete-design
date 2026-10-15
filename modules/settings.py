@@ -1193,9 +1193,9 @@ def get_default_project_state(project_name: str = "", owner_name: str = "") -> d
     """Return fresh default project state with all module schemas initialized."""
     d = dict(ECP_DEFAULTS)
     d["_schema_mod8_removed"] = True
-    # New projects start in Zero Column State (empty grid without pre-generated columns)
-    d["fs_zero_col_mode"] = True
-    d["fs_placed_cols"] = []
+    # Standard grid state: all grid intersections have active columns by default
+    d["fs_zero_col_mode"] = False
+    d["fs_placed_cols"] = None
     d["fs_col_props"] = {}
     d["fs_removed_cols"] = []
     d["module_9_strap_footing"] = get_default_module_9_state()
@@ -3500,16 +3500,17 @@ def cfg_set(key: str, value) -> None:
     st.session_state["cfg"][key] = value
     save_settings()
     widget_key = f"w_{key}"
-    if widget_key in st.session_state:
-        try:
-            if isinstance(st.session_state[widget_key], float):
-                st.session_state[widget_key] = float(value)
-            elif isinstance(st.session_state[widget_key], int):
-                st.session_state[widget_key] = int(round(float(value)))
-            else:
-                st.session_state[widget_key] = value
-        except Exception:
-            st.session_state[widget_key] = value
+    for wk in list(st.session_state.keys()):
+        if wk == widget_key or wk.endswith(f"_{widget_key}") or f"w_{key}_v" in wk:
+            try:
+                if isinstance(st.session_state[wk], float):
+                    st.session_state[wk] = float(value)
+                elif isinstance(st.session_state[wk], int):
+                    st.session_state[wk] = int(round(float(value)))
+                else:
+                    st.session_state[wk] = value
+            except Exception:
+                pass
 
 
 get_setting = cfg_val
@@ -3539,8 +3540,9 @@ def number_input(label: str, cfg_key: str, **kwargs):
     """
     Drop-in replacement for st.number_input that persists the value.
     'value' is overridden by cfg if a saved value exists.
+    Supports explicit 'key' in kwargs for versioned/reactive widget keys.
     """
-    widget_key = f"w_{cfg_key}"
+    widget_key = kwargs.pop("key", f"w_{cfg_key}")
     saved = cfg_val(cfg_key)
     if saved is not None:
         kwargs["value"] = saved
@@ -3600,6 +3602,7 @@ def number_input(label: str, cfg_key: str, **kwargs):
 def integer_input(label: str, cfg_key: str, **kwargs):
     """
     Convenience wrapper around number_input strictly for pure-integer fields.
+    Supports explicit 'key' in kwargs for versioned/reactive widget keys.
     """
     kwargs.setdefault("step", 1)
     for k in ("min_value", "max_value", "step", "value"):
@@ -3615,7 +3618,7 @@ def integer_input(label: str, cfg_key: str, **kwargs):
         except (ValueError, TypeError):
             pass
 
-    widget_key = f"w_{cfg_key}"
+    widget_key = kwargs.pop("key", f"w_{cfg_key}")
     val = st.number_input(
         label,
         key=widget_key,

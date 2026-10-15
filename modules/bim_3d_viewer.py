@@ -51,6 +51,7 @@ def extract_bim_3d_scene_data(
     cover_ftg_cm: float = 7.0,
     cover_gb_cm: float = 4.0,
     edge_columns: dict = None,
+    drop_beams: list = None,
 ) -> dict:
     """
     Extracts all coordinated 3D structural geometry, elevations, and rebar data
@@ -149,6 +150,125 @@ def extract_bim_3d_scene_data(
             "حجم الخرسانة": f"{(slab_w_x * slab_w_y * ts_m):.2f} م³",
         }
     })
+
+    # 1.1b DROP BEAMS (Concrete Meshes + 3D Rebar Cages)
+    _eff_drop_beams = drop_beams
+    if _eff_drop_beams is None:
+        try:
+            _eff_drop_beams = st.session_state.get("cfg", {}).get("fs_drop_beams") or st.session_state.get("fs_drop_beams", [])
+        except Exception:
+            _eff_drop_beams = []
+
+    if _eff_drop_beams:
+        for b_idx, beam in enumerate(_eff_drop_beams):
+            if not isinstance(beam, dict):
+                continue
+            p1 = beam.get("p1") or beam.get("p1_face") or beam.get("p1_grid")
+            p2 = beam.get("p2") or beam.get("p2_face") or beam.get("p2_grid")
+            if not p1 or not p2:
+                continue
+            x1, y1 = float(p1[0]), float(p1[1])
+            x2, y2 = float(p2[0]), float(p2[1])
+            span = math.hypot(x2 - x1, y2 - y1)
+            if span < 0.20:
+                continue
+
+            b_id = str(beam.get("id", f"B{b_idx+1}"))
+            b_m = float(beam.get("b_mm", beam.get("b_cm", 25.0) * 10.0)) / 1000.0
+            t_m = float(beam.get("t_mm", beam.get("t_cm", 60.0) * 10.0)) / 1000.0
+            mid_x = (x1 + x2) / 2.0
+            mid_y = (y1 + y2) / 2.0
+            angle_b = math.atan2(y2 - y1, x2 - x1)
+
+            # Drop Beam Rib: The drop hangs strictly BELOW the slab soffit (z_slab_bot).
+            # The slab concrete occupies z_slab_bot to z_slab_top.
+            # The protruding dropped portion below the slab has height drop_h = max(0.05, t_m - ts_m).
+            # Its top is at z_slab_bot, and its bottom is at z_slab_bot - drop_h = z_slab_top - t_m.
+            # Center of the dropped rib is at z_slab_bot - (drop_h / 2.0).
+            drop_h = max(0.05, t_m - ts_m)
+            z_beam_center = z_slab_bot - (drop_h / 2.0)
+
+            concrete_elements.append({
+                "id": f"db_{b_id}",
+                "category": "drop_beams",
+                "name": f"كمرة ساقطة {b_id} ({beam.get('supports_desc', 'Drop Beam')})",
+                "label": b_id,
+                "type": "Drop Beam (RC)",
+                "x": mid_x,
+                "y": mid_y,
+                "z": z_beam_center,
+                "dx": span,
+                "dy": b_m,
+                "dz": drop_h,
+                "rot_z": angle_b,
+                "color": "#0284c7",  # Sky Blue RC
+                "details": {
+                    "النموذج": f"{b_id} (كمرة ساقطة مسلحة)",
+                    "الأبعاد الخرسانية (b × t)": f"{int(round(b_m * 1000))} × {int(round(t_m * 1000))} مم ({int(round(b_m * 100))} × {int(round(t_m * 100))} سم)",
+                    "سقوط أسفل البلاطة (t - ts)": f"{int(round(drop_h * 1000))} مم",
+                    "البحر الصافي (Ln)": f"{beam.get('clear_span_m', span):.2f} م (الإجمالي: {beam.get('total_span_m', span):.2f} م)",
+                    "توصيف الركائز": beam.get("supports_desc", "كمرة ساقطة"),
+                    "التسليح السفلي (الرئيسي)": beam.get("rft_btm_str", "—"),
+                    "التسليح العلوي (تعليق كانات)": beam.get("rft_top_str", "—"),
+                    "تسليح الكانات (القص)": beam.get("stirrups_str", "5Φ8/m (فرعين)"),
+                    "حديد الانكماش (Skin RFT)": beam.get("skin_rft_str", "غير مطلوب"),
+                    "عزم الانحناء التصميمي (Mu)": f"{beam.get('Mu_ton_m', 0.0):.2f} t·m",
+                    "قوة القص القصوى (Vu)": f"{beam.get('Vu_ton', 0.0):.2f} ton",
+                    "الحالة الإنشائية": beam.get("status", "Safe / OK"),
+                }
+            })
+
+            # Drop Beam 3D Rebar Cage (strictly positioned inside the dropped rib below slab soffit)
+            db_lines = []
+            cov_b = 0.025  # 2.5 cm concrete cover
+            z_bot_b = z_slab_bot - drop_h + cov_b
+            z_top_b = z_slab_bot - cov_b
+
+            dx_u = (x2 - x1) / span
+            dy_u = (y2 - y1) / span
+            p_x = -dy_u * (b_m / 2.0 - cov_b)
+            p_y = dx_u * (b_m / 2.0 - cov_b)
+
+            # Top Rebar Lines (Hangers)
+            db_lines.extend([
+                x1 - p_x, y1 - p_y, z_top_b, x2 - p_x, y2 - p_y, z_top_b,
+                x1 + p_x, y1 + p_y, z_top_b, x2 + p_x, y2 + p_y, z_top_b,
+            ])
+            # Bottom Rebar Lines (Main Tension Steel)
+            db_lines.extend([
+                x1 - p_x, y1 - p_y, z_bot_b, x2 - p_x, y2 - p_y, z_bot_b,
+                x1, y1, z_bot_b, x2, y2, z_bot_b,
+                x1 + p_x, y1 + p_y, z_bot_b, x2 + p_x, y2 + p_y, z_bot_b,
+            ])
+            # Skin Rebar Lines (if drop_h >= 0.40 m)
+            if drop_h >= 0.40:
+                z_mid_b = (z_top_b + z_bot_b) / 2.0
+                db_lines.extend([
+                    x1 - p_x, y1 - p_y, z_mid_b, x2 - p_x, y2 - p_y, z_mid_b,
+                    x1 + p_x, y1 + p_y, z_mid_b, x2 + p_x, y2 + p_y, z_mid_b,
+                ])
+
+            # Closed Rectangular Stirrups along the span
+            st_count = max(4, int(math.ceil(span * beam.get("stirrup_n", 6))))
+            for s_idx in range(1, st_count):
+                frac = s_idx / st_count
+                sx = x1 + frac * (x2 - x1)
+                sy = y1 + frac * (y2 - y1)
+                db_lines.extend([
+                    sx - p_x, sy - p_y, z_top_b, sx + p_x, sy + p_y, z_top_b,
+                    sx + p_x, sy + p_y, z_top_b, sx + p_x, sy + p_y, z_bot_b,
+                    sx + p_x, sy + p_y, z_bot_b, sx - p_x, sy - p_y, z_bot_b,
+                    sx - p_x, sy - p_y, z_bot_b, sx - p_x, sy - p_y, z_top_b,
+                ])
+
+            rebar_elements.append({
+                "id": f"rebar_db_{b_id}",
+                "parent_id": f"db_{b_id}",
+                "category": "rebar_beams",
+                "color": "#38bdf8",
+                "name": f"تسليح كمرة ساقطة {b_id}",
+                "lines": db_lines,
+            })
 
     # 1.2 COLUMNS (Concrete Meshes + Rebar Cages)
     for col in active_cols:
@@ -1518,6 +1638,7 @@ def extract_bim_3d_scene_data(
                 + len(ftg_analysis.get("corner_strap_footings", [])) * 2
             ) if ftg_analysis else 0,
             "num_ground_beams": len(gb_analysis.get("ground_beams", [])) if gb_analysis else 0,
+            "num_drop_beams": len(_eff_drop_beams) if _eff_drop_beams else 0,
             "slab_area_m2": round(slab_w_x * slab_w_y, 2),
             "num_floors": num_floors,
         }
@@ -1539,6 +1660,7 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
     else:
         filter_chips_html = """<button class="filter-chip active" id="flt-slab" data-cat="slab">السقف</button>
     <button class="filter-chip active" id="flt-cols" data-cat="columns">الأعمدة</button>
+    <button class="filter-chip active" id="flt-db" data-cat="drop_beams">الكمرات الساقطة</button>
     <button class="filter-chip active" id="flt-ftgs" data-cat="footings">الأساسات</button>
     <button class="filter-chip active" id="flt-gb" data-cat="ground_beams">السملات والشدادات</button>
     <button class="filter-chip active" id="flt-rebar" data-cat="rebar">حديد التسليح</button>"""
@@ -1552,6 +1674,7 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
     else:
         legend_html = """<span style="color:#38bdf8; font-weight:800; margin-left:4px;">🎨 كود الألوان والتسميات:</span>
   <div class="legend-item"><span class="legend-dot" style="background:#38bdf8; border-radius:3px;"></span> تسميات الأعمدة (C1...)</div>
+  <div class="legend-item"><span class="legend-dot" style="background:#0284c7; border-radius:3px;"></span> تسميات الكمرات الساقطة (B1...)</div>
   <div class="legend-item"><span class="legend-dot" style="background:#34d399; border-radius:3px;"></span> تسميات القواعد (F1, SF, DSF...)</div>
   <div class="legend-item"><span class="legend-dot" style="background:#f43f5e; border-radius:3px;"></span> تسميات الشدادات والسملات (B1, ST1...)</div>
   <div class="legend-item"><span class="legend-dot" style="background:#0284c7;"></span> شبكة بلاطة سفلية</div>
@@ -2295,6 +2418,10 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
       bgColor = 'rgba(120, 53, 15, 0.94)';
       borderColor = '#fbbf24';
       textColor = '#fffbeb';
+    }} else if (category === 'drop_beams') {{
+      bgColor = 'rgba(12, 74, 110, 0.94)';
+      borderColor = '#38bdf8';
+      textColor = '#f0f9ff';
     }}
 
     if (options.bgColor) bgColor = options.bgColor;
@@ -2341,7 +2468,7 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
     const spriteMat = new THREE.SpriteMaterial({{
       map: texture,
       transparent: true,
-      depthTest: false,
+      depthTest: true,
       depthWrite: false,
     }});
 
@@ -2410,6 +2537,8 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
         posZ = -(elem.y - offY);
       }} else if (elem.category === 'ground_beams') {{
         posY = elem.z + (elem.dz / 2.0) + 0.08;
+      }} else if (elem.category === 'drop_beams') {{
+        posY = elem.z;
       }}
 
       const sprite = createLabelSprite(elem.label, elem.category);
@@ -2601,7 +2730,7 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
   }});
 
   const filterState = {{}};
-  ['slab', 'columns', 'footings', 'ground_beams', 'rebar', 'subbase', 'strap_beam'].forEach(c => {{ filterState[c] = true; }});
+  ['slab', 'columns', 'footings', 'ground_beams', 'drop_beams', 'rebar', 'rebar_beams', 'subbase', 'strap_beam'].forEach(c => {{ filterState[c] = true; }});
   document.querySelectorAll('.filter-chip').forEach(btn => {{
     const cat = btn.getAttribute('data-cat');
     filterState[cat] = true;
@@ -3204,6 +3333,7 @@ def render_3d_bim_viewer(
     height: int = 760,
     edge_columns: dict = None,
     layout_sketch_b64: str = None,
+    drop_beams: list = None,
 ):
     """
     Renders the Integrated 3D Structural BIM & Rebar Viewer inside Module 1.
@@ -3231,15 +3361,21 @@ def render_3d_bim_viewer(
             fcu=fcu,
             fy=fy,
             edge_columns=edge_columns,
+            drop_beams=drop_beams,
         )
 
         if not scene_data or not scene_data.get("concrete_elements"):
             st.info("💡 أدخل بيانات شبكة المحاور وقم بتنفيذ التصميم لعرض النموذج الإنشائي ثلاثي الأبعاد.")
             return
 
-        # Check / retrieve / generate Foundation Layout Sketch base64 for side-by-side comparison
+        # Check / retrieve / generate Foundation or Flat Slab Layout Sketch base64 for side-by-side comparison
         if not layout_sketch_b64:
-            layout_sketch_b64 = st.session_state.get(f"{prefix}foundation_sketch_b64", "")
+            layout_sketch_b64 = (
+                st.session_state.get(f"{prefix}flat_slab_plan_b64", "")
+                or st.session_state.get("fs_flat_slab_plan_b64", "")
+                or st.session_state.get("flat_slab_plan_b64", "")
+                or st.session_state.get(f"{prefix}foundation_sketch_b64", "")
+            )
         # If missing or smaller than a real drawing (<25KB base64 indicates a blank/cleared canvas), generate fresh
         if (not layout_sketch_b64 or len(layout_sketch_b64) < 25000) and active_cols and ftg_analysis:
             try:
@@ -3261,8 +3397,14 @@ def render_3d_bim_viewer(
                 layout_sketch_b64 = ""
 
         scene_data["layout_sketch_b64"] = layout_sketch_b64 or ""
+        if layout_sketch_b64:
+            scene_data["sketch_title"] = "المسقط الأفقي وتوزيع الأعمدة والكمرات"
+            scene_data["sketch_btn_title"] = "🗺️ مسقط السقف والمحاور"
+            scene_data["sketch_dl_name"] = "Structural_Plan_Detailing.png"
 
         m = scene_data["metrics"]
+
+        beams_metric_html = f"<span>📏 الكمرات الساقطة: <b style='color:#38bdf8;'>{m.get('num_drop_beams', 0)} كمرة</b></span>" if m.get("num_drop_beams", 0) > 0 else ""
 
         # Executive Metrics Header Strip
         st.markdown(
@@ -3274,6 +3416,7 @@ def render_3d_bim_viewer(
                 <div style="display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; font-weight: 700; color: #e2e8f0;">
                     <span>📐 مسطح السقف: <b style="color:#38bdf8;">{m['slab_area_m2']} م²</b></span>
                     <span>🏛️ الأعمدة: <b style="color:#4ade80;">{m['num_columns']} عمود</b></span>
+                    {beams_metric_html}
                     <span>🪸 الأساسات: <b style="color:#fb923c;">{m['num_footings']} قاعدة</b></span>
                     <span>🔗 السملات والشدادات: <b style="color:#a3e635;">{m['num_ground_beams']} سملة</b></span>
                     <span>🏢 الطوابق: <b style="color:#f472b6;">{m['num_floors']} طوابق</b></span>
@@ -5115,6 +5258,7 @@ def render_standalone_flat_slab_3d_bim_viewer(
     layout_sketch_b64: str = "",
     prefix: str = "",
     height: int = 760,
+    drop_beams: list = None,
 ):
     """
     Renders the 3D BIM & Rebar Viewer for Module 13: Standalone Flat Slabs.
@@ -5139,29 +5283,41 @@ def render_standalone_flat_slab_3d_bim_viewer(
             top_mesh_dia=top_mesh_dia,
             fcu=fcu,
             fy=fy,
+            drop_beams=drop_beams,
         )
 
         if not scene_data or not scene_data.get("concrete_elements"):
             st.info("💡 أدخل بيانات شبكة المحاور وقم بتنفيذ التصميم لعرض النموذج الإنشائي ثلاثي الأبعاد للبلاطة اللاكمرية.")
             return
 
+        m = scene_data["metrics"]
+        n_db = m.get("num_drop_beams", 0)
+
         scene_data["categories"] = [
             {"id": "slab", "name": "سقف البلاطة"},
             {"id": "columns", "name": "الأعمدة الحاملة"},
-            {"id": "rebar", "name": "حديد التسليح والكابات"},
+            {"id": "drop_beams", "name": "الكمرات الساقطة (Drop Beams)"},
+            {"id": "rebar", "name": "حديد التسليح والكمرات"},
         ]
         scene_data["legend_items"] = [
             {"color": "#0284c7", "name": f"شبكة سفلية ({n_mesh_btm:.0f} Φ {bottom_mesh_dia}/م)"},
             {"color": "#6366f1", "name": f"شبكة علوية ({n_mesh_top:.0f} Φ {top_mesh_dia}/م)"},
+            {"color": "#0ea5e9", "name": "الكمرات الساقطة (Drop Beams)"},
             {"color": "#f97316", "name": "كابات إضافي الأعمدة"},
             {"color": "#ec4899", "name": "تسليح القص الثاقب"},
             {"color": "#10b981", "name": "تسليح الأعمدة"},
+            {"color": "#38bdf8", "name": "تسليح الكمرات الساقطة (Rebar)"},
         ]
         scene_data["sketch_title"] = "المسقط الأفقي وتفريد تسليح السقف اللاكمري"
         scene_data["sketch_btn_title"] = "🗺️ مسقط السقف والتسليح"
         scene_data["sketch_dl_name"] = "Standalone_Flat_Slab_Reinforcement.png"
         # Check / retrieve / generate Flat Slab Layout Sketch base64 for side-by-side comparison
-        fs_sketch = layout_sketch_b64 or st.session_state.get(f"{prefix}flat_slab_plan_b64", "")
+        fs_sketch = (
+            layout_sketch_b64
+            or st.session_state.get(f"{prefix}flat_slab_plan_b64", "")
+            or st.session_state.get("fs_flat_slab_plan_b64", "")
+            or st.session_state.get("flat_slab_plan_b64", "")
+        )
         if (not fs_sketch or len(fs_sketch) < 25000) and active_cols and Lx_calc and Ly_calc:
             try:
                 import io, base64
@@ -5177,6 +5333,7 @@ def render_standalone_flat_slab_3d_bim_viewer(
                     top_mesh_n=int(n_mesh_top),
                     fcu=fcu,
                     fy=fy,
+                    drop_beams=drop_beams,
                 )
                 buf_sk = io.BytesIO()
                 fig_fs.savefig(buf_sk, format="png", bbox_inches="tight", dpi=160)
@@ -5188,7 +5345,7 @@ def render_standalone_flat_slab_3d_bim_viewer(
                 pass
         scene_data["layout_sketch_b64"] = fs_sketch or ""
 
-        m = scene_data["metrics"]
+        db_metric_html = f"<span>📏 الكمرات الساقطة: <b style='color:#38bdf8;'>{n_db} كمرة</b></span>" if n_db > 0 else ""
 
         st.markdown(
             f"""
@@ -5200,6 +5357,7 @@ def render_standalone_flat_slab_3d_bim_viewer(
                     <span>📐 مسطح السقف: <b style="color:#38bdf8;">{m['slab_area_m2']} م²</b></span>
                     <span>🧱 السُمك ts: <b style="color:#4ade80;">{ts_cm:.0f} سم</b></span>
                     <span>🏛️ الأعمدة الحاملة: <b style="color:#fb923c;">{m['num_columns']} عمود</b></span>
+                    {db_metric_html}
                     <span>🔩 شبكة سفلية: <b style="color:#a3e635;">{n_mesh_btm:.0f}Φ{bottom_mesh_dia}/م</b></span>
                     <span>🔩 شبكة علوية: <b style="color:#f472b6;">{n_mesh_top:.0f}Φ{top_mesh_dia}/م</b></span>
                     <span>🧱 حجم الخرسانة: <b style="color:#e0e7ff;">{m['slab_area_m2']*(ts_cm/100.0):.2f} م³</b></span>
