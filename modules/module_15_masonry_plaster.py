@@ -35,7 +35,7 @@ M15_SHIFT_Y_OPTIONS = [
     "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)",
     "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)",
 ]
-_CLR_WALL_12="#EFA368"; _CLR_WALL_25="#8B1A1A"; _CLR_WALL_PARAPET="#0284C7"
+_CLR_WALL_12="#EFA368"; _CLR_WALL_25="#8B1A1A"; _CLR_WALL_PARAPET="#7E22CE"
 _CLR_COL="#2F4F8F"; _CLR_COL_REMOVED="#BBBBBB"
 _CLR_WIN="#87CEEB"; _CLR_DOOR="#2E7D32"
 _CLR_AXIS_X="#E53935"; _CLR_AXIS_Y="#1565C0"
@@ -2370,15 +2370,15 @@ def _draw_plan(with_dim=True):
         ax.axis("off"); buf=io.BytesIO(); fig.savefig(buf,format="png",dpi=120); plt.close(fig); buf.seek(0); return buf
     x_min,x_max=min(xs),max(xs); y_min,y_max=min(ys),max(ys)
     span_x=x_max-x_min or 1.0; span_y=y_max-y_min or 1.0
-    fig_w=min(18,max(10,span_x*1.6+2.5)); fig_h=min(15,max(8,span_y*1.6+2.5))
+    fig_w=min(20,max(12,span_x*1.7+3.5)); fig_h=min(18,max(9,span_y*1.7+3.5))
     fig,ax=plt.subplots(figsize=(fig_w,fig_h)); ax.set_aspect("equal")
     # ── تباعد خطوط الأبعاد والمحيط الخارجي بنمط الأوتوكاد الهندسي المتناسق ──
     min_span = min(span_x, span_y) if (span_x and span_y) else 5.0
-    d_bay = max(0.60, min(1.10, min_span * 0.09))
-    d_tot = max(0.50, min(0.90, min_span * 0.075))
-    d_bub = max(0.50, min(0.90, min_span * 0.075))
-    cad_bubble_r = max(0.16, min(0.22, min_span * 0.026))
-    dt_tick = max(0.08, min(0.14, min_span * 0.015))
+    d_bay = max(1.20, min(2.00, min_span * 0.14))
+    d_tot = max(0.65, min(1.10, min_span * 0.085))
+    d_bub = max(0.65, min(1.10, min_span * 0.085))
+    cad_bubble_r = max(0.18, min(0.24, min_span * 0.028))
+    dt_tick = max(0.09, min(0.15, min_span * 0.016))
 
     # إحداثيات خطوط الأبعاد والفقاعات الخارجية
     y_dim_bot_bay = y_min - d_bay
@@ -2394,11 +2394,12 @@ def _draw_plan(with_dim=True):
     x_bub_left     = x_dim_left_tot - d_bub
 
     x_dim_right_bay = x_max + d_bay
-    x_dim_right_tot = x_dim_right_bay - d_tot
+    x_dim_right_tot = x_dim_right_bay + d_tot
     x_bub_right     = x_dim_right_tot + d_bub
 
-    margin_x = d_bay + d_tot + d_bub + cad_bubble_r + 0.35
-    margin_y = d_bay + d_tot + d_bub + cad_bubble_r + 0.35
+    margin_extra = max(0.85, min_span * 0.055)
+    margin_x = d_bay + d_tot + d_bub + cad_bubble_r + margin_extra
+    margin_y = d_bay + d_tot + d_bub + cad_bubble_r + margin_extra
 
     ax.set_xlim(x_min - margin_x, x_max + margin_x)
     ax.set_ylim(y_min - margin_y, y_max + margin_y)
@@ -2453,7 +2454,7 @@ def _draw_plan(with_dim=True):
             if is_h: rx = min(xs[i1], xs[i2]); ry = cross_min; rw = abs(xs[i2] - xs[i1]); rh = thick_m
             else: rx = cross_min; ry = min(ys[j1], ys[j2]); rw = thick_m; rh = abs(ys[j2] - ys[j1])
             plan_obstacles.append([rx, ry, rx + rw, ry + rh])
-            edge_clr = "#0369a1" if is_p else "#333333"
+            edge_clr = "#3b0764" if is_p else "#333333"
             edge_lw = 1.3 if is_p else 1.0
 
             tgt_w = tuple(int(x) for x in pending_del.get("target", ())) if (pending_del and pending_del.get("kind") == "wall" and pending_del.get("target")) else ()
@@ -2841,7 +2842,7 @@ def _draw_plan(with_dim=True):
         else:
             base_name = names[0]
 
-        label_text = f"{base_name} [حائط دروة]" if is_parapet else base_name
+        label_text = base_name
         tgt_w = tuple(int(x) for x in pending_del.get("target", ())) if (pending_del and pending_del.get("kind") == "wall" and pending_del.get("target")) else ()
         is_grp_pending = any(
             bool(tgt_w) and (tgt_w == s or (len(tgt_w) == 4 and (tgt_w[2], tgt_w[3], tgt_w[0], tgt_w[1]) == s))
@@ -2852,9 +2853,9 @@ def _draw_plan(with_dim=True):
             t_box_bg = "#fee2e2"
             t_color = "#991b1b"
         elif is_parapet:
-            t_box_edge = "#0284c7"
-            t_box_bg = "#e0f2fe"
-            t_color = "#0369a1"
+            t_box_edge = "#7e22ce"
+            t_box_bg = "#f3e8ff"
+            t_color = "#581c87"
         else:
             t_box_edge = "#cbd5e1"
             t_box_bg = "#ffffff"
@@ -3113,6 +3114,14 @@ def _draw_plan(with_dim=True):
                 fontsize=fs_dim, fontweight="bold", color="#0f172a", zorder=5,
                 bbox=dict(boxstyle="square,pad=0.15", facecolor="#ffffff", edgecolor="none", alpha=0.90))
 
+    # خط البعد الكلي الأفقي العلوي (Total Lx)
+    ax.plot([xs[0], xs[-1]], [y_dim_top_tot, y_dim_top_tot], color="#1e3a8a", lw=1.2, zorder=3)
+    _draw_cad_tick(xs[0], y_dim_top_tot)
+    _draw_cad_tick(xs[-1], y_dim_top_tot)
+    ax.text((xs[0] + xs[-1]) / 2.0, y_dim_top_tot + dt_tick * 1.2, f"Total Lx = {span_x:.2f}m", ha="center", va="bottom",
+            fontsize=fs_dim, fontweight="bold", color="#1e3a8a", zorder=5,
+            bbox=dict(boxstyle="square,pad=0.15", facecolor="#ffffff", edgecolor="none", alpha=0.90))
+
     # دوائر المحاور العلوية (Top CAD Bubbles)
     for idx, x in enumerate(xs):
         bub = patches.Circle((x, y_bub_top), radius=cad_bubble_r, facecolor="#ffffff", edgecolor=_CLR_AXIS_Y, lw=1.6, zorder=6)
@@ -3154,6 +3163,14 @@ def _draw_plan(with_dim=True):
         ax.text(x_dim_right_bay + dt_tick * 1.2, (y1 + y2) / 2.0, f"{sp:.2f}m", ha="center", va="center", rotation=90,
                 fontsize=fs_dim, fontweight="bold", color="#0f172a", zorder=5,
                 bbox=dict(boxstyle="square,pad=0.15", facecolor="#ffffff", edgecolor="none", alpha=0.90))
+
+    # خط البعد الكلي الرأسي باليمين (Total Ly)
+    ax.plot([x_dim_right_tot, x_dim_right_tot], [ys[0], ys[-1]], color="#1e3a8a", lw=1.2, zorder=3)
+    _draw_cad_tick(x_dim_right_tot, ys[0])
+    _draw_cad_tick(x_dim_right_tot, ys[-1])
+    ax.text(x_dim_right_tot + dt_tick * 1.2, (ys[0] + ys[-1]) / 2.0, f"Total Ly = {span_y:.2f}m", ha="center", va="center", rotation=90,
+            fontsize=fs_dim, fontweight="bold", color="#1e3a8a", zorder=5,
+            bbox=dict(boxstyle="square,pad=0.15", facecolor="#ffffff", edgecolor="none", alpha=0.90))
 
     # دوائر المحاور باليمين (Right CAD Bubbles)
     for idx, y in enumerate(ys):
@@ -3436,7 +3453,7 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     mode_str = box_mode or ""
     box_banner_display = "none"
     viewport_box_class = "box-mode" if box_mode else ""
-    cad_toolbar_style = "display:none !important;" if box_mode == "add_wall" else ""
+    cad_toolbar_style = "display:none !important;"
     if box_mode == "delete_element" or box_mode == "delete_wall":
         hint_text_toolbar = "🗑️ اسحب صندوقاً حول الحائط أو العمود أو الشباك أو الباب لحذفه"
     elif box_mode == "add_wall":
@@ -3493,7 +3510,7 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     top: 10px;
     right: 10px;
     z-index: 1000;
-    display: flex;
+    display: none !important;
     align-items: center;
     gap: 5px;
     background: rgba(255, 255, 255, 0.95);
@@ -5081,9 +5098,363 @@ def _section_add_walls():
             st.session_state["m15_add_wall_mode"] = False
             st.rerun()
 
+
+def m15_split_span(axis_dir: str, span_index: int, offset_d1: float):
+    """
+    تقسيم البحر وإدراج محور جديد في موديول 15 تماماً بفلسفة Flat Slabs (موديول 11):
+    - إعادة فهرسة شبكة المحاور والأعمدة والحوائط هندسياً بدقة متناهية.
+    - الحفاظ الكامل 100% على مواضع وأطوال وأسماء الأعمدة والحوائط القائمة دون أدنى تغيير في المخرجات.
+    - الحفاظ على فتحات الأبواب والشبابيك بمواضعها الفيزيائية الدقيقة (pos_m).
+    """
+    offset_d1 = round(float(offset_d1), 3)
+    old_xs = list(st.session_state.get("m15_x_axes", []))
+    old_ys = list(st.session_state.get("m15_y_axes", []))
+    nx = len(old_xs)
+    ny = len(old_ys)
+
+    if nx < 2 or ny < 2:
+        st.error("شبكة المحاور غير كافية للتقسيم.")
+        return
+
+    # ── ترقية رقم إصدار الشبكة لمنع تعارض Streamlit Widget Keys (فلسفة موديول 11) ──
+    grid_ver = int(st.session_state.get("_m15_grid_ver", 0)) + 1
+    st.session_state["_m15_grid_ver"] = grid_ver
+
+    if axis_dir == "X":
+        if span_index < 0 or span_index >= nx - 1:
+            st.error("فهرس البحر غير صالح.")
+            return
+        sp = round(old_xs[span_index + 1] - old_xs[span_index], 3)
+        if offset_d1 <= 0.0 or offset_d1 >= sp:
+            st.error(f"المسافة ({offset_d1:.2f}م) يجب أن تكون أكبر من 0 وأقل من طول البحر ({sp:.2f}م).")
+            return
+        d2 = round(sp - offset_d1, 3)
+        new_x = round(old_xs[span_index] + offset_d1, 3)
+
+        # 1. تحديث المحاور الرأسية
+        new_xs = list(old_xs[:span_index + 1]) + [new_x] + list(old_xs[span_index + 1:])
+        st.session_state["m15_x_axes"] = new_xs
+        st.session_state[f"m15_n_v_axes_v{grid_ver}"] = len(new_xs)
+        st.session_state["_m15_synced_x_axes"] = list(new_xs)
+        st.session_state["_m15_synced_nx"] = len(new_xs)
+
+        k = span_index
+
+        # 2. ترحيل الأعمدة (m15_col_placed, m15_col_removed, properties)
+        def _remap_col_pt(pt):
+            t = _safe_coord_tuple(pt, 2)
+            if not t:
+                return None
+            i, j = t
+            ni = i if i <= k else i + 1
+            return (ni, j)
+
+        # 2a. m15_col_placed
+        old_cp = st.session_state.get("m15_col_placed", set())
+        new_cp = set()
+        for item in old_cp:
+            rp = _remap_col_pt(item)
+            if rp:
+                new_cp.add(rp)
+        st.session_state["m15_col_placed"] = new_cp
+
+        # 2b. m15_col_removed
+        old_cr = st.session_state.get("m15_col_removed", set())
+        new_cr = set()
+        for item in old_cr:
+            rp = _remap_col_pt(item)
+            if rp:
+                new_cr.add(rp)
+        st.session_state["m15_col_removed"] = new_cr
+
+        # 2c. اتجاهات وإزاحات وخصائص الأعمدة
+        for ckey in ["m15_col_dirs", "m15_col_shifts", "m15_col_shifted", "m15_col_props"]:
+            old_dict = st.session_state.get(ckey, {})
+            new_dict = {}
+            for pt, val in old_dict.items():
+                rp = _remap_col_pt(pt)
+                if rp:
+                    new_dict[rp] = val
+            st.session_state[ckey] = new_dict
+
+        # 3. ترحيل وتقسيم الحوائط
+        def _remap_wall_seg(wk):
+            t = _safe_coord_tuple(wk, 4)
+            if not t:
+                return []
+            i1, j1, i2, j2 = t
+            if i1 == i2:  # حائط رأسي
+                ni = i1 if i1 <= k else i1 + 1
+                j_min, j_max = min(j1, j2), max(j1, j2)
+                return [((ni, j_min, ni, j_max), 0.0)]
+            elif j1 == j2:  # حائط أفقي
+                j = j1
+                i_min, i_max = min(i1, i2), max(i1, i2)
+                if i_max <= k:
+                    return [((i_min, j, i_max, j), 0.0)]
+                elif i_min >= k + 1:
+                    return [((i_min + 1, j, i_max + 1, j), 0.0)]
+                else:  # i_min <= k and i_max >= k + 1 (يقطع المحور الرأسي الجديد)
+                    split_offset_m = round(new_x - old_xs[i_min], 3)
+                    part1 = ((i_min, j, k + 1, j), 0.0)
+                    part2 = ((k + 1, j, i_max + 1, j), split_offset_m)
+                    return [part1, part2]
+            return []
+
+        # 3a. m15_walls_placed
+        old_wp = st.session_state.get("m15_walls_placed", [])
+        new_wp = []
+        for item in old_wp:
+            for seg, _ in _remap_wall_seg(item):
+                if seg not in new_wp:
+                    new_wp.append(seg)
+        st.session_state["m15_walls_placed"] = new_wp
+
+        # 3b. m15_wall_removed
+        old_wr = st.session_state.get("m15_wall_removed", set())
+        new_wr = set()
+        for item in old_wr:
+            for seg, _ in _remap_wall_seg(item):
+                new_wr.add(seg)
+        st.session_state["m15_wall_removed"] = new_wr
+
+        # 3c. m15_parapet_walls
+        old_pw = st.session_state.get("m15_parapet_walls", set())
+        new_pw = set()
+        for item in old_pw:
+            for seg, _ in _remap_wall_seg(item):
+                new_pw.add(seg)
+        st.session_state["m15_parapet_walls"] = new_pw
+
+        # 3d. سمك وارتفاعات الحوائط وأوجه المحارة
+        for wkey in ["m15_wall_thickness", "m15_wall_heights", "m15_plaster_faces"]:
+            old_store = st.session_state.get(wkey, {})
+            new_store = {}
+            for item, val in old_store.items():
+                for seg, _ in _remap_wall_seg(item):
+                    new_store[seg] = list(val) if isinstance(val, (list, set)) else val
+            st.session_state[wkey] = new_store
+
+        # 3e. الشبابيك والأبواب (مع الحفاظ على pos_m الفيزيائي الدقيق)
+        for op_key in ["m15_windows", "m15_doors"]:
+            old_store = st.session_state.get(op_key, {})
+            new_store = {}
+            for item, op_list in old_store.items():
+                if not op_list:
+                    continue
+                parts = _remap_wall_seg(item)
+                if not parts:
+                    continue
+                if len(parts) == 1:
+                    target_seg = parts[0][0]
+                    target_list = new_store.setdefault(target_seg, [])
+                    for op in op_list:
+                        op_c = dict(op)
+                        op_c["wk"] = target_seg
+                        target_list.append(op_c)
+                else:
+                    seg1, _ = parts[0]
+                    seg2, split_off = parts[1]
+                    list1 = new_store.setdefault(seg1, [])
+                    list2 = new_store.setdefault(seg2, [])
+                    for op in op_list:
+                        op_c = dict(op)
+                        p_pos = float(op.get("pos_m", 0.0))
+                        if p_pos < split_off:
+                            op_c["wk"] = seg1
+                            list1.append(op_c)
+                        else:
+                            op_c["wk"] = seg2
+                            op_c["pos_m"] = round(max(0.0, p_pos - split_off), 2)
+                            list2.append(op_c)
+            st.session_state[op_key] = new_store
+
+        # مزامنة مفاتيح spans الرأسية للإصدار الجديد
+        for i in range(len(new_xs) - 1):
+            st.session_state[f"m15_x_sp_{i}_v{grid_ver}"] = float(round(new_xs[i + 1] - new_xs[i], 2))
+
+    else:  # axis_dir == "Y"
+        if span_index < 0 or span_index >= ny - 1:
+            st.error("فهرس البحر غير صالح.")
+            return
+        sp = round(old_ys[span_index + 1] - old_ys[span_index], 3)
+        if offset_d1 <= 0.0 or offset_d1 >= sp:
+            st.error(f"المسافة ({offset_d1:.2f}م) يجب أن تكون أكبر من 0 وأقل من طول البحر ({sp:.2f}م).")
+            return
+        d2 = round(sp - offset_d1, 3)
+        new_y = round(old_ys[span_index] + offset_d1, 3)
+
+        # 1. تحديث المحاور الأفقية
+        new_ys = list(old_ys[:span_index + 1]) + [new_y] + list(old_ys[span_index + 1:])
+        st.session_state["m15_y_axes"] = new_ys
+        st.session_state[f"m15_n_h_axes_v{grid_ver}"] = len(new_ys)
+        st.session_state["_m15_synced_y_axes"] = list(new_ys)
+        st.session_state["_m15_synced_ny"] = len(new_ys)
+
+        k = span_index
+
+        # 2. ترحيل الأعمدة
+        def _remap_col_pt_y(pt):
+            t = _safe_coord_tuple(pt, 2)
+            if not t:
+                return None
+            i, j = t
+            nj = j if j <= k else j + 1
+            return (i, nj)
+
+        # 2a. m15_col_placed
+        old_cp = st.session_state.get("m15_col_placed", set())
+        new_cp = set()
+        for item in old_cp:
+            rp = _remap_col_pt_y(item)
+            if rp:
+                new_cp.add(rp)
+        st.session_state["m15_col_placed"] = new_cp
+
+        # 2b. m15_col_removed
+        old_cr = st.session_state.get("m15_col_removed", set())
+        new_cr = set()
+        for item in old_cr:
+            rp = _remap_col_pt_y(item)
+            if rp:
+                new_cr.add(rp)
+        st.session_state["m15_col_removed"] = new_cr
+
+        # 2c. اتجاهات وإزاحات وخصائص الأعمدة
+        for ckey in ["m15_col_dirs", "m15_col_shifts", "m15_col_shifted", "m15_col_props"]:
+            old_dict = st.session_state.get(ckey, {})
+            new_dict = {}
+            for pt, val in old_dict.items():
+                rp = _remap_col_pt_y(pt)
+                if rp:
+                    new_dict[rp] = val
+            st.session_state[ckey] = new_dict
+
+        # 3. ترحيل وتقسيم الحوائط
+        def _remap_wall_seg_y(wk):
+            t = _safe_coord_tuple(wk, 4)
+            if not t:
+                return []
+            i1, j1, i2, j2 = t
+            if j1 == j2:  # حائط أفقي
+                nj = j1 if j1 <= k else j1 + 1
+                i_min, i_max = min(i1, i2), max(i1, i2)
+                return [((i_min, nj, i_max, nj), 0.0)]
+            elif i1 == i2:  # حائط رأسي
+                i = i1
+                j_min, j_max = min(j1, j2), max(j1, j2)
+                if j_max <= k:
+                    return [((i, j_min, i, j_max), 0.0)]
+                elif j_min >= k + 1:
+                    return [((i, j_min + 1, i, j_max + 1), 0.0)]
+                else:  # يقطع المحور الأفقي الجديد
+                    split_offset_m = round(new_y - old_ys[j_min], 3)
+                    part1 = ((i, j_min, i, k + 1), 0.0)
+                    part2 = ((i, k + 1, i, j_max + 1), split_offset_m)
+                    return [part1, part2]
+            return []
+
+        # 3a. m15_walls_placed
+        old_wp = st.session_state.get("m15_walls_placed", [])
+        new_wp = []
+        for item in old_wp:
+            for seg, _ in _remap_wall_seg_y(item):
+                if seg not in new_wp:
+                    new_wp.append(seg)
+        st.session_state["m15_walls_placed"] = new_wp
+
+        # 3b. m15_wall_removed
+        old_wr = st.session_state.get("m15_wall_removed", set())
+        new_wr = set()
+        for item in old_wr:
+            for seg, _ in _remap_wall_seg_y(item):
+                new_wr.add(seg)
+        st.session_state["m15_wall_removed"] = new_wr
+
+        # 3c. m15_parapet_walls
+        old_pw = st.session_state.get("m15_parapet_walls", set())
+        new_pw = set()
+        for item in old_pw:
+            for seg, _ in _remap_wall_seg_y(item):
+                new_pw.add(seg)
+        st.session_state["m15_parapet_walls"] = new_pw
+
+        # 3d. سمك وارتفاعات الحوائط وأوجه المحارة
+        for wkey in ["m15_wall_thickness", "m15_wall_heights", "m15_plaster_faces"]:
+            old_store = st.session_state.get(wkey, {})
+            new_store = {}
+            for item, val in old_store.items():
+                for seg, _ in _remap_wall_seg_y(item):
+                    new_store[seg] = list(val) if isinstance(val, (list, set)) else val
+            st.session_state[wkey] = new_store
+
+        # 3e. الشبابيك والأبواب
+        for op_key in ["m15_windows", "m15_doors"]:
+            old_store = st.session_state.get(op_key, {})
+            new_store = {}
+            for item, op_list in old_store.items():
+                if not op_list:
+                    continue
+                parts = _remap_wall_seg_y(item)
+                if not parts:
+                    continue
+                if len(parts) == 1:
+                    target_seg = parts[0][0]
+                    target_list = new_store.setdefault(target_seg, [])
+                    for op in op_list:
+                        op_c = dict(op)
+                        op_c["wk"] = target_seg
+                        target_list.append(op_c)
+                else:
+                    seg1, _ = parts[0]
+                    seg2, split_off = parts[1]
+                    list1 = new_store.setdefault(seg1, [])
+                    list2 = new_store.setdefault(seg2, [])
+                    for op in op_list:
+                        op_c = dict(op)
+                        p_pos = float(op.get("pos_m", 0.0))
+                        if p_pos < split_off:
+                            op_c["wk"] = seg1
+                            list1.append(op_c)
+                        else:
+                            op_c["wk"] = seg2
+                            op_c["pos_m"] = round(max(0.0, p_pos - split_off), 2)
+                            list2.append(op_c)
+            st.session_state[op_key] = new_store
+
+        # مزامنة مفاتيح spans الأفقية للإصدار الجديد
+        for j in range(len(new_ys) - 1):
+            st.session_state[f"m15_y_sp_{j}_v{grid_ver}"] = float(round(new_ys[j + 1] - new_ys[j], 2))
+
+    # تنظيف مفاتيح الإصدارات السابقة غير الإصدار الحالي
+    for k_item in list(st.session_state.keys()):
+        if ("_m15_" in k_item or "m15_" in k_item) and "_v" in k_item and not k_item.endswith(f"_v{grid_ver}") and k_item != "_m15_grid_ver":
+            st.session_state.pop(k_item, None)
+        elif k_item.startswith("m15_split_d1_"):
+            st.session_state.pop(k_item, None)
+
+    st.session_state.pop("m15_plan_png_b64", None)
+    st.session_state.pop("m15_3d_cache", None)
+    st.session_state.pop("m15_openings_win_wall_sel", None)
+    st.session_state.pop("m15_openings_door_wall_sel", None)
+    st.session_state.pop("m15_sel_wall_del_plaster", None)
+    st.session_state.pop("m15_sel_bay_idx", None)
+    st.session_state.pop("m15_col_orient_sel_col", None)
+    st.session_state.pop("m15_del_active_col_sel", None)
+    st.session_state.pop("m15_del_wall_sel", None)
+
+    _sanitize_and_prune_grid_data()
+    _normalize_wall_keys()
+    _ensure_opening_ids()
+    save_settings()
+    st.toast("✅ تم تقسيم البحر وإدراج المحور الجديد بنجاح مع حفظ كامل الكيانات الهندسية!", icon="✂️")
+    st.rerun()
+
+
 def _section_axes():
     cxs = st.session_state["m15_x_axes"]
     cys = st.session_state["m15_y_axes"]
+    grid_ver = int(st.session_state.get("_m15_grid_ver", 0))
 
     # ═════════════════════════════════════════════════════════════════════════
     # 🔵 Vertical Axes — Y1, Y2, Y3...   (m15_x_axes → خطوط رأسية في المسقط)
@@ -5099,9 +5470,9 @@ def _section_axes():
     )
 
     cur_nx = len(cxs)
-    if "m15_n_v_axes" in st.session_state and st.session_state.get("_m15_synced_nx") != cur_nx:
-        st.session_state["m15_n_v_axes"] = cur_nx
-        st.session_state["_m15_synced_nx"] = cur_nx
+    k_nv = f"m15_n_v_axes_v{grid_ver}"
+    if k_nv not in st.session_state:
+        st.session_state[k_nv] = cur_nx
 
     c_ny1, c_ny2 = st.columns([1.2, 2.8])
     with c_ny1:
@@ -5109,9 +5480,9 @@ def _section_axes():
             "عدد المحاور الرأسية Y",
             min_value=2,
             max_value=20,
-            value=cur_nx,
+            value=int(st.session_state[k_nv]),
             step=1,
-            key="m15_n_v_axes"
+            key=k_nv
         )
         n_y_axes = int(n_y_axes)
     with c_ny2:
@@ -5125,7 +5496,7 @@ def _section_axes():
     # مزامنة مفاتيح الواجهة إذا تم تعديل الإحداثيات من خارج القسم
     if st.session_state.get("_m15_synced_x_axes") != cxs:
         for idx in range(len(cxs) - 1):
-            st.session_state[f"m15_x_sp_{idx}"] = float(round(cxs[idx + 1] - cxs[idx], 2))
+            st.session_state[f"m15_x_sp_{idx}_v{grid_ver}"] = float(round(cxs[idx + 1] - cxs[idx], 2))
         st.session_state["_m15_synced_x_axes"] = list(cxs)
 
     spacings_x = []
@@ -5140,18 +5511,50 @@ def _section_axes():
                 dsp = spacings_x[-1]
             else:
                 dsp = 4.0
-            if f"m15_x_sp_{idx}" not in st.session_state:
-                st.session_state[f"m15_x_sp_{idx}"] = float(dsp)
+            sp_key = f"m15_x_sp_{idx}_v{grid_ver}"
+            if sp_key not in st.session_state:
+                st.session_state[sp_key] = float(dsp)
             sp = cols[ci].number_input(
                 f"البعد الأفقي Y{idx+1} → Y{idx+2}",
                 min_value=0.25,
                 max_value=50.0,
-                value=float(st.session_state[f"m15_x_sp_{idx}"]),
+                value=float(st.session_state[sp_key]),
                 step=0.25,
                 format="%.2f",
-                key=f"m15_x_sp_{idx}"
+                key=sp_key
             )
             spacings_x.append(float(sp))
+            ax_c1 = cxs[idx] if idx < len(cxs) else 0.0
+            ax_c2 = cxs[idx + 1] if idx + 1 < len(cxs) else (ax_c1 + sp)
+            cols[ci].caption(f"📍 Y{idx+1} ({ax_c1:.2f}م) ➔ Y{idx+2} ({ax_c2:.2f}م)")
+            with cols[ci].popover("✂️ Split Axis", use_container_width=True, help=f"تقسيم البحر بين المحورين Y{idx+1} و Y{idx+2} وإدراج محور رأسي جديد (Insert Axis)"):
+                st.markdown(f"<div dir='rtl'><b>✂️ تقسيم البحر Y{idx+1} - Y{idx+2}</b><br><small>الطول الحالي: <b>{sp:.2f} م</b></small></div>", unsafe_allow_html=True)
+                d1_default = round(sp / 2.0, 2)
+                max_d1 = max(0.10, round(sp - 0.05, 2))
+                d1_input = st.number_input(
+                    f"المسافة d₁ من المحور Y{idx+1} (م):",
+                    min_value=0.05,
+                    max_value=max_d1,
+                    value=min(max_d1, max(0.05, d1_default)),
+                    step=0.05,
+                    key=f"m15_split_d1_x_{idx}_v{grid_ver}",
+                    help=f"المسافة من المحور Y{idx+1} إلى المحور الرأسي الجديد."
+                )
+                d2_calc = max(0.0, round(sp - float(d1_input), 4))
+                new_axis_coord = ax_c1 + float(d1_input)
+                st.markdown(
+                    f"""
+                    <div dir='rtl' style='background: rgba(15, 23, 42, 0.6); padding: 8px 10px; border-radius: 6px; font-size: 12px; margin: 8px 0; border-right: 3px solid #38bdf8;'>
+                        📐 <b>النتيجة الهندسية والترقيم:</b><br>
+                        • البحر Y{idx+1} الجديد: <b>{d1_input:.2f} م</b> (Y{idx+1} ➔ المحور الجديد عند {new_axis_coord:.2f}م)<br>
+                        • البحر Y{idx+2} الجديد: <b>{d2_calc:.2f} م</b> (المحور الجديد ➔ Y{idx+2} عند {ax_c2:.2f}م)<br>
+                        • الإجمالي: <b>{(d1_input + d2_calc):.2f} م</b> (ثابت 100%)
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+                if st.button("🚀 تأكيد التقسيم وإدراج المحور", key=f"m15_btn_confirm_split_x_{idx}_v{grid_ver}", type="primary", use_container_width=True):
+                    m15_split_span("X", idx, float(d1_input))
 
     # حساب الإحداثيات التراكمية للمحاور الرأسية
     x_vals = [0.0]
@@ -5185,9 +5588,9 @@ def _section_axes():
     )
 
     cur_ny = len(cys)
-    if "m15_n_h_axes" in st.session_state and st.session_state.get("_m15_synced_ny") != cur_ny:
-        st.session_state["m15_n_h_axes"] = cur_ny
-        st.session_state["_m15_synced_ny"] = cur_ny
+    k_nh = f"m15_n_h_axes_v{grid_ver}"
+    if k_nh not in st.session_state:
+        st.session_state[k_nh] = cur_ny
 
     c_nx1, c_nx2 = st.columns([1.2, 2.8])
     with c_nx1:
@@ -5195,9 +5598,9 @@ def _section_axes():
             "عدد المحاور الأفقية X",
             min_value=2,
             max_value=20,
-            value=cur_ny,
+            value=int(st.session_state[k_nh]),
             step=1,
-            key="m15_n_h_axes"
+            key=k_nh
         )
         n_x_axes = int(n_x_axes)
     with c_nx2:
@@ -5211,7 +5614,7 @@ def _section_axes():
     # مزامنة مفاتيح الواجهة إذا تم تعديل الإحداثيات من خارج القسم
     if st.session_state.get("_m15_synced_y_axes") != cys:
         for idx in range(len(cys) - 1):
-            st.session_state[f"m15_y_sp_{idx}"] = float(round(cys[idx + 1] - cys[idx], 2))
+            st.session_state[f"m15_y_sp_{idx}_v{grid_ver}"] = float(round(cys[idx + 1] - cys[idx], 2))
         st.session_state["_m15_synced_y_axes"] = list(cys)
 
     spacings_y = []
@@ -5226,18 +5629,50 @@ def _section_axes():
                 dsp = spacings_y[-1]
             else:
                 dsp = 3.0
-            if f"m15_y_sp_{idx}" not in st.session_state:
-                st.session_state[f"m15_y_sp_{idx}"] = float(dsp)
+            sp_key = f"m15_y_sp_{idx}_v{grid_ver}"
+            if sp_key not in st.session_state:
+                st.session_state[sp_key] = float(dsp)
             sp = cols[ci].number_input(
                 f"البعد الرأسي X{idx+1} → X{idx+2}",
                 min_value=0.25,
                 max_value=50.0,
-                value=float(st.session_state[f"m15_y_sp_{idx}"]),
+                value=float(st.session_state[sp_key]),
                 step=0.25,
                 format="%.2f",
-                key=f"m15_y_sp_{idx}"
+                key=sp_key
             )
             spacings_y.append(float(sp))
+            ay_c1 = cys[idx] if idx < len(cys) else 0.0
+            ay_c2 = cys[idx + 1] if idx + 1 < len(cys) else (ay_c1 + sp)
+            cols[ci].caption(f"📍 X{idx+1} ({ay_c1:.2f}م) ➔ X{idx+2} ({ay_c2:.2f}م)")
+            with cols[ci].popover("✂️ Split Axis", use_container_width=True, help=f"تقسيم البحر بين المحورين X{idx+1} و X{idx+2} وإدراج محور أفقي جديد (Insert Axis)"):
+                st.markdown(f"<div dir='rtl'><b>✂️ تقسيم البحر X{idx+1} - X{idx+2}</b><br><small>الطول الحالي: <b>{sp:.2f} م</b></small></div>", unsafe_allow_html=True)
+                d1_default = round(sp / 2.0, 2)
+                max_d1 = max(0.10, round(sp - 0.05, 2))
+                d1_input = st.number_input(
+                    f"المسافة d₁ من المحور X{idx+1} (م):",
+                    min_value=0.05,
+                    max_value=max_d1,
+                    value=min(max_d1, max(0.05, d1_default)),
+                    step=0.05,
+                    key=f"m15_split_d1_y_{idx}_v{grid_ver}",
+                    help=f"المسافة من المحور X{idx+1} إلى المحور الأفقي الجديد."
+                )
+                d2_calc = max(0.0, round(sp - float(d1_input), 4))
+                new_axis_coord = ay_c1 + float(d1_input)
+                st.markdown(
+                    f"""
+                    <div dir='rtl' style='background: rgba(15, 23, 42, 0.6); padding: 8px 10px; border-radius: 6px; font-size: 12px; margin: 8px 0; border-right: 3px solid #ef4444;'>
+                        📐 <b>النتيجة الهندسية والترقيم:</b><br>
+                        • البحر X{idx+1} الجديد: <b>{d1_input:.2f} م</b> (X{idx+1} ➔ المحور الجديد عند {new_axis_coord:.2f}م)<br>
+                        • البحر X{idx+2} الجديد: <b>{d2_calc:.2f} م</b> (المحور الجديد ➔ X{idx+2} عند {ay_c2:.2f}م)<br>
+                        • الإجمالي: <b>{(d1_input + d2_calc):.2f} م</b> (ثابت 100%)
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+                if st.button("🚀 تأكيد التقسيم وإدراج المحور", key=f"m15_btn_confirm_split_y_{idx}_v{grid_ver}", type="primary", use_container_width=True):
+                    m15_split_span("Y", idx, float(d1_input))
 
     # حساب الإحداثيات التراكمية للمحاور الأفقية
     y_vals = [0.0]
@@ -5275,17 +5710,22 @@ def _confirm_delete_wall(wk):
     cm = _get_col_name_map()
     wm = _get_wall_name_map()
     lbl = _wall_display_label(wk, cm, wm)
-    st.toast(f"🗑️ تم حذف الحائط ({lbl}) بنجاح! يمكنك استعادته في أي وقت من قسم استعادة الحوائط.", icon="🗑️")
+    st.toast(f"🗑️ تم حذف الحائط ({lbl}) بنجاح!", icon="🗑️")
     st.rerun()
 
 
 def _cancel_pending_delete():
     st.session_state["m15_pending_delete"] = None
     st.session_state["m15_pending_delete_wall"] = None
+    st.session_state["m15_del_wall_mode"] = False
+    st.session_state["m15_del_dropdown_ver"] = int(st.session_state.get("m15_del_dropdown_ver", 0)) + 1
+    st.session_state.pop("m15_dropdown_del_wall", None)
+    st.session_state.pop("m15_sel_col", None)
+    st.session_state.pop("m15_sel_delete_opening_idx", None)
     st.session_state.pop("_last_del_confirm_whistle_token", None)
     st.session_state.pop("m15_plan_png_b64", None)
 
-def _set_pending_delete(kind, target, name=None):
+def _set_pending_delete(kind, target, name=None, step=1):
     xs = st.session_state.get("m15_x_axes", [])
     ys = st.session_state.get("m15_y_axes", [])
     cm = _get_col_name_map()
@@ -5320,7 +5760,8 @@ def _set_pending_delete(kind, target, name=None):
             "target": wk,
             "name": w_name,
             "title_kind": title_kind,
-            "details": details
+            "details": details,
+            "step": step
         }
         st.session_state["m15_pending_delete_wall"] = wk
 
@@ -5344,7 +5785,8 @@ def _set_pending_delete(kind, target, name=None):
             "target": (ci, cj),
             "name": cname,
             "title_kind": title_kind,
-            "details": details
+            "details": details,
+            "step": step
         }
 
     elif kind == "win":
@@ -5377,7 +5819,8 @@ def _set_pending_delete(kind, target, name=None):
             "target": w_id,
             "name": wname,
             "title_kind": title_kind,
-            "details": details
+            "details": details,
+            "step": step
         }
 
     elif kind == "door":
@@ -5409,7 +5852,8 @@ def _set_pending_delete(kind, target, name=None):
             "target": d_id,
             "name": dname,
             "title_kind": title_kind,
-            "details": details
+            "details": details,
+            "step": step
         }
 
     st.session_state.pop("m15_plan_png_b64", None)
@@ -5429,7 +5873,7 @@ def _confirm_pending_delete(pending):
             removed_walls = set(removed_walls)
         removed_walls.add(wk)
         st.session_state["m15_wall_removed"] = removed_walls
-        st.toast(f"🗑️ تم حذف الحائط ({name}) ونقله لقسم استعادة الحوائط!", icon="🧱")
+        st.toast(f"🗑️ تم حذف الحائط ({name}) بنجاح!", icon="🧱")
 
     elif kind == "col":
         ci, cj = int(target[0]), int(target[1])
@@ -5523,6 +5967,10 @@ def _render_floating_delete_panel(pending):
           cursor: default !important;
         `;
 
+        var initialStep = {int(pending.get('step', 1))};
+        var step1Display = (initialStep === 1) ? 'flex' : 'none';
+        var step2Display = (initialStep === 2) ? 'flex' : 'none';
+
         panel.innerHTML = `
           <div id="m15_del_drag_handle" style="display:flex; align-items:center; cursor:grab; color:#94a3b8; padding:3px 4px; user-select:none;" title="اضغط واسحب لتحريك البانيل بالماوس في أي مكان على الشاشة">
             <svg width="14" height="20" viewBox="0 0 14 20" fill="currentColor">
@@ -5534,45 +5982,92 @@ def _render_floating_delete_panel(pending):
               <circle cx="10" cy="16" r="1.8" />
             </svg>
           </div>
-          <div style="display:flex; align-items:center; gap:7px; font-size:13.5px; font-weight:700; color:#f8fafc; white-space:nowrap; flex:1;">
-            <span style="color:#ef4444; font-size:16px;">⚠️</span>
-            <span>حذف {esc_title}:</span>
-            <span style="color:#fca5a5; font-weight:800; background:rgba(239,68,68,0.22); padding:2px 8px; border-radius:6px; border:1px solid rgba(239,68,68,0.4);">{esc_name}</span>
+
+          <!-- المرحلة 1: عند اختيار العنصر -->
+          <div id="m15_float_step1" style="display:${{step1Display}}; align-items:center; gap:12px; width:100%;">
+            <div style="display:flex; align-items:center; gap:7px; font-size:13.5px; font-weight:700; color:#f8fafc; white-space:nowrap; flex:1;">
+              <span style="color:#ef4444; font-size:16px;">🗑️</span>
+              <span>حذف {esc_title}:</span>
+              <span style="color:#fca5a5; font-weight:800; background:rgba(239,68,68,0.22); padding:2px 8px; border-radius:6px; border:1px solid rgba(239,68,68,0.4);">{esc_name}</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <button id="m15_btn_float_del_final" type="button" style="
+                background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+                color: #ffffff !important;
+                border: 1px solid #b91c1c !important;
+                border-radius: 20px !important;
+                padding: 6px 14px !important;
+                font-size: 13px !important;
+                font-weight: 800 !important;
+                cursor: pointer !important;
+                white-space: nowrap !important;
+                box-shadow: 0 2px 8px rgba(220, 38, 38, 0.4) !important;
+                display: flex !important;
+                align-items: center !important;
+                gap: 4px !important;
+              ">
+                🗑️ حذف نهائي
+              </button>
+              <button id="m15_btn_float_cancel_step1" type="button" style="
+                background: rgba(255, 255, 255, 0.12) !important;
+                color: #e2e8f0 !important;
+                border: 1px solid rgba(255, 255, 255, 0.25) !important;
+                border-radius: 20px !important;
+                padding: 6px 12px !important;
+                font-size: 13px !important;
+                font-weight: 700 !important;
+                cursor: pointer !important;
+                white-space: nowrap !important;
+                display: flex !important;
+                align-items: center !important;
+                gap: 4px !important;
+              ">
+                ✕ إلغاء
+              </button>
+            </div>
           </div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <button id="m15_btn_float_confirm_del" type="button" style="
-              background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
-              color: #ffffff !important;
-              border: 1px solid #b91c1c !important;
-              border-radius: 20px !important;
-              padding: 6px 14px !important;
-              font-size: 13px !important;
-              font-weight: 800 !important;
-              cursor: pointer !important;
-              white-space: nowrap !important;
-              box-shadow: 0 2px 8px rgba(220, 38, 38, 0.4) !important;
-              display: flex !important;
-              align-items: center !important;
-              gap: 4px !important;
-            ">
-              🗑️ تأكيد
-            </button>
-            <button id="m15_btn_float_cancel_del" type="button" style="
-              background: rgba(255, 255, 255, 0.12) !important;
-              color: #e2e8f0 !important;
-              border: 1px solid rgba(255, 255, 255, 0.25) !important;
-              border-radius: 20px !important;
-              padding: 6px 12px !important;
-              font-size: 13px !important;
-              font-weight: 700 !important;
-              cursor: pointer !important;
-              white-space: nowrap !important;
-              display: flex !important;
-              align-items: center !important;
-              gap: 4px !important;
-            ">
-              ❌ إلغاء
-            </button>
+
+          <!-- المرحلة 2: تأكيد الحذف النهائي -->
+          <div id="m15_float_step2" style="display:${{step2Display}}; align-items:center; gap:12px; width:100%;">
+            <div style="display:flex; align-items:center; gap:7px; font-size:13px; font-weight:700; color:#fca5a5; white-space:nowrap; flex:1;">
+              <span style="color:#ef4444; font-size:16px;">⚠️</span>
+              <span>هل أنت متأكد من الحذف النهائي لـ {esc_name}؟</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <button id="m15_btn_float_confirm_del" type="button" style="
+                background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+                color: #ffffff !important;
+                border: 1px solid #b91c1c !important;
+                border-radius: 20px !important;
+                padding: 6px 14px !important;
+                font-size: 13px !important;
+                font-weight: 800 !important;
+                cursor: pointer !important;
+                white-space: nowrap !important;
+                box-shadow: 0 2px 8px rgba(220, 38, 38, 0.4) !important;
+                display: flex !important;
+                align-items: center !important;
+                gap: 4px !important;
+              ">
+                ✅ موافق علي الحذف
+              </button>
+              <button id="m15_btn_float_cancel_del" type="button" style="
+                background: rgba(255, 255, 255, 0.12) !important;
+                color: #e2e8f0 !important;
+                border: 1px solid rgba(255, 255, 255, 0.25) !important;
+                border-radius: 20px !important;
+                padding: 6px 12px !important;
+                font-size: 13px !important;
+                font-weight: 700 !important;
+                cursor: pointer !important;
+                white-space: nowrap !important;
+                display: flex !important;
+                align-items: center !important;
+                gap: 4px !important;
+              ">
+                ❌ إلغاء الحذف
+              </button>
+            </div>
           </div>
         `;
 
@@ -5669,8 +6164,30 @@ def _render_floating_delete_panel(pending):
           }}
         }}
 
+        var step1Box = panel.querySelector('#m15_float_step1');
+        var step2Box = panel.querySelector('#m15_float_step2');
+        var btnDelFinal = panel.querySelector('#m15_btn_float_del_final');
+        var btnCancelStep1 = panel.querySelector('#m15_btn_float_cancel_step1');
         var btnConfirm = panel.querySelector('#m15_btn_float_confirm_del');
         var btnCancel = panel.querySelector('#m15_btn_float_cancel_del');
+
+        if (btnDelFinal) {{
+          btnDelFinal.onclick = function(e) {{
+            e.stopPropagation();
+            if (step1Box) step1Box.style.display = 'none';
+            if (step2Box) step2Box.style.display = 'flex';
+          }};
+        }}
+
+        if (btnCancelStep1) {{
+          btnCancelStep1.onclick = function(e) {{
+            e.stopPropagation();
+            btnCancelStep1.disabled = true;
+            btnCancelStep1.innerText = 'جارٍ الإلغاء...';
+            syncToStreamlit({{ action: 'cancel_pending_delete', ts: Date.now() }});
+            setTimeout(function() {{ try {{ panel.remove(); }} catch(err){{}} }}, 200);
+          }};
+        }}
 
         if (btnConfirm) {{
           btnConfirm.onclick = function(e) {{
@@ -6625,7 +7142,7 @@ def _handle_sync_payload(payload_str=None):
                 cm = _get_col_name_map()
                 wm = _get_wall_name_map()
                 w_name = data.get("name") or _wall_display_label(wk, cm, wm)
-                st.toast(f"🗑️ تم حذف الحائط ({w_name}) وحفظه في قسم استعادة الحوائط المحذوفة!", icon="🗑️")
+                st.toast(f"🗑️ تم حذف الحائط ({w_name}) بنجاح!", icon="🗑️")
                 st.rerun()
 
         elif action == "delete_window" or op_type == "delete_window":
@@ -7098,7 +7615,6 @@ def _section_delete_walls():
     - رسالة تأكيد الحذف عند التقاط الحائط بالصندوق أو النقر عليه مع زري [✅ نعم، تأكيد الحذف] و [❌ إلغاء].
     - إمكانية اختيار حائط يدوي من قائمة الحوائط النشطة كبديل سريع.
     - إحصائيات الحوائط القائمة والمحذوفة.
-    - قسم استعادة الحوائط المحذوفة مع زر استعادة فردي وزر '♻️ استعادة جميع الحوائط المحذوفة'.
     """
     xs = st.session_state.get("m15_x_axes", [])
     ys = st.session_state.get("m15_y_axes", [])
@@ -7137,129 +7653,86 @@ def _section_delete_walls():
             st.rerun()
     else:
         if st.button("⏹️ إنهاء وضع الحذف (Esc)", key="m15_btn_exit_del_wall", use_container_width=True):
-            st.session_state["m15_del_wall_mode"] = False
-            st.session_state["m15_pending_delete_wall"] = None
+            _cancel_pending_delete()
             st.rerun()
 
     # 2. بطاقة تأكيد الحذف عند التقاط حائط معلق
     if pending_wk and pending_wk in all_walls:
-        _set_pending_delete("wall", pending_wk)
+        _set_pending_delete("wall", pending_wk, step=1)
 
-    # 3. اختيار يدوي بديل من القائمة
+    # 3. عرض خيارات الحذف للحائط المحدد
+    pending_del = st.session_state.get("m15_pending_delete")
+    if pending_del and pending_del.get("kind") == "wall":
+        step = pending_del.get("step", 1)
+        if step == 1:
+            st.markdown(
+                f"""<div style='background:rgba(239, 68, 68, 0.14); border:1.5px solid #ef4444; border-radius:8px; padding:10px 14px; margin:10px 0;' dir='rtl'>
+                    <div style='color:#fca5a5; font-weight:700; font-size:0.92rem; margin-bottom:4px;'>
+                        🗑️ تم اختيار الحائط: <b>{pending_del.get('name')}</b>
+                    </div>
+                </div>""",
+                unsafe_allow_html=True
+            )
+            c_w1, c_w2 = st.columns(2)
+            with c_w1:
+                if st.button("🗑️ حذف نهائي", key="m15_btn_st_del_wall_step1", type="primary", use_container_width=True):
+                    pending_del["step"] = 2
+                    st.session_state["m15_pending_delete"] = pending_del
+                    st.rerun()
+            with c_w2:
+                if st.button("✕ إلغاء", key="m15_btn_st_cancel_wall_step1", use_container_width=True):
+                    _cancel_pending_delete()
+                    st.rerun()
+        else:
+            st.markdown(
+                f"""<div style='background:rgba(220, 38, 38, 0.22); border:2px solid #dc2626; border-radius:8px; padding:10px 14px; margin:10px 0;' dir='rtl'>
+                    <div style='color:#fca5a5; font-weight:700; font-size:0.92rem; margin-bottom:4px;'>
+                        ⚠️ رسالة تأكيد: هل أنت متأكد من الحذف النهائي للحائط <b>{pending_del.get('name')}</b>؟
+                    </div>
+                    <div style='color:#e2e8f0; font-size:0.8rem; margin-bottom:10px;'>
+                        تنبيه: لا يمكن التراجع عن هذا الإجراء بعد تنفيذه.
+                    </div>
+                </div>""",
+                unsafe_allow_html=True
+            )
+            c_conf1, c_conf2 = st.columns(2)
+            with c_conf1:
+                if st.button("✅ موافق علي الحذف", key="m15_btn_st_confirm_del_wall", type="primary", use_container_width=True):
+                    _confirm_pending_delete(pending_del)
+            with c_conf2:
+                if st.button("❌ إلغاء الحذف", key="m15_btn_st_cancel_del_wall", use_container_width=True):
+                    _cancel_pending_delete()
+                    st.rerun()
+
+    # 4. اختيار يدوي بديل من القائمة
     if active_walls:
         with st.expander("🔍 أو اختر حائطاً مباشرة من القائمة للحذف", expanded=False):
             wall_options = [0] + list(range(1, len(active_walls) + 1))
             def _fmt_w(idx):
-                if idx == 0: return "-- اختر حائطاً للحذف مباشرة --"
+                if idx == 0: return "-- اختر حائطاً للحذف --"
                 w = active_walls[idx - 1]
                 return f"{_wall_display_label(w, cm, wm)} (طول: {_wall_length_m(w):.2f}م | سُمك: {_get_wall_thickness(w)}سم)"
-            sel_w_idx = st.selectbox("الحائط المراد حذفه:", options=wall_options, format_func=_fmt_w, key="m15_dropdown_del_wall")
+            del_ver = st.session_state.get("m15_del_dropdown_ver", 0)
+            sel_w_idx = st.selectbox("الحائط المراد حذفه:", options=wall_options, format_func=_fmt_w, key=f"m15_dropdown_del_wall_{del_ver}")
             if sel_w_idx != 0:
                 target_wk = active_walls[sel_w_idx - 1]
                 if has_conflict:
-                    st.button("🗑️ حذف هذا الحائط", key="m15_btn_request_dropdown_del_wall", use_container_width=True, disabled=True, help="لا يمكن الحذف لوجود نمط نشط على المسقط")
+                    st.button("🗑️ حذف نهائي", key=f"m15_btn_req_dropdown_del_wall_{del_ver}", use_container_width=True, disabled=True, help="لا يمكن الحذف لوجود نمط نشط على المسقط")
                 else:
-                    if st.button("🗑️ حذف هذا الحائط", key="m15_btn_request_dropdown_del_wall", use_container_width=True):
-                        _set_pending_delete("wall", target_wk)
-                        st.rerun()
-
-    if removed_walls:
-        st.caption("💡 لاستعادة أي من الحوائط المحذوفة، تفضل بفتح قسم **'♻️ استعادة الحوائط المحذوفة'** بالأسفل.")
+                    col_dr1, col_dr2 = st.columns(2)
+                    with col_dr1:
+                        if st.button("🗑️ حذف نهائي", key=f"m15_btn_req_dropdown_del_wall_{del_ver}", type="primary", use_container_width=True):
+                            _set_pending_delete("wall", target_wk, step=2)
+                            st.rerun()
+                    with col_dr2:
+                        if st.button("✕ إلغاء", key=f"m15_btn_cancel_dropdown_del_wall_{del_ver}", use_container_width=True):
+                            _cancel_pending_delete()
+                            st.rerun()
 
 
 def _section_restore_walls():
-    """
-    قسم استعادة الحوائط المحذوفة (Restore Deleted Walls):
-    - عرض إحصائيات الحوائط المحذوفة.
-    - زر '♻️ استعادة جميع الحوائط المحذوفة' دفعة واحدة.
-    - قائمة تفاعلية للحوائط المحذوفة مع زر استعادة لكل حائط ومواصفاته (المحاور، الطول، السُمك).
-    - جدول تفصيلي منظم لكافة الحوائط المحذوفة.
-    """
-    xs = st.session_state.get("m15_x_axes", [])
-    ys = st.session_state.get("m15_y_axes", [])
-    if len(xs) < 1 or len(ys) < 1:
-        st.info("⚠️ أدخل محاور X و Y أولاً في قسم 'شبكة المحاور'.")
-        return
-
-    all_walls = _get_all_walls()
-    if not all_walls:
-        st.info("ℹ️ لا توجد حوائط في المخطط حالياً.")
-        return
-
-    cm = _get_col_name_map()
-    wm = _get_wall_name_map()
-    removed_walls = st.session_state.get("m15_wall_removed", set())
-    if not isinstance(removed_walls, set):
-        removed_walls = set(removed_walls)
-
-    rem_count = len(removed_walls)
-    active_count = len(all_walls) - rem_count
-
-    st.markdown("<div style='font-size:0.95rem; font-weight:700; color:#ffffff; margin-top:8px; margin-bottom:14px;'>♻️ استعادة الحوائط المحذوفة</div>", unsafe_allow_html=True)
-
-    c_st1, c_st2 = st.columns(2)
-    with c_st1:
-        st.caption(f"🧱 الحوائط النشطة: **{active_count}** حائط")
-    with c_st2:
-        st.caption(f"🗑️ الحوائط المحذوفة: **{rem_count}** حائط")
-
-    if rem_count == 0:
-        st.success("✅ لا توجد حوائط محذوفة حالياً. كافة حوائط المخطط نشطة وظاهرة في الحصر و 3D.")
-        return
-
-    st.info(f"💡 يوجد حالياً **{rem_count}** حائط محذوف في سجل المحذوفات. يمكنك استعادتها فردياً أو استعادة الكل دفعة واحدة:")
-
-    active_mode = _get_active_interactive_mode()
-    has_conflict = (active_mode is not None)
-    if has_conflict:
-        _render_mode_conflict_warning("استعادة الحوائط المحذوفة", active_mode, context_key="restore_walls")
-
-    if st.button("♻️ استعادة جميع الحوائط المحذوفة", key="m15_sec_restore_all_walls", type="primary", use_container_width=True, disabled=has_conflict):
-        st.session_state["m15_wall_removed"] = set()
-        st.session_state["m15_pending_delete_wall"] = None
-        st.session_state.pop("m15_plan_png_b64", None)
-        save_settings()
-        st.toast("✅ تم استعادة جميع الحوائط المحذوفة بنجاح!", icon="♻️")
-        st.rerun()
-
-    st.markdown("<hr style='margin: 10px 0 12px 0; border: none; border-top: 1px solid rgba(255,255,255,0.1);'>", unsafe_allow_html=True)
-
-    sorted_rem = sorted(list(removed_walls), key=lambda x: all_walls.index(x) if x in all_walls else 9999)
-    for r_wk in sorted_rem:
-        if r_wk in all_walls:
-            rc_col1, rc_col2 = st.columns([2.6, 1.2], vertical_alignment="center")
-            with rc_col1:
-                st.markdown(
-                    f"**🗑️ {_wall_display_label(r_wk, cm, wm)}**<br>"
-                    f"<span style='font-size:0.78rem;color:#94a3b8;'>الطول: `{_wall_length_m(r_wk):.2f}م` | السُمك: `{_get_wall_thickness(r_wk)}سم`</span>",
-                    unsafe_allow_html=True
-                )
-            with rc_col2:
-                btn_k = f"m15_restore_wall_btn_{r_wk[0]}_{r_wk[1]}_{r_wk[2]}_{r_wk[3]}"
-                if st.button("♻️ استعادة", key=btn_k, use_container_width=True, disabled=has_conflict):
-                    removed_walls.discard(r_wk)
-                    st.session_state["m15_wall_removed"] = removed_walls
-                    st.session_state.pop("m15_plan_png_b64", None)
-                    save_settings()
-                    st.toast(f"✅ تم استعادة الحائط بنجاح!", icon="♻️")
-                    st.rerun()
-
-    with st.expander(f"📋 جدول الحوائط المحذوفة ({rem_count})", expanded=False):
-        import pandas as pd
-        wall_table = []
-        for r_wk in sorted_rem:
-            if r_wk in all_walls:
-                c1_name = cm.get((r_wk[0], r_wk[1]), f"C({r_wk[0]+1},{r_wk[1]+1})")
-                c2_name = cm.get((r_wk[2], r_wk[3]), f"C({r_wk[2]+1},{r_wk[3]+1})")
-                wall_table.append({
-                    "الحائط": _wall_display_label(r_wk, cm, wm),
-                    "بين الأعمدة": f"{c1_name} ↔ {c2_name}",
-                    "الطول (م)": round(_wall_length_m(r_wk), 2),
-                    "السُمك (سم)": _get_wall_thickness(r_wk),
-                    "الحالة": "🗑️ محذوف"
-                })
-        if wall_table:
-            st.dataframe(pd.DataFrame(wall_table), use_container_width=True, hide_index=True)
+    """تم حذف هذا القسم نهائياً بناءً على طلب المستخدم."""
+    pass
 
 
 def _section_columns():
@@ -7285,34 +7758,68 @@ def _section_columns():
         st.info("💡 لم تُضَف أي أعمدة بعد. استخدم قسم '➕ إضافة الأعمدة على المحاور' أعلاه لإسقاط الأعمدة على المسقط.")
         return
 
+    del_ver = st.session_state.get("m15_del_dropdown_ver", 0)
+    col_options = [0] + list(range(1, len(all_cols) + 1))
     def _clbl(k):
-        i, j = all_cols[k]
+        if k == 0:
+            return "-- اختر عموداً للحذف --"
+        i, j = all_cols[k - 1]
         orig_cname = f"C{j * len(xs) + i + 1}"
         if (i, j) in removed_cols:
             return f"🗑️ {orig_cname} محذوف (Y{i+1},X{j+1}) — Y{i+1}={xs[i]:.2f}م, X{j+1}={ys[j]:.2f}م"
         nm = cn.get((i, j), orig_cname)
         return f"✅ {nm} — Y{i+1}={xs[i]:.2f}م, X{j+1}={ys[j]:.2f}م"
 
-    _safe_idx("m15_sel_col", len(all_cols))
-    sel = st.selectbox("اختر عموداً", options=range(len(all_cols)), format_func=_clbl, key="m15_sel_col")
-    si,sj=all_cols[sel]; is_rem=(si,sj) in removed_cols
-    cur_dir=col_dirs.get((si,sj),"NS"); dx,dy=col_shifted.get((si,sj),(0.0,0.0))
-    orig_cname = f"C{sj * len(xs) + si + 1}"
-    cname = cn.get((si, sj), orig_cname)
-    if is_rem:
-        st.info(f"🗑️ العمود **{orig_cname}** عند تقاطع (Y{si+1}, X{sj+1}) محذوف — يمكنك استعادته من قسم '♻️ استعادة أعمدة' بالسحب على المسقط.")
+    sel = st.selectbox("اختر عموداً للحذف:", options=col_options, format_func=_clbl, key=f"m15_sel_col_{del_ver}")
 
-    active_mode = _get_active_interactive_mode()
-    has_conflict = (active_mode is not None)
-    if has_conflict:
-        _render_mode_conflict_warning("حذف الأعمدة", active_mode, context_key="del_cols")
+    is_rem = False
+    if sel != 0:
+        si, sj = all_cols[sel - 1]
+        is_rem = (si, sj) in removed_cols
+        cur_dir = col_dirs.get((si, sj), "NS")
+        dx, dy = col_shifted.get((si, sj), (0.0, 0.0))
+        orig_cname = f"C{sj * len(xs) + si + 1}"
+        cname = cn.get((si, sj), orig_cname)
+        if is_rem:
+            st.info(f"🗑️ العمود **{orig_cname}** عند تقاطع (Y{si+1}, X{sj+1}) محذوف بالفعل — يمكنك استعادته من قسم '♻️ استعادة أعمدة' بالسحب على المسقط.")
+        else:
+            active_mode = _get_active_interactive_mode()
+            has_conflict = (active_mode is not None)
+            if has_conflict:
+                _render_mode_conflict_warning("حذف الأعمدة", active_mode, context_key="del_cols")
 
-    if not is_rem:
-        if st.button("🗑️ حذف العمود", key="m15_del_col", use_container_width=True, disabled=has_conflict):
-            _set_pending_delete("col", (si, sj), name=cname)
-            st.rerun()
-    else:
-        st.info("💡 استخدم زر '♻️ استعادة أعمدة' لاستعادة هذا العمود بالسحب على المسقط.")
+            col_cbtn1, col_cbtn2 = st.columns(2)
+            with col_cbtn1:
+                if st.button("🗑️ حذف نهائي", key=f"m15_del_col_{del_ver}", type="primary", use_container_width=True, disabled=has_conflict):
+                    _set_pending_delete("col", (si, sj), name=cname, step=2)
+                    st.rerun()
+            with col_cbtn2:
+                if st.button("✕ إلغاء", key=f"m15_cancel_col_{del_ver}", use_container_width=True, disabled=has_conflict):
+                    _cancel_pending_delete()
+                    st.rerun()
+
+    # عرض رسالة تأكيد الحذف للعمود المحدد
+    pending_del = st.session_state.get("m15_pending_delete")
+    if pending_del and pending_del.get("kind") == "col" and pending_del.get("step") == 2:
+        st.markdown(
+            f"""<div style='background:rgba(220, 38, 38, 0.22); border:2px solid #dc2626; border-radius:8px; padding:10px 14px; margin:10px 0;' dir='rtl'>
+                <div style='color:#fca5a5; font-weight:700; font-size:0.92rem; margin-bottom:4px;'>
+                    ⚠️ رسالة تأكيد: هل أنت متأكد من الحذف النهائي للعمود <b>{pending_del.get('name')}</b>؟
+                </div>
+                <div style='color:#e2e8f0; font-size:0.8rem; margin-bottom:10px;'>
+                    تنبيه: لا يمكن التراجع عن هذا الإجراء بعد تنفيذه.
+                </div>
+            </div>""",
+            unsafe_allow_html=True
+        )
+        c_cconf1, c_cconf2 = st.columns(2)
+        with c_cconf1:
+            if st.button("✅ موافق علي الحذف", key="m15_btn_st_confirm_del_col", type="primary", use_container_width=True):
+                _confirm_pending_delete(pending_del)
+        with c_cconf2:
+            if st.button("❌ إلغاء الحذف", key="m15_btn_st_cancel_del_col", use_container_width=True):
+                _cancel_pending_delete()
+                st.rerun()
 
     col_shifts = st.session_state.get("m15_col_shifts", {})
 
@@ -7956,25 +8463,60 @@ def _section_delete_openings():
         return
 
     # قائمة منسدلة لاختيار الفتحة
+    del_ver = st.session_state.get("m15_del_dropdown_ver", 0)
     options_idx = [0] + list(range(1, len(items) + 1))
     def _format_opening_item(i):
         if i == 0:
-            return "-- اختر الشباك أو الباب المراد حذفه --"
+            if filter_type == "شبابيك فقط 🪟":
+                return "-- اختر شباكاً للحذف --"
+            elif filter_type == "أبواب فقط 🚪":
+                return "-- اختر باباً للحذف --"
+            return "-- اختر باب أو شباك للحذف --"
         return items[i - 1]["display"]
 
     sel_idx = st.selectbox(
         "🎯 اختر الشباك أو الباب المراد حذفه من القائمة المنسدلة:",
         options=options_idx,
         format_func=_format_opening_item,
-        key="m15_sel_delete_opening_idx"
+        key=f"m15_sel_delete_opening_idx_{del_ver}"
     )
 
     if sel_idx != 0:
         chosen = items[sel_idx - 1]
         kind_title = "الشباك" if chosen["kind"] == "win" else "الباب"
-        if st.button(f"🗑️ حذف {kind_title} {chosen['name']}", key="m15_btn_req_del_op", type="primary", use_container_width=True, disabled=has_conflict):
-            _set_pending_delete(chosen["kind"], chosen["id"], name=chosen["name"])
-            st.rerun()
+        col_op1, col_op2 = st.columns(2)
+        with col_op1:
+            if st.button(f"🗑️ حذف نهائي {kind_title} {chosen['name']}", key=f"m15_btn_req_del_op_{del_ver}", type="primary", use_container_width=True, disabled=has_conflict):
+                _set_pending_delete(chosen["kind"], chosen["id"], name=chosen["name"], step=2)
+                st.rerun()
+        with col_op2:
+            if st.button("✕ إلغاء", key=f"m15_btn_cancel_req_del_op_{del_ver}", use_container_width=True, disabled=has_conflict):
+                _cancel_pending_delete()
+                st.rerun()
+
+    # عرض رسالة تأكيد الحذف للشباك أو الباب المحدد
+    pending_del = st.session_state.get("m15_pending_delete")
+    if pending_del and pending_del.get("kind") in ["win", "door"] and pending_del.get("step") == 2:
+        op_title = "الشباك" if pending_del.get("kind") == "win" else "الباب"
+        st.markdown(
+            f"""<div style='background:rgba(220, 38, 38, 0.22); border:2px solid #dc2626; border-radius:8px; padding:10px 14px; margin:10px 0;' dir='rtl'>
+                <div style='color:#fca5a5; font-weight:700; font-size:0.92rem; margin-bottom:4px;'>
+                    ⚠️ رسالة تأكيد: هل أنت متأكد من الحذف النهائي لـ {op_title} <b>{pending_del.get('name')}</b>؟
+                </div>
+                <div style='color:#e2e8f0; font-size:0.8rem; margin-bottom:10px;'>
+                    تنبيه: لا يمكن التراجع عن هذا الإجراء بعد تنفيذه.
+                </div>
+            </div>""",
+            unsafe_allow_html=True
+        )
+        c_oconf1, c_oconf2 = st.columns(2)
+        with c_oconf1:
+            if st.button("✅ موافق علي الحذف", key="m15_btn_st_confirm_del_op", type="primary", use_container_width=True):
+                _confirm_pending_delete(pending_del)
+        with c_oconf2:
+            if st.button("❌ إلغاء الحذف", key="m15_btn_st_cancel_del_op", use_container_width=True):
+                _cancel_pending_delete()
+                st.rerun()
 
 
 
@@ -8563,7 +9105,7 @@ def _section_plaster_walls():
     removed_walls = st.session_state.get("m15_wall_removed", set())
     active_walls = [wk for wk in all_walls if wk not in removed_walls]
     if not active_walls:
-        st.info("💡 لا توجد حوائط نشطة بالمشروع. استعد بعض الحوائط المحذوفة أولاً.")
+        st.info("💡 لا توجد حوائط نشطة بالمشروع.")
         return
 
     cm = _get_col_name_map()
@@ -11086,19 +11628,19 @@ def _section_3d_viewer():
   </div>
   <div class="wbar-actions" id="wbar-actions-init">
     <button class="wbar-btn-del" id="btn-wbar-del-init">
-      🗑️ حذف هذا الحائط
+      🗑️ حذف نهائي
     </button>
     <button class="wbar-btn-cancel" id="btn-wbar-cancel">
       ✕ إلغاء
     </button>
   </div>
   <div class="wbar-actions" id="wbar-actions-confirm" style="display:none;">
-    <span id="wbar-confirm-prompt" style="color:#fca5a5; font-size:11.5px; font-weight:700;">⚠️ تأكيد الحذف؟</span>
+    <span id="wbar-confirm-prompt" style="color:#fca5a5; font-size:11.5px; font-weight:700;">⚠️ هل أنت متأكد من الحذف النهائي؟</span>
     <button class="wbar-btn-del" id="btn-wbar-del-confirm" style="background:#dc2626; box-shadow:0 2px 8px rgba(220,38,38,0.6);">
-      ✅ نعم، احذف
+      ✅ موافق علي الحذف
     </button>
     <button class="wbar-btn-cancel" id="btn-wbar-cancel-confirm">
-      تراجع
+      ❌ إلغاء الحذف
     </button>
   </div>
 </div>
@@ -11202,7 +11744,7 @@ def _section_3d_viewer():
 
   // Materials
   const wallMat = new THREE.MeshStandardMaterial({ color: 0xd4d4d8, roughness: 0.80, metalness: 0.05 });
-  const parapetWallMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.70, metalness: 0.10 });
+  const parapetWallMat = new THREE.MeshStandardMaterial({ color: 0x7e22ce, roughness: 0.70, metalness: 0.10 });
   const wallEdgeMat = new THREE.LineBasicMaterial({ color: 0x94a3b8, transparent: true, opacity: 0.60 });
 
   const colMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.90, metalness: 0.10 });
@@ -12840,13 +13382,13 @@ def _section_3d_viewer():
 
         <div class="insp-actions" style="margin-top:14px;">
           <button class="insp-btn" id="btn-insp-del-wall" style="background:linear-gradient(135deg,#ef4444,#dc2626);border:1px solid #f87171;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:8px 12px;border-radius:6px;cursor:pointer;">
-            <span>🗑️</span> <span>حذف الحائط ${d.wall_name}</span>
+            <span>🗑️</span> <span>حذف نهائي</span>
           </button>
           <div id="insp-del-confirm-box" style="display:none;margin-top:8px;padding:10px;background:rgba(239,68,68,0.18);border:1.5px solid #ef4444;border-radius:8px;text-align:center;">
-            <div style="font-size:12px;color:#fca5a5;font-weight:700;margin-bottom:8px;">⚠️ تأكيد حذف الحائط ${d.wall_name} بالكامل؟ سيتم حفظه في قسم الاستعادة.</div>
+            <div style="font-size:12px;color:#fca5a5;font-weight:700;margin-bottom:8px;">⚠️ تأكيد الحذف: هل أنت متأكد من الحذف النهائي للحائط ${d.wall_name}؟</div>
             <div style="display:flex;gap:8px;justify-content:center;">
-              <button class="insp-btn" id="btn-insp-confirm-del" style="background:#dc2626;border:1px solid #f87171;color:#fff;padding:5px 14px;font-size:11.5px;font-weight:700;border-radius:5px;cursor:pointer;">✅ تأكيد حذف الحائط ${d.wall_name}</button>
-              <button class="insp-btn" id="btn-insp-cancel-del" style="background:#334155;border:1px solid #475569;color:#cbd5e1;padding:5px 12px;font-size:11.5px;border-radius:5px;cursor:pointer;">تراجع</button>
+              <button class="insp-btn" id="btn-insp-confirm-del" style="background:#dc2626;border:1px solid #f87171;color:#fff;padding:5px 14px;font-size:11.5px;font-weight:700;border-radius:5px;cursor:pointer;">✅ موافق علي الحذف</button>
+              <button class="insp-btn" id="btn-insp-cancel-del" style="background:#334155;border:1px solid #475569;color:#cbd5e1;padding:5px 12px;font-size:11.5px;border-radius:5px;cursor:pointer;">❌ إلغاء الحذف</button>
             </div>
           </div>
         </div>
@@ -12861,9 +13403,9 @@ def _section_3d_viewer():
       const delBoxId = isWin ? 'insp-del-win-confirm-box' : 'insp-del-door-confirm-box';
       const confBtnId = isWin ? 'btn-insp-confirm-del-win' : 'btn-insp-confirm-del-door';
       const cancBtnId = isWin ? 'btn-insp-cancel-del-win' : 'btn-insp-cancel-del-door';
-      const delActionLabel = isWin ? `حذف الشباك ${d.name}` : `حذف الباب ${d.name}`;
-      const confPrompt = isWin ? `⚠️ تأكيد حذف الشباك ${d.name} من الحائط (${d.wall_label})؟ سيتم حفظه في قسم الاستعادة.` : `⚠️ تأكيد حذف الباب ${d.name} من الحائط (${d.wall_label})؟ سيتم حفظه في قسم الاستعادة.`;
-      const confBtnLabel = isWin ? `✅ تأكيد حذف الشباك ${d.name}` : `✅ تأكيد حذف الباب ${d.name}`;
+      const delActionLabel = `حذف نهائي`;
+      const confPrompt = isWin ? `⚠️ تأكيد الحذف: هل أنت متأكد من الحذف النهائي للشباك ${d.name}؟` : `⚠️ تأكيد الحذف: هل أنت متأكد من الحذف النهائي للباب ${d.name}؟`;
+      const confBtnLabel = `✅ موافق علي الحذف`;
 
       html = `
         <div class="insp-tag ${tagClass}">${kindAr} منفصل [${d.type_label}]</div>
@@ -12898,7 +13440,7 @@ def _section_3d_viewer():
             <div style="font-size:12px;color:#fca5a5;font-weight:700;margin-bottom:8px;">${confPrompt}</div>
             <div style="display:flex;gap:8px;justify-content:center;">
               <button class="insp-btn" id="${confBtnId}" style="background:#dc2626;border:1px solid #f87171;color:#fff;padding:5px 14px;font-size:11.5px;font-weight:700;border-radius:5px;cursor:pointer;">${confBtnLabel}</button>
-              <button class="insp-btn" id="${cancBtnId}" style="background:#334155;border:1px solid #475569;color:#cbd5e1;padding:5px 12px;font-size:11.5px;border-radius:5px;cursor:pointer;">تراجع</button>
+              <button class="insp-btn" id="${cancBtnId}" style="background:#334155;border:1px solid #475569;color:#cbd5e1;padding:5px 12px;font-size:11.5px;border-radius:5px;cursor:pointer;">❌ إلغاء الحذف</button>
             </div>
           </div>
         </div>
@@ -12928,13 +13470,13 @@ def _section_3d_viewer():
 
         <div class="insp-actions" style="margin-top:14px;">
           <button class="insp-btn" id="btn-insp-del-col" style="background:linear-gradient(135deg,#ef4444,#dc2626);border:1px solid #f87171;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:8px 12px;border-radius:6px;cursor:pointer;">
-            <span>🗑️</span> <span>حذف العمود ${d.name}</span>
+            <span>🗑️</span> <span>حذف نهائي</span>
           </button>
           <div id="insp-del-col-confirm-box" style="display:none;margin-top:8px;padding:10px;background:rgba(239,68,68,0.18);border:1.5px solid #ef4444;border-radius:8px;text-align:center;">
-            <div style="font-size:12px;color:#fca5a5;font-weight:700;margin-bottom:8px;">⚠️ تأكيد حذف العمود ${d.name}؟ سيتم حفظه في قسم استعادة الأعمدة.</div>
+            <div style="font-size:12px;color:#fca5a5;font-weight:700;margin-bottom:8px;">⚠️ تأكيد الحذف: هل أنت متأكد من الحذف النهائي للعمود ${d.name}؟</div>
             <div style="display:flex;gap:8px;justify-content:center;">
-              <button class="insp-btn" id="btn-insp-confirm-del-col" style="background:#dc2626;border:1px solid #f87171;color:#fff;padding:5px 14px;font-size:11.5px;font-weight:700;border-radius:5px;cursor:pointer;">✅ تأكيد حذف العمود ${d.name}</button>
-              <button class="insp-btn" id="btn-insp-cancel-del-col" style="background:#334155;border:1px solid #475569;color:#cbd5e1;padding:5px 12px;font-size:11.5px;border-radius:5px;cursor:pointer;">تراجع</button>
+              <button class="insp-btn" id="btn-insp-confirm-del-col" style="background:#dc2626;border:1px solid #f87171;color:#fff;padding:5px 14px;font-size:11.5px;font-weight:700;border-radius:5px;cursor:pointer;">✅ موافق علي الحذف</button>
+              <button class="insp-btn" id="btn-insp-cancel-del-col" style="background:#334155;border:1px solid #475569;color:#cbd5e1;padding:5px 12px;font-size:11.5px;border-radius:5px;cursor:pointer;">❌ إلغاء الحذف</button>
             </div>
           </div>
         </div>
@@ -16176,7 +16718,6 @@ def render_masonry_plaster_module():
             _section_delete_openings()
         with st.expander("🗑️ حذف حوائط", expanded=is_del_wall_active): _section_delete_walls()
         with st.expander("🗑️ حذف الأعمدة", expanded=False): _section_columns()
-        with st.expander("♻️ استعادة الحوائط المحذوفة", expanded=False): _section_restore_walls()
         with st.expander("♻️ استعادة أعمدة (Interactive)", expanded=is_restore_active): _section_restore_columns()
         with st.expander("♻️ استعادة الشبابيك والأبواب المحذوفة", expanded=False):
             _section_restore_openings()
@@ -16197,6 +16738,54 @@ def render_masonry_plaster_module():
         cancel_all_int = st.session_state.get("m15_confirm_cancel_all_interior")
         if pending_del:
             _render_floating_delete_panel(pending_del)
+            kind_title = pending_del.get("title_kind", "العنصر")
+            item_name = pending_del.get("name", "")
+            step = pending_del.get("step", 1)
+
+            if step == 1:
+                st.markdown(
+                    f"""<div style='background:rgba(239, 68, 68, 0.14); border:1.5px solid #ef4444; border-radius:8px; padding:10px 16px; margin-bottom:12px;' dir='rtl'>
+                        <div style='display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;'>
+                            <div style='color:#fca5a5; font-weight:800; font-size:0.95rem;'>
+                                🗑️ تم اختيار {kind_title} للحذف: <span style='color:#ffffff; text-decoration:underline;'>{item_name}</span>
+                            </div>
+                            <div style='color:#cbd5e1; font-size:0.82rem;'>
+                                اختر "حذف نهائي" للمتابعة أو "إلغاء":
+                            </div>
+                        </div>
+                    </div>""",
+                    unsafe_allow_html=True
+                )
+                c_main1, c_main2 = st.columns(2)
+                with c_main1:
+                    if st.button("🗑️ حذف نهائي", key="m15_main_btn_del_final", type="primary", use_container_width=True):
+                        pending_del["step"] = 2
+                        st.session_state["m15_pending_delete"] = pending_del
+                        st.rerun()
+                with c_main2:
+                    if st.button("✕ إلغاء", key="m15_main_btn_cancel_step1", use_container_width=True):
+                        _cancel_pending_delete()
+                        st.rerun()
+            else:
+                st.markdown(
+                    f"""<div style='background:rgba(220, 38, 38, 0.22); border:2px solid #dc2626; border-radius:8px; padding:12px 16px; margin-bottom:14px;' dir='rtl'>
+                        <div style='color:#fca5a5; font-weight:800; font-size:1rem; margin-bottom:4px;'>
+                            ⚠️ رسالة تأكيد: هل أنت متأكد من الحذف النهائي لـ {kind_title} ({item_name})؟
+                        </div>
+                        <div style='color:#f8fafc; font-size:0.83rem;'>
+                            تنبيه: لا يمكن التراجع عن هذا الإجراء بعد تنفيذه.
+                        </div>
+                    </div>""",
+                    unsafe_allow_html=True
+                )
+                c_main_cf1, c_main_cf2 = st.columns(2)
+                with c_main_cf1:
+                    if st.button("✅ موافق علي الحذف", key="m15_main_btn_confirm_agree", type="primary", use_container_width=True):
+                        _confirm_pending_delete(pending_del)
+                with c_main_cf2:
+                    if st.button("❌ إلغاء الحذف", key="m15_main_btn_cancel_del", use_container_width=True):
+                        _cancel_pending_delete()
+                        st.rerun()
         elif cancel_all_int:
             _render_floating_plaster_cancel_panel()
         else:
