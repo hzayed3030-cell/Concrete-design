@@ -3436,6 +3436,7 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     mode_str = box_mode or ""
     box_banner_display = "none"
     viewport_box_class = "box-mode" if box_mode else ""
+    cad_toolbar_style = "display:none !important;" if box_mode == "add_wall" else ""
     if box_mode == "delete_element" or box_mode == "delete_wall":
         hint_text_toolbar = "🗑️ اسحب صندوقاً حول الحائط أو العمود أو الشباك أو الباب لحذفه"
     elif box_mode == "add_wall":
@@ -3657,7 +3658,7 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
 
 <div id="viewport" class="{viewport_box_class}">
   <!-- Floating CAD Toolbar -->
-  <div class="cad-toolbar">
+  <div class="cad-toolbar" style="{cad_toolbar_style}">
     <button class="tb-btn tb-btn-fp" id="btn-toggle-floating-plan" title="عرض / إخفاء المسقط المعماري الاسترشادي (Ctrl + Alt + F)">🖼️ المسقط الاسترشادي</button>
     <button class="tb-btn" id="btn-cad-del-element" style="background:#fee2e2; border-color:#f87171; color:#991b1b; font-weight:700;" title="تحديد عنصر بالماوس لحذفه (حائط / عمود / شباك / باب)">🗑️ حذف بالماوس</button>
     <button class="tb-btn" id="btn-zoom-in" title="تكبير (Zoom In)">🔍➕ تكبير</button>
@@ -4159,9 +4160,38 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     return best;
   }}
 
-  // ── Mouse & Interaction Handlers ──
+  // ── Mouse & Interaction Handlers (مع دعم كامل لخاصية Pan وتحريك المسقط) ──
+  let isSpacePressed = false;
+  window.addEventListener('keydown', function(e) {{
+    if (e.code === 'Space' && !e.target.matches('input, textarea, select')) {{
+      isSpacePressed = true;
+      viewport.style.cursor = 'grab';
+    }}
+  }});
+  window.addEventListener('keyup', function(e) {{
+    if (e.code === 'Space') {{
+      isSpacePressed = false;
+      viewport.style.cursor = currentBoxMode ? 'crosshair' : 'grab';
+    }}
+  }});
+
+  viewport.addEventListener('contextmenu', function(e) {{
+    e.preventDefault();
+  }});
+
   viewport.addEventListener('mousedown', function(e) {{
     if (e.target.closest('.cad-toolbar') || e.target.closest('#box-mode-banner')) return;
+
+    // دعم تحريك المسقط Pan بالزر الأيمن أو الأوسط للماوس أو مع الضغط على مسطرة المسافة
+    if (e.button === 1 || e.button === 2 || isSpacePressed) {{
+      isDragging = true;
+      isBoxSelecting = false;
+      startX = e.clientX - panX;
+      startY = e.clientY - panY;
+      viewport.classList.add('panning');
+      e.preventDefault();
+      return;
+    }}
 
     if (currentBoxMode) {{
       isBoxSelecting = true;
@@ -4203,6 +4233,14 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
   }});
 
   window.addEventListener('mousemove', function(e) {{
+    if (isDragging) {{
+      panX = e.clientX - startX;
+      panY = e.clientY - startY;
+      updateTransform();
+      e.preventDefault();
+      return;
+    }}
+
     if (currentBoxMode && isBoxSelecting) {{
       const vRect = viewport.getBoundingClientRect();
       const curX = e.clientX;
@@ -4314,6 +4352,10 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
   }});
 
   window.addEventListener('mouseup', function(e) {{
+    if (isDragging) {{
+      isDragging = false;
+      viewport.classList.remove('panning');
+    }}
     if (currentBoxMode && isBoxSelecting) {{
       isBoxSelecting = false;
       selBox.style.display = 'none';
@@ -4882,7 +4924,6 @@ def _section_opening_types():
                 if abs(new_wl - wt.get("w_cm", 100.0)) > 0.1 or abs(new_wh - wt.get("h_cm", 120.0)) > 0.1 or abs(new_ws - wt.get("sill_cm", 90.0)) > 0.1:
                     wt["w_cm"] = new_wl; wt["h_cm"] = new_wh; wt["sill_cm"] = new_ws
                     changed_wt = True
-                st.caption(f"📐 {lbl}: {new_wl:.0f}×{new_wh:.0f}سم | جلسة: {new_ws:.0f}سم ({new_wl/100:.2f}م × {new_wh/100:.2f}م)")
 
         if changed_wt or win_types != st.session_state.get("m15_window_types", []):
             st.session_state["m15_window_types"] = win_types
@@ -4922,7 +4963,6 @@ def _section_opening_types():
                 if abs(new_dw - dt.get("w_cm", 90.0)) > 0.1 or abs(new_dh - dt.get("h_cm", 210.0)) > 0.1:
                     dt["w_cm"] = new_dw; dt["h_cm"] = new_dh
                     changed_dt = True
-                st.caption(f"📐 {lbl}: {new_dw:.0f}×{new_dh:.0f}سم ({new_dw/100:.2f}م × {new_dh/100:.2f}م)")
 
         if changed_dt or door_types != st.session_state.get("m15_door_types", []):
             st.session_state["m15_door_types"] = door_types
@@ -5075,7 +5115,12 @@ def _section_axes():
         )
         n_y_axes = int(n_y_axes)
     with c_ny2:
-        st.caption("📐 أدخل الأبعاد الأفقية (العرض) بين كل محورين رأسيين متتاليين (م) [المحور الأول Y1 = 0.00م]:")
+        st.markdown(
+            "<div style='color:#ffffff; font-size:0.90rem; font-weight:600; text-align:right; direction:rtl; margin-top:28px;' dir='rtl'>"
+            "📐 أدخل الأبعاد الأفقية (العرض) بين كل محورين رأسيين متتاليين (م) [المحور الأول Y1 = 0.00م]:"
+            "</div>",
+            unsafe_allow_html=True
+        )
 
     # مزامنة مفاتيح الواجهة إذا تم تعديل الإحداثيات من خارج القسم
     if st.session_state.get("_m15_synced_x_axes") != cxs:
@@ -5156,7 +5201,12 @@ def _section_axes():
         )
         n_x_axes = int(n_x_axes)
     with c_nx2:
-        st.caption("📐 أدخل الأبعاد الرأسية (العمق) بين كل محورين أفقيين متتاليين (م) [المحور الأول X1 = 0.00م]:")
+        st.markdown(
+            "<div style='color:#ffffff; font-size:0.90rem; font-weight:600; text-align:right; direction:rtl; margin-top:28px;' dir='rtl'>"
+            "📐 أدخل الأبعاد الرأسية (العمق) بين كل محورين أفقيين متتاليين (م) [المحور الأول X1 = 0.00م]:"
+            "</div>",
+            unsafe_allow_html=True
+        )
 
     # مزامنة مفاتيح الواجهة إذا تم تعديل الإحداثيات من خارج القسم
     if st.session_state.get("_m15_synced_y_axes") != cys:
@@ -5652,6 +5702,217 @@ def _render_floating_delete_panel(pending):
 
 # توافق مع أي استدعاء قديم
 _render_delete_confirmation_modal = _render_floating_delete_panel
+
+
+def _render_floating_plaster_cancel_panel():
+    """
+    بانيل شفاف عائم بحجم صغير ومختصر جداً أسفل الشاشة، قابل للتحريك بالماوس،
+    لتأكيد حذف المحارة الداخلية لجميع الحوائط أو إلغاء الأمر دون حجب المسقط الأفقي.
+    """
+    play_warning_sound(force=True)
+
+    js_code = """
+    <script>
+    (function() {
+      try {
+        if (!window.parent || !window.parent.document) return;
+        var pDoc = window.parent.document;
+        var pWin = window.parent;
+
+        var old = pDoc.getElementById("m15_floating_delete_panel");
+        if (old) old.remove();
+
+        var panel = pDoc.createElement("div");
+        panel.id = "m15_floating_delete_panel";
+        panel.style.cssText = `
+          position: fixed !important;
+          bottom: 24px !important;
+          left: 50% !important;
+          transform: translateX(-50%) !important;
+          z-index: 99999999 !important;
+          background: rgba(15, 23, 42, 0.88) !important;
+          backdrop-filter: blur(14px) !important;
+          -webkit-backdrop-filter: blur(14px) !important;
+          border: 1.5px solid rgba(239, 68, 68, 0.85) !important;
+          border-radius: 40px !important;
+          padding: 6px 16px 6px 12px !important;
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 18px rgba(239, 68, 68, 0.3) !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 12px !important;
+          direction: rtl !important;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Cairo", Tahoma, sans-serif !important;
+          user-select: none !important;
+          color: #ffffff !important;
+          min-width: 320px !important;
+          max-width: 92vw !important;
+          box-sizing: border-box !important;
+          cursor: default !important;
+        `;
+
+        panel.innerHTML = `
+          <div id="m15_del_drag_handle" style="display:flex; align-items:center; cursor:grab; color:#94a3b8; padding:3px 4px; user-select:none;" title="اضغط واسحب لتحريك البانيل بالماوس في أي مكان على الشاشة">
+            <svg width="14" height="20" viewBox="0 0 14 20" fill="currentColor">
+              <circle cx="4" cy="4" r="1.8" />
+              <circle cx="10" cy="4" r="1.8" />
+              <circle cx="4" cy="10" r="1.8" />
+              <circle cx="10" cy="10" r="1.8" />
+              <circle cx="4" cy="16" r="1.8" />
+              <circle cx="10" cy="16" r="1.8" />
+            </svg>
+          </div>
+          <div style="display:flex; align-items:center; gap:7px; font-size:13.5px; font-weight:700; color:#f8fafc; white-space:nowrap; flex:1;">
+            <span style="color:#ef4444; font-size:16px;">⚠️</span>
+            <span style="color:#fca5a5; font-weight:800;">تأكيد حذف المحارة الداخلية لجميع الحوائط !!</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button id="m15_btn_float_confirm_del" type="button" style="
+              background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+              color: #ffffff !important;
+              border: 1px solid #b91c1c !important;
+              border-radius: 20px !important;
+              padding: 6px 14px !important;
+              font-size: 13px !important;
+              font-weight: 800 !important;
+              cursor: pointer !important;
+              white-space: nowrap !important;
+              box-shadow: 0 2px 8px rgba(220, 38, 38, 0.4) !important;
+              display: flex !important;
+              align-items: center !important;
+              gap: 4px !important;
+            ">
+              🔥 تأكيد
+            </button>
+            <button id="m15_btn_float_cancel_del" type="button" style="
+              background: rgba(255, 255, 255, 0.12) !important;
+              color: #e2e8f0 !important;
+              border: 1px solid rgba(255, 255, 255, 0.25) !important;
+              border-radius: 20px !important;
+              padding: 6px 12px !important;
+              font-size: 13px !important;
+              font-weight: 700 !important;
+              cursor: pointer !important;
+              white-space: nowrap !important;
+              display: flex !important;
+              align-items: center !important;
+              gap: 4px !important;
+            ">
+              ❌ إلغاء
+            </button>
+          </div>
+        `;
+
+        pDoc.body.appendChild(panel);
+
+        var handle = panel.querySelector('#m15_del_drag_handle');
+        var isDragging = false;
+        var startX = 0, startY = 0;
+        var initialLeft = 0, initialTop = 0;
+
+        function startDrag(e) {
+          if (e.target.closest('button')) return;
+          isDragging = true;
+          startX = e.clientX;
+          startY = e.clientY;
+          var rect = panel.getBoundingClientRect();
+          initialLeft = rect.left;
+          initialTop = rect.top;
+          panel.style.transition = 'none';
+          panel.style.transform = 'none';
+          panel.style.bottom = 'auto';
+          panel.style.left = initialLeft + 'px';
+          panel.style.top = initialTop + 'px';
+          if (handle) handle.style.cursor = 'grabbing';
+          panel.style.cursor = 'grabbing';
+          pWin.addEventListener('mousemove', onDrag, { passive: false });
+          pWin.addEventListener('mouseup', endDrag);
+          pDoc.addEventListener('mousemove', onDrag, { passive: false });
+          pDoc.addEventListener('mouseup', endDrag);
+          e.preventDefault();
+        }
+
+        function onDrag(e) {
+          if (!isDragging) return;
+          var dx = e.clientX - startX;
+          var dy = e.clientY - startY;
+          panel.style.left = (initialLeft + dx) + 'px';
+          panel.style.top = (initialTop + dy) + 'px';
+        }
+
+        function endDrag() {
+          if (!isDragging) return;
+          isDragging = false;
+          if (handle) handle.style.cursor = 'grab';
+          panel.style.cursor = 'default';
+          pWin.removeEventListener('mousemove', onDrag);
+          pWin.removeEventListener('mouseup', endDrag);
+          pDoc.removeEventListener('mousemove', onDrag);
+          pDoc.removeEventListener('mouseup', endDrag);
+        }
+
+        if (handle) {
+          handle.addEventListener('mousedown', startDrag);
+        }
+
+        function syncToStreamlit(payload) {
+          try {
+            var jsonStr = JSON.stringify(payload);
+            var synced = false;
+            if (pDoc) {
+              var input = pDoc.querySelector('input[aria-label="m15_3d_sync_payload"]') || pDoc.querySelector('div[data-testid="stTextInput"] input');
+              if (input) {
+                var proto = (pWin.HTMLInputElement || window.HTMLInputElement).prototype;
+                var desc = Object.getOwnPropertyDescriptor(proto, 'value');
+                if (desc && desc.set) desc.set.call(input, jsonStr);
+                else input.value = jsonStr;
+                if (input._valueTracker) input._valueTracker.setValue('');
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+                input.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }));
+                input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }));
+                synced = true;
+              }
+            }
+            if (!synced && pWin && pWin.location) {
+              var pUrl = new URL(pWin.location.href);
+              pUrl.searchParams.set('m15_op_move', jsonStr);
+              pUrl.searchParams.set('module', '12');
+              pWin.location.href = pUrl.toString();
+            }
+          } catch(e) {}
+        }
+
+        var btnConfirm = panel.querySelector('#m15_btn_float_confirm_del');
+        var btnCancel = panel.querySelector('#m15_btn_float_cancel_del');
+
+        if (btnConfirm) {
+          btnConfirm.onclick = function(e) {
+            e.stopPropagation();
+            btnConfirm.disabled = true;
+            btnConfirm.innerText = 'جارٍ الحذف...';
+            syncToStreamlit({ action: 'confirm_cancel_all_interior', ts: Date.now() });
+            setTimeout(function() { try { panel.remove(); } catch(err){} }, 300);
+          };
+        }
+
+        if (btnCancel) {
+          btnCancel.onclick = function(e) {
+            e.stopPropagation();
+            btnCancel.disabled = true;
+            btnCancel.innerText = 'جارٍ الإلغاء...';
+            syncToStreamlit({ action: 'abort_cancel_all_interior', ts: Date.now() });
+            setTimeout(function() { try { panel.remove(); } catch(err){} }, 200);
+          };
+        }
+
+      } catch(e) {
+        console.error("m15 floating plaster panel error:", e);
+      }
+    })();
+    </script>
+    """
+    components.html(js_code, height=0, width=0)
+
 
 def _execute_select_delete_wall_box(data):
     """التقاط الحائط المحدد بواسطة الصندوق وتخزينه كحائط معلق لطلب تأكيد الحذف."""
@@ -6226,6 +6487,42 @@ def _handle_sync_payload(payload_str=None):
             st.rerun()
             return
 
+        elif action == "confirm_cancel_all_interior":
+            pfm = st.session_state.setdefault("m15_plaster_faces", {})
+            bays = _compute_bays()
+            for b in bays:
+                for d_n in ["أعلى", "أسفل", "يسار", "يمين"]:
+                    winf = b["walls"][d_n]
+                    wk = winf["wk"]
+                    face = winf["face"]
+                    if wk in pfm:
+                        cur = list(pfm[wk])
+                        if face in cur:
+                            cur.remove(face)
+                        if cur:
+                            pfm[wk] = cur
+                        else:
+                            pfm.pop(wk, None)
+            st.session_state["m15_plaster_faces"] = pfm
+            for b in bays:
+                bid = b["id"]
+                st.session_state[f"m15_cb_all_{bid}"] = False
+                st.session_state[f"m15_cb_top_{bid}"] = False
+                st.session_state[f"m15_cb_bot_{bid}"] = False
+                st.session_state[f"m15_cb_left_{bid}"] = False
+                st.session_state[f"m15_cb_right_{bid}"] = False
+            st.session_state.pop("m15_confirm_cancel_all_interior", None)
+            st.session_state.pop("m15_plan_png_b64", None)
+            save_settings()
+            st.toast("🗑️ تم حذف المحارة الداخلية لجميع الحوائط بنجاح!", icon="✨")
+            st.rerun()
+            return
+
+        elif action == "abort_cancel_all_interior":
+            st.session_state.pop("m15_confirm_cancel_all_interior", None)
+            st.rerun()
+            return
+
         elif action in ["add_window_box", "add_window"]:
             _execute_add_window_box(data)
 
@@ -6450,6 +6747,76 @@ def _section_add_columns():
             st.rerun()
 
 
+def _check_col_orientation_conflict(si, sj, dir_code, norm_sx, norm_sy):
+    """
+    فحص التحقق من عدم تعارض ضرب العمود مع أي شباك أو باب قائم.
+    Return (has_conflict: bool, conflict_msg: str)
+    """
+    xs = st.session_state.get("m15_x_axes", [])
+    ys = st.session_state.get("m15_y_axes", [])
+    if si >= len(xs) or sj >= len(ys):
+        return False, ""
+    col_l = float(st.session_state.get("m15_col_length_cm", 60.0)) / 100.0
+    col_w = float(st.session_state.get("m15_col_width_cm", 30.0)) / 100.0
+    cw, ch = (col_w, col_l) if dir_code == "NS" else (col_l, col_w)
+    dx_m, dy_m = _compute_col_offsets(cw, ch, norm_sx, norm_sy)
+    cx = xs[si] + dx_m
+    cy = ys[sj] + dy_m
+    c_xmin = cx - cw / 2.0; c_xmax = cx + cw / 2.0
+    c_ymin = cy - ch / 2.0; c_ymax = cy + ch / 2.0
+
+    cm = _get_col_name_map()
+    orig_cname = f"C{sj * len(xs) + si + 1}"
+    cname = cm.get((si, sj), orig_cname)
+    wm_win = _get_window_name_map()
+    wm_door = _get_door_name_map()
+    removed_walls = st.session_state.get("m15_wall_removed", set())
+
+    for wk in _get_all_walls():
+        if wk in removed_walls:
+            continue
+        i1, j1, i2, j2 = wk
+        is_h = (j1 == j2)
+        thick_m = float(_get_wall_thickness(wk)) / 100.0
+        if is_h:
+            y_wall = ys[j1]
+            if min(c_ymax, y_wall + thick_m / 2.0) - max(c_ymin, y_wall - thick_m / 2.0) > 0.005:
+                x_start = min(xs[i1], xs[i2])
+                for win in _get_wall_windows(wk):
+                    if win.get("removed", False): continue
+                    w_pos = float(win.get("pos_m", 0.0)); w_w = float(win.get("w_m", 1.0))
+                    w_x1 = x_start + w_pos; w_x2 = w_x1 + w_w
+                    if min(c_xmax, w_x2) - max(c_xmin, w_x1) > 0.005:
+                        wnm = wm_win.get(win.get("id")) or win.get("name", "شباك")
+                        return True, f"تعارض هندسي: ضرب العمود {cname} يتعارض ويتداخل مع الشباك {wnm} القائم على الحائط الأفقي!"
+                for door in _get_wall_doors(wk):
+                    if door.get("removed", False): continue
+                    d_pos = float(door.get("pos_m", 0.0)); d_w = float(door.get("w_m", 0.9))
+                    d_x1 = x_start + d_pos; d_x2 = d_x1 + d_w
+                    if min(c_xmax, d_x2) - max(c_xmin, d_x1) > 0.005:
+                        dnm = wm_door.get(door.get("id")) or door.get("name", "باب")
+                        return True, f"تعارض هندسي: ضرب العمود {cname} يتعارض ويتداخل مع الباب {dnm} القائم على الحائط الأفقي!"
+        else:
+            x_wall = xs[i1]
+            if min(c_xmax, x_wall + thick_m / 2.0) - max(c_xmin, x_wall - thick_m / 2.0) > 0.005:
+                y_start = min(ys[j1], ys[j2])
+                for win in _get_wall_windows(wk):
+                    if win.get("removed", False): continue
+                    w_pos = float(win.get("pos_m", 0.0)); w_w = float(win.get("w_m", 1.0))
+                    w_y1 = y_start + w_pos; w_y2 = w_y1 + w_w
+                    if min(c_ymax, w_y2) - max(c_ymin, w_y1) > 0.005:
+                        wnm = wm_win.get(win.get("id")) or win.get("name", "شباك")
+                        return True, f"تعارض هندسي: ضرب العمود {cname} يتعارض ويتداخل مع الشباك {wnm} القائم على الحائط الرأسي!"
+                for door in _get_wall_doors(wk):
+                    if door.get("removed", False): continue
+                    d_pos = float(door.get("pos_m", 0.0)); d_w = float(door.get("w_m", 0.9))
+                    d_y1 = y_start + d_pos; d_y2 = d_y1 + d_w
+                    if min(c_ymax, d_y2) - max(c_ymin, d_y1) > 0.005:
+                        dnm = wm_door.get(door.get("id")) or door.get("name", "باب")
+                        return True, f"تعارض هندسي: ضرب العمود {cname} يتعارض ويتداخل مع الباب {dnm} القائم على الحائط الرأسي!"
+    return False, ""
+
+
 def _section_column_orientations():
     """
     قسم ضبط اتجاهات وضرب الأعمدة (Column Orientations & Offsets):
@@ -6539,6 +6906,16 @@ def _section_column_orientations():
         norm_sx = _normalize_m15_col_shift(sx_val, axis="x")
         norm_sy = _normalize_m15_col_shift(sy_val, axis="y")
 
+        # فحص التعارض مع الشبابيك أو الأبواب عند تغيير الاتجاه
+        if new_dc != cur_dir_code:
+            has_conf, conf_msg = _check_col_orientation_conflict(si, sj, new_dc, norm_sx, norm_sy)
+            if has_conf:
+                play_warning_sound(force=True)
+                st.session_state["m15_col_conflict_err"] = conf_msg
+                st.session_state[k_dir] = DIR_OPTIONS[idx_dir]
+                st.rerun()
+                return
+
         cdirs = st.session_state.setdefault("m15_col_dirs", {})
         cdirs[(si, sj)] = new_dc
         st.session_state["m15_col_dirs"] = cdirs
@@ -6578,6 +6955,23 @@ def _section_column_orientations():
         if _normalize_m15_col_shift(st.session_state[k_sy], axis="y") != norm_cur_sy:
             st.session_state[k_sy] = M15_SHIFT_Y_OPTIONS[idx_sy]
 
+    # عرض تنبيه التعارض الصوتي والمرئي إن وجد
+    col_err = st.session_state.pop("m15_col_conflict_err", None)
+    if col_err:
+        st.markdown(
+            f"""<div style='background:rgba(239, 68, 68, 0.15); border:1.5px solid #ef4444; border-right:4px solid #ef4444; border-radius:8px; padding:10px 14px; margin-bottom:12px;' dir='rtl'>
+                <div style='display:flex; align-items:center; gap:8px;'>
+                    <span style='font-size:1.25rem;'>🚨</span>
+                    <span style='color:#f87171; font-weight:800; font-size:0.92rem;'>تنبيه تعارض: لا يمكن تغيير اتجاه العمود</span>
+                </div>
+                <div style='color:#fee2e2; font-size:0.86rem; line-height:1.6; margin-top:5px;'>
+                    {col_err}<br>
+                    لم يتم تغيير اتجاه العمود لوجود تعارض وتداخل مباشر مع الفتحة.
+                </div>
+            </div>""",
+            unsafe_allow_html=True
+        )
+
     sel_dir = st.selectbox(
         "اتجاه ضرب العمود",
         options=DIR_OPTIONS,
@@ -6610,27 +7004,14 @@ def _section_column_orientations():
     norm_new_sy = _normalize_m15_col_shift(sel_sy, axis="y")
 
     if new_dir_code != col_dirs.get((si, sj)) or norm_new_sx != norm_cur_sx or norm_new_sy != norm_cur_sy:
+        if new_dir_code != col_dirs.get((si, sj)):
+            has_conf, conf_msg = _check_col_orientation_conflict(si, sj, new_dir_code, norm_new_sx, norm_new_sy)
+            if has_conf:
+                play_warning_sound(force=True)
+                st.session_state["m15_col_conflict_err"] = conf_msg
+                st.session_state[k_dir] = DIR_OPTIONS[idx_dir]
+                st.rerun()
         _apply_orient_update()
-
-    # بطاقة معلومات توضيحية لترحيل العمود الحالي (أوفست بالسنتيمتر)
-    dx_val, dy_val = col_shifted.get((si, sj), (0.0, 0.0))
-    dir_badge = "رأسي (موازٍ لمحور Y)" if new_dir_code == "NS" else "أفقي (موازٍ لمحور X)"
-    badge_bg = "#1e40af" if new_dir_code == "NS" else "#b45309"
-    badge_clr = "#ffffff"
-
-    st.markdown(
-        f"""<div style='background:rgba(30, 41, 59, 0.75); border:1px solid #334155; border-radius:8px; padding:10px 14px; margin-top:8px;' dir='rtl'>
-            <div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;'>
-                <span style='font-size:0.85rem; color:#cbd5e1;'>ضرب العمود:</span>
-                <span style='background:{badge_bg}; color:{badge_clr}; font-weight:700; font-size:0.82rem; padding:2px 8px; border-radius:4px;'>{dir_badge}</span>
-            </div>
-            <div style='display:flex; justify-content:space-between; align-items:center; font-size:0.84rem; color:#ffffff;'>
-                <span>إزاحة المركز (ΔX): <b>{dx_val:+.1f} سم</b></span>
-                <span>إزاحة المركز (ΔY): <b>{dy_val:+.1f} سم</b></span>
-            </div>
-        </div>""",
-        unsafe_allow_html=True
-    )
 
 
 def _section_restore_columns():
@@ -7357,6 +7738,129 @@ def _section_add_doors():
     else:
         if st.button("⏹️ إنهاء وضع إسقاط الأبواب (Esc)", key="m15_btn_exit_add_door", use_container_width=True):
             st.session_state["m15_add_door_mode"] = False
+            st.rerun()
+
+
+def _section_door_orientation():
+    """
+    قسم تعديل اتجاه فتح الأبواب:
+    - قائمة منسدلة بعنوان 'اختر الباب المطلوب تغيير اتجاهه' تبدأ بـ 'لم يتم اختيار باب'.
+    - عند اختيار باب تظهر خيارات Radio Button:
+      * للحائط الأفقي:
+        - اتجاه المفصلة يمين
+        - اتجاه المفصلة يسار
+        - اتجاه ضلفة الباب لاعلي
+        - اتجاه ضلفة الباب لاسفل
+      * للحائط الرأسي:
+        - اتجاه المفصلة لاعلي
+        - اتجاه المفصلة لاسفل
+        - اتجاه ضلفة الباب يمين
+        - اتجاه ضلفة الباب يسار
+    - التنفيذ الفوري على رسم المسقط الأفقي المصمم.
+    """
+    _ensure_opening_names()
+    active_doors = _get_active_doors_list()
+    if not active_doors:
+        st.info("💡 لا توجد أبواب قائمة حالياً. أسقط بعض الأبواب أولاً من قسم '5️⃣ إسقاط الأبواب'.")
+        return
+
+    wm_door = _get_door_name_map()
+    door_options = ["لم يتم اختيار باب"]
+    door_lookup = {}
+    for idx, wlbl, dinfo, wk in active_doors:
+        did = dinfo.get("id")
+        dname = wm_door.get(did) or dinfo.get("name") or f"D{idx+1}"
+        opt_key = f"{dname} — ({wlbl})"
+        door_options.append(opt_key)
+        door_lookup[opt_key] = (dinfo, wk, dname, wlbl)
+
+    sel_door_label = st.selectbox(
+        "اختر الباب المطلوب تغيير اتجاهه",
+        options=door_options,
+        index=0,
+        key="m15_sel_door_orient"
+    )
+
+    if sel_door_label == "لم يتم اختيار باب" or sel_door_label not in door_lookup:
+        st.caption("ℹ️ اختر باباً من القائمة المنسدلة أعلاه لتعديل اتجاه المفصلة وضلفة الباب فورياً.")
+        return
+
+    dinfo, wk, dname, wlbl = door_lookup[sel_door_label]
+    i1, j1, i2, j2 = wk
+    is_h = (j1 == j2)
+
+    cur_hinge = dinfo.get("hinge_dir", "يسار" if is_h else "أسفل")
+    cur_leaf = dinfo.get("leaf_dir", "أعلى" if is_h else "يمين")
+
+    st.markdown(
+        f"""<div style='background:rgba(30, 41, 59, 0.75); border:1px solid #334155; border-radius:8px; padding:10px 14px; margin-bottom:12px;' dir='rtl'>
+            <div style='display:flex; justify-content:space-between; align-items:center;'>
+                <span style='color:#38bdf8; font-weight:800; font-size:0.92rem;'>🚪 {dname}</span>
+                <span style='color:#94a3b8; font-size:0.84rem;'>وضع الحائط: <b style='color:#ffffff;'>{'أفقي' if is_h else 'رأسي'}</b> ({wlbl})</span>
+            </div>
+            <div style='margin-top:6px; color:#cbd5e1; font-size:0.85rem;'>
+                المفصلة الحالية: <b style='color:#ffffff;'>{cur_hinge}</b> | ضلفة الباب الحالية: <b style='color:#ffffff;'>{cur_leaf}</b>
+            </div>
+        </div>""",
+        unsafe_allow_html=True
+    )
+
+    if is_h:
+        radio_opts = [
+            "اتجاه المفصلة يمين",
+            "اتجاه المفصلة يسار",
+            "اتجاه ضلفة الباب لاعلي",
+            "اتجاه ضلفة الباب لاسفل",
+        ]
+    else:
+        radio_opts = [
+            "اتجاه المفصلة لاعلي",
+            "اتجاه المفصلة لاسفل",
+            "اتجاه ضلفة الباب يمين",
+            "اتجاه ضلفة الباب يسار",
+        ]
+
+    r_key = f"m15_door_orient_choice_{dinfo.get('id')}"
+
+    choice = st.radio(
+        "خيارات اتجاه المفصلة والضلفة:",
+        options=radio_opts,
+        index=None,
+        key=r_key,
+        help="اختر لتغيير موضع المفصلة أو دوران الضلفة فورياً على المسقط الأفقي المصمم."
+    )
+
+    if choice:
+        changed = False
+        if choice == "اتجاه المفصلة يمين":
+            if dinfo.get("hinge_dir") != "يمين":
+                dinfo["hinge_dir"] = "يمين"; changed = True
+        elif choice == "اتجاه المفصلة يسار":
+            if dinfo.get("hinge_dir") != "يسار":
+                dinfo["hinge_dir"] = "يسار"; changed = True
+        elif choice == "اتجاه المفصلة لاعلي":
+            if dinfo.get("hinge_dir") != "أعلى":
+                dinfo["hinge_dir"] = "أعلى"; changed = True
+        elif choice == "اتجاه المفصلة لاسفل":
+            if dinfo.get("hinge_dir") != "أسفل":
+                dinfo["hinge_dir"] = "أسفل"; changed = True
+        elif choice == "اتجاه ضلفة الباب لاعلي":
+            if dinfo.get("leaf_dir") != "أعلى":
+                dinfo["leaf_dir"] = "أعلى"; changed = True
+        elif choice == "اتجاه ضلفة الباب لاسفل":
+            if dinfo.get("leaf_dir") != "أسفل":
+                dinfo["leaf_dir"] = "أسفل"; changed = True
+        elif choice == "اتجاه ضلفة الباب يمين":
+            if dinfo.get("leaf_dir") != "يمين":
+                dinfo["leaf_dir"] = "يمين"; changed = True
+        elif choice == "اتجاه ضلفة الباب يسار":
+            if dinfo.get("leaf_dir") != "يسار":
+                dinfo["leaf_dir"] = "يسار"; changed = True
+
+        if changed:
+            st.session_state.pop("m15_plan_png_b64", None)
+            save_settings()
+            st.toast(f"✅ تم تطبيق {choice} للباب {dname} وتحديث المسقط فورياً!", icon="🚪")
             st.rerun()
 
 
@@ -8164,45 +8668,6 @@ def _section_plaster_walls():
         if not bays:
             st.info("💡 لا توجد مساحات داخلية محصورة بين المحاور.")
         else:
-            st.markdown(
-                """<div style='background:linear-gradient(135deg,#0f172a,#1e293b); border:1.5px solid #0284c7;
-                    border-radius:8px; padding:12px 16px; margin-bottom:12px;' dir='rtl'>
-                    <b style='color:#38bdf8; font-size:1.0rem;'>⚡ الاختيار السريع للحوائط الداخلية:</b><br>
-                    <span style='color:#cbd5e1; font-size:0.86rem; line-height:1.7;'>
-                    تحكم فوري شامل لتطبيق تهشير المحارة على جميع الأوجه الداخلية لكافة المساحات والباكيات (A1, A2...) دفعة واحدة، أو إلغاء وتفريغ المحارة الداخلية بالكامل، مع التحديث الفوري في رسم المسقط الأفقي المصمم وحسابات الحصر الهندسي.
-                    </span>
-                </div>""",
-                unsafe_allow_html=True
-            )
-
-            # إحصائيات سريعة للباكيات
-            total_bay_faces = len(bays) * 4
-            active_bay_faces = 0
-            for b in bays:
-                for d_n in ["أعلى", "أسفل", "يسار", "يمين"]:
-                    winf = b["walls"][d_n]
-                    if winf["face"] in plaster_faces_map.get(winf["wk"], []):
-                        active_bay_faces += 1
-
-            c_st1, c_st2 = st.columns(2)
-            with c_st1:
-                st.markdown(f"""
-                <div style='background:rgba(2,132,199,0.14); border:1px solid #0284c7; border-radius:6px; padding:8px 10px; text-align:center;'>
-                    <div style='color:#7dd3fc; font-size:0.78rem;'>إجمالي المساحات المعرفة</div>
-                    <div style='color:#ffffff; font-size:1.20rem; font-weight:900;'>{len(bays)} مساحة</div>
-                </div>
-                """, unsafe_allow_html=True)
-            with c_st2:
-                pct = int((active_bay_faces / total_bay_faces * 100)) if total_bay_faces > 0 else 0
-                st.markdown(f"""
-                <div style='background:rgba(16,185,129,0.14); border:1px solid #10b981; border-radius:6px; padding:8px 10px; text-align:center;'>
-                    <div style='color:#6ee7b7; font-size:0.78rem;'>أوجه المحارة الداخلية المحددة</div>
-                    <div style='color:#ffffff; font-size:1.20rem; font-weight:900;'>{active_bay_faces} / {total_bay_faces} ({pct}%)</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-            st.markdown("<div style='height:12px;'></div>", unsafe_allow_html=True)
-
             # 1. زر اختيار المحارة الداخلية لجميع المساحات
             if st.button("✨ اختيار المحارة الداخلية لجميع المساحات", key="m15_btn_select_all_interior_plaster", use_container_width=True):
                 st.session_state.pop("m15_confirm_cancel_all_interior", None)
@@ -8233,96 +8698,89 @@ def _section_plaster_walls():
             st.markdown("<div style='height:4px;'></div>", unsafe_allow_html=True)
             if st.button("🗑️ إلغاء المحارة الداخلية لجميع المساحات", key="m15_btn_trigger_cancel_interior", use_container_width=True):
                 st.session_state["m15_confirm_cancel_all_interior"] = True
-                st.session_state["m15_play_cancel_whistle"] = True
-                st.session_state["_last_whistle_time"] = 0.0
+                play_warning_sound(force=True)
                 st.rerun()
 
-            # نافذة / صندوق التأكيد بخلفية حمراء وصافرة تحذيرية وخط عريض واضح (تطلق الصافرة فوراً عند طلب الإلغاء قبل الحذف)
-            if st.session_state.get("m15_confirm_cancel_all_interior", False):
-                if st.session_state.pop("m15_play_cancel_whistle", False):
-                    # تشغيل الصافرة التحذيرية فوراً بمجرد الضغط على الزر وظهور رسالة التحذير
-                    components.html(
-                        f"""
-                        <audio autoplay src="data:audio/wav;base64,{ALARM_WAV_B64}" style="display:none;"></audio>
-                        <script>
-                        (function() {{
-                            try {{
-                                var AudioCtx = window.AudioContext || window.webkitAudioContext;
-                                if (AudioCtx) {{
-                                    var ctx = new AudioCtx();
-                                    if (ctx.state === 'suspended') {{ ctx.resume(); }}
-                                    var t = ctx.currentTime;
-                                    var osc = ctx.createOscillator();
-                                    var gain = ctx.createGain();
-                                    osc.type = 'sine';
-                                    osc.frequency.setValueAtTime(2600.0, t);
-                                    gain.gain.setValueAtTime(0.0001, t);
-                                    gain.gain.linearRampToValueAtTime(0.40, t + 0.015);
-                                    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
-                                    osc.connect(gain);
-                                    gain.connect(ctx.destination);
-                                    osc.start(t);
-                                    osc.stop(t + 0.32);
-                                }}
-                            }} catch(e) {{}}
-                        }})();
-                        </script>
-                        """,
-                        height=0,
-                        width=0
-                    )
+            # ════════════════════════════════════════════════════════════
+            # 🗑️ قسم حذف محارة حوائط
+            # ════════════════════════════════════════════════════════════
+            st.markdown("<hr style='margin: 18px 0 14px 0; border: none; border-top: 1.5px dashed #334155;'>", unsafe_allow_html=True)
+            st.markdown(
+                """<div style='background:linear-gradient(135deg,rgba(15,23,42,0.9),rgba(30,41,59,0.9)); border:1.5px solid #ef4444; border-radius:8px; padding:10px 14px; margin-bottom:12px;' dir='rtl'>
+                    <div style='color:#f87171; font-weight:800; font-size:1.0rem;'>🗑️ حذف محارة حوائط</div>
+                    <div style='color:#cbd5e1; font-size:0.84rem; margin-top:3px;'>
+                        اختر الحائط المطلوب لحذف وجه المحارة وتأكيد الحذف فورياً على المسقط الأفقي المصمم.
+                    </div>
+                </div>""",
+                unsafe_allow_html=True
+            )
+
+            wall_options = ["لم يتم اختيار حائط"]
+            wall_lookup = {}
+            for wk in active_walls:
+                w_lbl = _wall_display_label(wk, cm, wm)
+                wall_options.append(w_lbl)
+                wall_lookup[w_lbl] = wk
+
+            sel_wall_lbl = st.selectbox(
+                "اختر الحائط المطلوب حذف محارته",
+                options=wall_options,
+                index=0,
+                key="m15_sel_wall_del_plaster"
+            )
+
+            if sel_wall_lbl != "لم يتم اختيار حائط" and sel_wall_lbl in wall_lookup:
+                sel_wk = wall_lookup[sel_wall_lbl]
+                i1, j1, i2, j2 = sel_wk
+                is_wall_h = (j1 == j2)
+
+                cur_faces = list(plaster_faces_map.get(sel_wk, []))
+                faces_str = " + ".join([f"وجه {f}" for f in cur_faces]) if cur_faces else "لا توجد محارة مطبقة حالياً"
+
                 st.markdown(
-                    """<div style='background: linear-gradient(135deg, #7f1d1d, #991b1b);
-                        border: 3px solid #ef4444; border-radius: 12px; padding: 18px 20px;
-                        margin: 14px 0 12px 0; text-align: center; box-shadow: 0 6px 20px rgba(239, 68, 68, 0.45);' dir='rtl'>
-                        <div style='font-size: 2.2rem; margin-bottom: 6px;'>⚠️ 🚨 ⚠️</div>
-                        <div style='color: #ffffff; font-size: 1.25rem; font-weight: 900; line-height: 1.8; margin-bottom: 10px;'>
-                            تأكيد حذف وإلغاء المحارة الداخلية لجميع المساحات والحوائط الداخلية
-                        </div>
-                        <div style='color: #fee2e2; font-size: 0.96rem; font-weight: 700; line-height: 1.6;'>
-                            هل أنت متأكد من رغبتك في حذف محارة جميع الحوائط الداخلية؟<br>
-                            سيتم فوراً إزالة تهشير المحارة من كافة المساحات والباكيات الداخلية في المسقط الأفقي المصمم وتحديث كميات وجداول الحصر فورياً.
-                        </div>
+                    f"""<div style='background:rgba(30, 41, 59, 0.75); border:1px solid #334155; border-radius:6px; padding:8px 12px; margin-bottom:10px; font-size:0.85rem;' dir='rtl'>
+                        وضع الحائط: <b style='color:#ffffff;'>{'حائط أفقي' if is_wall_h else 'حائط رأسي'}</b> | أوجه المحارة الحالية: <b style='color:#f472b6;'>{faces_str}</b>
                     </div>""",
                     unsafe_allow_html=True
                 )
 
-                c_cf1, c_cf2 = st.columns(2)
-                with c_cf1:
-                    if st.button("🔥 نعم، تأكيد حذف المحارة الداخلية لجميع المساحات", key="m15_btn_confirm_cancel_all_int", use_container_width=True):
-                        pfm = st.session_state.setdefault("m15_plaster_faces", {})
-                        for b in bays:
-                            for d_n in ["أعلى", "أسفل", "يسار", "يمين"]:
-                                winf = b["walls"][d_n]
-                                wk = winf["wk"]
-                                face = winf["face"]
-                                if wk in pfm:
-                                    cur = list(pfm[wk])
-                                    if face in cur:
-                                        cur.remove(face)
-                                    if cur:
-                                        pfm[wk] = cur
-                                    else:
-                                        pfm.pop(wk, None)
-                        st.session_state["m15_plaster_faces"] = pfm
-                        # تحديث قيم مربعات الاختيار في تبويب المساحات
-                        for b in bays:
-                            bid = b["id"]
-                            st.session_state[f"m15_cb_all_{bid}"] = False
-                            st.session_state[f"m15_cb_top_{bid}"] = False
-                            st.session_state[f"m15_cb_bot_{bid}"] = False
-                            st.session_state[f"m15_cb_left_{bid}"] = False
-                            st.session_state[f"m15_cb_right_{bid}"] = False
-                        st.session_state.pop("m15_confirm_cancel_all_interior", None)
-                        st.session_state.pop("m15_play_cancel_whistle", None)
-                        save_settings()
-                        st.rerun()
+                radio_del_opts = [
+                    "حذف المحارة العلوية",
+                    "حذف المحارة السفلية",
+                    "حذف محارة الوجهين"
+                ]
 
-                with c_cf2:
-                    if st.button("❌ تراجع / إلغاء الأمر", key="m15_btn_cancel_abort", use_container_width=True):
-                        st.session_state.pop("m15_confirm_cancel_all_interior", None)
-                        st.session_state.pop("m15_play_cancel_whistle", None)
-                        st.rerun()
+                del_choice = st.radio(
+                    "حدد وجه المحارة المراد حذفه:",
+                    options=radio_del_opts,
+                    index=0,
+                    key=f"m15_radio_del_plaster_{sel_wk[0]}_{sel_wk[1]}_{sel_wk[2]}_{sel_wk[3]}"
+                )
+
+                if st.button("🔘 تأكيد حذف وجه محارة", key="m15_btn_confirm_del_single_wall_plaster", type="primary", use_container_width=True):
+                    pfm = st.session_state.setdefault("m15_plaster_faces", {})
+                    cur_f = list(pfm.get(sel_wk, []))
+                    if del_choice == "حذف المحارة العلوية":
+                        for target_f in (["أعلى"] if is_wall_h else ["يمين", "أعلى"]):
+                            if target_f in cur_f:
+                                cur_f.remove(target_f)
+                    elif del_choice == "حذف المحارة السفلية":
+                        for target_f in (["أسفل"] if is_wall_h else ["يسار", "أسفل"]):
+                            if target_f in cur_f:
+                                cur_f.remove(target_f)
+                    elif del_choice == "حذف محارة الوجهين":
+                        cur_f = []
+
+                    if cur_f:
+                        pfm[sel_wk] = cur_f
+                    else:
+                        pfm.pop(sel_wk, None)
+
+                    st.session_state["m15_plaster_faces"] = pfm
+                    st.session_state.pop("m15_plan_png_b64", None)
+                    save_settings()
+                    st.toast(f"✅ تم تنفيذ {del_choice} للحائط {sel_wall_lbl} وتحديث المسقط فورياً!", icon="🎨")
+                    st.rerun()
 
     # ════════════════════════════════════════════════════════════
     # 🏠 التبويب 2: المحارة الداخلية (المساحات والباكيات A1, A2...)
@@ -8372,21 +8830,6 @@ def _section_plaster_walls():
             name_bot = wm.get(wk_bot, _wall_display_label(wk_bot, cm, wm)) if ex_bot else "—"
             name_left = wm.get(wk_left, _wall_display_label(wk_left, cm, wm)) if ex_left else "—"
             name_right = wm.get(wk_right, _wall_display_label(wk_right, cm, wm)) if ex_right else "—"
-
-            # بطاقة تعريفية للمساحة المحددة
-            st.markdown(f"""
-            <div style='background:linear-gradient(135deg,#0f172a,#1e293b); border:1.5px solid #0284c7; border-radius:8px; padding:10px 14px; margin-bottom:12px;' dir='rtl'>
-                <div style='display:flex; justify-content:space-between; align-items:center;'>
-                    <b style='color:#38bdf8; font-size:1.02rem;'>🏷️ المساحة {bay_id} [الأبعاد: {sel_bay["span_x"]:.2f}م × {sel_bay["span_y"]:.2f}م]</b>
-                    <span style='background:rgba(2,132,199,0.20); color:#7dd3fc; border:1px solid #0284c7; padding:2px 10px; border-radius:12px; font-size:0.80rem; font-weight:bold;'>
-                        المسطح التقريبي: {(sel_bay["span_x"] * sel_bay["span_y"]):.2f} م²
-                    </span>
-                </div>
-                <div style='color:#94a3b8; font-size:0.82rem; margin-top:5px;'>
-                    الحوائط المحيطة: أعلى (<b>{name_top}</b>) | أسفل (<b>{name_bot}</b>) | يسار (<b>{name_left}</b>) | يمين (<b>{name_right}</b>)
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
 
             # دالة تحديث وجه محدد
             def _toggle_bay_face(wk, face, enable):
@@ -8441,7 +8884,7 @@ def _section_plaster_walls():
                 help="تطبيق التهشير على الأوجه الداخلية الأربعة المحيطة بهذه المساحة فوراً."
             )
 
-            st.markdown("<div style='margin-top:6px; font-weight:bold; font-size:0.88rem; color:#cbd5e1;'>خيارات توجيه المحارة الفردية للمساحة:</div>", unsafe_allow_html=True)
+            st.markdown("<div style='margin-top:10px; margin-bottom:14px; font-weight:bold; font-size:0.88rem; color:#cbd5e1;'>خيارات توجيه المحارة الفردية للمساحة:</div>", unsafe_allow_html=True)
             col_b1, col_b2 = st.columns(2)
 
             with col_b1:
@@ -8525,23 +8968,7 @@ def _section_plaster_walls():
                 fac_face = fac["face"]
                 fac_walls = fac["walls"]
 
-                w_names = [wm.get(wk, _wall_display_label(wk, cm, wm)) for wk in fac_walls]
-                total_len = sum(_wall_length_m(wk) for wk in fac_walls)
                 is_active = (all(fac_face in plaster_faces_map.get(wk, []) for wk in fac_walls) if fac_walls else False)
-
-                st.markdown(f"""
-                <div style='background:#1e293b; border:1px solid #334155; border-right:4px solid #3b82f6; border-radius:8px; padding:10px 14px; margin-top:10px; margin-bottom:4px;' dir='rtl'>
-                    <div style='display:flex; justify-content:space-between; align-items:center;'>
-                        <b style='color:#f8fafc; font-size:0.95rem;'>{fac_icon} {fac_name}</b>
-                        <span style='background:#0f172a; color:#38bdf8; padding:2px 10px; border-radius:12px; font-size:0.80rem; border:1px solid #0284c7;'>
-                            الطول: {total_len:.2f}م | {len(fac_walls)} حوائط مستقلة
-                        </span>
-                    </div>
-                    <div style='color:#94a3b8; font-size:0.82rem; margin-top:4px;'>
-                        الحوائط الإنشائية المكونة: <b>{', '.join(w_names) if w_names else 'لا يوجد'}</b> (الوجه الخارجي: <b>{fac_face}</b>)
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
 
                 r_key = f"m15_ext_radio_{f_key}"
                 cur_idx = 0 if is_active else 1
@@ -8553,7 +8980,7 @@ def _section_plaster_walls():
                     return _cb
 
                 st.radio(
-                    f"حالة محارة {fac_name}:",
+                    f"{fac_icon} حالة محارة {fac_name}:",
                     options=["نعم", "لا"],
                     index=cur_idx,
                     horizontal=True,
@@ -8576,92 +9003,6 @@ def _section_plaster_walls():
                         _apply_facade(facades[f_k]["walls"], facades[f_k]["face"], False)
                         st.session_state[f"m15_ext_radio_{f_k}"] = "لا"
                     st.rerun()
-
-    # ════════════════════════════════════════════════════════════
-    # 🏷️ زر تسمية المساحات بناءً على وجود الحوائط الفعلية
-    # ════════════════════════════════════════════════════════════
-    st.markdown("<hr style='margin: 16px 0 14px 0; border: none; border-top: 2px dashed #334155;'>", unsafe_allow_html=True)
-    st.markdown(
-        """<div style='background:linear-gradient(135deg,#0f172a,#1e293b); border:1.5px solid #7c3aed;
-            border-radius:8px; padding:10px 14px; margin-bottom:10px;' dir='rtl'>
-            <b style='color:#c4b5fd; font-size:0.97rem;'>🏷️ تسمية المساحات طبقاً للحوائط:</b><br>
-            <span style='color:#cbd5e1; font-size:0.84rem; line-height:1.7;'>
-            اضغط الزر أدناه لتسمية المساحات الداخلية طبقاً لوجود الحوائط الفعلية وليس طبقاً للمحاور.
-            تُعتبر أي باكية مساحةً مسماةً إذا كان لها حائط واحد على الأقل على أي ضلع من أضلعها الأربعة،
-            حتى لو لم يكتمل الحائط إلى المحاور المجاورة.
-            </span>
-        </div>""",
-        unsafe_allow_html=True
-    )
-
-    named_spaces_cur = st.session_state.get("m15_named_spaces", [])
-    c_name1, c_name2 = st.columns([2, 1])
-    with c_name1:
-        if st.button(
-            "🏷️ اضغط لتسمية المساحات للمحارة",
-            key="m15_btn_label_spaces_by_walls",
-            use_container_width=True,
-            type="primary",
-            help="يحسب الكود المساحات المحصورة بناءً على الحوائط الموجودة ويضعها كتسميات على المسقط الأفقي."
-        ):
-            computed = _compute_wall_bounded_spaces()
-            if computed:
-                st.session_state["m15_named_spaces"] = computed
-                st.session_state.pop("m15_plan_png_b64", None)
-                save_settings()
-                st.toast(f"✅ تم تسمية {len(computed)} مساحة بناءً على الحوائط الموجودة!", icon="🏷️")
-                st.rerun()
-            else:
-                st.toast("⚠️ لا توجد حوائط نشطة لتحديد المساحات. أضف حوائط أولاً.", icon="⚠️")
-
-    with c_name2:
-        if named_spaces_cur:
-            if st.button(
-                "🗑️ حذف التسميات",
-                key="m15_btn_clear_named_spaces",
-                use_container_width=True,
-                help="إزالة جميع تسميات المساحات من المسقط الأفقي."
-            ):
-                st.session_state["m15_named_spaces"] = []
-                st.session_state.pop("m15_plan_png_b64", None)
-                save_settings()
-                st.toast("🗑️ تم حذف جميع تسميات المساحات.", icon="🗑️")
-                st.rerun()
-
-    # عرض التسميات الحالية إن وجدت
-    if named_spaces_cur:
-        n_count = len(named_spaces_cur)
-        st.markdown(
-            f"""<div style='background:rgba(124,58,237,0.12); border:1px solid #7c3aed; border-radius:6px;
-                padding:8px 12px; margin-top:6px; font-size:0.84rem; color:#c4b5fd;' dir='rtl'>
-                ✅ يوجد حالياً <b style='color:#ffffff;'>{n_count} مساحة مسماة</b> معروضة على المسقط الأفقي.
-                (التسميات: {", ".join([s["name"] for s in named_spaces_cur[:8]])}{" ..." if n_count > 8 else ""})
-            </div>""",
-            unsafe_allow_html=True
-        )
-
-    # ملخص كميات المحارة التنفيذي السريع في قسم التحديد
-    p_summary = _compute_plaster_survey()
-
-    if p_summary["rows"]:
-        st.markdown(f"""
-        <div style='background:linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border:1.5px solid #0284c7; border-radius:8px; padding:12px 16px; margin-top:12px;' dir='rtl'>
-            <div style='display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:8px;'>
-                <b style='color:#38bdf8; font-size:0.95rem;'>📊 ملخص كميات المحارة التنفيذية (طبقاً للكود المصري ECP):</b>
-                <span style='background:#0284c7; color:#fff; font-size:0.75rem; font-weight:bold; padding:2px 8px; border-radius:10px;'>
-                    {p_summary['active_walls_count']} حائط مشمول
-                </span>
-            </div>
-            <div style='display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px; font-size:0.84rem; color:#cbd5e1;'>
-                <div>• إجمالي المسطح: <b style='color:#93c5fd;'>{p_summary['tot_gross']:.2f} م²</b></div>
-                <div>• الفتحات المخصومة: <b style='color:#f87171;'>{p_summary['tot_ded']:.2f} م²</b></div>
-                <div>• صافي المسطح: <b style='color:#4ade80;'>{p_summary['tot_net']:.2f} م²</b></div>
-                <div>• الرمل (5% هالك): <b style='color:#fde047;'>{p_summary['tot_sand']:.2f} م³</b></div>
-                <div>• الأسمنت: <b style='color:#67e8f9;'>{p_summary['tot_cement_tons']:.2f} طن</b> <span style='color:#94a3b8;'>({p_summary['tot_cement_bags']} شكارة)</span></div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-        st.markdown("<div style='font-size:0.82rem;color:#94a3b8;margin-top:8px;text-align:center;'>📋 تم نقل وتخصيص <b>جدول حصر وخامات البياض التفصيلي</b> في قسم منفصل مطوي أسفل المسقط الأفقي قبل قسم الأسعار.</div>", unsafe_allow_html=True)
 
 
 def _section_plaster_boq():
@@ -15827,6 +16168,8 @@ def render_masonry_plaster_module():
             _section_add_windows()
         with st.expander("5️⃣ إسقاط الأبواب", expanded=is_add_door_active):
             _section_add_doors()
+        with st.expander("🚪 تعديل اتجاه فتح الابواب", expanded=False):
+            _section_door_orientation()
         with st.expander("3️⃣ تحديد مواصفات وتعديل الحوائط", expanded=False): _section_walls()
         with st.expander("📐 ضبط اتجاهات وضرب الأعمدة", expanded=False): _section_column_orientations()
         with st.expander("🗑️ حذف الشبابيك والأبواب", expanded=False):
@@ -15851,8 +16194,11 @@ def render_masonry_plaster_module():
         )
 
         pending_del = st.session_state.get("m15_pending_delete")
+        cancel_all_int = st.session_state.get("m15_confirm_cancel_all_interior")
         if pending_del:
             _render_floating_delete_panel(pending_del)
+        elif cancel_all_int:
+            _render_floating_plaster_cancel_panel()
         else:
             _cleanup_floating_delete_panel()
 
