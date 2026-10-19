@@ -10,6 +10,7 @@ Displays:
 """
 
 import math
+import os
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -59,195 +60,143 @@ def _weight_per_m(d_mm: float) -> float:
     return area_m2 * 7_850  # kg/m
 
 
+def calculate_concrete_properties(fcu_kg_cm2: float) -> dict:
+    """
+    Calculate concrete properties according to Egyptian (ECP 203) and American (ACI 318 / AISC) codes:
+      • fcu (MPa) = fcu (kg/cm²) / 10.0
+      • E_c ECP (MPa) = 4400 * sqrt(fcu)  -->  E_c ECP (t/m²) = E_c (MPa) * 100
+      • f'c (MPa) = 0.80 * fcu            -->  f'c (t/m²) = f'c (MPa) * 100
+      • E_c ACI (MPa) = 4700 * sqrt(f'c)  -->  E_c ACI (t/m²) = E_c (MPa) * 100
+    """
+    fcu_kg = max(0.0, float(fcu_kg_cm2))
+    fcu_mpa = fcu_kg / 10.0
+    fcu_ton_m2 = fcu_mpa * 100.0
+
+    # Egyptian Code ECP 203: Ec = 4400 * sqrt(fcu) [MPa]
+    ec_ecp_mpa = 4400.0 * math.sqrt(fcu_mpa)
+    ec_ecp_ton_m2 = ec_ecp_mpa * 100.0  # 1 MPa = 100 t/m²
+
+    # American Code ACI 318 / AISC: f'c = 0.80 * fcu [MPa]
+    fc_prime_mpa = 0.80 * fcu_mpa
+    fc_prime_ton_m2 = fc_prime_mpa * 100.0
+    fc_prime_kg_cm2 = fc_prime_mpa * 10.0
+
+    # American Code ACI 318 / AISC: Ec = 4700 * sqrt(f'c) [MPa]
+    ec_aci_mpa = 4700.0 * math.sqrt(fc_prime_mpa)
+    ec_aci_ton_m2 = ec_aci_mpa * 100.0  # 1 MPa = 100 t/m²
+
+    return {
+        "fcu_kg_cm2": fcu_kg,
+        "fcu_mpa": fcu_mpa,
+        "fcu_ton_m2": fcu_ton_m2,
+        "fc_prime_kg_cm2": fc_prime_kg_cm2,
+        "fc_prime_mpa": fc_prime_mpa,
+        "fc_prime_ton_m2": fc_prime_ton_m2,
+        "ec_ecp_mpa": ec_ecp_mpa,
+        "ec_ecp_ton_m2": ec_ecp_ton_m2,
+        "ec_aci_mpa": ec_aci_mpa,
+        "ec_aci_ton_m2": ec_aci_ton_m2,
+    }
+
+
+
 # ── Main render ──────────────────────────────────────────────────────────────
 def render() -> None:
-    tab_steel, tab_moment, tab_slab_weight = st.tabs([
+    # Resolve Word file path
+    _module_dir = os.path.dirname(os.path.abspath(__file__))
+    _project_root = os.path.dirname(_module_dir)
+    docx_file_path = os.path.join(_project_root, "assets", "خطوات تصميم بلاطات وكمرات برنامج SAFE.docx")
+    if not os.path.exists(docx_file_path):
+        docx_file_path = os.path.join("assets", "خطوات تصميم بلاطات وكمرات برنامج SAFE.docx")
+
+    # ── Word button anchor & absolute positioning on the tab bar ─────────────
+    st.markdown(
+        """
+        <div id="m12_word_btn_anchor" style="display:none;"></div>
+        <style>
+        /* Make the parent vertical block relative so the button pins to its top-right */
+        div[data-testid="stVerticalBlock"]:has(#m12_word_btn_anchor) {
+            position: relative !important;
+        }
+
+        /* Collapse the marker container completely so it occupies 0 height */
+        div[data-testid="stElementContainer"]:has(#m12_word_btn_anchor),
+        div[data-testid="element-container"]:has(#m12_word_btn_anchor),
+        div:has(> #m12_word_btn_anchor) {
+            height: 0px !important;
+            min-height: 0px !important;
+            margin: 0px !important;
+            padding: 0px !important;
+            overflow: hidden !important;
+            line-height: 0px !important;
+        }
+
+        /* Position the Word button container at the exact top-right of the tab list */
+        div[data-testid="stElementContainer"]:has(#m12_word_btn_anchor) + div[data-testid="stElementContainer"],
+        div[data-testid="element-container"]:has(#m12_word_btn_anchor) + div[data-testid="element-container"],
+        div:has(> #m12_word_btn_anchor) + div {
+            position: absolute !important;
+            right: 0 !important;
+            top: 2px !important;
+            z-index: 999 !important;
+            width: auto !important;
+            max-width: fit-content !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        /* Modern styled button matching the title width */
+        div:has(> #m12_word_btn_anchor) + div button {
+            border-radius: 8px !important;
+            font-weight: 800 !important;
+            box-shadow: 0 4px 12px rgba(2, 132, 199, 0.35) !important;
+            height: 36px !important;
+            min-height: 36px !important;
+            white-space: nowrap !important;
+            width: auto !important;
+            max-width: fit-content !important;
+            padding: 0 16px !important;
+            background: linear-gradient(135deg, #0284c7 0%, #1d4ed8 100%) !important;
+            border: 1px solid #38bdf8 !important;
+            color: #ffffff !important;
+        }
+
+        div:has(> #m12_word_btn_anchor) + div button:hover {
+            background: linear-gradient(135deg, #0369a1 0%, #1e40af 100%) !important;
+            box-shadow: 0 6px 16px rgba(2, 132, 199, 0.55) !important;
+            transform: translateY(-1px);
+        }
+
+        div:has(> #m12_word_btn_anchor) + div button * {
+            font-weight: 800 !important;
+            font-size: 13.5px !important;
+            color: #ffffff !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if st.button("📝 خطوات تصميم البلاطات والكمرات برنامج CSI SAFE", key="module_top_open_word_btn", type="primary", use_container_width=False):
+        if os.path.exists(docx_file_path):
+            try:
+                os.startfile(os.path.abspath(docx_file_path))
+                st.toast("✅ تم فتح ملف الورد في برنامج Microsoft Word!", icon="📄")
+            except Exception as err:
+                st.error(f"تعذر فتح ملف Word: {err}")
+        else:
+            st.error("ملف Word غير موجود في مسار assets.")
+
+    tab_csi_safe, tab_steel, tab_slab_weight = st.tabs([
+        "CSI SAFE assistant sections",
         "Steel bars",
-        "Moment against Steel",
         "Slab on Grade / Mat Steel Weight",
     ])
 
-    with tab_steel:
-        with st.expander("📋 جدول أقطار حديد التسليح وأوزانها (Rebar Properties Table)", expanded=False):
-            rows = []
-            for b in BARS:
-                d       = b["dia_mm"]
-                w       = b["weight_kgm"]
-                a       = b["area_cm2"]
-                per     = f"{w:.3f}"
-                w12     = w * 12
-                bars_ton_12m = 1000.0 / w12 if w12 > 0 else 0
-                rows.append({
-                    "القطر Ø (mm)":              d,
-                    "المساحة المستعرضة (cm²)":   f"{a:.3f}",
-                    "الوزن / متر طولي (kg/m)":  per,
-                    "الوزن / 12م (kg/bar)":      f"{w12:.2f}",
-                    "الوزن / 6م  (kg/bar)":      f"{w * 6:.2f}",
-                    "عدد الأسياخ في الطن (12م)":  f"{round(bars_ton_12m):d} سيخ ({bars_ton_12m:.1f})",
-                    "القطر بالسم (cm)":           f"{d / 10:.1f}",
-                })
-
-            df = pd.DataFrame(rows)
-            render_styled_table(df)
-
-            st.markdown(
-                """
-                <div dir="rtl" style="font-size: 15.5px; font-weight: 500; color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; line-height: 1.8; text-align: right; margin-top: 12px; margin-bottom: 8px;">
-                    الكثافة المستخدمة: <span style="color:#38bdf8; font-weight:700;">7,850 kg/m³</span> &nbsp;|&nbsp; 
-                    المساحة = <span style="color:#38bdf8; font-weight:700;">π × d² / 4</span> &nbsp;|&nbsp; 
-                    الوزن = <span style="color:#38bdf8; font-weight:700;">المساحة (m²) × الكثافة</span> &nbsp;|&nbsp; 
-                    عدد الأسياخ في الطن (طول 12م) = <span style="color:#38bdf8; font-weight:700;">1000 كجم / وزن السيخ 12م</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        # Grade info
-        with st.expander("📌 Steel Grades & Yield Strengths (درجات الحديد وحدود الخضوع)", expanded=False):
-            g_rows = [
-                {"الدرجة / Grade": g, "حد الخضوع Fy (kg/cm²)": fy}
-                for g, fy in GRADES.items()
-            ]
-            render_styled_table(g_rows)
-
-        # Areas per metre for multiple bars
-        with st.expander("📐 As (n bars/m) Table (مساحة n بار / متر طولي)", expanded=False):
-            counts = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12]
-            area_rows = []
-            for b in BARS:
-                row = {"Ø (mm)": f"Ø {b['dia_mm']}"}
-                for n in counts:
-                    row[f"{n} bars (cm²/m)"] = f"{b['area_cm2'] * n:.3f}"
-                area_rows.append(row)
-            render_styled_table(area_rows)
-
-        with st.expander("📥 جدول بنود ومدخلات حديد التسليح المتعددة (Multi-Diameter Rebar Input Schedule)", expanded=False):
-            st.markdown(
-                """
-                <div style="font-size: 17.5px; font-weight: 600; color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; margin: 8px 0 28px 0; line-height: 1.6; text-align: right;">
-                    أضف بنود حديد التسليح بأقطار وأعداد وأطوال مختلفة لحساب الأوزان والمساحات لكل بند والإجمالي العام.
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            # Session state init
-            if "sb_rows" not in st.session_state:
-                st.session_state["sb_rows"] = [
-                    {"dia": 16, "n": 10, "length": 12.0, "desc": ""},
-                ]
-
-            def _add_row():
-                st.session_state["sb_rows"].append(
-                    {"dia": 16, "n": 5, "length": 12.0, "desc": ""}
-                )
-
-            def _clear_rows():
-                st.session_state["sb_rows"] = [
-                    {"dia": 16, "n": 10, "length": 12.0, "desc": ""}
-                ]
-
-            col_add, col_clr, _ = st.columns([1.2, 1.2, 3.6])
-            col_add.button("➕ إضافة بند تسليح", on_click=_add_row, use_container_width=True)
-            col_clr.button("🗑️ مسح الجدول",  on_click=_clear_rows, use_container_width=True)
-
-            st.markdown(
-                """
-                <div style="background:linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border:1px solid rgba(56, 189, 248, 0.35); border-radius:8px; padding:10px 14px; margin-top:14px; margin-bottom:20px;">
-                    <div style="font-weight:900; font-size:15px; color:#38bdf8;">📋 تفاصيل مدخلات وبنود التسليح (Rebar Items Input Table):</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            # Header titles row above dynamic input boxes
-            h_desc, h_dia, h_n, h_len, h_del = st.columns([3, 1.5, 1, 1.5, 0.5])
-            h_desc.markdown("<div style='font-size:14.5px; font-weight:800; color:#38bdf8; text-align:right; padding:4px 0;'>📝 وصف البند / العنصر</div>", unsafe_allow_html=True)
-            h_dia.markdown("<div style='font-size:14.5px; font-weight:800; color:#38bdf8; text-align:center; padding:4px 0;'>📏 قطر السيخ Ø</div>", unsafe_allow_html=True)
-            h_n.markdown("<div style='font-size:14.5px; font-weight:800; color:#38bdf8; text-align:center; padding:4px 0;'>🔢 العدد (n)</div>", unsafe_allow_html=True)
-            h_len.markdown("<div style='font-size:14.5px; font-weight:800; color:#38bdf8; text-align:center; padding:4px 0;'>📐 الطول L (m)</div>", unsafe_allow_html=True)
-            h_del.markdown("<div style='font-size:14.5px; font-weight:800; color:#f87171; text-align:center; padding:4px 0;'>حذف</div>", unsafe_allow_html=True)
-
-            rows_data = st.session_state["sb_rows"]
-            to_delete = []
-
-            for i, row in enumerate(rows_data):
-                c_desc, c_dia, c_n, c_len, c_del = st.columns([3, 1.5, 1, 1.5, 0.5])
-                with c_desc:
-                    rows_data[i]["desc"] = st.text_input(
-                        f"وصف / Desc #{i+1}", value=row["desc"],
-                        key=f"mb_desc_{i}", label_visibility="collapsed",
-                        placeholder=f"بند #{i+1} (مثال: أشاير أعمدة دور أرضي)",
-                    )
-                with c_dia:
-                    rows_data[i]["dia"] = st.selectbox(
-                        f"Ø #{i+1}", options=DIAMETERS,
-                        index=DIAMETERS.index(row["dia"]) if row["dia"] in DIAMETERS else 5,
-                        format_func=lambda d: f"Ø{d} mm",
-                        key=f"mb_dia_{i}", label_visibility="collapsed",
-                    )
-                with c_n:
-                    rows_data[i]["n"] = st.number_input(
-                        f"n #{i+1}", min_value=1, max_value=100_000,
-                        value=int(row["n"]), step=1,
-                        key=f"mb_n_{i}", label_visibility="collapsed",
-                    )
-                with c_len:
-                    rows_data[i]["length"] = st.number_input(
-                        f"L #{i+1}", min_value=0.01, max_value=10_000.0,
-                        value=float(row["length"]), step=0.5, format="%.2f",
-                        key=f"mb_len_{i}", label_visibility="collapsed",
-                    )
-                with c_del:
-                    if st.button("✕", key=f"mb_del_{i}", help="حذف هذا السطر"):
-                        to_delete.append(i)
-
-            # Remove deleted rows
-            for idx in reversed(to_delete):
-                st.session_state["sb_rows"].pop(idx)
-            if to_delete:
-                st.rerun()
-
-            # Results table
-            st.markdown("---")
-            result_rows = []
-            total_kg  = 0.0
-            total_a   = 0.0
-            for row in rows_data:
-                b   = BAR_MAP[row["dia"]]
-                w   = b["weight_kgm"] * row["length"] * row["n"]
-                a   = b["area_cm2"]   * row["n"]
-                total_kg += w
-                total_a  += a
-                result_rows.append({
-                    "الوصف":               row["desc"] or "—",
-                    "Ø (mm)":              row["dia"],
-                    "العدد":               row["n"],
-                    "الطول (m)":           row["length"],
-                    "الوزن الكلي (kg)":   f"{w:.2f}",
-                    "المساحة الكلية (cm²)": f"{a:.3f}",
-                })
-
-            result_rows.append({
-                "الوصف":               "✅ الإجمالي / TOTAL",
-                "Ø (mm)":              "—",
-                "العدد":               "—",
-                "الطول (m)":           "—",
-                "الوزن الكلي (kg)":   f"{total_kg:.2f}",
-                "المساحة الكلية (cm²)": f"{total_a:.3f}",
-            })
-
-            render_styled_table(result_rows)
-
-            m1, m2, m3 = st.columns(3)
-            m1.metric("إجمالي الوزن (kg)",  f"{total_kg:.2f}")
-            m2.metric("إجمالي الوزن (ton)", f"{total_kg / 1000:.4f}")
-            m3.metric("إجمالي المساحة (cm²)", f"{total_a:.3f}")
-
     # ────────────────────────────────────────────────────────────────────────
-    # TAB 2 — Moment against Steel
+    # TAB 1 — CSI SAFE assistant sections
     # ────────────────────────────────────────────────────────────────────────
-    with tab_moment:
+    with tab_csi_safe:
         with st.expander("⚡ Moment Capacity vs. Provided Reinforcement (حساب العزم المقاوم لحديد التسليح)", expanded=True):
             st.markdown(
                 """
@@ -518,7 +467,7 @@ def render() -> None:
                     var parentDoc = (window.parent && window.parent.document) ? window.parent.document : document;
                     var parentWin = (window.parent) ? window.parent : window;
 
-                    function showCopyToast(val) {
+                    function showCopyToast(val, customMsg) {
                         var toast = parentDoc.getElementById('ecp-mu-copy-toast');
                         if (!toast) {
                             toast = parentDoc.createElement('div');
@@ -526,7 +475,17 @@ def render() -> None:
                             toast.style.cssText = 'position:fixed;bottom:35px;left:50%;transform:translateX(-50%) translateY(20px);background:linear-gradient(135deg,#065f46 0%,#059669 50%,#10b981 100%);color:#ffffff;padding:10px 24px;border-radius:24px;font-size:14.5px;font-weight:800;font-family:system-ui,-apple-system,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,0.5),0 0 15px rgba(16,185,129,0.4);z-index:9999999;display:flex;align-items:center;gap:10px;direction:rtl;pointer-events:none;transition:opacity 0.25s cubic-bezier(0.4,0,0.2,1),transform 0.25s cubic-bezier(0.4,0,0.2,1);opacity:0;border:1.5px solid rgba(255,255,255,0.4);';
                             parentDoc.body.appendChild(toast);
                         }
-                        toast.innerHTML = '<span style="font-size:18px;">✓</span> <span>تم نسخ القيمة: <strong style="color:#ffffff;text-decoration:underline;">' + val + '</strong> بنجاح!</span>';
+                        if (customMsg) {
+                            toast.innerHTML = '<span style="font-size:18px;">📋</span> <span>' + customMsg + '</span>';
+                            toast.style.background = 'linear-gradient(135deg, #991b1b 0%, #dc2626 50%, #ef4444 100%)';
+                            toast.style.boxShadow = '0 10px 30px rgba(0,0,0,0.5), 0 0 16px rgba(239,68,68,0.55)';
+                            toast.style.border = '1.5px solid #f87171';
+                        } else {
+                            toast.innerHTML = '<span style="font-size:18px;">✓</span> <span>تم نسخ القيمة: <strong style="color:#ffffff;text-decoration:underline;">' + val + '</strong> بنجاح!</span>';
+                            toast.style.background = 'linear-gradient(135deg,#065f46 0%,#059669 50%,#10b981 100%)';
+                            toast.style.boxShadow = '0 10px 30px rgba(0,0,0,0.5),0 0 15px rgba(16,185,129,0.4)';
+                            toast.style.border = '1.5px solid rgba(255,255,255,0.4)';
+                        }
                         
                         requestAnimationFrame(function() {
                             toast.style.opacity = '1';
@@ -539,7 +498,7 @@ def render() -> None:
                         parentWin.__ecp_toast_timer = setTimeout(function() {
                             toast.style.opacity = '0';
                             toast.style.transform = 'translateX(-50%) translateY(20px)';
-                        }, 2000);
+                        }, 2200);
                     }
 
                     function extractNumericVal(el) {
@@ -636,12 +595,479 @@ def render() -> None:
                     };
 
                     parentDoc.addEventListener('click', parentWin.__ecp_mu_copy_handler, true);
+
+                    // ── Section Title Auto-Select & Quick Copy on Mouse Hover ──
+                    if (parentWin.__ecp_title_hover_handler) {
+                        parentDoc.removeEventListener('mouseover', parentWin.__ecp_title_hover_handler, true);
+                    }
+                    if (parentWin.__ecp_title_leave_handler) {
+                        parentDoc.removeEventListener('mouseout', parentWin.__ecp_title_leave_handler, true);
+                    }
+                    if (parentWin.__ecp_title_click_handler) {
+                        parentDoc.removeEventListener('click', parentWin.__ecp_title_click_handler, true);
+                    }
+
+                    parentWin.__ecp_title_hover_handler = function(e) {
+                        var summaryEl = e.target.closest('div[data-testid="stExpander"] summary');
+                        if (!summaryEl) return;
+
+                        var targetNode = summaryEl.querySelector('[data-testid="stMarkdownContainer"] p') || 
+                                         summaryEl.querySelector('[data-testid="stMarkdownContainer"] span') ||
+                                         summaryEl.querySelector('[data-testid="stMarkdownContainer"]');
+                        if (!targetNode) return;
+
+                        var txt = (targetNode.textContent || '').trim();
+                        // Target sections including Concrete Modulus of Elasticity, CSI SAFE, Moment Capacity, etc.
+                        if (txt.indexOf('Concrete Modulus') !== -1 || txt.indexOf('Elasticity') !== -1 || txt.indexOf('CSI SAFE') !== -1 || txt.indexOf('Moment Capacity') !== -1 || txt.indexOf('إضافة سريعة') !== -1) {
+                            try {
+                                var range = parentDoc.createRange();
+                                range.selectNodeContents(targetNode);
+                                var sel = parentWin.getSelection();
+                                sel.removeAllRanges();
+                                sel.addRange(range);
+                            } catch(err) {}
+                        }
+                    };
+
+                    parentWin.__ecp_title_leave_handler = function(e) {
+                        var summaryEl = e.target.closest('div[data-testid="stExpander"] summary');
+                        if (!summaryEl) return;
+
+                        var related = e.relatedTarget;
+                        if (related && summaryEl.contains(related)) {
+                            return; // still moving within summary bounds
+                        }
+
+                        // Remove text selection immediately when cursor leaves title area
+                        try {
+                            var sel = parentWin.getSelection();
+                            if (sel) {
+                                sel.removeAllRanges();
+                            }
+                        } catch(err) {}
+                    if (parentWin.__ecp_title_click_handler) {
+                        parentDoc.removeEventListener('click', parentWin.__ecp_title_click_handler, true);
+                        parentWin.__ecp_title_click_handler = null;
+                    }
+
+                    parentDoc.addEventListener('mouseover', parentWin.__ecp_title_hover_handler, true);
+                    parentDoc.addEventListener('mouseout', parentWin.__ecp_title_leave_handler, true);
                 })();
                 </script>
                 """,
                 height=0,
                 width=0,
             )
+
+        # ────────────────────────────────────────────────────────────────────
+        # Concrete Modulus of Elasticity Ec & Specific Compressive Strength F'c
+        # ────────────────────────────────────────────────────────────────────
+        with st.expander("🧪 Concrete Modulus of Elasticity (Ec) & Specific Compressive Strength (f'c) — خواص الخرسانة ومعاير المرونة", expanded=True):
+            st.markdown(
+                """
+                <div dir="rtl" style="font-size: 14.5px; font-weight: 500; color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; line-height: 1.8; text-align: right; margin-bottom: 16px; padding: 12px 16px; background: rgba(15, 23, 42, 0.6); border-radius: 8px; border-right: 4px solid #38bdf8;">
+                    <div style="font-weight: 700; font-size: 15px; color: #38bdf8; margin-bottom: 6px;">
+                        📌 القوانين والمعادلات الهندسية المعتمدة (ECP 203 & ACI 318 / AISC):
+                    </div>
+                    <div style="font-size: 13.5px; color: #e2e8f0; line-height: 1.9;">
+                        • <strong>الكود المصري (ECP 203):</strong> رتبة المكعب القياسي 15×15×15 سم <span style="color:#38bdf8; font-weight:700;">f<sub>cu</sub> (MPa) = f<sub>cu</sub> (kg/cm²) / 10</span> &nbsp;|&nbsp; معاير المرونة: <span style="color:#38bdf8; font-weight:700;">E<sub>c</sub> = 4400 √f<sub>cu</sub> (MPa) = 4400 √f<sub>cu</sub> × 100 (t/m²)</span><br>
+                        • <strong>الكود الأمريكي (ACI 318 / AISC):</strong> مقاومة الأسطوانة القياسية 15×30 سم <span style="color:#38bdf8; font-weight:700;">f'<sub>c</sub> = 0.80 × f<sub>cu</sub> (MPa)</span> &nbsp;|&nbsp; معاير المرونة: <span style="color:#38bdf8; font-weight:700;">E<sub>c</sub> = 4700 √f'<sub>c</sub> (MPa) = 4700 √f'<sub>c</sub> × 100 (t/m²)</span><br>
+                        • <strong>علاقة التحويل المباشرة:</strong> <span style="color:#fbbf24; font-weight:700;">1 MPa = 1 N/mm² = 10 kg/cm² = 100 t/m²</span>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # Scoped styling for common grades selectbox and vertical spacing
+            st.markdown(
+                """
+                <style>
+                .ec-grade-box-wrap {
+                    margin-bottom: 22px !important;
+                }
+                .ec-grade-box-wrap label,
+                .ec-grade-box-wrap label p {
+                    font-size: 16.5px !important;
+                    font-weight: 800 !important;
+                    color: #38bdf8 !important;
+                    margin-bottom: 8px !important;
+                }
+                .ec-grade-box-wrap div[data-baseweb="select"] {
+                    border-radius: 8px !important;
+                }
+                .ec-grade-box-wrap div[data-baseweb="select"] > div {
+                    background: #0f172a !important;
+                    border: 2px solid #0284c7 !important;
+                    min-height: 48px !important;
+                    height: 48px !important;
+                }
+                .ec-grade-box-wrap div[data-baseweb="select"] span,
+                .ec-grade-box-wrap div[data-baseweb="select"] div {
+                    font-size: 18px !important;
+                    font-weight: 900 !important;
+                    color: #ffffff !important;
+                }
+                div[data-baseweb="popover"] li,
+                div[data-baseweb="popover"] li span,
+                div[data-baseweb="menu"] li {
+                    font-size: 16px !important;
+                    font-weight: 800 !important;
+                }
+                </style>
+                <div class="ec-grade-box-wrap">
+                """,
+                unsafe_allow_html=True,
+            )
+
+            is_custom_mode = (
+                "ec_grade_preset_select" in st.session_state
+                and st.session_state["ec_grade_preset_select"].startswith("إدخال يدوي")
+            )
+
+            if is_custom_mode:
+                col_ec_opt, col_ec_val = st.columns([1.5, 1])
+                with col_ec_opt:
+                    preset_sel = st.selectbox(
+                        "🏷️ رتب الخرسانة الشائعة في السوق المصري (Common Grades)",
+                        options=[
+                            "250 kg/cm² (25 MPa)",
+                            "200 kg/cm² (20 MPa)",
+                            "225 kg/cm² (22.5 MPa)",
+                            "275 kg/cm² (27.5 MPa)",
+                            "300 kg/cm² (30 MPa)",
+                            "350 kg/cm² (35 MPa)",
+                            "400 kg/cm² (40 MPa)",
+                            "إدخال يدوي مخصص (Custom Value)",
+                        ],
+                        index=7,
+                        key="ec_grade_preset_select",
+                        help="اختر رتبة خرسانة قياسية أو اختر مخصص لإدخال أي قيمة",
+                    )
+                with col_ec_val:
+                    fcu_input_val = st.number_input(
+                        "⚡ مقاومة المكعب المخصصة fcu (kg/cm²)",
+                        min_value=50.0,
+                        max_value=1500.0,
+                        value=250.0,
+                        step=10.0,
+                        key="ec_fcu_custom_input",
+                        help="أدخل قيمة fcu بالمكعب القياسي (kg/cm²)",
+                    )
+            else:
+                col_ec_opt, _ = st.columns([1.6, 1])
+                with col_ec_opt:
+                    preset_sel = st.selectbox(
+                        "🏷️ رتب الخرسانة الشائعة في السوق المصري (Common Grades)",
+                        options=[
+                            "250 kg/cm² (25 MPa)",
+                            "200 kg/cm² (20 MPa)",
+                            "225 kg/cm² (22.5 MPa)",
+                            "275 kg/cm² (27.5 MPa)",
+                            "300 kg/cm² (30 MPa)",
+                            "350 kg/cm² (35 MPa)",
+                            "400 kg/cm² (40 MPa)",
+                            "إدخال يدوي مخصص (Custom Value)",
+                        ],
+                        index=0,
+                        key="ec_grade_preset_select",
+                        help="اختر رتبة خرسانة قياسية أو اختر مخصص لإدخال أي قيمة",
+                    )
+                if preset_sel.startswith("إدخال يدوي"):
+                    fcu_input_val = 250.0
+                else:
+                    fcu_input_val = float(preset_sel.split()[0])
+
+            st.markdown('</div><div style="margin-bottom: 20px;"></div>', unsafe_allow_html=True)
+
+            # Perform calculations
+            prop = calculate_concrete_properties(fcu_input_val)
+
+            # 3 Metric Cards (Panel 1: fcu display only kg/cm2, Panel 2: Ec ECP, Panel 3: f'c ACI)
+            c1, c2, c3 = st.columns(3)
+
+            with c1:
+                st.markdown(
+                    f"""
+                    <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); 
+                                border: 1.5px solid #64748b; border-radius: 10px; padding: 14px 16px; 
+                                box-shadow: 0 4px 12px rgba(0,0,0,0.3); height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                <span style="font-size: 18.5px; font-weight: 900; color: #94a3b8;">مقاومة المكعب f<sub>cu</sub></span>
+                                <span style="font-size: 11.5px; background: rgba(148,163,184,0.18); color: #94a3b8; border: 1px solid rgba(148,163,184,0.35); border-radius: 4px; padding: 2px 7px; font-weight: 700;">ECP 203</span>
+                            </div>
+                            <div style="font-size: 11.5px; color: #64748b; margin-bottom: 12px; font-weight: 600;">
+                                Characteristic Cube Strength (15cm)
+                            </div>
+                            <div style="background: rgba(15, 23, 42, 0.7); border: 1.5px solid #475569; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: baseline;">
+                                <span style="font-size: 26px; font-weight: 900; color: #ffffff; text-shadow: 0 0 10px rgba(255,255,255,0.3);">{round(prop['fcu_kg_cm2']):d}</span>
+                                <span style="font-size: 14px; font-weight: 800; color: #cbd5e1;">kg/cm²</span>
+                            </div>
+                            <div style="background: rgba(15, 23, 42, 0.4); border: 1px dashed rgba(100, 116, 139, 0.4); border-radius: 6px; padding: 8px 12px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: baseline;">
+                                <span style="font-size: 15px; font-weight: 800; color: #94a3b8;">{round(prop['fcu_ton_m2']):,d} t/m²</span>
+                                <span style="font-size: 12.5px; font-weight: 700; color: #64748b;">({round(prop['fcu_mpa']):d} MPa)</span>
+                            </div>
+                        </div>
+                        <div style="text-align: center; padding: 8px 0 2px 0; font-size: 12px; font-weight: 700; color: #64748b; border-top: 1px dashed rgba(100,116,139,0.3);">
+                            🔒 بطاقة مرجعية للعرض المباشر (Display Only)
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            with c2:
+                st.markdown(
+                    f"""
+                    <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); 
+                                border: 1.5px solid #38bdf8; border-radius: 10px; padding: 14px 16px; 
+                                box-shadow: 0 4px 12px rgba(0,0,0,0.3); height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                <span style="font-size: 18.5px; font-weight: 900; color: #38bdf8; text-shadow: 0 0 12px rgba(56, 189, 248, 0.4);">معاير المرونة E<sub>c</sub></span>
+                                <span style="font-size: 11.5px; background: rgba(56,189,248,0.18); color: #7dd3fc; border: 1px solid rgba(56,189,248,0.35); border-radius: 4px; padding: 2px 7px; font-weight: 700;">الكود المصري ECP</span>
+                            </div>
+                            <div style="font-size: 11.5px; color: #94a3b8; margin-bottom: 12px; font-weight: 600;">
+                                E<sub>c</sub> = 4400 √f<sub>cu</sub> (MPa)
+                            </div>
+                            <!-- Metric Unit (t/m²): COPYABLE -->
+                            <div class="ecp-copy-mu-box" data-copy-val="{round(prop['ec_ecp_ton_m2']):d}" title="انقر لنسخ القيمة ({round(prop['ec_ecp_ton_m2']):,d} t/m²)"
+                                 style="background: rgba(15, 23, 42, 0.7); border: 1.5px solid #0284c7; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; cursor: pointer; display: flex; justify-content: space-between; align-items: baseline; transition: all 0.2s ease;">
+                                <span style="font-size: 22px; font-weight: 900; color: #ffffff;">{round(prop['ec_ecp_ton_m2']):,d}</span>
+                                <span style="font-size: 14px; font-weight: 800; color: #38bdf8;">t/m²</span>
+                            </div>
+                            <!-- Non-Metric Unit (MPa): DISPLAY ONLY, NOT COPYABLE -->
+                            <div style="background: rgba(15, 23, 42, 0.4); border: 1px dashed rgba(56, 189, 248, 0.4); border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: baseline; user-select: text; cursor: default;">
+                                <span style="font-size: 15px; font-weight: 800; color: #cbd5e1;">{round(prop['ec_ecp_mpa']):,d}</span>
+                                <span style="font-size: 12.5px; font-weight: 700; color: #94a3b8;">MPa</span>
+                            </div>
+                        </div>
+                        <!-- Button only copies metric t/m² -->
+                        <button class="ecp-copy-mu-btn" data-copy-val="{round(prop['ec_ecp_ton_m2']):d}" title="نسخ القيمة بوحدة t/m² ({round(prop['ec_ecp_ton_m2']):d})"
+                                style="width: 100%; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); border: 1px solid #38bdf8; border-radius: 6px; color: #ffffff; cursor: pointer; padding: 7px 10px; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 2px 6px rgba(2, 132, 199, 0.35);">
+                            <span>📋</span> <span>نسخ Ec مصري ({round(prop['ec_ecp_ton_m2']):,d} t/m²)</span>
+                        </button>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            with c3:
+                st.markdown(
+                    f"""
+                    <div style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); 
+                                border: 1.5px solid #38bdf8; border-radius: 10px; padding: 14px 16px; 
+                                box-shadow: 0 4px 12px rgba(0,0,0,0.3); height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div>
+                            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                                <span style="font-size: 18.5px; font-weight: 900; color: #38bdf8; text-shadow: 0 0 12px rgba(56, 189, 248, 0.4);">مقاومة الأسطوانة f'<sub>c</sub></span>
+                                <span style="font-size: 11.5px; background: rgba(56,189,248,0.18); color: #7dd3fc; border: 1px solid rgba(56,189,248,0.35); border-radius: 4px; padding: 2px 7px; font-weight: 700;">ACI / AISC</span>
+                            </div>
+                            <div style="font-size: 11.5px; color: #94a3b8; margin-bottom: 12px; font-weight: 600;">
+                                Specified Cylinder Strength (0.80 f<sub>cu</sub>)
+                            </div>
+                            <!-- Metric Unit (t/m²): COPYABLE -->
+                            <div class="ecp-copy-mu-box" data-copy-val="{round(prop['fc_prime_ton_m2']):d}" title="انقر لنسخ القيمة ({round(prop['fc_prime_ton_m2']):,d} t/m²)"
+                                 style="background: rgba(15, 23, 42, 0.7); border: 1.5px solid #0284c7; border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; cursor: pointer; display: flex; justify-content: space-between; align-items: baseline; transition: all 0.2s ease;">
+                                <span style="font-size: 22px; font-weight: 900; color: #ffffff;">{round(prop['fc_prime_ton_m2']):,d}</span>
+                                <span style="font-size: 14px; font-weight: 800; color: #38bdf8;">t/m²</span>
+                            </div>
+                            <!-- Non-Metric Unit (MPa): DISPLAY ONLY, NOT COPYABLE -->
+                            <div style="background: rgba(15, 23, 42, 0.4); border: 1px dashed rgba(56, 189, 248, 0.4); border-radius: 6px; padding: 8px 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: baseline; user-select: text; cursor: default;">
+                                <span style="font-size: 15px; font-weight: 800; color: #cbd5e1;">{round(prop['fc_prime_mpa']):d}</span>
+                                <span style="font-size: 12.5px; font-weight: 700; color: #94a3b8;">MPa ({round(prop['fc_prime_kg_cm2']):d} kg/cm²)</span>
+                            </div>
+                        </div>
+                        <!-- Button only copies metric t/m² -->
+                        <button class="ecp-copy-mu-btn" data-copy-val="{round(prop['fc_prime_ton_m2']):d}" title="نسخ القيمة بوحدة t/m² ({round(prop['fc_prime_ton_m2']):d})"
+                                style="width: 100%; background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); border: 1px solid #38bdf8; border-radius: 6px; color: #ffffff; cursor: pointer; padding: 7px 10px; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 6px; box-shadow: 0 2px 6px rgba(2, 132, 199, 0.35);">
+                            <span>📋</span> <span>نسخ f'c أمريكي ({round(prop['fc_prime_ton_m2']):,d} t/m²)</span>
+                        </button>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+    # ────────────────────────────────────────────────────────────────────────
+    # TAB 2 — Steel bars
+    # ────────────────────────────────────────────────────────────────────────
+    with tab_steel:
+        with st.expander("📋 جدول أقطار حديد التسليح وأوزانها (Rebar Properties Table)", expanded=False):
+            rows = []
+            for b in BARS:
+                d       = b["dia_mm"]
+                w       = b["weight_kgm"]
+                a       = b["area_cm2"]
+                per     = f"{w:.3f}"
+                w12     = w * 12
+                bars_ton_12m = 1000.0 / w12 if w12 > 0 else 0
+                rows.append({
+                    "القطر Ø (mm)":              d,
+                    "المساحة المستعرضة (cm²)":   f"{a:.3f}",
+                    "الوزن / متر طولي (kg/m)":  per,
+                    "الوزن / 12م (kg/bar)":      f"{w12:.2f}",
+                    "الوزن / 6م  (kg/bar)":      f"{w * 6:.2f}",
+                    "عدد الأسياخ في الطن (12م)":  f"{round(bars_ton_12m):d} سيخ ({bars_ton_12m:.1f})",
+                    "القطر بالسم (cm)":           f"{d / 10:.1f}",
+                })
+
+            df = pd.DataFrame(rows)
+            render_styled_table(df)
+
+            st.markdown(
+                """
+                <div dir="rtl" style="font-size: 15.5px; font-weight: 500; color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; line-height: 1.8; text-align: right; margin-top: 12px; margin-bottom: 8px;">
+                    الكثافة المستخدمة: <span style="color:#38bdf8; font-weight:700;">7,850 kg/m³</span> &nbsp;|&nbsp; 
+                    المساحة = <span style="color:#38bdf8; font-weight:700;">π × d² / 4</span> &nbsp;|&nbsp; 
+                    الوزن = <span style="color:#38bdf8; font-weight:700;">المساحة (m²) × الكثافة</span> &nbsp;|&nbsp; 
+                    عدد الأسياخ في الطن (طول 12م) = <span style="color:#38bdf8; font-weight:700;">1000 كجم / وزن السيخ 12م</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        # Grade info
+        with st.expander("📌 Steel Grades & Yield Strengths (درجات الحديد وحدود الخضوع)", expanded=False):
+            g_rows = [
+                {"الدرجة / Grade": g, "حد الخضوع Fy (kg/cm²)": fy}
+                for g, fy in GRADES.items()
+            ]
+            render_styled_table(g_rows)
+
+        # Areas per metre for multiple bars
+        with st.expander("📐 As (n bars/m) Table (مساحة n بار / متر طولي)", expanded=False):
+            counts = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12]
+            area_rows = []
+            for b in BARS:
+                row = {"Ø (mm)": f"Ø {b['dia_mm']}"}
+                for n in counts:
+                    row[f"{n} bars (cm²/m)"] = f"{b['area_cm2'] * n:.3f}"
+                area_rows.append(row)
+            render_styled_table(area_rows)
+
+        with st.expander("📥 جدول بنود ومدخلات حديد التسليح المتعددة (Multi-Diameter Rebar Input Schedule)", expanded=False):
+            st.markdown(
+                """
+                <div style="font-size: 17.5px; font-weight: 600; color: #ffffff !important; -webkit-text-fill-color: #ffffff !important; margin: 8px 0 28px 0; line-height: 1.6; text-align: right;">
+                    أضف بنود حديد التسليح بأقطار وأعداد وأطوال مختلفة لحساب الأوزان والمساحات لكل بند والإجمالي العام.
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # Session state init
+            if "sb_rows" not in st.session_state:
+                st.session_state["sb_rows"] = [
+                    {"dia": 16, "n": 10, "length": 12.0, "desc": ""},
+                ]
+
+            def _add_row():
+                st.session_state["sb_rows"].append(
+                    {"dia": 16, "n": 5, "length": 12.0, "desc": ""}
+                )
+
+            def _clear_rows():
+                st.session_state["sb_rows"] = [
+                    {"dia": 16, "n": 10, "length": 12.0, "desc": ""}
+                ]
+
+            col_add, col_clr, _ = st.columns([1.2, 1.2, 3.6])
+            col_add.button("➕ إضافة بند تسليح", on_click=_add_row, use_container_width=True)
+            col_clr.button("🗑️ مسح الجدول",  on_click=_clear_rows, use_container_width=True)
+
+            st.markdown(
+                """
+                <div style="background:linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border:1px solid rgba(56, 189, 248, 0.35); border-radius:8px; padding:10px 14px; margin-top:14px; margin-bottom:20px;">
+                    <div style="font-weight:900; font-size:15px; color:#38bdf8;">📋 تفاصيل مدخلات وبنود التسليح (Rebar Items Input Table):</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # Header titles row above dynamic input boxes
+            h_desc, h_dia, h_n, h_len, h_del = st.columns([3, 1.5, 1, 1.5, 0.5])
+            h_desc.markdown("<div style='font-size:14.5px; font-weight:800; color:#38bdf8; text-align:right; padding:4px 0;'>📝 وصف البند / العنصر</div>", unsafe_allow_html=True)
+            h_dia.markdown("<div style='font-size:14.5px; font-weight:800; color:#38bdf8; text-align:center; padding:4px 0;'>📏 قطر السيخ Ø</div>", unsafe_allow_html=True)
+            h_n.markdown("<div style='font-size:14.5px; font-weight:800; color:#38bdf8; text-align:center; padding:4px 0;'>🔢 العدد (n)</div>", unsafe_allow_html=True)
+            h_len.markdown("<div style='font-size:14.5px; font-weight:800; color:#38bdf8; text-align:center; padding:4px 0;'>📐 الطول L (m)</div>", unsafe_allow_html=True)
+            h_del.markdown("<div style='font-size:14.5px; font-weight:800; color:#f87171; text-align:center; padding:4px 0;'>حذف</div>", unsafe_allow_html=True)
+
+            rows_data = st.session_state["sb_rows"]
+            to_delete = []
+
+            for i, row in enumerate(rows_data):
+                c_desc, c_dia, c_n, c_len, c_del = st.columns([3, 1.5, 1, 1.5, 0.5])
+                with c_desc:
+                    rows_data[i]["desc"] = st.text_input(
+                        f"وصف / Desc #{i+1}", value=row["desc"],
+                        key=f"mb_desc_{i}", label_visibility="collapsed",
+                        placeholder=f"بند #{i+1} (مثال: أشاير أعمدة دور أرضي)",
+                    )
+                with c_dia:
+                    rows_data[i]["dia"] = st.selectbox(
+                        f"Ø #{i+1}", options=DIAMETERS,
+                        index=DIAMETERS.index(row["dia"]) if row["dia"] in DIAMETERS else 5,
+                        format_func=lambda d: f"Ø{d} mm",
+                        key=f"mb_dia_{i}", label_visibility="collapsed",
+                    )
+                with c_n:
+                    rows_data[i]["n"] = st.number_input(
+                        f"n #{i+1}", min_value=1, max_value=100_000,
+                        value=int(row["n"]), step=1,
+                        key=f"mb_n_{i}", label_visibility="collapsed",
+                    )
+                with c_len:
+                    rows_data[i]["length"] = st.number_input(
+                        f"L #{i+1}", min_value=0.01, max_value=10_000.0,
+                        value=float(row["length"]), step=0.5, format="%.2f",
+                        key=f"mb_len_{i}", label_visibility="collapsed",
+                    )
+                with c_del:
+                    if st.button("✕", key=f"mb_del_{i}", help="حذف هذا السطر"):
+                        to_delete.append(i)
+
+            # Remove deleted rows
+            for idx in reversed(to_delete):
+                st.session_state["sb_rows"].pop(idx)
+            if to_delete:
+                st.rerun()
+
+            # Results table
+            st.markdown("---")
+            result_rows = []
+            total_kg  = 0.0
+            total_a   = 0.0
+            for row in rows_data:
+                b   = BAR_MAP[row["dia"]]
+                w   = b["weight_kgm"] * row["length"] * row["n"]
+                a   = b["area_cm2"]   * row["n"]
+                total_kg += w
+                total_a  += a
+                result_rows.append({
+                    "الوصف":               row["desc"] or "—",
+                    "Ø (mm)":              row["dia"],
+                    "العدد":               row["n"],
+                    "الطول (m)":           row["length"],
+                    "الوزن الكلي (kg)":   f"{w:.2f}",
+                    "المساحة الكلية (cm²)": f"{a:.3f}",
+                })
+
+            result_rows.append({
+                "الوصف":               "✅ الإجمالي / TOTAL",
+                "Ø (mm)":              "—",
+                "العدد":               "—",
+                "الطول (m)":           "—",
+                "الوزن الكلي (kg)":   f"{total_kg:.2f}",
+                "المساحة الكلية (cm²)": f"{total_a:.3f}",
+            })
+
+            render_styled_table(result_rows)
+
+            m1, m2, m3 = st.columns(3)
+            m1.metric("إجمالي الوزن (kg)",  f"{total_kg:.2f}")
+            m2.metric("إجمالي الوزن (ton)", f"{total_kg / 1000:.4f}")
+            m3.metric("إجمالي المساحة (cm²)", f"{total_a:.3f}")
 
     # ────────────────────────────────────────────────────────────────────────
     # TAB 3 — Slab On Grade / Mat Steel Weight

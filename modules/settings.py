@@ -2458,18 +2458,18 @@ def reset_module_15_state(cfg: dict | None = None) -> None:
 
 def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
     """Switch active profile, load its data into cfg, and clear widget session cache."""
-    # Ensure any live changes in current active profile are committed before switching
-    current_active = st.session_state.get("_active_profile_name")
-    if current_active and current_active != profile_name and "cfg" in st.session_state:
-        try:
-            save_settings()
-        except Exception:
-            pass
-
     pdata = load_profiles_data()
     profiles = pdata.get("profiles", {})
     if profile_name not in profiles:
         return
+
+    # Ensure any live changes in current active profile are committed before switching
+    current_active = st.session_state.get("_active_profile_name")
+    if current_active and current_active != profile_name and current_active in profiles and "cfg" in st.session_state:
+        try:
+            save_settings()
+        except Exception:
+            pass
 
     now_full = _get_now_str(with_seconds=True)
     pdata["active_profile"] = profile_name
@@ -2685,6 +2685,10 @@ def delete_project(project_name: str) -> bool:
 
     pdata["profiles"] = profiles
     save_profiles_data(pdata)
+
+    # Wipe from session state so save_settings never resurrects it
+    if st.session_state.get("_active_profile_name") == project_name:
+        st.session_state["_active_profile_name"] = None
 
     target_active = pdata["active_profile"]
     set_active_project(target_active, clear_cache=True)
@@ -3402,14 +3406,13 @@ def save_settings() -> None:
             cfg["apartment_name"] = new_pname
             cfg["cs_project_name"] = new_pname
 
-    if active_name not in profiles:
-        profiles[active_name] = {
-            "name": active_name,
-            "description": f"مشروع {active_name}",
-            "created_at": _get_now_str(),
-            "updated_at": _get_now_str(),
-            "data": {},
-        }
+    if not active_name or active_name not in profiles:
+        active_name = pdata.get("active_profile")
+        if not active_name or active_name not in profiles:
+            if profiles:
+                active_name = list(profiles.keys())[0]
+            else:
+                return
 
     clean_cfg = {k: _sanitize_for_json(v) for k, v in cfg.items()}
     clean_cfg["nav_view"] = st.session_state.get("nav_view", cfg.get("nav_view", "module"))

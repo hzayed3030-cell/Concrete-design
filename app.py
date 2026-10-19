@@ -2109,12 +2109,13 @@ def render_profile_manager():
         col_in_sure, col_btn_sure, col_btn_cancel = st.columns([3.4, 2.2, 1.4])
         with col_in_sure:
             sure_text = st.text_input(
-                'اكتب العبارة "I am sure" لتأكيد حذف المشروع:',
+                'اكتب العبارة "I am sure" أو "نعم" لتأكيد حذف المشروع:',
                 key=f"input_sure_del_proj_{del_target}",
-                placeholder="I am sure",
-                help="اكتب العبارة بدقة لتفعيل زر حذف المشروع النهائي",
+                placeholder="I am sure أو نعم",
+                help="اكتب I am sure أو نعم لتفعيل زر حذف المشروع النهائي",
             )
-        is_sure_matched = (sure_text or "").strip().lower() == "i am sure"
+        clean_sure = (sure_text or "").strip().lower()
+        is_sure_matched = clean_sure in ["i am sure", "i'm sure", "im sure", "sure", "yes", "نعم", "تأكيد", "تاكيد", "حذف"]
 
         with col_btn_sure:
             st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
@@ -2125,12 +2126,15 @@ def render_profile_manager():
                 type="primary",
                 disabled=not is_sure_matched,
             ):
-                delete_project(del_target)
+                del_ok = delete_project(del_target)
                 st.session_state["_profile_to_delete"] = None
                 st.session_state.pop("_play_strong_whistle_now", None)
                 st.session_state.pop("_last_del_confirm_whistle_token", None)
                 st.session_state.pop(f"input_sure_del_proj_{del_target}", None)
-                st.success(f"✅ تم حذف المشروع «{del_target}» بالكامل بنجاح.")
+                if del_ok:
+                    st.success(f"✅ تم حذف المشروع «{del_target}» بالكامل بنجاح.")
+                else:
+                    st.error(f"تعذر حذف المشروع «{del_target}».")
                 st.rerun()
 
         with col_btn_cancel:
@@ -2143,7 +2147,7 @@ def render_profile_manager():
                 st.rerun()
 
         if not is_sure_matched:
-            st.caption("💡 اكتب **I am sure** في الحقل أعلاه لتفعيل زر الحذف النهائي للمشروع.")
+            st.caption("💡 اكتب **I am sure** أو **نعم** في الحقل أعلاه لتفعيل زر الحذف النهائي للمشروع.")
 
         st.markdown("<hr style='margin:6px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 
