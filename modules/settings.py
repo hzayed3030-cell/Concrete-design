@@ -1193,11 +1193,14 @@ def get_default_project_state(project_name: str = "", owner_name: str = "") -> d
     """Return fresh default project state with all module schemas initialized."""
     d = dict(ECP_DEFAULTS)
     d["_schema_mod8_removed"] = True
-    # Standard grid state: all grid intersections have active columns by default
-    d["fs_zero_col_mode"] = False
-    d["fs_placed_cols"] = None
+    # Zero Column State: new projects start with axes only (no auto-placed columns)
+    d["fs_zero_col_mode"] = True
+    d["fs_placed_cols"] = []
     d["fs_col_props"] = {}
     d["fs_removed_cols"] = []
+    d["fs_col_transforms"] = {}
+    d["fs_edge_columns"] = {}
+    d["fs_drop_beams"] = []
     d["module_9_strap_footing"] = get_default_module_9_state()
     d["module_10_diagonal_strap"] = get_default_module_10_state()
     d["module_11_ground_beam"] = get_default_module_11_state()

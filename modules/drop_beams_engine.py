@@ -96,7 +96,7 @@ def detect_support_at_point(
                     "obj": c,
                 }
 
-    # 2. فحص وجود كمرة رئيسية حاملة أخرى
+    # 2. فحص وجود كمرة رئيسية حاملة متقاطعة (ليست على نفس الامتداد المحوري)
     if beams_list:
         for b in beams_list:
             if not isinstance(b, dict):
@@ -106,8 +106,16 @@ def detect_support_at_point(
                 continue
             bp1 = b.get("p1_grid", b.get("p1", [0, 0]))
             bp2 = b.get("p2_grid", b.get("p2", [0, 0]))
+            bx1, by1 = float(bp1[0]), float(bp1[1])
+            bx2, by2 = float(bp2[0]), float(bp2[1])
+            bL = math.hypot(bx2 - bx1, by2 - by1)
+            if bL > 0.1:
+                bux, buy = (bx2 - bx1) / bL, (by2 - by1) / bL
+                # إذا كانت الكمرة على نفس المحور الهندسي (موازية)، فهي كمرة امتداد وليست كمرة حاملة متقاطعة
+                if abs(ux * bux + uy * buy) > 0.85:
+                    continue
             dist_b, proj_pt, t_val = point_to_segment_distance_and_projection(
-                px, py, float(bp1[0]), float(bp1[1]), float(bp2[0]), float(bp2[1])
+                px, py, bx1, by1, bx2, by2
             )
             if dist_b <= tol_beam:
                 # كمرة حاملة رئيسية
@@ -225,6 +233,66 @@ def compute_beam_face_coordinates(
     return p1_face, p2_face, clear_L, supp1, supp2
 
 
+def find_adjacent_backspan_beam(
+    p_root: list,
+    p_free: list,
+    beams_list: list,
+    current_beam_id: str = None,
+    tol: float = 0.45,
+) -> dict:
+    """
+    فحص وجود كمرة مجاورة مستمرة (Backspan Beam) على نفس المحور الهندسي تتصل مباشرة بنقطة الركيزة الرأسية (p_root)
+    في الاتجاه المعاكس للطرف الحر للكابولي (p_free) لتأمين التثبيت والاستمرارية التامة للعزوم (Full Moment Continuity).
+    """
+    if not beams_list or not p_root or not p_free:
+        return None
+    xr, yr = float(p_root[0]), float(p_root[1])
+    xf, yf = float(p_free[0]), float(p_free[1])
+    L_cant = math.hypot(xf - xr, yf - yr)
+    if L_cant < 0.1:
+        return None
+    ux = (xf - xr) / L_cant
+    uy = (yf - yr) / L_cant
+
+    for b in beams_list:
+        if not isinstance(b, dict):
+            continue
+        bid = str(b.get("id", ""))
+        if current_beam_id and bid == str(current_beam_id):
+            continue
+        bp1 = b.get("p1_grid", b.get("p1", [0, 0]))
+        bp2 = b.get("p2_grid", b.get("p2", [0, 0]))
+        if not bp1 or not bp2:
+            continue
+        try:
+            bx1, by1 = float(bp1[0]), float(bp1[1])
+            bx2, by2 = float(bp2[0]), float(bp2[1])
+        except (ValueError, TypeError, IndexError):
+            continue
+        bL = math.hypot(bx2 - bx1, by2 - by1)
+        if bL < 0.25:
+            continue
+        bux = (bx2 - bx1) / bL
+        buy = (by2 - by1) / bL
+        # يجب أن تقع الكمرة المجاورة على نفس المحور الهندسي
+        if abs(ux * bux + uy * buy) < 0.90:
+            continue
+        # فحص اتصال أحد طرفي الكمرة المجاورة بنقطة الركيزة الرأسية وامتداد الطرف الآخر في الاتجاه المعاكس للكابولي
+        d1 = math.hypot(bx1 - xr, by1 - yr)
+        d2 = math.hypot(bx2 - xr, by2 - yr)
+        if d1 <= tol:
+            vec_other_x = bx2 - xr
+            vec_other_y = by2 - yr
+            if (vec_other_x * ux + vec_other_y * uy) < -0.25 * bL:
+                return b
+        elif d2 <= tol:
+            vec_other_x = bx1 - xr
+            vec_other_y = by1 - yr
+            if (vec_other_x * ux + vec_other_y * uy) < -0.25 * bL:
+                return b
+    return None
+
+
 def design_drop_beam(
     p1: list,
     p2: list,
@@ -283,15 +351,48 @@ def design_drop_beam(
     s1_name = supp1.get("name", "طرف حر")
     s2_name = supp2.get("name", "طرف حر")
 
-    is_cantilever_beam = (s1_type == "cantilever_edge" or s2_type == "cantilever_edge" or is_continuous == "cantilever")
+    # قاعدة التعميم الموحدة للكمرات الكابولية:
+    # أي كمرة ذات طرف حر ("free" أو "cantilever_edge") تتصل في طرفها الآخر بركيزة رأسية ("column" أو "wall")
+    # وتتصل مباشرة بكمرة مجاورة مستمرة على نفس المحور الهندسي تُقبل ككمرة كابولية بتثبيت تام الاستمرارية (Full Moment Continuity).
+    backspan_beam = None
+    free_is_s2 = None
+    if s1_type in ("column", "wall") and s2_type in ("free", "cantilever_edge"):
+        backspan_beam = find_adjacent_backspan_beam([x1, y1], [x2, y2], beams_list, current_beam_id=beam_id)
+        free_is_s2 = True
+    elif s2_type in ("column", "wall") and s1_type in ("free", "cantilever_edge"):
+        backspan_beam = find_adjacent_backspan_beam([x2, y2], [x1, y1], beams_list, current_beam_id=beam_id)
+        free_is_s2 = False
+
+    is_valid_cantilever = (
+        (free_is_s2 is not None and (backspan_beam is not None or is_continuous == "cantilever"))
+        or (s1_type == "cantilever_edge" and s2_type in ("column", "wall"))
+        or (s2_type == "cantilever_edge" and s1_type in ("column", "wall"))
+    )
+    is_cantilever_beam = bool(is_valid_cantilever)
 
     if is_cantilever_beam:
-        fixed_supp = supp2 if s1_type == "cantilever_edge" else supp1
+        if free_is_s2 is True or s2_type in ("free", "cantilever_edge"):
+            fixed_supp = supp1
+            free_supp = supp2
+            free_is_s2 = True
+        else:
+            fixed_supp = supp2
+            free_supp = supp1
+            free_is_s2 = False
+        free_supp["type"] = "cantilever_edge"
+        free_supp["id"] = "CantileverFreeEnd"
+        free_supp["name"] = "طرف حر كابولي"
+        free_supp["offset"] = 0.0
+        s1_type = supp1.get("type", "free")
+        s2_type = supp2.get("type", "free")
+        s1_name = supp1.get("name", "طرف حر")
+        s2_name = supp2.get("name", "طرف حر")
         s_fix_name = fixed_supp.get("name", "عمود")
+        backspan_lbl = f"كمرة {backspan_beam.get('id')}" if isinstance(backspan_beam, dict) and backspan_beam.get("id") else "كمرة مجاورة مستمرة"
         beam_type_category = "cantilever_beam"
-        supports_desc = f"كمرة كابولية (مرتكزة على {s_fix_name} ⟷ نهاية كابولي البلاطة)"
+        supports_desc = f"كمرة كابولية (مرتكزة على {s_fix_name} باتصال جاسئ تام الاستمرارية مع {backspan_lbl} ⟷ طرف حر)"
         is_continuous = "cantilever"
-        is_secondary = (fixed_supp.get("type") == "beam")
+        is_secondary = False
     elif s1_type == "beam" and s2_type == "beam":
         beam_type_category = "secondary_2_beams"
         supports_desc = f"كمرة ثانوية (مرتكزة على {s1_name} ⟷ {s2_name})"
@@ -429,6 +530,13 @@ def design_drop_beam(
     # 8. حساب رد الفعل المنقول وكانات التعليق الإضافية (ECP 203 Hanging Stirrups)
     # إذا كانت الكمرة ثانوية وترتكز على كمرة رئيسية، يلزم كانات تعليق إضافية لنقل رد الفعل Ru
     reaction_ton = round(Vu_ton, 2)
+    if is_cantilever_beam:
+        reaction_s1_ton = 0.0 if (free_is_s2 is False) else reaction_ton
+        reaction_s2_ton = 0.0 if (free_is_s2 is True) else reaction_ton
+    else:
+        reaction_s1_ton = reaction_ton
+        reaction_s2_ton = reaction_ton
+
     hanging_stirrups_str = "—"
     if is_secondary:
         # مساحة كانات التعليق Ash = Ru / (fy / 1.15)
@@ -442,7 +550,7 @@ def design_drop_beam(
     q_max = 0.70 * math.sqrt(max(100.0, fcu_val) / 1.5) * 10.0
     is_safe = (qu <= q_max) and (As_final <= 0.04 * b_cm * d_cm) and (t_cm >= t_min_cm)
     if is_cantilever_beam:
-        status_str = "Safe / OK (كمرة كابولية كودية)" if is_safe else "Review Dimensions"
+        status_str = "Safe / OK (كمرة كابولية — Full Moment Continuity)" if is_safe else "Review Dimensions"
     elif s1_type in ("free", "cantilever_edge") or s2_type in ("free", "cantilever_edge"):
         status_str = "⚠️ غير كودي: طرف حر غير مستند داخل البلاطة"
     else:
@@ -462,6 +570,8 @@ def design_drop_beam(
         "beam_type_category": beam_type_category,
         "is_secondary": is_secondary,
         "reaction_ton": reaction_ton,
+        "reaction_s1_ton": reaction_s1_ton,
+        "reaction_s2_ton": reaction_s2_ton,
         "hanging_stirrups_str": hanging_stirrups_str,
         "total_span_m": round(total_span_m, 2),
         "clear_span_m": round(clear_span_m, 2),
@@ -486,6 +596,8 @@ def design_drop_beam(
         "Vu_ton": round(Vu_ton, 2),
         "w_ult_tot": round(w_ult_tot, 2),
         "is_continuous": is_continuous,
+        "full_moment_continuity": bool(is_cantilever_beam),
+        "backspan_beam_id": backspan_beam.get("id") if isinstance(backspan_beam, dict) else None,
     }
 
 
@@ -550,7 +662,8 @@ def recompute_all_drop_beams(
     grid_bounds: dict = None,
 ) -> list:
     """
-    إعادة الحساب والتصميم اللحظي الشامل لكافة الكمرات في النموذج مع تحديث الاستمرارية والضبط بين أوجه الأعمدة.
+    إعادة الحساب والتصميم اللحظي الشامل لكافة الكمرات في النموذج مع تحديث الاستمرارية والضبط بين أوجه الأعمدة،
+    وتطبيق الاستمرارية التامة للعزوم (Full Moment Continuity) واتزان ردود الأفعال عند ركائز الكمرات الكابولية.
     """
     updated = []
     for i, b in enumerate(beams_list):
@@ -564,10 +677,9 @@ def recompute_all_drop_beams(
 
         # تحديد الاستمرارية مقارنة بباقي الكمرات
         others = [ob for j, ob in enumerate(beams_list) if j != i]
+        cont = determine_beam_continuity(p1, p2, others)
         if b.get("is_continuous") == "cantilever" or b.get("beam_type_category") == "cantilever_beam":
             cont = "cantilever"
-        else:
-            cont = determine_beam_continuity(p1, p2, others)
 
         des = design_drop_beam(
             p1=p1,
@@ -593,6 +705,89 @@ def recompute_all_drop_beams(
         if "axis_index" in b: des["axis_index"] = b["axis_index"]
         if "axis_name" in b: des["axis_name"] = b["axis_name"]
         updated.append(des)
+
+    # ── المرحلة الثانية: تطبيق Full Moment Continuity واتزان العزوم وردود الأفعال بين الكابولي والكمرة المجاورة والعمود ──
+    fy_val = float(Fy)
+    fcu_val = float(Fcu)
+    j_val = 0.826
+    for cb in updated:
+        if cb.get("is_continuous") != "cantilever" and cb.get("beam_type_category") != "cantilever_beam":
+            continue
+        s1_t = cb.get("supp1", {}).get("type", "free")
+        s2_t = cb.get("supp2", {}).get("type", "free")
+        p1_g = cb.get("p1_grid", cb.get("p1", [0, 0]))
+        p2_g = cb.get("p2_grid", cb.get("p2", [0, 0]))
+        if s1_t in ("column", "wall") and s2_t in ("free", "cantilever_edge"):
+            p_root, p_free = p1_g, p2_g
+            root_is_s1 = True
+        elif s2_t in ("column", "wall") and s1_t in ("free", "cantilever_edge"):
+            p_root, p_free = p2_g, p1_g
+            root_is_s1 = False
+        else:
+            continue
+
+        adj_b = find_adjacent_backspan_beam(p_root, p_free, updated, current_beam_id=cb.get("id"))
+        if not adj_b:
+            continue
+
+        Mu_cant_neg = float(cb.get("Mu_ton_m", 0.0))
+        Vu_cant = float(cb.get("Vu_ton", 0.0))
+        Ln_adj = max(0.50, float(adj_b.get("clear_span_m", 1.0)))
+        w_adj = float(adj_b.get("w_ult_tot", 0.0))
+        Mu_adj_neg = max(float(adj_b.get("Mu_ton_m", 0.0)), (w_adj * (Ln_adj ** 2)) / 10.0)
+
+        # العزم السالب المتزن عند الركيزة الجاسئة المشتركة (Full Moment Continuity)
+        Mu_joint_neg = max(Mu_adj_neg, Mu_cant_neg)
+        joint_d_cm = max(10.0, float(adj_b.get("d_cm", 55.0)), float(cb.get("d_cm", 55.0)))
+        adj_b_cm = max(12.0, float(adj_b.get("b_cm", 25.0)))
+        adj_dia = int(adj_b.get("dia_main", dia_main))
+        As_top_req_joint = (Mu_joint_neg * 1e5) / ((fy_val / 1.15) * j_val * joint_d_cm)
+        As_min_adj = max(
+            (0.225 * math.sqrt(max(100.0, fcu_val)) / fy_val) * adj_b_cm * joint_d_cm,
+            (1.1 / fy_val) * adj_b_cm * joint_d_cm,
+        )
+        As_top_joint_final = max(As_top_req_joint, As_min_adj)
+        bar_area_adj = math.pi * ((adj_dia / 10.0) ** 2) / 4.0
+        n_top_joint = max(2, math.ceil(As_top_joint_final / bar_area_adj))
+
+        # مد التسليح العلوي الرئيسي للكابولي باستمرارية تامة داخل الكمرة المجاورة لمقاومة العزم السالب المتزن
+        if Mu_cant_neg >= 0.50 * Mu_adj_neg:
+            n_top_cant = int(cb.get("n_bars_top", 2))
+            n_top_cont = max(n_top_joint, n_top_cant)
+            adj_b["n_bars_top"] = n_top_cont
+            adj_b["rft_top_str"] = f"{n_top_cont}Φ{adj_dia} (مستمر مع كابولي {cb.get('id')})"
+
+        # ازدواج الاتزان الإنشائي (Overturning / Continuity Balancing Couple): ΔR = Mu_cant / Ln_adj
+        delta_R = Mu_cant_neg / Ln_adj
+        adj_p1 = adj_b.get("p1_grid", adj_b.get("p1", [0, 0]))
+        adj_p2 = adj_b.get("p2_grid", adj_b.get("p2", [0, 0]))
+        d_adj_s1 = math.hypot(float(adj_p1[0]) - float(p_root[0]), float(adj_p1[1]) - float(p_root[1]))
+        d_adj_s2 = math.hypot(float(adj_p2[0]) - float(p_root[0]), float(adj_p2[1]) - float(p_root[1]))
+        base_rxn_s1 = float(adj_b.get("reaction_s1_ton", adj_b.get("reaction_ton", 0.0)))
+        base_rxn_s2 = float(adj_b.get("reaction_s2_ton", adj_b.get("reaction_ton", 0.0)))
+        if d_adj_s1 <= d_adj_s2:
+            adj_b["reaction_s1_ton"] = round(base_rxn_s1 + delta_R, 2)
+            adj_b["reaction_s2_ton"] = round(max(0.15 * base_rxn_s2, base_rxn_s2 - delta_R), 2)
+        else:
+            adj_b["reaction_s2_ton"] = round(base_rxn_s2 + delta_R, 2)
+            adj_b["reaction_s1_ton"] = round(max(0.15 * base_rxn_s1, base_rxn_s1 - delta_R), 2)
+        adj_b["reaction_ton"] = round(max(adj_b["reaction_s1_ton"], adj_b["reaction_s2_ton"]), 2)
+        adj_b["connected_cantilever_id"] = cb.get("id")
+        adj_b["Mu_support_neg_ton_m"] = round(Mu_joint_neg, 2)
+        adj_b["full_moment_continuity"] = True
+
+        cb["full_moment_continuity"] = True
+        cb["backspan_beam_id"] = adj_b.get("id")
+        cb["Mu_neg_support_ton_m"] = round(Mu_cant_neg, 2)
+        cb["delta_R_equilibrium_ton"] = round(delta_R, 2)
+        cb["Mu_col_transferred_ton_m"] = round(Mu_cant_neg, 2)
+        if root_is_s1:
+            cb["reaction_s1_ton"] = round(Vu_cant, 2)
+            cb["reaction_s2_ton"] = 0.0
+        else:
+            cb["reaction_s1_ton"] = 0.0
+            cb["reaction_s2_ton"] = round(Vu_cant, 2)
+
     return updated
 
 
@@ -621,7 +816,7 @@ def draw_beam_polygon_on_plan(ax, p1, p2, b_m, label="", rft_label="", is_steel_
     if is_steel_layout:
         edge_col = "#1e3a8a"
         poly = patches.Polygon(
-            poly_pts, closed=True, facecolor="rgba(37, 99, 235, 0.15)",
+            poly_pts, closed=True, facecolor=(37/255.0, 99/255.0, 235/255.0, 0.16),
             edgecolor=edge_col, lw=2.0, zorder=6, linestyle="--"
         )
         ax.add_patch(poly)

@@ -1746,43 +1746,123 @@ def render_profile_manager():
                                     git_env = os.environ.copy()
                                     git_env["PYTHONIOENCODING"] = "utf-8"
                                     git_env["LC_ALL"] = "C.UTF-8"
+                                    git_env["GIT_TERMINAL_PROMPT"] = "0"
+                                    git_env["GCM_INTERACTIVE"] = "always"
+                                    git_env["GCM_GUI_PROMPT"] = "1"
 
-                                    # Remove stale index.lock if left behind by an interrupted process
-                                    lock_file = os.path.join(app_dir, ".git", "index.lock")
-                                    if os.path.exists(lock_file):
-                                        try:
-                                            os.remove(lock_file)
-                                        except OSError:
-                                            pass
+                                    # Remove stale index.lock or rebase state if left behind by an interrupted process
+                                    for stale_rel in [
+                                        os.path.join(".git", "index.lock"),
+                                        os.path.join(".git", "HEAD.lock"),
+                                        os.path.join(".git", "refs", "heads", "main.lock"),
+                                    ]:
+                                        lock_file = os.path.join(app_dir, stale_rel)
+                                        if os.path.exists(lock_file):
+                                            try:
+                                                os.remove(lock_file)
+                                            except OSError:
+                                                pass
 
-                                    # 1. git add -A
-                                    subprocess.run(["git", "add", "-A"], cwd=app_dir, env=git_env, capture_output=True, text=True, encoding="utf-8", errors="replace")
-                                    # 2. git commit --allow-empty -m (supports both Arabic & English UTF-8 messages)
-                                    res_commit = subprocess.run(["git", "commit", "--allow-empty", "-m", msg_final], cwd=app_dir, env=git_env, capture_output=True, text=True, encoding="utf-8", errors="replace")
-                                    # 2.5. git pull --rebase --autostash to safely integrate remote commits even if profiles.json updated
-                                    subprocess.run(["git", "pull", "--rebase", "--autostash", "origin", "main"], cwd=app_dir, env=git_env, capture_output=True, text=True, encoding="utf-8", errors="replace")
-                                    # 3. git push (with automatic retry on transient network/SSL hiccup)
-                                    res_push = subprocess.run(["git", "push", "origin", "main"], cwd=app_dir, env=git_env, capture_output=True, text=True, encoding="utf-8", errors="replace")
-                                    if res_push.returncode != 0:
-                                        subprocess.run(["git", "add", "-A"], cwd=app_dir, env=git_env, capture_output=True, text=True, encoding="utf-8", errors="replace")
-                                        subprocess.run(["git", "pull", "--rebase", "--autostash", "origin", "main"], cwd=app_dir, env=git_env, capture_output=True, text=True, encoding="utf-8", errors="replace")
-                                        res_push = subprocess.run(["git", "push", "origin", "main"], cwd=app_dir, env=git_env, capture_output=True, text=True, encoding="utf-8", errors="replace")
+                                    # Ensure Git author identity is configured (prevents 'Author identity unknown' after fresh Git install)
+                                    chk_name = subprocess.run(
+                                        ["git", "config", "user.name"],
+                                        cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
+                                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
+                                    )
+                                    if chk_name.returncode != 0 or not (chk_name.stdout or "").strip():
+                                        subprocess.run(
+                                            ["git", "config", "user.name", "hzayed3030-cell"],
+                                            cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
+                                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
+                                        )
+                                    chk_email = subprocess.run(
+                                        ["git", "config", "user.email"],
+                                        cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
+                                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
+                                    )
+                                    if chk_email.returncode != 0 or not (chk_email.stdout or "").strip():
+                                        subprocess.run(
+                                            ["git", "config", "user.email", "hzayed3030@hotmail.com"],
+                                            cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
+                                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
+                                        )
 
-                                    if res_push.returncode == 0:
-                                        st.session_state["git_push_success_msg"] = f"✅ تم رفع وتحديث المشروع إلى GitHub بنجاح! باسم التعديل: «{msg_final}»"
-                                        st.session_state["show_git_update_form"] = False
-                                        st.session_state.pop("input_git_commit_msg", None)
-                                        st.rerun()
-                                    else:
-                                        err_text = (res_push.stderr or res_push.stdout or "").strip()
-                                        commit_out = (res_commit.stdout or res_commit.stderr or "").strip()
-                                        if "Everything up-to-date" in err_text or "nothing to commit" in commit_out:
-                                            st.session_state["git_push_success_msg"] = "✅ تم التحقق: المستودع متزامن مع GitHub بالفعل ولا توجد تعديلات جديدة للرفع (Everything up-to-date)."
+                                    try:
+                                        # Check if Git Credential Manager has a GitHub account logged in; if not, launch browser login directly
+                                        chk_gcm = subprocess.run(
+                                            ["git", "credential-manager", "github", "list"],
+                                            cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
+                                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
+                                        )
+                                        if chk_gcm.returncode == 0 and not (chk_gcm.stdout or "").strip():
+                                            subprocess.run(
+                                                ["git", "credential-manager", "github", "login", "--browser"],
+                                                cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
+                                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120
+                                            )
+
+                                        git_id_args = ["-c", "user.name=hzayed3030-cell", "-c", "user.email=hzayed3030@hotmail.com"]
+
+                                        # 1. git add -A
+                                        subprocess.run(
+                                            ["git", "add", "-A"],
+                                            cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
+                                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30
+                                        )
+                                        # 2. git commit --allow-empty -m (supports both Arabic & English UTF-8 messages)
+                                        res_commit = subprocess.run(
+                                            ["git"] + git_id_args + ["commit", "--allow-empty", "-m", msg_final],
+                                            cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
+                                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30
+                                        )
+                                        # 2.5. git pull --rebase --autostash to safely integrate remote commits even if profiles.json updated
+                                        subprocess.run(
+                                            ["git"] + git_id_args + ["pull", "--rebase", "--autostash", "origin", "main"],
+                                            cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
+                                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60
+                                        )
+                                        # 3. git push (with automatic retry on transient network/SSL hiccup)
+                                        res_push = subprocess.run(
+                                            ["git", "push", "origin", "main"],
+                                            cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
+                                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60
+                                        )
+                                        if res_push.returncode != 0:
+                                            subprocess.run(
+                                                ["git", "add", "-A"],
+                                                cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
+                                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30
+                                            )
+                                            subprocess.run(
+                                                ["git"] + git_id_args + ["pull", "--rebase", "--autostash", "origin", "main"],
+                                                cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
+                                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60
+                                            )
+                                            res_push = subprocess.run(
+                                                ["git", "push", "origin", "main"],
+                                                cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
+                                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60
+                                            )
+
+                                        if res_push.returncode == 0:
+                                            st.session_state["git_push_success_msg"] = f"✅ تم رفع وتحديث المشروع إلى GitHub بنجاح! باسم التعديل: «{msg_final}»"
                                             st.session_state["show_git_update_form"] = False
                                             st.session_state.pop("input_git_commit_msg", None)
                                             st.rerun()
                                         else:
-                                            st.error(f"❌ حدث خطأ أثناء الرفع إلى GitHub:\n\n{err_text if err_text else commit_out}")
+                                            err_text = (res_push.stderr or res_push.stdout or "").strip()
+                                            commit_out = (res_commit.stdout or res_commit.stderr or "").strip()
+                                            if res_commit.returncode != 0 and "nothing to commit" not in commit_out:
+                                                st.error(f"❌ تعذر تسجيل التعديلات محلياً (git commit):\n\n{commit_out}")
+                                            elif "Everything up-to-date" in err_text:
+                                                st.session_state["git_push_success_msg"] = "✅ تم التحقق: المستودع متزامن مع GitHub بالفعل ولا توجد تعديلات جديدة للرفع (Everything up-to-date)."
+                                                st.session_state["show_git_update_form"] = False
+                                                st.session_state.pop("input_git_commit_msg", None)
+                                                st.rerun()
+                                            else:
+                                                st.error(f"❌ حدث خطأ أثناء الرفع إلى GitHub:\n\n{err_text if err_text else commit_out}")
+                                    except subprocess.TimeoutExpired:
+                                        st.error("⏱️ انتهت مهلة الاتصال بـ GitHub (Timeout). يرجى التأكد من إتمام تسجيل الدخول إلى GitHub في المتصفح أو التحقق من اتصال الإنترنت ثم المحاولة مرة أخرى.")
 
         st.markdown("<hr style='margin: 10px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 

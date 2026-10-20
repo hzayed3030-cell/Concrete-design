@@ -136,27 +136,21 @@ def _compute_effective_spans(Lx_spans, Ly_spans, removed_ij_set):
     for j in range(n_yj):
         remaining_per_yj[j] = n_xi - sum(1 for i in range(n_xi) if (i, j) in removed_ij_set)
 
-    # An axis line acts as a continuous structural support line in DDM
-    # only if it retains enough columns (at least 2 for grids >= 3, or > 0 for small grids)
-    min_cols_x = 2 if n_yj >= 3 else 1
-    min_cols_y = 2 if n_xi >= 3 else 1
+    # An axis line remains active as long as it has at least 1 active column;
+    # outer boundary axes (0 and n-1) are always preserved so slab dimensions never shrink.
+    min_cols_x = 1
+    min_cols_y = 1
 
-    active_xi = [i for i in range(n_xi) if remaining_per_xi[i] >= min_cols_x]
-    active_yj = [j for j in range(n_yj) if remaining_per_yj[j] >= min_cols_y]
-
-    # Guard: always keep at least the boundary axes
-    if len(active_xi) < 2:
-        active_xi = [0, n_xi - 1]
-    if len(active_yj) < 2:
-        active_yj = [0, n_yj - 1]
+    active_xi = sorted(list({0, n_xi - 1} | {i for i in range(n_xi) if remaining_per_xi[i] >= min_cols_x}))
+    active_yj = sorted(list({0, n_yj - 1} | {j for j in range(n_yj) if remaining_per_yj[j] >= min_cols_y}))
 
     # Compute effective spans between consecutive active axis lines
     eff_Lx = [x_coords[active_xi[k+1]] - x_coords[active_xi[k]] for k in range(len(active_xi)-1)]
     eff_Ly = [y_coords[active_yj[k+1]] - y_coords[active_yj[k]] for k in range(len(active_yj)-1)]
 
-    # Detect fully or mostly-removed axis lines (for warning)
-    full_x_removed = [i for i in range(n_xi) if remaining_per_xi[i] < min_cols_x]
-    full_y_removed = [j for j in range(n_yj) if remaining_per_yj[j] < min_cols_y]
+    # Detect fully-removed intermediate axis lines (for warning)
+    full_x_removed = [i for i in range(n_xi) if remaining_per_xi[i] == 0]
+    full_y_removed = [j for j in range(n_yj) if remaining_per_yj[j] == 0]
 
     # DDM validity check: adjacent effective spans ratio must be ≤ 1.33
     ddm_warning = None
@@ -840,7 +834,43 @@ def get_flat_slab_panels(Lx_spans, Ly_spans, void_ids=None):
     return panels
 
 
+def _get_active_drop_beams_list(drop_beams=None):
+    """
+    Retrieves the active drop beams list (including cantilever beams) from argument
+    or from session_state/cfg so that all plan drawings and calculations stay synchronized.
+    """
+    if drop_beams is not None:
+        return list(drop_beams) if isinstance(drop_beams, (list, tuple)) else []
+    try:
+        dbs = st.session_state.get("fs_drop_beams")
+        if dbs is None:
+            dbs = st.session_state.get("cfg", {}).get("fs_drop_beams", [])
+        return list(dbs) if isinstance(dbs, (list, tuple)) else []
+    except Exception:
+        return []
 
+
+def _render_drop_beams_on_ax(ax, drop_beams=None, is_steel_layout=False):
+    """
+    Unified renderer for Drop Beams and Cantilever Drop Beams on any 2D plan axis.
+    """
+    _dbs = _get_active_drop_beams_list(drop_beams)
+    if not _dbs:
+        return
+    for b_obj in _dbs:
+        if not isinstance(b_obj, dict):
+            continue
+        bp1 = b_obj.get("p1_face") or b_obj.get("p1_grid") or b_obj.get("p1", [0, 0])
+        bp2 = b_obj.get("p2_face") or b_obj.get("p2_grid") or b_obj.get("p2", [0, 0])
+        bb_m = float(b_obj.get("b_cm", 25.0)) / 100.0
+        bid = b_obj.get("id", "B")
+        b_mm = int(b_obj.get("b_mm", round(float(b_obj.get("b_cm", 25.0)) * 10)))
+        t_mm = int(b_obj.get("t_mm", round(float(b_obj.get("t_cm", 60.0)) * 10)))
+        is_cant = (b_obj.get("is_continuous") == "cantilever" or b_obj.get("beam_type_category") == "cantilever_beam")
+        cant_tag = " [Cant.]" if is_cant else ""
+        b_dim_lbl = f"{bid}{cant_tag} ({b_mm}×{t_mm})"
+        rft_lbl = f"{bid}{cant_tag}: {b_obj.get('rft_btm_str', '')} Btm | {b_obj.get('rft_top_str', '')} Top | {b_obj.get('stirrups_str', '')}"
+        draw_beam_polygon_on_plan(ax, bp1, bp2, bb_m, label=b_dim_lbl, rft_label=rft_lbl, is_steel_layout=is_steel_layout)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1260,21 +1290,8 @@ def generate_flat_slab_sketch(
             if is_edge_valid:
                 draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, raw_edge_dir, zorder=10)
 
-    # ── Drop Beams (الكمرات الساقطة من وجه العمود لوجه العمود) ──
-    _effective_dbs = drop_beams
-    if _effective_dbs is None:
-        try:
-            _effective_dbs = st.session_state.get("cfg", {}).get("fs_drop_beams", [])
-        except Exception:
-            _effective_dbs = []
-    if _effective_dbs:
-        for b_obj in _effective_dbs:
-            bp1 = b_obj.get("p1_face") or b_obj.get("p1", [0, 0])
-            bp2 = b_obj.get("p2_face") or b_obj.get("p2", [0, 0])
-            bb_m = float(b_obj.get("b_cm", 25.0)) / 100.0
-            bid = b_obj.get("id", "B")
-            b_dim_lbl = f"{bid} ({b_obj.get('b_mm', 250)}×{b_obj.get('t_mm', 600)})"
-            draw_beam_polygon_on_plan(ax_plan, bp1, bp2, bb_m, label=b_dim_lbl, is_steel_layout=False)
+    # ── Drop Beams (الكمرات الساقطة والكابولية من وجه العمود لوجه العمود) ──
+    _render_drop_beams_on_ax(ax_plan, drop_beams=drop_beams, is_steel_layout=False)
 
     # Span Dimensions (Lx along Bottom)
     y_dim_lx = y_slab_min - dim_offset_bot
@@ -1699,6 +1716,9 @@ def generate_flat_slab_top_rft_sketch(
         is_right = (col_cx >= x_coords[-1] - 0.1)
         draw_column_label_beside(ax_plan, col_rx, col_ry, col_rw, col_rh, col_cx, col_cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=7)
 
+    # ── Drop Beams (الكمرات الساقطة والكابولية) ──
+    _render_drop_beams_on_ax(ax_plan, is_steel_layout=False)
+
     # Span Dimensions (Lx along Bottom)
     y_dim_lx = y_slab_min - dim_offset_bot
     for i, lx in enumerate(Lx_spans):
@@ -2048,6 +2068,9 @@ def generate_flat_slab_bottom_rft_sketch(
             draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=7)
             col_num += 1
 
+    # ── Drop Beams (الكمرات الساقطة والكابولية) ──
+    _render_drop_beams_on_ax(ax_plan, is_steel_layout=False)
+
     # 🔵 2. BOTTOM EXTRA REBAR IN ENLARGED BAYS (BLUE)
     if btm_extra_spans:
         # Filter by direction
@@ -2384,12 +2407,14 @@ def generate_flat_slab_reactions_sketch(
     col_d_m = max(col_d_cm / 100.0, slab_h * 0.045)
 
     reac_map = {r["Column ID"]: r for r in col_reactions_data}
-    rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
+    rem_coords = {(round(float(c["x"]), 3), round(float(c["y"]), 3)) for c in removed_cols if "x" in c and "y" in c} if removed_cols else set()
+    rem_orig_ids = {c.get("orig_id") for c in removed_cols if isinstance(c, dict) and c.get("orig_id")} if removed_cols else set()
 
     col_idx = 1
     for j_idx, y in enumerate(y_coords):
         for i_idx, x in enumerate(x_coords):
-            if (x, y) in rem_coords:
+            orig_grid_id = f"C{j_idx * len(x_coords) + i_idx + 1}"
+            if orig_grid_id in rem_orig_ids or (round(float(x), 3), round(float(y), 3)) in rem_coords:
                 continue
             cid = f"C{col_idx}"
             r_info = reac_map.get(cid, None)
@@ -2438,6 +2463,7 @@ def generate_flat_slab_reactions_sketch(
                 pu1 = r_info.get("pu_1f_val", 0.0)
                 pu_tot = r_info.get("pu_tot_val", 0.0)
                 atrib = r_info.get("atrib_val", 0.0)
+                pu_beam = r_info.get("pu_beam_val", 0.0)
 
                 card_dx = 0.0
                 if j_idx == 0:
@@ -2447,12 +2473,14 @@ def generate_flat_slab_reactions_sketch(
                 else:
                     card_dy = col_d_m * 0.95 + max(0.4, slab_h * 0.04)
 
-                card_x = x + card_dx
-                card_y = y + card_dy
+                card_x = col_cx + card_dx
+                card_y = col_cy + card_dy
 
+                beam_line = f"• R_beams = +{pu_beam:.2f} t\n" if pu_beam > 0.01 else ""
                 text_content = (
                     f"[ {cid} — {type_name} ]\n"
                     f"• Atrib = {atrib:.2f} m²\n"
+                    f"{beam_line}"
                     f"• Pu (1F) = {pu1:.2f} t\n"
                     f"★ Pu ({num_floors}F) = {pu_tot:.2f} t"
                 )
@@ -2473,6 +2501,9 @@ def generate_flat_slab_reactions_sketch(
                 )
 
             col_idx += 1
+
+    # ── Drop Beams (الكمرات الساقطة والكابولية) ──
+    _render_drop_beams_on_ax(ax_plan, is_steel_layout=False)
 
     # Span Dimensions (Lx along Bottom)
     y_dim_lx = y_slab_min - dim_offset_bot
@@ -2602,6 +2633,7 @@ def build_slab_moment_field(
     btm_extra_spans=None,
     active_cols=None,
     removed_cols=None,
+    drop_beams=None,
 ):
     """
     Reconstructs continuous 2D moment fields M11(x, y) and M22(x, y)
@@ -2689,11 +2721,26 @@ def build_slab_moment_field(
                 if cx is not None and cy is not None:
                     active_col_coords.add((round(float(cx), 2), round(float(cy), 2)))
 
+    beam_supported_coords = set()
+    drop_beams = _get_active_drop_beams_list(drop_beams)
+    if drop_beams:
+        for db in drop_beams:
+            if not isinstance(db, dict) or db.get("beam_type_category") == "unsupported_beam":
+                continue
+            bp1 = db.get("p1_grid", db.get("p1"))
+            bp2 = db.get("p2_grid", db.get("p2"))
+            if bp1 and len(bp1) >= 2:
+                beam_supported_coords.add((round(float(bp1[0]), 2), round(float(bp1[1]), 2)))
+            if bp2 and len(bp2) >= 2:
+                beam_supported_coords.add((round(float(bp2[0]), 2), round(float(bp2[1]), 2)))
+
     def is_vertex_col_active(i_idx, j_idx):
         if not active_cols and not removed_cols:
             return True
         gx = x_coords[i_idx]
         gy = y_coords[j_idx]
+        if (round(gx, 2), round(gy, 2)) in beam_supported_coords:
+            return True
         cid = f"C{j_idx * len(x_coords) + i_idx + 1}"
         if active_col_set or active_col_coords:
             return (cid in active_col_set) or ((round(gx, 2), round(gy, 2)) in active_col_coords)
@@ -2929,6 +2976,94 @@ def build_slab_moment_field(
             w_neg = np.exp(-0.5 * (np.sqrt(dist_sq[near_mask]) / (r_col_eff * 0.52)) ** 2)
             M11[near_mask] = M11[near_mask] - m_neg_peak_x * w_neg
             M22[near_mask] = M22[near_mask] - m_neg_peak_y * w_neg
+
+    # ── 6b. Full Moment Continuity at Cantilever Drop Beam Root Supports ──────
+    if drop_beams:
+        for db in drop_beams:
+            if not isinstance(db, dict):
+                continue
+            bp1 = db.get("p1_grid", db.get("p1"))
+            bp2 = db.get("p2_grid", db.get("p2"))
+            if not bp1 or not bp2 or len(bp1) < 2 or len(bp2) < 2:
+                continue
+            x1_b, y1_b = float(bp1[0]), float(bp1[1])
+            x2_b, y2_b = float(bp2[0]), float(bp2[1])
+            L_b = math.hypot(x2_b - x1_b, y2_b - y1_b)
+            if L_b < 0.2:
+                continue
+            is_horiz_b = abs(x2_b - x1_b) >= abs(y2_b - y1_b)
+            is_cant_b = (db.get("is_continuous") == "cantilever" or db.get("beam_type_category") == "cantilever_beam")
+
+            # (A) Cantilever Drop Beam Continuity & Elastic Tip Support for Slab (Full Moment Continuity)
+            # Note: The cantilever beam's own internal moment Mu_cant is resisted by the beam's top reinforcement
+            # (extended continuously into the adjacent backspan beam). For the slab panel itself, the cantilever
+            # beam provides continuous support at the root and elastic point/line support at its tip.
+            if is_cant_b and db.get("full_moment_continuity"):
+                s1_t = db.get("supp1", {}).get("type", "free")
+                s2_t = db.get("supp2", {}).get("type", "free")
+                if s1_t in ("column", "wall"):
+                    rx, ry = x1_b, y1_b
+                    tx, ty = x2_b, y2_b
+                elif s2_t in ("column", "wall"):
+                    rx, ry = x2_b, y2_b
+                    tx, ty = x1_b, y1_b
+                else:
+                    rx, ry, tx, ty = None, None, None, None
+                if rx is not None:
+                    dist_sq_r = (X - rx) ** 2 + (Y - ry) ** 2
+                    near_r = dist_sq_r <= (r_col_eff * 1.8) ** 2
+                    if np.any(near_r):
+                        w_r = np.exp(-0.5 * (np.sqrt(dist_sq_r[near_r]) / (r_col_eff * 0.52)) ** 2)
+                        if is_horiz_b:
+                            M11[near_r] = np.minimum(M11[near_r], -1.10 * m_neg_peak_x * w_r)
+                        else:
+                            M22[near_r] = np.minimum(M22[near_r], -1.10 * m_neg_peak_y * w_r)
+                    # Tip support restraint for the slab supported at the cantilever beam tip
+                    dist_sq_t = (X - tx) ** 2 + (Y - ty) ** 2
+                    near_t = dist_sq_t <= (r_col_eff * 1.6) ** 2
+                    if np.any(near_t):
+                        w_t = np.exp(-0.5 * (np.sqrt(dist_sq_t[near_t]) / (r_col_eff * 0.50)) ** 2)
+                        M11[near_t] = np.minimum(M11[near_t], -0.65 * m_neg_peak_x * w_t)
+                        M22[near_t] = np.minimum(M22[near_t], -0.65 * m_neg_peak_y * w_t)
+
+            # (B) Stiff Drop Beam Load Sharing & Line-Support Restraint (ECP 203 Clause 6-2-5-4)
+            # A stiff drop beam (t_beam > ts) absorbs ~85% of the parallel column-strip moment
+            # and provides continuous line support for perpendicular slab strips.
+            if db.get("beam_type_category") != "unsupported_beam":
+                if is_horiz_b:
+                    xb_min, xb_max = min(x1_b, x2_b), max(x1_b, x2_b)
+                    yb_mid = 0.5 * (y1_b + y2_b)
+                    band_y = max(1.0, 1.35 * h_cs_y)
+                    mask_par = (X >= xb_min - 0.1) & (X <= xb_max + 0.1) & (np.abs(Y - yb_mid) <= band_y)
+                    if np.any(mask_par):
+                        w_strip = np.exp(-0.5 * (np.abs(Y[mask_par] - yb_mid) / (0.60 * band_y)) ** 2)
+                        # Reduce parallel slab positive & negative moment where stiff beam carries the strip moment
+                        red_par = 1.0 - 0.30 * w_strip
+                        pos_p = M11[mask_par] > 0
+                        M11_sub = M11[mask_par]
+                        M11_sub[pos_p] = M11_sub[pos_p] * red_par[pos_p]
+                        M11[mask_par] = M11_sub
+                        # Reduce perpendicular positive sagging moment near the line support
+                        pos_perp = M22[mask_par] > 0
+                        M22_sub = M22[mask_par]
+                        M22_sub[pos_perp] = M22_sub[pos_perp] * (1.0 - 0.22 * w_strip[pos_perp])
+                        M22[mask_par] = M22_sub
+                else:
+                    yb_min, yb_max = min(y1_b, y2_b), max(y1_b, y2_b)
+                    xb_mid = 0.5 * (x1_b + x2_b)
+                    band_x = max(1.0, 1.35 * h_cs_x)
+                    mask_par = (Y >= yb_min - 0.1) & (Y <= yb_max + 0.1) & (np.abs(X - xb_mid) <= band_x)
+                    if np.any(mask_par):
+                        w_strip = np.exp(-0.5 * (np.abs(X[mask_par] - xb_mid) / (0.60 * band_x)) ** 2)
+                        red_par = 1.0 - 0.30 * w_strip
+                        pos_p = M22[mask_par] > 0
+                        M22_sub = M22[mask_par]
+                        M22_sub[pos_p] = M22_sub[pos_p] * red_par[pos_p]
+                        M22[mask_par] = M22_sub
+                        pos_perp = M11[mask_par] > 0
+                        M11_sub = M11[mask_par]
+                        M11_sub[pos_perp] = M11_sub[pos_perp] * (1.0 - 0.22 * w_strip[pos_perp])
+                        M11[mask_par] = M11_sub
 
     # ── 7. Adjust Positive Moment in Enlarged Bays (if any) ──────────────────
     if btm_extra_spans:
@@ -3331,6 +3466,9 @@ def generate_flat_slab_moment_contour(
                     zorder=8
                 )
 
+    # ── Drop Beams (الكمرات الساقطة والكابولية) ──
+    _render_drop_beams_on_ax(ax_plan, is_steel_layout=False)
+
     # Peak Positive Moment Badges at Bay Midspans (with Anti-Overlap Staggering)
     for j in range(len(Ly_spans)):
         Ly = y_coords[j+1] - y_coords[j]
@@ -3602,29 +3740,51 @@ def generate_flat_slab_dual_moment_contour(
             ax.text(x_slab_min - offset_grid_left, y, f"X{idx+1}", color="#991b1b", fontsize=13, weight="bold", ha="center", va="center", zorder=7)
 
         # Columns
-        grid_c = 1
-        col_c = 1
-        for y in y_coords:
-            for x in x_coords:
-                orig_id = f"C{grid_c}"
-                grid_c += 1
-                if (x, y) in rem_coords:
-                    continue
-                cid = f"C{col_c}"
-                col_c += 1
-                c_trans = (col_transforms or {}).get(orig_id, {})
-                geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
-                is_edge_c = is_edge_column_verified(orig_id, geom=geom, edge_columns=edge_columns)
+        if active_cols:
+            for c in active_cols:
+                cid = c.get("id", c.get("orig_id", "C"))
+                orig_id = c.get("orig_id", cid)
+                cx, cy = float(c["x"]), float(c["y"])
+                rx, ry = float(c.get("x_min", cx - 0.15)), float(c.get("y_min", cy - 0.15))
+                rw, rh = float(c.get("width_m", 0.30)), float(c.get("height_m", 0.30))
+                is_edge_c = is_edge_column_verified(orig_id, geom=c, edge_columns=edge_columns)
                 col_box = patches.Rectangle(
-                    (geom["x_min"], geom["y_min"]), geom["width_m"], geom["height_m"],
+                    (rx, ry), rw, rh,
                     linewidth=2.0, edgecolor="#0f172a", facecolor="#1e293b", zorder=6
                 )
                 ax.add_patch(col_box)
                 if is_edge_c:
                     ed_info = (edge_columns or {}).get(orig_id, {})
-                    draw_neighbor_edge_strip(ax, geom["x_min"], geom["y_min"], geom["width_m"], geom["height_m"], ed_info.get("direction", ""), zorder=8)
-                is_right = (geom["center_x"] >= x_coords[-1] - 0.1)
-                draw_column_label_beside(ax, geom["x_min"], geom["y_min"], geom["width_m"], geom["height_m"], geom["center_x"], geom["center_y"], cid, is_right_edge=is_right, fontsize=10.5, zorder=9)
+                    draw_neighbor_edge_strip(ax, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=8)
+                is_right = (cx >= x_coords[-1] - 0.1)
+                draw_column_label_beside(ax, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=10.5, zorder=9)
+        else:
+            grid_c = 1
+            col_c = 1
+            for y in y_coords:
+                for x in x_coords:
+                    orig_id = f"C{grid_c}"
+                    grid_c += 1
+                    if (x, y) in rem_coords:
+                        continue
+                    cid = f"C{col_c}"
+                    col_c += 1
+                    c_trans = (col_transforms or {}).get(orig_id, {})
+                    geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+                    is_edge_c = is_edge_column_verified(orig_id, geom=geom, edge_columns=edge_columns)
+                    col_box = patches.Rectangle(
+                        (geom["x_min"], geom["y_min"]), geom["width_m"], geom["height_m"],
+                        linewidth=2.0, edgecolor="#0f172a", facecolor="#1e293b", zorder=6
+                    )
+                    ax.add_patch(col_box)
+                    if is_edge_c:
+                        ed_info = (edge_columns or {}).get(orig_id, {})
+                        draw_neighbor_edge_strip(ax, geom["x_min"], geom["y_min"], geom["width_m"], geom["height_m"], ed_info.get("direction", ""), zorder=8)
+                    is_right = (geom["center_x"] >= x_coords[-1] - 0.1)
+                    draw_column_label_beside(ax, geom["x_min"], geom["y_min"], geom["width_m"], geom["height_m"], geom["center_x"], geom["center_y"], cid, is_right_edge=is_right, fontsize=10.5, zorder=9)
+
+        # ── Drop Beams (الكمرات الساقطة والكابولية) ──
+        _render_drop_beams_on_ax(ax, is_steel_layout=False)
 
         ax.set_title(f"Moment {mode_name} — {dir_label}\n[Max +M: +{m_max:.2f} t.m/m | Max -M: {m_min:.2f} t.m/m]", fontsize=16, weight="bold", pad=12, color="#0f172a")
         ax.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
@@ -4150,6 +4310,9 @@ def generate_moment_deficit_contour(
                     draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=8)
                 is_right = (i_idx == len(x_coords) - 1)
                 draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=9)
+
+    # ── Drop Beams (الكمرات الساقطة والكابولية) ──
+    _render_drop_beams_on_ax(ax_plan, is_steel_layout=False)
 
     # ── Dimensions ────────────────────────────────────────────────────────────
     y_dim_lx = y_slab_min - dim_offset_bot
@@ -4802,6 +4965,9 @@ def generate_flat_slab_column_caps_sketch(
                 is_right = (i_idx == len(x_coords) - 1)
                 draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=10)
 
+    # ── Drop Beams (الكمرات الساقطة والكابولية) ──
+    _render_drop_beams_on_ax(ax_plan, is_steel_layout=False)
+
     active_caps_count = 0
     needed_caps = []
     mesh_inc_caps = []
@@ -5254,26 +5420,38 @@ def calculate_flat_slab_deflections(
                 kd = 0.0075
                 m_denom = 18.0
 
-            # ── التحقق من وجود كمرات ساقطة على أطراف الباكية (Drop / Marginal Beams Stiffness) ──
-            _effective_defl_beams = drop_beams
-            if _effective_defl_beams is None:
-                try:
-                    _effective_defl_beams = st.session_state.get("cfg", {}).get("fs_drop_beams", [])
-                except Exception:
-                    _effective_defl_beams = []
-            if _effective_defl_beams and (is_edge_x or is_edge_y):
-                # فحص تطابق أي كمرة ساقطة مع حدود هذه الباكية
+            # ── التحقق من وجود كمرات ساقطة أو كمرات كابولية متزنة على أطراف الباكية (Drop / Cantilever Beams Stiffness) ──
+            _effective_defl_beams = _get_active_drop_beams_list(drop_beams)
+            if _effective_defl_beams:
                 px_min, px_max = x_coords[i], x_coords[i+1]
                 py_min, py_max = y_coords[j], y_coords[j+1]
+                n_panel_beams = 0
+                has_cant_beam = False
                 for db in _effective_defl_beams:
-                    dp1 = db.get("p1", [0, 0])
-                    dp2 = db.get("p2", [0, 0])
-                    dmx = (dp1[0] + dp2[0]) / 2.0
-                    dmy = (dp1[1] + dp2[1]) / 2.0
+                    if not isinstance(db, dict) or db.get("beam_type_category") == "unsupported_beam":
+                        continue
+                    dp1 = db.get("p1_grid", db.get("p1", [0, 0]))
+                    dp2 = db.get("p2_grid", db.get("p2", [0, 0]))
+                    dmx = (float(dp1[0]) + float(dp2[0])) / 2.0
+                    dmy = (float(dp1[1]) + float(dp2[1])) / 2.0
                     if (px_min - 0.4 <= dmx <= px_max + 0.4) and (py_min - 0.4 <= dmy <= py_max + 0.4):
-                        kd *= 0.76  # تخفيض معامل سهم الانحناء نظراً للجساءة العالية للكمرة الساقطة الطرفية
-                        ptype += " + كمرة ساقطة (Drop Beam)"
-                        break
+                        n_panel_beams += 1
+                        if db.get("is_continuous") == "cantilever" or db.get("beam_type_category") == "cantilever_beam":
+                            has_cant_beam = True
+                if n_panel_beams == 1:
+                    kd *= 0.76
+                    m_denom *= 1.15
+                elif n_panel_beams == 2:
+                    kd *= 0.62
+                    m_denom *= 1.28
+                elif n_panel_beams >= 3:
+                    kd *= 0.50
+                    m_denom *= 1.42
+                if n_panel_beams > 0:
+                    if has_cant_beam:
+                        ptype += f" + {n_panel_beams} كمرة ساقطة/كابولية متزنة"
+                    else:
+                        ptype += f" + {n_panel_beams} كمرة ساقطة (Drop Beam)"
 
             Ms_pos = (Ws * (Ln_critical ** 2)) / m_denom       # t.m/m
 
@@ -6167,21 +6345,16 @@ def generate_flat_slab_deflection_contour_sketch(
     _col_transforms_def = col_transforms or {}
     _min_col_w = max(col_w_cm / 100.0, slab_w * 0.040)
     _min_col_d = max(col_d_cm / 100.0, slab_h * 0.040)
-    rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
-    col_k = 1
-    for y in y_coords:
-        for x in x_coords:
-            if (x, y) in rem_coords:
-                col_k += 1
-                continue
-            orig_id = f"C{col_k}"
-            c_trans = _col_transforms_def.get(orig_id, {})
-            geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
-            rx = max(geom["x_min"], geom["x_max"] - _min_col_w) if geom["width_m"] < _min_col_w else geom["x_min"]
-            ry = max(geom["y_min"], geom["y_max"] - _min_col_d) if geom["height_m"] < _min_col_d else geom["y_min"]
-            rw = max(geom["width_m"], _min_col_w)
-            rh = max(geom["height_m"], _min_col_d)
-            is_edge_c = is_edge_column_verified(orig_id, geom=geom, edge_columns=edge_columns)
+    if active_cols:
+        for c in active_cols:
+            cid = c.get("id", c.get("orig_id", "C"))
+            orig_id = c.get("orig_id", cid)
+            cx, cy = float(c["x"]), float(c["y"])
+            rw = max(float(c.get("width_m", col_w_cm / 100.0)), _min_col_w)
+            rh = max(float(c.get("height_m", col_d_cm / 100.0)), _min_col_d)
+            rx = float(c.get("x_min", cx - rw / 2.0))
+            ry = float(c.get("y_min", cy - rh / 2.0))
+            is_edge_c = is_edge_column_verified(orig_id, geom=c, edge_columns=edge_columns)
             ax_plan.add_patch(patches.Rectangle(
                 (rx, ry), rw, rh,
                 lw=2.0,
@@ -6192,9 +6365,43 @@ def generate_flat_slab_deflection_contour_sketch(
             if is_edge_c:
                 ed_info = (edge_columns or {}).get(orig_id) or {}
                 draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=9)
-            is_right = (x >= x_coords[-1] - 0.1)
-            draw_column_label_beside(ax_plan, rx, ry, rw, rh, geom["center_x"], geom["center_y"], orig_id, is_right_edge=is_right, fontsize=12.0, zorder=10)
-            col_k += 1
+            is_right = (cx >= x_coords[-1] - 0.1)
+            draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=10)
+    else:
+        rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
+        col_k = 1
+        col_idx = 1
+        for y in y_coords:
+            for x in x_coords:
+                if (x, y) in rem_coords:
+                    col_k += 1
+                    continue
+                orig_id = f"C{col_k}"
+                cid = f"C{col_idx}"
+                c_trans = _col_transforms_def.get(orig_id, {})
+                geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+                rx = max(geom["x_min"], geom["x_max"] - _min_col_w) if geom["width_m"] < _min_col_w else geom["x_min"]
+                ry = max(geom["y_min"], geom["y_max"] - _min_col_d) if geom["height_m"] < _min_col_d else geom["y_min"]
+                rw = max(geom["width_m"], _min_col_w)
+                rh = max(geom["height_m"], _min_col_d)
+                is_edge_c = is_edge_column_verified(orig_id, geom=geom, edge_columns=edge_columns)
+                ax_plan.add_patch(patches.Rectangle(
+                    (rx, ry), rw, rh,
+                    lw=2.0,
+                    edgecolor="#0f172a",
+                    facecolor="#1e293b",
+                    zorder=8
+                ))
+                if is_edge_c:
+                    ed_info = (edge_columns or {}).get(orig_id) or {}
+                    draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=9)
+                is_right = (x >= x_coords[-1] - 0.1)
+                draw_column_label_beside(ax_plan, rx, ry, rw, rh, geom["center_x"], geom["center_y"], cid, is_right_edge=is_right, fontsize=12.0, zorder=10)
+                col_k += 1
+                col_idx += 1
+
+    # ── Drop Beams (الكمرات الساقطة والكابولية) ──
+    _render_drop_beams_on_ax(ax_plan, is_steel_layout=False)
 
     # Panel Deflection Callout Tags
     unsafe_count = 0
@@ -6751,6 +6958,9 @@ def generate_flat_slab_punching_shear_sketch(
                 color=tag_txt_color, zorder=10,
                 bbox=dict(boxstyle="round,pad=0.32", facecolor=tag_face, edgecolor=tag_edge, lw=1.6, alpha=0.96)
             )
+
+    # ── Drop Beams (الكمرات الساقطة والكابولية) ──
+    _render_drop_beams_on_ax(ax_plan, is_steel_layout=False)
 
     ax_plan.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
     ax_plan.set_ylim(y_slab_min - margin_bot, y_slab_max + margin_top)
@@ -7709,6 +7919,9 @@ def generate_flat_slab_bottom_extra_shawka_sketch(
                 is_right = (i_idx == len(x_coords) - 1)
                 draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=10)
 
+    # ── Drop Beams (الكمرات الساقطة والكابولية) ──
+    _render_drop_beams_on_ax(ax_plan, is_steel_layout=False)
+
     # Filter items by direction (Independent Bay Detailing per Panel P_i_j)
     dir_req = (direction or "X").upper()
     raw_filtered_bays = [
@@ -8127,6 +8340,9 @@ def generate_flat_slab_top_mesh_extra_sketch(
                     draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=9)
                 is_right = (i_idx == len(x_coords) - 1)
                 draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=10)
+
+    # ── Drop Beams (الكمرات الساقطة والكابولية) ──
+    _render_drop_beams_on_ax(ax_plan, is_steel_layout=False)
 
     # ── Check Extra Top Slab Reinforcement by Direction ─────────────────────
     # ملاحظة هندسية: الحديد الإضافي العلوي المقاوم للعزوم السالبة أعلى الأعمدة (Column Caps)
@@ -8824,21 +9040,8 @@ def generate_flat_slab_master_steel_layout_sketch(
         color="#1e3a8a", fontsize=12.0, weight="bold", ha="left", va="center", rotation=270
     )
 
-    # ── Drop Beams (الكمرات الساقطة على لوحة التسليح الشاملة) ──
-    _effective_msl_beams = drop_beams
-    if _effective_msl_beams is None:
-        try:
-            _effective_msl_beams = st.session_state.get("cfg", {}).get("fs_drop_beams", [])
-        except Exception:
-            _effective_msl_beams = []
-    if _effective_msl_beams:
-        for b_obj in _effective_msl_beams:
-            bp1 = b_obj.get("p1_face") or b_obj.get("p1", [0, 0])
-            bp2 = b_obj.get("p2_face") or b_obj.get("p2", [0, 0])
-            bb_m = float(b_obj.get("b_cm", 25.0)) / 100.0
-            bid = b_obj.get("id", "B")
-            rft_lbl = f"{bid}: {b_obj.get('rft_btm_str', '')} Btm | {b_obj.get('rft_top_str', '')} Top | {b_obj.get('stirrups_str', '')}"
-            draw_beam_polygon_on_plan(ax_plan, bp1, bp2, bb_m, rft_label=rft_lbl, is_steel_layout=True)
+    # ── Drop Beams (الكمرات الساقطة والكابولية على لوحة التسليح الشاملة) ──
+    _render_drop_beams_on_ax(ax_plan, drop_beams=drop_beams, is_steel_layout=True)
 
     ax_plan.set_xlim(x_slab_min - margin_left, x_slab_max + margin_right)
     ax_plan.set_ylim(y_slab_min - margin_bot, y_slab_max + margin_top)
@@ -9188,7 +9391,9 @@ def calculate_punching_shear(columns, Lx_spans, Ly_spans, cantilevers, Wu, d_cm,
         bc, tc = col["bc"], col["tc"]
         ctype = col["type"]
 
-        if "Pu_slab" in col and col["Pu_slab"] is not None:
+        if "Pu_punch" in col and col["Pu_punch"] is not None:
+            Pu = col["Pu_punch"]
+        elif "Pu_slab" in col and col["Pu_slab"] is not None:
             Pu = col["Pu_slab"]
         elif "Pu" in col and col["Pu"] is not None:
             Pu = col["Pu"]
@@ -9228,14 +9433,16 @@ def calculate_punching_shear(columns, Lx_spans, Ly_spans, cantilevers, Wu, d_cm,
         ratio = des["stress_ratio"]
         is_safe = des["is_safe"]
 
+        framing_beams = col.get("framing_beams", [])
+        beam_note = f" — كمرات ({', '.join(framing_beams)})" if framing_beams else ""
         if is_safe:
-            status_str = "✅ Safe (آمن)"
+            status_str = f"✅ Safe (آمن{beam_note})"
         elif des["advisory_case"] == 1:
-            status_str = "⚠️ Unsafe (ts < 25cm)"
+            status_str = f"⚠️ Unsafe (ts < 25cm{beam_note})"
         elif des["advisory_case"] == 2:
-            status_str = "🚨 Unsafe (qu > qu,max)"
+            status_str = f"🚨 Unsafe (qu > qu,max{beam_note})"
         else:
-            status_str = "⚠️ Unsafe (Stirrups Feasible)"
+            status_str = f"⚠️ Unsafe (Stirrups Feasible{beam_note})"
 
         results.append({
             "Column ID": col["id"],
@@ -9700,9 +9907,10 @@ def calculate_boq(Lx_spans, Ly_spans, cantilevers, ts_cm, mesh_btm_n, mesh_btm_d
     len_edge_m = l_upins + l_edge_long
     steel_edge_kg = w_upins + w_edge_long
 
-    # 7. Drop Beams concrete & reinforcement (الكمرات الساقطة المسلحة)
+    # 7. Drop Beams concrete & reinforcement (الكمرات الساقطة والكابولية المسلحة)
     beams_conc_vol = 0.0
     beams_steel_kg = 0.0
+    beams_steel_len_m = 0.0
     if drop_beams and isinstance(drop_beams, list):
         for b in drop_beams:
             if not isinstance(b, dict):
@@ -9713,18 +9921,21 @@ def calculate_boq(Lx_spans, Ly_spans, cantilevers, ts_cm, mesh_btm_n, mesh_btm_d
             v_drop = b_m * max(0.0, t_m - (ts_cm / 100.0)) * L_clr
             beams_conc_vol += v_drop
 
-            # Main bottom bars
+            is_cant_b = (b.get("is_continuous") == "cantilever" or b.get("beam_type_category") == "cantilever_beam")
             dia_b = int(b.get("dia_main", 16))
             nb_b = int(b.get("n_bars_btm", 3))
             lb_b = (L_clr + 0.60) * 1.06
-            _, w1 = add_steel(dia_b, nb_b * lb_b, "تسليح رئيسي سفلي للكمرات الساقطة (Drop Beams Main)")
+            l1, w1 = add_steel(dia_b, nb_b * lb_b, "تسليح سفلي للكمرات الساقطة والكابولية (Drop Beams Btm)")
             beams_steel_kg += w1
+            beams_steel_len_m += l1
 
-            # Top hanger bars
+            # Top bars (Main top steel for cantilever / continuous root beams, or hanger bars for simple beams)
             nb_t = int(b.get("n_bars_top", 2))
-            lb_t = (L_clr + 0.40) * 1.06
-            _, w2 = add_steel(12, nb_t * lb_t, "تعليق كانات علوي للكمرات الساقطة (Drop Beams Hangers)")
+            dia_t = dia_b if (is_cant_b or b.get("full_moment_continuity")) else 12
+            lb_t = (L_clr + (0.90 if is_cant_b else 0.40)) * 1.06
+            l2, w2 = add_steel(dia_t, nb_t * lb_t, "تسليح علوي للكمرات الساقطة والكابولية (Drop Beams Top)")
             beams_steel_kg += w2
+            beams_steel_len_m += l2
 
             # Stirrups
             st_n = int(b.get("stirrup_n", 5))
@@ -9733,14 +9944,16 @@ def calculate_boq(Lx_spans, Ly_spans, cantilevers, ts_cm, mesh_btm_n, mesh_btm_d
             st_p = 2.0 * ((b_m - 0.05) + (t_m - 0.05)) + 0.15
             if nb_br == 4:
                 st_p += 2.0 * (t_m - 0.05)
-            _, w3 = add_steel(8, st_tot * st_p * 1.06, "كانات قص للكمرات الساقطة (Drop Beams Stirrups)")
+            l3, w3 = add_steel(8, st_tot * st_p * 1.06, "كانات قص للكمرات الساقطة (Drop Beams Stirrups)")
             beams_steel_kg += w3
+            beams_steel_len_m += l3
 
             # Skin rebar (if depth >= 60cm)
             if t_m >= 0.60:
                 n_sk = 4 if t_m >= 0.90 else 2
-                _, w4 = add_steel(10, n_sk * L_clr * 1.06, "حديد انكماش جانبي للكمرات (Skin Rebar)")
+                l4, w4 = add_steel(10, n_sk * L_clr * 1.06, "حديد انكماش جانبي للكمرات (Skin Rebar)")
                 beams_steel_kg += w4
+                beams_steel_len_m += l4
 
     concrete_vol += beams_conc_vol
 
@@ -9824,15 +10037,15 @@ def calculate_boq(Lx_spans, Ly_spans, cantilevers, ts_cm, mesh_btm_n, mesh_btm_d
 
     if beams_steel_kg > 0 or beams_conc_vol > 0:
         items.append({
-            "item_name": f"الكمرات الساقطة المسلحة (Drop Beams — {len(drop_beams)} كمرة)",
+            "item_name": f"الكمرات الساقطة والكابولية المسلحة (Drop Beams — {len(drop_beams)} كمرة)",
             "dia_str": "Ø8, Ø12, Ø16 mm",
             "dia_mm": 16,
-            "length_m": 0.0,
+            "length_m": beams_steel_len_m,
             "weight_kg": beams_steel_kg,
             "weight_ton": beams_steel_kg / 1000.0,
             "qty_str": f"{beams_steel_kg / 1000.0:.2f} Ton ({beams_steel_kg:,.0f} kg)",
-            "length_str": "—",
-            "spec": f"خرسانة كمرات ساقطة = {beams_conc_vol:.2f} m³ (سقوط أسفل البلاطة)",
+            "length_str": f"{beams_steel_len_m:,.1f} m'",
+            "spec": f"خرسانة سقوط الكمرات = {beams_conc_vol:.2f} m³ (سقوط أسفل البلاطة)",
         })
 
     items.append({
@@ -10127,26 +10340,30 @@ def _compute_adaptive_fs_col_transform(
 
 def _ensure_fs_selective_mode_initialized(Lx_spans: list, Ly_spans: list) -> tuple:
     """
-    ضمان تهيئة قائمة الأعمدة المسقطة (fs_placed_cols) مع الحفاظ الكامل على الأعمدة:
-    - إذا كانت القائمة فارغة أو None، يتم تهيئتها بجميع أعمدة الشبكة الحالية غير المحذوفة.
+    ضمان تهيئة قائمة الأعمدة المسقطة (fs_placed_cols):
+    - في حالة المشاريع الجديدة (Zero Column Mode / fs_zero_col_mode=True)، تظل القائمة فارغة [] حتى يسقط المستخدم الأعمدة.
+    - في حالة المشاريع القديمة (fs_zero_col_mode=False و fs_placed_cols=None)، يتم تهيئتها بجميع أعمدة الشبكة الحالية غير المحذوفة.
     """
     cfg = st.session_state.setdefault("cfg", {})
     n_xi = len(Lx_spans) + 1
     n_yj = len(Ly_spans) + 1
+    zero_mode = bool(cfg.get("fs_zero_col_mode", False))
     placed_raw = cfg.get("fs_placed_cols", None)
     removed_raw = cfg.get("fs_removed_cols", [])
     if not isinstance(removed_raw, list):
         removed_raw = []
 
     all_orig = [f"C{k}" for k in range(1, n_xi * n_yj + 1)]
-    if placed_raw is None or (isinstance(placed_raw, list) and len(placed_raw) == 0):
+    if not zero_mode and placed_raw is None:
         placed_list = [cid for cid in all_orig if cid not in removed_raw]
-        cfg["fs_zero_col_mode"] = False
+        cfg["fs_zero_col_mode"] = True
         cfg["fs_placed_cols"] = placed_list
-        S.cfg_set("fs_zero_col_mode", False)
+        S.cfg_set("fs_zero_col_mode", True)
         S.cfg_set("fs_placed_cols", placed_list)
     else:
-        placed_list = list(placed_raw)
+        placed_list = list(placed_raw) if isinstance(placed_raw, list) else []
+        cfg["fs_zero_col_mode"] = True
+        cfg["fs_placed_cols"] = placed_list
 
     return cfg, placed_list, removed_raw
 
@@ -10222,11 +10439,13 @@ def _place_fs_columns_at_intersections(
             "i": int(ti),
             "j": int(tj),
         }
+        col_props[f"{ti},{tj}"] = dict(col_props[orig_id])
         col_transforms[orig_id] = {
             "direction": adaptive_tr["direction"],
             "shift_x": adaptive_tr["shift_x"],
             "shift_y": adaptive_tr["shift_y"],
         }
+        col_transforms[f"{ti},{tj}"] = dict(col_transforms[orig_id])
 
         if was_active:
             updated_count += 1
@@ -11109,19 +11328,90 @@ def _find_beam_spans_on_line(
             else:
                 deduped.append(s)
 
-    # ترشيح الركائز الواقعة ضمن نطاق التحديد
+    # ترشيح الركائز الواقعة ضمن نطاق التحديد مع دعم الكمرات الكابولية ذات الطرف الحر
     tol = 0.45
+    axis_coords = x_coords if is_horizontal else y_coords
+
     if abs(sel_max - sel_min) < 0.40:
         # نقر مفرد على بحر: إيجاد أقرب ركيزة سابقة وأقرب ركيزة تالية
+        click_pos = (sel_min + sel_max) / 2.0
         left_s = [s for s in deduped if s["coord"] <= sel_min + tol]
         right_s = [s for s in deduped if s["coord"] >= sel_max - tol]
         if left_s and right_s and left_s[-1] != right_s[0]:
             chosen = [left_s[-1], right_s[0]]
+        elif left_s and left_s[-1]["type"] in ("column", "wall") and not right_s:
+            right_grid_pts = [g for g in axis_coords if g >= max(click_pos - 0.15, left_s[-1]["coord"] + 0.50)]
+            free_coord = right_grid_pts[0] if right_grid_pts else max(click_pos, left_s[-1]["coord"] + 1.0)
+            chosen = [
+                left_s[-1],
+                {"coord": round(free_coord, 4), "type": "cantilever_edge", "id": "طرف حر كابولي", "obj": None},
+            ]
+        elif right_s and right_s[0]["type"] in ("column", "wall") and not left_s:
+            left_grid_pts = [g for g in axis_coords if g <= min(click_pos + 0.15, right_s[0]["coord"] - 0.50)]
+            free_coord = left_grid_pts[-1] if left_grid_pts else min(click_pos, right_s[0]["coord"] - 1.0)
+            chosen = [
+                {"coord": round(free_coord, 4), "type": "cantilever_edge", "id": "طرف حر كابولي", "obj": None},
+                right_s[0],
+            ]
         else:
             chosen = []
     else:
         # سحب بالماوس أو صندوق تحديد
         chosen = [s for s in deduped if (sel_min - tol) <= s["coord"] <= (sel_max + tol)]
+        if not chosen:
+            left_s = [s for s in deduped if s["coord"] <= sel_min + tol]
+            right_s = [s for s in deduped if s["coord"] >= sel_max - tol]
+            if left_s and right_s and left_s[-1] != right_s[0]:
+                chosen = [left_s[-1], right_s[0]]
+            elif left_s and left_s[-1]["type"] in ("column", "wall") and not right_s:
+                chosen = [left_s[-1]]
+            elif right_s and right_s[0]["type"] in ("column", "wall") and not left_s:
+                chosen = [right_s[0]]
+
+        if chosen:
+            # فحص امتداد التحديد لطرف حر كابولي جهة اليسار / الأسفل
+            first_s = chosen[0]
+            has_further_left_supp = any(s["coord"] < first_s["coord"] - 0.25 for s in deduped)
+            if first_s["type"] in ("column", "wall") and not has_further_left_supp:
+                prev_g_list = [g for g in axis_coords if g < first_s["coord"] - 0.50]
+                prev_bay_len = (first_s["coord"] - max(prev_g_list)) if prev_g_list else 2.0
+                left_thresh = 0.50 if len(chosen) == 1 else max(1.10, 0.45 * prev_bay_len)
+                if (first_s["coord"] - sel_min) >= left_thresh:
+                    cand_g_left = [g for g in axis_coords if (sel_min - tol) <= g <= (first_s["coord"] - 0.50)]
+                    if cand_g_left:
+                        free_l_coord = min(cand_g_left)
+                    elif prev_g_list and len(chosen) == 1:
+                        free_l_coord = max(prev_g_list)
+                    else:
+                        free_l_coord = sel_min
+                    chosen.insert(0, {
+                        "coord": round(free_l_coord, 4),
+                        "type": "cantilever_edge",
+                        "id": "طرف حر كابولي",
+                        "obj": None,
+                    })
+
+            # فحص امتداد التحديد لطرف حر كابولي جهة اليمين / الأعلى
+            last_s = chosen[-1]
+            has_further_right_supp = any(s["coord"] > last_s["coord"] + 0.25 for s in deduped)
+            if last_s["type"] in ("column", "wall") and not has_further_right_supp:
+                next_g_list = [g for g in axis_coords if g > last_s["coord"] + 0.50]
+                next_bay_len = (min(next_g_list) - last_s["coord"]) if next_g_list else 2.0
+                right_thresh = 0.50 if len(chosen) == 1 else max(1.10, 0.45 * next_bay_len)
+                if (sel_max - last_s["coord"]) >= right_thresh:
+                    cand_g_right = [g for g in axis_coords if (last_s["coord"] + 0.50) <= g <= (sel_max + tol)]
+                    if cand_g_right:
+                        free_r_coord = max(cand_g_right)
+                    elif next_g_list and len(chosen) == 1:
+                        free_r_coord = min(next_g_list)
+                    else:
+                        free_r_coord = sel_max
+                    chosen.append({
+                        "coord": round(free_r_coord, 4),
+                        "type": "cantilever_edge",
+                        "id": "طرف حر كابولي",
+                        "obj": None,
+                    })
 
     spans = []
     for k in range(len(chosen) - 1):
@@ -11323,14 +11613,16 @@ def _execute_fs_add_beam_box(data: dict, Lx_spans: list, Ly_spans: list, cantile
             st.rerun()
         return
 
-    # فحص كمرات الكابولي والتأكد من وجود كمرة داخلية مجاورة مستمرة (Backspan Continuity) طبقاً للكود
+    # فحص كمرات الكابولي والتأكد من تحقق شرط الركيزة الرأسية (عمود/حائط) والاتصال المباشر بكمرة مجاورة مستمرة (Backspan Continuity)
     rejected_cantilever_msg = None
     for sp in spans:
         if sp.get("is_cantilever"):
             s1 = sp["s1"]
             s2 = sp["s2"]
-            supp_coord = s2["coord"] if s1["type"] == "cantilever_edge" else s1["coord"]
+            fixed_supp = s2 if s1["type"] == "cantilever_edge" else s1
+            supp_coord = fixed_supp["coord"]
             cant_dir = -1 if s1["type"] == "cantilever_edge" else +1
+            is_vertical_support = fixed_supp.get("type") in ("column", "wall")
             has_backspan = _has_adjacent_backspan_beam(
                 is_horizontal=is_horizontal,
                 line_coord=line_coord,
@@ -11339,13 +11631,14 @@ def _execute_fs_add_beam_box(data: dict, Lx_spans: list, Ly_spans: list, cantile
                 cur_beams=cur_beams,
                 candidate_spans=spans,
             )
-            if not has_backspan:
-                supp_name = "عمود" if (s1["type"] == "column" or s2["type"] == "column") else "ركيزة"
+            if not is_vertical_support or not has_backspan:
+                supp_name = "عمود أو حائط" if is_vertical_support else "ركيزة غير رأسية"
                 rejected_cantilever_msg = (
-                    f"🚫 مكان إسقاط الكمرة مرفوض كودياً (ECP 203):\n"
-                    f"لا يمكن إسقاط كمرة كابولي (Cantilever Beam) مرتكزة على {supp_name} فقط دون وجود كمرة داخلية مجاورة مستمرة معها "
-                    "على نفس المحور والامتداد داخل البلاطة لموازنة عزم الانقلاب والانحناء السالب (Backspan Continuity).\n"
-                    "يرجى أولاً إسقاط الكمرة الداخلية المجاورة، ثم مد كابولي الكمرة كامتداد لها."
+                    f"🚫 مكان إسقاط الكمرة الكابولية مرفوض كودياً (ECP 203):\n"
+                    f"لقبول الكمرة الكابولية ذات الطرف الحر (Cantilever Beam) يلزم تحقق شرطين هندسيين معاً:\n"
+                    f"1. اتصال نقطة البداية بركيزة رأسية (عمود أو حائط).\n"
+                    f"2. اتصالها المباشر بكمرة داخلية مجاورة مستمرة على نفس المحور الهندسي لتأمين التثبيت التام (Full Moment Continuity).\n"
+                    f"يرجى أولاً إسقاط الكمرة الداخلية المجاورة على نفس المحور، ثم مد كابولي الكمرة من الركيزة الرأسية كامتداد لها."
                 )
                 break
 
@@ -11445,7 +11738,13 @@ def _execute_fs_delete_drop_beam(data: dict, trigger_rerun: bool = False):
     cfg_obj = st.session_state.setdefault("cfg", {})
     cur_beams = list(cfg_obj.get("fs_drop_beams") or st.session_state.get("fs_drop_beams") or S.cfg_val("fs_drop_beams", []) or [])
     new_beams = [b for b in cur_beams if b.get("id") != target_id]
-    new_beams = recompute_all_drop_beams(new_beams)
+    _act_cols_del = st.session_state.get("_fs_active_cols") or None
+    _bounds_del = st.session_state.get("_fs_current_slab_bounds") or None
+    new_beams = recompute_all_drop_beams(
+        new_beams,
+        columns_list=_act_cols_del,
+        grid_bounds=_bounds_del,
+    )
     cfg_obj["fs_drop_beams"] = new_beams
     st.session_state["fs_drop_beams"] = new_beams
     st.session_state["fs_pending_delete_beam_id"] = None
@@ -11459,10 +11758,11 @@ def _execute_fs_delete_drop_beam(data: dict, trigger_rerun: bool = False):
 def _on_fs_sync_input_change():
     """
     Callback يُنفَّذ فور وصول إشارة الإسقاط بالماوس من المسقط الأفقي قبل بناء أي عنصر واجهة،
-    مما يسمح بتفريغ الحقل بأمان تام وتنفيذ الإسقاط الفوري في نفس دورة التشغيل.
+    مما يسمح بتفريغ الحقل بأمان تام وتنفيذ الإسقاط الفوري في نفس دورة التشغيل دون فقدان النقرات المتتالية.
     """
     raw = st.session_state.get("fs_col_sync_input", "")
     if raw:
+        st.session_state.setdefault("_fs_queued_sync_payloads", []).append(raw)
         st.session_state["_fs_queued_sync_payload"] = raw
         st.session_state["fs_col_sync_input"] = ""
 
@@ -11471,18 +11771,28 @@ def _handle_fs_sync_payload(Lx_spans: list, Ly_spans: list, cantilevers: dict, p
     """
     معالجة أوامر الإسقاط التفاعلي للأعمدة والكمرات القادمة من لوحة المسقط الأفقي (JS Bridge / Query Params).
     """
-    val = payload_str
-    if not val:
-        val = st.session_state.pop("_fs_queued_sync_payload", None)
-    if not val:
-        val = st.session_state.get("fs_col_sync_input")
+    queued_list = list(st.session_state.pop("_fs_queued_sync_payloads", []) or [])
+    single_queued = st.session_state.pop("_fs_queued_sync_payload", None)
+    if single_queued and single_queued not in queued_list:
+        queued_list.append(single_queued)
+    if payload_str and payload_str not in queued_list:
+        queued_list.append(payload_str)
+    cur_in = st.session_state.get("fs_col_sync_input")
+    if cur_in and cur_in not in queued_list:
+        queued_list.append(cur_in)
+
     from_query = False
-    if not val and "fs_col_op" in st.query_params:
-        val = st.query_params["fs_col_op"]
+    if not queued_list and "fs_col_op" in st.query_params:
+        queued_list.append(st.query_params["fs_col_op"])
         from_query = True
 
-    if not val:
+    if not queued_list:
         return
+
+    if len(queued_list) > 1:
+        for _q_item in queued_list[:-1]:
+            _handle_fs_sync_payload(Lx_spans, Ly_spans, cantilevers, payload_str=_q_item)
+    val = queued_list[-1]
 
     try:
         data = json.loads(val) if isinstance(val, str) else val
@@ -11676,6 +11986,9 @@ def _render_fs_interactive_plan(
     bbox_info["col_b_m"] = cur_b_cm / 100.0
     bbox_info["col_t_m"] = cur_t_cm / 100.0
     bbox_info["col_dir"] = cur_dir
+    bbox_info["placed_ij"] = [[int(c.get("i", 0)), int(c.get("j", 0))] for c in (active_cols or []) if "i" in c and "j" in c]
+    bbox_info["del_ver"] = int(st.session_state.get("_fs_del_col_ver", 0))
+    bbox_info["project_key"] = str(S.get_active_profile_name() or "default")
 
     # نقاط الجذب الذكي المغناطيسي (Smart Snapping Targets)
     snaps_list = []
@@ -12227,9 +12540,45 @@ def _render_fs_interactive_plan(
     }}
   }}
 
+  const geomKeyStr = (bboxInfo.project_key || '') + '|' + (bboxInfo.xs || []).join(',') + '|' + (bboxInfo.ys || []).join(',') + '|dv=' + (bboxInfo.del_ver || 0);
+  const confirmedSet = new Set(((bboxInfo && bboxInfo.placed_ij) || []).map(p => p[0] + ',' + p[1]));
+  let pendingColMap = new Map();
+  try {{
+    if (window.parent) {{
+      if (!window.parent._fsPendingColsStore || window.parent._fsPendingColsStore.key !== geomKeyStr) {{
+        window.parent._fsPendingColsStore = {{ key: geomKeyStr, items: {{}} }};
+      }}
+      const storeItems = window.parent._fsPendingColsStore.items || {{}};
+      Object.keys(storeItems).forEach(function(k) {{
+        if (confirmedSet.has(k)) {{
+          delete storeItems[k];
+        }} else {{
+          pendingColMap.set(k, storeItems[k]);
+        }}
+      }});
+    }}
+  }} catch(e) {{}}
+
+  function recordAndGetPendingIntersections(newList) {{
+    (newList || []).forEach(function(it) {{
+      const k = it.i + ',' + it.j;
+      const itemObj = {{ i: it.i, j: it.j, x: (bboxInfo.xs && bboxInfo.xs[it.i]) || it.x || 0, y: (bboxInfo.ys && bboxInfo.ys[it.j]) || it.y || 0 }};
+      pendingColMap.set(k, itemObj);
+      try {{
+        if (window.parent && window.parent._fsPendingColsStore && window.parent._fsPendingColsStore.key === geomKeyStr) {{
+          window.parent._fsPendingColsStore.items[k] = itemObj;
+        }}
+      }} catch(e) {{}}
+    }});
+    return Array.from(pendingColMap.values()).map(it => ({{ i: it.i, j: it.j }}));
+  }}
+
   function syncToStreamlit(payloadObj) {{
     try {{
-      const jsonStr = JSON.stringify(payloadObj);
+      if (payloadObj && payloadObj.action === 'add_column_box' && Array.isArray(payloadObj.intersections)) {{
+        payloadObj.intersections = recordAndGetPendingIntersections(payloadObj.intersections);
+      }}
+      let jsonStr = JSON.stringify(payloadObj);
       let synced = false;
       try {{
         if (window.parent && window.parent.document) {{
@@ -12238,6 +12587,15 @@ def _render_fs_interactive_plan(
                    || pDoc.querySelector('.st-key-fs_col_sync_input input')
                    || pDoc.querySelector('div[class*="st-key-fs_col_sync_input"] input');
           if (input) {{
+            if (payloadObj && payloadObj.action === 'add_column_box' && input.value) {{
+              try {{
+                const prevObj = JSON.parse(input.value);
+                if (prevObj && prevObj.action === 'add_column_box' && Array.isArray(prevObj.intersections)) {{
+                  payloadObj.intersections = recordAndGetPendingIntersections(prevObj.intersections.concat(payloadObj.intersections || []));
+                  jsonStr = JSON.stringify(payloadObj);
+                }}
+              }} catch(e) {{}}
+            }}
             input.focus();
             const proto = (window.parent.HTMLInputElement || window.HTMLInputElement).prototype;
             const desc = Object.getOwnPropertyDescriptor(proto, 'value');
@@ -12706,6 +13064,19 @@ def _render_fs_interactive_plan(
     const factor = e.deltaY < 0 ? 1.15 : 0.87;
     applyZoom(factor, e.clientX, e.clientY);
   }}, {{ passive: false }});
+
+  if (pendingColMap.size > 0) {{
+    const leftoverList = Array.from(pendingColMap.values());
+    drawInstantColumnsOnCanvas(leftoverList);
+    setTimeout(function() {{
+      syncToStreamlit({{
+        action: 'add_column_box',
+        intersections: leftoverList.map(it => ({{ i: it.i, j: it.j }})),
+        multi: true,
+        ts: Date.now()
+      }});
+    }}, 120);
+  }}
 }})();
 </script>
 </body>
@@ -13329,12 +13700,17 @@ def _section_fs_add_columns(
                         key=f"{prefix}btn_confirm_perm_del_{del_ver}",
                     ):
                         cfg_obj, placed_list, _ = _ensure_fs_selective_mode_initialized(Lx_spans, Ly_spans)
-                        new_placed = [oid for oid in placed_list if oid not in pending_del_orig_ids]
+                        active_orig_ordered = [c["orig_id"] for c in _active_cols]
+                        base_orig_list = active_orig_ordered if active_orig_ordered else placed_list
+                        new_placed = [oid for oid in base_orig_list if oid not in pending_del_orig_ids]
                         cfg_obj["fs_zero_col_mode"] = True
                         cfg_obj["fs_placed_cols"] = new_placed
                         cfg_obj["fs_removed_cols"] = []
+                        st.session_state["fs_zero_col_mode"] = True
+                        st.session_state["fs_placed_cols"] = new_placed
+                        st.session_state["fs_removed_cols"] = []
 
-                        # مسح أي أثر للأعمدة المحذوفة من القواميس المخزنة نهائياً
+                        # مسح أي أثر للأعمدة المحذوفة فقط من القواميس المخزنة نهائياً دون المساس ببقية الأعمدة
                         col_props_dict = cfg_obj.get("fs_col_props", {})
                         if isinstance(col_props_dict, dict):
                             for cid in selected_del_ids:
@@ -13363,9 +13739,12 @@ def _section_fs_add_columns(
                         if isinstance(edge_cols_dict, dict):
                             for cid in selected_del_ids:
                                 oid = active_id_to_orig.get(cid)
+                                ij = active_id_to_ij.get(cid)
                                 if oid:
                                     edge_cols_dict.pop(oid, None)
-                                edge_cols_dict.pop(cid, None)
+                                if ij:
+                                    edge_cols_dict.pop(f"{ij[0]},{ij[1]}", None)
+                                    edge_cols_dict.pop(ij, None)
                             cfg_obj["fs_edge_columns"] = edge_cols_dict
 
                         st.session_state["_fs_pending_removals"] = []
@@ -13619,7 +13998,15 @@ def _section_fs_add_columns(
                     with c_del_b_ok:
                         if st.button("🗑️ موافقة (حذف نهائي)", key=f"{prefix}btn_confirm_del_beam_{pending_del_id}", type="primary", use_container_width=True):
                             new_b_list = [b for b in cur_drop_beams if b.get("id") != pending_del_id]
-                            new_b_list = recompute_all_drop_beams(new_b_list)
+                            _bounds_del_b = st.session_state.get("_fs_current_slab_bounds") or None
+                            new_b_list = recompute_all_drop_beams(
+                                new_b_list,
+                                col_w_cm=_bc_col,
+                                col_d_cm=_tc_col,
+                                columns_list=_active_cols,
+                                cantilevers=cantilevers,
+                                grid_bounds=_bounds_del_b,
+                            )
                             cfg["fs_drop_beams"] = new_b_list
                             st.session_state["fs_drop_beams"] = new_b_list
                             st.session_state["fs_pending_delete_beam_id"] = None
@@ -14608,14 +14995,8 @@ def render(is_standalone: bool = False):
     if not isinstance(_placed_cols_raw, list) and _placed_cols_raw is not None:
         _placed_cols_raw = None
 
-    if _placed_cols_raw is not None and len(_placed_cols_raw) == 0:
-        _placed_cols_raw = None
-        _zero_col_mode = False
-        cfg_obj = st.session_state.setdefault("cfg", {})
-        cfg_obj["fs_placed_cols"] = None
-        cfg_obj["fs_zero_col_mode"] = False
-        S.cfg_set("fs_placed_cols", None)
-        S.cfg_set("fs_zero_col_mode", False)
+    if _zero_col_mode and _placed_cols_raw is None:
+        _placed_cols_raw = []
 
     _col_props = S.cfg_val("fs_col_props", {})
     _col_props = _col_props if isinstance(_col_props, dict) else {}
@@ -14689,24 +15070,6 @@ def render(is_standalone: bool = False):
         zero_col_mode=_zero_col_mode,
         col_props=_col_props,
     )
-    # Extra safety: If _active_cols became 0 because of empty placed_cols, auto-heal immediately
-    if len(_active_cols) == 0 and len(_all_cols) > 0 and len(_confirmed_removals) < len(_all_cols):
-        _placed_cols_raw = None
-        _zero_col_mode = False
-        cfg_obj = st.session_state.setdefault("cfg", {})
-        cfg_obj["fs_placed_cols"] = None
-        cfg_obj["fs_zero_col_mode"] = False
-        S.cfg_set("fs_placed_cols", None)
-        S.cfg_set("fs_zero_col_mode", False)
-        _active_cols, _all_cols, _eff_Lx, _eff_Ly, _ddm_warn = get_flat_slab_columns(
-            Lx_spans, Ly_spans, bc_cm=_bc_col, tc_cm=_tc_col,
-            removed_ids=set(_confirmed_removals),
-            col_transforms=_col_transforms,
-            edge_columns=_edge_columns,
-            placed_cols=None,
-            zero_col_mode=False,
-            col_props=_col_props,
-        )
 
     st.session_state["_fs_active_cols"] = _active_cols
     _effective_removed_ids = {c["orig_id"] for c in _all_cols if c["removed"]}
@@ -14736,6 +15099,8 @@ def render(is_standalone: bool = False):
             wall_load=float(S.cfg_val("wall_load_val", 0.50)),
             ts_cm=float(S.cfg_val("fs_slab_thickness_cm", ts_initial if ts_initial is not None else 20.0)),
             columns_list=_active_cols,
+            cantilevers=cantilevers,
+            grid_bounds=_slab_bounds_current,
         )
         st.session_state.setdefault("cfg", {})["fs_drop_beams"] = _cur_beams_list
         st.session_state["fs_drop_beams"] = _cur_beams_list
@@ -15125,14 +15490,33 @@ def render(is_standalone: bool = False):
         c["Atrib_0"] = max(0.0, col_atrib)
         c["Pu_slab_0"] = Wu * c["Atrib_0"]
         c["Pu_slab"] = c["Pu_slab_0"]
+        c["Pu_punch"] = c["Pu_slab_0"]
+        c["Pu_beam"] = 0.0
+        c["framing_beams"] = []
         c["Pu_0"] = c["Pu_slab_0"] * col_sf_val
         c["Pu"] = c["Pu_0"]
 
-    # If columns were removed, transfer their load to surviving active columns
+    # حصر نقاط التقاطعات والركائز المحمولة بواسطة كمرات ساقطة أو كمرات كابولية متزنة (Full Moment Continuity)
+    _beam_supported_pts = set()
+    if _cur_beams_list:
+        for _db in _cur_beams_list:
+            if not isinstance(_db, dict) or _db.get("beam_type_category") == "unsupported_beam":
+                continue
+            _bp1 = _db.get("p1_grid", _db.get("p1"))
+            _bp2 = _db.get("p2_grid", _db.get("p2"))
+            if _bp1 and len(_bp1) >= 2:
+                _beam_supported_pts.add((round(float(_bp1[0]), 2), round(float(_bp1[1]), 2)))
+            if _bp2 and len(_bp2) >= 2:
+                _beam_supported_pts.add((round(float(_bp2[0]), 2), round(float(_bp2[1]), 2)))
+
+    # If columns were removed, transfer their load to surviving active columns (unless supported by a cantilever/drop beam)
     _removed_col_objs = [c for c in _all_cols if c.get("removed")]
     if _removed_col_objs and _active_cols:
         for rcol in _removed_col_objs:
             rx, ry = rcol["x"], rcol["y"]
+            if (round(float(rx), 2), round(float(ry), 2)) in _beam_supported_pts:
+                # هذا الموضع محمول مباشرة بواسطة كمرة كابولية/ساقطة تنقل أحماله وعزومه باتزان تام للأعمدة الحاملة
+                continue
             r_load_slab = rcol.get("Pu_slab_0", 0.0)
             r_load = rcol.get("Pu_0", 0.0)
             if r_load > 0 or r_load_slab > 0:
@@ -15141,30 +15525,63 @@ def render(is_standalone: bool = False):
                 tot_w = sum(weights)
                 for idx, c in enumerate(_active_cols):
                     c["Pu_slab"] += (weights[idx] / tot_w) * r_load_slab
+                    c["Pu_punch"] += (weights[idx] / tot_w) * r_load_slab
                     c["Pu"] += (weights[idx] / tot_w) * r_load
 
-    # ── نقل وتوريد ردود أفعال الكمرات الساقطة للأعمدة الحاملة (Drop Beams Load Transfer) ──
+    # ── نقل وتوريد ردود أفعال وعزوم الكمرات الساقطة والكابولية للأعمدة الحاملة وتخفيف القص الثاقب للبلاطة (ECP 203) ──
     if _cur_beams_list and _active_cols:
         col_lookup = {}
         for c in _active_cols:
             col_lookup[str(c.get("id"))] = c
             col_lookup[str(c.get("orig_id"))] = c
         for b in _cur_beams_list:
-            rxn = float(b.get("reaction_ton", 0.0))
-            if rxn <= 0.0:
+            if not isinstance(b, dict) or b.get("beam_type_category") == "unsupported_beam":
                 continue
-            for supp_k in ("supp1", "supp2"):
+            is_cant_b = (b.get("is_continuous") == "cantilever" or b.get("beam_type_category") == "cantilever_beam")
+            w_own_u = float(b.get("w_own_u", 0.0))
+            w_wall_u = float(b.get("w_wall_u", 0.0))
+            ln_b = max(0.5, float(b.get("clear_span_m", b.get("span_m", 1.0))))
+            # الوزن الإضافي الصافي للكمرة (وزن سقوط الكمرة + حمل الحائط فوقها) غير المشمول في مساحة تأثير البلاطة
+            extra_self_rxn = 0.5 * (w_own_u + w_wall_u) * ln_b
+
+            for supp_k, rxn_k in (("supp1", "reaction_s1_ton"), ("supp2", "reaction_s2_ton")):
                 supp = b.get(supp_k, {})
-                if supp.get("type") == "column":
+                rxn = float(b.get(rxn_k, b.get("reaction_ton", 0.0)))
+                if rxn <= 0.0:
+                    continue
+                if supp.get("type") in ("column", "wall"):
                     cid = str(supp.get("id", ""))
                     tgt_col = col_lookup.get(cid)
                     if tgt_col:
-                        tgt_col["Pu_slab"] += rxn
-                        tgt_col["Pu"] += rxn * col_sf_val
+                        bid_str = str(b.get("id", "B"))
+                        if bid_str not in tgt_col["framing_beams"]:
+                            tgt_col["framing_beams"].append(bid_str)
+                        if is_cant_b:
+                            # الكمرة الكابولية تنقل كامل رد فعل الكابولي الحر للعمود الحامل
+                            net_col_rxn = rxn
+                        else:
+                            # الكمرة بين عمودين تنقل وزنها الذاتي وحمل الحائط + أي فرق ازدواج اتزان من كابولي متصل
+                            base_sym_rxn = 0.5 * float(b.get("w_ult_tot", 0.0)) * ln_b
+                            delta_r_cont = max(0.0, rxn - base_sym_rxn)
+                            net_col_rxn = extra_self_rxn + delta_r_cont
+                        tgt_col["Pu_slab"] += net_col_rxn
+                        tgt_col["Pu_beam"] += rxn
+                        tgt_col["Pu"] += net_col_rxn * col_sf_val
                         tgt_col.setdefault("beam_reactions", []).append({
-                            "beam_id": b.get("id", ""),
+                            "beam_id": bid_str,
                             "rxn_ton": rxn,
+                            "net_col_rxn_ton": round(net_col_rxn, 2),
+                            "Mu_transferred_ton_m": float(b.get("Mu_col_transferred_ton_m", 0.0)),
+                            "full_moment_continuity": bool(b.get("full_moment_continuity", False)),
                         })
+
+        # تخفيض قوة الاختراق المباشر للبلاطة الرقيقة (Pu_punch) للأعمدة المتصلة بكمرات ساقطة (ECP 203):
+        # حيث تنتقل أحمال القص على أوجه العمود المتصلة بكمرات ساقطة عبر قص الكمرة ذات العمق الكبير بدلاً من القص الثاقب للبلاطة
+        for c in _active_cols:
+            n_fb = len(c.get("framing_beams", []))
+            if n_fb > 0:
+                punch_relief = max(0.32, 1.0 - 0.22 * n_fb)
+                c["Pu_punch"] = round(c["Pu_slab_0"] * punch_relief, 2)
 
     # ── Multi-Bay & Merged-Bay Moments Analysis (X & Y) ──────────────────────
     btm_extra_spans = []
@@ -15187,11 +15604,11 @@ def render(is_standalone: bool = False):
     for ly in Ly_calc:
         y_eff_coords.append(y_eff_coords[-1] + ly)
 
-    # Labels and indices for active grid axes (skipping removed support lines)
-    min_cols_x = 2 if n_yj >= 3 else 1
-    min_cols_y = 2 if n_xi >= 3 else 1
-    _active_xi = [i for i in range(n_xi) if sum(1 for c in _active_cols if c["i"] == i) >= min_cols_x]
-    _active_yj = [j for j in range(n_yj) if sum(1 for c in _active_cols if c["j"] == j) >= min_cols_y]
+    # Labels and indices for active grid axes (preserving perimeter axes and any axis with >= 1 active column)
+    min_cols_x = 1
+    min_cols_y = 1
+    _active_xi = sorted({0, n_xi - 1} | {i for i in range(n_xi) if sum(1 for c in _active_cols if c["i"] == i) >= min_cols_x})
+    _active_yj = sorted({0, n_yj - 1} | {j for j in range(n_yj) if sum(1 for c in _active_cols if c["j"] == j) >= min_cols_y})
     if len(_active_xi) < 2:
         _active_xi = [0, n_xi - 1]
     if len(_active_yj) < 2:
@@ -15295,7 +15712,10 @@ def render(is_standalone: bool = False):
     ]
 
     # 3. Detect and calculate Bottom Extra Steel per Independent Panel Bay (P_i_j) & Column-Head Top Steel
-    rem_coords_set = {(c["x"], c["y"]) for c in (_removed_col_objs or [])}
+    rem_coords_set = {
+        (c["x"], c["y"]) for c in (_removed_col_objs or [])
+        if (round(float(c["x"]), 2), round(float(c["y"]), 2)) not in _beam_supported_pts
+    }
     all_panels_x_design = []
     all_panels_y_design = []
     M_cap_btm_m = XZ.mu_capacity_per_m(prov_btm_mesh_cm2m, d, Fcu, Fy)
@@ -15308,6 +15728,7 @@ def render(is_standalone: bool = False):
         void_boxes=_void_boxes_sk,
         active_cols=_active_cols,
         removed_cols=_removed_col_objs,
+        drop_beams=_cur_beams_list,
     )
 
     bay_geom_records = []
@@ -15342,6 +15763,26 @@ def render(is_standalone: bool = False):
             # Check if this panel borders any removed column (enlarged bay)
             is_enlarged = bool(rem_coords_set.intersection({(x_l, y_b), (x_r, y_b), (x_l, y_t), (x_r, y_t)}))
 
+            # Detect Drop / Cantilever Beams along the 4 edges of this bay (ECP 203 Clause 6-2-5-4)
+            n_beams_x_edge = 0
+            n_beams_y_edge = 0
+            if _cur_beams_list:
+                for _db_p in _cur_beams_list:
+                    if not isinstance(_db_p, dict) or _db_p.get("beam_type_category") == "unsupported_beam":
+                        continue
+                    _bp1 = _db_p.get("p1_grid", _db_p.get("p1", [0, 0]))
+                    _bp2 = _db_p.get("p2_grid", _db_p.get("p2", [0, 0]))
+                    _bmx = 0.5 * (float(_bp1[0]) + float(_bp2[0]))
+                    _bmy = 0.5 * (float(_bp1[1]) + float(_bp2[1]))
+                    _is_hb = abs(float(_bp2[0]) - float(_bp1[0])) >= abs(float(_bp2[1]) - float(_bp1[1]))
+                    if _is_hb and (x_l - 0.35 <= _bmx <= x_r + 0.35) and (abs(_bmy - y_b) <= 0.35 or abs(_bmy - y_t) <= 0.35):
+                        n_beams_x_edge += 1
+                    elif (not _is_hb) and (y_b - 0.35 <= _bmy <= y_t + 0.35) and (abs(_bmx - x_l) <= 0.35 or abs(_bmx - x_r) <= 0.35):
+                        n_beams_y_edge += 1
+
+            beam_red_x = max(0.65, 1.0 - 0.15 * n_beams_x_edge - 0.10 * n_beams_y_edge)
+            beam_red_y = max(0.65, 1.0 - 0.15 * n_beams_y_edge - 0.10 * n_beams_x_edge)
+
             # Extract exact peak positive moment M⁺ inside bay boundaries (matching 2D Contour Map)
             ix_m = int(np.argmin(np.abs(X_mf[0, :] - cx)))
             iy_m = int(np.argmin(np.abs(Y_mf[:, 0] - cy)))
@@ -15350,7 +15791,7 @@ def render(is_standalone: bool = False):
 
             # X-direction Bending (M11+)
             Mo_x = Wu * span_ly * (Ln_x ** 2) / 8.0
-            M_pos_x = (0.50 if is_enlarged else 0.35) * Mo_x
+            M_pos_x = (0.50 if is_enlarged else 0.35) * Mo_x * beam_red_x
             w_cs_x = min(span_lx, span_ly) / 2.0
             M_cs_x = 0.60 * M_pos_x
             ms_w_x = max(0.1, span_ly - w_cs_x)
@@ -15374,7 +15815,7 @@ def render(is_standalone: bool = False):
 
             # Y-direction Bending (M22+)
             Mo_y = Wu * span_lx * (Ln_y ** 2) / 8.0
-            M_pos_y = (0.50 if is_enlarged else 0.35) * Mo_y
+            M_pos_y = (0.50 if is_enlarged else 0.35) * Mo_y * beam_red_y
             w_cs_y = min(span_lx, span_ly) / 2.0
             M_cs_y = 0.60 * M_pos_y
             ms_w_y = max(0.1, span_lx - w_cs_y)
@@ -17309,6 +17750,7 @@ def render(is_standalone: bool = False):
                 f"Total Pu ({num_floors} Floors) [ton]": f"{pu_tot:.2f}",
                 "pu_1f_val": pu_1f,
                 "pu_tot_val": pu_tot,
+                "pu_beam_val": float(c.get("Pu_beam", 0.0)),
                 "atrib_val": atrib,
                 "x_min": c.get("x_min"),
                 "y_min": c.get("y_min"),
@@ -17330,7 +17772,7 @@ def render(is_standalone: bool = False):
         with exp_reac:
             if st.session_state.get(f"{prefix}exp_col_reactions", False):
                 fig_reac = generate_flat_slab_reactions_sketch(
-                    Lx_calc, Ly_calc, cantilevers, num_floors, Wu,
+                    Lx_spans, Ly_spans, cantilevers, num_floors, Wu,
                     col_reactions_data,
                     col_w_cm=bc_s, col_d_cm=tc_s,
                     removed_cols=_removed_col_objs,
