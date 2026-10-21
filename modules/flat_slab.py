@@ -42,6 +42,7 @@ from modules.extra_steel_zones import (
 from modules.drop_beams_engine import (
     design_drop_beam,
     recompute_all_drop_beams,
+    auto_merge_collinear_beams,
     draw_beam_polygon_on_plan,
     generate_beam_cross_section_sketch,
     build_beams_summary_dataframe,
@@ -3158,6 +3159,743 @@ def build_grid_axes_info(x_coords, y_coords, active_cols, active_x_labels=None, 
             axes_y.append((y, lbl))
 
     return axes_x, axes_y
+
+
+import matplotlib.ticker as ticker
+
+def get_strip_true_supports(direction, cut_pos, active_cols, drop_beams, is_col_strip, w_strip, s_min, s_max, void_boxes=None):
+    """
+    Identifies TRUE physical structural supports (columns and supporting transverse beams)
+    that physically intersect the section cut line, strictly excluding any column or beam
+    whose physical boundaries do not cross the section line.
+    Returns a sorted list of TrueSupport dicts:
+    [{'coord': s_val, 'label': 'C2', 'type': 'column', 'width': 0.30, 'col': col_dict, 'beam': beam_dict}, ...]
+    """
+    supports_raw = []
+
+    # 1. Active Columns physically intersecting this section cut line
+    for c in (active_cols or []):
+        if not isinstance(c, dict):
+            continue
+
+        # Extract or compute exact column boundaries
+        if "x_min" in c and "x_max" in c and "y_min" in c and "y_max" in c:
+            c_xmin = float(c["x_min"])
+            c_xmax = float(c["x_max"])
+            c_ymin = float(c["y_min"])
+            c_ymax = float(c["y_max"])
+            cx = float(c.get("center_x", (c_xmin + c_xmax) / 2.0))
+            cy = float(c.get("center_y", (c_ymin + c_ymax) / 2.0))
+        else:
+            cx = float(c.get("center_x", c.get("grid_x_m", c.get("x", 0.0))))
+            cy = float(c.get("center_y", c.get("grid_y_m", c.get("y", 0.0))))
+            bc = float(c.get("bc", c.get("b_cm", 30.0)))
+            tc = float(c.get("tc", c.get("t_cm", 50.0)))
+            dir_c = str(c.get("direction", "اتجاه X"))
+            if "Y" in dir_c:
+                wx = min(bc, tc) / 100.0 if max(bc, tc) > 5.0 else min(bc, tc)
+                hy = max(bc, tc) / 100.0 if max(bc, tc) > 5.0 else max(bc, tc)
+            else:
+                wx = max(bc, tc) / 100.0 if max(bc, tc) > 5.0 else max(bc, tc)
+                hy = min(bc, tc) / 100.0 if max(bc, tc) > 5.0 else min(bc, tc)
+            c_xmin = cx - wx / 2.0
+            c_xmax = cx + wx / 2.0
+            c_ymin = cy - hy / 2.0
+            c_ymax = cy + hy / 2.0
+
+        cid = c.get("id", c.get("orig_id", "C"))
+
+        # Strict physical spatial intersection test:
+        if direction == "X":
+            # Cut line is horizontal at Y = cut_pos
+            # Column is intersected if and only if cut_pos falls within column's physical Y bounds
+            if (c_ymin - 0.02) <= cut_pos <= (c_ymax + 0.02):
+                col_w_x = max(0.20, c_xmax - c_xmin)
+                supports_raw.append({
+                    "coord": cx,
+                    "label": str(cid),
+                    "type": "column",
+                    "width": col_w_x,
+                    "col": c,
+                    "beam": None,
+                })
+        else:
+            # Direction Y: Cut line is vertical at X = cut_pos
+            # Column is intersected if and only if cut_pos falls within column's physical X bounds
+            if (c_xmin - 0.02) <= cut_pos <= (c_xmax + 0.02):
+                col_h_y = max(0.20, c_ymax - c_ymin)
+                supports_raw.append({
+                    "coord": cy,
+                    "label": str(cid),
+                    "type": "column",
+                    "width": col_h_y,
+                    "col": c,
+                    "beam": None,
+                })
+
+    # 2. Transverse Drop Beams physically crossing this section cut line
+    for b in (drop_beams or []):
+        if not isinstance(b, dict):
+            continue
+        if b.get("beam_type_category") == "unsupported_beam":
+            continue
+        bp1 = b.get("p1_grid", b.get("p1", [0, 0]))
+        bp2 = b.get("p2_grid", b.get("p2", [0, 0]))
+        if not bp1 or not bp2 or len(bp1) < 2 or len(bp2) < 2:
+            continue
+        bx1, by1 = float(bp1[0]), float(bp1[1])
+        bx2, by2 = float(bp2[0]), float(bp2[1])
+        bid = b.get("id", "Beam")
+        bw_m = float(b.get("b_cm", 25.0)) / 100.0
+
+        if direction == "X":
+            # Transverse beam must run predominantly in Y across the horizontal cut line
+            by_min, by_max = min(by1, by2), max(by1, by2)
+            if (by_min - 0.04) <= cut_pos <= (by_max + 0.04) and abs(by2 - by1) >= 0.35:
+                if abs(by2 - by1) > 1e-4:
+                    frac_y = np.clip((cut_pos - by1) / (by2 - by1), 0.0, 1.0)
+                    bx_cross = bx1 + frac_y * (bx2 - bx1)
+                else:
+                    bx_cross = 0.5 * (bx1 + bx2)
+                supports_raw.append({
+                    "coord": bx_cross,
+                    "label": str(bid),
+                    "type": "beam",
+                    "width": max(0.20, bw_m),
+                    "col": None,
+                    "beam": b,
+                })
+        else:
+            # Transverse beam must run predominantly in X across the vertical cut line
+            bx_min, bx_max = min(bx1, bx2), max(bx1, bx2)
+            if (bx_min - 0.04) <= cut_pos <= (bx_max + 0.04) and abs(bx2 - bx1) >= 0.35:
+                if abs(bx2 - bx1) > 1e-4:
+                    frac_x = np.clip((cut_pos - bx1) / (bx2 - bx1), 0.0, 1.0)
+                    by_cross = by1 + frac_x * (by2 - by1)
+                else:
+                    by_cross = 0.5 * (by1 + by2)
+                supports_raw.append({
+                    "coord": by_cross,
+                    "label": str(bid),
+                    "type": "beam",
+                    "width": max(0.20, bw_m),
+                    "col": None,
+                    "beam": b,
+                })
+
+    # 3. Merge coincident/near supports (within 0.35m)
+    supports_raw.sort(key=lambda s: s["coord"])
+    merged = []
+    for s in supports_raw:
+        if not merged:
+            merged.append(s)
+        else:
+            prev = merged[-1]
+            if abs(s["coord"] - prev["coord"]) <= 0.35:
+                if prev["type"] != s["type"]:
+                    prev["label"] = f"{prev['label']}/{s['label']}"
+                    prev["type"] = "column_beam"
+                else:
+                    prev["label"] = f"{prev['label']}/{s['label']}"
+                prev["width"] = max(prev["width"], s["width"])
+                if s["col"] and not prev["col"]: prev["col"] = s["col"]
+                if s["beam"] and not prev["beam"]: prev["beam"] = s["beam"]
+            else:
+                merged.append(s)
+
+    merged = [s for s in merged if s_min - 0.20 <= s["coord"] <= s_max + 0.20]
+
+    # 4. Fallback if fewer than 2 physical supports found along this section
+    if len(merged) < 2:
+        if len(merged) == 1:
+            c0 = merged[0]["coord"]
+            if c0 - s_min > s_max - c0:
+                merged.insert(0, {"coord": s_min, "label": "حافة البلاطة (Edge)", "type": "edge", "width": 0.25, "col": None, "beam": None})
+            else:
+                merged.append({"coord": s_max, "label": "حافة البلاطة (Edge)", "type": "edge", "width": 0.25, "col": None, "beam": None})
+        else:
+            merged = [
+                {"coord": s_min, "label": "حافة البلاطة (Edge 1)", "type": "edge", "width": 0.25, "col": None, "beam": None},
+                {"coord": s_max, "label": "حافة البلاطة (Edge 2)", "type": "edge", "width": 0.25, "col": None, "beam": None},
+            ]
+    return merged
+
+
+def generate_flat_slab_moment_cross_section(
+    Lx_spans,
+    Ly_spans,
+    cantilevers,
+    ts_cm,
+    direction="X",
+    strip_type="column",
+    strip_coord=0.0,
+    strip_title_custom=None,
+    active_cols=None,
+    drop_beams=None,
+    void_boxes=None,
+    M_cap_top_m=3.5,
+    M_cap_btm_m=3.5,
+    mesh_top_str="5 Φ 10 / m",
+    mesh_btm_str="5 Φ 10 / m",
+    Wu=1.45,
+    show_labels=True,
+    show_capacities=True,
+    active_x_labels=None,
+    active_y_labels=None,
+    # Backward compatibility
+    strip_index=0,
+    X_mf=None,
+    Y_mf=None,
+    M11_raw_mf=None,
+    M22_raw_mf=None,
+):
+    """
+    Renders an engineering-grade structural cross-section of the flat slab & true physical supports (columns & beams)
+    coupled synchronously with the Bending Moment Diagram (BMD) across the full width/length.
+    Strictly ignores virtual grid lines, computing spans, supports, and moments from TRUE physical supports only.
+    Legend / Info panel is positioned strictly below the plot area in a single horizontal row.
+    """
+    plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
+
+    x_coords = [0.0]
+    for lx in Lx_spans: x_coords.append(round(x_coords[-1] + float(lx), 4))
+    y_coords = [0.0]
+    for ly in Ly_spans: y_coords.append(round(y_coords[-1] + float(ly), 4))
+
+    cant_l = float(cantilevers.get('left', 0.0) or 0.0)
+    cant_r = float(cantilevers.get('right', 0.0) or 0.0)
+    cant_b = float(cantilevers.get('bottom', 0.0) or 0.0)
+    cant_t = float(cantilevers.get('top', 0.0) or 0.0)
+
+    slab_h = max(0.15, float(ts_cm) / 100.0)
+    is_col_strip = (strip_type == "column")
+
+    if direction == "X":
+        s_min = x_coords[0] - cant_l
+        s_max = x_coords[-1] + cant_r
+        cut_pos = float(strip_coord if strip_coord != 0.0 or strip_index == 0 else (y_coords[min(strip_index, len(y_coords)-1)]))
+        w_strip = min(np.mean(Lx_spans), np.mean(Ly_spans)) / 2.0
+        strip_title = strip_title_custom or (
+            f"قطاع رأسي لعزوم الانحناء (اتجاه X) — {'شريحة عمود حرجة (Column Strip)' if is_col_strip else 'شريحة وسط (Field Strip)'} [Y = {cut_pos:.2f} m]"
+        )
+    else:  # Direction Y
+        s_min = y_coords[0] - cant_b
+        s_max = y_coords[-1] + cant_t
+        cut_pos = float(strip_coord if strip_coord != 0.0 or strip_index == 0 else (x_coords[min(strip_index, len(x_coords)-1)]))
+        w_strip = min(np.mean(Lx_spans), np.mean(Ly_spans)) / 2.0
+        strip_title = strip_title_custom or (
+            f"قطاع رأسي لعزوم الانحناء (اتجاه Y) — {'شريحة عمود حرجة (Column Strip)' if is_col_strip else 'شريحة وسط (Field Strip)'} [X = {cut_pos:.2f} m]"
+        )
+
+    # ── 1. Resolve TRUE SUPPORTS (Columns & Beams only — Grid Lines completely ignored) ──
+    true_supports = get_strip_true_supports(
+        direction, cut_pos, active_cols, drop_beams, is_col_strip, w_strip, s_min, s_max, void_boxes=void_boxes
+    )
+
+    support_pts = [s["coord"] for s in true_supports]
+    support_labels = [s["label"] for s in true_supports]
+
+    # Calculate true spans
+    num_spans = max(1, len(support_pts) - 1)
+    true_spans = [support_pts[k+1] - support_pts[k] for k in range(num_spans)]
+
+    # ── 2. Identify Drop Beams along or crossing this section ───────────────────
+    cut_beams = []
+    for b in (drop_beams or []):
+        if not isinstance(b, dict): continue
+        if b.get("beam_type_category") == "unsupported_beam": continue
+        bp1 = b.get("p1_grid", b.get("p1", [0, 0]))
+        bp2 = b.get("p2_grid", b.get("p2", [0, 0]))
+        if not bp1 or not bp2 or len(bp1) < 2 or len(bp2) < 2: continue
+        bx1, by1 = float(bp1[0]), float(bp1[1])
+        bx2, by2 = float(bp2[0]), float(bp2[1])
+        if direction == "X":
+            if abs(by1 - by2) <= 0.35 and abs((by1 + by2)/2.0 - cut_pos) <= 0.40:
+                cut_beams.append(b)
+        else:
+            if abs(bx1 - bx2) <= 0.35 and abs((bx1 + bx2)/2.0 - cut_pos) <= 0.40:
+                cut_beams.append(b)
+
+    # ── 3. Identify Voids crossing this section ────────────────────────────────
+    void_intervals = []
+    for vb in (void_boxes or []):
+        if isinstance(vb, (list, tuple)) and len(vb) >= 4:
+            vx1, vx2, vy1, vy2 = float(vb[0]), float(vb[1]), float(vb[2]), float(vb[3])
+        elif isinstance(vb, dict):
+            vx1 = float(vb.get("x1", vb.get("xmin", 0.0)))
+            vx2 = float(vb.get("x2", vb.get("xmax", 0.0)))
+            vy1 = float(vb.get("y1", vb.get("ymin", 0.0)))
+            vy2 = float(vb.get("y2", vb.get("ymax", 0.0)))
+        else:
+            continue
+        if direction == "X":
+            if min(vy1, vy2) - 0.04 <= cut_pos <= max(vy1, vy2) + 0.04:
+                void_intervals.append((min(vx1, vx2), max(vx1, vx2)))
+        else:
+            if min(vx1, vx2) - 0.04 <= cut_pos <= max(vx1, vx2) + 0.04:
+                void_intervals.append((min(vy1, vy2), max(vy1, vy2)))
+
+    # ── 3b. Cantilever Validation Check & Boundary Clipping against Voids ──────
+    # A true cantilever can only exist in solid slab domain. If a void lies before s_start or after s_end,
+    # clip the section boundaries immediately to the outer face of the outermost supports,
+    # completely excluding voids from the section and setting cantilever length = 0.
+    s_start = support_pts[0]
+    s_end = support_pts[-1]
+    sup_start_w = true_supports[0].get("width", 0.25)
+    sup_end_w = true_supports[-1].get("width", 0.25)
+
+    void_at_start = False
+    for v1, v2 in void_intervals:
+        if v1 <= s_start + 0.05 and v2 >= s_min - 0.05:
+            if v2 >= s_start - 0.20:
+                s_min = s_start - (sup_start_w / 2.0)
+                void_at_start = True
+                break
+            else:
+                s_min = max(s_min, v2)
+
+    void_at_end = False
+    for v1, v2 in void_intervals:
+        if v2 >= s_end - 0.05 and v1 <= s_max + 0.05:
+            if v1 <= s_end + 0.20:
+                s_max = s_end + (sup_end_w / 2.0)
+                void_at_end = True
+                break
+            else:
+                s_max = min(s_max, v1)
+
+    cant_start_len = 0.0 if void_at_start else max(0.0, s_start - s_min)
+    cant_end_len = 0.0 if void_at_end else max(0.0, s_max - s_end)
+
+    # Active internal void intervals (strictly within the clipped solid slab [s_min, s_max])
+    active_void_intervals = [
+        (max(s_min, v1), min(s_max, v2))
+        for v1, v2 in void_intervals
+        if v2 > s_min + 0.20 and v1 < s_max - 0.20
+    ]
+
+    # ── 4. Generate Continuous Bending Moment Curve m(s) from TRUE SUPPORTS ────
+    Wu_eff = max(0.50, float(Wu or 1.45))
+    s_vec = np.linspace(s_min, s_max, 600)
+    m_vec = np.zeros_like(s_vec)
+
+    # Cantilever on start (strictly validated in solid slab):
+    if cant_start_len > 0.05:
+        mask_c_start = (s_vec <= s_start)
+        m_vec[mask_c_start] = -0.5 * Wu_eff * (np.maximum(0.0, s_start - s_vec[mask_c_start])) ** 2
+        m_cant_start = -0.5 * Wu_eff * (cant_start_len ** 2)
+    else:
+        m_cant_start = 0.0
+
+    # Cantilever on end (strictly validated in solid slab):
+    if cant_end_len > 0.05:
+        mask_c_end = (s_vec >= s_end)
+        m_vec[mask_c_end] = -0.5 * Wu_eff * (np.maximum(0.0, s_vec[mask_c_end] - s_end)) ** 2
+        m_cant_end = -0.5 * Wu_eff * (cant_end_len ** 2)
+    else:
+        m_cant_end = 0.0
+
+    # Compute static moment m0_k = Wu * Lk^2 / 8 for each true span
+    m0_list = []
+    for k in range(num_spans):
+        Lk = max(0.5, true_supports[k+1]["coord"] - true_supports[k]["coord"])
+        m0_list.append(Wu_eff * (Lk ** 2) / 8.0)
+
+    # Compute continuous negative moments at each support j = 0 .. num_spans (ECP 203)
+    support_neg_moments = [0.0] * (num_spans + 1)
+    if num_spans == 1:
+        # Single Span (Simple / Partially Restrained Span on True Supports)
+        is_left_edge = (true_supports[0].get("type") == "edge")
+        is_right_edge = (true_supports[1].get("type") == "edge")
+        neg_ext_coeff = -0.25 if is_col_strip else -0.16
+        support_neg_moments[0] = (
+            0.0 if is_left_edge else (m_cant_start if cant_start_len > 0.20 else neg_ext_coeff * m0_list[0])
+        )
+        support_neg_moments[1] = (
+            0.0 if is_right_edge else (m_cant_end if cant_end_len > 0.20 else neg_ext_coeff * m0_list[0])
+        )
+    else:
+        # Multi-Span Continuous System
+        neg_ext_coeff = -0.30 if is_col_strip else -0.15
+        neg_int_coeff = -0.65 if is_col_strip else -0.325
+        for j in range(num_spans + 1):
+            sup_j = true_supports[j]
+            is_edge_j = (sup_j.get("type") == "edge")
+            if j == 0:
+                support_neg_moments[0] = (
+                    0.0 if is_edge_j else (m_cant_start if cant_start_len > 0.20 else neg_ext_coeff * m0_list[0])
+                )
+            elif j == num_spans:
+                support_neg_moments[num_spans] = (
+                    0.0 if is_edge_j else (m_cant_end if cant_end_len > 0.20 else neg_ext_coeff * m0_list[-1])
+                )
+            else:
+                if is_edge_j:
+                    support_neg_moments[j] = 0.0
+                else:
+                    m0_avg_int = 0.50 * m0_list[j - 1] + 0.50 * m0_list[j]
+                    support_neg_moments[j] = neg_int_coeff * m0_avg_int
+
+    # Build span_moments with true net mid-span positive moment (m_pos_k > 0) and free sagging height (h_free_k)
+    span_moments = []
+    for k in range(num_spans):
+        sup_left = true_supports[k]
+        sup_right = true_supports[k+1]
+        sk_left = sup_left["coord"]
+        sk_right = sup_right["coord"]
+        Lk = max(0.5, sk_right - sk_left)
+        m0_k = m0_list[k]
+
+        m_neg_left = support_neg_moments[k]
+        m_neg_right = support_neg_moments[k+1]
+
+        # Net positive mid-span moment M_pos (strictly positive, sagging below baseline) per ECP 203:
+        if num_spans == 1:
+            # Single span: ~ WL^2/10.7 for Column Strip, ~ WL^2/12.3 for Field Strip
+            pos_coeff = 0.75 if is_col_strip else 0.65
+        elif k == 0 or k == num_spans - 1:
+            # Exterior / End span in continuous system
+            pos_coeff = 0.60 if is_col_strip else 0.45
+        else:
+            # Interior span in continuous system
+            pos_coeff = 0.42 if is_col_strip else 0.32
+
+        m_pos_k = pos_coeff * m0_k
+
+        # Check if a longitudinal beam in cut_beams physically covers THIS specific span (Column Strip only)
+        if is_col_strip and cut_beams:
+            span_covered = False
+            for cb in cut_beams:
+                cbp1 = cb.get("p1_grid", cb.get("p1", [0, 0]))
+                cbp2 = cb.get("p2_grid", cb.get("p2", [0, 0]))
+                cb1 = float(cbp1[0] if direction == "X" else cbp1[1])
+                cb2 = float(cbp2[0] if direction == "X" else cbp2[1])
+                ov_len = max(0.0, min(sk_right, max(cb1, cb2)) - max(sk_left, min(cb1, cb2)))
+                if ov_len >= 0.60 * Lk:
+                    span_covered = True
+                    break
+            if span_covered:
+                m_pos_k *= 0.45
+                m_neg_left *= 0.45
+                m_neg_right *= 0.45
+
+        # Total parabolic free sagging drop height from negative support chord line to positive mid-span peak:
+        # At xi = 0.5: m(0.5) = 0.5*(m_neg_left + m_neg_right) + h_free_k = +m_pos_k > 0
+        h_free_k = m_pos_k - 0.5 * (m_neg_left + m_neg_right)
+
+        span_moments.append({
+            "left_neg": m_neg_left,
+            "right_neg": m_neg_right,
+            "pos": m_pos_k,
+            "h_free": h_free_k,
+            "Lk": Lk,
+            "sk_left": sk_left,
+            "sk_right": sk_right,
+        })
+
+    for k in range(num_spans):
+        sm = span_moments[k]
+        sk_left = sm["sk_left"]
+        sk_right = sm["sk_right"]
+        Lk = sm["Lk"]
+        if k == 0 and num_spans == 1:
+            mask_span = (
+                (s_vec >= (s_min if cant_start_len <= 0.05 else sk_left))
+                & (s_vec <= (s_max if cant_end_len <= 0.05 else sk_right))
+            )
+        elif k == 0:
+            mask_span = (s_vec <= sk_right) if cant_start_len <= 0.05 else ((s_vec >= sk_left) & (s_vec <= sk_right))
+        elif k == num_spans - 1:
+            mask_span = (s_vec >= sk_left) if cant_end_len <= 0.05 else ((s_vec >= sk_left) & (s_vec <= sk_right))
+        else:
+            mask_span = (s_vec >= sk_left) & (s_vec <= sk_right)
+
+        if not np.any(mask_span):
+            continue
+
+        xi = np.clip((s_vec[mask_span] - sk_left) / Lk, 0.0, 1.0)
+        # Exact superposition: linear negative support chord + parabolic positive sagging drop
+        m_span = sm["left_neg"] * (1.0 - xi) + sm["right_neg"] * xi + 4.0 * sm["h_free"] * xi * (1.0 - xi)
+        m_vec[mask_span] = m_span
+
+    for v_start, v_end in active_void_intervals:
+        mask_v = (s_vec >= v_start) & (s_vec <= v_end)
+        m_vec[mask_v] = np.nan
+
+    # ── 5. Setup Matplotlib Canvas with Single-Row Legend Below ────────────────
+    fig, (ax_slab, ax_bmd) = plt.subplots(
+        2, 1, figsize=(16.0, 9.6),
+        gridspec_kw={'height_ratios': [1, 2.3], 'hspace': 0.10},
+        sharex=True
+    )
+    fig.subplots_adjust(bottom=0.15, top=0.92, left=0.06, right=0.96)
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # UPPER PANEL: STRUCTURAL SLAB ELEVATION & TRUE SUPPORTS
+    # ═════════════════════════════════════════════════════════════════════════
+    if not active_void_intervals:
+        slab_rect = patches.Rectangle(
+            (s_min, 0), s_max - s_min, slab_h,
+            linewidth=1.5, edgecolor='#334155', facecolor='#cbd5e1', zorder=2
+        )
+        ax_slab.add_patch(slab_rect)
+    else:
+        active_void_intervals.sort(key=lambda iv: iv[0])
+        curr_s = s_min
+        for v_start, v_end in active_void_intervals:
+            if v_start > curr_s:
+                s_part = patches.Rectangle(
+                    (curr_s, 0), v_start - curr_s, slab_h,
+                    linewidth=1.5, edgecolor='#334155', facecolor='#cbd5e1', zorder=2
+                )
+                ax_slab.add_patch(s_part)
+            v_box = patches.Rectangle(
+                (v_start, 0), v_end - v_start, slab_h,
+                linewidth=1.5, edgecolor='#ef4444', facecolor='#fff1f2', linestyle='--', hatch='xx', zorder=2
+            )
+            ax_slab.add_patch(v_box)
+            ax_slab.text(
+                (v_start + v_end)/2.0, slab_h/2.0, "فتحة منور\n(Void)",
+                ha='center', va='center', fontsize=8, fontweight='bold', color='#b91c1c', zorder=4
+            )
+            curr_s = max(curr_s, v_end)
+        if curr_s < s_max:
+            s_part = patches.Rectangle(
+                (curr_s, 0), s_max - curr_s, slab_h,
+                linewidth=1.5, edgecolor='#334155', facecolor='#cbd5e1', zorder=2
+            )
+            ax_slab.add_patch(s_part)
+
+    for b in cut_beams:
+        bp1 = b.get("p1_grid", b.get("p1", [0, 0]))
+        bp2 = b.get("p2_grid", b.get("p2", [0, 0]))
+        bx1 = float(bp1[0] if direction == "X" else bp1[1])
+        bx2 = float(bp2[0] if direction == "X" else bp2[1])
+        b_min_pos = min(bx1, bx2)
+        b_len = abs(bx2 - bx1)
+        tb_m = float(b.get("t_cm", 60.0)) / 100.0
+        drop_rib_h = max(0.10, tb_m - slab_h)
+        beam_rib = patches.Rectangle(
+            (b_min_pos, -drop_rib_h), b_len, drop_rib_h,
+            linewidth=1.2, edgecolor='#1e40af', facecolor='#93c5fd', hatch='..', zorder=2
+        )
+        ax_slab.add_patch(beam_rib)
+        bid = b.get("id", "Beam")
+        ax_slab.text(
+            b_min_pos + b_len/2.0, -drop_rib_h/2.0, f"{bid} (t={tb_m*100:.0f}cm)",
+            ha='center', va='center', fontsize=7.8, fontweight='bold', color='#1e3a8a', zorder=4,
+            bbox=dict(boxstyle='round,pad=0.15', facecolor='#ffffff', edgecolor='#3b82f6', alpha=0.9)
+        )
+
+    # Draw TRUE SUPPORTS (Columns and Transverse Beams)
+    col_h_draw = 0.65
+    for s_info in true_supports:
+        s_coord = s_info["coord"]
+        s_w = s_info["width"]
+        s_lbl = s_info["label"]
+
+        if s_info["col"] is not None:
+            col_box = patches.Rectangle(
+                (s_coord - s_w/2.0, -col_h_draw), s_w, col_h_draw,
+                linewidth=1.3, edgecolor='#0f172a', facecolor='#94a3b8', hatch='///', zorder=3
+            )
+            ax_slab.add_patch(col_box)
+            ax_slab.text(
+                s_coord, -col_h_draw * 0.50, s_lbl,
+                ha='center', va='center', fontsize=8.5, fontweight='bold', color='#0f172a', zorder=4,
+                bbox=dict(boxstyle='round,pad=0.2', facecolor='#ffffff', edgecolor='#64748b', alpha=0.92)
+            )
+        elif s_info["beam"] is not None:
+            b_obj = s_info["beam"]
+            tb_m = float(b_obj.get("t_cm", 60.0)) / 100.0
+            drop_rib_h = max(0.12, tb_m - slab_h)
+            beam_rib = patches.Rectangle(
+                (s_coord - s_w/2.0, -drop_rib_h), s_w, drop_rib_h,
+                linewidth=1.2, edgecolor='#1e40af', facecolor='#93c5fd', hatch='..', zorder=3
+            )
+            ax_slab.add_patch(beam_rib)
+            ax_slab.text(
+                s_coord, -drop_rib_h * 0.50, s_lbl,
+                ha='center', va='center', fontsize=8.0, fontweight='bold', color='#1e3a8a', zorder=4,
+                bbox=dict(boxstyle='round,pad=0.15', facecolor='#ffffff', edgecolor='#3b82f6', alpha=0.9)
+            )
+        elif s_info.get("type") == "edge":
+            edge_tri = patches.Polygon(
+                [[s_coord - 0.15, -0.22], [s_coord + 0.15, -0.22], [s_coord, 0.0]],
+                closed=True, linewidth=1.2, edgecolor='#475569', facecolor='#e2e8f0', zorder=3
+            )
+            ax_slab.add_patch(edge_tri)
+            ax_slab.text(
+                s_coord, -0.32, s_lbl,
+                ha='center', va='top', fontsize=7.5, fontweight='bold', color='#475569', zorder=4,
+                bbox=dict(boxstyle='round,pad=0.15', facecolor='#ffffff', edgecolor='#94a3b8', alpha=0.9)
+            )
+
+    # Vertical centerlines and True Support Badges (ONLY at True Supports!)
+    for s_info in true_supports:
+        sp_coord = s_info["coord"]
+        sp_lbl = s_info["label"]
+        ax_slab.axvline(sp_coord, color='#94a3b8', linestyle='--', linewidth=0.9, alpha=0.65, zorder=1)
+        ax_bmd.axvline(sp_coord, color='#94a3b8', linestyle='--', linewidth=0.9, alpha=0.65, zorder=1)
+        ax_slab.text(
+            sp_coord, slab_h + 0.35, sp_lbl,
+            ha='center', va='center', fontsize=9.0, fontweight='bold', color='#1e3a8a', zorder=5,
+            bbox=dict(boxstyle='round,pad=0.30', facecolor='#e0f2fe', edgecolor='#0284c7', linewidth=1.4)
+        )
+
+    # Span dimensions between TRUE SUPPORTS only
+    for k in range(num_spans):
+        p_left = support_pts[k]
+        p_right = support_pts[k+1]
+        mid_span = (p_left + p_right) / 2.0
+        span_len = p_right - p_left
+        ax_slab.annotate(
+            '', xy=(p_left, slab_h + 0.12), xytext=(p_right, slab_h + 0.12),
+            arrowprops=dict(arrowstyle='<->', color='#475569', lw=1.0)
+        )
+        ax_slab.text(
+            mid_span, slab_h + 0.14, f"L{k+1} = {span_len:.2f} m",
+            ha='center', va='bottom', fontsize=8.2, fontweight='bold', color='#334155',
+            bbox=dict(boxstyle='round,pad=0.15', facecolor='#ffffff', edgecolor='none', alpha=0.75)
+        )
+
+    # Cantilever dimensions if present
+    if cant_start_len > 0.15:
+        ax_slab.annotate('', xy=(s_min, slab_h + 0.12), xytext=(support_pts[0], slab_h + 0.12), arrowprops=dict(arrowstyle='<->', color='#475569', lw=1.0))
+        ax_slab.text((s_min + support_pts[0])/2.0, slab_h + 0.14, f"Cant = {cant_start_len:.2f}m", ha='center', va='bottom', fontsize=7.8, fontweight='bold', color='#b45309')
+    if cant_end_len > 0.15:
+        ax_slab.annotate('', xy=(support_pts[-1], slab_h + 0.12), xytext=(s_max, slab_h + 0.12), arrowprops=dict(arrowstyle='<->', color='#475569', lw=1.0))
+        ax_slab.text((support_pts[-1] + s_max)/2.0, slab_h + 0.14, f"Cant = {cant_end_len:.2f}m", ha='center', va='bottom', fontsize=7.8, fontweight='bold', color='#b45309')
+
+    ax_slab.set_ylim(-0.85, slab_h + 0.70)
+    ax_slab.set_ylabel("قطاع الخرسانة والأعمدة\nElevation Section", fontsize=9.5, fontweight='bold', color='#1e293b')
+    ax_slab.set_title(f"{strip_title}\n[سمك البلاطة ts = {ts_cm:.0f} cm | عرض الشريحة b = {w_strip:.2f} m | الحمل التصميمي Wu = {Wu:.2f} t/m² | الركائز الفعلية: {len(true_supports)}]", fontsize=11.5, fontweight='bold', color='#0f172a', pad=16)
+    ax_slab.set_yticks([])
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # LOWER PANEL: BENDING MOMENT DIAGRAM (BMD)
+    # ═════════════════════════════════════════════════════════════════════════
+    y_bmd = -m_vec
+
+    ax_bmd.plot(s_vec, y_bmd, color='#1e3a8a', linewidth=2.5, label='منحنى عزم الانحناء Bending Moment (BMD)', zorder=4)
+    ax_bmd.axhline(0, color='#0f172a', linewidth=1.5, zorder=3)
+
+    # Fill negative tension (above baseline, y_bmd > 0)
+    ax_bmd.fill_between(s_vec, y_bmd, 0, where=(y_bmd >= 0), interpolate=True, color='#fee2e2', alpha=0.85, label='عزم سالب M⁻ (شد علوي فوق الركائز)', zorder=2)
+    # Fill positive tension (below baseline, y_bmd < 0)
+    ax_bmd.fill_between(s_vec, y_bmd, 0, where=(y_bmd <= 0), interpolate=True, color='#e0f2fe', alpha=0.85, label='عزم موجب M⁺ (شد سفلي في منتصف البحر)', zorder=2)
+
+    # Mesh capacity reference lines
+    if show_capacities and M_cap_top_m > 0:
+        ax_bmd.axhline(M_cap_top_m, color='#dc2626', linestyle='--', linewidth=1.3, alpha=0.8, zorder=3,
+                      label=f'سعة الشبكة العلوية Mcap,top = {M_cap_top_m:.2f} t·m/m ({mesh_top_str})')
+    if show_capacities and M_cap_btm_m > 0:
+        ax_bmd.axhline(-M_cap_btm_m, color='#0284c7', linestyle='--', linewidth=1.3, alpha=0.8, zorder=3,
+                      label=f'سعة الشبكة السفلية Mcap,btm = {M_cap_btm_m:.2f} t·m/m ({mesh_btm_str})')
+
+    # Format Y-Axis range first so label offsets scale cleanly with diagram amplitude
+    ax_bmd.set_xlim(s_min - 0.35, s_max + 0.35)
+    valid_y = np.abs(y_bmd[~np.isnan(y_bmd)])
+    max_y_val = max(1.5, (np.max(valid_y) * 1.42) if len(valid_y) > 0 else 5.0)
+    lbl_offset = max(0.35, max_y_val * 0.10)
+    ax_bmd.set_ylim(-max_y_val, max_y_val)
+
+    # Annotate Negative Peaks (EXCLUSIVELY over TRUE SUPPORTS!)
+    if show_labels:
+        for s_info in true_supports:
+            sp_coord = s_info["coord"]
+            sp_lbl = s_info["label"]
+            idx_near = np.where(np.abs(s_vec - sp_coord) <= 0.35)[0]
+            if len(idx_near) > 0:
+                valid_near = m_vec[idx_near][~np.isnan(m_vec[idx_near])]
+                if len(valid_near) > 0:
+                    m_peak = float(np.min(valid_near))
+                    if m_peak < -0.05:
+                        y_peak = -m_peak
+                        ax_bmd.plot(sp_coord, y_peak, 'o', color='#dc2626', markersize=5.5, zorder=5)
+
+                        needs_extra = abs(m_peak) > M_cap_top_m
+                        lbl_color = '#991b1b' if needs_extra else '#1e293b'
+                        bg_color = '#fef2f2' if needs_extra else '#ffffff'
+                        border_color = '#dc2626' if needs_extra else '#94a3b8'
+
+                        txt = f"M⁻ = {m_peak:.2f} t·m/m\n[{sp_lbl}]"
+                        if needs_extra:
+                            txt += "\n[⚠️ إضافي علوي]"
+
+                        ax_bmd.annotate(
+                            txt, xy=(sp_coord, y_peak),
+                            xytext=(sp_coord, y_peak + lbl_offset),
+                            ha='center', va='bottom', fontsize=8.0, fontweight='bold', color=lbl_color,
+                            bbox=dict(boxstyle='round,pad=0.25', facecolor=bg_color, edgecolor=border_color, lw=1.2),
+                            arrowprops=dict(arrowstyle='->', color='#dc2626', lw=1.0)
+                        )
+
+        # Annotate Positive Peaks (EXCLUSIVELY at MID-SPANS between TRUE SUPPORTS!)
+        for k in range(num_spans):
+            x_left = support_pts[k]
+            x_right = support_pts[k+1]
+            idx_span = np.where((s_vec >= x_left + 0.15) & (s_vec <= x_right - 0.15))[0]
+            if len(idx_span) > 0:
+                valid_span = m_vec[idx_span]
+                if not np.all(np.isnan(valid_span)):
+                    m_pos_peak = float(np.nanmax(valid_span))
+                    if m_pos_peak > 0.05:
+                        s_pos_peak = float(s_vec[idx_span[np.nanargmax(valid_span)]])
+                        y_pos_peak = -m_pos_peak
+                        ax_bmd.plot(s_pos_peak, y_pos_peak, 'o', color='#0284c7', markersize=5.5, zorder=5)
+
+                        needs_extra = m_pos_peak > M_cap_btm_m
+                        lbl_color = '#0369a1' if needs_extra else '#1e293b'
+                        bg_color = '#f0f9ff' if needs_extra else '#ffffff'
+                        border_color = '#0284c7' if needs_extra else '#94a3b8'
+
+                        txt = f"M⁺ = +{m_pos_peak:.2f} t·m/m\n[L{k+1}={x_right-x_left:.2f}m]"
+                        if needs_extra:
+                            txt += "\n[⚠️ إضافي سفلي]"
+
+                        ax_bmd.annotate(
+                            txt, xy=(s_pos_peak, y_pos_peak),
+                            xytext=(s_pos_peak, y_pos_peak - lbl_offset),
+                            ha='center', va='top', fontsize=8.0, fontweight='bold', color=lbl_color,
+                            bbox=dict(boxstyle='round,pad=0.25', facecolor=bg_color, edgecolor=border_color, lw=1.2),
+                            arrowprops=dict(arrowstyle='->', color='#0284c7', lw=1.0)
+                        )
+
+    def _moment_tick_formatter(val, pos):
+        if abs(val) < 0.05:
+            return "0.0"
+        elif val > 0:
+            return f"-{val:.1f} (M⁻)"
+        else:
+            return f"+{abs(val):.1f} (M⁺)"
+
+    ax_bmd.yaxis.set_major_formatter(ticker.FuncFormatter(_moment_tick_formatter))
+    ax_bmd.set_xlabel("المسافة على امتداد القطاع الإنشائي Distance (m)", fontsize=10.5, fontweight='bold', color='#0f172a')
+    ax_bmd.set_ylabel("عزم الانحناء Bending Moment (t·m / m')\n[أعلى: عزم سالب M⁻ ⟷ أسفل: عزم موجب M⁺]", fontsize=9.5, fontweight='bold', color='#0f172a')
+    ax_bmd.grid(True, linestyle=':', alpha=0.55, color='#94a3b8')
+
+    # ═════════════════════════════════════════════════════════════════════════
+    # REQUIREMENT 2: LEGEND / INFO PANEL STRICTLY BELOW THE CANVAS IN SINGLE ROW
+    # ═════════════════════════════════════════════════════════════════════════
+    handles, labels = ax_bmd.get_legend_handles_labels()
+    if handles:
+        ax_bmd.legend(
+            handles, labels,
+            loc='upper center',
+            bbox_to_anchor=(0.5, -0.22),
+            ncol=len(handles),  # Exactly one horizontal line
+            frameon=True,
+            facecolor='#ffffff',
+            edgecolor='#cbd5e1',
+            framealpha=0.98,
+            fontsize=8.5,
+            columnspacing=1.4,
+            handletextpad=0.5,
+            borderpad=0.5,
+        )
+
+    return fig
 
 
 def generate_flat_slab_moment_contour(
@@ -11697,6 +12435,7 @@ def _execute_fs_add_beam_box(data: dict, Lx_spans: list, Ly_spans: list, cantile
     if added_count > 0:
         st.session_state["_fs_beam_warning_msg"] = None
         st.session_state["_fs_invalid_beam_rejected_alert"] = None
+        cur_beams = auto_merge_collinear_beams(cur_beams, columns_list=columns_list)
         cur_beams = recompute_all_drop_beams(
             cur_beams, b_cm=b_cm_val, dia_main=dia_val,
             col_w_cm=col_w_cm, col_d_cm=col_d_cm, Fcu=Fcu, Fy=Fy, Wu_slab=Wu,
@@ -13151,7 +13890,7 @@ def _section_fs_add_columns(
         # 1️⃣ القسم الفرعي الأول: إسقاط الأعمدة (Collapsed افتراضياً)
         # ══════════════════════════════════════════════════════════════════════
         with st.expander(
-            "🎯 1- إسقاط الأعمدة",
+            "🎯 1. Column Placement (إسقاط الأعمدة)",
             expanded=False,
             key=f"{prefix}sub_exp_drop_cols",
         ):
@@ -13298,7 +14037,7 @@ def _section_fs_add_columns(
         # 2️⃣ القسم الفرعي الثاني: تعديل الأعمدة (Collapsed افتراضياً)
         # ══════════════════════════════════════════════════════════════════════
         with st.expander(
-            "🛠️ 2- تعديل الأعمدة",
+            "🛠️ 2. Column Modification (تعديل وتدوير الأعمدة)",
             expanded=False,
             key=f"{prefix}sub_exp_edit_cols",
         ):
@@ -13607,7 +14346,7 @@ def _section_fs_add_columns(
         # 3️⃣ القسم الفرعي الثالث: حذف الأعمدة (Collapsed افتراضياً)
         # ══════════════════════════════════════════════════════════════════════
         with st.expander(
-            "🗑️ 3- حذف الأعمدة",
+            "🗑️ 3. Column Removal (حذف واستبعاد الأعمدة)",
             expanded=False,
             key=f"{prefix}sub_exp_del_cols",
         ):
@@ -13780,7 +14519,7 @@ def _section_fs_add_columns(
         is_beam_mode_active = bool(st.session_state.get("fs_draw_beam_mode", False))
 
         with st.expander(
-            f"🎯 4- إسقاط وتعديل وحذف الكمرات الساقطة (Drop Beams — {len(cur_drop_beams)} كمرة)",
+            f"🏗️ 4. Drop Beams Management ({len(cur_drop_beams)} Beams — إسقاط وتعديل وحذف الكمرات الساقطة)",
             expanded=bool(is_beam_mode_active or st.session_state.get("fs_pending_delete_beam_id") or st.session_state.get("_fs_invalid_beam_rejected_alert") or st.session_state.get("_fs_mode_conflict_alert")),
             key=f"{prefix}sub_exp_drop_beams",
         ):
@@ -15081,6 +15820,11 @@ def render(is_standalone: bool = False):
         (p["x1"], p["x2"], p["y1"], p["y2"], p["area"])
         for p in _orig_panels_sk if p["id"] in set(_confirmed_voids)
     ]
+    st.session_state["_fs_void_boxes_sk"] = _void_boxes_sk
+    st.session_state["_fs_orig_panels_sk"] = _orig_panels_sk
+    st.session_state["_fs_Lx_spans_arch"] = list(Lx_spans)
+    st.session_state["_fs_Ly_spans_arch"] = list(Ly_spans)
+    st.session_state["fs_void_boxes"] = _void_boxes_sk
     _cur_beams_list = st.session_state.get("fs_drop_beams") or cfg.get("fs_drop_beams") or S.cfg_val("fs_drop_beams", []) or []
     if not isinstance(_cur_beams_list, list):
         _cur_beams_list = []
@@ -15710,6 +16454,11 @@ def render(is_standalone: bool = False):
         (p["x1"], p["x2"], p["y1"], p["y2"], p["area"])
         for p in _orig_panels_sk if p["id"] in set(_confirmed_voids)
     ]
+    st.session_state["_fs_void_boxes_sk"] = _void_boxes_sk
+    st.session_state["_fs_orig_panels_sk"] = _orig_panels_sk
+    st.session_state["_fs_Lx_spans_arch"] = list(Lx_spans)
+    st.session_state["_fs_Ly_spans_arch"] = list(Ly_spans)
+    st.session_state["fs_void_boxes"] = _void_boxes_sk
 
     # 3. Detect and calculate Bottom Extra Steel per Independent Panel Bay (P_i_j) & Column-Head Top Steel
     rem_coords_set = {
@@ -16855,6 +17604,221 @@ def render(is_standalone: bool = False):
         else:
             st.info("💡 انقر لتوسيع هذا القسم وعرض مصفوفة العزوم والمخططات اللونية الكنتورية (M11 & M22).")
 
+    # ── 📈 VERTICAL BENDING MOMENT SECTIONS (القطاعات الرأسية لعزوم الانحناء) ────
+    exp_mom_sections = st.expander(
+        "📈 Vertical Bending Moment Sections (القطاعات الرأسية لعزوم الانحناء / قطاعات العزوم)",
+        expanded=False,
+        key=f"{prefix}exp_moments_sections",
+        on_change="rerun",
+    )
+    with exp_mom_sections:
+        if st.session_state.get(f"{prefix}exp_moments_sections", False):
+            st.markdown(
+                """
+                <div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:8px; padding:10px 14px; margin-bottom:12px;">
+                    <div style="font-size:0.95rem; font-weight:800; color:#1e3a8a; display:flex; align-items:center; gap:8px;">
+                        <span>📈</span>
+                        <span>قطاعات رأسية تمتد بكامل طول وعرض البلاطة مع الاعتماد الحصري على الركائز الفعلية (الأعمدة والكمرات) وتجاهل خطوط المحاور الوهمية</span>
+                    </div>
+                    <div style="font-size:0.85rem; color:#475569; margin-top:4px;">
+                        تعتمد هذه الأداة على الإحداثيات الحقيقية للعناصر الإنشائية لتحديد البحور والعزوم القصوى، مع عرض مفتاح الرسم أسفل اللوحة بالكامل دون حجب أي قيم.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            col_sec_d, col_sec_s = st.columns(2)
+            with col_sec_d:
+                sec_dir = S.radio(
+                    "🧭 اتجاه القطاع الإنشائي (Section Direction):",
+                    f"{prefix}sec_moment_dir",
+                    options=[
+                        "↔️ اتجاه المحور الأفقي (Direction X — يمر بالبحور الأفقية)",
+                        "↕️ اتجاه المحور الرأسي (Direction Y — يمر بالبحور الرأسية)",
+                    ],
+                    index=0,
+                )
+            is_dir_x = "X" in sec_dir
+            dir_code = "X" if is_dir_x else "Y"
+
+            x_coords_ui = [0.0]
+            for lx in Lx_calc: x_coords_ui.append(round(x_coords_ui[-1] + float(lx), 4))
+            y_coords_ui = [0.0]
+            for ly in Ly_calc: y_coords_ui.append(round(y_coords_ui[-1] + float(ly), 4))
+
+            with col_sec_s:
+                sec_strip_type = S.radio(
+                    "📍 مسار وموضع شريحة القطع (Strip Cutting Plane):",
+                    f"{prefix}sec_strip_type",
+                    options=[
+                        "🏛️ شريحة عمود حرجة (Column Strip / Critical Zone — على خطوط الأعمدة الفعلية)",
+                        "📍 شريحة وسط (Field Strip / Mid-Span — في منتصف البحور بين الأعمدة)",
+                    ],
+                    index=0,
+                )
+            is_col_strip = "Column Strip" in sec_strip_type
+            strip_type_code = "column" if is_col_strip else "field"
+
+            # ── Dynamically discover real structural lines (True Alignments) ──
+            strip_choices = []
+            if is_dir_x:
+                col_y_list = []
+                for c in (_active_cols or []):
+                    if isinstance(c, dict):
+                        cy = float(c.get("center_y", c.get("grid_y_m", c.get("y", 0.0))))
+                        cid = c.get("id", c.get("orig_id", "C"))
+                        col_y_list.append((cy, cid))
+                for b in (_cur_beams_list or []):
+                    if isinstance(b, dict):
+                        bp1 = b.get("p1_grid", b.get("p1", [0, 0]))
+                        bp2 = b.get("p2_grid", b.get("p2", [0, 0]))
+                        if bp1 and bp2 and len(bp1) >= 2 and len(bp2) >= 2:
+                            if abs(float(bp1[1]) - float(bp2[1])) <= 0.35:
+                                col_y_list.append(((float(bp1[1]) + float(bp2[1])) / 2.0, b.get("id", "Beam")))
+
+                col_y_list.sort(key=lambda it: it[0])
+                clusters_y = []
+                for y_val, el_id in col_y_list:
+                    if not clusters_y or abs(y_val - clusters_y[-1]["y"]) > 0.40:
+                        clusters_y.append({"y": y_val, "elements": [el_id]})
+                    else:
+                        clusters_y[-1]["elements"].append(el_id)
+
+                if not clusters_y:
+                    clusters_y = [{"y": y_v, "elements": [f"Y={y_v:.2f}m"]} for y_v in y_coords_ui]
+
+                if is_col_strip:
+                    for idx_cl, cl in enumerate(clusters_y):
+                        y_v = cl["y"]
+                        els_str = ", ".join(cl["elements"][:4])
+                        if len(cl["elements"]) > 4: els_str += "..."
+                        lbl = f"🏛️ خط عناصر إنشائية عند Y = {y_v:.2f} m — [{els_str}]"
+                        strip_choices.append((y_v, lbl))
+                else:
+                    for idx_cl in range(len(clusters_y) - 1):
+                        y1_v = clusters_y[idx_cl]["y"]
+                        y2_v = clusters_y[idx_cl + 1]["y"]
+                        y_mid = (y1_v + y2_v) / 2.0
+                        lbl = f"📍 شريحة منتصف البحر بين Y={y1_v:.2f}m و Y={y2_v:.2f}m — (Y = {y_mid:.2f} m)"
+                        strip_choices.append((y_mid, lbl))
+            else:
+                col_x_list = []
+                for c in (_active_cols or []):
+                    if isinstance(c, dict):
+                        cx = float(c.get("center_x", c.get("grid_x_m", c.get("x", 0.0))))
+                        cid = c.get("id", c.get("orig_id", "C"))
+                        col_x_list.append((cx, cid))
+                for b in (_cur_beams_list or []):
+                    if isinstance(b, dict):
+                        bp1 = b.get("p1_grid", b.get("p1", [0, 0]))
+                        bp2 = b.get("p2_grid", b.get("p2", [0, 0]))
+                        if bp1 and bp2 and len(bp1) >= 2 and len(bp2) >= 2:
+                            if abs(float(bp1[0]) - float(bp2[0])) <= 0.35:
+                                col_x_list.append(((float(bp1[0]) + float(bp2[0])) / 2.0, b.get("id", "Beam")))
+
+                col_x_list.sort(key=lambda it: it[0])
+                clusters_x = []
+                for x_val, el_id in col_x_list:
+                    if not clusters_x or abs(x_val - clusters_x[-1]["x"]) > 0.40:
+                        clusters_x.append({"x": x_val, "elements": [el_id]})
+                    else:
+                        clusters_x[-1]["elements"].append(el_id)
+
+                if not clusters_x:
+                    clusters_x = [{"x": x_v, "elements": [f"X={x_v:.2f}m"]} for x_v in x_coords_ui]
+
+                if is_col_strip:
+                    for idx_cl, cl in enumerate(clusters_x):
+                        x_v = cl["x"]
+                        els_str = ", ".join(cl["elements"][:4])
+                        if len(cl["elements"]) > 4: els_str += "..."
+                        lbl = f"🏛️ خط عناصر إنشائية عند X = {x_v:.2f} m — [{els_str}]"
+                        strip_choices.append((x_v, lbl))
+                else:
+                    for idx_cl in range(len(clusters_x) - 1):
+                        x1_v = clusters_x[idx_cl]["x"]
+                        x2_v = clusters_x[idx_cl + 1]["x"]
+                        x_mid = (x1_v + x2_v) / 2.0
+                        lbl = f"📍 شريحة منتصف البحر بين X={x1_v:.2f}m و X={x2_v:.2f}m — (X = {x_mid:.2f} m)"
+                        strip_choices.append((x_mid, lbl))
+
+            if not strip_choices:
+                strip_choices = [(0.0, "القطاع الافتراضي الرئيسي")]
+
+            col_choice, col_opts1, col_opts2 = st.columns([2.5, 1.2, 1.2])
+            with col_choice:
+                chosen_strip_coord = S.selectbox(
+                    "🔍 اختر موقع القطاع الإنشائي المراد دراسته:",
+                    f"{prefix}sec_chosen_strip_coord",
+                    options=[item[0] for item in strip_choices],
+                    format_func=lambda c_val: next((item[1] for item in strip_choices if item[0] == c_val), str(c_val)),
+                    index=0,
+                )
+                chosen_label = next((item[1] for item in strip_choices if item[0] == chosen_strip_coord), "")
+
+            with col_opts1:
+                show_sec_labels = st.checkbox(
+                    "🏷️ إظهار قيم العزوم القصوى",
+                    value=True,
+                    key=f"{prefix}sec_show_labels",
+                    help="كتابة قيم العزوم الموجبة والسالبة القصوى ومواضعها فوق الركائز وفي منتصف البحور",
+                )
+            with col_opts2:
+                show_sec_caps = st.checkbox(
+                    "📏 إظهار سعة الشبكة (Mcap)",
+                    value=True,
+                    key=f"{prefix}sec_show_caps",
+                    help="رسم خطوط سعة مقاومة شبكتي التسليح العلوية والسفلية الأساسية لتحديد مناطق الإضافي",
+                )
+
+            fig_sec = generate_flat_slab_moment_cross_section(
+                Lx_calc,
+                Ly_calc,
+                cantilevers,
+                ts_cm=ts,
+                direction=dir_code,
+                strip_type=strip_type_code,
+                strip_coord=chosen_strip_coord,
+                strip_title_custom=chosen_label,
+                active_cols=_active_cols,
+                drop_beams=_cur_beams_list,
+                void_boxes=_void_boxes_sk,
+                M_cap_top_m=M_cap_top_m,
+                M_cap_btm_m=M_cap_btm_m,
+                mesh_top_str=mesh_top_str,
+                mesh_btm_str=mesh_btm_str,
+                Wu=Wu,
+                show_labels=show_sec_labels,
+                show_capacities=show_sec_caps,
+                active_x_labels=_active_x_labels,
+                active_y_labels=_active_y_labels,
+            )
+
+            st.pyplot(fig_sec, clear_figure=True, use_container_width=True)
+
+            buf_sec = io.BytesIO()
+            fig_sec.savefig(buf_sec, format="png", bbox_inches="tight", dpi=180)
+            buf_sec.seek(0)
+            sec_filename = f"{prefix}Flat_Slab_Moment_Section_{dir_code}_{strip_type_code}_{chosen_strip_coord:.2f}m_ts{ts:.0f}cm.png"
+
+            col_btn_sec, col_info_sec = st.columns([1.5, 2.5])
+            with col_btn_sec:
+                st.download_button(
+                    label="📥 تحميل القطاع الرأسي عالي الدقة (PNG)",
+                    data=buf_sec,
+                    file_name=sec_filename,
+                    mime="image/png",
+                    use_container_width=True,
+                )
+            with col_info_sec:
+                st.caption("📐 دقة المخطط: 180 DPI | تم الحساب استناداً إلى الركائز الفعلية حصرياً مع تجاهل خطوط المحاور.")
+
+            plt.close(fig_sec)
+        else:
+            st.info("💡 انقر لتوسيع هذا القسم واختيار مسارات القطاعات الرأسية (شرائح الأعمدة وشرائح الوسط) وعرض مخططات عزوم الانحناء (BMD).")
+
+
     # ── 🟢 2. TOP REINFORCEMENT PLAN (Initialized for exports) ────────────────
     img_top_b64 = None
 
@@ -17284,7 +18248,7 @@ def render(is_standalone: bool = False):
         _cfg_curr_beams = list(st.session_state.get("fs_drop_beams", []))
 
     exp_beams = st.expander(
-        f"🏗️ تصميم الكمرات - Beams Design ({len(_cfg_curr_beams)} كمرة مسقطة)",
+        f"🏗️ Drop Beams Design ({len(_cfg_curr_beams)} Beams — تصميم الكمرات الساقطة)",
         expanded=False,
         key=f"{prefix}exp_beams_design",
         on_change="rerun",
@@ -17498,7 +18462,7 @@ def render(is_standalone: bool = False):
             )
 
             # 3. Comprehensive Verification Summary Table (Collapsed Expander)
-            with st.expander("📋 جدول التحقق التفصيلي من سهم الانحناء والجساءة الفعالة لكافة الباكيات (ECP 203)", expanded=False):
+            with st.expander("📋 Detailed Deflection & Effective Stiffness Schedule — ECP 203 (جدول التحقق التفصيلي من سهم الانحناء والجساءة الفعالة)", expanded=False):
                 st.markdown(
                     """
                     <div style="font-size:13px; color:#94a3b8; margin-bottom:12px;">
@@ -19233,6 +20197,12 @@ def render(is_standalone: bool = False):
                 prefix=prefix,
                 edge_columns=_edge_columns if '_edge_columns' in locals() else None,
                 drop_beams=_cur_beams_list,
+                void_panels=_confirmed_voids,
+                void_boxes=_void_boxes_sk if '_void_boxes_sk' in locals() else None,
+                Lx_spans=Lx_spans if 'Lx_spans' in locals() else None,
+                Ly_spans=Ly_spans if 'Ly_spans' in locals() else None,
+                active_x_labels=_active_x_labels if '_active_x_labels' in locals() else None,
+                active_y_labels=_active_y_labels if '_active_y_labels' in locals() else None,
                 layout_sketch_b64=st.session_state.get(f"{prefix}flat_slab_plan_b64", "") or st.session_state.get("fs_flat_slab_plan_b64", ""),
             )
         except Exception as _e_3d:
@@ -19624,6 +20594,12 @@ def render(is_standalone: bool = False):
             prefix=prefix,
             layout_sketch_b64=st.session_state.get(f"{prefix}flat_slab_plan_b64", "") or st.session_state.get("fs_flat_slab_plan_b64", ""),
             drop_beams=_cur_beams_list,
+            void_panels=_confirmed_voids,
+            void_boxes=_void_boxes_sk if '_void_boxes_sk' in locals() else None,
+            Lx_spans=Lx_spans if 'Lx_spans' in locals() else None,
+            Ly_spans=Ly_spans if 'Ly_spans' in locals() else None,
+            active_x_labels=_active_x_labels if '_active_x_labels' in locals() else None,
+            active_y_labels=_active_y_labels if '_active_y_labels' in locals() else None,
         )
 
         with st.expander("📊 Approximate Quantity Survey (الحصر التقريبي لكميات ومواد السقف)", expanded=False):
@@ -20395,6 +21371,7 @@ def render(is_standalone: bool = False):
             "📉 Long-Term Deflection Contour Plan (مخطط هبوط وترخيم البلاطة طويل المدى)",
             "📈 Moment M11 Contour Plan (كنتور عزوم الانحناء M11 — X-Direction Moment)",
             "📈 Moment M22 Contour Plan (كنتور عزوم الانحناء M22 — Y-Direction Moment)",
+            "📊 Vertical Bending Moment Cross-Sections (القطاعات الرأسية لعزوم الانحناء BMD)",
             "🔴 1. Column Caps Layout (Top Extra) (كابات وتفريد الإضافي العلوي للأعمدة)",
             "🔶 2A. Bottom Extra (X-Direction) & Base Meshes (الحديد الإضافي السفلي اتجاه X وشبكات التسليح)",
             "🔶 2B. Bottom Extra (Y-Direction) & Base Meshes (الحديد الإضافي السفلي اتجاه Y وشبكات التسليح)",
@@ -20601,6 +21578,27 @@ def render(is_standalone: bool = False):
                                         active_x_labels=_active_x_labels,
                                         active_y_labels=_active_y_labels,
                                         void_boxes=_void_boxes_sk,
+                                    )
+                                elif "Vertical Bending Moment Cross-Sections" in sk_title:
+                                    _X_sec, _Y_sec, _, _, _M11_raw_sec, _M22_raw_sec = build_slab_moment_field(
+                                        Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+                                        void_panel_ids=set(_confirmed_voids),
+                                        grid_res=220,
+                                        void_boxes=_void_boxes_sk,
+                                        btm_extra_spans=btm_extra_spans,
+                                        active_cols=_active_cols,
+                                        removed_cols=_removed_col_objs,
+                                        drop_beams=_cur_beams_list,
+                                    )
+                                    fig_sk = generate_flat_slab_moment_cross_section(
+                                        Lx_calc, Ly_calc, cantilevers, ts_cm=ts,
+                                        direction="X", strip_type="column", strip_coord=0.0,
+                                        X_mf=_X_sec, Y_mf=_Y_sec, M11_raw_mf=_M11_raw_sec, M22_raw_mf=_M22_raw_sec,
+                                        active_cols=_active_cols, drop_beams=_cur_beams_list, void_boxes=_void_boxes_sk,
+                                        M_cap_top_m=M_cap_top_m, M_cap_btm_m=M_cap_btm_m,
+                                        mesh_top_str=mesh_top_str, mesh_btm_str=mesh_btm_str, Wu=Wu,
+                                        show_labels=True, show_capacities=True,
+                                        active_x_labels=_active_x_labels, active_y_labels=_active_y_labels,
                                     )
                                 elif "Master Steel Layout" in sk_title:
                                     fig_sk = generate_flat_slab_master_steel_layout_sketch(

@@ -646,6 +646,174 @@ def determine_beam_continuity(p1: list, p2: list, other_beams: list, tol: float 
     return "simple"
 
 
+def auto_merge_collinear_beams(
+    beams_list: list,
+    columns_list: list = None,
+    tol_adjacent: float = 0.35,
+    tol_col: float = 0.60,
+) -> list:
+    """
+    فحص ودمج الكمرات المتجاورة الواقعة على استقامة واحدة (Collinear / Adjacent Beams):
+    إذا وُجدت كمرتان متجاورتان متصلا النهايات ولا يفصل بينهما أي عمود خرساني (Column)،
+    يتم دمج الكمرتين تلقائياً في عنصر إنشائي واحد (كمرة واحدة متصلة) وإعطاؤهما اسماً واحداً موحداً (الأصغر ترقيماً).
+    """
+    if not beams_list or len(beams_list) < 2:
+        return beams_list
+
+    def _has_column_at(pt):
+        if not columns_list:
+            return False
+        px, py = float(pt[0]), float(pt[1])
+        for c in columns_list:
+            if not isinstance(c, dict):
+                continue
+            cx = float(c.get("center_x", c.get("x", c.get("grid_x_m", 0.0))))
+            cy = float(c.get("center_y", c.get("y", c.get("grid_y_m", 0.0))))
+            if math.hypot(cx - px, cy - py) <= tol_col:
+                return True
+            if "x_min" in c and "x_max" in c and "y_min" in c and "y_max" in c:
+                if (float(c["x_min"]) - 0.15 <= px <= float(c["x_max"]) + 0.15 and
+                    float(c["y_min"]) - 0.15 <= py <= float(c["y_max"]) + 0.15):
+                    return True
+        return False
+
+    def _beam_num(bid: str):
+        try:
+            return int(str(bid).lstrip("B"))
+        except Exception:
+            return 999999
+
+    merged_any = True
+    result = [dict(b) for b in beams_list]
+
+    while merged_any:
+        merged_any = False
+        n = len(result)
+        for i in range(n):
+            if merged_any:
+                break
+            for j in range(i + 1, n):
+                b1 = result[i]
+                b2 = result[j]
+                p1_1 = b1.get("p1_grid", b1.get("p1"))
+                p1_2 = b1.get("p2_grid", b1.get("p2"))
+                p2_1 = b2.get("p1_grid", b2.get("p1"))
+                p2_2 = b2.get("p2_grid", b2.get("p2"))
+                if not (p1_1 and p1_2 and p2_1 and p2_2):
+                    continue
+
+                dx1, dy1 = float(p1_2[0]) - float(p1_1[0]), float(p1_2[1]) - float(p1_1[1])
+                dx2, dy2 = float(p2_2[0]) - float(p2_1[0]), float(p2_2[1]) - float(p2_1[1])
+                L1 = math.hypot(dx1, dy1)
+                L2 = math.hypot(dx2, dy2)
+                if L1 < 0.1 or L2 < 0.1:
+                    continue
+
+                u1 = (dx1 / L1, dy1 / L1)
+                u2 = (dx2 / L2, dy2 / L2)
+                dot = abs(u1[0] * u2[0] + u1[1] * u2[1])
+                if dot < 0.98:
+                    continue
+
+                # Check collinearity via distance to infinite line of b1
+                dist_line = abs(dy1 * float(p2_1[0]) - dx1 * float(p2_1[1]) + float(p1_2[0]) * float(p1_1[1]) - float(p1_2[1]) * float(p1_1[0])) / L1
+                if dist_line > 0.35:
+                    continue
+
+                # Check shared endpoint junction
+                junction = None
+                new_p1, new_p2 = None, None
+                if math.hypot(float(p1_2[0]) - float(p2_1[0]), float(p1_2[1]) - float(p2_1[1])) <= tol_adjacent:
+                    junction = [(float(p1_2[0]) + float(p2_1[0])) / 2.0, (float(p1_2[1]) + float(p2_1[1])) / 2.0]
+                    new_p1, new_p2 = list(p1_1), list(p2_2)
+                elif math.hypot(float(p1_2[0]) - float(p2_2[0]), float(p1_2[1]) - float(p2_2[1])) <= tol_adjacent:
+                    junction = [(float(p1_2[0]) + float(p2_2[0])) / 2.0, (float(p1_2[1]) + float(p2_2[1])) / 2.0]
+                    new_p1, new_p2 = list(p1_1), list(p2_1)
+                elif math.hypot(float(p1_1[0]) - float(p2_1[0]), float(p1_1[1]) - float(p2_1[1])) <= tol_adjacent:
+                    junction = [(float(p1_1[0]) + float(p2_1[0])) / 2.0, (float(p1_1[1]) + float(p2_1[1])) / 2.0]
+                    new_p1, new_p2 = list(p1_2), list(p2_2)
+                elif math.hypot(float(p1_1[0]) - float(p2_2[0]), float(p1_1[1]) - float(p2_2[1])) <= tol_adjacent:
+                    junction = [(float(p1_1[0]) + float(p2_2[0])) / 2.0, (float(p1_1[1]) + float(p2_2[1])) / 2.0]
+                    new_p1, new_p2 = list(p1_2), list(p2_1)
+
+                if junction is None:
+                    continue
+
+                # Check if an intermediate column exists at the junction
+                if _has_column_at(junction):
+                    continue
+
+                # Determine primary beam ID (lower number, e.g. B12 instead of B13)
+                num1 = _beam_num(b1.get("id"))
+                num2 = _beam_num(b2.get("id"))
+                if num1 <= num2:
+                    pri_b, sec_b = b1, b2
+                else:
+                    pri_b, sec_b = b2, b1
+
+                pri_id = pri_b.get("id", "B")
+                sec_id = sec_b.get("id", "B")
+
+                # Canonical orientation of endpoints (min X, then min Y)
+                if (float(new_p1[0]) > float(new_p2[0])) or (abs(float(new_p1[0]) - float(new_p2[0])) < 1e-4 and float(new_p1[1]) > float(new_p2[1])):
+                    new_p1, new_p2 = new_p2, new_p1
+
+                merged_beam = dict(pri_b)
+                merged_beam["id"] = pri_id
+                merged_beam["name"] = f"كمرة {pri_id}"
+                merged_beam["p1_grid"] = [round(float(new_p1[0]), 4), round(float(new_p1[1]), 4)]
+                merged_beam["p2_grid"] = [round(float(new_p2[0]), 4), round(float(new_p2[1]), 4)]
+                merged_beam["p1"] = list(merged_beam["p1_grid"])
+                merged_beam["p2"] = list(merged_beam["p2_grid"])
+                merged_beam["b_cm"] = max(float(b1.get("b_cm", 25.0)), float(b2.get("b_cm", 25.0)))
+                merged_beam["dia_main"] = max(int(b1.get("dia_main", 16)), int(b2.get("dia_main", 16)))
+
+                t1 = float(b1.get("user_t_cm", 0.0) or 0.0)
+                t2 = float(b2.get("user_t_cm", 0.0) or 0.0)
+                merged_beam["user_t_cm"] = max(t1, t2)
+
+                if "axis_type" not in merged_beam and "axis_type" in sec_b:
+                    merged_beam["axis_type"] = sec_b["axis_type"]
+                if "axis_index" not in merged_beam and "axis_index" in sec_b:
+                    merged_beam["axis_index"] = sec_b["axis_index"]
+                if "axis_name" not in merged_beam and "axis_name" in sec_b:
+                    merged_beam["axis_name"] = sec_b["axis_name"]
+
+                result[i] = merged_beam
+                del result[j]
+
+                # Update any references to sec_id in remaining beams
+                for rb in result:
+                    for sk in ("supp1", "supp2"):
+                        if isinstance(rb.get(sk), dict) and rb[sk].get("id") == sec_id:
+                            rb[sk]["id"] = pri_id
+                            rb[sk]["name"] = f"كمرة {pri_id}"
+
+                try:
+                    import streamlit as st
+                    if st.session_state.get("fs_selected_beam_id") == sec_id:
+                        st.session_state["fs_selected_beam_id"] = pri_id
+                    if st.session_state.get("fs_pending_delete_beam_id") == sec_id:
+                        st.session_state["fs_pending_delete_beam_id"] = None
+                    gb_ov = st.session_state.get("gb_overrides") or st.session_state.get("cfg", {}).get("gb_overrides")
+                    if isinstance(gb_ov, dict):
+                        prefix_sec = f"{sec_id}_"
+                        prefix_pri = f"{pri_id}_"
+                        keys_to_migrate = [k for k in gb_ov if k.startswith(prefix_sec)]
+                        for k in keys_to_migrate:
+                            new_k = prefix_pri + k[len(prefix_sec):]
+                            if new_k not in gb_ov:
+                                gb_ov[new_k] = gb_ov[k]
+                            del gb_ov[k]
+                except Exception:
+                    pass
+
+                merged_any = True
+                break
+
+    return result
+
+
 def recompute_all_drop_beams(
     beams_list: list,
     b_cm: float = 25.0,
@@ -663,8 +831,12 @@ def recompute_all_drop_beams(
 ) -> list:
     """
     إعادة الحساب والتصميم اللحظي الشامل لكافة الكمرات في النموذج مع تحديث الاستمرارية والضبط بين أوجه الأعمدة،
+    ودمج الكمرات المتجاورة على استقامة واحدة تلقائياً في حال عدم وجود عمود فاصل،
     وتطبيق الاستمرارية التامة للعزوم (Full Moment Continuity) واتزان ردود الأفعال عند ركائز الكمرات الكابولية.
     """
+    if columns_list is not None and beams_list:
+        beams_list = auto_merge_collinear_beams(beams_list, columns_list=columns_list)
+
     updated = []
     for i, b in enumerate(beams_list):
         # استخدام إحداثيات المحور الأصلية لإعادة اشتقاق أوجه الأعمدة والاستمرارية

@@ -52,6 +52,12 @@ def extract_bim_3d_scene_data(
     cover_gb_cm: float = 4.0,
     edge_columns: dict = None,
     drop_beams: list = None,
+    void_panels: list = None,
+    void_boxes: list = None,
+    Lx_spans: list = None,
+    Ly_spans: list = None,
+    active_x_labels: list = None,
+    active_y_labels: list = None,
 ) -> dict:
     """
     Extracts all coordinated 3D structural geometry, elevations, and rebar data
@@ -125,31 +131,332 @@ def extract_bim_3d_scene_data(
     concrete_elements = []
     rebar_elements = []
 
-    # 1.1 SLAB (Concrete Mesh)
-    concrete_elements.append({
-        "id": "slab_main",
-        "category": "slab",
-        "name": "سقف البلاطة اللاكمرية (Flat Slab)",
-        "type": "Flat Slab",
-        "x": slab_center_x,
-        "y": slab_center_y,
-        "z": z_slab_bot + (ts_m / 2.0),
-        "dx": slab_w_x,
-        "dy": slab_w_y,
-        "dz": ts_m,
-        "color": "#cbd5e1",
-        "details": {
-            "النوع": "بلاطة لاكمرية خرسانية مسلحة (Solid Flat Slab)",
-            "الأبعاد الكلية": f"{slab_w_x:.2f} × {slab_w_y:.2f} م",
-            "سُمك البلاطة (ts)": f"{ts_cm:.0f} سم ({ts_m:.2f} م)",
-            "الكوابيل (Cantilevers)": f"يسار: {cant_left}م | يمين: {cant_right}م | أعلى: {cant_top}م | أسفل: {cant_bottom}م",
-            "المقاومة المميزة (Fcu)": f"{fcu:.0f} كجم/سم²",
-            "إجهاد الخضوع (Fy)": f"{fy:.0f} كجم/سم²",
-            "الشبكة السفلية": f"{n_mesh_btm:.0f} Φ {bottom_mesh_dia} / م (اتجاهين X, Y)",
-            "الشبكة العلوية": f"{n_mesh_top:.0f} Φ {top_mesh_dia} / م (اتجاهين X, Y)",
-            "حجم الخرسانة": f"{(slab_w_x * slab_w_y * ts_m):.2f} م³",
-        }
-    })
+    # 1.0b SLAB VOID PANELS RESOLUTION & RECTANGLE DECOMPOSITION
+    # Root-cause resolution: ensure all voids in the 2D plan (such as P_1_1, P_5_3, etc.)
+    # are reliably translated into exact 2D bounding boxes, regardless of column removals or span merges.
+    eff_void_boxes = void_boxes
+    if not eff_void_boxes:
+        try:
+            eff_void_boxes = (
+                st.session_state.get("_fs_void_boxes_sk")
+                or st.session_state.get("fs_void_boxes")
+            )
+        except Exception:
+            eff_void_boxes = None
+
+    void_boxes_2d = []
+    if eff_void_boxes:
+        for idx, vb in enumerate(eff_void_boxes):
+            if isinstance(vb, dict):
+                vx1 = float(vb.get("x1", 0.0))
+                vx2 = float(vb.get("x2", 0.0))
+                vy1 = float(vb.get("y1", 0.0))
+                vy2 = float(vb.get("y2", 0.0))
+                v_id = str(vb.get("id", f"void_{idx+1}"))
+                v_name = str(vb.get("name", v_id))
+                v_area = float(vb.get("area", abs((vx2 - vx1) * (vy2 - vy1))))
+            elif isinstance(vb, (list, tuple)) and len(vb) >= 4:
+                vx1, vx2, vy1, vy2 = float(vb[0]), float(vb[1]), float(vb[2]), float(vb[3])
+                v_area = float(vb[4]) if len(vb) >= 5 else abs((vx2 - vx1) * (vy2 - vy1))
+                v_id = f"void_{idx+1}"
+                v_name = f"منور / فتحة {idx+1}"
+            else:
+                continue
+
+            x1_b = round(min(vx1, vx2), 4)
+            x2_b = round(max(vx1, vx2), 4)
+            y1_b = round(min(vy1, vy2), 4)
+            y2_b = round(max(vy1, vy2), 4)
+            w_box = x2_b - x1_b
+            h_box = y2_b - y1_b
+            if w_box >= 0.02 and h_box >= 0.02:
+                void_boxes_2d.append({
+                    "id": v_id,
+                    "name": v_name,
+                    "x1": x1_b,
+                    "y1": y1_b,
+                    "x2": x2_b,
+                    "y2": y2_b,
+                    "mid_x": round((x1_b + x2_b) / 2.0, 4),
+                    "mid_y": round((y1_b + y2_b) / 2.0, 4),
+                    "Lx": w_box,
+                    "Ly": h_box,
+                    "area": v_area if v_area > 0 else round(w_box * h_box, 4),
+                })
+
+    # Fallback: if void_boxes_2d is still empty, resolve from void_panels using architectural spans
+    if not void_boxes_2d:
+        eff_void_panels = void_panels
+        if eff_void_panels is None:
+            try:
+                eff_void_panels = (
+                    st.session_state.get("cfg", {}).get("fs_void_panels")
+                    or st.session_state.get("fs_void_panels")
+                    or []
+                )
+            except Exception:
+                eff_void_panels = []
+
+        if isinstance(eff_void_panels, str):
+            try:
+                import ast
+                eff_void_panels = ast.literal_eval(eff_void_panels)
+            except Exception:
+                eff_void_panels = [eff_void_panels]
+
+        if eff_void_panels:
+            # Recover architectural spans from parameter or session state / config
+            ref_lx = Lx_spans
+            ref_ly = Ly_spans
+            if not ref_lx or not ref_ly:
+                try:
+                    ref_lx = st.session_state.get("_fs_Lx_spans_arch")
+                    ref_ly = st.session_state.get("_fs_Ly_spans_arch")
+                except Exception:
+                    pass
+            if not ref_lx or not ref_ly:
+                try:
+                    cfg_s = st.session_state.get("cfg", {})
+                    n_lx = cfg_s.get("fs_n_lx") or st.session_state.get("fs_n_lx")
+                    n_ly = cfg_s.get("fs_n_ly") or st.session_state.get("fs_n_ly")
+                    if n_lx and n_ly:
+                        ref_lx = [float(cfg_s.get(f"fs_lx_{k}") or st.session_state.get(f"fs_lx_{k}") or 6.0) for k in range(int(n_lx))]
+                        ref_ly = [float(cfg_s.get(f"fs_ly_{k}") or st.session_state.get(f"fs_ly_{k}") or 6.0) for k in range(int(n_ly))]
+                except Exception:
+                    pass
+            ref_lx = ref_lx or Lx_list
+            ref_ly = ref_ly or Ly_list
+            try:
+                from modules.flat_slab import get_flat_slab_panels
+                all_panels_reg = get_flat_slab_panels(ref_lx, ref_ly, void_ids=eff_void_panels)
+                for p in all_panels_reg:
+                    if p.get("is_void") or (p.get("id") in set(eff_void_panels)):
+                        void_boxes_2d.append({
+                            "id": p["id"],
+                            "name": p.get("name", p["id"]),
+                            "x1": round(float(p["x1"]), 4),
+                            "y1": round(float(p["y1"]), 4),
+                            "x2": round(float(p["x2"]), 4),
+                            "y2": round(float(p["y2"]), 4),
+                            "mid_x": round(float(p["mid_x"]), 4),
+                            "mid_y": round(float(p["mid_y"]), 4),
+                            "Lx": float(p["Lx"]),
+                            "Ly": float(p["Ly"]),
+                            "area": float(p["area"]),
+                        })
+            except Exception:
+                void_boxes_2d = []
+
+    def _subtract_rect_2d(r_solid, r_void):
+        sx1, sy1, sx2, sy2 = r_solid
+        vx1, vy1, vx2, vy2 = r_void
+        if vx2 <= sx1 + 1e-4 or vx1 >= sx2 - 1e-4 or vy2 <= sy1 + 1e-4 or vy1 >= sy2 - 1e-4:
+            return [r_solid]
+        ix1 = max(sx1, vx1)
+        ix2 = min(sx2, vx2)
+        iy1 = max(sy1, vy1)
+        iy2 = min(sy2, vy2)
+        pieces = []
+        if (iy1 - sy1) >= 0.02:
+            pieces.append([sx1, sy1, sx2, iy1])
+        if (sy2 - iy2) >= 0.02:
+            pieces.append([sx1, iy2, sx2, sy2])
+        if (ix1 - sx1) >= 0.02 and (iy2 - iy1) >= 0.02:
+            pieces.append([sx1, iy1, ix1, iy2])
+        if (sx2 - ix2) >= 0.02 and (iy2 - iy1) >= 0.02:
+            pieces.append([ix2, iy1, sx2, iy2])
+        return pieces
+
+    def _subtract_all_voids_2d(initial_solid, voids):
+        solids = [initial_solid]
+        for v in voids:
+            new_solids = []
+            for s in solids:
+                new_solids.extend(_subtract_rect_2d(s, v))
+            solids = new_solids
+        valid_solids = []
+        for s in solids:
+            if (s[2] - s[0]) >= 0.02 and (s[3] - s[1]) >= 0.02:
+                valid_solids.append(s)
+        return valid_solids
+
+    def _merge_adjacent_rects_2d(rects):
+        merged = True
+        res = list(rects)
+        while merged:
+            merged = False
+            n = len(res)
+            for i in range(n):
+                if merged: break
+                for j in range(i + 1, n):
+                    r1, r2 = res[i], res[j]
+                    if abs(r1[0] - r2[0]) < 1e-4 and abs(r1[2] - r2[2]) < 1e-4:
+                        if abs(r1[3] - r2[1]) < 1e-4:
+                            res[i] = [r1[0], r1[1], r1[2], r2[3]]
+                            del res[j]
+                            merged = True
+                            break
+                        elif abs(r2[3] - r1[1]) < 1e-4:
+                            res[i] = [r1[0], r2[1], r1[2], r1[3]]
+                            del res[j]
+                            merged = True
+                            break
+                    elif abs(r1[1] - r2[1]) < 1e-4 and abs(r1[3] - r2[3]) < 1e-4:
+                        if abs(r1[2] - r2[0]) < 1e-4:
+                            res[i] = [r1[0], r1[1], r2[2], r1[3]]
+                            del res[j]
+                            merged = True
+                            break
+                        elif abs(r2[2] - r1[0]) < 1e-4:
+                            res[i] = [r2[0], r1[1], r1[2], r1[3]]
+                            del res[j]
+                            merged = True
+                            break
+        return res
+
+    def _get_slab_perimeter_segments_2d(pieces):
+        """
+        Extracts only true external perimeter boundary segments of the combined solid slab pieces,
+        canceling out internal shared seams so the slab appears as a single monolithic block without dividing lines.
+        """
+        horiz_segments = []
+        vert_segments = []
+        for (x1, y1, x2, y2) in pieces:
+            horiz_segments.append({'y': y1, 'x1': min(x1, x2), 'x2': max(x1, x2), 'normal': -1})
+            horiz_segments.append({'y': y2, 'x1': min(x1, x2), 'x2': max(x1, x2), 'normal': +1})
+            vert_segments.append({'x': x1, 'y1': min(y1, y2), 'y2': max(y1, y2), 'normal': -1})
+            vert_segments.append({'x': x2, 'y1': min(y1, y2), 'y2': max(y1, y2), 'normal': +1})
+
+        ext_horiz = []
+        for h in horiz_segments:
+            current_intervals = [(h['x1'], h['x2'])]
+            for other in horiz_segments:
+                if other is h or abs(other['y'] - h['y']) > 1e-4:
+                    continue
+                if other['normal'] != h['normal']:
+                    ox1, ox2 = other['x1'], other['x2']
+                    next_intervals = []
+                    for (cx1, cx2) in current_intervals:
+                        ov1 = max(cx1, ox1)
+                        ov2 = min(cx2, ox2)
+                        if ov1 < ov2:
+                            if cx1 < ov1: next_intervals.append((cx1, ov1))
+                            if ov2 < cx2: next_intervals.append((ov2, cx2))
+                        else:
+                            next_intervals.append((cx1, cx2))
+                    current_intervals = next_intervals
+            for (cx1, cx2) in current_intervals:
+                if cx2 - cx1 > 1e-3:
+                    ext_horiz.append((round(cx1, 3), round(h['y'], 3), round(cx2, 3), round(h['y'], 3)))
+
+        ext_vert = []
+        for v in vert_segments:
+            current_intervals = [(v['y1'], v['y2'])]
+            for other in vert_segments:
+                if other is v or abs(other['x'] - v['x']) > 1e-4:
+                    continue
+                if other['normal'] != v['normal']:
+                    oy1, oy2 = other['y1'], other['y2']
+                    next_intervals = []
+                    for (cy1, cy2) in current_intervals:
+                        ov1 = max(cy1, oy1)
+                        ov2 = min(cy2, oy2)
+                        if ov1 < ov2:
+                            if cy1 < ov1: next_intervals.append((cy1, ov1))
+                            if ov2 < cy2: next_intervals.append((ov2, cy2))
+                        else:
+                            next_intervals.append((cy1, cy2))
+                    current_intervals = next_intervals
+            for (cy1, cy2) in current_intervals:
+                if cy2 - cy1 > 1e-3:
+                    ext_vert.append((round(v['x'], 3), round(cy1, 3), round(v['x'], 3), round(cy2, 3)))
+
+        return ext_horiz + ext_vert
+
+    gross_slab_area = slab_w_x * slab_w_y
+    total_void_area = sum(v["area"] for v in void_boxes_2d)
+    net_slab_area = max(1.0, gross_slab_area - total_void_area)
+    net_slab_vol = net_slab_area * ts_m
+
+    if void_boxes_2d:
+        raw_solids = _subtract_all_voids_2d(
+            [x_min_slab, y_min_slab, x_max_slab, y_max_slab],
+            [[v["x1"], v["y1"], v["x2"], v["y2"]] for v in void_boxes_2d]
+        )
+        solid_slab_pieces = _merge_adjacent_rects_2d(raw_solids)
+    else:
+        solid_slab_pieces = [[x_min_slab, y_min_slab, x_max_slab, y_max_slab]]
+
+    slab_perimeter_segments = _get_slab_perimeter_segments_2d(solid_slab_pieces)
+
+    # 1.1 SLAB (Concrete Meshes with Voids Subtracted)
+    for k, sp in enumerate(solid_slab_pieces):
+        px1, py1, px2, py2 = sp
+        p_dx = px2 - px1
+        p_dy = py2 - py1
+        p_cx = (px1 + px2) / 2.0
+        p_cy = (py1 + py2) / 2.0
+        piece_id = "slab_main" if len(solid_slab_pieces) == 1 else f"slab_part_{k+1}"
+        piece_name = "سقف البلاطة اللاكمرية (Flat Slab)" if len(solid_slab_pieces) == 1 else f"سقف البلاطة اللاكمرية (Flat Slab) — قطاع {k+1}"
+        concrete_elements.append({
+            "id": piece_id,
+            "parent_id": "slab_main",
+            "category": "slab",
+            "name": piece_name,
+            "type": "Flat Slab",
+            "x": p_cx,
+            "y": p_cy,
+            "z": z_slab_bot + (ts_m / 2.0),
+            "dx": p_dx,
+            "dy": p_dy,
+            "dz": ts_m,
+            "color": "#cbd5e1",
+            "details": {
+                "النوع": "بلاطة لاكمرية خرسانية مسلحة (Solid Flat Slab)",
+                "الأبعاد الكلية للمبنى": f"{slab_w_x:.2f} × {slab_w_y:.2f} م",
+                "المسقف الصافي الفعلي": f"{net_slab_area:.2f} م²",
+                "سُمك البلاطة (ts)": f"{ts_cm:.0f} سم ({ts_m:.2f} م)",
+                "الكوابيل (Cantilevers)": f"يسار: {cant_left}م | يمين: {cant_right}م | أعلى: {cant_top}م | أسفل: {cant_bottom}م",
+                "الفتحات والمناور (Voids)": f"{len(void_boxes_2d)} فتحة مفرغة (إجمالي {total_void_area:.2f} م²)" if void_boxes_2d else "لا توجد مناور (مصمتة بالكامل)",
+                "المقاومة المميزة (Fcu)": f"{fcu:.0f} كجم/سم²",
+                "إجهاد الخضوع (Fy)": f"{fy:.0f} كجم/سم²",
+                "الشبكة السفلية": f"{n_mesh_btm:.0f} Φ {bottom_mesh_dia} / م (اتجاهين X, Y)",
+                "الشبكة العلوية": f"{n_mesh_top:.0f} Φ {top_mesh_dia} / م (اتجاهين X, Y)",
+                "حجم الخرسانة الصافي": f"{net_slab_vol:.2f} م³",
+            }
+        })
+
+    # 1.1b VOID OPENINGS 3D BOUNDARY & WIREFRAME
+    for vb in void_boxes_2d:
+        vx1, vy1, vx2, vy2 = vb["x1"], vb["y1"], vb["x2"], vb["y2"]
+        void_lines = [
+            # Top perimeter
+            vx1, vy1, z_slab_top, vx2, vy1, z_slab_top,
+            vx2, vy1, z_slab_top, vx2, vy2, z_slab_top,
+            vx2, vy2, z_slab_top, vx1, vy2, z_slab_top,
+            vx1, vy2, z_slab_top, vx1, vy1, z_slab_top,
+            # Bottom perimeter
+            vx1, vy1, z_slab_bot, vx2, vy1, z_slab_bot,
+            vx2, vy1, z_slab_bot, vx2, vy2, z_slab_bot,
+            vx2, vy2, z_slab_bot, vx1, vy2, z_slab_bot,
+            vx1, vy2, z_slab_bot, vx1, vy1, z_slab_bot,
+            # Vertical corners
+            vx1, vy1, z_slab_bot, vx1, vy1, z_slab_top,
+            vx2, vy1, z_slab_bot, vx2, vy1, z_slab_top,
+            vx2, vy2, z_slab_bot, vx2, vy2, z_slab_top,
+            vx1, vy2, z_slab_bot, vx1, vy2, z_slab_top,
+            # Diagonal cross on top
+            vx1, vy1, z_slab_top, vx2, vy2, z_slab_top,
+            vx1, vy2, z_slab_top, vx2, vy1, z_slab_top,
+        ]
+        rebar_elements.append({
+            "id": f"void_wireframe_{vb['id']}",
+            "parent_id": "slab_main",
+            "category": "rebar_col_ties",
+            "color": "#ef4444",
+            "name": f"حدود الفتحة / المنور ({vb['name']} — {vb['area']:.1f} م²)",
+            "lines": void_lines,
+        })
 
     # 1.1b DROP BEAMS (Concrete Meshes + 3D Rebar Cages)
     _eff_drop_beams = drop_beams
@@ -158,6 +465,13 @@ def extract_bim_3d_scene_data(
             _eff_drop_beams = st.session_state.get("cfg", {}).get("fs_drop_beams") or st.session_state.get("fs_drop_beams", [])
         except Exception:
             _eff_drop_beams = []
+
+    if _eff_drop_beams:
+        try:
+            from modules.drop_beams_engine import auto_merge_collinear_beams
+            _eff_drop_beams = auto_merge_collinear_beams(_eff_drop_beams, columns_list=active_cols)
+        except Exception:
+            pass
 
     if _eff_drop_beams:
         for b_idx, beam in enumerate(_eff_drop_beams):
@@ -1489,30 +1803,53 @@ def extract_bim_3d_scene_data(
                 "lines": gb_lines,
             })
 
-    # 1.5 SLAB REINFORCEMENT
+    # 1.5 SLAB REINFORCEMENT (With true void boundary clipping)
     cov_s = cover_slab_cm / 100.0
     z_slab_rebar_bot_x = z_slab_bot + cov_s
     z_slab_rebar_bot_y = z_slab_rebar_bot_x + 0.015
     z_slab_rebar_top_y = z_slab_top - cov_s - 0.015
     z_slab_rebar_top_x = z_slab_top - cov_s
 
+    def _clip_1d_line(start_val: float, end_val: float, void_ranges: list, cover: float = 0.04) -> list:
+        segments = [(start_val, end_val)]
+        for v1, v2 in void_ranges:
+            cut_start = min(v1, v2) - cover
+            cut_end = max(v1, v2) + cover
+            new_segs = []
+            for s1, s2 in segments:
+                if s2 <= cut_start or s1 >= cut_end:
+                    new_segs.append((s1, s2))
+                else:
+                    if s1 < cut_start and (cut_start - s1) >= 0.15:
+                        new_segs.append((s1, cut_start))
+                    if s2 > cut_end and (s2 - cut_end) >= 0.15:
+                        new_segs.append((cut_end, s2))
+            segments = new_segs
+        return segments
+
     slab_bot_lines = []
     step_y = max(0.20, 1.0 / max(1.0, n_mesh_btm))
     curr_y = y_min_slab + 0.10
     while curr_y <= y_max_slab - 0.10:
-        slab_bot_lines.extend([
-            x_min_slab + 0.05, curr_y, z_slab_rebar_bot_x,
-            x_max_slab - 0.05, curr_y, z_slab_rebar_bot_x,
-        ])
+        void_x_ranges = [(v["x1"], v["x2"]) for v in void_boxes_2d if (v["y1"] - 0.02) <= curr_y <= (v["y2"] + 0.02)]
+        x_segs = _clip_1d_line(x_min_slab + 0.05, x_max_slab - 0.05, void_x_ranges, cover=0.04)
+        for sx1, sx2 in x_segs:
+            slab_bot_lines.extend([
+                sx1, curr_y, z_slab_rebar_bot_x,
+                sx2, curr_y, z_slab_rebar_bot_x,
+            ])
         curr_y += step_y
 
     step_x = max(0.20, 1.0 / max(1.0, n_mesh_btm))
     curr_x = x_min_slab + 0.10
     while curr_x <= x_max_slab - 0.10:
-        slab_bot_lines.extend([
-            curr_x, y_min_slab + 0.05, z_slab_rebar_bot_y,
-            curr_x, y_max_slab - 0.05, z_slab_rebar_bot_y,
-        ])
+        void_y_ranges = [(v["y1"], v["y2"]) for v in void_boxes_2d if (v["x1"] - 0.02) <= curr_x <= (v["x2"] + 0.02)]
+        y_segs = _clip_1d_line(y_min_slab + 0.05, y_max_slab - 0.05, void_y_ranges, cover=0.04)
+        for sy1, sy2 in y_segs:
+            slab_bot_lines.extend([
+                curr_x, sy1, z_slab_rebar_bot_y,
+                curr_x, sy2, z_slab_rebar_bot_y,
+            ])
         curr_x += step_x
 
     rebar_elements.append({
@@ -1528,19 +1865,25 @@ def extract_bim_3d_scene_data(
     step_top_y = max(0.25, 1.0 / max(1.0, n_mesh_top))
     curr_y = y_min_slab + 0.15
     while curr_y <= y_max_slab - 0.15:
-        slab_top_lines.extend([
-            x_min_slab + 0.05, curr_y, z_slab_rebar_top_x,
-            x_max_slab - 0.05, curr_y, z_slab_rebar_top_x,
-        ])
+        void_x_ranges = [(v["x1"], v["x2"]) for v in void_boxes_2d if (v["y1"] - 0.02) <= curr_y <= (v["y2"] + 0.02)]
+        x_segs = _clip_1d_line(x_min_slab + 0.05, x_max_slab - 0.05, void_x_ranges, cover=0.04)
+        for sx1, sx2 in x_segs:
+            slab_top_lines.extend([
+                sx1, curr_y, z_slab_rebar_top_x,
+                sx2, curr_y, z_slab_rebar_top_x,
+            ])
         curr_y += step_top_y
 
     step_top_x = max(0.25, 1.0 / max(1.0, n_mesh_top))
     curr_x = x_min_slab + 0.15
     while curr_x <= x_max_slab - 0.15:
-        slab_top_lines.extend([
-            curr_x, y_min_slab + 0.05, z_slab_rebar_top_y,
-            curr_x, y_max_slab - 0.05, z_slab_rebar_top_y,
-        ])
+        void_y_ranges = [(v["y1"], v["y2"]) for v in void_boxes_2d if (v["x1"] - 0.02) <= curr_x <= (v["x2"] + 0.02)]
+        y_segs = _clip_1d_line(y_min_slab + 0.05, y_max_slab - 0.05, void_y_ranges, cover=0.04)
+        for sy1, sy2 in y_segs:
+            slab_top_lines.extend([
+                curr_x, sy1, z_slab_rebar_top_y,
+                curr_x, sy2, z_slab_rebar_top_y,
+            ])
         curr_x += step_top_x
 
     rebar_elements.append({
@@ -1619,6 +1962,72 @@ def extract_bim_3d_scene_data(
             "lines": punch_stirrups_lines,
         })
 
+    # ── 9. Grid Axes (Center lines in Red with Names) ─────────────────────────
+    x_coords_grid = [0.0]
+    for lx in (Lx_spans or Lx_list):
+        x_coords_grid.append(round(x_coords_grid[-1] + float(lx), 4))
+    y_coords_grid = [0.0]
+    for ly in (Ly_spans or Ly_list):
+        y_coords_grid.append(round(y_coords_grid[-1] + float(ly), 4))
+
+    axes_x = []
+    col_x_map = {}
+    for c in (active_cols or []):
+        if isinstance(c, dict):
+            gx = c.get("grid_x")
+            gxm = c.get("grid_x_m", c.get("x"))
+            if gx and gxm is not None and gx not in col_x_map:
+                col_x_map[gx] = float(gxm)
+    if col_x_map:
+        for gx, xm in sorted(col_x_map.items(), key=lambda it: it[1]):
+            axes_x.append((round(xm, 4), str(gx)))
+    else:
+        for idx, x in enumerate(x_coords_grid):
+            lbl = active_x_labels[idx] if (active_x_labels and idx < len(active_x_labels)) else f"Y{idx+1}"
+            axes_x.append((round(x, 4), str(lbl)))
+
+    axes_y = []
+    col_y_map = {}
+    for c in (active_cols or []):
+        if isinstance(c, dict):
+            gy = c.get("grid_y")
+            gym = c.get("grid_y_m", c.get("y"))
+            if gy and gym is not None and gy not in col_y_map:
+                col_y_map[gy] = float(gym)
+    if col_y_map:
+        for gy, ym in sorted(col_y_map.items(), key=lambda it: it[1]):
+            axes_y.append((round(ym, 4), str(gy)))
+    else:
+        for idx, y in enumerate(y_coords_grid):
+            lbl = active_y_labels[idx] if (active_y_labels and idx < len(active_y_labels)) else f"X{idx+1}"
+            axes_y.append((round(y, 4), str(lbl)))
+
+    ext_x = max(1.50, slab_w_x * 0.08)
+    ext_y = max(1.50, slab_w_y * 0.08)
+
+    grid_axes_data = {
+        "elevation": round(z_slab_top + 0.025, 3),
+        "z_ground": round(z_ground + 0.025, 3),
+        "axes_x": [
+            {
+                "coord": xm,
+                "label": lbl,
+                "y_min": round(y_min_slab - ext_y, 3),
+                "y_max": round(y_max_slab + ext_y, 3),
+            }
+            for (xm, lbl) in axes_x
+        ],
+        "axes_y": [
+            {
+                "coord": ym,
+                "label": lbl,
+                "x_min": round(x_min_slab - ext_x, 3),
+                "x_max": round(x_max_slab + ext_x, 3),
+            }
+            for (ym, lbl) in axes_y
+        ],
+    }
+
     return {
         "span_x": round(slab_w_x, 2),
         "span_y": round(slab_w_y, 2),
@@ -1626,9 +2035,25 @@ def extract_bim_3d_scene_data(
         "center_y": round(slab_center_y, 2),
         "building_height": round(z_slab_top - (z_ground - 1.20), 2),
         "z_ground": z_ground,
+        "z_slab_bot": round(z_slab_bot, 3),
         "z_slab_top": z_slab_top,
         "concrete_elements": concrete_elements,
         "rebar_elements": rebar_elements,
+        "grid_axes": grid_axes_data,
+        "monolithic_slab": {
+            "pieces": [
+                [round(p[0], 3), round(p[1], 3), round(p[2], 3), round(p[3], 3)]
+                for p in solid_slab_pieces
+            ],
+            "perimeter_segments": [
+                [round(s[0], 3), round(s[1], 3), round(s[2], 3), round(s[3], 3)]
+                for s in slab_perimeter_segments
+            ],
+            "z_bot": round(z_slab_bot, 3),
+            "z_top": round(z_slab_top, 3),
+            "ts_m": round(ts_m, 3),
+            "color": "#cbd5e1",
+        },
         "metrics": {
             "num_columns": len(active_cols),
             "num_footings": (
@@ -1639,7 +2064,10 @@ def extract_bim_3d_scene_data(
             ) if ftg_analysis else 0,
             "num_ground_beams": len(gb_analysis.get("ground_beams", [])) if gb_analysis else 0,
             "num_drop_beams": len(_eff_drop_beams) if _eff_drop_beams else 0,
-            "slab_area_m2": round(slab_w_x * slab_w_y, 2),
+            "slab_area_m2": round(net_slab_area, 2),
+            "slab_gross_area_m2": round(gross_slab_area, 2),
+            "voids_count": len(void_boxes_2d),
+            "voids_area_m2": round(total_void_area, 2),
             "num_floors": num_floors,
         }
     }
@@ -1665,6 +2093,9 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
     <button class="filter-chip active" id="flt-gb" data-cat="ground_beams">السملات والشدادات</button>
     <button class="filter-chip active" id="flt-rebar" data-cat="rebar">حديد التسليح</button>"""
 
+    if scene_data.get("grid_axes"):
+        filter_chips_html += '\n    <button class="filter-chip active" id="flt-axes" data-cat="grid_axes" style="border-color:#ef4444; color:#ef4444; font-weight:800;">🔴 المحاور (Axes)</button>'
+
     legend_items = scene_data.get("legend_items")
     if legend_items:
         legend_html = '<span style="color:#38bdf8; font-weight:800; margin-left:4px;">🎨 كود الألوان والتسميات:</span>\n' + "\n".join([
@@ -1673,6 +2104,7 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
         ])
     else:
         legend_html = """<span style="color:#38bdf8; font-weight:800; margin-left:4px;">🎨 كود الألوان والتسميات:</span>
+  <div class="legend-item"><span class="legend-dot" style="background:#dc2626; border-radius:3px;"></span> المحاور الإنشائية (Center Lines)</div>
   <div class="legend-item"><span class="legend-dot" style="background:#38bdf8; border-radius:3px;"></span> تسميات الأعمدة (C1...)</div>
   <div class="legend-item"><span class="legend-dot" style="background:#0284c7; border-radius:3px;"></span> تسميات الكمرات الساقطة (B1...)</div>
   <div class="legend-item"><span class="legend-dot" style="background:#34d399; border-radius:3px;"></span> تسميات القواعد (F1, SF, DSF...)</div>
@@ -2265,6 +2697,7 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
     <button class="btn-tool" id="btn-reset-cam" title="إعادة ضبط زاوية الكاميرا">🔄 ضبط</button>
     <button class="btn-tool" id="btn-theme" title="تبديل الخلفية">🌙 / ☀️</button>
     <button class="btn-tool active" id="btn-toggle-labels" title="إظهار / إخفاء أسماء وتسميات العناصر الإنشائية (C1, F1...)">🏷️ الأسماء (Labels)</button>
+    <button class="btn-tool active" id="btn-toggle-axes" title="إظهار / إخفاء المحاور الإنشائية وسناتر الخطوط الحمراء (Grid Center Lines)">🔴 المحاور (Axes)</button>
     <button class="btn-tool active" id="btn-toggle-sketch" title="إظهار / إخفاء المخطط والمسقط (Layout Sketch)">{sketch_btn_title}</button>
     <button class="btn-tool" id="btn-fullscreen" title="عرض كامل الشاشة بنفس الأزرار والأدوات">⛶ ملء الشاشة</button>
   </div>
@@ -2368,10 +2801,13 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
   const edgesGroup = new THREE.Group();
   const labelsGroup = new THREE.Group();
   labelsGroup.renderOrder = 999;
+  const gridAxesGroup = new THREE.Group();
+  gridAxesGroup.renderOrder = 998;
   scene.add(concreteGroup);
   scene.add(rebarGroup);
   scene.add(edgesGroup);
   scene.add(labelsGroup);
+  scene.add(gridAxesGroup);
 
   const concreteMeshes = [];
   const rebarMeshes = [];
@@ -2482,7 +2918,112 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
 
   const edgeMat = new THREE.LineBasicMaterial({{ color: 0x334155, transparent: true, opacity: 0.45 }});
 
+  // ── 1. Monolithic Solid Slab (كتلة واحدة مصمتة بدون أي خطوط فاصلة داخلية) ────
+  if (data.monolithic_slab) {{
+    const ms = data.monolithic_slab;
+    const pieces = ms.pieces || [];
+    const perimeterSegs = ms.perimeter_segments || [];
+    const zTop = ms.z_top;
+    const zBot = ms.z_bot;
+
+    const slabPositions = [];
+    const slabIndices = [];
+
+    // Top horizontal faces (seamless unbroken plane at zTop)
+    pieces.forEach(p => {{
+      const x1 = p[0], y1 = p[1], x2 = p[2], y2 = p[3];
+      const base = slabPositions.length / 3;
+      slabPositions.push(
+        x1, zTop, -y1,
+        x2, zTop, -y1,
+        x2, zTop, -y2,
+        x1, zTop, -y2
+      );
+      slabIndices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }});
+
+    // Bottom horizontal faces (seamless unbroken plane at zBot)
+    pieces.forEach(p => {{
+      const x1 = p[0], y1 = p[1], x2 = p[2], y2 = p[3];
+      const base = slabPositions.length / 3;
+      slabPositions.push(
+        x1, zBot, -y1,
+        x2, zBot, -y1,
+        x2, zBot, -y2,
+        x1, zBot, -y2
+      );
+      slabIndices.push(base, base + 2, base + 1, base, base + 3, base + 2);
+    }});
+
+    // Vertical side walls (ONLY on external perimeter and void boundaries, ZERO internal walls!)
+    perimeterSegs.forEach(seg => {{
+      const xa = seg[0], ya = seg[1], xb = seg[2], yb = seg[3];
+      const base = slabPositions.length / 3;
+      slabPositions.push(
+        xa, zTop, -ya,
+        xb, zTop, -yb,
+        xb, zBot, -yb,
+        xa, zBot, -ya
+      );
+      slabIndices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }});
+
+    const monolithicSlabGeom = new THREE.BufferGeometry();
+    monolithicSlabGeom.setAttribute('position', new THREE.Float32BufferAttribute(slabPositions, 3));
+    monolithicSlabGeom.setIndex(slabIndices);
+    monolithicSlabGeom.computeVertexNormals();
+
+    const slabMat = new THREE.MeshStandardMaterial({{
+      color: 0xcbd5e1,
+      roughness: 0.75,
+      metalness: 0.10,
+      transparent: false,
+      opacity: 1.0,
+      depthWrite: true,
+    }});
+
+    const monolithicSlabMesh = new THREE.Mesh(monolithicSlabGeom, slabMat);
+    const slabElemSample = (data.concrete_elements || []).find(e => e.category === 'slab');
+    const slabDetails = slabElemSample ? slabElemSample.details : {{}};
+    monolithicSlabMesh.userData = {{
+      id: 'slab_main',
+      name: 'سقف البلاطة اللاكمرية (Solid Monolithic Flat Slab)',
+      category: 'slab',
+      type: 'Flat Slab',
+      details: slabDetails,
+      origColor: 0xcbd5e1,
+      mat: slabMat,
+    }};
+
+    concreteGroup.add(monolithicSlabMesh);
+    concreteMeshes.push(monolithicSlabMesh);
+    elementDataMap.set('slab_main', monolithicSlabMesh);
+
+    // Perimeter outline edges ONLY (ZERO internal lines across the slab!)
+    const slabEdgePositions = [];
+    perimeterSegs.forEach(seg => {{
+      const xa = seg[0], ya = seg[1], xb = seg[2], yb = seg[3];
+      // Top boundary edge
+      slabEdgePositions.push(xa, zTop, -ya, xb, zTop, -yb);
+      // Bottom boundary edge
+      slabEdgePositions.push(xa, zBot, -ya, xb, zBot, -yb);
+      // Vertical corner edges
+      slabEdgePositions.push(xa, zBot, -ya, xa, zTop, -ya);
+      slabEdgePositions.push(xb, zBot, -yb, xb, zTop, -yb);
+    }});
+
+    const slabEdgesGeom = new THREE.BufferGeometry();
+    slabEdgesGeom.setAttribute('position', new THREE.Float32BufferAttribute(slabEdgePositions, 3));
+    const slabEdgesMesh = new THREE.LineSegments(slabEdgesGeom, edgeMat);
+    slabEdgesMesh.userData = {{ parentId: 'slab_main', category: 'slab' }};
+    edgesGroup.add(slabEdgesMesh);
+  }}
+
   (data.concrete_elements || []).forEach(elem => {{
+    // Skip decomposed slab pieces if monolithic slab is active
+    if (data.monolithic_slab && elem.category === 'slab') {{
+      return;
+    }}
     const geom = new THREE.BoxGeometry(elem.dx, elem.dz, elem.dy);
     const colHex = elem.color ? parseInt(elem.color.replace('#', '0x')) : 0x94a3b8;
     const mat = new THREE.MeshStandardMaterial({{
@@ -2592,6 +3133,189 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
   }});
 
   rebarGroup.visible = false;
+
+  // ── Render 3D Grid Axes (Center lines in Red with CAD Bubble Labels) ──────
+  if (data.grid_axes) {{
+    const ga = data.grid_axes;
+    const elevSlab = (ga.elevation !== undefined) ? ga.elevation : ((data.z_slab_top || 3.0) + 0.025);
+    const elevGround = (ga.z_ground !== undefined) ? ga.z_ground : 0.02;
+
+    const centerLineSegments = [];
+    const solidGuideSegments = [];
+
+    function addCenterLine(p1, p2) {{
+      const dir = new THREE.Vector3().subVectors(p2, p1);
+      const totalLen = dir.length();
+      if (totalLen <= 0.05) return;
+      dir.normalize();
+
+      // Continuous faint guide line
+      solidGuideSegments.push(p1.x, p1.y, p1.z);
+      solidGuideSegments.push(p2.x, p2.y, p2.z);
+
+      // CAD Centerline pattern: Long dash (0.90m), Gap (0.20m), Dot (0.12m), Gap (0.20m)
+      const dashLen = 0.90;
+      const gap1 = 0.20;
+      const dotLen = 0.12;
+      const gap2 = 0.20;
+      const cycleLen = dashLen + gap1 + dotLen + gap2;
+
+      let t = 0;
+      while (t < totalLen) {{
+        const endDash = Math.min(t + dashLen, totalLen);
+        const v1 = new THREE.Vector3().copy(p1).addScaledVector(dir, t);
+        const v2 = new THREE.Vector3().copy(p1).addScaledVector(dir, endDash);
+        centerLineSegments.push(v1.x, v1.y, v1.z);
+        centerLineSegments.push(v2.x, v2.y, v2.z);
+
+        const dotStart = t + dashLen + gap1;
+        if (dotStart < totalLen) {{
+          const dotEnd = Math.min(dotStart + dotLen, totalLen);
+          const vd1 = new THREE.Vector3().copy(p1).addScaledVector(dir, dotStart);
+          const vd2 = new THREE.Vector3().copy(p1).addScaledVector(dir, dotEnd);
+          centerLineSegments.push(vd1.x, vd1.y, vd1.z);
+          centerLineSegments.push(vd2.x, vd2.y, vd2.z);
+        }}
+        t += cycleLen;
+      }}
+    }}
+
+    function createGridAxisBubbleSprite(text) {{
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      const cx = 64, cy = 64, radius = 54;
+
+      // Circle fill: bright CAD red
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+      ctx.fillStyle = '#dc2626';
+      ctx.fill();
+
+      // Circular white border
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+
+      // Text: bold white label
+      ctx.fillStyle = '#ffffff';
+      const fontSize = (text.length > 3) ? 36 : (text.length > 2 ? 42 : 48);
+      ctx.font = 'bold ' + fontSize + 'px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, cx, cy + 2);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.minFilter = THREE.LinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      texture.generateMipmaps = false;
+
+      const spriteMat = new THREE.SpriteMaterial({{
+        map: texture,
+        transparent: true,
+        depthTest: false,
+        depthWrite: false
+      }});
+      const sprite = new THREE.Sprite(spriteMat);
+      const worldSize = 0.75;
+      sprite.scale.set(worldSize, worldSize, 1.0);
+      sprite.renderOrder = 1000;
+      return sprite;
+    }}
+
+    // X-Axes (Constant X, running along Y from y_min to y_max)
+    (ga.axes_x || []).forEach(ax => {{
+      const xVal = ax.coord;
+      const y1 = ax.y_min;
+      const y2 = ax.y_max;
+      const lbl = ax.label;
+
+      const pSlab1 = new THREE.Vector3(xVal, elevSlab, -y1);
+      const pSlab2 = new THREE.Vector3(xVal, elevSlab, -y2);
+      addCenterLine(pSlab1, pSlab2);
+
+      // Also add center line at ground level
+      const pGrd1 = new THREE.Vector3(xVal, elevGround, -y1);
+      const pGrd2 = new THREE.Vector3(xVal, elevGround, -y2);
+      addCenterLine(pGrd1, pGrd2);
+
+      // End bubble 1 (South)
+      const b1 = createGridAxisBubbleSprite(lbl);
+      b1.position.copy(pSlab1);
+      gridAxesGroup.add(b1);
+
+      // End bubble 2 (North)
+      const b2 = createGridAxisBubbleSprite(lbl);
+      b2.position.copy(pSlab2);
+      gridAxesGroup.add(b2);
+
+      // Vertical stem drop lines at bubbles connecting slab to ground
+      solidGuideSegments.push(xVal, elevSlab, -y1, xVal, elevGround, -y1);
+      solidGuideSegments.push(xVal, elevSlab, -y2, xVal, elevGround, -y2);
+    }});
+
+    // Y-Axes (Constant Y, running along X from x_min to x_max)
+    (ga.axes_y || []).forEach(ax => {{
+      const yVal = ax.coord;
+      const x1 = ax.x_min;
+      const x2 = ax.x_max;
+      const lbl = ax.label;
+
+      const pSlab1 = new THREE.Vector3(x1, elevSlab, -yVal);
+      const pSlab2 = new THREE.Vector3(x2, elevSlab, -yVal);
+      addCenterLine(pSlab1, pSlab2);
+
+      // Also add center line at ground level
+      const pGrd1 = new THREE.Vector3(x1, elevGround, -yVal);
+      const pGrd2 = new THREE.Vector3(x2, elevGround, -yVal);
+      addCenterLine(pGrd1, pGrd2);
+
+      // End bubble 1 (West)
+      const b1 = createGridAxisBubbleSprite(lbl);
+      b1.position.copy(pSlab1);
+      gridAxesGroup.add(b1);
+
+      // End bubble 2 (East)
+      const b2 = createGridAxisBubbleSprite(lbl);
+      b2.position.copy(pSlab2);
+      gridAxesGroup.add(b2);
+
+      // Vertical stem drop lines at bubbles connecting slab to ground
+      solidGuideSegments.push(x1, elevSlab, -yVal, x1, elevGround, -yVal);
+      solidGuideSegments.push(x2, elevSlab, -yVal, x2, elevGround, -yVal);
+    }});
+
+    // Bold Red Centerline Mesh
+    if (centerLineSegments.length > 0) {{
+      const clGeom = new THREE.BufferGeometry();
+      clGeom.setAttribute('position', new THREE.Float32BufferAttribute(centerLineSegments, 3));
+      const clMat = new THREE.LineBasicMaterial({{
+        color: 0xdc2626,
+        linewidth: 2,
+        transparent: true,
+        opacity: 0.95,
+        depthTest: true
+      }});
+      const clMesh = new THREE.LineSegments(clGeom, clMat);
+      gridAxesGroup.add(clMesh);
+    }}
+
+    // Faint continuous guide line underneath
+    if (solidGuideSegments.length > 0) {{
+      const guideGeom = new THREE.BufferGeometry();
+      guideGeom.setAttribute('position', new THREE.Float32BufferAttribute(solidGuideSegments, 3));
+      const guideMat = new THREE.LineBasicMaterial({{
+        color: 0xdc2626,
+        linewidth: 1,
+        transparent: true,
+        opacity: 0.28,
+        depthTest: true
+      }});
+      const guideMesh = new THREE.LineSegments(guideGeom, guideMat);
+      gridAxesGroup.add(guideMesh);
+    }}
+  }}
 
   const targetX = (data.center_x !== undefined) ? data.center_x : 0;
   const targetY = (data.center_y_elev !== undefined) ? data.center_y_elev : ((data.z_slab_top !== undefined ? data.z_slab_top : 3.0) / 2.0);
@@ -2749,6 +3473,18 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
     }});
   }}
 
+  let axesVisible = true;
+  const btnToggleAxes = document.getElementById('btn-toggle-axes');
+  if (btnToggleAxes) {{
+    btnToggleAxes.addEventListener('click', () => {{
+      axesVisible = !axesVisible;
+      btnToggleAxes.classList.toggle('active', axesVisible);
+      gridAxesGroup.visible = axesVisible;
+      const fltAxes = document.getElementById('flt-axes');
+      if (fltAxes) fltAxes.classList.toggle('active', axesVisible);
+    }});
+  }}
+
   function applyCategoryFilters() {{
     concreteMeshes.forEach(m => {{
       const cat = m.userData.category;
@@ -2786,6 +3522,12 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
       const cat = btn.getAttribute('data-cat');
       filterState[cat] = !filterState[cat];
       btn.classList.toggle('active', filterState[cat]);
+      if (cat === 'grid_axes') {{
+        axesVisible = filterState[cat];
+        gridAxesGroup.visible = axesVisible;
+        if (btnToggleAxes) btnToggleAxes.classList.toggle('active', axesVisible);
+        return;
+      }}
       applyCategoryFilters();
     }});
   }});
@@ -3334,6 +4076,12 @@ def render_3d_bim_viewer(
     edge_columns: dict = None,
     layout_sketch_b64: str = None,
     drop_beams: list = None,
+    void_panels: list = None,
+    void_boxes: list = None,
+    Lx_spans: list = None,
+    Ly_spans: list = None,
+    active_x_labels: list = None,
+    active_y_labels: list = None,
 ):
     """
     Renders the Integrated 3D Structural BIM & Rebar Viewer inside Module 1.
@@ -3362,6 +4110,12 @@ def render_3d_bim_viewer(
             fy=fy,
             edge_columns=edge_columns,
             drop_beams=drop_beams,
+            void_panels=void_panels,
+            void_boxes=void_boxes,
+            Lx_spans=Lx_spans,
+            Ly_spans=Ly_spans,
+            active_x_labels=active_x_labels,
+            active_y_labels=active_y_labels,
         )
 
         if not scene_data or not scene_data.get("concrete_elements"):
@@ -3414,7 +4168,7 @@ def render_3d_bim_viewer(
                     <span>🏢 النموذج الإنشائي الرقمي المتكامل (ECP 203 BIM Model):</span>
                 </div>
                 <div style="display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; font-weight: 700; color: #e2e8f0;">
-                    <span>📐 مسطح السقف: <b style="color:#38bdf8;">{m['slab_area_m2']} م²</b></span>
+                    <span>📐 مسطح السقف: <b style="color:#38bdf8;">{m['slab_area_m2']} م²</b>{f' <span style="color:#f87171; font-size:0.88em;">(خصم {m["voids_count"]} منور {m["voids_area_m2"]}م²)</span>' if m.get('voids_count', 0) > 0 else ''}</span>
                     <span>🏛️ الأعمدة: <b style="color:#4ade80;">{m['num_columns']} عمود</b></span>
                     {beams_metric_html}
                     <span>🪸 الأساسات: <b style="color:#fb923c;">{m['num_footings']} قاعدة</b></span>
@@ -4725,8 +5479,8 @@ def render_strap_footing_3d_bim_viewer(
         )
 
         tab_3d, tab_plan = st.tabs([
-            "🏢 العرض ثلاثي الأبعاد التفاعلي (3D Interactive BIM Model)",
-            "📐 المسقط الأفقي العام للقواعد والشداد (2D Layout Plan)",
+            "🏢 3D Interactive BIM Model (العرض ثلاثي الأبعاد التفاعلي)",
+            "📐 2D Layout Plan (المسقط الأفقي العام للقواعد والشداد)",
         ])
 
         with tab_3d:
@@ -5259,6 +6013,12 @@ def render_standalone_flat_slab_3d_bim_viewer(
     prefix: str = "",
     height: int = 760,
     drop_beams: list = None,
+    void_panels: list = None,
+    void_boxes: list = None,
+    Lx_spans: list = None,
+    Ly_spans: list = None,
+    active_x_labels: list = None,
+    active_y_labels: list = None,
 ):
     """
     Renders the 3D BIM & Rebar Viewer for Module 13: Standalone Flat Slabs.
@@ -5284,6 +6044,12 @@ def render_standalone_flat_slab_3d_bim_viewer(
             fcu=fcu,
             fy=fy,
             drop_beams=drop_beams,
+            void_panels=void_panels,
+            void_boxes=void_boxes,
+            Lx_spans=Lx_spans,
+            Ly_spans=Ly_spans,
+            active_x_labels=active_x_labels,
+            active_y_labels=active_y_labels,
         )
 
         if not scene_data or not scene_data.get("concrete_elements"):
@@ -5354,7 +6120,7 @@ def render_standalone_flat_slab_3d_bim_viewer(
                     <span>🏢 النموذج الإنشائي الرقمي للسقف اللاكمري (Standalone Flat Slab BIM Model):</span>
                 </div>
                 <div style="display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; font-weight: 700; color: #e2e8f0;">
-                    <span>📐 مسطح السقف: <b style="color:#38bdf8;">{m['slab_area_m2']} م²</b></span>
+                    <span>📐 مسطح السقف: <b style="color:#38bdf8;">{m['slab_area_m2']} م²</b>{f' <span style="color:#f87171; font-size:0.88em;">(خصم {m["voids_count"]} منور {m["voids_area_m2"]}م²)</span>' if m.get('voids_count', 0) > 0 else ''}</span>
                     <span>🧱 السُمك ts: <b style="color:#4ade80;">{ts_cm:.0f} سم</b></span>
                     <span>🏛️ الأعمدة الحاملة: <b style="color:#fb923c;">{m['num_columns']} عمود</b></span>
                     {db_metric_html}

@@ -1,0 +1,2 @@
+1035: with st.expander("🖼️ Sec. A-A Blueprint (عرض لوحة القطاع العرضي)", expanded=False, key="m11_sec_exp", on_change="rerun"):
+1085: with st.expander("🖼️ Longitudinal Elevation Blueprint (عرض المسقط الطولي والمخططات)", expanded=False, key="m11_elev_exp", on_change="rerun"):
