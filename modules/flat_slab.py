@@ -992,7 +992,7 @@ def generate_flat_slab_sketch(
         fig_w = max(6.0, min(14.5, fig_h / aspect))
 
     # Full-width Structural Plan (ax_plan) maximized to full canvas without extra borders
-    fig = plt.figure(figsize=(fig_w, fig_h), dpi=100, facecolor="#ffffff")
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=75, facecolor="#ffffff")
     ax_plan = fig.add_subplot(1, 1, 1)
 
     # ── 1. STRUCTURAL GEOMETRY PLAN (ax_plan) ──
@@ -12686,7 +12686,7 @@ def _render_fs_interactive_plan(
 
     # حفظ الصورة بدون bbox_inches="tight" لضمان التطابق الرياضي التام مع ax_plan.get_position()
     buf_cad = io.BytesIO()
-    fig_verif.savefig(buf_cad, format="png", dpi=100)
+    fig_verif.savefig(buf_cad, format="png", dpi=75)
     buf_cad.seek(0)
     b64_img = base64.b64encode(buf_cad.getvalue()).decode("utf-8")
     st.session_state["_fs_cached_interactive_b64"] = b64_img
@@ -16119,34 +16119,48 @@ def render(is_standalone: bool = False):
     st.markdown(
         """
         <style>
+        /* استهداف شامل لزر إبدأ التصميم الإنشائي وتوليد المخططات بجميع محددات Streamlit */
+        div[class*="st-key-"][class*="btn_fs_run_design"] button,
         div.stButton > button[key*="btn_fs_run_design"],
-        button[kind="primary"][data-testid="baseButton-primary"] {
-            font-family: inherit;
-        }
-        div.stButton > button[key*="btn_fs_run_design"] {
-            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 50%, #991b1b 100%) !important;
+        button[key*="btn_fs_run_design"],
+        .st-key-btn_fs_run_design button,
+        div[data-testid="stVerticalBlock"] div:has(> button[key*="btn_fs_run_design"]) button {
+            background: #dc2626 !important;
+            background-color: #dc2626 !important;
             color: #ffffff !important;
-            font-size: 24px !important;
+            font-size: 32px !important;
             font-weight: 900 !important;
-            padding: 16px 28px !important;
-            border-radius: 12px !important;
-            border: 3px solid #fecaca !important;
-            box-shadow: 0 6px 20px rgba(220, 38, 38, 0.45) !important;
+            padding: 22px 36px !important;
+            border-radius: 14px !important;
+            border: 3.5px solid #ffffff !important;
+            box-shadow: 0 8px 26px rgba(220, 38, 38, 0.65) !important;
             transition: all 0.25s ease !important;
             letter-spacing: 0.5px !important;
-            margin: 12px 0px !important;
+            margin: 16px 0px !important;
+            min-height: 80px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            cursor: pointer !important;
         }
-        div.stButton > button[key*="btn_fs_run_design"]:hover {
-            background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%) !important;
+        div[class*="st-key-"][class*="btn_fs_run_design"] button:hover,
+        div.stButton > button[key*="btn_fs_run_design"]:hover,
+        button[key*="btn_fs_run_design"]:hover {
+            background: #b91c1c !important;
+            background-color: #b91c1c !important;
             color: #ffffff !important;
-            border-color: #ffffff !important;
-            box-shadow: 0 8px 28px rgba(220, 38, 38, 0.65) !important;
+            border-color: #fecaca !important;
+            box-shadow: 0 10px 34px rgba(220, 38, 38, 0.85) !important;
             transform: translateY(-2px) !important;
         }
-        div.stButton > button[key*="btn_fs_run_design"] * {
+        div[class*="st-key-"][class*="btn_fs_run_design"] button *,
+        div.stButton > button[key*="btn_fs_run_design"] *,
+        button[key*="btn_fs_run_design"] * {
             color: #ffffff !important;
-            font-size: 24px !important;
+            font-size: 32px !important;
             font-weight: 900 !important;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.45) !important;
+            line-height: 1.3 !important;
         }
         </style>
         """,
@@ -16159,7 +16173,7 @@ def render(is_standalone: bool = False):
         f"ts:{ts_initial}|col_sz:({bc_s},{tc_s})|loads:({SDL},{wall_load},{LL})|rebar:({bottom_mesh_dia},{top_mesh_dia})"
     )
 
-    if st.button("🚀 إبدأ التصميم", key=f"{prefix}btn_fs_run_design", use_container_width=True, help="بدء الحسابات والتصميم الإنشائي وتوليد مخططات العزوم والتسليح والترخيم والقص الثاقب"): 
+    if st.button("🚀 إبدأ التصميم الإنشائي وتوليد المخططات", key=f"{prefix}btn_fs_run_design", use_container_width=True, help="بدء الحسابات والتصميم الإنشائي وتوليد مخططات العزوم والتسليح والترخيم والقص الثاقب"): 
         st.session_state[f"{prefix}fs_design_started"] = True
         st.session_state[f"{prefix}fs_last_designed_state"] = _geom_fingerprint
         st.rerun()
@@ -16170,11 +16184,11 @@ def render(is_standalone: bool = False):
     if _is_design_started and _last_designed_state and _last_designed_state != _geom_fingerprint:
         st.warning(
             "⚠️ **تنبيه:** تم تعديل المحاور أو الأعمدة أو الفراغات أو الأحمال. " 
-            "انقر على زر **«🚀 إبدأ التصميم»** بالأعلى لتحديث نتائج التصميم والعزوم والتسليح والمخططات الهندسية طبقاً للوضع الجديد."
+            "انقر على زر **«🚀 إبدأ التصميم الإنشائي وتوليد المخططات»** بالأعلى لتحديث نتائج التصميم والعزوم والتسليح والمخططات الهندسية طبقاً للوضع الجديد."
         )
 
     if not _is_design_started:
-        st.info("ℹ️ **المرحلة الأولى:** تم تحديث وعرض المسقط الأفقي والمحاور والأعمدة والكمرات والفراغات بنجاح. اضغط على الزر الأحمر أعلاه **«🚀 إبدأ التصميم»** لبدء الحسابات والتصميم الإنشائي وتوليد باقي المخططات والتسليح.")
+        st.info("ℹ️ **المرحلة الأولى:** تم تحديث وعرض المسقط الأفقي والمحاور والأعمدة والكمرات والفراغات بنجاح. اضغط على الزر الأحمر أعلاه **«🚀 إبدأ التصميم الإنشائي وتوليد المخططات»** لبدء الحسابات والتصميم الإنشائي وتوليد باقي المخططات والتسليح.")
         return
 
     # ── 5g. DESIGN CRITERIA & LOADS SUMMARY (Merged Section) ─────────────────
