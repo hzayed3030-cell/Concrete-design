@@ -4070,6 +4070,14 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
 
   function findElementInBox(bounds) {{
     if (!bboxInfo) return null;
+    // في نمط حذف الحوائط: يتم حصر التحديد في الحوائط فقط وتجاهل الفتحات والأعمدة
+    if (currentBoxMode === 'delete_wall') {{
+      const wall = findWallInBox(bounds);
+      if (wall) {{
+        return {{ kind: 'wall', target: wall.wk, name: wall.name || wall.label, item: wall }};
+      }}
+      return null;
+    }}
     const bCx = (bounds.xmin + bounds.xmax) / 2.0;
     const bCy = (bounds.ymin + bounds.ymax) / 2.0;
 
@@ -4129,6 +4137,14 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
 
   function findClosestElement(wx, wy, maxDist) {{
     if (!bboxInfo) return null;
+    // في نمط حذف الحوائط: التقاط أقرب حائط فقط وتجاهل أي فتحة
+    if (currentBoxMode === 'delete_wall') {{
+      const wall = findClosestWall(wx, wy, maxDist || 1.2);
+      if (wall) {{
+        return {{ kind: 'wall', target: wall.wk, name: wall.name || wall.label, item: wall }};
+      }}
+      return null;
+    }}
     let dist = maxDist || 0.85;
     let best = null;
 
@@ -5687,31 +5703,196 @@ def _section_axes():
         _normalize_wall_keys()
         save_settings()
 
-def _confirm_delete_wall(wk):
+
+def _get_full_continuous_wall_segments(target_wk):
     """
-    تأكيد وحذف الحائط المحدد:
-    - إضافة مفتاح الحائط إلى مجموعة الحوائط المحذوفة m15_wall_removed.
-    - تصفير الحائط المعلق m15_pending_delete_wall.
-    - تحديث كاش صورة المسقط وحفظ الإعدادات.
-    - إظهار إشعار تأكيد مع إبقاء إمكانية الاستعادة في أي وقت.
+    استخراج كافة القطع المتصلة على نفس الاستقامة (الحائط بالكامل من أوله إلى آخره).
+    إذا كان الحائط ممتداً من X5 حتى X8، يجمع كافة الفترات بين التقاطعات على هذا المحور.
+    """
+    t = _safe_coord_tuple(target_wk, 4)
+    if not t:
+        return [target_wk], target_wk
+    i1, j1, i2, j2 = t
+    placed = st.session_state.get("m15_walls_placed", [])
+    placed_tuples = set()
+    for item in placed:
+        st_ = _safe_coord_tuple(item, 4)
+        if st_:
+            si1, sj1, si2, sj2 = st_
+            if sj1 == sj2:
+                for k in range(min(si1, si2), max(si1, si2)):
+                    placed_tuples.add((k, sj1, k + 1, sj1))
+            elif si1 == si2:
+                for k in range(min(sj1, sj2), max(sj1, sj2)):
+                    placed_tuples.add((si1, k, si1, k + 1))
+
+    all_connected_segs = []
+
+    if j1 == j2:  # حائط أفقي على المحور Y = j
+        j = j1
+        cur_min = min(i1, i2)
+        cur_max = max(i1, i2)
+        k = cur_min
+        while (k - 1, j, k, j) in placed_tuples:
+            all_connected_segs.append((k - 1, j, k, j))
+            k -= 1
+        for k_mid in range(cur_min, cur_max):
+            all_connected_segs.append((k_mid, j, k_mid + 1, j))
+        k = cur_max
+        while (k, j, k + 1, j) in placed_tuples:
+            all_connected_segs.append((k, j, k + 1, j))
+            k += 1
+
+        if all_connected_segs:
+            bound_seg = (min(s[0] for s in all_connected_segs), j, max(s[2] for s in all_connected_segs), j)
+        else:
+            bound_seg = t
+    else:  # حائط رأسي على المحور X = i
+        i = i1
+        cur_min = min(j1, j2)
+        cur_max = max(j1, j2)
+        k = cur_min
+        while (i, k - 1, i, k) in placed_tuples:
+            all_connected_segs.append((i, k - 1, i, k))
+            k -= 1
+        for k_mid in range(cur_min, cur_max):
+            all_connected_segs.append((i, k_mid, i, k_mid + 1))
+        k = cur_max
+        while (i, k, i, k + 1) in placed_tuples:
+            all_connected_segs.append((i, k, i, k + 1))
+            k += 1
+
+        if all_connected_segs:
+            bound_seg = (i, min(s[1] for s in all_connected_segs), i, max(s[3] for s in all_connected_segs))
+        else:
+            bound_seg = t
+
+    all_connected_segs.append(bound_seg)
+    return list(set(all_connected_segs)), bound_seg
+
+
+def _delete_openings_on_wall_segments(deleted_segments):
+    """
+    حذف كافة الشبابيك والأبواب الموجودة على الحائط المحذوف بالكامل أو أي من أجزائه.
+    """
+    seg_tuples = set()
+    for s in deleted_segments:
+        t = _safe_coord_tuple(s, 4)
+        if t:
+            seg_tuples.add(t)
+            seg_tuples.add((t[2], t[3], t[0], t[1]))
+
+    h_ranges = {}
+    v_ranges = {}
+    for (i1, j1, i2, j2) in seg_tuples:
+        if j1 == j2:
+            j = j1
+            c_min, c_max = min(i1, i2), max(i1, i2)
+            if j not in h_ranges:
+                h_ranges[j] = [c_min, c_max]
+            else:
+                h_ranges[j][0] = min(h_ranges[j][0], c_min)
+                h_ranges[j][1] = max(h_ranges[j][1], c_max)
+        elif i1 == i2:
+            i = i1
+            c_min, c_max = min(j1, j2), max(j1, j2)
+            if i not in v_ranges:
+                v_ranges[i] = [c_min, c_max]
+            else:
+                v_ranges[i][0] = min(v_ranges[i][0], c_min)
+                v_ranges[i][1] = max(v_ranges[i][1], c_max)
+
+    def _matches_deleted(wk_coords):
+        t = _safe_coord_tuple(wk_coords, 4)
+        if not t:
+            return False
+        if t in seg_tuples or (t[2], t[3], t[0], t[1]) in seg_tuples:
+            return True
+        wi1, wj1, wi2, wj2 = t
+        if wj1 == wj2 and wj1 in h_ranges:
+            w_min, w_max = min(wi1, wi2), max(wi1, wi2)
+            rg_min, rg_max = h_ranges[wj1]
+            if w_min >= rg_min and w_max <= rg_max:
+                return True
+        elif wi1 == wi2 and wi1 in v_ranges:
+            w_min, w_max = min(wj1, wj2), max(wj1, wj2)
+            rg_min, rg_max = v_ranges[wi1]
+            if w_min >= rg_min and w_max <= rg_max:
+                return True
+        return False
+
+    for kind in ["win", "door"]:
+        store = st.session_state.get("m15_windows" if kind == "win" else "m15_doors", {})
+        for k_wall in list(store.keys()):
+            if _matches_deleted(k_wall):
+                for op in store[k_wall]:
+                    op["removed"] = True
+            else:
+                for op in store[k_wall]:
+                    op_wk = op.get("wk")
+                    if op_wk and _matches_deleted(op_wk):
+                        op["removed"] = True
+
+    _resequence_openings()
+    save_settings()
+
+
+def _perform_delete_wall(wk, trigger_rerun=True):
+    """
+    تنفيذ حذف الحائط بالكامل من بدايته حتى نهايته وحذف كافة الفتحات الواقعة عليه مباشرة:
+    - حذف كافة القطع المتصلة على نفس الاستقامة (الحائط بالكامل).
+    - إضافة كافة القطع والحدود إلى m15_wall_removed وإزالتها من المسقط.
+    - حذف كافة الشبابيك والأبواب الموجودة على هذا الحائط بالكامل.
+    - إعادة تسلسل وترقيم الفتحات (W#, D#).
+    - إعادة ترقيم الحوائط فورياً (L#).
+    - إبقاء قسم '🗑️ حذف حوائط' مفتوحاً بشكل دائم.
     """
     if not wk or len(wk) != 4:
         return
     wk = tuple(int(x) for x in wk)
+    all_segs, bound_seg = _get_full_continuous_wall_segments(wk)
+
     removed_walls = st.session_state.get("m15_wall_removed", set())
     if not isinstance(removed_walls, set):
         removed_walls = set(removed_walls)
+
+    for s in all_segs:
+        removed_walls.add(s)
+        removed_walls.add((s[2], s[3], s[0], s[1]))
+    removed_walls.add(bound_seg)
+    removed_walls.add((bound_seg[2], bound_seg[3], bound_seg[0], bound_seg[1]))
     removed_walls.add(wk)
+    removed_walls.add((wk[2], wk[3], wk[0], wk[1]))
     st.session_state["m15_wall_removed"] = removed_walls
+
+    # حذف كافة الشبابيك والأبواب الموجودة على هذا الحائط بالكامل
+    _delete_openings_on_wall_segments(all_segs + [bound_seg, wk])
+
+    # إعادة ترقيم الشبابيك والأبواب
+    _resequence_openings()
+
+    st.session_state["m15_pending_delete"] = None
     st.session_state["m15_pending_delete_wall"] = None
+    st.session_state["m15_del_wall_mode"] = False
+    st.session_state["m15_del_wall_expander_open"] = True
     st.session_state.pop("_last_del_confirm_whistle_token", None)
     st.session_state.pop("m15_plan_png_b64", None)
     save_settings()
-    cm = _get_col_name_map()
-    wm = _get_wall_name_map()
-    lbl = _wall_display_label(wk, cm, wm)
-    st.toast(f"🗑️ تم حذف الحائط ({lbl}) بنجاح!", icon="🗑️")
-    st.rerun()
+
+    if trigger_rerun:
+        cm = _get_col_name_map()
+        wm = _get_wall_name_map()
+        bi1, bj1, bi2, bj2 = bound_seg
+        c_start = cm.get((bi1, bj1), f"X{bi1+1}") if bi1 != bi2 else cm.get((bi1, bj1), f"Y{bj1+1}")
+        c_end = cm.get((bi2, bj2), f"X{bi2+1}") if bi1 != bi2 else cm.get((bi2, bj2), f"Y{bj2+1}")
+        span_str = f"من {c_start} إلى {c_end}" if (bi1, bj1) != (bi2, bj2) else ""
+        st.toast(f"🗑️ تم حذف الحائط بالكامل ({span_str}) وكافة الفتحات التابعة له بنجاح!", icon="🧱")
+        st.rerun()
+
+
+def _confirm_delete_wall(wk):
+    """تأكيد وحذف الحائط بالكامل وكافة الفتحات الواقعة عليه."""
+    _perform_delete_wall(wk, trigger_rerun=True)
 
 
 def _cancel_pending_delete():
@@ -5744,26 +5925,35 @@ def _set_pending_delete(kind, target, name=None, step=1):
             if rev in all_walls:
                 wk = rev
         title_kind = "حائط مباني"
+        all_segs, bound_seg = _get_full_continuous_wall_segments(wk)
         w_lbl = _wall_display_label(wk, cm, wm)
         w_name = wm.get(wk) or w_lbl
-        w_len = _wall_length_m(wk)
+        w_len = _wall_length_m(bound_seg)
         w_th = _get_wall_thickness(wk)
         is_p = _is_parapet_wall(wk)
+        bi1, bj1, bi2, bj2 = bound_seg
+        c_start = cm.get((bi1, bj1), f"X{bi1+1}") if bi1 != bi2 else cm.get((bi1, bj1), f"Y{bj1+1}")
+        c_end = cm.get((bi2, bj2), f"X{bi2+1}") if bi1 != bi2 else cm.get((bi2, bj2), f"Y{bj2+1}")
+        span_desc = f"من المحور {c_start} إلى المحور {c_end}" if (bi1, bj1) != (bi2, bj2) else ""
         details = {
-            "الاسم المعتمد": f"<b>{w_name}</b>" + (" (حائط دروة)" if is_p else ""),
-            "المحاور": f"من {cm.get((wk[0], wk[1]), f'({wk[0]+1},{wk[1]+1})')} إلى {cm.get((wk[2], wk[3]), f'({wk[2]+1},{wk[3]+1})')}",
-            "الطول المحوري": f"{w_len:.2f} م",
+            "الاسم ورقم الحائط": f"<b>{w_name}</b>" + (" (حائط دروة)" if is_p else ""),
+            "امتداد الحائط بالكامل": span_desc or w_lbl,
+            "الطول الإجمالي": f"{w_len:.2f} م",
             "سُمك الحائط": f"{w_th} سم"
         }
         st.session_state["m15_pending_delete"] = {
             "kind": "wall",
             "target": wk,
+            "all_segments": all_segs,
+            "bound_segment": bound_seg,
             "name": w_name,
+            "span_desc": span_desc,
             "title_kind": title_kind,
             "details": details,
             "step": step
         }
         st.session_state["m15_pending_delete_wall"] = wk
+        st.session_state["m15_del_wall_expander_open"] = True
 
     elif kind == "col":
         ci, cj = int(target[0]), int(target[1])
@@ -5868,12 +6058,8 @@ def _confirm_pending_delete(pending):
 
     if kind == "wall":
         wk = tuple(int(x) for x in target)
-        removed_walls = st.session_state.get("m15_wall_removed", set())
-        if not isinstance(removed_walls, set):
-            removed_walls = set(removed_walls)
-        removed_walls.add(wk)
-        st.session_state["m15_wall_removed"] = removed_walls
-        st.toast(f"🗑️ تم حذف الحائط ({name}) بنجاح!", icon="🧱")
+        _perform_delete_wall(wk, trigger_rerun=True)
+        return
 
     elif kind == "col":
         ci, cj = int(target[0]), int(target[1])
@@ -5918,7 +6104,7 @@ def _render_floating_delete_panel(pending):
     بانيل شفاف عائم بحجم صغير ومختصر جداً أسفل الشاشة، قابل للتحريك بالماوس،
     لعرض اسم العنصر المراد حذفه وتأكيد أو إلغاء الحذف دون حجب المسقط الأفقي.
     """
-    if not pending:
+    if not pending or pending.get("kind") == "wall":
         return
     token = f"m15_whistle_{pending.get('kind')}_{pending.get('target')}"
     play_delete_confirmation_whistle(token)
@@ -7660,74 +7846,86 @@ def _section_delete_walls():
     if pending_wk and pending_wk in all_walls:
         _set_pending_delete("wall", pending_wk, step=1)
 
-    # 3. عرض خيارات الحذف للحائط المحدد
+    # 3. بطاقة تأكيد الحذف للحائط المحدد بالماوس (تظهر يسار الشاشة فقط)
     pending_del = st.session_state.get("m15_pending_delete")
     if pending_del and pending_del.get("kind") == "wall":
-        step = pending_del.get("step", 1)
-        if step == 1:
-            st.markdown(
-                f"""<div style='background:rgba(239, 68, 68, 0.14); border:1.5px solid #ef4444; border-radius:8px; padding:10px 14px; margin:10px 0;' dir='rtl'>
-                    <div style='color:#fca5a5; font-weight:700; font-size:0.92rem; margin-bottom:4px;'>
-                        🗑️ تم اختيار الحائط: <b>{pending_del.get('name')}</b>
-                    </div>
-                </div>""",
-                unsafe_allow_html=True
-            )
-            c_w1, c_w2 = st.columns(2)
-            with c_w1:
-                if st.button("🗑️ حذف نهائي", key="m15_btn_st_del_wall_step1", type="primary", use_container_width=True):
-                    pending_del["step"] = 2
-                    st.session_state["m15_pending_delete"] = pending_del
-                    st.rerun()
-            with c_w2:
-                if st.button("✕ إلغاء", key="m15_btn_st_cancel_wall_step1", use_container_width=True):
-                    _cancel_pending_delete()
-                    st.rerun()
-        else:
-            st.markdown(
-                f"""<div style='background:rgba(220, 38, 38, 0.22); border:2px solid #dc2626; border-radius:8px; padding:10px 14px; margin:10px 0;' dir='rtl'>
-                    <div style='color:#fca5a5; font-weight:700; font-size:0.92rem; margin-bottom:4px;'>
-                        ⚠️ رسالة تأكيد: هل أنت متأكد من الحذف النهائي للحائط <b>{pending_del.get('name')}</b>؟
-                    </div>
-                    <div style='color:#e2e8f0; font-size:0.8rem; margin-bottom:10px;'>
-                        تنبيه: لا يمكن التراجع عن هذا الإجراء بعد تنفيذه.
-                    </div>
-                </div>""",
-                unsafe_allow_html=True
-            )
-            c_conf1, c_conf2 = st.columns(2)
-            with c_conf1:
-                if st.button("✅ موافق علي الحذف", key="m15_btn_st_confirm_del_wall", type="primary", use_container_width=True):
-                    _confirm_pending_delete(pending_del)
-            with c_conf2:
-                if st.button("❌ إلغاء الحذف", key="m15_btn_st_cancel_del_wall", use_container_width=True):
-                    _cancel_pending_delete()
-                    st.rerun()
+        w_name = pending_del.get("name", "الحائط")
+        span_desc = pending_del.get("span_desc", "")
+        desc_str = f" ({span_desc})" if span_desc else ""
+        st.markdown(
+            f"""<div style='background:rgba(220, 38, 38, 0.22); border:2px solid #dc2626; border-radius:8px; padding:12px 14px; margin:10px 0;' dir='rtl'>
+                <div style='color:#fca5a5; font-weight:800; font-size:0.95rem; margin-bottom:4px;'>
+                    🗑️ تأكيد حذف الحائط بالكامل: <span style='color:#ffffff; text-decoration:underline;'>{w_name}{desc_str}</span>
+                </div>
+                <div style='color:#e2e8f0; font-size:0.82rem; margin-bottom:10px;'>
+                    هل أنت متأكد من الحذف النهائي لهذا الحائط بالكامل وكافة الفتحات (الأبواب والشبابيك) الموجودة عليه؟ لا يمكن التراجع عن هذا الإجراء.
+                </div>
+            </div>""",
+            unsafe_allow_html=True
+        )
+        c_conf1, c_conf2 = st.columns(2)
+        with c_conf1:
+            if st.button("✅ موافق علي الحذف", key="m15_btn_st_confirm_del_wall", type="primary", use_container_width=True):
+                target_wk = pending_del.get("target")
+                _perform_delete_wall(target_wk, trigger_rerun=True)
+        with c_conf2:
+            if st.button("❌ إلغاء الحذف", key="m15_btn_st_cancel_del_wall", use_container_width=True):
+                _cancel_pending_delete()
+                st.session_state["m15_del_wall_expander_open"] = True
+                st.rerun()
 
-    # 4. اختيار يدوي بديل من القائمة
+    # 4. اختيار يدوي متعدد من القائمة (Multiselect)
     if active_walls:
-        with st.expander("🔍 أو اختر حائطاً مباشرة من القائمة للحذف", expanded=False):
-            wall_options = [0] + list(range(1, len(active_walls) + 1))
-            def _fmt_w(idx):
-                if idx == 0: return "-- اختر حائطاً للحذف --"
-                w = active_walls[idx - 1]
-                return f"{_wall_display_label(w, cm, wm)} (طول: {_wall_length_m(w):.2f}م | سُمك: {_get_wall_thickness(w)}سم)"
+        with st.expander("🔍 أو اختر حائطاً أو أكثر من القائمة للحذف", expanded=True):
             del_ver = st.session_state.get("m15_del_dropdown_ver", 0)
-            sel_w_idx = st.selectbox("الحائط المراد حذفه:", options=wall_options, format_func=_fmt_w, key=f"m15_dropdown_del_wall_{del_ver}")
-            if sel_w_idx != 0:
-                target_wk = active_walls[sel_w_idx - 1]
-                if has_conflict:
-                    st.button("🗑️ حذف نهائي", key=f"m15_btn_req_dropdown_del_wall_{del_ver}", use_container_width=True, disabled=True, help="لا يمكن الحذف لوجود نمط نشط على المسقط")
+
+            def _fmt_w(w):
+                name = wm.get(w, "")
+                lbl = _wall_display_label(w, cm, wm)
+                _, bound = _get_full_continuous_wall_segments(w)
+                bi1, bj1, bi2, bj2 = bound
+                if bi1 != bi2:
+                    span_str = f"X{bi1+1}→X{bi2+1}"
                 else:
-                    col_dr1, col_dr2 = st.columns(2)
-                    with col_dr1:
-                        if st.button("🗑️ حذف نهائي", key=f"m15_btn_req_dropdown_del_wall_{del_ver}", type="primary", use_container_width=True):
-                            _set_pending_delete("wall", target_wk, step=2)
-                            st.rerun()
-                    with col_dr2:
-                        if st.button("✕ إلغاء", key=f"m15_btn_cancel_dropdown_del_wall_{del_ver}", use_container_width=True):
-                            _cancel_pending_delete()
-                            st.rerun()
+                    span_str = f"Y{bj1+1}→Y{bj2+1}"
+                return f"{name}: {span_str} (طول: {_wall_length_m(bound):.2f}م | سُمك: {_get_wall_thickness(w)}سم)"
+
+            sel_walls = st.multiselect(
+                "حدد الحوائط المراد حذفها من القائمة:",
+                options=active_walls,
+                format_func=_fmt_w,
+                key=f"m15_multiselect_del_walls_{del_ver}",
+                help="يمكنك اختيار حائط واحد أو أكثر لحذفها بالكامل دفعة واحدة"
+            )
+
+            if sel_walls:
+                names_list = [wm.get(w, str(w)) for w in sel_walls]
+                names_str = "، ".join(names_list)
+                st.markdown(
+                    f"""<div style='background:rgba(220, 38, 38, 0.22); border:2px solid #dc2626; border-radius:8px; padding:12px 14px; margin:10px 0;' dir='rtl'>
+                        <div style='color:#fca5a5; font-weight:800; font-size:0.92rem; margin-bottom:4px;'>
+                            ⚠️ تأكيد حذف الحوائط المحددة ({len(sel_walls)} حائط): <b>{names_str}</b>
+                        </div>
+                        <div style='color:#e2e8f0; font-size:0.8rem;'>
+                            سيتم حذف هذه الحوائط بالكامل وكافة الفتحات (الأبواب والشبابيك) الموجودة عليها.
+                        </div>
+                    </div>""",
+                    unsafe_allow_html=True
+                )
+                col_dr1, col_dr2 = st.columns(2)
+                with col_dr1:
+                    if st.button("✅ موافق علي الحذف", key=f"m15_btn_confirm_multidel_{del_ver}", type="primary", use_container_width=True):
+                        for sw in sel_walls:
+                            _perform_delete_wall(sw, trigger_rerun=False)
+                        st.session_state["m15_del_wall_expander_open"] = True
+                        st.session_state["m15_del_dropdown_ver"] = del_ver + 1
+                        st.toast(f"🗑️ تم حذف الحوائط ({names_str}) بالكامل بنجاح!", icon="🧱")
+                        st.rerun()
+                with col_dr2:
+                    if st.button("❌ إلغاء الحذف", key=f"m15_btn_cancel_multidel_{del_ver}", use_container_width=True):
+                        st.session_state["m15_del_wall_expander_open"] = True
+                        st.session_state["m15_del_dropdown_ver"] = del_ver + 1
+                        st.rerun()
 
 
 def _section_restore_walls():
@@ -16736,7 +16934,7 @@ def render_masonry_plaster_module():
 
         pending_del = st.session_state.get("m15_pending_delete")
         cancel_all_int = st.session_state.get("m15_confirm_cancel_all_interior")
-        if pending_del:
+        if pending_del and pending_del.get("kind") != "wall":
             _render_floating_delete_panel(pending_del)
             kind_title = pending_del.get("title_kind", "العنصر")
             item_name = pending_del.get("name", "")
@@ -16786,6 +16984,9 @@ def render_masonry_plaster_module():
                     if st.button("❌ إلغاء الحذف", key="m15_main_btn_cancel_del", use_container_width=True):
                         _cancel_pending_delete()
                         st.rerun()
+        elif pending_del and pending_del.get("kind") == "wall":
+            _cleanup_floating_delete_panel()
+
         elif cancel_all_int:
             _render_floating_plaster_cancel_panel()
         else:
@@ -16894,6 +17095,126 @@ def render_masonry_plaster_module():
                     <span style='color:#222;font-weight:bold;'>■ حائط (L#)</span>
                     <span style='color:#888;font-weight:bold;'>┄ خط استرشادي (محذوف)</span>
                 </div>""",unsafe_allow_html=True)
+
+    # ═════════════════════════════════════════════════════════════════════════
+    #  PHASE 1 -> PHASE 2 TRIGGER: "🚀 إبدأ التصميم" BUTTON (الزر الأحمر الكبير ثلاثي الأبعاد)
+    # ═════════════════════════════════════════════════════════════════════════
+    st.markdown(
+        """
+        <style>
+        /* زر إبدأ التصميم الإنشائي وتوليد المخططات التخصصية - تصميم عريض متدرج أحمر ثلاثي الأبعاد */
+        div[class*="st-key-"][class*="m15_btn_run_design"] button,
+        div.stButton > button[key*="m15_btn_run_design"],
+        button[key*="m15_btn_run_design"],
+        .st-key-m15_btn_run_design button,
+        div[data-testid="stVerticalBlock"] div:has(> button[key*="m15_btn_run_design"]) button {
+            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%) !important;
+            background-color: #dc2626 !important;
+            color: #ffffff !important;
+            font-size: 24px !important;
+            font-weight: 900 !important;
+            padding: 18px 36px !important;
+            border-radius: 14px !important;
+            border: 3.5px solid #ffffff !important;
+            box-shadow: 0 8px 26px rgba(220, 38, 38, 0.65), 0 4px 0 #7f1d1d, inset 0 1px 2px rgba(255, 255, 255, 0.45) !important;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            letter-spacing: 0.5px !important;
+            margin: 20px 0px !important;
+            min-height: 76px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            cursor: pointer !important;
+            width: 100% !important;
+        }
+        div[class*="st-key-"][class*="m15_btn_run_design"] button:hover,
+        div.stButton > button[key*="m15_btn_run_design"]:hover,
+        button[key*="m15_btn_run_design"]:hover {
+            background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%) !important;
+            background-color: #ef4444 !important;
+            color: #ffffff !important;
+            border-color: #fee2e2 !important;
+            box-shadow: 0 12px 34px rgba(220, 38, 38, 0.85), 0 5px 0 #991b1b, inset 0 1px 3px rgba(255, 255, 255, 0.6) !important;
+            transform: translateY(-2px) scale(1.008) !important;
+        }
+        div[class*="st-key-"][class*="m15_btn_run_design"] button:active,
+        button[key*="m15_btn_run_design"]:active {
+            transform: translateY(2px) !important;
+            box-shadow: 0 4px 14px rgba(220, 38, 38, 0.6), 0 2px 0 #7f1d1d !important;
+        }
+        div[class*="st-key-"][class*="m15_btn_run_design"] button *,
+        div.stButton > button[key*="m15_btn_run_design"] *,
+        button[key*="m15_btn_run_design"] * {
+            color: #ffffff !important;
+            font-size: 24px !important;
+            font-weight: 900 !important;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6) !important;
+            line-height: 1.3 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # بصمة هندسية دقيقة لكافة مدخلات النموذج والمحاور والأعمدة والحوائط والفتحات والمواصفات
+    import hashlib
+    _m15_geom_raw = (
+        f"x:{list(st.session_state.get('m15_x_axes', []))}|"
+        f"y:{list(st.session_state.get('m15_y_axes', []))}|"
+        f"wp:{sorted(str(w) for w in st.session_state.get('m15_walls_placed', []))}|"
+        f"wr:{sorted(str(w) for w in st.session_state.get('m15_wall_removed', []))}|"
+        f"wt:{sorted(f'{k}:{v}' for k, v in st.session_state.get('m15_wall_thickness', {}).items())}|"
+        f"wh:{sorted(f'{k}:{v}' for k, v in st.session_state.get('m15_wall_heights', {}).items())}|"
+        f"cp:{sorted(str(c) for c in st.session_state.get('m15_col_placed', []))}|"
+        f"cr:{sorted(str(c) for c in st.session_state.get('m15_col_removed', []))}|"
+        f"cd:{sorted(f'{k}:{v}' for k, v in st.session_state.get('m15_col_dirs', {}).items())}|"
+        f"win:{sorted(f'{k}:{len(v)}' for k, v in st.session_state.get('m15_windows', {}).items())}|"
+        f"dr:{sorted(f'{k}:{len(v)}' for k, v in st.session_state.get('m15_doors', {}).items())}|"
+        f"bt:{st.session_state.get('m15_brick_type', '')}|"
+        f"bs:{st.session_state.get('m15_brick_size', '')}|"
+        f"m:{st.session_state.get('m15_mortar_thickness_cm', 1.0)}|"
+        f"pw:{sorted(str(w) for w in st.session_state.get('m15_plaster_walls', []))}|"
+        f"spaces:{len(st.session_state.get('m15_named_spaces', {}))}"
+    )
+    _m15_fingerprint = hashlib.md5(_m15_geom_raw.encode("utf-8")).hexdigest()
+
+    if st.button("🚀 إبدأ التصميم", key="m15_btn_run_design", use_container_width=True, help="بدء الحسابات والتصميم الإنشائي الكامل وتوليد المخططات الهندسية والقطاعات الـ 10 التخصصية"):
+        st.session_state["m15_design_started"] = True
+        st.session_state["m15_last_designed_state"] = _m15_fingerprint
+        st.rerun()
+
+    _is_design_started = bool(st.session_state.get("m15_design_started", False))
+    _last_designed_state = st.session_state.get("m15_last_designed_state")
+
+    # تنبيه ذكي مضاف (Smart Invalidation Warning)
+    if _is_design_started and _last_designed_state and _last_designed_state != _m15_fingerprint:
+        st.warning(
+            "⚠️ **تنبيه ذكي (Smart Invalidation Warning):** تم تعديل عناصر المسقط أو النموذج (المحاور، الحوائط، الأعمدة، الفتحات، أو المواصفات) بعد آخر عملية تصميم. "
+            "يرجى إعادة الضغط على الزر الأحمر بالأعلى **«🚀 إبدأ التصميم»** لتحديث وتوليد الحسابات والمخططات والقطاعات الـ 10 التخصصية وجداول الحصر طبقاً للمسقط الجديد."
+        )
+
+    # فحص بدء التصميم للمرحلة الثانية
+    if not _is_design_started:
+        st.info("ℹ️ **المرحلة الأولى (Phase 1 — Geometry & Plan Setup):** تم تحديث وعكس مدخلات المسقط الأفقي والمحاور والحوائط والأعمدة والفتحات بنجاح وبسرعة فائقة. اضغط على الزر الأحمر الكبير أعلاه **«🚀 إبدأ التصميم»** لبدء المرحلة الثانية وتوليد الحسابات والتصميم الإنشائي الكامل وكافة القطاعات الـ 10 التخصصية وجداول الحصر.")
+        save_settings()
+        _inject_floating_plan_viewer()
+        return
+
+    # ═════════════════════════════════════════════════════════════════════════
+    #  المرحلة الثانية: الحسابات والتصميم الإنشائي الكامل (Phase 2 — Structural Design & Detailing)
+    # ═════════════════════════════════════════════════════════════════════════
+    from modules.m15_structural_engine import render_m15_structural_phase_2
+    buf_plan_clean = _draw_plan(with_dim=False)
+    render_m15_structural_phase_2(
+        walls_placed=st.session_state.get("m15_walls_placed", []),
+        wall_thickness=st.session_state.get("m15_wall_thickness", {}),
+        wall_heights=st.session_state.get("m15_wall_heights", {}),
+        windows=st.session_state.get("m15_windows", {}),
+        doors=st.session_state.get("m15_doors", {}),
+        col_placed=st.session_state.get("m15_col_placed", set()),
+        buf_plan_clean=buf_plan_clean
+    )
+
     st.divider()
     with st.expander("🌐 3D (Data Processing & Rendering) — العارض ثلاثي الأبعاد التفاعلي", expanded=False):
         _section_3d_viewer()
@@ -16907,5 +17228,4 @@ def render_masonry_plaster_module():
     _section_export_pdf()
     save_settings()
     _inject_floating_plan_viewer()
-
 
