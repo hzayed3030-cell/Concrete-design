@@ -1,0 +1,138 @@
+16608: init_btm_x = calculate_additional_reinforcement(
+16632: init_btm_y = calculate_additional_reinforcement(
+16653: eff_btm_dia_x, _, upgraded_btm_x, orig_btm_dia_x = optimize_extra_bar_diameter(
+16662: final_btm_x = calculate_additional_reinforcement(
+16751: eff_btm_dia_y, _, upgraded_btm_y, orig_btm_dia_y = optimize_extra_bar_diameter(
+16760: final_btm_y = calculate_additional_reinforcement(
+16871: punching_results = calculate_punching_shear(
+16889: top_extra_cols = calculate_extra_top_steel_at_columns(
+16931: cant_rft_list = calculate_cantilever_reinforcement(cantilevers, Wu, d, Fcu, Fy, ts, bottom_mesh_dia)
+16934: deflection_results = calculate_flat_slab_deflections(
+16949: boq = calculate_boq(
+17037: fig_punch = generate_flat_slab_punching_shear_sketch(
+17050: fig_punch.savefig(buf_punch, format="png", bbox_inches="tight", dpi=180)
+17052: st.pyplot(fig_punch, clear_figure=True, use_container_width=True)
+17061: plt.close(fig_punch)
+17375: fig_det = generate_punching_stirrups_detail_sketch(
+17388: fig_det.savefig(buf_det, format="png", bbox_inches="tight", dpi=180)
+17390: st.pyplot(fig_det, clear_figure=True, use_container_width=True)
+17399: plt.close(fig_det)
+17402: fig_3d = generate_punching_stirrups_3d_sketch(
+17415: fig_3d.savefig(buf_3d, format="png", bbox_inches="tight", dpi=180)
+17417: st.pyplot(fig_3d, clear_figure=True, use_container_width=True)
+17426: plt.close(fig_3d)
+17586: fig_m11 = generate_flat_slab_moment_contour(
+17608: st.pyplot(fig_m11, clear_figure=True, use_container_width=True)
+17610: fig_m11.savefig(buf_m11, format="png", bbox_inches="tight", dpi=180)
+17621: plt.close(fig_m11)
+17624: fig_m22 = generate_flat_slab_moment_contour(
+17646: st.pyplot(fig_m22, clear_figure=True, use_container_width=True)
+17648: fig_m22.savefig(buf_m22, format="png", bbox_inches="tight", dpi=180)
+17659: plt.close(fig_m22)
+17831: fig_sec = generate_flat_slab_moment_cross_section(
+17854: st.pyplot(fig_sec, clear_figure=True, use_container_width=True)
+17857: fig_sec.savefig(buf_sec, format="png", bbox_inches="tight", dpi=180)
+17873: plt.close(fig_sec)
+18069: fig_cc = generate_flat_slab_column_caps_sketch(
+18083: fig_cc.savefig(buf_cc, format="pdf", bbox_inches="tight")
+18085: st.pyplot(fig_cc, clear_figure=True, use_container_width=True)
+18094: plt.close(fig_cc)
+18126: fig_bes_x = generate_flat_slab_bottom_extra_shawka_sketch(
+18147: fig_bes_x.savefig(buf_bes_x, format="pdf", bbox_inches="tight")
+18149: st.pyplot(fig_bes_x, clear_figure=True, use_container_width=True)
+18158: plt.close(fig_bes_x)
+18173: fig_bes_y = generate_flat_slab_bottom_extra_shawka_sketch(
+18194: fig_bes_y.savefig(buf_bes_y, format="pdf", bbox_inches="tight")
+18196: st.pyplot(fig_bes_y, clear_figure=True, use_container_width=True)
+18205: plt.close(fig_bes_y)
+18219: fig_tmes_x = generate_flat_slab_top_mesh_extra_sketch(
+18240: fig_tmes_x.savefig(buf_tmes_x, format="pdf", bbox_inches="tight")
+18242: st.pyplot(fig_tmes_x, clear_figure=True, use_container_width=True)
+18251: plt.close(fig_tmes_x)
+18265: fig_tmes_y = generate_flat_slab_top_mesh_extra_sketch(
+18286: fig_tmes_y.savefig(buf_tmes_y, format="pdf", bbox_inches="tight")
+18288: st.pyplot(fig_tmes_y, clear_figure=True, use_container_width=True)
+18297: plt.close(fig_tmes_y)
+18398: fig_sec = generate_beam_cross_section_sketch(sel_beam_obj)
+18399: st.pyplot(fig_sec, clear_figure=True, use_container_width=True)
+18404: fig_sec.savefig(buf_sec_png, format="png", bbox_inches="tight", dpi=180)
+18416: fig_sec.savefig(buf_sec_pdf, format="pdf", bbox_inches="tight")
+18426: plt.close(fig_sec)
+18473: fig_def = generate_flat_slab_deflection_contour_sketch(
+18486: st.pyplot(fig_def, clear_figure=True, use_container_width=True)
+18489: fig_def.savefig(buf_def, format="png", bbox_inches="tight", dpi=180)
+18500: plt.close(fig_def)
+18630: opt_res = solve_deflection_optimization(sel_panel_data, DL_tot, LL, Fcu, Fy=Fy)
+18652: fig_opt_curve = generate_deflection_optimization_curves_sketch(
+18655: st.pyplot(fig_opt_curve, clear_figure=True, use_container_width=True)
+18656: plt.close(fig_opt_curve)
+18711: fig_opt_curve = generate_deflection_optimization_curves_sketch(
+18714: st.pyplot(fig_opt_curve, clear_figure=True, use_container_width=True)
+18717: fig_opt_curve.savefig(buf_opt_c, format="png", bbox_inches="tight", dpi=180)
+18727: plt.close(fig_opt_curve)
+18730: fig_opt_sec = generate_deflection_rebar_cross_section_sketch(
+18733: st.pyplot(fig_opt_sec, clear_figure=True, use_container_width=True)
+18736: fig_opt_sec.savefig(buf_opt_s, format="png", bbox_inches="tight", dpi=180)
+18746: plt.close(fig_opt_sec)
+18794: fig_reac = generate_flat_slab_reactions_sketch(
+18803: st.pyplot(fig_reac, clear_figure=True, use_container_width=True)
+18805: fig_reac.savefig(buf_reac, format="png", bbox_inches="tight", dpi=180)
+18816: plt.close(fig_reac)
+20000: fig_full_sketch.savefig(buf_fs_sketch, format="png", bbox_inches="tight", dpi=160)
+20007: st.pyplot(fig_full_sketch, clear_figure=True, use_container_width=True)
+20016: plt.close(fig_full_sketch)
+20770: generate_flat_slab_report_html,
+20771: generate_flat_slab_outputs_report_html,
+20890: fig.savefig(buf, format="png", bbox_inches="tight", dpi=130)
+20897: plt.close(fig)
+20907: _f = generate_flat_slab_sketch(
+20931: _img_verif = _fig_to_b64(_f)
+20936: return generate_flat_slab_outputs_report_html(
+20956: _f = generate_flat_slab_sketch(
+20980: _img_verif = _fig_to_b64(_f)
+20988: _f = generate_flat_slab_punching_shear_sketch(
+21000: _img_punch = _fig_to_b64(_f)
+21007: _f = generate_flat_slab_deflection_contour_sketch(
+21020: _img_defl = _fig_to_b64(_f)
+21028: _f = generate_flat_slab_moment_contour(
+21038: _img_m11 = _fig_to_b64(_f)
+21047: _f = generate_flat_slab_moment_contour(
+21057: _img_m22 = _fig_to_b64(_f)
+21065: _f = generate_flat_slab_column_caps_sketch(
+21077: _img_col_caps = _fig_to_b64(_f)
+21084: _f = generate_flat_slab_bottom_extra_shawka_sketch(
+21100: _img_btm_x = _fig_to_b64(_f)
+21107: _f = generate_flat_slab_bottom_extra_shawka_sketch(
+21123: _img_btm_y = _fig_to_b64(_f)
+21130: _f = generate_flat_slab_top_mesh_extra_sketch(
+21146: _img_top_x = _fig_to_b64(_f)
+21153: _f = generate_flat_slab_top_mesh_extra_sketch(
+21169: _img_top_y = _fig_to_b64(_f)
+21176: _f = generate_flat_slab_master_steel_layout_sketch(
+21188: _img_master_steel = _fig_to_b64(_f)
+21196: _f = generate_flat_slab_reactions_sketch(
+21205: _img_reac = _fig_to_b64(_f)
+21213: _f = generate_flat_slab_rebar_bending_details(
+21222: _img_bbs = _fig_to_b64(_f)
+21226: return generate_flat_slab_report_html(
+21258: if st.button("📕 تصدير مخرجات التصميم ملف PDF", key=f"{prefix}btn_export_outputs_pdf", use_container_
+21315: if st.button("📑 تصدير جميع المدخلات والمخرجات ملف PDF", key=f"{prefix}btn_export_full_pdf", use_cont
+21446: key=f"{prefix}multiselect_export_sketches",
+21452: if st.button("🚀 بدء التصدير", key=f"{prefix}btn_start_export_sketches_pdf", use_container_width=True
+21464: fig_sk = generate_flat_slab_sketch(
+21494: fig_sk = generate_flat_slab_column_caps_sketch(
+21508: fig_sk = generate_flat_slab_bottom_extra_shawka_sketch(
+21528: fig_sk = generate_flat_slab_bottom_extra_shawka_sketch(
+21548: fig_sk = generate_flat_slab_top_mesh_extra_sketch(
+21568: fig_sk = generate_flat_slab_top_mesh_extra_sketch(
+21588: fig_sk = generate_flat_slab_punching_shear_sketch(
+21601: fig_sk = generate_flat_slab_deflection_contour_sketch(
+21615: fig_sk = generate_flat_slab_moment_contour(
+21627: fig_sk = generate_flat_slab_moment_contour(
+21649: fig_sk = generate_flat_slab_moment_cross_section(
+21660: fig_sk = generate_flat_slab_master_steel_layout_sketch(
+21673: fig_sk = generate_flat_slab_reactions_sketch(
+21683: fig_sk = generate_flat_slab_rebar_bending_details(
+21694: pdf_doc.savefig(fig_sk, bbox_inches="tight")
+21695: plt.close(fig_sk)
+21699: plt.close(fig_sk)

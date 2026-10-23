@@ -1,0 +1,74 @@
+890: def generate_flat_slab_sketch(
+995: fig = plt.figure(figsize=(fig_w, fig_h), dpi=110, facecolor="#ffffff")
+1421: fig = plt.figure(figsize=(7.5, 9.2), dpi=110, facecolor="#ffffff")
+1579: fig = plt.figure(figsize=(fig_w, fig_h), dpi=100, facecolor="#ffffff")
+1966: fig = plt.figure(figsize=(fig_w, fig_h), dpi=100, facecolor="#ffffff")
+2328: fig = plt.figure(figsize=(fig_w, fig_h), dpi=100, facecolor="#ffffff")
+3635: fig, (ax_slab, ax_bmd) = plt.subplots(
+3910: def generate_flat_slab_moment_contour(
+4012: fig = plt.figure(figsize=(fig_w, fig_h), dpi=100, facecolor="#ffffff")
+4428: fig = plt.figure(figsize=(32.0, 16.0), dpi=100, facecolor="#ffffff")
+4716: fig = plt.figure(figsize=(fig_w, fig_h), dpi=100, facecolor="#ffffff")
+5297: fig, axes = plt.subplots(4, 2, figsize=(18, 20), dpi=100)
+5300: plt.subplots_adjust(left=0.04, right=0.96, top=0.945, bottom=0.025, hspace=0.36, wspace=0.
+5597: fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
+6641: fig, ax = plt.subplots(figsize=(14, 7.5), dpi=100)
+6774: fig, ax = plt.subplots(figsize=(15, 8.5), dpi=100)
+6890: def generate_flat_slab_deflection_contour_sketch(
+6954: fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
+7323: def generate_flat_slab_punching_shear_sketch(
+7386: fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
+7821: fig = plt.figure(figsize=(19, 13), dpi=100)
+8181: fig = plt.figure(figsize=(22, 13), dpi=100)
+8553: fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
+8975: fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
+9491: fig = plt.figure(figsize=(fig_w, fig_h), dpi=100)
+14767: fig_interactive = generate_flat_slab_sketch(
+17037: fig_punch = generate_flat_slab_punching_shear_sketch(
+17052: st.pyplot(fig_punch, clear_figure=True, use_container_width=True)
+17390: st.pyplot(fig_det, clear_figure=True, use_container_width=True)
+17417: st.pyplot(fig_3d, clear_figure=True, use_container_width=True)
+17586: fig_m11 = generate_flat_slab_moment_contour(
+17608: st.pyplot(fig_m11, clear_figure=True, use_container_width=True)
+17624: fig_m22 = generate_flat_slab_moment_contour(
+17646: st.pyplot(fig_m22, clear_figure=True, use_container_width=True)
+17854: st.pyplot(fig_sec, clear_figure=True, use_container_width=True)
+18085: st.pyplot(fig_cc, clear_figure=True, use_container_width=True)
+18149: st.pyplot(fig_bes_x, clear_figure=True, use_container_width=True)
+18196: st.pyplot(fig_bes_y, clear_figure=True, use_container_width=True)
+18242: st.pyplot(fig_tmes_x, clear_figure=True, use_container_width=True)
+18288: st.pyplot(fig_tmes_y, clear_figure=True, use_container_width=True)
+18399: st.pyplot(fig_sec, clear_figure=True, use_container_width=True)
+18473: fig_def = generate_flat_slab_deflection_contour_sketch(
+18486: st.pyplot(fig_def, clear_figure=True, use_container_width=True)
+18655: st.pyplot(fig_opt_curve, clear_figure=True, use_container_width=True)
+18714: st.pyplot(fig_opt_curve, clear_figure=True, use_container_width=True)
+18733: st.pyplot(fig_opt_sec, clear_figure=True, use_container_width=True)
+18803: st.pyplot(fig_reac, clear_figure=True, use_container_width=True)
+20007: st.pyplot(fig_full_sketch, clear_figure=True, use_container_width=True)
+20885: def _fig_to_b64(fig):
+20907: _f = generate_flat_slab_sketch(
+20931: _img_verif = _fig_to_b64(_f)
+20956: _f = generate_flat_slab_sketch(
+20980: _img_verif = _fig_to_b64(_f)
+20988: _f = generate_flat_slab_punching_shear_sketch(
+21000: _img_punch = _fig_to_b64(_f)
+21007: _f = generate_flat_slab_deflection_contour_sketch(
+21020: _img_defl = _fig_to_b64(_f)
+21028: _f = generate_flat_slab_moment_contour(
+21038: _img_m11 = _fig_to_b64(_f)
+21047: _f = generate_flat_slab_moment_contour(
+21057: _img_m22 = _fig_to_b64(_f)
+21077: _img_col_caps = _fig_to_b64(_f)
+21100: _img_btm_x = _fig_to_b64(_f)
+21123: _img_btm_y = _fig_to_b64(_f)
+21146: _img_top_x = _fig_to_b64(_f)
+21169: _img_top_y = _fig_to_b64(_f)
+21188: _img_master_steel = _fig_to_b64(_f)
+21205: _img_reac = _fig_to_b64(_f)
+21222: _img_bbs = _fig_to_b64(_f)
+21464: fig_sk = generate_flat_slab_sketch(
+21588: fig_sk = generate_flat_slab_punching_shear_sketch(
+21601: fig_sk = generate_flat_slab_deflection_contour_sketch(
+21615: fig_sk = generate_flat_slab_moment_contour(
+21627: fig_sk = generate_flat_slab_moment_contour(

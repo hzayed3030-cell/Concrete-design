@@ -1,0 +1,30 @@
+13893: with st.expander( "🎯 1. Column Placement (إسقاط الأعمدة)", expanded=False, key=f"{prefix}sub_exp_drop_cols",
+14040: with st.expander( "🛠️ 2. Column Modification (تعديل وتدوير الأعمدة)", expanded=False, key=f"{prefix}sub_exp_edit_cols",
+14349: with st.expander( "🗑️ 3. Column Removal (حذف واستبعاد الأعمدة)", expanded=False, key=f"{prefix}sub_exp_del_cols",
+14522: with st.expander( f"🏗️ 4. Drop Beams Management ({len(cur_drop_beams)} Beams — إسقاط وتعديل وحذف الكمرات الساقطة)", expa
+15243: with st.expander(f"📐 Step 1 — Grid Geometry & Cantilevers (اسم المشروع والمحاور والكوابيل) — [ {active_profile_name} ]",
+15455: with st.expander("🧱 Step 2 — Slab Thickness, Column Size, Loads & Rebar (السُمك والأعمدة والأحمال والتسليح)", expanded=F
+15912: with st.expander( f"🏛️ Plan & Structure Management (إدارة وتوقيع الأعمدة والكمرات — {len(_active_cols)} / {len(_all_cols
+15954: with st.expander( f"🕳️ Panel Removal & Openings (تعديل وحذف البلاطات — إنشاء مناور وفراغات معمارية / Voids) " f"{'— ' + 
+16080: with st.expander("📋 Design Criteria & Loads Summary (ملخص معايير التصميم والأحمال)", expanded=False, key=f"{prefix}exp_d
+16964: exp_punch = st.expander("🥊 Punching Shear Check (فحص القص الثاقب وتصميم كانات القص لجميع الأعمدة)", expanded=False, key=
+17480: with st.expander("📸 Shear Punching Stirrups Site Execution (صورة توضيحية لتنفيذ كانات القص الثاقب)", expanded=False): si
+17551: exp_mom = st.expander( "📊 1. 2D Bending Moment Matrix & Color Contours (مصفوفة العزوم والمخطط اللوني M11 & M22)", expand
+17664: exp_mom_sections = st.expander( "📈 Vertical Bending Moment Sections (القطاعات الرأسية لعزوم الانحناء / قطاعات العزوم)", 
+17888: with st.expander("📊 Bending Moments & Steel Design Schedules (جداول حصر وتوزيع العزوم وحديد التسليح)", expanded=False): 
+18000: exp_stl = st.expander("🗺️ Steel Layout (مسقط أفقي لتسليح البلاطة)", expanded=False, key=f"{prefix}exp_steel_layout", on_
+18306: exp_beams = st.expander( f"🏗️ Drop Beams Design ({len(_cfg_curr_beams)} Beams — تصميم الكمرات الساقطة)", expanded=False,
+18454: exp_defl = st.expander("📉 Final Deflection Verification (التحقق الإنشائي النهائي من سهم الانحناء والترخيم طويل الأمد)", 
+18521: with st.expander("📋 Detailed Deflection & Effective Stiffness Schedule — ECP 203 (جدول التحقق التفصيلي من سهم الانحناء و
+18579: with st.expander("💡 Deflection Optimization Engine & Rebar Alternatives (موديول المعالجة الذكية لسهم الانحناء وبدائل الت
+18786: exp_reac = st.expander( f"🏛️ Column Reactions & Vertical Loads — {num_floors} Floors (ردود أفعال وتوزيع أحمال الأعمدة)",
+18820: with st.expander(f"📊 Column Reactions Table — {num_floors} Floors (جدول ردود أفعال وتوزيع أحمال الأعمدة)", expanded=Fals
+18836: with st.expander("📌 Governing Column Loads by Type (أقصى ردود أفعال وتصنيف نماذج الأعمدة)", expanded=False): int_cols = 
+19077: with st.expander(f"🏛️ Rectangular Columns Design — {num_floors} Floors (التصميم الإنشائي لنماذج الأعمدة المستطيلة)", exp
+19135: with st.expander(f"📋 Individual Columns Schedule — Detailed Design for All {len(indiv_col_designs)} Columns (جدول تصميم 
+19362: with st.expander(f"🪸 Building Foundations Design — {num_floors} Floors (تصميم أساسات المبنى والقواعد المنفصلة والمشتركة 
+19610: with st.expander(f"🧱 Ground Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج الميدات والسملات الأرضية)", expanded
+19970: with st.expander(f"🗺️ Foundation Layout Sketch — {num_floors} Floors (المسقط الأفقي وتوزيع كافة القواعد والشدادات والسمل
+20267: with st.expander("📊 Approximate Quantity Survey (الحصر التقريبي للكميات)", expanded=False): st.markdown( f""" <div style
+20661: with st.expander("📊 Approximate Quantity Survey (الحصر التقريبي لكميات ومواد السقف)", expanded=False): st.markdown( f"""
+20768: with st.expander("💾 Save & Export Design Calculation Sheet (حفظ وتصدير المذكرة الحسابية الكاملة)", expanded=False): from

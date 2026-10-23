@@ -1,0 +1,32 @@
+15665: # ── ③ INPUT VALIDATION ───────────────────────────────────────────────────
+15686: # ── ④ VERIFICATION SKETCH ────────────────────────────────────────────────
+15693: # ── 5a. Geometry-change guard & Drop beams remapping ─────────────────────
+15760: # ── 5b. Process interactive mouse column drop BEFORE loading column state ──
+15787: # ── Load confirmed column & void removals + selective placement state ─────
+15858: # ── 5c. Build active columns with selective placement & removals applied ──
+15911: # ── 5c-bis. SECTION: 🏛️ Plan & Structure Management (إدارة وتوقيع الأعمدة والكم
+15912: with st.expander(
+15951: # ── 5e. Column Removal is now unified inside '➕ إضافة وحذف الأعمدة على المحاور'
+15953: # ── 5f. Panel / Void Removal Expander ─────────────────────────────────────
+15954: with st.expander(
+16079: # ── 5g. DESIGN CRITERIA & LOADS SUMMARY (Merged Section) ─────────────────
+16080: with st.expander("📋 Design Criteria & Loads Summary (ملخص معايير التصميم والأحما
+16147: # ── Columns Registry Table (removed per user request) ────────────────────
+16187: # ── الشبكة السفلية والعلوية: فحص الحد الأدنى الكودي (ECP 203: ρ_min = 0.18%) ──
+16226: # ── الشبكة العلوية: قيمة المستخدم مباشرة ────────────────────────────────────
+16231: # ── Load Redistribution & Tributary Calculation (with Void Deductions) ───
+16331: # ── نقل وتوريد ردود أفعال وعزوم الكمرات الساقطة والكابولية للأعمدة الحاملة وتخف
+16386: # ── Multi-Bay & Merged-Bay Moments Analysis (X & Y) ──────────────────────
+16962: # ── Design Results Summary removed per user request ──────────────────────
+17506: # ── 📊 1. 2D BENDING MOMENT MATRIX & COLOR CONTOURS (M11 & M22) ─────────
+17511: # ── Case 1 Tracking: Small Deficits (0.05 < ΔAs < 3Φ12/m = 3.393 cm²/m) ──
+17663: # ── 📈 VERTICAL BENDING MOMENT SECTIONS (القطاعات الرأسية لعزوم الانحناء) ────
+17878: # ── 🟢 2. TOP REINFORCEMENT PLAN (Initialized for exports) ────────────────
+17881: # ── 🔵 3. BOTTOM REINFORCEMENT PLAN (Initialized for exports) ────────────
+17887: # ── 📊 BENDING MOMENTS & REINFORCEMENT SCHEDULES (Collapsed Section) ─────
+17888: with st.expander("📊 Bending Moments & Steel Design Schedules (جداول حصر وتوزيع ا
+18301: # ── 🏗️ 6. Drop Beams Design & Verification (تصميم الكمرات الساقطة) ────────
+18452: # ── Cantilever Reinforcement Details expander removed per user request ────
+20767: # ── 💾 SAVE & EXPORT COMPLETE CALCULATION SHEET (COLLAPSED EXPANDER) ────────
+20768: with st.expander("💾 Save & Export Design Calculation Sheet (حفظ وتصدير المذكرة ا
+21762: # ── Final Info Summary ────────────────────────────────────────────────────

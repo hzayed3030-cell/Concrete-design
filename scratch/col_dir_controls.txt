@@ -1,0 +1,46 @@
+13839: _col_transforms: dict,
+13934: "رأسي (اتجاه Y)",
+13935: "أفقي (اتجاه X)",
+13945: "📐 اتجاه ضرب العمود (Orientation):",
+13949: help="ربط توجيه العمود تلقائياً بالمسارات المعمارية والمحاور الطرفية أو تثبيته في اتجاه X أو Y.",
+13952: "↔️ الترحيل الأفقي (X) عن المحور الرأسي:",
+13959: "↕️ الترحيل الرأسي (Y) عن المحور الأفقي:",
+14046: st.info("لا توجد أعمدة فعّالة حالياً على المسقط لتعديل ضربها أو ترحيلها.")
+14053: help="اختر العمود المراد تعديل اتجاه ضربه أو ترحيله على المحاور.",
+14061: col_transforms_curr = cfg.get("fs_col_transforms", {})
+14062: if not isinstance(col_transforms_curr, dict):
+14063: col_transforms_curr = {}
+14066: col_transforms_curr.get(tgt_orig_id)
+14067: or col_transforms_curr.get(tgt_ij_str)
+14069: "direction": tgt_col_obj.get("direction", "اتجاه X"),
+14076: EDIT_DIR_OPTIONS = ["اتجاه X", "اتجاه Y"]
+14080: idx_edit_dir = EDIT_DIR_OPTIONS.index(norm_trans_edit["direction"]) if norm_trans_edit["direction"] 
+14085: "ضرب العمود",
+14089: help="اتجاه البعد الأكبر للعمود D (موازٍ لمحور X أو لمحور Y).",
+14092: "الترحيل الأفقي (X)",
+14096: help="الترحيل الأفقي للعمود بالنسبة للمحور الرأسي (±6 سم أو متمركز).",
+14099: "الترحيل الرأسي (Y)",
+14103: help="الترحيل الرأسي للعمود بالنسبة للمحور الأفقي (±6 سم أو متمركز).",
+14118: "direction": edit_sel_dir,
+14184: SEL_DIR_PH_E = "-- اختر اتجاه الجار --"
+14185: raw_saved_edge_dir_e = str(saved_edge_edit.get("direction", "") or "").strip()
+14215: "لا يجوز اعتبار هذا العمود عمود جار: لأنه عمود داخلي (Interior Column) يقع داخل حدود مساحة المسقط ال
+14226: "اتجاه الجار",
+14230: help="اتجاه وجه/أوجه الجار بالنسبة لحدود المسقط.",
+14235: "<div dir='rtl' style='direction:rtl;text-align:right;background:#eff6ff;border:1.5px solid #3b82f6;
+14246: "direction": edit_sel_edge_dir if has_real_dir_e else "",
+14251: edit_sel_dir != norm_trans_edit["direction"]
+14257: or str(saved_edge_edit.get("direction", "") or "").strip() != new_edge_entry["direction"]
+14263: upd_trans_map = dict(col_transforms_curr)
+14265: "direction": edit_sel_dir,
+14271: cfg["fs_col_transforms"] = upd_trans_map
+14281: _existing_p["direction"] = edit_sel_dir
+14307: f"<div dir='rtl' style='direction:rtl;text-align:right;background:#fef2f2;border:1.5px solid #ef4444
+14321: _edge_badge_html = "<span style='color:#2563eb;'>⏳ بانتظار اختيار اتجاه الجار</span>"
+14331: <div dir='rtl' style='direction:rtl;text-align:right;background:#f8fafc;border:1px solid #cbd5e1;pad
+14363: help="اختر الأعمدة المراد حذفها نهائياً من المسقط الأفقي والحسابات الإنشائية.",
+14420: <div dir='rtl' style='direction:rtl; text-align:right; background:#fef2f2; border:2px solid #dc2626;
+14427: • عند التأكيد سيتم فوراً تعديل رسم المسقط الأفقي، وإعادة ترتيب أسماء الأعمدة المتبقية تسلسلياً، وإعا
+14466: col_trans_dict = cfg_obj.get("fs_col_transforms", {})
+14476: cfg_obj["fs_col_transforms"] = col_trans_dict
+14790: col_transforms=_col_transforms,
