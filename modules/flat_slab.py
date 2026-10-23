@@ -992,7 +992,7 @@ def generate_flat_slab_sketch(
         fig_w = max(6.0, min(14.5, fig_h / aspect))
 
     # Full-width Structural Plan (ax_plan) maximized to full canvas without extra borders
-    fig = plt.figure(figsize=(fig_w, fig_h), dpi=110, facecolor="#ffffff")
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=100, facecolor="#ffffff")
     ax_plan = fig.add_subplot(1, 1, 1)
 
     # ── 1. STRUCTURAL GEOMETRY PLAN (ax_plan) ──
@@ -12686,9 +12686,10 @@ def _render_fs_interactive_plan(
 
     # حفظ الصورة بدون bbox_inches="tight" لضمان التطابق الرياضي التام مع ax_plan.get_position()
     buf_cad = io.BytesIO()
-    fig_verif.savefig(buf_cad, format="png", dpi=145)
+    fig_verif.savefig(buf_cad, format="png", dpi=100)
     buf_cad.seek(0)
     b64_img = base64.b64encode(buf_cad.getvalue()).decode("utf-8")
+    st.session_state["_fs_cached_interactive_b64"] = b64_img
 
     # قراءة أبعاد وإحداثيات المحور الفعلي بعد الرسم الفعلي (savefig) لضمان دقة 100%
     try:
@@ -14045,9 +14046,23 @@ def _section_fs_add_columns(
             if not active_col_ids:
                 st.info("لا توجد أعمدة فعّالة حالياً على المسقط لتعديل ضربها أو ترحيلها.")
             else:
+                # الحفاظ على اختيار العمود المحدد عبر معرفه الثابت orig_id وتجنب عودته إلى C1 عند إعادة التشغيل
+                _saved_edit_orig_id = st.session_state.get(f"{prefix}fs_cur_edit_col_orig_id")
+                _default_edit_idx = 0
+                if _saved_edit_orig_id:
+                    _matched_idx = next((idx for idx, c in enumerate(_active_cols) if c.get("orig_id") == _saved_edit_orig_id), None)
+                    if _matched_idx is not None and _matched_idx < len(active_col_ids):
+                        _default_edit_idx = _matched_idx
+
+                # مزامنة مفتاح الـ widget في session_state إذا كان خارج النطاق أو غير متطابق
+                _cur_widget_val = st.session_state.get(f"{prefix}edit_col_select")
+                if _cur_widget_val not in active_col_ids and active_col_ids:
+                    st.session_state[f"{prefix}edit_col_select"] = active_col_ids[_default_edit_idx]
+
                 edit_col_id = st.selectbox(
                     "اسم العمود",
                     options=active_col_ids,
+                    index=_default_edit_idx,
                     format_func=lambda cid: active_col_labels.get(cid, cid),
                     key=f"{prefix}edit_col_select",
                     help="اختر العمود المراد تعديل اتجاه ضربه أو ترحيله على المحاور.",
@@ -14057,6 +14072,7 @@ def _section_fs_add_columns(
                 tgt_orig_id = tgt_col_obj["orig_id"]
                 tgt_ij = (tgt_col_obj["i"], tgt_col_obj["j"])
                 tgt_ij_str = f"{tgt_ij[0]},{tgt_ij[1]}"
+                st.session_state[f"{prefix}fs_cur_edit_col_orig_id"] = tgt_orig_id
 
                 col_transforms_curr = cfg.get("fs_col_transforms", {})
                 if not isinstance(col_transforms_curr, dict):
@@ -14269,6 +14285,7 @@ def _section_fs_add_columns(
                         upd_trans_map[tgt_orig_id] = new_trans_entry
                         upd_trans_map[tgt_ij_str] = dict(new_trans_entry)
                         cfg["fs_col_transforms"] = upd_trans_map
+                        S.cfg_set("fs_col_transforms", upd_trans_map)
 
                         col_props_curr = cfg.get("fs_col_props", {})
                         if not isinstance(col_props_curr, dict):
@@ -14283,21 +14300,42 @@ def _section_fs_add_columns(
                             _existing_p["shift_y"] = edit_sel_sy
                             col_props_curr[_k_p] = _existing_p
                         cfg["fs_col_props"] = col_props_curr
+                        S.cfg_set("fs_col_props", col_props_curr)
 
                         st.session_state[f"_fs_dir_widget_{tgt_orig_id}"] = edit_sel_dir
                         st.session_state[f"_fs_sx_widget_{tgt_orig_id}"] = edit_sel_sx
                         st.session_state[f"_fs_sy_widget_{tgt_orig_id}"] = edit_sel_sy
 
+                        # تحديث مباشر ومحلي لمصفوفة التحويلات والأعمدة لتظهر على الرسم فوراً في نفس المسار دون دورة Rerun ثانية
+                        _col_transforms[tgt_orig_id] = new_trans_entry
+                        _col_transforms[tgt_ij_str] = dict(new_trans_entry)
+                        geom = compute_column_geometry(
+                            tgt_col_obj.get("grid_x_m", tgt_col_obj.get("x", 0.0)),
+                            tgt_col_obj.get("grid_y_m", tgt_col_obj.get("y", 0.0)),
+                            float(tgt_col_obj.get("b_cm", _bc_col)),
+                            float(tgt_col_obj.get("t_cm", _tc_col)),
+                            new_trans_entry,
+                        )
+                        tgt_col_obj.update(geom)
+                        tgt_col_obj["direction"] = edit_sel_dir
+                        tgt_col_obj["shift_x"] = edit_sel_sx
+                        tgt_col_obj["shift_y"] = edit_sel_sy
+
                     if edge_changed_e:
                         upd_edge_map = dict(edge_cols_curr)
                         upd_edge_map[tgt_orig_id] = new_edge_entry
                         cfg["fs_edge_columns"] = upd_edge_map
+                        S.cfg_set("fs_edge_columns", upd_edge_map)
                         st.session_state[f"_fs_is_edge_widget_{tgt_orig_id}"] = edit_sel_is_edge
                         if has_real_dir_e:
                             st.session_state[f"_fs_edge_dir_widget_{tgt_orig_id}"] = edit_sel_edge_dir
+                        _edge_columns[tgt_orig_id] = new_edge_entry
 
+                    try:
+                        get_flat_slab_columns.clear()
+                    except Exception:
+                        pass
                     S.save_settings()
-                    st.rerun()
 
                 # عرض رسائل التحقق الهندسي وتشغيل الصافرة بعد استقرار الـ rerun حتى لا تُبتلع الصافرة
                 if edge_val_errs_e:
@@ -14884,14 +14922,12 @@ def _section_fs_add_columns(
             drop_beams=cur_drop_beams_plan,
         )
         try:
-            import io, base64
-            buf_plan = io.BytesIO()
-            fig_interactive.savefig(buf_plan, format="png", bbox_inches="tight", dpi=140)
-            buf_plan.seek(0)
-            plan_b64 = "data:image/png;base64," + base64.b64encode(buf_plan.getvalue()).decode("utf-8")
-            st.session_state[f"{prefix}flat_slab_plan_b64"] = plan_b64
-            st.session_state["fs_flat_slab_plan_b64"] = plan_b64
-            st.session_state["flat_slab_plan_b64"] = plan_b64
+            cached_interactive_b64 = st.session_state.get("_fs_cached_interactive_b64")
+            if cached_interactive_b64:
+                plan_b64 = "data:image/png;base64," + cached_interactive_b64
+                st.session_state[f"{prefix}flat_slab_plan_b64"] = plan_b64
+                st.session_state["fs_flat_slab_plan_b64"] = plan_b64
+                st.session_state["flat_slab_plan_b64"] = plan_b64
         except Exception:
             pass
         plt.close(fig_interactive)
@@ -16075,6 +16111,71 @@ def render(is_standalone: bool = False):
                     st.session_state["_fs_pending_voids"] = []
                     st.session_state["_fs_show_void_confirm"] = False
                     st.rerun()
+
+
+    # ═════════════════════════════════════════════════════════════════════════
+    #  PHASE 2 TRIGGER: "إبدأ التصميم" BUTTON (اسفل قسم تعديل وحذف البلاطات والمناور)
+    # ═════════════════════════════════════════════════════════════════════════
+    st.markdown(
+        """
+        <style>
+        div.stButton > button[key*="btn_fs_run_design"],
+        button[kind="primary"][data-testid="baseButton-primary"] {
+            font-family: inherit;
+        }
+        div.stButton > button[key*="btn_fs_run_design"] {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 50%, #991b1b 100%) !important;
+            color: #ffffff !important;
+            font-size: 24px !important;
+            font-weight: 900 !important;
+            padding: 16px 28px !important;
+            border-radius: 12px !important;
+            border: 3px solid #fecaca !important;
+            box-shadow: 0 6px 20px rgba(220, 38, 38, 0.45) !important;
+            transition: all 0.25s ease !important;
+            letter-spacing: 0.5px !important;
+            margin: 12px 0px !important;
+        }
+        div.stButton > button[key*="btn_fs_run_design"]:hover {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%) !important;
+            color: #ffffff !important;
+            border-color: #ffffff !important;
+            box-shadow: 0 8px 28px rgba(220, 38, 38, 0.65) !important;
+            transform: translateY(-2px) !important;
+        }
+        div.stButton > button[key*="btn_fs_run_design"] * {
+            color: #ffffff !important;
+            font-size: 24px !important;
+            font-weight: 900 !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    _geom_fingerprint = (
+        f"Lx:{list(Lx_spans)}|Ly:{list(Ly_spans)}|cant:({cant_left},{cant_right},{cant_top},{cant_bottom})|"
+        f"cols:{len(_active_cols)}|trans:{cfg.get('fs_col_transforms', {})}|voids:{list(_confirmed_voids)}|"
+        f"ts:{ts_initial}|col_sz:({bc_s},{tc_s})|loads:({SDL},{wall_load},{LL})|rebar:({bottom_mesh_dia},{top_mesh_dia})"
+    )
+
+    if st.button("🚀 إبدأ التصميم", key=f"{prefix}btn_fs_run_design", use_container_width=True, help="بدء الحسابات والتصميم الإنشائي وتوليد مخططات العزوم والتسليح والترخيم والقص الثاقب"): 
+        st.session_state[f"{prefix}fs_design_started"] = True
+        st.session_state[f"{prefix}fs_last_designed_state"] = _geom_fingerprint
+        st.rerun()
+
+    _is_design_started = st.session_state.get(f"{prefix}fs_design_started", False)
+    _last_designed_state = st.session_state.get(f"{prefix}fs_last_designed_state")
+
+    if _is_design_started and _last_designed_state and _last_designed_state != _geom_fingerprint:
+        st.warning(
+            "⚠️ **تنبيه:** تم تعديل المحاور أو الأعمدة أو الفراغات أو الأحمال. " 
+            "انقر على زر **«🚀 إبدأ التصميم»** بالأعلى لتحديث نتائج التصميم والعزوم والتسليح والمخططات الهندسية طبقاً للوضع الجديد."
+        )
+
+    if not _is_design_started:
+        st.info("ℹ️ **المرحلة الأولى:** تم تحديث وعرض المسقط الأفقي والمحاور والأعمدة والكمرات والفراغات بنجاح. اضغط على الزر الأحمر أعلاه **«🚀 إبدأ التصميم»** لبدء الحسابات والتصميم الإنشائي وتوليد باقي المخططات والتسليح.")
+        return
 
     # ── 5g. DESIGN CRITERIA & LOADS SUMMARY (Merged Section) ─────────────────
     with st.expander("📋 Design Criteria & Loads Summary (ملخص معايير التصميم والأحمال)", expanded=False, key=f"{prefix}exp_data_card"):
