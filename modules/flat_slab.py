@@ -14074,24 +14074,88 @@ def _section_fs_add_columns(
                 tgt_ij_str = f"{tgt_ij[0]},{tgt_ij[1]}"
                 st.session_state[f"{prefix}fs_cur_edit_col_orig_id"] = tgt_orig_id
 
+                col_props_curr = cfg.get("fs_col_props", {})
+                if not isinstance(col_props_curr, dict):
+                    col_props_curr = {}
+                saved_col_prop = dict(col_props_curr.get(tgt_orig_id) or col_props_curr.get(tgt_ij_str) or {})
+
                 col_transforms_curr = cfg.get("fs_col_transforms", {})
                 if not isinstance(col_transforms_curr, dict):
                     col_transforms_curr = {}
+                cur_trans_dict = dict(col_transforms_curr.get(tgt_orig_id) or col_transforms_curr.get(tgt_ij_str) or {})
 
-                saved_trans_raw = (
-                    col_transforms_curr.get(tgt_orig_id)
-                    or col_transforms_curr.get(tgt_ij_str)
-                    or {
-                        "direction": tgt_col_obj.get("direction", "اتجاه X"),
-                        "shift_x": tgt_col_obj.get("shift_x", "متمركز على المحور (Centered)"),
-                        "shift_y": tgt_col_obj.get("shift_y", "متمركز على المحور (Centered)"),
-                    }
+                cur_col_b = float(saved_col_prop.get("b_cm") or tgt_col_obj.get("b_cm") or _bc_col)
+                cur_col_t = float(saved_col_prop.get("t_cm") or tgt_col_obj.get("t_cm") or _tc_col)
+
+                cur_dir_raw = (
+                    cur_trans_dict.get("direction")
+                    or saved_col_prop.get("direction")
+                    or tgt_col_obj.get("direction")
+                    or "اتجاه X"
                 )
-                norm_trans_edit = normalize_col_transform(saved_trans_raw)
+                cur_sx_raw = (
+                    cur_trans_dict.get("shift_x")
+                    or saved_col_prop.get("shift_x")
+                    or tgt_col_obj.get("shift_x")
+                    or "متمركز على المحور (Centered)"
+                )
+                cur_sy_raw = (
+                    cur_trans_dict.get("shift_y")
+                    or saved_col_prop.get("shift_y")
+                    or tgt_col_obj.get("shift_y")
+                    or "متمركز على المحور (Centered)"
+                )
+
+                norm_trans_edit = normalize_col_transform({
+                    "direction": cur_dir_raw,
+                    "shift_x": cur_sx_raw,
+                    "shift_y": cur_sy_raw,
+                })
 
                 EDIT_DIR_OPTIONS = ["اتجاه X", "اتجاه Y"]
                 EDIT_SX_OPTIONS = list(FS_SHIFT_X_OPTIONS)
                 EDIT_SY_OPTIONS = list(FS_SHIFT_Y_OPTIONS)
+
+                _w_b_key = f"{prefix}edit_col_b_widget_{tgt_orig_id}"
+                _w_t_key = f"{prefix}edit_col_t_widget_{tgt_orig_id}"
+                _w_dir_key = f"{prefix}edit_dir_widget_{tgt_orig_id}"
+                _w_sx_key = f"{prefix}edit_sx_widget_{tgt_orig_id}"
+                _w_sy_key = f"{prefix}edit_sy_widget_{tgt_orig_id}"
+
+                # مزامنة مدخلات العمود عند تغيير العمود المختار لضمان ظهور أبعاده الحالية واتجاهه وترحيلاته
+                _last_col_orig_id = st.session_state.get(f"{prefix}fs_cur_edit_col_orig_id_prev")
+                if _last_col_orig_id != tgt_orig_id:
+                    st.session_state[f"{prefix}fs_cur_edit_col_orig_id_prev"] = tgt_orig_id
+                    st.session_state[_w_b_key] = float(cur_col_b)
+                    st.session_state[_w_t_key] = float(cur_col_t)
+                    if norm_trans_edit["direction"] in EDIT_DIR_OPTIONS:
+                        st.session_state[_w_dir_key] = norm_trans_edit["direction"]
+                    if norm_trans_edit["shift_x"] in EDIT_SX_OPTIONS:
+                        st.session_state[_w_sx_key] = norm_trans_edit["shift_x"]
+                    if norm_trans_edit["shift_y"] in EDIT_SY_OPTIONS:
+                        st.session_state[_w_sy_key] = norm_trans_edit["shift_y"]
+
+                c_edit_b, c_edit_t = st.columns(2)
+                with c_edit_b:
+                    edit_col_b = st.number_input(
+                        "عرض العمود b (سم):",
+                        min_value=min(10.0, float(cur_col_b)),
+                        max_value=max(350.0, float(cur_col_b)),
+                        value=float(cur_col_b),
+                        step=5.0,
+                        key=_w_b_key,
+                        help="عرض قطاع العمود بالسنتمتر (يمكن تعديله أو إبقاؤه كما هو).",
+                    )
+                with c_edit_t:
+                    edit_col_t = st.number_input(
+                        "طول العمود t (سم):",
+                        min_value=min(10.0, float(cur_col_t)),
+                        max_value=max(500.0, float(cur_col_t)),
+                        value=float(cur_col_t),
+                        step=5.0,
+                        key=_w_t_key,
+                        help="طول/عمق قطاع العمود بالسنتمتر (يمكن تعديله أو إبقاؤه كما هو).",
+                    )
 
                 idx_edit_dir = EDIT_DIR_OPTIONS.index(norm_trans_edit["direction"]) if norm_trans_edit["direction"] in EDIT_DIR_OPTIONS else 0
                 idx_edit_sx = EDIT_SX_OPTIONS.index(norm_trans_edit["shift_x"]) if norm_trans_edit["shift_x"] in EDIT_SX_OPTIONS else 0
@@ -14101,21 +14165,21 @@ def _section_fs_add_columns(
                     "ضرب العمود",
                     options=EDIT_DIR_OPTIONS,
                     index=idx_edit_dir,
-                    key=f"{prefix}edit_dir_widget_{tgt_orig_id}",
+                    key=_w_dir_key,
                     help="اتجاه البعد الأكبر للعمود D (موازٍ لمحور X أو لمحور Y).",
                 )
                 edit_sel_sx = st.selectbox(
                     "الترحيل الأفقي (X)",
                     options=EDIT_SX_OPTIONS,
                     index=idx_edit_sx,
-                    key=f"{prefix}edit_sx_widget_{tgt_orig_id}",
+                    key=_w_sx_key,
                     help="الترحيل الأفقي للعمود بالنسبة للمحور الرأسي (±6 سم أو متمركز).",
                 )
                 edit_sel_sy = st.selectbox(
                     "الترحيل الرأسي (Y)",
                     options=EDIT_SY_OPTIONS,
                     index=idx_edit_sy,
-                    key=f"{prefix}edit_sy_widget_{tgt_orig_id}",
+                    key=_w_sy_key,
                     help="الترحيل الرأسي للعمود بالنسبة للمحور الأفقي (±6 سم أو متمركز).",
                 )
 
@@ -14138,8 +14202,8 @@ def _section_fs_add_columns(
                 col_geom_prev = compute_column_geometry(
                     tgt_col_obj.get("grid_x_m", tgt_col_obj.get("x", 0.0)),
                     tgt_col_obj.get("grid_y_m", tgt_col_obj.get("y", 0.0)),
-                    float(tgt_col_obj.get("b_cm", _bc_col)),
-                    float(tgt_col_obj.get("t_cm", _tc_col)),
+                    float(edit_col_b),
+                    float(edit_col_t),
                     curr_trans_preview,
                 )
 
@@ -14268,58 +14332,82 @@ def _section_fs_add_columns(
                     or edit_sel_sx != norm_trans_edit["shift_x"]
                     or edit_sel_sy != norm_trans_edit["shift_y"]
                 )
+                dims_changed_e = (
+                    abs(float(edit_col_b) - cur_col_b) > 1e-4
+                    or abs(float(edit_col_t) - cur_col_t) > 1e-4
+                )
                 edge_changed_e = (
                     saved_edge_edit.get("is_edge", "No") != new_edge_entry["is_edge"]
                     or str(saved_edge_edit.get("direction", "") or "").strip() != new_edge_entry["direction"]
                     or bool(saved_edge_edit.get("is_valid", False)) != new_edge_entry["is_valid"]
                 )
 
-                if trans_changed_e or edge_changed_e:
+                if trans_changed_e or dims_changed_e or edge_changed_e:
+                    new_trans_entry = {
+                        "direction": edit_sel_dir,
+                        "shift_x": edit_sel_sx,
+                        "shift_y": edit_sel_sy,
+                    }
+
                     if trans_changed_e:
                         upd_trans_map = dict(col_transforms_curr)
-                        new_trans_entry = {
-                            "direction": edit_sel_dir,
-                            "shift_x": edit_sel_sx,
-                            "shift_y": edit_sel_sy,
-                        }
                         upd_trans_map[tgt_orig_id] = new_trans_entry
                         upd_trans_map[tgt_ij_str] = dict(new_trans_entry)
                         cfg["fs_col_transforms"] = upd_trans_map
                         S.cfg_set("fs_col_transforms", upd_trans_map)
+                        _col_transforms[tgt_orig_id] = new_trans_entry
+                        _col_transforms[tgt_ij_str] = dict(new_trans_entry)
 
+                    if dims_changed_e or trans_changed_e:
                         col_props_curr = cfg.get("fs_col_props", {})
                         if not isinstance(col_props_curr, dict):
                             col_props_curr = {}
                         for _k_p in (tgt_orig_id, tgt_ij_str):
-                            _existing_p = dict(col_props_curr.get(_k_p, {})) if isinstance(col_props_curr.get(_k_p), dict) else {
-                                "b_cm": float(tgt_col_obj.get("b_cm", _bc_col)),
-                                "t_cm": float(tgt_col_obj.get("t_cm", _tc_col)),
-                            }
+                            _existing_p = dict(col_props_curr.get(_k_p, {})) if isinstance(col_props_curr.get(_k_p), dict) else {}
+                            _existing_p["b_cm"] = float(edit_col_b)
+                            _existing_p["t_cm"] = float(edit_col_t)
+                            _existing_p["model"] = f"C({int(round(edit_col_b))}x{int(round(edit_col_t))})"
+                            # الحفاظ التام على اتجاه العمود وترحيلاته كما هي طالما لم يغيرها المستخدم
                             _existing_p["direction"] = edit_sel_dir
                             _existing_p["shift_x"] = edit_sel_sx
                             _existing_p["shift_y"] = edit_sel_sy
+                            _existing_p["i"] = tgt_ij[0]
+                            _existing_p["j"] = tgt_ij[1]
                             col_props_curr[_k_p] = _existing_p
                         cfg["fs_col_props"] = col_props_curr
                         S.cfg_set("fs_col_props", col_props_curr)
+                        _col_props[tgt_orig_id] = dict(col_props_curr[tgt_orig_id])
+                        _col_props[tgt_ij_str] = dict(col_props_curr[tgt_ij_str])
 
                         st.session_state[f"_fs_dir_widget_{tgt_orig_id}"] = edit_sel_dir
                         st.session_state[f"_fs_sx_widget_{tgt_orig_id}"] = edit_sel_sx
                         st.session_state[f"_fs_sy_widget_{tgt_orig_id}"] = edit_sel_sy
 
                         # تحديث مباشر ومحلي لمصفوفة التحويلات والأعمدة لتظهر على الرسم فوراً في نفس المسار دون دورة Rerun ثانية
-                        _col_transforms[tgt_orig_id] = new_trans_entry
-                        _col_transforms[tgt_ij_str] = dict(new_trans_entry)
                         geom = compute_column_geometry(
                             tgt_col_obj.get("grid_x_m", tgt_col_obj.get("x", 0.0)),
                             tgt_col_obj.get("grid_y_m", tgt_col_obj.get("y", 0.0)),
-                            float(tgt_col_obj.get("b_cm", _bc_col)),
-                            float(tgt_col_obj.get("t_cm", _tc_col)),
+                            float(edit_col_b),
+                            float(edit_col_t),
                             new_trans_entry,
                         )
                         tgt_col_obj.update(geom)
+                        tgt_col_obj["b_cm"] = float(edit_col_b)
+                        tgt_col_obj["t_cm"] = float(edit_col_t)
                         tgt_col_obj["direction"] = edit_sel_dir
                         tgt_col_obj["shift_x"] = edit_sel_sx
                         tgt_col_obj["shift_y"] = edit_sel_sy
+
+                        for _c_all in _all_cols:
+                            if _c_all.get("orig_id") == tgt_orig_id or _c_all.get("id") == edit_col_id:
+                                _c_all.update(geom)
+                                _c_all["b_cm"] = float(edit_col_b)
+                                _c_all["t_cm"] = float(edit_col_t)
+                                _c_all["direction"] = edit_sel_dir
+                                _c_all["shift_x"] = edit_sel_sx
+                                _c_all["shift_y"] = edit_sel_sy
+
+                        active_col_labels[edit_col_id] = f"{edit_col_id} ({tgt_col_obj.get('grid_x', '')} × {tgt_col_obj.get('grid_y', '')} — {tgt_col_obj.get('width_cm', edit_col_b):.0f}×{tgt_col_obj.get('height_cm', edit_col_t):.0f} سم)"
 
                     if edge_changed_e:
                         upd_edge_map = dict(edge_cols_curr)
