@@ -1547,6 +1547,171 @@ def render_top_profile_bar():
     )
 
 
+def get_windows_github_token():
+    """Extracts GitHub OAuth token directly from Windows Credential Vault if available.
+    Prevents Git Credential Manager subprocess deadlocks in non-interactive / background sessions."""
+    try:
+        import ctypes
+        import ctypes.wintypes
+        Advapi32 = ctypes.windll.Advapi32
+
+        class CREDENTIAL(ctypes.Structure):
+            _fields_ = [
+                ('Flags', ctypes.wintypes.DWORD), ('Type', ctypes.wintypes.DWORD),
+                ('TargetName', ctypes.c_wchar_p), ('Comment', ctypes.c_wchar_p),
+                ('LastWritten', ctypes.wintypes.FILETIME), ('CredentialBlobSize', ctypes.wintypes.DWORD),
+                ('CredentialBlob', ctypes.c_void_p), ('Persist', ctypes.wintypes.DWORD),
+                ('AttributeCount', ctypes.wintypes.DWORD), ('Attributes', ctypes.c_void_p),
+                ('TargetAlias', ctypes.c_wchar_p), ('UserName', ctypes.c_wchar_p)
+            ]
+
+        CredReadW = Advapi32.CredReadW
+        CredReadW.argtypes = [ctypes.c_wchar_p, ctypes.wintypes.DWORD, ctypes.wintypes.DWORD, ctypes.POINTER(ctypes.POINTER(CREDENTIAL))]
+        CredReadW.restype = ctypes.wintypes.BOOL
+        CredFree = Advapi32.CredFree
+        CredFree.argtypes = [ctypes.c_void_p]
+
+        pcred = ctypes.POINTER(CREDENTIAL)()
+        for target in ['git:https://github.com', 'git:https://x-access-token@github.com']:
+            if CredReadW(target, 1, 0, ctypes.byref(pcred)):
+                cred = pcred.contents
+                blob = ctypes.string_at(cred.CredentialBlob, cred.CredentialBlobSize)
+                try:
+                    token = blob.decode('utf-16-le')
+                except Exception:
+                    token = blob.decode('utf-8', errors='ignore')
+                CredFree(pcred)
+                if token and any(token.startswith(pfx) for pfx in ('ghp_', 'gho_', 'github_pat_')):
+                    return token.strip()
+    except Exception:
+        pass
+    return None
+
+
+def sync_project_to_github(commit_msg: str, repo_dir: str):
+    """
+    Executes a fully automated, self-healing Git sync (add, commit, push) to GitHub.
+    - Cleans stale locks & automatically aborts any hanging rebase/merge states.
+    - Statically ensures author identity (user.name & user.email).
+    - Stages all changes cleanly via git add -A.
+    - Commits with UTF-8 message support.
+    - Uses stored Windows OAuth token fallback to avoid GCM background deadlocks.
+    - Safely reconciles remote changes (-X ours) if remote is ahead.
+    - Returns: (success: bool, user_message: str, detailed_log: str)
+    """
+    git_env = os.environ.copy()
+    git_env["PYTHONIOENCODING"] = "utf-8"
+    git_env["LC_ALL"] = "C.UTF-8"
+    git_env["GIT_TERMINAL_PROMPT"] = "0"
+
+    logs = []
+    def log(step, res=None):
+        line = f"[{step}]"
+        if res is not None:
+            line += f" exit={res.returncode}"
+            if (res.stdout or "").strip():
+                line += f"\n  STDOUT: {(res.stdout or '').strip()}"
+            if (res.stderr or "").strip():
+                line += f"\n  STDERR: {(res.stderr or '').strip()}"
+        logs.append(line)
+
+    def run_cmd(args, timeout=35):
+        return subprocess.run(
+            ["git"] + args,
+            cwd=repo_dir,
+            env=git_env,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
+
+    # 1. Clean stale locks & interrupted states
+    for rel in [
+        os.path.join(".git", "index.lock"),
+        os.path.join(".git", "HEAD.lock"),
+        os.path.join(".git", "refs", "heads", "main.lock"),
+    ]:
+        p = os.path.join(repo_dir, rel)
+        if os.path.exists(p):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
+    run_cmd(["rebase", "--abort"], timeout=10)
+    run_cmd(["merge", "--abort"], timeout=10)
+    for stale_dir in [os.path.join(".git", "rebase-merge"), os.path.join(".git", "rebase-apply")]:
+        dp = os.path.join(repo_dir, stale_dir)
+        if os.path.exists(dp):
+            shutil.rmtree(dp, ignore_errors=True)
+
+    # 2. Author identity guarantee
+    git_id = ["-c", "user.name=hzayed3030-cell", "-c", "user.email=hzayed3030@hotmail.com"]
+
+    # 3. Stage all files
+    r_add = run_cmd(["add", "-A"], timeout=30)
+    log("git add -A", r_add)
+    if r_add.returncode != 0:
+        return False, "تعذر تجهيز الملفات (git add)", "\n\n".join(logs)
+
+    # 4. Commit changes (supports both English and Arabic UTF-8)
+    r_commit = run_cmd(git_id + ["commit", "--allow-empty", "-m", commit_msg], timeout=30)
+    log("git commit", r_commit)
+    if r_commit.returncode != 0 and "nothing to commit" not in (r_commit.stdout + r_commit.stderr).lower():
+        return False, "تعذر حفظ التعديل محلياً (git commit)", "\n\n".join(logs)
+
+    # 5. Push: Direct Token Push first (prevents GCM subprocess hang on Windows)
+    token = get_windows_github_token()
+    pushed = False
+
+    if token:
+        auth_url = f"https://x-access-token:{token}@github.com/hzayed3030-cell/Concrete-design.git"
+        r_push = run_cmd(["-c", "credential.helper=", "push", auth_url, "main"], timeout=45)
+        log("git push (direct token)", r_push)
+        if r_push.returncode == 0:
+            pushed = True
+        else:
+            push_err = (r_push.stderr or r_push.stdout or "").lower()
+            if any(k in push_err for k in ("fetch first", "non-fast-forward", "behind", "rejected")):
+                log("syncing remote changes via merge -X ours")
+                run_cmd(["fetch", auth_url, "main"], timeout=45)
+                r_merge = run_cmd(git_id + ["merge", "--no-edit", "-X", "ours", "FETCH_HEAD"], timeout=45)
+                log("git merge -X ours FETCH_HEAD", r_merge)
+                if r_merge.returncode != 0:
+                    run_cmd(["merge", "--abort"], timeout=10)
+                r_push2 = run_cmd(["-c", "credential.helper=", "push", auth_url, "main"], timeout=45)
+                log("git push retry after merge", r_push2)
+                if r_push2.returncode == 0:
+                    pushed = True
+
+    # 6. Fallback standard push if token not found or direct push failed
+    if not pushed:
+        r_push_std = run_cmd(["push", "origin", "main"], timeout=45)
+        log("git push (standard origin)", r_push_std)
+        if r_push_std.returncode == 0:
+            pushed = True
+        else:
+            push_err = (r_push_std.stderr or r_push_std.stdout or "").lower()
+            if any(k in push_err for k in ("fetch first", "non-fast-forward", "behind", "rejected")):
+                run_cmd(["fetch", "origin", "main"], timeout=45)
+                r_merge = run_cmd(git_id + ["merge", "--no-edit", "-X", "ours", "origin/main"], timeout=45)
+                log("standard git merge -X ours", r_merge)
+                if r_merge.returncode != 0:
+                    run_cmd(["merge", "--abort"], timeout=10)
+                r_push_retry = run_cmd(["push", "origin", "main"], timeout=45)
+                log("standard push retry", r_push_retry)
+                if r_push_retry.returncode == 0:
+                    pushed = True
+
+    if pushed:
+        return True, f"تم رفع وتحديث المشروع إلى GitHub بنجاح! باسم التعديل: «{commit_msg}»", "\n\n".join(logs)
+    else:
+        return False, "تعذر إرسال التحديثات إلى مستودع GitHub", "\n\n".join(logs)
+
+
 def get_github_repo_url():
     try:
         res = subprocess.run(["git", "config", "--get", "remote.origin.url"], cwd=app_dir, capture_output=True, text=True)
@@ -1763,10 +1928,12 @@ def render_profile_manager():
                             unsafe_allow_html=True,
                         )
 
-                        col_gbtn1, col_gbtn2 = st.columns([2, 1])
+                        col_gbtn1, col_gbtn2, col_gbtn3 = st.columns([2, 1.3, 1])
                         with col_gbtn1:
                             btn_exec = st.form_submit_button("🚀 تأكيد ورفع التحديثات إلى GitHub", use_container_width=True, type="primary")
                         with col_gbtn2:
+                            btn_quick = st.form_submit_button("⚡ رفع فوري وتلقائي", use_container_width=True)
+                        with col_gbtn3:
                             btn_cancel = st.form_submit_button("❌ إلغاء", use_container_width=True)
 
                         if btn_cancel:
@@ -1774,142 +1941,40 @@ def render_profile_manager():
                             st.session_state.pop("input_git_commit_msg", None)
                             st.rerun()
 
-                        if btn_exec:
+                        if btn_exec or btn_quick:
                             # Final safety check
                             cur_dist_dirs = [d for d in ["dist", "build", "built"] if os.path.exists(os.path.join(app_dir, d))]
                             if cur_dist_dirs:
                                 st.error("⛔ تم رفض الرفع لوجود مجلدات dist أو build!")
                             else:
-                                user_text = (commit_msg_input or "").strip()
                                 now_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
-                                if not user_text:
+                                if btn_quick:
                                     msg_final = f"Update project - {now_str}"
-                                elif append_timestamp and not bool(re.search(r'\d{4}-\d{2}-\d{2}', user_text)):
-                                    msg_final = f"{user_text} - {now_str}"
                                 else:
-                                    msg_final = user_text
+                                    user_text = (commit_msg_input or "").strip()
+                                    if not user_text:
+                                        msg_final = f"Update project - {now_str}"
+                                    elif append_timestamp and not bool(re.search(r'\d{4}-\d{2}-\d{2}', user_text)):
+                                        msg_final = f"{user_text} - {now_str}"
+                                    else:
+                                        msg_final = user_text
 
-                                with st.spinner(f"⏳ جاري رفع التحديثات باسم «{msg_final}» إلى GitHub..."):
-                                    git_env = os.environ.copy()
-                                    git_env["PYTHONIOENCODING"] = "utf-8"
-                                    git_env["LC_ALL"] = "C.UTF-8"
-                                    git_env["GIT_TERMINAL_PROMPT"] = "0"
-                                    git_env["GCM_INTERACTIVE"] = "always"
-                                    git_env["GCM_GUI_PROMPT"] = "1"
-
-                                    # Remove stale index.lock or rebase state if left behind by an interrupted process
-                                    for stale_rel in [
-                                        os.path.join(".git", "index.lock"),
-                                        os.path.join(".git", "HEAD.lock"),
-                                        os.path.join(".git", "refs", "heads", "main.lock"),
-                                    ]:
-                                        lock_file = os.path.join(app_dir, stale_rel)
-                                        if os.path.exists(lock_file):
-                                            try:
-                                                os.remove(lock_file)
-                                            except OSError:
-                                                pass
-
-                                    # Ensure Git author identity is configured (prevents 'Author identity unknown' after fresh Git install)
-                                    chk_name = subprocess.run(
-                                        ["git", "config", "user.name"],
-                                        cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
-                                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
-                                    )
-                                    if chk_name.returncode != 0 or not (chk_name.stdout or "").strip():
-                                        subprocess.run(
-                                            ["git", "config", "user.name", "hzayed3030-cell"],
-                                            cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
-                                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
-                                        )
-                                    chk_email = subprocess.run(
-                                        ["git", "config", "user.email"],
-                                        cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
-                                        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
-                                    )
-                                    if chk_email.returncode != 0 or not (chk_email.stdout or "").strip():
-                                        subprocess.run(
-                                            ["git", "config", "user.email", "hzayed3030@hotmail.com"],
-                                            cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
-                                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
-                                        )
-
+                                with st.spinner(f"⏳ جاري حفظ وتأمين ورفع التحديثات باسم «{msg_final}» إلى GitHub..."):
                                     try:
-                                        # Check if Git Credential Manager has a GitHub account logged in; if not, launch browser login directly
-                                        chk_gcm = subprocess.run(
-                                            ["git", "credential-manager", "github", "list"],
-                                            cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
-                                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10
-                                        )
-                                        if chk_gcm.returncode == 0 and not (chk_gcm.stdout or "").strip():
-                                            subprocess.run(
-                                                ["git", "credential-manager", "github", "login", "--browser"],
-                                                cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
-                                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120
-                                            )
-
-                                        git_id_args = ["-c", "user.name=hzayed3030-cell", "-c", "user.email=hzayed3030@hotmail.com"]
-
-                                        # 1. git add -A
-                                        subprocess.run(
-                                            ["git", "add", "-A"],
-                                            cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
-                                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30
-                                        )
-                                        # 2. git commit --allow-empty -m (supports both Arabic & English UTF-8 messages)
-                                        res_commit = subprocess.run(
-                                            ["git"] + git_id_args + ["commit", "--allow-empty", "-m", msg_final],
-                                            cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
-                                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30
-                                        )
-                                        # 2.5. git pull --rebase --autostash to safely integrate remote commits even if profiles.json updated
-                                        subprocess.run(
-                                            ["git"] + git_id_args + ["pull", "--rebase", "--autostash", "origin", "main"],
-                                            cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
-                                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60
-                                        )
-                                        # 3. git push (with automatic retry on transient network/SSL hiccup)
-                                        res_push = subprocess.run(
-                                            ["git", "push", "origin", "main"],
-                                            cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
-                                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60
-                                        )
-                                        if res_push.returncode != 0:
-                                            subprocess.run(
-                                                ["git", "add", "-A"],
-                                                cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
-                                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30
-                                            )
-                                            subprocess.run(
-                                                ["git"] + git_id_args + ["pull", "--rebase", "--autostash", "origin", "main"],
-                                                cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
-                                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60
-                                            )
-                                            res_push = subprocess.run(
-                                                ["git", "push", "origin", "main"],
-                                                cwd=app_dir, env=git_env, stdin=subprocess.DEVNULL,
-                                                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60
-                                            )
-
-                                        if res_push.returncode == 0:
-                                            st.session_state["git_push_success_msg"] = f"✅ تم رفع وتحديث المشروع إلى GitHub بنجاح! باسم التعديل: «{msg_final}»"
+                                        success, user_msg, detailed_log = sync_project_to_github(msg_final, app_dir)
+                                        if success:
+                                            st.session_state["git_push_success_msg"] = f"✅ {user_msg}"
                                             st.session_state["show_git_update_form"] = False
                                             st.session_state.pop("input_git_commit_msg", None)
                                             st.rerun()
                                         else:
-                                            err_text = (res_push.stderr or res_push.stdout or "").strip()
-                                            commit_out = (res_commit.stdout or res_commit.stderr or "").strip()
-                                            if res_commit.returncode != 0 and "nothing to commit" not in commit_out:
-                                                st.error(f"❌ تعذر تسجيل التعديلات محلياً (git commit):\n\n{commit_out}")
-                                            elif "Everything up-to-date" in err_text:
-                                                st.session_state["git_push_success_msg"] = "✅ تم التحقق: المستودع متزامن مع GitHub بالفعل ولا توجد تعديلات جديدة للرفع (Everything up-to-date)."
-                                                st.session_state["show_git_update_form"] = False
-                                                st.session_state.pop("input_git_commit_msg", None)
-                                                st.rerun()
-                                            else:
-                                                st.error(f"❌ حدث خطأ أثناء الرفع إلى GitHub:\n\n{err_text if err_text else commit_out}")
+                                            st.error(f"❌ {user_msg}")
+                                            with st.expander("🔍 تفاصيل التشخيص الفني ومخرجات Git (Diagnostics Log)", expanded=True):
+                                                st.code(detailed_log, language="text")
                                     except subprocess.TimeoutExpired:
-                                        st.error("⏱️ انتهت مهلة الاتصال بـ GitHub (Timeout). يرجى التأكد من إتمام تسجيل الدخول إلى GitHub في المتصفح أو التحقق من اتصال الإنترنت ثم المحاولة مرة أخرى.")
+                                        st.error("⏱️ انتهت مهلة الاتصال بـ GitHub (Timeout). يرجى التحقق من اتصال الإنترنت ثم المحاولة مرة أخرى.")
+                                    except Exception as ex:
+                                        st.error(f"❌ حدث خطأ غير متوقع أثناء معالجة الرفع: {ex}")
 
         st.markdown("<hr style='margin: 10px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 
