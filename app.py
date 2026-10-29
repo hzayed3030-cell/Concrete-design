@@ -1707,6 +1707,7 @@ def sync_project_to_github(commit_msg: str, repo_dir: str):
                     pushed = True
 
     if pushed:
+        run_cmd(["update-ref", "refs/remotes/origin/main", "refs/heads/main"], timeout=10)
         return True, f"تم رفع وتحديث المشروع إلى GitHub بنجاح! باسم التعديل: «{commit_msg}»", "\n\n".join(logs)
     else:
         return False, "تعذر إرسال التحديثات إلى مستودع GitHub", "\n\n".join(logs)
