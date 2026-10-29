@@ -138,9 +138,9 @@ def extract_structural_links_and_beams(
                 "Mu_tm": abs(r9.get("Mu_neg", 0.0)),
                 "Vu_ton": float(r9.get("Vu_ton", 0.0)),
                 "Pu_tie_ton": 0.0,  # Moments and shear dominate strap beams
-                "rft_top_str": f"{n_top} Φ 22",
-                "rft_bot_str": f"{n_bot} Φ 16",
-                "stirrups_str": f"{st_per_m} Φ 10 / m ({n_br} فروع)",
+                "rft_top_str": f"{n_top}Ø22",
+                "rft_bot_str": f"{n_bot}Ø16",
+                "stirrups_str": f"{st_per_m}Ø10/m ({n_br} فروع)",
                 "behavior": "نقل عزوم وقوى قص عالية ناتجة عن لامركزية عمود الجار (Moment & Shear Transfer)",
                 "status": "✅ Safe",
             })
@@ -189,9 +189,9 @@ def extract_structural_links_and_beams(
                 "Mu_tm": abs(r10.get("Mu_neg_tm", 0.0)),
                 "Vu_ton": float(r10.get("Vu_ton", 0.0)),
                 "Pu_tie_ton": 0.0,
-                "rft_top_str": f"{n_top} Φ 22",
-                "rft_bot_str": f"{n_bot} Φ 16",
-                "stirrups_str": f"{st_per_m} Φ 10 / m ({n_br} فروع)",
+                "rft_top_str": f"{n_top}Ø22",
+                "rft_bot_str": f"{n_bot}Ø16",
+                "stirrups_str": f"{st_per_m}Ø10/m ({n_br} فروع)",
                 "behavior": "نقل عزوم انحناء وقص ولي لعمود الجار الركني (Bending, Shear & Torsion)",
                 "status": "✅ Safe",
             })
@@ -794,10 +794,10 @@ def extract_structural_links_and_beams(
             "stirrups_per_m": ov_st,
             "phi_st": phi_st,
             "n_branches": env_branches,
-            "rft_bot_str": f"{ov_nbot} Φ {phi_bot}",
-            "rft_top_str": f"{ov_ntop} Φ {phi_top}",
-            "rft_side_str": f"{env_side_bars} Φ {phi_side} (براندات)" if env_side_bars > 0 else "—",
-            "stirrups_str": f"{ov_st} Φ {phi_st} / m ({env_branches} فروع)",
+            "rft_bot_str": f"{ov_nbot}Ø{phi_bot}",
+            "rft_top_str": f"{ov_ntop}Ø{phi_top}",
+            "rft_side_str": f"{env_side_bars}Ø{phi_side} (براندات)" if env_side_bars > 0 else "—",
+            "stirrups_str": f"{ov_st}Ø{phi_st}/m ({env_branches} فروع)",
             "dimensions_str": f"{int(b_unified)} × {int(ov_t)}",
         }
 
@@ -858,7 +858,7 @@ def extract_structural_links_and_beams(
             "Cross-Section (b × t)": f"{int(gb['b_cm'])} × {int(gb['exec_t_cm'])}",
             "Structural Behavior / Notes": f"{gb['supp_cond']} | ربط محوري P_tie={gb['Pu_tie']:.1f}t (10% Pu)",
             "Design Capacity / Forces": f"Mu = {gb['Mu_pos']:.2f} t.m | Qu = {gb['Qu']:.2f} t",
-            "Reinforcement Summary": f"سفلي: {gb['exec_n_bot']} Φ {gb['phi_bot']} | علوي: {gb['exec_n_top']} Φ {gb['phi_top']} | كانات: {gb['exec_stirrups_per_m']} Φ {gb['phi_st']}/m",
+            "Reinforcement Summary": f"سفلي: {gb['exec_n_bot']}Ø{gb['phi_bot']} | علوي: {gb['exec_n_top']}Ø{gb['phi_top']} | كانات: {gb['exec_stirrups_per_m']}Ø{gb['phi_st']}/m",
         })
 
     # ── Step G: Ground Beams Detailed Bar Bending Schedule ─────────────────────
@@ -876,10 +876,10 @@ def extract_structural_links_and_beams(
             "عزم التصميم Mu (t.m)": f"{gb['Mu_pos']:.2f}",
             "قوة القص Qu (ton)": f"{gb['Qu']:.2f}",
             "قوة الربط المحوري P_tie (ton)": f"{gb['Pu_tie']:.2f}",
-            "التسليح السفلي (Bottom Steel)": f"{gb['exec_n_bot']} Φ {gb['phi_bot']}",
-            "التسليح العلوي (Top Steel)": f"{gb['exec_n_top']} Φ {gb['phi_top']}",
-            "براندات الجوانب (Side Bars)": f"{gb['exec_side_bars']} Φ {gb['phi_side']}" if gb['exec_side_bars'] > 0 else "—",
-            "الكانات (Stirrups)": f"{gb['exec_stirrups_per_m']} Φ {gb['phi_st']} / m",
+            "التسليح السفلي (Bottom Steel)": f"{gb['exec_n_bot']}Ø{gb['phi_bot']}",
+            "التسليح العلوي (Top Steel)": f"{gb['exec_n_top']}Ø{gb['phi_top']}",
+            "براندات الجوانب (Side Bars)": f"{gb['exec_side_bars']}Ø{gb['phi_side']}" if gb['exec_side_bars'] > 0 else "—",
+            "الكانات (Stirrups)": f"{gb['exec_stirrups_per_m']}Ø{gb['phi_st']}/m",
             "حالة التحقق (Status)": gb["shear_status"],
         })
 

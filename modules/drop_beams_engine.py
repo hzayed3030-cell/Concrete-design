@@ -479,19 +479,19 @@ def design_drop_beam(
     # تحويل مساحة الحديد لعدد أسياخ من القطر المختار
     bar_area_cm2 = math.pi * ((dia_main / 10.0) ** 2) / 4.0
     n_bars_btm = max(2, math.ceil(As_final / bar_area_cm2))
-    rft_btm_str = f"{n_bars_btm}Φ{dia_main}"
+    rft_btm_str = f"{n_bars_btm}Ø{dia_main}"
 
     # 5. حساب التسليح الثانوي (العلوي - تعليق كانات)
-    # لا يقل عن 20% من التسليح الرئيسي أو 2Φ12
+    # لا يقل عن 20% من التسليح الرئيسي أو 2Ø12
     As_top = max(0.20 * As_final, 2.0 * (math.pi * 1.2**2 / 4.0))
     n_bars_top = max(2, math.ceil(As_top / (math.pi * 1.2**2 / 4.0)))
-    rft_top_str = f"{n_bars_top}Φ12"
+    rft_top_str = f"{n_bars_top}Ø12"
 
     if is_cantilever_beam or is_continuous == "cantilever":
         # في كمرات الكابولي: العزم سالب والشد بالكامل في الألياف العلوية
         # لذا يكون التسليح الرئيسي المحسوب As,final علوياً، والتسليح السفلي تعليق كانات
-        rft_top_str = f"{n_bars_btm}Φ{dia_main}"
-        rft_btm_str = f"{max(2, n_bars_top)}Φ12"
+        rft_top_str = f"{n_bars_btm}Ø{dia_main}"
+        rft_btm_str = f"{max(2, n_bars_top)}Ø12"
         _temp_btm = n_bars_btm
         n_bars_btm = max(2, n_bars_top)
         n_bars_top = _temp_btm
@@ -507,21 +507,21 @@ def design_drop_beam(
 
     if qu <= qcu:
         stirrup_n = 5
-        stirrups_str = f"5Φ8/m ({branch_str})"
+        stirrups_str = f"5Ø8/m ({branch_str})"
     else:
         qsu = max(1.0, qu - (qcu / 2.0))
-        ast_1br = 0.503  # Φ8
+        ast_1br = 0.503  # Ø8
         s_cm = (n_branches * ast_1br * (2400.0 / 1.15)) / (b_cm * qsu)
         stirrup_n = min(10, max(5, math.ceil(100.0 / s_cm)))
-        stirrups_str = f"{stirrup_n}Φ8/m ({branch_str})"
+        stirrups_str = f"{stirrup_n}Ø8/m ({branch_str})"
 
     # 7. حديد الانكماش الجانبي (Skin Reinforcement) طبقاً للحدود القياسية
     # يضاف أسياخ جانبية كل 30 سم في حال تجاوز العمق الكلي 60 سم
     if t_cm >= 90.0:
-        skin_rft_str = "4Φ10 لكل جانب"
+        skin_rft_str = "4Ø10 لكل جانب"
         n_skin_per_side = 4
     elif t_cm >= 60.0:
-        skin_rft_str = "2Φ10 لكل جانب"
+        skin_rft_str = "2Ø10 لكل جانب"
         n_skin_per_side = 2
     else:
         skin_rft_str = "—"
@@ -542,9 +542,9 @@ def design_drop_beam(
         # مساحة كانات التعليق Ash = Ru / (fy / 1.15)
         # Ash (cm²) = (reaction_ton * 1000 kg) / (2400 / 1.15 kg/cm²)
         ash_req_cm2 = (reaction_ton * 1000.0) / (2400.0 / 1.15)
-        # مساحة فرعين لكانة Φ8 = 2 * 0.503 = 1.006 سم²
+        # مساحة فرعين لكانة Ø8 = 2 * 0.503 = 1.006 سم²
         n_hanging = max(3, math.ceil(ash_req_cm2 / 1.006))
-        hanging_stirrups_str = f"{n_hanging}Φ8 إضافي عند الركيزة"
+        hanging_stirrups_str = f"{n_hanging}Ø8 إضافي عند الركيزة"
 
     # 9. حالة الأمان والتحقق الإنشائي (Safe / OK)
     q_max = 0.70 * math.sqrt(max(100.0, fcu_val) / 1.5) * 10.0
@@ -814,6 +814,53 @@ def auto_merge_collinear_beams(
     return result
 
 
+def renumber_drop_beams_sequentially(beams_list: list) -> list:
+    """
+    إعادة ترتيب وترقيم كمرات النموذج تسلسلياً (B1, B2, B3, ...) بدون فجوات
+    بعد أي عملية حذف أو دمج، وتحديث أي مراجع للركائز (supp1 / supp2) المستندة على كمرات أخرى.
+    """
+    if not beams_list:
+        return []
+
+    def _beam_sort_key(b):
+        bid = str(b.get("id", ""))
+        num = 999999
+        if bid.startswith("B"):
+            try:
+                num = int(bid[1:])
+            except Exception:
+                pass
+        p1 = b.get("p1_grid", b.get("p1", [0, 0]))
+        p2 = b.get("p2_grid", b.get("p2", [0, 0]))
+        min_y = min(float(p1[1]), float(p2[1])) if len(p1) > 1 and len(p2) > 1 else 0.0
+        min_x = min(float(p1[0]), float(p2[0])) if len(p1) > 0 and len(p2) > 0 else 0.0
+        return (num, round(min_y, 2), round(min_x, 2))
+
+    sorted_beams = sorted(beams_list, key=_beam_sort_key)
+    id_map = {}
+    renumbered = []
+    for idx, b in enumerate(sorted_beams, start=1):
+        old_id = str(b.get("id", f"B{idx}"))
+        new_id = f"B{idx}"
+        id_map[old_id] = new_id
+        b_copy = dict(b)
+        b_copy["id"] = new_id
+        b_copy["name"] = f"كمرة {new_id}"
+        renumbered.append(b_copy)
+
+    # تحديث مراجع الكمرات الثانوية المستندة على كمرات أخرى
+    for b in renumbered:
+        for sk in ("supp1", "supp2"):
+            supp = b.get(sk)
+            if isinstance(supp, dict) and supp.get("type") == "beam":
+                old_supp_id = str(supp.get("id", ""))
+                if old_supp_id in id_map:
+                    supp["id"] = id_map[old_supp_id]
+                    supp["name"] = f"كمرة {id_map[old_supp_id]}"
+
+    return renumbered
+
+
 def recompute_all_drop_beams(
     beams_list: list,
     b_cm: float = 25.0,
@@ -836,6 +883,9 @@ def recompute_all_drop_beams(
     """
     if columns_list is not None and beams_list:
         beams_list = auto_merge_collinear_beams(beams_list, columns_list=columns_list)
+
+    if beams_list:
+        beams_list = renumber_drop_beams_sequentially(beams_list)
 
     updated = []
     for i, b in enumerate(beams_list):
@@ -927,7 +977,7 @@ def recompute_all_drop_beams(
             n_top_cant = int(cb.get("n_bars_top", 2))
             n_top_cont = max(n_top_joint, n_top_cant)
             adj_b["n_bars_top"] = n_top_cont
-            adj_b["rft_top_str"] = f"{n_top_cont}Φ{adj_dia} (مستمر مع كابولي {cb.get('id')})"
+            adj_b["rft_top_str"] = f"{n_top_cont}Ø{adj_dia} (مستمر مع كابولي {cb.get('id')})"
 
         # ازدواج الاتزان الإنشائي (Overturning / Continuity Balancing Couple): ΔR = Mu_cant / Ln_adj
         delta_R = Mu_cant_neg / Ln_adj
@@ -1164,9 +1214,10 @@ def remap_beams_on_span_change(
     return remapped
 
 
-def draw_beam_polygon_on_plan(ax, p1, p2, b_m, label="", rft_label="", is_steel_layout=False):
+def draw_beam_polygon_on_plan(ax, p1, p2, b_m, label="", rft_label="", is_steel_layout=False, is_pending=False):
     """
     رسم كمرة ساقطة كقطاع خرساني مزدوج الحدود على المسقط الأفقي مع وسوم التصميم.
+    عند اختيار الكمرة للحذف (is_pending=True) يتم تلوينها بلون باهت مع حدود متقطعة.
     """
     x1, y1 = p1
     x2, y2 = p2
@@ -1186,7 +1237,15 @@ def draw_beam_polygon_on_plan(ax, p1, p2, b_m, label="", rft_label="", is_steel_
         [x1 - nx, y1 - ny],
     ]
 
-    if is_steel_layout:
+    if is_pending:
+        edge_col = "#f97316"
+        poly = patches.Polygon(
+            poly_pts, closed=True, facecolor="#fed7aa",
+            edgecolor=edge_col, lw=2.2, zorder=8, linestyle="--", alpha=0.60
+        )
+        ax.add_patch(poly)
+        ax.plot([x1, x2], [y1, y2], color="#ea580c", lw=1.4, linestyle="--", alpha=0.75, zorder=8)
+    elif is_steel_layout:
         edge_col = "#1e3a8a"
         poly = patches.Polygon(
             poly_pts, closed=True, facecolor=(37/255.0, 99/255.0, 235/255.0, 0.16),
@@ -1219,13 +1278,18 @@ def draw_beam_polygon_on_plan(ax, p1, p2, b_m, label="", rft_label="", is_steel_
         angle_deg += 180
 
     txt = rft_label if (is_steel_layout and rft_label) else label
+    if is_pending and txt:
+        txt = f"{txt} ?"
     if txt:
+        txt_col = "#c2410c" if is_pending else "#0f172a"
+        box_fc = "#fff7ed" if is_pending else "#ffffff"
+        box_alpha = 0.85 if is_pending else 0.95
         ax.text(
             mx, my, txt,
-            color="#0f172a", fontsize=9.5, weight="bold",
+            color=txt_col, fontsize=9.5, weight="bold",
             ha="center", va="center", rotation=angle_deg,
-            bbox=dict(boxstyle="round,pad=0.28", facecolor="#ffffff", edgecolor=edge_col, lw=1.3, alpha=0.95),
-            zorder=8,
+            bbox=dict(boxstyle="round,pad=0.28", facecolor=box_fc, edgecolor=edge_col, lw=1.3, alpha=box_alpha),
+            zorder=9 if is_pending else 8,
         )
 
 

@@ -150,6 +150,12 @@ ECP_DEFAULTS: dict = {
     "fs_new_col_dir": "اتجاه Y",
     "fs_new_col_sx": "متمركز على المحور (Centered)",
     "fs_new_col_sy": "متمركز على المحور (Centered)",
+    "fs_beam_b_cm": 25.0,
+    "fs_beam_t_cm": 60.0,
+    "fs_beam_dia_main": 16,
+    "fs_show_panel_labels": True,
+    "fs_show_col_labels": True,
+    "fs_show_beam_labels": True,
     "_schema_mod8_removed": True,
 
     # Customs Module – Concrete Survey, Flat Slabs & Material Prices
@@ -3521,6 +3527,7 @@ def cfg_set(key: str, value) -> None:
 
 get_setting = cfg_val
 set_setting = cfg_set
+set_cfg_val = cfg_set
 
 
 # ── Widget helpers ──────────────────────────────────────────────────────────

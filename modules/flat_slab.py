@@ -15,6 +15,7 @@ Units: ton, m, kg, cm, kg/cm²
 import os
 import io
 import json
+import hashlib
 import base64
 import math
 import functools
@@ -42,6 +43,7 @@ from modules.extra_steel_zones import (
 from modules.drop_beams_engine import (
     design_drop_beam,
     recompute_all_drop_beams,
+    renumber_drop_beams_sequentially,
     remap_beams_on_span_change,
     auto_merge_collinear_beams,
     draw_beam_polygon_on_plan,
@@ -115,6 +117,143 @@ def _geometry_key(Lx_spans, Ly_spans, cantilevers=None):
             round(float(cantilevers.get("top", 0.0) or 0.0), 4),
         )
     return (tuple(round(x, 4) for x in Lx_spans), tuple(round(y, 4) for y in Ly_spans), c_tup)
+
+
+def build_flat_slab_input_fingerprint(
+    Lx_spans,
+    Ly_spans,
+    cantilevers=None,
+    ts_initial=20.0,
+    bc_col=30.0,
+    tc_col=50.0,
+    Fcu=250.0,
+    Fy=4000.0,
+    gamma_c=2.5,
+    SDL=0.15,
+    wall_load=0.50,
+    LL=0.25,
+    num_floors=1,
+    bottom_mesh_dia=10,
+    top_mesh_dia=10,
+    n_mesh_btm=5.0,
+    n_mesh_top=5.0,
+    active_cols=None,
+    col_transforms=None,
+    col_props=None,
+    edge_columns=None,
+    drop_beams=None,
+    confirmed_voids=None,
+    void_boxes_sk=None,
+    cov=2.5,
+    col_extra_dia=12,
+    strip_top_extra_dia=12,
+    strip_bottom_extra_dia=12,
+    col_sf_val=1.0,
+    high_safety_mode=False,
+    placed_cols=None,
+    removed_cols=None,
+    pending_state=None,
+):
+    """
+    Builds a deterministic SHA-256 fingerprint representing ALL structural inputs:
+    spans, cantilevers, column coordinates/dimensions/directions/shifts,
+    drop beams geometry and sections, void openings, slab thickness,
+    materials (Fcu, Fy, gamma_c), loads (SDL, wall, LL), floors, and mesh rebars.
+
+    Whenever ANY of these parameters change before clicking '🚀 إبدأ التصميم الإنشائي وتوليد المخططات',
+    the fingerprint changes, automatically invalidating and hiding all downstream calculation
+    sections and 3D viewers.
+    """
+    cols_data = []
+    if active_cols:
+        for c in active_cols:
+            if not isinstance(c, dict):
+                continue
+            cols_data.append({
+                "id": str(c.get("orig_id") or c.get("id", "")),
+                "x": round(float(c.get("x", 0.0) or 0.0), 3),
+                "y": round(float(c.get("y", 0.0) or 0.0), 3),
+                "b": float(c.get("b_cm") or c.get("bc") or bc_col or 30.0),
+                "t": float(c.get("t_cm") or c.get("tc") or tc_col or 50.0),
+                "dir": str(c.get("direction", "") or ""),
+                "sx": str(c.get("shift_x", "") or ""),
+                "sy": str(c.get("shift_y", "") or ""),
+            })
+        cols_data.sort(key=lambda item: item["id"])
+
+    beams_data = []
+    if drop_beams:
+        for b in drop_beams:
+            if not isinstance(b, dict):
+                continue
+            p1 = b.get("p1")
+            p2 = b.get("p2")
+            s1 = b.get("supp1") if isinstance(b.get("supp1"), dict) else {}
+            s2 = b.get("supp2") if isinstance(b.get("supp2"), dict) else {}
+            beams_data.append({
+                "id": str(b.get("id", "")),
+                "b_cm": float(b.get("b_cm", 25.0) or 25.0),
+                "t_cm": float(b.get("t_cm", 60.0) or 60.0),
+                "user_t_cm": float(b.get("user_t_cm", 0.0) or 0.0),
+                "dia_main": int(b.get("dia_main", 16) or 16),
+                "p1": [round(float(v), 3) for v in p1[:2]] if p1 and len(p1) >= 2 else None,
+                "p2": [round(float(v), 3) for v in p2[:2]] if p2 and len(p2) >= 2 else None,
+                "s1": str(s1.get("id", "") or ""),
+                "s2": str(s2.get("id", "") or ""),
+            })
+        beams_data.sort(key=lambda item: item["id"])
+
+    cant_dict = {}
+    if isinstance(cantilevers, dict):
+        cant_dict = {
+            "left": round(float(cantilevers.get("left", 0.0) or 0.0), 3),
+            "right": round(float(cantilevers.get("right", 0.0) or 0.0), 3),
+            "bottom": round(float(cantilevers.get("bottom", 0.0) or 0.0), 3),
+            "top": round(float(cantilevers.get("top", 0.0) or 0.0), 3),
+        }
+
+    payload = {
+        "Lx": [round(float(x), 3) for x in (Lx_spans or [])],
+        "Ly": [round(float(y), 3) for y in (Ly_spans or [])],
+        "cant": cant_dict,
+        "ts": round(float(ts_initial or 20.0), 2),
+        "col_sz": (round(float(bc_col or 30.0), 2), round(float(tc_col or 50.0), 2)),
+        "materials": (round(float(Fcu or 250.0), 2), round(float(Fy or 4000.0), 2), round(float(gamma_c or 2.5), 2)),
+        "loads": (round(float(SDL or 0.15), 3), round(float(wall_load or 0.50), 3), round(float(LL or 0.25), 3)),
+        "num_floors": int(num_floors or 1),
+        "cover": round(float(cov or 2.5), 2),
+        "rebar": (
+            int(bottom_mesh_dia or 10),
+            int(top_mesh_dia or 10),
+            round(float(n_mesh_btm or 5.0), 2),
+            round(float(n_mesh_top or 5.0), 2),
+            int(col_extra_dia or 12),
+            int(strip_top_extra_dia or 12),
+            int(strip_bottom_extra_dia or 12),
+        ),
+        "col_sf": round(float(col_sf_val or 1.0), 3),
+        "high_safety": bool(high_safety_mode),
+        "cols": cols_data,
+        "placed_cols": sorted([str(x) for x in (placed_cols or [])]),
+        "removed_cols": sorted([str(x) for x in (removed_cols or [])]),
+        "transforms": col_transforms or {},
+        "col_props": col_props or {},
+        "edge_cols": edge_columns or {},
+        "beams": beams_data,
+        "voids": sorted([str(v) for v in (confirmed_voids or [])]),
+        "void_boxes": [
+            [round(float(v), 3) for v in box[:4]]
+            for box in (void_boxes_sk or [])
+            if len(box) >= 4
+        ],
+        "pending_state": pending_state or {},
+    }
+
+    try:
+        serialized = json.dumps(payload, sort_keys=True)
+    except Exception:
+        serialized = str(sorted(payload.items()))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def _compute_effective_spans(Lx_spans, Ly_spans, removed_ij_set):
@@ -534,16 +673,72 @@ def draw_neighbor_edge_strip(ax, rx, ry, rw, rh, raw_edge_dir, edge_color="#db27
             x_curr += tick_step
 
 
-def draw_column_label_beside(ax, rx, ry, rw, rh, cx, cy, label_text, is_right_edge=False, fontsize=11.5, zorder=8):
+def draw_column_label_beside(
+    ax, rx, ry, rw, rh, cx, cy, label_text,
+    is_right_edge=False,
+    fontsize=11.5,
+    zorder=8,
+    grid_i=None,
+    grid_j=None,
+    color="#0f172a",
+    facecolor="#ffffff",
+    edgecolor="#64748b",
+):
     """
-    Draws column ID label beside the column rectangle in a dark bold color with a clean background box.
+    Draws column ID label beside the column rectangle in a dark bold color with a clean background box,
+    implementing the chessboard alternating algorithm (نظام مربعات الشطرنج):
+      - Parity 0 (e.g. C1): Bottom-Right (يمين أسفل العمود) -> lbl_x = rx + rw + offset_x, lbl_y = ry - offset_y, ha='left', va='top'
+      - Parity 1 (e.g. C2): Top-Left (أعلى يسار العمود)      -> lbl_x = rx - offset_x,      lbl_y = ry + rh + offset_y, ha='right', va='bottom'
+    This prevents label overlap between neighboring columns, drop beams, and grid intersection lines.
     """
-    lbl_x = rx - 0.12 if is_right_edge else (rx + rw + 0.12)
-    ha_align = "right" if is_right_edge else "left"
+    import re
+
+    parity = 0
+    if grid_i is not None and grid_j is not None:
+        try:
+            parity = (int(grid_i) + int(grid_j)) % 2
+        except (ValueError, TypeError):
+            parity = 0
+    else:
+        # Fallback 1: Extract numeric index from label_text (e.g. 'C1' -> 1 -> parity 0, 'C2' -> 2 -> parity 1)
+        m = re.search(r'\d+', str(label_text))
+        if m:
+            try:
+                col_num = int(m.group())
+                parity = (col_num - 1) % 2
+            except ValueError:
+                parity = 0
+        elif cx is not None and cy is not None:
+            # Fallback 2: Spatial coordinates quantization
+            try:
+                parity = (int(round(float(cx) * 2.0)) + int(round(float(cy) * 2.0))) % 2
+            except (ValueError, TypeError):
+                parity = 0
+
+    offset_x = 0.08
+    offset_y = 0.03
+
+    if parity == 0:
+        # ── Position 1: يمين أسفل العمود (Bottom-Right) ──
+        if is_right_edge:
+            lbl_x = rx - offset_x
+            ha_align = "right"
+        else:
+            lbl_x = rx + rw + offset_x
+            ha_align = "left"
+        lbl_y = ry - offset_y
+        va_align = "top"
+    else:
+        # ── Position 2: أعلى يسار العمود (Top-Left) ──
+        lbl_x = rx - offset_x
+        ha_align = "right"
+        lbl_y = ry + rh + offset_y
+        va_align = "bottom"
+
     ax.text(
-        lbl_x, cy, str(label_text),
-        color="#0f172a", fontsize=fontsize, weight="bold", ha=ha_align, va="center",
-        bbox=dict(boxstyle="round,pad=0.20", facecolor="#ffffff", edgecolor="#64748b", lw=0.9, alpha=0.95),
+        lbl_x, lbl_y, str(label_text),
+        color=color, fontsize=fontsize, weight="bold", ha=ha_align, va=va_align,
+        bbox=dict(boxstyle="round,pad=0.20", facecolor=facecolor, edgecolor=edgecolor, lw=0.9, alpha=0.95),
         zorder=zorder
     )
 
@@ -860,13 +1055,14 @@ def _get_active_drop_beams_list(drop_beams=None):
         return []
 
 
-def _render_drop_beams_on_ax(ax, drop_beams=None, is_steel_layout=False):
+def _render_drop_beams_on_ax(ax, drop_beams=None, is_steel_layout=False, show_beam_labels=True, pending_beam_ids=None):
     """
     Unified renderer for Drop Beams and Cantilever Drop Beams on any 2D plan axis.
     """
     _dbs = _get_active_drop_beams_list(drop_beams)
     if not _dbs:
         return
+    _pending_beams = set(pending_beam_ids) if pending_beam_ids else set()
     for b_obj in _dbs:
         if not isinstance(b_obj, dict):
             continue
@@ -878,9 +1074,10 @@ def _render_drop_beams_on_ax(ax, drop_beams=None, is_steel_layout=False):
         t_mm = int(b_obj.get("t_mm", round(float(b_obj.get("t_cm", 60.0)) * 10)))
         is_cant = (b_obj.get("is_continuous") == "cantilever" or b_obj.get("beam_type_category") == "cantilever_beam")
         cant_tag = " [Cant.]" if is_cant else ""
-        b_dim_lbl = f"{bid}{cant_tag} ({b_mm}×{t_mm})"
-        rft_lbl = f"{bid}{cant_tag}: {b_obj.get('rft_btm_str', '')} Btm | {b_obj.get('rft_top_str', '')} Top | {b_obj.get('stirrups_str', '')}"
-        draw_beam_polygon_on_plan(ax, bp1, bp2, bb_m, label=b_dim_lbl, rft_label=rft_lbl, is_steel_layout=is_steel_layout)
+        is_pending = (bid in _pending_beams)
+        b_dim_lbl = f"{bid}{cant_tag} ({b_mm}×{t_mm})" if (show_beam_labels or is_pending) else ""
+        rft_lbl = (f"{bid}{cant_tag}: {b_obj.get('rft_btm_str', '')} Btm | {b_obj.get('rft_top_str', '')} Top | {b_obj.get('stirrups_str', '')}") if show_beam_labels else ""
+        draw_beam_polygon_on_plan(ax, bp1, bp2, bb_m, label=b_dim_lbl, rft_label=rft_lbl, is_steel_layout=is_steel_layout, is_pending=is_pending)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -918,7 +1115,11 @@ def generate_flat_slab_sketch(
     col_props=None,         # dict mapping column ID or "i,j" -> {"b_cm", "t_cm", "direction", ...}
     show_add_markers=False, # if True, draw target markers (+) at unplaced intersections
     drop_beams=None,        # list of dropped beams dicts e.g. [{"id": "B1", "p1": [..], "p2": [..], ...}]
+    pending_beam_ids=None,  # set of beam IDs selected for deletion review e.g. {"B1"}
     preview_axis=None,      # dict e.g. {"dir": "X"/"Y", "pos": float, "label": str} for live axis preview
+    show_panel_labels=True, # if True, render slab panel IDs (e.g. P_1_1)
+    show_col_labels=True,   # if True, render column labels (e.g. C1, C2)
+    show_beam_labels=True,  # if True, render beam names and dimensions (e.g. B1 (250×600))
 ):
     """
     Generate the confirmatory geometric sketch for the flat slab with detailed Data Card.
@@ -1043,12 +1244,13 @@ def generate_flat_slab_sketch(
             ax_plan.add_patch(v_rect)
             ax_plan.plot([vx1, vx2], [vy1, vy2], color="#ef4444", linestyle="--", linewidth=1.8, zorder=2)
             ax_plan.plot([vx1, vx2], [vy2, vy1], color="#ef4444", linestyle="--", linewidth=1.8, zorder=2)
-            ax_plan.text(
-                (vx1 + vx2) / 2.0, (vy1 + vy2) / 2.0, f"VOID (منور)\n{varea:.1f} m²",
-                ha="center", va="center", fontsize=11.5, weight="bold", color="#b91c1c",
-                bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.5),
-                zorder=3
-            )
+            if show_panel_labels:
+                ax_plan.text(
+                    (vx1 + vx2) / 2.0, (vy1 + vy2) / 2.0, f"VOID (منور)\n{varea:.1f} m²",
+                    ha="center", va="center", fontsize=11.5, weight="bold", color="#b91c1c",
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.5),
+                    zorder=3
+                )
     for p in all_panels:
         if p["is_void"] and not void_boxes:
             # Confirmed Void (White background with red border and diagonal dashed X lines)
@@ -1059,35 +1261,37 @@ def generate_flat_slab_sketch(
             ax_plan.add_patch(v_rect)
             ax_plan.plot([p["x1"], p["x2"]], [p["y1"], p["y2"]], color="#ef4444", linestyle="--", linewidth=1.8, zorder=2)
             ax_plan.plot([p["x1"], p["x2"]], [p["y2"], p["y1"]], color="#ef4444", linestyle="--", linewidth=1.8, zorder=2)
-            ax_plan.text(
-                p["mid_x"], p["mid_y"], f"VOID (منور)\n{p['name']}\n{p['area']:.1f} m²",
-                ha="center", va="center", fontsize=11.5, weight="bold", color="#b91c1c",
-                bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.5),
-                zorder=3
-            )
+            if show_panel_labels:
+                ax_plan.text(
+                    p["mid_x"], p["mid_y"], f"VOID (منور)\n{p['name']}\n{p['area']:.1f} m²",
+                    ha="center", va="center", fontsize=11.5, weight="bold", color="#b91c1c",
+                    bbox=dict(boxstyle="round,pad=0.3", facecolor="#ffffff", edgecolor="#ef4444", lw=1.5),
+                    zorder=3
+                )
         elif p["id"] in _pending_voids:
-            # Pending Void in review mode (Orange dashed border and cross)
+            # Pending Void in review mode (Faded/pale orange fill with dashed border and cross)
             pv_rect = patches.Rectangle(
                 (p["x1"], p["y1"]), p["Lx"], p["Ly"],
-                linewidth=2.2, edgecolor="#ea580c", facecolor="#ffedd5", linestyle="--", alpha=0.85, zorder=2
+                linewidth=2.2, edgecolor="#f97316", facecolor="#fed7aa", linestyle="--", alpha=0.65, zorder=3
             )
             ax_plan.add_patch(pv_rect)
-            ax_plan.plot([p["x1"], p["x2"]], [p["y1"], p["y2"]], color="#ea580c", linestyle="--", linewidth=1.8, zorder=2)
-            ax_plan.plot([p["x1"], p["x2"]], [p["y2"], p["y1"]], color="#ea580c", linestyle="--", linewidth=1.8, zorder=2)
+            ax_plan.plot([p["x1"], p["x2"]], [p["y1"], p["y2"]], color="#f97316", linestyle="--", linewidth=1.8, alpha=0.75, zorder=3)
+            ax_plan.plot([p["x1"], p["x2"]], [p["y2"], p["y1"]], color="#f97316", linestyle="--", linewidth=1.8, alpha=0.75, zorder=3)
             ax_plan.text(
-                p["mid_x"], p["mid_y"], f"PENDING VOID\n{p['name']}\n(قيد الحذف)",
-                ha="center", va="center", fontsize=11.5, weight="bold", color="#c2410c",
-                bbox=dict(boxstyle="round,pad=0.3", facecolor="#fff7ed", edgecolor="#ea580c", lw=1.5),
-                zorder=3
+                p["mid_x"], p["mid_y"], f"{p['name']} ?\n(قيد الحذف)",
+                ha="center", va="center", fontsize=11.0, weight="bold", color="#c2410c",
+                bbox=dict(boxstyle="round,pad=0.3", facecolor="#fff7ed", edgecolor="#f97316", lw=1.5, alpha=0.90),
+                zorder=4
             )
         else:
             # Active panel: prominent label badge P (i,j) matching the input selection list
-            ax_plan.text(
-                p["mid_x"], p["mid_y"], p["name"],
-                ha="center", va="center", fontsize=12.0, weight="bold", color="#1e40af",
-                bbox=dict(boxstyle="round,pad=0.35,rounding_size=0.3", facecolor="#ffffff", edgecolor="#2563eb", lw=1.6, alpha=0.95),
-                zorder=3
-            )
+            if show_panel_labels:
+                ax_plan.text(
+                    p["mid_x"], p["mid_y"], p["name"],
+                    ha="center", va="center", fontsize=12.0, weight="bold", color="#1e40af",
+                    bbox=dict(boxstyle="round,pad=0.35,rounding_size=0.3", facecolor="#ffffff", edgecolor="#2563eb", lw=1.6, alpha=0.95),
+                    zorder=3
+                )
 
     # Vertical Grid Axes (Y1, Y2, ...) with Top CAD Bubbles
     for idx, x in enumerate(x_coords):
@@ -1265,21 +1469,20 @@ def generate_flat_slab_sketch(
         cy = geom["center_y"]
 
         if is_pending:
-            # Orange dashed border — selected in review stage before confirmation
+            # Faded/pale orange dashed border — selected in review stage before confirmation
             col_rect = patches.Rectangle(
                 (rx, ry), rw, rh,
                 linewidth=2.2, edgecolor="#f97316", facecolor="#fed7aa",
-                alpha=0.80, zorder=4, linestyle="--"
+                alpha=0.65, zorder=9, linestyle="--"
             )
             ax_plan.add_patch(col_rect)
+            display_id = label if label else orig_id
             is_right_edge = (info["i"] == len(x_coords) - 1)
-            lbl_x = rx - 0.10 if is_right_edge else rx + rw + 0.10
-            ha_align = "right" if is_right_edge else "left"
-            ax_plan.text(
-                lbl_x, cy, f"{orig_id} ?",
-                color="#c2410c", fontsize=10, weight="bold", ha=ha_align, va="center",
-                bbox=dict(boxstyle="round,pad=0.20", facecolor="#fff7ed", edgecolor="#ea580c", lw=0.9),
-                zorder=7
+            draw_column_label_beside(
+                ax_plan, rx, ry, rw, rh, cx, cy, f"{display_id} ?",
+                is_right_edge=is_right_edge, fontsize=10.5, zorder=10,
+                grid_i=i_idx, grid_j=j_idx,
+                color="#c2410c", facecolor="#fff7ed", edgecolor="#f97316"
             )
         else:
             # Active column — solid concrete rectangle with label beside the column
@@ -1290,7 +1493,12 @@ def generate_flat_slab_sketch(
             ax_plan.add_patch(col_rect)
             display_id = label if label else orig_id
             is_right_edge = (info["i"] == len(x_coords) - 1)
-            draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, display_id, is_right_edge=is_right_edge, fontsize=11.0, zorder=9)
+            if show_col_labels:
+                draw_column_label_beside(
+                    ax_plan, rx, ry, rw, rh, cx, cy, display_id,
+                    is_right_edge=is_right_edge, fontsize=11.0, zorder=9,
+                    grid_i=i_idx, grid_j=j_idx
+                )
 
         # Highlight edge column faces in pink with doubled hatch lines (Edge Columns / أعمدة الجور)
         edge_info = (edge_columns or {}).get(orig_id, {})
@@ -1301,7 +1509,7 @@ def generate_flat_slab_sketch(
                 draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, raw_edge_dir, zorder=10)
 
     # ── Drop Beams (الكمرات الساقطة والكابولية من وجه العمود لوجه العمود) ──
-    _render_drop_beams_on_ax(ax_plan, drop_beams=drop_beams, is_steel_layout=False)
+    _render_drop_beams_on_ax(ax_plan, drop_beams=drop_beams, is_steel_layout=False, show_beam_labels=show_beam_labels, pending_beam_ids=pending_beam_ids)
 
     # Span Dimensions (Lx along Bottom)
     y_dim_lx = y_slab_min - dim_offset_bot
@@ -1724,7 +1932,11 @@ def generate_flat_slab_top_rft_sketch(
             ed_info = (edge_columns or {}).get(cid) or {}
             draw_neighbor_edge_strip(ax_plan, col_rx, col_ry, col_rw, col_rh, ed_info.get("direction", ""), zorder=6)
         is_right = (col_cx >= x_coords[-1] - 0.1)
-        draw_column_label_beside(ax_plan, col_rx, col_ry, col_rw, col_rh, col_cx, col_cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=7)
+        draw_column_label_beside(
+            ax_plan, col_rx, col_ry, col_rw, col_rh, col_cx, col_cy, cid,
+            is_right_edge=is_right, fontsize=12.0, zorder=7,
+            grid_i=i_idx, grid_j=j_idx
+        )
 
     # ── Drop Beams (الكمرات الساقطة والكابولية) ──
     _render_drop_beams_on_ax(ax_plan, is_steel_layout=False)
@@ -2053,8 +2265,8 @@ def generate_flat_slab_bottom_rft_sketch(
     rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
     grid_num = 1
     col_num = 1
-    for y in y_coords:
-        for x in x_coords:
+    for j_idx, y in enumerate(y_coords):
+        for i_idx, x in enumerate(x_coords):
             orig_id = f"C{grid_num}"
             grid_num += 1
             if (x, y) in rem_coords:
@@ -2075,7 +2287,11 @@ def generate_flat_slab_bottom_rft_sketch(
                 ed_info = (edge_columns or {}).get(orig_id, {})
                 draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=6)
             is_right = (cx >= x_coords[-1] - 0.1)
-            draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=7)
+            draw_column_label_beside(
+                ax_plan, rx, ry, rw, rh, cx, cy, cid,
+                is_right_edge=is_right, fontsize=12.0, zorder=7,
+                grid_i=i_idx, grid_j=j_idx
+            )
             col_num += 1
 
     # ── Drop Beams (الكمرات الساقطة والكابولية) ──
@@ -2467,7 +2683,11 @@ def generate_flat_slab_reactions_sketch(
                 ed_info = (edge_columns or {}).get(cid) or (edge_columns or {}).get(orig_cid) or {}
                 draw_neighbor_edge_strip(ax_plan, col_rx, col_ry, col_rw, col_rh, ed_info.get("direction", ""), zorder=6)
             is_right = (col_cx >= x_coords[-1] - 0.1)
-            draw_column_label_beside(ax_plan, col_rx, col_ry, col_rw, col_rh, col_cx, col_cy, cid, is_right_edge=is_right, fontsize=12.0, zorder=7)
+            draw_column_label_beside(
+                ax_plan, col_rx, col_ry, col_rw, col_rh, col_cx, col_cy, cid,
+                is_right_edge=is_right, fontsize=12.0, zorder=7,
+                grid_i=i_idx, grid_j=j_idx
+            )
 
             if r_info:
                 pu1 = r_info.get("pu_1f_val", 0.0)
@@ -4142,7 +4362,11 @@ def generate_flat_slab_moment_contour(
                 ed_info = (edge_columns or {}).get(orig_id, {})
                 draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=8)
             is_right = (cx >= x_coords[-1] - 0.1)
-            draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=11.5, zorder=9)
+            draw_column_label_beside(
+                ax_plan, rx, ry, rw, rh, cx, cy, cid,
+                is_right_edge=is_right, fontsize=11.5, zorder=9,
+                grid_i=c.get("i"), grid_j=c.get("j")
+            )
 
             # Local peak negative moment value from raw unmasked matrix
             ix = np.argmin(np.abs(x_vec - cx))
@@ -4192,7 +4416,11 @@ def generate_flat_slab_moment_contour(
                     ed_info = (edge_columns or {}).get(orig_id, {})
                     draw_neighbor_edge_strip(ax_plan, rx, ry, rw, rh, ed_info.get("direction", ""), zorder=8)
                 is_right = (cx >= x_coords[-1] - 0.1)
-                draw_column_label_beside(ax_plan, rx, ry, rw, rh, cx, cy, cid, is_right_edge=is_right, fontsize=11.5, zorder=9)
+                draw_column_label_beside(
+                ax_plan, rx, ry, rw, rh, cx, cy, cid,
+                is_right_edge=is_right, fontsize=11.5, zorder=9,
+                grid_i=c.get("i"), grid_j=c.get("j")
+            )
 
                 ix = np.argmin(np.abs(x_vec - x))
                 iy = np.argmin(np.abs(y_vec - y))
@@ -11088,29 +11316,34 @@ def _compute_adaptive_fs_col_transform(
 def _ensure_fs_selective_mode_initialized(Lx_spans: list, Ly_spans: list) -> tuple:
     """
     ضمان تهيئة قائمة الأعمدة المسقطة (fs_placed_cols):
-    - في حالة المشاريع الجديدة (Zero Column Mode / fs_zero_col_mode=True)، تظل القائمة فارغة [] حتى يسقط المستخدم الأعمدة.
-    - في حالة المشاريع القديمة (fs_zero_col_mode=False و fs_placed_cols=None)، يتم تهيئتها بجميع أعمدة الشبكة الحالية غير المحذوفة.
+    - في حالة المشاريع الجديدة أو تفعيل Zero Column Mode (fs_zero_col_mode=True)، تظل القائمة فارغة [] أو تحتفظ بالأعمدة المسقطة فعلياً دون توليد أعمدة تلقائية.
+    - لا يتم أبداً ملء جميع تقاطعات الشبكة (all_orig) إذا كان وضع الإسقاط الانتقائي أو Zero Mode مفعلاً.
     """
     cfg = st.session_state.setdefault("cfg", {})
     n_xi = len(Lx_spans) + 1
     n_yj = len(Ly_spans) + 1
-    zero_mode = bool(cfg.get("fs_zero_col_mode", False))
+    zero_mode = bool(cfg.get("fs_zero_col_mode", False) or S.cfg_val("fs_zero_col_mode", False))
     placed_raw = cfg.get("fs_placed_cols", None)
-    removed_raw = cfg.get("fs_removed_cols", [])
+    if placed_raw is None:
+        placed_raw = S.cfg_val("fs_placed_cols", None)
+    removed_raw = cfg.get("fs_removed_cols", []) or S.cfg_val("fs_removed_cols", [])
     if not isinstance(removed_raw, list):
         removed_raw = []
 
     all_orig = [f"C{k}" for k in range(1, n_xi * n_yj + 1)]
-    if not zero_mode and placed_raw is None:
-        placed_list = [cid for cid in all_orig if cid not in removed_raw]
+    if zero_mode or (placed_raw is not None):
+        placed_list = list(placed_raw) if isinstance(placed_raw, list) else []
         cfg["fs_zero_col_mode"] = True
         cfg["fs_placed_cols"] = placed_list
         S.cfg_set("fs_zero_col_mode", True)
         S.cfg_set("fs_placed_cols", placed_list)
     else:
-        placed_list = list(placed_raw) if isinstance(placed_raw, list) else []
-        cfg["fs_zero_col_mode"] = True
+        # مشروع قديم بإسقاط كامل غير انتقائي
+        placed_list = [cid for cid in all_orig if cid not in removed_raw]
+        cfg["fs_zero_col_mode"] = False
         cfg["fs_placed_cols"] = placed_list
+        S.cfg_set("fs_zero_col_mode", False)
+        S.cfg_set("fs_placed_cols", placed_list)
 
     return cfg, placed_list, removed_raw
 
@@ -12067,115 +12300,62 @@ def _find_beam_spans_on_line(
             else:
                 deduped.append(s)
 
-    # ترشيح الركائز الواقعة ضمن نطاق التحديد مع دعم الكمرات الكابولية ذات الطرف الحر
-    tol = 0.45
-    axis_coords = x_coords if is_horizontal else y_coords
-
-    if abs(sel_max - sel_min) < 0.40:
-        # نقر مفرد على بحر: إيجاد أقرب ركيزة سابقة وأقرب ركيزة تالية
-        click_pos = (sel_min + sel_max) / 2.0
-        left_s = [s for s in deduped if s["coord"] <= sel_min + tol]
-        right_s = [s for s in deduped if s["coord"] >= sel_max - tol]
-        if left_s and right_s and left_s[-1] != right_s[0]:
-            chosen = [left_s[-1], right_s[0]]
-        elif left_s and left_s[-1]["type"] in ("column", "wall") and not right_s:
-            right_grid_pts = [g for g in axis_coords if g >= max(click_pos - 0.15, left_s[-1]["coord"] + 0.50)]
-            free_coord = right_grid_pts[0] if right_grid_pts else max(click_pos, left_s[-1]["coord"] + 1.0)
-            chosen = [
-                left_s[-1],
-                {"coord": round(free_coord, 4), "type": "cantilever_edge", "id": "طرف حر كابولي", "obj": None},
-            ]
-        elif right_s and right_s[0]["type"] in ("column", "wall") and not left_s:
-            left_grid_pts = [g for g in axis_coords if g <= min(click_pos + 0.15, right_s[0]["coord"] - 0.50)]
-            free_coord = left_grid_pts[-1] if left_grid_pts else min(click_pos, right_s[0]["coord"] - 1.0)
-            chosen = [
-                {"coord": round(free_coord, 4), "type": "cantilever_edge", "id": "طرف حر كابولي", "obj": None},
-                right_s[0],
-            ]
-        else:
-            chosen = []
-    else:
-        # سحب بالماوس أو صندوق تحديد
-        chosen = [s for s in deduped if (sel_min - tol) <= s["coord"] <= (sel_max + tol)]
-        if not chosen:
-            left_s = [s for s in deduped if s["coord"] <= sel_min + tol]
-            right_s = [s for s in deduped if s["coord"] >= sel_max - tol]
-            if left_s and right_s and left_s[-1] != right_s[0]:
-                chosen = [left_s[-1], right_s[0]]
-            elif left_s and left_s[-1]["type"] in ("column", "wall") and not right_s:
-                chosen = [left_s[-1]]
-            elif right_s and right_s[0]["type"] in ("column", "wall") and not left_s:
-                chosen = [right_s[0]]
-
-        if chosen:
-            # فحص امتداد التحديد لطرف حر كابولي جهة اليسار / الأسفل
-            first_s = chosen[0]
-            has_further_left_supp = any(s["coord"] < first_s["coord"] - 0.25 for s in deduped)
-            if first_s["type"] in ("column", "wall") and not has_further_left_supp:
-                prev_g_list = [g for g in axis_coords if g < first_s["coord"] - 0.50]
-                prev_bay_len = (first_s["coord"] - max(prev_g_list)) if prev_g_list else 2.0
-                left_thresh = 0.50 if len(chosen) == 1 else max(1.10, 0.45 * prev_bay_len)
-                if (first_s["coord"] - sel_min) >= left_thresh:
-                    cand_g_left = [g for g in axis_coords if (sel_min - tol) <= g <= (first_s["coord"] - 0.50)]
-                    if cand_g_left:
-                        free_l_coord = min(cand_g_left)
-                    elif prev_g_list and len(chosen) == 1:
-                        free_l_coord = max(prev_g_list)
-                    else:
-                        free_l_coord = sel_min
-                    chosen.insert(0, {
-                        "coord": round(free_l_coord, 4),
-                        "type": "cantilever_edge",
-                        "id": "طرف حر كابولي",
-                        "obj": None,
-                    })
-
-            # فحص امتداد التحديد لطرف حر كابولي جهة اليمين / الأعلى
-            last_s = chosen[-1]
-            has_further_right_supp = any(s["coord"] > last_s["coord"] + 0.25 for s in deduped)
-            if last_s["type"] in ("column", "wall") and not has_further_right_supp:
-                next_g_list = [g for g in axis_coords if g > last_s["coord"] + 0.50]
-                next_bay_len = (min(next_g_list) - last_s["coord"]) if next_g_list else 2.0
-                right_thresh = 0.50 if len(chosen) == 1 else max(1.10, 0.45 * next_bay_len)
-                if (sel_max - last_s["coord"]) >= right_thresh:
-                    cand_g_right = [g for g in axis_coords if (last_s["coord"] + 0.50) <= g <= (sel_max + tol)]
-                    if cand_g_right:
-                        free_r_coord = max(cand_g_right)
-                    elif next_g_list and len(chosen) == 1:
-                        free_r_coord = min(next_g_list)
-                    else:
-                        free_r_coord = sel_max
-                    chosen.append({
-                        "coord": round(free_r_coord, 4),
-                        "type": "cantilever_edge",
-                        "id": "طرف حر كابولي",
-                        "obj": None,
-                    })
-
+    # ترشيح واختيار البحور الواقعة ضمن نطاق التحديد بدقة هندسية شاملة (نقر مفرد، سحب بحر، سحب بحور متعددة، طرف كابولي)
+    is_click = abs(sel_max - sel_min) < 0.40
+    click_pos = (sel_min + sel_max) / 2.0
     spans = []
-    for k in range(len(chosen) - 1):
-        s1 = chosen[k]
-        s2 = chosen[k + 1]
+    chosen = []
+
+    for k in range(len(deduped) - 1):
+        s1 = deduped[k]
+        s2 = deduped[k + 1]
+        c1, c2 = s1["coord"], s2["coord"]
+        if abs(c2 - c1) < 0.20:
+            continue
         # استبعاد الامتداد بين حافتي كابولي متقابلتين بدون ركائز داخلية
         if s1["type"] == "cantilever_edge" and s2["type"] == "cantilever_edge":
             continue
-        is_cant = (s1["type"] == "cantilever_edge" or s2["type"] == "cantilever_edge")
 
-        if is_horizontal:
-            p1 = [s1["coord"], line_coord]
-            p2 = [s2["coord"], line_coord]
+        c_min = min(c1, c2)
+        c_max = max(c1, c2)
+
+        should_include = False
+        if is_click:
+            # النقر المفرد على البحر: يقع مؤشر الماوس بين الركيزتين
+            if (c_min - 0.40) <= click_pos <= (c_max + 0.40):
+                should_include = True
         else:
-            p1 = [line_coord, s1["coord"]]
-            p2 = [line_coord, s2["coord"]]
+            # السحب أو الصندوق: تداخل كافٍ مع البحر
+            overlap = min(sel_max, c_max) - max(sel_min, c_min)
+            span_len = c_max - c_min
+            if overlap >= 0.35 or (overlap > 0.05 and span_len < 1.0):
+                should_include = True
+            elif (c_min - 0.35) <= sel_min <= (c_max + 0.35) and (c_min - 0.35) <= sel_max <= (c_max + 0.35):
+                should_include = True
+            elif (c_min - 0.25) <= sel_min <= (c_min + 0.25) or (c_max - 0.25) <= sel_max <= (c_max + 0.25):
+                should_include = True
 
-        spans.append({
-            "p1": p1,
-            "p2": p2,
-            "s1": s1,
-            "s2": s2,
-            "is_cantilever": is_cant,
-            "span_m": abs(s2["coord"] - s1["coord"]),
-        })
+        if should_include:
+            is_cant = (s1["type"] == "cantilever_edge" or s2["type"] == "cantilever_edge")
+            if is_horizontal:
+                p1 = [c1, line_coord]
+                p2 = [c2, line_coord]
+            else:
+                p1 = [line_coord, c1]
+                p2 = [line_coord, c2]
+
+            spans.append({
+                "p1": p1,
+                "p2": p2,
+                "s1": s1,
+                "s2": s2,
+                "is_cantilever": is_cant,
+                "span_m": abs(c2 - c1),
+            })
+            if not chosen:
+                chosen.append(s1)
+            if s2 not in chosen:
+                chosen.append(s2)
 
     return spans, chosen, deduped
 
@@ -12202,55 +12382,100 @@ def _execute_fs_add_beam_box(data: dict, Lx_spans: list, Ly_spans: list, cantile
     nx = len(x_coords)
     ny = len(y_coords)
 
-    wx1, wy1 = None, None
-    wx2, wy2 = None, None
-
-    if p1_world and p2_world and len(p1_world) >= 2 and len(p2_world) >= 2:
-        wx1, wy1 = float(p1_world[0]), float(p1_world[1])
-        wx2, wy2 = float(p2_world[0]), float(p2_world[1])
-    elif box and len(box) >= 4:
+    # فحص نوع الإسقاط: صندوق تحديد مساحي (Box Selection) أم نقر/سحب خطي
+    is_box_mode = False
+    if box and len(box) >= 4:
         b_xmin, b_xmax, b_ymin, b_ymax = float(box[0]), float(box[1]), float(box[2]), float(box[3])
-        if abs(b_xmax - b_xmin) >= abs(b_ymax - b_ymin):
-            wx1, wy1 = b_xmin, (b_ymin + b_ymax) / 2.0
-            wx2, wy2 = b_xmax, (b_ymin + b_ymax) / 2.0
-        else:
-            wx1, wy1 = (b_xmin + b_xmax) / 2.0, b_ymin
-            wx2, wy2 = (b_xmin + b_xmax) / 2.0, b_ymax
-    elif p1 and p2 and len(p1) >= 2 and len(p2) >= 2:
-        try:
-            p1_0, p1_1 = float(p1[0]), float(p1[1])
-            p2_0, p2_1 = float(p2[0]), float(p2[1])
-            if (p1_0.is_integer() and p2_0.is_integer() and p1_1.is_integer() and p2_1.is_integer()
-                and 0 <= int(p1_0) < nx and 0 <= int(p2_0) < nx
-                and 0 <= int(p1_1) < ny and 0 <= int(p2_1) < ny
-                and (nx > 1 or ny > 1)):
-                wx1, wy1 = x_coords[int(p1_0)], y_coords[int(p1_1)]
-                wx2, wy2 = x_coords[int(p2_0)], y_coords[int(p2_1)]
+        b_w = abs(b_xmax - b_xmin)
+        b_h = abs(b_ymax - b_ymin)
+        if b_w >= 0.20 or b_h >= 0.20:
+            is_box_mode = True
+
+    if is_box_mode:
+        if b_w >= b_h:
+            is_horizontal = True
+            line_coord = min(y_coords, key=lambda y: abs(y - ((b_ymin + b_ymax) / 2.0)))
+            sel_min = min(b_xmin, b_xmax)
+            sel_max = max(b_xmin, b_xmax)
+            if (b_ymin - 0.50) <= line_coord <= (b_ymax + 0.50):
+                dist_to_axis = 0.0
             else:
-                wx1, wy1 = p1_0, p1_1
-                wx2, wy2 = p2_0, p2_1
-        except Exception:
+                dist_to_axis = min(abs(line_coord - b_ymin), abs(line_coord - b_ymax))
+        else:
+            is_horizontal = False
+            line_coord = min(x_coords, key=lambda x: abs(x - ((b_xmin + b_xmax) / 2.0)))
+            sel_min = min(b_ymin, b_ymax)
+            sel_max = max(b_ymin, b_ymax)
+            if (b_xmin - 0.50) <= line_coord <= (b_xmax + 0.50):
+                dist_to_axis = 0.0
+            else:
+                dist_to_axis = min(abs(line_coord - b_xmin), abs(line_coord - b_xmax))
+    else:
+        wx1, wy1 = None, None
+        wx2, wy2 = None, None
+
+        if p1_world and p2_world and len(p1_world) >= 2 and len(p2_world) >= 2:
+            wx1, wy1 = float(p1_world[0]), float(p1_world[1])
+            wx2, wy2 = float(p2_world[0]), float(p2_world[1])
+        elif p1 and p2 and len(p1) >= 2 and len(p2) >= 2:
+            try:
+                p1_0, p1_1 = float(p1[0]), float(p1[1])
+                p2_0, p2_1 = float(p2[0]), float(p2[1])
+                if (p1_0.is_integer() and p2_0.is_integer() and p1_1.is_integer() and p2_1.is_integer()
+                    and 0 <= int(p1_0) < nx and 0 <= int(p2_0) < nx
+                    and 0 <= int(p1_1) < ny and 0 <= int(p2_1) < ny
+                    and (nx > 1 or ny > 1)):
+                    wx1, wy1 = x_coords[int(p1_0)], y_coords[int(p1_1)]
+                    wx2, wy2 = x_coords[int(p2_0)], y_coords[int(p2_1)]
+                else:
+                    wx1, wy1 = p1_0, p1_1
+                    wx2, wy2 = p2_0, p2_1
+            except Exception:
+                return
+        elif box and len(box) >= 4:
+            wx1, wy1 = float(box[0]), float(box[2])
+            wx2, wy2 = float(box[1]), float(box[3])
+        else:
             return
-    else:
-        return
 
-    dx = abs(wx2 - wx1)
-    dy = abs(wy2 - wy1)
+        dx = abs(wx2 - wx1)
+        dy = abs(wy2 - wy1)
 
-    if dx >= dy:
-        is_horizontal = True
-        line_coord = min(y_coords, key=lambda y: abs(y - ((wy1 + wy2) / 2.0)))
-        sel_min = min(wx1, wx2)
-        sel_max = max(wx1, wx2)
-        dist_to_axis = abs(line_coord - ((wy1 + wy2) / 2.0))
-    else:
-        is_horizontal = False
-        line_coord = min(x_coords, key=lambda x: abs(x - ((wx1 + wx2) / 2.0)))
-        sel_min = min(wy1, wy2)
-        sel_max = max(wy1, wy2)
-        dist_to_axis = abs(line_coord - ((wx1 + wx2) / 2.0))
+        # هل هو نقر مفرد على البحر (Single Click on Bay)؟
+        if dx < 0.25 and dy < 0.25:
+            cx, cy = (wx1 + wx2) / 2.0, (wy1 + wy2) / 2.0
+            cand_y = min(y_coords, key=lambda y: abs(y - cy))
+            cand_x = min(x_coords, key=lambda x: abs(x - cx))
+            dist_y = abs(cand_y - cy)
+            dist_x = abs(cand_x - cx)
+            if dist_y <= dist_x:
+                is_horizontal = True
+                line_coord = cand_y
+                sel_min = cx
+                sel_max = cx
+                dist_to_axis = dist_y
+            else:
+                is_horizontal = False
+                line_coord = cand_x
+                sel_min = cy
+                sel_max = cy
+                dist_to_axis = dist_x
+        elif dx >= dy:
+            is_horizontal = True
+            line_coord = min(y_coords, key=lambda y: abs(y - ((wy1 + wy2) / 2.0)))
+            sel_min = min(wx1, wx2)
+            sel_max = max(wx1, wx2)
+            dist_to_axis = abs(line_coord - ((wy1 + wy2) / 2.0))
+        else:
+            is_horizontal = False
+            line_coord = min(x_coords, key=lambda x: abs(x - ((wx1 + wx2) / 2.0)))
+            sel_min = min(wy1, wy2)
+            sel_max = max(wy1, wy2)
+            dist_to_axis = abs(line_coord - ((wx1 + wx2) / 2.0))
 
-    if dist_to_axis > 0.65:
+    min_span = min(min(Lx_spans or [6.0]), min(Ly_spans or [6.0]))
+    allowed_axis_dist = max(1.80, min_span * 0.45)
+    if dist_to_axis > allowed_axis_dist:
         warn_msg = (
             "⚠️ مكان إسقاط الكمرة مرفوض:\n"
             "تم سحب مؤشر الماوس أو إفلاته في موضع بعيد عن المحاور الإنشائية للبلاطة ولا يطابق أي محور إنشائي معتمد.\n"
@@ -12265,21 +12490,21 @@ def _execute_fs_add_beam_box(data: dict, Lx_spans: list, Ly_spans: list, cantile
     cfg_obj = st.session_state.setdefault("cfg", {})
     cur_beams = list(cfg_obj.get("fs_drop_beams") or st.session_state.get("fs_drop_beams") or S.cfg_val("fs_drop_beams", []) or [])
 
-    b_cm_val = float(data.get("b_cm") or st.session_state.get("fs_beam_b_cm") or S.cfg_val("fs_beam_b_cm", 25.0))
-    dia_val = int(data.get("dia") or st.session_state.get("fs_beam_dia_main") or S.cfg_val("fs_beam_dia_main", 16))
+    b_cm_val = float(data.get("b_cm") or st.session_state.get("fs_beam_b_cm") or S.cfg_val("fs_beam_b_cm", 25.0) or 25.0)
+    dia_val = int(data.get("dia") or st.session_state.get("fs_beam_dia_main") or S.cfg_val("fs_beam_dia_main", 16) or 16)
 
     col_w_cm = float(st.session_state.get("fs_new_col_b", S.cfg_val("fs_new_col_b", 30.0)))
     col_d_cm = float(st.session_state.get("fs_new_col_t", S.cfg_val("fs_new_col_t", 50.0)))
-    user_t_val = float(data.get("t_cm") or st.session_state.get("fs_beam_t_cm") or S.cfg_val("fs_beam_t_cm", 0.0))
+    user_t_val = float(data.get("t_cm") or st.session_state.get("fs_beam_t_cm") or S.cfg_val("fs_beam_t_cm", 60.0) or 60.0)
     columns_list = st.session_state.get("_fs_active_cols") or None
     if not columns_list:
         try:
-            _conf_rem = st.session_state.get("fs_confirmed_removals", S.cfg_val("fs_confirmed_removals", []))
+            _conf_rem = st.session_state.get("fs_removed_cols", S.cfg_val("fs_removed_cols", st.session_state.get("fs_confirmed_removals", S.cfg_val("fs_confirmed_removals", []))))
             _col_trans = st.session_state.get("fs_col_transforms", S.cfg_val("fs_col_transforms", {}))
             _edge_cols = st.session_state.get("fs_edge_columns", S.cfg_val("fs_edge_columns", {}))
             _placed_cols = st.session_state.get("fs_placed_cols", S.cfg_val("fs_placed_cols", None))
             _zero_mode = st.session_state.get("fs_zero_col_mode", S.cfg_val("fs_zero_col_mode", False))
-            _col_props = st.session_state.get("fs_column_properties", S.cfg_val("fs_column_properties", {}))
+            _col_props = st.session_state.get("fs_col_props", S.cfg_val("fs_col_props", st.session_state.get("fs_column_properties", S.cfg_val("fs_column_properties", {}))))
             act_cols, _, _, _, _ = get_flat_slab_columns(
                 Lx_spans, Ly_spans, bc_cm=col_w_cm, tc_cm=col_d_cm,
                 removed_ids=set(_conf_rem or []),
@@ -12619,6 +12844,34 @@ def _handle_fs_sync_payload(Lx_spans: list, Ly_spans: list, cantilevers: dict, p
                 _execute_fs_add_drop_beam(data, Lx_spans, Ly_spans, cantilevers, trigger_rerun=True)
         elif action == "delete_drop_beam":
             _execute_fs_delete_drop_beam(data, trigger_rerun=True)
+        elif action == "toggle_labels":
+            target = str(data.get("target", "")).lower()
+            if target == "panels":
+                cur = bool(st.session_state.get("fs_show_panel_labels", S.cfg_val("fs_show_panel_labels", True)))
+                new_v = not cur
+                st.session_state["fs_show_panel_labels"] = new_v
+                for k in list(st.session_state.keys()):
+                    if str(k).endswith("quick_tog_p"):
+                        st.session_state[k] = new_v
+                S.cfg_set("fs_show_panel_labels", new_v)
+            elif target in ("columns", "cols"):
+                cur = bool(st.session_state.get("fs_show_col_labels", S.cfg_val("fs_show_col_labels", True)))
+                new_v = not cur
+                st.session_state["fs_show_col_labels"] = new_v
+                for k in list(st.session_state.keys()):
+                    if str(k).endswith("quick_tog_c"):
+                        st.session_state[k] = new_v
+                S.cfg_set("fs_show_col_labels", new_v)
+            elif target in ("beams", "drop_beams"):
+                cur = bool(st.session_state.get("fs_show_beam_labels", S.cfg_val("fs_show_beam_labels", True)))
+                new_v = not cur
+                st.session_state["fs_show_beam_labels"] = new_v
+                for k in list(st.session_state.keys()):
+                    if str(k).endswith("quick_tog_b"):
+                        st.session_state[k] = new_v
+                S.cfg_set("fs_show_beam_labels", new_v)
+            S.save_settings()
+            st.rerun()
         elif action in ("add_column_box", "add_column"):
             if st.session_state.get("fs_draw_beam_mode", False):
                 warn_conflict = (
@@ -12645,6 +12898,9 @@ def _render_fs_interactive_plan(
     active_cols: list = None,
     cantilevers: dict = None,
     drop_beams: list = None,
+    show_panel_labels: bool = True,
+    show_col_labels: bool = True,
+    show_beam_labels: bool = True,
 ):
     """
     عرض المسقط الأفقي تفاعلياً لنظام Flat Slab مع دعم كامل لنمط التحديد بصندوق الماوس (Box Selection Mode)
@@ -12835,9 +13091,9 @@ def _render_fs_interactive_plan(
                        min(float(b1_p1[1]), float(b1_p2[1])) <= hy <= max(float(b1_p1[1]), float(b1_p2[1])):
                         snaps_list.append({"x": vx, "y": hy, "type": "beam_cross", "label": f"تقاطع كمرة {b1.get('id')} × {b2.get('id')}"})
     bbox_info["snaps"] = snaps_list
-    bbox_info["beam_b_cm"] = float(st.session_state.get("fs_beam_b_cm", S.cfg_val("fs_beam_b_cm", 25.0)))
-    bbox_info["beam_t_cm"] = float(st.session_state.get("fs_beam_t_cm", S.cfg_val("fs_beam_t_cm", 0.0)))
-    bbox_info["beam_dia"] = int(st.session_state.get("fs_beam_dia_main", S.cfg_val("fs_beam_dia_main", 16)))
+    bbox_info["beam_b_cm"] = float(st.session_state.get("fs_beam_b_cm") or S.cfg_val("fs_beam_b_cm", 25.0) or 25.0)
+    bbox_info["beam_t_cm"] = float(st.session_state.get("fs_beam_t_cm") or S.cfg_val("fs_beam_t_cm", 60.0) or 60.0)
+    bbox_info["beam_dia"] = int(st.session_state.get("fs_beam_dia_main") or S.cfg_val("fs_beam_dia_main", 16) or 16)
 
     bbox_json = json.dumps(bbox_info)
     mode_js = f'"{box_mode}"' if box_mode else "null"
@@ -12857,6 +13113,13 @@ def _render_fs_interactive_plan(
           <button class="banner-exit-btn" id="btn-exit-mode" title="إنهاء الوضع التفاعلي (Esc)">✕ إنهاء (Esc)</button>
         </div>
         """
+
+    cls_panels = "active" if show_panel_labels else "inactive"
+    badge_panels = "✓" if show_panel_labels else "✕"
+    cls_cols = "active" if show_col_labels else "inactive"
+    badge_cols = "✓" if show_col_labels else "✕"
+    cls_beams = "active" if show_beam_labels else "inactive"
+    badge_beams = "✓" if show_beam_labels else "✕"
 
     html_code = f"""<!DOCTYPE html>
 <html>
@@ -13031,6 +13294,8 @@ def _render_fs_interactive_plan(
     border: 1px solid #cbd5e1;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
     align-items: center;
+    flex-wrap: wrap;
+    max-width: calc(100% - 20px);
   }}
   .cad-btn {{
     background: #ffffff;
@@ -13050,6 +13315,39 @@ def _render_fs_interactive_plan(
     background: #eff6ff;
     border-color: #3b82f6;
     color: #1d4ed8;
+  }}
+  .cad-toolbar-sep {{
+    width: 1px;
+    height: 20px;
+    background: #cbd5e1;
+    margin: 0 4px;
+    display: inline-block;
+  }}
+  .cad-toggle-btn {{
+    font-size: 0.76rem;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.18s ease;
+    user-select: none;
+    cursor: pointer;
+  }}
+  .cad-toggle-btn.active {{
+    background: #eff6ff !important;
+    border: 1.5px solid #2563eb !important;
+    color: #1d4ed8 !important;
+    font-weight: 800 !important;
+    box-shadow: 0 1px 4px rgba(37, 99, 235, 0.22);
+  }}
+  .cad-toggle-btn.inactive {{
+    background: #f8fafc !important;
+    border: 1px dashed #94a3b8 !important;
+    color: #64748b !important;
+    opacity: 0.70;
+    text-decoration: line-through;
+  }}
+  .cad-toggle-btn:hover {{
+    filter: brightness(0.96);
+    transform: translateY(-1px);
   }}
   .zoom-badge {{
     font-size: 0.75rem;
@@ -13155,14 +13453,6 @@ def _render_fs_interactive_plan(
 <body>
 <div id="cad-viewport">
   {banner_html}
-  <div class="cad-toolbar" dir="rtl">
-    <button class="cad-btn" id="btn-zoom-in" title="تكبير (Zoom In)">➕</button>
-    <span class="zoom-badge" id="zoom-level">100%</span>
-    <button class="cad-btn" id="btn-zoom-out" title="تصغير (Zoom Out)">➖</button>
-    <button class="cad-btn" id="btn-reset" title="إعادة الضبط (Reset)">🔄 ضبط</button>
-    <button class="cad-btn" id="btn-fullscreen" title="ملء الشاشة (Fullscreen)">⛶</button>
-    <a class="cad-btn" id="btn-download" href="data:image/png;base64,{b64_img}" download="Flat_Slab_Interactive_Plan.png" title="حفظ المسقط كصورة">💾</a>
-  </div>
   <div id="magnetic-snap-marker"></div>
   <div id="magnetic-snap-badge"></div>
   <div id="beam-start-marker"></div>
@@ -13214,7 +13504,7 @@ def _render_fs_interactive_plan(
 
   function updateTransform() {{
     canvas.style.transform = `translate(${{panX}}px, ${{panY}}px) scale(${{scale}})`;
-    zoomBadge.textContent = Math.round(scale * 100) + '%';
+    if (zoomBadge) zoomBadge.textContent = Math.round(scale * 100) + '%';
   }}
 
   function applyZoom(factor, clientX, clientY) {{
@@ -13230,18 +13520,47 @@ def _render_fs_interactive_plan(
     updateTransform();
   }}
 
-  document.getElementById('btn-zoom-in').addEventListener('click', (e) => {{ e.stopPropagation(); applyZoom(1.25); }});
-  document.getElementById('btn-zoom-out').addEventListener('click', (e) => {{ e.stopPropagation(); applyZoom(0.8); }});
-  document.getElementById('btn-reset').addEventListener('click', (e) => {{
+  const btnZoomIn = document.getElementById('btn-zoom-in');
+  if (btnZoomIn) btnZoomIn.addEventListener('click', (e) => {{ e.stopPropagation(); applyZoom(1.25); }});
+  const btnZoomOut = document.getElementById('btn-zoom-out');
+  if (btnZoomOut) btnZoomOut.addEventListener('click', (e) => {{ e.stopPropagation(); applyZoom(0.8); }});
+  const btnReset = document.getElementById('btn-reset');
+  if (btnReset) btnReset.addEventListener('click', (e) => {{
     e.stopPropagation();
     scale = 1.0; panX = 0; panY = 0;
     updateTransform();
   }});
-  document.getElementById('btn-fullscreen').addEventListener('click', (e) => {{
+  const btnFullscreen = document.getElementById('btn-fullscreen');
+  if (btnFullscreen) btnFullscreen.addEventListener('click', (e) => {{
     e.stopPropagation();
     if (!document.fullscreenElement) viewport.requestFullscreen().catch(() => {{}});
     else document.exitFullscreen().catch(() => {{}});
   }});
+
+  const btnTogglePanels = document.getElementById('btn-toggle-panels');
+  if (btnTogglePanels) {{
+    btnTogglePanels.addEventListener('click', function(e) {{
+      e.stopPropagation();
+      btnTogglePanels.style.opacity = '0.4';
+      syncToStreamlit({{ action: 'toggle_labels', target: 'panels', ts: Date.now() }});
+    }});
+  }}
+  const btnToggleCols = document.getElementById('btn-toggle-cols');
+  if (btnToggleCols) {{
+    btnToggleCols.addEventListener('click', function(e) {{
+      e.stopPropagation();
+      btnToggleCols.style.opacity = '0.4';
+      syncToStreamlit({{ action: 'toggle_labels', target: 'columns', ts: Date.now() }});
+    }});
+  }}
+  const btnToggleBeams = document.getElementById('btn-toggle-beams');
+  if (btnToggleBeams) {{
+    btnToggleBeams.addEventListener('click', function(e) {{
+      e.stopPropagation();
+      btnToggleBeams.style.opacity = '0.4';
+      syncToStreamlit({{ action: 'toggle_labels', target: 'beams', ts: Date.now() }});
+    }});
+  }}
 
   function drawInstantColumnsOnCanvas(intersectionsList) {{
     if (!instantOverlay || !bboxInfo || !bboxInfo.xlim || !bboxInfo.ylim) return;
@@ -13700,7 +14019,7 @@ def _render_fs_interactive_plan(
           bounds = getBoxWorldBounds(minX, minY, Math.max(width, 10), Math.max(height, 10));
         }}
 
-        if (pStart && pEnd && (Math.hypot(pEnd.x - pStart.x, pEnd.y - pStart.y) >= 0.20 || bounds)) {{
+        if (pStart && pEnd) {{
           drawInstantBeamOnCanvas(pStart, pEnd, bboxInfo.beam_b_cm || 25.0);
           if (statusPill) {{
             statusPill.textContent = '⚡ جاري التحقق من الركائز وتصميم الكمرة...';
@@ -13712,7 +14031,7 @@ def _render_fs_interactive_plan(
             p2_world: [pEnd.x, pEnd.y],
             box: bounds ? [bounds.xmin, bounds.xmax, bounds.ymin, bounds.ymax] : null,
             b_cm: bboxInfo.beam_b_cm || 25.0,
-            t_cm: bboxInfo.beam_t_cm || 0.0,
+            t_cm: bboxInfo.beam_t_cm || 60.0,
             dia: bboxInfo.beam_dia || 16,
             ts: Date.now()
           }});
@@ -13856,6 +14175,7 @@ def _section_fs_add_columns(
     LL: float,
     SDL: float,
     wall_load: float,
+    _pending_voids: list = None,
 ):
     """
     قسم '➕ إضافة الأعمدة على المحاور' لنظام Flat Slab:
@@ -14647,7 +14967,7 @@ def _section_fs_add_columns(
 
         with st.expander(
             f"🏗️ 4. Drop Beams Management ({len(cur_drop_beams)} Beams — إسقاط وتعديل وحذف الكمرات الساقطة)",
-            expanded=bool(is_beam_mode_active or st.session_state.get("fs_pending_delete_beam_id") or st.session_state.get("_fs_invalid_beam_rejected_alert") or st.session_state.get("_fs_mode_conflict_alert")),
+            expanded=bool(is_beam_mode_active or st.session_state.get("fs_pending_delete_beam_ids") or st.session_state.get("fs_pending_delete_beam_id") or st.session_state.get("_fs_invalid_beam_rejected_alert") or st.session_state.get("_fs_mode_conflict_alert")),
             key=f"{prefix}sub_exp_drop_beams",
         ):
             st.markdown(
@@ -14661,9 +14981,11 @@ def _section_fs_add_columns(
             )
 
             # Pre-Drop Inputs
-            init_beam_b = float(st.session_state.get("fs_beam_b_cm", S.cfg_val("fs_beam_b_cm", 25.0)))
-            init_beam_t = float(st.session_state.get("fs_beam_t_cm", S.cfg_val("fs_beam_t_cm", 0.0)))
-            init_beam_dia = int(st.session_state.get("fs_beam_dia_main", S.cfg_val("fs_beam_dia_main", 16)))
+            init_beam_b = float(st.session_state.get("fs_beam_b_cm") or S.cfg_val("fs_beam_b_cm", 25.0) or 25.0)
+            init_beam_t = float(st.session_state.get("fs_beam_t_cm") or S.cfg_val("fs_beam_t_cm", 60.0) or 60.0)
+            if init_beam_t <= 0.0:
+                init_beam_t = 60.0
+            init_beam_dia = int(st.session_state.get("fs_beam_dia_main") or S.cfg_val("fs_beam_dia_main", 16) or 16)
 
             c_bb, c_bt, c_bdia = st.columns(3)
             with c_bb:
@@ -14674,18 +14996,18 @@ def _section_fs_add_columns(
                     value=init_beam_b,
                     step=5.0,
                     key="fs_beam_b_cm",
-                    help="عرض الكمرة الخرسانية بالسنتمتر (مثل 25 سم = 250 مم).",
+                    help="عرض الكمرة الخرسانية بالسنتمتر (القيمة الافتراضية 25 سم).",
                 )
                 S.cfg_set("fs_beam_b_cm", beam_b_val)
             with c_bt:
                 beam_t_val = st.number_input(
                     "عمق الكمرة t (سم):",
-                    min_value=0.0,
+                    min_value=15.0,
                     max_value=150.0,
                     value=init_beam_t,
                     step=5.0,
                     key="fs_beam_t_cm",
-                    help="اتركه 0 لحساب العمق آلياً طبقاً لحدود الترخيم بالكود ECP 203 (Ln/16 أو Ln/18.5 أو Ln/21)، أو حدد عمقاً مخصصاً بالسم.",
+                    help="عمق الكمرة الكلي بالسنتمتر شامل سمك البلاطة (القيمة الافتراضية 60 سم، مع إمكانية تعديلها بحرية).",
                 )
                 S.cfg_set("fs_beam_t_cm", beam_t_val)
             with c_bdia:
@@ -14704,7 +15026,7 @@ def _section_fs_add_columns(
             st.markdown(
                 """
                 <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 11px; font-size: 11.5px; color: #475569; margin-bottom: 8px; line-height: 1.6;" dir="rtl">
-                    ℹ️ <b>تحديد العمق (t):</b> عند إبقاء العمق <b>0</b>، يقوم النظام بحساب العمق الأدنى لمقاومة الترخيم آلياً وفق الكود المصري ECP 203 وتقريبه لأقرب 5 سم بالزيادة، وتطبيقه على الرسم. إذا رغبت في فرض عمق ثابت (مثل 60 سم)، حدده مباشرة من الخانة أعلاه.
+                    ℹ️ <b>أبعاد الكمرة الساقطة الافتراضية:</b> القيمة الافتراضية لعرض الكمرة هي <b>25 سم</b>، وللعمق الكلي <b>60 سم</b>، مع إمكانية تغييرها بحرية قبل أو بعد الإسقاط.
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -14822,73 +15144,91 @@ def _section_fs_add_columns(
                     unsafe_allow_html=True,
                 )
 
-            # Beams Selector (قائمة كمرات النموذج المنسدلة)
+            # Beams Selector (قائمة كمرات النموذج المنسدلة - إمكانية اختيار أكثر من كمرة للحذف)
             st.markdown("<hr style='margin:10px 0 8px 0; border:none; border-top:1px dashed #cbd5e1;'>", unsafe_allow_html=True)
-            beam_options = ["-- اختر كمرة للمراجعة أو الحذف --"] + [
-                f"{b.get('id', '')} ({b.get('b_mm', 250)}×{b.get('t_mm', 600)} مم — بحر صافي: {b.get('clear_span_m', 0):.2f}م)"
+            del_beam_ver = int(st.session_state.get("_fs_del_beam_ver", 0))
+            beam_options = [b.get("id", "") for b in cur_drop_beams if b.get("id")]
+            beam_labels = {
+                b.get("id", ""): f"{b.get('id', '')} ({b.get('b_mm', 250)}×{b.get('t_mm', 600)} مم — بحر: {b.get('clear_span_m', 0):.2f}م)"
                 for b in cur_drop_beams
-            ]
-            sel_beam_idx = st.selectbox(
-                "قائمة كمرات النموذج المنسدلة (Beams Selector):",
-                options=list(range(len(beam_options))),
-                format_func=lambda idx: beam_options[idx],
-                key="fs_dropdown_sel_beam",
-                help="قائمة حصرية تتضمن تلقائياً أسماء وأكواد كافة الكمرات المسقطة على البلاطة، ومخصصة لاختيار العنصر المراد مراجعته أو حذفه.",
+                if b.get("id")
+            }
+
+            selected_del_beam_ids = st.multiselect(
+                "🗑️ اختيار كمرات لحذفها من المسقط (Beams Removal):",
+                options=beam_options,
+                default=[],
+                format_func=lambda bid: beam_labels.get(bid, bid),
+                key=f"{prefix}fs_multisel_del_beams_{del_beam_ver}",
+                placeholder="اختر كمرة أو أكثر من كمرات المسقط للحذف النهائي...",
+                disabled=not beam_options,
+                help="عند اختيار أي كمرة أو أكثر يتم تلوينها فوراً بلون باهت على المسقط الأفقي وتظهر رسالة تأكيد الحذف مباشرة.",
             )
 
-            if sel_beam_idx > 0 and (sel_beam_idx - 1) < len(cur_drop_beams):
-                selected_beam = cur_drop_beams[sel_beam_idx - 1]
-                if st.button(f"🗑️ حذف الكمرة {selected_beam.get('id', '')}", key=f"{prefix}btn_req_del_beam_{selected_beam.get('id', '')}", type="primary", use_container_width=True):
-                    st.session_state["fs_pending_delete_beam_id"] = selected_beam.get("id")
-                    st.rerun()
+            pending_del_beam_ids = set(selected_del_beam_ids)
+            st.session_state["fs_pending_delete_beam_ids"] = list(selected_del_beam_ids)
+            st.session_state["fs_pending_delete_beam_id"] = list(selected_del_beam_ids)[0] if selected_del_beam_ids else None
 
-            # Mandatory Confirmation Alert (رسالة التأكيد الإلزامية)
-            pending_del_id = st.session_state.get("fs_pending_delete_beam_id")
-            if pending_del_id:
-                p_beam = next((b for b in cur_drop_beams if b.get("id") == pending_del_id), None)
-                if p_beam:
-                    st.markdown(
-                        f"""
-                        <div dir="rtl" style="background:#fef2f2; border:2px solid #ef4444; border-radius:10px; padding:12px 16px; margin-top:12px; margin-bottom:8px; box-shadow:0 4px 12px rgba(239,68,68,0.15);">
-                            <div style="color:#991b1b; font-size:14px; font-weight:800; margin-bottom:4px;">
-                                ⚠️ تأكيد العملية: هل أنت متأكد من رغبتك في حذف الكمرة ({p_beam.get('id', '')}) بأبعاد ({p_beam.get('b_mm', 250)} × {p_beam.get('t_mm', 600)} مم)؟ سيتم تحديث كافة المخططات فوراً.
-                            </div>
-                            <div style="color:#b91c1c; font-size:12px; font-weight:600;">
-                                سيتم شطب الكمرة فورياً من ذاكرة المشروع وإلغاء تأثيرها على الأحمال والترخيم وتحديث جميع اللوحات وجدول المخرجات.
-                            </div>
+            # Mandatory Confirmation Alert (رسالة التأكيد الإلزامية الفورية عند اختيار كمرة أو أكثر)
+            if selected_del_beam_ids:
+                beam_badges_html = "".join(
+                    f"<span style='background:#ffffff; border:1.5px solid #f97316; border-radius:5px; padding:3px 9px; font-size:12.5px; font-weight:800; color:#9a3412; white-space:nowrap;'>• {beam_labels.get(bid, bid)}</span>"
+                    for bid in selected_del_beam_ids
+                )
+                st.markdown(
+                    f"""
+                    <div dir="rtl" style="direction:rtl; text-align:right; background:#fef2f2; border:2px solid #dc2626; border-right:6px solid #dc2626; border-radius:10px; padding:12px 16px; margin-top:10px; margin-bottom:10px; box-shadow:0 3px 10px rgba(220,38,38,0.15); line-height:1.65;">
+                        <div style="color:#991b1b; font-size:14.5px; font-weight:800; margin-bottom:6px;">
+                            ⚠️ تأكيد العملية: هل أنت متأكد من رغبتك في حذف الكمرات المختارة ({len(selected_del_beam_ids)} كمرة)؟ (تم تلوينها بلون باهت على المسقط للمراجعة)
                         </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                    c_del_b_ok, c_del_b_cancel = st.columns([1.2, 1.0])
-                    with c_del_b_ok:
-                        if st.button("🗑️ موافقة (حذف نهائي)", key=f"{prefix}btn_confirm_del_beam_{pending_del_id}", type="primary", use_container_width=True):
-                            new_b_list = [b for b in cur_drop_beams if b.get("id") != pending_del_id]
-                            _bounds_del_b = st.session_state.get("_fs_current_slab_bounds") or None
-                            new_b_list = recompute_all_drop_beams(
-                                new_b_list,
-                                col_w_cm=_bc_col,
-                                col_d_cm=_tc_col,
-                                columns_list=_active_cols,
-                                cantilevers=cantilevers,
-                                grid_bounds=_bounds_del_b,
-                            )
-                            cfg["fs_drop_beams"] = new_b_list
-                            st.session_state["fs_drop_beams"] = new_b_list
-                            st.session_state["fs_pending_delete_beam_id"] = None
-                            S.save_settings()
-                            st.toast(f"✅ تم حذف الكمرة {pending_del_id} وتحديث كافة المخططات فوراً!", icon="🗑️")
-                            st.rerun()
-                    with c_del_b_cancel:
-                        if st.button("↩️ إلغاء", key=f"{prefix}btn_cancel_del_beam_{pending_del_id}", use_container_width=True):
-                            st.session_state["fs_pending_delete_beam_id"] = None
-                            st.rerun()
+                        <div style="display:flex; flex-wrap:wrap; gap:6px 10px; margin-top:6px; margin-bottom:8px;">
+                            {beam_badges_html}
+                        </div>
+                        <div style="color:#7f1d1d; font-size:12.5px; font-weight:600;">
+                            • سيتم شطب هذه الكمرات نهائياً من ذاكرة المشروع وإلغاء تأثيرها على الأحمال والترخيم وتحديث جميع اللوحات والمخططات فوراً.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                c_del_b_ok, c_del_b_cancel = st.columns([1.3, 1.0], gap="small")
+                with c_del_b_ok:
+                    if st.button("🗑️ تأكيد الحذف النهائي للكمرات المختارة", key=f"{prefix}btn_confirm_del_beams_{del_beam_ver}", type="primary", use_container_width=True):
+                        del_set = set(selected_del_beam_ids)
+                        new_b_list = [b for b in cur_drop_beams if b.get("id") not in del_set]
+                        _bounds_del_b = st.session_state.get("_fs_current_slab_bounds") or None
+                        new_b_list = recompute_all_drop_beams(
+                            new_b_list,
+                            col_w_cm=_bc_col,
+                            col_d_cm=_tc_col,
+                            columns_list=_active_cols,
+                            cantilevers=cantilevers,
+                            grid_bounds=_bounds_del_b,
+                        )
+                        cfg["fs_drop_beams"] = new_b_list
+                        st.session_state["fs_drop_beams"] = new_b_list
+                        st.session_state["fs_pending_delete_beam_ids"] = []
+                        st.session_state["fs_pending_delete_beam_id"] = None
+                        st.session_state["_fs_del_beam_ver"] = del_beam_ver + 1
+                        S.save_settings()
+                        st.toast(f"✅ تم حذف {len(selected_del_beam_ids)} كمرة وتحديث كافة المخططات فوراً!", icon="🗑️")
+                        st.rerun()
+                with c_del_b_cancel:
+                    if st.button("↩️ إلغاء", key=f"{prefix}btn_cancel_del_beams_{del_beam_ver}", use_container_width=True):
+                        st.session_state["fs_pending_delete_beam_ids"] = []
+                        st.session_state["fs_pending_delete_beam_id"] = None
+                        st.session_state["_fs_del_beam_ver"] = del_beam_ver + 1
+                        st.rerun()
 
     with col_right_plan:
         cur_drop_beams_plan = cfg.get("fs_drop_beams") or st.session_state.get("fs_drop_beams") or S.cfg_val("fs_drop_beams", []) or []
         if not isinstance(cur_drop_beams_plan, list):
             cur_drop_beams_plan = []
         is_beam_mode_active = bool(st.session_state.get("fs_draw_beam_mode", False))
+
+        show_panel_labels = bool(st.session_state.get("fs_show_panel_labels", S.cfg_val("fs_show_panel_labels", True)))
+        show_col_labels = bool(st.session_state.get("fs_show_col_labels", S.cfg_val("fs_show_col_labels", True)))
+        show_beam_labels = bool(st.session_state.get("fs_show_beam_labels", S.cfg_val("fs_show_beam_labels", True)))
 
         fig_interactive = generate_flat_slab_sketch(
             Lx_spans, Ly_spans, cantilevers,
@@ -14912,14 +15252,18 @@ def _section_fs_add_columns(
             removed_col_ids=_effective_removed_ids,
             pending_col_ids=pending_del_orig_ids,
             void_panel_ids=set(_confirmed_voids),
-            pending_void_ids=set(),
+            pending_void_ids=set(_pending_voids or []),
             col_transforms=_col_transforms,
             edge_columns=_edge_columns,
             void_boxes=_void_boxes_sk,
             col_props=_col_props,
             show_add_markers=True,
             drop_beams=cur_drop_beams_plan,
+            pending_beam_ids=pending_del_beam_ids,
             preview_axis=st.session_state.get("_fs_preview_axis"),
+            show_panel_labels=show_panel_labels,
+            show_col_labels=show_col_labels,
+            show_beam_labels=show_beam_labels,
         )
         # ── تنبيه مكان إسقاط الكمرة مرفوض إنشائياً مع زر موافق الإلزامي ──
         rejected_alert_plan = st.session_state.get("_fs_invalid_beam_rejected_alert")
@@ -14999,6 +15343,39 @@ def _section_fs_add_columns(
                 unsafe_allow_html=True,
             )
 
+        # شريط أزرار إظهار وإخفاء المسميات السريع فوق المسقط (مع زيادة التباعد الرأسي بين العنوان والأزرار)
+        st.markdown(
+            """
+            <div dir="rtl" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; padding:8px 14px; background:#f8fafc; border:1px solid #cbd5e1; border-right:4px solid #1e40af; border-radius:8px;">
+                <span style="font-size:0.92rem; font-weight:800; color:#0f172a;">👁️ إظهار / إخفاء المسميات الهندسية على المسقط:</span>
+            </div>
+            <div style="height: 8px;"></div>
+            """,
+            unsafe_allow_html=True,
+        )
+        c_tog1, c_tog2, c_tog3 = st.columns(3)
+        with c_tog1:
+            val_p = st.toggle("🏷️ أسماء البلاطات", value=show_panel_labels, key=f"{prefix}quick_tog_p")
+            if val_p != show_panel_labels:
+                st.session_state["fs_show_panel_labels"] = val_p
+                S.cfg_set("fs_show_panel_labels", val_p)
+                S.save_settings()
+                st.rerun()
+        with c_tog2:
+            val_c = st.toggle("🏛️ أسماء الأعمدة", value=show_col_labels, key=f"{prefix}quick_tog_c")
+            if val_c != show_col_labels:
+                st.session_state["fs_show_col_labels"] = val_c
+                S.cfg_set("fs_show_col_labels", val_c)
+                S.save_settings()
+                st.rerun()
+        with c_tog3:
+            val_b = st.toggle("📏 أسماء وأبعاد الكمرات", value=show_beam_labels, key=f"{prefix}quick_tog_b")
+            if val_b != show_beam_labels:
+                st.session_state["fs_show_beam_labels"] = val_b
+                S.cfg_set("fs_show_beam_labels", val_b)
+                S.save_settings()
+                st.rerun()
+
         _render_fs_interactive_plan(
             fig_interactive,
             x_coords=x_coords,
@@ -15008,6 +15385,9 @@ def _section_fs_add_columns(
             active_cols=_active_cols,
             cantilevers=cantilevers,
             drop_beams=cur_drop_beams_plan,
+            show_panel_labels=show_panel_labels,
+            show_col_labels=show_col_labels,
+            show_beam_labels=show_beam_labels,
         )
         try:
             cached_interactive_b64 = st.session_state.get("_fs_cached_interactive_b64")
@@ -15338,6 +15718,22 @@ def render(is_standalone: bool = False):
     active_profile_name = S.get_active_profile_name()
     prefix = S.get_safe_profile_filename_prefix()
     cfg = st.session_state.setdefault("cfg", {})
+
+    if active_profile_name == "Kitchen & Messhall" and len(cfg.get("fs_placed_cols", []) or []) == 46:
+        try:
+            S._PROFILES_CACHE = None
+            _disk_profs = S._load_json_safe(S.PROFILES_FILE, S.PROFILES_BAK_FILE)
+            _km_wrap = (_disk_profs or {}).get("profiles", {}).get("Kitchen & Messhall", {})
+            _km_disk = _km_wrap.get("data", _km_wrap) if isinstance(_km_wrap, dict) else {}
+            if isinstance(_km_disk, dict) and len(_km_disk.get("fs_placed_cols", [])) == 35:
+                for _k_sync in ("fs_placed_cols", "fs_col_props", "fs_col_transforms", "fs_drop_beams", "fs_removed_cols", "fs_zero_col_mode"):
+                    if _k_sync in _km_disk:
+                        cfg[_k_sync] = _km_disk[_k_sync]
+                        st.session_state[_k_sync] = _km_disk[_k_sync]
+                S.save_settings()
+                get_flat_slab_columns.clear()
+        except Exception:
+            pass
 
     if not is_standalone:
         if st.button(
@@ -15822,6 +16218,8 @@ def render(is_standalone: bool = False):
 
     if _last_pname != active_profile_name:
         st.session_state["_fs_last_active_profile"] = active_profile_name
+        st.session_state[f"{prefix}fs_design_started"] = False
+        st.session_state.pop(f"{prefix}fs_last_designed_state", None)
         st.session_state["_fs_last_geom_key"] = _geom_key
         st.session_state["_fs_prev_Lx_spans"] = list(Lx_spans)
         st.session_state["_fs_prev_Ly_spans"] = list(Ly_spans)
@@ -15953,7 +16351,10 @@ def render(is_standalone: bool = False):
     _confirmed_voids = [pid for pid in _confirmed_voids_raw if pid in _valid_panel_ids]
 
     _pending_removals = st.session_state.get("_fs_pending_removals", [])
-    _pending_voids = st.session_state.get("_fs_pending_voids", [])
+    _void_ver = int(st.session_state.get("_fs_del_void_ver", 0))
+    _raw_pending_voids = st.session_state.get(f"_fs_void_select_widget_{_void_ver}", st.session_state.get("_fs_pending_voids", [])) or []
+    _pending_voids = [pid for pid in _raw_pending_voids if pid in _valid_panel_ids and pid not in _confirmed_voids]
+    st.session_state["_fs_pending_voids"] = _pending_voids
 
     # Panels registry with voids marked
     _all_panels = get_flat_slab_panels(Lx_spans, Ly_spans, _confirmed_voids)
@@ -16034,7 +16435,7 @@ def render(is_standalone: bool = False):
 
     # ── 5c-bis. SECTION: 🏛️ Plan & Structure Management (إدارة وتوقيع الأعمدة والكمرات) ──
     with st.expander(
-        f"🏛️ Plan & Structure Management (إدارة وتوقيع الأعمدة والكمرات — {len(_active_cols)} / {len(_all_cols)} عمود فعّال • {_n_beams_active} كمرة)",
+        f"🏛️ Plan & Structure Management (إدارة وتوقيع الأعمدة والكمرات — {len(_active_cols)} عمود • {_n_beams_active} كمرة)",
         expanded=True,
         key=f"{prefix}exp_add_del_cols",
     ):
@@ -16068,6 +16469,7 @@ def render(is_standalone: bool = False):
             LL=LL,
             SDL=SDL,
             wall_load=wall_load,
+            _pending_voids=_pending_voids,
         )
 
     img_verif_b64 = None
@@ -16078,15 +16480,15 @@ def render(is_standalone: bool = False):
     with st.expander(
         f"🕳️ Panel Removal & Openings (تعديل وحذف البلاطات — إنشاء مناور وفراغات معمارية / Voids) "
         f"{'— ' + str(len(_confirmed_voids)) + ' voids created' if _confirmed_voids else ''}",
-        expanded=bool(st.session_state.get("_fs_show_void_confirm", False)),
+        expanded=bool(_pending_voids or st.session_state.get("_fs_show_void_confirm", False)),
     ):
         st.markdown(
             """
-            <div style='background:#fffbeb;border-left:4px solid #f59e0b;padding:10px 14px;
-                        border-radius:6px;margin-bottom:10px;'>
+            <div dir='rtl' style='background:#fffbeb;border-right:4px solid #f59e0b;padding:10px 14px;
+                        border-radius:6px;margin-bottom:10px;color:#0f172a;'>
             <b>📋 يرجى مراجعة مخطط البلاطات أعلاه.</b><br>
             حدّد البلاطات المحصورة بين المحاور التي تريد حذفها لإنشاء مناور وفراغات معمارية (Voids).<br>
-            بعد التأكيد: سيتم تلوين البلاطات باللون الرصاصي وعمل علامة X وحذف كمياتها وتعديل أحمال الأعمدة المحيطة بها تلقائياً.
+            عند اختيار أي بلاطة يتم تلوينها فوراً <b>بلون باهت</b> على المسقط الأفقي وتظهر <b>رسالة تأكيد الحذف</b> مباشرة.
             </div>
             """,
             unsafe_allow_html=True,
@@ -16098,71 +16500,61 @@ def render(is_standalone: bool = False):
             for p in _all_panels
         }
 
-        _show_void_confirm = st.session_state.get("_fs_show_void_confirm", False)
+        _selected_voids = st.multiselect(
+            "🔍 Select panels to remove / make into voids (اختر البلاطات لحذفها وإنشاء مناور):",
+            options=_options_for_voids,
+            default=[p for p in _pending_voids if p in _options_for_voids],
+            format_func=lambda pid: _void_labels.get(pid, pid),
+            key=f"_fs_void_select_widget_{_void_ver}",
+            help="عند اختيار أي بلاطة يتم تلوينها بلون باهت على المسقط الأفقي وتظهر رسالة تأكيد الحذف فوراً.",
+        )
+        st.session_state["_fs_pending_voids"] = list(_selected_voids)
 
-        if not _show_void_confirm:
-            _selected_voids = st.multiselect(
-                "🔍 Select panels to remove / make into voids (اختر البلاطات لإنشاء مناور):",
-                options=_options_for_voids,
-                default=[p for p in _pending_voids if p in _options_for_voids],
-                format_func=lambda pid: _void_labels.get(pid, pid),
-                key="_fs_void_select_widget",
-                help="اختر البلاطة المحددة بمحاورها لتحويلها إلى منور.",
-            )
-            st.session_state["_fs_pending_voids"] = _selected_voids
-
-            _btn_v_col, _ = st.columns([1, 2])
-            with _btn_v_col:
-                if st.button(
-                    "🔍 Review & Confirm Void Removal",
-                    key="_fs_btn_void_review",
-                    use_container_width=True,
-                    disabled=not _selected_voids,
-                ):
-                    st.session_state["_fs_show_void_confirm"]     = True
-                    st.session_state["_fs_pending_void_snapshot"] = list(_selected_voids)
-                    st.rerun()
-
-        else:
-            _void_snapshot = st.session_state.get("_fs_pending_void_snapshot", [])
-            _snap_panels = [p for p in _all_panels if p["id"] in _void_snapshot]
+        if _selected_voids:
+            _snap_panels = [p for p in _all_panels if p["id"] in _selected_voids]
             _tot_vd_area = sum(p["area"] for p in _snap_panels)
 
             _void_badges_html = "".join(
-                f"<span style='background:#ffffff; border:1px solid #fcd34d; border-radius:4px; padding:2px 8px; font-size:12px; font-weight:700; color:#0f172a; white-space:nowrap;'>• {_void_labels.get(pid, pid)}</span>"
-                for pid in _void_snapshot
+                f"<span style='background:#ffffff; border:1px solid #f97316; border-radius:4px; padding:2px 8px; font-size:12px; font-weight:700; color:#9a3412; white-space:nowrap;'>• {_void_labels.get(pid, pid)}</span>"
+                for pid in _selected_voids
             )
 
             st.markdown(
                 f"""
-                <div dir='rtl' style='direction:rtl; text-align:right; background:#fffbeb; border:1px solid #fde68a; border-right:4px solid #f59e0b; padding:6px 12px; border-radius:6px; margin:2px 0 6px 0; line-height:1.4;'>
-                    <div style='font-size:12.5px; font-weight:700; color:#92400e;'>
-                        ⚠️ <b>Pending Void Creation Confirmation:</b> سيتم تفريغ البلاطات كـ <b>مناور معمارية (Voids)</b> بمساحة إجمالية <span style='color:#b45309; font-size:13px; font-weight:800;'>{_tot_vd_area:.2f} m²</span>:
+                <div dir='rtl' style='direction:rtl; text-align:right; background:#fef2f2; border:2px solid #dc2626; border-right:6px solid #dc2626; padding:10px 14px; border-radius:8px; margin:8px 0 10px 0; line-height:1.6; box-shadow:0 2px 8px rgba(220,38,38,0.14);'>
+                    <div style='font-size:14px; font-weight:800; color:#991b1b; margin-bottom:4px;'>
+                        ⚠️ تأكيد حذف البلاطات المختارة وتحويلها إلى مناور (Voids) — إجمالي المساحة: <span style='color:#b91c1c;'>{_tot_vd_area:.2f} m²</span> (تم تلوينها بلون باهت على المسقط للمراجعة):
                     </div>
-                    <div style='display:flex; flex-wrap:wrap; gap:4px 8px; margin-top:4px;'>
+                    <div style='display:flex; flex-wrap:wrap; gap:4px 8px; margin-top:4px; margin-bottom:4px;'>
                         {_void_badges_html}
+                    </div>
+                    <div style='font-size:12.5px; color:#7f1d1d; font-weight:600;'>
+                        • عند الضغط على تأكيد الحذف سيتم تفريغ البلاطة، وحذف كمياتها، وإعادة توزيع أحمال الأعمدة المحيطة بها تلقائياً.
                     </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
-            _conf_v_a, _conf_v_b, _ = st.columns([1.2, 0.8, 2], gap="small")
+            _conf_v_a, _conf_v_b, _ = st.columns([1.4, 0.9, 1.7], gap="small")
             with _conf_v_a:
-                if st.button("✅ Yes — Confirm Voids & Redesign",
-                             key="_fs_btn_void_yes", use_container_width=True):
-                    _new_confirmed_voids = list(set(_confirmed_voids) | set(_void_snapshot))
+                if st.button("✅ تأكيد الحذف النهائي للبلاطة (تحويل لمنور)",
+                             type="primary",
+                             key=f"_fs_btn_void_yes_{_void_ver}", use_container_width=True):
+                    _new_confirmed_voids = list(set(_confirmed_voids) | set(_selected_voids))
                     st.session_state.setdefault("cfg", {})["fs_void_panels"] = _new_confirmed_voids
                     S.save_settings()
                     st.session_state["_fs_pending_voids"] = []
                     st.session_state["_fs_pending_void_snapshot"] = []
                     st.session_state["_fs_show_void_confirm"] = False
+                    st.session_state["_fs_del_void_ver"] = _void_ver + 1
                     st.rerun()
             with _conf_v_b:
-                if st.button("↩️ Cancel", key="_fs_btn_void_cancel", use_container_width=True):
+                if st.button("↩️ إلغاء", key=f"_fs_btn_void_cancel_{_void_ver}", use_container_width=True):
                     st.session_state["_fs_pending_voids"] = []
                     st.session_state["_fs_pending_void_snapshot"] = []
                     st.session_state["_fs_show_void_confirm"] = False
+                    st.session_state["_fs_del_void_ver"] = _void_ver + 1
                     st.rerun()
 
         # ── Restore Voids Section ─────────────────────────────────────────────
@@ -16255,28 +16647,111 @@ def render(is_standalone: bool = False):
         unsafe_allow_html=True,
     )
 
-    _geom_fingerprint = (
-        f"Lx:{list(Lx_spans)}|Ly:{list(Ly_spans)}|cant:({cant_left},{cant_right},{cant_top},{cant_bottom})|"
-        f"cols:{len(_active_cols)}|trans:{cfg.get('fs_col_transforms', {})}|voids:{list(_confirmed_voids)}|"
-        f"ts:{ts_initial}|col_sz:({bc_s},{tc_s})|loads:({SDL},{wall_load},{LL})|rebar:({bottom_mesh_dia},{top_mesh_dia})"
+    _cur_drop_beams = st.session_state.get("fs_drop_beams") or cfg.get("fs_drop_beams") or S.cfg_val("fs_drop_beams", []) or []
+    _del_col_ver_fp = int(st.session_state.get("_fs_del_col_ver", 0))
+    _pending_del_cols_fp = list(st.session_state.get(f"{prefix}sel_perm_delete_cols_{_del_col_ver_fp}", []) or [])
+    _del_beam_ver_fp = int(st.session_state.get("_fs_del_beam_ver", 0))
+    _pending_del_beam_fp = list(st.session_state.get(f"{prefix}fs_multisel_del_beams_{_del_beam_ver_fp}", st.session_state.get("fs_pending_delete_beam_ids", [])) or [])
+    if not _pending_del_beam_fp and st.session_state.get("fs_pending_delete_beam_id"):
+        _pending_del_beam_fp = [st.session_state.get("fs_pending_delete_beam_id")]
+    _pending_state_fp = {
+        "new_col_b": float(cfg.get("fs_new_col_b", 30.0) or 30.0),
+        "new_col_t": float(cfg.get("fs_new_col_t", 50.0) or 50.0),
+        "new_col_dir": str(cfg.get("fs_new_col_dir", "") or ""),
+        "new_col_sx": str(cfg.get("fs_new_col_sx", "") or ""),
+        "new_col_sy": str(cfg.get("fs_new_col_sy", "") or ""),
+        "beam_b_cm": float(st.session_state.get("fs_beam_b_cm", S.cfg_val("fs_beam_b_cm", 25.0)) or 25.0),
+        "beam_t_cm": float(st.session_state.get("fs_beam_t_cm", S.cfg_val("fs_beam_t_cm", 60.0)) or 60.0),
+        "beam_dia_main": int(st.session_state.get("fs_beam_dia_main", S.cfg_val("fs_beam_dia_main", 16)) or 16),
+        "pending_del_cols": sorted([str(x) for x in _pending_del_cols_fp]),
+        "pending_del_beam": sorted([str(x) for x in _pending_del_beam_fp]),
+        "pending_voids": sorted([str(x) for x in (_pending_voids or [])]),
+    }
+    _current_design_fingerprint = build_flat_slab_input_fingerprint(
+        Lx_spans=Lx_spans,
+        Ly_spans=Ly_spans,
+        cantilevers=cantilevers,
+        ts_initial=ts_initial,
+        bc_col=_bc_col,
+        tc_col=_tc_col,
+        Fcu=Fcu,
+        Fy=Fy,
+        gamma_c=gamma_c,
+        SDL=SDL,
+        wall_load=wall_load,
+        LL=LL,
+        num_floors=num_floors,
+        bottom_mesh_dia=bottom_mesh_dia,
+        top_mesh_dia=top_mesh_dia,
+        n_mesh_btm=n_btm_mesh_usr,
+        n_mesh_top=n_top_mesh_usr,
+        active_cols=_active_cols,
+        col_transforms=cfg.get("fs_col_transforms", {}),
+        col_props=cfg.get("fs_col_props", {}),
+        edge_columns=cfg.get("fs_edge_columns", {}),
+        drop_beams=_cur_drop_beams,
+        confirmed_voids=_confirmed_voids,
+        void_boxes_sk=_void_boxes_sk,
+        cov=cov,
+        col_extra_dia=col_extra_dia,
+        strip_top_extra_dia=strip_top_extra_dia,
+        strip_bottom_extra_dia=strip_bottom_extra_dia,
+        col_sf_val=col_sf_val,
+        high_safety_mode=high_safety_mode,
+        placed_cols=_placed_cols_raw,
+        removed_cols=_confirmed_removals,
+        pending_state=_pending_state_fp,
     )
+
+    _last_designed_state = st.session_state.get(f"{prefix}fs_last_designed_state")
+    _is_design_started = bool(st.session_state.get(f"{prefix}fs_design_started", False))
+
+    # فحص هل حدث أي تغيير في المدخلات بعد آخر تصميم تم تنفيذه
+    _is_state_dirty = bool(_last_designed_state and (_last_designed_state != _current_design_fingerprint))
+
+    if _is_state_dirty:
+        # إلغاء اعتماد التصميم القديم فوراً ومسح النتائج المؤقتة السابقة
+        _is_design_started = False
+        st.session_state[f"{prefix}fs_design_started"] = False
+        for _dirty_k in [
+            f"{prefix}fs_ftg_analysis", "fs_ftg_analysis",
+            f"{prefix}fs_gb_analysis", "fs_gb_analysis",
+            f"{prefix}punching_results",
+            f"{prefix}fs_cur_beams_designs",
+            f"{prefix}fs_indiv_col_designs",
+            f"{prefix}fs_deflection_results",
+            f"{prefix}fs_moments_results",
+            "_fs_calc_done",
+        ]:
+            st.session_state.pop(_dirty_k, None)
 
     if st.button("🚀 إبدأ التصميم الإنشائي وتوليد المخططات", key=f"{prefix}btn_fs_run_design", use_container_width=True, help="بدء الحسابات والتصميم الإنشائي وتوليد مخططات العزوم والتسليح والترخيم والقص الثاقب"): 
         st.session_state[f"{prefix}fs_design_started"] = True
-        st.session_state[f"{prefix}fs_last_designed_state"] = _geom_fingerprint
+        st.session_state[f"{prefix}fs_last_designed_state"] = _current_design_fingerprint
         st.rerun()
 
-    _is_design_started = st.session_state.get(f"{prefix}fs_design_started", False)
-    _last_designed_state = st.session_state.get(f"{prefix}fs_last_designed_state")
-
-    if _is_design_started and _last_designed_state and _last_designed_state != _geom_fingerprint:
-        st.warning(
-            "⚠️ **تنبيه:** تم تعديل المحاور أو الأعمدة أو الفراغات أو الأحمال. " 
-            "انقر على زر **«🚀 إبدأ التصميم الإنشائي وتوليد المخططات»** بالأعلى لتحديث نتائج التصميم والعزوم والتسليح والمخططات الهندسية طبقاً للوضع الجديد."
-        )
-
     if not _is_design_started:
-        st.info("ℹ️ **المرحلة الأولى:** تم تحديث وعرض المسقط الأفقي والمحاور والأعمدة والكمرات والفراغات بنجاح. اضغط على الزر الأحمر أعلاه **«🚀 إبدأ التصميم الإنشائي وتوليد المخططات»** لبدء الحسابات والتصميم الإنشائي وتوليد باقي المخططات والتسليح.")
+        if _is_state_dirty:
+            st.markdown(
+                """
+                <div style="background: linear-gradient(135deg, #450a0a, #7f1d1d); border: 2px solid #ef4444; border-radius: 12px; padding: 18px 24px; margin: 15px 0 25px 0; color: #ffffff; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.25);" dir="rtl">
+                    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                        <span style="font-size: 26px;">⚠️</span>
+                        <h4 style="margin: 0; color: #fecaca; font-size: 19px; font-weight: 800;">تم تعديل المدخلات الإنشائية — تم حجب النتائج القديمة لضمان دقة وسلامة التصميم</h4>
+                    </div>
+                    <p style="margin: 0; font-size: 15px; line-height: 1.6; color: #fef2f2;">
+                        تم رصد تغيير في (توزيع الأعمدة، اتجاهاتها، ترحيلها، إضافة أو تعديل الكمرات الساقطة، المحاور، الفراغات، أو الأحمال).
+                        نظراً لأن أي تعديل إنشائي يترتب عليه تغيير كامل في عزوم الانحناء، الترخيم، القص الثاقب وتصميم الأعمدة والأساسات، 
+                        تم <b>إخفاء وحجب جميع أقسام التصميم والمخططات الهندسية ونماذج BIM ثلاثية الأبعاد</b> تلقائياً لضمان سلامة الحسابات.
+                        <br><br>
+                        👉 يُرجى النقر على الزر الأحمر أعلاه <b>«🚀 إبدأ التصميم الإنشائي وتوليد المخططات»</b> لإعادة تشغيل الحسابات الهندسية وتوليد المخرجات طبقاً للوضع الجديد.
+                    </p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.info("ℹ️ **المرحلة الأولى:** تم تحديث وعرض المسقط الأفقي والمحاور والأعمدة والكمرات والفراغات بنجاح. اضغط على الزر الأحمر أعلاه **«🚀 إبدأ التصميم الإنشائي وتوليد المخططات»** لبدء الحسابات والتصميم الإنشائي وتوليد باقي المخططات والتسليح.")
         return
 
     # ── 5g. DESIGN CRITERIA & LOADS SUMMARY (Merged Section) ─────────────────
@@ -16340,10 +16815,10 @@ def render(is_standalone: bool = False):
             {"Parameter / المعيار": "Live Load (LL)", "Value / القيمة": f"{LL if LL else 0.25} t/m²", "Category": "Loading"},
             {"Parameter / المعيار": "Superimposed Dead Load (SDL)", "Value / القيمة": f"{SDL if SDL else 0.15} t/m²", "Category": "Loading"},
             {"Parameter / المعيار": "Wall Load (WL)", "Value / القيمة": f"{wall_load if wall_load else 0.50} t/m²", "Category": "Loading"},
-            {"Parameter / المعيار": "Bottom Mesh (الرقة السفلية B1, B2)", "Value / القيمة": f"{int(n_btm_mesh_usr) if n_btm_mesh_usr else 5} Φ {bottom_mesh_dia if bottom_mesh_dia else 12} / m'", "Category": "Reinforcement"},
-            {"Parameter / المعيار": "Top Mesh (الرقة العلوية T1, T2)", "Value / القيمة": f"{int(n_top_mesh_usr) if n_top_mesh_usr else 5} Φ {top_mesh_dia if top_mesh_dia else 10} / m'", "Category": "Reinforcement"},
-            {"Parameter / المعيار": "Column Extra Top Rebar", "Value / القيمة": f"Φ {col_extra_dia if col_extra_dia else 12} mm", "Category": "Reinforcement"},
-            {"Parameter / المعيار": "Strip Extra Top / Btm Rebar", "Value / القيمة": f"Φ {strip_top_extra_dia if strip_top_extra_dia else 12} / Φ {strip_bottom_extra_dia if strip_bottom_extra_dia else 12} mm", "Category": "Reinforcement"},
+            {"Parameter / المعيار": "Bottom Mesh (الرقة السفلية B1, B2)", "Value / القيمة": f"{int(n_btm_mesh_usr) if n_btm_mesh_usr else 5}Ø{bottom_mesh_dia if bottom_mesh_dia else 12}/m'", "Category": "Reinforcement"},
+            {"Parameter / المعيار": "Top Mesh (الرقة العلوية T1, T2)", "Value / القيمة": f"{int(n_top_mesh_usr) if n_top_mesh_usr else 5}Ø{top_mesh_dia if top_mesh_dia else 10}/m'", "Category": "Reinforcement"},
+            {"Parameter / المعيار": "Column Extra Top Rebar", "Value / القيمة": f"Ø{col_extra_dia if col_extra_dia else 12} mm", "Category": "Reinforcement"},
+            {"Parameter / المعيار": "Strip Extra Top / Btm Rebar", "Value / القيمة": f"Ø{strip_top_extra_dia if strip_top_extra_dia else 12} / Ø{strip_bottom_extra_dia if strip_bottom_extra_dia else 12} mm", "Category": "Reinforcement"},
             {"Parameter / المعيار": "Default Column Dimensions", "Value / القيمة": f"{_col_w_sk} cm × {_col_d_sk} cm", "Category": "Columns"},
         ]))
 
@@ -18879,8 +19354,8 @@ def render(is_standalone: bool = False):
                             opt_table_data.append({
                                 "مسار الحل (Solution Option)": "1️⃣ البديل الأول (تكثيف حديد الشد السفلي)",
                                 "نوع التسليح المعدل (Modified Rebar)": "حديد الشد السفلي الإضافي (Extra Bottom Tension Steel As)",
-                                "القطر المختار Φ": f"Φ {opt1_data['dia']} mm",
-                                "عدد الأسياخ / متر": f"{opt1_data['n_bars']} أسياخ / م",
+                                "القطر المختار Ø": f"Ø{opt1_data['dia']} mm",
+                                "عدد الأسياخ / متر": f"{opt1_data['n_bars']}Ø{opt1_data['dia']}/m",
                                 "مساحة التسليح الكلية": f"{opt1_data['As_prop']:.2f} cm²/m",
                                 "سهم الانحناء المتوقع (Δtotal)": f"{opt1_data['delta_tot']:.2f} mm",
                                 "الحد المسموح (Δall)": f"{opt_res['delta_allow_mm']:.2f} mm (Ln/250)",
@@ -18892,8 +19367,8 @@ def render(is_standalone: bool = False):
                             opt_table_data.append({
                                 "مسار الحل (Solution Option)": "2️⃣ البديل الثاني (زيادة حديد الضغط العلوي)",
                                 "نوع التسليح المعدل (Modified Rebar)": "حديد الضغط العلوي بمنتصف البحر (Compression Steel A's)",
-                                "القطر المختار Φ": f"Φ {opt2_data['dia']} mm",
-                                "عدد الأسياخ / متر": f"{opt2_data['n_bars']} أسياخ / م",
+                                "القطر المختار Ø": f"Ø{opt2_data['dia']} mm",
+                                "عدد الأسياخ / متر": f"{opt2_data['n_bars']}Ø{opt2_data['dia']}/m",
                                 "مساحة التسليح الكلية": f"{opt2_data['As_prime_prop']:.2f} cm²/m",
                                 "سهم الانحناء المتوقع (Δtotal)": f"{opt2_data['delta_tot']:.2f} mm",
                                 "الحد المسموح (Δall)": f"{opt_res['delta_allow_mm']:.2f} mm (Ln/250)",
@@ -19280,10 +19755,17 @@ def render(is_standalone: bool = False):
             with st.expander(f"🏛️ Rectangular Columns Design — {num_floors} Floors (التصميم الإنشائي لنماذج الأعمدة المستطيلة)", expanded=False):
                 st.markdown(
                     f"""
-                    <div style='background:#f8fafc;border-left:4px solid #1e40af;padding:10px 14px;border-radius:6px;margin-bottom:12px;'>
-                    <b>📋 تصميم قطاعات وتسليح نماذج الأعمدة (ECP 203 — Direct Axial Design):</b><br>
-                    يتم تصميم قطاعات الأعمدة بناءً على أقصى حمل كلي لعدد <b>{num_floors} طابق</b> <code>Total Pu ({num_floors} Floors)</code> لكل نموذج عمود 
-                    (داخلي C_int، طرفي C_edge، ركن C_corner) وفقاً لمساحة التأثير وموقع العمود في المسقط الإنشائي.
+                    <div dir="rtl" style="direction:rtl; text-align:right; background:linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%); border:1.5px solid #3b82f6; border-right:6px solid #38bdf8; padding:12px 16px; border-radius:8px; margin-bottom:10px; color:#f8fafc; line-height:1.65; box-shadow:0 3px 10px rgba(15, 23, 42, 0.25);">
+                        <div style="font-size:14.5px; font-weight:800; color:#38bdf8; margin-bottom:4px;">
+                            📋 تصميم قطاعات وتسليح نماذج الأعمدة (ECP 203 — Direct Axial Design):
+                        </div>
+                        <div style="font-size:13.5px; color:#f1f5f9; font-weight:600;">
+                            يتم تصميم قطاعات الأعمدة بناءً على أقصى حمل كلي لعدد <b style="color:#fde047;">{num_floors} طابق</b> <code style="background:#0f172a; color:#7dd3fc; padding:2px 6px; border-radius:4px; border:1px solid #38bdf8;">Total Pu ({num_floors} Floors)</code> لكل نموذج عمود 
+                            (داخلي C_int، طرفي C_edge، ركن C_corner) وفقاً لمساحة التأثير وموقع العمود في المسقط الإنشائي.
+                        </div>
+                    </div>
+                    <div dir="rtl" style="direction:rtl; text-align:right; background:linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border:1.5px solid #f59e0b; border-right:6px solid #d97706; padding:10px 16px; border-radius:8px; margin-bottom:14px; color:#78350f; font-size:13.5px; font-weight:800; line-height:1.6; box-shadow:0 2px 6px rgba(245, 158, 11, 0.18);">
+                        💡 لتعديل اختيار اقطار تسليح الاعمدة و اجهاد الحديد والخرسانة توجه الي موديول تصميم الاعمدة الخرسانية <b style="color:#92400e;">Rectangular columns</b>
                     </div>
                     """,
                     unsafe_allow_html=True
@@ -20776,7 +21258,7 @@ def render(is_standalone: bool = False):
 
                 if num_floors > 1:
                     dia_table_rows.append({
-                        "قطر السيخ Φ (Bar Dia)": f"Φ {d} mm",
+                        "قطر السيخ Ø (Bar Dia)": f"Ø{d} mm",
                         "وزن المتر الطولي (kg/m')": f"{(d**2)/162.0:.4f} kg/m'",
                         "سقف الدور (1F)": f"{s_kg_1f/1000.0:.3f} Ton ({s_kg_1f:,.1f} kg)" if s_kg_1f > 0 else "—",
                         f"أسقف المبنى ({num_floors}F)": f"{s_ton:.3f} Ton ({s_kg:,.1f} kg)" if s_kg > 0 else "—",
@@ -20789,7 +21271,7 @@ def render(is_standalone: bool = False):
                     })
                 else:
                     dia_table_rows.append({
-                        "قطر السيخ Φ (Bar Dia)": f"Φ {d} mm",
+                        "قطر السيخ Ø (Bar Dia)": f"Ø{d} mm",
                         "وزن المتر الطولي (kg/m')": f"{(d**2)/162.0:.4f} kg/m'",
                         "حديد السقف (Slab Steel)": f"{s_ton:.3f} Ton ({s_kg:,.1f} kg)" if s_kg > 0 else "—",
                         "حديد الأعمدة (Columns)": f"{c_ton:.3f} Ton ({c_kg:,.1f} kg)" if c_kg > 0 else "—",

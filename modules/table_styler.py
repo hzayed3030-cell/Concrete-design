@@ -12,9 +12,51 @@ import pandas as pd
 import streamlit as st
 
 
+def _normalize_rebar_notation(val_str: str) -> str:
+    """
+    Normalize all rebar notations to compact '8Ø16' / '6Ø8/m' format (using Ø without spaces)
+    so that numbers and diameter symbols stay tightly bound.
+    """
+    if not val_str:
+        return val_str
+    s = str(val_str)
+    # e.g. '6 Φ 8 / m' or '6 Ø 8 / m'' -> '6Ø8/m' or '6Ø8/m''
+    s = re.sub(r"(\d+)\s*[ΦϕØø]\s*(\d+)\s*/\s*(m'?|م)", r"\1Ø\2/\3", s)
+    # e.g. '8 Φ 16' or '8 Ø 16' -> '8Ø16'
+    s = re.sub(r"(\d+)\s*[ΦϕØø]\s*(\d+)", r"\1Ø\2", s)
+    # e.g. '6 Φ / m' or '6Φ/m' -> '6Ø/m'
+    s = re.sub(r"(\d+)\s*[ΦϕØø]\s*/\s*(m'?|م)", r"\1Ø/\2", s)
+    # e.g. '60 Φ' or '12Φ' -> '60Ø' or '12Ø'
+    s = re.sub(r"(\d+)\s*[Φϕ](?=\s|$|\)|،|\||/|\+)", r"\1Ø", s)
+    # e.g. 'Φ 16 mm' or 'Φ16' -> 'Ø16 mm' or 'Ø16'
+    s = re.sub(r"[ΦϕØ]\s*(\d+)", r"Ø\1", s)
+    return s
+
+
+def _isolate_rebar_for_rtl_html(val_str: str) -> str:
+    """
+    Wrap rebar tokens (like 8Ø16, 6Ø8/m, Ø16 mm, 12Ø) in <bdi dir="ltr"> with unicode-bidi:isolate
+    so that inside RTL or mixed Arabic/numeric table cells, '8Ø16' is never split or reversed by BiDi rules.
+    """
+    s = _normalize_rebar_notation(val_str)
+    if "Ø" not in s:
+        return s
+    pattern = r"(\d+Ø\d+(?:/(?:m'?|م))?|\d+Ø(?:/(?:m'?|م))?|Ø\d+(?:\s*mm)?)"
+    return re.sub(
+        pattern,
+        r'<bdi dir="ltr" style="unicode-bidi:isolate; display:inline-block; font-weight:900;">\1</bdi>',
+        s,
+    )
+
+
+def _has_arabic(val_str: str) -> bool:
+    """Check if the string contains any Arabic characters."""
+    return bool(re.search(r"[\u0600-\u06FF]", str(val_str)))
+
+
 def _is_numeric_or_measurement(val_str: str) -> bool:
     """Check if text represents numerical values, measurements, coordinates, percentages, or equations."""
-    s = val_str.strip()
+    s = _normalize_rebar_notation(val_str).strip()
     if not s or s == "—" or s == "-":
         return False
     # If it contains digits and standard measurement tokens or symbols
@@ -232,7 +274,10 @@ def get_styled_table_html(
 
         tds = []
         for c_idx, val in enumerate(row):
-            val_str = str(val) if val is not None else ""
+            raw_val_str = str(val) if val is not None else ""
+            val_str = _normalize_rebar_notation(raw_val_str)
+            val_html = _isolate_rebar_for_rtl_html(val_str)
+            has_ar = _has_arabic(val_str)
             align = alignments[c_idx]
 
             # Check if this cell is a status badge
@@ -245,30 +290,32 @@ def get_styled_table_html(
             elif is_tot:
                 # Highlighted total row cell
                 text_color = "#fbbf24" if c_idx == 0 else ("#38bdf8" if _is_numeric_or_measurement(val_str) else "#ffffff")
-                dir_attr = ' dir="ltr"' if _is_numeric_or_measurement(val_str) else ''
+                dir_attr = ' dir="rtl"' if has_ar else (' dir="ltr"' if _is_numeric_or_measurement(val_str) else '')
                 tds.append(
                     f'<td style="padding: {pad_v + 2}px {pad_h}px !important; font-size: {fs_num:.1f}px !important; '
                     f'font-weight: 900 !important; color: {text_color} !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.3 !important;"{dir_attr}>'
-                    f'{val_str}</td>'
+                    f'{val_html}</td>'
                 )
             elif c_idx == 0 and align == "right":
                 # Primary text / parameter column
+                dir_attr = ' dir="rtl"' if has_ar else ''
                 tds.append(
                     f'<td style="padding: {pad_v}px {pad_h}px !important; font-size: {fs_cell:.1f}px !important; '
-                    f'font-weight: 800 !important; color: #ffffff !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.3 !important;">'
-                    f'{val_str}</td>'
+                    f'font-weight: 800 !important; color: #ffffff !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.3 !important;"{dir_attr}>'
+                    f'{val_html}</td>'
                 )
             elif _is_numeric_or_measurement(val_str):
-                # Numeric / Result / Dimension column
+                # Numeric / Result / Dimension / Rebar column
                 h_name = str(hdr_list[c_idx]).lower()
                 if ("δ" in h_name or "delta" in h_name or "δ" in h_name) and ("tot" in h_name or "long" in h_name or "كلي" in h_name):
                     num_color = "#ffffff"
                 else:
                     num_color = "#38bdf8"
+                dir_attr = 'dir="rtl"' if has_ar else 'dir="ltr"'
                 tds.append(
                     f'<td style="padding: {pad_v}px {pad_h}px !important; font-size: {fs_num:.1f}px !important; '
-                    f'font-weight: 900 !important; color: {num_color} !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.3 !important;" dir="ltr">'
-                    f'{val_str}</td>'
+                    f'font-weight: 900 !important; color: {num_color} !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.3 !important;" {dir_attr}>'
+                    f'{val_html}</td>'
                 )
             else:
                 # Standard secondary text / code reference / notes
@@ -279,10 +326,11 @@ def get_styled_table_html(
                     text_color = "#fbbf24"
                 else:
                     text_color = "#cbd5e1"
+                dir_attr = ' dir="rtl"' if has_ar else ''
                 tds.append(
                     f'<td style="padding: {pad_v}px {pad_h}px !important; font-size: {fs_cell:.1f}px !important; '
-                    f'font-weight: 700 !important; color: {text_color} !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.3 !important;">'
-                    f'{val_str}</td>'
+                    f'font-weight: 700 !important; color: {text_color} !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.3 !important;"{dir_attr}>'
+                    f'{val_html}</td>'
                 )
 
         tbody_trs.append(

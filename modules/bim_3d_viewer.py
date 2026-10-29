@@ -420,8 +420,8 @@ def extract_bim_3d_scene_data(
                 "الفتحات والمناور (Voids)": f"{len(void_boxes_2d)} فتحة مفرغة (إجمالي {total_void_area:.2f} م²)" if void_boxes_2d else "لا توجد مناور (مصمتة بالكامل)",
                 "المقاومة المميزة (Fcu)": f"{fcu:.0f} كجم/سم²",
                 "إجهاد الخضوع (Fy)": f"{fy:.0f} كجم/سم²",
-                "الشبكة السفلية": f"{n_mesh_btm:.0f} Φ {bottom_mesh_dia} / م (اتجاهين X, Y)",
-                "الشبكة العلوية": f"{n_mesh_top:.0f} Φ {top_mesh_dia} / م (اتجاهين X, Y)",
+                "الشبكة السفلية": f"{int(round(n_mesh_btm))}Ø{bottom_mesh_dia}/m (اتجاهين X, Y)",
+                "الشبكة العلوية": f"{int(round(n_mesh_top))}Ø{top_mesh_dia}/m (اتجاهين X, Y)",
                 "حجم الخرسانة الصافي": f"{net_slab_vol:.2f} م³",
             }
         })
@@ -524,7 +524,7 @@ def extract_bim_3d_scene_data(
                     "توصيف الركائز": beam.get("supports_desc", "كمرة ساقطة"),
                     "التسليح السفلي (الرئيسي)": beam.get("rft_btm_str", "—"),
                     "التسليح العلوي (تعليق كانات)": beam.get("rft_top_str", "—"),
-                    "تسليح الكانات (القص)": beam.get("stirrups_str", "5Φ8/m (فرعين)"),
+                    "تسليح الكانات (القص)": beam.get("stirrups_str", "5Ø8/m (فرعين)"),
                     "حديد الانكماش (Skin RFT)": beam.get("skin_rft_str", "غير مطلوب"),
                     "عزم الانحناء التصميمي (Mu)": f"{beam.get('Mu_ton_m', 0.0):.2f} t·m",
                     "قوة القص القصوى (Vu)": f"{beam.get('Vu_ton', 0.0):.2f} ton",
@@ -620,8 +620,8 @@ def extract_bim_3d_scene_data(
                 "الأبعاد (b × t)": f"{int(round(cd * 100))} × {int(round(cw * 100))} سم",
                 "الارتفاع الصافي (H)": f"{col_h_m:.2f} م",
                 "الحمل الأقصى (Pu)": f"{pu_tot:.1f} طن ({num_floors} أدوار)",
-                "التسليح الطولي": f"{n_bars} Φ {phi_m} مم (Main Vertical Rebar)",
-                "الكانات والأطواق": f"{n_st_per_m} Φ {phi_st} / م (مع تكثيف طرفي)",
+                "التسليح الطولي": f"{n_bars}Ø{phi_m} (Main Vertical Rebar)",
+                "الكانات والأطواق": f"{n_st_per_m}Ø{phi_st}/m (مع تكثيف طرفي)",
                 "حجم الخرسانة": f"{(cw * cd * col_h_m):.2f} م³",
             }
         })
@@ -685,7 +685,7 @@ def extract_bim_3d_scene_data(
             "parent_id": col_elem_id,
             "category": "rebar_col",
             "color": "#10b981",  # Emerald Green
-            "name": f"تسليح العمود {cid} ({n_bars}Φ{phi_m})",
+            "name": f"تسليح العمود {cid} ({n_bars}Ø{phi_m})",
             "lines": col_bar_lines,
         })
 
@@ -713,7 +713,7 @@ def extract_bim_3d_scene_data(
             "parent_id": col_elem_id,
             "category": "rebar_col_ties",
             "color": "#84cc16",  # Lime
-            "name": f"كانات العمود {cid} ({n_st_per_m}Φ{phi_st}/م)",
+            "name": f"كانات العمود {cid} ({n_st_per_m}Ø{phi_st}/m)",
             "lines": tie_lines,
         })
 
@@ -778,7 +778,7 @@ def extract_bim_3d_scene_data(
                     "العمود المرتكز": cid,
                     "أبعاد المسلحة (L × B × t)": f"{int(round(L_rc * 100))} × {int(round(B_rc * 100))} × {int(round(t_rc * 100))} سم",
                     "أبعاد العادية (L × B × t)": f"{int(round(L_pc * 100))} × {int(round(B_pc * 100))} × {int(round(t_pc * 100))} سم",
-                    "التسليح السفلي (فرش وغطاء)": f_iso.get("rft_str", "6 Φ 16 / م (اتجاهين)"),
+                    "التسليح السفلي (فرش وغطاء)": f_iso.get("rft_str", "6Ø16/m (اتجاهين)"),
                     "إجهاد التربة الفعلي (q_act)": f"{f_iso.get('q_act', 1.25):.2f} كجم/سم²",
                     "حالة الأمان": "✅ Safe ومحقق للكود",
                 }
@@ -900,8 +900,8 @@ def extract_bim_3d_scene_data(
                     "النموذج": f"{cf_name} (قاعدة مشتركة)",
                     "الأعمدة المرتكزة": cf_cols,
                     "أبعاد المسلحة (L × B × t)": f"{int(round(dx_cf*100))} × {int(round(dy_cf*100))} × {int(round(t_rc*100))} سم",
-                    "التسليح العلوي": cf.get("rft_top_str", "7 Φ 18 / م (Top Main Rft)"),
-                    "التسليح السفلي": cf.get("rft_bot_str", "6 Φ 16 / م (Bottom Mesh)"),
+                    "التسليح العلوي": cf.get("rft_top_str", "7Ø18/m (Top Main Rft)"),
+                    "التسليح السفلي": cf.get("rft_bot_str", "6Ø16/m (Bottom Mesh)"),
                     "حالة التحقق": cf.get("status_str", "✅ Safe"),
                 }
             })
@@ -1016,7 +1016,7 @@ def extract_bim_3d_scene_data(
                     "العمود": f"{c1_id} (ملاصق لحدود الجار)",
                     "الأبعاد (L1 × B1 × t1)": f"{int(round(f1_g['w']*100))} × {int(round(f1_g['h']*100))} × {int(round(t1*100))} سم",
                     "حد الجار": f"ملاصق تماماً لحد الجار ({f1_g.get('nbr_face', 'Left')}) بدون أي بروز خارج الموقع",
-                    "التسليح": "شبكة سفلية اتجاهين 6-7 Φ 16 / م",
+                    "التسليح": "شبكة سفلية اتجاهين 6-7Ø16/m",
                 }
             })
 
@@ -1194,9 +1194,9 @@ def extract_bim_3d_scene_data(
                     "منسوب القاع الموحد": f"{z_gb_bot:.2f} م (مشترك مع كافة السملات)",
                     "البحر (S)": f"{span_sb:.2f} م",
                     "القطاع (b × D)": f"{int(round(sb_b*100))} × {int(round(sb_D*100))} سم",
-                    "التسليح الرئيسي (العلوي)": "6 Φ 22 (مقاومة عزم الانقلاب)",
-                    "التسليح السفلي": "4 Φ 16",
-                    "الكانات": "7 Φ 10 / م (4 فروع لمقاومة القص والالتواء)",
+                    "التسليح الرئيسي (العلوي)": "6Ø22 (مقاومة عزم الانقلاب)",
+                    "التسليح السفلي": "4Ø16",
+                    "الكانات": "7Ø10/m (4 فروع لمقاومة القص والالتواء)",
                 }
             })
 
@@ -1506,9 +1506,9 @@ def extract_bim_3d_scene_data(
                     "منسوب القاع الموحد": f"{z_gb_bot:.2f} م (مشترك مع كافة السملات)",
                     "البحر (S)": f"{span_dsf:.2f} م",
                     "القطاع (b × D)": f"{int(round(sb_b*100))} × {int(round(sb_D*100))} سم",
-                    "التسليح الرئيسي (العلوي)": "6 Φ 22 (مقاومة عزم الانقلاب)",
-                    "التسليح السفلي": "4 Φ 16",
-                    "الكانات": "7 Φ 10 / م (4 فروع لمقاومة القص والالتواء)",
+                    "التسليح الرئيسي (العلوي)": "6Ø22 (مقاومة عزم الانقلاب)",
+                    "التسليح السفلي": "4Ø16",
+                    "الكانات": "7Ø10/m (4 فروع لمقاومة القص والالتواء)",
                 }
             })
 
@@ -1641,7 +1641,7 @@ def extract_bim_3d_scene_data(
                 "العمود المرتكز": cid,
                 "أبعاد المسلحة (L × B × t)": f"{int(round(L_rc * 100))} × {int(round(B_rc * 100))} × {int(round(t_rc * 100))} سم",
                 "أبعاد العادية (L × B × t)": f"{int(round(L_pc * 100))} × {int(round(B_pc * 100))} × {int(round(t_pc * 100))} سم",
-                "التسليح السفلي": "6 Φ 16 / م (اتجاهين)",
+                "التسليح السفلي": "6Ø16/m (اتجاهين)",
                 "حالة الأمان": "✅ Safe ومحقق للكود",
             }
         })
@@ -1754,10 +1754,10 @@ def extract_bim_3d_scene_data(
                     "المحور": gb.get("axis_name", gb.get("axis_str", "—")),
                     "البحر (Span)": f"{span:.2f} م (صافي {gb.get('clear_span_m', span):.2f} م)",
                     "القطاع (b × t)": f"{int(round(b_m*100))} × {int(round(t_m*100))} سم",
-                    "التسليح السفلي": f"{gb.get('exec_n_bot', 3)} Φ {gb.get('phi_bot', 16)}",
-                    "التسليح العلوي": f"{gb.get('exec_n_top', 2)} Φ {gb.get('phi_top', 12)}",
-                    "براندات الجوانب": f"{gb.get('exec_side_bars', 0)} Φ {gb.get('phi_side', 10)}" if gb.get('exec_side_bars', 0) > 0 else "غير مطلوبة",
-                    "الكانات": f"{gb.get('exec_stirrups_per_m', 6)} Φ {gb.get('phi_st', 8)} / م",
+                    "التسليح السفلي": f"{gb.get('exec_n_bot', 3)}Ø{gb.get('phi_bot', 16)}",
+                    "التسليح العلوي": f"{gb.get('exec_n_top', 2)}Ø{gb.get('phi_top', 12)}",
+                    "براندات الجوانب": f"{gb.get('exec_side_bars', 0)}Ø{gb.get('phi_side', 10)}" if gb.get('exec_side_bars', 0) > 0 else "غير مطلوبة",
+                    "الكانات": f"{gb.get('exec_stirrups_per_m', 6)}Ø{gb.get('phi_st', 8)}/m",
                     "حالة التحقق": gb.get("shear_status", "✅ Safe"),
                 }
             })
@@ -1857,7 +1857,7 @@ def extract_bim_3d_scene_data(
         "parent_id": "slab_main",
         "category": "rebar_slab_bot",
         "color": "#0284c7",  # Cyan
-        "name": f"الشبكة السفلية للبلاطة ({n_mesh_btm:.0f}Φ{bottom_mesh_dia}/م)",
+        "name": f"الشبكة السفلية للبلاطة ({int(round(n_mesh_btm))}Ø{bottom_mesh_dia}/m)",
         "lines": slab_bot_lines,
     })
 
@@ -1891,7 +1891,7 @@ def extract_bim_3d_scene_data(
         "parent_id": "slab_main",
         "category": "rebar_slab_top",
         "color": "#6366f1",  # Indigo
-        "name": f"الشبكة العلوية للبلاطة ({n_mesh_top:.0f}Φ{top_mesh_dia}/م)",
+        "name": f"الشبكة العلوية للبلاطة ({int(round(n_mesh_top))}Ø{top_mesh_dia}/m)",
         "lines": slab_top_lines,
     })
 
@@ -2077,7 +2077,7 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
     """
     Generates the standalone WebGL Three.js 3D Viewer application HTML.
     """
-    json_str = json.dumps(scene_data)
+    json_str = json.dumps(scene_data, ensure_ascii=False)
 
     cats = scene_data.get("categories")
     if cats:
@@ -3542,17 +3542,29 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
   const inspBody = document.getElementById('insp-body');
   const btnCloseInsp = document.getElementById('btn-close-insp');
 
+  function formatRebarNotation(val) {{
+    if (val === null || val === undefined) return '';
+    let s = String(val);
+    s = s.replace(/[ΦФφ]/g, 'Ø');
+    s = s.replace(/([0-9]+)\\s*[-–]\\s*([0-9]+)\\s*Ø\\s*([0-9]+)\\s*(?:مم|mm)?\\s*[/]\\s*(?:m'?|م'?|م)/gi, '$1-$2Ø$3/m');
+    s = s.replace(/([0-9]+)(?:\\.0+)?\\s*Ø\\s*([0-9]+)\\s*(?:مم|mm)?\\s*[/]\\s*(?:m'?|م'?|م)/gi, '$1Ø$2/m');
+    s = s.replace(/([0-9]+)(?:\\.0+)?\\s*Ø\\s*([0-9]+)(?:\\s*(?:مم|mm))?(?!\\s*[/]\\s*m)/gi, '$1Ø$2');
+    s = s.replace(/([0-9]+(?:-[0-9]+)?Ø[0-9]+(?:\\/m)?)/g, '<bdi dir="ltr" style="unicode-bidi:isolate; font-weight:800; color:#38bdf8;">$1</bdi>');
+    return s;
+  }}
+
   function openInspector(elemMesh) {{
     if (!elemMesh) return;
     const d = elemMesh.userData;
-    inspName.textContent = d.name || 'العنصر الإنشائي';
+    inspName.innerHTML = formatRebarNotation(d.name || 'العنصر الإنشائي');
     inspBody.innerHTML = '';
 
     const details = d.details || {{}};
     for (const [key, val] of Object.entries(details)) {{
       const row = document.createElement('div');
       row.className = 'insp-row';
-      row.innerHTML = `<span class="insp-lbl">${{key}}</span><span class="insp-val">${{val}}</span>`;
+      const formattedVal = formatRebarNotation(val);
+      row.innerHTML = `<span class="insp-lbl">${{key}}</span><span class="insp-val">${{formattedVal}}</span>`;
       inspBody.appendChild(row);
     }}
 
@@ -3642,12 +3654,29 @@ def generate_bim_3d_html(scene_data: dict, height: int = 760) -> str:
       }}
     }}
 
-    // 2. Otherwise check concrete meshes
+    // 2. Check concrete meshes
     const intersects = raycaster.intersectObjects(concreteMeshes.filter(m => m.visible), false);
     if (intersects.length > 0) {{
       const hit = intersects[0].object;
       clearSelection();
       selectedMesh = hit;
+      if (selectedMesh.material && selectedMesh.material.emissive) {{
+        selectedMesh.material.emissive.setHex(0x38bdf8);
+        selectedMesh.material.emissiveIntensity = 0.35;
+      }}
+      openInspector(selectedMesh);
+      return;
+    }}
+
+    // 3. Check rebar elements
+    const rebarIntersects = raycaster.intersectObjects(rebarMeshes.filter(m => m.visible), false);
+    if (rebarIntersects.length > 0) {{
+      const hitR = rebarIntersects[0].object;
+      const parentId = hitR.userData ? (hitR.userData.parentId || hitR.userData.parent_id) : null;
+      const parentMesh = parentId ? elementDataMap.get(parentId) : null;
+      const target = parentMesh || hitR;
+      clearSelection();
+      selectedMesh = target;
       if (selectedMesh.material && selectedMesh.material.emissive) {{
         selectedMesh.material.emissive.setHex(0x38bdf8);
         selectedMesh.material.emissiveIntensity = 0.35;
@@ -4158,25 +4187,43 @@ def render_3d_bim_viewer(
 
         m = scene_data["metrics"]
 
-        beams_metric_html = f"<span>📏 الكمرات الساقطة: <b style='color:#38bdf8;'>{m.get('num_drop_beams', 0)} كمرة</b></span>" if m.get("num_drop_beams", 0) > 0 else ""
+        # Number of floors Arabic grammar formulation
+        n_fl = int(m.get("num_floors", 1))
+        if n_fl == 1:
+            floors_str = "طابق واحد"
+        elif n_fl == 2:
+            floors_str = "طابقان"
+        elif 3 <= n_fl <= 10:
+            floors_str = f"{n_fl} طوابق"
+        else:
+            floors_str = f"{n_fl} طابقاً"
 
-        # Executive Metrics Header Strip
+        # Executive Metrics items assembled cleanly without empty lines or indentation gaps
+        metric_spans = [
+            f"<span>📐 مسطح السقف: <b style=\"color:#38bdf8;\">{m['slab_area_m2']} م²</b>"
+            + (f" <span style=\"color:#f87171; font-size:0.88em;\">(خصم {m['voids_count']} منور {m['voids_area_m2']}م²)</span>" if m.get("voids_count", 0) > 0 else "")
+            + "</span>",
+            f"<span>🏛️ الأعمدة: <b style=\"color:#4ade80;\">{m['num_columns']} عمود</b></span>",
+        ]
+        if m.get("num_drop_beams", 0) > 0:
+            metric_spans.append(f"<span>📏 الكمرات الساقطة: <b style=\"color:#38bdf8;\">{m['num_drop_beams']} كمرة</b></span>")
+        metric_spans.extend([
+            f"<span>🪸 الأساسات: <b style=\"color:#fb923c;\">{m['num_footings']} قاعدة</b></span>",
+            f"<span>🔗 السملات والشدادات: <b style=\"color:#a3e635;\">{m['num_ground_beams']} سملة</b></span>",
+            f"<span>🏢 الطوابق: <b style=\"color:#f472b6;\">{floors_str}</b></span>",
+        ])
+        metrics_chips_html = "".join(metric_spans)
+
+        # Executive Metrics Header Strip (rendered without empty lines/indented blocks to prevent markdown code-block triggers)
         st.markdown(
-            f"""
-            <div dir="rtl" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 1.5px solid #38bdf8; border-radius: 10px; padding: 12px 18px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-                <div style="font-size: 15px; font-weight: 900; color: #38bdf8; display: flex; align-items: center; gap: 6px;">
-                    <span>🏢 النموذج الإنشائي الرقمي المتكامل (ECP 203 BIM Model):</span>
-                </div>
-                <div style="display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; font-weight: 700; color: #e2e8f0;">
-                    <span>📐 مسطح السقف: <b style="color:#38bdf8;">{m['slab_area_m2']} م²</b>{f' <span style="color:#f87171; font-size:0.88em;">(خصم {m["voids_count"]} منور {m["voids_area_m2"]}م²)</span>' if m.get('voids_count', 0) > 0 else ''}</span>
-                    <span>🏛️ الأعمدة: <b style="color:#4ade80;">{m['num_columns']} عمود</b></span>
-                    {beams_metric_html}
-                    <span>🪸 الأساسات: <b style="color:#fb923c;">{m['num_footings']} قاعدة</b></span>
-                    <span>🔗 السملات والشدادات: <b style="color:#a3e635;">{m['num_ground_beams']} سملة</b></span>
-                    <span>🏢 الطوابق: <b style="color:#f472b6;">{m['num_floors']} طوابق</b></span>
-                </div>
-            </div>
-            """,
+            f'<div dir="rtl" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 1.5px solid #38bdf8; border-radius: 10px; padding: 12px 18px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">'
+            f'<div style="font-size: 15px; font-weight: 900; color: #38bdf8; display: flex; align-items: center; gap: 6px;">'
+            f'<span>🏢 النموذج الإنشائي الرقمي المتكامل (ECP 203 BIM Model):</span>'
+            f'</div>'
+            f'<div style="display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; font-weight: 700; color: #e2e8f0;">'
+            f'{metrics_chips_html}'
+            f'</div>'
+            f'</div>',
             unsafe_allow_html=True,
         )
 
@@ -4253,8 +4300,8 @@ def render_column_3d_bim_viewer(
                 "القطاع (b × t)": f"{b_cm:.0f} × {t_cm:.0f} سم",
                 "الارتفاع الصافي (H)": f"{H_clear_cm:.0f} سم ({H_m:.2f} م)",
                 "الحمل الأقصى (Pu)": f"{Pu_ton:.1f} طن",
-                "التسليح الرئيسي": f"{n_bars} Φ {phi_mm} مم (طول السيخ: {L_bar_m:.2f} م')",
-                "الكانات والأطواق": f"{n_st_per_m} Φ {phi_st_mm} / م (إجمالي: {n_ties} كانة)",
+                "التسليح الرئيسي": f"{n_bars}Ø{phi_mm} (طول السيخ: {L_bar_m:.2f} م')",
+                "الكانات والأطواق": f"{n_st_per_m}Ø{phi_st_mm}/m (إجمالي: {n_ties} كانة)",
                 "طول وصلة التراكب (Splice)": f"{L_splice_m*100:.0f} سم ({L_splice_m:.2f} م')",
                 "حجم الخرسانة": f"{vol_conc_m3:.3f} م³",
                 "إجمالي وزن الحديد": f"{tot_steel_kg:.1f} كجم ({tot_steel_kg/1000.0:.3f} طن)",
@@ -4333,7 +4380,7 @@ def render_column_3d_bim_viewer(
             "parent_id": f"col_{col_id}",
             "category": "rebar",
             "color": "#10b981",
-            "name": f"الحديد الطولي الرئيسي ({n_bars} Φ {phi_mm} mm)",
+            "name": f"الحديد الطولي الرئيسي ({n_bars}Ø{phi_mm})",
             "lines": main_bar_lines,
         }
     ]
@@ -4371,7 +4418,7 @@ def render_column_3d_bim_viewer(
             "parent_id": f"col_{col_id}",
             "category": "rebar",
             "color": "#f59e0b",
-            "name": f"كانات وأطواق العمود (Φ {phi_st_mm} @ {n_st_per_m}/m)",
+            "name": f"كانات وأطواق العمود ({n_st_per_m}Ø{phi_st_mm}/m)",
             "lines": tie_lines,
         })
 
@@ -4391,8 +4438,8 @@ def render_column_3d_bim_viewer(
             {"id": "rebar", "name": "حديد التسليح والكانات"},
         ],
         "legend_items": [
-            {"color": "#10b981", "name": f"تسليح طولي ({n_bars} Φ {phi_mm} mm)"},
-            {"color": "#f59e0b", "name": f"كانات العمود (Φ {phi_st_mm} @ {n_st_per_m}/m)"},
+            {"color": "#10b981", "name": f"تسليح طولي ({n_bars}Ø{phi_mm})"},
+            {"color": "#f59e0b", "name": f"كانات العمود ({n_st_per_m}Ø{phi_st_mm}/m)"},
             {"color": "#38bdf8", "name": f"أشاير السقف ({L_splice_m:.2f} m)"},
         ],
         "sketch_title": f"مخطط وتفريد تسليح العمود {col_id} ({b_cm:.0f}×{t_cm:.0f} سم)",
@@ -4411,8 +4458,8 @@ def render_column_3d_bim_viewer(
                 <div style="display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; font-weight: 700; color: #e2e8f0;">
                     <span>🏛️ القطاع: <b style="color:#38bdf8;">{b_cm:.0f} × {t_cm:.0f} سم</b></span>
                     <span>📏 الارتفاع الصافي: <b style="color:#4ade80;">{H_m:.2f} م</b></span>
-                    <span>🔩 التسليح الطولي: <b style="color:#fb923c;">{n_bars} Φ {phi_mm} مم</b></span>
-                    <span>⚙️ الكانات: <b style="color:#a3e635;">{n_st_per_m} Φ {phi_st_mm}/م</b></span>
+                    <span>🔩 التسليح الطولي: <b style="color:#fb923c;">{n_bars}Ø{phi_mm}</b></span>
+                    <span>⚙️ الكانات: <b style="color:#a3e635;">{n_st_per_m}Ø{phi_st_mm}/m</b></span>
                     <span>🧱 الخرسانة: <b style="color:#f472b6;">{vol_conc_m3:.2f} م³</b></span>
                     <span>⚖️ إجمالي الحديد: <b style="color:#e0e7ff;">{tot_steel_kg:.1f} كجم</b></span>
                 </div>
@@ -4528,8 +4575,8 @@ def render_isolated_footing_3d_bim_viewer(
                 "الأبعاد (L × B × t)": f"{L_cm:.0f} × {B_cm:.0f} × {t_rc_cm:.0f} سم",
                 "إجهاد التربة الفعلي (q_act)": f"{q_act:.2f} كجم/سم² (المسموح: {q_all:.2f})",
                 "الحمل الأقصى (Pu)": f"{Pu:.1f} طن",
-                "تسليح الاتجاه الطولي (L)": f"{n_long} Φ {Phi} مم (فرش)",
-                "تسليح الاتجاه القصير (B)": f"{n_sht} Φ {Phi} مم (غطاء)",
+                "تسليح الاتجاه الطولي (L)": f"{n_long}Ø{Phi} (فرش)",
+                "تسليح الاتجاه القصير (B)": f"{n_sht}Ø{Phi} (غطاء)",
                 "حجم الخرسانة المسلحة": f"{vol_rc_m3:.2f} م³",
                 "إجمالي وزن الحديد": f"{tot_steel_kg:.1f} كجم",
             },
@@ -4578,7 +4625,7 @@ def render_isolated_footing_3d_bim_viewer(
         "parent_id": f"rc_{ftg_id}",
         "category": "rebar",
         "color": "#0284c7",
-        "name": f"فرش الاتجاه الرئيسي ({n_long} Φ {Phi} mm)",
+        "name": f"فرش الاتجاه الرئيسي ({n_long}Ø{Phi})",
         "lines": long_lines,
     })
 
@@ -4601,7 +4648,7 @@ def render_isolated_footing_3d_bim_viewer(
         "parent_id": f"rc_{ftg_id}",
         "category": "rebar",
         "color": "#6366f1",
-        "name": f"غطاء الاتجاه الثانوي ({n_sht} Φ {Phi} mm)",
+        "name": f"غطاء الاتجاه الثانوي ({n_sht}Ø{Phi})",
         "lines": sht_lines,
     })
 
@@ -4653,8 +4700,8 @@ def render_isolated_footing_3d_bim_viewer(
             {"id": "rebar", "name": "حديد التسليح والأشاير"},
         ],
         "legend_items": [
-            {"color": "#0284c7", "name": f"فرش اتجاه رئيسي ({n_long} Φ {Phi})"},
-            {"color": "#6366f1", "name": f"غطاء اتجاه ثانوي ({n_sht} Φ {Phi})"},
+            {"color": "#0284c7", "name": f"فرش اتجاه رئيسي ({n_long}Ø{Phi})"},
+            {"color": "#6366f1", "name": f"غطاء اتجاه ثانوي ({n_sht}Ø{Phi})"},
             {"color": "#10b981", "name": "أشاير العمود وكانات الرقبة"},
         ],
         "sketch_title": f"المسقط الأفقي للقاعدة {ftg_id} وتوزيع التسليح",
@@ -4674,7 +4721,7 @@ def render_isolated_footing_3d_bim_viewer(
                     <span>📐 المسلحة: <b style="color:#38bdf8;">{L_cm:.0f} × {B_cm:.0f} × {t_rc_cm:.0f} سم</b></span>
                     <span>🏛️ رقبة العمود: <b style="color:#4ade80;">{bc_cm:.0f} × {tc_cm:.0f} سم</b></span>
                     <span>🌱 إجهاد التربة: <b style="color:#fb923c;">{q_act:.2f} / {q_all:.2f} kg/cm²</b></span>
-                    <span>🔩 التسليح: <b style="color:#a3e635;">{n_long}Φ{Phi} فرش │ {n_sht}Φ{Phi} غطاء</b></span>
+                    <span>🔩 التسليح: <b style="color:#a3e635;">{n_long}Ø{Phi} فرش │ {n_sht}Ø{Phi} غطاء</b></span>
                     <span>🧱 خرسانة مسلحة: <b style="color:#f472b6;">{vol_rc_m3:.2f} م³</b></span>
                     <span>⚖️ إجمالي الحديد: <b style="color:#e0e7ff;">{tot_steel_kg:.1f} كجم</b></span>
                 </div>
@@ -4754,8 +4801,8 @@ def render_ground_slab_3d_bim_viewer(
                 "مقاومة الخرسانة (Fcu)": f"{fcu:.0f} كجم/سم²",
                 "أقصى حمل تصميمي": f"{wheel_load_ton:.1f} طن / عجلة",
                 "مسافات فواصل الانكماش": f"{joint_spacing_x_m:.1f} × {joint_spacing_y_m:.1f} م",
-                "تسليح الشبكة": f"{mesh_type} (Φ{phi_mesh_mm} @ {spacing_mesh_cm:.0f} سم)",
-                "دواول نقل القص": f"Φ{dowel_phi_mm} مم بطول {dowel_len_cm:.0f} سم @ {dowel_spacing_cm:.0f} سم",
+                "تسليح الشبكة": f"{mesh_type} (Ø{phi_mesh_mm} @ {spacing_mesh_cm:.0f} سم)",
+                "دواول نقل القص": f"Ø{dowel_phi_mm} بطول {dowel_len_cm:.0f} سم @ {dowel_spacing_cm:.0f} سم",
                 "حجم الخرسانة": f"{vol_conc_m3:.2f} م³",
             },
         },
@@ -4785,7 +4832,7 @@ def render_ground_slab_3d_bim_viewer(
         "parent_id": "ground_slab_mesh",
         "category": "rebar",
         "color": "#0284c7",
-        "name": f"شبكة تسليح الانكماش (Φ {phi_mesh_mm} @ {spacing_mesh_cm:.0f} cm)",
+        "name": f"شبكة تسليح الانكماش (Ø{phi_mesh_mm} @ {spacing_mesh_cm:.0f} cm)",
         "lines": mesh_lines,
     })
 
@@ -4818,7 +4865,7 @@ def render_ground_slab_3d_bim_viewer(
             "parent_id": "ground_slab_mesh",
             "category": "rebar",
             "color": "#f97316",
-            "name": f"دواول نقل القص الملساء (Φ {dowel_phi_mm} mm @ {dowel_spacing_cm:.0f} cm)",
+            "name": f"دواول نقل القص الملساء (Ø{dowel_phi_mm} @ {dowel_spacing_cm:.0f} cm)",
             "lines": dowel_lines,
         })
 
@@ -4839,8 +4886,8 @@ def render_ground_slab_3d_bim_viewer(
             {"id": "rebar", "name": "شبكة التسليح والدواول"},
         ],
         "legend_items": [
-            {"color": "#0284c7", "name": f"شبكة التسليح (Φ {phi_mesh_mm} @ {spacing_mesh_cm:.0f} cm)"},
-            {"color": "#f97316", "name": f"دواول نقل القص (Φ {dowel_phi_mm} mm)"},
+            {"color": "#0284c7", "name": f"شبكة التسليح (Ø{phi_mesh_mm} @ {spacing_mesh_cm:.0f} cm)"},
+            {"color": "#f97316", "name": f"دواول نقل القص (Ø{dowel_phi_mm} mm)"},
         ],
         "sketch_title": f"المسقط الأفقي للبلاطة الأرضية وفواصل الصب ({Lx:.1f}×{Ly:.1f} م)",
         "sketch_btn_title": "🗺️ مسقط البلاطة والفواصل",
@@ -4859,8 +4906,8 @@ def render_ground_slab_3d_bim_viewer(
                     <span>📐 مسطح البلاطة: <b style="color:#38bdf8;">{Lx*Ly:.1f} م²</b></span>
                     <span>🧱 السُمك ts: <b style="color:#4ade80;">{ts_cm:.0f} سم</b></span>
                     <span>🚚 الحمل التصميمي: <b style="color:#fb923c;">{wheel_load_ton:.1f} طن</b></span>
-                    <span>🔩 شبكة التسليح: <b style="color:#a3e635;">Φ{phi_mesh_mm} @ {spacing_mesh_cm:.0f}سم</b></span>
-                    <span>🔗 الدواول: <b style="color:#f472b6;">Φ{dowel_phi_mm} @ {dowel_spacing_cm:.0f}سم</b></span>
+                    <span>🔩 شبكة التسليح: <b style="color:#a3e635;">Ø{phi_mesh_mm} @ {spacing_mesh_cm:.0f}سم</b></span>
+                    <span>🔗 الدواول: <b style="color:#f472b6;">Ø{dowel_phi_mm} @ {dowel_spacing_cm:.0f}سم</b></span>
                     <span>🧱 خرسانة مسلحة: <b style="color:#e0e7ff;">{vol_conc_m3:.2f} م³</b></span>
                 </div>
             </div>
@@ -4954,8 +5001,8 @@ def render_combined_footing_3d_bim_viewer(
                 "المسافة بين المحاور (S)": f"{S_m:.2f} م",
                 "أحمال الأعمدة": f"P₁ = {P1_ton:.1f} طن │ P₂ = {P2_ton:.1f} طن",
                 "إجهاد التربة الفعلي (q_act)": f"{q_act:.2f} كجم/سم² (المسموح: {q_net:.2f})",
-                "الحديد العلوي الرئيسي": f"{n_top} Φ {Phi_top} مم (لمقاومة العزم السالب)",
-                "الحديد السفلي الرئيسي": f"{n_bot} Φ {Phi_bot} مم (لمقاومة العزم الموجب)",
+                "الحديد العلوي الرئيسي": f"{n_top}Ø{Phi_top} (لمقاومة العزم السالب)",
+                "الحديد السفلي الرئيسي": f"{n_bot}Ø{Phi_bot} (لمقاومة العزم الموجب)",
                 "حجم الخرسانة المسلحة": f"{vol_rc:.2f} م³",
             },
         },
@@ -5021,7 +5068,7 @@ def render_combined_footing_3d_bim_viewer(
         "parent_id": f"rc_{cf_id}",
         "category": "rebar",
         "color": "#ea580c",
-        "name": f"الحديد العلوي الرئيسي ({n_top} Φ {Phi_top} mm)",
+        "name": f"الحديد العلوي الرئيسي ({n_top}Ø{Phi_top})",
         "lines": top_lines,
     })
 
@@ -5038,7 +5085,7 @@ def render_combined_footing_3d_bim_viewer(
         "parent_id": f"rc_{cf_id}",
         "category": "rebar",
         "color": "#0284c7",
-        "name": f"الحديد السفلي الرئيسي ({n_bot} Φ {Phi_bot} mm)",
+        "name": f"الحديد السفلي الرئيسي ({n_bot}Ø{Phi_bot})",
         "lines": bot_lines,
     })
 
@@ -5106,8 +5153,8 @@ def render_combined_footing_3d_bim_viewer(
             {"id": "rebar", "name": "حديد التسليح والأشاير"},
         ],
         "legend_items": [
-            {"color": "#ea580c", "name": f"حديد علوي رئيسي ({n_top} Φ {Phi_top})"},
-            {"color": "#0284c7", "name": f"حديد سفلي رئيسي ({n_bot} Φ {Phi_bot})"},
+            {"color": "#ea580c", "name": f"حديد علوي رئيسي ({n_top}Ø{Phi_top})"},
+            {"color": "#0284c7", "name": f"حديد سفلي رئيسي ({n_bot}Ø{Phi_bot})"},
             {"color": "#6366f1", "name": "تسليح عرضي وأحزمة"},
             {"color": "#10b981", "name": "أشاير الأعمدة C1 & C2"},
         ],
@@ -5128,7 +5175,7 @@ def render_combined_footing_3d_bim_viewer(
                     <span>📐 المسلحة: <b style="color:#38bdf8;">{Lc*100:.0f} × {Bc*100:.0f} × {tc_cm:.0f} سم</b></span>
                     <span>🏛️ بحر الأعمدة S: <b style="color:#4ade80;">{S_m:.2f} م</b></span>
                     <span>🌱 إجهاد التربة: <b style="color:#fb923c;">{q_act:.2f} / {q_net:.2f} kg/cm²</b></span>
-                    <span>🔩 علوي: <b style="color:#ea580c;">{n_top}Φ{Phi_top}</b> │ سفلي: <b style="color:#38bdf8;">{n_bot}Φ{Phi_bot}</b></span>
+                    <span>🔩 علوي: <b style="color:#ea580c;">{n_top}Ø{Phi_top}</b> │ سفلي: <b style="color:#38bdf8;">{n_bot}Ø{Phi_bot}</b></span>
                     <span>🧱 خرسانة مسلحة: <b style="color:#f472b6;">{vol_rc:.2f} م³</b></span>
                 </div>
             </div>
@@ -5202,7 +5249,7 @@ def render_strap_footing_3d_bim_viewer(
                 "النموذج": "F1 — قاعدة الجار",
                 "الأبعاد": f"{L1*100:.0f} × {B1*100:.0f} × {t1_m*100:.0f} سم",
                 "إجهاد التربة q_act1": f"{r.get('q_act1', 1.2):.2f} كجم/سم²",
-                "التسليح العرضي": f"{r.get('n_t1', 7)} Φ {d.get('trans_bar_dia', 16)} مم",
+                "التسليح العرضي": f"{r.get('n_t1', 7)}Ø{d.get('trans_bar_dia', 16)}",
             },
         },
         # Footing 2 (Interior)
@@ -5223,7 +5270,7 @@ def render_strap_footing_3d_bim_viewer(
                 "النموذج": "F2 — القاعدة الداخلية",
                 "الأبعاد": f"{L2*100:.0f} × {B2*100:.0f} × {t2_m*100:.0f} سم",
                 "إجهاد التربة q_act2": f"{r.get('q_act2', 1.2):.2f} كجم/سم²",
-                "التسليح العرضي": f"{r.get('n_t2', 8)} Φ {d.get('trans_bar_dia', 16)} مم",
+                "التسليح العرضي": f"{r.get('n_t2', 8)}Ø{d.get('trans_bar_dia', 16)}",
             },
         },
         # Deep Strap Beam
@@ -5246,9 +5293,9 @@ def render_strap_footing_3d_bim_viewer(
                 "الطول الكلي": f"{strap_len_m:.2f} م",
                 "أقصى عزم سالب Mu,max": f"{r.get('Mu_max_strap', abs(r.get('Mu_neg', 0))):.2f} طن·م",
                 "موقع انعدام القص (x₀)": f"{r.get('x0', 0.0):.2f} م من حد الجار",
-                "الحديد العلوي الرئيسي": f"{n_top} Φ {phi_top} مم",
-                "الحديد السفلي": f"{n_bot} Φ {phi_bot} مم",
-                "الكانات": f"{st_per_m:.0f} Φ {phi_st} مم / م ({r.get('n_branches', 2)} فروع)",
+                "الحديد العلوي الرئيسي": f"{n_top}Ø{phi_top}",
+                "الحديد السفلي": f"{n_bot}Ø{phi_bot}",
+                "الكانات": f"{st_per_m:.0f}Ø{phi_st}/m ({r.get('n_branches', 2)} فروع)",
             },
         },
         # Column 1 (Edge)
@@ -5317,7 +5364,7 @@ def render_strap_footing_3d_bim_viewer(
         "parent_id": "strap_beam_rc",
         "category": "rebar",
         "color": "#ea580c",
-        "name": f"حديد الشداد العلوي الرئيسي ({n_top} Φ {phi_top} mm)",
+        "name": f"حديد الشداد العلوي الرئيسي ({n_top}Ø{phi_top})",
         "lines": strap_top_lines,
     })
 
@@ -5334,7 +5381,7 @@ def render_strap_footing_3d_bim_viewer(
         "parent_id": "strap_beam_rc",
         "category": "rebar",
         "color": "#0284c7",
-        "name": f"حديد الشداد السفلي ({n_bot} Φ {phi_bot} mm)",
+        "name": f"حديد الشداد السفلي ({n_bot}Ø{phi_bot})",
         "lines": strap_bot_lines,
     })
 
@@ -5355,7 +5402,7 @@ def render_strap_footing_3d_bim_viewer(
         "parent_id": "strap_beam_rc",
         "category": "rebar",
         "color": "#ec4899",
-        "name": f"كانات الشداد المكثفة (Φ {phi_st} @ {st_per_m:.0f}/m)",
+        "name": f"كانات الشداد المكثفة ({st_per_m:.0f}Ø{phi_st}/m)",
         "lines": strap_st_lines,
     })
 
@@ -5447,9 +5494,9 @@ def render_strap_footing_3d_bim_viewer(
             {"id": "rebar", "name": "حديد التسليح والكانات"},
         ],
         "legend_items": [
-            {"color": "#ea580c", "name": f"حديد الشداد العلوي ({n_top} Φ {phi_top})"},
-            {"color": "#0284c7", "name": f"حديد الشداد السفلي ({n_bot} Φ {phi_bot})"},
-            {"color": "#ec4899", "name": f"كانات الشداد ({st_per_m:.0f} Φ {phi_st}/m)"},
+            {"color": "#ea580c", "name": f"حديد الشداد العلوي ({n_top}Ø{phi_top})"},
+            {"color": "#0284c7", "name": f"حديد الشداد السفلي ({n_bot}Ø{phi_bot})"},
+            {"color": "#ec4899", "name": f"كانات الشداد ({st_per_m:.0f}Ø{phi_st}/m)"},
             {"color": "#14b8a6", "name": "تسليح القواعد العرضي"},
             {"color": "#10b981", "name": "أشاير الأعمدة"},
         ],
@@ -5471,7 +5518,7 @@ def render_strap_footing_3d_bim_viewer(
                     <span>📐 قاعدة الجار F1: <b style="color:#4ade80;">{L1*100:.0f} × {B1*100:.0f} سم</b></span>
                     <span>📐 القاعدة الداخلية F2: <b style="color:#fb923c;">{L2*100:.0f} × {B2*100:.0f} سم</b></span>
                     <span>📉 العزم الأقصى Mu: <b style="color:#a3e635;">{r.get('Mu_max_strap', abs(r.get('Mu_neg', 0))):.2f} t·m</b></span>
-                    <span>🔩 علوي الشداد: <b style="color:#ea580c;">{n_top}Φ{phi_top}</b> │ سفلي: <b style="color:#38bdf8;">{n_bot}Φ{phi_bot}</b></span>
+                    <span>🔩 علوي الشداد: <b style="color:#ea580c;">{n_top}Ø{phi_top}</b> │ سفلي: <b style="color:#38bdf8;">{n_bot}Ø{phi_bot}</b></span>
                 </div>
             </div>
             """,
@@ -5609,8 +5656,8 @@ def render_diagonal_strap_3d_bim_viewer(
                 "القطاع (b × D)": f"{sb_m*100:.0f} × {sD_m*100:.0f} سم",
                 "الطول القطري": f"{L_diag:.2f} م (زاوية الميل: {math.degrees(theta):.1f}°)",
                 "العزم الأقصى Mu": f"{r.get('Mu_max_strap', abs(r.get('Mu_neg', 0))):.2f} طن·م",
-                "الحديد العلوي": f"{n_top} Φ {phi_top} مم",
-                "الحديد السفلي": f"{n_bot} Φ {phi_bot} مم",
+                "الحديد العلوي": f"{n_top}Ø{phi_top}",
+                "الحديد السفلي": f"{n_bot}Ø{phi_bot}",
             },
         },
         # Column 1 (Corner)
@@ -5686,7 +5733,7 @@ def render_diagonal_strap_3d_bim_viewer(
         "parent_id": "diag_strap_beam",
         "category": "rebar",
         "color": "#ea580c",
-        "name": f"حديد الشداد المائل العلوي ({n_top} Φ {phi_top} mm)",
+        "name": f"حديد الشداد المائل العلوي ({n_top}Ø{phi_top})",
         "lines": diag_top_lines,
     })
 
@@ -5707,7 +5754,7 @@ def render_diagonal_strap_3d_bim_viewer(
         "parent_id": "diag_strap_beam",
         "category": "rebar",
         "color": "#0284c7",
-        "name": f"حديد الشداد المائل السفلي ({n_bot} Φ {phi_bot} mm)",
+        "name": f"حديد الشداد المائل السفلي ({n_bot}Ø{phi_bot})",
         "lines": diag_bot_lines,
     })
 
@@ -5729,8 +5776,8 @@ def render_diagonal_strap_3d_bim_viewer(
             {"id": "rebar", "name": "حديد التسليح"},
         ],
         "legend_items": [
-            {"color": "#ea580c", "name": f"حديد الشداد العلوي ({n_top} Φ {phi_top})"},
-            {"color": "#0284c7", "name": f"حديد الشداد السفلي ({n_bot} Φ {phi_bot})"},
+            {"color": "#ea580c", "name": f"حديد الشداد العلوي ({n_top}Ø{phi_top})"},
+            {"color": "#0284c7", "name": f"حديد الشداد السفلي ({n_bot}Ø{phi_bot})"},
             {"color": "#14b8a6", "name": "تسليح القواعد"},
             {"color": "#10b981", "name": "أشاير الأعمدة"},
         ],
@@ -5751,7 +5798,7 @@ def render_diagonal_strap_3d_bim_viewer(
                     <span>📐 الشداد المائل: <b style="color:#38bdf8;">{sb_m*100:.0f} × {sD_m*100:.0f} سم (L = {L_diag:.2f} م)</b></span>
                     <span>📐 قاعدة الركن F1: <b style="color:#4ade80;">{L1*100:.0f} × {B1*100:.0f} سم</b></span>
                     <span>📐 الداخلية F2: <b style="color:#fb923c;">{L2*100:.0f} × {B2*100:.0f} سم</b></span>
-                    <span>🔩 علوي: <b style="color:#ea580c;">{n_top}Φ{phi_top}</b> │ سفلي: <b style="color:#38bdf8;">{n_bot}Φ{phi_bot}</b></span>
+                    <span>🔩 علوي: <b style="color:#ea580c;">{n_top}Ø{phi_top}</b> │ سفلي: <b style="color:#38bdf8;">{n_bot}Ø{phi_bot}</b></span>
                 </div>
             </div>
             """,
@@ -5816,10 +5863,10 @@ def render_ground_beam_3d_bim_viewer(
                 "البحر الصافي (L)": f"{L:.2f} م",
                 "عزم الانحناء التصميمي (Mu)": f"{Mu_tm:.2f} طن·م",
                 "قوة القص القصوى (Qu)": f"{Qu_ton:.2f} طن",
-                "التسليح العلوي": f"{n_top} Φ {phi_top} مم",
-                "التسليح السفلي": f"{n_bot} Φ {phi_bot} مم",
-                "الكانات": f"{n_st_per_m} Φ {phi_st} / م ({n_branches} فروع)",
-                "براندات الانكماش": f"{n_side} Φ {phi_side} مم" if n_side > 0 else "غير مطلوبة (العمق < 60 سم)",
+                "التسليح العلوي": f"{n_top}Ø{phi_top}",
+                "التسليح السفلي": f"{n_bot}Ø{phi_bot}",
+                "الكانات": f"{n_st_per_m}Ø{phi_st}/m ({n_branches} فروع)",
+                "براندات الانكماش": f"{n_side}Ø{phi_side}" if n_side > 0 else "غير مطلوبة (العمق < 60 سم)",
                 "حجم الخرسانة": f"{vol_rc:.2f} م³",
             },
         },
@@ -5880,7 +5927,7 @@ def render_ground_beam_3d_bim_viewer(
         "parent_id": f"gb_{beam_id}",
         "category": "rebar",
         "color": "#ea580c",
-        "name": f"حديد الميدة العلوي ({n_top} Φ {phi_top} mm)",
+        "name": f"حديد الميدة العلوي ({n_top}Ø{phi_top})",
         "lines": top_lines,
     })
 
@@ -5897,7 +5944,7 @@ def render_ground_beam_3d_bim_viewer(
         "parent_id": f"gb_{beam_id}",
         "category": "rebar",
         "color": "#0284c7",
-        "name": f"حديد الميدة السفلي ({n_bot} Φ {phi_bot} mm)",
+        "name": f"حديد الميدة السفلي ({n_bot}Ø{phi_bot})",
         "lines": bot_lines,
     })
 
@@ -5918,7 +5965,7 @@ def render_ground_beam_3d_bim_viewer(
         "parent_id": f"gb_{beam_id}",
         "category": "rebar",
         "color": "#ec4899",
-        "name": f"كانات الميدة المغلقة (Φ {phi_st} @ {n_st_per_m}/m)",
+        "name": f"كانات الميدة المغلقة ({n_st_per_m}Ø{phi_st}/m)",
         "lines": st_lines,
     })
 
@@ -5935,7 +5982,7 @@ def render_ground_beam_3d_bim_viewer(
             "parent_id": f"gb_{beam_id}",
             "category": "rebar",
             "color": "#eab308",
-            "name": f"براندات انكماش جانبية ({max(2, n_side)} Φ {phi_side} mm)",
+            "name": f"براندات انكماش جانبية ({max(2, n_side)}Ø{phi_side})",
             "lines": side_lines,
         })
 
@@ -5956,9 +6003,9 @@ def render_ground_beam_3d_bim_viewer(
             {"id": "rebar", "name": "حديد التسليح والكانات"},
         ],
         "legend_items": [
-            {"color": "#ea580c", "name": f"حديد علوي ({n_top} Φ {phi_top})"},
-            {"color": "#0284c7", "name": f"حديد سفلي ({n_bot} Φ {phi_bot})"},
-            {"color": "#ec4899", "name": f"كانات مغلقة (Φ {phi_st} @ {n_st_per_m}/m)"},
+            {"color": "#ea580c", "name": f"حديد علوي ({n_top}Ø{phi_top})"},
+            {"color": "#0284c7", "name": f"حديد سفلي ({n_bot}Ø{phi_bot})"},
+            {"color": "#ec4899", "name": f"كانات مغلقة ({n_st_per_m}Ø{phi_st}/m)"},
             {"color": "#eab308", "name": "براندات انكماش جانبية"},
         ],
         "sketch_title": f"المخطط التنفيذي وتفريد تسليح الميدة {beam_id}",
@@ -5978,8 +6025,8 @@ def render_ground_beam_3d_bim_viewer(
                     <span>🧱 القطاع: <b style="color:#38bdf8;">{b_cm:.0f} × {t_cm:.0f} سم</b></span>
                     <span>📏 البحر L: <b style="color:#4ade80;">{L:.2f} م</b></span>
                     <span>📉 عزم الانحناء Mu: <b style="color:#fb923c;">{Mu_tm:.2f} t·m</b></span>
-                    <span>🔩 علوي: <b style="color:#ea580c;">{n_top}Φ{phi_top}</b> │ سفلي: <b style="color:#38bdf8;">{n_bot}Φ{phi_bot}</b></span>
-                    <span>⚙️ الكانات: <b style="color:#a3e635;">{n_st_per_m}Φ{phi_st}/m</b></span>
+                    <span>🔩 علوي: <b style="color:#ea580c;">{n_top}Ø{phi_top}</b> │ سفلي: <b style="color:#38bdf8;">{n_bot}Ø{phi_bot}</b></span>
+                    <span>⚙️ الكانات: <b style="color:#a3e635;">{n_st_per_m}Ø{phi_st}/m</b></span>
                     <span>🧱 خرسانة: <b style="color:#f472b6;">{vol_rc:.2f} م³</b></span>
                 </div>
             </div>
@@ -6066,8 +6113,8 @@ def render_standalone_flat_slab_3d_bim_viewer(
             {"id": "rebar", "name": "حديد التسليح والكمرات"},
         ]
         scene_data["legend_items"] = [
-            {"color": "#0284c7", "name": f"شبكة سفلية ({n_mesh_btm:.0f} Φ {bottom_mesh_dia}/م)"},
-            {"color": "#6366f1", "name": f"شبكة علوية ({n_mesh_top:.0f} Φ {top_mesh_dia}/م)"},
+            {"color": "#0284c7", "name": f"شبكة سفلية ({int(round(n_mesh_btm))}Ø{bottom_mesh_dia}/m)"},
+            {"color": "#6366f1", "name": f"شبكة علوية ({int(round(n_mesh_top))}Ø{top_mesh_dia}/m)"},
             {"color": "#0ea5e9", "name": "الكمرات الساقطة (Drop Beams)"},
             {"color": "#f97316", "name": "كابات إضافي الأعمدة"},
             {"color": "#ec4899", "name": "تسليح القص الثاقب"},
@@ -6111,25 +6158,32 @@ def render_standalone_flat_slab_3d_bim_viewer(
                 pass
         scene_data["layout_sketch_b64"] = fs_sketch or ""
 
-        db_metric_html = f"<span>📏 الكمرات الساقطة: <b style='color:#38bdf8;'>{n_db} كمرة</b></span>" if n_db > 0 else ""
+        # Build metric tags cleanly without empty lines or indentation gaps
+        standalone_spans = [
+            f"<span>📐 مسطح السقف: <b style=\"color:#38bdf8;\">{m['slab_area_m2']} م²</b>"
+            + (f" <span style=\"color:#f87171; font-size:0.88em;\">(خصم {m['voids_count']} منور {m['voids_area_m2']}م²)</span>" if m.get("voids_count", 0) > 0 else "")
+            + "</span>",
+            f"<span>🧱 السُمك ts: <b style=\"color:#4ade80;\">{ts_cm:.0f} سم</b></span>",
+            f"<span>🏛️ الأعمدة الحاملة: <b style=\"color:#fb923c;\">{m['num_columns']} عمود</b></span>",
+        ]
+        if n_db > 0:
+            standalone_spans.append(f"<span>📏 الكمرات الساقطة: <b style=\"color:#38bdf8;\">{n_db} كمرة</b></span>")
+        standalone_spans.extend([
+            f"<span>🔩 شبكة سفلية: <b style=\"color:#a3e635;\">{int(round(n_mesh_btm))}Ø{bottom_mesh_dia}/m</b></span>",
+            f"<span>🔩 شبكة علوية: <b style=\"color:#f472b6;\">{int(round(n_mesh_top))}Ø{top_mesh_dia}/m</b></span>",
+            f"<span>🧱 حجم الخرسانة: <b style=\"color:#e0e7ff;\">{m['slab_area_m2']*(ts_cm/100.0):.2f} م³</b></span>",
+        ])
+        standalone_chips_html = "".join(standalone_spans)
 
         st.markdown(
-            f"""
-            <div dir="rtl" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 1.5px solid #38bdf8; border-radius: 10px; padding: 12px 18px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-                <div style="font-size: 15px; font-weight: 900; color: #38bdf8; display: flex; align-items: center; gap: 6px;">
-                    <span>🏢 النموذج الإنشائي الرقمي للسقف اللاكمري (Standalone Flat Slab BIM Model):</span>
-                </div>
-                <div style="display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; font-weight: 700; color: #e2e8f0;">
-                    <span>📐 مسطح السقف: <b style="color:#38bdf8;">{m['slab_area_m2']} م²</b>{f' <span style="color:#f87171; font-size:0.88em;">(خصم {m["voids_count"]} منور {m["voids_area_m2"]}م²)</span>' if m.get('voids_count', 0) > 0 else ''}</span>
-                    <span>🧱 السُمك ts: <b style="color:#4ade80;">{ts_cm:.0f} سم</b></span>
-                    <span>🏛️ الأعمدة الحاملة: <b style="color:#fb923c;">{m['num_columns']} عمود</b></span>
-                    {db_metric_html}
-                    <span>🔩 شبكة سفلية: <b style="color:#a3e635;">{n_mesh_btm:.0f}Φ{bottom_mesh_dia}/م</b></span>
-                    <span>🔩 شبكة علوية: <b style="color:#f472b6;">{n_mesh_top:.0f}Φ{top_mesh_dia}/م</b></span>
-                    <span>🧱 حجم الخرسانة: <b style="color:#e0e7ff;">{m['slab_area_m2']*(ts_cm/100.0):.2f} م³</b></span>
-                </div>
-            </div>
-            """,
+            f'<div dir="rtl" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 1.5px solid #38bdf8; border-radius: 10px; padding: 12px 18px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">'
+            f'<div style="font-size: 15px; font-weight: 900; color: #38bdf8; display: flex; align-items: center; gap: 6px;">'
+            f'<span>🏢 النموذج الإنشائي الرقمي للسقف اللاكمري (Standalone Flat Slab BIM Model):</span>'
+            f'</div>'
+            f'<div style="display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; font-weight: 700; color: #e2e8f0;">'
+            f'{standalone_chips_html}'
+            f'</div>'
+            f'</div>',
             unsafe_allow_html=True,
         )
 

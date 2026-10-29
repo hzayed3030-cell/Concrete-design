@@ -184,7 +184,7 @@ def design_isolated_footing_model(
 
     # Top reinforcement (shrinkage if t >= 80 cm)
     if t_cm >= 80:
-        top_rft_str = "5 Φ 12 / m (انكماش علوي)"
+        top_rft_str = "5Ø12/m (انكماش علوي)"
     else:
         top_rft_str = "None"
 
@@ -211,10 +211,10 @@ def design_isolated_footing_model(
         "t_cm": t_cm,
         "d_cm": d_cm,
         "dims_str": f"{L_cm} × {B_cm} × {t_cm} cm",
-        "rft_long_str": f"{n_m_L} Φ {Phi_mm} / m ({total_bars_L} Φ {Phi_mm})",
-        "rft_short_str": f"{n_m_B} Φ {Phi_mm} / m ({total_bars_B} Φ {Phi_mm})",
+        "rft_long_str": f"{n_m_L}Ø{Phi_mm}/m ({total_bars_L}Ø{Phi_mm})",
+        "rft_short_str": f"{n_m_B}Ø{Phi_mm}/m ({total_bars_B}Ø{Phi_mm})",
         "top_rft_str": top_rft_str,
-        "Ld_str": f"{Ld_cm} cm (60Φ)",
+        "Ld_str": f"{Ld_cm} cm (60Ø)",
         "status_str": "Safe ✅" if is_safe else "Review ⚠️",
         "is_safe": is_safe,
         "q_act": q_act,
@@ -368,9 +368,9 @@ def design_combined_footing_model(
         "tc_cm": tc_cm,
         "dc_cm": dc_cm,
         "dims_str": f"{Lc_cm} × {Bc_cm} × {tc_cm} cm",
-        "rft_bot_str": f"{n_bot_total} Φ {Phi_mm} ({n_bot_total/Bc_m:.0f}Φ/m)",
-        "rft_top_str": f"{n_top_total} Φ {Phi_mm} ({n_top_total/Bc_m:.0f}Φ/m)",
-        "rft_trans_str": f"{n_trans_m} Φ {Phi_mm} / m'",
+        "rft_bot_str": f"{n_bot_total}Ø{Phi_mm} ({n_bot_total/Bc_m:.0f}Ø/m)",
+        "rft_top_str": f"{n_top_total}Ø{Phi_mm} ({n_top_total/Bc_m:.0f}Ø/m)",
+        "rft_trans_str": f"{n_trans_m}Ø{Phi_mm}/m'",
         "n_top_total": n_top_total,
         "n_bot_total": n_bot_total,
         "Phi_mm": Phi_mm,
@@ -1693,7 +1693,7 @@ def classify_and_design_building_foundations(
             "أقصى حمل تصميمي Pu (ton)": f"Pu = {P1:.1f}t (R1u = {r9.get('Ru1', P1):.1f}t)",
             "أبعاد المسلحة R.C. (cm)": f"{L1_cm} × {B1_cm} × {t1_cm}",
             "أبعاد العادية P.C. (cm)": f"{L1_cm + 40} × {B1_cm + 40} × 20",
-            "التسليح والتفاصيل الإنشائية": f"عرضي: {n_tr1} Φ 16 / m ({N_tr1_tot} Φ 16) | طولي: 5 Φ 12 / m | q1 = {r9.get('q_act1', 1.0):.2f} kg/cm²",
+            "التسليح والتفاصيل الإنشائية": f"عرضي: {n_tr1}Ø16/m ({N_tr1_tot}Ø16) | طولي: 5Ø12/m | q1 = {r9.get('q_act1', 1.0):.2f} kg/cm²",
             "حالة التحقق الإنشائي (Status)": "✅ Safe" if r9.get("q_act1", 1.0) <= q_all_net else "⚠️ Review",
         })
 
@@ -1727,7 +1727,7 @@ def classify_and_design_building_foundations(
             "أقصى حمل تصميمي Pu (ton)": f"Pu = {P2:.1f}t (R2u = {r9.get('R2', P2/1.5)*1.5:.1f}t)",
             "أبعاد المسلحة R.C. (cm)": f"{L2_cm} × {B2_cm} × {t2_cm}",
             "أبعاد العادية P.C. (cm)": f"{L2_cm + 40} × {B2_cm + 40} × 20",
-            "التسليح والتفاصيل الإنشائية": f"فرش: {n_tr2} Φ 16 / m ({N_tr2_tot} Φ 16) | غطاء: 5 Φ 12 / m | q2 = {r9.get('q_act2', 1.0):.2f} kg/cm²",
+            "التسليح والتفاصيل الإنشائية": f"فرش: {n_tr2}Ø16/m ({N_tr2_tot}Ø16) | غطاء: 5Ø12/m | q2 = {r9.get('q_act2', 1.0):.2f} kg/cm²",
             "حالة التحقق الإنشائي (Status)": "✅ Safe" if r9.get("q_act2", 1.0) <= q_all_net else "⚠️ Review",
         })
 
@@ -1764,7 +1764,7 @@ def classify_and_design_building_foundations(
             "أقصى حمل تصميمي Pu (ton)": f"Mu = {abs(r9.get('Mu_neg', 0.0)):.1f} t.m | Vu = {r9.get('Vu_ton', 0.0):.1f} t",
             "أبعاد المسلحة R.C. (cm)": f"{int(round(sb_m*100))} × {int(round(sD_cm))} × {int(round(S_m*100))} (b×D×L)",
             "أبعاد العادية P.C. (cm)": "دكة عادية أسفل الشداد 20 cm",
-            "التسليح والتفاصيل الإنشائية": f"علوي: {n_top_sb} Φ 22 | سفلي: {n_bot_sb} Φ 16 | كانات: {n_st_sb} Φ 10 / m ({n_br_sb} فروع)",
+            "التسليح والتفاصيل الإنشائية": f"علوي: {n_top_sb}Ø22 | سفلي: {n_bot_sb}Ø16 | كانات: {n_st_sb}Ø10/m ({n_br_sb} فروع)",
             "حالة التحقق الإنشائي (Status)": "✅ Safe (عزم وقص محقق)" if (r9.get("shear_max_ok", True) and r9.get("stirrups_shear_ok", True)) else "⚠️ Review",
         })
 
@@ -1805,7 +1805,7 @@ def classify_and_design_building_foundations(
             "أقصى حمل تصميمي Pu (ton)": f"Pu = {P1:.1f}t (R1u = {r10.get('R1u', P1):.1f}t)",
             "أبعاد المسلحة R.C. (cm)": f"{L1x_cm} × {L1y_cm} × {t1_cm}",
             "أبعاد العادية P.C. (cm)": f"{L1x_cm + 40} × {L1y_cm + 40} × 20",
-            "التسليح والتفاصيل الإنشائية": f"شبكة اتجاهين: {n_tr1} Φ 16 / m ({N1x}Φ اتجاه X + {N1y}Φ اتجاه Y) | q1 = {r10.get('q_act1', 1.0):.2f} kg/cm²",
+            "التسليح والتفاصيل الإنشائية": f"شبكة اتجاهين: {n_tr1}Ø16/m ({N1x}Ø اتجاه X + {N1y}Ø اتجاه Y) | q1 = {r10.get('q_act1', 1.0):.2f} kg/cm²",
             "حالة التحقق الإنشائي (Status)": "✅ Safe" if r10.get("q_act1", 1.0) <= q_all_net else "⚠️ Review",
         })
 
@@ -1839,7 +1839,7 @@ def classify_and_design_building_foundations(
             "أقصى حمل تصميمي Pu (ton)": f"Pu = {P2:.1f}t (R2u = {r10.get('R2u', P2):.1f}t)",
             "أبعاد المسلحة R.C. (cm)": f"{L2x_cm} × {L2y_cm} × {t2_cm}",
             "أبعاد العادية P.C. (cm)": f"{L2x_cm + 40} × {L2y_cm + 40} × 20",
-            "التسليح والتفاصيل الإنشائية": f"فرش: {n_tr2} Φ 16 / m ({N2x} Φ 16) | غطاء: 5 Φ 12 / m | q2 = {r10.get('q_act2', 1.0):.2f} kg/cm²",
+            "التسليح والتفاصيل الإنشائية": f"فرش: {n_tr2}Ø16/m ({N2x}Ø16) | غطاء: 5Ø12/m | q2 = {r10.get('q_act2', 1.0):.2f} kg/cm²",
             "حالة التحقق الإنشائي (Status)": "✅ Safe" if r10.get("q_act2", 1.0) <= q_all_net else "⚠️ Review",
         })
 
@@ -1878,7 +1878,7 @@ def classify_and_design_building_foundations(
             "أقصى حمل تصميمي Pu (ton)": f"Mu = {abs(r10.get('Mu_neg_tm', 0.0)):.1f} t.m | Vu = {r10.get('Vu_ton', 0.0):.1f} t",
             "أبعاد المسلحة R.C. (cm)": f"{int(round(sb_m*100))} × {int(round(sD_cm))} × {int(round(S_m*100))} (b×D×L)",
             "أبعاد العادية P.C. (cm)": "دكة عادية أسفل الشداد 20 cm",
-            "التسليح والتفاصيل الإنشائية": f"علوي: {n_top_dsb} Φ 22 | سفلي: {n_bot_dsb} Φ 16 | كانات: {n_st_dsb} Φ 10 / m ({n_br_dsb} فروع)",
+            "التسليح والتفاصيل الإنشائية": f"علوي: {n_top_dsb}Ø22 | سفلي: {n_bot_dsb}Ø16 | كانات: {n_st_dsb}Ø10/m ({n_br_dsb} فروع)",
             "حالة التحقق الإنشائي (Status)": "✅ Safe (انحناء وقص ولي محقق)" if (r10.get("shear_max_ok", True) and r10.get("stirrups_shear_ok", True)) else "⚠️ Review",
         })
 
