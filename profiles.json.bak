@@ -5,8 +5,8 @@
       "name": "Kitchen & Messhall",
       "description": "مشروع Kitchen & Messhall",
       "created_at": "2026-10-25 15:48",
-      "updated_at": "2026-10-29 21:56",
-      "last_used_at": "2026-10-29 21:56:23",
+      "updated_at": "2026-10-29 22:30",
+      "last_used_at": "2026-10-29 22:30:50",
       "data": {
         "selected_module_idx": 0,
         "apartment_name": "Kitchen & Messhall",
@@ -5750,34 +5750,7 @@
                     "placed": true,
                     "removed": false,
                     "i_eff": 4,
-                    "j_eff": 7,
-                    "Atrib_0": 6.231000000000001,
-                    "Pu_slab_0": 13.83282,
-                    "Pu_slab": 31.59499724167732,
-                    "Pu_punch": 7.75,
-                    "Pu_beam": 12.059999999999999,
-                    "framing_beams": [
-                      "B21",
-                      "B22"
-                    ],
-                    "Pu_0": 16.599384,
-                    "Pu": 37.91399669001278,
-                    "beam_reactions": [
-                      {
-                        "beam_id": "B21",
-                        "rxn_ton": 8.37,
-                        "net_col_rxn_ton": 0.02,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B22",
-                        "rxn_ton": 3.69,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      }
-                    ]
+                    "j_eff": 7
                   }
                 },
                 "supp2": {
@@ -5822,42 +5795,7 @@
                     "placed": true,
                     "removed": false,
                     "i_eff": 4,
-                    "j_eff": 9,
-                    "Atrib_0": 9.4767,
-                    "Pu_slab_0": 21.038273999999998,
-                    "Pu_slab": 33.443181880152565,
-                    "Pu_punch": 7.15,
-                    "Pu_beam": 15.030000000000001,
-                    "framing_beams": [
-                      "B22",
-                      "B23",
-                      "B29"
-                    ],
-                    "Pu_0": 25.245928799999998,
-                    "Pu": 40.13181825618307,
-                    "beam_reactions": [
-                      {
-                        "beam_id": "B22",
-                        "rxn_ton": 3.69,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B23",
-                        "rxn_ton": 2.54,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B29",
-                        "rxn_ton": 8.8,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      }
-                    ]
+                    "j_eff": 9
                   }
                 },
                 "supports_desc": "كمرة رئيسية (مرتكزة على عمود C23 ⟷ عمود C29)",
@@ -6186,34 +6124,7 @@
                     "placed": true,
                     "removed": false,
                     "i_eff": 5,
-                    "j_eff": 1,
-                    "Atrib_0": 12.122,
-                    "Pu_slab_0": 26.910839999999997,
-                    "Pu_slab": 39.42805253484604,
-                    "Pu_punch": 15.07,
-                    "Pu_beam": 10.64,
-                    "framing_beams": [
-                      "B14",
-                      "B15"
-                    ],
-                    "Pu_0": 32.29300799999999,
-                    "Pu": 47.313663041815246,
-                    "beam_reactions": [
-                      {
-                        "beam_id": "B14",
-                        "rxn_ton": 4.64,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B15",
-                        "rxn_ton": 6.0,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      }
-                    ]
+                    "j_eff": 1
                   }
                 },
                 "supp2": {
@@ -6258,50 +6169,7 @@
                     "placed": true,
                     "removed": false,
                     "i_eff": 5,
-                    "j_eff": 4,
-                    "Atrib_0": 7.19055,
-                    "Pu_slab_0": 15.963020999999998,
-                    "Pu_slab": 31.45024643379203,
-                    "Pu_punch": 5.11,
-                    "Pu_beam": 20.259999999999998,
-                    "framing_beams": [
-                      "B15",
-                      "B16",
-                      "B24",
-                      "B32"
-                    ],
-                    "Pu_0": 19.155625199999996,
-                    "Pu": 37.74029572055043,
-                    "beam_reactions": [
-                      {
-                        "beam_id": "B15",
-                        "rxn_ton": 6.0,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B16",
-                        "rxn_ton": 8.1,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B24",
-                        "rxn_ton": 1.35,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B32",
-                        "rxn_ton": 4.81,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      }
-                    ]
+                    "j_eff": 4
                   }
                 },
                 "supports_desc": "كمرة رئيسية (مرتكزة على عمود C10 ⟷ عمود C16)",
@@ -6523,42 +6391,7 @@
                     "placed": true,
                     "removed": false,
                     "i_eff": 5,
-                    "j_eff": 6,
-                    "Atrib_0": 3.4162000000000003,
-                    "Pu_slab_0": 7.583964,
-                    "Pu_slab": 23.943637595111642,
-                    "Pu_punch": 2.58,
-                    "Pu_beam": 15.99,
-                    "framing_beams": [
-                      "B16",
-                      "B17",
-                      "B25"
-                    ],
-                    "Pu_0": 9.1007568,
-                    "Pu": 28.732365114133977,
-                    "beam_reactions": [
-                      {
-                        "beam_id": "B16",
-                        "rxn_ton": 8.1,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B17",
-                        "rxn_ton": 7.23,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B25",
-                        "rxn_ton": 0.66,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      }
-                    ]
+                    "j_eff": 6
                   }
                 },
                 "supp2": {
@@ -6603,34 +6436,7 @@
                     "placed": true,
                     "removed": false,
                     "i_eff": 5,
-                    "j_eff": 9,
-                    "Atrib_0": 7.755325,
-                    "Pu_slab_0": 17.2168215,
-                    "Pu_slab": 28.404515294421735,
-                    "Pu_punch": 9.64,
-                    "Pu_beam": 8.86,
-                    "framing_beams": [
-                      "B17",
-                      "B18"
-                    ],
-                    "Pu_0": 20.660185799999997,
-                    "Pu": 34.085418353306096,
-                    "beam_reactions": [
-                      {
-                        "beam_id": "B17",
-                        "rxn_ton": 7.23,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B18",
-                        "rxn_ton": 1.63,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      }
-                    ]
+                    "j_eff": 9
                   }
                 },
                 "supports_desc": "كمرة رئيسية (مرتكزة على عمود C21 ⟷ عمود C30)",
