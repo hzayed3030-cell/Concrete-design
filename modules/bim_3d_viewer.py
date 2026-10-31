@@ -971,10 +971,14 @@ def extract_bim_3d_scene_data(
             c1_ref = active_cols_map.get(c1_id, {})
             c2_ref = active_cols_map.get(c2_id, {})
 
-            x1 = float(c1.get("x", c1_ref.get("center_x", c1_ref.get("x", 0.0))))
-            y1 = float(c1.get("y", c1_ref.get("center_y", c1_ref.get("y", 0.0))))
-            x2 = float(c2.get("x", c2_ref.get("center_x", c2_ref.get("x", 0.0))))
-            y2 = float(c2.get("y", c2_ref.get("center_y", c2_ref.get("y", 0.0))))
+            if "p1" in gb and "p2" in gb:
+                x1, y1 = float(gb["p1"][0]), float(gb["p1"][1])
+                x2, y2 = float(gb["p2"][0]), float(gb["p2"][1])
+            else:
+                x1 = float(c1.get("x", c1_ref.get("center_x", c1_ref.get("x", 0.0))))
+                y1 = float(c1.get("y", c1_ref.get("center_y", c1_ref.get("y", 0.0))))
+                x2 = float(c2.get("x", c2_ref.get("center_x", c2_ref.get("x", 0.0))))
+                y2 = float(c2.get("y", c2_ref.get("center_y", c2_ref.get("y", 0.0))))
 
             L1 = float(sf.get("L1", 2.2))
             B1 = float(sf.get("B1", 3.0))
@@ -1299,10 +1303,14 @@ def extract_bim_3d_scene_data(
             c1_ref = active_cols_map.get(c1_id, {})
             c2_ref = active_cols_map.get(c2_id, {})
 
-            x1 = float(c1.get("x", c1_ref.get("center_x", c1_ref.get("x", 0.0))))
-            y1 = float(c1.get("y", c1_ref.get("center_y", c1_ref.get("y", 0.0))))
-            x2 = float(c2.get("x", c2_ref.get("center_x", c2_ref.get("x", 0.0))))
-            y2 = float(c2.get("y", c2_ref.get("center_y", c2_ref.get("y", 0.0))))
+            if "p1" in gb and "p2" in gb:
+                x1, y1 = float(gb["p1"][0]), float(gb["p1"][1])
+                x2, y2 = float(gb["p2"][0]), float(gb["p2"][1])
+            else:
+                x1 = float(c1.get("x", c1_ref.get("center_x", c1_ref.get("x", 0.0))))
+                y1 = float(c1.get("y", c1_ref.get("center_y", c1_ref.get("y", 0.0))))
+                x2 = float(c2.get("x", c2_ref.get("center_x", c2_ref.get("x", 0.0))))
+                y2 = float(c2.get("y", c2_ref.get("center_y", c2_ref.get("y", 0.0))))
 
             L1x = float(dsf.get("L1x", 2.0))
             L1y = float(dsf.get("L1y", 2.0))
@@ -1713,10 +1721,14 @@ def extract_bim_3d_scene_data(
             c1_ref = active_cols_map.get(c1_id, {})
             c2_ref = active_cols_map.get(c2_id, {})
 
-            x1 = float(c1.get("x", c1_ref.get("center_x", c1_ref.get("x", 0.0))))
-            y1 = float(c1.get("y", c1_ref.get("center_y", c1_ref.get("y", 0.0))))
-            x2 = float(c2.get("x", c2_ref.get("center_x", c2_ref.get("x", 0.0))))
-            y2 = float(c2.get("y", c2_ref.get("center_y", c2_ref.get("y", 0.0))))
+            if "p1" in gb and "p2" in gb:
+                x1, y1 = float(gb["p1"][0]), float(gb["p1"][1])
+                x2, y2 = float(gb["p2"][0]), float(gb["p2"][1])
+            else:
+                x1 = float(c1.get("x", c1_ref.get("center_x", c1_ref.get("x", 0.0))))
+                y1 = float(c1.get("y", c1_ref.get("center_y", c1_ref.get("y", 0.0))))
+                x2 = float(c2.get("x", c2_ref.get("center_x", c2_ref.get("x", 0.0))))
+                y2 = float(c2.get("y", c2_ref.get("center_y", c2_ref.get("y", 0.0))))
 
             b_m = float(gb.get("b_cm", 25.0)) / 100.0
             t_m = float(gb.get("exec_t_cm", gb.get("t_calc", 60.0))) / 100.0

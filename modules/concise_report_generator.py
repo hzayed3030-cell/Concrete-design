@@ -29,6 +29,22 @@ import matplotlib.patches as patches
 from modules.report_generator import html_to_pdf_bytes
 
 
+def _ar(text: Any) -> str:
+    """Helper to reshape and reorder Arabic text for matplotlib rendering."""
+    if not text:
+        return ""
+    try:
+        import arabic_reshaper
+        from bidi.algorithm import get_display
+        if any('\u0600' <= char <= '\u06FF' for char in str(text)):
+            reshaped_text = arabic_reshaper.reshape(str(text))
+            return get_display(reshaped_text)
+        return str(text)
+    except Exception:
+        return str(text)
+
+
+
 # ── Helper: Convert Matplotlib Figure to Base64 ────────────────────────────────
 def fig_to_b64(fig: plt.Figure) -> Optional[str]:
     if fig is None:
@@ -209,10 +225,16 @@ def draw_page2_columns_plan(
 ) -> plt.Figure:
     """
     Page 2: Column plan with ONLY model tags (C1, C2, C3...) written on columns.
+    Legend is positioned cleanly below the drawing to prevent any text overlapping.
     """
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "sans-serif"]
-    fig, ax = plt.subplots(figsize=(14, 8.5), dpi=140, facecolor="#ffffff")
+    fig, (ax, ax_leg) = plt.subplots(
+        2, 1, figsize=(14, 8.5), dpi=140, facecolor="#ffffff",
+        gridspec_kw={"height_ratios": [1, 0.08], "hspace": 0.06}
+    )
     ax.set_facecolor("#f8fafc")
+    ax_leg.set_facecolor("#ffffff")
+    ax_leg.axis("off")
 
     cant_l = float(cantilevers.get("left", 0.0) or 0.0) if cantilevers else 0.0
     cant_r = float(cantilevers.get("right", 0.0) or 0.0) if cantilevers else 0.0
@@ -288,19 +310,19 @@ def draw_page2_columns_plan(
         cr = patches.Rectangle((cx - cw / 2.0, cy - ch / 2.0), cw, ch,
                                facecolor=cfg["fc"], edgecolor=cfg["ec"], lw=1.8, zorder=5)
         ax.add_patch(cr)
-        ax.text(cx, cy, model_tag, ha="center", va="center", color=cfg["tc"], fontweight="900", fontsize=9.5, zorder=7)
+        ax.text(cx, cy, model_tag, ha="center", va="center", color=cfg["tc"], fontweight="bold", fontsize=9.5, zorder=7)
 
-    # Dynamic Legend
-    leg_lines = ["نماذج الأعمدة (Column Models):"]
+    # Dynamic Legend placed cleanly below drawing in ax_leg
+    leg_items = []
     if has_int:
-        leg_lines.append(f"• {dyn_col_map['interior']}: أعمدة داخلية (Interior)")
+        leg_items.append(f"■ {dyn_col_map['interior']}: " + _ar("أعمدة داخلية (Interior)"))
     if has_edge:
-        leg_lines.append(f"• {dyn_col_map['edge']}: أعمدة طرفية (Edge)")
+        leg_items.append(f"■ {dyn_col_map['edge']}: " + _ar("أعمدة طرفية (Edge)"))
     if has_corner:
-        leg_lines.append(f"• {dyn_col_map['corner']}: أعمدة ركن (Corner)")
-    legend_text = "\n".join(leg_lines)
-    ax.text(0.02, 0.03, legend_text, transform=ax.transAxes, fontsize=8.5, fontweight="bold", color="#1e293b",
-            va="bottom", ha="left", bbox=dict(boxstyle="round,pad=0.4", fc="#ffffff", ec="#cbd5e1", lw=1.2, alpha=0.92), zorder=9)
+        leg_items.append(f"■ {dyn_col_map['corner']}: " + _ar("أعمدة ركن (Corner)"))
+    leg_str = _ar("نماذج الأعمدة (Column Models):  ") + "   |   ".join(leg_items)
+    ax_leg.text(0.5, 0.5, leg_str, ha="center", va="center", fontsize=9.2, fontweight="bold", color="#1e293b",
+                bbox=dict(boxstyle="round,pad=0.45", fc="#ffffff", ec="#cbd5e1", lw=1.2, alpha=0.96))
 
     ax.set_xlim(x_min_slab - 1.8, x_max_slab + 1.2)
     ax.set_ylim(y_min_slab - 0.8, y_max_slab + 1.8)
@@ -319,10 +341,16 @@ def draw_page3_footings_plan(
 ) -> plt.Figure:
     """
     Page 3: Footings layout plan with ONLY model tags (F1, F2, F3...) on footings.
+    Legend is positioned cleanly below the drawing to prevent any text overlapping.
     """
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "sans-serif"]
-    fig, ax = plt.subplots(figsize=(14, 8.5), dpi=140, facecolor="#ffffff")
+    fig, (ax, ax_leg) = plt.subplots(
+        2, 1, figsize=(14, 8.5), dpi=140, facecolor="#ffffff",
+        gridspec_kw={"height_ratios": [1, 0.08], "hspace": 0.06}
+    )
     ax.set_facecolor("#f8fafc")
+    ax_leg.set_facecolor("#ffffff")
+    ax_leg.axis("off")
 
     cant_l = float(cantilevers.get("left", 0.0) or 0.0) if cantilevers else 0.0
     cant_r = float(cantilevers.get("right", 0.0) or 0.0) if cantilevers else 0.0
@@ -358,7 +386,6 @@ def draw_page3_footings_plan(
         "ST1": {"fc": "#fef08a", "ec": "#ca8a04", "tc": "#854d0e"},
     }
 
-    # Dynamic sequential footings mapping: Priority (Interior -> Edge -> Corner)
     dyn_ftg_map = (ftg_analysis.get("ftg_label_map") or {}) if ftg_analysis else {}
     iso_by_col = {}
     if ftg_analysis and "isolated_footings" in ftg_analysis:
@@ -422,23 +449,28 @@ def draw_page3_footings_plan(
         ax.add_patch(cr)
 
         # Label ONLY model tag
-        ax.text(cx, cy - B_ftg / 2.0 + 0.35, ftg_tag, ha="center", va="center", color=cfg["tc"], fontweight="900", fontsize=10, zorder=7,
+        ax.text(cx, cy - B_ftg / 2.0 + 0.35, ftg_tag, ha="center", va="center", color=cfg["tc"], fontweight="bold", fontsize=10, zorder=7,
                 bbox=dict(boxstyle="round,pad=0.15", fc="#ffffff", ec=cfg["ec"], lw=0.9, alpha=0.92))
 
-    # Dynamic Legend
-    leg_lines = ["نماذج القواعد المسلحة (Footing Models):"]
+    # Dynamic Legend placed cleanly below drawing in ax_leg
+    leg_items = []
     if "Interior" in dyn_ftg_map:
-        leg_lines.append(f"• {dyn_ftg_map['Interior']}: قواعد الأعمدة الداخلية (Interior Footings)")
+        leg_items.append(f"■ {dyn_ftg_map['Interior']}: " + _ar("قواعد الأعمدة الداخلية (Interior Footings)"))
     if "Edge" in dyn_ftg_map:
-        leg_lines.append(f"• {dyn_ftg_map['Edge']}: قواعد الأعمدة الطرفية (Edge Footings)")
+        leg_items.append(f"■ {dyn_ftg_map['Edge']}: " + _ar("قواعد الأعمدة الطرفية (Edge Footings)"))
     if "Corner" in dyn_ftg_map:
-        leg_lines.append(f"• {dyn_ftg_map['Corner']}: قواعد أعمدة الأركان (Corner Footings)")
-    legend_text = "\n".join(leg_lines)
-    ax.text(0.02, 0.03, legend_text, transform=ax.transAxes, fontsize=8.5, fontweight="bold", color="#1e293b",
-            va="bottom", ha="left", bbox=dict(boxstyle="round,pad=0.4", fc="#ffffff", ec="#cbd5e1", lw=1.2, alpha=0.92), zorder=9)
+        leg_items.append(f"■ {dyn_ftg_map['Corner']}: " + _ar("قواعد أعمدة الأركان (Corner Footings)"))
+    leg_str = _ar("نماذج القواعد المسلحة (RC Footing Models):  ") + "   |   ".join(leg_items)
+    ax_leg.text(0.5, 0.5, leg_str, ha="center", va="center", fontsize=9.2, fontweight="bold", color="#1e293b",
+                bbox=dict(boxstyle="round,pad=0.45", fc="#ffffff", ec="#cbd5e1", lw=1.2, alpha=0.96))
 
-    ax.set_xlim(x_min_slab - 1.8, x_max_slab + 1.2)
-    ax.set_ylim(y_min_slab - 0.8, y_max_slab + 1.8)
+    min_xc = min(float(c.get("center_x", c.get("x", 0.0))) for c in active_cols) if active_cols else x_min_slab
+    max_xc = max(float(c.get("center_x", c.get("x", 0.0))) for c in active_cols) if active_cols else x_max_slab
+    min_yc = min(float(c.get("center_y", c.get("y", 0.0))) for c in active_cols) if active_cols else y_min_slab
+    max_yc = max(float(c.get("center_y", c.get("y", 0.0))) for c in active_cols) if active_cols else y_max_slab
+
+    ax.set_xlim(min(x_min_slab - 1.8, min_xc - 1.8), max(x_max_slab + 1.2, max_xc + 1.8))
+    ax.set_ylim(min(y_min_slab - 0.8, min_yc - 1.8), max(y_max_slab + 1.8, max_yc + 1.8))
     ax.set_aspect("equal", adjustable="box")
     ax.axis("off")
     return fig
@@ -454,10 +486,16 @@ def draw_page4_ground_beams_plan(
 ) -> plt.Figure:
     """
     Page 4: Ground beams layout plan with ONLY model tags (B1, B2, B3...) on beams.
+    Legend is positioned cleanly below the drawing to prevent any text overlapping.
     """
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "sans-serif"]
-    fig, ax = plt.subplots(figsize=(14, 8.5), dpi=140, facecolor="#ffffff")
+    fig, (ax, ax_leg) = plt.subplots(
+        2, 1, figsize=(14, 8.5), dpi=140, facecolor="#ffffff",
+        gridspec_kw={"height_ratios": [1, 0.08], "hspace": 0.06}
+    )
     ax.set_facecolor("#f8fafc")
+    ax_leg.set_facecolor("#ffffff")
+    ax_leg.axis("off")
 
     cant_l = float(cantilevers.get("left", 0.0) or 0.0) if cantilevers else 0.0
     cant_r = float(cantilevers.get("right", 0.0) or 0.0) if cantilevers else 0.0
@@ -493,35 +531,57 @@ def draw_page4_ground_beams_plan(
         "ST1": {"fc": "#ffedd5", "ec": "#ea580c", "tc": "#9a3412"},
     }
 
-    # Draw Ground Beams
-    gb_list = gb_analysis.get("ground_beams", [])
+    # Draw Ground Beams with Strict Centerline Continuity
+    from modules.ground_beam_layout import align_ground_beam_coords, _get_grid_axes_gb
+    col_xs, col_ys, _, _ = _get_grid_axes_gb(active_cols)
+    eff_grid_xs = col_xs if col_xs else x_grid
+    eff_grid_ys = col_ys if col_ys else y_grid
+
+    gb_list = gb_analysis.get("ground_beams", []) if gb_analysis else []
     for b in gb_list:
-        c1 = b.get("col1", {})
-        c2 = b.get("col2", {})
+        alg = align_ground_beam_coords(b, eff_grid_xs, eff_grid_ys)
+        p1 = alg["p1"]
+        p2 = alg["p2"]
+        dir_b = alg["dir"]
         tag = b.get("tag", b.get("model_mark", "B1"))
         bw_m = float(b.get("b_cm", 25.0)) / 100.0
-
-        p1 = [c1.get("x", 0.0), c1.get("y", 0.0)]
-        p2 = [c2.get("x", 0.0), c2.get("y", 0.0)]
-        dx = p2[0] - p1[0]
-        dy = p2[1] - p1[1]
-
         cfg = beam_style.get(tag, beam_style["B1"])
-        if abs(dx) >= abs(dy):
+
+        if dir_b == "X":
             bx0 = min(p1[0], p2[0])
-            bw = abs(dx)
-            by0 = p1[1] - bw_m / 2.0
+            bw = abs(p2[0] - p1[0])
+            by0 = alg["cl_y"] - bw_m / 2.0
             r_b = patches.Rectangle((bx0, by0), bw, bw_m, facecolor=cfg["fc"], edgecolor=cfg["ec"], lw=1.8, alpha=0.92, zorder=3)
             ax.add_patch(r_b)
-            ax.text(bx0 + bw / 2.0, by0 + bw_m / 2.0, tag, ha="center", va="center", color=cfg["tc"], fontweight="900", fontsize=9.5, zorder=6,
+            ax.text(bx0 + bw / 2.0, alg["cl_y"], tag, ha="center", va="center", color=cfg["tc"], fontweight="bold", fontsize=9.5, zorder=6,
                     bbox=dict(boxstyle="round,pad=0.12", fc="#ffffff", ec=cfg["ec"], lw=0.8, alpha=0.9))
-        else:
+        elif dir_b == "Y":
             by0 = min(p1[1], p2[1])
-            bh = abs(dy)
-            bx0 = p1[0] - bw_m / 2.0
+            bh = abs(p2[1] - p1[1])
+            bx0 = alg["cl_x"] - bw_m / 2.0
             r_b = patches.Rectangle((bx0, by0), bw_m, bh, facecolor=cfg["fc"], edgecolor=cfg["ec"], lw=1.8, alpha=0.92, zorder=3)
             ax.add_patch(r_b)
-            ax.text(bx0 + bw_m / 2.0, by0 + bh / 2.0, tag, ha="center", va="center", rotation=90, color=cfg["tc"], fontweight="900", fontsize=9.5, zorder=6,
+            ax.text(alg["cl_x"], by0 + bh / 2.0, tag, ha="center", va="center", rotation=90, color=cfg["tc"], fontweight="bold", fontsize=9.5, zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.12", fc="#ffffff", ec=cfg["ec"], lw=0.8, alpha=0.9))
+        else:
+            dx = p2[0] - p1[0]
+            dy = p2[1] - p1[1]
+            th_gb = math.atan2(dy, dx)
+            nx_gb = -math.sin(th_gb) * bw_m / 2.0
+            ny_gb = math.cos(th_gb) * bw_m / 2.0
+            poly_b = patches.Polygon([
+                (p1[0] + nx_gb, p1[1] + ny_gb), (p2[0] + nx_gb, p2[1] + ny_gb),
+                (p2[0] - nx_gb, p2[1] - ny_gb), (p1[0] - nx_gb, p1[1] - ny_gb)
+            ], facecolor=cfg["fc"], edgecolor=cfg["ec"], lw=1.8, alpha=0.92, zorder=3)
+            ax.add_patch(poly_b)
+            mid_x = (p1[0] + p2[0]) / 2.0
+            mid_y = (p1[1] + p2[1]) / 2.0
+            rot_deg = math.degrees(th_gb)
+            if rot_deg > 90:
+                rot_deg -= 180
+            elif rot_deg < -90:
+                rot_deg += 180
+            ax.text(mid_x, mid_y, tag, ha="center", va="center", rotation=rot_deg, color=cfg["tc"], fontweight="bold", fontsize=9.5, zorder=6,
                     bbox=dict(boxstyle="round,pad=0.12", fc="#ffffff", ec=cfg["ec"], lw=0.8, alpha=0.9))
 
     # Draw Columns
@@ -533,10 +593,15 @@ def draw_page4_ground_beams_plan(
         cr = patches.Rectangle((cx - cw / 2.0, cy - ch / 2.0), cw, ch, facecolor="#1e293b", edgecolor="#0f172a", lw=1.4, zorder=5)
         ax.add_patch(cr)
 
-    # Legend
-    legend_text = "نماذج السملات الأرضية (Ground Beam Models):\n• B1: سملات قطاع ثقيل (Heavy GB)\n• B2: سملات قطاع متوسط (Medium GB)\n• B3: سملات قطاع خفيف (Light GB)"
-    ax.text(0.02, 0.03, legend_text, transform=ax.transAxes, fontsize=8.5, fontweight="bold", color="#1e293b",
-            va="bottom", ha="left", bbox=dict(boxstyle="round,pad=0.4", fc="#ffffff", ec="#cbd5e1", lw=1.2, alpha=0.92), zorder=9)
+    # Dynamic Legend placed cleanly below drawing in ax_leg
+    leg_items = [
+        "■ B1: " + _ar("سملات قطاع ثقيل (Heavy GB)"),
+        "■ B2: " + _ar("سملات قطاع متوسط (Medium GB)"),
+        "■ B3: " + _ar("سملات قطاع خفيف (Light GB)"),
+    ]
+    leg_str = _ar("نماذج السملات الأرضية (Ground Beam Models):  ") + "   |   ".join(leg_items)
+    ax_leg.text(0.5, 0.5, leg_str, ha="center", va="center", fontsize=9.2, fontweight="bold", color="#1e293b",
+                bbox=dict(boxstyle="round,pad=0.45", fc="#ffffff", ec="#cbd5e1", lw=1.2, alpha=0.96))
 
     ax.set_xlim(x_min_slab - 1.8, x_max_slab + 1.2)
     ax.set_ylim(y_min_slab - 0.8, y_max_slab + 1.8)
@@ -549,66 +614,137 @@ def draw_page4_ground_beams_plan(
 def draw_page5_roof_beams_plan(
     rb_analysis: Dict[str, Any],
     active_cols: List[Dict[str, Any]],
-    Lx_spans: List[float],
-    Ly_spans: List[float],
-    cantilevers: Dict[str, float],
+    Lx_spans: Optional[List[float]] = None,
+    Ly_spans: Optional[List[float]] = None,
+    cantilevers: Optional[Dict[str, float]] = None,
+    slab_bounds: Optional[Dict[str, Any]] = None,
 ) -> plt.Figure:
     """
-    Page 5: Roof beams & cantilevers layout plan with ONLY model tags (B1, B2, B3, CB1...).
+    Page 5: Roof beams & cantilevers layout plan synchronized 100% with actual user inputs.
+    Displays modeled roof drop beams (B1, B2, B3) and cantilever beams (CB1) with their dimensions (b x t),
+    slab footprint, cantilever zones, grid lines, and columns.
+    Legend is positioned cleanly below the drawing in a dedicated subplot to prevent any text overlapping.
     """
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "sans-serif"]
-    fig, ax = plt.subplots(figsize=(14, 8.5), dpi=140, facecolor="#ffffff")
+    fig, (ax, ax_leg) = plt.subplots(
+        2, 1, figsize=(14, 8.5), dpi=140, facecolor="#ffffff",
+        gridspec_kw={"height_ratios": [1, 0.08], "hspace": 0.06}
+    )
     ax.set_facecolor("#f8fafc")
+    ax_leg.set_facecolor("#ffffff")
+    ax_leg.axis("off")
 
-    cant_l = float(cantilevers.get("left", 0.0) or 0.0) if cantilevers else 0.0
-    cant_r = float(cantilevers.get("right", 0.0) or 0.0) if cantilevers else 0.0
-    cant_b = float(cantilevers.get("bottom", 0.0) or 0.0) if cantilevers else 0.0
-    cant_t = float(cantilevers.get("top", 0.0) or 0.0) if cantilevers else 0.0
+    from modules.roof_beam_layout import _get_grid_axes_rb, _hdim, _vdim
 
-    x_grid = [0.0]
-    for lx in Lx_spans: x_grid.append(x_grid[-1] + float(lx))
-    y_grid = [0.0]
-    for ly in Ly_spans: y_grid.append(y_grid[-1] + float(ly))
+    unique_xs, unique_ys, label_map_x, label_map_y = _get_grid_axes_rb(active_cols) if active_cols else ([], [], {}, {})
 
-    x_min_slab = x_grid[0] - cant_l
-    x_max_slab = x_grid[-1] + cant_r
-    y_min_slab = y_grid[0] - cant_b
-    y_max_slab = y_grid[-1] + cant_t
+    # Fallback if active_cols was empty
+    if not unique_xs and Lx_spans:
+        x_g = [0.0]
+        for lx in Lx_spans: x_g.append(x_g[-1] + float(lx))
+        unique_xs = x_g
+        label_map_x = {x: f"Y{i+1}" for i, x in enumerate(x_g)}
+    if not unique_ys and Ly_spans:
+        y_g = [0.0]
+        for ly in Ly_spans: y_g.append(y_g[-1] + float(ly))
+        unique_ys = y_g
+        label_map_y = {y: f"X{i+1}" for i, y in enumerate(y_g)}
 
-    # Slab boundary
-    ax.add_patch(patches.Rectangle((x_min_slab, y_min_slab), x_max_slab - x_min_slab, y_max_slab - y_min_slab,
-                                  facecolor="#f8fafc", edgecolor="#94a3b8", lw=1.5, ls="--", zorder=1))
+    eff_sb = slab_bounds or (rb_analysis.get("slab_bounds") if rb_analysis else None) or {}
+    c_dict = (cantilevers or {}) or (rb_analysis.get("cantilevers") if rb_analysis else {}) or {}
+    cant_l = float(eff_sb.get("cant_left", c_dict.get("left", 0.0) or 0.0) or 0.0)
+    cant_r = float(eff_sb.get("cant_right", c_dict.get("right", 0.0) or 0.0) or 0.0)
+    cant_b = float(eff_sb.get("cant_bottom", c_dict.get("bottom", 0.0) or 0.0) or 0.0)
+    cant_t = float(eff_sb.get("cant_top", c_dict.get("top", 0.0) or 0.0) or 0.0)
 
-    # Grid lines
-    y_bubble_top = y_max_slab + 1.2
-    x_bubble_left = x_min_slab - 1.2
-    for idx, gx in enumerate(x_grid, 1):
-        ax.plot([gx, gx], [y_min_slab - 0.4, y_bubble_top], color="#94a3b8", ls="--", lw=0.9, zorder=1)
-        ax.text(gx, y_bubble_top, f"Y{idx}", ha="center", va="center", color="#1e293b", fontweight="bold", fontsize=9.5,
+    col_xs = [float(c.get("center_x", c.get("x", 0.0))) for c in active_cols] if active_cols else [0.0]
+    col_ys = [float(c.get("center_y", c.get("y", 0.0))) for c in active_cols] if active_cols else [0.0]
+
+    x_core_min = float(eff_sb.get("min_x", unique_xs[0] if unique_xs else min(col_xs)))
+    x_core_max = float(eff_sb.get("max_x", unique_xs[-1] if unique_xs else max(col_xs)))
+    y_core_min = float(eff_sb.get("min_y", unique_ys[0] if unique_ys else min(col_ys)))
+    y_core_max = float(eff_sb.get("max_y", unique_ys[-1] if unique_ys else max(col_ys)))
+
+    x_slab_min = x_core_min - cant_l
+    x_slab_max = x_core_max + cant_r
+    y_slab_min = y_core_min - cant_b
+    y_slab_max = y_core_max + cant_t
+
+    slab_w = x_slab_max - x_slab_min
+    slab_h = y_slab_max - y_slab_min
+
+    # Slab footprint
+    ax.add_patch(patches.Rectangle((x_slab_min, y_slab_min), slab_w, slab_h,
+                                  facecolor="#f8fafc", edgecolor="#334155", lw=2.0, zorder=1))
+
+    has_cant = (cant_l > 0.05 or cant_r > 0.05 or cant_t > 0.05 or cant_b > 0.05)
+    if has_cant:
+        core_w = x_core_max - x_core_min
+        core_h = y_core_max - y_core_min
+        if core_w > 0 and core_h > 0:
+            ax.add_patch(patches.Rectangle((x_core_min, y_core_min), core_w, core_h,
+                                          facecolor="none", edgecolor="#94a3b8", lw=1.2, ls="--", zorder=1.4))
+        if cant_l > 0.05:
+            ax.add_patch(patches.Rectangle((x_slab_min, y_slab_min), cant_l, slab_h,
+                                          facecolor="#fffbeb", edgecolor="#f59e0b", lw=1.0, ls=":", alpha=0.5, zorder=1.2))
+            ax.text(x_slab_min + cant_l / 2.0, (y_slab_min + y_slab_max) / 2.0, _ar(f"كابولي أيسر ({cant_l:.2f}m)"),
+                    ha="center", va="center", fontsize=8.0, color="#b45309", fontweight="bold", rotation=90, zorder=2)
+        if cant_r > 0.05:
+            ax.add_patch(patches.Rectangle((x_core_max, y_slab_min), cant_r, slab_h,
+                                          facecolor="#fffbeb", edgecolor="#f59e0b", lw=1.0, ls=":", alpha=0.5, zorder=1.2))
+            ax.text(x_core_max + cant_r / 2.0, (y_slab_min + y_slab_max) / 2.0, _ar(f"كابولي أيمن ({cant_r:.2f}m)"),
+                    ha="center", va="center", fontsize=8.0, color="#b45309", fontweight="bold", rotation=90, zorder=2)
+        if cant_t > 0.05:
+            ax.add_patch(patches.Rectangle((x_slab_min, y_core_max), slab_w, cant_t,
+                                          facecolor="#fffbeb", edgecolor="#f59e0b", lw=1.0, ls=":", alpha=0.5, zorder=1.2))
+            ax.text((x_slab_min + x_slab_max) / 2.0, y_core_max + cant_t / 2.0, _ar(f"كابولي علوي ({cant_t:.2f}m)"),
+                    ha="center", va="center", fontsize=8.0, color="#b45309", fontweight="bold", zorder=2)
+        if cant_b > 0.05:
+            ax.add_patch(patches.Rectangle((x_slab_min, y_slab_min), slab_w, cant_b,
+                                          facecolor="#fffbeb", edgecolor="#f59e0b", lw=1.0, ls=":", alpha=0.5, zorder=1.2))
+            ax.text((x_slab_min + x_slab_max) / 2.0, y_slab_min + cant_b / 2.0, _ar(f"كابولي سفلي ({cant_b:.2f}m)"),
+                    ha="center", va="center", fontsize=8.0, color="#b45309", fontweight="bold", zorder=2)
+
+    # Grid lines & bubbles
+    min_gx = unique_xs[0] if unique_xs else x_core_min
+    max_gx = unique_xs[-1] if unique_xs else x_core_max
+    min_gy = unique_ys[0] if unique_ys else y_core_min
+    max_gy = unique_ys[-1] if unique_ys else y_core_max
+
+    y_bubble_top = max(y_slab_max, max_gy) + 1.2
+    x_bubble_left = min(x_slab_min, min_gx) - 1.2
+
+    for idx, gx in enumerate(unique_xs, start=1):
+        lbl = label_map_x.get(gx, f"Y{idx}")
+        ax.plot([gx, gx], [min(y_slab_min, min_gy) - 0.4, y_bubble_top], color="#94a3b8", ls="--", lw=0.9, zorder=1)
+        ax.text(gx, y_bubble_top, lbl, ha="center", va="center", color="#1e293b", fontweight="bold", fontsize=9.5,
                 bbox=dict(boxstyle="circle,pad=0.25", fc="#f8fafc", ec="#334155", lw=1.2), zorder=8)
-    for idx, gy in enumerate(y_grid, 1):
-        ax.plot([x_bubble_left, x_max_slab + 0.4], [gy, gy], color="#94a3b8", ls="--", lw=0.9, zorder=1)
-        ax.text(x_bubble_left, gy, f"X{idx}", ha="center", va="center", color="#1e293b", fontweight="bold", fontsize=9.5,
+    for idx, gy in enumerate(unique_ys, start=1):
+        lbl = label_map_y.get(gy, f"X{idx}")
+        ax.plot([x_bubble_left, max(x_slab_max, max_gx) + 0.4], [gy, gy], color="#94a3b8", ls="--", lw=0.9, zorder=1)
+        ax.text(x_bubble_left, gy, lbl, ha="center", va="center", color="#1e293b", fontweight="bold", fontsize=9.5,
                 bbox=dict(boxstyle="circle,pad=0.25", fc="#f8fafc", ec="#334155", lw=1.2), zorder=8)
 
     beam_style = {
-        "B1": {"fc": "#dcfce7", "ec": "#15803d", "tc": "#14532d", "hatch": None},
-        "B2": {"fc": "#e0f2fe", "ec": "#0284c7", "tc": "#0369a1", "hatch": None},
-        "B3": {"fc": "#f3e8ff", "ec": "#7e22ce", "tc": "#581c87", "hatch": None},
-        "CB1": {"fc": "#ffedd5", "ec": "#ea580c", "tc": "#9a3412", "hatch": "///"},
+        "B1": {"fc": "#dbeafe", "ec": "#1d4ed8", "tc": "#1e40af", "badge_bg": "#eff6ff", "hatch": None},
+        "B2": {"fc": "#dcfce7", "ec": "#15803d", "tc": "#166534", "badge_bg": "#f0fdf4", "hatch": None},
+        "B3": {"fc": "#f3e8ff", "ec": "#7e22ce", "tc": "#6b21a8", "badge_bg": "#faf5ff", "hatch": None},
+        "CB1": {"fc": "#ffedd5", "ec": "#ea580c", "tc": "#9a3412", "badge_bg": "#fff7ed", "hatch": "///"},
     }
 
-    all_beams = rb_analysis.get("all_roof_beams", [])
+    all_beams = rb_analysis.get("all_roof_beams", []) if rb_analysis else []
     for b in all_beams:
         p1 = b["p1"]
         p2 = b["p2"]
-        tag = b.get("tag", "B1")
         bw_m = float(b.get("b_cm", 25.0)) / 100.0
+        t_cm = int(b.get("exec_t_cm", b.get("t_calc", 50.0)))
+        b_cm = int(b.get("b_cm", 25.0))
+        tag = b.get("tag", b.get("model_mark", "B1"))
+        cfg = beam_style.get(tag, beam_style["B1"])
 
         dx = p2[0] - p1[0]
         dy = p2[1] - p1[1]
 
-        cfg = beam_style.get(tag, beam_style["B1"])
         if abs(dx) >= abs(dy):
             bx0 = min(p1[0], p2[0])
             bw = abs(dx)
@@ -616,8 +752,9 @@ def draw_page5_roof_beams_plan(
             r_b = patches.Rectangle((bx0, by0), bw, bw_m, facecolor=cfg["fc"], edgecolor=cfg["ec"],
                                     hatch=cfg["hatch"], lw=1.8, alpha=0.92, zorder=3)
             ax.add_patch(r_b)
-            ax.text(bx0 + bw / 2.0, by0 + bw_m / 2.0, tag, ha="center", va="center", color=cfg["tc"], fontweight="900", fontsize=9.5, zorder=6,
-                    bbox=dict(boxstyle="round,pad=0.12", fc="#ffffff", ec=cfg["ec"], lw=0.8, alpha=0.9))
+            lbl = f"{tag} ({b_cm}×{t_cm})"
+            ax.text(bx0 + bw / 2.0, by0 + bw_m / 2.0, lbl, ha="center", va="center", color=cfg["tc"], fontweight="bold", fontsize=8.2, zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.15", fc=cfg["badge_bg"], ec=cfg["ec"], lw=0.8, alpha=0.92))
         else:
             by0 = min(p1[1], p2[1])
             bh = abs(dy)
@@ -625,8 +762,9 @@ def draw_page5_roof_beams_plan(
             r_b = patches.Rectangle((bx0, by0), bw_m, bh, facecolor=cfg["fc"], edgecolor=cfg["ec"],
                                     hatch=cfg["hatch"], lw=1.8, alpha=0.92, zorder=3)
             ax.add_patch(r_b)
-            ax.text(bx0 + bw_m / 2.0, by0 + bh / 2.0, tag, ha="center", va="center", rotation=90, color=cfg["tc"], fontweight="900", fontsize=9.5, zorder=6,
-                    bbox=dict(boxstyle="round,pad=0.12", fc="#ffffff", ec=cfg["ec"], lw=0.8, alpha=0.9))
+            lbl = f"{tag} ({b_cm}×{t_cm})"
+            ax.text(bx0 + bw_m / 2.0, by0 + bh / 2.0, lbl, ha="center", va="center", rotation=90, color=cfg["tc"], fontweight="bold", fontsize=8.2, zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.15", fc=cfg["badge_bg"], ec=cfg["ec"], lw=0.8, alpha=0.92))
 
     # Draw Columns
     for c in active_cols:
@@ -636,14 +774,33 @@ def draw_page5_roof_beams_plan(
         ch = float(c.get("height_m", c.get("bc", 30.0) / 100.0))
         cr = patches.Rectangle((cx - cw / 2.0, cy - ch / 2.0), cw, ch, facecolor="#1e293b", edgecolor="#0f172a", lw=1.4, zorder=5)
         ax.add_patch(cr)
+        c_lbl = str(c.get("orig_id", c.get("id", "C")))
+        ax.text(cx, cy, c_lbl, ha="center", va="center", color="#ffffff", fontweight="bold", fontsize=8.2, zorder=7)
 
-    # Legend
-    legend_text = "نماذج كمرات السقف والكوابيل (Roof Beam Models):\n• B1: كمرات ساقطة قطاع ثقيل (Heavy Beam)\n• B2: كمرات ساقطة قطاع متوسط (Medium Beam)\n• B3: كمرات ساقطة قطاع خفيف (Light Beam)\n• CB1: كمرات كابولية بشوك علوية (Cantilever Beam)"
-    ax.text(0.02, 0.03, legend_text, transform=ax.transAxes, fontsize=8.5, fontweight="bold", color="#1e293b",
-            va="bottom", ha="left", bbox=dict(boxstyle="round,pad=0.4", fc="#ffffff", ec="#cbd5e1", lw=1.2, alpha=0.92), zorder=9)
+    # Dynamic Legend placed cleanly below drawing in ax_leg
+    models_dict = rb_analysis.get("models_dict", {}) if rb_analysis else {}
+    leg_items = []
+    for mk in ["B1", "B2", "B3", "CB1"]:
+        if mk in models_dict:
+            m = models_dict[mk]
+            if mk == "B1": dot = "■ B1: " + _ar("ساقطة ثقيل (Heavy)")
+            elif mk == "B2": dot = "■ B2: " + _ar("ساقطة متوسط (Medium)")
+            elif mk == "B3": dot = "■ B3: " + _ar("ساقطة خفيف (Light)")
+            else: dot = "■ CB1: " + _ar("كابولية بشوك (Cantilever)")
+            leg_items.append(f"{dot} [{m['dimensions_str']} cm]")
+    if not leg_items:
+        leg_items = [
+            "■ B1: " + _ar("كمرات ساقطة ثقيل (Heavy)"),
+            "■ B2: " + _ar("كمرات ساقطة متوسط (Medium)"),
+            "■ B3: " + _ar("كمرات ساقطة خفيف (Light)"),
+            "■ CB1: " + _ar("كمرات كابولية (Cantilever)"),
+        ]
+    leg_str = _ar("نماذج كمرات السقف والكوابيل (Roof Beam Models):  ") + "   |   ".join(leg_items)
+    ax_leg.text(0.5, 0.5, leg_str, ha="center", va="center", fontsize=8.8, fontweight="bold", color="#1e293b",
+                bbox=dict(boxstyle="round,pad=0.45", fc="#ffffff", ec="#cbd5e1", lw=1.2, alpha=0.96))
 
-    ax.set_xlim(x_min_slab - 1.8, x_max_slab + 1.2)
-    ax.set_ylim(y_min_slab - 0.8, y_max_slab + 1.8)
+    ax.set_xlim(x_slab_min - 1.8, x_slab_max + 1.2)
+    ax.set_ylim(y_slab_min - 0.8, y_slab_max + 1.8)
     ax.set_aspect("equal", adjustable="box")
     ax.axis("off")
     return fig
@@ -755,7 +912,7 @@ def draw_page6_slab_bottom_rebar(
     # Base Mesh Banner Box
     mesh_box_text = f"الشبكة السفلية الرئيسية: {n_mesh_btm:.0f}Ø{bottom_mesh_dia}/م' (فرش وغطاء في الاتجاهين T1 & T2)"
     if not has_any_extra:
-        mesh_box_text += "\n✅ الشبكة السفلية الأساسية كافية لتغطية كامل العزوم الموجبة ولا يلزم إضافي سفلي"
+        mesh_box_text += "\n[OK] الشبكة السفلية الأساسية كافية لتغطية كامل العزوم الموجبة ولا يلزم إضافي سفلي"
     ax.text(0.50, 0.96, mesh_box_text, transform=ax.transAxes, ha="center", va="top",
             fontsize=10.5, fontweight="bold", color="#064e3b",
             bbox=dict(boxstyle="round,pad=0.45", fc="#dcfce7", ec="#16a34a", lw=1.6, alpha=0.96), zorder=9)
@@ -1034,6 +1191,30 @@ def generate_concise_design_report_html(
     """
     Builds the complete 8-page standalone HTML calculation report ready for PDF printing.
     """
+    # Filter and normalize Page 5 Roof Beams schedule table:
+    # 1. Remove redundant beam lengths column (إجمالي الأطوال / طول الكمرة)
+    # 2. Normalize and order columns exactly into 8 cells matching the 8 headers
+    clean_rb_table = []
+    if rb_table_data:
+        for r in rb_table_data:
+            row_clean = {k: v for k, v in r.items() if not any(sub in k.lower() for sub in ["أطوال", "طول", "length", "len"])}
+            def _find_val(terms, default="—"):
+                for k, val in row_clean.items():
+                    if any(t in k for t in terms):
+                        return val
+                return default
+            ordered = {
+                "mark": _find_val(["النموذج", "Mark"]),
+                "class": _find_val(["التصنيف", "الأهمية"]),
+                "b_t": _find_val(["الأبعاد", "القطاع", "b × t"]),
+                "bot": _find_val(["السفلي", "Bottom"]),
+                "top": _find_val(["العلوي", "Top"]),
+                "stirrups": _find_val(["الكانات", "Stirrups"]),
+                "side": _find_val(["براندات", "Side"]),
+                "count": _find_val(["العدد", "Count"]),
+            }
+            clean_rb_table.append(ordered)
+
     html_content = f"""<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -1411,20 +1592,30 @@ def generate_concise_design_report_html(
 
         <div class="table-container">
             <table class="design-table">
+                <colgroup>
+                    <col style="width: 10%;">
+                    <col style="width: 20%;">
+                    <col style="width: 11%;">
+                    <col style="width: 14%;">
+                    <col style="width: 15%;">
+                    <col style="width: 11%;">
+                    <col style="width: 10%;">
+                    <col style="width: 9%;">
+                </colgroup>
                 <thead>
                     <tr>
-                        <th>النموذج (Mark)</th>
-                        <th>التصنيف والأهمية بالسقف</th>
-                        <th>القطاع b × t (cm)</th>
-                        <th>التسليح السفلي (Bottom Rft)</th>
-                        <th>التسليح العلوي / الشوك (Top Rft)</th>
-                        <th>الكانات (Stirrups)</th>
-                        <th>براندات الجوانب (Side Bars)</th>
-                        <th>العدد بالسقف</th>
+                        <th style="width: 10%;">النموذج (Mark)</th>
+                        <th style="width: 20%;">التصنيف والأهمية بالسقف</th>
+                        <th style="width: 11%;">القطاع b × t (cm)</th>
+                        <th style="width: 14%;">التسليح السفلي (Bottom Rft)</th>
+                        <th style="width: 15%;">التسليح العلوي / الشوك (Top Rft)</th>
+                        <th style="width: 11%;">الكانات (Stirrups)</th>
+                        <th style="width: 10%;">براندات الجوانب (Side Bars)</th>
+                        <th style="width: 9%;">العدد بالسقف</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {_render_html_table_rows(rb_table_data)}
+                    {_render_html_table_rows(clean_rb_table)}
                 </tbody>
             </table>
         </div>

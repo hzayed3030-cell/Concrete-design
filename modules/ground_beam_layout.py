@@ -36,11 +36,191 @@ Key Capabilities:
 
 import math
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 1. NETWORK CONNECTIVITY & BEAM SEGMENT EXTRACTION
 # ═══════════════════════════════════════════════════════════════════════════════
+
+
+
+def _ar(text):
+    if not text:
+        return ""
+    try:
+        import arabic_reshaper
+        from bidi.algorithm import get_display
+        if any('\u0600' <= char <= '\u06FF' for char in str(text)):
+            reshaped_text = arabic_reshaper.reshape(str(text))
+            return get_display(reshaped_text)
+        return str(text)
+    except Exception:
+        return str(text)
+
+
+def _hdim(ax, y, x1, x2, label, side="top", fs=9.0, offset=0.18, draw_ext=True):
+    ym = y + offset if side == "top" else y - offset
+    ax.annotate("", xy=(x1, ym), xytext=(x2, ym), arrowprops=dict(arrowstyle="<->", color="#334155", lw=1.2))
+    if draw_ext:
+        ax.plot([x1, x1], [y, ym], color="#94a3b8", lw=0.8, ls="--", alpha=0.7)
+        ax.plot([x2, x2], [y, ym], color="#94a3b8", lw=0.8, ls="--", alpha=0.7)
+    ax.text((x1 + x2) / 2.0, ym + (0.08 if side == "top" else -0.08),
+            label, ha="center", va="bottom" if side == "top" else "top",
+            fontsize=fs, fontweight="bold", color="#1e293b")
+
+
+def _vdim(ax, x, y1, y2, label, side="left", fs=9.0, offset=0.18, draw_ext=True):
+    xm = x + offset if side == "right" else x - offset
+    ax.annotate("", xy=(xm, y1), xytext=(xm, y2), arrowprops=dict(arrowstyle="<->", color="#334155", lw=1.2))
+    if draw_ext:
+        ax.plot([x, xm], [y1, y1], color="#94a3b8", lw=0.8, ls="--", alpha=0.7)
+        ax.plot([x, xm], [y2, y2], color="#94a3b8", lw=0.8, ls="--", alpha=0.7)
+    ax.text(xm + (0.08 if side == "right" else -0.08), (y1 + y2) / 2.0,
+            label, ha="right" if side == "left" else "left", va="center",
+            rotation=90, fontsize=fs, fontweight="bold", color="#1e293b")
+
+
+def _get_grid_axes_gb(columns_list):
+    """
+    Extract clean structural grid coordinates and labels from columns list.
+    Prioritizes explicit grid_x_m / grid_y_m, with fallback clustering of coordinates
+    to prevent shifted/offset columns from generating duplicate or chaotic grid lines.
+    """
+    if not columns_list:
+        return [], [], {}, {}
+    has_grid_m = any("grid_x_m" in c for c in columns_list)
+    if has_grid_m:
+        unique_xs = sorted(list(set(round(float(c["grid_x_m"]), 3) for c in columns_list if "grid_x_m" in c)))
+        unique_ys = sorted(list(set(round(float(c["grid_y_m"]), 3) for c in columns_list if "grid_y_m" in c)))
+    else:
+        def _cluster(coords, tol=0.40):
+            if not coords:
+                return []
+            sc = sorted(coords)
+            clusters = [[sc[0]]]
+            for val in sc[1:]:
+                if val - clusters[-1][-1] <= tol:
+                    clusters[-1].append(val)
+                else:
+                    clusters.append([val])
+            return sorted([round(sum(cl) / len(cl), 2) for cl in clusters])
+
+        unique_xs = _cluster([float(c["x"]) for c in columns_list])
+        unique_ys = _cluster([float(c["y"]) for c in columns_list])
+
+    label_map_x = {}
+    label_map_y = {}
+    for c in columns_list:
+        gx = float(c.get("grid_x_m", c.get("x", 0.0)))
+        gy = float(c.get("grid_y_m", c.get("y", 0.0)))
+        if "grid_x" in c and c["grid_x"] and unique_xs:
+            best_x = min(unique_xs, key=lambda u: abs(u - gx))
+            label_map_x[best_x] = str(c["grid_x"])
+        if "grid_y" in c and c["grid_y"] and unique_ys:
+            best_y = min(unique_ys, key=lambda u: abs(u - gy))
+            label_map_y[best_y] = str(c["grid_y"])
+
+    return unique_xs, unique_ys, label_map_x, label_map_y
+
+
+def align_ground_beam_coords(gb, unique_xs=None, unique_ys=None):
+    """
+    Enforces strict centerline continuity (توحيد السنترلاين) for Ground Beams and Strap Beams.
+    Snaps horizontal beams to the shared structural grid Y-axis and vertical beams to the shared structural grid X-axis,
+    eliminating column eccentricity/architectural face shift offsets and ensuring 100% collinearity between adjacent spans.
+    """
+    if gb.get("_is_aligned") and "p1" in gb and "p2" in gb:
+        return gb
+
+    c1 = gb.get("col1", {})
+    c2 = gb.get("col2", {})
+    c1_x = float(c1.get("x", 0.0))
+    c1_y = float(c1.get("y", 0.0))
+    c2_x = float(c2.get("x", 0.0))
+    c2_y = float(c2.get("y", 0.0))
+
+    dx = c2_x - c1_x
+    dy = c2_y - c1_y
+    dir_b = gb.get("dir")
+
+    if not dir_b:
+        if abs(dx) > 0.35 and abs(dy) > 0.35:
+            dir_b = "DIAG"
+        elif abs(dx) >= abs(dy):
+            dir_b = "X"
+        else:
+            dir_b = "Y"
+
+    if dir_b == "X" or (abs(dx) >= abs(dy) and abs(dy) <= 0.45):
+        mean_y = (c1_y + c2_y) / 2.0
+        cl_y = min(unique_ys, key=lambda u: abs(u - mean_y)) if unique_ys else mean_y
+
+        if unique_xs:
+            best_x1 = min(unique_xs, key=lambda u: abs(u - c1_x))
+            x1 = best_x1 if abs(best_x1 - c1_x) <= 0.45 else c1_x
+            best_x2 = min(unique_xs, key=lambda u: abs(u - c2_x))
+            x2 = best_x2 if abs(best_x2 - c2_x) <= 0.45 else c2_x
+        else:
+            x1 = c1_x
+            x2 = c2_x
+
+        p1 = [min(x1, x2), cl_y]
+        p2 = [max(x1, x2), cl_y]
+        return {
+            "dir": "X",
+            "cl_coord": cl_y,
+            "cl_y": cl_y,
+            "p1": p1,
+            "p2": p2,
+            "bx0": min(x1, x2),
+            "bw": abs(x2 - x1),
+            "by0": cl_y,
+            "_is_aligned": True,
+        }
+    elif dir_b == "Y" or (abs(dy) > abs(dx) and abs(dx) <= 0.45):
+        mean_x = (c1_x + c2_x) / 2.0
+        cl_x = min(unique_xs, key=lambda u: abs(u - mean_x)) if unique_xs else mean_x
+
+        if unique_ys:
+            best_y1 = min(unique_ys, key=lambda u: abs(u - c1_y))
+            y1 = best_y1 if abs(best_y1 - c1_y) <= 0.45 else c1_y
+            best_y2 = min(unique_ys, key=lambda u: abs(u - c2_y))
+            y2 = best_y2 if abs(best_y2 - c2_y) <= 0.45 else c2_y
+        else:
+            y1 = c1_y
+            y2 = c2_y
+
+        p1 = [cl_x, min(y1, y2)]
+        p2 = [cl_x, max(y1, y2)]
+        return {
+            "dir": "Y",
+            "cl_coord": cl_x,
+            "cl_x": cl_x,
+            "p1": p1,
+            "p2": p2,
+            "by0": min(y1, y2),
+            "bh": abs(y2 - y1),
+            "bx0": cl_x,
+            "_is_aligned": True,
+        }
+    else:
+        p1 = [c1_x, c1_y]
+        p2 = [c2_x, c2_y]
+        return {
+            "dir": "DIAG",
+            "p1": p1,
+            "p2": p2,
+            "bx0": min(c1_x, c2_x),
+            "by0": min(c1_y, c2_y),
+            "bw": abs(dx),
+            "bh": abs(dy),
+            "_is_aligned": True,
+        }
+
 
 def extract_structural_links_and_beams(
     active_columns: list,
@@ -89,6 +269,7 @@ def extract_structural_links_and_beams(
         if "id" not in c:
             c["id"] = str(c.get("label", c.get("name", f"C{idx+1}")))
     cols_map = {c["id"]: c for c in active_columns}
+    unique_xs, unique_ys, label_map_x, label_map_y = _get_grid_axes_gb(active_columns)
 
     # ── Step A: Identify Strap Beams from ftg_analysis (Module 9 & 10) ─────────
     strap_pair_keys = set()
@@ -871,6 +1052,17 @@ def extract_structural_links_and_beams(
         b["exec_n_top"] = m_info.get("n_top", b["n_top"])
         b["exec_stirrups_per_m"] = m_info.get("stirrups_per_m", b["stirrups_per_m"])
         b["exec_side_bars"] = m_info.get("total_side_bars", 0)
+        alg = align_ground_beam_coords(b, unique_xs, unique_ys)
+        b["p1"] = alg["p1"]
+        b["p2"] = alg["p2"]
+        b["cl_coord"] = alg.get("cl_coord")
+        b["cl_y"] = alg.get("cl_y")
+        b["cl_x"] = alg.get("cl_x")
+        b["bx0"] = alg.get("bx0")
+        b["by0"] = alg.get("by0")
+        b["bw"] = alg.get("bw")
+        b["bh"] = alg.get("bh")
+        b["_is_aligned"] = True
 
     # ── Step E: Master Ground Beams Schedule Table ─────────────────────────────
     models_schedule = []
@@ -1024,3 +1216,248 @@ def extract_structural_links_and_beams(
         "classification_rows": classification_rows,
         "detailed_schedule_rows": detailed_schedule_rows,
     }
+
+
+
+def draw_ground_beams_layout_sketch(
+    active_columns: list,
+    gb_analysis: dict,
+    slab_bounds: dict = None,
+    title: str = "ECP 203 — Ground Beams & Tie Beams 2D Framing Plan",
+):
+    """
+    Renders comprehensive 2D ground beams and tie beams framing plan sketch:
+    - B1 Heavy Ground Beams: Royal Blue / Indigo (#1d4ed8)
+    - B2 Medium Ground Beams: Emerald Green (#15803d)
+    - B3 Light Ground Beams: Soft Violet / Purple (#7e22ce)
+    - Strap Beams (ST): Warm Coral / Orange (#ea580c)
+    - Strict Centerline Continuity: Adjacent spans share the exact same structural grid axis centerline
+    - Outer building/slab footprint
+    - Structural grid lines with circular bubbles, bay spans, and total dimensions
+    - Shaded column rectangles with column IDs
+    - Full Legend matching Master Models Schedule (100% data consistency)
+    """
+    plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "sans-serif"]
+    fig, ax = plt.subplots(figsize=(16, 13), dpi=160, facecolor="#ffffff")
+    ax.set_facecolor("#f8fafc")
+
+    if not active_columns:
+        ax.text(0.5, 0.5, "No Active Columns Found / لا توجد أعمدة مفعلة", ha="center", va="center", fontsize=14, color="#64748b")
+        ax.axis("off")
+        return fig
+
+    unique_xs, unique_ys, label_map_x, label_map_y = _get_grid_axes_gb(active_columns)
+
+    col_xs = [float(c["x"]) for c in active_columns]
+    col_ys = [float(c["y"]) for c in active_columns]
+
+    eff_sb = slab_bounds or {}
+    x_slab_min = float(eff_sb.get("min_x", unique_xs[0] if unique_xs else min(col_xs))) - float(eff_sb.get("cant_left", 0.0) or 0.0)
+    x_slab_max = float(eff_sb.get("max_x", unique_xs[-1] if unique_xs else max(col_xs))) + float(eff_sb.get("cant_right", 0.0) or 0.0)
+    y_slab_min = float(eff_sb.get("min_y", unique_ys[0] if unique_ys else min(col_ys))) - float(eff_sb.get("cant_bottom", 0.0) or 0.0)
+    y_slab_max = float(eff_sb.get("max_y", unique_ys[-1] if unique_ys else max(col_ys))) + float(eff_sb.get("cant_top", 0.0) or 0.0)
+
+    min_gx = unique_xs[0] if unique_xs else x_slab_min
+    max_gx = unique_xs[-1] if unique_xs else x_slab_max
+    min_gy = unique_ys[0] if unique_ys else y_slab_min
+    max_gy = unique_ys[-1] if unique_ys else y_slab_max
+
+    y_top_ref = max(y_slab_max, max_gy) + 0.6
+    x_left_ref = min(x_slab_min, min_gx) - 0.6
+    y_bottom_ref = min(y_slab_min, min_gy) - 0.6
+    x_right_ref = max(x_slab_max, max_gx) + 0.6
+
+    y_dim1 = y_top_ref + 0.5
+    y_dim2 = y_top_ref + 1.2
+    y_bubble = y_top_ref + 2.1
+
+    x_dim1 = x_left_ref - 0.5
+    x_dim2 = x_left_ref - 1.2
+    x_bubble = x_left_ref - 2.1
+
+    # 1. Building Footprint
+    slab_w = x_slab_max - x_slab_min
+    slab_h = y_slab_max - y_slab_min
+    if slab_w > 0 and slab_h > 0:
+        slab_rect = patches.Rectangle(
+            (x_slab_min, y_slab_min), slab_w, slab_h,
+            facecolor="#f8fafc", edgecolor="#475569", lw=2.0, ls="-", zorder=1
+        )
+        ax.add_patch(slab_rect)
+        ax.text(
+            x_slab_min + 0.15, y_slab_max - 0.25, _ar("حدود المبنى الإنشائية (Building Perimeter)"),
+            fontsize=8.5, color="#64748b", fontweight="bold", zorder=2
+        )
+
+    # 2. Structural Grid Lines, Bubbles & Dimensions
+    for idx, gx in enumerate(unique_xs, start=1):
+        lbl = label_map_x.get(gx, f"Y{idx}")
+        ax.plot([gx, gx], [y_bottom_ref, y_bubble], color="#94a3b8", ls="--", lw=1.1, zorder=1.5)
+        ax.text(gx, y_bubble, lbl, ha="center", va="center", color="#1e293b", fontweight="bold", fontsize=10.5,
+                bbox=dict(boxstyle="circle,pad=0.30", fc="#f8fafc", ec="#334155", lw=1.5), zorder=8)
+
+    for idx, gy in enumerate(unique_ys, start=1):
+        lbl = label_map_y.get(gy, f"X{idx}")
+        ax.plot([x_bubble, x_right_ref], [gy, gy], color="#94a3b8", ls="--", lw=1.1, zorder=1.5)
+        ax.text(x_bubble, gy, lbl, ha="center", va="center", color="#1e293b", fontweight="bold", fontsize=10.5,
+                bbox=dict(boxstyle="circle,pad=0.30", fc="#f8fafc", ec="#334155", lw=1.5), zorder=8)
+
+    if len(unique_xs) > 1:
+        for i in range(len(unique_xs) - 1):
+            _hdim(ax, y_top_ref, unique_xs[i], unique_xs[i + 1], f"{unique_xs[i+1]-unique_xs[i]:.2f} m", side="top", fs=9.0, offset=0.5, draw_ext=False)
+        _hdim(ax, y_top_ref, unique_xs[0], unique_xs[-1], f"Total L = {unique_xs[-1]-unique_xs[0]:.2f} m", side="top", fs=10.0, offset=1.2, draw_ext=False)
+
+    if len(unique_ys) > 1:
+        for j in range(len(unique_ys) - 1):
+            _vdim(ax, x_left_ref, unique_ys[j], unique_ys[j + 1], f"{unique_ys[j+1]-unique_ys[j]:.2f} m", side="left", fs=9.0, offset=0.5, draw_ext=False)
+        _vdim(ax, x_left_ref, unique_ys[0], unique_ys[-1], f"Total B = {unique_ys[-1]-unique_ys[0]:.2f} m", side="left", fs=10.0, offset=1.2, draw_ext=False)
+
+    # 3. Ground Beams & Strap Beams Drawing
+    color_map = {
+        "B1": {"fc": "#dbeafe", "ec": "#1d4ed8", "tc": "#1e40af", "badge_bg": "#eff6ff"},
+        "B2": {"fc": "#dcfce7", "ec": "#15803d", "tc": "#166534", "badge_bg": "#f0fdf4"},
+        "B3": {"fc": "#f3e8ff", "ec": "#7e22ce", "tc": "#6b21a8", "badge_bg": "#faf5ff"},
+        "ST1": {"fc": "#ffedd5", "ec": "#ea580c", "tc": "#9a3412", "badge_bg": "#fff7ed"},
+        "ST2": {"fc": "#ffedd5", "ec": "#ea580c", "tc": "#9a3412", "badge_bg": "#fff7ed"},
+        "ST": {"fc": "#ffedd5", "ec": "#ea580c", "tc": "#9a3412", "badge_bg": "#fff7ed"},
+    }
+
+    all_gbs = gb_analysis.get("ground_beams", [])
+    strap_list = gb_analysis.get("strap_beams", [])
+    combined_elements = list(all_gbs) + list(strap_list)
+
+    if not combined_elements:
+        mid_x_c = (x_slab_min + x_slab_max) / 2.0
+        mid_y_c = (y_slab_min + y_slab_max) / 2.0
+        ax.text(
+            mid_x_c, mid_y_c,
+            _ar("لم يتم استخراج أي سملات أرضية بعد\nتأكد من وجود أعمدة مفعلة وشبكة محاور"),
+            ha="center", va="center", fontsize=10.5, fontweight="bold", color="#92400e",
+            bbox=dict(boxstyle="round,pad=0.7", fc="#fef3c7", ec="#f59e0b", lw=1.5, alpha=0.96),
+            zorder=10
+        )
+
+    for b in combined_elements:
+        alg = align_ground_beam_coords(b, unique_xs, unique_ys)
+        p1 = alg["p1"]
+        p2 = alg["p2"]
+        dir_b = alg["dir"]
+        bw_m = float(b.get("b_cm", 25.0)) / 100.0
+        t_cm = int(b.get("exec_t_cm", b.get("t_calc", b.get("t_cm", 50.0))))
+        b_cm = int(b.get("b_cm", 25.0))
+        tag = b.get("tag", b.get("model_mark", "B1"))
+        cfg = color_map.get(tag, color_map.get("ST" if "ST" in str(tag) else "B1", {"fc": "#f1f5f9", "ec": "#475569", "tc": "#334155", "badge_bg": "#ffffff"}))
+
+        if dir_b == "X":
+            bx0 = min(p1[0], p2[0])
+            bw = abs(p2[0] - p1[0])
+            by0 = alg["cl_y"] - bw_m / 2.0
+            rect = patches.Rectangle(
+                (bx0, by0), bw, bw_m,
+                facecolor=cfg["fc"], edgecolor=cfg["ec"], lw=1.8, alpha=0.92, zorder=3
+            )
+            ax.add_patch(rect)
+            mid_x = bx0 + bw / 2.0
+            mid_y = alg["cl_y"]
+            rot = 0
+        elif dir_b == "Y":
+            by0 = min(p1[1], p2[1])
+            bh = abs(p2[1] - p1[1])
+            bx0 = alg["cl_x"] - bw_m / 2.0
+            rect = patches.Rectangle(
+                (bx0, by0), bw_m, bh,
+                facecolor=cfg["fc"], edgecolor=cfg["ec"], lw=1.8, alpha=0.92, zorder=3
+            )
+            ax.add_patch(rect)
+            mid_x = alg["cl_x"]
+            mid_y = by0 + bh / 2.0
+            rot = 90
+        else: # DIAG
+            dx_val = p2[0] - p1[0]
+            dy_val = p2[1] - p1[1]
+            th = math.atan2(dy_val, dx_val)
+            nx = -math.sin(th) * bw_m / 2.0
+            ny = math.cos(th) * bw_m / 2.0
+            poly = patches.Polygon([
+                (p1[0] + nx, p1[1] + ny), (p2[0] + nx, p2[1] + ny),
+                (p2[0] - nx, p2[1] - ny), (p1[0] - nx, p1[1] - ny)
+            ], facecolor=cfg["fc"], edgecolor=cfg["ec"], lw=1.8, alpha=0.92, zorder=3)
+            ax.add_patch(poly)
+            mid_x = (p1[0] + p2[0]) / 2.0
+            mid_y = (p1[1] + p2[1]) / 2.0
+            rot = math.degrees(th)
+            if rot > 90:
+                rot -= 180
+            elif rot < -90:
+                rot += 180
+
+        n_bot = b.get("exec_n_bot", b.get("n_bot", 2))
+        phi_bot = b.get("phi_bot", 16)
+        span_len = b.get("span_m", math.hypot(p2[0] - p1[0], p2[1] - p1[1]))
+        lbl = f"{tag} ({b_cm}×{t_cm})"
+        if span_len >= 2.0:
+            if "ST" in str(tag):
+                lbl += f"\n{b.get('rft_top_str', '')}"
+            else:
+                lbl += f"\n{n_bot}Ø{phi_bot}"
+
+        ax.text(
+            mid_x, mid_y, lbl,
+            ha="center", va="center", rotation=rot, fontsize=7.5, fontweight="bold", color=cfg["tc"],
+            bbox=dict(boxstyle="round,pad=0.18", fc=cfg["badge_bg"], ec=cfg["ec"], lw=0.9, alpha=0.95),
+            zorder=6
+        )
+
+    # 4. Columns
+    for c in active_columns:
+        w_m = float(c.get("width_m", c.get("bc", 30.0) / 100.0))
+        h_m = float(c.get("height_m", c.get("tc", 50.0) / 100.0))
+        cx = float(c["x"])
+        cy = float(c["y"])
+        col_r = patches.Rectangle(
+            (cx - w_m / 2.0, cy - h_m / 2.0), w_m, h_m,
+            facecolor="#1e293b", edgecolor="#0f172a", lw=1.5, zorder=5
+        )
+        ax.add_patch(col_r)
+        c_lbl = str(c.get("orig_id", c.get("id", "C")))
+        ax.text(
+            cx, cy, c_lbl,
+            ha="center", va="center", color="#ffffff", fontweight="bold", fontsize=8.2, zorder=7
+        )
+
+    # 5. Legend Box
+    models_dict = gb_analysis.get("models_dict", {})
+    if not models_dict:
+        leg_lines = [_ar("دليل نماذج السملات: لم يتم نمذجة أي سملات بعد")]
+    else:
+        leg_lines = [_ar("دليل نماذج السملات الأرضية والميدات (Ground Beams Legend):")]
+    for mk in ["B1", "B2", "B3"]:
+        if mk in models_dict:
+            m = models_dict[mk]
+            if mk == "B1":
+                dot = "■ B1 (Heavy)"
+            elif mk == "B2":
+                dot = "■ B2 (Medium)"
+            else:
+                dot = "■ B3 (Light)"
+            leg_lines.append(
+                f"{dot}: {m['dimensions_str']} cm | " + _ar(f"سفلي: {m['rft_bot_str']} | علوي: {m['rft_top_str']} | كانات: {m['stirrups_str']} ({m['count']} سملة - {m['total_len_m']:.1f}m)")
+            )
+    if strap_list:
+        leg_lines.append("■ ST (Strap Beam): " + _ar(f"شدادات قواعد الجار ({len(strap_list)} شداد)"))
+
+    leg_text = "\n".join(leg_lines)
+    ax.text(
+        0.02, 0.02, leg_text, transform=ax.transAxes,
+        fontsize=8.5, fontweight="bold", color="#1e293b", va="bottom", ha="left",
+        bbox=dict(boxstyle="round,pad=0.45", fc="#ffffff", ec="#cbd5e1", lw=1.3, alpha=0.96),
+        zorder=9
+    )
+
+    ax.set_xlim(x_bubble - 1.2, x_right_ref + 1.2)
+    ax.set_ylim(y_bottom_ref - 1.2, y_bubble + 1.2)
+    ax.set_aspect("equal", adjustable="box")
+    ax.axis("off")
+    ax.set_title(title, fontsize=13.5, fontweight="bold", color="#0f172a", pad=20)
+    return fig
+

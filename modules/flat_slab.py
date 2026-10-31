@@ -13530,6 +13530,11 @@ def _render_fs_interactive_plan(
     scale = 1.0; panX = 0; panY = 0;
     updateTransform();
   }});
+  viewport.addEventListener('dblclick', (e) => {{
+    if (e.target.closest('.cad-toolbar') || e.target.closest('#box-mode-banner')) return;
+    scale = 1.0; panX = 0; panY = 0;
+    updateTransform();
+  }});
   const btnFullscreen = document.getElementById('btn-fullscreen');
   if (btnFullscreen) btnFullscreen.addEventListener('click', (e) => {{
     e.stopPropagation();
@@ -15405,7 +15410,424 @@ def _section_fs_add_columns(
 #  STREAMLIT RENDER
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  UNIVERSAL PAN & ZOOM ENGINE FOR ALL MODULE 1 DRAWINGS (ECP 203)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def inject_module1_drawings_pan_zoom():
+    """
+    تفعيل محرك التكبير/التصغير (Zoom In/Out) والتحريك (Pan) لجميع رسومات ولوحات موديول 1 (Integrated Structural Design).
+    ميزات المحرك:
+    1. تكبير وتصغير سلس بعجلة الماوس (Mouse Wheel) متمحور حول مؤشر الفأرة.
+    2. سحب وتحريك (Pan) بسلاسة كاملة بالزر الأيسر للماوس في جميع الاتجاهات.
+    3. نقر مزدوج (Double-Click) لإعادة الضبط فوراً إلى 100%.
+    4. شريط تحكم عائم مصغر أنيق (Floating Mini-HUD) في الزاوية السفلية لا يشغل أي مساحة فوق الرسم.
+    5. تفعيل تلقائي لجميع الرسومات الحالية والمولدة ديناميكياً مع تبديل التبويبات (MutationObserver).
+    6. عدم حبس التمرير (Non-trapping wheel): عند الحجم الافتراضي والتمرير لأسفل يتم تمرير الصفحة بشكل طبيعي.
+    """
+    import streamlit.components.v1 as components
+
+    PAN_ZOOM_INJECTION_HTML = """<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { margin: 0; padding: 0; overflow: hidden; background: transparent; }
+</style>
+</head>
+<body>
+<script>
+(function() {
+  var parentDoc = null;
+  var parentWin = null;
+  try {
+    if (window.parent && window.parent.document) {
+      parentDoc = window.parent.document;
+      parentWin = window.parent;
+    } else {
+      parentDoc = document;
+      parentWin = window;
+    }
+  } catch(e) {
+    parentDoc = document;
+    parentWin = window;
+  }
+
+  // 1. Hide host iframe and wrapper to prevent any UI jump or spacing
+  try {
+    var myFrame = window.frameElement;
+    if (myFrame) {
+      myFrame.style.height = '0px';
+      myFrame.style.width = '0px';
+      myFrame.style.display = 'none';
+      var pCont = myFrame.closest('div[data-testid="stCustomComponentV1"]') || myFrame.parentElement;
+      if (pCont) {
+        pCont.style.height = '0px';
+        pCont.style.minHeight = '0px';
+        pCont.style.margin = '0px';
+        pCont.style.padding = '0px';
+        pCont.style.display = 'none';
+      }
+    }
+  } catch(e) {}
+
+  // 2. Inject global CSS into parent document
+  var STYLE_ID = 'ecp203-module1-panzoom-style';
+  if (!parentDoc.getElementById(STYLE_ID)) {
+    var styleEl = parentDoc.createElement('style');
+    styleEl.id = STYLE_ID;
+    styleEl.textContent = `
+      .m1-panzoom-container {
+        position: relative !important;
+        overflow: hidden !important;
+        border-radius: 8px !important;
+        cursor: grab !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
+        touch-action: none !important;
+        background: #ffffff !important;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
+      }
+      .m1-panzoom-container.panning {
+        cursor: grabbing !important;
+      }
+      .m1-panzoom-container img {
+        transform-origin: center center !important;
+        will-change: transform !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
+        pointer-events: none !important;
+      }
+      .m1-panzoom-hud {
+        position: absolute !important;
+        bottom: 10px !important;
+        right: 12px !important;
+        z-index: 30 !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        gap: 3px !important;
+        background: rgba(15, 23, 42, 0.82) !important;
+        backdrop-filter: blur(8px) !important;
+        -webkit-backdrop-filter: blur(8px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.20) !important;
+        border-radius: 999px !important;
+        padding: 3px 8px !important;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25) !important;
+        opacity: 0.35 !important;
+        transition: opacity 0.22s ease !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
+        direction: ltr !important;
+        pointer-events: auto !important;
+      }
+      .m1-panzoom-container:hover .m1-panzoom-hud {
+        opacity: 0.95 !important;
+      }
+      .m1-panzoom-hud:hover {
+        opacity: 1.0 !important;
+      }
+      .m1-pz-btn {
+        background: transparent !important;
+        border: none !important;
+        color: #ffffff !important;
+        font-size: 13px !important;
+        font-weight: 800 !important;
+        width: 22px !important;
+        height: 22px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        cursor: pointer !important;
+        border-radius: 50% !important;
+        transition: background 0.15s, transform 0.1s !important;
+        outline: none !important;
+        padding: 0 !important;
+        line-height: 1 !important;
+      }
+      .m1-pz-btn:hover {
+        background: rgba(255, 255, 255, 0.22) !important;
+        transform: scale(1.08) !important;
+      }
+      .m1-pz-btn:active {
+        transform: scale(0.92) !important;
+      }
+      .m1-pz-badge {
+        color: #38bdf8 !important;
+        font-size: 11px !important;
+        font-weight: 700 !important;
+        min-width: 38px !important;
+        text-align: center !important;
+        cursor: pointer !important;
+        padding: 2px 4px !important;
+        border-radius: 4px !important;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+        letter-spacing: -0.2px !important;
+        transition: color 0.15s, background 0.15s !important;
+      }
+      .m1-pz-badge:hover {
+        background: rgba(56, 189, 248, 0.18) !important;
+        color: #7dd3fc !important;
+      }
+      .m1-panzoom-container:fullscreen {
+        background: #0f172a !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        border-radius: 0 !important;
+        padding: 16px !important;
+      }
+      .m1-panzoom-container:fullscreen img {
+        max-width: 96vw !important;
+        max-height: 96vh !important;
+        object-fit: contain !important;
+      }
+    `;
+    (parentDoc.head || parentDoc.documentElement).appendChild(styleEl);
+  }
+
+  // 3. Attach Pan & Zoom Engine to individual container
+  function attachPanZoom(container) {
+    if (!container || container.getAttribute('data-m1-pz') === 'true') return;
+
+    // Skip sidebar elements
+    if (container.closest && container.closest('section[data-testid="stSidebar"], [data-testid="stSidebar"]')) {
+      return;
+    }
+
+    var img = container.querySelector('img');
+    if (!img) return;
+
+    function doAttach() {
+      if (container.getAttribute('data-m1-pz') === 'true') return;
+
+      // Ignore tiny thumbnails/icons
+      if (img.naturalWidth > 0 && img.naturalWidth < 120 && img.naturalHeight < 120) {
+        return;
+      }
+
+      container.setAttribute('data-m1-pz', 'true');
+      container.classList.add('m1-panzoom-container');
+
+      var scale = 1.0;
+      var panX = 0;
+      var panY = 0;
+      var isDragging = false;
+      var startX = 0;
+      var startY = 0;
+
+      function applyTransform(instant) {
+        if (instant) {
+          img.style.transition = 'none';
+        } else {
+          img.style.transition = 'transform 0.05s ease-out';
+        }
+        img.style.transform = 'translate(' + panX.toFixed(2) + 'px, ' + panY.toFixed(2) + 'px) scale(' + scale.toFixed(3) + ')';
+        if (badgeEl) {
+          badgeEl.textContent = Math.round(scale * 100) + '%';
+        }
+      }
+
+      function resetView() {
+        scale = 1.0;
+        panX = 0;
+        panY = 0;
+        img.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1)';
+        applyTransform(false);
+        setTimeout(function() {
+          img.style.transition = 'transform 0.05s ease-out';
+        }, 240);
+      }
+
+      function zoomBy(factor, clientX, clientY) {
+        var newScale = Math.min(Math.max(scale * factor, 0.4), 8.0);
+        if (Math.abs(newScale - scale) < 0.001) return;
+
+        if (clientX !== undefined && clientY !== undefined) {
+          var rect = container.getBoundingClientRect();
+          var cx = clientX - rect.left - rect.width / 2;
+          var cy = clientY - rect.top - rect.height / 2;
+          panX = cx - (cx - panX) * (newScale / scale);
+          panY = cy - (cy - panY) * (newScale / scale);
+        } else {
+          panX = panX * (newScale / scale);
+          panY = panY * (newScale / scale);
+        }
+        scale = newScale;
+        applyTransform(false);
+      }
+
+      // Mouse Wheel
+      container.addEventListener('wheel', function(e) {
+        // Allow natural page scroll if at 100% and scrolling down
+        if (scale <= 1.01 && e.deltaY > 0) {
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+
+        var factor = e.deltaY < 0 ? 1.15 : (1 / 1.15);
+        zoomBy(factor, e.clientX, e.clientY);
+      }, { passive: false });
+
+      // Drag to Pan
+      container.addEventListener('mousedown', function(e) {
+        if (e.button !== 0) return;
+        if (e.target.closest && e.target.closest('.m1-panzoom-hud')) return;
+
+        isDragging = true;
+        startX = e.clientX - panX;
+        startY = e.clientY - panY;
+        container.classList.add('panning');
+        e.preventDefault();
+      });
+
+      var onMouseMove = function(e) {
+        if (!isDragging) return;
+        panX = e.clientX - startX;
+        panY = e.clientY - startY;
+        applyTransform(true);
+      };
+
+      var onMouseUp = function(e) {
+        if (!isDragging) return;
+        isDragging = false;
+        container.classList.remove('panning');
+      };
+
+      parentDoc.addEventListener('mousemove', onMouseMove);
+      parentDoc.addEventListener('mouseup', onMouseUp);
+
+      // Double-click to reset
+      container.addEventListener('dblclick', function(e) {
+        if (e.target.closest && e.target.closest('.m1-panzoom-hud')) return;
+        e.preventDefault();
+        resetView();
+      });
+
+      // Touch & Pinch gestures
+      var touchDist0 = 0;
+      var touchScale0 = 1.0;
+      var touchStartX = 0;
+      var touchStartY = 0;
+
+      container.addEventListener('touchstart', function(e) {
+        if (e.touches.length === 2) {
+          touchDist0 = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+          touchScale0 = scale;
+        } else if (e.touches.length === 1) {
+          touchStartX = e.touches[0].clientX - panX;
+          touchStartY = e.touches[0].clientY - panY;
+        }
+      }, { passive: true });
+
+      container.addEventListener('touchmove', function(e) {
+        if (e.touches.length === 2 && touchDist0 > 0) {
+          e.preventDefault();
+          var dist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+          scale = Math.min(Math.max(touchScale0 * (dist / touchDist0), 0.4), 8.0);
+          applyTransform(true);
+        } else if (e.touches.length === 1 && scale > 1.01) {
+          e.preventDefault();
+          panX = e.touches[0].clientX - touchStartX;
+          panY = e.touches[0].clientY - touchStartY;
+          applyTransform(true);
+        }
+      }, { passive: false });
+
+      // Floating corner HUD (zero space taken above the drawing)
+      var hud = parentDoc.createElement('div');
+      hud.className = 'm1-panzoom-hud';
+
+      var btnOut = parentDoc.createElement('button');
+      btnOut.className = 'm1-pz-btn';
+      btnOut.innerHTML = '−';
+      btnOut.title = 'Zoom Out (تصغير)';
+      btnOut.onclick = function(e) { e.stopPropagation(); zoomBy(0.8); };
+
+      var badgeEl = parentDoc.createElement('span');
+      badgeEl.className = 'm1-pz-badge';
+      badgeEl.textContent = '100%';
+      badgeEl.title = 'انقر لإعادة الضبط 100%';
+      badgeEl.onclick = function(e) { e.stopPropagation(); resetView(); };
+
+      var btnIn = parentDoc.createElement('button');
+      btnIn.className = 'm1-pz-btn';
+      btnIn.innerHTML = '+';
+      btnIn.title = 'Zoom In (تكبير)';
+      btnIn.onclick = function(e) { e.stopPropagation(); zoomBy(1.25); };
+
+      var btnRst = parentDoc.createElement('button');
+      btnRst.className = 'm1-pz-btn';
+      btnRst.innerHTML = '↺';
+      btnRst.title = 'Reset View (استعادة)';
+      btnRst.onclick = function(e) { e.stopPropagation(); resetView(); };
+
+      var btnFs = parentDoc.createElement('button');
+      btnFs.className = 'm1-pz-btn';
+      btnFs.innerHTML = '⛶';
+      btnFs.title = 'Fullscreen (ملء الشاشة)';
+      btnFs.onclick = function(e) {
+        e.stopPropagation();
+        if (!parentDoc.fullscreenElement) {
+          if (container.requestFullscreen) container.requestFullscreen().catch(function(){});
+        } else {
+          if (parentDoc.exitFullscreen) parentDoc.exitFullscreen().catch(function(){});
+        }
+      };
+
+      hud.appendChild(btnOut);
+      hud.appendChild(badgeEl);
+      hud.appendChild(btnIn);
+      hud.appendChild(btnRst);
+      hud.appendChild(btnFs);
+
+      container.appendChild(hud);
+    }
+
+    if (img.complete && img.naturalWidth > 0) {
+      doAttach();
+    } else {
+      img.addEventListener('load', doAttach, { once: true });
+    }
+  }
+
+  // 4. Scanner function to find all plots in Module 1
+  function scanAndInit() {
+    var targets = parentDoc.querySelectorAll('div[data-testid="stImage"], .stImage');
+    for (var i = 0; i < targets.length; i++) {
+      attachPanZoom(targets[i]);
+    }
+  }
+
+  // Initial scan
+  scanAndInit();
+  setTimeout(scanAndInit, 300);
+  setTimeout(scanAndInit, 1000);
+
+  // 5. Observer for dynamically rendered plots (tabs, expanders, toggles)
+  if (!parentWin._m1PanZoomObserverAttached) {
+    parentWin._m1PanZoomObserverAttached = true;
+    var obs = new MutationObserver(function() {
+      scanAndInit();
+    });
+    obs.observe(parentDoc.body, { childList: true, subtree: true });
+  }
+})();
+</script>
+</body>
+</html>"""
+    components.html(PAN_ZOOM_INJECTION_HTML, height=0, width=0)
+
 def render(is_standalone: bool = False):
+    inject_module1_drawings_pan_zoom()
     st.markdown(
         """
         <style>
@@ -20234,6 +20656,7 @@ def render(is_standalone: bool = False):
                 phi_side=rb_phi_side_val,
                 stirrups_per_m=rb_stirrups_val,
                 user_overrides=rb_user_overrides,
+                slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
             )
             st.session_state["fs_rb_analysis"] = rb_analysis
 
@@ -20588,10 +21011,11 @@ def render(is_standalone: bool = False):
             )
 
             # 4. Interactive Tabs
-            tab_gb_class, tab_gb_models, tab_gb_details = st.tabs([
+            tab_gb_class, tab_gb_models, tab_gb_details, tab_gb_plan = st.tabs([
                 "📋 Classification Table (جدول تصنيف عناصر الربط: شدادات وسملات)",
                 "🏛️ Master Models Schedule (جدول نماذج السملات التنفيذي B1, B2, B3)",
                 "🔩 Detailed Beams Schedule (جدول تفريد وتفاصيل جميع السملات الفردية)",
+                "🗺️ Ground Beams Plan Sketch (المسقط الأفقي التنفيذي للميدات والسملات)",
             ])
 
             # ── TAB 1: UNIFIED CLASSIFICATION TABLE (STRAP BEAMS & GROUND BEAMS) ──
@@ -20794,6 +21218,31 @@ def render(is_standalone: bool = False):
                         use_container_width=True,
                         key=f"{prefix}btn_dl_det_csv",
                     )
+
+            # ── TAB 4: GROUND BEAMS 2D FRAMING PLAN SKETCH ──
+            with tab_gb_plan:
+                st.markdown("##### 🗺️ المسقط الأفقي التنفيذي للميدات والسملات الأرضية (Ground Beams 2D Framing Plan)")
+                st.caption("مسقط أفقي إنشائي شامل يوضح توزيع ومسارات السملات والشدادات بعد النمذجة (B1, B2, B3, ST) مع استمرارية تامة للسنترلاين وبدون أي انكسارات.")
+                from modules.ground_beam_layout import draw_ground_beams_layout_sketch
+                fig_gb_sketch = draw_ground_beams_layout_sketch(
+                    fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols,
+                    gb_analysis,
+                    slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
+                    title=f"ECP 203 — Ground Beams & Tie Beams 2D Framing Plan ({num_floors} Floors)",
+                )
+                buf_gb_sketch = io.BytesIO()
+                fig_gb_sketch.savefig(buf_gb_sketch, format="png", bbox_inches="tight", dpi=160)
+                buf_gb_sketch.seek(0)
+                st.pyplot(fig_gb_sketch, clear_figure=True, use_container_width=True)
+                st.download_button(
+                    label="📥 تحميل المسقط الأفقي للميدات (High-Res PNG)",
+                    data=buf_gb_sketch.getvalue(),
+                    file_name=f"{prefix}Ground_Beams_Plan_Sketch_{num_floors}Floors.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key=f"{prefix}btn_dl_gb_sketch_png",
+                )
+                plt.close(fig_gb_sketch)
 
         # ── 🧱 ROOF BEAMS DESIGN SECTION (ECP 203) ─────────────────────────────────────
         with st.expander(f"🧱 Roof Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج كمرات السقف والكوابيل)", expanded=False):
@@ -21108,6 +21557,77 @@ def render(is_standalone: bool = False):
                 df_rb_models_export = pd.DataFrame(rb_analysis["models_schedule"])
                 render_styled_table(df_rb_models_export)
 
+                csv_rb_models_data = df_rb_models_export.to_csv(index=False).encode('utf-8-sig')
+                excel_rb_models_bytes = safe_to_excel_bytes(df_rb_models_export, sheet_name='Roof_Beams_Schedule')
+
+                c_rb_m1, c_rb_m2 = st.columns(2)
+                with c_rb_m1:
+                    if excel_rb_models_bytes is not None:
+                        st.download_button(
+                            label="📊 تصدير جدول نماذج كمرات السقف (Excel .xlsx)",
+                            data=excel_rb_models_bytes,
+                            file_name=f"{prefix}Master_Roof_Beams_Schedule_{num_floors}Floors.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key=f"{prefix}btn_dl_rb_models_excel",
+                        )
+                    else:
+                        st.download_button(
+                            label="📊 تصدير جدول نماذج كمرات السقف (Excel .xlsx)",
+                            data=b"",
+                            disabled=True,
+                            help="يلزم تثبيت مكتبة openpyxl لتصدير Excel",
+                            use_container_width=True,
+                            key=f"{prefix}btn_dl_rb_models_excel_dis",
+                        )
+                with c_rb_m2:
+                    st.download_button(
+                        label="📥 تصدير جدول نماذج كمرات السقف (CSV)",
+                        data=csv_rb_models_data,
+                        file_name=f"{prefix}Master_Roof_Beams_Schedule_{num_floors}Floors.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        key=f"{prefix}btn_dl_rb_models_csv",
+                    )
+
+                # ── 🗺️ 2D Roof Beams Framing Plan Sketch ──
+                st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
+                st.markdown(
+                    f"""
+                    <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.04) 0%, rgba(15, 23, 42, 0.08) 100%); border: 1.5px solid #0284c7; border-right: 6px solid #0284c7; border-radius: 10px; padding: 14px 18px; margin: 12px 0 16px 0; text-align: right;">
+                        <div style="font-size: 16px; font-weight: 800; color: #0369a1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                            <span>🗺️ المسقط الأفقي وتوزيع نماذج كمرات السقف والكوابيل (2D Roof Beams Framing Plan)</span>
+                            <span style="font-size: 12.5px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Beams Framing</span>
+                        </div>
+                        <div style="font-size: 13px; color: #475569; margin-top: 6px; line-height: 1.6;">
+                            مخطط ثنائي الأبعاد لمسقط السقف يوضح توقيع النماذج الموحدة (B1, B2, B3, CB1) بأبعادها ومواقعها الدقيقة، مع المحاور وأبعاد البحور (Spans) وحدود البلاطة والكوابيل، لربط الجدول التنفيذي أعلاه باللوحة الإنشائية.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                fig_rb_plan = draw_roof_beams_layout_sketch(
+                    active_columns=fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols,
+                    roof_beams_analysis=rb_analysis,
+                    slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
+                    title=f"ECP 203 — Roof Drop Beams & Cantilevers 2D Framing Plan (سقف {num_floors} طوابق)",
+                )
+                buf_rb_plan = io.BytesIO()
+                fig_rb_plan.savefig(buf_rb_plan, format="png", bbox_inches="tight", dpi=160)
+                buf_rb_plan.seek(0)
+                st.pyplot(fig_rb_plan, clear_figure=True, use_container_width=True)
+
+                st.download_button(
+                    label="📥 تحميل المسقط الأفقي لكمرات السقف (High-Res 2D Framing Plan PNG)",
+                    data=buf_rb_plan.getvalue(),
+                    file_name=f"{prefix}Roof_Beams_Framing_Plan_{num_floors}Floors.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key=f"{prefix}btn_dl_rb_plan_tab2_png",
+                )
+
+                # ── Interactive Overrides Table ──
                 st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
                 with st.container(border=True):
                     st.markdown("<div style='font-size:15.5px; font-weight:800; color:#9333ea; margin-bottom:6px;'>🛠️ واجهة التعديل اليدوي التفاعلية لنماذج كمرات السقف (Interactive Overrides Table)</div>", unsafe_allow_html=True)
@@ -21199,39 +21719,6 @@ def render(is_standalone: bool = False):
                                     del st.session_state[k]
                             st.rerun()
 
-                csv_rb_models_data = df_rb_models_export.to_csv(index=False).encode('utf-8-sig')
-                excel_rb_models_bytes = safe_to_excel_bytes(df_rb_models_export, sheet_name='Roof_Beams_Schedule')
-
-                c_rb_m1, c_rb_m2 = st.columns(2)
-                with c_rb_m1:
-                    if excel_rb_models_bytes is not None:
-                        st.download_button(
-                            label="📊 تصدير جدول نماذج كمرات السقف (Excel .xlsx)",
-                            data=excel_rb_models_bytes,
-                            file_name=f"{prefix}Master_Roof_Beams_Schedule_{num_floors}Floors.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True,
-                            key=f"{prefix}btn_dl_rb_models_excel",
-                        )
-                    else:
-                        st.download_button(
-                            label="📊 تصدير جدول نماذج كمرات السقف (Excel .xlsx)",
-                            data=b"",
-                            disabled=True,
-                            help="يلزم تثبيت مكتبة openpyxl لتصدير Excel",
-                            use_container_width=True,
-                            key=f"{prefix}btn_dl_rb_models_excel_dis",
-                        )
-                with c_rb_m2:
-                    st.download_button(
-                        label="📥 تصدير جدول نماذج كمرات السقف (CSV)",
-                        data=csv_rb_models_data,
-                        file_name=f"{prefix}Master_Roof_Beams_Schedule_{num_floors}Floors.csv",
-                        mime="text/csv",
-                        use_container_width=True,
-                        key=f"{prefix}btn_dl_rb_models_csv",
-                    )
-
             # ── TAB 3: DETAILED BEAMS SCHEDULE ──
             with tab_rb_details:
                 st.markdown("##### 🔩 جدول تفريد وحصر وتفاصيل جميع كمرات السقف الإنشائية (Detailed Roof Beams Schedule)")
@@ -21294,56 +21781,148 @@ def render(is_standalone: bool = False):
                     key=f"{prefix}btn_dl_rb_sketch_png",
                 )
 
-        # ── 🗺️ FOUNDATION LAYOUT SKETCH SECTION (ECP 203) ──────────────────────────────
-        with st.expander(f"🗺️ Foundation Layout Sketch — {num_floors} Floors (المسقط الأفقي وتوزيع كافة القواعد والشدادات والسملات)", expanded=False):
+        # ── 🏛️ FINAL DESIGN OF FOUNDATIONS AND GROUND BEAMS (ECP 203) ───────────────────
+        with st.expander(f"🏛️ Final Design of Foundations and Ground Beams — {num_floors} Floors (التصميم النهائي للقواعد والسملات الأرضية)", expanded=True):
             st.markdown(
                 f"""
-                <div dir="rtl" style="background:#eff6ff; border:1.5px solid #bfdbfe; border-right:7px solid #2563eb; border-radius:10px; padding:18px 22px; margin-bottom:16px; color:#1e3a8a; line-height:1.9; text-align:right;">
-                    <div style="font-size:1.45rem; font-weight:800; color:#1d4ed8; margin-bottom:10px;">
-                        🗺️ المسقط الأفقي العام لأساسات المبنى وعناصر الربط الإنشائي (Foundation Layout Plan Sketch):
+                <div dir="rtl" style="background:#eff6ff; border:1.5px solid #bfdbfe; border-right:7px solid #1d4ed8; border-radius:10px; padding:18px 22px; margin-bottom:18px; color:#1e3a8a; line-height:1.9; text-align:right;">
+                    <div style="font-size:1.45rem; font-weight:800; color:#1d4ed8; margin-bottom:8px;">
+                        🏛️ التصميم الإنشائي النهائي لأساسات وسملات المبنى (Final Design of Foundations & Ground Beams):
                     </div>
-                    <div style="font-size:1.15rem; font-weight:700; color:#1e40af;">
-                        لوحة تنفيذية متكاملة لأساسات المبنى لعدد <span style="font-weight:800; color:#1e3a8a;">{num_floors} طوابق</span>، توضح التوزيع الهندسي الشامل لجميع عناصر الأساسات والربط الإنشائي طبقاً لـ <span dir="ltr">ECP 203</span>:
-                        <br/>• 🟦 <b>القواعد المنفصلة (Module 3):</b> مصنفة إلى 3 نماذج رئيسية قياسية موحدة (<span dir="ltr">F1, F2, F3</span>) بأبعادها وتسليحها الحاكم.
-                        <br/>• 🟧 <b>قواعد وكمرات الشدادات للجار (Modules 9 & 10):</b> برموز واضحة (<span dir="ltr">ST1, ST2...</span>) وأبعاد القطاع وعزوم الاتزان.
-                        <br/>• 🟪 <b>السملات والميدات الأرضية (Module 11):</b> بلون نيلي مميز مع بطاقات النماذج التنفيذية (<span dir="ltr">B1, B2, B3</span>) والمحاور والأبعاد.
+                    <div style="font-size:1.12rem; font-weight:700; color:#1e40af;">
+                        قسم تجميعي تنفيذي موحد وشامل يربط تلقائياً مخرجات <b>تصميم الأساسات (Building Foundations Design)</b> و<b>تصميم السملات الأرضية (Ground Beams Design)</b> لعدد <span style="font-weight:800; color:#1e3a8a;">{num_floors} طوابق</span> طبقاً لـ <span dir="ltr">ECP 203</span>.
+                        <br/>• <b>المسقط الأفقي التنفيذي الموحد (Consolidated 2D Plan Sketch):</b> إسقاط تفصيلي يدمج القواعد المسلحة والعادية، مع خطوط مسارات السملات والشدادات، والأعمدة والمحاور الإنشائية.
+                        <br/>• <b>جدول نماذج القواعد التنفيذي (Foundations Schedule Table):</b> تلخيص نماذج القواعد (F1, F2, F3...) بأبعاد المسلحة والعادية والتسليح الحاكم.
+                        <br/>• <b>جدول نماذج السملات الأرضية (Ground Beams Schedule Table):</b> تلخيص نماذج السملات (GB1, GB2, GB3...) بالقطاعات والتسليح السفلي والعلوي والكانات.
                     </div>
                 </div>
                 """,
                 unsafe_allow_html=True
             )
 
-            ftg_analysis_sketch = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
-            gb_analysis_sketch = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis")
-            active_cols_sketch = fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols
+            ftg_analysis_final = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
+            gb_analysis_final = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis")
+            active_cols_final = fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols
 
-            if ftg_analysis_sketch and active_cols_sketch:
-                gb_list = gb_analysis_sketch.get("ground_beams", []) if gb_analysis_sketch else []
-                fig_full_sketch = draw_comprehensive_foundation_sketch(
-                    active_cols_sketch, ftg_analysis_sketch, ground_beams=gb_list,
-                    edge_columns=_edge_columns,
-                    slab_bounds=_slab_bounds_current,
+            if ftg_analysis_final and active_cols_final:
+                # ── 1. CONSOLIDATED 2D PLAN SKETCH (TOP SECTION) ──
+                st.markdown("##### 🗺️ 1. المسقط الأفقي التنفيذي الموحد للأساسات والميدات (Consolidated 2D Plan Sketch)")
+                st.caption("مسقط إنشائي متكامل يوضح توقيع القواعد المسلحة والعادية وأبعادها وأسماء نماذجها مع مسارات السملات والميدات الأرضية والمحاور.")
+
+                gb_list_final = gb_analysis_final.get("ground_beams", []) if gb_analysis_final else []
+                fig_final_sketch = draw_comprehensive_foundation_sketch(
+                    active_cols_final, ftg_analysis_final, ground_beams=gb_list_final,
+                    edge_columns=_edge_columns if '_edge_columns' in locals() else None,
+                    slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
                 )
-                buf_fs_sketch = io.BytesIO()
-                fig_full_sketch.savefig(buf_fs_sketch, format="png", bbox_inches="tight", dpi=160)
-                buf_fs_sketch.seek(0)
+                buf_final_sketch = io.BytesIO()
+                fig_final_sketch.savefig(buf_final_sketch, format="png", bbox_inches="tight", dpi=160)
+                buf_final_sketch.seek(0)
                 try:
-                    st.session_state[f"{prefix}foundation_sketch_b64"] = base64.b64encode(buf_fs_sketch.getvalue()).decode("utf-8")
+                    st.session_state[f"{prefix}foundation_sketch_b64"] = base64.b64encode(buf_final_sketch.getvalue()).decode("utf-8")
                 except Exception:
                     pass
 
-                st.pyplot(fig_full_sketch, clear_figure=True, use_container_width=True)
+                st.pyplot(fig_final_sketch, clear_figure=True, use_container_width=True)
                 st.download_button(
-                    label="📥 Download Foundation Layout Plan Sketch (High-Res PNG)",
-                    data=buf_fs_sketch,
-                    file_name=f"{prefix}Foundation_Comprehensive_Layout_{num_floors}Floors.png",
+                    label="📥 تحميل المسقط الأفقي الموحد للأساسات والميدات (High-Res PNG)",
+                    data=buf_final_sketch.getvalue(),
+                    file_name=f"{prefix}Final_Foundations_and_Ground_Beams_Plan_{num_floors}Floors.png",
                     mime="image/png",
                     use_container_width=True,
-                    key=f"{prefix}btn_dl_full_foundation_sketch",
+                    key=f"{prefix}btn_dl_final_foundations_sketch",
                 )
-                plt.close(fig_full_sketch)
+                plt.close(fig_final_sketch)
+
+                st.markdown("<hr style='margin: 24px 0; border: none; border-top: 1.5px solid #cbd5e1;' />", unsafe_allow_html=True)
+
+                # ── 2. FOUNDATIONS SCHEDULE TABLE (MIDDLE SECTION) ──
+                st.markdown("##### 📋 2. جدول نماذج الأساسات التنفيذي (Foundations Models Schedule Table — ECP 203)")
+                st.caption("جدول النماذج الموحدة للقواعد المسلحة والعادية شامل الأبعاد والتسليح السفلي والعلوي وملاحظات الرقاب.")
+
+                raw_ftg_rows = ftg_analysis_final.get("unified_rows", [])
+                df_ftg_summary = pd.DataFrame(raw_ftg_rows)
+                render_styled_table(df_ftg_summary)
+
+                # Export Excel & CSV for Foundations Schedule
+                csv_ftg_final = df_ftg_summary.to_csv(index=False).encode('utf-8-sig')
+                excel_ftg_final = safe_to_excel_bytes(df_ftg_summary, sheet_name='Foundations_Schedule')
+
+                c_ftg_ex1, c_ftg_ex2 = st.columns(2)
+                with c_ftg_ex1:
+                    if excel_ftg_final is not None:
+                        st.download_button(
+                            label="📊 تصدير جدول نماذج الأساسات (Excel .xlsx)",
+                            data=excel_ftg_final,
+                            file_name=f"{prefix}Final_Foundations_Schedule_{num_floors}Floors.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key=f"{prefix}btn_dl_final_ftg_excel",
+                        )
+                    else:
+                        st.download_button(
+                            label="📊 تصدير جدول نماذج الأساسات (Excel .xlsx)",
+                            data=b"",
+                            disabled=True,
+                            use_container_width=True,
+                            key=f"{prefix}btn_dl_final_ftg_excel_dis",
+                        )
+                with c_ftg_ex2:
+                    st.download_button(
+                        label="📥 تصدير جدول نماذج الأساسات (CSV)",
+                        data=csv_ftg_final,
+                        file_name=f"{prefix}Final_Foundations_Schedule_{num_floors}Floors.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        key=f"{prefix}btn_dl_final_ftg_csv",
+                    )
+
+                st.markdown("<hr style='margin: 24px 0; border: none; border-top: 1.5px solid #cbd5e1;' />", unsafe_allow_html=True)
+
+                # ── 3. GROUND BEAMS SCHEDULE TABLE (BOTTOM SECTION) ──
+                st.markdown("##### 🧱 3. جدول نماذج السملات الأرضية التنفيذي (Ground Beams Models Schedule Table — ECP 203)")
+                st.caption("جدول النماذج الموحدة للسملات والميدات الأرضية بتطبيق قاعدة الظرف الحاكم شامل القطاعات والتسليح والكانات.")
+
+                if gb_analysis_final and gb_analysis_final.get("models_schedule"):
+                    raw_gb_rows = gb_analysis_final.get("models_schedule", [])
+                    df_gb_summary = pd.DataFrame(raw_gb_rows)
+                    render_styled_table(df_gb_summary)
+
+                    csv_gb_final = df_gb_summary.to_csv(index=False).encode('utf-8-sig')
+                    excel_gb_final = safe_to_excel_bytes(df_gb_summary, sheet_name='Ground_Beams_Schedule')
+
+                    c_gb_ex1, c_gb_ex2 = st.columns(2)
+                    with c_gb_ex1:
+                        if excel_gb_final is not None:
+                            st.download_button(
+                                label="📊 تصدير جدول نماذج السملات (Excel .xlsx)",
+                                data=excel_gb_final,
+                                file_name=f"{prefix}Final_Ground_Beams_Schedule_{num_floors}Floors.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                use_container_width=True,
+                                key=f"{prefix}btn_dl_final_gb_excel",
+                            )
+                        else:
+                            st.download_button(
+                                label="📊 تصدير جدول نماذج السملات (Excel .xlsx)",
+                                data=b"",
+                                disabled=True,
+                                use_container_width=True,
+                                key=f"{prefix}btn_dl_final_gb_excel_dis",
+                            )
+                    with c_gb_ex2:
+                        st.download_button(
+                            label="📥 تصدير جدول نماذج السملات (CSV)",
+                            data=csv_gb_final,
+                            file_name=f"{prefix}Final_Ground_Beams_Schedule_{num_floors}Floors.csv",
+                            mime="text/csv",
+                            use_container_width=True,
+                            key=f"{prefix}btn_dl_final_gb_csv",
+                        )
+                else:
+                    st.info("💡 لم يتم استخراج نماذج للسملات الأرضية أو لم يتم تفعيل قسم Ground Beams Design بعد.")
             else:
-                st.info("💡 جاري معالجة بيانات الأساسات والسملات لتوليد المسقط الأفقي العام.")
+                st.info("💡 جاري معالجة وحساب بيانات الأساسات والسملات لتوليد لوحة ومخرجات التصميم النهائي للقواعد والسملات.")
 
         # ── 📊 الحصر التقريبي للكميات — APPROXIMATE QUANTITY SURVEY ──────────────
         # 1. Slab Quantities (السقف)
@@ -22666,9 +23245,14 @@ def render(is_standalone: bool = False):
             gb_tbl = _gb_obj.get("models_schedule", []) if _gb_obj else []
 
             # Page 5: Roof Beams Plan & Table
-            f5 = draw_page5_roof_beams_plan(_rb_obj, _act_cols, Lx_calc, Ly_calc, cantilevers)
+            _cur_sb = _slab_bounds_current if '_slab_bounds_current' in locals() else st.session_state.get("_fs_current_slab_bounds")
+            f5 = draw_page5_roof_beams_plan(_rb_obj, _act_cols, Lx_calc, Ly_calc, cantilevers, slab_bounds=_cur_sb)
             b5 = fig_to_b64(f5)
-            rb_tbl = _rb_obj.get("models_schedule", []) if _rb_obj else []
+            # Exclude redundant beam length column from summary table
+            rb_tbl = [
+                {k: v for k, v in r.items() if not any(sub in k.lower() for sub in ["أطوال", "طول", "length", "len"])}
+                for r in _rb_obj.get("models_schedule", [])
+            ] if _rb_obj else []
 
             # Page 6: Slab Bottom Rebar Plan
             f6 = draw_page6_slab_bottom_rebar(Lx_calc, Ly_calc, cantilevers, btm_extra_spans if 'btm_extra_spans' in locals() else None, n_mesh_btm if 'n_mesh_btm' in locals() else 5.0, bottom_mesh_dia if 'bottom_mesh_dia' in locals() else 10, _act_cols, void_boxes=_vboxes)
@@ -22962,6 +23546,8 @@ def render(is_standalone: bool = False):
             "📋 Master Steel Layout & Detailing (لوحة تجميع التسليح الماستر)",
             "⚖️ Column Reactions Layout (مخطط ردود أفعال وأحمال الأعمدة التصميمية Purl)",
             "📐 Rebar Bending & Detailing Details (تفاصيل وتفريد تكسيح وأطوال الأسياخ Bar Bending Details)",
+            "🏛️ Roof Beams 2D Framing Plan (المسقط الأفقي التنفيذي لكمرات السقف ونماذجها B1, B2, B3, CB1)",
+            "🗺️ Ground Beams 2D Framing Plan (المسقط الأفقي التنفيذي لميدات وسملات الأساسات B1, B2, B3, ST)", 
         ]
 
         selected_sketches = st.multiselect(
@@ -23214,6 +23800,21 @@ def render(is_standalone: bool = False):
                                         btm_extra_spans=btm_extra_spans,
                                         void_panels=_void_boxes_sk,
                                         bc_cm=bc_s, tc_cm=tc_s,
+                                    )
+                                elif "Roof Beams 2D Framing Plan" in sk_title:
+                                    fig_sk = draw_roof_beams_layout_sketch(
+                                        active_columns=_act_cols,
+                                        roof_beams_analysis=st.session_state.get("fs_rb_analysis", {}),
+                                        slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
+                                        title=f"ECP 203 — Roof Drop Beams & Cantilevers 2D Framing Plan",
+                                    )
+                                elif "Ground Beams 2D Framing Plan" in sk_title:
+                                    from modules.ground_beam_layout import draw_ground_beams_layout_sketch
+                                    fig_sk = draw_ground_beams_layout_sketch(
+                                        active_columns=_act_cols,
+                                        gb_analysis=st.session_state.get("fs_gb_analysis", {}),
+                                        slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
+                                        title=f"ECP 203 — Ground Beams & Tie Beams 2D Framing Plan",
                                     )
 
                                 if fig_sk is not None:

@@ -2118,60 +2118,59 @@ def draw_comprehensive_foundation_sketch(
                 rotation=rot_deg, ha="center", va="bottom", zorder=6,
                 bbox=dict(boxstyle="round,pad=0.12", fc="#fff7ed", ec="#ea580c", lw=0.9, alpha=0.9))
 
-    # 4b. Draw Ground Beams (Distinct Royal Indigo/Blue Color & Marked B1, B2, B3)
+    # 4b. Draw Ground Beams (Distinct Royal Indigo/Blue Color & Marked B1, B2, B3 with Strict Centerline Continuity)
+    from modules.ground_beam_layout import align_ground_beam_coords
     gb_list = ground_beams if ground_beams is not None else foundation_res.get("ground_beams", [])
     for gb in gb_list:
-        c1 = gb["col1"]
-        c2 = gb["col2"]
+        alg = align_ground_beam_coords(gb, unique_xs, unique_ys)
+        p1 = alg["p1"]
+        p2 = alg["p2"]
+        dir_b = alg["dir"]
         gb_w = float(gb.get("b_cm", 25.0)) / 100.0
         mark = gb.get("tag", gb.get("model_mark", "B1"))
         b_val = int(gb.get("b_cm", 25.0))
         t_val = int(gb.get("exec_t_cm", gb.get("t_calc", 60.0)))
+        nbot_val = gb.get("exec_n_bot", 2)
+        phi_b_val = gb.get("phi_bot", 16)
 
-        dx_val = c2["x"] - c1["x"]
-        dy_val = c2["y"] - c1["y"]
-        if abs(dx_val) > 0.35 and abs(dy_val) > 0.35:
+        if dir_b == "X":
+            bx0 = min(p1[0], p2[0])
+            bw = abs(p2[0] - p1[0])
+            by0 = alg["cl_y"] - gb_w / 2.0
+            r_gb = patches.Rectangle((bx0, by0), bw, gb_w, facecolor="#e0e7ff", edgecolor="#4338ca", lw=1.8, alpha=0.88, zorder=3)
+            ax.add_patch(r_gb)
+            ax.text(bx0 + bw/2.0, alg["cl_y"], f"{mark} ({b_val}×{t_val})\n{nbot_val}Ø{phi_b_val}",
+                    color="#312e81", fontsize=7.5, fontweight="bold", ha="center", va="center", zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.10", fc="#ffffff", ec="#6366f1", lw=0.8, alpha=0.85))
+        elif dir_b == "Y":
+            by0 = min(p1[1], p2[1])
+            bh = abs(p2[1] - p1[1])
+            bx0 = alg["cl_x"] - gb_w / 2.0
+            r_gb = patches.Rectangle((bx0, by0), gb_w, bh, facecolor="#e0e7ff", edgecolor="#4338ca", lw=1.8, alpha=0.88, zorder=3)
+            ax.add_patch(r_gb)
+            ax.text(alg["cl_x"], by0 + bh/2.0, f"{mark} ({b_val}×{t_val})\n{nbot_val}Ø{phi_b_val}",
+                    color="#312e81", fontsize=7.5, fontweight="bold", ha="center", va="center", rotation=90, zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.10", fc="#ffffff", ec="#6366f1", lw=0.8, alpha=0.85))
+        else:
+            dx_val = p2[0] - p1[0]
+            dy_val = p2[1] - p1[1]
             th_gb = math.atan2(dy_val, dx_val)
             nx_gb = -math.sin(th_gb) * gb_w / 2.0
             ny_gb = math.cos(th_gb) * gb_w / 2.0
             poly_gb = patches.Polygon([
-                (c1["x"] + nx_gb, c1["y"] + ny_gb), (c2["x"] + nx_gb, c2["y"] + ny_gb),
-                (c2["x"] - nx_gb, c2["y"] - ny_gb), (c1["x"] - nx_gb, c1["y"] - ny_gb)
+                (p1[0] + nx_gb, p1[1] + ny_gb), (p2[0] + nx_gb, p2[1] + ny_gb),
+                (p2[0] - nx_gb, p2[1] - ny_gb), (p1[0] - nx_gb, p1[1] - ny_gb)
             ], facecolor="#e0e7ff", edgecolor="#4338ca", lw=1.8, alpha=0.88, zorder=3)
             ax.add_patch(poly_gb)
-            mid_x_gb = (c1["x"] + c2["x"]) / 2.0
-            mid_y_gb = (c1["y"] + c2["y"]) / 2.0
+            mid_x_gb = (p1[0] + p2[0]) / 2.0
+            mid_y_gb = (p1[1] + p2[1]) / 2.0
             rot_deg_gb = math.degrees(th_gb)
             if rot_deg_gb > 90:
                 rot_deg_gb -= 180
             elif rot_deg_gb < -90:
                 rot_deg_gb += 180
-            nbot_val = gb.get("exec_n_bot", 2)
-            phi_b_val = gb.get("phi_bot", 16)
             ax.text(mid_x_gb, mid_y_gb, f"{mark} ({b_val}×{t_val})\n{nbot_val}Ø{phi_b_val}",
                     color="#312e81", fontsize=7.2, fontweight="bold", ha="center", va="center", rotation=rot_deg_gb, zorder=6,
-                    bbox=dict(boxstyle="round,pad=0.10", fc="#ffffff", ec="#6366f1", lw=0.8, alpha=0.85))
-        elif abs(dx_val) >= abs(dy_val):
-            bx0 = min(c1["x"], c2["x"])
-            bw = abs(dx_val)
-            by0 = c1["y"] - gb_w / 2.0
-            r_gb = patches.Rectangle((bx0, by0), bw, gb_w, facecolor="#e0e7ff", edgecolor="#4338ca", lw=1.8, alpha=0.88, zorder=3)
-            ax.add_patch(r_gb)
-            nbot_val = gb.get("exec_n_bot", 2)
-            phi_b_val = gb.get("phi_bot", 16)
-            ax.text(bx0 + bw/2.0, by0 + gb_w/2.0, f"{mark} ({b_val}×{t_val})\n{nbot_val}Ø{phi_b_val}",
-                    color="#312e81", fontsize=7.5, fontweight="bold", ha="center", va="center", zorder=6,
-                    bbox=dict(boxstyle="round,pad=0.10", fc="#ffffff", ec="#6366f1", lw=0.8, alpha=0.85))
-        else:
-            by0 = min(c1["y"], c2["y"])
-            bh = abs(dy_val)
-            bx0 = c1["x"] - gb_w / 2.0
-            r_gb = patches.Rectangle((bx0, by0), gb_w, bh, facecolor="#e0e7ff", edgecolor="#4338ca", lw=1.8, alpha=0.88, zorder=3)
-            ax.add_patch(r_gb)
-            nbot_val = gb.get("exec_n_bot", 2)
-            phi_b_val = gb.get("phi_bot", 16)
-            ax.text(bx0 + gb_w/2.0, by0 + bh/2.0, f"{mark} ({b_val}×{t_val})\n{nbot_val}Ø{phi_b_val}",
-                    color="#312e81", fontsize=7.5, fontweight="bold", ha="center", va="center", rotation=90, zorder=6,
                     bbox=dict(boxstyle="round,pad=0.10", fc="#ffffff", ec="#6366f1", lw=0.8, alpha=0.85))
 
     # 5. Draw Columns
