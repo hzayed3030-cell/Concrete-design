@@ -19510,7 +19510,7 @@ def render(is_standalone: bool = False):
             render_styled_table(reactions_df)
             st.caption(f"ℹ️ الأحمال المحورية $P_u$ تشمل معامل الأمان ووزن الأعمدة (Factor of Safety & Columns Weight = **{col_sf_val:.2f}**).")
 
-        # ── 📊 CLASSIFICATION INTO 3 GOVERNING COLUMN TYPES ──────────────────────
+        # ── 📊 CLASSIFICATION INTO GOVERNING COLUMN TYPES (DYNAMIC RE-INDEXING C1, C2, C3) ──
         with st.expander("📌 Governing Column Loads by Type (أقصى ردود أفعال وتصنيف نماذج الأعمدة)", expanded=False):
             int_cols = [r for r in col_reactions_data if r["Raw Type"] == "Interior"]
             edge_cols = [r for r in col_reactions_data if r["Raw Type"] == "Edge"]
@@ -19520,44 +19520,39 @@ def render(is_standalone: bool = False):
             max_edge = max(edge_cols, key=lambda x: x["pu_1f_val"]) if edge_cols else None
             max_corner = max(corner_cols, key=lambda x: x["pu_1f_val"]) if corner_cols else None
 
-            # Governing summary model table
+            # Dynamic re-indexing priority: (Interior -> Edge -> Corner)
+            col_group_specs = [
+                ("Interior", int_cols, max_int, "أعمدة داخلية", "داخلي (Interior)", "أقصى عمود داخلي", "قواعد داخلية"),
+                ("Edge", edge_cols, max_edge, "أعمدة طرفية", "طرفي / وسط خارجي (Edge)", "أقصى عمود طرفي", "قواعد جانبية"),
+                ("Corner", corner_cols, max_corner, "أعمدة ركن", "ركن (Corner)", "أقصى عمود ركن", "قواعد أركان"),
+            ]
+            active_col_groups = [g for g in col_group_specs if g[1]]
+            col_label_map = {}
+            for idx_c, (grp_key, grp_cols, grp_max, grp_ar, grp_loc, grp_gov_lbl, ftg_ar) in enumerate(active_col_groups, start=1):
+                col_label_map[grp_key] = f"C{idx_c}"
+
+            # Governing summary model table with dynamic marks (C1, C2...)
             summary_models = []
-            if max_int:
+            for grp_key, grp_cols, grp_max, grp_ar, grp_loc, grp_gov_lbl, ftg_ar in active_col_groups:
+                c_mark = col_label_map[grp_key]
                 summary_models.append({
-                    "Column Model (نموذج التصميم)": "C_int (أقصى عمود داخلي)",
-                    "Governing Column": f"{max_int['Column ID']} ({max_int['Grid']})",
-                    "Location Type": "داخلي (Interior)",
-                    "Tributary Area (m²)": f"{max_int['atrib_val']:.2f}",
-                    "Pu (1 Floor) [ton]": f"{max_int['pu_1f_val']:.2f}",
-                    f"Total Pu ({num_floors} Floors) [ton]": f"{max_int['pu_tot_val']:.2f}",
-                })
-            if max_edge:
-                summary_models.append({
-                    "Column Model (نموذج التصميم)": "C_edge (أقصى عمود طرفي)",
-                    "Governing Column": f"{max_edge['Column ID']} ({max_edge['Grid']})",
-                    "Location Type": "طرفي / وسط خارجي (Edge)",
-                    "Tributary Area (m²)": f"{max_edge['atrib_val']:.2f}",
-                    "Pu (1 Floor) [ton]": f"{max_edge['pu_1f_val']:.2f}",
-                    f"Total Pu ({num_floors} Floors) [ton]": f"{max_edge['pu_tot_val']:.2f}",
-                })
-            if max_corner:
-                summary_models.append({
-                    "Column Model (نموذج التصميم)": "C_corner (أقصى عمود ركن)",
-                    "Governing Column": f"{max_corner['Column ID']} ({max_corner['Grid']})",
-                    "Location Type": "ركن (Corner)",
-                    "Tributary Area (m²)": f"{max_corner['atrib_val']:.2f}",
-                    "Pu (1 Floor) [ton]": f"{max_corner['pu_1f_val']:.2f}",
-                    f"Total Pu ({num_floors} Floors) [ton]": f"{max_corner['pu_tot_val']:.2f}",
+                    "Column Model (نموذج التصميم)": f"{c_mark} ({grp_gov_lbl})",
+                    "Governing Column": f"{grp_max['Column ID']} ({grp_max['Grid']})",
+                    "Location Type": grp_loc,
+                    "Tributary Area (m²)": f"{grp_max['atrib_val']:.2f}",
+                    "Pu (1 Floor) [ton]": f"{grp_max['pu_1f_val']:.2f}",
+                    f"Total Pu ({num_floors} Floors) [ton]": f"{grp_max['pu_tot_val']:.2f}",
                 })
 
             if summary_models:
                 render_styled_table(summary_models)
 
+                dyn_ftg_tags = ", ".join([f"F{i+1}" for i in range(len(active_col_groups))])
                 st.markdown(
-                    """
+                    f"""
                     <div dir="rtl" style="background: rgba(30, 64, 175, 0.12); border: 1.5px solid #3b82f6; border-radius: 8px; padding: 12px 16px; margin: 12px 0 10px 0; text-align: right;">
                         <div style="font-size: 14.5px; font-weight: 800; color: #60a5fa; margin-bottom: 4px;">
-                            🚀 الانتقال المباشر لتصميم نماذج القواعد المنفصلة (F1, F2, F3) في موديول 3 (Isolated Footings):
+                            🚀 الانتقال المباشر لتصميم نماذج القواعد المنفصلة ({dyn_ftg_tags}) في موديول 3 (Isolated Footings):
                         </div>
                         <div style="font-size: 12.5px; color: #cbd5e1;">
                             اضغط على أي من الأزرار التالية لتحميل الأحمال الحاكمة تلقائياً والانتقال الفوري إلى موديول 3 لتصميم وتدقيق النموذج:
@@ -19566,37 +19561,19 @@ def render(is_standalone: bool = False):
                     """,
                     unsafe_allow_html=True,
                 )
-                col_b1, col_b2, col_b3 = st.columns(3)
-                with col_b1:
-                    if st.button("🪨 تصميم F1 (قواعد داخلية)", key="btn_nav_m3_f1", use_container_width=True, help="الانتقال إلى موديول 3 وتصميم نموذج F1 بأقصى حمل للأعمدة الداخلية"):
-                        if max_int:
-                            S.set_setting("ftg_Pu", float(max_int["pu_tot_val"]))
-                            S.set_setting("ftg_tc", float(tc_s))
-                            S.set_setting("ftg_bc", float(bc_s))
-                        st.session_state["ftg_selected_model_type"] = "F1"
-                        S.cfg_set("selected_module_idx", 2)
-                        st.session_state["selected_module_idx"] = 2
-                        st.rerun()
-                with col_b2:
-                    if st.button("🪨 تصميم F2 (قواعد جانبية)", key="btn_nav_m3_f2", use_container_width=True, help="الانتقال إلى موديول 3 وتصميم نموذج F2 بأقصى حمل للأعمدة الجانبية"):
-                        if max_edge:
-                            S.set_setting("ftg_Pu", float(max_edge["pu_tot_val"]))
-                            S.set_setting("ftg_tc", float(tc_s))
-                            S.set_setting("ftg_bc", float(bc_s))
-                        st.session_state["ftg_selected_model_type"] = "F2"
-                        S.cfg_set("selected_module_idx", 2)
-                        st.session_state["selected_module_idx"] = 2
-                        st.rerun()
-                with col_b3:
-                    if st.button("🪨 تصميم F3 (قواعد أركان)", key="btn_nav_m3_f3", use_container_width=True, help="الانتقال إلى موديول 3 وتصميم نموذج F3 بأقصى حمل لأعمدة الأركان"):
-                        if max_corner:
-                            S.set_setting("ftg_Pu", float(max_corner["pu_tot_val"]))
-                            S.set_setting("ftg_tc", float(tc_s))
-                            S.set_setting("ftg_bc", float(bc_s))
-                        st.session_state["ftg_selected_model_type"] = "F3"
-                        S.cfg_set("selected_module_idx", 2)
-                        st.session_state["selected_module_idx"] = 2
-                        st.rerun()
+                nav_cols = st.columns(len(active_col_groups)) if active_col_groups else [st.container()]
+                for idx_nav, (grp_key, grp_cols, grp_max, grp_ar, grp_loc, grp_gov_lbl, ftg_ar) in enumerate(active_col_groups):
+                    ftg_mark = f"F{idx_nav + 1}"
+                    with nav_cols[idx_nav]:
+                        if st.button(f"🪨 تصميم {ftg_mark} ({ftg_ar})", key=f"btn_nav_m3_{grp_key.lower()}", use_container_width=True, help=f"الانتقال إلى موديول 3 وتصميم نموذج {ftg_mark} بأقصى حمل للـ {ftg_ar}"):
+                            if grp_max:
+                                S.set_setting("ftg_Pu", float(grp_max["pu_tot_val"]))
+                                S.set_setting("ftg_tc", float(tc_s))
+                                S.set_setting("ftg_bc", float(bc_s))
+                            st.session_state["ftg_selected_model_type"] = ftg_mark
+                            S.cfg_set("selected_module_idx", 2)
+                            st.session_state["selected_module_idx"] = 2
+                            st.rerun()
 
         # ── 💾 PERSIST GOVERNING COLUMN LOADS FOR MODULE 2 & MODULE 7 ─────────────
         if max_int and max_int.get("pu_1f_val", 0) > 0:
@@ -19630,12 +19607,16 @@ def render(is_standalone: bool = False):
         # Export full building columns layout (coordinates, dimensions, loads, types)
         cols_export = []
         for c in _active_cols:
+            c_raw_type = c.get("type", "Interior")
+            c_mark = col_label_map.get(c_raw_type, "C1") if 'col_label_map' in locals() else "C1"
+            c["model_mark"] = c_mark
             cols_export.append({
                 "id": c["id"],
                 "orig_id": c.get("orig_id", c["id"]),
                 "grid_x": c.get("grid_x", ""),
                 "grid_y": c.get("grid_y", ""),
-                "type": c.get("type", "Interior"),
+                "type": c_raw_type,
+                "model_mark": c_mark,
                 "x": float(c["x"]),
                 "y": float(c["y"]),
                 "bc": float(c.get("bc", bc_s)),
@@ -19694,11 +19675,8 @@ def render(is_standalone: bool = False):
         sand_m3_cols = 0.0
 
         col_designs = []
-        for model_label, col_obj, model_key in [
-            ("C_int (أقصى عمود داخلي)", max_int, "C_int"),
-            ("C_edge (أقصى عمود طرفي)", max_edge, "C_edge"),
-            ("C_corner (أقصى عمود ركن)", max_corner, "C_corner"),
-        ]:
+        # Dynamic loop over active column groups (Priority: Interior -> Edge -> Corner)
+        for grp_key, grp_cols, col_obj, grp_ar, grp_loc, grp_gov_lbl, ftg_ar in active_col_groups:
             if col_obj and col_obj.get("pu_tot_val", 0) > 0:
                 pu_tot = float(col_obj["pu_tot_val"])
                 pu_1f = float(col_obj["pu_1f_val"])
@@ -19715,8 +19693,11 @@ def render(is_standalone: bool = False):
                     Phi=col_phi,
                     Phi_st=col_phi_st,
                 )
-                des["model_label"] = model_label
-                des["model_key"] = model_key
+                m_mark = col_label_map[grp_key]
+                des["model_mark"] = m_mark
+                des["model_label"] = f"{m_mark} ({grp_ar})"
+                des["model_key"] = f"C_{grp_key.lower()}"
+                des["raw_type"] = grp_key
                 des["gov_col"] = f"{col_obj['Column ID']} ({col_obj['Grid']})"
                 des["loc_type"] = col_obj["Location Type"]
                 des["atrib"] = col_obj["atrib_val"]
@@ -19790,14 +19771,16 @@ def render(is_standalone: bool = False):
 
                 st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
 
-                # 3 Detailed Cards for the 3 Column Models
-                d_c1, d_c2, d_c3 = st.columns(3)
-                for des, container, color_border, color_hdr in zip(
-                    col_designs,
-                    [d_c1, d_c2, d_c3],
-                    ["#93c5fd", "#fde68a", "#fecaca"],
-                    ["#1e40af", "#b45309", "#b91c1c"]
-                ):
+                # Detailed Cards for Active Column Models
+                card_cols = st.columns(len(col_designs)) if col_designs else [st.container()]
+                palette = [
+                    ("#93c5fd", "#1e40af"),
+                    ("#fde68a", "#b45309"),
+                    ("#fecaca", "#b91c1c"),
+                ]
+                for idx_card, des in enumerate(col_designs):
+                    container = card_cols[idx_card]
+                    color_border, color_hdr = palette[idx_card % len(palette)]
                     with container:
                         st.markdown(
                             f"""
@@ -19858,13 +19841,11 @@ def render(is_standalone: bool = False):
 
                 H_m = col_H / 100.0  # column height in meters
 
-                for m_key, m_label, count in [
-                    ("C_int", "C_int (أعمدة داخلية)", cnt_int),
-                    ("C_edge", "C_edge (أعمدة طرفية)", cnt_edge),
-                    ("C_corner", "C_corner (أعمدة ركن)", cnt_corner),
-                ]:
-                    if count > 0 and m_key in des_map:
-                        des = des_map[m_key]
+                for des in col_designs:
+                    m_key = des.get("raw_type", "Interior")
+                    count = cnt_int if m_key == "Interior" else (cnt_edge if m_key == "Edge" else cnt_corner)
+                    m_label = des["model_label"]
+                    if count > 0:
                         b_cm = des["b"]
                         t_cm = des["t"]
                         phi_m = des["Phi"]
@@ -20219,6 +20200,43 @@ def render(is_standalone: bool = False):
             )
             st.session_state["fs_gb_analysis"] = gb_analysis
 
+            # ── Automated Roof Beams Layout & Design Integration ──
+            from modules.roof_beam_layout import extract_roof_beams_and_models, draw_roof_beams_layout_sketch
+
+            rb_b_unified = float(S.cfg_val("rb_b_unified", S.cfg_val(f"{prefix}rb_b_unified", 25.0)))
+            rb_phi_bot_val = int(S.cfg_val("rb_phi_bot", S.cfg_val(f"{prefix}rb_phi_bot", 16)))
+            rb_phi_top_val = int(S.cfg_val("rb_phi_top", S.cfg_val(f"{prefix}rb_phi_top", 12)))
+            rb_phi_st_val = int(S.cfg_val("rb_phi_st", S.cfg_val(f"{prefix}rb_phi_st", 8)))
+            rb_phi_side_val = int(S.cfg_val("rb_phi_side", S.cfg_val(f"{prefix}rb_phi_side", 10)))
+            rb_stirrups_val = int(S.cfg_val("rb_stirrups_m", S.cfg_val(f"{prefix}rb_stirrups_m", 6)))
+            rb_user_overrides = S.cfg_val("rb_overrides") or st.session_state.get(f"{prefix}rb_overrides", {})
+            if not isinstance(rb_user_overrides, dict):
+                rb_user_overrides = {}
+
+            rb_analysis = extract_roof_beams_and_models(
+                active_columns=fs_active_columns,
+                drop_beams=_cur_beams_list,
+                cantilevers=cantilevers if 'cantilevers' in locals() else None,
+                Lx_spans=Lx_calc if 'Lx_calc' in locals() else (Lx_spans if 'Lx_spans' in locals() else None),
+                Ly_spans=Ly_calc if 'Ly_calc' in locals() else (Ly_spans if 'Ly_spans' in locals() else None),
+                ts_cm=ts if 'ts' in locals() else 20.0,
+                Wu_slab=Wu if 'Wu' in locals() else 1.45,
+                Fcu=float(Fcu) if 'Fcu' in locals() and Fcu else 250.0,
+                Fy=float(Fy) if 'Fy' in locals() and Fy else 4000.0,
+                b_unified=rb_b_unified,
+                has_wall=False,
+                h_wall=0.0,
+                t_wall=0.0,
+                gamma_brick=1.80,
+                phi_bot=rb_phi_bot_val,
+                phi_top=rb_phi_top_val,
+                phi_st=rb_phi_st_val,
+                phi_side=rb_phi_side_val,
+                stirrups_per_m=rb_stirrups_val,
+                user_overrides=rb_user_overrides,
+            )
+            st.session_state["fs_rb_analysis"] = rb_analysis
+
             # 3. Executive Report Banner
             st.markdown(
                 f"""
@@ -20421,6 +20439,120 @@ def render(is_standalone: bool = False):
                         S.cfg_set(f"{prefix}gb_phi_st", new_p_st)
                         st.rerun()
 
+                # ── 3 Direct Depth Inputs: B1, B2, B3 (عمق الكمرة طبقاً للتصميم) ──
+                st.markdown("<hr style='margin:14px 0 12px 0; border:0; border-top:1.5px dashed #cbd5e1;'/>", unsafe_allow_html=True)
+                st.markdown(
+                    """
+                    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+                        <div style="font-size:15px; font-weight:800; color:#1e3a8a;">
+                            📏 تعديل الأعماق التنفيذية لنماذج السملات (B1, B2, B3) طبقاً لنتائج التصميم الإنشائي:
+                        </div>
+                        <div style="font-size:12.5px; color:#475569; font-weight:600;">
+                            💡 تم وضع القيمة التصميمية المحسوبة تلقائياً مع إمكانية التعديل وإعادة الحسابات فوراً
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+                cur_ov_depths = dict(S.cfg_val("gb_overrides") or st.session_state.get(f"{prefix}gb_overrides", {}))
+                models_d = gb_analysis.get("models_dict", {})
+                m_b1 = models_d.get("B1", {})
+                m_b2 = models_d.get("B2", {})
+                m_b3 = models_d.get("B3", {})
+
+                b1_calc = float(m_b1.get("t_env_calc", 60.0))
+                b2_calc = float(m_b2.get("t_env_calc", m_b1.get("t_env_calc", 50.0)))
+                b3_calc = float(m_b3.get("t_env_calc", m_b2.get("t_env_calc", m_b1.get("t_env_calc", 40.0))))
+
+                b1_curr = float(cur_ov_depths.get("B1_t", m_b1.get("t_cm", b1_calc)))
+                b2_curr = float(cur_ov_depths.get("B2_t", m_b2.get("t_cm", b2_calc)))
+                b3_curr = float(cur_ov_depths.get("B3_t", m_b3.get("t_cm", b3_calc)))
+
+                c_dep1, c_dep2, c_dep3 = st.columns(3)
+                with c_dep1:
+                    new_t_b1 = st.number_input(
+                        f"عمق الكمرة B1 طبق للتصميم [{b1_calc:.0f} cm]:",
+                        min_value=25.0,
+                        max_value=150.0,
+                        value=float(b1_curr),
+                        step=5.0,
+                        key=f"{prefix}inp_depth_B1",
+                        help=f"عمق السملة B1 بالسم (العمق التصميمي المحسوب: {b1_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات فوراً.",
+                    )
+                with c_dep2:
+                    new_t_b2 = st.number_input(
+                        f"عمق الكمرة B2 طبق للتصميم [{b2_calc:.0f} cm]:",
+                        min_value=25.0,
+                        max_value=150.0,
+                        value=float(b2_curr),
+                        step=5.0,
+                        key=f"{prefix}inp_depth_B2",
+                        help=f"عمق السملة B2 بالسم (العمق التصميمي المحسوب: {b2_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات فوراً.",
+                    )
+                with c_dep3:
+                    new_t_b3 = st.number_input(
+                        f"عمق الكمرة B3 طبق للتصميم [{b3_calc:.0f} cm]:",
+                        min_value=25.0,
+                        max_value=150.0,
+                        value=float(b3_curr),
+                        step=5.0,
+                        key=f"{prefix}inp_depth_B3",
+                        help=f"عمق السملة B3 بالسم (العمق التصميمي المحسوب: {b3_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات فوراً.",
+                    )
+
+                changed_gb_depth = False
+                if abs(new_t_b1 - b1_curr) > 0.01:
+                    cur_ov_depths["B1_t"] = new_t_b1
+                    cur_ov_depths.pop("B1_nbot", None)
+                    cur_ov_depths.pop("B1_ntop", None)
+                    cur_ov_depths.pop("B1_stirrups", None)
+                    st.session_state.pop(f"{prefix}ov_nbot_B1", None)
+                    st.session_state.pop(f"{prefix}ov_ntop_B1", None)
+                    st.session_state.pop(f"{prefix}ov_st_B1", None)
+                    changed_gb_depth = True
+                if abs(new_t_b2 - b2_curr) > 0.01:
+                    cur_ov_depths["B2_t"] = new_t_b2
+                    cur_ov_depths.pop("B2_nbot", None)
+                    cur_ov_depths.pop("B2_ntop", None)
+                    cur_ov_depths.pop("B2_stirrups", None)
+                    st.session_state.pop(f"{prefix}ov_nbot_B2", None)
+                    st.session_state.pop(f"{prefix}ov_ntop_B2", None)
+                    st.session_state.pop(f"{prefix}ov_st_B2", None)
+                    changed_gb_depth = True
+                if abs(new_t_b3 - b3_curr) > 0.01:
+                    cur_ov_depths["B3_t"] = new_t_b3
+                    cur_ov_depths.pop("B3_nbot", None)
+                    cur_ov_depths.pop("B3_ntop", None)
+                    cur_ov_depths.pop("B3_stirrups", None)
+                    st.session_state.pop(f"{prefix}ov_nbot_B3", None)
+                    st.session_state.pop(f"{prefix}ov_ntop_B3", None)
+                    st.session_state.pop(f"{prefix}ov_st_B3", None)
+                    changed_gb_depth = True
+
+                if changed_gb_depth:
+                    S.cfg_set("gb_overrides", cur_ov_depths)
+                    st.session_state[f"{prefix}gb_overrides"] = cur_ov_depths
+                    for mk in ["B1", "B2", "B3"]:
+                        if f"{mk}_t" in cur_ov_depths:
+                            st.session_state[f"{prefix}ov_t_{mk}"] = cur_ov_depths[f"{mk}_t"]
+                    st.rerun()
+
+                has_any_depth_ov = any(f"{mk}_t" in cur_ov_depths for mk in ["B1", "B2", "B3"])
+                if has_any_depth_ov:
+                    rst_c1, rst_c2 = st.columns([3, 1])
+                    with rst_c1:
+                        st.info("💡 تم تعديل أعماق النماذج يدوياً. يتم تطبيق الأعماق الجديدة على جميع اللوحات والمساقط والـ 3D وحصر الكميات والمذكرة الحسابية.")
+                    with rst_c2:
+                        if st.button("🔄 استعادة الأعماق التصميمية", key=f"{prefix}btn_reset_depths", use_container_width=True):
+                            for mk in ["B1", "B2", "B3"]:
+                                cur_ov_depths.pop(f"{mk}_t", None)
+                                st.session_state.pop(f"{prefix}inp_depth_{mk}", None)
+                                st.session_state.pop(f"{prefix}ov_t_{mk}", None)
+                            S.cfg_set("gb_overrides", cur_ov_depths)
+                            st.session_state[f"{prefix}gb_overrides"] = cur_ov_depths
+                            st.rerun()
+
             # 3. KPI Metrics Banner
             cnt_gb = len(gb_analysis["ground_beams"])
             cnt_st = len(gb_analysis["strap_beams"])
@@ -20531,6 +20663,12 @@ def render(is_standalone: bool = False):
                             )
                             if new_t != m_data["t_cm"]:
                                 cur_ov[f"{m_mark}_t"] = new_t
+                                cur_ov.pop(f"{m_mark}_nbot", None)
+                                cur_ov.pop(f"{m_mark}_ntop", None)
+                                cur_ov.pop(f"{m_mark}_stirrups", None)
+                                st.session_state.pop(f"{prefix}ov_nbot_{m_mark}", None)
+                                st.session_state.pop(f"{prefix}ov_ntop_{m_mark}", None)
+                                st.session_state.pop(f"{prefix}ov_st_{m_mark}", None)
                                 ov_changed = True
 
                             # Bottom bars override
@@ -20569,11 +20707,17 @@ def render(is_standalone: bool = False):
                     if ov_changed:
                         S.cfg_set("gb_overrides", cur_ov)
                         st.session_state[f"{prefix}gb_overrides"] = cur_ov
+                        for mk in ["B1", "B2", "B3"]:
+                            if f"{mk}_t" in cur_ov:
+                                st.session_state[f"{prefix}inp_depth_{mk}"] = cur_ov[f"{mk}_t"]
                         st.rerun()
 
                     if st.button("🔄 إعادة ضبط نماذج السملات إلى الحسابات التلقائية (Reset Overrides)", key=f"{prefix}btn_reset_gb_ov"):
                         S.cfg_set("gb_overrides", {})
                         st.session_state[f"{prefix}gb_overrides"] = {}
+                        for mk in ["B1", "B2", "B3"]:
+                            st.session_state.pop(f"{prefix}inp_depth_{mk}", None)
+                            st.session_state.pop(f"{prefix}ov_t_{mk}", None)
                         st.rerun()
 
                 # Export Excel & CSV
@@ -20650,6 +20794,505 @@ def render(is_standalone: bool = False):
                         use_container_width=True,
                         key=f"{prefix}btn_dl_det_csv",
                     )
+
+        # ── 🧱 ROOF BEAMS DESIGN SECTION (ECP 203) ─────────────────────────────────────
+        with st.expander(f"🧱 Roof Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج كمرات السقف والكوابيل)", expanded=False):
+            # 1. Header & Description Banner
+            st.markdown(
+                f"""
+                <div dir="rtl" style="background:#f0fdf4; border:1.5px solid #bbf7d0; border-right:7px solid #16a34a; border-radius:10px; padding:18px 22px; margin-bottom:16px; color:#14532d; line-height:1.9; text-align:right;">
+                    <div style="font-size:1.45rem; font-weight:800; color:#15803d; margin-bottom:10px;">
+                        🧱 منظومة تصميم وتفريد ونماذج كمرات السقف والكوابيل (Roof Drop Beams & Cantilever Beams — ECP 203):
+                    </div>
+                    <div style="font-size:1.15rem; font-weight:700; color:#166534;">
+                        نظام متكامل يربط تلقائياً بين مسقط الأعمدة والبلاطة في <b>Module 1</b> وعناصر كمرات السقف الساقطة والكوابيل:
+                        <br/>• <b>التجميع التلقائي في 3 نماذج تنفيذية (B1, B2, B3) + كوابيل (CB1):</b> تطبيق قاعدة الظرف الحاكم (Governing Envelope Rule) لتسهيل التنفيذ وضبط الجودة.
+                        <br/>• <b>استنتاج حالة الاستمرارية تلقائياً من المسقط:</b> تحديد حالة الدعم (بسيطة / مستمرة من طرف / مستمرة من طرفين / كابولي) بناءً على امتداد محاور الأعمدة والكوابيل بدون إدخال يدوي.
+                        <br/>• <b>أحمال دقيقة بدون ازدواجية:</b> حساب الوزن الذاتي لسقوط الكمرة أسفل البلاطة (<span dir="ltr">1.4 × γc × b × (t - ts)</span>) + نصيب الكمرة من أحمال البلاطة اللاكمرية (<span dir="ltr">Wu × w_trib</span>) الشاملة بالفعل لكافة أحمال الحوائط والقواطيع والتشطيبات.
+                        <br/>• <b>إعادة التصميم الإنشائي الفوري عند تعديل الأعماق:</b> عند تعديل عمق أي نموذج، يُعاد حساب العزوم والقص وحديد التسليح والبراندات (للأعماق ≥ 60 سم) والكانات والرسومات فوراً.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            # 2. Design Parameters & Controls
+            with st.container(border=True):
+                st.markdown("<div style='font-size:16px; font-weight:800; color:#1e3a8a; margin-bottom:6px;'>⚙️ محددات ومعايير تصميم كمرات السقف (Roof Beam Design Parameters)</div>", unsafe_allow_html=True)
+                rbc1, rbc2, rbc3 = st.columns([1.2, 1.3, 2.2])
+                with rbc1:
+                    new_rb_b = st.number_input(
+                        "عرض الكمرة الموحد b (cm):",
+                        min_value=15.0, max_value=60.0,
+                        value=float(rb_b_unified), step=5.0,
+                        key=f"{prefix}w_rb_b_unified",
+                    )
+                    if new_rb_b != rb_b_unified:
+                        S.cfg_set("rb_b_unified", new_rb_b)
+                        S.cfg_set(f"{prefix}rb_b_unified", new_rb_b)
+                        st.rerun()
+
+                    new_rb_st_m = st.number_input(
+                        "عدد الكانات الأساسية / م':",
+                        min_value=5, max_value=10,
+                        value=int(rb_stirrups_val), step=1,
+                        key=f"{prefix}w_rb_stirrups_m",
+                    )
+                    if new_rb_st_m != rb_stirrups_val:
+                        S.cfg_set("rb_stirrups_m", new_rb_st_m)
+                        S.cfg_set(f"{prefix}rb_stirrups_m", new_rb_st_m)
+                        st.rerun()
+
+                with rbc2:
+                    rb_dia_opts = [12, 16, 18, 22, 25]
+                    rb_dia_st_opts = [8, 10]
+                    rb_idx_b = rb_dia_opts.index(rb_phi_bot_val) if rb_phi_bot_val in rb_dia_opts else 1
+                    rb_idx_t = rb_dia_opts.index(rb_phi_top_val) if rb_phi_top_val in rb_dia_opts else 0
+                    rb_idx_s = rb_dia_st_opts.index(rb_phi_st_val) if rb_phi_st_val in rb_dia_st_opts else 0
+
+                    new_rb_p_bot = st.selectbox("قطر التسليح السفلي Φ_bot (mm):", options=rb_dia_opts, index=rb_idx_b, key=f"{prefix}w_rb_phi_bot")
+                    new_rb_p_top = st.selectbox("قطر التسليح العلوي Φ_top (mm):", options=rb_dia_opts, index=rb_idx_t, key=f"{prefix}w_rb_phi_top")
+                    new_rb_p_st = st.selectbox("قطر الكانات Φ_st (mm):", options=rb_dia_st_opts, index=rb_idx_s, key=f"{prefix}w_rb_phi_st")
+
+                    if new_rb_p_bot != rb_phi_bot_val or new_rb_p_top != rb_phi_top_val or new_rb_p_st != rb_phi_st_val:
+                        S.cfg_set("rb_phi_bot", new_rb_p_bot)
+                        S.cfg_set(f"{prefix}rb_phi_bot", new_rb_p_bot)
+                        S.cfg_set("rb_phi_top", new_rb_p_top)
+                        S.cfg_set(f"{prefix}rb_phi_top", new_rb_p_top)
+                        S.cfg_set("rb_phi_st", new_rb_p_st)
+                        S.cfg_set(f"{prefix}rb_phi_st", new_rb_p_st)
+                        st.rerun()
+
+                with rbc3:
+                    st.markdown(
+                        f"""
+                        <div dir="rtl" style="background:#eff6ff; border:1.5px solid #bfdbfe; border-right:5px solid #2563eb; border-radius:8px; padding:12px 14px; color:#1e293b; line-height:1.75; font-size:12.5px;">
+                            <div style="font-size:13.5px; font-weight:800; color:#1e40af; margin-bottom:4px;">
+                                💡 معايير أحمال كمرات السقف (Flat Slab Drop Beams):
+                            </div>
+                            <b>• أحمال البلاطة الشاملة:</b> تعتمد كمرات السقف على نصيبها من الحمل التصميمي الأقصى للبلاطة (<span dir="ltr">Wu = {Wu:.2f} t/m²</span>)، والذي يتضمن بالفعل الوزن الذاتي للبلاطة والتشطيبات والحمل الحي، بالإضافة إلى الحمل المكافئ الموزع لجميع الحوائط والقواطيع بالمشروع (<span dir="ltr">WL = {wall_load:.2f} t/m²</span>).<br/>
+                            <b>• الوزن الذاتي لسقوط الكمرة:</b> يُحسب الحمل الإضافي الميت فقط لخرسانة سقوط الكمرة أسفل البلاطة (<span dir="ltr">1.4 × γc × b × (t - ts)</span>) منعاً لأي ازدواجية أو تكرار في حساب أحمال الحوائط طبقاً لأصول الكود المصري ECP 203.
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                # ── تعديل الأعماق التنفيذية لنماذج الكمرات (B1, B2, B3) طبقاً لنتائج التصميم الإنشائي ──
+                st.markdown("<hr style='margin:14px 0 12px 0; border:0; border-top:1.5px dashed #cbd5e1;'/>", unsafe_allow_html=True)
+                st.markdown(
+                    """
+                    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+                        <div style="font-size:15px; font-weight:800; color:#1e3a8a;">
+                            📏 تعديل الأعماق التنفيذية لنماذج الكمرات (B1, B2, B3) طبقاً لنتائج التصميم الإنشائي:
+                        </div>
+                        <div style="font-size:12.5px; color:#475569; font-weight:600;">
+                            💡 تم وضع القيمة التصميمية المحسوبة تلقائياً مع إمكانية التعديل وإعادة الحسابات والتصميم والرسومات فوراً
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+                cur_ov_depths_rb = dict(S.cfg_val("rb_overrides") or st.session_state.get(f"{prefix}rb_overrides", {}))
+                rb_models_d = rb_analysis.get("models_dict", {})
+                rb_m_b1 = rb_models_d.get("B1", {})
+                rb_m_b2 = rb_models_d.get("B2", {})
+                rb_m_b3 = rb_models_d.get("B3", {})
+                rb_m_cb1 = rb_models_d.get("CB1", {})
+
+                rb_b1_calc = float(rb_m_b1.get("t_env_calc", 60.0))
+                rb_b2_calc = float(rb_m_b2.get("t_env_calc", rb_m_b1.get("t_env_calc", 50.0)))
+                rb_b3_calc = float(rb_m_b3.get("t_env_calc", rb_m_b2.get("t_env_calc", rb_m_b1.get("t_env_calc", 40.0))))
+
+                rb_b1_curr = float(cur_ov_depths_rb.get("B1_t", rb_m_b1.get("t_cm", rb_b1_calc)))
+                rb_b2_curr = float(cur_ov_depths_rb.get("B2_t", rb_m_b2.get("t_cm", rb_b2_calc)))
+                rb_b3_curr = float(cur_ov_depths_rb.get("B3_t", rb_m_b3.get("t_cm", rb_b3_calc)))
+
+                has_cb1 = "CB1" in rb_models_d
+                if has_cb1:
+                    rb_cb1_calc = float(rb_m_cb1.get("t_env_calc", 40.0))
+                    rb_cb1_curr = float(cur_ov_depths_rb.get("CB1_t", rb_m_cb1.get("t_cm", rb_cb1_calc)))
+                    c_dep1, c_dep2, c_dep3, c_dep4 = st.columns(4)
+                else:
+                    c_dep1, c_dep2, c_dep3 = st.columns(3)
+
+                with c_dep1:
+                    new_t_rb1 = st.number_input(
+                        f"عمق الكمرة B1 طبق للتصميم [{rb_b1_calc:.0f} cm]:",
+                        min_value=20.0,
+                        max_value=150.0,
+                        value=float(rb_b1_curr),
+                        step=5.0,
+                        key=f"{prefix}inp_rb_depth_B1",
+                        help=f"عمق الكمرة B1 بالسم (العمق التصميمي المحسوب: {rb_b1_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات فوراً.",
+                    )
+                with c_dep2:
+                    new_t_rb2 = st.number_input(
+                        f"عمق الكمرة B2 طبق للتصميم [{rb_b2_calc:.0f} cm]:",
+                        min_value=20.0,
+                        max_value=150.0,
+                        value=float(rb_b2_curr),
+                        step=5.0,
+                        key=f"{prefix}inp_rb_depth_B2",
+                        help=f"عمق الكمرة B2 بالسم (العمق التصميمي المحسوب: {rb_b2_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات فوراً.",
+                    )
+                with c_dep3:
+                    new_t_rb3 = st.number_input(
+                        f"عمق الكمرة B3 طبق للتصميم [{rb_b3_calc:.0f} cm]:",
+                        min_value=20.0,
+                        max_value=150.0,
+                        value=float(rb_b3_curr),
+                        step=5.0,
+                        key=f"{prefix}inp_rb_depth_B3",
+                        help=f"عمق الكمرة B3 بالسم (العمق التصميمي المحسوب: {rb_b3_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات فوراً.",
+                    )
+                if has_cb1:
+                    with c_dep4:
+                        new_t_rcb1 = st.number_input(
+                            f"عمق الكابولي CB1 طبق للتصميم [{rb_cb1_calc:.0f} cm]:",
+                            min_value=20.0,
+                            max_value=150.0,
+                            value=float(rb_cb1_curr),
+                            step=5.0,
+                            key=f"{prefix}inp_rb_depth_CB1",
+                            help=f"عمق كمرة الكابولي CB1 بالسم (العمق التصميمي المحسوب: {rb_cb1_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات فوراً.",
+                        )
+
+                changed_rb_depth = False
+                if abs(new_t_rb1 - rb_b1_curr) > 0.01:
+                    cur_ov_depths_rb["B1_t"] = new_t_rb1
+                    cur_ov_depths_rb.pop("B1_nbot", None)
+                    cur_ov_depths_rb.pop("B1_ntop", None)
+                    cur_ov_depths_rb.pop("B1_stirrups", None)
+                    st.session_state.pop(f"{prefix}ov_rb_nbot_B1", None)
+                    st.session_state.pop(f"{prefix}ov_rb_ntop_B1", None)
+                    st.session_state.pop(f"{prefix}ov_rb_st_B1", None)
+                    changed_rb_depth = True
+                if abs(new_t_rb2 - rb_b2_curr) > 0.01:
+                    cur_ov_depths_rb["B2_t"] = new_t_rb2
+                    cur_ov_depths_rb.pop("B2_nbot", None)
+                    cur_ov_depths_rb.pop("B2_ntop", None)
+                    cur_ov_depths_rb.pop("B2_stirrups", None)
+                    st.session_state.pop(f"{prefix}ov_rb_nbot_B2", None)
+                    st.session_state.pop(f"{prefix}ov_rb_ntop_B2", None)
+                    st.session_state.pop(f"{prefix}ov_rb_st_B2", None)
+                    changed_rb_depth = True
+                if abs(new_t_rb3 - rb_b3_curr) > 0.01:
+                    cur_ov_depths_rb["B3_t"] = new_t_rb3
+                    cur_ov_depths_rb.pop("B3_nbot", None)
+                    cur_ov_depths_rb.pop("B3_ntop", None)
+                    cur_ov_depths_rb.pop("B3_stirrups", None)
+                    st.session_state.pop(f"{prefix}ov_rb_nbot_B3", None)
+                    st.session_state.pop(f"{prefix}ov_rb_ntop_B3", None)
+                    st.session_state.pop(f"{prefix}ov_rb_st_B3", None)
+                    changed_rb_depth = True
+                if has_cb1 and abs(new_t_rcb1 - rb_cb1_curr) > 0.01:
+                    cur_ov_depths_rb["CB1_t"] = new_t_rcb1
+                    cur_ov_depths_rb.pop("CB1_nbot", None)
+                    cur_ov_depths_rb.pop("CB1_ntop", None)
+                    cur_ov_depths_rb.pop("CB1_stirrups", None)
+                    st.session_state.pop(f"{prefix}ov_rb_nbot_CB1", None)
+                    st.session_state.pop(f"{prefix}ov_rb_ntop_CB1", None)
+                    st.session_state.pop(f"{prefix}ov_rb_st_CB1", None)
+                    changed_rb_depth = True
+
+                if changed_rb_depth:
+                    S.cfg_set("rb_overrides", cur_ov_depths_rb)
+                    st.session_state[f"{prefix}rb_overrides"] = cur_ov_depths_rb
+                    for mk in ["B1", "B2", "B3", "CB1"]:
+                        if f"{mk}_t" in cur_ov_depths_rb:
+                            st.session_state[f"{prefix}ov_rb_t_{mk}"] = cur_ov_depths_rb[f"{mk}_t"]
+                    st.rerun()
+
+                has_any_rb_depth_ov = any(f"{mk}_t" in cur_ov_depths_rb for mk in ["B1", "B2", "B3", "CB1"])
+                if has_any_rb_depth_ov:
+                    rst_rc1, rst_rc2 = st.columns([3, 1])
+                    with rst_rc1:
+                        st.info("💡 تم تعديل أعماق نماذج الكمرات يدوياً. يتم تطبيق الأعماق الجديدة على جميع الجداول والرسومات الإنشائية وحصر الكميات فوراً.")
+                    with rst_rc2:
+                        if st.button("🔄 استعادة الأعماق التصميمية", key=f"{prefix}btn_reset_rb_depths", use_container_width=True):
+                            for mk in ["B1", "B2", "B3", "CB1"]:
+                                cur_ov_depths_rb.pop(f"{mk}_t", None)
+                                st.session_state.pop(f"{prefix}inp_rb_depth_{mk}", None)
+                                st.session_state.pop(f"{prefix}ov_rb_t_{mk}", None)
+                            S.cfg_set("rb_overrides", cur_ov_depths_rb)
+                            st.session_state[f"{prefix}rb_overrides"] = cur_ov_depths_rb
+                            st.rerun()
+
+            # 3. KPI Metrics Banner
+            cnt_rb = len(rb_analysis["roof_beams"])
+            cnt_cb = len(rb_analysis["cantilever_beams"])
+            len_rb = sum(b["span_m"] for b in rb_analysis["roof_beams"])
+            len_cb = sum(b["span_m"] for b in rb_analysis["cantilever_beams"])
+
+            st.markdown(
+                f"""
+                <div dir="rtl" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 12px 0 16px 0;">
+                    <div style="background:rgba(224, 231, 255, 0.5); border:1.5px solid #6366f1; border-right:5px solid #4338ca; border-radius:8px; padding:12px 14px;">
+                        <div style="font-size:14px; font-weight:800; color:#312e81;">🧱 إجمالي كمرات السقف (Roof Beams)</div>
+                        <div style="font-size:20px; font-weight:900; color:#1e1b4b;">{cnt_rb} <span style="font-size:13px; font-weight:600; color:#475569;">كمرة ({len_rb:.1f} m)</span></div>
+                        <div style="font-size:12px; color:#4338ca; margin-top:2px;">مجمعة في 3 نماذج: B1, B2, B3</div>
+                    </div>
+                    <div style="background:rgba(254, 215, 170, 0.5); border:1.5px solid #ea580c; border-right:5px solid #c2410c; border-radius:8px; padding:12px 14px;">
+                        <div style="font-size:14px; font-weight:800; color:#9a3412;">📐 إجمالي الكوابيل (Cantilevers)</div>
+                        <div style="font-size:20px; font-weight:900; color:#431407;">{cnt_cb} <span style="font-size:13px; font-weight:600; color:#475569;">كابولي ({len_cb:.1f} m)</span></div>
+                        <div style="font-size:12px; color:#c2410c; margin-top:2px;">كمرات كابولية (CB1) بشوك علوية</div>
+                    </div>
+                    <div style="background:rgba(240, 253, 244, 0.7); border:1.5px solid #22c55e; border-right:5px solid #15803d; border-radius:8px; padding:12px 14px;">
+                        <div style="font-size:14px; font-weight:800; color:#14532d;">📊 حجم الخرسانة المسلحة للكمرات</div>
+                        <div style="font-size:20px; font-weight:900; color:#052e16;">{rb_analysis['boq']['conc_vol_rc']:.2f} <span style="font-size:13px; font-weight:600; color:#475569;">m³</span></div>
+                        <div style="font-size:12px; color:#15803d; margin-top:2px;">بمعدل أسمنت 350 كجم/م³</div>
+                    </div>
+                    <div style="background:rgba(245, 243, 255, 0.7); border:1.5px solid #8b5cf6; border-right:5px solid #6d28d9; border-radius:8px; padding:12px 14px;">
+                        <div style="font-size:14px; font-weight:800; color:#4c1d95;">⚙️ إجمالي وزن حديد تسليح الكمرات</div>
+                        <div style="font-size:20px; font-weight:900; color:#2e1065;">{rb_analysis['boq']['steel_ton_tot']:.3f} <span style="font-size:13px; font-weight:600; color:#475569;">Ton ({rb_analysis['boq']['steel_kg_tot']:,.0f} kg)</span></div>
+                        <div style="font-size:12px; color:#6d28d9; margin-top:2px;">معدل: {rb_analysis['boq']['steel_ratio_kg_m3']:.1f} kg/m³</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # 4. Interactive Tabs
+            tab_rb_class, tab_rb_models, tab_rb_details, tab_rb_sketch = st.tabs([
+                "📋 Classification Table (جدول تصنيف كمرات السقف الشامل)",
+                "🏛️ Master Models Schedule (جدول نماذج كمرات السقف التنفيذي B1, B2, B3, CB1)",
+                "🔩 Detailed Beams Schedule (جدول تفريد وتفاصيل جميع كمرات السقف الفردية)",
+                "🗺️ Roof Beams Plan Sketch (المسقط الأفقي واللوحة التنفيذية للكمرات)",
+            ])
+
+            # ── TAB 1: CLASSIFICATION TABLE ──
+            with tab_rb_class:
+                st.markdown("##### 📋 جدول تصنيف كمرات السقف الإنشائية الشامل (Unified Roof Beams Classification Table)")
+                st.caption("يوضح التفرقة والتصنيف الصريح لجميع كمرات السقف الساقطة والكوابيل مع الموقع والمحاور والأبعاد والتسليح النهائي.")
+                df_rb_class_export = pd.DataFrame(rb_analysis["classification_rows"])
+                render_styled_table(df_rb_class_export)
+
+                csv_rb_class_data = df_rb_class_export.to_csv(index=False).encode('utf-8-sig')
+                excel_rb_class_bytes = safe_to_excel_bytes(df_rb_class_export, sheet_name='Roof_Beams_Classification')
+
+                c_rb_cl1, c_rb_cl2 = st.columns(2)
+                with c_rb_cl1:
+                    if excel_rb_class_bytes is not None:
+                        st.download_button(
+                            label="📊 تصدير جدول تصنيف كمرات السقف (Excel .xlsx)",
+                            data=excel_rb_class_bytes,
+                            file_name=f"{prefix}Roof_Beams_Classification_{num_floors}Floors.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key=f"{prefix}btn_dl_rb_class_excel",
+                        )
+                    else:
+                        st.download_button(
+                            label="📊 تصدير جدول تصنيف كمرات السقف (Excel .xlsx)",
+                            data=b"",
+                            disabled=True,
+                            help="يلزم تثبيت مكتبة openpyxl لتصدير Excel",
+                            use_container_width=True,
+                            key=f"{prefix}btn_dl_rb_class_excel_dis",
+                        )
+                with c_rb_cl2:
+                    st.download_button(
+                        label="📥 تصدير جدول تصنيف كمرات السقف (CSV)",
+                        data=csv_rb_class_data,
+                        file_name=f"{prefix}Roof_Beams_Classification_{num_floors}Floors.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        key=f"{prefix}btn_dl_rb_class_csv",
+                    )
+
+            # ── TAB 2: MASTER ROOF BEAMS SCHEDULE (B1, B2, B3, CB1) & INTERACTIVE OVERRIDES ──
+            with tab_rb_models:
+                st.markdown("##### 🏛️ جدول نماذج كمرات السقف التنفيذي (Master Roof Beams Schedule — Governing Envelopes)")
+                st.caption("تم تجميع كمرات السقف تلقائياً في 3 نماذج تنفيذية (B1 للقطاع الثقيل، B2 للمتوسط، B3 للخفيف) بالإضافة للكوابيل (CB1) بتطبيق قاعدة الظرف الحاكم.")
+                df_rb_models_export = pd.DataFrame(rb_analysis["models_schedule"])
+                render_styled_table(df_rb_models_export)
+
+                st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
+                with st.container(border=True):
+                    st.markdown("<div style='font-size:15.5px; font-weight:800; color:#9333ea; margin-bottom:6px;'>🛠️ واجهة التعديل اليدوي التفاعلية لنماذج كمرات السقف (Interactive Overrides Table)</div>", unsafe_allow_html=True)
+                    st.caption("يمكنك تعديل العمق أو عدد الأسياخ أو الكانات لكل نموذج مباشرة. تنعكس التعديلات فوراً على المخطط واللوحات وحصر الكميات.")
+
+                    cur_rb_ov = dict(S.cfg_val("rb_overrides") or st.session_state.get(f"{prefix}rb_overrides", {}))
+                    rb_ov_cols = st.columns(len(rb_analysis["models_dict"])) if rb_analysis["models_dict"] else [st.container()]
+                    rb_ov_changed = False
+
+                    for idx_m, (m_mark, m_data) in enumerate(rb_analysis["models_dict"].items()):
+                        with rb_ov_cols[idx_m]:
+                            st.markdown(f"**📌 نموذج {m_mark} ({m_data['count']} كمرات):**")
+                            new_t = st.number_input(
+                                f"عمق {m_mark} الكلي t (cm):",
+                                min_value=20.0, max_value=150.0,
+                                value=float(m_data["t_cm"]), step=5.0,
+                                key=f"{prefix}ov_rb_t_{m_mark}",
+                            )
+                            if new_t != m_data["t_cm"]:
+                                cur_rb_ov[f"{m_mark}_t"] = new_t
+                                cur_rb_ov.pop(f"{m_mark}_nbot", None)
+                                cur_rb_ov.pop(f"{m_mark}_ntop", None)
+                                cur_rb_ov.pop(f"{m_mark}_stirrups", None)
+                                rb_ov_changed = True
+
+                            is_c = m_data.get("is_cantilever", False)
+                            if is_c:
+                                new_ntop = st.number_input(
+                                    f"تسليح علوي رئيسي (شوك) {m_mark}:",
+                                    min_value=2, max_value=16,
+                                    value=int(m_data["n_top"]), step=1,
+                                    key=f"{prefix}ov_rb_ntop_{m_mark}",
+                                )
+                                if new_ntop != m_data["n_top"]:
+                                    cur_rb_ov[f"{m_mark}_ntop"] = new_ntop
+                                    rb_ov_changed = True
+
+                                new_nbot = st.number_input(
+                                    f"تسليح سفلي ثانوي {m_mark}:",
+                                    min_value=2, max_value=12,
+                                    value=int(m_data["n_bot"]), step=1,
+                                    key=f"{prefix}ov_rb_nbot_{m_mark}",
+                                )
+                                if new_nbot != m_data["n_bot"]:
+                                    cur_rb_ov[f"{m_mark}_nbot"] = new_nbot
+                                    rb_ov_changed = True
+                            else:
+                                new_nbot = st.number_input(
+                                    f"تسليح سفلي رئيسي {m_mark}:",
+                                    min_value=2, max_value=16,
+                                    value=int(m_data["n_bot"]), step=1,
+                                    key=f"{prefix}ov_rb_nbot_{m_mark}",
+                                )
+                                if new_nbot != m_data["n_bot"]:
+                                    cur_rb_ov[f"{m_mark}_nbot"] = new_nbot
+                                    rb_ov_changed = True
+
+                                new_ntop = st.number_input(
+                                    f"تسليح علوي تعليق {m_mark}:",
+                                    min_value=2, max_value=12,
+                                    value=int(m_data["n_top"]), step=1,
+                                    key=f"{prefix}ov_rb_ntop_{m_mark}",
+                                )
+                                if new_ntop != m_data["n_top"]:
+                                    cur_rb_ov[f"{m_mark}_ntop"] = new_ntop
+                                    rb_ov_changed = True
+
+                            new_st = st.number_input(
+                                f"الكانات {m_mark} (كانة/م'):",
+                                min_value=5, max_value=12,
+                                value=int(m_data["stirrups_per_m"]), step=1,
+                                key=f"{prefix}ov_rb_st_{m_mark}",
+                            )
+                            if new_st != m_data["stirrups_per_m"]:
+                                cur_rb_ov[f"{m_mark}_stirrups"] = new_st
+                                rb_ov_changed = True
+
+                    if rb_ov_changed:
+                        S.cfg_set("rb_overrides", cur_rb_ov)
+                        st.session_state[f"{prefix}rb_overrides"] = cur_rb_ov
+                        st.rerun()
+
+                    if cur_rb_ov:
+                        if st.button("🔄 إعادة ضبط نماذج كمرات السقف إلى القيم المحسوبة", key=f"{prefix}btn_reset_all_rb_ov", use_container_width=True):
+                            S.cfg_set("rb_overrides", {})
+                            st.session_state[f"{prefix}rb_overrides"] = {}
+                            for k in list(st.session_state.keys()):
+                                if k.startswith(f"{prefix}ov_rb_") or k.startswith(f"{prefix}inp_rb_depth_"):
+                                    del st.session_state[k]
+                            st.rerun()
+
+                csv_rb_models_data = df_rb_models_export.to_csv(index=False).encode('utf-8-sig')
+                excel_rb_models_bytes = safe_to_excel_bytes(df_rb_models_export, sheet_name='Roof_Beams_Schedule')
+
+                c_rb_m1, c_rb_m2 = st.columns(2)
+                with c_rb_m1:
+                    if excel_rb_models_bytes is not None:
+                        st.download_button(
+                            label="📊 تصدير جدول نماذج كمرات السقف (Excel .xlsx)",
+                            data=excel_rb_models_bytes,
+                            file_name=f"{prefix}Master_Roof_Beams_Schedule_{num_floors}Floors.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key=f"{prefix}btn_dl_rb_models_excel",
+                        )
+                    else:
+                        st.download_button(
+                            label="📊 تصدير جدول نماذج كمرات السقف (Excel .xlsx)",
+                            data=b"",
+                            disabled=True,
+                            help="يلزم تثبيت مكتبة openpyxl لتصدير Excel",
+                            use_container_width=True,
+                            key=f"{prefix}btn_dl_rb_models_excel_dis",
+                        )
+                with c_rb_m2:
+                    st.download_button(
+                        label="📥 تصدير جدول نماذج كمرات السقف (CSV)",
+                        data=csv_rb_models_data,
+                        file_name=f"{prefix}Master_Roof_Beams_Schedule_{num_floors}Floors.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        key=f"{prefix}btn_dl_rb_models_csv",
+                    )
+
+            # ── TAB 3: DETAILED BEAMS SCHEDULE ──
+            with tab_rb_details:
+                st.markdown("##### 🔩 جدول تفريد وحصر وتفاصيل جميع كمرات السقف الإنشائية (Detailed Roof Beams Schedule)")
+                st.caption("تفصيل دقيق لكل كمرة سقف بالمبنى مع البحور الصافية، والعزوم، وقوى القص، والتسليح النهائي، وحالة التحقق.")
+                df_rb_det_export = pd.DataFrame(rb_analysis["detailed_schedule_rows"])
+                render_styled_table(df_rb_det_export)
+
+                csv_rb_det_data = df_rb_det_export.to_csv(index=False).encode('utf-8-sig')
+                excel_rb_det_bytes = safe_to_excel_bytes(df_rb_det_export, sheet_name='Detailed_Roof_Beams')
+
+                c_rb_dt1, c_rb_dt2 = st.columns(2)
+                with c_rb_dt1:
+                    if excel_rb_det_bytes is not None:
+                        st.download_button(
+                            label="📊 تصدير جدول تفريد كمرات السقف التفصيلي (Excel .xlsx)",
+                            data=excel_rb_det_bytes,
+                            file_name=f"{prefix}Detailed_Roof_Beams_Schedule_{num_floors}Floors.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key=f"{prefix}btn_dl_rb_det_excel",
+                        )
+                    else:
+                        st.download_button(
+                            label="📊 تصدير جدول تفريد كمرات السقف التفصيلي (Excel .xlsx)",
+                            data=b"",
+                            disabled=True,
+                            help="يلزم تثبيت مكتبة openpyxl لتصدير Excel",
+                            use_container_width=True,
+                            key=f"{prefix}btn_dl_rb_det_excel_dis",
+                        )
+                with c_rb_dt2:
+                    st.download_button(
+                        label="📥 تصدير جدول تفريد كمرات السقف التفصيلي (CSV)",
+                        data=csv_rb_det_data,
+                        file_name=f"{prefix}Detailed_Roof_Beams_Schedule_{num_floors}Floors.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                        key=f"{prefix}btn_dl_rb_det_csv",
+                    )
+
+            # ── TAB 4: ROOF BEAMS PLAN SKETCH ──
+            with tab_rb_sketch:
+                st.markdown("##### 🗺️ المسقط الأفقي وتوزيع نماذج كمرات السقف والكوابيل (Roof Beams Plan Sketch)")
+                st.caption("مخطط هندسي متكامل يوضح توقيع كافة كمرات السقف والكوابيل ونماذجها التنفيذية (B1, B2, B3, CB1) بأبعادها وتسليحها.")
+                fig_rb_sketch = draw_roof_beams_layout_sketch(
+                    fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols,
+                    rb_analysis,
+                    slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
+                )
+                buf_rb_sketch = io.BytesIO()
+                fig_rb_sketch.savefig(buf_rb_sketch, format="png", bbox_inches="tight", dpi=160)
+                buf_rb_sketch.seek(0)
+                st.pyplot(fig_rb_sketch, clear_figure=True, use_container_width=True)
+                st.download_button(
+                    label="📥 تحميل المسقط الأفقي لكمرات السقف (High-Res PNG)",
+                    data=buf_rb_sketch.getvalue(),
+                    file_name=f"{prefix}Roof_Beams_Plan_Sketch_{num_floors}Floors.png",
+                    mime="image/png",
+                    use_container_width=True,
+                    key=f"{prefix}btn_dl_rb_sketch_png",
+                )
 
         # ── 🗺️ FOUNDATION LAYOUT SKETCH SECTION (ECP 203) ──────────────────────────────
         with st.expander(f"🗺️ Foundation Layout Sketch — {num_floors} Floors (المسقط الأفقي وتوزيع كافة القواعد والشدادات والسملات)", expanded=False):
@@ -20881,9 +21524,10 @@ def render(is_standalone: bool = False):
                 }
 
         cols_dia_map = {}
-        if 'des_map' in locals() and des_map:
-            for m_key, des_item in des_map.items():
-                cnt = cnt_int if m_key == "C_int" else (cnt_edge if m_key == "C_edge" else cnt_corner)
+        if 'col_designs' in locals() and col_designs:
+            for des_item in col_designs:
+                _rtype = des_item.get("raw_type", "Interior")
+                cnt = cnt_int if _rtype == "Interior" else (cnt_edge if _rtype == "Edge" else cnt_corner)
                 if cnt > 0:
                     phi_m = des_item["Phi"]
                     phi_st = des_item["Phi_st"]
@@ -21456,10 +22100,23 @@ def render(is_standalone: bool = False):
             generate_flat_slab_outputs_report_html,
             html_to_pdf_bytes,
         )
+        from modules.concise_report_generator import (
+            generate_concise_design_report_html,
+            draw_page1_silent_inputs,
+            draw_page2_columns_plan,
+            draw_page3_footings_plan,
+            draw_page4_ground_beams_plan,
+            draw_page5_roof_beams_plan,
+            draw_page6_slab_bottom_rebar,
+            draw_page7_slab_top_rebar,
+            draw_page8_column_caps,
+            fig_to_b64,
+        )
         import streamlit.components.v1 as components
 
         rep_fn_tag = "ECP203_Standalone_Flat_Slab" if is_standalone else "ECP203_Integrated_Structural_Design"
         pdf_outputs_filename = f"{prefix}{rep_fn_tag}_Design_Outputs_ts{ts:.0f}cm_{num_floors}Floors.pdf"
+        pdf_concise_filename = f"{prefix}{rep_fn_tag}_Concise_Design_Outputs_{num_floors}Floors.pdf"
         pdf_full_filename = f"{prefix}{rep_fn_tag}_Full_Inputs_Outputs_ts{ts:.0f}cm_{num_floors}Floors.pdf"
         html_filename = f"{prefix}{rep_fn_tag}_Calculation_Sheet_ts{ts:.0f}cm_{num_floors}Floors.html"
 
@@ -21629,6 +22286,7 @@ def render(is_standalone: bool = False):
                 punching_results=punching_results, all_punching_safe=all_safe,
                 deflection_results=deflection_results, all_deflection_safe=all_deflection_safe,
                 img_verif_b64=_img_verif,
+                gb_analysis=gb_analysis_obj if 'gb_analysis_obj' in locals() else st.session_state.get('fs_gb_analysis'),
             )
 
         def _build_flat_slab_full_html():
@@ -21933,10 +22591,127 @@ def render(is_standalone: bool = False):
                 img_master_steel_b64=_img_master_steel,
                 img_reactions_b64=_img_reac,
                 img_rebar_bbs_b64=_img_bbs,
+                gb_analysis=gb_analysis_obj if 'gb_analysis_obj' in locals() else st.session_state.get('fs_gb_analysis'),
             )
 
-        # 3 Dedicated Red Export Buttons
-        exp_c1, exp_c2, exp_c3 = st.columns([1.5, 1.7, 1.3], gap="medium")
+        def _build_flat_slab_concise_html():
+            _act_cols = fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols
+            _ftg_obj = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis", {})
+            _gb_obj = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis", {})
+            _rb_obj = rb_analysis if ('rb_analysis' in locals() and rb_analysis) else st.session_state.get("fs_rb_analysis", {})
+            _dr_beams = _cur_beams_list if '_cur_beams_list' in locals() else []
+            _vboxes = _void_boxes_sk if '_void_boxes_sk' in locals() else None
+
+            # Fallback if gb or rb not yet populated
+            if not _gb_obj:
+                try:
+                    from modules.ground_beam_layout import extract_structural_links_and_beams
+                    _gb_obj = extract_structural_links_and_beams(_act_cols, _ftg_obj)
+                except Exception:
+                    _gb_obj = {}
+
+            if not _rb_obj:
+                try:
+                    from modules.roof_beam_layout import extract_roof_beams_and_models
+                    _rb_obj = extract_roof_beams_and_models(_act_cols, drop_beams=_dr_beams, cantilevers=cantilevers)
+                except Exception:
+                    _rb_obj = {}
+
+            # Page 1: Silent Inputs Plan
+            f1 = draw_page1_silent_inputs(Lx_calc, Ly_calc, cantilevers, _act_cols, drop_beams=_dr_beams, void_boxes=_vboxes)
+            b1 = fig_to_b64(f1)
+
+            # Page 2: Columns Plan & Table
+            f2 = draw_page2_columns_plan(_act_cols, Lx_calc, Ly_calc, cantilevers)
+            b2 = fig_to_b64(f2)
+
+            cnt_int = sum(1 for c in _act_cols if str(c.get("type", "")).lower() == "interior")
+            cnt_edge = sum(1 for c in _act_cols if "edge" in str(c.get("type", "")).lower())
+            cnt_corner = sum(1 for c in _act_cols if "corner" in str(c.get("type", "")).lower())
+
+            cols_tbl = []
+            if 'col_designs' in locals() and col_designs:
+                for des in col_designs:
+                    _rtype = des.get("raw_type", "Interior")
+                    c_cnt = cnt_int if _rtype == "Interior" else (cnt_edge if _rtype == "Edge" else cnt_corner)
+                    cols_tbl.append({
+                        "نموذج العمود": des.get("model_label", des.get("model_mark", "C1")),
+                        "موقع وتصنيف العمود": des.get("loc_type", "داخلي"),
+                        "أبعاد القطاع b × t": f"{des['b']:.0f} × {des['t']:.0f} cm",
+                        "التسليح الرأسي الطولي": f"{des.get('main_steel_str', '8Ø16')} (μ={des.get('mu_provided', 1.0):.2f}%)",
+                        "تسليح الكانات": des.get("stirrups_str", "5Ø8/m"),
+                        "أقصى حمل تصميمي Pu": f"{des.get('pu_tot', 0.0):.1f} ton",
+                        "عدد الأعمدة بالمبنى": f"{c_cnt} عمود",
+                    })
+            if not cols_tbl:
+                # Dynamic fallback
+                fallback_groups = []
+                if cnt_int > 0: fallback_groups.append(("C1 (أعمدة داخلية)", "داخلي", cnt_int))
+                if cnt_edge > 0: fallback_groups.append((f"C{len(fallback_groups)+1} (أعمدة طرفية)", "طرفي", cnt_edge))
+                if cnt_corner > 0: fallback_groups.append((f"C{len(fallback_groups)+1} (أعمدة ركن)", "ركن", cnt_corner))
+                cols_tbl = [
+                    {"نموذج العمود": fg[0], "موقع وتصنيف العمود": fg[1], "أبعاد القطاع b × t": f"{bc_s:.0f} × {tc_s:.0f} cm", "التسليح الرأسي الطولي": "8Ø16", "تسليح الكانات": "5Ø8/m", "أقصى حمل تصميمي Pu": "—", "عدد الأعمدة بالمبنى": f"{fg[2]} عمود"}
+                    for fg in fallback_groups
+                ]
+
+            # Page 3: Footings Plan & Table
+            f3 = draw_page3_footings_plan(_act_cols, _ftg_obj, Lx_calc, Ly_calc, cantilevers)
+            b3 = fig_to_b64(f3)
+            # Exclude summary totals row from concise PDF table
+            ftgs_tbl = [r for r in _ftg_obj.get("unified_rows", []) if not str(r.get("نموذج القاعدة (Model)", "")).startswith("📌")] if _ftg_obj else []
+
+            # Page 4: Ground Beams Plan & Table
+            f4 = draw_page4_ground_beams_plan(_gb_obj, _act_cols, Lx_calc, Ly_calc, cantilevers)
+            b4 = fig_to_b64(f4)
+            gb_tbl = _gb_obj.get("models_schedule", []) if _gb_obj else []
+
+            # Page 5: Roof Beams Plan & Table
+            f5 = draw_page5_roof_beams_plan(_rb_obj, _act_cols, Lx_calc, Ly_calc, cantilevers)
+            b5 = fig_to_b64(f5)
+            rb_tbl = _rb_obj.get("models_schedule", []) if _rb_obj else []
+
+            # Page 6: Slab Bottom Rebar Plan
+            f6 = draw_page6_slab_bottom_rebar(Lx_calc, Ly_calc, cantilevers, btm_extra_spans if 'btm_extra_spans' in locals() else None, n_mesh_btm if 'n_mesh_btm' in locals() else 5.0, bottom_mesh_dia if 'bottom_mesh_dia' in locals() else 10, _act_cols, void_boxes=_vboxes)
+            b6 = fig_to_b64(f6)
+
+            # Page 7: Slab Top Rebar Plan
+            f7 = draw_page7_slab_top_rebar(Lx_calc, Ly_calc, cantilevers, cant_rft_list if 'cant_rft_list' in locals() else None, n_mesh_top if 'n_mesh_top' in locals() else 5.0, top_mesh_dia if 'top_mesh_dia' in locals() else 10, _act_cols, void_boxes=_vboxes)
+            b7 = fig_to_b64(f7)
+
+            # Page 8: Column Caps Plan
+            f8 = draw_page8_column_caps(Lx_calc, Ly_calc, cantilevers, ts, top_extra_cols if 'top_extra_cols' in locals() else [], _act_cols, void_boxes=_vboxes)
+            b8 = fig_to_b64(f8)
+
+            proj_title = "Standalone Flat Slab Reinforced Concrete Design (ECP 203)" if is_standalone else "Integrated Structural Design (ECP 203)"
+            return generate_concise_design_report_html(
+                project_name=proj_title,
+                num_floors=num_floors,
+                ts=ts,
+                Fcu=float(Fcu) if 'Fcu' in locals() and Fcu else 250.0,
+                Fy=float(Fy) if 'Fy' in locals() and Fy else 4000.0,
+                Wu=float(Wu) if 'Wu' in locals() and Wu else 1.45,
+                SDL=float(SDL) if 'SDL' in locals() and SDL else 0.15,
+                wall_load=float(wall_load) if 'wall_load' in locals() and wall_load else 0.45,
+                LL=float(LL) if 'LL' in locals() and LL else 0.25,
+                img_page1_b64=b1,
+                img_page2_b64=b2,
+                img_page3_b64=b3,
+                img_page4_b64=b4,
+                img_page5_b64=b5,
+                img_page6_b64=b6,
+                img_page7_b64=b7,
+                img_page8_b64=b8,
+                cols_table_data=cols_tbl,
+                ftgs_table_data=ftgs_tbl,
+                gb_table_data=gb_tbl,
+                rb_table_data=rb_tbl,
+                mesh_btm_str=mesh_btm_str if 'mesh_btm_str' in locals() else f"{n_mesh_btm:.0f}Ø{bottom_mesh_dia}/m'",
+                mesh_top_str=mesh_top_str if 'mesh_top_str' in locals() else f"{n_mesh_top:.0f}Ø{top_mesh_dia}/m'",
+                slab_area_val=slab_area_val if 'slab_area_val' in locals() else sum(Lx_calc)*sum(Ly_calc),
+            )
+
+        # 4 Dedicated Red Export Buttons
+        exp_c1, exp_c2, exp_c3, exp_c4 = st.columns([1.3, 1.5, 1.4, 1.1], gap="medium")
 
         with exp_c1:
             # Button 1: تصدير مخرجات التصميم في ملف PDF
@@ -21996,7 +22771,63 @@ def render(is_standalone: bool = False):
                 )
 
         with exp_c2:
-            # Button 2: تصدير جميع المدخلات والمخرجات في ملف PDF
+            # Button 2: تصدير مخرجات التصميم المختصرة في ملف PDF (8 صفحات)
+            if st.button("📑 تصدير مخرجات التصميم المختصرة", key=f"{prefix}btn_export_concise_pdf", use_container_width=True):
+                with st.spinner("جاري توليد مخرجات التصميم المختصرة (8 صفحات هندسية معتمدة) وتحويلها إلى PDF..."):
+                    _concise_html = _build_flat_slab_concise_html()
+                    pdf_concise_bytes = html_to_pdf_bytes(_concise_html, timeout_sec=60)
+                if pdf_concise_bytes:
+                    st.session_state[f"{prefix}_last_concise_pdf_bytes"] = pdf_concise_bytes
+                    st.toast("✅ تم تصدير مخرجات التصميم المختصرة (8 صفحات) PDF بنجاح!", icon="📑")
+                    b64_pdf_concise = base64.b64encode(pdf_concise_bytes).decode("utf-8")
+                    js_dl_concise = f"""
+                    <script>
+                    (function() {{
+                        try {{
+                            var b64Data = "{b64_pdf_concise}";
+                            var byteChars = atob(b64Data);
+                            var byteNums = new Array(byteChars.length);
+                            for (var i = 0; i < byteChars.length; i++) {{ byteNums[i] = byteChars.charCodeAt(i); }}
+                            var byteArray = new Uint8Array(byteNums);
+                            var blob = new Blob([byteArray], {{type: "application/pdf"}});
+                            var blobUrl = URL.createObjectURL(blob);
+                            var targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+                            var a = targetDoc.createElement("a");
+                            a.href = blobUrl;
+                            a.download = "{pdf_concise_filename}";
+                            a.target = "_blank";
+                            targetDoc.body.appendChild(a);
+                            a.click();
+                            setTimeout(function() {{
+                                try {{ targetDoc.body.removeChild(a); }} catch(e) {{}}
+                                URL.revokeObjectURL(blobUrl);
+                            }}, 4000);
+                        }} catch(err) {{
+                            var aFallback = document.createElement("a");
+                            aFallback.href = "data:application/pdf;base64,{b64_pdf_concise}";
+                            aFallback.download = "{pdf_concise_filename}";
+                            document.body.appendChild(aFallback);
+                            aFallback.click();
+                        }}
+                    }})();
+                    </script>
+                    """
+                    components.html(js_dl_concise, height=0, width=0)
+                else:
+                    st.error("تعذر إنشاء ملف الـ PDF عبر المحرك التلقائي، يرجى المحاولة مرة أخرى.")
+
+            if st.session_state.get(f"{prefix}_last_concise_pdf_bytes"):
+                st.download_button(
+                    label=f"📥 حفظ وتحميل ملف المخرجات المختصرة ({pdf_concise_filename})",
+                    data=st.session_state[f"{prefix}_last_concise_pdf_bytes"],
+                    file_name=pdf_concise_filename,
+                    mime="application/pdf",
+                    key=f"{prefix}btn_instant_concise_pdf_exp",
+                    use_container_width=True,
+                )
+
+        with exp_c3:
+            # Button 3: تصدير جميع المدخلات والمخرجات في ملف PDF
             if st.button("📑 تصدير جميع المدخلات والمخرجات ملف PDF", key=f"{prefix}btn_export_full_pdf", use_container_width=True):
                 with st.spinner("جاري توليد التقرير الاستشاري الكامل بجميع الرسومات والمخرجات وتحويله إلى PDF..."):
                     _full_html = _build_flat_slab_full_html()
@@ -22052,8 +22883,8 @@ def render(is_standalone: bool = False):
                     use_container_width=True,
                 )
 
-        with exp_c3:
-            # Button 3: حفظ التقرير بصيغة HTML
+        with exp_c4:
+            # Button 4: حفظ التقرير بصيغة HTML
             _cached_html = st.session_state.get(f"{prefix}_cached_report_html")
             if not _cached_html:
                 _cached_html = _build_flat_slab_full_html()
@@ -22076,6 +22907,16 @@ def render(is_standalone: bool = False):
                 file_name=pdf_outputs_filename,
                 mime="application/pdf",
                 key=f"{prefix}btn_fallback_outputs_pdf",
+                use_container_width=True,
+            )
+
+        if st.session_state.get(f"{prefix}_last_concise_pdf_bytes"):
+            st.download_button(
+                label=f"📥 اضغط هنا إذا لم يبدأ تحميل ملف مخرجات التصميم المختصرة ({pdf_concise_filename})",
+                data=st.session_state[f"{prefix}_last_concise_pdf_bytes"],
+                file_name=pdf_concise_filename,
+                mime="application/pdf",
+                key=f"{prefix}btn_fallback_concise_pdf",
                 use_container_width=True,
             )
 

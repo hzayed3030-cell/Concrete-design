@@ -327,7 +327,7 @@ def extract_structural_links_and_beams(
     # 5. Fallback tie search ensuring every column has >= 3 distinct directional restraints
 
     MAX_SPAN_GRID = 7.50
-    MAX_SPAN_DIAG = 8.50
+    # MAX_SPAN_DIAG removed per ECP 203 (no diagonal corner ties)
 
     connected_pairs = set()
     for sb in strap_beams:
@@ -461,82 +461,69 @@ def extract_structural_links_and_beams(
                     is_t_joint=True
                 )
 
-    # 2. Localized Corner Diagonals strictly for true building envelope corners
-    min_x_bldg = min(c["x"] for c in active_columns)
-    max_x_bldg = max(c["x"] for c in active_columns)
-    min_y_bldg = min(c["y"] for c in active_columns)
-    max_y_bldg = max(c["y"] for c in active_columns)
+    # 2. Strict ECP 203 Rule for Corner Isolated Footings & Orthogonal Ties:
+    # Under ECP 203 Section 6 & ECP 202, connecting isolated footings requires ties in
+    # the 2 principal orthogonal directions (X and Y).
+    # Corner footings naturally connect to their 2 adjacent edge columns via 2 orthogonal
+    # ground beams (1 along X, 1 along Y). This provides complete 2D translational restraint
+    # (Rx, Ry), transmits the 10% Pu axial tie action, and mitigates differential settlement.
+    # Therefore, exactly 2 orthogonal tie beams are completely sufficient per code.
+    # Strictly NO diagonal or inclined ground beams are permitted for corner footings.
 
-    for c in active_columns:
-        links = _get_col_links(c["id"])
-        if len(links) < 3:
-            is_corner_x = abs(c["x"] - min_x_bldg) <= 0.50 or abs(c["x"] - max_x_bldg) <= 0.50
-            is_corner_y = abs(c["y"] - min_y_bldg) <= 0.50 or abs(c["y"] - max_y_bldg) <= 0.50
-            if is_corner_x and is_corner_y:
-                inw_x = +1 if c["x"] < cen_x else -1
-                inw_y = +1 if c["y"] < cen_y else -1
-                best_diag = None
-                min_diag_dist = 999.0
-                for cand in active_columns:
-                    if cand["id"] == c["id"]:
-                        continue
-                    dx = (cand["x"] - c["x"]) * inw_x
-                    dy = (cand["y"] - c["y"]) * inw_y
-                    if 0.5 <= dx <= MAX_SPAN_GRID and 0.5 <= dy <= MAX_SPAN_GRID:
-                        d_diag = math.dist((c["x"], c["y"]), (cand["x"], cand["y"]))
-                        if d_diag <= MAX_SPAN_DIAG and d_diag < min_diag_dist:
-                            min_diag_dist = d_diag
-                            best_diag = cand
-                if best_diag:
-                    _add_tie_span(
-                        c, best_diag, "Diag-Tie",
-                        f"رابط ركن قطري ({c['id']} ↔ {best_diag['id']})",
-                        "Simply Supported (رابط ركن قطري)"
-                    )
+    def _is_col_fully_braced(cid):
+        links = _get_col_links(cid)
+        c = cols_map.get(cid)
+        if not c:
+            return True
+        has_x = any(d == "X" or abs(nb["y"] - c["y"]) <= 0.35 for (nb, d) in links)
+        has_y = any(d == "Y" or abs(nb["x"] - c["x"]) <= 0.35 for (nb, d) in links)
+        return has_x and has_y
 
-    # 3. Perimeter Gap Ties (for re-entrant corners or where corner columns were removed)
+    # 3. Perimeter Orthogonal Gap Ties (Strictly Collinear X or Y only, NO Diagonals)
+    # If any non-corner column still lacks bracing in X or Y, connect strictly along the collinear axis.
     for c in active_columns:
+        if _is_col_fully_braced(c["id"]):
+            continue
         links = _get_col_links(c["id"])
-        if len(links) < 3:
-            best_p = None
-            min_d = 999.0
+        has_x = any(d == "X" or abs(nb["y"] - c["y"]) <= 0.35 for (nb, d) in links)
+        has_y = any(d == "Y" or abs(nb["x"] - c["x"]) <= 0.35 for (nb, d) in links)
+
+        # Missing X tie: look for collinear candidate in X (same Y within 0.35m)
+        if not has_x:
+            best_cand_x = None
+            min_dx = 999.0
             for cand in active_columns:
                 if cand["id"] == c["id"]:
                     continue
-                d = math.dist((c["x"], c["y"]), (cand["x"], cand["y"]))
-                if 0.5 <= d <= MAX_SPAN_GRID:
-                    cand_links = _get_col_links(cand["id"])
-                    if len(cand_links) < 3 and d < min_d:
-                        min_d = d
-                        best_p = cand
-            if best_p and min_d <= 6.50:
+                if abs(cand["y"] - c["y"]) <= 0.35:
+                    dx = abs(cand["x"] - c["x"])
+                    if 0.5 <= dx <= MAX_SPAN_GRID and dx < min_dx:
+                        min_dx = dx
+                        best_cand_x = cand
+            if best_cand_x:
                 _add_tie_span(
-                    c, best_p, "Edge-Tie",
-                    f"سملة ربط محيطية ({c['id']} ↔ {best_p['id']})",
-                    "Simply Supported (سملة ربط محيطية)"
+                    c, best_cand_x, "X",
+                    f"سملة ربط متعامدة X ({c['id']} ↔ {best_cand_x['id']})",
+                    "Simply Supported (سملة ربط متعامدة X)"
                 )
 
-    # 4. General Safety Fallback for any remaining unbraced columns
-    for c in active_columns:
-        links = _get_col_links(c["id"])
-        if len(links) < 3:
-            best_c = None
-            min_d = 999.0
+        # Missing Y tie: look for collinear candidate in Y (same X within 0.35m)
+        if not has_y:
+            best_cand_y = None
+            min_dy = 999.0
             for cand in active_columns:
                 if cand["id"] == c["id"]:
                     continue
-                pair_k = tuple(sorted([c["id"], cand["id"]]))
-                if pair_k in connected_pairs:
-                    continue
-                d = math.dist((c["x"], c["y"]), (cand["x"], cand["y"]))
-                if 0.4 <= d <= MAX_SPAN_GRID and d < min_d:
-                    min_d = d
-                    best_c = cand
-            if best_c:
+                if abs(cand["x"] - c["x"]) <= 0.35:
+                    dy = abs(cand["y"] - c["y"])
+                    if 0.5 <= dy <= MAX_SPAN_GRID and dy < min_dy:
+                        min_dy = dy
+                        best_cand_y = cand
+            if best_cand_y:
                 _add_tie_span(
-                    c, best_c, "Tie",
-                    f"سملة ربط تكميلية ({c['id']} ↔ {best_c['id']})",
-                    "Simply Supported (سملة ربط تكميلية)"
+                    c, best_cand_y, "Y",
+                    f"سملة ربط متعامدة Y ({c['id']} ↔ {best_cand_y['id']})",
+                    "Simply Supported (سملة ربط متعامدة Y)"
                 )
 
 
@@ -710,6 +697,13 @@ def extract_structural_links_and_beams(
             "n_branches": n_branches,
             "demand_score": demand_score,
             "shear_status": shear_status,
+            "coeff_pos": coeff_pos,
+            "coeff_neg": coeff_neg,
+            "coeff_V": coeff_V,
+            "Mu_delta": Mu_delta,
+            "Qu_delta": Qu_delta,
+            "w_wall": w_wall,
+            "As_tie": As_tie,
         })
 
     # ── Step D: AUTOMATIC GROUPING INTO 3 TYPES (B1, B2, B3) ───────────────────
@@ -752,6 +746,73 @@ def extract_structural_links_and_beams(
 
         env_t = max(b["t_calc"] for b in grp_beams)
         env_t = float(math.ceil(env_t / 5.0) * 5.0)
+        ov_t = float(overrides.get(f"{mark}_t", env_t))
+
+        # Dynamic Recalculation of Section Forces & Reinforcement for all beams with depth ov_t
+        for b in grp_beams:
+            d_exec = max(10.0, ov_t - cover_cm)
+            w_ow = (b_unified / 100.0) * (ov_t / 100.0) * 2.50
+            w_DL = w_ow + b.get("w_wall", 0.0)
+            w_u_grav = 1.4 * w_DL
+            L_des = b["L_des"]
+            Mu_pos = b.get("coeff_pos", 0.125) * w_u_grav * (L_des ** 2) + b.get("Mu_delta", 0.0)
+            Mu_neg = b.get("coeff_neg", 0.0833) * w_u_grav * (L_des ** 2) + b.get("Mu_delta", 0.0)
+            Qu = b.get("coeff_V", 0.5) * w_u_grav * L_des + b.get("Qu_delta", 0.0)
+
+            denom = math.sqrt((Mu_pos * 100000.0) / (max(1.0, fcu) * b_unified)) if Mu_pos > 0 else 1.0
+            C1 = d_exec / denom if denom > 0 else 5.0
+            if C1 >= 4.85:
+                J = 0.826
+            elif C1 < 2.78:
+                J = 0.670
+            else:
+                term = max(0.0, 1.0 - (2.0 * Mu_pos * 100000.0) / (0.85 * fcu * b_unified * (d_exec ** 2)))
+                cd_ratio = (1.0 - math.sqrt(term)) / 0.80
+                J = min(0.826, max(0.67, 1.0 - 0.40 * cd_ratio))
+
+            As_bot_flex = (Mu_pos * 100000.0) / (fy * J * d_exec) if (fy * J * d_exec) > 0 else 0.0
+            As_min = max(0.0015 * b_unified * d_exec, (1.1 / fy) * b_unified * d_exec)
+            As_bot_req = max(As_bot_flex + b.get("As_tie", 0.0) / 2.0, As_min)
+
+            As_top_flex = (Mu_neg * 100000.0) / (fy * 0.826 * d_exec) if (fy * 0.826 * d_exec) > 0 else 0.0
+            As_top_min = max(0.20 * As_bot_req, 0.0015 * b_unified * d_exec)
+            As_top_req = max(As_top_flex + b.get("As_tie", 0.0) / 2.0, As_top_min)
+
+            qu = (Qu * 1000.0) / (b_unified * d_exec) if (b_unified * d_exec) > 0 else 0.0
+            qcu = 0.75 * math.sqrt(fcu / 1.5)
+            qu_max = 2.20 * math.sqrt(fcu / 1.5)
+            n_branches = 4 if b_unified >= 40.0 else 2
+            area_1st = math.pi * ((phi_st / 10.0) ** 2) / 4.0
+            fy_st = 2400.0 if phi_st <= 8 else 4000.0
+
+            if qu > qu_max:
+                shear_status = "⚠️ غير آمن قصاً (يلزم زيادة القطاع)"
+                st_req_per_m = stirrups_per_m
+            elif qu > qcu:
+                qsu = qu - (qcu / 2.0)
+                As_st_req = (qsu * b_unified * 100.0) / (fy_st / 1.15) if fy_st > 0 else 0.0
+                st_req_per_m = max(stirrups_per_m, int(math.ceil(As_st_req / (n_branches * area_1st))))
+                shear_status = "✅ آمن بالكانات"
+            else:
+                st_req_per_m = stirrups_per_m
+                shear_status = "✅ آمن خرسانة فقط"
+
+            area_1bot = math.pi * ((phi_bot / 10.0) ** 2) / 4.0
+            n_bot_des = max(2, int(math.ceil(As_bot_req / max(0.01, area_1bot))))
+            area_1top = math.pi * ((phi_top / 10.0) ** 2) / 4.0
+            n_top_des = max(2, int(math.ceil(As_top_req / max(0.01, area_1top))))
+
+            b["Mu_pos"] = Mu_pos
+            b["Mu_neg"] = Mu_neg
+            b["Qu"] = Qu
+            b["As_bot_req"] = As_bot_req
+            b["As_top_req"] = As_top_req
+            b["n_bot"] = n_bot_des
+            b["n_top"] = n_top_des
+            b["stirrups_per_m"] = st_req_per_m
+            b["shear_status"] = shear_status
+
+        # Governing Envelope based on execution depth ov_t
         env_As_bot = max(b["As_bot_req"] for b in grp_beams)
         env_As_top = max(b["As_top_req"] for b in grp_beams)
         env_st_m = max(b["stirrups_per_m"] for b in grp_beams)
@@ -762,8 +823,7 @@ def extract_structural_links_and_beams(
         area_1top = math.pi * ((phi_top / 10.0) ** 2) / 4.0
         env_ntop = max(2, int(math.ceil(env_As_top / max(0.01, area_1top))))
 
-        # Apply User Interactive Overrides if provided
-        ov_t = float(overrides.get(f"{mark}_t", env_t))
+        # Apply User Interactive Overrides if provided (or default to dynamically recalculated env_nbot, env_ntop, env_st_m)
         ov_nbot = int(overrides.get(f"{mark}_nbot", env_nbot))
         ov_ntop = int(overrides.get(f"{mark}_ntop", env_ntop))
         ov_st = int(overrides.get(f"{mark}_stirrups", env_st_m))
@@ -801,7 +861,7 @@ def extract_structural_links_and_beams(
             "dimensions_str": f"{int(b_unified)} × {int(ov_t)}",
         }
 
-    # Assign Model Tag to Each Ground Beam
+    # Assign Model Tag & Final Exec Values to Each Ground Beam
     for b in analyzed_ground_beams:
         b["model_mark"] = group_assignments.get(b["elem_id"], "B1")
         b["tag"] = b["model_mark"]
@@ -810,7 +870,7 @@ def extract_structural_links_and_beams(
         b["exec_n_bot"] = m_info.get("n_bot", b["n_bot"])
         b["exec_n_top"] = m_info.get("n_top", b["n_top"])
         b["exec_stirrups_per_m"] = m_info.get("stirrups_per_m", b["stirrups_per_m"])
-        b["exec_side_bars"] = m_info.get("total_side_bars", b["total_side_bars"])
+        b["exec_side_bars"] = m_info.get("total_side_bars", 0)
 
     # ── Step E: Master Ground Beams Schedule Table ─────────────────────────────
     models_schedule = []
@@ -848,6 +908,10 @@ def extract_structural_links_and_beams(
 
     # 2. Ground Beams
     for gb in analyzed_ground_beams:
+        rft_str = f"سفلي: {gb['exec_n_bot']}Ø{gb['phi_bot']} | علوي: {gb['exec_n_top']}Ø{gb['phi_top']} | كانات: {gb['exec_stirrups_per_m']}Ø{gb['phi_st']}/m"
+        if gb.get("exec_side_bars", 0) > 0:
+            rft_str += f" | براندات: {gb['exec_side_bars']}Ø{gb['phi_side']}"
+
         classification_rows.append({
             "Element ID": gb["elem_id"],
             "Tag / Mark": gb["tag"],
@@ -858,7 +922,7 @@ def extract_structural_links_and_beams(
             "Cross-Section (b × t)": f"{int(gb['b_cm'])} × {int(gb['exec_t_cm'])}",
             "Structural Behavior / Notes": f"{gb['supp_cond']} | ربط محوري P_tie={gb['Pu_tie']:.1f}t (10% Pu)",
             "Design Capacity / Forces": f"Mu = {gb['Mu_pos']:.2f} t.m | Qu = {gb['Qu']:.2f} t",
-            "Reinforcement Summary": f"سفلي: {gb['exec_n_bot']}Ø{gb['phi_bot']} | علوي: {gb['exec_n_top']}Ø{gb['phi_top']} | كانات: {gb['exec_stirrups_per_m']}Ø{gb['phi_st']}/m",
+            "Reinforcement Summary": rft_str,
         })
 
     # ── Step G: Ground Beams Detailed Bar Bending Schedule ─────────────────────

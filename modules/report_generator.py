@@ -618,6 +618,7 @@ def generate_flat_slab_report_html(
     img_btm_rft_b64: Optional[str] = None,
     img_reactions_b64: Optional[str] = None,
     img_rebar_bbs_b64: Optional[str] = None,
+    gb_analysis: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Generates a complete, standalone, print-ready HTML engineering calculation sheet
@@ -1065,6 +1066,74 @@ def generate_flat_slab_report_html(
     {models_table_html}
     """ if col_reactions_data and len(col_reactions_data) > 0 else ""
 
+    # Ground Beams Section (ECP 203)
+    gb_section_html = ""
+    if gb_analysis:
+        gb_models_rows = ""
+        for m_mark in ["B1", "B2", "B3"]:
+            if m_mark in gb_analysis.get("models_dict", {}):
+                m_info = gb_analysis["models_dict"][m_mark]
+                m_lbl = m_info.get("label", "").split("—")[-1].strip(" )") if "—" in m_info.get("label", "") else m_info.get("label", "")
+                gb_models_rows += f"""
+                <tr>
+                    <td><b>{m_info.get('mark', m_mark)}</b></td>
+                    <td>{m_lbl}</td>
+                    <td><b>{m_info.get('dimensions_str', '')}</b></td>
+                    <td>{m_info.get('t_env_calc', 0.0):.0f} cm</td>
+                    <td style="color:#1e40af; font-weight:bold;">{m_info.get('t_cm', 0.0):.0f} cm</td>
+                    <td>{m_info.get('rft_bot_str', '')}</td>
+                    <td>{m_info.get('rft_top_str', '')}</td>
+                    <td>{m_info.get('rft_side_str', '—')}</td>
+                    <td>{m_info.get('stirrups_str', '')}</td>
+                    <td>{m_info.get('count', 0)} سملة</td>
+                    <td>{m_info.get('total_len_m', 0.0):.2f} m</td>
+                </tr>
+                """
+        gboq = gb_analysis.get("boq", {})
+        gb_section_html = f"""
+        <div class="section-title page-break">🧱 6. منظومة وتصميم الميدات والسملات الأرضية (Ground Beams & Tie Beams — ECP 203)</div>
+        <div class="info-grid">
+            <div class="info-card">
+                <div class="card-lbl">إجمالي عناصر الربط والسملات</div>
+                <div class="card-val">{len(gb_analysis.get('ground_beams', []))} سملة + {len(gb_analysis.get('strap_beams', []))} شداد</div>
+            </div>
+            <div class="info-card">
+                <div class="card-lbl">حجم خرسانة السملات المسلحة (R.C.)</div>
+                <div class="card-val" style="color:#1e40af;">{gboq.get('conc_vol_rc', 0.0):.2f} m³</div>
+            </div>
+            <div class="info-card">
+                <div class="card-lbl">إجمالي وزن حديد تسليح السملات</div>
+                <div class="card-val" style="color:#15803d;">{gboq.get('steel_ton_tot', 0.0):.3f} Ton ({gboq.get('steel_kg_tot', 0.0):,.0f} kg)</div>
+            </div>
+            <div class="info-card">
+                <div class="card-lbl">معدل استهلاك الحديد للسملات</div>
+                <div class="card-val">{gboq.get('steel_ratio_kg_m3', 0.0):.1f} kg/m³</div>
+            </div>
+        </div>
+
+        <div class="subsection-title">📋 6.1 جدول نماذج السملات التنفيذية المعتمدة (Master Ground Beams Models Schedule):</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>النموذج (Mark)</th>
+                    <th>التوصيف الإنشائي</th>
+                    <th>القطاع b × t (cm)</th>
+                    <th>العمق التصميمي المحسوب</th>
+                    <th>العمق التنفيذي المعتمد</th>
+                    <th>التسليح السفلي</th>
+                    <th>التسليح العلوي</th>
+                    <th>براندات الانكماش</th>
+                    <th>الكانات</th>
+                    <th>العدد</th>
+                    <th>إجمالي الطول</th>
+                </tr>
+            </thead>
+            <tbody>
+                {gb_models_rows}
+            </tbody>
+        </table>
+        """
+
     html_content = f"""<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -1142,6 +1211,8 @@ def generate_flat_slab_report_html(
     <div class="subsection-title">🧱 5.3 جدول حصر كميات الخرسانة المسلحة والمواد الأولية (Concrete & Raw Materials Estimate):</div>
     {boq_concrete_mat_table_html}
 
+    {gb_section_html}
+
     <!-- Sign-off Block -->
     <div class="signature-block">
         <div class="sig-box">
@@ -1189,6 +1260,7 @@ def generate_flat_slab_outputs_report_html(
     deflection_results: Optional[List[Dict[str, Any]]] = None,
     all_deflection_safe: bool = True,
     img_verif_b64: Optional[str] = None,
+    gb_analysis: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Generates a concise, high-level Output Summary calculation sheet (تقرير مخرجات التصميم المعتمد).
@@ -1338,6 +1410,48 @@ def generate_flat_slab_outputs_report_html(
     </table>
     """
 
+    # Ground Beams Outputs Schedule
+    gb_outputs_html = ""
+    if gb_analysis:
+        gb_models_rows = ""
+        for m_mark in ["B1", "B2", "B3"]:
+            if m_mark in gb_analysis.get("models_dict", {}):
+                m_info = gb_analysis["models_dict"][m_mark]
+                gb_models_rows += f"""
+                <tr>
+                    <td><b>{m_info.get('mark', m_mark)}</b></td>
+                    <td><b>{m_info.get('dimensions_str', '')}</b></td>
+                    <td>{m_info.get('t_env_calc', 0.0):.0f} cm</td>
+                    <td style="color:#1e40af; font-weight:bold;">{m_info.get('t_cm', 0.0):.0f} cm</td>
+                    <td>{m_info.get('rft_bot_str', '')}</td>
+                    <td>{m_info.get('rft_top_str', '')}</td>
+                    <td>{m_info.get('rft_side_str', '—')}</td>
+                    <td>{m_info.get('stirrups_str', '')}</td>
+                    <td>{m_info.get('count', 0)} سملة ({m_info.get('total_len_m', 0.0):.1f} m)</td>
+                </tr>
+                """
+        gb_outputs_html = f"""
+        <div class="section-title">3. جدول نماذج الميدات والسملات الأرضية المعتمدة (Approved Ground Beams Schedule)</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>النموذج</th>
+                    <th>القطاع b × t (cm)</th>
+                    <th>العمق التصميمي المحسوب</th>
+                    <th>العمق التنفيذي المعتمد</th>
+                    <th>التسليح السفلي</th>
+                    <th>التسليح العلوي</th>
+                    <th>براندات الجوانب</th>
+                    <th>الكانات</th>
+                    <th>العدد والأطوال</th>
+                </tr>
+            </thead>
+            <tbody>
+                {gb_models_rows}
+            </tbody>
+        </table>
+        """
+
     html_content = f"""<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -1376,6 +1490,8 @@ def generate_flat_slab_outputs_report_html(
     <!-- Section 2: Master Outputs -->
     <div class="section-title page-break">2. جدول مخرجات التصميم والتسليح المعتمد (Master Design & Reinforcement Outputs)</div>
     {outputs_table_html}
+
+    {gb_outputs_html}
 
     <!-- Sign-off Block -->
     <div class="signature-block">

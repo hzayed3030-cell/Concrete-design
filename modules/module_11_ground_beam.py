@@ -276,7 +276,11 @@ def calculate_ground_beam(params: dict) -> dict:
     return {
         # Geometry
         "L": L,
+        "L_m": L,
         "b": b,
+        "b_cm": b,
+        "t": t_exec,
+        "t_cm": t_exec,
         "t_exec": t_exec,
         "t_calc": t_calc,
         "t_defl": t_defl,
@@ -326,6 +330,7 @@ def calculate_ground_beam(params: dict) -> dict:
         # Side Bars
         "n_side_rows": n_side_rows,
         "total_side_bars": total_side_bars,
+        "n_side": total_side_bars,
         "phi_side": phi_side,
         "As_side_prov": As_side_prov,
         # Shear
@@ -333,6 +338,7 @@ def calculate_ground_beam(params: dict) -> dict:
         "qcu": qcu,
         "qu_max": qu_max,
         "stirrups_per_m": stirrups_per_m,
+        "n_st_per_m": stirrups_per_m,
         "phi_st": phi_st,
         "n_branches": n_branches,
         "As_st_req_per_m": As_st_req_per_m,
@@ -716,6 +722,24 @@ def render_ground_beam_module():
     if float(data.get("q_all_soil", 1.50)) >= 5.0:
         data["q_all_soil"] = round(float(data["q_all_soil"]) / 10.0, 2)
 
+
+    # ── ECP 203 Code Compliance Banner: Isolated Footings & Orthogonal Tie Beams ──
+    st.markdown(
+        '''
+        <div dir="rtl" style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%);
+                    border: 1.5px solid #38bdf8; border-right: 6px solid #0284c7; border-radius: 10px;
+                    padding: 14px 18px; margin-bottom: 16px; text-align: right;">
+            <div style="font-size: 15px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; gap: 8px;">
+                <span>📌 معايير الكود المصري ECP 203 لربط القواعد المنفصلة (Isolated Footings Tie Beams):</span>
+            </div>
+            <div style="font-size: 13.5px; color: #cbd5e1; margin-top: 6px; line-height: 1.7;">
+                • <b>ربط القواعد المنفصلة:</b> يشترط الكود المصري ربط القواعد المنفصلة في الاتجاهين الرئيسيين المتعامدين (Orthogonal X & Y) لمقاومة الهبوط التفاوتي وقوى الزلازل المحورية (10% Pu).<br/>
+                • <b>قواعد الأركان (Corner Footings):</b> يُكتفى كودياً وتصميمياً بربط قاعدة الركن بعدد <b>2 سمل متعامدين فقط</b> (سمل باتجاه X وسمل باتجاه Y) لتحقيق التقييد الثنائي الكامل، مع <b>منع استخدام أي كمرات قطرية أو مائلة</b> لقواعد الأركان لما تسببه من تعقيد تنفيذي وتعارضات مع شبكات الصرف دون أي جدوى إنشائية.
+            </div>
+        </div>
+        ''',
+        unsafe_allow_html=True
+    )
 
     # ── Interactive Sidebar / Top Controls ───────────────────────────────────
     col_in1, col_in2, col_in3 = st.columns([1.1, 1.1, 1.0])
@@ -1164,17 +1188,17 @@ def render_ground_beam_module():
                 gb_sketch = ""
 
         render_ground_beam_3d_bim_viewer(
-            b_cm=res["b"],
-            t_cm=res["t"],
-            L_m=res["L"],
-            n_top=res["n_top"],
-            phi_top=res["phi_top"],
-            n_bot=res["n_bot"],
-            phi_bot=res["phi_bot"],
-            phi_st=res["phi_st"],
-            n_st_per_m=res["n_st_per_m"],
-            n_branches=res["n_branches"],
-            n_side=res.get("n_side", 0),
+            b_cm=res.get("b", res.get("b_cm", 25.0)),
+            t_cm=res.get("t_exec", res.get("t_cm", res.get("t", 60.0))),
+            L_m=res.get("L", res.get("L_m", 5.0)),
+            n_top=res.get("n_top", 2),
+            phi_top=res.get("phi_top", 12),
+            n_bot=res.get("n_bot", 2),
+            phi_bot=res.get("phi_bot", 16),
+            phi_st=res.get("phi_st", 8),
+            n_st_per_m=res.get("stirrups_per_m", res.get("n_st_per_m", 6)),
+            n_branches=res.get("n_branches", 2),
+            n_side=res.get("total_side_bars", res.get("n_side", 0)),
             phi_side=res.get("phi_side", 10),
             fcu=res.get("fcu", 250.0),
             fy=res.get("fy", 4000.0),

@@ -602,6 +602,23 @@ def show_dialog_m7_ground_beam():
         '</li>'
         '</ul>'
         '</div>'
+
+        '<div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-right: 6px solid #0284c7; border-radius: 10px; padding: 18px 22px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">'
+        '<h4 style="color: #0369a1; margin-top: 0; margin-bottom: 10px; font-size: 16.5px; font-weight: 800;">'
+        '5️⃣ اشتراطات ربط القواعد المنفصلة والاكتفاء بسملين متعامدين للأركان <span dir="ltr" style="font-size:14px; color:#0284c7;">(Orthogonal Ties & Corner Footings)</span>'
+        '</h4>'
+        '<ul style="margin-bottom: 6px; padding-right: 22px; line-height: 1.8;">'
+        '<li style="margin-bottom: 8px;">'
+        '<b>الربط في الاتجاهين المتعامدين فقط:</b> ينص الكود المصري ECP 203 وكود الأساسات ECP 202 على ربط القواعد المنفصلة في الاتجاهين الرئيسيين المتعامدين (Orthogonal X & Y) لتوفير التقييد الكامل ضد الإزاحة الأفقية ومقاومة قوى الشد والضغط الزلزالية.'
+        '</li>'
+        '<li style="margin-bottom: 8px;">'
+        '<b>قواعد الأركان (Corner Isolated Footings):</b> يُكتفى كودياً بربط قاعدة الركن بعدد <b>2 سمل متعامدين فقط</b> (سمل باتجاه X وسمل باتجاه Y يربطانها بأول عمودي جار). يحقق هذان السملان الاتزان الثنائي التام (2D Translational Restraint) ويمنعان الهبوط التفاوتي.'
+        '</li>'
+        '<li>'
+        '<b>منع الكمرات القطرية / المائلة للأركان:</b> يمنع استخدام أي كمرات قطرية أو مائلة لقواعد الأركان المنفصلة لتفادي تعقيد حديد التسليح والنجارة وتعارض المسار مع شبكات الصرف وغرف التفتيش دون أي إضافة إنشائية ذات جدوى.'
+        '</li>'
+        '</ul>'
+        '</div>'
         '</div>'
     )
     st.markdown(html_dialog, unsafe_allow_html=True)

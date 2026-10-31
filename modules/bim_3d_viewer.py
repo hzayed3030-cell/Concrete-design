@@ -1782,6 +1782,17 @@ def extract_bim_3d_scene_data(
                 x1 + p_x, y1 + p_y, z_bot_g, x2 + p_x, y2 + p_y, z_bot_g,
             ])
 
+            # Side shrinkage bars lines in 3D (if t >= 60 cm)
+            side_cnt = int(gb.get("exec_side_bars", 0))
+            if side_cnt > 0:
+                n_rows = side_cnt // 2
+                for r_idx in range(1, n_rows + 1):
+                    z_side = z_bot_g + (r_idx / (n_rows + 1.0)) * (z_top_g - z_bot_g)
+                    gb_lines.extend([
+                        x1 - p_x, y1 - p_y, z_side, x2 - p_x, y2 - p_y, z_side,
+                        x1 + p_x, y1 + p_y, z_side, x2 + p_x, y2 + p_y, z_side,
+                    ])
+
             st_count = max(4, int(math.ceil(span * gb.get("exec_stirrups_per_m", 5))))
             for s_idx in range(1, st_count):
                 frac = s_idx / st_count

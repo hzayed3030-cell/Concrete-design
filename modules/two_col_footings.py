@@ -1479,68 +1479,48 @@ def classify_and_design_building_foundations(
         else:
             int_cols.append(c)
 
-    # 4a. Model F1: Interior Columns (القواعد الداخلية)
-    f1_model = None
+    # 4. Standardized Isolated Footings with Dynamic Sequential Re-indexing (F1, F2, F3...)
+    # Dynamic numbering based on actually existing categories: Priority (Interior -> Edge -> Corner)
+    active_groups = []
     if int_cols:
-        pu_gov_int = max([float(c.get("pu_tot", 60.0)) for c in int_cols], default=60.0)
-        c_gov_int = max([float(c.get("tc", col_c_dim)) for c in int_cols], default=col_c_dim)
-        b_gov_int = max([float(c.get("bc", col_b_dim)) for c in int_cols], default=col_b_dim)
-        f1_model = design_isolated_footing_model(
-            "F1", "قواعد داخلية", ", ".join([c["id"] for c in int_cols]),
-            pu_gov_int, c_gov_int, b_gov_int, q_all_net, fcu, fy, cov, phi
-        )
-        f1_model["cols_list"] = int_cols
-        for c in int_cols:
-            f_inst = dict(f1_model)
-            f_inst["col"] = c
-            f_inst["col_id"] = c["id"]
-            f_inst["name"] = "F1"
-            f_inst["model_id"] = "F1"
-            f_inst["model_name"] = "F1 (قاعدة داخلية)"
-            f_inst["x"] = c["x"]
-            f_inst["y"] = c["y"]
-            isolated_footings.append(f_inst)
-
-    # 4b. Model F2: Edge Columns (القواعد الجانبية / الطرفية)
-    f2_model = None
+        active_groups.append(("Interior", int_cols, "قواعد داخلية", "قاعدة داخلية", "داخلية", 60.0))
     if edge_cols:
-        pu_gov_edge = max([float(c.get("pu_tot", 50.0)) for c in edge_cols], default=50.0)
-        c_gov_edge = max([float(c.get("tc", col_c_dim)) for c in edge_cols], default=col_c_dim)
-        b_gov_edge = max([float(c.get("bc", col_b_dim)) for c in edge_cols], default=col_b_dim)
-        f2_model = design_isolated_footing_model(
-            "F2", "قواعد جانبية", ", ".join([c["id"] for c in edge_cols]),
-            pu_gov_edge, c_gov_edge, b_gov_edge, q_all_net, fcu, fy, cov, phi
-        )
-        f2_model["cols_list"] = edge_cols
-        for c in edge_cols:
-            f_inst = dict(f2_model)
-            f_inst["col"] = c
-            f_inst["col_id"] = c["id"]
-            f_inst["name"] = "F2"
-            f_inst["model_id"] = "F2"
-            f_inst["model_name"] = "F2 (قاعدة جانبية)"
-            f_inst["x"] = c["x"]
-            f_inst["y"] = c["y"]
-            isolated_footings.append(f_inst)
-
-    # 4c. Model F3: Corner Columns (قواعد الأركان)
-    f3_model = None
+        active_groups.append(("Edge", edge_cols, "قواعد جانبية", "قاعدة جانبية", "جانبية", 50.0))
     if corner_cols:
-        pu_gov_corner = max([float(c.get("pu_tot", 40.0)) for c in corner_cols], default=40.0)
-        c_gov_corner = max([float(c.get("tc", col_c_dim)) for c in corner_cols], default=col_c_dim)
-        b_gov_corner = max([float(c.get("bc", col_b_dim)) for c in corner_cols], default=col_b_dim)
-        f3_model = design_isolated_footing_model(
-            "F3", "قواعد أركان", ", ".join([c["id"] for c in corner_cols]),
-            pu_gov_corner, c_gov_corner, b_gov_corner, q_all_net, fcu, fy, cov, phi
+        active_groups.append(("Corner", corner_cols, "قواعد أركان", "قاعدة ركن", "أركان", 40.0))
+
+    designed_models = []
+    models_dict = {}
+    ftg_label_map = {}
+
+    for idx, (grp_key, grp_cols, grp_title, grp_single, grp_desc, def_pu) in enumerate(active_groups, start=1):
+        m_id = f"F{idx}"
+        ftg_label_map[grp_key] = m_id
+        pu_gov = max([float(c.get("pu_tot", def_pu)) for c in grp_cols], default=def_pu)
+        c_gov = max([float(c.get("tc", col_c_dim)) for c in grp_cols], default=col_c_dim)
+        b_gov = max([float(c.get("bc", col_b_dim)) for c in grp_cols], default=col_b_dim)
+
+        m_obj = design_isolated_footing_model(
+            m_id, grp_title, ", ".join([c["id"] for c in grp_cols]),
+            pu_gov, c_gov, b_gov, q_all_net, fcu, fy, cov, phi
         )
-        f3_model["cols_list"] = corner_cols
-        for c in corner_cols:
-            f_inst = dict(f3_model)
+        m_obj["cols_list"] = grp_cols
+        m_obj["raw_type"] = grp_key
+        m_obj["model_id"] = m_id
+        m_obj["model_name"] = f"{m_id} ({grp_single})"
+        m_obj["model_label"] = grp_title
+        designed_models.append((m_obj, grp_cols))
+        models_dict[m_id] = m_obj
+        models_dict[grp_key] = m_obj  # alias for backwards compatibility
+
+        for c in grp_cols:
+            f_inst = dict(m_obj)
             f_inst["col"] = c
             f_inst["col_id"] = c["id"]
-            f_inst["name"] = "F3"
-            f_inst["model_id"] = "F3"
-            f_inst["model_name"] = "F3 (قاعدة ركن)"
+            f_inst["name"] = m_id
+            f_inst["model_id"] = m_id
+            f_inst["model_name"] = f"{m_id} ({grp_single})"
+            f_inst["raw_type"] = grp_key
             f_inst["x"] = c["x"]
             f_inst["y"] = c["y"]
             isolated_footings.append(f_inst)
@@ -1561,9 +1541,9 @@ def classify_and_design_building_foundations(
 
     unified_rows = []
 
-    # 5a. Isolated Footings: Standardized Models (F1, F2, F3)
+    # 5a. Isolated Footings: Standardized Models (Dynamic F1, F2, F3...)
     # Add summary rows for the active models to the unified schedule
-    for m, m_cols in [(f1_model, int_cols), (f2_model, edge_cols), (f3_model, corner_cols)]:
+    for m, m_cols in designed_models:
         if m is None or not m_cols:
             continue
         pc_L = m["L_cm"] + 40
@@ -1896,12 +1876,15 @@ def classify_and_design_building_foundations(
     })
 
     iso_names_list = []
-    if int_cols:
-        iso_names_list.append(f"F1 ({len(int_cols)} داخلية)")
-    if edge_cols:
-        iso_names_list.append(f"F2 ({len(edge_cols)} جانبية)")
-    if corner_cols:
-        iso_names_list.append(f"F3 ({len(corner_cols)} أركان)")
+    for m, m_cols in designed_models:
+        iso_names_list.append(f"{m['model_id']} ({len(m_cols)} {m['raw_type']})")
+
+    models_output = {
+        "F1": models_dict.get("F1"),
+        "F2": models_dict.get("F2"),
+        "F3": models_dict.get("F3"),
+    }
+    models_output.update(models_dict)
 
     return {
         "isolated_footings": isolated_footings,
@@ -1918,11 +1901,8 @@ def classify_and_design_building_foundations(
             "corner_strap_count": len(corner_strap_footings),
             "corner_strap_names": [dsf["name"] for dsf in corner_strap_footings],
         },
-        "models": {
-            "F1": f1_model,
-            "F2": f2_model,
-            "F3": f3_model,
-        },
+        "models": models_output,
+        "ftg_label_map": ftg_label_map,
         "unified_rows": unified_rows,
         "quantities": {
             "ftgs_conc_rc_val": ftgs_conc_rc_val,
@@ -2166,8 +2146,10 @@ def draw_comprehensive_foundation_sketch(
                 rot_deg_gb -= 180
             elif rot_deg_gb < -90:
                 rot_deg_gb += 180
-            ax.text(mid_x_gb, mid_y_gb, f"{mark} ({b_val}×{t_val})",
-                    color="#312e81", fontsize=7.5, fontweight="bold", ha="center", va="center", rotation=rot_deg_gb, zorder=6,
+            nbot_val = gb.get("exec_n_bot", 2)
+            phi_b_val = gb.get("phi_bot", 16)
+            ax.text(mid_x_gb, mid_y_gb, f"{mark} ({b_val}×{t_val})\n{nbot_val}Ø{phi_b_val}",
+                    color="#312e81", fontsize=7.2, fontweight="bold", ha="center", va="center", rotation=rot_deg_gb, zorder=6,
                     bbox=dict(boxstyle="round,pad=0.10", fc="#ffffff", ec="#6366f1", lw=0.8, alpha=0.85))
         elif abs(dx_val) >= abs(dy_val):
             bx0 = min(c1["x"], c2["x"])
@@ -2175,8 +2157,10 @@ def draw_comprehensive_foundation_sketch(
             by0 = c1["y"] - gb_w / 2.0
             r_gb = patches.Rectangle((bx0, by0), bw, gb_w, facecolor="#e0e7ff", edgecolor="#4338ca", lw=1.8, alpha=0.88, zorder=3)
             ax.add_patch(r_gb)
-            ax.text(bx0 + bw/2.0, by0 + gb_w/2.0, f"{mark} ({b_val}×{t_val})",
-                    color="#312e81", fontsize=8.0, fontweight="bold", ha="center", va="center", zorder=6,
+            nbot_val = gb.get("exec_n_bot", 2)
+            phi_b_val = gb.get("phi_bot", 16)
+            ax.text(bx0 + bw/2.0, by0 + gb_w/2.0, f"{mark} ({b_val}×{t_val})\n{nbot_val}Ø{phi_b_val}",
+                    color="#312e81", fontsize=7.5, fontweight="bold", ha="center", va="center", zorder=6,
                     bbox=dict(boxstyle="round,pad=0.10", fc="#ffffff", ec="#6366f1", lw=0.8, alpha=0.85))
         else:
             by0 = min(c1["y"], c2["y"])
@@ -2184,8 +2168,10 @@ def draw_comprehensive_foundation_sketch(
             bx0 = c1["x"] - gb_w / 2.0
             r_gb = patches.Rectangle((bx0, by0), gb_w, bh, facecolor="#e0e7ff", edgecolor="#4338ca", lw=1.8, alpha=0.88, zorder=3)
             ax.add_patch(r_gb)
-            ax.text(bx0 + gb_w/2.0, by0 + bh/2.0, f"{mark} ({b_val}×{t_val})",
-                    color="#312e81", fontsize=8.0, fontweight="bold", ha="center", va="center", rotation=90, zorder=6,
+            nbot_val = gb.get("exec_n_bot", 2)
+            phi_b_val = gb.get("phi_bot", 16)
+            ax.text(bx0 + gb_w/2.0, by0 + bh/2.0, f"{mark} ({b_val}×{t_val})\n{nbot_val}Ø{phi_b_val}",
+                    color="#312e81", fontsize=7.5, fontweight="bold", ha="center", va="center", rotation=90, zorder=6,
                     bbox=dict(boxstyle="round,pad=0.10", fc="#ffffff", ec="#6366f1", lw=0.8, alpha=0.85))
 
     # 5. Draw Columns
@@ -2229,8 +2215,10 @@ def draw_comprehensive_foundation_sketch(
         except Exception:
             return txt
 
+    iso_models_present = sorted(list({f.get("name", "F1") for f in foundation_res.get("isolated_footings", [])}))
+    iso_tags_str = ", ".join(iso_models_present) if iso_models_present else "F1, F2..."
     leg_handles = [
-        patches.Patch(facecolor="#bae6fd", edgecolor="#0284c7", lw=1.8, label=f"Isolated Footings (F1, F2, F3) — {_ar('قواعد منفصلة (F1, F2, F3)')}"),
+        patches.Patch(facecolor="#bae6fd", edgecolor="#0284c7", lw=1.8, label=f"Isolated Footings ({iso_tags_str}) — {_ar(f'قواعد منفصلة ({iso_tags_str})')}"),
         patches.Patch(facecolor="#fed7aa", edgecolor="#ea580c", lw=2.0, label=f"Strap Footings (SF, DSF) — {_ar('قواعد الشدادات والجار (SF, DSF)')}"),
         patches.Patch(facecolor="#fdba74", edgecolor="#c2410c", hatch="///", lw=2.0, label=f"Strap Beams (ST1, ST2) — {_ar('شدادات الجار والركن')}"),
         patches.Patch(facecolor="#e0e7ff", edgecolor="#4338ca", lw=1.8, label=f"Ground Beams (B1, B2, B3) — {_ar('سملات وميدات أرضية')}"),
