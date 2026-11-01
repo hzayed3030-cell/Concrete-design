@@ -3313,6 +3313,8 @@ def load_settings() -> None:
     st.session_state["cfg"] = cfg
     st.session_state["current_project"] = cfg
     st.session_state["_active_profile_name"] = active_name
+    if "_fs_grid_ver" in cfg:
+        st.session_state["_fs_grid_ver"] = int(cfg["_fs_grid_ver"])
     # Always default to the main projects screen on fresh app startup / new session
     if "nav_view" not in st.session_state:
         st.session_state["nav_view"] = "profile_manager"
@@ -3441,6 +3443,65 @@ def save_settings() -> None:
         clean_cfg["deleted_modules_trash"] = existing_data["deleted_modules_trash"]
     elif "deleted_modules_trash" in cfg:
         clean_cfg["deleted_modules_trash"] = cfg["deleted_modules_trash"]
+
+    # ── STRUCTURAL DATA INTEGRITY SAFEGUARD ──────────────────────────────────────
+    # Prevent code reloads, widget desyncs, or stale cfg instances from wiping out
+    # custom project geometry, spans, columns, beams, voids, or overrides.
+    if isinstance(existing_data, dict) and existing_data:
+        has_rich_existing_geometry = (
+            int(existing_data.get("fs_n_lx", 2) or 2) > 2
+            or int(existing_data.get("fs_n_ly", 2) or 2) > 2
+            or bool(existing_data.get("fs_placed_cols"))
+            or bool(existing_data.get("fs_building_columns"))
+            or bool(existing_data.get("fs_drop_beams"))
+            or bool(existing_data.get("fs_void_panels"))
+            or bool(existing_data.get("fs_col_transforms"))
+            or bool(existing_data.get("rb_overrides"))
+            or bool(existing_data.get("gb_overrides"))
+        )
+        is_clean_cfg_default_geometry = (
+            int(clean_cfg.get("fs_n_lx", 2) or 2) == 2
+            and int(clean_cfg.get("fs_n_ly", 2) or 2) == 2
+            and not clean_cfg.get("fs_placed_cols")
+            and not clean_cfg.get("fs_building_columns")
+            and not clean_cfg.get("fs_void_panels")
+        )
+
+        # 1. If clean_cfg is trying to silently clobber rich existing geometry with bare defaults (e.g. after reload)
+        if has_rich_existing_geometry and is_clean_cfg_default_geometry:
+            for geom_key in (
+                "fs_n_lx", "fs_n_ly", "fs_cant_left", "fs_cant_right", "fs_cant_bottom", "fs_cant_top",
+                "fs_zero_col_mode", "fs_placed_cols", "fs_removed_cols", "fs_col_props", "fs_col_transforms",
+                "fs_edge_columns", "fs_void_panels", "fs_building_columns", "fs_drop_beams",
+                "rb_overrides", "gb_overrides", "_fs_grid_ver",
+                "slab_bc", "slab_tc", "slab_ts_initial", "slab_n_floors", "slab_col_safety_factor",
+                "slab_SDL", "slab_wall_load", "slab_LL", "slab_gamma_c", "slab_Fcu", "slab_Fy", "slab_cover",
+                "slab_bottom_mesh_dia_idx", "slab_n_btm_mesh", "slab_top_mesh_dia_idx", "slab_n_top_mesh",
+                "slab_col_extra_dia_idx", "slab_strip_top_extra_dia_idx", "slab_strip_bottom_extra_dia_idx",
+                "fs_new_col_b", "fs_new_col_t", "fs_new_col_dir", "fs_new_col_sx", "fs_new_col_sy",
+                "fs_beam_b_cm", "fs_beam_t_cm", "fs_beam_dia_main",
+                "gb_b_unified", "gb_phi_bot", "gb_phi_top", "gb_phi_st", "gb_stirrups_m",
+                "gb_h_wall", "gb_t_wall", "gb_axial_tie_ratio", "gb_level_type", "gb_has_wall"
+            ):
+                if geom_key in existing_data and existing_data[geom_key] is not None:
+                    clean_cfg[geom_key] = existing_data[geom_key]
+                    if "cfg" in st.session_state:
+                        st.session_state["cfg"][geom_key] = existing_data[geom_key]
+
+            for ek, ev in existing_data.items():
+                if (ek.startswith("fs_lx_") or ek.startswith("fs_ly_")) and ev is not None:
+                    clean_cfg[ek] = ev
+                    if "cfg" in st.session_state:
+                        st.session_state["cfg"][ek] = ev
+
+        # 2. Always retain existing structural calculation and override keys that might not be in clean_cfg
+        for ek, ev in existing_data.items():
+            if ek not in clean_cfg or clean_cfg[ek] is None:
+                clean_cfg[ek] = ev
+            elif ek in ("fs_building_columns", "fs_drop_beams", "rb_overrides", "gb_overrides", "fs_void_panels", "fs_col_transforms") and not clean_cfg[ek] and ev:
+                clean_cfg[ek] = ev
+                if "cfg" in st.session_state:
+                    st.session_state["cfg"][ek] = ev
 
     profiles[active_name]["data"] = clean_cfg
     profiles[active_name]["updated_at"] = _get_now_str()

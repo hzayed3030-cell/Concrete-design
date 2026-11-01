@@ -16141,21 +16141,34 @@ def render(is_standalone: bool = False):
     prefix = S.get_safe_profile_filename_prefix()
     cfg = st.session_state.setdefault("cfg", {})
 
-    if active_profile_name == "Kitchen & Messhall" and len(cfg.get("fs_placed_cols", []) or []) == 46:
-        try:
-            S._PROFILES_CACHE = None
-            _disk_profs = S._load_json_safe(S.PROFILES_FILE, S.PROFILES_BAK_FILE)
-            _km_wrap = (_disk_profs or {}).get("profiles", {}).get("Kitchen & Messhall", {})
-            _km_disk = _km_wrap.get("data", _km_wrap) if isinstance(_km_wrap, dict) else {}
-            if isinstance(_km_disk, dict) and len(_km_disk.get("fs_placed_cols", [])) == 35:
-                for _k_sync in ("fs_placed_cols", "fs_col_props", "fs_col_transforms", "fs_drop_beams", "fs_removed_cols", "fs_zero_col_mode"):
-                    if _k_sync in _km_disk:
-                        cfg[_k_sync] = _km_disk[_k_sync]
-                        st.session_state[_k_sync] = _km_disk[_k_sync]
-                S.save_settings()
-                get_flat_slab_columns.clear()
-        except Exception:
-            pass
+    # ── Universal Structural State Self-Healing Guard ──
+    try:
+        _disk_wrap = S.get_all_projects().get(active_profile_name, {})
+        _disk_data = _disk_wrap.get("data", _disk_wrap) if isinstance(_disk_wrap, dict) else {}
+        if isinstance(_disk_data, dict) and _disk_data:
+            # 1. Sync spans & grid geometry if in-memory cfg defaulted but disk has custom grid
+            if int(_disk_data.get("fs_n_lx", 2) or 2) > 2 and int(cfg.get("fs_n_lx", 2) or 2) == 2:
+                for _k_g in ("fs_n_lx", "fs_n_ly", "fs_cant_left", "fs_cant_right", "fs_cant_bottom", "fs_cant_top", "_fs_grid_ver"):
+                    if _k_g in _disk_data:
+                        cfg[_k_g] = _disk_data[_k_g]
+                        st.session_state[_k_g] = _disk_data[_k_g]
+                for _dk, _dv in _disk_data.items():
+                    if (_dk.startswith("fs_lx_") or _dk.startswith("fs_ly_")) and _dv is not None:
+                        cfg[_dk] = _dv
+                        st.session_state[_dk] = _dv
+
+            # 2. Sync placed columns & void panels if disk has selective columns and cfg is empty/desynced
+            _d_placed = _disk_data.get("fs_placed_cols")
+            if isinstance(_d_placed, list) and len(_d_placed) > 0:
+                _c_placed = cfg.get("fs_placed_cols")
+                if not isinstance(_c_placed, list) or len(_c_placed) != len(_d_placed) or not cfg.get("fs_zero_col_mode"):
+                    for _k_sync in ("fs_placed_cols", "fs_col_props", "fs_col_transforms", "fs_drop_beams", "fs_removed_cols", "fs_zero_col_mode", "fs_void_panels", "rb_overrides", "gb_overrides"):
+                        if _k_sync in _disk_data:
+                            cfg[_k_sync] = _disk_data[_k_sync]
+                            st.session_state[_k_sync] = _disk_data[_k_sync]
+                    get_flat_slab_columns.clear()
+    except Exception:
+        pass
 
     if not is_standalone:
         if st.button(
@@ -20734,29 +20747,10 @@ def render(is_standalone: bool = False):
 
         # ── 🧱 GROUND BEAMS DESIGN SECTION (ECP 203) ───────────────────────────────────
         with st.expander(f"🧱 Ground Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج الميدات والسملات الأرضية)", expanded=False):
-            # 1. Header & Description Banner
-            st.markdown(
-                f"""
-                <div dir="rtl" style="background:#f0fdf4; border:1.5px solid #bbf7d0; border-right:7px solid #16a34a; border-radius:10px; padding:18px 22px; margin-bottom:16px; color:#14532d; line-height:1.9; text-align:right;">
-                    <div style="font-size:1.45rem; font-weight:800; color:#15803d; margin-bottom:10px;">
-                        🧱 منظومة تصميم وتفريد ونماذج الميدات والسملات الأرضية (Ground Beams & Tie Beams — ECP 203):
-                    </div>
-                    <div style="font-size:1.15rem; font-weight:700; color:#166534;">
-                        نظام متكامل يربط تلقائياً بين مسقط الأعمدة والأساسات في <b>Module 1</b> وعناصر الربط الإنشائية الأرضية:
-                        <br/>• <b>التفرقة والتصنيف الصريح:</b> تمييز <b>الشدادات (Strap Beams: ST1, ST2)</b> الناقلة للعزوم لقواعد الجار، عن <b>السملات الأرضية (Ground Beams: B1, B2, B3)</b>.
-                        <br/>• <b>استنتاج حالة الاستمرارية تلقائياً من المسقط:</b> تحديد حالة الدعم (بسيطة / مستمرة من طرف واحد / مستمرة من الطرفين) بناءً على امتداد محاور الأعمدة في المسقط بدون الحاجة لإدخال يدوي.
-                        <br/>• <b>قوى الربط المحوري (Axial Tie Action):</b> تصميم السملات على قوى ربط محوري بنسبة <span dir="ltr">10%</span> من حمل العمود الأكبر لمقاومة الهبوط المتفاوت والزلازل طبقاً للكود.
-                        <br/>• <b>التجميع التلقائي في 3 نماذج تنفيذية (B1, B2, B3):</b> تطبيق قاعدة الظرف الحاكم (Governing Envelope Rule) مع إتاحة التعديل اليدوي التفاعلي المباشر.
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-            # 2. Design Parameters & Controls
+            # 1. Design Parameters & Controls
             with st.container(border=True):
                 st.markdown("<div style='font-size:16px; font-weight:800; color:#1e3a8a; margin-bottom:6px;'>⚙️ محددات ومعايير تصميم السملات الأرضية (Ground Beam Design Parameters)</div>", unsafe_allow_html=True)
-                gbc1, gbc2, gbc3, gbc4 = st.columns(4)
+                gbc1, gbc2, gbc3 = st.columns(3)
                 with gbc1:
                     lvl_opts = [
                         "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)",
@@ -20842,41 +20836,73 @@ def render(is_standalone: bool = False):
                         S.cfg_set(f"{prefix}gb_stirrups_m", new_gb_st_m)
                         st.rerun()
 
-                with gbc4:
-                    dia_opts = [12, 16, 18, 22, 25]
-                    dia_st_opts = [8, 10]
-                    idx_b = dia_opts.index(gb_phi_bot_val) if gb_phi_bot_val in dia_opts else 1
-                    idx_t = dia_opts.index(gb_phi_top_val) if gb_phi_top_val in dia_opts else 0
-                    idx_s = dia_st_opts.index(gb_phi_st_val) if gb_phi_st_val in dia_st_opts else 0
-
-                    new_p_bot = st.selectbox("قطر التسليح السفلي Φ_bot (mm):", options=dia_opts, index=idx_b, key=f"{prefix}w_gb_phi_bot")
-                    new_p_top = st.selectbox("قطر التسليح العلوي Φ_top (mm):", options=dia_opts, index=idx_t, key=f"{prefix}w_gb_phi_top")
-                    new_p_st = st.selectbox("قطر الكانات Φ_st (mm):", options=dia_st_opts, index=idx_s, key=f"{prefix}w_gb_phi_st")
-
-                    if new_p_bot != gb_phi_bot_val or new_p_top != gb_phi_top_val or new_p_st != gb_phi_st_val:
-                        S.cfg_set("gb_phi_bot", new_p_bot)
-                        S.cfg_set(f"{prefix}gb_phi_bot", new_p_bot)
-                        S.cfg_set("gb_phi_top", new_p_top)
-                        S.cfg_set(f"{prefix}gb_phi_top", new_p_top)
-                        S.cfg_set("gb_phi_st", new_p_st)
-                        S.cfg_set(f"{prefix}gb_phi_st", new_p_st)
-                        st.rerun()
-
-                # ── 3 Direct Depth Inputs: B1, B2, B3 (عمق الكمرة طبقاً للتصميم) ──
+                # ── تعديل أقطار التسليح والأعماق التنفيذية لنماذج السملات (B1, B2, B3) ──
                 st.markdown("<hr style='margin:14px 0 12px 0; border:0; border-top:1.5px dashed #cbd5e1;'/>", unsafe_allow_html=True)
                 st.markdown(
                     """
                     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
                         <div style="font-size:15px; font-weight:800; color:#1e3a8a;">
-                            📏 تعديل الأعماق التنفيذية لنماذج السملات (B1, B2, B3) طبقاً لنتائج التصميم الإنشائي:
+                            📏 تعديل اقطار التسليح و الأعماق التنفيذية لنماذج السملات (B1, B2, B3) طبقاً لنتائج التصميم الإنشائي:
                         </div>
                         <div style="font-size:12.5px; color:#475569; font-weight:600;">
-                            💡 تم وضع القيمة التصميمية المحسوبة تلقائياً مع إمكانية التعديل وإعادة الحسابات فوراً
+                            💡 تم وضع القيم المحسوبة تلقائياً مع إمكانية تعديل الأقطار والأعماق التنفيذية وإعادة الحسابات والتصميم فوراً
                         </div>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
+
+                # ── أقطار حديد التسليح والكانات ──
+                dia_opts = [10, 12, 16, 18, 20, 22, 25]
+                dia_st_opts = [8, 10, 12]
+                idx_b = dia_opts.index(gb_phi_bot_val) if gb_phi_bot_val in dia_opts else 2
+                idx_t = dia_opts.index(gb_phi_top_val) if gb_phi_top_val in dia_opts else 1
+                idx_s = dia_st_opts.index(gb_phi_st_val) if gb_phi_st_val in dia_st_opts else 0
+
+                c_dia1, c_dia2, c_dia3 = st.columns(3)
+                with c_dia1:
+                    new_p_bot = st.selectbox(
+                        "قطر الحديد السفلي (mm):",
+                        options=dia_opts,
+                        index=idx_b,
+                        key=f"{prefix}w_gb_phi_bot",
+                        help="قطر أسياخ حديد التسليح السفلي الرئيسي للسملات (Φ_bot بالملليمتر). يؤثر مباشرة على حساب عدد الأسياخ وتفريد النماذج والوزن الإجمالي.",
+                    )
+                with c_dia2:
+                    new_p_top = st.selectbox(
+                        "قطر الحديد العلوي (mm):",
+                        options=dia_opts,
+                        index=idx_t,
+                        key=f"{prefix}w_gb_phi_top",
+                        help="قطر أسياخ حديد التسليح العلوي الرئيسي وعلاقات الكانات للسملات (Φ_top بالملليمتر). يؤثر مباشرة على عدد الأسياخ والوزن الإجمالي.",
+                    )
+                with c_dia3:
+                    new_p_st = st.selectbox(
+                        "قطر الكانات (mm):",
+                        options=dia_st_opts,
+                        index=idx_s,
+                        key=f"{prefix}w_gb_phi_st",
+                        help="قطر أسياخ الكانات المقاومة لقوى القص (Φ_st بالملليمتر). يؤثر مباشرة على كفاءة القص ووزن حديد الكانات.",
+                    )
+
+                if new_p_bot != gb_phi_bot_val or new_p_top != gb_phi_top_val or new_p_st != gb_phi_st_val:
+                    S.cfg_set("gb_phi_bot", new_p_bot)
+                    S.cfg_set(f"{prefix}gb_phi_bot", new_p_bot)
+                    S.cfg_set("gb_phi_top", new_p_top)
+                    S.cfg_set(f"{prefix}gb_phi_top", new_p_top)
+                    S.cfg_set("gb_phi_st", new_p_st)
+                    S.cfg_set(f"{prefix}gb_phi_st", new_p_st)
+                    cur_ov_depths_temp = dict(S.cfg_val("gb_overrides") or st.session_state.get(f"{prefix}gb_overrides", {}))
+                    for mk in ["B1", "B2", "B3"]:
+                        cur_ov_depths_temp.pop(f"{mk}_nbot", None)
+                        cur_ov_depths_temp.pop(f"{mk}_ntop", None)
+                        cur_ov_depths_temp.pop(f"{mk}_stirrups", None)
+                        st.session_state.pop(f"{prefix}ov_nbot_{mk}", None)
+                        st.session_state.pop(f"{prefix}ov_ntop_{mk}", None)
+                        st.session_state.pop(f"{prefix}ov_st_{mk}", None)
+                    S.cfg_set("gb_overrides", cur_ov_depths_temp)
+                    st.session_state[f"{prefix}gb_overrides"] = cur_ov_depths_temp
+                    st.rerun()
 
                 cur_ov_depths = dict(S.cfg_val("gb_overrides") or st.session_state.get(f"{prefix}gb_overrides", {}))
                 models_d = gb_analysis.get("models_dict", {})
@@ -21011,11 +21037,9 @@ def render(is_standalone: bool = False):
             )
 
             # 4. Interactive Tabs
-            tab_gb_class, tab_gb_models, tab_gb_details, tab_gb_plan = st.tabs([
+            tab_gb_class, tab_gb_models = st.tabs([
                 "📋 Classification Table (جدول تصنيف عناصر الربط: شدادات وسملات)",
                 "🏛️ Master Models Schedule (جدول نماذج السملات التنفيذي B1, B2, B3)",
-                "🔩 Detailed Beams Schedule (جدول تفريد وتفاصيل جميع السملات الفردية)",
-                "🗺️ Ground Beams Plan Sketch (المسقط الأفقي التنفيذي للميدات والسملات)",
             ])
 
             # ── TAB 1: UNIFIED CLASSIFICATION TABLE (STRAP BEAMS & GROUND BEAMS) ──
@@ -21059,90 +21083,12 @@ def render(is_standalone: bool = False):
                         key=f"{prefix}btn_dl_class_csv",
                     )
 
-            # ── TAB 2: MASTER GROUND BEAMS SCHEDULE (B1, B2, B3) & INTERACTIVE OVERRIDES ──
+            # ── TAB 2: MASTER GROUND BEAMS SCHEDULE (B1, B2, B3) ──
             with tab_gb_models:
                 st.markdown("##### 🏛️ جدول نماذج السملات التنفيذي (Master Ground Beams Schedule — Governing Envelopes)")
                 st.caption("تم تجميع السملات تلقائياً في 3 نماذج تنفيذية (B1 للقطاع الثقيل، B2 للمتوسط، B3 للخفيف) بتطبيق قاعدة الظرف الحاكم.")
                 df_models_export = pd.DataFrame(gb_analysis["models_schedule"])
                 render_styled_table(df_models_export)
-
-                st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
-                with st.container(border=True):
-                    st.markdown("<div style='font-size:15.5px; font-weight:800; color:#9333ea; margin-bottom:6px;'>🛠️ واجهة التعديل اليدوي التفاعلية لنماذج السملات (Interactive Overrides Table)</div>", unsafe_allow_html=True)
-                    st.caption("يمكنك تعديل العمق أو عدد الأسياخ أو الكانات لكل نموذج مباشرة. تنعكس التعديلات فوراً على المخطط واللوحات وحصر الكميات.")
-
-                    ov_changed = False
-                    cur_ov = dict(S.cfg_val("gb_overrides") or st.session_state.get(f"{prefix}gb_overrides", {}))
-
-                    ov_cols = st.columns(len(gb_analysis["models_dict"])) if gb_analysis["models_dict"] else [st.container()]
-                    for idx_m, (m_mark, m_data) in enumerate(gb_analysis["models_dict"].items()):
-                        with ov_cols[idx_m]:
-                            st.markdown(f"**📌 نموذج {m_mark} ({m_data['count']} سملات):**")
-                            # Depth override
-                            new_t = st.number_input(
-                                f"عمق {m_mark} الكلي t (cm):",
-                                min_value=30.0, max_value=120.0,
-                                value=float(m_data["t_cm"]), step=5.0,
-                                key=f"{prefix}ov_t_{m_mark}",
-                            )
-                            if new_t != m_data["t_cm"]:
-                                cur_ov[f"{m_mark}_t"] = new_t
-                                cur_ov.pop(f"{m_mark}_nbot", None)
-                                cur_ov.pop(f"{m_mark}_ntop", None)
-                                cur_ov.pop(f"{m_mark}_stirrups", None)
-                                st.session_state.pop(f"{prefix}ov_nbot_{m_mark}", None)
-                                st.session_state.pop(f"{prefix}ov_ntop_{m_mark}", None)
-                                st.session_state.pop(f"{prefix}ov_st_{m_mark}", None)
-                                ov_changed = True
-
-                            # Bottom bars override
-                            new_nbot = st.number_input(
-                                f"عدد سفلي Φ{m_data['phi_bot']}:",
-                                min_value=2, max_value=20,
-                                value=int(m_data["n_bot"]), step=1,
-                                key=f"{prefix}ov_nbot_{m_mark}",
-                            )
-                            if new_nbot != m_data["n_bot"]:
-                                cur_ov[f"{m_mark}_nbot"] = new_nbot
-                                ov_changed = True
-
-                            # Top bars override
-                            new_ntop = st.number_input(
-                                f"عدد علوي Φ{m_data['phi_top']}:",
-                                min_value=2, max_value=20,
-                                value=int(m_data["n_top"]), step=1,
-                                key=f"{prefix}ov_ntop_{m_mark}",
-                            )
-                            if new_ntop != m_data["n_top"]:
-                                cur_ov[f"{m_mark}_ntop"] = new_ntop
-                                ov_changed = True
-
-                            # Stirrups override
-                            new_st = st.number_input(
-                                f"كانات/م' Φ{m_data['phi_st']}:",
-                                min_value=5, max_value=12,
-                                value=int(m_data["stirrups_per_m"]), step=1,
-                                key=f"{prefix}ov_st_{m_mark}",
-                            )
-                            if new_st != m_data["stirrups_per_m"]:
-                                cur_ov[f"{m_mark}_stirrups"] = new_st
-                                ov_changed = True
-
-                    if ov_changed:
-                        S.cfg_set("gb_overrides", cur_ov)
-                        st.session_state[f"{prefix}gb_overrides"] = cur_ov
-                        for mk in ["B1", "B2", "B3"]:
-                            if f"{mk}_t" in cur_ov:
-                                st.session_state[f"{prefix}inp_depth_{mk}"] = cur_ov[f"{mk}_t"]
-                        st.rerun()
-
-                    if st.button("🔄 إعادة ضبط نماذج السملات إلى الحسابات التلقائية (Reset Overrides)", key=f"{prefix}btn_reset_gb_ov"):
-                        S.cfg_set("gb_overrides", {})
-                        st.session_state[f"{prefix}gb_overrides"] = {}
-                        for mk in ["B1", "B2", "B3"]:
-                            st.session_state.pop(f"{prefix}inp_depth_{mk}", None)
-                            st.session_state.pop(f"{prefix}ov_t_{mk}", None)
-                        st.rerun()
 
                 # Export Excel & CSV
                 csv_models_data = df_models_export.to_csv(index=False).encode('utf-8-sig')
@@ -21178,97 +21124,14 @@ def render(is_standalone: bool = False):
                         key=f"{prefix}btn_dl_models_csv",
                     )
 
-            # ── TAB 3: DETAILED GROUND BEAMS BAR BENDING SCHEDULE ──
-            with tab_gb_details:
-                st.markdown("##### 🔩 جدول تفريد وحصر وتفاصيل جميع السملات الإنشائية (Detailed Ground Beams Schedule)")
-                st.caption("تفصيل دقيق لكل سملة بالمبنى مع البحور الصافية، والعزوم، وقوى القص، وقوى الربط المحوري، والتسليح النهائي.")
-                df_det_export = pd.DataFrame(gb_analysis["detailed_schedule_rows"])
-                render_styled_table(df_det_export)
 
-                # Export Excel & CSV
-                csv_det_data = df_det_export.to_csv(index=False).encode('utf-8-sig')
-                excel_det_bytes = safe_to_excel_bytes(df_det_export, sheet_name='Detailed_Ground_Beams')
-
-                c_dt1, c_dt2 = st.columns(2)
-                with c_dt1:
-                    if excel_det_bytes is not None:
-                        st.download_button(
-                            label="📊 تصدير جدول تفريد السملات التفصيلي (Excel .xlsx)",
-                            data=excel_det_bytes,
-                            file_name=f"{prefix}Detailed_Ground_Beams_Schedule_{num_floors}Floors.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True,
-                            key=f"{prefix}btn_dl_det_excel",
-                        )
-                    else:
-                        st.download_button(
-                            label="📊 تصدير جدول تفريد السملات التفصيلي (Excel .xlsx)",
-                            data=b"",
-                            disabled=True,
-                            help="يلزم تثبيت مكتبة openpyxl لتصدير Excel",
-                            use_container_width=True,
-                            key=f"{prefix}btn_dl_det_excel_dis",
-                        )
-                with c_dt2:
-                    st.download_button(
-                        label="📥 تصدير جدول تفريد السملات التفصيلي (CSV)",
-                        data=csv_det_data,
-                        file_name=f"{prefix}Detailed_Ground_Beams_Schedule_{num_floors}Floors.csv",
-                        mime="text/csv",
-                        use_container_width=True,
-                        key=f"{prefix}btn_dl_det_csv",
-                    )
-
-            # ── TAB 4: GROUND BEAMS 2D FRAMING PLAN SKETCH ──
-            with tab_gb_plan:
-                st.markdown("##### 🗺️ المسقط الأفقي التنفيذي للميدات والسملات الأرضية (Ground Beams 2D Framing Plan)")
-                st.caption("مسقط أفقي إنشائي شامل يوضح توزيع ومسارات السملات والشدادات بعد النمذجة (B1, B2, B3, ST) مع استمرارية تامة للسنترلاين وبدون أي انكسارات.")
-                from modules.ground_beam_layout import draw_ground_beams_layout_sketch
-                fig_gb_sketch = draw_ground_beams_layout_sketch(
-                    fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols,
-                    gb_analysis,
-                    slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
-                    title=f"ECP 203 — Ground Beams & Tie Beams 2D Framing Plan ({num_floors} Floors)",
-                )
-                buf_gb_sketch = io.BytesIO()
-                fig_gb_sketch.savefig(buf_gb_sketch, format="png", bbox_inches="tight", dpi=160)
-                buf_gb_sketch.seek(0)
-                st.pyplot(fig_gb_sketch, clear_figure=True, use_container_width=True)
-                st.download_button(
-                    label="📥 تحميل المسقط الأفقي للميدات (High-Res PNG)",
-                    data=buf_gb_sketch.getvalue(),
-                    file_name=f"{prefix}Ground_Beams_Plan_Sketch_{num_floors}Floors.png",
-                    mime="image/png",
-                    use_container_width=True,
-                    key=f"{prefix}btn_dl_gb_sketch_png",
-                )
-                plt.close(fig_gb_sketch)
 
         # ── 🧱 ROOF BEAMS DESIGN SECTION (ECP 203) ─────────────────────────────────────
         with st.expander(f"🧱 Roof Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج كمرات السقف والكوابيل)", expanded=False):
-            # 1. Header & Description Banner
-            st.markdown(
-                f"""
-                <div dir="rtl" style="background:#f0fdf4; border:1.5px solid #bbf7d0; border-right:7px solid #16a34a; border-radius:10px; padding:18px 22px; margin-bottom:16px; color:#14532d; line-height:1.9; text-align:right;">
-                    <div style="font-size:1.45rem; font-weight:800; color:#15803d; margin-bottom:10px;">
-                        🧱 منظومة تصميم وتفريد ونماذج كمرات السقف والكوابيل (Roof Drop Beams & Cantilever Beams — ECP 203):
-                    </div>
-                    <div style="font-size:1.15rem; font-weight:700; color:#166534;">
-                        نظام متكامل يربط تلقائياً بين مسقط الأعمدة والبلاطة في <b>Module 1</b> وعناصر كمرات السقف الساقطة والكوابيل:
-                        <br/>• <b>التجميع التلقائي في 3 نماذج تنفيذية (B1, B2, B3) + كوابيل (CB1):</b> تطبيق قاعدة الظرف الحاكم (Governing Envelope Rule) لتسهيل التنفيذ وضبط الجودة.
-                        <br/>• <b>استنتاج حالة الاستمرارية تلقائياً من المسقط:</b> تحديد حالة الدعم (بسيطة / مستمرة من طرف / مستمرة من طرفين / كابولي) بناءً على امتداد محاور الأعمدة والكوابيل بدون إدخال يدوي.
-                        <br/>• <b>أحمال دقيقة بدون ازدواجية:</b> حساب الوزن الذاتي لسقوط الكمرة أسفل البلاطة (<span dir="ltr">1.4 × γc × b × (t - ts)</span>) + نصيب الكمرة من أحمال البلاطة اللاكمرية (<span dir="ltr">Wu × w_trib</span>) الشاملة بالفعل لكافة أحمال الحوائط والقواطيع والتشطيبات.
-                        <br/>• <b>إعادة التصميم الإنشائي الفوري عند تعديل الأعماق:</b> عند تعديل عمق أي نموذج، يُعاد حساب العزوم والقص وحديد التسليح والبراندات (للأعماق ≥ 60 سم) والكانات والرسومات فوراً.
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-            # 2. Design Parameters & Controls
+            # 1. Design Parameters & Controls
             with st.container(border=True):
                 st.markdown("<div style='font-size:16px; font-weight:800; color:#1e3a8a; margin-bottom:6px;'>⚙️ محددات ومعايير تصميم كمرات السقف (Roof Beam Design Parameters)</div>", unsafe_allow_html=True)
-                rbc1, rbc2, rbc3 = st.columns([1.2, 1.3, 2.2])
+                rbc1, rbc2 = st.columns(2)
                 with rbc1:
                     new_rb_b = st.number_input(
                         "عرض الكمرة الموحد b (cm):",
@@ -21311,20 +21174,6 @@ def render(is_standalone: bool = False):
                         S.cfg_set("rb_phi_st", new_rb_p_st)
                         S.cfg_set(f"{prefix}rb_phi_st", new_rb_p_st)
                         st.rerun()
-
-                with rbc3:
-                    st.markdown(
-                        f"""
-                        <div dir="rtl" style="background:#eff6ff; border:1.5px solid #bfdbfe; border-right:5px solid #2563eb; border-radius:8px; padding:12px 14px; color:#1e293b; line-height:1.75; font-size:12.5px;">
-                            <div style="font-size:13.5px; font-weight:800; color:#1e40af; margin-bottom:4px;">
-                                💡 معايير أحمال كمرات السقف (Flat Slab Drop Beams):
-                            </div>
-                            <b>• أحمال البلاطة الشاملة:</b> تعتمد كمرات السقف على نصيبها من الحمل التصميمي الأقصى للبلاطة (<span dir="ltr">Wu = {Wu:.2f} t/m²</span>)، والذي يتضمن بالفعل الوزن الذاتي للبلاطة والتشطيبات والحمل الحي، بالإضافة إلى الحمل المكافئ الموزع لجميع الحوائط والقواطيع بالمشروع (<span dir="ltr">WL = {wall_load:.2f} t/m²</span>).<br/>
-                            <b>• الوزن الذاتي لسقوط الكمرة:</b> يُحسب الحمل الإضافي الميت فقط لخرسانة سقوط الكمرة أسفل البلاطة (<span dir="ltr">1.4 × γc × b × (t - ts)</span>) منعاً لأي ازدواجية أو تكرار في حساب أحمال الحوائط طبقاً لأصول الكود المصري ECP 203.
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
 
                 # ── تعديل الأعماق التنفيذية لنماذج الكمرات (B1, B2, B3) طبقاً لنتائج التصميم الإنشائي ──
                 st.markdown("<hr style='margin:14px 0 12px 0; border:0; border-top:1.5px dashed #cbd5e1;'/>", unsafe_allow_html=True)
@@ -21468,6 +21317,45 @@ def render(is_standalone: bool = False):
                             st.session_state[f"{prefix}rb_overrides"] = cur_ov_depths_rb
                             st.rerun()
 
+            # ── 🗺️ 2D Roof Beams Framing Plan Sketch ──
+            st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.04) 0%, rgba(15, 23, 42, 0.08) 100%); border: 1.5px solid #0284c7; border-right: 6px solid #0284c7; border-radius: 10px; padding: 14px 18px; margin: 12px 0 16px 0; text-align: right;">
+                    <div style="font-size: 16px; font-weight: 800; color: #0369a1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                        <span>🗺️ المسقط الأفقي وتوزيع نماذج كمرات السقف والكوابيل (2D Roof Beams Framing Plan)</span>
+                        <span style="font-size: 12.5px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Beams Framing</span>
+                    </div>
+                    <div style="font-size: 13px; color: #475569; margin-top: 6px; line-height: 1.6;">
+                        مخطط ثنائي الأبعاد لمسقط السقف يوضح توقيع النماذج الموحدة (B1, B2, B3, CB1) بأبعادها ومواقعها الدقيقة، مع المحاور وأبعاد البحور (Spans) وحدود البلاطة والكوابيل، لربط الجدول التنفيذي أعلاه باللوحة الإنشائية.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            fig_rb_plan = draw_roof_beams_layout_sketch(
+                active_columns=fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols,
+                roof_beams_analysis=rb_analysis,
+                slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
+                title=f"ECP 203 — Roof Drop Beams & Cantilevers 2D Framing Plan (سقف {num_floors} طوابق)",
+            )
+            buf_rb_plan = io.BytesIO()
+            fig_rb_plan.savefig(buf_rb_plan, format="png", bbox_inches="tight", dpi=160)
+            buf_rb_plan.seek(0)
+            st.pyplot(fig_rb_plan, clear_figure=True, use_container_width=True)
+
+            st.download_button(
+                label="📥 تحميل المسقط الأفقي لكمرات السقف (High-Res 2D Framing Plan PNG)",
+                data=buf_rb_plan.getvalue(),
+                file_name=f"{prefix}Roof_Beams_Framing_Plan_{num_floors}Floors.png",
+                mime="image/png",
+                use_container_width=True,
+                key=f"{prefix}btn_dl_rb_plan_tab2_png",
+            )
+
+            plt.close(fig_rb_plan)
+
             # 3. KPI Metrics Banner
             cnt_rb = len(rb_analysis["roof_beams"])
             cnt_cb = len(rb_analysis["cantilever_beams"])
@@ -21503,54 +21391,12 @@ def render(is_standalone: bool = False):
             )
 
             # 4. Interactive Tabs
-            tab_rb_class, tab_rb_models, tab_rb_details, tab_rb_sketch = st.tabs([
-                "📋 Classification Table (جدول تصنيف كمرات السقف الشامل)",
+            tab_rb_models, tab_rb_class = st.tabs([
                 "🏛️ Master Models Schedule (جدول نماذج كمرات السقف التنفيذي B1, B2, B3, CB1)",
-                "🔩 Detailed Beams Schedule (جدول تفريد وتفاصيل جميع كمرات السقف الفردية)",
-                "🗺️ Roof Beams Plan Sketch (المسقط الأفقي واللوحة التنفيذية للكمرات)",
+                "📋 Classification Table (جدول تصنيف كمرات السقف الشامل)",
             ])
 
-            # ── TAB 1: CLASSIFICATION TABLE ──
-            with tab_rb_class:
-                st.markdown("##### 📋 جدول تصنيف كمرات السقف الإنشائية الشامل (Unified Roof Beams Classification Table)")
-                st.caption("يوضح التفرقة والتصنيف الصريح لجميع كمرات السقف الساقطة والكوابيل مع الموقع والمحاور والأبعاد والتسليح النهائي.")
-                df_rb_class_export = pd.DataFrame(rb_analysis["classification_rows"])
-                render_styled_table(df_rb_class_export)
-
-                csv_rb_class_data = df_rb_class_export.to_csv(index=False).encode('utf-8-sig')
-                excel_rb_class_bytes = safe_to_excel_bytes(df_rb_class_export, sheet_name='Roof_Beams_Classification')
-
-                c_rb_cl1, c_rb_cl2 = st.columns(2)
-                with c_rb_cl1:
-                    if excel_rb_class_bytes is not None:
-                        st.download_button(
-                            label="📊 تصدير جدول تصنيف كمرات السقف (Excel .xlsx)",
-                            data=excel_rb_class_bytes,
-                            file_name=f"{prefix}Roof_Beams_Classification_{num_floors}Floors.xlsx",
-                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True,
-                            key=f"{prefix}btn_dl_rb_class_excel",
-                        )
-                    else:
-                        st.download_button(
-                            label="📊 تصدير جدول تصنيف كمرات السقف (Excel .xlsx)",
-                            data=b"",
-                            disabled=True,
-                            help="يلزم تثبيت مكتبة openpyxl لتصدير Excel",
-                            use_container_width=True,
-                            key=f"{prefix}btn_dl_rb_class_excel_dis",
-                        )
-                with c_rb_cl2:
-                    st.download_button(
-                        label="📥 تصدير جدول تصنيف كمرات السقف (CSV)",
-                        data=csv_rb_class_data,
-                        file_name=f"{prefix}Roof_Beams_Classification_{num_floors}Floors.csv",
-                        mime="text/csv",
-                        use_container_width=True,
-                        key=f"{prefix}btn_dl_rb_class_csv",
-                    )
-
-            # ── TAB 2: MASTER ROOF BEAMS SCHEDULE (B1, B2, B3, CB1) & INTERACTIVE OVERRIDES ──
+            # ── TAB 1: MASTER ROOF BEAMS SCHEDULE (B1, B2, B3, CB1) & INTERACTIVE OVERRIDES ──
             with tab_rb_models:
                 st.markdown("##### 🏛️ جدول نماذج كمرات السقف التنفيذي (Master Roof Beams Schedule — Governing Envelopes)")
                 st.caption("تم تجميع كمرات السقف تلقائياً في 3 نماذج تنفيذية (B1 للقطاع الثقيل، B2 للمتوسط، B3 للخفيف) بالإضافة للكوابيل (CB1) بتطبيق قاعدة الظرف الحاكم.")
@@ -21589,43 +21435,6 @@ def render(is_standalone: bool = False):
                         use_container_width=True,
                         key=f"{prefix}btn_dl_rb_models_csv",
                     )
-
-                # ── 🗺️ 2D Roof Beams Framing Plan Sketch ──
-                st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
-                st.markdown(
-                    f"""
-                    <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.04) 0%, rgba(15, 23, 42, 0.08) 100%); border: 1.5px solid #0284c7; border-right: 6px solid #0284c7; border-radius: 10px; padding: 14px 18px; margin: 12px 0 16px 0; text-align: right;">
-                        <div style="font-size: 16px; font-weight: 800; color: #0369a1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                            <span>🗺️ المسقط الأفقي وتوزيع نماذج كمرات السقف والكوابيل (2D Roof Beams Framing Plan)</span>
-                            <span style="font-size: 12.5px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Beams Framing</span>
-                        </div>
-                        <div style="font-size: 13px; color: #475569; margin-top: 6px; line-height: 1.6;">
-                            مخطط ثنائي الأبعاد لمسقط السقف يوضح توقيع النماذج الموحدة (B1, B2, B3, CB1) بأبعادها ومواقعها الدقيقة، مع المحاور وأبعاد البحور (Spans) وحدود البلاطة والكوابيل، لربط الجدول التنفيذي أعلاه باللوحة الإنشائية.
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-                fig_rb_plan = draw_roof_beams_layout_sketch(
-                    active_columns=fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols,
-                    roof_beams_analysis=rb_analysis,
-                    slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
-                    title=f"ECP 203 — Roof Drop Beams & Cantilevers 2D Framing Plan (سقف {num_floors} طوابق)",
-                )
-                buf_rb_plan = io.BytesIO()
-                fig_rb_plan.savefig(buf_rb_plan, format="png", bbox_inches="tight", dpi=160)
-                buf_rb_plan.seek(0)
-                st.pyplot(fig_rb_plan, clear_figure=True, use_container_width=True)
-
-                st.download_button(
-                    label="📥 تحميل المسقط الأفقي لكمرات السقف (High-Res 2D Framing Plan PNG)",
-                    data=buf_rb_plan.getvalue(),
-                    file_name=f"{prefix}Roof_Beams_Framing_Plan_{num_floors}Floors.png",
-                    mime="image/png",
-                    use_container_width=True,
-                    key=f"{prefix}btn_dl_rb_plan_tab2_png",
-                )
 
                 # ── Interactive Overrides Table ──
                 st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
@@ -21719,86 +21528,49 @@ def render(is_standalone: bool = False):
                                     del st.session_state[k]
                             st.rerun()
 
-            # ── TAB 3: DETAILED BEAMS SCHEDULE ──
-            with tab_rb_details:
-                st.markdown("##### 🔩 جدول تفريد وحصر وتفاصيل جميع كمرات السقف الإنشائية (Detailed Roof Beams Schedule)")
-                st.caption("تفصيل دقيق لكل كمرة سقف بالمبنى مع البحور الصافية، والعزوم، وقوى القص، والتسليح النهائي، وحالة التحقق.")
-                df_rb_det_export = pd.DataFrame(rb_analysis["detailed_schedule_rows"])
-                render_styled_table(df_rb_det_export)
+            # ── TAB 2: CLASSIFICATION TABLE ──
+            with tab_rb_class:
+                st.markdown("##### 📋 جدول تصنيف كمرات السقف الإنشائية الشامل (Unified Roof Beams Classification Table)")
+                st.caption("يوضح التفرقة والتصنيف الصريح لجميع كمرات السقف الساقطة والكوابيل مع الموقع والمحاور والأبعاد والتسليح النهائي.")
+                df_rb_class_export = pd.DataFrame(rb_analysis["classification_rows"])
+                render_styled_table(df_rb_class_export)
 
-                csv_rb_det_data = df_rb_det_export.to_csv(index=False).encode('utf-8-sig')
-                excel_rb_det_bytes = safe_to_excel_bytes(df_rb_det_export, sheet_name='Detailed_Roof_Beams')
+                csv_rb_class_data = df_rb_class_export.to_csv(index=False).encode('utf-8-sig')
+                excel_rb_class_bytes = safe_to_excel_bytes(df_rb_class_export, sheet_name='Roof_Beams_Classification')
 
-                c_rb_dt1, c_rb_dt2 = st.columns(2)
-                with c_rb_dt1:
-                    if excel_rb_det_bytes is not None:
+                c_rb_cl1, c_rb_cl2 = st.columns(2)
+                with c_rb_cl1:
+                    if excel_rb_class_bytes is not None:
                         st.download_button(
-                            label="📊 تصدير جدول تفريد كمرات السقف التفصيلي (Excel .xlsx)",
-                            data=excel_rb_det_bytes,
-                            file_name=f"{prefix}Detailed_Roof_Beams_Schedule_{num_floors}Floors.xlsx",
+                            label="📊 تصدير جدول تصنيف كمرات السقف (Excel .xlsx)",
+                            data=excel_rb_class_bytes,
+                            file_name=f"{prefix}Roof_Beams_Classification_{num_floors}Floors.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                             use_container_width=True,
-                            key=f"{prefix}btn_dl_rb_det_excel",
+                            key=f"{prefix}btn_dl_rb_class_excel",
                         )
                     else:
                         st.download_button(
-                            label="📊 تصدير جدول تفريد كمرات السقف التفصيلي (Excel .xlsx)",
+                            label="📊 تصدير جدول تصنيف كمرات السقف (Excel .xlsx)",
                             data=b"",
                             disabled=True,
                             help="يلزم تثبيت مكتبة openpyxl لتصدير Excel",
                             use_container_width=True,
-                            key=f"{prefix}btn_dl_rb_det_excel_dis",
+                            key=f"{prefix}btn_dl_rb_class_excel_dis",
                         )
-                with c_rb_dt2:
+                with c_rb_cl2:
                     st.download_button(
-                        label="📥 تصدير جدول تفريد كمرات السقف التفصيلي (CSV)",
-                        data=csv_rb_det_data,
-                        file_name=f"{prefix}Detailed_Roof_Beams_Schedule_{num_floors}Floors.csv",
+                        label="📥 تصدير جدول تصنيف كمرات السقف (CSV)",
+                        data=csv_rb_class_data,
+                        file_name=f"{prefix}Roof_Beams_Classification_{num_floors}Floors.csv",
                         mime="text/csv",
                         use_container_width=True,
-                        key=f"{prefix}btn_dl_rb_det_csv",
+                        key=f"{prefix}btn_dl_rb_class_csv",
                     )
-
-            # ── TAB 4: ROOF BEAMS PLAN SKETCH ──
-            with tab_rb_sketch:
-                st.markdown("##### 🗺️ المسقط الأفقي وتوزيع نماذج كمرات السقف والكوابيل (Roof Beams Plan Sketch)")
-                st.caption("مخطط هندسي متكامل يوضح توقيع كافة كمرات السقف والكوابيل ونماذجها التنفيذية (B1, B2, B3, CB1) بأبعادها وتسليحها.")
-                fig_rb_sketch = draw_roof_beams_layout_sketch(
-                    fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols,
-                    rb_analysis,
-                    slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
-                )
-                buf_rb_sketch = io.BytesIO()
-                fig_rb_sketch.savefig(buf_rb_sketch, format="png", bbox_inches="tight", dpi=160)
-                buf_rb_sketch.seek(0)
-                st.pyplot(fig_rb_sketch, clear_figure=True, use_container_width=True)
-                st.download_button(
-                    label="📥 تحميل المسقط الأفقي لكمرات السقف (High-Res PNG)",
-                    data=buf_rb_sketch.getvalue(),
-                    file_name=f"{prefix}Roof_Beams_Plan_Sketch_{num_floors}Floors.png",
-                    mime="image/png",
-                    use_container_width=True,
-                    key=f"{prefix}btn_dl_rb_sketch_png",
-                )
 
         # ── 🏛️ FINAL DESIGN OF FOUNDATIONS AND GROUND BEAMS (ECP 203) ───────────────────
         with st.expander(f"🏛️ Final Design of Foundations and Ground Beams — {num_floors} Floors (التصميم النهائي للقواعد والسملات الأرضية)", expanded=True):
-            st.markdown(
-                f"""
-                <div dir="rtl" style="background:#eff6ff; border:1.5px solid #bfdbfe; border-right:7px solid #1d4ed8; border-radius:10px; padding:18px 22px; margin-bottom:18px; color:#1e3a8a; line-height:1.9; text-align:right;">
-                    <div style="font-size:1.45rem; font-weight:800; color:#1d4ed8; margin-bottom:8px;">
-                        🏛️ التصميم الإنشائي النهائي لأساسات وسملات المبنى (Final Design of Foundations & Ground Beams):
-                    </div>
-                    <div style="font-size:1.12rem; font-weight:700; color:#1e40af;">
-                        قسم تجميعي تنفيذي موحد وشامل يربط تلقائياً مخرجات <b>تصميم الأساسات (Building Foundations Design)</b> و<b>تصميم السملات الأرضية (Ground Beams Design)</b> لعدد <span style="font-weight:800; color:#1e3a8a;">{num_floors} طوابق</span> طبقاً لـ <span dir="ltr">ECP 203</span>.
-                        <br/>• <b>المسقط الأفقي التنفيذي الموحد (Consolidated 2D Plan Sketch):</b> إسقاط تفصيلي يدمج القواعد المسلحة والعادية، مع خطوط مسارات السملات والشدادات، والأعمدة والمحاور الإنشائية.
-                        <br/>• <b>جدول نماذج القواعد التنفيذي (Foundations Schedule Table):</b> تلخيص نماذج القواعد (F1, F2, F3...) بأبعاد المسلحة والعادية والتسليح الحاكم.
-                        <br/>• <b>جدول نماذج السملات الأرضية (Ground Beams Schedule Table):</b> تلخيص نماذج السملات (GB1, GB2, GB3...) بالقطاعات والتسليح السفلي والعلوي والكانات.
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+
 
             ftg_analysis_final = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
             gb_analysis_final = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis")
