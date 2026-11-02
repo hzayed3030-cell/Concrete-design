@@ -1070,7 +1070,7 @@ def generate_flat_slab_report_html(
     gb_section_html = ""
     if gb_analysis:
         gb_models_rows = ""
-        for m_mark in ["B1", "B2", "B3"]:
+        for m_mark in ["GB1", "GB2", "GB3", "B1", "B2", "B3"]:
             if m_mark in gb_analysis.get("models_dict", {}):
                 m_info = gb_analysis["models_dict"][m_mark]
                 m_lbl = m_info.get("label", "").split("—")[-1].strip(" )") if "—" in m_info.get("label", "") else m_info.get("label", "")
@@ -1414,7 +1414,7 @@ def generate_flat_slab_outputs_report_html(
     gb_outputs_html = ""
     if gb_analysis:
         gb_models_rows = ""
-        for m_mark in ["B1", "B2", "B3"]:
+        for m_mark in ["GB1", "GB2", "GB3", "B1", "B2", "B3"]:
             if m_mark in gb_analysis.get("models_dict", {}):
                 m_info = gb_analysis["models_dict"][m_mark]
                 gb_models_rows += f"""

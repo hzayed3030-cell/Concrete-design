@@ -1,6 +1,6 @@
 {
   "selected_module_idx": 0,
-  "apartment_name": "Control room",
+  "apartment_name": "Control test",
   "col_Pu_input": 160.0,
   "col_Safety_Factor": 1.2,
   "col_b": 30,
@@ -462,7 +462,7 @@
   "cs_price_gravel": 600.0,
   "cs_price_sand": 200.0,
   "cs_price_labor": 2000.0,
-  "cs_project_name": "Control room",
+  "cs_project_name": "Control test",
   "gs_lx": 30.0,
   "gs_ly": 20.0,
   "gs_ts": 20.0,
@@ -2389,35 +2389,7 @@
               "placed": true,
               "removed": false,
               "i_eff": 1,
-              "j_eff": 0,
-              "Atrib_0": 3.4749999999999996,
-              "Pu_slab_0": 7.592874999999998,
-              "Pu_slab": 22.393684297575774,
-              "Pu_punch": 4.25,
-              "Pu_beam": 19.09,
-              "framing_beams": [
-                "B7",
-                "B11"
-              ],
-              "Pu_0": 8.352162499999999,
-              "Pu": 24.63305272733335,
-              "beam_reactions": [
-                {
-                  "beam_id": "B7",
-                  "rxn_ton": 6.75,
-                  "net_col_rxn_ton": 0.01,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": false
-                },
-                {
-                  "beam_id": "B11",
-                  "rxn_ton": 12.34,
-                  "net_col_rxn_ton": 0.0,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": false
-                }
-              ],
-              "model_mark": "C1"
+              "j_eff": 0
             }
           },
           "supp2": {
@@ -2462,43 +2434,7 @@
               "placed": true,
               "removed": false,
               "i_eff": 1,
-              "j_eff": 3,
-              "Atrib_0": 6.131475,
-              "Pu_slab_0": 13.397272874999997,
-              "Pu_slab": 33.50814249899895,
-              "Pu_punch": 4.56,
-              "Pu_beam": 25.49,
-              "framing_beams": [
-                "B2",
-                "B3",
-                "B11"
-              ],
-              "Pu_0": 14.737000162499998,
-              "Pu": 36.85895674889885,
-              "beam_reactions": [
-                {
-                  "beam_id": "B2",
-                  "rxn_ton": 5.85,
-                  "net_col_rxn_ton": 0.01,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": false
-                },
-                {
-                  "beam_id": "B3",
-                  "rxn_ton": 7.3,
-                  "net_col_rxn_ton": 0.0,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": false
-                },
-                {
-                  "beam_id": "B11",
-                  "rxn_ton": 12.34,
-                  "net_col_rxn_ton": 0.0,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": false
-                }
-              ],
-              "model_mark": "C1"
+              "j_eff": 3
             }
           },
           "supports_desc": "كمرة رئيسية (مرتكزة على عمود C1 ⟷ عمود C8)",
@@ -3323,43 +3259,7 @@
               "placed": true,
               "removed": false,
               "i_eff": 3,
-              "j_eff": 0,
-              "Atrib_0": 5.268750000000001,
-              "Pu_slab_0": 11.512218749999999,
-              "Pu_slab": 34.09334777856426,
-              "Pu_punch": 3.91,
-              "Pu_beam": 28.79,
-              "framing_beams": [
-                "B5",
-                "B6",
-                "B10"
-              ],
-              "Pu_0": 12.663440625,
-              "Pu": 37.50268255642069,
-              "beam_reactions": [
-                {
-                  "beam_id": "B5",
-                  "rxn_ton": 8.38,
-                  "net_col_rxn_ton": 0.0,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": false
-                },
-                {
-                  "beam_id": "B6",
-                  "rxn_ton": 7.14,
-                  "net_col_rxn_ton": 0.01,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": false
-                },
-                {
-                  "beam_id": "B10",
-                  "rxn_ton": 13.27,
-                  "net_col_rxn_ton": 0.0,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": false
-                }
-              ],
-              "model_mark": "C1"
+              "j_eff": 0
             }
           },
           "supp2": {
@@ -3404,43 +3304,7 @@
               "placed": true,
               "removed": false,
               "i_eff": 3,
-              "j_eff": 3,
-              "Atrib_0": 4.826175,
-              "Pu_slab_0": 10.545192375,
-              "Pu_slab": 35.68420577276169,
-              "Pu_punch": 3.59,
-              "Pu_beam": 27.32,
-              "framing_beams": [
-                "B4",
-                "B10",
-                "B13"
-              ],
-              "Pu_0": 11.5997116125,
-              "Pu": 39.252626350037865,
-              "beam_reactions": [
-                {
-                  "beam_id": "B4",
-                  "rxn_ton": 8.33,
-                  "net_col_rxn_ton": 1.53,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": true
-                },
-                {
-                  "beam_id": "B10",
-                  "rxn_ton": 13.27,
-                  "net_col_rxn_ton": 0.0,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": false
-                },
-                {
-                  "beam_id": "B13",
-                  "rxn_ton": 5.72,
-                  "net_col_rxn_ton": 5.72,
-                  "Mu_transferred_ton_m": 7.55,
-                  "full_moment_continuity": true
-                }
-              ],
-              "model_mark": "C1"
+              "j_eff": 3
             }
           },
           "supports_desc": "كمرة رئيسية (مرتكزة على عمود C3 ⟷ عمود C10)",
@@ -3916,13 +3780,18 @@
   "fs_col_pu_edge": 41.49354789362141,
   "fs_col_tot_pu_edge": 41.49354789362141,
   "gb_overrides": {
-    "B1_t": 50.0,
-    "B2_t": 50.0,
-    "B3_t": 50.0,
-    "B1_nbot": 3,
-    "B1_ntop": 5,
-    "B2_ntop": 4,
-    "B3_ntop": 4
+    "B1_t": 90.0,
+    "B2_t": 40.0,
+    "B3_t": 40.0,
+    "GB1_t": 90.0,
+    "GB2_t": 40.0,
+    "GB3_t": 40.0,
+    "GB3_phi_bot": 16,
+    "B3_phi_bot": 16,
+    "GB1_phi_bot": 12,
+    "B1_phi_bot": 12,
+    "GB2_phi_bot": 12,
+    "B2_phi_bot": 12
   },
   "fs_col_pu_int": 41.71117633389702,
   "fs_col_tot_pu_int": 41.71117633389702,
@@ -3956,7 +3825,7 @@
   "Control_room_gb_phi_top": 12,
   "gb_phi_st": 8,
   "Control_room_gb_phi_st": 8,
-  "gb_b_unified": 30.0,
+  "gb_b_unified": 25.0,
   "Control_room_gb_b_unified": 30.0,
   "rb_h_wall": 1.0,
   "Control_room_rb_h_wall": 1.0,
@@ -3964,6 +3833,11 @@
     "B1_t": 60.0,
     "B3_t": 60.0
   },
+  "Control_test_gb_b_unified": 25.0,
+  "gb_h_wall": 4.0,
+  "Control_test_gb_h_wall": 4.0,
+  "gb_t_wall": 25.0,
+  "Control_test_gb_t_wall": 25.0,
   "enabled_modules": [
     0,
     1,

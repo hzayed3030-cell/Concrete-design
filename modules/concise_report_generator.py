@@ -525,6 +525,9 @@ def draw_page4_ground_beams_plan(
                 bbox=dict(boxstyle="circle,pad=0.25", fc="#f8fafc", ec="#334155", lw=1.2), zorder=8)
 
     beam_style = {
+        "GB1": {"fc": "#dcfce7", "ec": "#15803d", "tc": "#14532d"},
+        "GB2": {"fc": "#e0f2fe", "ec": "#0284c7", "tc": "#0369a1"},
+        "GB3": {"fc": "#f3e8ff", "ec": "#7e22ce", "tc": "#581c87"},
         "B1": {"fc": "#dcfce7", "ec": "#15803d", "tc": "#14532d"},
         "B2": {"fc": "#e0f2fe", "ec": "#0284c7", "tc": "#0369a1"},
         "B3": {"fc": "#f3e8ff", "ec": "#7e22ce", "tc": "#581c87"},
@@ -543,9 +546,9 @@ def draw_page4_ground_beams_plan(
         p1 = alg["p1"]
         p2 = alg["p2"]
         dir_b = alg["dir"]
-        tag = b.get("tag", b.get("model_mark", "B1"))
+        tag = b.get("tag", b.get("model_mark", "GB1"))
         bw_m = float(b.get("b_cm", 25.0)) / 100.0
-        cfg = beam_style.get(tag, beam_style["B1"])
+        cfg = beam_style.get(tag, beam_style.get("GB1", beam_style["B1"]))
 
         if dir_b == "X":
             bx0 = min(p1[0], p2[0])
@@ -739,8 +742,8 @@ def draw_page5_roof_beams_plan(
         bw_m = float(b.get("b_cm", 25.0)) / 100.0
         t_cm = int(b.get("exec_t_cm", b.get("t_calc", 50.0)))
         b_cm = int(b.get("b_cm", 25.0))
-        tag = b.get("tag", b.get("model_mark", "B1"))
-        cfg = beam_style.get(tag, beam_style["B1"])
+        tag = b.get("tag", b.get("model_mark", "GB1"))
+        cfg = beam_style.get(tag, beam_style.get("GB1", beam_style["B1"]))
 
         dx = p2[0] - p1[0]
         dy = p2[1] - p1[1]

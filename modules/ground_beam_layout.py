@@ -892,34 +892,34 @@ def extract_structural_links_and_beams(
     analyzed_ground_beams.sort(key=lambda b: b["demand_score"], reverse=True)
 
     n_tot_gb = len(analyzed_ground_beams)
-    group_assignments = {}  # elem_id -> "B1", "B2", or "B3"
+    group_assignments = {}  # elem_id -> "GB1", "GB2", or "GB3"
 
     if n_tot_gb == 0:
         pass
     elif n_tot_gb == 1:
-        group_assignments[analyzed_ground_beams[0]["elem_id"]] = "B1"
+        group_assignments[analyzed_ground_beams[0]["elem_id"]] = "GB1"
     elif n_tot_gb == 2:
-        group_assignments[analyzed_ground_beams[0]["elem_id"]] = "B1"
-        group_assignments[analyzed_ground_beams[1]["elem_id"]] = "B2"
+        group_assignments[analyzed_ground_beams[0]["elem_id"]] = "GB1"
+        group_assignments[analyzed_ground_beams[1]["elem_id"]] = "GB2"
     else:
         cut1 = int(math.ceil(n_tot_gb / 3.0))
         cut2 = int(math.ceil(2.0 * n_tot_gb / 3.0))
         for i, b in enumerate(analyzed_ground_beams):
             if i < cut1:
-                group_assignments[b["elem_id"]] = "B1"
+                group_assignments[b["elem_id"]] = "GB1"
             elif i < cut2:
-                group_assignments[b["elem_id"]] = "B2"
+                group_assignments[b["elem_id"]] = "GB2"
             else:
-                group_assignments[b["elem_id"]] = "B3"
+                group_assignments[b["elem_id"]] = "GB3"
 
     # Compute Governing Envelope for each group
     models_dict = {}
     overrides = user_overrides or {}
 
     for mark, label in [
-        ("B1", "B1 (Heavy — قطاع ثقيل لأعلى عزوم وبحور)"),
-        ("B2", "B2 (Medium — قطاع متوسط للمتطلبات الإنشائية الوسطى)"),
-        ("B3", "B3 (Light — قطاع خفيف للبحور القصيرة وقواطيع الحوائط)"),
+        ("GB1", "GB1 (Heavy — قطاع ثقيل لأعلى عزوم وبحور)"),
+        ("GB2", "GB2 (Medium — قطاع متوسط للمتطلبات الإنشائية الوسطى)"),
+        ("GB3", "GB3 (Light — قطاع خفيف للبحور القصيرة وقواطيع الحوائط)"),
     ]:
         grp_beams = [b for b in analyzed_ground_beams if group_assignments.get(b["elem_id"]) == mark]
         if not grp_beams:
@@ -927,9 +927,11 @@ def extract_structural_links_and_beams(
 
         env_t = max(b["t_calc"] for b in grp_beams)
         env_t = float(math.ceil(env_t / 5.0) * 5.0)
-        ov_t = float(overrides.get(f"{mark}_t", env_t))
+        ov_t = float(overrides.get(f"{mark}_t", overrides.get(f"B{mark[2:]}_t", env_t)))
+        m_phi_bot = int(overrides.get(f"{mark}_phi_bot", overrides.get(f"B{mark[2:]}_phi_bot", phi_bot)))
+        m_phi_top = int(overrides.get(f"{mark}_phi_top", overrides.get(f"B{mark[2:]}_phi_top", phi_top)))
 
-        # Dynamic Recalculation of Section Forces & Reinforcement for all beams with depth ov_t
+        # Dynamic Recalculation of Section Forces & Reinforcement for all beams with depth ov_t and diameters m_phi_bot, m_phi_top
         for b in grp_beams:
             d_exec = max(10.0, ov_t - cover_cm)
             w_ow = (b_unified / 100.0) * (ov_t / 100.0) * 2.50
@@ -978,9 +980,9 @@ def extract_structural_links_and_beams(
                 st_req_per_m = stirrups_per_m
                 shear_status = "✅ آمن خرسانة فقط"
 
-            area_1bot = math.pi * ((phi_bot / 10.0) ** 2) / 4.0
+            area_1bot = math.pi * ((m_phi_bot / 10.0) ** 2) / 4.0
             n_bot_des = max(2, int(math.ceil(As_bot_req / max(0.01, area_1bot))))
-            area_1top = math.pi * ((phi_top / 10.0) ** 2) / 4.0
+            area_1top = math.pi * ((m_phi_top / 10.0) ** 2) / 4.0
             n_top_des = max(2, int(math.ceil(As_top_req / max(0.01, area_1top))))
 
             b["Mu_pos"] = Mu_pos
@@ -990,6 +992,8 @@ def extract_structural_links_and_beams(
             b["As_top_req"] = As_top_req
             b["n_bot"] = n_bot_des
             b["n_top"] = n_top_des
+            b["phi_bot"] = m_phi_bot
+            b["phi_top"] = m_phi_top
             b["stirrups_per_m"] = st_req_per_m
             b["shear_status"] = shear_status
 
@@ -999,15 +1003,15 @@ def extract_structural_links_and_beams(
         env_st_m = max(b["stirrups_per_m"] for b in grp_beams)
         env_branches = 4 if b_unified >= 40.0 else 2
 
-        area_1bot = math.pi * ((phi_bot / 10.0) ** 2) / 4.0
+        area_1bot = math.pi * ((m_phi_bot / 10.0) ** 2) / 4.0
         env_nbot = max(2, int(math.ceil(env_As_bot / max(0.01, area_1bot))))
-        area_1top = math.pi * ((phi_top / 10.0) ** 2) / 4.0
+        area_1top = math.pi * ((m_phi_top / 10.0) ** 2) / 4.0
         env_ntop = max(2, int(math.ceil(env_As_top / max(0.01, area_1top))))
 
         # Apply User Interactive Overrides if provided (or default to dynamically recalculated env_nbot, env_ntop, env_st_m)
-        ov_nbot = int(overrides.get(f"{mark}_nbot", env_nbot))
-        ov_ntop = int(overrides.get(f"{mark}_ntop", env_ntop))
-        ov_st = int(overrides.get(f"{mark}_stirrups", env_st_m))
+        ov_nbot = int(overrides.get(f"{mark}_nbot", overrides.get(f"B{mark[2:]}_nbot", env_nbot)))
+        ov_ntop = int(overrides.get(f"{mark}_ntop", overrides.get(f"B{mark[2:]}_ntop", env_ntop)))
+        ov_st = int(overrides.get(f"{mark}_stirrups", overrides.get(f"B{mark[2:]}_stirrups", env_st_m)))
 
         if ov_t >= 60.0:
             side_spaces = math.ceil((ov_t - 2.0 * cover_cm) / 30.0)
@@ -1027,16 +1031,16 @@ def extract_structural_links_and_beams(
             "t_cm": ov_t,
             "t_env_calc": env_t,
             "n_bot": ov_nbot,
-            "phi_bot": phi_bot,
+            "phi_bot": m_phi_bot,
             "n_top": ov_ntop,
-            "phi_top": phi_top,
+            "phi_top": m_phi_top,
             "total_side_bars": env_side_bars,
             "phi_side": phi_side,
             "stirrups_per_m": ov_st,
             "phi_st": phi_st,
             "n_branches": env_branches,
-            "rft_bot_str": f"{ov_nbot}Ø{phi_bot}",
-            "rft_top_str": f"{ov_ntop}Ø{phi_top}",
+            "rft_bot_str": f"{ov_nbot}Ø{m_phi_bot}",
+            "rft_top_str": f"{ov_ntop}Ø{m_phi_top}",
             "rft_side_str": f"{env_side_bars}Ø{phi_side} (براندات)" if env_side_bars > 0 else "—",
             "stirrups_str": f"{ov_st}Ø{phi_st}/m ({env_branches} فروع)",
             "dimensions_str": f"{int(b_unified)} × {int(ov_t)}",
@@ -1044,12 +1048,14 @@ def extract_structural_links_and_beams(
 
     # Assign Model Tag & Final Exec Values to Each Ground Beam
     for b in analyzed_ground_beams:
-        b["model_mark"] = group_assignments.get(b["elem_id"], "B1")
+        b["model_mark"] = group_assignments.get(b["elem_id"], "GB1")
         b["tag"] = b["model_mark"]
         m_info = models_dict.get(b["model_mark"], {})
         b["exec_t_cm"] = m_info.get("t_cm", b["t_calc"])
         b["exec_n_bot"] = m_info.get("n_bot", b["n_bot"])
         b["exec_n_top"] = m_info.get("n_top", b["n_top"])
+        b["phi_bot"] = m_info.get("phi_bot", m_phi_bot)
+        b["phi_top"] = m_info.get("phi_top", m_phi_top)
         b["exec_stirrups_per_m"] = m_info.get("stirrups_per_m", b["stirrups_per_m"])
         b["exec_side_bars"] = m_info.get("total_side_bars", 0)
         alg = align_ground_beam_coords(b, unique_xs, unique_ys)
@@ -1066,7 +1072,7 @@ def extract_structural_links_and_beams(
 
     # ── Step E: Master Ground Beams Schedule Table ─────────────────────────────
     models_schedule = []
-    for mark in ["B1", "B2", "B3"]:
+    for mark in ["GB1", "GB2", "GB3"]:
         if mark in models_dict:
             m = models_dict[mark]
             models_schedule.append({
@@ -1237,14 +1243,57 @@ def draw_ground_beams_layout_sketch(
     - Shaded column rectangles with column IDs
     - Full Legend matching Master Models Schedule (100% data consistency)
     """
-    plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "sans-serif"]
-    fig, ax = plt.subplots(figsize=(16, 13), dpi=160, facecolor="#ffffff")
-    ax.set_facecolor("#f8fafc")
-
     if not active_columns:
-        ax.text(0.5, 0.5, "No Active Columns Found / لا توجد أعمدة مفعلة", ha="center", va="center", fontsize=14, color="#64748b")
+        fig, ax = plt.subplots(figsize=(10, 8), dpi=160, facecolor="#ffffff")
+        ax.text(0.5, 0.5, "No Active Columns Found / No columns active", ha="center", va="center", fontsize=14, color="#64748b")
         ax.axis("off")
         return fig
+
+    # ── 1. Prepare Legend Rows & Data Model Ahead of Canvas Construction ──
+    models_dict = gb_analysis.get("models_dict", {})
+    strap_list = gb_analysis.get("strap_beams", [])
+    color_meta = {
+        "GB1": {"color": "#1d4ed8", "name": "Heavy Section"},
+        "GB2": {"color": "#15803d", "name": "Medium Section"},
+        "GB3": {"color": "#7e22ce", "name": "Light Section"},
+        "ST":  {"color": "#ea580c", "name": "Strap Beams"},
+    }
+
+    leg_rows = []
+    for mk in ["GB1", "GB2", "GB3"]:
+        if mk in models_dict:
+            m = models_dict[mk]
+            meta = color_meta.get(mk, {"color": "#1e293b", "name": "Ground Beam"})
+            sec_s = f"{int(m.get('b_cm', 25))} × {int(m.get('t_cm', 60))} cm"
+            rft_parts = [
+                f"Bottom: {m.get('n_bot', 2)}Ø{m.get('phi_bot', 16)}",
+                f"Top: {m.get('n_top', 2)}Ø{m.get('phi_top', 12)}",
+                f"Stirrups: {m.get('stirrups_per_m', 6)}Ø{m.get('phi_st', 8)}/m ({m.get('n_branches', 2)}-legs)",
+            ]
+            if m.get("total_side_bars", 0) > 0:
+                rft_parts.append(f"Side: {m['total_side_bars']}Ø{m.get('phi_side', 10)}")
+
+            rft_s = "   |   ".join(rft_parts)
+            cnt_s = f"{m.get('count', 0)} Beams ({m.get('total_len_m', 0.0):.1f} m)"
+            leg_rows.append({
+                "mark": mk,
+                "label": meta["name"],
+                "color": meta["color"],
+                "sec": sec_s,
+                "rft": rft_s,
+                "cnt": cnt_s,
+            })
+
+    if strap_list:
+        meta_st = color_meta["ST"]
+        leg_rows.append({
+            "mark": "ST",
+            "label": meta_st["name"],
+            "color": meta_st["color"],
+            "sec": "Design Specific",
+            "rft": "Eccentricity ties for neighbor footings",
+            "cnt": f"{len(strap_list)} Beams",
+        })
 
     unique_xs, unique_ys, label_map_x, label_map_y = _get_grid_axes_gb(active_columns)
 
@@ -1274,6 +1323,49 @@ def draw_ground_beams_layout_sketch(
     x_dim1 = x_left_ref - 0.5
     x_dim2 = x_left_ref - 1.2
     x_bubble = x_left_ref - 2.1
+
+    # ── 2. Algorithmic Plan Area & Aspect Ratio Optimization ──
+    x_min_bound = x_bubble - 0.9
+    x_max_bound = x_right_ref + 0.9
+    y_min_bound = y_bottom_ref - 0.9
+    y_max_bound = y_bubble + 0.9
+
+    W_span = x_max_bound - x_min_bound
+    H_span = y_max_bound - y_min_bound
+    R_data = W_span / max(0.5, H_span)
+
+    W_fig = 16.0
+    W_box_in = 0.93 * W_fig  # ~14.88 in
+    H_plan_target = W_box_in / R_data
+    H_plan_in = max(7.5, min(15.5, H_plan_target))
+    R_box = W_box_in / H_plan_in
+
+    # Symmetrically pad limits so data aspect perfectly fills the subplot viewport (Zero letterbox waste)
+    if R_data > R_box:
+        delta_H = (W_span / R_box) - H_span
+        y_min_eff = y_min_bound - delta_H / 2.0
+        y_max_eff = y_max_bound + delta_H / 2.0
+        x_min_eff = x_min_bound
+        x_max_eff = x_max_bound
+    else:
+        delta_W = (H_span * R_box) - W_span
+        x_min_eff = x_min_bound - delta_W / 2.0
+        x_max_eff = x_max_bound + delta_W / 2.0
+        y_min_eff = y_min_bound
+        y_max_eff = y_max_bound
+
+    n_leg = max(1, len(leg_rows))
+    H_leg_in = max(1.8, 0.85 + n_leg * 0.44)
+    H_fig = H_plan_in + H_leg_in + 0.35
+
+    plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "sans-serif"]
+    fig, (ax, ax_leg) = plt.subplots(
+        2, 1, figsize=(W_fig, H_fig), dpi=160, facecolor="#ffffff",
+        gridspec_kw={"height_ratios": [H_plan_in, H_leg_in], "hspace": 0.04}
+    )
+    ax.set_facecolor("#f8fafc")
+    ax_leg.set_facecolor("#ffffff")
+    ax_leg.axis("off")
 
     # 1. Building Footprint
     slab_w = x_slab_max - x_slab_min
@@ -1314,6 +1406,9 @@ def draw_ground_beams_layout_sketch(
 
     # 3. Ground Beams & Strap Beams Drawing
     color_map = {
+        "GB1": {"fc": "#dbeafe", "ec": "#1d4ed8", "tc": "#1e40af", "badge_bg": "#eff6ff"},
+        "GB2": {"fc": "#dcfce7", "ec": "#15803d", "tc": "#166534", "badge_bg": "#f0fdf4"},
+        "GB3": {"fc": "#f3e8ff", "ec": "#7e22ce", "tc": "#6b21a8", "badge_bg": "#faf5ff"},
         "B1": {"fc": "#dbeafe", "ec": "#1d4ed8", "tc": "#1e40af", "badge_bg": "#eff6ff"},
         "B2": {"fc": "#dcfce7", "ec": "#15803d", "tc": "#166534", "badge_bg": "#f0fdf4"},
         "B3": {"fc": "#f3e8ff", "ec": "#7e22ce", "tc": "#6b21a8", "badge_bg": "#faf5ff"},
@@ -1345,8 +1440,8 @@ def draw_ground_beams_layout_sketch(
         bw_m = float(b.get("b_cm", 25.0)) / 100.0
         t_cm = int(b.get("exec_t_cm", b.get("t_calc", b.get("t_cm", 50.0))))
         b_cm = int(b.get("b_cm", 25.0))
-        tag = b.get("tag", b.get("model_mark", "B1"))
-        cfg = color_map.get(tag, color_map.get("ST" if "ST" in str(tag) else "B1", {"fc": "#f1f5f9", "ec": "#475569", "tc": "#334155", "badge_bg": "#ffffff"}))
+        tag = b.get("tag", b.get("model_mark", "GB1"))
+        cfg = color_map.get(tag, color_map.get("ST" if "ST" in str(tag) else "GB1", {"fc": "#f1f5f9", "ec": "#475569", "tc": "#334155", "badge_bg": "#ffffff"}))
 
         if dir_b == "X":
             bx0 = min(p1[0], p2[0])
@@ -1391,20 +1486,12 @@ def draw_ground_beams_layout_sketch(
             elif rot < -90:
                 rot += 180
 
-        n_bot = b.get("exec_n_bot", b.get("n_bot", 2))
-        phi_bot = b.get("phi_bot", 16)
-        span_len = b.get("span_m", math.hypot(p2[0] - p1[0], p2[1] - p1[1]))
-        lbl = f"{tag} ({b_cm}×{t_cm})"
-        if span_len >= 2.0:
-            if "ST" in str(tag):
-                lbl += f"\n{b.get('rft_top_str', '')}"
-            else:
-                lbl += f"\n{n_bot}Ø{phi_bot}"
+        lbl = str(tag)
 
         ax.text(
             mid_x, mid_y, lbl,
-            ha="center", va="center", rotation=rot, fontsize=7.5, fontweight="bold", color=cfg["tc"],
-            bbox=dict(boxstyle="round,pad=0.18", fc=cfg["badge_bg"], ec=cfg["ec"], lw=0.9, alpha=0.95),
+            ha="center", va="center", rotation=rot, fontsize=8.5, fontweight="bold", color=cfg["tc"],
+            bbox=dict(boxstyle="round,pad=0.20", fc=cfg["badge_bg"], ec=cfg["ec"], lw=1.0, alpha=0.95),
             zorder=6
         )
 
@@ -1425,39 +1512,76 @@ def draw_ground_beams_layout_sketch(
             ha="center", va="center", color="#ffffff", fontweight="bold", fontsize=8.2, zorder=7
         )
 
-    # 5. Legend Box
-    models_dict = gb_analysis.get("models_dict", {})
-    if not models_dict:
-        leg_lines = [_ar("دليل نماذج السملات: لم يتم نمذجة أي سملات بعد")]
-    else:
-        leg_lines = [_ar("دليل نماذج السملات الأرضية والميدات (Ground Beams Legend):")]
-    for mk in ["B1", "B2", "B3"]:
-        if mk in models_dict:
-            m = models_dict[mk]
-            if mk == "B1":
-                dot = "■ B1 (Heavy)"
-            elif mk == "B2":
-                dot = "■ B2 (Medium)"
-            else:
-                dot = "■ B3 (Light)"
-            leg_lines.append(
-                f"{dot}: {m['dimensions_str']} cm | " + _ar(f"سفلي: {m['rft_bot_str']} | علوي: {m['rft_top_str']} | كانات: {m['stirrups_str']} ({m['count']} سملة - {m['total_len_m']:.1f}m)")
-            )
-    if strap_list:
-        leg_lines.append("■ ST (Strap Beam): " + _ar(f"شدادات قواعد الجار ({len(strap_list)} شداد)"))
-
-    leg_text = "\n".join(leg_lines)
-    ax.text(
-        0.02, 0.02, leg_text, transform=ax.transAxes,
-        fontsize=8.5, fontweight="bold", color="#1e293b", va="bottom", ha="left",
-        bbox=dict(boxstyle="round,pad=0.45", fc="#ffffff", ec="#cbd5e1", lw=1.3, alpha=0.96),
-        zorder=9
-    )
-
-    ax.set_xlim(x_bubble - 1.2, x_right_ref + 1.2)
-    ax.set_ylim(y_bottom_ref - 1.2, y_bubble + 1.2)
+    ax.set_xlim(x_min_eff, x_max_eff)
+    ax.set_ylim(y_min_eff, y_max_eff)
     ax.set_aspect("equal", adjustable="box")
     ax.axis("off")
     ax.set_title(title, fontsize=13.5, fontweight="bold", color="#0f172a", pad=20)
+
+    # ── 5. Dedicated Legend Subplot (Below Framing Plan — Algorithmic Font Sizing & Proportions) ──
+    ax_leg.axis("off")
+    ax_leg.set_facecolor("#ffffff")
+    ax_leg.set_xlim(0, 1)
+    ax_leg.set_ylim(0, 1)
+
+    # Outer decorative card border
+    card_patch = patches.FancyBboxPatch(
+        (0.01, 0.02), 0.98, 0.96,
+        boxstyle="round,pad=0.012,rounding_size=0.015",
+        facecolor="#ffffff", edgecolor="#cbd5e1", lw=1.5, zorder=1
+    )
+    ax_leg.add_patch(card_patch)
+
+    # Algorithmic vertical slot & font size calculations based on row density and text length
+    h_row = 0.70 / n_leg
+    fs_base = max(7.8, min(10.8, 6.8 + 12.0 * h_row))
+    max_len = max(len(r.get("rft", "") + r.get("sec", "")) for r in leg_rows) if leg_rows else 60
+    scale_w = min(1.0, 80.0 / max(1, max_len))
+    fs_rft = max(7.2, min(fs_base, fs_base * scale_w))
+    fs_badge = fs_base
+    fs_title = min(11.5, fs_base + 1.5)
+    fs_cnt = max(7.4, fs_base - 0.4)
+
+    # Title header (English only)
+    ax_leg.text(
+        0.025, 0.88, "GROUND BEAMS & TIE BEAMS SCHEDULE LEGEND (ECP 203)",
+        fontsize=fs_title, fontweight="bold", color="#1e3a8a", va="center", ha="left", zorder=3
+    )
+    ax_leg.plot([0.025, 0.975], [0.77, 0.77], color="#e2e8f0", lw=1.2, zorder=2)
+
+    if not leg_rows:
+        ax_leg.text(
+            0.5, 0.40, "No ground beams or tie links identified yet.",
+            fontsize=fs_base, fontweight="bold", color="#64748b", ha="center", va="center"
+        )
+    else:
+        y_slots = [0.75 - (i + 0.5) * h_row for i in range(n_leg)]
+        for r_item, y_s in zip(leg_rows, y_slots):
+            # Model badge
+            ax_leg.text(
+                0.025, y_s, f"■ {r_item['mark']} ({r_item['label']}):",
+                fontsize=fs_badge, fontweight="bold", color=r_item["color"], va="center", ha="left", zorder=3
+            )
+            # Cross-section
+            ax_leg.text(
+                0.20, y_s, f"Sec: {r_item['sec']}",
+                fontsize=fs_rft, fontweight="bold", color="#1e293b", va="center", ha="left", zorder=3
+            )
+            # Rebar details
+            ax_leg.text(
+                0.35, y_s, r_item["rft"],
+                fontsize=fs_rft, fontweight="normal", color="#334155", va="center", ha="left", zorder=3
+            )
+            # Count & Length
+            ax_leg.text(
+                0.975, y_s, r_item["cnt"],
+                fontsize=fs_cnt, fontweight="bold", color="#475569", va="center", ha="right", zorder=3
+            )
+
+    try:
+        fig.subplots_adjust(top=0.97, bottom=0.03, left=0.035, right=0.965)
+    except Exception:
+        pass
+
     return fig
 
