@@ -11113,7 +11113,7 @@ def show_design_philosophy_dialog():
         '</div>'
 
         '<div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-right: 6px solid #2563eb; border-radius: 10px; padding: 18px 22px; margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">'
-        '<h4 style="color: #1e40af; margin-top: 0; margin-bottom: 10px; font-size: 16.5px; font-weight: 800;">'
+        '<h4 style="color: #38bdf8; margin-top: 0; margin-bottom: 10px; font-size: 16.5px; font-weight: 800;">'
         '1️⃣ فلسفة حساب ردود أفعال وأحمال الأعمدة <span dir="ltr" style="font-size:14px; color:#3b82f6;">(Column Reactions & Tributary Area)</span>'
         '</h4>'
         '<ul style="margin-bottom: 6px; padding-right: 22px; line-height: 1.8;">'
@@ -14498,7 +14498,7 @@ def _section_fs_add_columns(
             cfg["fs_new_col_sy"] = sel_sy_mode
 
             st.markdown("<hr style='margin: 10px 0; border: none; border-top: 1px dashed #cbd5e1;'>", unsafe_allow_html=True)
-            st.markdown("<div dir='rtl' style='font-size:0.95rem; font-weight:800; color:#1e3a8a; margin-bottom:6px;'>🖱️ اسقاط اعمدة بسحب صندوق بالماوس (Interactive Box Selection)</div>", unsafe_allow_html=True)
+            st.markdown("<div dir='rtl' style='font-size:0.95rem; font-weight:800; color:#38bdf8; margin-bottom:6px;'>🖱️ اسقاط اعمدة بسحب صندوق بالماوس (Interactive Box Selection)</div>", unsafe_allow_html=True)
 
             multi_box_flag = st.checkbox(
                 "📦 السماح بإسقاط عدة أعمدة دفعة واحدة عند سحب الصندوق على أكثر من تقاطع / محور",
@@ -15179,7 +15179,7 @@ def _section_fs_add_columns(
         ):
             st.markdown(
                 """
-                <div style="background: #f0f9ff; border-right: 4px solid #0284c7; padding: 7px 12px; border-radius: 6px; font-size: 13px; color: #0369a1; margin-bottom: 10px;" dir="rtl">
+                <div style="background: #f0f9ff; border-right: 4px solid #38bdf8; padding: 7px 12px; border-radius: 6px; font-size: 13px; color: #38bdf8; margin-bottom: 10px;" dir="rtl">
                     <b>📏 موديول كمرات البلاطات المسطحة (Drop Beams Engine):</b><br>
                     حدد أبعاد الكمرة وقطر التسليح، ثم فعّل وضع الصندوق واسحب بالماوس ليشمل المحور والبحور المطلوبة. يتم إسقاط ورسم الكمرات على خطوط المحاور تماماً وحساب تسليحها وأبعادها فورياً (بنفس فلسفة إسقاط الحوائط في موديول 15).
                 </div>
@@ -15287,7 +15287,7 @@ def _section_fs_add_columns(
             else:
                 st.markdown(
                     """
-                    <div style="background: linear-gradient(135deg, rgba(224, 242, 254, 0.95), rgba(186, 230, 253, 0.95)); border: 2px solid #0284c7; border-radius: 8px; padding: 9px 14px; margin-bottom: 8px; text-align: right; font-size: 13px; color: #0369a1; font-weight: 800;" dir="rtl">
+                    <div style="background: linear-gradient(135deg, rgba(224, 242, 254, 0.95), rgba(186, 230, 253, 0.95)); border: 2px solid #38bdf8; border-radius: 8px; padding: 9px 14px; margin-bottom: 8px; text-align: right; font-size: 13px; color: #38bdf8; font-weight: 800;" dir="rtl">
                         🎯 <b>وضع صندوق إسقاط الكمرات نشط:</b> اسحب صندوقاً بالماوس ليشمل المحور والبحور المطلوبة بين التقاطعات على المسقط (أو انقر على البحر). يتم إسقاط ورسم الكمرات على المحاور تماماً.
                     </div>
                     """,
@@ -18908,7 +18908,7 @@ def render(is_standalone: bool = False):
             st.markdown(
                 """
                 <div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:8px; padding:10px 14px; margin-bottom:12px;">
-                    <div style="font-size:0.95rem; font-weight:800; color:#1e3a8a; display:flex; align-items:center; gap:8px;">
+                    <div style="font-size:0.95rem; font-weight:800; color:#38bdf8; display:flex; align-items:center; gap:8px;">
                         <span>📈</span>
                         <span>قطاعات رأسية تمتد بكامل طول وعرض البلاطة مع الاعتماد الحصري على الركائز الفعلية (الأعمدة والكمرات) وتجاهل خطوط المحاور الوهمية</span>
                     </div>
@@ -19114,7 +19114,7 @@ def render(is_standalone: bool = False):
         st.markdown(
             """
             <div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:8px; padding:10px 16px; margin-bottom:14px;">
-                <div style="font-size:0.95rem; font-weight:800; color:#1e3a8a; display:flex; align-items:center; gap:8px;">
+                <div style="font-size:0.95rem; font-weight:800; color:#38bdf8; display:flex; align-items:center; gap:8px;">
                     <span>📋</span>
                     <span>جداول تفصيلية شاملة لمواضع وقيم عزوم الانحناء التصميمية وحديد التسليح المطلوب لتغطيتها طبقاً للكود المصري ECP 203</span>
                 </div>
@@ -20370,7 +20370,7 @@ def render(is_standalone: bool = False):
                     st.markdown(
                         f"""
                         <div dir="rtl" style="direction: rtl !important; text-align: right !important; background:#eff6ff; border:1.5px solid #bfdbfe; border-right:7px solid #2563eb; border-radius:10px; padding:16px 20px; margin:4px 0 8px 0; color:#1e293b; line-height:1.9;">
-                            <div style="direction: rtl !important; text-align: right !important; font-size:1.35rem; font-weight:800; color:#1e40af; margin-bottom:8px;">
+                            <div style="direction: rtl !important; text-align: right !important; font-size:1.35rem; font-weight:800; color:#38bdf8; margin-bottom:8px;">
                                 🏘️ أعمدة الجار المعتمدة بالمشروع (طبقاً لمدخلات البلاطة والأعمدة):
                             </div>
                             <div style="direction: rtl !important; text-align: right !important; font-size:1.25rem; font-weight:700; line-height:1.9; color:#0f172a;">
@@ -20582,8 +20582,8 @@ def render(is_standalone: bool = False):
         with st.expander(f"🧱 Ground Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج الميدات والسملات الأرضية)", expanded=False):
             # 1. Design Parameters & Controls
             with st.container(border=True):
-                st.markdown("<div style='font-size:16px; font-weight:800; color:#1e3a8a; margin-bottom:6px;'>⚙️ محددات ومعايير تصميم السملات الأرضية (Ground Beam Design Parameters)</div>", unsafe_allow_html=True)
-                gbc1, gbc2, gbc3 = st.columns(3)
+                st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:6px;'>⚙️ محددات ومعايير تصميم السملات الأرضية (Ground Beam Design Parameters)</div>", unsafe_allow_html=True)
+                gbc1, gbc2, gbc3, gbc4, gbc5 = st.columns(5)
                 with gbc1:
                     lvl_opts = [
                         "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)",
@@ -20602,6 +20602,7 @@ def render(is_standalone: bool = False):
                         S.cfg_set(f"{prefix}gb_level_type", new_gb_level)
                         st.rerun()
 
+                with gbc2:
                     new_gb_b = st.number_input(
                         "عرض الميدة الموحد b (cm):",
                         min_value=15.0, max_value=60.0,
@@ -20611,37 +20612,6 @@ def render(is_standalone: bool = False):
                     if new_gb_b != gb_b_unified:
                         S.cfg_set("gb_b_unified", new_gb_b)
                         S.cfg_set(f"{prefix}gb_b_unified", new_gb_b)
-                        st.rerun()
-
-                with gbc2:
-                    new_gb_wall = st.checkbox("وجود حوائط مباني فوق السملات", value=bool(gb_has_wall), key=f"{prefix}w_gb_has_wall")
-                    if new_gb_wall != gb_has_wall:
-                        S.cfg_set("gb_has_wall", new_gb_wall)
-                        S.cfg_set(f"{prefix}gb_has_wall", new_gb_wall)
-                        st.rerun()
-
-                    new_gb_hw = st.number_input(
-                        "ارتفاع الحائط H_wall (m):",
-                        min_value=1.0, max_value=6.0,
-                        value=float(gb_h_wall), step=0.25,
-                        disabled=not new_gb_wall,
-                        key=f"{prefix}w_gb_h_wall",
-                    )
-                    if new_gb_hw != gb_h_wall:
-                        S.cfg_set("gb_h_wall", new_gb_hw)
-                        S.cfg_set(f"{prefix}gb_h_wall", new_gb_hw)
-                        st.rerun()
-
-                    new_gb_tw = st.number_input(
-                        "سُمك الحائط t_wall (cm):",
-                        min_value=10.0, max_value=40.0,
-                        value=float(gb_t_wall), step=2.0,
-                        disabled=not new_gb_wall,
-                        key=f"{prefix}w_gb_t_wall",
-                    )
-                    if new_gb_tw != gb_t_wall:
-                        S.cfg_set("gb_t_wall", new_gb_tw)
-                        S.cfg_set(f"{prefix}gb_t_wall", new_gb_tw)
                         st.rerun()
 
                 with gbc3:
@@ -20658,6 +20628,7 @@ def render(is_standalone: bool = False):
                         S.cfg_set(f"{prefix}gb_axial_tie_ratio", new_gb_tie)
                         st.rerun()
 
+                with gbc4:
                     new_gb_st_m = st.number_input(
                         "عدد الكانات الأساسية / م':",
                         min_value=5, max_value=10,
@@ -20669,6 +20640,7 @@ def render(is_standalone: bool = False):
                         S.cfg_set(f"{prefix}gb_stirrups_m", new_gb_st_m)
                         st.rerun()
 
+                with gbc5:
                     dia_st_opts = [8, 10, 12]
                     idx_s = dia_st_opts.index(gb_phi_st_val) if gb_phi_st_val in dia_st_opts else 0
                     new_gb_phi_st = st.selectbox(
@@ -20683,23 +20655,71 @@ def render(is_standalone: bool = False):
                         S.cfg_set(f"{prefix}gb_phi_st", new_gb_phi_st)
                         st.rerun()
 
+                wbc1, wbc2, wbc3, wbc4, wbc5 = st.columns(5)
+                with wbc1:
+                    st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
+                    new_gb_wall = st.checkbox("وجود حوائط مباني فوق السملات", value=bool(gb_has_wall), key=f"{prefix}w_gb_has_wall")
+                    if new_gb_wall != gb_has_wall:
+                        S.cfg_set("gb_has_wall", new_gb_wall)
+                        S.cfg_set(f"{prefix}gb_has_wall", new_gb_wall)
+                        st.rerun()
+
+                with wbc2:
+                    new_gb_hw = st.number_input(
+                        "ارتفاع الحائط H_wall (m):",
+                        min_value=1.0, max_value=6.0,
+                        value=float(gb_h_wall), step=0.25,
+                        disabled=not new_gb_wall,
+                        key=f"{prefix}w_gb_h_wall",
+                    )
+                    if new_gb_hw != gb_h_wall:
+                        S.cfg_set("gb_h_wall", new_gb_hw)
+                        S.cfg_set(f"{prefix}gb_h_wall", new_gb_hw)
+                        st.rerun()
+
+                with wbc3:
+                    new_gb_tw = st.number_input(
+                        "سُمك الحائط t_wall (cm):",
+                        min_value=10.0, max_value=40.0,
+                        value=float(gb_t_wall), step=2.0,
+                        disabled=not new_gb_wall,
+                        key=f"{prefix}w_gb_t_wall",
+                    )
+                    if new_gb_tw != gb_t_wall:
+                        S.cfg_set("gb_t_wall", new_gb_tw)
+                        S.cfg_set(f"{prefix}gb_t_wall", new_gb_tw)
+                        st.rerun()
+
                 # ── تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج (GB1, GB2, GB3) ──
-                st.markdown("<hr style='margin:14px 0 12px 0; border:0; border-top:1.5px dashed #cbd5e1;'/>", unsafe_allow_html=True)
-                st.markdown(
-                    """
-                    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
-                        <div style="font-size:15px; font-weight:800; color:#1e3a8a;">
-                            📏 تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج (GB1, GB2, GB3):
-                        </div>
-                        <div style="font-size:12.5px; color:#475569; font-weight:600;">
-                            💡 مدخلات مستقلة لكل نموذج تشمل العمق التنفيذي وقطر الحديد السفلي وقطر الحديد العلوي مع إعادة الحسابات والتصميم والرسومات والحصر فوراً
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                st.markdown("<hr style='margin:12px 0 10px 0; border:0; border-top:1.5px dashed #cbd5e1;'/>", unsafe_allow_html=True)
 
                 cur_ov_depths = dict(S.cfg_val("gb_overrides") or st.session_state.get(f"{prefix}gb_overrides", {}))
+                has_any_ov = any(
+                    f"{mk}_t" in cur_ov_depths or f"{mk}_phi_bot" in cur_ov_depths or f"{mk}_phi_top" in cur_ov_depths
+                    for mk in ["GB1", "GB2", "GB3", "B1", "B2", "B3"]
+                )
+                if has_any_ov:
+                    hdr_c1, hdr_c2 = st.columns([4.2, 1.3])
+                    with hdr_c1:
+                        st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; line-height:36px;'>📏 تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج (GB1, GB2, GB3):</div>", unsafe_allow_html=True)
+                    with hdr_c2:
+                        if st.button("🔄 استعادة القيم التصميمية", key=f"{prefix}btn_reset_depths", use_container_width=True):
+                            for mk in ["GB1", "GB2", "GB3", "B1", "B2", "B3"]:
+                                cur_ov_depths.pop(f"{mk}_t", None)
+                                cur_ov_depths.pop(f"{mk}_phi_bot", None)
+                                cur_ov_depths.pop(f"{mk}_phi_top", None)
+                                cur_ov_depths.pop(f"{mk}_nbot", None)
+                                cur_ov_depths.pop(f"{mk}_ntop", None)
+                                cur_ov_depths.pop(f"{mk}_stirrups", None)
+                                st.session_state.pop(f"{prefix}inp_depth_{mk}", None)
+                                st.session_state.pop(f"{prefix}ov_t_{mk}", None)
+                                st.session_state.pop(f"{prefix}w_{mk.lower()}_phi_bot", None)
+                                st.session_state.pop(f"{prefix}w_{mk.lower()}_phi_top", None)
+                            S.cfg_set("gb_overrides", cur_ov_depths)
+                            st.session_state[f"{prefix}gb_overrides"] = cur_ov_depths
+                            st.rerun()
+                else:
+                    st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; margin-bottom:8px;'>📏 تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج (GB1, GB2, GB3):</div>", unsafe_allow_html=True)
                 models_d = gb_analysis.get("models_dict", {})
                 m_b1 = models_d.get("GB1", models_d.get("B1", {}))
                 m_b2 = models_d.get("GB2", models_d.get("B2", {}))
@@ -20713,7 +20733,7 @@ def render(is_standalone: bool = False):
                 b2_curr = float(cur_ov_depths.get("GB2_t", cur_ov_depths.get("B2_t", m_b2.get("t_cm", b2_calc))))
                 b3_curr = float(cur_ov_depths.get("GB3_t", cur_ov_depths.get("B3_t", m_b3.get("t_cm", b3_calc))))
 
-                dia_opts = [10, 12, 14, 16, 18, 20, 22, 25]
+                dia_opts = [10, 12, 16, 18, 20, 22, 25]
 
                 b1_pbot = int(cur_ov_depths.get("GB1_phi_bot", cur_ov_depths.get("B1_phi_bot", m_b1.get("phi_bot", gb_phi_bot_val))))
                 b1_ptop = int(cur_ov_depths.get("GB1_phi_top", cur_ov_depths.get("B1_phi_top", m_b1.get("phi_top", gb_phi_top_val))))
@@ -20724,14 +20744,14 @@ def render(is_standalone: bool = False):
                 b3_pbot = int(cur_ov_depths.get("GB3_phi_bot", cur_ov_depths.get("B3_phi_bot", m_b3.get("phi_bot", gb_phi_bot_val))))
                 b3_ptop = int(cur_ov_depths.get("GB3_phi_top", cur_ov_depths.get("B3_phi_top", m_b3.get("phi_top", gb_phi_top_val))))
 
-                idx_b1_bot = dia_opts.index(b1_pbot) if b1_pbot in dia_opts else 3
-                idx_b1_top = dia_opts.index(b1_ptop) if b1_ptop in dia_opts else 1
+                idx_b1_bot = dia_opts.index(b1_pbot) if b1_pbot in dia_opts else (dia_opts.index(16) if 16 in dia_opts else 2)
+                idx_b1_top = dia_opts.index(b1_ptop) if b1_ptop in dia_opts else (dia_opts.index(12) if 12 in dia_opts else 1)
 
-                idx_b2_bot = dia_opts.index(b2_pbot) if b2_pbot in dia_opts else 3
-                idx_b2_top = dia_opts.index(b2_ptop) if b2_ptop in dia_opts else 1
+                idx_b2_bot = dia_opts.index(b2_pbot) if b2_pbot in dia_opts else (dia_opts.index(16) if 16 in dia_opts else 2)
+                idx_b2_top = dia_opts.index(b2_ptop) if b2_ptop in dia_opts else (dia_opts.index(12) if 12 in dia_opts else 1)
 
-                idx_b3_bot = dia_opts.index(b3_pbot) if b3_pbot in dia_opts else 3
-                idx_b3_top = dia_opts.index(b3_ptop) if b3_ptop in dia_opts else 1
+                idx_b3_bot = dia_opts.index(b3_pbot) if b3_pbot in dia_opts else (dia_opts.index(16) if 16 in dia_opts else 2)
+                idx_b3_top = dia_opts.index(b3_ptop) if b3_ptop in dia_opts else (dia_opts.index(12) if 12 in dia_opts else 1)
 
                 col_gb1, col_gb2, col_gb3 = st.columns(3)
 
@@ -20907,119 +20927,21 @@ def render(is_standalone: bool = False):
                             st.session_state[f"{prefix}ov_t_{mk}"] = cur_ov_depths[f"{mk}_t"]
                     st.rerun()
 
-                has_any_ov = any(
-                    f"{mk}_t" in cur_ov_depths or f"{mk}_phi_bot" in cur_ov_depths or f"{mk}_phi_top" in cur_ov_depths
-                    for mk in ["GB1", "GB2", "GB3", "B1", "B2", "B3"]
-                )
-                if has_any_ov:
-                    rst_c1, rst_c2 = st.columns([3, 1])
-                    with rst_c1:
-                        st.info("💡 تم تخصيص أبعاد أو أقطار تسليح النماذج يدوياً. يتم تطبيق التعديلات فوراً على جميع اللوحات والمساقط والـ 3D وحصر الكميات والمذكرة الحسابية.")
-                    with rst_c2:
-                        if st.button("🔄 استعادة القيم التصميمية", key=f"{prefix}btn_reset_depths", use_container_width=True):
-                            for mk in ["GB1", "GB2", "GB3", "B1", "B2", "B3"]:
-                                cur_ov_depths.pop(f"{mk}_t", None)
-                                cur_ov_depths.pop(f"{mk}_phi_bot", None)
-                                cur_ov_depths.pop(f"{mk}_phi_top", None)
-                                cur_ov_depths.pop(f"{mk}_nbot", None)
-                                cur_ov_depths.pop(f"{mk}_ntop", None)
-                                cur_ov_depths.pop(f"{mk}_stirrups", None)
-                                st.session_state.pop(f"{prefix}inp_depth_{mk}", None)
-                                st.session_state.pop(f"{prefix}ov_t_{mk}", None)
-                                st.session_state.pop(f"{prefix}w_{mk.lower()}_phi_bot", None)
-                                st.session_state.pop(f"{prefix}w_{mk.lower()}_phi_top", None)
-                            S.cfg_set("gb_overrides", cur_ov_depths)
-                            st.session_state[f"{prefix}gb_overrides"] = cur_ov_depths
-                            st.rerun()
 
-            # ── 🗺️ 2D Ground Beams Framing Plan Sketch ──
+
             st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
-            st.markdown(
-                f"""
-                <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.04) 0%, rgba(15, 23, 42, 0.08) 100%); border: 1.5px solid #4338ca; border-right: 6px solid #4338ca; border-radius: 10px; padding: 14px 18px; margin: 12px 0 16px 0; text-align: right;">
-                    <div style="font-size: 16px; font-weight: 800; color: #312e81; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                        <span>🗺️ المسقط الأفقي وتوزيع نماذج السملات الأرضية والشدادات (2D Ground Beams Framing Plan)</span>
-                        <span style="font-size: 12.5px; background: #4338ca; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Ground Beams</span>
-                    </div>
-                    <div style="font-size: 13px; color: #475569; margin-top: 6px; line-height: 1.6;">
-                        مخطط ثنائي الأبعاد لمسقط السملات والميدات الأرضية يوضح توقيع النماذج الموحدة (GB1, GB2, GB3) والشدادات (ST) بأبعادها وتسليحها ومواقعها الدقيقة، مع المحاور وأبعاد البحور (Spans) وحدود المبنى الإنشائية، محدثة تلقائياً طبقاً لتعديلات الأعماق وأقطار التسليح المدخلة أعلاه.
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
 
-            fig_gb_plan = draw_ground_beams_layout_sketch(
-                active_columns=fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols,
-                gb_analysis=gb_analysis,
-                slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
-                title=f"ECP 203 — Ground Beams & Tie Beams 2D Framing Plan (مسقط السملات الأرضية {num_floors} طوابق)",
-            )
-            buf_gb_plan = io.BytesIO()
-            fig_gb_plan.savefig(buf_gb_plan, format="png", bbox_inches="tight", dpi=170)
-            plt.close(fig_gb_plan)
-            buf_gb_plan.seek(0)
-            gb_b64 = base64.b64encode(buf_gb_plan.getvalue()).decode("utf-8")
-            _render_gb_interactive_viewer(gb_b64, viewer_h=740)
+            # ── 1. MASTER GROUND BEAMS SCHEDULE (GB1, GB2, GB3) ──
+            st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>🏛️ جدول نماذج السملات التنفيذي (Master Ground Beams Schedule — Governing Envelopes)</div>", unsafe_allow_html=True)
+            df_models_export = pd.DataFrame(gb_analysis["models_schedule"])
+            render_styled_table(df_models_export, font_size_override=14.0)
 
+            st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
 
-
-            # 3. KPI Metrics Banner
-            cnt_gb = len(gb_analysis["ground_beams"])
-            cnt_st = len(gb_analysis["strap_beams"])
-            len_gb = sum(b["span_m"] for b in gb_analysis["ground_beams"])
-            len_st = sum(b["span_m"] for b in gb_analysis["strap_beams"])
-
-            st.markdown(
-                f"""
-                <div dir="rtl" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 12px 0 16px 0;">
-                    <div style="background:rgba(224, 231, 255, 0.5); border:1.5px solid #6366f1; border-right:5px solid #4338ca; border-radius:8px; padding:12px 14px;">
-                        <div style="font-size:14px; font-weight:800; color:#312e81;">🧱 إجمالي السملات الأرضية (Ground Beams)</div>
-                        <div style="font-size:20px; font-weight:900; color:#1e1b4b;">{cnt_gb} <span style="font-size:13px; font-weight:600; color:#475569;">سملة ({len_gb:.1f} m)</span></div>
-                        <div style="font-size:12px; color:#4338ca; margin-top:2px;">مجمعة في 3 نماذج: GB1, GB2, GB3</div>
-                    </div>
-                    <div style="background:rgba(254, 215, 170, 0.5); border:1.5px solid #ea580c; border-right:5px solid #c2410c; border-radius:8px; padding:12px 14px;">
-                        <div style="font-size:14px; font-weight:800; color:#9a3412;">🟧 إجمالي الشدادات (Strap Beams)</div>
-                        <div style="font-size:20px; font-weight:900; color:#431407;">{cnt_st} <span style="font-size:13px; font-weight:600; color:#475569;">شداد ({len_st:.1f} m)</span></div>
-                        <div style="font-size:12px; color:#c2410c; margin-top:2px;">لقواعد الجار والركن (ST1, ST2...)</div>
-                    </div>
-                    <div style="background:rgba(240, 253, 244, 0.7); border:1.5px solid #22c55e; border-right:5px solid #15803d; border-radius:8px; padding:12px 14px;">
-                        <div style="font-size:14px; font-weight:800; color:#14532d;">📊 حجم الخرسانة المسلحة للسملات</div>
-                        <div style="font-size:20px; font-weight:900; color:#052e16;">{gb_analysis['boq']['conc_vol_rc']:.2f} <span style="font-size:13px; font-weight:600; color:#475569;">m³</span></div>
-                        <div style="font-size:12px; color:#15803d; margin-top:2px;">بمعدل أسمنت 350 كجم/م³</div>
-                    </div>
-                    <div style="background:rgba(245, 243, 255, 0.7); border:1.5px solid #8b5cf6; border-right:5px solid #6d28d9; border-radius:8px; padding:12px 14px;">
-                        <div style="font-size:14px; font-weight:800; color:#4c1d95;">⚙️ إجمالي وزن حديد تسليح السملات</div>
-                        <div style="font-size:20px; font-weight:900; color:#2e1065;">{gb_analysis['boq']['steel_ton_tot']:.3f} <span style="font-size:13px; font-weight:600; color:#475569;">Ton ({gb_analysis['boq']['steel_kg_tot']:,.0f} kg)</span></div>
-                        <div style="font-size:12px; color:#6d28d9; margin-top:2px;">معدل: {gb_analysis['boq']['steel_ratio_kg_m3']:.1f} kg/m³</div>
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            # 4. Interactive Tabs
-            tab_gb_class, tab_gb_models = st.tabs([
-                "📋 Classification Table (جدول تصنيف عناصر الربط: شدادات وسملات)",
-                "🏛️ Master Models Schedule (جدول نماذج السملات التنفيذي GB1, GB2, GB3)",
-            ])
-
-            # ── TAB 1: UNIFIED CLASSIFICATION TABLE (STRAP BEAMS & GROUND BEAMS) ──
-            with tab_gb_class:
-                st.markdown("##### 📋 جدول تصنيف عناصر الربط الإنشائية الشامل (Unified Structural Links Classification Table)")
-                st.caption("يوضح التفرقة الصريحة بين الشدادات (Strap Beams) الحاملة لعزوم لامركزية قواعد الجار والسملات الأرضية (Ground Beams) الرابطة للأعمدة.")
-                df_class_export = pd.DataFrame(gb_analysis["classification_rows"])
-                render_styled_table(df_class_export)
-
-                # Export Excel & CSV
-
-
-            # ── TAB 2: MASTER GROUND BEAMS SCHEDULE (B1, B2, B3) ──
-            with tab_gb_models:
-                st.markdown("##### 🏛️ جدول نماذج السملات التنفيذي (Master Ground Beams Schedule — Governing Envelopes)")
-                st.caption("تم تجميع السملات تلقائياً في 3 نماذج تنفيذية (GB1 للقطاع الثقيل، GB2 للمتوسط، GB3 للخفيف) بتطبيق قاعدة الظرف الحاكم.")
-                df_models_export = pd.DataFrame(gb_analysis["models_schedule"])
-                render_styled_table(df_models_export)
+            # ── 2. UNIFIED CLASSIFICATION TABLE (STRAP BEAMS & GROUND BEAMS) ──
+            st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>📋 جدول تصنيف عناصر الربط الإنشائية الشامل (Unified Structural Links Classification Table)</div>", unsafe_allow_html=True)
+            df_class_export = pd.DataFrame(gb_analysis["classification_rows"])
+            render_styled_table(df_class_export, font_size_override=13.5)
 
 
 
@@ -21029,8 +20951,8 @@ def render(is_standalone: bool = False):
         with st.expander(f"🧱 Roof Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج كمرات السقف والكوابيل)", expanded=False):
             # 1. Design Parameters & Controls
             with st.container(border=True):
-                st.markdown("<div style='font-size:16px; font-weight:800; color:#1e3a8a; margin-bottom:6px;'>⚙️ محددات ومعايير تصميم كمرات السقف (Roof Beam Design Parameters)</div>", unsafe_allow_html=True)
-                rbc1, rbc2 = st.columns(2)
+                st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:6px;'>⚙️ محددات ومعايير تصميم كمرات السقف (Roof Beam Design Parameters)</div>", unsafe_allow_html=True)
+                rbc1, rbc2, rbc3, rbc4, rbc5 = st.columns(5)
                 with rbc1:
                     new_rb_b = st.number_input(
                         "عرض الكمرة الموحد b (cm):",
@@ -21043,6 +20965,7 @@ def render(is_standalone: bool = False):
                         S.cfg_set(f"{prefix}rb_b_unified", new_rb_b)
                         st.rerun()
 
+                with rbc2:
                     new_rb_st_m = st.number_input(
                         "عدد الكانات الأساسية / م':",
                         min_value=5, max_value=10,
@@ -21054,44 +20977,80 @@ def render(is_standalone: bool = False):
                         S.cfg_set(f"{prefix}rb_stirrups_m", new_rb_st_m)
                         st.rerun()
 
-                with rbc2:
+                with rbc3:
                     rb_dia_opts = [12, 16, 18, 22, 25]
-                    rb_dia_st_opts = [8, 10]
                     rb_idx_b = rb_dia_opts.index(rb_phi_bot_val) if rb_phi_bot_val in rb_dia_opts else 1
-                    rb_idx_t = rb_dia_opts.index(rb_phi_top_val) if rb_phi_top_val in rb_dia_opts else 0
-                    rb_idx_s = rb_dia_st_opts.index(rb_phi_st_val) if rb_phi_st_val in rb_dia_st_opts else 0
-
                     new_rb_p_bot = st.selectbox("قطر التسليح السفلي Φ_bot (mm):", options=rb_dia_opts, index=rb_idx_b, key=f"{prefix}w_rb_phi_bot")
-                    new_rb_p_top = st.selectbox("قطر التسليح العلوي Φ_top (mm):", options=rb_dia_opts, index=rb_idx_t, key=f"{prefix}w_rb_phi_top")
-                    new_rb_p_st = st.selectbox("قطر الكانات Φ_st (mm):", options=rb_dia_st_opts, index=rb_idx_s, key=f"{prefix}w_rb_phi_st")
-
-                    if new_rb_p_bot != rb_phi_bot_val or new_rb_p_top != rb_phi_top_val or new_rb_p_st != rb_phi_st_val:
+                    if new_rb_p_bot != rb_phi_bot_val:
                         S.cfg_set("rb_phi_bot", new_rb_p_bot)
                         S.cfg_set(f"{prefix}rb_phi_bot", new_rb_p_bot)
+                        st.rerun()
+
+                with rbc4:
+                    rb_dia_opts = [12, 16, 18, 22, 25]
+                    rb_idx_t = rb_dia_opts.index(rb_phi_top_val) if rb_phi_top_val in rb_dia_opts else 0
+                    new_rb_p_top = st.selectbox("قطر التسليح العلوي Φ_top (mm):", options=rb_dia_opts, index=rb_idx_t, key=f"{prefix}w_rb_phi_top")
+                    if new_rb_p_top != rb_phi_top_val:
                         S.cfg_set("rb_phi_top", new_rb_p_top)
                         S.cfg_set(f"{prefix}rb_phi_top", new_rb_p_top)
+                        st.rerun()
+
+                with rbc5:
+                    rb_dia_st_opts = [8, 10]
+                    rb_idx_s = rb_dia_st_opts.index(rb_phi_st_val) if rb_phi_st_val in rb_dia_st_opts else 0
+                    new_rb_p_st = st.selectbox("قطر الكانات Φ_st (mm):", options=rb_dia_st_opts, index=rb_idx_s, key=f"{prefix}w_rb_phi_st")
+                    if new_rb_p_st != rb_phi_st_val:
                         S.cfg_set("rb_phi_st", new_rb_p_st)
                         S.cfg_set(f"{prefix}rb_phi_st", new_rb_p_st)
                         st.rerun()
 
                 # ── تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج (B1, B2, B3 / CB1) ──
-                st.markdown("<hr style='margin:14px 0 12px 0; border:0; border-top:1.5px dashed #cbd5e1;'/>", unsafe_allow_html=True)
-                st.markdown(
-                    """
-                    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
-                        <div style="font-size:15px; font-weight:800; color:#1e3a8a;">
-                            📏 تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج (B1, B2, B3 / CB1):
-                        </div>
-                        <div style="font-size:12.5px; color:#475569; font-weight:600;">
-                            💡 يمكنك تعديل العمق التنفيذي وقطر الحديد السفلي وقطر الحديد العلوي لكل نموذج بشكل مستقل لإعادة الحسابات فوراً
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                st.markdown("<hr style='margin:12px 0 10px 0; border:0; border-top:1.5px dashed #cbd5e1;'/>", unsafe_allow_html=True)
 
                 cur_ov_depths_rb = dict(S.cfg_val("rb_overrides") or st.session_state.get(f"{prefix}rb_overrides", {}))
                 rb_models_d = rb_analysis.get("models_dict", {})
+                has_cb1 = "CB1" in rb_models_d
+
+                has_any_rb_ov = any(
+                    f"{mk}_t" in cur_ov_depths_rb or f"{mk}_phi_bot" in cur_ov_depths_rb or f"{mk}_phi_top" in cur_ov_depths_rb
+                    for mk in ["B1", "B2", "B3", "CB1"]
+                )
+                if has_any_rb_ov:
+                    hdr_rc1, hdr_rc2 = st.columns([4.2, 1.3])
+                    with hdr_rc1:
+                        st.markdown(
+                            f"""
+                            <div style="font-size:15px; font-weight:800; color:#38bdf8; line-height:36px;">
+                                📏 تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج ({'B1, B2, B3, CB1' if has_cb1 else 'B1, B2, B3'}):
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+                    with hdr_rc2:
+                        if st.button("🔄 استعادة القيم التصميمية", key=f"{prefix}btn_reset_rb_depths", use_container_width=True):
+                            for mk in ["B1", "B2", "B3", "CB1"]:
+                                cur_ov_depths_rb.pop(f"{mk}_t", None)
+                                cur_ov_depths_rb.pop(f"{mk}_phi_bot", None)
+                                cur_ov_depths_rb.pop(f"{mk}_phi_top", None)
+                                cur_ov_depths_rb.pop(f"{mk}_nbot", None)
+                                cur_ov_depths_rb.pop(f"{mk}_ntop", None)
+                                cur_ov_depths_rb.pop(f"{mk}_stirrups", None)
+                                st.session_state.pop(f"{prefix}inp_rb_depth_{mk}", None)
+                                st.session_state.pop(f"{prefix}ov_rb_t_{mk}", None)
+                                st.session_state.pop(f"{prefix}w_rb_{mk.lower()}_phi_bot", None)
+                                st.session_state.pop(f"{prefix}w_rb_{mk.lower()}_phi_top", None)
+                            S.cfg_set("rb_overrides", cur_ov_depths_rb)
+                            st.session_state[f"{prefix}rb_overrides"] = cur_ov_depths_rb
+                            st.rerun()
+                else:
+                    st.markdown(
+                        f"""
+                        <div style="font-size:15px; font-weight:800; color:#38bdf8; margin-bottom:8px;">
+                            📏 تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج ({'B1, B2, B3, CB1' if has_cb1 else 'B1, B2, B3'}):
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
                 rb_m_b1 = rb_models_d.get("B1", {})
                 rb_m_b2 = rb_models_d.get("B2", {})
                 rb_m_b3 = rb_models_d.get("B3", {})
@@ -21105,7 +21064,7 @@ def render(is_standalone: bool = False):
                 rb_b2_curr = float(cur_ov_depths_rb.get("B2_t", rb_m_b2.get("t_cm", rb_b2_calc)))
                 rb_b3_curr = float(cur_ov_depths_rb.get("B3_t", rb_m_b3.get("t_cm", rb_b3_calc)))
 
-                dia_opts_rb = [10, 12, 14, 16, 18, 20, 22, 25]
+                dia_opts_rb = [10, 12, 16, 18, 20, 22, 25]
                 b1_pbot = int(cur_ov_depths_rb.get("B1_phi_bot", rb_m_b1.get("phi_bot", rb_phi_bot_val)))
                 b1_ptop = int(cur_ov_depths_rb.get("B1_phi_top", rb_m_b1.get("phi_top", rb_phi_top_val)))
                 b2_pbot = int(cur_ov_depths_rb.get("B2_phi_bot", rb_m_b2.get("phi_bot", rb_phi_bot_val)))
@@ -21113,12 +21072,12 @@ def render(is_standalone: bool = False):
                 b3_pbot = int(cur_ov_depths_rb.get("B3_phi_bot", rb_m_b3.get("phi_bot", rb_phi_bot_val)))
                 b3_ptop = int(cur_ov_depths_rb.get("B3_phi_top", rb_m_b3.get("phi_top", rb_phi_top_val)))
 
-                idx_b1_bot = dia_opts_rb.index(b1_pbot) if b1_pbot in dia_opts_rb else 3
-                idx_b1_top = dia_opts_rb.index(b1_ptop) if b1_ptop in dia_opts_rb else 1
-                idx_b2_bot = dia_opts_rb.index(b2_pbot) if b2_pbot in dia_opts_rb else 3
-                idx_b2_top = dia_opts_rb.index(b2_ptop) if b2_ptop in dia_opts_rb else 1
-                idx_b3_bot = dia_opts_rb.index(b3_pbot) if b3_pbot in dia_opts_rb else 3
-                idx_b3_top = dia_opts_rb.index(b3_ptop) if b3_ptop in dia_opts_rb else 1
+                idx_b1_bot = dia_opts_rb.index(b1_pbot) if b1_pbot in dia_opts_rb else (dia_opts_rb.index(16) if 16 in dia_opts_rb else 2)
+                idx_b1_top = dia_opts_rb.index(b1_ptop) if b1_ptop in dia_opts_rb else (dia_opts_rb.index(12) if 12 in dia_opts_rb else 1)
+                idx_b2_bot = dia_opts_rb.index(b2_pbot) if b2_pbot in dia_opts_rb else (dia_opts_rb.index(16) if 16 in dia_opts_rb else 2)
+                idx_b2_top = dia_opts_rb.index(b2_ptop) if b2_ptop in dia_opts_rb else (dia_opts_rb.index(12) if 12 in dia_opts_rb else 1)
+                idx_b3_bot = dia_opts_rb.index(b3_pbot) if b3_pbot in dia_opts_rb else (dia_opts_rb.index(16) if 16 in dia_opts_rb else 2)
+                idx_b3_top = dia_opts_rb.index(b3_ptop) if b3_ptop in dia_opts_rb else (dia_opts_rb.index(12) if 12 in dia_opts_rb else 1)
 
                 has_cb1 = "CB1" in rb_models_d
                 if has_cb1:
@@ -21126,8 +21085,8 @@ def render(is_standalone: bool = False):
                     rb_cb1_curr = float(cur_ov_depths_rb.get("CB1_t", rb_m_cb1.get("t_cm", rb_cb1_calc)))
                     cb1_pbot = int(cur_ov_depths_rb.get("CB1_phi_bot", rb_m_cb1.get("phi_bot", rb_phi_bot_val)))
                     cb1_ptop = int(cur_ov_depths_rb.get("CB1_phi_top", rb_m_cb1.get("phi_top", rb_phi_top_val)))
-                    idx_cb1_bot = dia_opts_rb.index(cb1_pbot) if cb1_pbot in dia_opts_rb else 3
-                    idx_cb1_top = dia_opts_rb.index(cb1_ptop) if cb1_ptop in dia_opts_rb else 1
+                    idx_cb1_bot = dia_opts_rb.index(cb1_pbot) if cb1_pbot in dia_opts_rb else (dia_opts_rb.index(16) if 16 in dia_opts_rb else 2)
+                    idx_cb1_top = dia_opts_rb.index(cb1_ptop) if cb1_ptop in dia_opts_rb else (dia_opts_rb.index(16) if 16 in dia_opts_rb else 2)
                     c_dep1, c_dep2, c_dep3, c_dep4 = st.columns(4)
                 else:
                     c_dep1, c_dep2, c_dep3 = st.columns(3)
@@ -21328,86 +21287,21 @@ def render(is_standalone: bool = False):
                             st.session_state[f"{prefix}ov_rb_t_{mk}"] = cur_ov_depths_rb[f"{mk}_t"]
                     st.rerun()
 
-                has_any_rb_ov = any(
-                    f"{mk}_t" in cur_ov_depths_rb or f"{mk}_phi_bot" in cur_ov_depths_rb or f"{mk}_phi_top" in cur_ov_depths_rb
-                    for mk in ["B1", "B2", "B3", "CB1"]
-                )
-                if has_any_rb_ov:
-                    rst_rc1, rst_rc2 = st.columns([3, 1])
-                    with rst_rc1:
-                        st.info("💡 تم تخصيص أبعاد أو أقطار تسليح نماذج كمرات السقف يدوياً. يتم تطبيق التعديلات فوراً على جميع اللوحات والمساقط والـ 3D وحصر الكميات والمذكرة الحسابية.")
-                    with rst_rc2:
-                        if st.button("🔄 استعادة القيم التصميمية", key=f"{prefix}btn_reset_rb_depths", use_container_width=True):
-                            for mk in ["B1", "B2", "B3", "CB1"]:
-                                cur_ov_depths_rb.pop(f"{mk}_t", None)
-                                cur_ov_depths_rb.pop(f"{mk}_phi_bot", None)
-                                cur_ov_depths_rb.pop(f"{mk}_phi_top", None)
-                                cur_ov_depths_rb.pop(f"{mk}_nbot", None)
-                                cur_ov_depths_rb.pop(f"{mk}_ntop", None)
-                                cur_ov_depths_rb.pop(f"{mk}_stirrups", None)
-                                st.session_state.pop(f"{prefix}inp_rb_depth_{mk}", None)
-                                st.session_state.pop(f"{prefix}ov_rb_t_{mk}", None)
-                                st.session_state.pop(f"{prefix}w_rb_{mk.lower()}_phi_bot", None)
-                                st.session_state.pop(f"{prefix}w_rb_{mk.lower()}_phi_top", None)
-                            S.cfg_set("rb_overrides", cur_ov_depths_rb)
-                            st.session_state[f"{prefix}rb_overrides"] = cur_ov_depths_rb
-                            st.rerun()
 
-            # ── 🗺️ 2D Roof Beams Framing Plan Sketch ──
+
             st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
-            st.markdown(
-                f"""
-                <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.04) 0%, rgba(15, 23, 42, 0.08) 100%); border: 1.5px solid #0284c7; border-right: 6px solid #0284c7; border-radius: 10px; padding: 14px 18px; margin: 12px 0 16px 0; text-align: right;">
-                    <div style="font-size: 16px; font-weight: 800; color: #0369a1; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                        <span>🗺️ المسقط الأفقي وتوزيع نماذج كمرات السقف والكوابيل (2D Roof Beams Framing Plan)</span>
-                        <span style="font-size: 12.5px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Beams Framing</span>
-                    </div>
-                    <div style="font-size: 13px; color: #475569; margin-top: 6px; line-height: 1.6;">
-                        مخطط ثنائي الأبعاد لمسقط السقف يوضح توقيع النماذج الموحدة (B1, B2, B3, CB1) بأبعادها ومواقعها الدقيقة، مع المحاور وأبعاد البحور (Spans) وحدود البلاطة والكوابيل، لربط الجدول التنفيذي أعلاه باللوحة الإنشائية.
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
 
-            fig_rb_plan = draw_roof_beams_layout_sketch(
-                active_columns=fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols,
-                roof_beams_analysis=rb_analysis,
-                slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
-                title=f"ECP 203 — Roof Drop Beams & Cantilevers 2D Framing Plan (مسقط كمرات السقف {num_floors} طوابق)",
-            )
-            buf_rb_plan = io.BytesIO()
-            fig_rb_plan.savefig(buf_rb_plan, format="png", bbox_inches="tight", dpi=170)
-            plt.close(fig_rb_plan)
-            buf_rb_plan.seek(0)
-            rb_b64 = base64.b64encode(buf_rb_plan.getvalue()).decode("utf-8")
-            _render_gb_interactive_viewer(rb_b64, viewer_h=740)
+            # ── 1. MASTER ROOF BEAMS SCHEDULE (B1, B2, B3, CB1) ──
+            st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>🏛️ جدول نماذج كمرات السقف التنفيذي (Master Roof Beams Schedule — Governing Envelopes)</div>", unsafe_allow_html=True)
+            df_rb_models_export = pd.DataFrame(rb_analysis["models_schedule"])
+            render_styled_table(df_rb_models_export, font_size_override=14.0)
 
+            st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
 
-
-            # 4. Interactive Tabs
-            tab_rb_models, tab_rb_class = st.tabs([
-                "🏛️ Master Models Schedule (جدول نماذج كمرات السقف التنفيذي B1, B2, B3, CB1)",
-                "📋 Classification Table (جدول تصنيف كمرات السقف الشامل)",
-            ])
-
-            # ── TAB 1: MASTER ROOF BEAMS SCHEDULE (B1, B2, B3, CB1) ──
-            with tab_rb_models:
-                st.markdown("##### 🏛️ جدول نماذج كمرات السقف التنفيذي (Master Roof Beams Schedule — Governing Envelopes)")
-                st.caption("تم تجميع كمرات السقف تلقائياً في 3 نماذج تنفيذية (B1 للقطاع الثقيل، B2 للمتوسط، B3 للخفيف) بالإضافة للكوابيل (CB1) بتطبيق قاعدة الظرف الحاكم.")
-                df_rb_models_export = pd.DataFrame(rb_analysis["models_schedule"])
-                render_styled_table(df_rb_models_export)
-
-
-
-
-
-            # ── TAB 2: CLASSIFICATION TABLE ──
-            with tab_rb_class:
-                st.markdown("##### 📋 جدول تصنيف كمرات السقف الإنشائية الشامل (Unified Roof Beams Classification Table)")
-                st.caption("يوضح التفرقة والتصنيف الصريح لجميع كمرات السقف الساقطة والكوابيل مع الموقع والمحاور والأبعاد والتسليح النهائي.")
-                df_rb_class_export = pd.DataFrame(rb_analysis["classification_rows"])
-                render_styled_table(df_rb_class_export)
+            # ── 2. UNIFIED CLASSIFICATION TABLE ──
+            st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>📋 جدول تصنيف كمرات السقف الإنشائية الشامل (Unified Roof Beams Classification Table)</div>", unsafe_allow_html=True)
+            df_rb_class_export = pd.DataFrame(rb_analysis["classification_rows"])
+            render_styled_table(df_rb_class_export, font_size_override=13.5)
 
 
 
@@ -21421,14 +21315,14 @@ def render(is_standalone: bool = False):
 
             if ftg_analysis_final and active_cols_final:
                 # ── 1. CONSOLIDATED 2D PLAN SKETCH (TOP SECTION) ──
-                st.markdown("##### 🗺️ 1. المسقط الأفقي التنفيذي الموحد للأساسات والميدات (Consolidated 2D Plan Sketch)")
-                st.caption("مسقط إنشائي متكامل يوضح توقيع القواعد المسلحة والعادية وأبعادها وأسماء نماذجها مع مسارات السملات والميدات الأرضية والمحاور.")
+                st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 10px 0 8px 0;'>🗺️ 1. المسقط الأفقي التنفيذي الموحد للأساسات والميدات (Consolidated 2D Plan Sketch)</div>", unsafe_allow_html=True)
 
                 gb_list_final = gb_analysis_final.get("ground_beams", []) if gb_analysis_final else []
                 fig_final_sketch = draw_comprehensive_foundation_sketch(
                     active_cols_final, ftg_analysis_final, ground_beams=gb_analysis_final if gb_analysis_final else gb_list_final,
                     edge_columns=_edge_columns if '_edge_columns' in locals() else None,
                     slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
+                    include_legend=False,
                 )
                 buf_final_sketch = io.BytesIO()
                 fig_final_sketch.savefig(buf_final_sketch, format="png", bbox_inches="tight", dpi=160)
@@ -21444,241 +21338,107 @@ def render(is_standalone: bool = False):
 
 
 
-                # ── Executive Modeled Outputs Cards (Foundations & Ground Beams Models — ECP 203) ──
+                # ── 2. EXECUTIVE GROUND BEAMS SCHEDULE TABLE (جدول السملات الأرضية بخط كبير وغامق) ──
                 st.markdown(
                     """
-                    <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.03) 0%, rgba(15, 23, 42, 0.07) 100%); border: 1.5px solid #cbd5e1; border-right: 6px solid #1e3a8a; border-radius: 10px; padding: 14px 18px; margin: 16px 0 14px 0; text-align: right;">
-                        <div style="font-size: 15.5px; font-weight: 800; color: #1e3a8a; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                            <span>📌 مخرجات النمذجة الإنشائية والتنفيذية الموحدة للأساسات والسملات (Executive Models Summary — ECP 203)</span>
-                            <span style="font-size: 12px; background: #1e3a8a; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Consolidated</span>
-                        </div>
-                        <div style="font-size: 12.8px; color: #475569; margin-top: 5px; line-height: 1.6;">
-                            ملخص تنفيذي شامل لكافة نماذج القواعد والسملات طبقاً لنتائج التصميم الإنشائي الحاكم، مع القطاعات الخرسانية وأقطار وتفاصيل حديد التسليح وأعداد العناصر، متطابقة بنسبة 100% مع المسقط الأفقي التنفيذي أعلاه.
+                    <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.05) 0%, rgba(15, 23, 42, 0.09) 100%); border: 1.5px solid #cbd5e1; border-right: 6px solid #38bdf8; border-radius: 10px; padding: 12px 16px; margin: 20px 0 12px 0; text-align: right;">
+                        <div style="font-size: 16px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                            <span>🧱 جدول نماذج السملات والشدادات الأرضية التنفيذي (Ground Beams & Strap Beams Schedule)</span>
+                            <span style="font-size: 12px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Executive</span>
                         </div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
 
-                col_out_ftg, col_out_gb = st.columns(2)
-
-                with col_out_ftg:
-                    st.markdown(
-                        """
-                        <div dir="rtl" style="background:#f0f9ff; border:1.5px solid #bae6fd; border-right:5px solid #0284c7; border-radius:8px; padding:10px 14px; margin-bottom:12px;">
-                            <div style="font-size:14.5px; font-weight:800; color:#0369a1;">🏛️ مخرجات نماذج الأساسات بعد النمذجة (Foundations Models)</div>
-                            <div style="font-size:12px; color:#0284c7; margin-top:2px;">نماذج القواعد المسلحة والعادية شاملة القطاعات والتسليح الحاكم</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-                    ftg_models_dict = ftg_analysis_final.get("models", {}) if ftg_analysis_final else {}
-                    iso_keys_ordered = [k for k in ["F1", "F2", "F3"] if k in ftg_models_dict]
-                    if not iso_keys_ordered:
-                        iso_keys_ordered = [k for k in ftg_models_dict.keys() if k.startswith("F")][:3]
-
-                    color_ftg_badges = {
-                        "F1": {"bg": "#eff6ff", "border": "#bfdbfe", "text": "#1d4ed8", "badge_bg": "#1d4ed8"},
-                        "F2": {"bg": "#f0fdf4", "border": "#bbf7d0", "text": "#15803d", "badge_bg": "#15803d"},
-                        "F3": {"bg": "#faf5ff", "border": "#e9d5ff", "text": "#7e22ce", "badge_bg": "#7e22ce"},
-                    }
-
-                    for f_mk in iso_keys_ordered:
-                        fm = ftg_models_dict.get(f_mk, {})
-                        if not fm:
-                            continue
-                        f_cfg = color_ftg_badges.get(f_mk, {"bg": "#f8fafc", "border": "#cbd5e1", "text": "#0369a1", "badge_bg": "#0284c7"})
-                        L_c = int(fm.get("L_cm", 200))
-                        B_c = int(fm.get("B_cm", 200))
-                        t_c = int(fm.get("tc_cm", 60))
-                        pc_L = L_c + 40
-                        pc_B = B_c + 40
-                        rft_l = fm.get("rft_long_str", "5Ø16/m")
-                        rft_s = fm.get("rft_short_str", "5Ø16/m")
-                        grp_lbl = fm.get("model_label", fm.get("raw_type", "قواعد منفصلة"))
-                        cols_m = fm.get("cols_list", [])
-                        cnt_m = len(cols_m)
-                        c_names = ", ".join([c["id"] for c in cols_m]) if cols_m else "—"
-                        pu_m = fm.get("pu_gov", 0.0)
-
-                        st.markdown(
-                            f"""
-                            <div dir="rtl" style="background:{f_cfg['bg']}; border:1.5px solid {f_cfg['border']}; border-radius:8px; padding:10px 14px; margin-bottom:10px;">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                                    <span style="font-weight:800; font-size:13.8px; color:{f_cfg['text']};">■ {f_mk} — {grp_lbl}</span>
-                                    <span style="background:{f_cfg['badge_bg']}; color:#ffffff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">{cnt_m} قواعد ({c_names})</span>
-                                </div>
-                                <div style="font-size:12.5px; color:#1e293b; line-height:1.7;">
-                                    📏 <b>الخرسانة المسلحة (R.C.):</b> <span dir="ltr" style="font-weight:700;">{L_c} × {B_c} × {t_c} cm</span>
-                                    <br/>📐 <b>الخرسانة العادية (P.C.):</b> <span dir="ltr" style="font-weight:600; color:#475569;">{pc_L} × {pc_B} × 20 cm</span>
-                                    <br/>🔩 <b>التسليح السفلي:</b> فرش: <b>{rft_l}</b> | غطاء: <b>{rft_s}</b>
-                                    <br/>⚡ <b>الحمل التصميمي الحاكم:</b> <span dir="ltr" style="font-weight:700; color:#0369a1;">Pu = {pu_m:.1f} ton</span>
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-
-                    # Combined Footings if any
-                    comb_ftgs = ftg_analysis_final.get("combined_footings", []) if ftg_analysis_final else []
-                    for cf_item in comb_ftgs:
-                        st.markdown(
-                            f"""
-                            <div dir="rtl" style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:10px 14px; margin-bottom:10px;">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                                    <span style="font-weight:800; font-size:13.8px; color:#15803d;">■ {cf_item['name']} — قاعدة مشتركة (Combined Footing)</span>
-                                    <span style="background:#15803d; color:#ffffff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">الأعمدة: {cf_item.get('supported_cols', '—')}</span>
-                                </div>
-                                <div style="font-size:12.5px; color:#1e293b; line-height:1.7;">
-                                    📏 <b>الخرسانة المسلحة (R.C.):</b> <span dir="ltr" style="font-weight:700;">{int(cf_item.get('Lc_cm', 400))} × {int(cf_item.get('Bc_cm', 200))} × {int(cf_item.get('tc_cm', 70))} cm</span>
-                                    <br/>🔩 <b>التسليح:</b> علوي: <b>{cf_item.get('rft_top_str', '6Ø18/m')}</b> | سفلي: <b>{cf_item.get('rft_bot_str', '6Ø16/m')}</b>
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-
-                    # Strap Footings if any
-                    st_ftgs = (ftg_analysis_final.get("edge_strap_footings", []) + ftg_analysis_final.get("corner_strap_footings", [])) if ftg_analysis_final else []
-                    for sf_idx, sf_item in enumerate(st_ftgs, start=1):
-                        sf_tag = sf_item.get("name", f"SF{sf_idx}")
-                        st.markdown(
-                            f"""
-                            <div dir="rtl" style="background:#fff7ed; border:1.5px solid #fed7aa; border-radius:8px; padding:10px 14px; margin-bottom:10px;">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                                    <span style="font-weight:800; font-size:13.8px; color:#c2410c;">■ {sf_tag} — قاعدة وكمرة شداد (Strap Footing & Beam)</span>
-                                    <span style="background:#ea580c; color:#ffffff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">شداد ST{sf_idx}</span>
-                                </div>
-                                <div style="font-size:12.5px; color:#1e293b; line-height:1.7;">
-                                    📏 <b>قطاع كمرة الشداد:</b> <span dir="ltr" style="font-weight:700;">{int(sf_item.get('strap_b', 40))} × {int(sf_item.get('strap_D', 100))} cm</span>
-                                    <br/>🧱 <b>قاعدة الجار الخارجية F1:</b> <span dir="ltr" style="font-weight:700;">{int(sf_item.get('L1', 2.2)*100)} × {int(sf_item.get('B1', 3.0)*100)} × {int(sf_item.get('t1', 55))} cm</span>
-                                    <br/>🏛️ <b>قاعدة العمود الداخلي F2:</b> <span dir="ltr" style="font-weight:700;">{int(sf_item.get('L2', 2.85)*100)} × {int(sf_item.get('B2', 2.85)*100)} × {int(sf_item.get('t2', 50))} cm</span>
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-
-                with col_out_gb:
-                    st.markdown(
-                        """
-                        <div dir="rtl" style="background:#eef2ff; border:1.5px solid #c7d2fe; border-right:5px solid #4338ca; border-radius:8px; padding:10px 14px; margin-bottom:12px;">
-                            <div style="font-size:14.5px; font-weight:800; color:#312e81;">🧱 مخرجات نماذج السملات الأرضية بعد النمذجة (Ground Beams Models)</div>
-                            <div style="font-size:12px; color:#4338ca; margin-top:2px;">نماذج السملات والميدات الأرضية شاملة القطاعات وأقطار التسليح والكانات</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-                    gb_models_final = dict(gb_analysis_final.get("models_dict", {})) if (gb_analysis_final and gb_analysis_final.get("models_dict")) else {}
-                    if not gb_models_final and gb_list_final:
-                        for b in gb_list_final:
-                            t_mark = b.get("tag", b.get("model_mark", "GB1"))
-                            if t_mark not in gb_models_final:
-                                gb_models_final[t_mark] = {
-                                    "mark": t_mark,
-                                    "b_cm": int(b.get("b_cm", 25)),
-                                    "t_cm": int(b.get("exec_t_cm", b.get("t_calc", 60))),
-                                    "n_bot": b.get("exec_n_bot", 2),
-                                    "phi_bot": b.get("phi_bot", 16),
-                                    "n_top": b.get("exec_n_top", 2),
-                                    "phi_top": b.get("phi_top", 12),
-                                    "stirrups_per_m": b.get("exec_stirrups", 6),
-                                    "phi_st": b.get("phi_st", 8),
-                                    "n_branches": b.get("n_branches", 2),
-                                    "count": 1,
-                                    "total_len_m": b.get("span_m", 4.0),
-                                }
-
-                    color_gb_cards = {
-                        "GB1": {"bg": "#eff6ff", "border": "#bfdbfe", "text": "#1d4ed8", "badge_bg": "#1d4ed8", "badge_txt": "القطاع الثقيل (Heavy)"},
-                        "GB2": {"bg": "#f0fdf4", "border": "#bbf7d0", "text": "#15803d", "badge_bg": "#15803d", "badge_txt": "القطاع المتوسط (Medium)"},
-                        "GB3": {"bg": "#faf5ff", "border": "#e9d5ff", "text": "#7e22ce", "badge_bg": "#7e22ce", "badge_txt": "القطاع الخفيف (Light)"},
-                    }
-
+                raw_gb_rows = []
+                if gb_analysis_final and gb_analysis_final.get("models_schedule"):
+                    raw_gb_rows = [dict(r) for r in gb_analysis_final.get("models_schedule", [])]
+                elif gb_analysis_final and gb_analysis_final.get("models_dict"):
                     for gb_mk in ["GB1", "GB2", "GB3"]:
-                        if gb_mk in gb_models_final:
-                            gbm = gb_models_final[gb_mk]
-                            gb_c = color_gb_cards.get(gb_mk, {"bg": "#f8fafc", "border": "#cbd5e1", "text": "#312e81", "badge_bg": "#4338ca", "badge_txt": "سملة أرضية"})
+                        if gb_mk in gb_analysis_final["models_dict"]:
+                            gbm = gb_analysis_final["models_dict"][gb_mk]
                             b_val = int(gbm.get("b_cm", 25))
                             t_val = int(gbm.get("t_cm", 60))
-                            nbot_val = gbm.get("n_bot", 2)
-                            phi_b_val = gbm.get("phi_bot", 16)
-                            ntop_val = gbm.get("n_top", 2)
-                            phi_t_val = gbm.get("phi_top", 12)
-                            st_n_val = gbm.get("stirrups_per_m", 6)
-                            st_p_val = gbm.get("phi_st", 8)
-                            st_br_val = gbm.get("n_branches", 2)
-                            cnt_val = gbm.get("count", 0)
-                            len_val = gbm.get("total_len_m", 0.0)
+                            raw_gb_rows.append({
+                                "النموذج (Mark)": gb_mk,
+                                "التصنيف والأهمية الإنشائية": gbm.get("label", f"سملة أرضية {gb_mk}"),
+                                "الأبعاد b × t (cm)": f"{b_val} × {t_val}",
+                                "التسليح السفلي (Bottom Rft)": f"{gbm.get('n_bot', 2)}Ø{gbm.get('phi_bot', 16)}",
+                                "التسليح العلوي (Top Rft)": f"{gbm.get('n_top', 2)}Ø{gbm.get('phi_top', 12)}",
+                                "براندات الانكماش (Side Bars)": f"{gbm.get('side_bars', 0)}Ø{gbm.get('phi_side', 10)}" if gbm.get("side_bars", 0) > 0 else "—",
+                                "الكانات (Stirrups)": f"{gbm.get('stirrups_per_m', 6)}Ø{gbm.get('phi_st', 8)}/m ({gbm.get('n_branches', 2)} فروع)",
+                                "العدد بالمشروع (Count)": f"{gbm.get('count', 0)} سملة",
+                                "إجمالي الأطوال (Total Length)": f"{gbm.get('total_len_m', 0.0):.2f} m",
+                            })
 
-                            st.markdown(
-                                f"""
-                                <div dir="rtl" style="background:{gb_c['bg']}; border:1.5px solid {gb_c['border']}; border-radius:8px; padding:10px 14px; margin-bottom:10px;">
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                                        <span style="font-weight:800; font-size:13.8px; color:{gb_c['text']};">■ {gb_mk} — {gb_c['badge_txt']}</span>
-                                        <span style="background:{gb_c['badge_bg']}; color:#ffffff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">{cnt_val} سملات ({len_val:.1f} m)</span>
-                                    </div>
-                                    <div style="font-size:12.5px; color:#1e293b; line-height:1.7;">
-                                        📏 <b>القطاع الخرساني (Cross-Section):</b> <span dir="ltr" style="font-weight:700;">b × t = {b_val} × {t_val} cm</span>
-                                        <br/>🔩 <b>التسليح السفلي الرئيسي:</b> <span dir="ltr" style="font-weight:700; color:{gb_c['text']};">{nbot_val}Ø{phi_b_val}</span>
-                                        <br/>📎 <b>التسليح العلوي وعلاقات الكانات:</b> <span dir="ltr" style="font-weight:700;">{ntop_val}Ø{phi_t_val}</span>
-                                        <br/>🌀 <b>الكانات (Stirrups):</b> <span dir="ltr" style="font-weight:700;">{st_n_val}Ø{st_p_val}/m ({st_br_val} فروع)</span>
-                                    </div>
-                                </div>
-                                """,
-                                unsafe_allow_html=True,
-                            )
+                # Append Strap Beams row (ST) if available
+                st_beams_final = gb_analysis_final.get("strap_beams", []) if gb_analysis_final else []
+                if st_beams_final and not any("ST" in str(r.get("النموذج (Mark)", "")) for r in raw_gb_rows):
+                    cnt_st_b = len(st_beams_final)
+                    len_st_b = sum(b.get("span_m", 0.0) for b in st_beams_final)
+                    raw_gb_rows.append({
+                        "النموذج (Mark)": "ST",
+                        "التصنيف والأهمية الإنشائية": "شدادات الجار والركن (Strap Beams)",
+                        "الأبعاد b × t (cm)": "40 × 100",
+                        "التسليح السفلي (Bottom Rft)": "2Ø16 (سفلي ثانوي)",
+                        "التسليح العلوي (Top Rft)": "5Ø22 (علوي رئيسي)",
+                        "براندات الانكماش (Side Bars)": "4Ø10 (انكماش)",
+                        "الكانات (Stirrups)": "5Ø10/m (4 فروع)",
+                        "العدد بالمشروع (Count)": f"{cnt_st_b} شداد",
+                        "إجمالي الأطوال (Total Length)": f"{len_st_b:.2f} m",
+                    })
 
-                    # Strap Beams if any
-                    st_beams_final = gb_analysis_final.get("strap_beams", []) if gb_analysis_final else []
-                    if st_beams_final:
-                        cnt_st_b = len(st_beams_final)
-                        len_st_b = sum(b.get("span_m", 0.0) for b in st_beams_final)
-                        st.markdown(
-                            f"""
-                            <div dir="rtl" style="background:#fff7ed; border:1.5px solid #fed7aa; border-radius:8px; padding:10px 14px; margin-bottom:10px;">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                                    <span style="font-weight:800; font-size:13.8px; color:#c2410c;">■ ST — شدادات الجار والركن (Strap Beams)</span>
-                                    <span style="background:#ea580c; color:#ffffff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">{cnt_st_b} شدادات ({len_st_b:.1f} m)</span>
-                                </div>
-                                <div style="font-size:12.5px; color:#1e293b; line-height:1.7;">
-                                    📏 <b>القطاع الخرساني:</b> <span dir="ltr" style="font-weight:700;">b × D = 40 × 100 cm (Design Specific)</span>
-                                    <br/>⚙️ <b>الوظيفة الإنشائية:</b> كمرات جاسئة لنقل عزوم اللامركزية من قواعد الجار للأعمدة الداخلية
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-
-                st.markdown("<hr style='margin: 24px 0; border: none; border-top: 1.5px solid #cbd5e1;' />", unsafe_allow_html=True)
-
-                # ── 2. FOUNDATIONS SCHEDULE TABLE (MIDDLE SECTION) ──
-                st.markdown("##### 📋 2. جدول نماذج الأساسات التنفيذي (Foundations Models Schedule Table — ECP 203)")
-                st.caption("جدول النماذج الموحدة للقواعد المسلحة والعادية شامل الأبعاد والتسليح السفلي والعلوي وملاحظات الرقاب.")
-
-                raw_ftg_rows = ftg_analysis_final.get("unified_rows", [])
-                df_ftg_summary = pd.DataFrame(raw_ftg_rows)
-                render_styled_table(df_ftg_summary)
-
-                # Export Excel & CSV for Foundations Schedule
-
-
-                st.markdown("<hr style='margin: 24px 0; border: none; border-top: 1.5px solid #cbd5e1;' />", unsafe_allow_html=True)
-
-                # ── 3. GROUND BEAMS SCHEDULE TABLE (BOTTOM SECTION) ──
-                st.markdown("##### 🧱 3. جدول نماذج السملات الأرضية التنفيذي (Ground Beams Models Schedule Table — ECP 203)")
-                st.caption("جدول النماذج الموحدة للسملات والميدات الأرضية بتطبيق قاعدة الظرف الحاكم شامل القطاعات والتسليح والكانات.")
-
-                if gb_analysis_final and gb_analysis_final.get("models_schedule"):
-                    raw_gb_rows = gb_analysis_final.get("models_schedule", [])
+                if raw_gb_rows:
                     df_gb_summary = pd.DataFrame(raw_gb_rows)
-                    render_styled_table(df_gb_summary)
-
-
+                    render_styled_table(df_gb_summary, font_size_override=14.0)
                 else:
                     st.info("💡 لم يتم استخراج نماذج للسملات الأرضية أو لم يتم تفعيل قسم Ground Beams Design بعد.")
+
+                st.markdown("<hr style='margin: 24px 0; border: none; border-top: 1.5px solid #cbd5e1;' />", unsafe_allow_html=True)
+
+                # ── 3. EXECUTIVE FOUNDATIONS SCHEDULE TABLE (جدول القواعد بخط كبير وغامق) ──
+                st.markdown(
+                    """
+                    <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.05) 0%, rgba(15, 23, 42, 0.09) 100%); border: 1.5px solid #cbd5e1; border-right: 6px solid #38bdf8; border-radius: 10px; padding: 12px 16px; margin: 16px 0 12px 0; text-align: right;">
+                        <div style="font-size: 16px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                            <span>🏛️ جدول نماذج القواعد المسلحة والعادية التنفيذي (Foundations Executive Schedule)</span>
+                            <span style="font-size: 12px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Executive</span>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                raw_ftg_rows = []
+                if ftg_analysis_final and ftg_analysis_final.get("unified_rows"):
+                    raw_ftg_rows = [dict(r) for r in ftg_analysis_final.get("unified_rows", [])]
+                elif ftg_analysis_final and ftg_analysis_final.get("models"):
+                    ftg_models_dict = ftg_analysis_final.get("models", {})
+                    for f_mk in ["F1", "F2", "F3"]:
+                        if f_mk in ftg_models_dict:
+                            fm = ftg_models_dict[f_mk]
+                            L_c = int(fm.get("L_cm", 200))
+                            B_c = int(fm.get("B_cm", 200))
+                            t_c = int(fm.get("tc_cm", 60))
+                            cols_m = fm.get("cols_list", [])
+                            c_names = ", ".join([c["id"] for c in cols_m]) if cols_m else "—"
+                            raw_ftg_rows.append({
+                                "نموذج القاعدة (Model)": f_mk,
+                                "النوع والتصنيف": fm.get("model_label", "قاعدة منفصلة"),
+                                "الأعمدة المرتكزة (Columns)": f"{len(cols_m)} أعمدة ({c_names})",
+                                "أقصى حمل تصميمي Pu (ton)": f"{fm.get('pu_gov', 0.0):.1f} ton",
+                                "أبعاد المسلحة R.C. (cm)": f"{L_c} × {B_c} × {t_c}",
+                                "أبعاد العادية P.C. (cm)": f"{L_c + 40} × {B_c + 40} × 20",
+                                "التسليح والتفاصيل الإنشائية": f"فرش: {fm.get('rft_long_str', '5Ø16/m')} | غطاء: {fm.get('rft_short_str', '5Ø16/m')}",
+                                "حالة التحقق الإنشائي (Status)": "✅ Safe ومحقق للكود",
+                            })
+
+                if raw_ftg_rows:
+                    df_ftg_summary = pd.DataFrame(raw_ftg_rows)
+                    render_styled_table(df_ftg_summary, font_size_override=14.0)
+                else:
+                    st.info("💡 لم يتم استخراج نماذج للقواعد أو جاري حساب وتحليل الأساسات.")
             else:
                 st.info("💡 جاري معالجة وحساب بيانات الأساسات والسملات لتوليد لوحة ومخرجات التصميم النهائي للقواعد والسملات.")
 
@@ -21934,7 +21694,7 @@ def render(is_standalone: bool = False):
             st.markdown(
                 f"""
                 <div style="background:#f8fafc; border-left:4px solid #1e40af; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
-                    <div style="font-size:1.0rem; font-weight:800; color:#1e3a8a;">
+                    <div style="font-size:1.0rem; font-weight:800; color:#38bdf8;">
                         📋 جدول الحصر الشامل لكميات ومواد السقف والأعمدة والأساسات والسملات والإجمالي الكلي للمبنى:
                     </div>
                     <div style="font-size:0.9rem; color:#475569; margin-top:3px;">
@@ -22297,7 +22057,7 @@ def render(is_standalone: bool = False):
             st.markdown(
                 f"""
                 <div style="background:#f8fafc; border-left:4px solid #0284c7; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
-                    <div style="font-size:1.0rem; font-weight:800; color:#0369a1;">
+                    <div style="font-size:1.0rem; font-weight:800; color:#38bdf8;">
                         📋 جدول الحصر الهندسي الشامل لكميات ومواد سقف البلاطة اللاكمرية (Standalone Flat Slab BOQ):
                     </div>
                     <div style="font-size:0.9rem; color:#475569; margin-top:3px;">

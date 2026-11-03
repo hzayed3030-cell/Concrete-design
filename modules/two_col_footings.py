@@ -1927,6 +1927,7 @@ def draw_comprehensive_foundation_sketch(
     ground_beams: list | dict = None,
     edge_columns: dict = None,
     slab_bounds: dict = None,
+    include_legend: bool = False,
 ):
     """
     Renders comprehensive 2D foundation plan sketch with distinct color-coding:
@@ -1983,7 +1984,7 @@ def draw_comprehensive_foundation_sketch(
     h_plan_target = w_box_in / max(0.4, r_data)
     h_plan_in = max(7.5, min(15.5, h_plan_target))
     h_leg_in = max(2.6, min(5.2, 1.4 + n_est_rows * 0.52))
-    h_total = h_plan_in + h_leg_in + 0.5
+    h_total = (h_plan_in + h_leg_in + 0.5) if include_legend else (h_plan_in + 0.6)
     hr_plan = h_plan_in / h_total
     hr_leg = h_leg_in / h_total
 
@@ -2001,13 +2002,20 @@ def draw_comprehensive_foundation_sketch(
         final_y_min = raw_y_min
         final_y_max = raw_y_max
 
-    fig, (ax, ax_leg) = plt.subplots(
-        2, 1, figsize=(w_fig, h_total), dpi=160, facecolor="#ffffff",
-        gridspec_kw={"height_ratios": [hr_plan, hr_leg], "hspace": 0.05}
-    )
-    ax.set_facecolor("#f8fafc")
-    ax_leg.set_facecolor("#ffffff")
-    ax_leg.axis("off")
+    if include_legend:
+        fig, (ax, ax_leg) = plt.subplots(
+            2, 1, figsize=(w_fig, h_total), dpi=160, facecolor="#ffffff",
+            gridspec_kw={"height_ratios": [hr_plan, hr_leg], "hspace": 0.05}
+        )
+        ax.set_facecolor("#f8fafc")
+        ax_leg.set_facecolor("#ffffff")
+        ax_leg.axis("off")
+    else:
+        fig, ax = plt.subplots(
+            1, 1, figsize=(w_fig, h_total), dpi=160, facecolor="#ffffff"
+        )
+        ax.set_facecolor("#f8fafc")
+        ax_leg = None
 
     # Draw Grid lines & Bubbles
     for idx, gx in enumerate(unique_xs, start=1):
@@ -2289,124 +2297,125 @@ def draw_comprehensive_foundation_sketch(
                 bbox=dict(boxstyle="round,pad=0.15", fc="#ffffff", ec="#64748b", alpha=0.9))
 
     # ── 6. Dedicated Subplot Legend (Executive Schedule Card — ECP 203) ──
-    ax_leg.axis("off")
-    ax_leg.set_facecolor("#ffffff")
-    ax_leg.set_xlim(0, 1)
-    ax_leg.set_ylim(0, 1)
+    if include_legend and ax_leg is not None:
+        ax_leg.axis("off")
+        ax_leg.set_facecolor("#ffffff")
+        ax_leg.set_xlim(0, 1)
+        ax_leg.set_ylim(0, 1)
 
-    card_patch = patches.FancyBboxPatch(
-        (0.01, 0.02), 0.98, 0.96,
-        boxstyle="round,pad=0.012,rounding_size=0.015",
-        facecolor="#ffffff", edgecolor="#cbd5e1", lw=1.5, zorder=1
-    )
-    ax_leg.add_patch(card_patch)
+        card_patch = patches.FancyBboxPatch(
+            (0.01, 0.02), 0.98, 0.96,
+            boxstyle="round,pad=0.012,rounding_size=0.015",
+            facecolor="#ffffff", edgecolor="#cbd5e1", lw=1.5, zorder=1
+        )
+        ax_leg.add_patch(card_patch)
 
-    # Left Column: Foundations Models
-    ftg_models = foundation_res.get("models", {})
-    iso_unique_keys = [k for k in ["F1", "F2", "F3"] if k in ftg_models]
-    if not iso_unique_keys:
-        iso_unique_keys = [k for k in ftg_models.keys() if k.startswith("F")][:3]
+        # Left Column: Foundations Models
+        ftg_models = foundation_res.get("models", {})
+        iso_unique_keys = [k for k in ["F1", "F2", "F3"] if k in ftg_models]
+        if not iso_unique_keys:
+            iso_unique_keys = [k for k in ftg_models.keys() if k.startswith("F")][:3]
 
-    ftg_lines = []
-    for mk in iso_unique_keys:
-        m = ftg_models[mk]
-        if not m:
-            continue
-        L_c = int(m.get("L_cm", 200))
-        B_c = int(m.get("B_cm", 200))
-        t_c = int(m.get("tc_cm", 60))
-        rft_str = m.get("rft_long_str", "5Ø16/m")
-        pc_L = L_c + 40
-        pc_B = B_c + 40
-        grp_name = m.get("raw_type", "Isolated")
-        ftg_lines.append(f"■ {mk} ({grp_name}): RC {L_c}×{B_c}×{t_c} cm  |  Mesh: {rft_str}  |  PC {pc_L}×{pc_B}×20 cm")
+        ftg_lines = []
+        for mk in iso_unique_keys:
+            m = ftg_models[mk]
+            if not m:
+                continue
+            L_c = int(m.get("L_cm", 200))
+            B_c = int(m.get("B_cm", 200))
+            t_c = int(m.get("tc_cm", 60))
+            rft_str = m.get("rft_long_str", "5Ø16/m")
+            pc_L = L_c + 40
+            pc_B = B_c + 40
+            grp_name = m.get("raw_type", "Isolated")
+            ftg_lines.append(f"■ {mk} ({grp_name}): RC {L_c}×{B_c}×{t_c} cm  |  Mesh: {rft_str}  |  PC {pc_L}×{pc_B}×20 cm")
 
-    comb_list = foundation_res.get("combined_footings", [])
-    if comb_list:
-        cf0 = comb_list[0]
-        ftg_lines.append(f"■ {cf0.get('name', 'CF1')} (Combined): RC {int(cf0.get('Lc_cm', 400))}×{int(cf0.get('Bc_cm', 200))}×{int(cf0.get('tc_cm', 70))} cm  |  Top: {cf0.get('rft_top_str', '6Ø18/m')}  |  Bot: {cf0.get('rft_bot_str', '6Ø16/m')}")
+        comb_list = foundation_res.get("combined_footings", [])
+        if comb_list:
+            cf0 = comb_list[0]
+            ftg_lines.append(f"■ {cf0.get('name', 'CF1')} (Combined): RC {int(cf0.get('Lc_cm', 400))}×{int(cf0.get('Bc_cm', 200))}×{int(cf0.get('tc_cm', 70))} cm  |  Top: {cf0.get('rft_top_str', '6Ø18/m')}  |  Bot: {cf0.get('rft_bot_str', '6Ø16/m')}")
 
-    st_footings = edge_straps or corner_straps
-    if st_footings:
-        sf0 = st_footings[0]
-        ftg_lines.append(f"■ {sf0.get('name', 'SF1')} (Strap Footings): Ext F1 + Int F2 ties  |  Strap Beam: {int(sf0.get('strap_b', 40))}×{int(sf0.get('strap_D', 100))} cm")
+        st_footings = edge_straps or corner_straps
+        if st_footings:
+            sf0 = st_footings[0]
+            ftg_lines.append(f"■ {sf0.get('name', 'SF1')} (Strap Footings): Ext F1 + Int F2 ties  |  Strap Beam: {int(sf0.get('strap_b', 40))}×{int(sf0.get('strap_D', 100))} cm")
 
-    # Right Column: Ground Beams Models
-    gb_lines = []
-    color_gb_meta = {
-        "GB1": {"desc": "Heavy Section", "color": "#1d4ed8"},
-        "GB2": {"desc": "Medium Section", "color": "#15803d"},
-        "GB3": {"desc": "Light Section", "color": "#7e22ce"},
-    }
-    for mk in ["GB1", "GB2", "GB3"]:
-        if mk in gb_models_dict:
-            m = gb_models_dict[mk]
-            b_c = int(m.get("b_cm", 25))
-            t_c = int(m.get("t_cm", 60))
-            nbot = m.get("n_bot", 2)
-            pbot = m.get("phi_bot", 16)
-            ntop = m.get("n_top", 2)
-            ptop = m.get("phi_top", 12)
-            st_n = m.get("stirrups_per_m", 6)
-            st_p = m.get("phi_st", 8)
-            st_br = m.get("n_branches", 2)
-            meta = color_gb_meta.get(mk, {"desc": "Ground Beam", "color": "#312e81"})
+        # Right Column: Ground Beams Models
+        gb_lines = []
+        color_gb_meta = {
+            "GB1": {"desc": "Heavy Section", "color": "#1d4ed8"},
+            "GB2": {"desc": "Medium Section", "color": "#15803d"},
+            "GB3": {"desc": "Light Section", "color": "#7e22ce"},
+        }
+        for mk in ["GB1", "GB2", "GB3"]:
+            if mk in gb_models_dict:
+                m = gb_models_dict[mk]
+                b_c = int(m.get("b_cm", 25))
+                t_c = int(m.get("t_cm", 60))
+                nbot = m.get("n_bot", 2)
+                pbot = m.get("phi_bot", 16)
+                ntop = m.get("n_top", 2)
+                ptop = m.get("phi_top", 12)
+                st_n = m.get("stirrups_per_m", 6)
+                st_p = m.get("phi_st", 8)
+                st_br = m.get("n_branches", 2)
+                meta = color_gb_meta.get(mk, {"desc": "Ground Beam", "color": "#312e81"})
+                gb_lines.append((
+                    f"■ {mk} ({meta['desc']}): {b_c}×{t_c} cm  |  Bot: {nbot}Ø{pbot}  |  Top: {ntop}Ø{ptop}  |  Stirrups: {st_n}Ø{st_p}/m ({st_br}-legs)",
+                    meta["color"]
+                ))
+
+        if strap_list_final or edge_straps or corner_straps:
             gb_lines.append((
-                f"■ {mk} ({meta['desc']}): {b_c}×{t_c} cm  |  Bot: {nbot}Ø{pbot}  |  Top: {ntop}Ø{ptop}  |  Stirrups: {st_n}Ø{st_p}/m ({st_br}-legs)",
-                meta["color"]
+                "■ ST (Strap Beams): Design Specific (40×100 cm)  |  Eccentricity moment ties for neighbor footings",
+                "#ea580c"
             ))
 
-    if strap_list_final or edge_straps or corner_straps:
-        gb_lines.append((
-            "■ ST (Strap Beams): Design Specific (40×100 cm)  |  Eccentricity moment ties for neighbor footings",
-            "#ea580c"
-        ))
+        # Adaptive font and row layout algorithm
+        n_rows = max(len(ftg_lines), len(gb_lines), 1)
+        h_row = 0.58 / float(n_rows)
+        fs_base = max(7.2, min(9.8, 6.5 + 9.5 * h_row))
+        fs_title = min(11.5, fs_base + 1.8)
+        fs_sub = min(10.2, fs_base + 1.0)
 
-    # Adaptive font and row layout algorithm
-    n_rows = max(len(ftg_lines), len(gb_lines), 1)
-    h_row = 0.58 / float(n_rows)
-    fs_base = max(7.2, min(9.8, 6.5 + 9.5 * h_row))
-    fs_title = min(11.5, fs_base + 1.8)
-    fs_sub = min(10.2, fs_base + 1.0)
+        all_lens = [len(s) for s in ftg_lines] + [len(item[0]) for item in gb_lines] + [50]
+        max_len = max(all_lens)
+        w_scale = min(1.0, 72.0 / float(max_len)) if max_len > 72 else 1.0
+        fs_text = max(6.8, min(fs_base, fs_base * w_scale))
+        fs_key = max(6.5, min(8.0, fs_base - 0.8))
 
-    all_lens = [len(s) for s in ftg_lines] + [len(item[0]) for item in gb_lines] + [50]
-    max_len = max(all_lens)
-    w_scale = min(1.0, 72.0 / float(max_len)) if max_len > 72 else 1.0
-    fs_text = max(6.8, min(fs_base, fs_base * w_scale))
-    fs_key = max(6.5, min(8.0, fs_base - 0.8))
+        ax_leg.text(0.025, 0.92, "FOUNDATIONS & GROUND BEAMS EXECUTIVE SCHEDULE LEGEND (ECP 203)",
+                    fontsize=fs_title, fontweight="bold", color="#0f172a", va="center", zorder=3)
+        ax_leg.plot([0.025, 0.975], [0.85, 0.85], color="#e2e8f0", lw=1.2, zorder=2)
+        ax_leg.plot([0.50, 0.50], [0.14, 0.83], color="#e2e8f0", lw=1.2, ls="--", zorder=2)
 
-    ax_leg.text(0.025, 0.92, "FOUNDATIONS & GROUND BEAMS EXECUTIVE SCHEDULE LEGEND (ECP 203)",
-                fontsize=fs_title, fontweight="bold", color="#0f172a", va="center", zorder=3)
-    ax_leg.plot([0.025, 0.975], [0.85, 0.85], color="#e2e8f0", lw=1.2, zorder=2)
-    ax_leg.plot([0.50, 0.50], [0.14, 0.83], color="#e2e8f0", lw=1.2, ls="--", zorder=2)
+        # Render Left Column
+        ax_leg.text(0.025, 0.78, "FOUNDATIONS MODELS (ECP 203):", fontsize=fs_sub, fontweight="bold", color="#0369a1", va="center", zorder=3)
+        for l_idx, f_line in enumerate(ftg_lines):
+            y_pos = 0.73 - (l_idx + 0.5) * h_row
+            ax_leg.text(0.025, y_pos, f_line, fontsize=fs_text, color="#1e293b", va="center", zorder=3)
 
-    # Render Left Column
-    ax_leg.text(0.025, 0.78, "FOUNDATIONS MODELS (ECP 203):", fontsize=fs_sub, fontweight="bold", color="#0369a1", va="center", zorder=3)
-    for l_idx, f_line in enumerate(ftg_lines):
-        y_pos = 0.73 - (l_idx + 0.5) * h_row
-        ax_leg.text(0.025, y_pos, f_line, fontsize=fs_text, color="#1e293b", va="center", zorder=3)
+        # Render Right Column
+        ax_leg.text(0.52, 0.78, "GROUND BEAMS & TIE BEAMS (ECP 203):", fontsize=fs_sub, fontweight="bold", color="#312e81", va="center", zorder=3)
+        for l_idx, (gb_line, gb_col) in enumerate(gb_lines):
+            y_pos = 0.73 - (l_idx + 0.5) * h_row
+            ax_leg.text(0.52, y_pos, gb_line, fontsize=fs_text, color=gb_col, fontweight="bold" if l_idx==0 else "normal", va="center", zorder=3)
 
-    # Render Right Column
-    ax_leg.text(0.52, 0.78, "GROUND BEAMS & TIE BEAMS (ECP 203):", fontsize=fs_sub, fontweight="bold", color="#312e81", va="center", zorder=3)
-    for l_idx, (gb_line, gb_col) in enumerate(gb_lines):
-        y_pos = 0.73 - (l_idx + 0.5) * h_row
-        ax_leg.text(0.52, y_pos, gb_line, fontsize=fs_text, color=gb_col, fontweight="bold" if l_idx==0 else "normal", va="center", zorder=3)
-
-    # Bottom Key Bar
-    ax_leg.text(0.025, 0.065, "PLAN COLOR CODE:", fontsize=fs_key, fontweight="bold", color="#64748b", va="center", zorder=3)
-    code_items = [
-        ("#bae6fd", "#0284c7", "Isolated (F1, F2...)"),
-        ("#bbf7d0", "#15803d", "Combined (CF)"),
-        ("#fed7aa", "#ea580c", "Strap Footings (SF)"),
-        ("#fdba74", "#c2410c", "Strap Beams (ST)"),
-        ("#e0e7ff", "#4338ca", "Ground Beams (GB)"),
-        ("#fce7f3", "#db2777", "Neighbor Edge"),
-    ]
-    x_c = 0.18
-    for fc_c, ec_c, lbl_c in code_items:
-        ax_leg.add_patch(patches.Rectangle((x_c, 0.040), 0.016, 0.050, facecolor=fc_c, edgecolor=ec_c, lw=1.2, zorder=3))
-        ax_leg.text(x_c + 0.020, 0.065, lbl_c, fontsize=fs_key, color="#334155", va="center", zorder=3)
-        x_c += 0.135
+        # Bottom Key Bar
+        ax_leg.text(0.025, 0.065, "PLAN COLOR CODE:", fontsize=fs_key, fontweight="bold", color="#64748b", va="center", zorder=3)
+        code_items = [
+            ("#bae6fd", "#0284c7", "Isolated (F1, F2...)"),
+            ("#bbf7d0", "#15803d", "Combined (CF)"),
+            ("#fed7aa", "#ea580c", "Strap Footings (SF)"),
+            ("#fdba74", "#c2410c", "Strap Beams (ST)"),
+            ("#e0e7ff", "#4338ca", "Ground Beams (GB)"),
+            ("#fce7f3", "#db2777", "Neighbor Edge"),
+        ]
+        x_c = 0.18
+        for fc_c, ec_c, lbl_c in code_items:
+            ax_leg.add_patch(patches.Rectangle((x_c, 0.040), 0.016, 0.050, facecolor=fc_c, edgecolor=ec_c, lw=1.2, zorder=3))
+            ax_leg.text(x_c + 0.020, 0.065, lbl_c, fontsize=fs_key, color="#334155", va="center", zorder=3)
+            x_c += 0.135
 
     ax.set_title(title, fontsize=14, fontweight="bold", color="#0f172a", pad=25)
     ax.set_xlim(final_x_min, final_x_max)

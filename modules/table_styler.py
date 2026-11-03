@@ -293,7 +293,7 @@ def get_styled_table_html(
                 dir_attr = ' dir="rtl"' if has_ar else (' dir="ltr"' if _is_numeric_or_measurement(val_str) else '')
                 tds.append(
                     f'<td style="padding: {pad_v + 2}px {pad_h}px !important; font-size: {fs_num:.1f}px !important; '
-                    f'font-weight: 900 !important; color: {text_color} !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.3 !important;"{dir_attr}>'
+                    f'font-weight: 900 !important; color: {text_color} !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.35 !important; white-space: normal !important; word-wrap: break-word !important;"{dir_attr}>'
                     f'{val_html}</td>'
                 )
             elif c_idx == 0 and align == "right":
@@ -301,7 +301,7 @@ def get_styled_table_html(
                 dir_attr = ' dir="rtl"' if has_ar else ''
                 tds.append(
                     f'<td style="padding: {pad_v}px {pad_h}px !important; font-size: {fs_cell:.1f}px !important; '
-                    f'font-weight: 800 !important; color: #ffffff !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.3 !important;"{dir_attr}>'
+                    f'font-weight: 800 !important; color: #ffffff !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.35 !important; white-space: normal !important; word-wrap: break-word !important;"{dir_attr}>'
                     f'{val_html}</td>'
                 )
             elif _is_numeric_or_measurement(val_str):
@@ -314,7 +314,7 @@ def get_styled_table_html(
                 dir_attr = 'dir="rtl"' if has_ar else 'dir="ltr"'
                 tds.append(
                     f'<td style="padding: {pad_v}px {pad_h}px !important; font-size: {fs_num:.1f}px !important; '
-                    f'font-weight: 900 !important; color: {num_color} !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.3 !important;" {dir_attr}>'
+                    f'font-weight: 900 !important; color: {num_color} !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.35 !important; white-space: normal !important; word-wrap: break-word !important;" {dir_attr}>'
                     f'{val_html}</td>'
                 )
             else:
@@ -329,7 +329,7 @@ def get_styled_table_html(
                 dir_attr = ' dir="rtl"' if has_ar else ''
                 tds.append(
                     f'<td style="padding: {pad_v}px {pad_h}px !important; font-size: {fs_cell:.1f}px !important; '
-                    f'font-weight: 700 !important; color: {text_color} !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.3 !important;"{dir_attr}>'
+                    f'font-weight: 700 !important; color: {text_color} !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.35 !important; white-space: normal !important; word-wrap: break-word !important;"{dir_attr}>'
                     f'{val_html}</td>'
                 )
 
