@@ -17356,6 +17356,7 @@ def render(is_standalone: bool = False):
             f"{prefix}punching_results",
             f"{prefix}fs_cur_beams_designs",
             f"{prefix}fs_indiv_col_designs",
+            f"{prefix}fs_col_designs", "fs_col_designs",
             f"{prefix}fs_deflection_results",
             f"{prefix}fs_moments_results",
             "_fs_calc_done",
@@ -17697,6 +17698,522 @@ def render(is_standalone: bool = False):
             if n_fb > 0:
                 punch_relief = max(0.32, 1.0 - 0.22 * n_fb)
                 c["Pu_punch"] = round(c["Pu_slab_0"] * punch_relief, 2)
+
+    col_reactions_data = []
+    summary_models = []
+    img_reactions_b64 = None
+
+    if not is_standalone:
+        # ── 🏛️ COLUMN REACTIONS & MULTI-STOREY LOADS (ردود أفعال وتوزيع أحمال الأعمدة) ────
+        col_reactions_data = []
+        for c in _active_cols:
+            pu_1f = c.get("Pu", 0.0)
+            pu_tot = pu_1f * num_floors
+            atrib = c.get("Atrib_0", 0.0)
+            raw_type = c.get("type", "Interior")
+            col_reactions_data.append({
+                "Column ID": c["id"],
+                "Orig ID": c.get("orig_id", c["id"]),
+                "Grid": f"{c['grid_x']} - {c['grid_y']}",
+                "Location Type": {"Interior": "داخلي (Interior)", "Edge": "طرفي / وسط خارجي (Edge)", "Corner": "ركن (Corner)"}.get(raw_type, raw_type),
+                "Raw Type": raw_type,
+                "Tributary Area (m²)": f"{atrib:.2f}",
+                "Pu (1 Floor) [ton]": f"{pu_1f:.2f}",
+                f"Total Pu ({num_floors} Floors) [ton]": f"{pu_tot:.2f}",
+                "pu_1f_val": pu_1f,
+                "pu_tot_val": pu_tot,
+                "pu_beam_val": float(c.get("Pu_beam", 0.0)),
+                "atrib_val": atrib,
+                "x_min": c.get("x_min"),
+                "y_min": c.get("y_min"),
+                "x_max": c.get("x_max"),
+                "y_max": c.get("y_max"),
+                "width_m": c.get("width_m"),
+                "height_m": c.get("height_m"),
+                "center_x": c.get("center_x", c.get("x")),
+                "center_y": c.get("center_y", c.get("y")),
+            })
+
+        img_reactions_b64 = None
+
+        # ── 📊 CLASSIFICATION INTO GOVERNING COLUMN TYPES (DYNAMIC RE-INDEXING C1, C2, C3) ──
+        int_cols = [r for r in col_reactions_data if r["Raw Type"] == "Interior"]
+        edge_cols = [r for r in col_reactions_data if r["Raw Type"] == "Edge"]
+        corner_cols = [r for r in col_reactions_data if r["Raw Type"] == "Corner"]
+
+        max_int = max(int_cols, key=lambda x: x["pu_1f_val"]) if int_cols else None
+        max_edge = max(edge_cols, key=lambda x: x["pu_1f_val"]) if edge_cols else None
+        max_corner = max(corner_cols, key=lambda x: x["pu_1f_val"]) if corner_cols else None
+
+        # Dynamic re-indexing priority: (Interior -> Edge -> Corner)
+        col_group_specs = [
+            ("Interior", int_cols, max_int, "أعمدة داخلية", "داخلي (Interior)", "أقصى عمود داخلي", "قواعد داخلية"),
+            ("Edge", edge_cols, max_edge, "أعمدة جانبية", "جانبي / طرفي (Edge)", "أقصى عمود جانبي", "قواعد جانبية"),
+            ("Corner", corner_cols, max_corner, "أعمدة ركن", "ركن (Corner)", "أقصى عمود ركن", "قواعد أركان"),
+        ]
+        active_col_groups = [g for g in col_group_specs if g[1]]
+        col_label_map = {}
+        for idx_c, (grp_key, grp_cols, grp_max, grp_ar, grp_loc, grp_gov_lbl, ftg_ar) in enumerate(active_col_groups, start=1):
+            col_label_map[grp_key] = f"C{idx_c}"
+
+        # Governing summary model table with dynamic marks (C1, C2...)
+        summary_models = []
+        for grp_key, grp_cols, grp_max, grp_ar, grp_loc, grp_gov_lbl, ftg_ar in active_col_groups:
+            c_mark = col_label_map[grp_key]
+            clean_ar = "الداخلي" if grp_key == "Interior" else ("الجانبي" if grp_key == "Edge" else "الركن")
+            summary_models.append({
+                "Column Model (نموذج التصميم)": f"{c_mark} ({grp_gov_lbl})",
+                "Governing Column": f"{grp_max['Column ID']} ({grp_max['Grid']})",
+                "Location Type": grp_loc,
+                "Tributary Area (m²)": f"{grp_max['atrib_val']:.2f}",
+                "Pu (1 Floor) [ton]": f"{grp_max['pu_1f_val']:.2f}",
+                f"Total Pu ({num_floors} Floors) [ton]": f"{grp_max['pu_tot_val']:.2f}",
+            })
+
+        with st.expander(f"📊 Column Reactions Table — {num_floors} Floors (جدول ردود أفعال وتوزيع أحمال الأعمدة)", expanded=False):
+            # 1. Top Table: Governing Column Models & Loads (C1 الداخلي - C2 الجانبي - C3 الركن)
+            st.markdown(
+                f"""
+                <div dir="rtl" style="direction:rtl; text-align:right; background:linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border:1.5px solid #93c5fd; border-right:5px solid #2563eb; padding:10px 14px; border-radius:8px; margin-bottom:10px; color:#1e3a8a; font-weight:700; font-size:14.5px;">
+                    📌 نماذج وأحمال الأعمدة الحاكمة (C1 الداخلي - C2 الجانبي - C3 الركن):
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+            gov_models_table = []
+            for grp_key, grp_cols, grp_max, grp_ar, grp_loc, grp_gov_lbl, ftg_ar in active_col_groups:
+                c_mark = col_label_map[grp_key]
+                clean_ar = "الداخلي" if grp_key == "Interior" else ("الجانبي" if grp_key == "Edge" else "الركن")
+                gov_models_table.append({
+                    "نموذج العمود (Model)": f"{c_mark} ({clean_ar})",
+                    "العدد بالمسقط": f"{len(grp_cols)} عمود",
+                    "العمود الحاكم (Gov Col)": f"{grp_max['Column ID']} ({grp_max['Grid']})",
+                    "موقع وتصنيف العمود": grp_loc,
+                    "مساحة التأثير Atrib (m²)": f"{grp_max['atrib_val']:.2f}",
+                    "حمل الدور Pu (1F) [ton]": f"{grp_max['pu_1f_val']:.2f}",
+                    f"إجمالي الحمل ({num_floors}F) [ton]": f"{grp_max['pu_tot_val']:.2f}",
+                })
+
+            render_styled_table(gov_models_table)
+
+            st.markdown("<div style='margin: 16px 0 10px 0; border-top: 1.5px dashed #cbd5e1;'></div>", unsafe_allow_html=True)
+            st.markdown(
+                f"##### 📋 تفاصيل ردود أفعال وتوزيع أحمال كافة أعمدة المسقط الإنشائي ({len(col_reactions_data)} عمود):"
+            )
+
+            # 2. Existing Table: All Individual Column Reactions
+            reactions_df = pd.DataFrame([
+                {
+                    "Column ID": r["Column ID"],
+                    "Grid": r["Grid"],
+                    "Location Type": r["Location Type"],
+                    "Tributary Area (m²)": r["Tributary Area (m²)"],
+                    "Pu (1 Floor) [ton]": r["Pu (1 Floor) [ton]"],
+                    f"Total Pu ({num_floors} Floors) [ton]": r[f"Total Pu ({num_floors} Floors) [ton]"],
+                }
+                for r in col_reactions_data
+            ])
+            render_styled_table(reactions_df)
+            st.caption(f"ℹ️ الأحمال المحورية $P_u$ تشمل معامل الأمان ووزن الأعمدة (Factor of Safety & Columns Weight = **{col_sf_val:.2f}**).")
+
+        # ── 💾 PERSIST GOVERNING COLUMN LOADS FOR MODULE 2 & MODULE 7 ─────────────
+        if max_int and max_int.get("pu_1f_val", 0) > 0:
+            pu_int_1f = float(max_int["pu_1f_val"])
+            pu_int_tot = float(max_int["pu_tot_val"])
+            S.cfg_set("fs_col_pu_int", pu_int_1f)
+            S.cfg_set("fs_col_tot_pu_int", pu_int_tot)
+            st.session_state["fs_col_pu_int"] = pu_int_1f
+            st.session_state["fs_col_tot_pu_int"] = pu_int_tot
+            st.session_state["pu_tot_int"] = pu_int_tot
+
+        if max_edge and max_edge.get("pu_1f_val", 0) > 0:
+            pu_edge_1f = float(max_edge["pu_1f_val"])
+            pu_edge_tot = float(max_edge["pu_tot_val"])
+            S.cfg_set("fs_col_pu_edge", pu_edge_1f)
+            S.cfg_set("fs_col_tot_pu_edge", pu_edge_tot)
+            st.session_state["fs_col_pu_edge"] = pu_edge_1f
+            st.session_state["fs_col_tot_pu_edge"] = pu_edge_tot
+            st.session_state["pu_tot_edge"] = pu_edge_tot
+            st.session_state["pu_tot_side"] = pu_edge_tot
+
+        if max_corner and max_corner.get("pu_1f_val", 0) > 0:
+            pu_corner_1f = float(max_corner["pu_1f_val"])
+            pu_corner_tot = float(max_corner["pu_tot_val"])
+            S.cfg_set("fs_col_pu_corner", pu_corner_1f)
+            S.cfg_set("fs_col_tot_pu_corner", pu_corner_tot)
+            st.session_state["fs_col_pu_corner"] = pu_corner_1f
+            st.session_state["fs_col_tot_pu_corner"] = pu_corner_tot
+            st.session_state["pu_tot_corner"] = pu_corner_tot
+
+        # Export full building columns layout (coordinates, dimensions, loads, types)
+        cols_export = []
+        for c in _active_cols:
+            c_raw_type = c.get("type", "Interior")
+            c_mark = col_label_map.get(c_raw_type, "C1") if 'col_label_map' in locals() else "C1"
+            c["model_mark"] = c_mark
+            cols_export.append({
+                "id": c["id"],
+                "orig_id": c.get("orig_id", c["id"]),
+                "grid_x": c.get("grid_x", ""),
+                "grid_y": c.get("grid_y", ""),
+                "type": c_raw_type,
+                "model_mark": c_mark,
+                "x": float(c["x"]),
+                "y": float(c["y"]),
+                "bc": float(c.get("bc", bc_s)),
+                "tc": float(c.get("tc", tc_s)),
+                "pu_1f": float(c.get("Pu", 0.0)),
+                "pu_tot": float(c.get("Pu", 0.0) * num_floors),
+                "atrib": float(c.get("Atrib_0", 0.0)),
+            })
+        st.session_state["fs_building_columns"] = cols_export
+        st.session_state["fs_num_floors"] = num_floors
+        st.session_state["fs_Lx_spans"] = [float(x) for x in Lx_calc]
+        st.session_state["fs_Ly_spans"] = [float(y) for y in Ly_calc]
+        st.session_state["fs_col_b"] = float(bc_s)
+        st.session_state["fs_col_c"] = float(tc_s)
+        S.cfg_set("fs_building_columns", cols_export)
+        S.cfg_set("fs_col_b", float(bc_s))
+        S.cfg_set("fs_col_c", float(tc_s))
+        S.cfg_set("fs_Lx_spans", [float(x) for x in Lx_calc])
+        S.cfg_set("fs_Ly_spans", [float(y) for y in Ly_calc])
+
+        # ── 🏛️ RECTANGULAR COLUMNS DESIGN FROM FLAT SLAB LOADS ─────────────────────
+        from modules.columns import design_rectangular_column
+
+        col_sf = S.cfg_val("col_Safety_Factor", 1.20)
+        col_b_val = S.cfg_val("col_b", bc_s if bc_s else 30)
+        col_H = S.cfg_val("col_H_clear", 300)
+        col_K_idx = S.cfg_val("col_K_index", 1)
+        K_opts = [0.50, 0.70, 1.00, 1.20, 2.00]
+        col_K = K_opts[col_K_idx] if 0 <= col_K_idx < len(K_opts) else 0.70
+        col_Fcu = S.cfg_val("col_Fcu", Fcu if Fcu else 250)
+        col_Fy = S.cfg_val("col_Fy", Fy if Fy else 4000)
+        col_Fyk = S.cfg_val("col_Fyk", 2400)
+        col_mu = S.cfg_val("col_mu_target", 1.0)
+        phi_opts = [12, 16, 18, 20, 25]
+        col_phi_idx = S.cfg_val("col_Phi_index", 1)
+        col_phi = phi_opts[col_phi_idx] if 0 <= col_phi_idx < len(phi_opts) else 16
+        phi_st_opts = [6, 8, 10]
+        col_phist_idx = S.cfg_val("col_Phi_st_index", 1)
+        col_phi_st = phi_st_opts[col_phist_idx] if 0 <= col_phist_idx < len(phi_st_opts) else 8
+
+        cnt_int = sum(1 for c in _active_cols if c.get("type") == "Interior")
+        cnt_edge = sum(1 for c in _active_cols if c.get("type") == "Edge")
+        cnt_corner = sum(1 for c in _active_cols if c.get("type") == "Corner")
+        tot_active_cols = len(_active_cols)
+        tot_conc_vol_1f = 0.0
+        tot_main_steel_kg_1f = 0.0
+        tot_stirrup_steel_kg_1f = 0.0
+        tot_steel_kg_1f = 0.0
+        tot_ratio_1f = 0.0
+        tot_conc_vol_bld = 0.0
+        tot_steel_ton_bld = 0.0
+        tot_steel_kg_bld = 0.0
+        cement_ton_cols = 0.0
+        cement_bags_cols = 0
+        gravel_m3_cols = 0.0
+        sand_m3_cols = 0.0
+
+        col_designs = []
+        # Dynamic loop over active column groups (Priority: Interior -> Edge -> Corner)
+        for grp_key, grp_cols, col_obj, grp_ar, grp_loc, grp_gov_lbl, ftg_ar in active_col_groups:
+            if col_obj and col_obj.get("pu_tot_val", 0) > 0:
+                pu_tot = float(col_obj["pu_tot_val"])
+                pu_1f = float(col_obj["pu_1f_val"])
+                des = design_rectangular_column(
+                    Pu_input=pu_tot,
+                    Safety_Factor=1.0,
+                    b=col_b_val,
+                    H_clear=col_H,
+                    K=col_K,
+                    Fcu=col_Fcu,
+                    Fy=col_Fy,
+                    Fyk=col_Fyk,
+                    mu_target=col_mu,
+                    Phi=col_phi,
+                    Phi_st=col_phi_st,
+                )
+                m_mark = col_label_map[grp_key]
+                des["model_mark"] = m_mark
+                des["model_label"] = f"{m_mark} ({grp_ar})"
+                des["model_key"] = f"C_{grp_key.lower()}"
+                des["raw_type"] = grp_key
+                des["gov_col"] = f"{col_obj['Column ID']} ({col_obj['Grid']})"
+                des["loc_type"] = col_obj["Location Type"]
+                des["atrib"] = col_obj["atrib_val"]
+                des["pu_1f"] = pu_1f
+                des["pu_tot"] = pu_tot
+                col_designs.append(des)
+        st.session_state[f"{prefix}fs_col_designs"] = col_designs
+        st.session_state["fs_col_designs"] = col_designs
+
+        # Design calculation for all individual columns
+        indiv_col_designs = []
+        for r in col_reactions_data:
+            r_pu_tot = float(r["pu_tot_val"])
+            r_pu_1f = float(r["pu_1f_val"])
+            if r_pu_tot > 0:
+                r_des = design_rectangular_column(
+                    Pu_input=r_pu_tot,
+                    Safety_Factor=1.0,
+                    b=col_b_val,
+                    H_clear=col_H,
+                    K=col_K,
+                    Fcu=col_Fcu,
+                    Fy=col_Fy,
+                    Fyk=col_Fyk,
+                    mu_target=col_mu,
+                    Phi=col_phi,
+                    Phi_st=col_phi_st,
+                )
+                r_des["col_id"] = r["Column ID"]
+                r_des["grid"] = r["Grid"]
+                r_des["loc_type"] = r["Location Type"]
+                r_des["atrib"] = r["atrib_val"]
+                r_des["pu_1f"] = r_pu_1f
+                r_des["pu_tot"] = r_pu_tot
+                indiv_col_designs.append(r_des)
+
+        if col_designs:
+            with st.expander(f"🏛️ Rectangular Columns Design — {num_floors} Floors (التصميم الإنشائي لنماذج الأعمدة المستطيلة)", expanded=False):
+                # ── 📊 حصر كميات الخرسانة والحديد ومواد البناء لجميع الأعمدة (Columns BOQ & Materials) ──
+                cnt_int = sum(1 for c in _active_cols if c.get("type") == "Interior")
+                cnt_edge = sum(1 for c in _active_cols if c.get("type") == "Edge")
+                cnt_corner = sum(1 for c in _active_cols if c.get("type") == "Corner")
+                tot_active_cols = len(_active_cols)
+
+                H_m = col_H / 100.0  # column height in meters
+                col_boq_rows = []
+                tot_conc_vol_1f = 0.0
+                tot_main_steel_kg_1f = 0.0
+                tot_stirrup_steel_kg_1f = 0.0
+                tot_steel_kg_1f = 0.0
+
+                for des in col_designs:
+                    m_key = des.get("raw_type", "Interior")
+                    count = cnt_int if m_key == "Interior" else (cnt_edge if m_key == "Edge" else cnt_corner)
+                    m_label = des["model_label"]
+                    if count > 0:
+                        b_cm = des["b"]
+                        t_cm = des["t"]
+                        phi_m = des["Phi"]
+                        n_b = des["n_bars"]
+                        phi_st = des["Phi_st"]
+                        n_st_m = des["n_st_per_m"]
+
+                        # Concrete volume for 1 column and all columns of this type (m³)
+                        vol_1col = (b_cm / 100.0) * (t_cm / 100.0) * H_m
+                        vol_total = vol_1col * count
+                        vol_total_bld = vol_total * num_floors
+
+                        # Main longitudinal rebar: L = H + splice (m)
+                        L_bar = H_m + max(1.0, (50.0 * phi_m) / 1000.0)
+                        unit_w_main = (phi_m ** 2) / 162.0
+                        tot_len_main_1col = n_b * L_bar
+                        w_main_1col = tot_len_main_1col * unit_w_main
+                        tot_w_main = w_main_1col * count
+
+                        # Stirrups / Ties
+                        n_ties_1col = max(5, int(math.ceil(H_m * n_st_m)))
+                        cov_cm = 2.5
+                        tie_perim = 2.0 * (((b_cm - 2.0 * cov_cm) + (t_cm - 2.0 * cov_cm)) / 100.0) + 0.20
+                        unit_w_st = (phi_st ** 2) / 162.0
+                        tot_len_st_1col = n_ties_1col * tie_perim
+                        w_st_1col = tot_len_st_1col * unit_w_st
+                        tot_w_st = w_st_1col * count
+
+                        # Total steel weight & ratio
+                        tot_w_steel = tot_w_main + tot_w_st
+                        ratio_kg_m3 = (tot_w_steel / vol_total) if vol_total > 0 else 0.0
+
+                        tot_conc_vol_1f += vol_total
+                        tot_main_steel_kg_1f += tot_w_main
+                        tot_stirrup_steel_kg_1f += tot_w_st
+                        tot_steel_kg_1f += tot_w_steel
+
+                        # Cement, Sand, Gravel for building floors
+                        cement_ton_mod = vol_total_bld * 0.350
+                        cement_bags_mod = int(round(vol_total_bld * 7.0))
+                        sand_m3_mod = vol_total_bld * 0.40
+                        gravel_m3_mod = vol_total_bld * 0.80
+
+                        col_boq_rows.append({
+                            "نموذج العمود (Model)": m_label,
+                            "العدد في المسقط (Count)": f"{count} عمود",
+                            "القطاع b × t (cm)": f"{b_cm:.0f} × {t_cm:.0f}",
+                            "الخرسانة (1F) [m³]": f"{vol_total:.2f} m³",
+                            f"خرسانة ({num_floors}F) [m³]": f"{vol_total_bld:.2f} m³",
+                            "التسليح الرئيسي (kg)": f"{tot_w_main:,.1f}",
+                            "الكانات (kg)": f"{tot_w_st:,.1f}",
+                            f"إجمالي الحديد ({num_floors}F) [Ton]": f"{(tot_w_steel * num_floors) / 1000.0:.3f} Ton",
+                            f"الأسمنت ({num_floors}F) [Ton]": f"{cement_ton_mod:.2f} t ({cement_bags_mod} شكارة)",
+                            f"الرمل ({num_floors}F) [m³]": f"{sand_m3_mod:.2f} m³",
+                            f"الزلط ({num_floors}F) [m³]": f"{gravel_m3_mod:.2f} m³",
+                            "معدل التسليح (kg/m³)": f"{ratio_kg_m3:.1f} kg/m³",
+                        })
+
+                # Total row
+                tot_conc_vol_bld = tot_conc_vol_1f * num_floors
+                tot_steel_ton_bld = (tot_steel_kg_1f / 1000.0) * num_floors
+                tot_ratio_1f = (tot_steel_kg_1f / tot_conc_vol_1f) if tot_conc_vol_1f > 0 else 0.0
+
+                col_boq_rows.append({
+                    "نموذج العمود (Model)": f"📌 الإجمالي العام ({tot_active_cols} عمود — {num_floors} طابق)",
+                    "العدد في المسقط (Count)": f"{tot_active_cols} عمود",
+                    "القطاع b × t (cm)": f"H = {H_m:.2f} m",
+                    "الخرسانة (1F) [m³]": f"{tot_conc_vol_1f:.2f} m³",
+                    f"خرسانة ({num_floors}F) [m³]": f"{tot_conc_vol_bld:.2f} m³",
+                    "التسليح الرئيسي (kg)": f"{tot_main_steel_kg_1f * num_floors:,.1f} kg",
+                    "الكانات (kg)": f"{tot_stirrup_steel_kg_1f * num_floors:,.1f} kg",
+                    f"إجمالي الحديد ({num_floors}F) [Ton]": f"{tot_steel_ton_bld:.3f} Ton",
+                    f"الأسمنت ({num_floors}F) [Ton]": f"{tot_conc_vol_bld * 0.350:.2f} t ({int(round(tot_conc_vol_bld * 7.0))} شكارة)",
+                    f"الرمل ({num_floors}F) [m³]": f"{tot_conc_vol_bld * 0.40:.2f} m³",
+                    f"الزلط ({num_floors}F) [m³]": f"{tot_conc_vol_bld * 0.80:.2f} m³",
+                    "معدل التسليح (kg/m³)": f"{tot_ratio_1f:.1f} kg/m³",
+                })
+
+                st.markdown(
+                    f"##### 📊 حصر كميات الخرسانة والحديد لجميع الأعمدة في المسقط الإنشائي "
+                    f"({tot_active_cols} عمود: {cnt_int} داخلي + {cnt_edge} طرفي + {cnt_corner} ركن)"
+                )
+
+                render_styled_table(col_boq_rows, font_size_override=14.0)
+
+                st.markdown("<div style='margin: 18px 0; border-top: 1.5px solid #cbd5e1;'></div>", unsafe_allow_html=True)
+
+                col_designs_table = []
+                for des in col_designs:
+                    col_designs_table.append({
+                        "نموذج العمود (Model)": des["model_label"],
+                        "العمود الحاكم (Gov Col)": des["gov_col"],
+                        "حمل الدور Pu_1F (t)": f"{des['pu_1f']:.2f}",
+                        f"حمل التصميم الكلي ({num_floors}F) [ton]": f"{des['pu_tot']:.2f}",
+                        "القطاع المصمم b × t (cm)": f"{des['b']:.0f} × {des['t']:.0f}",
+                        "التسليح الطولي (Main RFT)": f"{des['main_steel_str']} (μ={des['mu_provided']:.2f}%)",
+                        "الكانات (Stirrups / Ties)": des["stirrups_str"],
+                        "سعة التحمل Pu,cap (t)": f"{des['Pu_cap_t']:.2f}",
+                        "نسبة الاستخدام (Util %)": f"{des['util_percent']:.1f} %",
+                        "فحص النحافة والأمان": "✅ Safe" if des["is_safe"] else "⚠️ Review",
+                    })
+
+                render_styled_table(col_designs_table, font_size_override=14.0)
+
+                # ── ⚙️ اعتماد وتعديل قطاعات الأعمدة للتحليل الإنشائي للبلاطة ──
+                st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
+                st.markdown(
+                    f"""
+                    <div dir="rtl" style="direction:rtl; text-align:right; background:#f0fdf4; border:1.5px solid #86efac; border-right:6px solid #16a34a; padding:12px 18px; border-radius:8px; margin-bottom:12px; color:#14532d; line-height:1.6;">
+                        <div style="font-size:15px; font-weight:800; color:#166534; margin-bottom:4px;">
+                            ⚙️ اعتماد وتعديل قطاعات الأعمدة للتحليل الإنشائي للبلاطة (Adopted Column Dimensions for Slab Checks):
+                        </div>
+                        <div style="font-size:13.5px; color:#1e293b; font-weight:600;">
+                            تنتقل هذه القطاعات المعتمدة فوراً إلى حسابات البحور الصافية <code style="background:#e2e8f0; padding:2px 6px; border-radius:4px;">Clear Spans Ln</code> وفحص القص الثاقب <code style="background:#e2e8f0; padding:2px 6px; border-radius:4px;">Punching Shear</code> وسهم الانحناء <code style="background:#e2e8f0; padding:2px 6px; border-radius:4px;">Deflection</code> في الأقسام التالية مباشرة.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+                adopt_cols = st.columns(len(col_designs)) if col_designs else [st.container()]
+                for idx_ac, des in enumerate(col_designs):
+                    m_key = des["raw_type"]
+                    with adopt_cols[idx_ac]:
+                        st.markdown(f"**📐 اعتماد قطاع {des['model_mark']} ({des['model_label'].split('(')[-1].replace(')', '')})**")
+                        def_b = float(st.session_state.get(f"fs_adopted_b_{m_key}", des["b"]))
+                        def_t = float(st.session_state.get(f"fs_adopted_t_{m_key}", des["t"]))
+                        st.number_input(
+                            f"العرض b (cm) — {des['model_mark']}",
+                            min_value=20.0,
+                            max_value=200.0,
+                            value=def_b,
+                            step=5.0,
+                            key=f"fs_adopted_b_{m_key}"
+                        )
+                        st.number_input(
+                            f"الطول t (cm) — {des['model_mark']}",
+                            min_value=20.0,
+                            max_value=300.0,
+                            value=def_t,
+                            step=5.0,
+                            key=f"fs_adopted_t_{m_key}"
+                        )
+
+                st.markdown(
+                    """
+                    <style>
+                    div[class*="st-key-"][class*="btn_fs_adopt_col_dims"] button,
+                    div.stButton > button[key*="btn_fs_adopt_col_dims"],
+                    button[key*="btn_fs_adopt_col_dims"],
+                    .st-key-btn_fs_adopt_col_dims button,
+                    div[data-testid="stVerticalBlock"] div:has(> button[key*="btn_fs_adopt_col_dims"]) button {
+                        background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%) !important;
+                        background-color: #1d4ed8 !important;
+                        color: #ffffff !important;
+                        font-size: 20px !important;
+                        font-weight: 800 !important;
+                        padding: 16px 28px !important;
+                        min-height: 62px !important;
+                        border-radius: 12px !important;
+                        border: 2px solid #60a5fa !important;
+                        box-shadow: 0 4px 15px rgba(29, 78, 216, 0.45) !important;
+                        transition: all 0.25s ease !important;
+                        margin: 14px 0px !important;
+                        display: flex !important;
+                        align-items: center !important;
+                        justify-content: center !important;
+                        cursor: pointer !important;
+                    }
+                    div[class*="st-key-"][class*="btn_fs_adopt_col_dims"] button:hover,
+                    div.stButton > button[key*="btn_fs_adopt_col_dims"]:hover,
+                    button[key*="btn_fs_adopt_col_dims"]:hover {
+                        background: linear-gradient(135deg, #1e40af 0%, #172554 100%) !important;
+                        border-color: #93c5fd !important;
+                        box-shadow: 0 8px 24px rgba(29, 78, 216, 0.65) !important;
+                        transform: translateY(-2px) !important;
+                    }
+                    div[class*="st-key-"][class*="btn_fs_adopt_col_dims"] button *,
+                    div.stButton > button[key*="btn_fs_adopt_col_dims"] *,
+                    button[key*="btn_fs_adopt_col_dims"] * {
+                        color: #ffffff !important;
+                        font-size: 20px !important;
+                        font-weight: 800 !important;
+                        line-height: 1.3 !important;
+                    }
+                    </style>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                if st.button("🔄 اعتماد وتحديث قطاعات الأعمدة وإعادة تحليل السقف (Adopt & Re-analyze Slab)", key=f"{prefix}btn_fs_adopt_col_dims", use_container_width=True, type="primary"):
+                    st.rerun()
+
+        # ── 🔄 ADOPTION & SYNCHRONIZATION OF COLUMN SIZES FOR SLAB ANALYSIS ────
+        des_map_type = {d["raw_type"]: d for d in col_designs} if 'col_designs' in locals() and col_designs else {}
+        for c in _active_cols:
+            c_type = c.get("type", "Interior")
+            des_m = des_map_type.get(c_type)
+            if des_m:
+                c_b = float(st.session_state.get(f"fs_adopted_b_{c_type}", des_m["b"]))
+                c_t = float(st.session_state.get(f"fs_adopted_t_{c_type}", des_m["t"]))
+                c["b_cm"] = c_b
+                c["t_cm"] = c_t
+                c["bc"] = c_b
+                c["tc"] = c_t
+                c["width_m"] = c_b / 100.0
+                c["height_m"] = c_t / 100.0
+                gx = float(c.get("center_x", c.get("x", 0.0)))
+                gy = float(c.get("center_y", c.get("y", 0.0)))
+                c["x_min"] = gx - (c["width_m"] / 2.0)
+                c["x_max"] = gx + (c["width_m"] / 2.0)
+                c["y_min"] = gy - (c["height_m"] / 2.0)
+                c["y_max"] = gy + (c["height_m"] / 2.0)
+
+        if 'col_designs' in locals() and col_designs:
+            gov_m = next((d for d in col_designs if d.get("raw_type") == "Interior"), col_designs[0])
+            bc_s = float(st.session_state.get(f"fs_adopted_b_{gov_m['raw_type']}", gov_m["b"]))
+            tc_s = float(st.session_state.get(f"fs_adopted_t_{gov_m['raw_type']}", gov_m["t"]))
+            bc_m = bc_s / 100.0
+            tc_m = tc_s / 100.0
 
     # ── Multi-Bay & Merged-Bay Moments Analysis (X & Y) ──────────────────────
     btm_extra_spans = []
@@ -19732,588 +20249,7 @@ def render(is_standalone: bool = False):
         else:
             st.info("💡 انقر لتوسيع هذا القسم وعرض التحقق الإنشائي النهائي من سهم الانحناء طويل الأمد (Deflection Verification).")
 
-    col_reactions_data = []
-    summary_models = []
-    img_reactions_b64 = None
-
     if not is_standalone:
-        # ── 🏛️ COLUMN REACTIONS & MULTI-STOREY LOADS (ردود أفعال وتوزيع أحمال الأعمدة) ────
-        col_reactions_data = []
-        for c in _active_cols:
-            pu_1f = c.get("Pu", 0.0)
-            pu_tot = pu_1f * num_floors
-            atrib = c.get("Atrib_0", 0.0)
-            raw_type = c.get("type", "Interior")
-            col_reactions_data.append({
-                "Column ID": c["id"],
-                "Orig ID": c.get("orig_id", c["id"]),
-                "Grid": f"{c['grid_x']} - {c['grid_y']}",
-                "Location Type": {"Interior": "داخلي (Interior)", "Edge": "طرفي / وسط خارجي (Edge)", "Corner": "ركن (Corner)"}.get(raw_type, raw_type),
-                "Raw Type": raw_type,
-                "Tributary Area (m²)": f"{atrib:.2f}",
-                "Pu (1 Floor) [ton]": f"{pu_1f:.2f}",
-                f"Total Pu ({num_floors} Floors) [ton]": f"{pu_tot:.2f}",
-                "pu_1f_val": pu_1f,
-                "pu_tot_val": pu_tot,
-                "pu_beam_val": float(c.get("Pu_beam", 0.0)),
-                "atrib_val": atrib,
-                "x_min": c.get("x_min"),
-                "y_min": c.get("y_min"),
-                "x_max": c.get("x_max"),
-                "y_max": c.get("y_max"),
-                "width_m": c.get("width_m"),
-                "height_m": c.get("height_m"),
-                "center_x": c.get("center_x", c.get("x")),
-                "center_y": c.get("center_y", c.get("y")),
-            })
-
-        img_reactions_b64 = None
-        exp_reac = st.expander(
-            f"🏛️ Column Reactions & Vertical Loads — {num_floors} Floors (ردود أفعال وتوزيع أحمال الأعمدة)",
-            expanded=False,
-            key=f"{prefix}exp_col_reactions",
-            on_change="rerun",
-        )
-        with exp_reac:
-            if st.session_state.get(f"{prefix}exp_col_reactions", False):
-                fig_reac = generate_flat_slab_reactions_sketch(
-                    Lx_spans, Ly_spans, cantilevers, num_floors, Wu,
-                    col_reactions_data,
-                    col_w_cm=bc_s, col_d_cm=tc_s,
-                    removed_cols=_removed_col_objs,
-                    void_panel_ids=set(_confirmed_voids),
-                    col_sf=col_sf_val,
-                    edge_columns=_edge_columns,
-                )
-                st.pyplot(fig_reac, clear_figure=True, use_container_width=True)
-                buf_reac = io.BytesIO()
-                fig_reac.savefig(buf_reac, format="png", bbox_inches="tight", dpi=180)
-                buf_reac.seek(0)
-                img_reactions_b64 = "data:image/png;base64," + base64.b64encode(buf_reac.getvalue()).decode("utf-8")
-                plt.close(fig_reac)
-            else:
-                st.info("💡 انقر لتوسيع هذا القسم وعرض مخطط ردود أفعال وتوزيع أحمال الأعمدة.")
-
-        with st.expander(f"📊 Column Reactions Table — {num_floors} Floors (جدول ردود أفعال وتوزيع أحمال الأعمدة)", expanded=False):
-            reactions_df = pd.DataFrame([
-                {
-                    "Column ID": r["Column ID"],
-                    "Grid": r["Grid"],
-                    "Location Type": r["Location Type"],
-                    "Tributary Area (m²)": r["Tributary Area (m²)"],
-                    "Pu (1 Floor) [ton]": r["Pu (1 Floor) [ton]"],
-                    f"Total Pu ({num_floors} Floors) [ton]": r[f"Total Pu ({num_floors} Floors) [ton]"],
-                }
-                for r in col_reactions_data
-            ])
-            render_styled_table(reactions_df)
-            st.caption(f"ℹ️ الأحمال المحورية $P_u$ تشمل معامل الأمان ووزن الأعمدة (Factor of Safety & Columns Weight = **{col_sf_val:.2f}**).")
-
-        # ── 📊 CLASSIFICATION INTO GOVERNING COLUMN TYPES (DYNAMIC RE-INDEXING C1, C2, C3) ──
-        with st.expander("📌 Governing Column Loads by Type (أقصى ردود أفعال وتصنيف نماذج الأعمدة)", expanded=False):
-            int_cols = [r for r in col_reactions_data if r["Raw Type"] == "Interior"]
-            edge_cols = [r for r in col_reactions_data if r["Raw Type"] == "Edge"]
-            corner_cols = [r for r in col_reactions_data if r["Raw Type"] == "Corner"]
-
-            max_int = max(int_cols, key=lambda x: x["pu_1f_val"]) if int_cols else None
-            max_edge = max(edge_cols, key=lambda x: x["pu_1f_val"]) if edge_cols else None
-            max_corner = max(corner_cols, key=lambda x: x["pu_1f_val"]) if corner_cols else None
-
-            # Dynamic re-indexing priority: (Interior -> Edge -> Corner)
-            col_group_specs = [
-                ("Interior", int_cols, max_int, "أعمدة داخلية", "داخلي (Interior)", "أقصى عمود داخلي", "قواعد داخلية"),
-                ("Edge", edge_cols, max_edge, "أعمدة طرفية", "طرفي / وسط خارجي (Edge)", "أقصى عمود طرفي", "قواعد جانبية"),
-                ("Corner", corner_cols, max_corner, "أعمدة ركن", "ركن (Corner)", "أقصى عمود ركن", "قواعد أركان"),
-            ]
-            active_col_groups = [g for g in col_group_specs if g[1]]
-            col_label_map = {}
-            for idx_c, (grp_key, grp_cols, grp_max, grp_ar, grp_loc, grp_gov_lbl, ftg_ar) in enumerate(active_col_groups, start=1):
-                col_label_map[grp_key] = f"C{idx_c}"
-
-            # Governing summary model table with dynamic marks (C1, C2...)
-            summary_models = []
-            for grp_key, grp_cols, grp_max, grp_ar, grp_loc, grp_gov_lbl, ftg_ar in active_col_groups:
-                c_mark = col_label_map[grp_key]
-                summary_models.append({
-                    "Column Model (نموذج التصميم)": f"{c_mark} ({grp_gov_lbl})",
-                    "Governing Column": f"{grp_max['Column ID']} ({grp_max['Grid']})",
-                    "Location Type": grp_loc,
-                    "Tributary Area (m²)": f"{grp_max['atrib_val']:.2f}",
-                    "Pu (1 Floor) [ton]": f"{grp_max['pu_1f_val']:.2f}",
-                    f"Total Pu ({num_floors} Floors) [ton]": f"{grp_max['pu_tot_val']:.2f}",
-                })
-
-            if summary_models:
-                render_styled_table(summary_models)
-
-                dyn_ftg_tags = ", ".join([f"F{i+1}" for i in range(len(active_col_groups))])
-                st.markdown(
-                    f"""
-                    <div dir="rtl" style="background: rgba(30, 64, 175, 0.12); border: 1.5px solid #3b82f6; border-radius: 8px; padding: 12px 16px; margin: 12px 0 10px 0; text-align: right;">
-                        <div style="font-size: 14.5px; font-weight: 800; color: #60a5fa; margin-bottom: 4px;">
-                            🚀 الانتقال المباشر لتصميم نماذج القواعد المنفصلة ({dyn_ftg_tags}) في موديول 3 (Isolated Footings):
-                        </div>
-                        <div style="font-size: 12.5px; color: #cbd5e1;">
-                            اضغط على أي من الأزرار التالية لتحميل الأحمال الحاكمة تلقائياً والانتقال الفوري إلى موديول 3 لتصميم وتدقيق النموذج:
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                nav_cols = st.columns(len(active_col_groups)) if active_col_groups else [st.container()]
-                for idx_nav, (grp_key, grp_cols, grp_max, grp_ar, grp_loc, grp_gov_lbl, ftg_ar) in enumerate(active_col_groups):
-                    ftg_mark = f"F{idx_nav + 1}"
-                    with nav_cols[idx_nav]:
-                        if st.button(f"🪨 تصميم {ftg_mark} ({ftg_ar})", key=f"btn_nav_m3_{grp_key.lower()}", use_container_width=True, help=f"الانتقال إلى موديول 3 وتصميم نموذج {ftg_mark} بأقصى حمل للـ {ftg_ar}"):
-                            if grp_max:
-                                S.set_setting("ftg_Pu", float(grp_max["pu_tot_val"]))
-                                S.set_setting("ftg_tc", float(tc_s))
-                                S.set_setting("ftg_bc", float(bc_s))
-                            st.session_state["ftg_selected_model_type"] = ftg_mark
-                            S.cfg_set("selected_module_idx", 2)
-                            st.session_state["selected_module_idx"] = 2
-                            st.rerun()
-
-        # ── 💾 PERSIST GOVERNING COLUMN LOADS FOR MODULE 2 & MODULE 7 ─────────────
-        if max_int and max_int.get("pu_1f_val", 0) > 0:
-            pu_int_1f = float(max_int["pu_1f_val"])
-            pu_int_tot = float(max_int["pu_tot_val"])
-            S.cfg_set("fs_col_pu_int", pu_int_1f)
-            S.cfg_set("fs_col_tot_pu_int", pu_int_tot)
-            st.session_state["fs_col_pu_int"] = pu_int_1f
-            st.session_state["fs_col_tot_pu_int"] = pu_int_tot
-            st.session_state["pu_tot_int"] = pu_int_tot
-
-        if max_edge and max_edge.get("pu_1f_val", 0) > 0:
-            pu_edge_1f = float(max_edge["pu_1f_val"])
-            pu_edge_tot = float(max_edge["pu_tot_val"])
-            S.cfg_set("fs_col_pu_edge", pu_edge_1f)
-            S.cfg_set("fs_col_tot_pu_edge", pu_edge_tot)
-            st.session_state["fs_col_pu_edge"] = pu_edge_1f
-            st.session_state["fs_col_tot_pu_edge"] = pu_edge_tot
-            st.session_state["pu_tot_edge"] = pu_edge_tot
-            st.session_state["pu_tot_side"] = pu_edge_tot
-
-        if max_corner and max_corner.get("pu_1f_val", 0) > 0:
-            pu_corner_1f = float(max_corner["pu_1f_val"])
-            pu_corner_tot = float(max_corner["pu_tot_val"])
-            S.cfg_set("fs_col_pu_corner", pu_corner_1f)
-            S.cfg_set("fs_col_tot_pu_corner", pu_corner_tot)
-            st.session_state["fs_col_pu_corner"] = pu_corner_1f
-            st.session_state["fs_col_tot_pu_corner"] = pu_corner_tot
-            st.session_state["pu_tot_corner"] = pu_corner_tot
-
-        # Export full building columns layout (coordinates, dimensions, loads, types)
-        cols_export = []
-        for c in _active_cols:
-            c_raw_type = c.get("type", "Interior")
-            c_mark = col_label_map.get(c_raw_type, "C1") if 'col_label_map' in locals() else "C1"
-            c["model_mark"] = c_mark
-            cols_export.append({
-                "id": c["id"],
-                "orig_id": c.get("orig_id", c["id"]),
-                "grid_x": c.get("grid_x", ""),
-                "grid_y": c.get("grid_y", ""),
-                "type": c_raw_type,
-                "model_mark": c_mark,
-                "x": float(c["x"]),
-                "y": float(c["y"]),
-                "bc": float(c.get("bc", bc_s)),
-                "tc": float(c.get("tc", tc_s)),
-                "pu_1f": float(c.get("Pu", 0.0)),
-                "pu_tot": float(c.get("Pu", 0.0) * num_floors),
-                "atrib": float(c.get("Atrib_0", 0.0)),
-            })
-        st.session_state["fs_building_columns"] = cols_export
-        st.session_state["fs_num_floors"] = num_floors
-        st.session_state["fs_Lx_spans"] = [float(x) for x in Lx_calc]
-        st.session_state["fs_Ly_spans"] = [float(y) for y in Ly_calc]
-        st.session_state["fs_col_b"] = float(bc_s)
-        st.session_state["fs_col_c"] = float(tc_s)
-        S.cfg_set("fs_building_columns", cols_export)
-        S.cfg_set("fs_col_b", float(bc_s))
-        S.cfg_set("fs_col_c", float(tc_s))
-        S.cfg_set("fs_Lx_spans", [float(x) for x in Lx_calc])
-        S.cfg_set("fs_Ly_spans", [float(y) for y in Ly_calc])
-
-        # ── 🏛️ RECTANGULAR COLUMNS DESIGN FROM FLAT SLAB LOADS ─────────────────────
-        from modules.columns import design_rectangular_column
-
-        col_sf = S.cfg_val("col_Safety_Factor", 1.20)
-        col_b_val = S.cfg_val("col_b", bc_s if bc_s else 30)
-        col_H = S.cfg_val("col_H_clear", 300)
-        col_K_idx = S.cfg_val("col_K_index", 1)
-        K_opts = [0.50, 0.70, 1.00, 1.20, 2.00]
-        col_K = K_opts[col_K_idx] if 0 <= col_K_idx < len(K_opts) else 0.70
-        col_Fcu = S.cfg_val("col_Fcu", Fcu if Fcu else 250)
-        col_Fy = S.cfg_val("col_Fy", Fy if Fy else 4000)
-        col_Fyk = S.cfg_val("col_Fyk", 2400)
-        col_mu = S.cfg_val("col_mu_target", 1.0)
-        phi_opts = [12, 16, 18, 20, 25]
-        col_phi_idx = S.cfg_val("col_Phi_index", 1)
-        col_phi = phi_opts[col_phi_idx] if 0 <= col_phi_idx < len(phi_opts) else 16
-        phi_st_opts = [6, 8, 10]
-        col_phist_idx = S.cfg_val("col_Phi_st_index", 1)
-        col_phi_st = phi_st_opts[col_phist_idx] if 0 <= col_phist_idx < len(phi_st_opts) else 8
-
-        cnt_int = sum(1 for c in _active_cols if c.get("type") == "Interior")
-        cnt_edge = sum(1 for c in _active_cols if c.get("type") == "Edge")
-        cnt_corner = sum(1 for c in _active_cols if c.get("type") == "Corner")
-        tot_active_cols = len(_active_cols)
-        tot_conc_vol_1f = 0.0
-        tot_main_steel_kg_1f = 0.0
-        tot_stirrup_steel_kg_1f = 0.0
-        tot_steel_kg_1f = 0.0
-        tot_ratio_1f = 0.0
-        tot_conc_vol_bld = 0.0
-        tot_steel_ton_bld = 0.0
-        tot_steel_kg_bld = 0.0
-        cement_ton_cols = 0.0
-        cement_bags_cols = 0
-        gravel_m3_cols = 0.0
-        sand_m3_cols = 0.0
-
-        col_designs = []
-        # Dynamic loop over active column groups (Priority: Interior -> Edge -> Corner)
-        for grp_key, grp_cols, col_obj, grp_ar, grp_loc, grp_gov_lbl, ftg_ar in active_col_groups:
-            if col_obj and col_obj.get("pu_tot_val", 0) > 0:
-                pu_tot = float(col_obj["pu_tot_val"])
-                pu_1f = float(col_obj["pu_1f_val"])
-                des = design_rectangular_column(
-                    Pu_input=pu_tot,
-                    Safety_Factor=1.0,
-                    b=col_b_val,
-                    H_clear=col_H,
-                    K=col_K,
-                    Fcu=col_Fcu,
-                    Fy=col_Fy,
-                    Fyk=col_Fyk,
-                    mu_target=col_mu,
-                    Phi=col_phi,
-                    Phi_st=col_phi_st,
-                )
-                m_mark = col_label_map[grp_key]
-                des["model_mark"] = m_mark
-                des["model_label"] = f"{m_mark} ({grp_ar})"
-                des["model_key"] = f"C_{grp_key.lower()}"
-                des["raw_type"] = grp_key
-                des["gov_col"] = f"{col_obj['Column ID']} ({col_obj['Grid']})"
-                des["loc_type"] = col_obj["Location Type"]
-                des["atrib"] = col_obj["atrib_val"]
-                des["pu_1f"] = pu_1f
-                des["pu_tot"] = pu_tot
-                col_designs.append(des)
-
-        # Design calculation for all individual columns
-        indiv_col_designs = []
-        for r in col_reactions_data:
-            r_pu_tot = float(r["pu_tot_val"])
-            r_pu_1f = float(r["pu_1f_val"])
-            if r_pu_tot > 0:
-                r_des = design_rectangular_column(
-                    Pu_input=r_pu_tot,
-                    Safety_Factor=1.0,
-                    b=col_b_val,
-                    H_clear=col_H,
-                    K=col_K,
-                    Fcu=col_Fcu,
-                    Fy=col_Fy,
-                    Fyk=col_Fyk,
-                    mu_target=col_mu,
-                    Phi=col_phi,
-                    Phi_st=col_phi_st,
-                )
-                r_des["col_id"] = r["Column ID"]
-                r_des["grid"] = r["Grid"]
-                r_des["loc_type"] = r["Location Type"]
-                r_des["atrib"] = r["atrib_val"]
-                r_des["pu_1f"] = r_pu_1f
-                r_des["pu_tot"] = r_pu_tot
-                indiv_col_designs.append(r_des)
-
-        if col_designs:
-            with st.expander(f"🏛️ Rectangular Columns Design — {num_floors} Floors (التصميم الإنشائي لنماذج الأعمدة المستطيلة)", expanded=False):
-                st.markdown(
-                    f"""
-                    <div dir="rtl" style="direction:rtl; text-align:right; background:linear-gradient(135deg, #1e3a8a 0%, #0f172a 100%); border:1.5px solid #3b82f6; border-right:6px solid #38bdf8; padding:12px 16px; border-radius:8px; margin-bottom:10px; color:#f8fafc; line-height:1.65; box-shadow:0 3px 10px rgba(15, 23, 42, 0.25);">
-                        <div style="font-size:14.5px; font-weight:800; color:#38bdf8; margin-bottom:4px;">
-                            📋 تصميم قطاعات وتسليح نماذج الأعمدة (ECP 203 — Direct Axial Design):
-                        </div>
-                        <div style="font-size:13.5px; color:#f1f5f9; font-weight:600;">
-                            يتم تصميم قطاعات الأعمدة بناءً على أقصى حمل كلي لعدد <b style="color:#fde047;">{num_floors} طابق</b> <code style="background:#0f172a; color:#7dd3fc; padding:2px 6px; border-radius:4px; border:1px solid #38bdf8;">Total Pu ({num_floors} Floors)</code> لكل نموذج عمود 
-                            (داخلي C_int، طرفي C_edge، ركن C_corner) وفقاً لمساحة التأثير وموقع العمود في المسقط الإنشائي.
-                        </div>
-                    </div>
-                    <div dir="rtl" style="direction:rtl; text-align:right; background:linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border:1.5px solid #f59e0b; border-right:6px solid #d97706; padding:10px 16px; border-radius:8px; margin-bottom:14px; color:#78350f; font-size:13.5px; font-weight:800; line-height:1.6; box-shadow:0 2px 6px rgba(245, 158, 11, 0.18);">
-                        💡 لتعديل اختيار اقطار تسليح الاعمدة و اجهاد الحديد والخرسانة توجه الي موديول تصميم الاعمدة الخرسانية <b style="color:#92400e;">Rectangular columns</b>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-                col_designs_table = []
-                for des in col_designs:
-                    col_designs_table.append({
-                        "نموذج العمود (Model)": des["model_label"],
-                        "العمود الحاكم (Gov Col)": des["gov_col"],
-                        "حمل الدور Pu_1F (t)": f"{des['pu_1f']:.2f}",
-                        f"حمل التصميم الكلي ({num_floors}F) [ton]": f"{des['pu_tot']:.2f}",
-                        "القطاع المصمم b × t (cm)": f"{des['b']:.0f} × {des['t']:.0f}",
-                        "التسليح الطولي (Main RFT)": f"{des['main_steel_str']} (μ={des['mu_provided']:.2f}%)",
-                        "الكانات (Stirrups / Ties)": des["stirrups_str"],
-                        "سعة التحمل Pu,cap (t)": f"{des['Pu_cap_t']:.2f}",
-                        "نسبة الاستخدام (Util %)": f"{des['util_percent']:.1f} %",
-                        "فحص النحافة والأمان": "✅ Safe" if des["is_safe"] else "⚠️ Review",
-                    })
-
-                render_styled_table(col_designs_table)
-
-                st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
-
-                # Detailed Cards for Active Column Models
-                card_cols = st.columns(len(col_designs)) if col_designs else [st.container()]
-                palette = [
-                    ("#93c5fd", "#1e40af"),
-                    ("#fde68a", "#b45309"),
-                    ("#fecaca", "#b91c1c"),
-                ]
-                for idx_card, des in enumerate(col_designs):
-                    container = card_cols[idx_card]
-                    color_border, color_hdr = palette[idx_card % len(palette)]
-                    with container:
-                        st.markdown(
-                            f"""
-                            <div style="background:#ffffff; border:2px solid {color_border}; border-radius:10px; padding:12px 14px; text-align:center;">
-                                <div style="font-size:15px; font-weight:700; color:{color_hdr}; margin-bottom:6px;">{des['model_label']}</div>
-                                <div style="font-size:13px; color:#475569;">العمود: <b>{des['gov_col']}</b></div>
-                                <div style="font-size:13px; color:#475569;">Pu_1F = <b>{des['pu_1f']:.1f} t</b> (Total {num_floors}F = <b>{des['pu_tot']:.1f} t</b>)</div>
-                                <hr style="margin:8px 0; border:0; border-top:1px solid #e2e8f0;">
-                                <div style="font-size:17px; font-weight:800; color:#0f172a;">{des['b']:.0f} × {des['t']:.0f} cm</div>
-                                <div style="font-size:14px; font-weight:700; color:#991b1b; margin-top:2px;">{des['main_steel_str']} (μ={des['mu_provided']:.2f}%)</div>
-                                <div style="font-size:13px; font-weight:600; color:#166534; margin-top:2px;">{des['stirrups_str']}</div>
-                                <div style="font-size:12px; color:#64748b; margin-top:4px;">Pu,cap = {des['Pu_cap_t']:.1f} t (كفاءة {des['util_percent']:.1f}%)</div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
-                        )
-
-                # Optional view: Detailed Design Table for ALL Individual Columns
-                if indiv_col_designs:
-                    with st.expander(f"📋 Individual Columns Schedule — Detailed Design for All {len(indiv_col_designs)} Columns (جدول تصميم كافة أعمدة السقف)", expanded=False):
-                        indiv_table = []
-                        for ides in indiv_col_designs:
-                            indiv_table.append({
-                                "Column ID": ides["col_id"],
-                                "Grid": ides["grid"],
-                                "Location Type": ides["loc_type"],
-                                "Atrib (m²)": f"{ides['atrib']:.2f}",
-                                "Pu (1F) [ton]": f"{ides['pu_1f']:.2f}",
-                                f"Total Pu ({num_floors}F) [ton]": f"{ides['pu_tot']:.2f}",
-                                "Design Section b × t (cm)": f"{ides['b']:.0f} × {ides['t']:.0f}",
-                                "Main Rebar": f"{ides['main_steel_str']} (μ={ides['mu_provided']:.2f}%)",
-                                "Ties / Stirrups": ides["stirrups_str"],
-                                "Pu,cap (ton)": f"{ides['Pu_cap_t']:.2f}",
-                                "Util %": f"{ides['util_percent']:.1f} %",
-                            })
-                        render_styled_table(indiv_table)
-
-                st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
-                st.markdown("---")
-
-                # ── 📊 حصر كميات الخرسانة والحديد لجميع أعمدة المسقط الإنشائي (Columns BOQ) ──
-                cnt_int = sum(1 for c in _active_cols if c.get("type") == "Interior")
-                cnt_edge = sum(1 for c in _active_cols if c.get("type") == "Edge")
-                cnt_corner = sum(1 for c in _active_cols if c.get("type") == "Corner")
-                tot_active_cols = len(_active_cols)
-
-                st.markdown(
-                    f"##### 📊 حصر كميات الخرسانة والحديد لجميع الأعمدة في المسقط الإنشائي "
-                    f"({tot_active_cols} عمود: {cnt_int} داخلي + {cnt_edge} طرفي + {cnt_corner} ركن)"
-                )
-
-                des_map = {d["model_key"]: d for d in col_designs}
-                col_boq_rows = []
-                tot_conc_vol_1f = 0.0
-                tot_main_steel_kg_1f = 0.0
-                tot_stirrup_steel_kg_1f = 0.0
-                tot_steel_kg_1f = 0.0
-
-                H_m = col_H / 100.0  # column height in meters
-
-                for des in col_designs:
-                    m_key = des.get("raw_type", "Interior")
-                    count = cnt_int if m_key == "Interior" else (cnt_edge if m_key == "Edge" else cnt_corner)
-                    m_label = des["model_label"]
-                    if count > 0:
-                        b_cm = des["b"]
-                        t_cm = des["t"]
-                        phi_m = des["Phi"]
-                        n_b = des["n_bars"]
-                        phi_st = des["Phi_st"]
-                        n_st_m = des["n_st_per_m"]
-
-                        # Concrete volume for 1 column and all columns of this type (m³)
-                        vol_1col = (b_cm / 100.0) * (t_cm / 100.0) * H_m
-                        vol_total = vol_1col * count
-
-                        # Main longitudinal rebar: L = H + splice (m)
-                        L_bar = H_m + max(1.0, (50.0 * phi_m) / 1000.0)
-                        unit_w_main = (phi_m ** 2) / 162.0
-                        tot_len_main_1col = n_b * L_bar
-                        w_main_1col = tot_len_main_1col * unit_w_main
-                        tot_w_main = w_main_1col * count
-
-                        # Stirrups / Ties
-                        n_ties_1col = max(5, int(math.ceil(H_m * n_st_m)))
-                        cov_cm = 2.5
-                        tie_perim = 2.0 * (((b_cm - 2.0 * cov_cm) + (t_cm - 2.0 * cov_cm)) / 100.0) + 0.20
-                        unit_w_st = (phi_st ** 2) / 162.0
-                        tot_len_st_1col = n_ties_1col * tie_perim
-                        w_st_1col = tot_len_st_1col * unit_w_st
-                        tot_w_st = w_st_1col * count
-
-                        # Total steel weight & ratio
-                        tot_w_steel = tot_w_main + tot_w_st
-                        ratio_kg_m3 = (tot_w_steel / vol_total) if vol_total > 0 else 0.0
-
-                        tot_conc_vol_1f += vol_total
-                        tot_main_steel_kg_1f += tot_w_main
-                        tot_stirrup_steel_kg_1f += tot_w_st
-                        tot_steel_kg_1f += tot_w_steel
-
-                        col_boq_rows.append({
-                            "نموذج العمود (Model)": m_label,
-                            "العدد في المسقط (Count)": f"{count} عمود",
-                            "القطاع b × t (cm)": f"{b_cm:.0f} × {t_cm:.0f}",
-                            "حجم الخرسانة (m³)": f"{vol_total:.2f} m³",
-                            "التسليح الرئيسي (Main Steel)": f"{n_b}Ø{phi_m} ({tot_w_main:,.1f} kg)",
-                            "الكانات (Stirrups)": f"{n_st_m}Ø{phi_st} /m ({tot_w_st:,.1f} kg)",
-                            "إجمالي وزن الحديد (Ton)": f"{tot_w_steel/1000.0:.3f} Ton",
-                            "معدل التسليح (kg/m³)": f"{ratio_kg_m3:.1f} kg/m³",
-                        })
-
-                # Total row
-                tot_ratio_1f = (tot_steel_kg_1f / tot_conc_vol_1f) if tot_conc_vol_1f > 0 else 0.0
-                col_boq_rows.append({
-                    "نموذج العمود (Model)": "📌 الإجمالي الكلي للأعمدة (1 Floor)",
-                    "العدد في المسقط (Count)": f"{tot_active_cols} عمود",
-                    "القطاع b × t (cm)": f"ارتفاع H = {H_m:.2f} m",
-                    "حجم الخرسانة (m³)": f"{tot_conc_vol_1f:.2f} m³",
-                    "التسليح الرئيسي (Main Steel)": f"{tot_main_steel_kg_1f:,.1f} kg ({tot_main_steel_kg_1f/1000.0:.3f} Ton)",
-                    "الكانات (Stirrups)": f"{tot_stirrup_steel_kg_1f:,.1f} kg ({tot_stirrup_steel_kg_1f/1000.0:.3f} Ton)",
-                    "إجمالي وزن الحديد (Ton)": f"{tot_steel_kg_1f/1000.0:.3f} Ton",
-                    "معدل التسليح (kg/m³)": f"{tot_ratio_1f:.1f} kg/m³",
-                })
-
-                # Multi-storey figures
-                tot_conc_vol_bld = tot_conc_vol_1f * num_floors
-                tot_steel_ton_bld = (tot_steel_kg_1f / 1000.0) * num_floors
-                tot_steel_kg_bld = tot_steel_kg_1f * num_floors
-                cement_ton_cols = tot_conc_vol_1f * 0.350
-                cement_bags_cols = int(round(tot_conc_vol_1f * 7.0))
-                gravel_m3_cols = tot_conc_vol_1f * 0.80
-                sand_m3_cols = tot_conc_vol_1f * 0.40
-
-                # ── Summary Metric Panels for Columns BOQ ──
-                cb1, cb2, cb3, cb4 = st.columns(4)
-                with cb1:
-                    st.markdown(
-                        f"""
-                        <div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:8px; padding:10px 14px; text-align:center;">
-                            <div style="font-size:14px; font-weight:600; color:#475569; margin-bottom:4px;">إجمالي عدد الأعمدة (Columns Count)</div>
-                            <div style="font-size:20px; font-weight:700; color:#1e40af;">{tot_active_cols} عمود</div>
-                            <div style="font-size:12px; color:#64748b; margin-top:2px;">{cnt_int} داخلي + {cnt_edge} طرفي + {cnt_corner} ركن</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                with cb2:
-                    st.markdown(
-                        f"""
-                        <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:10px 14px; text-align:center;">
-                            <div style="font-size:14px; font-weight:600; color:#15803d; margin-bottom:4px;">حجم خرسانة الأعمدة (Concrete Vol)</div>
-                            <div style="font-size:20px; font-weight:700; color:#166534;">{tot_conc_vol_1f:.2f} m³</div>
-                            <div style="font-size:12px; color:#64748b; margin-top:2px;">ولـ {num_floors} طابق: {tot_conc_vol_bld:.2f} m³</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                with cb3:
-                    st.markdown(
-                        f"""
-                        <div style="background:#f5f3ff; border:1.5px solid #c4b5fd; border-radius:8px; padding:10px 14px; text-align:center;">
-                            <div style="font-size:14px; font-weight:600; color:#6d28d9; margin-bottom:4px;">إجمالي وزن حديد الأعمدة (Steel Weight)</div>
-                            <div style="font-size:20px; font-weight:700; color:#5b21b6;">{tot_steel_kg_1f/1000.0:.3f} Ton</div>
-                            <div style="font-size:12px; color:#64748b; margin-top:2px;">{tot_steel_kg_1f:,.1f} kg (ولـ {num_floors} طابق: {tot_steel_ton_bld:.3f} Ton)</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                with cb4:
-                    st.markdown(
-                        f"""
-                        <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:10px 14px; text-align:center;">
-                            <div style="font-size:14px; font-weight:600; color:#1e40af; margin-bottom:4px;">معدل التسليح للأعمدة (Steel Ratio)</div>
-                            <div style="font-size:20px; font-weight:700; color:#1e3a8a;">{tot_ratio_1f:.1f} kg/m³</div>
-                            <div style="font-size:12px; color:#64748b; margin-top:2px;">متوسط نسبة التسليح لخرسانة الأعمدة</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-                st.markdown("<div style='margin-bottom:8px;'></div>", unsafe_allow_html=True)
-                render_styled_table(col_boq_rows)
-
-                st.markdown("<div style='margin-bottom:10px;'></div>", unsafe_allow_html=True)
-
-                # ── Concrete Raw Materials Panels for Columns ──
-                st.markdown("###### 🧱 المواد الأولية المطلوبة لصب خرسانة الأعمدة (Concrete Materials for Columns):")
-                cm1, cm2, cm3, cm4 = st.columns(4)
-                with cm1:
-                    st.markdown(
-                        f"""
-                        <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:8px 12px; text-align:center;">
-                            <div style="font-size:13px; font-weight:600; color:#1e40af;">كمية الأسمنت للأعمدة</div>
-                            <div style="font-size:18px; font-weight:700; color:#1e3a8a;">{cement_ton_cols:.2f} Ton</div>
-                            <div style="font-size:11.5px; color:#64748b;">{cement_bags_cols} شكارة (بمعدل 350 kg/m³)</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                with cm2:
-                    st.markdown(
-                        f"""
-                        <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:8px; padding:8px 12px; text-align:center;">
-                            <div style="font-size:13px; font-weight:600; color:#b45309;">كمية الزلط للأعمدة</div>
-                            <div style="font-size:18px; font-weight:700; color:#92400e;">{gravel_m3_cols:.2f} m³</div>
-                            <div style="font-size:11.5px; color:#64748b;">بمعدل 0.80 m³ لكل م³ خرسانة</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                with cm3:
-                    st.markdown(
-                        f"""
-                        <div style="background:#fef2f2; border:1.5px solid #fecaca; border-radius:8px; padding:8px 12px; text-align:center;">
-                            <div style="font-size:13px; font-weight:600; color:#b91c1c;">كمية الرمل للأعمدة</div>
-                            <div style="font-size:18px; font-weight:700; color:#991b1b;">{sand_m3_cols:.2f} m³</div>
-                            <div style="font-size:11.5px; color:#64748b;">بمعدل 0.40 m³ لكل م³ خرسانة</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-                with cm4:
-                    st.markdown(
-                        f"""
-                        <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:8px 12px; text-align:center;">
-                            <div style="font-size:13px; font-weight:600; color:#15803d;">إجمالي وزن الحديد الكامل</div>
-                            <div style="font-size:18px; font-weight:700; color:#166534;">{tot_steel_kg_1f/1000.0:.3f} Ton</div>
-                            <div style="font-size:11.5px; color:#64748b;">رئيسي: {tot_main_steel_kg_1f/1000.0:.2f}t | كانات: {tot_stirrup_steel_kg_1f/1000.0:.2f}t</div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
         # ── 🪸 BUILDING FOUNDATIONS DESIGN & DYNAMIC TABS (ECP 203) ───────────────
         from modules.two_col_footings import (
             design_isolated_footing_model,
@@ -20325,24 +20261,6 @@ def render(is_standalone: bool = False):
         )
 
         with st.expander(f"🪸 Building Foundations Design — {num_floors} Floors (تصميم أساسات المبنى والقواعد المنفصلة والمشتركة والشدادات)", expanded=False):
-            # 1. Header / Intro
-            st.markdown(
-                f"""
-                <div dir="rtl" style="background:#fff7ed; border:1.5px solid #fed7aa; border-right:7px solid #ea580c; border-radius:10px; padding:18px 22px; margin-bottom:16px; color:#1c1917; line-height:1.9; text-align:right;">
-                    <div style="font-size:1.45rem; font-weight:800; color:#9a3412; margin-bottom:10px;">
-                        📋 تصميم وتوحيد وتوزيع نماذج القواعد والشدادات لأساسات المبنى (ECP 203):
-                    </div>
-                    <div style="font-size:1.25rem; font-weight:700; color:#1c1917;">
-                        نظام متكامل لتصميم أساسات المبنى لعدد <span style="font-weight:800; color:#c2410c;">{num_floors} طوابق</span> بناءً على ردود الأفعال القصوى <span dir="ltr">Pu</span> والأحمال التشغيلية <span dir="ltr">Pw = Pu / 1.5</span>:
-                        <br/>• <b>قواعد منفصلة (Module 3):</b> مصنفة إلى 3 نماذج رئيسية قياسية (F1 للأعمدة الداخلية، F2 للأعمدة الجانبية، F3 لأعمدة الأركان).
-                        <br/>• <b>قواعد شدادات جانبية (Module 9):</b> لأعمدة الجار الجانبية وتربطها بشداد مع أقرب عمود داخلي.
-                        <br/>• <b>قواعد شدادات ركن مائلة (Module 10):</b> لأعمدة الجار الركن وتربطها بشداد مائل مع العمود الداخلي المقابل.
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
             # 2. Controls & Soil Properties
             ftg_qnet = S.cfg_val("tcf_q_net", 1.5)
             ftg_fcu = S.cfg_val("tcf_Fcu", col_Fcu if col_Fcu else 250)
@@ -20363,49 +20281,6 @@ def render(is_standalone: bool = False):
                 or (isinstance(_edge_columns, dict) and _edge_columns.get(c["id"], {}).get("is_edge") == "Yes")
             ]
             sel_neighbor_ids = auto_nbr_ids
-
-            with st.container(border=True):
-                if auto_nbr_ids:
-                    nbr_cols_str = "، ".join([f"<span dir='ltr'><b>{cid}</b></span>" for cid in auto_nbr_ids])
-                    st.markdown(
-                        f"""
-                        <div dir="rtl" style="direction: rtl !important; text-align: right !important; background:#eff6ff; border:1.5px solid #bfdbfe; border-right:7px solid #2563eb; border-radius:10px; padding:16px 20px; margin:4px 0 8px 0; color:#1e293b; line-height:1.9;">
-                            <div style="direction: rtl !important; text-align: right !important; font-size:1.35rem; font-weight:800; color:#38bdf8; margin-bottom:8px;">
-                                🏘️ أعمدة الجار المعتمدة بالمشروع (طبقاً لمدخلات البلاطة والأعمدة):
-                            </div>
-                            <div style="direction: rtl !important; text-align: right !important; font-size:1.25rem; font-weight:700; line-height:1.9; color:#0f172a;">
-                                أعمدة الجار المحددة في المشروع هي: 
-                                <span dir="rtl" style="font-size:1.35rem; font-weight:900; color:#b91c1c; background:#fef2f2; padding:3px 12px; border-radius:7px; border:1.5px solid #fca5a5; margin:0 6px; display:inline-block;">
-                                    {nbr_cols_str}
-                                </span>
-                                <span style="font-size:1.05rem; font-weight:600; color:#475569;">
-                                    (إجمالي {len(auto_nbr_ids)} أعمدة ملاصقة لحدود الجار)
-                                </span>
-                            </div>
-                            <div style="direction: rtl !important; text-align: right !important; font-size:1.05rem; font-weight:600; color:#2563eb; margin-top:8px; line-height:1.8;">
-                                ℹ️ يتم تصميم أساسات هذه الأعمدة تلقائياً كقواعد شداد (جانبية بنظام Module 9 أو ركنية مائلة بنظام Module 10) وربطها بأقرب أعمدة داخلية.
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-                else:
-                    st.markdown(
-                        """
-                        <div dir="rtl" style="direction: rtl !important; text-align: right !important; background:#f8fafc; border:1.5px solid #e2e8f0; border-right:7px solid #64748b; border-radius:10px; padding:16px 20px; margin:4px 0 8px 0; color:#1e293b; line-height:1.9;">
-                            <div style="direction: rtl !important; text-align: right !important; font-size:1.35rem; font-weight:800; color:#334155; margin-bottom:8px;">
-                                🏘️ أعمدة الجار بالمشروع:
-                            </div>
-                            <div style="direction: rtl !important; text-align: right !important; font-size:1.2rem; font-weight:700; color:#0f172a;">
-                                لا توجد أعمدة ملاصقة لحدود الجار محددة في مدخلات المشروع.
-                            </div>
-                            <div style="direction: rtl !important; text-align: right !important; font-size:1.05rem; font-weight:600; color:#64748b; margin-top:8px; line-height:1.8;">
-                                ℹ️ تُصمم كافة أساسات المبنى كقواعد منفصلة (Module 3) مصنفة إلى 3 نماذج رئيسية موحدة (F1, F2, F3).
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
 
             # Build active columns data list
             fs_active_columns = []
@@ -20537,43 +20412,10 @@ def render(is_standalone: bool = False):
             )
             st.session_state["fs_rb_analysis"] = rb_analysis
 
-            # 3. Executive Report Banner
-            st.markdown(
-                f"""
-                <div dir="rtl" style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%); border: 2px solid #38bdf8; border-radius: 12px; padding: 18px 22px; margin: 12px 0 18px 0; box-shadow: 0 4px 20px rgba(0,0,0,0.35); text-align: right;">
-                    <div style="font-size: 18px; font-weight: 900; color: #38bdf8; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                        <span>📋 تقرير توزيع وتصنيف أساسات المبنى الإنشائي (Building Foundations Classification Report)</span>
-                        <span style="font-size: 13.5px; background: #0284c7; color: #ffffff; padding: 4px 12px; border-radius: 6px; font-weight: 800;">إجمالي الأعمدة: {len(fs_active_columns)} عمود</span>
-                    </div>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-top: 10px;">
-                        <!-- 1. Isolated Footings -->
-                        <div style="background: rgba(186, 230, 253, 0.12); border: 1.5px solid #38bdf8; border-right: 5px solid #0284c7; border-radius: 8px; padding: 14px 16px;">
-                            <div style="font-size: 15px; font-weight: 800; color: #7dd3fc; margin-bottom: 4px;">🟦 1. القواعد المنفصلة (Module 3 — F1, F2, F3)</div>
-                            <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['isolated_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة منفصلة</span></div>
-                            <div style="font-size: 13px; color: #cbd5e1; margin-top: 6px; line-height: 1.5;"><b>النماذج الموحدة:</b> {', '.join(counts['isolated_names']) if counts['isolated_names'] else 'لا يوجد'}</div>
-                        </div>
-                        <!-- 2. Edge Strap Footings -->
-                        <div style="background: rgba(254, 215, 170, 0.12); border: 1.5px solid #fb923c; border-right: 5px solid #ea580c; border-radius: 8px; padding: 14px 16px;">
-                            <div style="font-size: 15px; font-weight: 800; color: #fdba74; margin-bottom: 4px;">🟧 2. قواعد الشدادات الجانبية (Module 9)</div>
-                            <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['edge_strap_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة شداد جانبي</span></div>
-                            <div style="font-size: 13px; color: #cbd5e1; margin-top: 6px; line-height: 1.5;"><b>النماذج:</b> {', '.join(counts['edge_strap_names']) if counts['edge_strap_names'] else 'لا توجد أعمدة جار جانبية'}</div>
-                        </div>
-                        <!-- 3. Corner Strap Footings -->
-                        <div style="background: rgba(253, 186, 116, 0.15); border: 1.5px solid #f97316; border-right: 5px solid #c2410c; border-radius: 8px; padding: 14px 16px;">
-                            <div style="font-size: 15px; font-weight: 800; color: #fed7aa; margin-bottom: 4px;">🟪 3. قواعد الشدادات الركن (Module 10)</div>
-                            <div style="font-size: 20px; font-weight: 900; color: #ffffff;">{counts['corner_strap_count']} <span style="font-size: 13px; font-weight: 600; color: #94a3b8;">قاعدة شداد ركن مائل</span></div>
-                            <div style="font-size: 13px; color: #cbd5e1; margin-top: 6px; line-height: 1.5;"><b>النماذج:</b> {', '.join(counts['corner_strap_names']) if counts['corner_strap_names'] else 'لا توجد أعمدة جار ركن'}</div>
-                        </div>
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
             # 4. Footings Detailed Table (Unified Schedule: All 4 Types)
-            st.markdown("##### 📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)")
+            st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)</div>", unsafe_allow_html=True)
             df_fs_export = pd.DataFrame(ftg_analysis["unified_rows"])
-            render_styled_table(df_fs_export)
+            render_styled_table(df_fs_export, font_size_override=14.0)
 
             # Export Excel & CSV
 
@@ -21306,7 +21148,7 @@ def render(is_standalone: bool = False):
 
 
         # ── 🏛️ FINAL DESIGN OF FOUNDATIONS AND GROUND BEAMS (ECP 203) ───────────────────
-        with st.expander(f"🏛️ Final Design of Foundations and Ground Beams — {num_floors} Floors (التصميم النهائي للقواعد والسملات الأرضية)", expanded=True):
+        with st.expander(f"🏛️ Final Design of Columns, Foundations and Ground Beams — {num_floors} Floors (التصميم النهائي للاعمدة و للقواعد والسملات الأرضية)", expanded=True):
 
 
             ftg_analysis_final = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
@@ -21338,7 +21180,44 @@ def render(is_standalone: bool = False):
 
 
 
-                # ── 2. EXECUTIVE GROUND BEAMS SCHEDULE TABLE (جدول السملات الأرضية بخط كبير وغامق) ──
+                # ── 2. EXECUTIVE COLUMNS SCHEDULE TABLE (جدول نماذج الأعمدة التنفيذي) ──
+                st.markdown(
+                    """
+                    <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.05) 0%, rgba(15, 23, 42, 0.09) 100%); border: 1.5px solid #cbd5e1; border-right: 6px solid #38bdf8; border-radius: 10px; padding: 12px 16px; margin: 20px 0 12px 0; text-align: right;">
+                        <div style="font-size: 16px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                            <span>🏛️ جدول نماذج الأعمدة التنفيذي (Columns Executive Schedule)</span>
+                            <span style="font-size: 12px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Executive</span>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                raw_col_rows = []
+                col_designs_final = col_designs if ('col_designs' in locals() and col_designs) else st.session_state.get(f"{prefix}fs_col_designs", st.session_state.get("fs_col_designs", []))
+                if col_designs_final:
+                    for des in col_designs_final:
+                        m_key = des.get("raw_type", "")
+                        b_val = float(st.session_state.get(f"fs_adopted_b_{m_key}", des.get("b", 30.0)))
+                        t_val = float(st.session_state.get(f"fs_adopted_t_{m_key}", des.get("t", 60.0)))
+                        mu_val = des.get("mu_provided", 1.0)
+                        raw_col_rows.append({
+                            "اسم نموذج العمود": des.get("model_label", des.get("model_mark", "C")),
+                            "القطاع": f"{int(round(b_val))} × {int(round(t_val))} cm",
+                            "التسليح الرئيسي": des.get("main_steel_str", "—"),
+                            "الكانات": des.get("stirrups_str", "—"),
+                            "نسبة التسليح للقطاع": f"{mu_val:.2f} %",
+                        })
+
+                if raw_col_rows:
+                    df_cols_summary = pd.DataFrame(raw_col_rows)
+                    render_styled_table(df_cols_summary, font_size_override=14.0)
+                else:
+                    st.info("💡 لم يتم استخراج نماذج للأعمدة أو جاري حساب وتصميم قطاعات الأعمدة.")
+
+                st.markdown("<hr style='margin: 24px 0; border: none; border-top: 1.5px solid #cbd5e1;' />", unsafe_allow_html=True)
+
+                # ── 3. EXECUTIVE GROUND BEAMS SCHEDULE TABLE (جدول السملات الأرضية بخط كبير وغامق) ──
                 st.markdown(
                     """
                     <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.05) 0%, rgba(15, 23, 42, 0.09) 100%); border: 1.5px solid #cbd5e1; border-right: 6px solid #38bdf8; border-radius: 10px; padding: 12px 16px; margin: 20px 0 12px 0; text-align: right;">
@@ -21397,12 +21276,12 @@ def render(is_standalone: bool = False):
 
                 st.markdown("<hr style='margin: 24px 0; border: none; border-top: 1.5px solid #cbd5e1;' />", unsafe_allow_html=True)
 
-                # ── 3. EXECUTIVE FOUNDATIONS SCHEDULE TABLE (جدول القواعد بخط كبير وغامق) ──
+                # ── 4. EXECUTIVE FOUNDATIONS SCHEDULE TABLE (جدول القواعد بخط كبير وغامق) ──
                 st.markdown(
                     """
                     <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.05) 0%, rgba(15, 23, 42, 0.09) 100%); border: 1.5px solid #cbd5e1; border-right: 6px solid #38bdf8; border-radius: 10px; padding: 12px 16px; margin: 16px 0 12px 0; text-align: right;">
                         <div style="font-size: 16px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                            <span>🏛️ جدول نماذج القواعد المسلحة والعادية التنفيذي (Foundations Executive Schedule)</span>
+                            <span>📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)</span>
                             <span style="font-size: 12px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Executive</span>
                         </div>
                     </div>

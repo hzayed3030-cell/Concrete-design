@@ -510,6 +510,7 @@ def design_rectangular_column(
     mu_target: float = 1.0,
     Phi: int = 16,
     Phi_st: int = 8,
+    t_override: float = None,
 ) -> dict:
     """
     Core design engine for a rectangular reinforced concrete column under axial load (ECP 203).
@@ -554,6 +555,14 @@ def design_rectangular_column(
         t_design = round_up_to_5(b)
         t_override_applied = True
 
+    t_calc_min = float(t_design)
+    if t_override is not None and float(t_override) > 0:
+        t_design = float(t_override)
+        t_override_applied = True
+        is_t_unsafe = t_design < t_calc_min
+    else:
+        is_t_unsafe = False
+
     # Actual gross area
     Ag = b * t_design  # cm²
 
@@ -586,7 +595,7 @@ def design_rectangular_column(
     n_st_per_m = max(5, math.ceil(100.0 / S_calc)) if S_calc > 0 else 5
 
     util = (Pu_design / Pu_cap * 100.0) if Pu_cap > 0 else 0.0
-    is_safe = util <= 100.0 and slender_ok
+    is_safe = util <= 100.0 and slender_ok and not is_t_unsafe
 
     return {
         "Pu_input": Pu_input,
@@ -595,7 +604,9 @@ def design_rectangular_column(
         "Pu_design_kg": Pu_design,
         "b": b,
         "t": t_design,
+        "t_calc_min": t_calc_min,
         "t_req": t_req,
+        "is_t_unsafe": is_t_unsafe,
         "t_override_applied": t_override_applied,
         "Ag": Ag,
         "Ag_req": Ag_req,
