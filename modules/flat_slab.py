@@ -14918,7 +14918,17 @@ def _section_fs_add_columns(
                             float(edit_col_t),
                             new_trans_entry,
                         )
+                        _saved_gx_lbl = tgt_col_obj.get("grid_x", "")
+                        _saved_gy_lbl = tgt_col_obj.get("grid_y", "")
                         tgt_col_obj.update(geom)
+                        if _saved_gx_lbl and isinstance(_saved_gx_lbl, str):
+                            tgt_col_obj["grid_x"] = _saved_gx_lbl
+                        if _saved_gy_lbl and isinstance(_saved_gy_lbl, str):
+                            tgt_col_obj["grid_y"] = _saved_gy_lbl
+                        tgt_col_obj["x"] = geom["center_x"]
+                        tgt_col_obj["y"] = geom["center_y"]
+                        tgt_col_obj["center_x"] = geom["center_x"]
+                        tgt_col_obj["center_y"] = geom["center_y"]
                         tgt_col_obj["b_cm"] = float(edit_col_b)
                         tgt_col_obj["t_cm"] = float(edit_col_t)
                         tgt_col_obj["direction"] = edit_sel_dir
@@ -14927,12 +14937,41 @@ def _section_fs_add_columns(
 
                         for _c_all in _all_cols:
                             if _c_all.get("orig_id") == tgt_orig_id or _c_all.get("id") == edit_col_id:
+                                _s_gx = _c_all.get("grid_x", "")
+                                _s_gy = _c_all.get("grid_y", "")
                                 _c_all.update(geom)
+                                if _s_gx and isinstance(_s_gx, str):
+                                    _c_all["grid_x"] = _s_gx
+                                if _s_gy and isinstance(_s_gy, str):
+                                    _c_all["grid_y"] = _s_gy
+                                _c_all["x"] = geom["center_x"]
+                                _c_all["y"] = geom["center_y"]
+                                _c_all["center_x"] = geom["center_x"]
+                                _c_all["center_y"] = geom["center_y"]
                                 _c_all["b_cm"] = float(edit_col_b)
                                 _c_all["t_cm"] = float(edit_col_t)
                                 _c_all["direction"] = edit_sel_dir
                                 _c_all["shift_x"] = edit_sel_sx
                                 _c_all["shift_y"] = edit_sel_sy
+
+                        for _c_act in _active_cols:
+                            if _c_act.get("orig_id") == tgt_orig_id or _c_act.get("id") == edit_col_id:
+                                _s_gx = _c_act.get("grid_x", "")
+                                _s_gy = _c_act.get("grid_y", "")
+                                _c_act.update(geom)
+                                if _s_gx and isinstance(_s_gx, str):
+                                    _c_act["grid_x"] = _s_gx
+                                if _s_gy and isinstance(_s_gy, str):
+                                    _c_act["grid_y"] = _s_gy
+                                _c_act["x"] = geom["center_x"]
+                                _c_act["y"] = geom["center_y"]
+                                _c_act["center_x"] = geom["center_x"]
+                                _c_act["center_y"] = geom["center_y"]
+                                _c_act["b_cm"] = float(edit_col_b)
+                                _c_act["t_cm"] = float(edit_col_t)
+                                _c_act["direction"] = edit_sel_dir
+                                _c_act["shift_x"] = edit_sel_sx
+                                _c_act["shift_y"] = edit_sel_sy
 
                         active_col_labels[edit_col_id] = f"{edit_col_id} ({tgt_col_obj.get('grid_x', '')} × {tgt_col_obj.get('grid_y', '')} — {tgt_col_obj.get('width_cm', edit_col_b):.0f}×{tgt_col_obj.get('height_cm', edit_col_t):.0f} سم)"
 
@@ -20285,34 +20324,93 @@ def render(is_standalone: bool = False):
             # Build active columns data list
             fs_active_columns = []
             for c_item in _active_cols:
+                cid = c_item["id"]
+                orig_id = c_item.get("orig_id", cid)
+                i_idx = c_item.get("i")
+                j_idx = c_item.get("j")
+
+                # Resolve props and transforms
+                c_prop = {}
+                if isinstance(_col_props, dict):
+                    c_prop = (
+                        _col_props.get(orig_id)
+                        or _col_props.get(cid)
+                        or (_col_props.get(f"{i_idx},{j_idx}") if i_idx is not None and j_idx is not None else {})
+                        or {}
+                    )
+
+                c_w_cm = float(c_prop.get("b_cm") or c_item.get("b_cm") or c_item.get("bc") or col_b_dim)
+                c_d_cm = float(c_prop.get("t_cm") or c_item.get("t_cm") or c_item.get("tc") or col_c_dim)
+
+                c_trans = {}
+                if isinstance(_col_transforms, dict):
+                    c_trans = dict(
+                        _col_transforms.get(orig_id)
+                        or _col_transforms.get(cid)
+                        or (_col_transforms.get(f"{i_idx},{j_idx}") if i_idx is not None and j_idx is not None else {})
+                        or {}
+                    )
+
+                if isinstance(c_prop, dict):
+                    if not c_trans.get("direction") and c_prop.get("direction"):
+                        c_trans["direction"] = c_prop["direction"]
+                    if not c_trans.get("shift_x") and c_prop.get("shift_x"):
+                        c_trans["shift_x"] = c_prop["shift_x"]
+                    if not c_trans.get("shift_y") and c_prop.get("shift_y"):
+                        c_trans["shift_y"] = c_prop["shift_y"]
+
+                if not c_trans.get("direction") and c_item.get("direction"):
+                    c_trans["direction"] = c_item.get("direction")
+                if not c_trans.get("shift_x") and c_item.get("shift_x"):
+                    c_trans["shift_x"] = c_item.get("shift_x")
+                if not c_trans.get("shift_y") and c_item.get("shift_y"):
+                    c_trans["shift_y"] = c_item.get("shift_y")
+
+                gx = float(c_item.get("grid_x_m", c_item["x"]))
+                gy = float(c_item.get("grid_y_m", c_item["y"]))
+
+                geom = compute_column_geometry(gx, gy, c_w_cm, c_d_cm, c_trans)
+
                 c_type = c_item.get("type", "Interior")
                 pu_val = float(c_item.get("Pu", 0.0) * num_floors)
                 is_edge = bool(
                     c_item.get("is_edge_col")
-                    or (isinstance(_edge_columns, dict) and _edge_columns.get(c_item.get("orig_id", c_item["id"]), {}).get("is_edge") == "Yes")
-                    or (isinstance(_edge_columns, dict) and _edge_columns.get(c_item["id"], {}).get("is_edge") == "Yes")
+                    or (isinstance(_edge_columns, dict) and _edge_columns.get(orig_id, {}).get("is_edge") == "Yes")
+                    or (isinstance(_edge_columns, dict) and _edge_columns.get(cid, {}).get("is_edge") == "Yes")
                 )
+
                 fs_active_columns.append({
-                    "id": c_item["id"],
-                    "orig_id": c_item.get("orig_id", c_item["id"]),
+                    "id": cid,
+                    "orig_id": orig_id,
                     "type": c_type,
                     "is_edge_col": is_edge,
-                    "x": float(c_item.get("center_x", c_item["x"])),
-                    "y": float(c_item.get("center_y", c_item["y"])),
-                    "bc": float(c_item.get("bc", col_b_dim)),
-                    "tc": float(c_item.get("tc", col_c_dim)),
+                    "x": geom["center_x"],
+                    "y": geom["center_y"],
+                    "center_x": geom["center_x"],
+                    "center_y": geom["center_y"],
+                    "bc": geom["bc"],
+                    "tc": geom["tc"],
+                    "b_cm": c_w_cm,
+                    "t_cm": c_d_cm,
                     "pu_tot": pu_val,
                     "grid_x": c_item.get("grid_x", ""),
                     "grid_y": c_item.get("grid_y", ""),
-                    "grid_x_m": float(c_item.get("grid_x_m", c_item["x"])),
-                    "grid_y_m": float(c_item.get("grid_y_m", c_item["y"])),
-                    "x_min": float(c_item.get("x_min", c_item.get("center_x", c_item["x"]) - c_item.get("width_m", c_item.get("tc", col_c_dim)/100.0)/2.0)),
-                    "x_max": float(c_item.get("x_max", c_item.get("center_x", c_item["x"]) + c_item.get("width_m", c_item.get("tc", col_c_dim)/100.0)/2.0)),
-                    "y_min": float(c_item.get("y_min", c_item.get("center_y", c_item["y"]) - c_item.get("height_m", c_item.get("bc", col_b_dim)/100.0)/2.0)),
-                    "y_max": float(c_item.get("y_max", c_item.get("center_y", c_item["y"]) + c_item.get("height_m", c_item.get("bc", col_b_dim)/100.0)/2.0)),
-                    "width_m": float(c_item.get("width_m", c_item.get("tc", col_c_dim)/100.0)),
-                    "height_m": float(c_item.get("height_m", c_item.get("bc", col_b_dim)/100.0)),
+                    "grid_x_m": gx,
+                    "grid_y_m": gy,
+                    "x_min": geom["x_min"],
+                    "x_max": geom["x_max"],
+                    "y_min": geom["y_min"],
+                    "y_max": geom["y_max"],
+                    "width_m": geom["width_m"],
+                    "height_m": geom["height_m"],
+                    "width_cm": geom["width_cm"],
+                    "height_cm": geom["height_cm"],
+                    "direction": geom["direction"],
+                    "shift_x": geom["shift_x"],
+                    "shift_y": geom["shift_y"],
                     "edge_dir": c_item.get("edge_dir", ""),
+                    "i": i_idx,
+                    "j": j_idx,
                 })
 
             # Run Comprehensive Multi-Module Engine
@@ -20329,6 +20427,8 @@ def render(is_standalone: bool = False):
                 num_floors=num_floors,
                 edge_columns=_edge_columns,
                 slab_bounds=_slab_bounds_current,
+                col_transforms=_col_transforms,
+                col_props=_col_props,
             )
             st.session_state["fs_ftg_analysis"] = ftg_analysis
             counts = ftg_analysis["summary_counts"]
@@ -21165,6 +21265,8 @@ def render(is_standalone: bool = False):
                     edge_columns=_edge_columns if '_edge_columns' in locals() else None,
                     slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
                     include_legend=False,
+                    col_transforms=_col_transforms if '_col_transforms' in locals() else None,
+                    col_props=_col_props if '_col_props' in locals() else None,
                 )
                 buf_final_sketch = io.BytesIO()
                 fig_final_sketch.savefig(buf_final_sketch, format="png", bbox_inches="tight", dpi=160)

@@ -1177,6 +1177,8 @@ def classify_and_design_building_foundations(
     num_floors: int = 1,
     edge_columns: dict = None,
     slab_bounds: dict = None,
+    col_transforms: dict = None,
+    col_props: dict = None,
 ) -> dict:
     """
     Automated building foundation classification and multi-module design engine:
@@ -1202,6 +1204,88 @@ def classify_and_design_building_foundations(
     for c_item in active_columns:
         if c_item.get("is_edge_col"):
             neighbor_ids.add(c_item["id"])
+
+    if col_transforms is None:
+        col_transforms = (
+            st.session_state.get("cfg", {}).get("fs_col_transforms")
+            or st.session_state.get("fs_col_transforms")
+            or S.cfg_val("fs_col_transforms", {})
+            or {}
+        )
+    if col_props is None:
+        col_props = (
+            st.session_state.get("cfg", {}).get("fs_col_props")
+            or st.session_state.get("fs_col_props")
+            or S.cfg_val("fs_col_props", {})
+            or {}
+        )
+
+    from modules.flat_slab import compute_column_geometry
+    for c in active_columns:
+        cid = c.get("id") or c.get("orig_id", "")
+        orig_id = c.get("orig_id", cid)
+        i_idx = c.get("i")
+        j_idx = c.get("j")
+
+        c_prop = {}
+        if isinstance(col_props, dict):
+            c_prop = (
+                col_props.get(orig_id)
+                or col_props.get(cid)
+                or (col_props.get(f"{i_idx},{j_idx}") if i_idx is not None and j_idx is not None else {})
+                or {}
+            )
+
+        c_w_cm = float(c_prop.get("b_cm") or c.get("b_cm") or c.get("bc") or col_b_dim)
+        c_d_cm = float(c_prop.get("t_cm") or c.get("t_cm") or c.get("tc") or col_c_dim)
+
+        c_trans = {}
+        if isinstance(col_transforms, dict):
+            c_trans = dict(
+                col_transforms.get(orig_id)
+                or col_transforms.get(cid)
+                or (col_transforms.get(f"{i_idx},{j_idx}") if i_idx is not None and j_idx is not None else {})
+                or {}
+            )
+
+        if isinstance(c_prop, dict):
+            if not c_trans.get("direction") and c_prop.get("direction"):
+                c_trans["direction"] = c_prop["direction"]
+            if not c_trans.get("shift_x") and c_prop.get("shift_x"):
+                c_trans["shift_x"] = c_prop["shift_x"]
+            if not c_trans.get("shift_y") and c_prop.get("shift_y"):
+                c_trans["shift_y"] = c_prop["shift_y"]
+
+        if not c_trans.get("direction") and c.get("direction"):
+            c_trans["direction"] = c.get("direction")
+        if not c_trans.get("shift_x") and c.get("shift_x"):
+            c_trans["shift_x"] = c.get("shift_x")
+        if not c_trans.get("shift_y") and c.get("shift_y"):
+            c_trans["shift_y"] = c.get("shift_y")
+
+        gx = float(c.get("grid_x_m", c.get("x", 0.0)))
+        gy = float(c.get("grid_y_m", c.get("y", 0.0)))
+
+        geom = compute_column_geometry(gx, gy, c_w_cm, c_d_cm, c_trans)
+        c["x"] = geom["center_x"]
+        c["y"] = geom["center_y"]
+        c["center_x"] = geom["center_x"]
+        c["center_y"] = geom["center_y"]
+        c["x_min"] = geom["x_min"]
+        c["y_min"] = geom["y_min"]
+        c["x_max"] = geom["x_max"]
+        c["y_max"] = geom["y_max"]
+        c["width_m"] = geom["width_m"]
+        c["height_m"] = geom["height_m"]
+        c["width_cm"] = geom["width_cm"]
+        c["height_cm"] = geom["height_cm"]
+        c["bc"] = geom["bc"]
+        c["tc"] = geom["tc"]
+        c["b_cm"] = c_w_cm
+        c["t_cm"] = c_d_cm
+        c["direction"] = geom["direction"]
+        c["shift_x"] = geom["shift_x"]
+        c["shift_y"] = geom["shift_y"]
 
     cols_map = {c["id"]: c for c in active_columns}
 
@@ -1917,6 +2001,8 @@ def classify_and_design_building_foundations(
         },
         "edge_columns": edge_columns,
         "slab_bounds": slab_bounds,
+        "col_transforms": col_transforms,
+        "col_props": col_props,
     }
 
 
@@ -1928,6 +2014,8 @@ def draw_comprehensive_foundation_sketch(
     edge_columns: dict = None,
     slab_bounds: dict = None,
     include_legend: bool = False,
+    col_transforms: dict = None,
+    col_props: dict = None,
 ):
     """
     Renders comprehensive 2D foundation plan sketch with distinct color-coding:
@@ -1939,6 +2027,23 @@ def draw_comprehensive_foundation_sketch(
     Below the plan, a dedicated legend card displays the full modeled output schedule.
     """
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "sans-serif"]
+
+    if col_transforms is None:
+        col_transforms = (
+            foundation_res.get("col_transforms")
+            or st.session_state.get("cfg", {}).get("fs_col_transforms")
+            or st.session_state.get("fs_col_transforms")
+            or S.cfg_val("fs_col_transforms", {})
+            or {}
+        )
+    if col_props is None:
+        col_props = (
+            foundation_res.get("col_props")
+            or st.session_state.get("cfg", {}).get("fs_col_props")
+            or st.session_state.get("fs_col_props")
+            or S.cfg_val("fs_col_props", {})
+            or {}
+        )
 
     if not active_columns:
         fig, ax = plt.subplots(figsize=(12, 8), dpi=160)
@@ -2265,36 +2370,91 @@ def draw_comprehensive_foundation_sketch(
                     color="#312e81", fontsize=8.0, fontweight="bold", ha="center", va="center", rotation=rot_deg_gb, zorder=6,
                     bbox=dict(boxstyle="round,pad=0.12", fc="#ffffff", ec="#6366f1", lw=0.9, alpha=0.9))
 
-    # 5. Draw Columns
+    # 5. Draw Columns (accurately aligned to user orientation and offset ±6 cm / centered)
     for c in active_columns:
-        if "width_m" in c and "height_m" in c:
-            w_m, h_m = c["width_m"], c["height_m"]
-        else:
-            w_m, h_m = float(c.get("tc", 50.0))/100.0, float(c.get("bc", 30.0))/100.0
-        cx0 = c["x"] - w_m / 2.0
-        cy0 = c["y"] - h_m / 2.0
-
         cid = c.get("id") or c.get("orig_id", "")
         orig_id = c.get("orig_id", cid)
+        i_idx = c.get("i")
+        j_idx = c.get("j")
+
+        # Resolve properties & transforms exactly matching Plan & Structure Management
+        c_prop = {}
+        if isinstance(col_props, dict):
+            c_prop = (
+                col_props.get(orig_id)
+                or col_props.get(cid)
+                or (col_props.get(f"{i_idx},{j_idx}") if i_idx is not None and j_idx is not None else {})
+                or {}
+            )
+
+        c_w_cm = float(c_prop.get("b_cm") or c.get("b_cm") or c.get("bc") or 30.0)
+        c_d_cm = float(c_prop.get("t_cm") or c.get("t_cm") or c.get("tc") or 60.0)
+
+        c_trans = {}
+        if isinstance(col_transforms, dict):
+            c_trans = dict(
+                col_transforms.get(orig_id)
+                or col_transforms.get(cid)
+                or (col_transforms.get(f"{i_idx},{j_idx}") if i_idx is not None and j_idx is not None else {})
+                or {}
+            )
+
+        if isinstance(c_prop, dict):
+            if not c_trans.get("direction") and c_prop.get("direction"):
+                c_trans["direction"] = c_prop["direction"]
+            if not c_trans.get("shift_x") and c_prop.get("shift_x"):
+                c_trans["shift_x"] = c_prop["shift_x"]
+            if not c_trans.get("shift_y") and c_prop.get("shift_y"):
+                c_trans["shift_y"] = c_prop["shift_y"]
+
+        if not c_trans.get("direction") and c.get("direction"):
+            c_trans["direction"] = c.get("direction")
+        if not c_trans.get("shift_x") and c.get("shift_x"):
+            c_trans["shift_x"] = c.get("shift_x")
+        if not c_trans.get("shift_y") and c.get("shift_y"):
+            c_trans["shift_y"] = c.get("shift_y")
+
+        gx = float(c.get("grid_x_m", c.get("x", 0.0)))
+        gy = float(c.get("grid_y_m", c.get("y", 0.0)))
+
+        from modules.flat_slab import compute_column_geometry, draw_column_label_beside, draw_neighbor_edge_strip
+        geom = compute_column_geometry(gx, gy, c_w_cm, c_d_cm, c_trans)
+
+        cx0 = geom["x_min"]
+        cy0 = geom["y_min"]
+        w_m = geom["width_m"]
+        h_m = geom["height_m"]
+        cx = geom["center_x"]
+        cy = geom["center_y"]
+
+        col_rect = patches.Rectangle(
+            (cx0, cy0), w_m, h_m,
+            facecolor="#334155", edgecolor="#0f172a", lw=1.8, zorder=7
+        )
+        ax.add_patch(col_rect)
+
+        # Highlight edge column faces in pink (Edge Columns / أعمدة الجار)
         is_edge_c = False
         raw_dir = ""
-        if edge_columns and isinstance(edge_columns, dict):
-            ed_info = edge_columns.get(cid) or edge_columns.get(orig_id) or {}
+        eff_edge = edge_columns if edge_columns is not None else foundation_res.get("edge_columns")
+        if eff_edge and isinstance(eff_edge, dict):
+            ed_info = eff_edge.get(cid) or eff_edge.get(orig_id) or {}
             if isinstance(ed_info, dict) and ed_info.get("is_edge") == "Yes":
                 is_edge_c = True
                 raw_dir = ed_info.get("direction", "")
         elif c.get("is_edge_col"):
             is_edge_c = True
-            raw_dir = c.get("edge_direction", "")
+            raw_dir = c.get("edge_direction", "") or c.get("edge_dir", "")
 
-        col_rect = patches.Rectangle((cx0, cy0), w_m, h_m, facecolor="#334155", edgecolor="#0f172a", lw=1.5, zorder=7)
-        ax.add_patch(col_rect)
-        if is_edge_c:
-            from modules.flat_slab import draw_neighbor_edge_strip
+        if is_edge_c and raw_dir:
             draw_neighbor_edge_strip(ax, cx0, cy0, w_m, h_m, raw_dir, zorder=8)
-        ax.text(c["x"] + w_m/2.0 + 0.08, c["y"] + h_m/2.0 + 0.05, c["id"],
-                color="#0f172a", fontweight="bold", fontsize=9.5, zorder=9,
-                bbox=dict(boxstyle="round,pad=0.15", fc="#ffffff", ec="#64748b", alpha=0.9))
+
+        is_right = (gx >= unique_xs[-1] - 0.1) if unique_xs else False
+        draw_column_label_beside(
+            ax, cx0, cy0, w_m, h_m, cx, cy, cid,
+            is_right_edge=is_right, fontsize=10.0, zorder=9,
+            grid_i=i_idx, grid_j=j_idx
+        )
 
     # ── 6. Dedicated Subplot Legend (Executive Schedule Card — ECP 203) ──
     if include_legend and ax_leg is not None:

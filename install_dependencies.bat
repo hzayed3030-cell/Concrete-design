@@ -8,17 +8,27 @@ echo ======================================================
 
 set PYTHON_EXEC=
 
-where python >nul 2>nul
-if %ERRORLEVEL% equ 0 (
-    set PYTHON_EXEC=python
-) else if exist "C:\Users\Mohamed\anaconda3\python.exe" (
-    set PYTHON_EXEC="C:\Users\Mohamed\anaconda3\python.exe"
-) else if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" (
-    set PYTHON_EXEC="%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
+if exist "%LOCALAPPDATA%\Programs\Python\Python315\python.exe" (
+    set PYTHON_EXEC="%LOCALAPPDATA%\Programs\Python\Python315\python.exe"
+) else if exist "%LOCALAPPDATA%\Programs\Python\Python314\python.exe" (
+    set PYTHON_EXEC="%LOCALAPPDATA%\Programs\Python\Python314\python.exe"
+) else if exist "%LOCALAPPDATA%\Programs\Python\Python313\python.exe" (
+    set PYTHON_EXEC="%LOCALAPPDATA%\Programs\Python\Python313\python.exe"
 ) else if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" (
     set PYTHON_EXEC="%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+) else if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" (
+    set PYTHON_EXEC="%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
 ) else if exist "%LOCALAPPDATA%\Programs\Python\Python310\python.exe" (
     set PYTHON_EXEC="%LOCALAPPDATA%\Programs\Python\Python310\python.exe"
+) else if exist "%LOCALAPPDATA%\Programs\Python\Launcher\py.exe" (
+    set PYTHON_EXEC="%LOCALAPPDATA%\Programs\Python\Launcher\py.exe"
+) else if exist "C:\Users\Mohamed\anaconda3\python.exe" (
+    set PYTHON_EXEC="C:\Users\Mohamed\anaconda3\python.exe"
+) else (
+    python --version >nul 2>nul
+    if %ERRORLEVEL% equ 0 (
+        set PYTHON_EXEC=python
+    )
 )
 
 if "%PYTHON_EXEC%"=="" (
