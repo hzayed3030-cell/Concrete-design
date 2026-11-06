@@ -915,10 +915,10 @@
           "grid_x": "Y1",
           "grid_y": "X2",
           "type": "Edge",
-          "bc": 30.0,
-          "tc": 50.0,
+          "bc": 60.0,
+          "tc": 30.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه X",
           "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
           "shift_y": "متمركز على المحور (Centered)",
@@ -926,12 +926,12 @@
           "B": 30.0,
           "width_cm": 60.0,
           "height_cm": 30.0,
-          "width_m": 0.3,
-          "height_m": 0.5,
-          "x_min": 0.09,
-          "y_min": 2.25,
-          "x_max": 0.39,
-          "y_max": 2.75,
+          "width_m": 0.6,
+          "height_m": 0.3,
+          "x_min": -0.06,
+          "y_min": 2.35,
+          "x_max": 0.54,
+          "y_max": 2.65,
           "center_x": 0.24,
           "center_y": 2.5,
           "is_edge_col": false,
@@ -939,35 +939,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 0,
-          "j_eff": 1,
-          "Atrib_0": 3.5663750000000003,
-          "Pu_slab_0": 7.792529374999999,
-          "Pu_slab": 21.007558196542274,
-          "Pu_punch": 4.36,
-          "Pu_beam": 12.2,
-          "framing_beams": [
-            "B1",
-            "B8"
-          ],
-          "Pu_0": 8.5717823125,
-          "Pu": 23.108314016196502,
-          "beam_reactions": [
-            {
-              "beam_id": "B1",
-              "rxn_ton": 6.3,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B8",
-              "rxn_ton": 5.9,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 1
         }
       },
       "supp2": {
@@ -988,10 +960,10 @@
           "grid_x": "Y1",
           "grid_y": "X4",
           "type": "Corner",
-          "bc": 30.0,
+          "bc": 60.0,
           "tc": 30.0,
           "b_cm": 30.0,
-          "t_cm": 30.0,
+          "t_cm": 60.0,
           "direction": "اتجاه X",
           "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
           "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -999,12 +971,12 @@
           "B": 30.0,
           "width_cm": 60.0,
           "height_cm": 30.0,
-          "width_m": 0.3,
+          "width_m": 0.6,
           "height_m": 0.3,
-          "x_min": 0.09,
+          "x_min": -0.06,
           "y_min": 7.319999999999999,
-          "x_max": 0.39,
-          "y_max": 7.62,
+          "x_max": 0.54,
+          "y_max": 7.619999999999999,
           "center_x": 0.24,
           "center_y": 7.47,
           "is_edge_col": false,
@@ -1012,35 +984,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 0,
-          "j_eff": 3,
-          "Atrib_0": 2.9483750000000004,
-          "Pu_slab_0": 6.4421993749999995,
-          "Pu_slab": 20.38322997570604,
-          "Pu_punch": 3.61,
-          "Pu_beam": 12.149999999999999,
-          "framing_beams": [
-            "B1",
-            "B2"
-          ],
-          "Pu_0": 7.0864193125,
-          "Pu": 22.421552973276647,
-          "beam_reactions": [
-            {
-              "beam_id": "B1",
-              "rxn_ton": 6.3,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B2",
-              "rxn_ton": 5.85,
-              "net_col_rxn_ton": 0.01,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            }
-          ],
-          "model_mark": "C2"
+          "j_eff": 3
         }
       },
       "supports_desc": "كمرة رئيسية (مرتكزة على عمود C5 ⟷ عمود C7)",
@@ -1123,10 +1067,10 @@
           "grid_x": "Y1",
           "grid_y": "X4",
           "type": "Corner",
-          "bc": 30.0,
+          "bc": 60.0,
           "tc": 30.0,
           "b_cm": 30.0,
-          "t_cm": 30.0,
+          "t_cm": 60.0,
           "direction": "اتجاه X",
           "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
           "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -1134,12 +1078,12 @@
           "B": 30.0,
           "width_cm": 60.0,
           "height_cm": 30.0,
-          "width_m": 0.3,
+          "width_m": 0.6,
           "height_m": 0.3,
-          "x_min": 0.09,
+          "x_min": -0.06,
           "y_min": 7.319999999999999,
-          "x_max": 0.39,
-          "y_max": 7.62,
+          "x_max": 0.54,
+          "y_max": 7.619999999999999,
           "center_x": 0.24,
           "center_y": 7.47,
           "is_edge_col": false,
@@ -1147,35 +1091,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 0,
-          "j_eff": 3,
-          "Atrib_0": 2.9483750000000004,
-          "Pu_slab_0": 6.4421993749999995,
-          "Pu_slab": 20.38322997570604,
-          "Pu_punch": 3.61,
-          "Pu_beam": 12.149999999999999,
-          "framing_beams": [
-            "B1",
-            "B2"
-          ],
-          "Pu_0": 7.0864193125,
-          "Pu": 22.421552973276647,
-          "beam_reactions": [
-            {
-              "beam_id": "B1",
-              "rxn_ton": 6.3,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B2",
-              "rxn_ton": 5.85,
-              "net_col_rxn_ton": 0.01,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            }
-          ],
-          "model_mark": "C2"
+          "j_eff": 3
         }
       },
       "supp2": {
@@ -1197,9 +1113,9 @@
           "grid_y": "X4",
           "type": "Edge",
           "bc": 30.0,
-          "tc": 50.0,
+          "tc": 60.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه Y",
           "shift_x": "متمركز على المحور (Centered)",
           "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -1208,11 +1124,11 @@
           "width_cm": 30.0,
           "height_cm": 60.0,
           "width_m": 0.3,
-          "height_m": 0.5,
+          "height_m": 0.6,
           "x_min": 5.0,
-          "y_min": 7.069999999999999,
-          "x_max": 5.300000000000001,
-          "y_max": 7.569999999999999,
+          "y_min": 7.02,
+          "x_max": 5.3,
+          "y_max": 7.619999999999999,
           "center_x": 5.15,
           "center_y": 7.319999999999999,
           "is_edge_col": false,
@@ -1220,43 +1136,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 1,
-          "j_eff": 3,
-          "Atrib_0": 6.131475,
-          "Pu_slab_0": 13.397272874999997,
-          "Pu_slab": 33.50814249899895,
-          "Pu_punch": 4.56,
-          "Pu_beam": 25.49,
-          "framing_beams": [
-            "B2",
-            "B3",
-            "B11"
-          ],
-          "Pu_0": 14.737000162499998,
-          "Pu": 36.85895674889885,
-          "beam_reactions": [
-            {
-              "beam_id": "B2",
-              "rxn_ton": 5.85,
-              "net_col_rxn_ton": 0.01,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B3",
-              "rxn_ton": 7.3,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B11",
-              "rxn_ton": 12.34,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 3
         }
       },
       "supports_desc": "كمرة رئيسية (مرتكزة على عمود C7 ⟷ عمود C8)",
@@ -1340,9 +1220,9 @@
           "grid_y": "X4",
           "type": "Edge",
           "bc": 30.0,
-          "tc": 50.0,
+          "tc": 60.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه Y",
           "shift_x": "متمركز على المحور (Centered)",
           "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -1351,11 +1231,11 @@
           "width_cm": 30.0,
           "height_cm": 60.0,
           "width_m": 0.3,
-          "height_m": 0.5,
+          "height_m": 0.6,
           "x_min": 5.0,
-          "y_min": 7.069999999999999,
-          "x_max": 5.300000000000001,
-          "y_max": 7.569999999999999,
+          "y_min": 7.02,
+          "x_max": 5.3,
+          "y_max": 7.619999999999999,
           "center_x": 5.15,
           "center_y": 7.319999999999999,
           "is_edge_col": false,
@@ -1363,43 +1243,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 1,
-          "j_eff": 3,
-          "Atrib_0": 6.131475,
-          "Pu_slab_0": 13.397272874999997,
-          "Pu_slab": 33.50814249899895,
-          "Pu_punch": 4.56,
-          "Pu_beam": 25.49,
-          "framing_beams": [
-            "B2",
-            "B3",
-            "B11"
-          ],
-          "Pu_0": 14.737000162499998,
-          "Pu": 36.85895674889885,
-          "beam_reactions": [
-            {
-              "beam_id": "B2",
-              "rxn_ton": 5.85,
-              "net_col_rxn_ton": 0.01,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B3",
-              "rxn_ton": 7.3,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B11",
-              "rxn_ton": 12.34,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 3
         }
       },
       "supp2": {
@@ -1420,10 +1264,10 @@
           "grid_x": "Y3",
           "grid_y": "X4",
           "type": "Edge",
-          "bc": 30.0,
-          "tc": 50.0,
+          "bc": 60.0,
+          "tc": 30.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه X",
           "shift_x": "متمركز على المحور (Centered)",
           "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -1431,12 +1275,12 @@
           "B": 30.0,
           "width_cm": 60.0,
           "height_cm": 30.0,
-          "width_m": 0.3,
-          "height_m": 0.5,
-          "x_min": 10.56,
-          "y_min": 7.22,
-          "x_max": 10.860000000000001,
-          "y_max": 7.72,
+          "width_m": 0.6,
+          "height_m": 0.3,
+          "x_min": 10.41,
+          "y_min": 7.319999999999999,
+          "x_max": 11.01,
+          "y_max": 7.619999999999999,
           "center_x": 10.71,
           "center_y": 7.47,
           "is_edge_col": false,
@@ -1444,35 +1288,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 2,
-          "j_eff": 3,
-          "Atrib_0": 6.463525000000001,
-          "Pu_slab_0": 14.122802124999998,
-          "Pu_slab": 36.40957475203559,
-          "Pu_punch": 7.91,
-          "Pu_beam": 12.55,
-          "framing_beams": [
-            "B3",
-            "B4"
-          ],
-          "Pu_0": 15.535082337499999,
-          "Pu": 40.05053222723915,
-          "beam_reactions": [
-            {
-              "beam_id": "B3",
-              "rxn_ton": 7.3,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B4",
-              "rxn_ton": 5.25,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": true
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 3
         }
       },
       "supports_desc": "كمرة رئيسية (مرتكزة على عمود C8 ⟷ عمود C9)",
@@ -1555,10 +1371,10 @@
           "grid_x": "Y3",
           "grid_y": "X4",
           "type": "Edge",
-          "bc": 30.0,
-          "tc": 50.0,
+          "bc": 60.0,
+          "tc": 30.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه X",
           "shift_x": "متمركز على المحور (Centered)",
           "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -1566,12 +1382,12 @@
           "B": 30.0,
           "width_cm": 60.0,
           "height_cm": 30.0,
-          "width_m": 0.3,
-          "height_m": 0.5,
-          "x_min": 10.56,
-          "y_min": 7.22,
-          "x_max": 10.860000000000001,
-          "y_max": 7.72,
+          "width_m": 0.6,
+          "height_m": 0.3,
+          "x_min": 10.41,
+          "y_min": 7.319999999999999,
+          "x_max": 11.01,
+          "y_max": 7.619999999999999,
           "center_x": 10.71,
           "center_y": 7.47,
           "is_edge_col": false,
@@ -1579,35 +1395,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 2,
-          "j_eff": 3,
-          "Atrib_0": 6.463525000000001,
-          "Pu_slab_0": 14.122802124999998,
-          "Pu_slab": 36.40957475203559,
-          "Pu_punch": 7.91,
-          "Pu_beam": 12.55,
-          "framing_beams": [
-            "B3",
-            "B4"
-          ],
-          "Pu_0": 15.535082337499999,
-          "Pu": 40.05053222723915,
-          "beam_reactions": [
-            {
-              "beam_id": "B3",
-              "rxn_ton": 7.3,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B4",
-              "rxn_ton": 5.25,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": true
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 3
         }
       },
       "supp2": {
@@ -1628,10 +1416,10 @@
           "grid_x": "Y4",
           "grid_y": "X4",
           "type": "Edge",
-          "bc": 30.0,
-          "tc": 50.0,
+          "bc": 60.0,
+          "tc": 30.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه X",
           "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
           "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -1639,12 +1427,12 @@
           "B": 30.0,
           "width_cm": 60.0,
           "height_cm": 30.0,
-          "width_m": 0.3,
-          "height_m": 0.5,
-          "x_min": 16.05,
-          "y_min": 7.22,
-          "x_max": 16.349999999999998,
-          "y_max": 7.72,
+          "width_m": 0.6,
+          "height_m": 0.3,
+          "x_min": 15.9,
+          "y_min": 7.319999999999999,
+          "x_max": 16.5,
+          "y_max": 7.619999999999999,
           "center_x": 16.2,
           "center_y": 7.47,
           "is_edge_col": false,
@@ -1652,43 +1440,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 3,
-          "j_eff": 3,
-          "Atrib_0": 4.826175,
-          "Pu_slab_0": 10.545192375,
-          "Pu_slab": 35.68420577276169,
-          "Pu_punch": 3.59,
-          "Pu_beam": 27.32,
-          "framing_beams": [
-            "B4",
-            "B10",
-            "B13"
-          ],
-          "Pu_0": 11.5997116125,
-          "Pu": 39.252626350037865,
-          "beam_reactions": [
-            {
-              "beam_id": "B4",
-              "rxn_ton": 8.33,
-              "net_col_rxn_ton": 1.53,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": true
-            },
-            {
-              "beam_id": "B10",
-              "rxn_ton": 13.27,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B13",
-              "rxn_ton": 5.72,
-              "net_col_rxn_ton": 5.72,
-              "Mu_transferred_ton_m": 7.55,
-              "full_moment_continuity": true
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 3
         }
       },
       "supports_desc": "كمرة رئيسية (مرتكزة على عمود C9 ⟷ عمود C10)",
@@ -1773,10 +1525,10 @@
           "grid_x": "Y4",
           "grid_y": "X1",
           "type": "Edge",
-          "bc": 30.0,
-          "tc": 50.0,
+          "bc": 60.0,
+          "tc": 30.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه X",
           "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
           "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
@@ -1784,12 +1536,12 @@
           "B": 30.0,
           "width_cm": 60.0,
           "height_cm": 30.0,
-          "width_m": 0.3,
-          "height_m": 0.5,
-          "x_min": 16.05,
-          "y_min": -0.16,
-          "x_max": 16.349999999999998,
-          "y_max": 0.33999999999999997,
+          "width_m": 0.6,
+          "height_m": 0.3,
+          "x_min": 15.9,
+          "y_min": -0.06,
+          "x_max": 16.5,
+          "y_max": 0.24,
           "center_x": 16.2,
           "center_y": 0.09,
           "is_edge_col": false,
@@ -1797,43 +1549,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 3,
-          "j_eff": 0,
-          "Atrib_0": 5.268750000000001,
-          "Pu_slab_0": 11.512218749999999,
-          "Pu_slab": 34.09334777856426,
-          "Pu_punch": 3.91,
-          "Pu_beam": 28.79,
-          "framing_beams": [
-            "B5",
-            "B6",
-            "B10"
-          ],
-          "Pu_0": 12.663440625,
-          "Pu": 37.50268255642069,
-          "beam_reactions": [
-            {
-              "beam_id": "B5",
-              "rxn_ton": 8.38,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B6",
-              "rxn_ton": 7.14,
-              "net_col_rxn_ton": 0.01,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B10",
-              "rxn_ton": 13.27,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 0
         }
       },
       "supp2": {
@@ -1854,10 +1570,10 @@
           "grid_x": "Y6",
           "grid_y": "X1",
           "type": "Corner",
-          "bc": 30.0,
+          "bc": 60.0,
           "tc": 30.0,
           "b_cm": 30.0,
-          "t_cm": 30.0,
+          "t_cm": 60.0,
           "direction": "اتجاه X",
           "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
           "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
@@ -1865,11 +1581,11 @@
           "B": 30.0,
           "width_cm": 60.0,
           "height_cm": 30.0,
-          "width_m": 0.3,
+          "width_m": 0.6,
           "height_m": 0.3,
-          "x_min": 22.2,
+          "x_min": 22.049999999999997,
           "y_min": -0.06,
-          "x_max": 22.499999999999996,
+          "x_max": 22.65,
           "y_max": 0.24,
           "center_x": 22.349999999999998,
           "center_y": 0.09,
@@ -1878,35 +1594,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 4,
-          "j_eff": 0,
-          "Atrib_0": 2.15625,
-          "Pu_slab_0": 4.71140625,
-          "Pu_slab": 21.41001618695747,
-          "Pu_punch": 2.64,
-          "Pu_beam": 15.15,
-          "framing_beams": [
-            "B5",
-            "B9"
-          ],
-          "Pu_0": 5.182546875,
-          "Pu": 23.551017805653217,
-          "beam_reactions": [
-            {
-              "beam_id": "B5",
-              "rxn_ton": 8.38,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B9",
-              "rxn_ton": 6.77,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            }
-          ],
-          "model_mark": "C2"
+          "j_eff": 0
         }
       },
       "supports_desc": "كمرة رئيسية (مرتكزة على عمود C3 ⟷ عمود C4)",
@@ -1990,9 +1678,9 @@
           "grid_y": "X1",
           "type": "Edge",
           "bc": 30.0,
-          "tc": 50.0,
+          "tc": 60.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه Y",
           "shift_x": "متمركز على المحور (Centered)",
           "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
@@ -2001,11 +1689,11 @@
           "width_cm": 30.0,
           "height_cm": 60.0,
           "width_m": 0.3,
-          "height_m": 0.5,
+          "height_m": 0.6,
           "x_min": 10.56,
-          "y_min": -0.010000000000000009,
+          "y_min": -0.06,
           "x_max": 10.860000000000001,
-          "y_max": 0.49,
+          "y_max": 0.54,
           "center_x": 10.71,
           "center_y": 0.24,
           "is_edge_col": false,
@@ -2013,35 +1701,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 2,
-          "j_eff": 0,
-          "Atrib_0": 7.05625,
-          "Pu_slab_0": 15.417906249999998,
-          "Pu_slab": 37.72140717601946,
-          "Pu_punch": 8.63,
-          "Pu_beam": 13.89,
-          "framing_beams": [
-            "B6",
-            "B7"
-          ],
-          "Pu_0": 16.959696875,
-          "Pu": 41.49354789362141,
-          "beam_reactions": [
-            {
-              "beam_id": "B6",
-              "rxn_ton": 7.14,
-              "net_col_rxn_ton": 0.01,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B7",
-              "rxn_ton": 6.75,
-              "net_col_rxn_ton": 0.01,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 0
         }
       },
       "supp2": {
@@ -2062,10 +1722,10 @@
           "grid_x": "Y4",
           "grid_y": "X1",
           "type": "Edge",
-          "bc": 30.0,
-          "tc": 50.0,
+          "bc": 60.0,
+          "tc": 30.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه X",
           "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
           "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
@@ -2073,12 +1733,12 @@
           "B": 30.0,
           "width_cm": 60.0,
           "height_cm": 30.0,
-          "width_m": 0.3,
-          "height_m": 0.5,
-          "x_min": 16.05,
-          "y_min": -0.16,
-          "x_max": 16.349999999999998,
-          "y_max": 0.33999999999999997,
+          "width_m": 0.6,
+          "height_m": 0.3,
+          "x_min": 15.9,
+          "y_min": -0.06,
+          "x_max": 16.5,
+          "y_max": 0.24,
           "center_x": 16.2,
           "center_y": 0.09,
           "is_edge_col": false,
@@ -2086,43 +1746,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 3,
-          "j_eff": 0,
-          "Atrib_0": 5.268750000000001,
-          "Pu_slab_0": 11.512218749999999,
-          "Pu_slab": 34.09334777856426,
-          "Pu_punch": 3.91,
-          "Pu_beam": 28.79,
-          "framing_beams": [
-            "B5",
-            "B6",
-            "B10"
-          ],
-          "Pu_0": 12.663440625,
-          "Pu": 37.50268255642069,
-          "beam_reactions": [
-            {
-              "beam_id": "B5",
-              "rxn_ton": 8.38,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B6",
-              "rxn_ton": 7.14,
-              "net_col_rxn_ton": 0.01,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B10",
-              "rxn_ton": 13.27,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 0
         }
       },
       "supports_desc": "كمرة رئيسية (مرتكزة على عمود C2 ⟷ عمود C3)",
@@ -2205,10 +1829,10 @@
           "grid_x": "Y2",
           "grid_y": "X1",
           "type": "Edge",
-          "bc": 30.0,
-          "tc": 50.0,
+          "bc": 60.0,
+          "tc": 30.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه X",
           "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
           "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
@@ -2216,12 +1840,12 @@
           "B": 30.0,
           "width_cm": 60.0,
           "height_cm": 30.0,
-          "width_m": 0.3,
-          "height_m": 0.5,
-          "x_min": 5.24,
-          "y_min": -0.16,
-          "x_max": 5.540000000000001,
-          "y_max": 0.33999999999999997,
+          "width_m": 0.6,
+          "height_m": 0.3,
+          "x_min": 5.090000000000001,
+          "y_min": -0.06,
+          "x_max": 5.69,
+          "y_max": 0.24,
           "center_x": 5.390000000000001,
           "center_y": 0.09,
           "is_edge_col": false,
@@ -2229,35 +1853,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 1,
-          "j_eff": 0,
-          "Atrib_0": 3.4749999999999996,
-          "Pu_slab_0": 7.592874999999998,
-          "Pu_slab": 22.393684297575774,
-          "Pu_punch": 4.25,
-          "Pu_beam": 19.09,
-          "framing_beams": [
-            "B7",
-            "B11"
-          ],
-          "Pu_0": 8.352162499999999,
-          "Pu": 24.63305272733335,
-          "beam_reactions": [
-            {
-              "beam_id": "B7",
-              "rxn_ton": 6.75,
-              "net_col_rxn_ton": 0.01,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B11",
-              "rxn_ton": 12.34,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 0
         }
       },
       "supp2": {
@@ -2279,9 +1875,9 @@
           "grid_y": "X1",
           "type": "Edge",
           "bc": 30.0,
-          "tc": 50.0,
+          "tc": 60.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه Y",
           "shift_x": "متمركز على المحور (Centered)",
           "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
@@ -2290,11 +1886,11 @@
           "width_cm": 30.0,
           "height_cm": 60.0,
           "width_m": 0.3,
-          "height_m": 0.5,
+          "height_m": 0.6,
           "x_min": 10.56,
-          "y_min": -0.010000000000000009,
+          "y_min": -0.06,
           "x_max": 10.860000000000001,
-          "y_max": 0.49,
+          "y_max": 0.54,
           "center_x": 10.71,
           "center_y": 0.24,
           "is_edge_col": false,
@@ -2302,35 +1898,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 2,
-          "j_eff": 0,
-          "Atrib_0": 7.05625,
-          "Pu_slab_0": 15.417906249999998,
-          "Pu_slab": 37.72140717601946,
-          "Pu_punch": 8.63,
-          "Pu_beam": 13.89,
-          "framing_beams": [
-            "B6",
-            "B7"
-          ],
-          "Pu_0": 16.959696875,
-          "Pu": 41.49354789362141,
-          "beam_reactions": [
-            {
-              "beam_id": "B6",
-              "rxn_ton": 7.14,
-              "net_col_rxn_ton": 0.01,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B7",
-              "rxn_ton": 6.75,
-              "net_col_rxn_ton": 0.01,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 0
         }
       },
       "supports_desc": "كمرة رئيسية (مرتكزة على عمود C1 ⟷ عمود C2)",
@@ -2413,10 +1981,10 @@
           "grid_x": "Y1",
           "grid_y": "X2",
           "type": "Edge",
-          "bc": 30.0,
-          "tc": 50.0,
+          "bc": 60.0,
+          "tc": 30.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه X",
           "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
           "shift_y": "متمركز على المحور (Centered)",
@@ -2424,12 +1992,12 @@
           "B": 30.0,
           "width_cm": 60.0,
           "height_cm": 30.0,
-          "width_m": 0.3,
-          "height_m": 0.5,
-          "x_min": 0.09,
-          "y_min": 2.25,
-          "x_max": 0.39,
-          "y_max": 2.75,
+          "width_m": 0.6,
+          "height_m": 0.3,
+          "x_min": -0.06,
+          "y_min": 2.35,
+          "x_max": 0.54,
+          "y_max": 2.65,
           "center_x": 0.24,
           "center_y": 2.5,
           "is_edge_col": false,
@@ -2437,35 +2005,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 0,
-          "j_eff": 1,
-          "Atrib_0": 3.5663750000000003,
-          "Pu_slab_0": 7.792529374999999,
-          "Pu_slab": 21.007558196542274,
-          "Pu_punch": 4.36,
-          "Pu_beam": 12.2,
-          "framing_beams": [
-            "B1",
-            "B8"
-          ],
-          "Pu_0": 8.5717823125,
-          "Pu": 23.108314016196502,
-          "beam_reactions": [
-            {
-              "beam_id": "B1",
-              "rxn_ton": 6.3,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B8",
-              "rxn_ton": 5.9,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 1
         }
       },
       "supp2": {
@@ -2518,10 +2058,10 @@
               "grid_x": "Y2",
               "grid_y": "X1",
               "type": "Edge",
-              "bc": 30.0,
-              "tc": 50.0,
+              "bc": 60.0,
+              "tc": 30.0,
               "b_cm": 30.0,
-              "t_cm": 50.0,
+              "t_cm": 60.0,
               "direction": "اتجاه X",
               "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
               "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
@@ -2529,12 +2069,12 @@
               "B": 30.0,
               "width_cm": 60.0,
               "height_cm": 30.0,
-              "width_m": 0.3,
-              "height_m": 0.5,
-              "x_min": 5.24,
-              "y_min": -0.16,
-              "x_max": 5.540000000000001,
-              "y_max": 0.33999999999999997,
+              "width_m": 0.6,
+              "height_m": 0.3,
+              "x_min": 5.090000000000001,
+              "y_min": -0.06,
+              "x_max": 5.69,
+              "y_max": 0.24,
               "center_x": 5.390000000000001,
               "center_y": 0.09,
               "is_edge_col": false,
@@ -2542,35 +2082,7 @@
               "placed": true,
               "removed": false,
               "i_eff": 1,
-              "j_eff": 0,
-              "Atrib_0": 3.4749999999999996,
-              "Pu_slab_0": 7.592874999999998,
-              "Pu_slab": 22.393684297575774,
-              "Pu_punch": 4.25,
-              "Pu_beam": 19.09,
-              "framing_beams": [
-                "B7",
-                "B11"
-              ],
-              "Pu_0": 8.352162499999999,
-              "Pu": 24.63305272733335,
-              "beam_reactions": [
-                {
-                  "beam_id": "B7",
-                  "rxn_ton": 6.75,
-                  "net_col_rxn_ton": 0.01,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": false
-                },
-                {
-                  "beam_id": "B11",
-                  "rxn_ton": 12.34,
-                  "net_col_rxn_ton": 0.0,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": false
-                }
-              ],
-              "model_mark": "C1"
+              "j_eff": 0
             }
           },
           "supp2": {
@@ -2592,9 +2104,9 @@
               "grid_y": "X4",
               "type": "Edge",
               "bc": 30.0,
-              "tc": 50.0,
+              "tc": 60.0,
               "b_cm": 30.0,
-              "t_cm": 50.0,
+              "t_cm": 60.0,
               "direction": "اتجاه Y",
               "shift_x": "متمركز على المحور (Centered)",
               "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -2603,11 +2115,11 @@
               "width_cm": 30.0,
               "height_cm": 60.0,
               "width_m": 0.3,
-              "height_m": 0.5,
+              "height_m": 0.6,
               "x_min": 5.0,
-              "y_min": 7.069999999999999,
-              "x_max": 5.300000000000001,
-              "y_max": 7.569999999999999,
+              "y_min": 7.02,
+              "x_max": 5.3,
+              "y_max": 7.619999999999999,
               "center_x": 5.15,
               "center_y": 7.319999999999999,
               "is_edge_col": false,
@@ -2615,43 +2127,7 @@
               "placed": true,
               "removed": false,
               "i_eff": 1,
-              "j_eff": 3,
-              "Atrib_0": 6.131475,
-              "Pu_slab_0": 13.397272874999997,
-              "Pu_slab": 33.50814249899895,
-              "Pu_punch": 4.56,
-              "Pu_beam": 25.49,
-              "framing_beams": [
-                "B2",
-                "B3",
-                "B11"
-              ],
-              "Pu_0": 14.737000162499998,
-              "Pu": 36.85895674889885,
-              "beam_reactions": [
-                {
-                  "beam_id": "B2",
-                  "rxn_ton": 5.85,
-                  "net_col_rxn_ton": 0.01,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": false
-                },
-                {
-                  "beam_id": "B3",
-                  "rxn_ton": 7.3,
-                  "net_col_rxn_ton": 0.0,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": false
-                },
-                {
-                  "beam_id": "B11",
-                  "rxn_ton": 12.34,
-                  "net_col_rxn_ton": 0.0,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": false
-                }
-              ],
-              "model_mark": "C1"
+              "j_eff": 3
             }
           },
           "supports_desc": "كمرة رئيسية (مرتكزة على عمود C1 ⟷ عمود C8)",
@@ -2772,10 +2248,10 @@
           "grid_x": "Y6",
           "grid_y": "X1",
           "type": "Corner",
-          "bc": 30.0,
+          "bc": 60.0,
           "tc": 30.0,
           "b_cm": 30.0,
-          "t_cm": 30.0,
+          "t_cm": 60.0,
           "direction": "اتجاه X",
           "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
           "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
@@ -2783,11 +2259,11 @@
           "B": 30.0,
           "width_cm": 60.0,
           "height_cm": 30.0,
-          "width_m": 0.3,
+          "width_m": 0.6,
           "height_m": 0.3,
-          "x_min": 22.2,
+          "x_min": 22.049999999999997,
           "y_min": -0.06,
-          "x_max": 22.499999999999996,
+          "x_max": 22.65,
           "y_max": 0.24,
           "center_x": 22.349999999999998,
           "center_y": 0.09,
@@ -2796,35 +2272,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 4,
-          "j_eff": 0,
-          "Atrib_0": 2.15625,
-          "Pu_slab_0": 4.71140625,
-          "Pu_slab": 21.41001618695747,
-          "Pu_punch": 2.64,
-          "Pu_beam": 15.15,
-          "framing_beams": [
-            "B5",
-            "B9"
-          ],
-          "Pu_0": 5.182546875,
-          "Pu": 23.551017805653217,
-          "beam_reactions": [
-            {
-              "beam_id": "B5",
-              "rxn_ton": 8.38,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B9",
-              "rxn_ton": 6.77,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            }
-          ],
-          "model_mark": "C2"
+          "j_eff": 0
         }
       },
       "supp2": {
@@ -2845,10 +2293,10 @@
           "grid_x": "Y6",
           "grid_y": "X3",
           "type": "Edge",
-          "bc": 30.0,
-          "tc": 50.0,
+          "bc": 60.0,
+          "tc": 30.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه X",
           "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
           "shift_y": "متمركز على المحور (Centered)",
@@ -2856,12 +2304,12 @@
           "B": 30.0,
           "width_cm": 60.0,
           "height_cm": 30.0,
-          "width_m": 0.3,
-          "height_m": 0.5,
-          "x_min": 22.2,
-          "y_min": 5.02,
-          "x_max": 22.499999999999996,
-          "y_max": 5.52,
+          "width_m": 0.6,
+          "height_m": 0.3,
+          "x_min": 22.049999999999997,
+          "y_min": 5.119999999999999,
+          "x_max": 22.65,
+          "y_max": 5.419999999999999,
           "center_x": 22.349999999999998,
           "center_y": 5.27,
           "is_edge_col": false,
@@ -2869,35 +2317,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 4,
-          "j_eff": 2,
-          "Atrib_0": 2.389125,
-          "Pu_slab_0": 5.220238124999999,
-          "Pu_slab": 21.985835489838443,
-          "Pu_punch": 2.92,
-          "Pu_beam": 14.98,
-          "framing_beams": [
-            "B9",
-            "B12"
-          ],
-          "Pu_0": 5.7422619374999995,
-          "Pu": 24.184419038822284,
-          "beam_reactions": [
-            {
-              "beam_id": "B9",
-              "rxn_ton": 6.77,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B12",
-              "rxn_ton": 8.21,
-              "net_col_rxn_ton": 0.02,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 2
         }
       },
       "supports_desc": "كمرة رئيسية (مرتكزة على عمود C4 ⟷ عمود C6)",
@@ -2980,10 +2400,10 @@
           "grid_x": "Y4",
           "grid_y": "X1",
           "type": "Edge",
-          "bc": 30.0,
-          "tc": 50.0,
+          "bc": 60.0,
+          "tc": 30.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه X",
           "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
           "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
@@ -2991,12 +2411,12 @@
           "B": 30.0,
           "width_cm": 60.0,
           "height_cm": 30.0,
-          "width_m": 0.3,
-          "height_m": 0.5,
-          "x_min": 16.05,
-          "y_min": -0.16,
-          "x_max": 16.349999999999998,
-          "y_max": 0.33999999999999997,
+          "width_m": 0.6,
+          "height_m": 0.3,
+          "x_min": 15.9,
+          "y_min": -0.06,
+          "x_max": 16.5,
+          "y_max": 0.24,
           "center_x": 16.2,
           "center_y": 0.09,
           "is_edge_col": false,
@@ -3004,43 +2424,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 3,
-          "j_eff": 0,
-          "Atrib_0": 5.268750000000001,
-          "Pu_slab_0": 11.512218749999999,
-          "Pu_slab": 34.09334777856426,
-          "Pu_punch": 3.91,
-          "Pu_beam": 28.79,
-          "framing_beams": [
-            "B5",
-            "B6",
-            "B10"
-          ],
-          "Pu_0": 12.663440625,
-          "Pu": 37.50268255642069,
-          "beam_reactions": [
-            {
-              "beam_id": "B5",
-              "rxn_ton": 8.38,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B6",
-              "rxn_ton": 7.14,
-              "net_col_rxn_ton": 0.01,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B10",
-              "rxn_ton": 13.27,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 0
         }
       },
       "supp2": {
@@ -3061,10 +2445,10 @@
           "grid_x": "Y4",
           "grid_y": "X4",
           "type": "Edge",
-          "bc": 30.0,
-          "tc": 50.0,
+          "bc": 60.0,
+          "tc": 30.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه X",
           "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
           "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -3072,12 +2456,12 @@
           "B": 30.0,
           "width_cm": 60.0,
           "height_cm": 30.0,
-          "width_m": 0.3,
-          "height_m": 0.5,
-          "x_min": 16.05,
-          "y_min": 7.22,
-          "x_max": 16.349999999999998,
-          "y_max": 7.72,
+          "width_m": 0.6,
+          "height_m": 0.3,
+          "x_min": 15.9,
+          "y_min": 7.319999999999999,
+          "x_max": 16.5,
+          "y_max": 7.619999999999999,
           "center_x": 16.2,
           "center_y": 7.47,
           "is_edge_col": false,
@@ -3085,43 +2469,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 3,
-          "j_eff": 3,
-          "Atrib_0": 4.826175,
-          "Pu_slab_0": 10.545192375,
-          "Pu_slab": 35.68420577276169,
-          "Pu_punch": 3.59,
-          "Pu_beam": 27.32,
-          "framing_beams": [
-            "B4",
-            "B10",
-            "B13"
-          ],
-          "Pu_0": 11.5997116125,
-          "Pu": 39.252626350037865,
-          "beam_reactions": [
-            {
-              "beam_id": "B4",
-              "rxn_ton": 8.33,
-              "net_col_rxn_ton": 1.53,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": true
-            },
-            {
-              "beam_id": "B10",
-              "rxn_ton": 13.27,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B13",
-              "rxn_ton": 5.72,
-              "net_col_rxn_ton": 5.72,
-              "Mu_transferred_ton_m": 7.55,
-              "full_moment_continuity": true
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 3
         }
       },
       "supports_desc": "كمرة رئيسية (مرتكزة على عمود C3 ⟷ عمود C10)",
@@ -3204,10 +2552,10 @@
           "grid_x": "Y2",
           "grid_y": "X1",
           "type": "Edge",
-          "bc": 30.0,
-          "tc": 50.0,
+          "bc": 60.0,
+          "tc": 30.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه X",
           "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
           "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
@@ -3215,12 +2563,12 @@
           "B": 30.0,
           "width_cm": 60.0,
           "height_cm": 30.0,
-          "width_m": 0.3,
-          "height_m": 0.5,
-          "x_min": 5.24,
-          "y_min": -0.16,
-          "x_max": 5.540000000000001,
-          "y_max": 0.33999999999999997,
+          "width_m": 0.6,
+          "height_m": 0.3,
+          "x_min": 5.090000000000001,
+          "y_min": -0.06,
+          "x_max": 5.69,
+          "y_max": 0.24,
           "center_x": 5.390000000000001,
           "center_y": 0.09,
           "is_edge_col": false,
@@ -3228,35 +2576,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 1,
-          "j_eff": 0,
-          "Atrib_0": 3.4749999999999996,
-          "Pu_slab_0": 7.592874999999998,
-          "Pu_slab": 22.393684297575774,
-          "Pu_punch": 4.25,
-          "Pu_beam": 19.09,
-          "framing_beams": [
-            "B7",
-            "B11"
-          ],
-          "Pu_0": 8.352162499999999,
-          "Pu": 24.63305272733335,
-          "beam_reactions": [
-            {
-              "beam_id": "B7",
-              "rxn_ton": 6.75,
-              "net_col_rxn_ton": 0.01,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B11",
-              "rxn_ton": 12.34,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 0
         }
       },
       "supp2": {
@@ -3278,9 +2598,9 @@
           "grid_y": "X4",
           "type": "Edge",
           "bc": 30.0,
-          "tc": 50.0,
+          "tc": 60.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه Y",
           "shift_x": "متمركز على المحور (Centered)",
           "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -3289,11 +2609,11 @@
           "width_cm": 30.0,
           "height_cm": 60.0,
           "width_m": 0.3,
-          "height_m": 0.5,
+          "height_m": 0.6,
           "x_min": 5.0,
-          "y_min": 7.069999999999999,
-          "x_max": 5.300000000000001,
-          "y_max": 7.569999999999999,
+          "y_min": 7.02,
+          "x_max": 5.3,
+          "y_max": 7.619999999999999,
           "center_x": 5.15,
           "center_y": 7.319999999999999,
           "is_edge_col": false,
@@ -3301,43 +2621,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 1,
-          "j_eff": 3,
-          "Atrib_0": 6.131475,
-          "Pu_slab_0": 13.397272874999997,
-          "Pu_slab": 33.50814249899895,
-          "Pu_punch": 4.56,
-          "Pu_beam": 25.49,
-          "framing_beams": [
-            "B2",
-            "B3",
-            "B11"
-          ],
-          "Pu_0": 14.737000162499998,
-          "Pu": 36.85895674889885,
-          "beam_reactions": [
-            {
-              "beam_id": "B2",
-              "rxn_ton": 5.85,
-              "net_col_rxn_ton": 0.01,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B3",
-              "rxn_ton": 7.3,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B11",
-              "rxn_ton": 12.34,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 3
         }
       },
       "supports_desc": "كمرة رئيسية (مرتكزة على عمود C1 ⟷ عمود C8)",
@@ -3452,10 +2736,10 @@
               "grid_x": "Y4",
               "grid_y": "X1",
               "type": "Edge",
-              "bc": 30.0,
-              "tc": 50.0,
+              "bc": 60.0,
+              "tc": 30.0,
               "b_cm": 30.0,
-              "t_cm": 50.0,
+              "t_cm": 60.0,
               "direction": "اتجاه X",
               "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
               "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
@@ -3463,12 +2747,12 @@
               "B": 30.0,
               "width_cm": 60.0,
               "height_cm": 30.0,
-              "width_m": 0.3,
-              "height_m": 0.5,
-              "x_min": 16.05,
-              "y_min": -0.16,
-              "x_max": 16.349999999999998,
-              "y_max": 0.33999999999999997,
+              "width_m": 0.6,
+              "height_m": 0.3,
+              "x_min": 15.9,
+              "y_min": -0.06,
+              "x_max": 16.5,
+              "y_max": 0.24,
               "center_x": 16.2,
               "center_y": 0.09,
               "is_edge_col": false,
@@ -3476,43 +2760,7 @@
               "placed": true,
               "removed": false,
               "i_eff": 3,
-              "j_eff": 0,
-              "Atrib_0": 5.268750000000001,
-              "Pu_slab_0": 11.512218749999999,
-              "Pu_slab": 34.09334777856426,
-              "Pu_punch": 3.91,
-              "Pu_beam": 28.79,
-              "framing_beams": [
-                "B5",
-                "B6",
-                "B10"
-              ],
-              "Pu_0": 12.663440625,
-              "Pu": 37.50268255642069,
-              "beam_reactions": [
-                {
-                  "beam_id": "B5",
-                  "rxn_ton": 8.38,
-                  "net_col_rxn_ton": 0.0,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": false
-                },
-                {
-                  "beam_id": "B6",
-                  "rxn_ton": 7.14,
-                  "net_col_rxn_ton": 0.01,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": false
-                },
-                {
-                  "beam_id": "B10",
-                  "rxn_ton": 13.27,
-                  "net_col_rxn_ton": 0.0,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": false
-                }
-              ],
-              "model_mark": "C1"
+              "j_eff": 0
             }
           },
           "supp2": {
@@ -3533,10 +2781,10 @@
               "grid_x": "Y4",
               "grid_y": "X4",
               "type": "Edge",
-              "bc": 30.0,
-              "tc": 50.0,
+              "bc": 60.0,
+              "tc": 30.0,
               "b_cm": 30.0,
-              "t_cm": 50.0,
+              "t_cm": 60.0,
               "direction": "اتجاه X",
               "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
               "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -3544,12 +2792,12 @@
               "B": 30.0,
               "width_cm": 60.0,
               "height_cm": 30.0,
-              "width_m": 0.3,
-              "height_m": 0.5,
-              "x_min": 16.05,
-              "y_min": 7.22,
-              "x_max": 16.349999999999998,
-              "y_max": 7.72,
+              "width_m": 0.6,
+              "height_m": 0.3,
+              "x_min": 15.9,
+              "y_min": 7.319999999999999,
+              "x_max": 16.5,
+              "y_max": 7.619999999999999,
               "center_x": 16.2,
               "center_y": 7.47,
               "is_edge_col": false,
@@ -3557,43 +2805,7 @@
               "placed": true,
               "removed": false,
               "i_eff": 3,
-              "j_eff": 3,
-              "Atrib_0": 4.826175,
-              "Pu_slab_0": 10.545192375,
-              "Pu_slab": 35.68420577276169,
-              "Pu_punch": 3.59,
-              "Pu_beam": 27.32,
-              "framing_beams": [
-                "B4",
-                "B10",
-                "B13"
-              ],
-              "Pu_0": 11.5997116125,
-              "Pu": 39.252626350037865,
-              "beam_reactions": [
-                {
-                  "beam_id": "B4",
-                  "rxn_ton": 8.33,
-                  "net_col_rxn_ton": 1.53,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": true
-                },
-                {
-                  "beam_id": "B10",
-                  "rxn_ton": 13.27,
-                  "net_col_rxn_ton": 0.0,
-                  "Mu_transferred_ton_m": 0.0,
-                  "full_moment_continuity": false
-                },
-                {
-                  "beam_id": "B13",
-                  "rxn_ton": 5.72,
-                  "net_col_rxn_ton": 5.72,
-                  "Mu_transferred_ton_m": 7.55,
-                  "full_moment_continuity": true
-                }
-              ],
-              "model_mark": "C1"
+              "j_eff": 3
             }
           },
           "supports_desc": "كمرة رئيسية (مرتكزة على عمود C3 ⟷ عمود C10)",
@@ -3652,10 +2864,10 @@
           "grid_x": "Y6",
           "grid_y": "X3",
           "type": "Edge",
-          "bc": 30.0,
-          "tc": 50.0,
+          "bc": 60.0,
+          "tc": 30.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه X",
           "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
           "shift_y": "متمركز على المحور (Centered)",
@@ -3663,12 +2875,12 @@
           "B": 30.0,
           "width_cm": 60.0,
           "height_cm": 30.0,
-          "width_m": 0.3,
-          "height_m": 0.5,
-          "x_min": 22.2,
-          "y_min": 5.02,
-          "x_max": 22.499999999999996,
-          "y_max": 5.52,
+          "width_m": 0.6,
+          "height_m": 0.3,
+          "x_min": 22.049999999999997,
+          "y_min": 5.119999999999999,
+          "x_max": 22.65,
+          "y_max": 5.419999999999999,
           "center_x": 22.349999999999998,
           "center_y": 5.27,
           "is_edge_col": false,
@@ -3676,35 +2888,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 4,
-          "j_eff": 2,
-          "Atrib_0": 2.389125,
-          "Pu_slab_0": 5.220238124999999,
-          "Pu_slab": 21.985835489838443,
-          "Pu_punch": 2.92,
-          "Pu_beam": 14.98,
-          "framing_beams": [
-            "B9",
-            "B12"
-          ],
-          "Pu_0": 5.7422619374999995,
-          "Pu": 24.184419038822284,
-          "beam_reactions": [
-            {
-              "beam_id": "B9",
-              "rxn_ton": 6.77,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B12",
-              "rxn_ton": 8.21,
-              "net_col_rxn_ton": 0.02,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 2
         }
       },
       "supports_desc": "كمرة ثانوية (مرتكزة على كمرة B10 ⟷ عمود C6)",
@@ -3787,10 +2971,10 @@
           "grid_x": "Y4",
           "grid_y": "X4",
           "type": "Edge",
-          "bc": 30.0,
-          "tc": 50.0,
+          "bc": 60.0,
+          "tc": 30.0,
           "b_cm": 30.0,
-          "t_cm": 50.0,
+          "t_cm": 60.0,
           "direction": "اتجاه X",
           "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
           "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -3798,12 +2982,12 @@
           "B": 30.0,
           "width_cm": 60.0,
           "height_cm": 30.0,
-          "width_m": 0.3,
-          "height_m": 0.5,
-          "x_min": 16.05,
-          "y_min": 7.22,
-          "x_max": 16.349999999999998,
-          "y_max": 7.72,
+          "width_m": 0.6,
+          "height_m": 0.3,
+          "x_min": 15.9,
+          "y_min": 7.319999999999999,
+          "x_max": 16.5,
+          "y_max": 7.619999999999999,
           "center_x": 16.2,
           "center_y": 7.47,
           "is_edge_col": false,
@@ -3811,43 +2995,7 @@
           "placed": true,
           "removed": false,
           "i_eff": 3,
-          "j_eff": 3,
-          "Atrib_0": 4.826175,
-          "Pu_slab_0": 10.545192375,
-          "Pu_slab": 35.68420577276169,
-          "Pu_punch": 3.59,
-          "Pu_beam": 27.32,
-          "framing_beams": [
-            "B4",
-            "B10",
-            "B13"
-          ],
-          "Pu_0": 11.5997116125,
-          "Pu": 39.252626350037865,
-          "beam_reactions": [
-            {
-              "beam_id": "B4",
-              "rxn_ton": 8.33,
-              "net_col_rxn_ton": 1.53,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": true
-            },
-            {
-              "beam_id": "B10",
-              "rxn_ton": 13.27,
-              "net_col_rxn_ton": 0.0,
-              "Mu_transferred_ton_m": 0.0,
-              "full_moment_continuity": false
-            },
-            {
-              "beam_id": "B13",
-              "rxn_ton": 5.72,
-              "net_col_rxn_ton": 5.72,
-              "Mu_transferred_ton_m": 7.55,
-              "full_moment_continuity": true
-            }
-          ],
-          "model_mark": "C1"
+          "j_eff": 3
         }
       },
       "supp2": {

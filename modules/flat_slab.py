@@ -16299,7 +16299,7 @@ def render(is_standalone: bool = False):
             padding: 12px 20px !important;
             margin: 6px 0 8px 0 !important;
             font-family: 'Cairo', 'Tajawal', 'Segoe UI', Tahoma, sans-serif !important;
-            font-size: 25.2px !important;
+            font-size: 17.15px !important;
             font-weight: 900 !important;
             text-align: center !important;
             display: flex !important;
@@ -16370,16 +16370,93 @@ def render(is_standalone: bool = False):
         """,
         unsafe_allow_html=True,
     )
-    if not is_standalone:
-        st.markdown(
-            '<div class="module-title-banner-m1" style="background: linear-gradient(135deg, #1c1917 0%, #78350f 45%, #92400e 100%) !important; color: #ffffff !important; border: 2px solid #f59e0b !important; border-radius: 8px !important; box-shadow: 0 4px 14px rgba(120, 53, 15, 0.40) !important; padding: 12px 20px !important; margin: 6px 0 8px 0 !important; font-family: \'Cairo\', \'Tajawal\', \'Segoe UI\', Tahoma, sans-serif !important; font-size: 25.2px !important; font-weight: 900 !important; text-align: center !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 10px !important; letter-spacing: 0.4px !important; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.65) !important; line-height: 1.35 !important; width: 100% !important; box-sizing: border-box !important;">'
-            '<span>🟦 Module 1 – Integrated Structural Design (ECP 203) (التصميم الإنشائي المتكامل)</span>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-
     active_profile_name = S.get_active_profile_name()
     prefix = S.get_safe_profile_filename_prefix()
+
+    if not is_standalone:
+        st.markdown(
+            """
+            <style>
+            div[data-testid="stHorizontalBlock"]:has(.m1-title-banner-center) {
+                background: linear-gradient(135deg, #1c1917 0%, #78350f 45%, #92400e 100%) !important;
+                border: 2px solid #f59e0b !important;
+                border-radius: 8px !important;
+                box-shadow: 0 4px 14px rgba(120, 53, 15, 0.40) !important;
+                padding: 6px 14px !important;
+                margin: 6px 0 10px 0 !important;
+                direction: rtl !important;
+                align-items: center !important;
+            }
+            div.m1-philo-btn-wrapper {
+                display: flex !important;
+                justify-content: flex-start !important;
+                align-items: center !important;
+                width: 100% !important;
+            }
+            div.m1-philo-btn-wrapper button {
+                background: linear-gradient(135deg, #292524 0%, #44403c 100%) !important;
+                color: #fde68a !important;
+                font-family: 'Cairo', 'Tajawal', 'Segoe UI', Tahoma, sans-serif !important;
+                font-size: 14px !important;
+                font-weight: 900 !important;
+                border: 1.5px solid #f59e0b !important;
+                border-radius: 7px !important;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.40) !important;
+                height: 40px !important;
+                max-width: 205px !important;
+                width: 100% !important;
+                white-space: nowrap !important;
+                padding: 4px 12px !important;
+                transition: all 0.25s ease-in-out !important;
+            }
+            div.m1-philo-btn-wrapper button:hover {
+                background: linear-gradient(135deg, #44403c 0%, #78350f 100%) !important;
+                border-color: #ffffff !important;
+                color: #ffffff !important;
+                box-shadow: 0 4px 14px rgba(245, 158, 11, 0.60) !important;
+                transform: translateY(-1px) !important;
+            }
+            div.m1-philo-btn-wrapper button,
+            div.m1-philo-btn-wrapper button *,
+            div.m1-philo-btn-wrapper button p,
+            div.m1-philo-btn-wrapper button span,
+            div.m1-philo-btn-wrapper button div,
+            div.m1-philo-btn-wrapper button strong,
+            div.m1-philo-btn-wrapper button b {
+                color: #fde68a !important;
+                font-family: 'Cairo', 'Tajawal', 'Segoe UI', Tahoma, sans-serif !important;
+                font-weight: 900 !important;
+                font-size: 14px !important;
+                letter-spacing: 0.3px !important;
+                -webkit-text-stroke: 0.35px rgba(253, 230, 138, 0.35) !important;
+            }
+            div.m1-philo-btn-wrapper button:hover * {
+                color: #ffffff !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+        col_m1_right, col_m1_center, col_m1_left = st.columns([1.6, 6.8, 1.6])
+        with col_m1_right:
+            st.markdown('<div class="m1-philo-btn-wrapper">', unsafe_allow_html=True)
+            if st.button("📖 **فلسفة التصميم والحصر**", key=f"{prefix}btn_philo_m1_banner_right", use_container_width=True, help="عرض دليل وفلسفة التصميم الإنشائي وتوزيع الأحمال وحصر الكميات"):
+                show_design_philosophy_dialog()
+            st.markdown('</div>', unsafe_allow_html=True)
+        with col_m1_center:
+            st.markdown(
+                """
+                <div class="m1-title-banner-center" style="text-align: center; display: flex; align-items: center; justify-content: center; height: 100%; min-height: 42px;">
+                    <span style="font-family: 'Cairo', 'Tajawal', 'Segoe UI', Tahoma, sans-serif; font-size: 17.15px; font-weight: 900; color: #ffffff; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.65); letter-spacing: 0.4px; white-space: nowrap;">
+                        🟦 Module 1 – Integrated Structural Design (ECP 203) (التصميم الإنشائي المتكامل)
+                    </span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        with col_m1_left:
+            st.markdown('<div style="height: 100%; min-height: 42px;"></div>', unsafe_allow_html=True)
+
     cfg = st.session_state.setdefault("cfg", {})
 
     # ── Universal Structural State Self-Healing Guard ──
@@ -16411,15 +16488,7 @@ def render(is_standalone: bool = False):
     except Exception:
         pass
 
-    if not is_standalone:
-        if st.button(
-            "📖 الاطلاع على فلسفة التصميم وحصر الكميات",
-            key=f"{prefix}btn_show_design_philosophy_top",
-            use_container_width=True,
-            help="عرض دليل وفلسفة حساب الأحمال التراكمية وتوزيعها وحصر الكميات",
-        ):
-            show_design_philosophy_dialog()
-        st.markdown("<div style='margin-bottom: 6px;'></div>", unsafe_allow_html=True)
+
 
     Lx_spans = []
     Ly_spans = []
@@ -20299,7 +20368,7 @@ def render(is_standalone: bool = False):
             draw_comprehensive_foundation_sketch,
         )
 
-        with st.expander(f"🪸 Building Foundations Design — {num_floors} Floors (تصميم أساسات المبنى والقواعد المنفصلة والمشتركة والشدادات)", expanded=False):
+        with st.expander(f"🪸 Foundations Design — {num_floors} Floors (تصميم الاساسات)", expanded=False):
             # 2. Controls & Soil Properties
             ftg_qnet = S.cfg_val("tcf_q_net", 1.5)
             ftg_fcu = S.cfg_val("tcf_Fcu", col_Fcu if col_Fcu else 250)
@@ -21248,7 +21317,7 @@ def render(is_standalone: bool = False):
 
 
         # ── 🏛️ FINAL DESIGN OF FOUNDATIONS AND GROUND BEAMS (ECP 203) ───────────────────
-        with st.expander(f"🏛️ Final Design of Columns, Foundations and Ground Beams — {num_floors} Floors (التصميم النهائي للاعمدة و للقواعد والسملات الأرضية)", expanded=True):
+        with st.expander(f"🏛️ Final Design of Columns, Foundations and Ground Beams — {num_floors} Floors (التصميم النهائي للاعمدة و للقواعد والسملات الأرضية)", expanded=False):
 
 
             ftg_analysis_final = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
@@ -21686,74 +21755,61 @@ def render(is_standalone: bool = False):
                 unsafe_allow_html=True,
             )
 
-            # ── KPI Summary Cards ──
-            kpi_c1, kpi_c2, kpi_c3, kpi_c4 = st.columns(4)
-            with kpi_c1:
-                st.markdown(
-                    f"""
-                    <div style="background:#f0fdf4; border:1.5px solid #86efac; border-radius:8px; padding:10px 14px; text-align:center;">
-                        <div style="font-size:13px; font-weight:600; color:#15803d; margin-bottom:4px;">إجمالي خرسانات المبنى ({num_floors} أدوار)</div>
-                        <div style="font-size:20px; font-weight:800; color:#166534;">{grand_conc_all_val:.2f} m³</div>
-                        <div style="font-size:11.5px; color:#475569; margin-top:2px;">مسلحة: {grand_conc_rc_val:.1f} m³ │ عادية: {grand_conc_pc_val:.1f} m³</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            with kpi_c2:
-                slab_sub_txt = f"أسقف ({num_floors}): {slab_steel_ton_tot:.2f}t (الدور: {slab_steel_ton:.2f}t)" if num_floors > 1 else f"سقف: {slab_steel_ton:.2f}t"
-                st.markdown(
-                    f"""
-                    <div style="background:#f5f3ff; border:1.5px solid #c4b5fd; border-radius:8px; padding:10px 14px; text-align:center;">
-                        <div style="font-size:13px; font-weight:600; color:#6d28d9; margin-bottom:4px;">إجمالي حديد المبنى بالكامل</div>
-                        <div style="font-size:20px; font-weight:800; color:#5b21b6;">{grand_steel_ton_val:.3f} Ton</div>
-                        <div style="font-size:11.5px; color:#475569; margin-top:2px;">{slab_sub_txt} │ أعمدة: {cols_steel_ton_tot_val:.2f}t │ قواعد: {ftgs_steel_ton_val:.2f}t │ سملات: {gb_steel_ton_val:.2f}t</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            with kpi_c3:
-                st.markdown(
-                    f"""
-                    <div style="background:#eff6ff; border:1.5px solid #93c5fd; border-radius:8px; padding:10px 14px; text-align:center;">
-                        <div style="font-size:13px; font-weight:600; color:#1e40af; margin-bottom:4px;">إجمالي أسمنت المبنى</div>
-                        <div style="font-size:20px; font-weight:800; color:#1e3a8a;">{grand_cement_ton:.2f} Ton</div>
-                        <div style="font-size:11.5px; color:#475569; margin-top:2px;">{grand_cement_bags:,} شكارة (50 كجم)</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-            with kpi_c4:
-                st.markdown(
-                    f"""
-                    <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:8px; padding:10px 14px; text-align:center;">
-                        <div style="font-size:13px; font-weight:600; color:#b45309; margin-bottom:4px;">إجمالي الزلط والرمل</div>
-                        <div style="font-size:18px; font-weight:800; color:#92400e;">زلط: {grand_gravel_val:.1f} m³</div>
-                        <div style="font-size:11.5px; color:#475569; margin-top:2px;">رمل: {grand_sand_val:.1f} m³ │ معدل: {grand_ratio_val:.1f} kg/m³</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+            # ── Summary Quantity Survey Table (بدلاً من البانيلات القديمة) ──
+            slab_sub_txt = f"أسقف ({num_floors}): {slab_steel_ton_tot:.2f}t (الدور: {slab_steel_ton:.2f}t)" if num_floors > 1 else f"سقف: {slab_steel_ton:.2f}t"
+            st.markdown(
+                f"""
+                <div style="direction: rtl; margin-bottom: 18px; border-radius: 10px; overflow: hidden; border: 2px solid #f97316; box-shadow: 0 4px 12px rgba(249, 115, 22, 0.12);">
+                    <table style="width: 100%; border-collapse: collapse; font-family: inherit; background-color: #fffaf5;">
+                        <thead>
+                            <tr style="background: linear-gradient(90deg, #fdba74 0%, #fed7aa 100%); border-bottom: 2px solid #f97316;">
+                                <th style="padding: 12px 16px; text-align: right; font-size: 1.15rem; font-weight: 800; color: #7c2d12; width: 26%;">البند / المكون الإنشائي</th>
+                                <th style="padding: 12px 16px; text-align: center; font-size: 1.15rem; font-weight: 800; color: #7c2d12; width: 24%;">إجمالي الكمية للمبنى</th>
+                                <th style="padding: 12px 16px; text-align: center; font-size: 1.15rem; font-weight: 800; color: #7c2d12; width: 14%;">الوحدة</th>
+                                <th style="padding: 12px 16px; text-align: right; font-size: 1.15rem; font-weight: 800; color: #7c2d12; width: 36%;">التفصيل والتوزيع الإنشائي</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="border-bottom: 1.5px solid #fed7aa; background-color: #fff7ed;">
+                                <td style="padding: 12px 16px; font-size: 1.12rem; font-weight: 700; color: #9a3412;">🏢 إجمالي خرسانات المبنى ({num_floors} أدوار)</td>
+                                <td style="padding: 12px 16px; text-align: center; font-size: 1.35rem; font-weight: 900; color: #c2410c;">{grand_conc_all_val:.2f}</td>
+                                <td style="padding: 12px 16px; text-align: center; font-size: 1.10rem; font-weight: 700; color: #7c2d12;">متر مكعب (m³)</td>
+                                <td style="padding: 12px 16px; font-size: 1.05rem; font-weight: 600; color: #431407;">مسلحة: <b>{grand_conc_rc_val:.1f} m³</b> │ عادية: <b>{grand_conc_pc_val:.1f} m³</b></td>
+                            </tr>
+                            <tr style="border-bottom: 1.5px solid #fed7aa; background-color: #fffaf5;">
+                                <td style="padding: 12px 16px; font-size: 1.12rem; font-weight: 700; color: #9a3412;">🔩 إجمالي حديد المبنى بالكامل</td>
+                                <td style="padding: 12px 16px; text-align: center; font-size: 1.35rem; font-weight: 900; color: #c2410c;">{grand_steel_ton_val:.3f}</td>
+                                <td style="padding: 12px 16px; text-align: center; font-size: 1.10rem; font-weight: 700; color: #7c2d12;">طن (Ton)<br><span style="font-size: 0.95rem; font-weight: 600; color: #9a3412;">({grand_steel_kg_val:,.1f} kg)</span></td>
+                                <td style="padding: 12px 16px; font-size: 1.05rem; font-weight: 600; color: #431407;">{slab_sub_txt} │ أعمدة: <b>{cols_steel_ton_tot_val:.2f}t</b> │ قواعد: <b>{ftgs_steel_ton_val:.2f}t</b> │ سملات: <b>{gb_steel_ton_val:.2f}t</b></td>
+                            </tr>
+                            <tr style="border-bottom: 1.5px solid #fed7aa; background-color: #fff7ed;">
+                                <td style="padding: 12px 16px; font-size: 1.12rem; font-weight: 700; color: #9a3412;">🏗️ إجمالي أسمنت المبنى</td>
+                                <td style="padding: 12px 16px; text-align: center; font-size: 1.35rem; font-weight: 900; color: #c2410c;">{grand_cement_ton:.2f}</td>
+                                <td style="padding: 12px 16px; text-align: center; font-size: 1.10rem; font-weight: 700; color: #7c2d12;">طن (Ton)</td>
+                                <td style="padding: 12px 16px; font-size: 1.05rem; font-weight: 600; color: #431407;"><b>{grand_cement_bags:,} شكارة</b> (وزن 50 كجم)</td>
+                            </tr>
+                            <tr style="background-color: #fffaf5;">
+                                <td style="padding: 12px 16px; font-size: 1.12rem; font-weight: 700; color: #9a3412;">⏳ إجمالي الزلط والرمل</td>
+                                <td style="padding: 12px 16px; text-align: center; font-size: 1.25rem; font-weight: 900; color: #c2410c;">زلط: {grand_gravel_val:.1f} │ رمل: {grand_sand_val:.1f}</td>
+                                <td style="padding: 12px 16px; text-align: center; font-size: 1.10rem; font-weight: 700; color: #7c2d12;">متر مكعب (m³)</td>
+                                <td style="padding: 12px 16px; font-size: 1.05rem; font-weight: 600; color: #431407;">معدل استهلاك الحديد الكلي: <b>{grand_ratio_val:.1f} kg/m³</b> خرسانة مسلحة</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
             st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
 
             # ── Table 1: Main Materials Quantity Survey Table ──
-            col_t1_title, col_t1_btn = st.columns([2.3, 1.7])
-            with col_t1_title:
-                st.markdown("##### 📋 1. جدول الحصر التقريبي العام للكميات والمواد الإنشائية (General Quantity Survey Table)")
-            with col_t1_btn:
-                if st.button("📖 الاطلاع على فلسفة التصميم وحصر الكميات", key=f"{prefix}btn_design_philosophy_boq", use_container_width=True):
-                    show_design_philosophy_dialog()
+            st.markdown("##### 📋 1. جدول الحصر التقريبي العام للكميات والمواد الإنشائية (General Quantity Survey Table)")
 
             st.markdown(
                 """
-                <div style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 2.5px solid #f59e0b; border-radius: 10px; padding: 14px 20px; margin-top: 8px; margin-bottom: 16px; text-align: center; box-shadow: 0 4px 10px rgba(245, 158, 11, 0.20);">
-                    <div style="font-size: 1.18rem; font-weight: 800; color: #92400e; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                        <span style="font-size: 1.45rem;">⚠️</span>
-                        <span>تنبيه وإرشاد هندسي هام:</span>
-                    </div>
-                    <div style="font-size: 1.12rem; font-weight: 800; color: #b45309; margin-top: 6px; line-height: 1.7;">
-                        إن هذه الحسابات استرشادية طبقاً للتصميم، يرجى استخدام موديول حصر الكميات لإدخال الكميات التي سيتم التنفيذ طبقاً لها على أرض الواقع.
-                    </div>
+                <div style="direction: rtl; font-size: 1.05rem; font-weight: 700; color: #9a3412; background: #fff7ed; border-right: 4px solid #f97316; border-radius: 6px; padding: 8px 14px; margin: 8px 0 14px 0; text-align: right;">
+                    ⚠️ <strong>تنبيه وإرشاد هندسي هام:</strong> إن هذا الحصر تقريبي واسترشادي طبقاً للتصميم، يرجى استخدام موديول حصر الكميات لإدخال الكميات التي سيتم التنفيذ طبقاً لها على أرض الواقع.
                 </div>
                 """,
                 unsafe_allow_html=True,
