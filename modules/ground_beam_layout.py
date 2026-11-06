@@ -127,26 +127,145 @@ def _get_grid_axes_gb(columns_list):
     return unique_xs, unique_ys, label_map_x, label_map_y
 
 
-def align_ground_beam_coords(gb, unique_xs=None, unique_ys=None):
+def align_ground_beam_coords(
+    gb,
+    unique_xs=None,
+    unique_ys=None,
+    active_columns=None,
+    col_props=None,
+    col_transforms=None,
+    edge_columns=None,
+    slab_bounds=None,
+):
     """
-    Enforces strict centerline continuity (توحيد السنترلاين) for Ground Beams and Strap Beams.
-    Snaps horizontal beams to the shared structural grid Y-axis and vertical beams to the shared structural grid X-axis,
-    eliminating column eccentricity/architectural face shift offsets and ensuring 100% collinearity between adjacent spans.
+    Computes exact engineering coordinates and face-alignment offset (Eccentricity)
+    for Ground Beams and Strap Beams according to ECP 203:
+    - Calculates the offset so that the Ground Beam face aligns 100% flush with the connected Column Face.
+    - Considers column dimensions, column orientation, and user-defined shift (±6 cm / center).
+    - Exterior Facade Priority: Exterior ground beams align with the building's exterior perimeter face.
+    - Differing Column Sizes: If connected columns differ in size or eccentricity, aligns with the dominant/larger column or exterior face.
     """
-    if gb.get("_is_aligned") and "p1" in gb and "p2" in gb:
-        return gb
+    import streamlit as st
+    try:
+        from modules.settings import S
+    except Exception:
+        S = None
+
+    if active_columns is None and "fs_active_columns" in st.session_state:
+        active_columns = st.session_state.get("fs_active_columns", [])
+    if col_transforms is None:
+        col_transforms = (
+            st.session_state.get("fs_col_transforms")
+            or (S.cfg_val("fs_col_transforms", {}) if S else {})
+            or {}
+        )
+    if col_props is None:
+        col_props = (
+            st.session_state.get("fs_col_props")
+            or (S.cfg_val("fs_col_props", {}) if S else {})
+            or {}
+        )
+    if edge_columns is None and "fs_ftg_analysis" in st.session_state:
+        edge_columns = st.session_state.get("fs_ftg_analysis", {}).get("edge_columns")
 
     c1 = gb.get("col1", {})
     c2 = gb.get("col2", {})
-    c1_x = float(c1.get("x", 0.0))
-    c1_y = float(c1.get("y", 0.0))
-    c2_x = float(c2.get("x", 0.0))
-    c2_y = float(c2.get("y", 0.0))
+    cid1 = str(gb.get("col1_id") or c1.get("id") or c1.get("orig_id") or "")
+    cid2 = str(gb.get("col2_id") or c2.get("id") or c2.get("orig_id") or "")
+
+    cols_by_id = {}
+    if active_columns:
+        for c in active_columns:
+            cid = str(c.get("id") or "")
+            orig_id = str(c.get("orig_id") or "")
+            name = str(c.get("name") or "")
+            if cid:
+                cols_by_id[cid] = c
+            if orig_id:
+                cols_by_id[orig_id] = c
+            if name:
+                cols_by_id[name] = c
+            i_idx, j_idx = c.get("i"), c.get("j")
+            if i_idx is not None and j_idx is not None:
+                cols_by_id[f"{i_idx},{j_idx}"] = c
+            gx_val = round(float(c.get("grid_x_m", c.get("x", 0.0))), 2)
+            gy_val = round(float(c.get("grid_y_m", c.get("y", 0.0))), 2)
+            cols_by_id[(gx_val, gy_val)] = c
+
+    col_match1 = cols_by_id.get(cid1)
+    if not col_match1:
+        c1_gx = round(float(c1.get("x", 0.0)), 2)
+        c1_gy = round(float(c1.get("y", 0.0)), 2)
+        col_match1 = cols_by_id.get((c1_gx, c1_gy), c1)
+
+    col_match2 = cols_by_id.get(cid2)
+    if not col_match2:
+        c2_gx = round(float(c2.get("x", 0.0)), 2)
+        c2_gy = round(float(c2.get("y", 0.0)), 2)
+        col_match2 = cols_by_id.get((c2_gx, c2_gy), c2)
+
+    def _resolve_col_geom(col_dict):
+        from modules.flat_slab import compute_column_geometry
+        cid = str(col_dict.get("id") or col_dict.get("orig_id") or "")
+        orig_id = str(col_dict.get("orig_id") or cid)
+        i_idx = col_dict.get("i")
+        j_idx = col_dict.get("j")
+
+        c_prop = {}
+        if isinstance(col_props, dict):
+            c_prop = (
+                col_props.get(orig_id)
+                or col_props.get(cid)
+                or (col_props.get(f"{i_idx},{j_idx}") if i_idx is not None and j_idx is not None else {})
+                or {}
+            )
+        c_w_cm = float(c_prop.get("b_cm") or col_dict.get("b_cm") or col_dict.get("bc") or 30.0)
+        c_d_cm = float(c_prop.get("t_cm") or col_dict.get("t_cm") or col_dict.get("tc") or 60.0)
+
+        c_trans = {}
+        if isinstance(col_transforms, dict):
+            c_trans = dict(
+                col_transforms.get(orig_id)
+                or col_transforms.get(cid)
+                or (col_transforms.get(f"{i_idx},{j_idx}") if i_idx is not None and j_idx is not None else {})
+                or {}
+            )
+
+        if isinstance(c_prop, dict):
+            if not c_trans.get("direction") and c_prop.get("direction"):
+                c_trans["direction"] = c_prop["direction"]
+            if not c_trans.get("shift_x") and c_prop.get("shift_x"):
+                c_trans["shift_x"] = c_prop["shift_x"]
+            if not c_trans.get("shift_y") and c_prop.get("shift_y"):
+                c_trans["shift_y"] = c_prop["shift_y"]
+
+        if not c_trans.get("direction") and col_dict.get("direction"):
+            c_trans["direction"] = col_dict.get("direction")
+        if not c_trans.get("shift_x") and col_dict.get("shift_x"):
+            c_trans["shift_x"] = col_dict.get("shift_x")
+        if not c_trans.get("shift_y") and col_dict.get("shift_y"):
+            c_trans["shift_y"] = col_dict.get("shift_y")
+
+        gx = float(col_dict.get("grid_x_m", col_dict.get("x", 0.0)))
+        gy = float(col_dict.get("grid_y_m", col_dict.get("y", 0.0)))
+
+        res = compute_column_geometry(gx, gy, c_w_cm, c_d_cm, c_trans)
+        res["orig_id"] = orig_id
+        res["cid"] = cid
+        return res
+
+    g1 = _resolve_col_geom(col_match1)
+    g2 = _resolve_col_geom(col_match2)
+    gb_w = float(gb.get("b_cm", 25.0)) / 100.0
+
+    c1_x = g1["grid_x"]
+    c1_y = g1["grid_y"]
+    c2_x = g2["grid_x"]
+    c2_y = g2["grid_y"]
 
     dx = c2_x - c1_x
     dy = c2_y - c1_y
     dir_b = gb.get("dir")
-
     if not dir_b:
         if abs(dx) > 0.35 and abs(dy) > 0.35:
             dir_b = "DIAG"
@@ -154,6 +273,15 @@ def align_ground_beam_coords(gb, unique_xs=None, unique_ys=None):
             dir_b = "X"
         else:
             dir_b = "Y"
+
+    def _get_edge_dirs(col_geom, cid_val):
+        dirs = []
+        if edge_columns and isinstance(edge_columns, dict):
+            ed = edge_columns.get(cid_val) or edge_columns.get(str(col_geom.get("orig_id", ""))) or {}
+            if isinstance(ed, dict) and ed.get("is_edge") == "Yes":
+                d_str = ed.get("direction", "").lower()
+                dirs.append(d_str)
+        return dirs
 
     if dir_b == "X" or (abs(dx) >= abs(dy) and abs(dy) <= 0.45):
         mean_y = (c1_y + c2_y) / 2.0
@@ -168,17 +296,86 @@ def align_ground_beam_coords(gb, unique_xs=None, unique_ys=None):
             x1 = c1_x
             x2 = c2_x
 
-        p1 = [min(x1, x2), cl_y]
-        p2 = [max(x1, x2), cl_y]
+        bx0 = min(x1, x2)
+        bw = abs(x2 - x1)
+
+        # Building footprint limits in Y
+        min_y_bldg = min(unique_ys) if unique_ys else min(c1_y, c2_y)
+        max_y_bldg = max(unique_ys) if unique_ys else max(c1_y, c2_y)
+        if slab_bounds and isinstance(slab_bounds, dict):
+            min_y_bldg = min(min_y_bldg, float(slab_bounds.get("y_min", min_y_bldg)))
+            max_y_bldg = max(max_y_bldg, float(slab_bounds.get("y_max", max_y_bldg)))
+
+        is_bottom_facade = abs(cl_y - min_y_bldg) <= 0.40
+        is_top_facade = abs(cl_y - max_y_bldg) <= 0.40
+
+        ed_dirs1 = _get_edge_dirs(g1, cid1)
+        ed_dirs2 = _get_edge_dirs(g2, cid2)
+        all_ed_dirs = ed_dirs1 + ed_dirs2
+        if any(any(k in d for k in ["bottom", "south", "أسفل"]) for d in all_ed_dirs):
+            is_bottom_facade = True
+        if any(any(k in d for k in ["top", "north", "أعلى"]) for d in all_ed_dirs):
+            is_top_facade = True
+
+        s1 = str(g1.get("shift_y", "") or "")
+        s2 = str(g2.get("shift_y", "") or "")
+        h1 = g1["height_m"]
+        h2 = g2["height_m"]
+
+        g_dom = g1 if h1 >= h2 else g2
+        dom_shift = str(g_dom.get("shift_y", "") or "")
+
+        def _is_shift_up(s):
+            return "لأعلى" in s or s.startswith("أعلى") or "up" in s.lower() or "top" in s.lower()
+
+        def _is_shift_down(s):
+            return "لأسفل" in s or s.startswith("أسفل") or "down" in s.lower() or "bottom" in s.lower()
+
+        # Exact face alignment offset calculation
+        if is_bottom_facade and not is_top_facade:
+            by0 = min(g1["y_min"], g2["y_min"])
+        elif is_top_facade and not is_bottom_facade:
+            by0 = max(g1["y_max"], g2["y_max"]) - gb_w
+        else:
+            is_up1 = _is_shift_up(s1)
+            is_up2 = _is_shift_up(s2)
+            is_down1 = _is_shift_down(s1)
+            is_down2 = _is_shift_down(s2)
+
+            if (is_up1 or is_up2) and not (is_down1 or is_down2):
+                ref_col = g1 if is_up1 and (h1 >= h2 or not is_up2) else g2
+                by0 = ref_col["y_min"]
+            elif (is_down1 or is_down2) and not (is_up1 or is_up2):
+                ref_col = g1 if is_down1 and (h1 >= h2 or not is_down2) else g2
+                by0 = ref_col["y_max"] - gb_w
+            elif (is_up1 or is_up2) and (is_down1 or is_down2):
+                if _is_shift_up(dom_shift):
+                    by0 = g_dom["y_min"]
+                elif _is_shift_down(dom_shift):
+                    by0 = g_dom["y_max"] - gb_w
+                else:
+                    by0 = cl_y - gb_w / 2.0
+            else:
+                by0 = cl_y - gb_w / 2.0
+
+        mid_x = bx0 + bw / 2.0
+        mid_y = by0 + gb_w / 2.0
+        p1 = [bx0, mid_y]
+        p2 = [bx0 + bw, mid_y]
+
         return {
             "dir": "X",
             "cl_coord": cl_y,
             "cl_y": cl_y,
             "p1": p1,
             "p2": p2,
-            "bx0": min(x1, x2),
-            "bw": abs(x2 - x1),
-            "by0": cl_y,
+            "bx0": bx0,
+            "bw": bw,
+            "by0": by0,
+            "bh": gb_w,
+            "gb_w": gb_w,
+            "mid_x": mid_x,
+            "mid_y": mid_y,
             "_is_aligned": True,
         }
     elif dir_b == "Y" or (abs(dy) > abs(dx) and abs(dx) <= 0.45):
@@ -194,30 +391,103 @@ def align_ground_beam_coords(gb, unique_xs=None, unique_ys=None):
             y1 = c1_y
             y2 = c2_y
 
-        p1 = [cl_x, min(y1, y2)]
-        p2 = [cl_x, max(y1, y2)]
+        by0 = min(y1, y2)
+        bh = abs(y2 - y1)
+
+        # Building footprint limits in X
+        min_x_bldg = min(unique_xs) if unique_xs else min(c1_x, c2_x)
+        max_x_bldg = max(unique_xs) if unique_xs else max(c1_x, c2_x)
+        if slab_bounds and isinstance(slab_bounds, dict):
+            min_x_bldg = min(min_x_bldg, float(slab_bounds.get("x_min", min_x_bldg)))
+            max_x_bldg = max(max_x_bldg, float(slab_bounds.get("x_max", max_x_bldg)))
+
+        is_left_facade = abs(cl_x - min_x_bldg) <= 0.40
+        is_right_facade = abs(cl_x - max_x_bldg) <= 0.40
+
+        ed_dirs1 = _get_edge_dirs(g1, cid1)
+        ed_dirs2 = _get_edge_dirs(g2, cid2)
+        all_ed_dirs = ed_dirs1 + ed_dirs2
+        if any(any(k in d for k in ["left", "west", "يسار"]) for d in all_ed_dirs):
+            is_left_facade = True
+        if any(any(k in d for k in ["right", "east", "يمين"]) for d in all_ed_dirs):
+            is_right_facade = True
+
+        s1 = str(g1.get("shift_x", "") or "")
+        s2 = str(g2.get("shift_x", "") or "")
+        w1 = g1["width_m"]
+        w2 = g2["width_m"]
+
+        g_dom = g1 if w1 >= w2 else g2
+        dom_shift = str(g_dom.get("shift_x", "") or "")
+
+        def _is_shift_right(s):
+            return "يميناً" in s or s.startswith("يمين") or "right" in s.lower()
+
+        def _is_shift_left(s):
+            return "يساراً" in s or s.startswith("يسار") or "left" in s.lower()
+
+        if is_left_facade and not is_right_facade:
+            bx0 = min(g1["x_min"], g2["x_min"])
+        elif is_right_facade and not is_left_facade:
+            bx0 = max(g1["x_max"], g2["x_max"]) - gb_w
+        else:
+            is_right1 = _is_shift_right(s1)
+            is_right2 = _is_shift_right(s2)
+            is_left1 = _is_shift_left(s1)
+            is_left2 = _is_shift_left(s2)
+
+            if (is_right1 or is_right2) and not (is_left1 or is_left2):
+                ref_col = g1 if is_right1 and (w1 >= w2 or not is_right2) else g2
+                bx0 = ref_col["x_min"]
+            elif (is_left1 or is_left2) and not (is_right1 or is_right2):
+                ref_col = g1 if is_left1 and (w1 >= w2 or not is_left2) else g2
+                bx0 = ref_col["x_max"] - gb_w
+            elif (is_right1 or is_right2) and (is_left1 or is_left2):
+                if _is_shift_right(dom_shift):
+                    bx0 = g_dom["x_min"]
+                elif _is_shift_left(dom_shift):
+                    bx0 = g_dom["x_max"] - gb_w
+                else:
+                    bx0 = cl_x - gb_w / 2.0
+            else:
+                bx0 = cl_x - gb_w / 2.0
+
+        mid_x = bx0 + gb_w / 2.0
+        mid_y = by0 + bh / 2.0
+        p1 = [mid_x, by0]
+        p2 = [mid_x, by0 + bh]
+
         return {
             "dir": "Y",
             "cl_coord": cl_x,
             "cl_x": cl_x,
             "p1": p1,
             "p2": p2,
-            "by0": min(y1, y2),
-            "bh": abs(y2 - y1),
-            "bx0": cl_x,
+            "bx0": bx0,
+            "bw": gb_w,
+            "by0": by0,
+            "bh": bh,
+            "gb_w": gb_w,
+            "mid_x": mid_x,
+            "mid_y": mid_y,
             "_is_aligned": True,
         }
     else:
-        p1 = [c1_x, c1_y]
-        p2 = [c2_x, c2_y]
+        p1 = [g1["center_x"], g1["center_y"]]
+        p2 = [g2["center_x"], g2["center_y"]]
+        dx_val = p2[0] - p1[0]
+        dy_val = p2[1] - p1[1]
         return {
             "dir": "DIAG",
             "p1": p1,
             "p2": p2,
-            "bx0": min(c1_x, c2_x),
-            "by0": min(c1_y, c2_y),
-            "bw": abs(dx),
-            "bh": abs(dy),
+            "bx0": min(p1[0], p2[0]),
+            "by0": min(p1[1], p2[1]),
+            "bw": abs(dx_val),
+            "bh": abs(dy_val),
+            "gb_w": gb_w,
+            "mid_x": (p1[0] + p2[0]) / 2.0,
+            "mid_y": (p1[1] + p2[1]) / 2.0,
             "_is_aligned": True,
         }
 
@@ -1433,7 +1703,7 @@ def draw_ground_beams_layout_sketch(
         )
 
     for b in combined_elements:
-        alg = align_ground_beam_coords(b, unique_xs, unique_ys)
+        alg = align_ground_beam_coords(b, unique_xs, unique_ys, active_columns=active_columns, slab_bounds=slab_bounds)
         p1 = alg["p1"]
         p2 = alg["p2"]
         dir_b = alg["dir"]
@@ -1444,42 +1714,44 @@ def draw_ground_beams_layout_sketch(
         cfg = color_map.get(tag, color_map.get("ST" if "ST" in str(tag) else "GB1", {"fc": "#f1f5f9", "ec": "#475569", "tc": "#334155", "badge_bg": "#ffffff"}))
 
         if dir_b == "X":
-            bx0 = min(p1[0], p2[0])
-            bw = abs(p2[0] - p1[0])
-            by0 = alg["cl_y"] - bw_m / 2.0
+            bx0 = alg.get("bx0", min(p1[0], p2[0]))
+            bw = alg.get("bw", abs(p2[0] - p1[0]))
+            by0 = alg.get("by0", alg["cl_y"] - bw_m / 2.0)
+            mid_y = alg.get("mid_y", by0 + bw_m / 2.0)
             rect = patches.Rectangle(
                 (bx0, by0), bw, bw_m,
                 facecolor=cfg["fc"], edgecolor=cfg["ec"], lw=1.8, alpha=0.92, zorder=3
             )
             ax.add_patch(rect)
             mid_x = bx0 + bw / 2.0
-            mid_y = alg["cl_y"]
             rot = 0
         elif dir_b == "Y":
-            by0 = min(p1[1], p2[1])
-            bh = abs(p2[1] - p1[1])
-            bx0 = alg["cl_x"] - bw_m / 2.0
+            by0 = alg.get("by0", min(p1[1], p2[1]))
+            bh = alg.get("bh", abs(p2[1] - p1[1]))
+            bx0 = alg.get("bx0", alg["cl_x"] - bw_m / 2.0)
+            mid_x = alg.get("mid_x", bx0 + bw_m / 2.0)
             rect = patches.Rectangle(
                 (bx0, by0), bw_m, bh,
                 facecolor=cfg["fc"], edgecolor=cfg["ec"], lw=1.8, alpha=0.92, zorder=3
             )
             ax.add_patch(rect)
-            mid_x = alg["cl_x"]
             mid_y = by0 + bh / 2.0
             rot = 90
         else: # DIAG
-            dx_val = p2[0] - p1[0]
-            dy_val = p2[1] - p1[1]
+            p1_c = alg.get("p1", p1)
+            p2_c = alg.get("p2", p2)
+            dx_val = p2_c[0] - p1_c[0]
+            dy_val = p2_c[1] - p1_c[1]
             th = math.atan2(dy_val, dx_val)
             nx = -math.sin(th) * bw_m / 2.0
             ny = math.cos(th) * bw_m / 2.0
             poly = patches.Polygon([
-                (p1[0] + nx, p1[1] + ny), (p2[0] + nx, p2[1] + ny),
-                (p2[0] - nx, p2[1] - ny), (p1[0] - nx, p1[1] - ny)
+                (p1_c[0] + nx, p1_c[1] + ny), (p2_c[0] + nx, p2_c[1] + ny),
+                (p2_c[0] - nx, p2_c[1] - ny), (p1_c[0] - nx, p1_c[1] - ny)
             ], facecolor=cfg["fc"], edgecolor=cfg["ec"], lw=1.8, alpha=0.92, zorder=3)
             ax.add_patch(poly)
-            mid_x = (p1[0] + p2[0]) / 2.0
-            mid_y = (p1[1] + p2[1]) / 2.0
+            mid_x = alg.get("mid_x", (p1_c[0] + p2_c[0]) / 2.0)
+            mid_y = alg.get("mid_y", (p1_c[1] + p2_c[1]) / 2.0)
             rot = math.degrees(th)
             if rot > 90:
                 rot -= 180

@@ -1749,41 +1749,57 @@ def sync_project_to_github(commit_msg: str, repo_dir: str, custom_token: str = N
     if r_commit.returncode != 0 and "nothing to commit" not in (r_commit.stdout + r_commit.stderr).lower():
         return False, "تعذر حفظ التعديل محلياً (git commit)", "\n\n".join(logs)
 
-    # 6. Retrieve Token
+    # 6. Push strategy: Direct Token Push first (if token provided), OR Fallback Standard Push (if other PC already has saved credentials)
     token = (custom_token or "").strip() or get_saved_github_token(repo_dir)
-
-    if not token:
-        # Without credentials, HTTPS pushes will hang or fail
-        return False, "⚠️ لم يتم العثور على رمز الوصول لـ GitHub (Token). يرجى إدخال رمز Personal Access Token لإتمام الرفع بنجاح دون توقف.", "\n\n".join(logs)
-
-    # 7. Push using Direct Token Authentication (100% non-interactive, immune to GCM hang)
-    auth_url = f"https://x-access-token:{token}@github.com/hzayed3030-cell/Concrete-design.git"
     pushed = False
 
-    r_push = run_cmd(["-c", "credential.helper=", "push", auth_url, current_branch], timeout=60)
-    log("git push (direct token)", r_push)
-    if r_push.returncode == 0:
-        pushed = True
+    if token:
+        # Token-based push (immune to GCM hang on fresh/unauthenticated machines)
+        auth_url = f"https://x-access-token:{token}@github.com/hzayed3030-cell/Concrete-design.git"
+        r_push = run_cmd(["-c", "credential.helper=", "push", auth_url, current_branch], timeout=60)
+        log("git push (direct token)", r_push)
+        if r_push.returncode == 0:
+            pushed = True
+        else:
+            push_err = (r_push.stderr or r_push.stdout or "").lower()
+            if any(k in push_err for k in ("fetch first", "non-fast-forward", "behind", "rejected")):
+                log("syncing remote changes via merge -X ours")
+                run_cmd(["fetch", auth_url, current_branch], timeout=45)
+                r_merge = run_cmd(git_id + ["merge", "--no-edit", "-X", "ours", "FETCH_HEAD"], timeout=45)
+                log("git merge -X ours FETCH_HEAD", r_merge)
+                if r_merge.returncode != 0:
+                    run_cmd(["merge", "--abort"], timeout=10)
+                r_push2 = run_cmd(["-c", "credential.helper=", "push", auth_url, current_branch], timeout=60)
+                log("git push retry after merge", r_push2)
+                if r_push2.returncode == 0:
+                    pushed = True
     else:
-        push_err = (r_push.stderr or r_push.stdout or "").lower()
-        if any(k in push_err for k in ("fetch first", "non-fast-forward", "behind", "rejected")):
-            log("syncing remote changes via merge -X ours")
-            run_cmd(["fetch", auth_url, current_branch], timeout=45)
-            r_merge = run_cmd(git_id + ["merge", "--no-edit", "-X", "ours", "FETCH_HEAD"], timeout=45)
-            log("git merge -X ours FETCH_HEAD", r_merge)
-            if r_merge.returncode != 0:
-                run_cmd(["merge", "--abort"], timeout=10)
-            r_push2 = run_cmd(["-c", "credential.helper=", "push", auth_url, current_branch], timeout=60)
-            log("git push retry after merge", r_push2)
-            if r_push2.returncode == 0:
-                pushed = True
+        # Standard push: Works out-of-the-box on other computers that already have GitHub credentials/GCM authenticated
+        r_push_std = run_cmd(["push", "origin", current_branch], timeout=45)
+        log("git push (standard system auth)", r_push_std)
+        if r_push_std.returncode == 0:
+            pushed = True
+        else:
+            push_err = (r_push_std.stderr or r_push_std.stdout or "").lower()
+            if any(k in push_err for k in ("fetch first", "non-fast-forward", "behind", "rejected")):
+                run_cmd(["fetch", "origin", current_branch], timeout=45)
+                r_merge = run_cmd(git_id + ["merge", "--no-edit", "-X", "ours", f"origin/{current_branch}"], timeout=45)
+                log("standard git merge -X ours", r_merge)
+                if r_merge.returncode != 0:
+                    run_cmd(["merge", "--abort"], timeout=10)
+                r_push_std2 = run_cmd(["push", "origin", current_branch], timeout=45)
+                log("standard push retry", r_push_std2)
+                if r_push_std2.returncode == 0:
+                    pushed = True
 
     if pushed:
         run_cmd(["update-ref", f"refs/remotes/origin/{current_branch}", f"refs/heads/{current_branch}"], timeout=10)
         return True, f"تم رفع وتحديث المشروع إلى GitHub بنجاح! باسم التعديل: «{commit_msg}»", "\n\n".join(logs)
     else:
         last_log = "\n\n".join(logs).lower()
-        if any(kw in last_log for kw in ["bad credentials", "invalid username", "authentication failed", "401", "403"]):
+        if not token and any(kw in last_log for kw in ["fatal: could not read", "empty reply", "authentication failed", "terminal prompts disabled", "exit=128", "exit=1", "401", "403"]):
+            return False, "⚠️ هذا الجهاز غير مسجل الدخول إلى GitHub بعد. يرجى إدخال رمز Personal Access Token لمرة واحدة لحفظه محلياً وإتمام الرفع بنجاح.", "\n\n".join(logs)
+        if token and any(kw in last_log for kw in ["bad credentials", "invalid username", "authentication failed", "401", "403"]):
             return False, "❌ فشل الرفع: رمز GitHub Token غير صحيح أو منتهي الصلاحية أو يفتقر لصلاحية repo. يرجى تجديد الرمز وإعادة المحاولة.", "\n\n".join(logs)
         return False, "تعذر إرسال التحديثات إلى مستودع GitHub (تحقق من اتصال الإنترنت أو صلاحيات الرمز)", "\n\n".join(logs)
 
@@ -2070,38 +2086,36 @@ def render_profile_manager():
                                 st.error("⛔ تم رفض الرفع لوجود مجلدات dist أو build!")
                             else:
                                 active_token = saved_gh_token or (token_input_val or "").strip()
-                                if not active_token:
-                                    st.error("⚠️ يرجى إدخال رمز Personal Access Token لـ GitHub لإتمام عملية الرفع لأول مرة.")
+                                if not saved_gh_token and save_token_chk and active_token:
+                                    save_github_token(active_token, app_dir)
+
+                                now_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+                                if btn_quick:
+                                    msg_final = f"Update project - {now_str}"
                                 else:
-                                    if not saved_gh_token and save_token_chk and active_token:
-                                        save_github_token(active_token, app_dir)
-
-                                    now_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
-                                    if btn_quick:
+                                    user_text = (commit_msg_input or "").strip()
+                                    if not user_text:
                                         msg_final = f"Update project - {now_str}"
+                                    elif append_timestamp and not bool(re.search(r'\d{4}-\d{2}-\d{2}', user_text)):
+                                        msg_final = f"{user_text} - {now_str}"
                                     else:
-                                        user_text = (commit_msg_input or "").strip()
-                                        if not user_text:
-                                            msg_final = f"Update project - {now_str}"
-                                        elif append_timestamp and not bool(re.search(r'\d{4}-\d{2}-\d{2}', user_text)):
-                                            msg_final = f"{user_text} - {now_str}"
-                                        else:
-                                            msg_final = user_text
+                                        msg_final = user_text
 
-                                    with st.spinner(f"⏳ جاري حفظ وتأمين ورفع التحديثات باسم «{msg_final}» إلى GitHub..."):
-                                        try:
-                                            success, user_msg, detailed_log = sync_project_to_github(msg_final, app_dir, custom_token=active_token)
-                                            if success:
-                                                st.session_state["git_push_success_msg"] = f"✅ {user_msg}"
-                                                st.session_state["show_git_update_form"] = False
-                                                st.session_state.pop("input_git_commit_msg", None)
-                                                st.rerun()
-                                            else:
-                                                st.error(f"❌ {user_msg}")
-                                                with st.expander("🔍 تفاصيل التشخيص الفني ومخرجات Git (Diagnostics Log)", expanded=True):
-                                                    st.code(detailed_log, language="text")
-                                        except Exception as ex:
-                                            st.error(f"❌ حدث خطأ أثناء معالجة الرفع: {ex}")
+                                with st.spinner(f"⏳ جاري حفظ وتأمين ورفع التحديثات باسم «{msg_final}» إلى GitHub..."):
+                                    try:
+                                        success, user_msg, detailed_log = sync_project_to_github(msg_final, app_dir, custom_token=active_token)
+                                        if success:
+                                            st.session_state["git_push_success_msg"] = f"✅ {user_msg}"
+                                            st.session_state["show_git_update_form"] = False
+                                            st.session_state.pop("input_git_commit_msg", None)
+                                            st.balloons()
+                                            st.rerun()
+                                        else:
+                                            st.error(f"❌ {user_msg}")
+                                            with st.expander("🔍 تفاصيل التشخيص الفني ومخرجات Git (Diagnostics Log)", expanded=True):
+                                                st.code(detailed_log, language="text")
+                                    except Exception as ex:
+                                        st.error(f"❌ حدث خطأ أثناء معالجة الرفع: {ex}")
 
                     st.markdown("<hr style='margin: 10px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 

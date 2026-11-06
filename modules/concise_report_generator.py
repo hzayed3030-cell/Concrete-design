@@ -542,7 +542,7 @@ def draw_page4_ground_beams_plan(
 
     gb_list = gb_analysis.get("ground_beams", []) if gb_analysis else []
     for b in gb_list:
-        alg = align_ground_beam_coords(b, eff_grid_xs, eff_grid_ys)
+        alg = align_ground_beam_coords(b, eff_grid_xs, eff_grid_ys, active_columns=active_cols)
         p1 = alg["p1"]
         p2 = alg["p2"]
         dir_b = alg["dir"]
@@ -551,20 +551,22 @@ def draw_page4_ground_beams_plan(
         cfg = beam_style.get(tag, beam_style.get("GB1", beam_style["B1"]))
 
         if dir_b == "X":
-            bx0 = min(p1[0], p2[0])
-            bw = abs(p2[0] - p1[0])
-            by0 = alg["cl_y"] - bw_m / 2.0
+            bx0 = alg.get("bx0", min(p1[0], p2[0]))
+            bw = alg.get("bw", abs(p2[0] - p1[0]))
+            by0 = alg.get("by0", alg["cl_y"] - bw_m / 2.0)
+            mid_y = alg.get("mid_y", by0 + bw_m / 2.0)
             r_b = patches.Rectangle((bx0, by0), bw, bw_m, facecolor=cfg["fc"], edgecolor=cfg["ec"], lw=1.8, alpha=0.92, zorder=3)
             ax.add_patch(r_b)
-            ax.text(bx0 + bw / 2.0, alg["cl_y"], tag, ha="center", va="center", color=cfg["tc"], fontweight="bold", fontsize=9.5, zorder=6,
+            ax.text(bx0 + bw / 2.0, mid_y, tag, ha="center", va="center", color=cfg["tc"], fontweight="bold", fontsize=9.5, zorder=6,
                     bbox=dict(boxstyle="round,pad=0.12", fc="#ffffff", ec=cfg["ec"], lw=0.8, alpha=0.9))
         elif dir_b == "Y":
-            by0 = min(p1[1], p2[1])
-            bh = abs(p2[1] - p1[1])
-            bx0 = alg["cl_x"] - bw_m / 2.0
+            by0 = alg.get("by0", min(p1[1], p2[1]))
+            bh = alg.get("bh", abs(p2[1] - p1[1]))
+            bx0 = alg.get("bx0", alg["cl_x"] - bw_m / 2.0)
+            mid_x = alg.get("mid_x", bx0 + bw_m / 2.0)
             r_b = patches.Rectangle((bx0, by0), bw_m, bh, facecolor=cfg["fc"], edgecolor=cfg["ec"], lw=1.8, alpha=0.92, zorder=3)
             ax.add_patch(r_b)
-            ax.text(alg["cl_x"], by0 + bh / 2.0, tag, ha="center", va="center", rotation=90, color=cfg["tc"], fontweight="bold", fontsize=9.5, zorder=6,
+            ax.text(mid_x, by0 + bh / 2.0, tag, ha="center", va="center", rotation=90, color=cfg["tc"], fontweight="bold", fontsize=9.5, zorder=6,
                     bbox=dict(boxstyle="round,pad=0.12", fc="#ffffff", ec=cfg["ec"], lw=0.8, alpha=0.9))
         else:
             dx = p2[0] - p1[0]

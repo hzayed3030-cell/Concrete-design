@@ -2322,8 +2322,18 @@ def draw_comprehensive_foundation_sketch(
                     "n_branches": b.get("n_branches", 2),
                 }
 
+    eff_edge_cols = edge_columns if edge_columns is not None else foundation_res.get("edge_columns")
+    eff_sb = slab_bounds if slab_bounds is not None else foundation_res.get("slab_bounds")
+
     for gb in gb_list:
-        alg = align_ground_beam_coords(gb, unique_xs, unique_ys)
+        alg = align_ground_beam_coords(
+            gb, unique_xs, unique_ys,
+            active_columns=active_columns,
+            col_props=col_props,
+            col_transforms=col_transforms,
+            edge_columns=eff_edge_cols,
+            slab_bounds=eff_sb,
+        )
         p1 = alg["p1"]
         p2 = alg["p2"]
         dir_b = alg["dir"]
@@ -2331,36 +2341,40 @@ def draw_comprehensive_foundation_sketch(
         mark = gb.get("tag", gb.get("model_mark", "GB1"))
 
         if dir_b == "X":
-            bx0 = min(p1[0], p2[0])
-            bw = abs(p2[0] - p1[0])
-            by0 = alg["cl_y"] - gb_w / 2.0
+            bx0 = alg.get("bx0", min(p1[0], p2[0]))
+            bw = alg.get("bw", abs(p2[0] - p1[0]))
+            by0 = alg.get("by0", alg["cl_y"] - gb_w / 2.0)
+            mid_y = alg.get("mid_y", by0 + gb_w / 2.0)
             r_gb = patches.Rectangle((bx0, by0), bw, gb_w, facecolor="#e0e7ff", edgecolor="#4338ca", lw=1.8, alpha=0.88, zorder=3)
             ax.add_patch(r_gb)
-            ax.text(bx0 + bw/2.0, alg["cl_y"], str(mark),
+            ax.text(bx0 + bw/2.0, mid_y, str(mark),
                     color="#312e81", fontsize=8.5, fontweight="bold", ha="center", va="center", zorder=6,
                     bbox=dict(boxstyle="round,pad=0.12", fc="#ffffff", ec="#6366f1", lw=0.9, alpha=0.9))
         elif dir_b == "Y":
-            by0 = min(p1[1], p2[1])
-            bh = abs(p2[1] - p1[1])
-            bx0 = alg["cl_x"] - gb_w / 2.0
+            by0 = alg.get("by0", min(p1[1], p2[1]))
+            bh = alg.get("bh", abs(p2[1] - p1[1]))
+            bx0 = alg.get("bx0", alg["cl_x"] - gb_w / 2.0)
+            mid_x = alg.get("mid_x", bx0 + gb_w / 2.0)
             r_gb = patches.Rectangle((bx0, by0), gb_w, bh, facecolor="#e0e7ff", edgecolor="#4338ca", lw=1.8, alpha=0.88, zorder=3)
             ax.add_patch(r_gb)
-            ax.text(alg["cl_x"], by0 + bh/2.0, str(mark),
+            ax.text(mid_x, by0 + bh/2.0, str(mark),
                     color="#312e81", fontsize=8.5, fontweight="bold", ha="center", va="center", rotation=90, zorder=6,
                     bbox=dict(boxstyle="round,pad=0.12", fc="#ffffff", ec="#6366f1", lw=0.9, alpha=0.9))
         else:
-            dx_val = p2[0] - p1[0]
-            dy_val = p2[1] - p1[1]
+            p1_c = alg.get("p1", p1)
+            p2_c = alg.get("p2", p2)
+            dx_val = p2_c[0] - p1_c[0]
+            dy_val = p2_c[1] - p1_c[1]
             th_gb = math.atan2(dy_val, dx_val)
             nx_gb = -math.sin(th_gb) * gb_w / 2.0
             ny_gb = math.cos(th_gb) * gb_w / 2.0
             poly_gb = patches.Polygon([
-                (p1[0] + nx_gb, p1[1] + ny_gb), (p2[0] + nx_gb, p2[1] + ny_gb),
-                (p2[0] - nx_gb, p2[1] - ny_gb), (p1[0] - nx_gb, p1[1] - ny_gb)
+                (p1_c[0] + nx_gb, p1_c[1] + ny_gb), (p2_c[0] + nx_gb, p2_c[1] + ny_gb),
+                (p2_c[0] - nx_gb, p2_c[1] - ny_gb), (p1_c[0] - nx_gb, p1_c[1] - ny_gb)
             ], facecolor="#e0e7ff", edgecolor="#4338ca", lw=1.8, alpha=0.88, zorder=3)
             ax.add_patch(poly_gb)
-            mid_x_gb = (p1[0] + p2[0]) / 2.0
-            mid_y_gb = (p1[1] + p2[1]) / 2.0
+            mid_x_gb = alg.get("mid_x", (p1_c[0] + p2_c[0]) / 2.0)
+            mid_y_gb = alg.get("mid_y", (p1_c[1] + p2_c[1]) / 2.0)
             rot_deg_gb = math.degrees(th_gb)
             if rot_deg_gb > 90:
                 rot_deg_gb -= 180
