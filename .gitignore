@@ -12,4 +12,8 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.venv/
+.venv/
+.github_token
+*.token
+.env
+
