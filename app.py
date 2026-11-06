@@ -1708,18 +1708,31 @@ def sync_project_to_github(commit_msg: str, repo_dir: str, custom_token: str = N
         except Exception as ex:
             return subprocess.CompletedProcess(["git"] + args, 1, "", str(ex))
 
-    # 1. Clean stale locks & interrupted states
-    for rel in [
-        os.path.join(".git", "index.lock"),
-        os.path.join(".git", "HEAD.lock"),
-        os.path.join(".git", "refs", "heads", "main.lock"),
-    ]:
-        p = os.path.join(repo_dir, rel)
-        if os.path.exists(p):
-            try:
-                os.remove(p)
-            except OSError:
-                pass
+    # 1. Clean stale locks & interrupted states (with Windows zombie git termination & recursive lock sweep)
+    import time
+    if sys.platform == "win32":
+        try:
+            subprocess.run(["taskkill", "/F", "/IM", "git.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3)
+        except Exception:
+            pass
+        time.sleep(0.2)
+
+    def _sweep_git_locks():
+        git_dir = os.path.join(repo_dir, ".git")
+        if os.path.isdir(git_dir):
+            for root, dirs, files in os.walk(git_dir):
+                for f in files:
+                    if f.endswith(".lock"):
+                        lp = os.path.join(root, f)
+                        for _ in range(3):
+                            try:
+                                os.chmod(lp, 0o777)
+                                os.remove(lp)
+                                break
+                            except Exception:
+                                time.sleep(0.15)
+
+    _sweep_git_locks()
 
     run_cmd(["rebase", "--abort"], timeout=10)
     run_cmd(["merge", "--abort"], timeout=10)
@@ -1737,8 +1750,13 @@ def sync_project_to_github(commit_msg: str, repo_dir: str, custom_token: str = N
     r_br = run_cmd(["rev-parse", "--abbrev-ref", "HEAD"], timeout=10)
     current_branch = (r_br.stdout or "main").strip() or "main"
 
-    # 4. Stage all files
+    # 4. Stage all files (with automatic lock retry)
     r_add = run_cmd(["add", "-A"], timeout=30)
+    if r_add.returncode != 0 and "index.lock" in ((r_add.stdout or "") + (r_add.stderr or "")):
+        time.sleep(0.4)
+        _sweep_git_locks()
+        time.sleep(0.2)
+        r_add = run_cmd(["add", "-A"], timeout=30)
     log("git add -A", r_add)
     if r_add.returncode != 0:
         return False, "تعذر تجهيز الملفات (git add)", "\n\n".join(logs)
