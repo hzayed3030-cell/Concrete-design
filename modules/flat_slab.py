@@ -16299,7 +16299,7 @@ def render(is_standalone: bool = False):
             padding: 12px 20px !important;
             margin: 6px 0 8px 0 !important;
             font-family: 'Cairo', 'Tajawal', 'Segoe UI', Tahoma, sans-serif !important;
-            font-size: 17.15px !important;
+            font-size: 15.44px !important;
             font-weight: 900 !important;
             text-align: center !important;
             display: flex !important;
@@ -16394,8 +16394,8 @@ def render(is_standalone: bool = False):
                 width: 100% !important;
             }
             div.m1-philo-btn-wrapper button {
-                background: linear-gradient(135deg, #292524 0%, #44403c 100%) !important;
-                color: #fde68a !important;
+                background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 45%, #fde68a 100%) !important;
+                color: #78350f !important;
                 font-family: 'Cairo', 'Tajawal', 'Segoe UI', Tahoma, sans-serif !important;
                 font-size: 14px !important;
                 font-weight: 900 !important;
@@ -16410,9 +16410,9 @@ def render(is_standalone: bool = False):
                 transition: all 0.25s ease-in-out !important;
             }
             div.m1-philo-btn-wrapper button:hover {
-                background: linear-gradient(135deg, #44403c 0%, #78350f 100%) !important;
-                border-color: #ffffff !important;
-                color: #ffffff !important;
+                background: linear-gradient(135deg, #ffffff 0%, #fffbeb 100%) !important;
+                border-color: #d97706 !important;
+                color: #92400e !important;
                 box-shadow: 0 4px 14px rgba(245, 158, 11, 0.60) !important;
                 transform: translateY(-1px) !important;
             }
@@ -16423,15 +16423,15 @@ def render(is_standalone: bool = False):
             div.m1-philo-btn-wrapper button div,
             div.m1-philo-btn-wrapper button strong,
             div.m1-philo-btn-wrapper button b {
-                color: #fde68a !important;
+                color: #78350f !important;
                 font-family: 'Cairo', 'Tajawal', 'Segoe UI', Tahoma, sans-serif !important;
                 font-weight: 900 !important;
                 font-size: 14px !important;
                 letter-spacing: 0.3px !important;
-                -webkit-text-stroke: 0.35px rgba(253, 230, 138, 0.35) !important;
+                -webkit-text-stroke: 0 !important;
             }
             div.m1-philo-btn-wrapper button:hover * {
-                color: #ffffff !important;
+                color: #92400e !important;
             }
             </style>
             """,
@@ -16447,7 +16447,7 @@ def render(is_standalone: bool = False):
             st.markdown(
                 """
                 <div class="m1-title-banner-center" style="text-align: center; display: flex; align-items: center; justify-content: center; height: 100%; min-height: 42px;">
-                    <span style="font-family: 'Cairo', 'Tajawal', 'Segoe UI', Tahoma, sans-serif; font-size: 17.15px; font-weight: 900; color: #ffffff; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.65); letter-spacing: 0.4px; white-space: nowrap;">
+                    <span style="font-family: 'Cairo', 'Tajawal', 'Segoe UI', Tahoma, sans-serif; font-size: 15.44px; font-weight: 900; color: #ffffff; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.65); letter-spacing: 0.4px; white-space: nowrap;">
                         🟦 Module 1 – Integrated Structural Design (ECP 203) (التصميم الإنشائي المتكامل)
                     </span>
                 </div>
