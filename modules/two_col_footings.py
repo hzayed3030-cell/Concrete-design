@@ -101,6 +101,7 @@ def design_isolated_footing_model(
     cover_cm: float = 7.0,
     Phi_mm: int = 16,
     Phi_col_mm: int = 16,
+    t_override_cm: float = None,
 ):
     """
     Design unified isolated footing model (F1, F2, F3) according to ECP 203.
@@ -150,9 +151,14 @@ def design_isolated_footing_model(
         d_punch = max(d_punch, d_req)
 
     d_cm = _r5(max(d_shear, d_punch, 35.0))
-    t_cm = _r5(d_cm + cover_cm + (Phi_mm / 20.0))
-    if t_cm < 40:
-        t_cm = 40
+    t_cm_calc = _r5(d_cm + cover_cm + (Phi_mm / 20.0))
+    if t_cm_calc < 40:
+        t_cm_calc = 40.0
+    if t_override_cm is not None and float(t_override_cm) > 0:
+        t_cm = _r5(max(float(t_override_cm), 40.0))
+        d_cm = t_cm - cover_cm - (Phi_mm / 20.0)
+    else:
+        t_cm = t_cm_calc
         d_cm = t_cm - cover_cm - (Phi_mm / 20.0)
 
     # Re-verify shear and punching stresses
@@ -175,12 +181,66 @@ def design_isolated_footing_model(
     As_L = _As_design_cm2(M_L_kgcm, d_cm, B_cm, Fcu, Fy)
     As_B = _As_design_cm2(M_B_kgcm, d_cm, L_cm, Fcu, Fy)
 
+    # 1. Evaluate with the selected diameter
     a_bar_cm2 = math.pi * ((Phi_mm / 10.0)**2) / 4.0
-    n_m_L = max(5, math.ceil((As_L / (B_cm / 100.0)) / a_bar_cm2))
-    n_m_B = max(5, math.ceil((As_B / (L_cm / 100.0)) / a_bar_cm2))
+    n_m_L_sel = max(5, math.ceil((As_L / (B_cm / 100.0)) / a_bar_cm2))
+    n_m_B_sel = max(5, math.ceil((As_B / (L_cm / 100.0)) / a_bar_cm2))
+    max_bars_m_sel = max(n_m_L_sel, n_m_B_sel)
 
-    total_bars_L = math.ceil(n_m_L * (B_cm / 100.0))
-    total_bars_B = math.ceil(n_m_B * (L_cm / 100.0))
+    # Spacing checks:
+    # Clear spacing in mm: (1000 - n * Phi) / (n - 1)
+    s_clear_mm = (1000.0 - max_bars_m_sel * Phi_mm) / max(1, max_bars_m_sel - 1)
+
+    # ECP 203 Check:
+    # Egyptian Code Clause 4-2-1-2 & 6-2-1:
+    # - Maximum bars per meter is 10 bars/m (spacing c/c >= 100 mm).
+    # - Clear spacing between bars >= 70 mm (and >= max aggregate size 25mm + 5mm) to prevent honeycombing.
+    phi_rejected = (max_bars_m_sel > 10) or (s_clear_mm < 70.0)
+
+    # Standard Egyptian footings rebar diameters (strictly excluding 14 mm!)
+    std_ftg_dias = [10, 12, 16, 18, 20, 22, 25]
+
+    safe_phi = Phi_mm
+    safe_n_L = n_m_L_sel
+    safe_n_B = n_m_B_sel
+
+    if phi_rejected:
+        # Search for the minimum safe diameter that satisfies ECP 203 spacing
+        for cand_phi in std_ftg_dias:
+            a_cand = math.pi * ((cand_phi / 10.0)**2) / 4.0
+            n_L_c = max(5, math.ceil((As_L / (B_cm / 100.0)) / a_cand))
+            n_B_c = max(5, math.ceil((As_B / (L_cm / 100.0)) / a_cand))
+            max_c = max(n_L_c, n_B_c)
+            s_clr_c = (1000.0 - max_c * cand_phi) / max(1, max_c - 1)
+            if max_c <= 10 and s_clr_c >= 70.0:
+                safe_phi = cand_phi
+                safe_n_L = n_L_c
+                safe_n_B = n_B_c
+                break
+        else:
+            safe_phi = 25
+            a_cand = math.pi * ((25 / 10.0)**2) / 4.0
+            safe_n_L = max(5, math.ceil((As_L / (B_cm / 100.0)) / a_cand))
+            safe_n_B = max(5, math.ceil((As_B / (L_cm / 100.0)) / a_cand))
+
+    # The program DOES NOT ACCEPT the failing diameter:
+    # It enforces safe_phi for final execution and quantities
+    actual_phi = safe_phi if phi_rejected else Phi_mm
+    actual_n_L = safe_n_L if phi_rejected else n_m_L_sel
+    actual_n_B = safe_n_B if phi_rejected else n_m_B_sel
+
+    total_bars_L = math.ceil(actual_n_L * (B_cm / 100.0))
+    total_bars_B = math.ceil(actual_n_B * (L_cm / 100.0))
+
+    rft_long_str = f"{actual_n_L}Ø{actual_phi}/m ({total_bars_L}Ø{actual_phi})"
+    rft_short_str = f"{actual_n_B}Ø{actual_phi}/m ({total_bars_B}Ø{actual_phi})"
+
+    rejection_reason = (
+        f"طبقاً للكود المصري لتصميم وتنفيذ المنشآت الخرسانية (ECP 203 - بند 4-2-1 و 6-2-1): "
+        f"الحد الأقصى لعدد أسياخ التسليح في المتر هو 10 أسياخ/م' (المسافة لا تقل عن 100 مم لمنع التعشيش وضمان تغلغل الخرسانة والركام). "
+        f"القطر المختار Φ{Phi_mm} يتطلب {max_bars_m_sel} أسياخ/م' وهو ما يتجاوز الحد الكودي المسموح به. "
+        f"تم رفض هذا القطر كودياً ولا يقبله البرنامج، وتم الترقية واعتماد القطر الآمن Φ{safe_phi} مم بواقع {max(safe_n_L, safe_n_B)} أسياخ/م'."
+    ) if phi_rejected else ""
 
     # Top reinforcement (shrinkage if t >= 80 cm)
     if t_cm >= 80:
@@ -194,6 +254,13 @@ def design_isolated_footing_model(
     is_safe = q_ok and s_ok and p_ok
 
     Pu_kN = Pu_ton * 9.80665
+
+    if phi_rejected:
+        status_str = f"⚠️ تم رفض Φ{Phi_mm} واعتماد Φ{safe_phi} (مطلوب زيادة القطر كودياً)"
+    elif not is_safe:
+        status_str = "Review ⚠️ (تحقق من إجهادات التربة أو القص)"
+    else:
+        status_str = "Safe ✅ ومحقق للكود"
 
     return {
         "model_id": model_id,
@@ -209,14 +276,30 @@ def design_isolated_footing_model(
         "L_cm": L_cm,
         "B_cm": B_cm,
         "t_cm": t_cm,
+        "t_cm_calc": locals().get("t_cm_calc", t_cm),
         "d_cm": d_cm,
         "dims_str": f"{L_cm} × {B_cm} × {t_cm} cm",
-        "rft_long_str": f"{n_m_L}Ø{Phi_mm}/m ({total_bars_L}Ø{Phi_mm})",
-        "rft_short_str": f"{n_m_B}Ø{Phi_mm}/m ({total_bars_B}Ø{Phi_mm})",
+        "selected_phi": Phi_mm,
+        "Phi_mm": actual_phi,
+        "actual_phi": actual_phi,
+        "safe_phi": safe_phi,
+        "phi_rejected": phi_rejected,
+        "rejection_reason": rejection_reason,
+        "max_bars_m_selected": max_bars_m_sel,
+        "max_bars_m_safe": max(safe_n_L, safe_n_B),
+        "s_clear_mm": s_clear_mm,
+        "n_m_L_selected": n_m_L_sel,
+        "n_m_B_selected": n_m_B_sel,
+        "n_m_L": actual_n_L,
+        "n_m_B": actual_n_B,
+        "total_bars_L": total_bars_L,
+        "total_bars_B": total_bars_B,
+        "rft_long_str": rft_long_str,
+        "rft_short_str": rft_short_str,
         "top_rft_str": top_rft_str,
         "Ld_str": f"{Ld_cm} cm (60Ø)",
-        "status_str": "Safe ✅" if is_safe else "Review ⚠️",
-        "is_safe": is_safe,
+        "status_str": status_str,
+        "is_safe": is_safe and not phi_rejected,
         "q_act": q_act,
         "q_net": q_net_kgcm2,
         "util_q": util_q,
@@ -1179,6 +1262,8 @@ def classify_and_design_building_foundations(
     slab_bounds: dict = None,
     col_transforms: dict = None,
     col_props: dict = None,
+    user_overrides: dict = None,
+    col_models: dict = None,
 ) -> dict:
     """
     Automated building foundation classification and multi-module design engine:
@@ -1219,6 +1304,12 @@ def classify_and_design_building_foundations(
             or S.cfg_val("fs_col_props", {})
             or {}
         )
+    if col_models is None:
+        col_models = (
+            st.session_state.get("fs_col_models_dict")
+            or S.cfg_val("fs_col_models_dict")
+            or {}
+        )
 
     from modules.flat_slab import compute_column_geometry
     for c in active_columns:
@@ -1236,8 +1327,18 @@ def classify_and_design_building_foundations(
                 or {}
             )
 
-        c_w_cm = float(c_prop.get("b_cm") or c.get("b_cm") or c.get("bc") or col_b_dim)
-        c_d_cm = float(c_prop.get("t_cm") or c.get("t_cm") or c.get("tc") or col_c_dim)
+        c_type_raw = c.get("type", "Interior")
+        m_info_res = (col_models.get(c_type_raw) or col_models.get(c.get("model_mark", ""))) if col_models else None
+        if m_info_res:
+            c_w_cm = float(m_info_res["b_cm"])
+            c_d_cm = float(m_info_res["t_cm"])
+            c_mk_resolved = m_info_res["mark"]
+            c_spec_resolved = m_info_res["spec_str"]
+        else:
+            c_w_cm = float(c.get("b_cm") or c.get("bc") or col_b_dim)
+            c_d_cm = float(c.get("t_cm") or c.get("tc") or col_c_dim)
+            c_mk_resolved = c.get("model_mark") or ("C1" if c_type_raw == "Interior" else ("C2" if c_type_raw == "Edge" else "C3"))
+            c_spec_resolved = c.get("col_spec_str") or f"{c_mk_resolved} = {int(round(c_w_cm))}*{int(round(c_d_cm))} cm"
 
         c_trans = {}
         if isinstance(col_transforms, dict):
@@ -1283,6 +1384,8 @@ def classify_and_design_building_foundations(
         c["tc"] = geom["tc"]
         c["b_cm"] = c_w_cm
         c["t_cm"] = c_d_cm
+        c["model_mark"] = c_mk_resolved
+        c["col_spec_str"] = c_spec_resolved
         c["direction"] = geom["direction"]
         c["shift_x"] = geom["shift_x"]
         c["shift_y"] = geom["shift_y"]
@@ -1382,8 +1485,8 @@ def classify_and_design_building_foundations(
 
             m9_in.update({
                 "S": max(2.0, S_m), "edge_clearance": 0.0,
-                "a1": float(c1.get("tc", col_c_dim)), "b1": float(c1.get("bc", col_b_dim)),
-                "a2": float(c2.get("tc", col_c_dim)), "b2": float(c2.get("bc", col_b_dim)),
+                "a1": float(c1.get("t_cm") or c1.get("tc") or col_c_dim), "b1": float(c1.get("b_cm") or c1.get("bc") or col_b_dim),
+                "a2": float(c2.get("t_cm") or c2.get("tc") or col_c_dim), "b2": float(c2.get("b_cm") or c2.get("bc") or col_b_dim),
                 "P1_u": P1u, "P2_u": P2u, "col_weight_factor": 1.0,
                 "q_all_net": q_all_net, "fcu": fcu, "fy": fy, "t_pc": 10.0,
                 "strap_b": strap_b_val,
@@ -1480,9 +1583,9 @@ def classify_and_design_building_foundations(
             m10_in = dict(DEFAULTS_M10)
             m10_in.update({
                 "edge_clearance_x": 0.0, "edge_clearance_y": 0.0,
-                "a1": float(c1.get("tc", col_c_dim)), "b1": float(c1.get("bc", col_b_dim)),
+                "a1": float(c1.get("t_cm") or c1.get("tc") or col_c_dim), "b1": float(c1.get("b_cm") or c1.get("bc") or col_b_dim),
                 "X2": max(1.5, S_m * math.cos(theta)), "Y2": max(1.5, S_m * math.sin(theta)),
-                "a2": float(c2.get("tc", col_c_dim)), "b2": float(c2.get("bc", col_b_dim)),
+                "a2": float(c2.get("t_cm") or c2.get("tc") or col_c_dim), "b2": float(c2.get("b_cm") or c2.get("bc") or col_b_dim),
                 "P1_u": P1u, "P2_u": P2u,
                 "col_weight_factor": 1.0,
                 "q_all_net": q_all_net, "fcu": fcu, "fy": fy, "t_pc": 10.0,
@@ -1584,13 +1687,35 @@ def classify_and_design_building_foundations(
         m_id = f"F{idx}"
         ftg_label_map[grp_key] = m_id
         pu_gov = max([float(c.get("pu_tot", def_pu)) for c in grp_cols], default=def_pu)
-        c_gov = max([float(c.get("tc", col_c_dim)) for c in grp_cols], default=col_c_dim)
-        b_gov = max([float(c.get("bc", col_b_dim)) for c in grp_cols], default=col_b_dim)
+
+        # Get governing column model dimensions directly from Rectangular Columns Design
+        m_info_grp = (col_models.get(grp_key) or col_models.get(grp_cols[0].get("model_mark", ""))) if col_models else None
+        if m_info_grp:
+            c_gov = float(m_info_grp["t_cm"])
+            b_gov = float(m_info_grp["b_cm"])
+            col_mk_ftg = m_info_grp["mark"]
+            col_spec_ftg = m_info_grp["spec_str"]
+        else:
+            c_gov = max([float(c.get("t_cm") or c.get("tc") or col_c_dim) for c in grp_cols], default=col_c_dim)
+            b_gov = max([float(c.get("b_cm") or c.get("bc") or col_b_dim) for c in grp_cols], default=col_b_dim)
+            col_mk_ftg = grp_cols[0].get("model_mark") or ("C1" if grp_key == "Interior" else ("C2" if grp_key == "Edge" else "C3"))
+            col_spec_ftg = f"{col_mk_ftg} = {int(round(b_gov))}*{int(round(c_gov))} cm"
+
+        overrides = user_overrides or {}
+        m_phi = int(overrides.get(f"{m_id}_phi", overrides.get(f"{grp_key}_phi", phi)))
+        if m_phi == 14:
+            m_phi = 16
+        m_t_ov = overrides.get(f"{m_id}_t", overrides.get(f"{grp_key}_t"))
 
         m_obj = design_isolated_footing_model(
-            m_id, grp_title, ", ".join([c["id"] for c in grp_cols]),
-            pu_gov, c_gov, b_gov, q_all_net, fcu, fy, cov, phi
+            m_id, grp_title, col_mk_ftg,
+            pu_gov, c_gov, b_gov, q_all_net, fcu, fy, cov, m_phi,
+            t_override_cm=m_t_ov
         )
+        m_obj["col_model_mark"] = col_mk_ftg
+        m_obj["col_spec_str"] = col_spec_ftg
+        m_obj["col_b_cm"] = b_gov
+        m_obj["col_t_cm"] = c_gov
         m_obj["cols_list"] = grp_cols
         m_obj["raw_type"] = grp_key
         m_obj["model_id"] = m_id
@@ -1635,11 +1760,16 @@ def classify_and_design_building_foundations(
             continue
         pc_L = m["L_cm"] + 40
         pc_B = m["B_cm"] + 40
-        cols_str = f"{len(m_cols)} أعمدة ({', '.join([c['id'] for c in m_cols])})"
+        col_model_cell = m.get("col_spec_str")
+        if not col_model_cell:
+            col_mk = m.get("col_model_mark") or m_cols[0].get("model_mark") or ("C1" if m.get("raw_type") == "Interior" else ("C2" if m.get("raw_type") == "Edge" else "C3"))
+            col_w = int(round(float(m.get("col_b_cm") or m_cols[0].get("b_cm") or 30)))
+            col_t = int(round(float(m.get("col_t_cm") or m_cols[0].get("t_cm") or 50)))
+            col_model_cell = f"{col_mk} = {col_w}*{col_t} cm"
         unified_rows.append({
             "نموذج القاعدة (Model)": f"{m['model_id']} ({m['model_label']})",
             "النوع والتصنيف": "قاعدة منفصلة (Module 3)",
-            "الأعمدة المرتكزة (Columns)": cols_str,
+            "نموذج العمود": col_model_cell,
             "أقصى حمل تصميمي Pu (ton)": f"{m['Pu_ton']:.2f} ton (الحاكم)",
             "أبعاد المسلحة R.C. (cm)": f"{m['L_cm']} × {m['B_cm']} × {m['t_cm']}",
             "أبعاد العادية P.C. (cm)": f"{pc_L} × {pc_B} × 20",
@@ -1660,7 +1790,9 @@ def classify_and_design_building_foundations(
         ftgs_conc_rc_val += v_rc
         ftgs_conc_pc_val += v_pc
 
-        phi_f = phi
+        phi_f = int(f.get("Phi_mm", phi))
+        if phi_f == 14:
+            phi_f = 16
         unit_w = (phi_f ** 2) / 162.0
         n_L = max(5, int(math.ceil(B_m * 5.0)))
         len_L = L_m - 0.10 + 2.0 * max(0.20, t_m - 0.10)
@@ -1712,10 +1844,25 @@ def classify_and_design_building_foundations(
 
         cf_pc_L = cf["Lc_cm"] + 40
         cf_pc_B = cf["Bc_cm"] + 40
+        c1_spec = cf.get("col1", {}).get("col_spec_str")
+        if not c1_spec:
+            c1_mk = cf.get("col1", {}).get("model_mark") or ("C2" if cf.get("col1", {}).get("type") == "Edge" else "C1")
+            c1_w = int(round(float(cf.get("col1", {}).get("b_cm") or cf.get("col1", {}).get("bc") or 30)))
+            c1_t = int(round(float(cf.get("col1", {}).get("t_cm") or cf.get("col1", {}).get("tc") or 50)))
+            c1_spec = f"{c1_mk} = {c1_w}*{c1_t} cm"
+
+        c2_spec = cf.get("col2", {}).get("col_spec_str")
+        if not c2_spec:
+            c2_mk = cf.get("col2", {}).get("model_mark") or ("C1" if cf.get("col2", {}).get("type") == "Interior" else "C2")
+            c2_w = int(round(float(cf.get("col2", {}).get("b_cm") or cf.get("col2", {}).get("bc") or 30)))
+            c2_t = int(round(float(cf.get("col2", {}).get("t_cm") or cf.get("col2", {}).get("tc") or 60)))
+            c2_spec = f"{c2_mk} = {c2_w}*{c2_t} cm"
+
+        cf_col_str = f"{c1_spec} + {c2_spec}"
         unified_rows.append({
             "نموذج القاعدة (Model)": f"{cf['name']} (مشتركة)",
             "النوع والتصنيف": "قاعدة مشتركة (Module 8)",
-            "الأعمدة المرتكزة (Columns)": cf["supported_cols"],
+            "نموذج العمود": cf_col_str,
             "أقصى حمل تصميمي Pu (ton)": f"Ru = {ru_cf:.2f} ton",
             "أبعاد المسلحة R.C. (cm)": f"{cf['Lc_cm']} × {cf['Bc_cm']} × {cf['tc_cm']}",
             "أبعاد العادية P.C. (cm)": f"{cf_pc_L} × {cf_pc_B} × 20",
@@ -1753,10 +1900,24 @@ def classify_and_design_building_foundations(
         _add_dia(16, wt_tr1, "تسليح عرضي سفلي لقواعد الجار (Edge Footings)")
         _add_dia(12, wt_long1, "تسليح طولي لقواعد الجار (Edge Footings)")
 
+        sf_c1_spec = sf['col1'].get('col_spec_str')
+        if not sf_c1_spec:
+            sf_c1_mk = sf['col1'].get('model_mark') or 'C2'
+            sf_c1_w = int(round(float(sf['col1'].get('b_cm') or sf['col1'].get('bc') or 30)))
+            sf_c1_t = int(round(float(sf['col1'].get('t_cm') or sf['col1'].get('tc') or 50)))
+            sf_c1_spec = f"{sf_c1_mk} = {sf_c1_w}*{sf_c1_t} cm"
+
+        sf_c2_spec = sf['col2'].get('col_spec_str')
+        if not sf_c2_spec:
+            sf_c2_mk = sf['col2'].get('model_mark') or 'C1'
+            sf_c2_w = int(round(float(sf['col2'].get('b_cm') or sf['col2'].get('bc') or 30)))
+            sf_c2_t = int(round(float(sf['col2'].get('t_cm') or sf['col2'].get('tc') or 60)))
+            sf_c2_spec = f"{sf_c2_mk} = {sf_c2_w}*{sf_c2_t} cm"
+
         unified_rows.append({
             "نموذج القاعدة (Model)": f"{sf['name']} (قاعدة جار)",
             "النوع والتصنيف": "قاعدة جار خارجية (Module 9)",
-            "الأعمدة المرتكزة (Columns)": f"{sf['col1']['id']} (عمود جار)",
+            "نموذج العمود": f"{sf_c1_spec} (عمود جار)",
             "أقصى حمل تصميمي Pu (ton)": f"Pu = {P1:.1f}t (R1u = {r9.get('Ru1', P1):.1f}t)",
             "أبعاد المسلحة R.C. (cm)": f"{L1_cm} × {B1_cm} × {t1_cm}",
             "أبعاد العادية P.C. (cm)": f"{L1_cm + 40} × {B1_cm + 40} × 20",
@@ -1790,7 +1951,7 @@ def classify_and_design_building_foundations(
         unified_rows.append({
             "نموذج القاعدة (Model)": f"{sf['name']} (قاعدة داخلية)",
             "النوع والتصنيف": "قاعدة داخلية للشداد (Module 9)",
-            "الأعمدة المرتكزة (Columns)": f"{sf['col2']['id']} (عمود داخلي)",
+            "نموذج العمود": f"{sf_c2_spec} (عمود داخلي)",
             "أقصى حمل تصميمي Pu (ton)": f"Pu = {P2:.1f}t (R2u = {r9.get('R2', P2/1.5)*1.5:.1f}t)",
             "أبعاد المسلحة R.C. (cm)": f"{L2_cm} × {B2_cm} × {t2_cm}",
             "أبعاد العادية P.C. (cm)": f"{L2_cm + 40} × {B2_cm + 40} × 20",
@@ -1827,7 +1988,7 @@ def classify_and_design_building_foundations(
         unified_rows.append({
             "نموذج القاعدة (Model)": f"{sf['name']} — Beam (كمرة الشداد)",
             "النوع والتصنيف": "كمرة شداد رابطة (Module 9)",
-            "الأعمدة المرتكزة (Columns)": f"يربط {sf['col1']['id']} مع {sf['col2']['id']} (بحر S = {S_m:.2f}m)",
+            "نموذج العمود": f"يربط {sf_c1_spec} مع {sf_c2_spec} (بحر S = {S_m:.2f}m)",
             "أقصى حمل تصميمي Pu (ton)": f"Mu = {abs(r9.get('Mu_neg', 0.0)):.1f} t.m | Vu = {r9.get('Vu_ton', 0.0):.1f} t",
             "أبعاد المسلحة R.C. (cm)": f"{int(round(sb_m*100))} × {int(round(sD_cm))} × {int(round(S_m*100))} (b×D×L)",
             "أبعاد العادية P.C. (cm)": "دكة عادية أسفل الشداد 20 cm",
@@ -1865,10 +2026,24 @@ def classify_and_design_building_foundations(
         ftgs_steel_kg_val += wt1x + wt1y
         _add_dia(16, wt1x + wt1y, "تسليح شبكة اتجاهين لقواعد الركن (Corner Footings)")
 
+        dsf_c1_spec = dsf['col1'].get('col_spec_str')
+        if not dsf_c1_spec:
+            dsf_c1_mk = dsf['col1'].get('model_mark') or 'C3'
+            dsf_c1_w = int(round(float(dsf['col1'].get('b_cm') or dsf['col1'].get('bc') or 30)))
+            dsf_c1_t = int(round(float(dsf['col1'].get('t_cm') or dsf['col1'].get('tc') or 40)))
+            dsf_c1_spec = f"{dsf_c1_mk} = {dsf_c1_w}*{dsf_c1_t} cm"
+
+        dsf_c2_spec = dsf['col2'].get('col_spec_str')
+        if not dsf_c2_spec:
+            dsf_c2_mk = dsf['col2'].get('model_mark') or 'C1'
+            dsf_c2_w = int(round(float(dsf['col2'].get('b_cm') or dsf['col2'].get('bc') or 30)))
+            dsf_c2_t = int(round(float(dsf['col2'].get('t_cm') or dsf['col2'].get('tc') or 60)))
+            dsf_c2_spec = f"{dsf_c2_mk} = {dsf_c2_w}*{dsf_c2_t} cm"
+
         unified_rows.append({
             "نموذج القاعدة (Model)": f"{dsf['name']} (قاعدة ركن جار)",
             "النوع والتصنيف": "قاعدة ركن خارجية (Module 10)",
-            "الأعمدة المرتكزة (Columns)": f"{dsf['col1']['id']} (عمود ركن)",
+            "نموذج العمود": f"{dsf_c1_spec} (عمود ركن)",
             "أقصى حمل تصميمي Pu (ton)": f"Pu = {P1:.1f}t (R1u = {r10.get('R1u', P1):.1f}t)",
             "أبعاد المسلحة R.C. (cm)": f"{L1x_cm} × {L1y_cm} × {t1_cm}",
             "أبعاد العادية P.C. (cm)": f"{L1x_cm + 40} × {L1y_cm + 40} × 20",
@@ -1902,7 +2077,7 @@ def classify_and_design_building_foundations(
         unified_rows.append({
             "نموذج القاعدة (Model)": f"{dsf['name']} (قاعدة داخلية)",
             "النوع والتصنيف": "قاعدة داخلية للشداد المائل (Module 10)",
-            "الأعمدة المرتكزة (Columns)": f"{dsf['col2']['id']} (عمود داخلي)",
+            "نموذج العمود": f"{dsf_c2_spec} (عمود داخلي)",
             "أقصى حمل تصميمي Pu (ton)": f"Pu = {P2:.1f}t (R2u = {r10.get('R2u', P2):.1f}t)",
             "أبعاد المسلحة R.C. (cm)": f"{L2x_cm} × {L2y_cm} × {t2_cm}",
             "أبعاد العادية P.C. (cm)": f"{L2x_cm + 40} × {L2y_cm + 40} × 20",
@@ -1941,7 +2116,7 @@ def classify_and_design_building_foundations(
         unified_rows.append({
             "نموذج القاعدة (Model)": f"{dsf['name']} — Beam (شداد مائل)",
             "النوع والتصنيف": "كمرة شداد ركنية مائلة (Module 10)",
-            "الأعمدة المرتكزة (Columns)": f"يربط {dsf['col1']['id']} مع {dsf['col2']['id']} قطرياً (بحر S = {S_m:.2f}m @ {dsf['theta_deg']:.1f}°)",
+            "نموذج العمود": f"يربط {dsf_c1_spec} مع {dsf_c2_spec} قطرياً (بحر S = {S_m:.2f}m @ {dsf['theta_deg']:.1f}°)",
             "أقصى حمل تصميمي Pu (ton)": f"Mu = {abs(r10.get('Mu_neg_tm', 0.0)):.1f} t.m | Vu = {r10.get('Vu_ton', 0.0):.1f} t",
             "أبعاد المسلحة R.C. (cm)": f"{int(round(sb_m*100))} × {int(round(sD_cm))} × {int(round(S_m*100))} (b×D×L)",
             "أبعاد العادية P.C. (cm)": "دكة عادية أسفل الشداد 20 cm",
@@ -1954,7 +2129,7 @@ def classify_and_design_building_foundations(
     unified_rows.append({
         "نموذج القاعدة (Model)": "📌 الإجمالي الكلي للأساسات (Total Foundations)",
         "النوع والتصنيف": "يشمل: منفصلة + مشتركة + شدادات وقواعدها",
-        "الأعمدة المرتكزة (Columns)": f"إجمالي {len(active_columns)} عمود بالمبنى",
+        "نموذج العمود": f"إجمالي {len(active_columns)} عمود بالمبنى",
         "أقصى حمل تصميمي Pu (ton)": f"Σ Pu = {ftgs_total_pu:.1f} ton",
         "أبعاد المسلحة R.C. (cm)": f"Σ V_rc = {ftgs_conc_rc_val:.2f} m³",
         "أبعاد العادية P.C. (cm)": f"Σ V_pc = {ftgs_conc_pc_val:.2f} m³",

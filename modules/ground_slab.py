@@ -711,7 +711,7 @@ def render():
                 "gs_rebar_mesh_type",
                 ["شبكة علوية وسفلية (Double Mesh)", "شبكة واحدة بموضع علوي (Single Top Mesh)", "شبكة واحدة بموضع سفلي (Single Bottom Mesh)"],
             )
-            phi_mesh_in = S.selectbox("قطر أسياخ شبك التسليح (mm):", "gs_phi_mesh", [8, 10, 12, 14, 16])
+            phi_mesh_in = S.selectbox("قطر أسياخ شبك التسليح (mm):", "gs_phi_mesh", [8, 10, 12, 16])
             mesh_spacing_in = S.number_input("المسافة بين الأسياخ (cm c/c):", "gs_mesh_spacing", min_value=10.0, max_value=30.0, step=2.5)
 
     res = compute_ground_slab_design(
@@ -1080,7 +1080,7 @@ def render():
         )
 
         # Egyptian Code Standard Diameters (ECP 203)
-        ECP_DIAMETERS = [0, 6, 8, 10, 12, 14, 16, 18, 20, 22, 25, 28, 32]
+        ECP_DIAMETERS = [0, 6, 8, 10, 12, 16, 18, 20, 22, 25, 28, 32]
 
         def _calc_wlm(d):
             return round((d ** 2) / 162.0, 2) if d > 0 else 0.0

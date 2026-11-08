@@ -1623,7 +1623,7 @@ def render_strap_footing_module():
                 st.markdown("<hr style='margin: 6px 0 8px 0; border-color: rgba(96, 165, 250, 0.25);'>", unsafe_allow_html=True)
                 cr1, cr2 = st.columns([1.0, 1.0])
                 with cr1:
-                    _td_opts = [12, 14, 16, 18, 20, 22]
+                    _td_opts = [12, 16, 18, 20, 22]
                     d["trans_bar_dia"] = st.selectbox(
                         "حديد عرضي القواعد",
                         options=_td_opts,
@@ -1657,7 +1657,7 @@ def render_strap_footing_module():
                         help="قطر أسياخ الحديد الطولي الرئيسي لكمرة الشداد (علوي وسفلي)",
                     )
                 with sb_r2:
-                    _st_opts = [8, 10, 12, 14, 16]
+                    _st_opts = [8, 10, 12, 16]
                     d["stirrup_dia"] = st.selectbox(
                         "قطر الكانات (mm)",
                         options=_st_opts,

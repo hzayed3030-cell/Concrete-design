@@ -594,6 +594,36 @@ def validate_edge_column_offset(geom, edge_dir, slab_bounds=None):
 # ── Centralized Unified Warning Whistle (2550 Hz with 36 Hz Trill) ─────────
 play_sharp_whistle_alert = S.play_warning_sound
 
+if hasattr(st, "dialog"):
+    @st.dialog("🚨 تنبيه تحقق هندسي: مدخل أو فحص غير مطابق للكود")
+    def _show_engineering_error_dialog(error_title: str, error_details: list, location_hint: str):
+        st.markdown(
+            f"""
+            <div dir="rtl" style="text-align:right; font-family:sans-serif;">
+                <div style="font-size:16.5px; font-weight:800; color:#b91c1c; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                    ⚠️ {error_title}
+                </div>
+                <div style="background:#fef2f2; border:1.5px solid #fecaca; border-radius:10px; padding:14px 16px; margin-bottom:14px; font-size:14px; color:#1e293b; line-height:1.85;">
+                    <div style="margin-bottom:8px;"><b>📍 مكان الفحص / المدخل:</b> <span style="color:#0284c7; font-weight:700;">{location_hint}</span></div>
+                    <b>⚠️ بيان الخطأ والاشتراط الكودي:</b>
+                    <ul style="margin:8px 0 0 18px; padding:0; color:#991b1b; font-weight:600;">
+                        {"".join(f"<li style=\'margin-bottom:6px;\'>{e}</li>" for e in error_details)}
+                    </ul>
+                </div>
+                <div style="font-size:13px; color:#64748b; margin-bottom:16px; line-height:1.6;">
+                    ℹ️ تم إطلاق صافرة التنبيه الصوتية لتوجيهك فوراً إلى هذا البند غير المقبول كودياً. يرجى مراجعة وتعديل المدخلات بالقسم الموضح أعلاه لتحقيق الأمان الكودي.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        if st.button("موافق (OK) ✅", key="_btn_dismiss_eng_err_dialog", use_container_width=True, type="primary"):
+            st.session_state["_eng_err_dialog_dismissed_token"] = st.session_state.get("_eng_err_pending_token")
+            st.rerun()
+else:
+    def _show_engineering_error_dialog(error_title: str, error_details: list, location_hint: str):
+        pass
+
 
 def is_edge_column_verified(col_id, geom=None, edge_columns=None, alt_id=None, slab_bounds=None):
     """
@@ -16804,6 +16834,15 @@ def render(is_standalone: bool = False):
             )
         if _step2_min_lines:
             S.play_warning_sound()
+            clean_errs_s2 = [re.sub(r'<[^>]+>', '', x).strip() for x in _step2_min_lines]
+            err_tok_s2 = f"step2_mesh_{hash(tuple(clean_errs_s2))}"
+            if st.session_state.get("_eng_err_dialog_dismissed_token") != err_tok_s2:
+                st.session_state["_eng_err_pending_token"] = err_tok_s2
+                _show_engineering_error_dialog(
+                    error_title="مخالفة الحد الأدنى لحديد شبكة البلاطة (ECP 203)",
+                    error_details=clean_errs_s2,
+                    location_hint="🟦 Module 1 — الخطوة 2: شبكة تسليح البلاطة (Step 2 - Slabs Reinforcement)"
+                )
             st.markdown(
                 f"""
                 <div dir="rtl" style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 50%, #991b1b 100%);
@@ -18085,7 +18124,36 @@ def render(is_standalone: bool = False):
                 indiv_col_designs.append(r_des)
 
         if col_designs:
-            with st.expander(f"🏛️ Rectangular Columns Design — {num_floors} Floors (التصميم الإنشائي لنماذج الأعمدة المستطيلة)", expanded=False):
+            # ── 1. Determine Confirmed Column Dimensions & Track Pending Edits ──
+            confirmed_col_dims = st.session_state.get("fs_confirmed_col_dims")
+            if not isinstance(confirmed_col_dims, dict) or not confirmed_col_dims:
+                confirmed_col_dims = S.cfg_val("fs_confirmed_col_dims", {})
+                if not isinstance(confirmed_col_dims, dict):
+                    confirmed_col_dims = {}
+
+            # Populate defaults for any model not yet confirmed
+            for des in col_designs:
+                m_key = des["raw_type"]
+                if m_key not in confirmed_col_dims:
+                    leg_b = st.session_state.get(f"fs_adopted_b_{m_key}")
+                    leg_t = st.session_state.get(f"fs_adopted_t_{m_key}")
+                    b_init = float(leg_b) if leg_b is not None else float(des["b"])
+                    t_init = float(leg_t) if leg_t is not None else float(des["t"])
+                    confirmed_col_dims[m_key] = {"b": b_init, "t": t_init}
+            st.session_state["fs_confirmed_col_dims"] = confirmed_col_dims
+
+            # Pre-check if any widget input currently in session_state differs from confirmed
+            has_pending_col_diff = False
+            for des in col_designs:
+                m_key = des["raw_type"]
+                curr_b_val = st.session_state.get(f"fs_adopted_b_{m_key}")
+                curr_t_val = st.session_state.get(f"fs_adopted_t_{m_key}")
+                if curr_b_val is not None and abs(float(curr_b_val) - float(confirmed_col_dims[m_key]["b"])) > 0.01:
+                    has_pending_col_diff = True
+                if curr_t_val is not None and abs(float(curr_t_val) - float(confirmed_col_dims[m_key]["t"])) > 0.01:
+                    has_pending_col_diff = True
+
+            with st.expander(f"🏛️ Rectangular Columns Design — {num_floors} Floors (التصميم الإنشائي لنماذج الأعمدة المستطيلة)", expanded=has_pending_col_diff):
                 # ── 📊 حصر كميات الخرسانة والحديد ومواد البناء لجميع الأعمدة (Columns BOQ & Materials) ──
                 cnt_int = sum(1 for c in _active_cols if c.get("type") == "Interior")
                 cnt_edge = sum(1 for c in _active_cols if c.get("type") == "Edge")
@@ -18226,10 +18294,11 @@ def render(is_standalone: bool = False):
                 adopt_cols = st.columns(len(col_designs)) if col_designs else [st.container()]
                 for idx_ac, des in enumerate(col_designs):
                     m_key = des["raw_type"]
+                    conf_m = confirmed_col_dims.get(m_key, {"b": float(des["b"]), "t": float(des["t"])})
+                    def_b = float(st.session_state.get(f"fs_adopted_b_{m_key}", conf_m["b"]))
+                    def_t = float(st.session_state.get(f"fs_adopted_t_{m_key}", conf_m["t"]))
                     with adopt_cols[idx_ac]:
                         st.markdown(f"**📐 اعتماد قطاع {des['model_mark']} ({des['model_label'].split('(')[-1].replace(')', '')})**")
-                        def_b = float(st.session_state.get(f"fs_adopted_b_{m_key}", des["b"]))
-                        def_t = float(st.session_state.get(f"fs_adopted_t_{m_key}", des["t"]))
                         st.number_input(
                             f"العرض b (cm) — {des['model_mark']}",
                             min_value=20.0,
@@ -18247,6 +18316,50 @@ def render(is_standalone: bool = False):
                             key=f"fs_adopted_t_{m_key}"
                         )
 
+                # Check if user made any edits that differ from confirmed dimensions
+                unadopted_col_changes = []
+                for des in col_designs:
+                    m_key = des["raw_type"]
+                    conf_m = confirmed_col_dims.get(m_key, {"b": float(des["b"]), "t": float(des["t"])})
+                    val_b = float(st.session_state.get(f"fs_adopted_b_{m_key}", conf_m["b"]))
+                    val_t = float(st.session_state.get(f"fs_adopted_t_{m_key}", conf_m["t"]))
+                    if abs(val_b - float(conf_m["b"])) > 0.01 or abs(val_t - float(conf_m["t"])) > 0.01:
+                        unadopted_col_changes.append({
+                            "model_mark": des["model_mark"],
+                            "raw_type": m_key,
+                            "old_b": conf_m["b"],
+                            "old_t": conf_m["t"],
+                            "new_b": val_b,
+                            "new_t": val_t,
+                        })
+                has_unadopted = len(unadopted_col_changes) > 0
+
+                if has_unadopted:
+                    chg_lines = [
+                        f"• <b>{c['model_mark']}</b>: تم تعديل القطاع في المدخلات إلى <b>{int(round(c['new_b']))} × {int(round(c['new_t']))} سم</b> (المعتمد حالياً: {int(round(c['old_b']))} × {int(round(c['old_t']))} سم)"
+                        for c in unadopted_col_changes
+                    ]
+                    st.markdown(
+                        f"""
+                        <div dir="rtl" style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 2px solid #f59e0b; border-right: 6px solid #d97706; border-radius: 10px; padding: 14px 18px; margin: 14px 0 10px 0; color: #92400e; line-height: 1.8;">
+                            <div style="font-size: 15.5px; font-weight: 800; color: #b45309; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
+                                ⏳ <span>تنبيه: تم تعديل قطاعات نماذج الأعمدة في المدخلات — يلزم النقر على زر الاعتماد أدناه</span>
+                            </div>
+                            <div style="font-size: 13.5px; font-weight: 600; margin-bottom: 6px; color: #78350f;">
+                                تم رصد التعديلات غير المعتمدة التالية:
+                            </div>
+                            <div style="margin-bottom: 10px; font-size: 13px; font-weight: 700; color: #b45309;">
+                                {'<br>'.join(chg_lines)}
+                            </div>
+                            <div style="font-size: 13.5px; font-weight: 700; color: #1e293b;">
+                                ⛔ <b>تم إيقاف كافة الحسابات والتصميمات الإنشائية وإخفاء جميع الأقسام التالية مؤقتاً.</b><br>
+                                👇 اضغط على الزر الأحمر أدناه لاعتماد وتطبيق هذه القطاعات فوراً وتشغيل التحليل الإنشائي والتصميم وإظهار كافة الأقسام.
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
                 st.markdown(
                     """
                     <style>
@@ -18255,16 +18368,16 @@ def render(is_standalone: bool = False):
                     button[key*="btn_fs_adopt_col_dims"],
                     .st-key-btn_fs_adopt_col_dims button,
                     div[data-testid="stVerticalBlock"] div:has(> button[key*="btn_fs_adopt_col_dims"]) button {
-                        background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%) !important;
-                        background-color: #1d4ed8 !important;
+                        background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+                        background-color: #dc2626 !important;
                         color: #ffffff !important;
                         font-size: 20px !important;
                         font-weight: 800 !important;
                         padding: 16px 28px !important;
                         min-height: 62px !important;
                         border-radius: 12px !important;
-                        border: 2px solid #60a5fa !important;
-                        box-shadow: 0 4px 15px rgba(29, 78, 216, 0.45) !important;
+                        border: 2px solid #f87171 !important;
+                        box-shadow: 0 4px 15px rgba(220, 38, 38, 0.45) !important;
                         transition: all 0.25s ease !important;
                         margin: 14px 0px !important;
                         display: flex !important;
@@ -18275,9 +18388,9 @@ def render(is_standalone: bool = False):
                     div[class*="st-key-"][class*="btn_fs_adopt_col_dims"] button:hover,
                     div.stButton > button[key*="btn_fs_adopt_col_dims"]:hover,
                     button[key*="btn_fs_adopt_col_dims"]:hover {
-                        background: linear-gradient(135deg, #1e40af 0%, #172554 100%) !important;
-                        border-color: #93c5fd !important;
-                        box-shadow: 0 8px 24px rgba(29, 78, 216, 0.65) !important;
+                        background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%) !important;
+                        border-color: #fca5a5 !important;
+                        box-shadow: 0 8px 24px rgba(220, 38, 38, 0.65) !important;
                         transform: translateY(-2px) !important;
                     }
                     div[class*="st-key-"][class*="btn_fs_adopt_col_dims"] button *,
@@ -18292,21 +18405,79 @@ def render(is_standalone: bool = False):
                     """,
                     unsafe_allow_html=True,
                 )
-                if st.button("🔄 اعتماد وتحديث قطاعات الأعمدة وإعادة تحليل السقف (Adopt & Re-analyze Slab)", key=f"{prefix}btn_fs_adopt_col_dims", use_container_width=True, type="primary"):
+                btn_adopt_clicked = st.button("🔄 اعتماد وتحديث قطاعات الأعمدة وإعادة تحليل السقف (Adopt & Re-analyze Slab)", key=f"{prefix}btn_fs_adopt_col_dims", use_container_width=True, type="primary")
+                if btn_adopt_clicked:
+                    for des in col_designs:
+                        m_key = des["raw_type"]
+                        confirmed_col_dims[m_key] = {
+                            "b": float(st.session_state.get(f"fs_adopted_b_{m_key}", des["b"])),
+                            "t": float(st.session_state.get(f"fs_adopted_t_{m_key}", des["t"])),
+                        }
+                    st.session_state["fs_confirmed_col_dims"] = confirmed_col_dims
+                    S.cfg_set("fs_confirmed_col_dims", confirmed_col_dims)
+                    S.save_settings()
+                    has_unadopted = False
                     st.rerun()
 
-        # ── 🔄 ADOPTION & SYNCHRONIZATION OF COLUMN SIZES FOR SLAB ANALYSIS ────
+        # ── ⛔ GATE: HIDE ALL DOWNSTREAM SECTIONS IF UNADOPTED CHANGES EXIST ──
+        if 'has_unadopted' in locals() and has_unadopted:
+            st.markdown(
+                """
+                <div dir="rtl" style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 2.5px dashed #d97706; border-radius: 12px; padding: 24px 28px; margin: 24px 0; text-align: center; box-shadow: 0 4px 14px rgba(217, 119, 6, 0.15);">
+                    <div style="font-size: 20px; font-weight: 800; color: #b45309; margin-bottom: 8px;">
+                        ⏸️ تم إيقاف الحسابات وإخفاء كافة الأقسام التالية مؤقتاً
+                    </div>
+                    <div style="font-size: 15px; color: #92400e; font-weight: 600; line-height: 1.8; margin-bottom: 14px;">
+                        يوجد تعديل في مدخلات قطاعات نماذج الأعمدة في قسم <b>🏛️ Rectangular Columns Design</b> لم يتم اعتماده بعد.<br>
+                        تم إيقاف التحليل الإنشائي والتصميم وإخفاء مخرجات البلاطة والكمرات والأساسات لضمان عدم إجراء أي حسابات على قطاعات غير معتمدة.
+                    </div>
+                    <div style="font-size: 14.5px; color: #1e293b; font-weight: 700;">
+                        👉 يرجى فتح قسم <b>🏛️ Rectangular Columns Design</b> أعلاه والنقر على الزر الأحمر <b>"(Adopt & Re-analyze Slab) اعتماد وتحديث قطاعات الأعمدة وإعادة تحليل السقف"</b> للمتابعة.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            return
+
+        # ── 🔄 ADOPTION & SYNCHRONIZATION OF COLUMN SIZES FOR SLAB ANALYSIS & FOUNDATIONS ────
         des_map_type = {d["raw_type"]: d for d in col_designs} if 'col_designs' in locals() and col_designs else {}
+        fs_col_models_dict = {}
+        if 'col_designs' in locals() and col_designs:
+            for des in col_designs:
+                raw_t = des["raw_type"]
+                m_mark = des.get("model_mark") or (col_label_map.get(raw_t, "C1") if 'col_label_map' in locals() else "C1")
+                b_val = float(confirmed_col_dims.get(raw_t, {}).get("b", des["b"]))
+                t_val = float(confirmed_col_dims.get(raw_t, {}).get("t", des["t"]))
+                spec_str = f"{m_mark} = {int(round(b_val))}*{int(round(t_val))} cm"
+                entry = {
+                    "mark": m_mark,
+                    "raw_type": raw_t,
+                    "label": des.get("model_label", f"{m_mark} ({raw_t})"),
+                    "b_cm": b_val,
+                    "t_cm": t_val,
+                    "spec_str": spec_str,
+                    "Pu_tot": des.get("pu_tot", 0.0),
+                }
+                fs_col_models_dict[raw_t] = entry
+                fs_col_models_dict[m_mark] = entry
+            st.session_state["fs_col_models_dict"] = fs_col_models_dict
+            st.session_state[f"{prefix}fs_col_models_dict"] = fs_col_models_dict
+            S.cfg_set("fs_col_models_dict", fs_col_models_dict)
+
         for c in _active_cols:
             c_type = c.get("type", "Interior")
             des_m = des_map_type.get(c_type)
             if des_m:
-                c_b = float(st.session_state.get(f"fs_adopted_b_{c_type}", des_m["b"]))
-                c_t = float(st.session_state.get(f"fs_adopted_t_{c_type}", des_m["t"]))
+                c_b = float(confirmed_col_dims.get(c_type, {}).get("b", des_m["b"]))
+                c_t = float(confirmed_col_dims.get(c_type, {}).get("t", des_m["t"]))
+                c_mk = des_m.get("model_mark") or (col_label_map.get(c_type, "C1") if 'col_label_map' in locals() else "C1")
                 c["b_cm"] = c_b
                 c["t_cm"] = c_t
                 c["bc"] = c_b
                 c["tc"] = c_t
+                c["model_mark"] = c_mk
+                c["col_spec_str"] = f"{c_mk} = {int(round(c_b))}*{int(round(c_t))} cm"
                 c["width_m"] = c_b / 100.0
                 c["height_m"] = c_t / 100.0
                 gx = float(c.get("center_x", c.get("x", 0.0)))
@@ -18318,8 +18489,8 @@ def render(is_standalone: bool = False):
 
         if 'col_designs' in locals() and col_designs:
             gov_m = next((d for d in col_designs if d.get("raw_type") == "Interior"), col_designs[0])
-            bc_s = float(st.session_state.get(f"fs_adopted_b_{gov_m['raw_type']}", gov_m["b"]))
-            tc_s = float(st.session_state.get(f"fs_adopted_t_{gov_m['raw_type']}", gov_m["t"]))
+            bc_s = float(confirmed_col_dims.get(gov_m["raw_type"], {}).get("b", gov_m["b"]))
+            tc_s = float(confirmed_col_dims.get(gov_m["raw_type"], {}).get("t", gov_m["t"]))
             bc_m = bc_s / 100.0
             tc_m = tc_s / 100.0
 
@@ -20264,6 +20435,18 @@ def render(is_standalone: bool = False):
                     if opt_res.get("all_failed", False):
                         # ── FAILURE ALERT: Trigger Unified Whistle & Mandatory Slab Thickness Alert ──
                         S.play_warning_sound()
+                        def_errs = [
+                            f"وصل حديد الشد للحد الأقصى الكودي As_max = {opt_res['As_max']:.2f} cm²/m، وسهم الانحناء غير آمن (Δtotal = {opt_res['delta_curr_mm']:.2f} mm > Δall = {opt_res['delta_allow_mm']:.2f} mm).",
+                            f"الحل الهندسي الإلزامي الموصى به: زيادة سُمك البلاطة الخرسانية فوراً إلى ts = {opt_res['ts_rec_cm']} cm (+{opt_res['ts_inc_cm']} cm)."
+                        ]
+                        err_tok_def = f"deflection_{hash(tuple(def_errs))}"
+                        if st.session_state.get("_eng_err_dialog_dismissed_token") != err_tok_def:
+                            st.session_state["_eng_err_pending_token"] = err_tok_def
+                            _show_engineering_error_dialog(
+                                error_title="سهم الانحناء غير آمن: يلزم زيادة تخانة البلاطة المسلحة",
+                                error_details=def_errs,
+                                location_hint="🟦 Module 1 — قسم دراسة سهم الانحناء طويل الأمد (Long-Term Deflection & Optimization)"
+                            )
 
                         st.markdown(
                             f"""
@@ -20374,9 +20557,13 @@ def render(is_standalone: bool = False):
             ftg_fcu = S.cfg_val("tcf_Fcu", col_Fcu if col_Fcu else 250)
             ftg_fy = S.cfg_val("tcf_Fy", col_Fy if col_Fy else 4000)
             ftg_cov = S.cfg_val("tcf_cover", 7)
-            phi_opts_ftg = [12, 16, 18, 22, 25]
-            phi_idx_ftg = S.cfg_val("tcf_Phi_index", 1)
+            phi_opts_ftg = [10, 12, 16, 18, 20, 22, 25]
+            phi_idx_ftg = S.cfg_val("tcf_Phi_index", 2)
             ftg_phi = phi_opts_ftg[phi_idx_ftg] if 0 <= phi_idx_ftg < len(phi_opts_ftg) else 16
+
+            ftg_user_overrides = S.cfg_val("ftg_overrides") or st.session_state.get(f"{prefix}ftg_overrides", {})
+            if not isinstance(ftg_user_overrides, dict):
+                ftg_user_overrides = {}
 
             col_c_dim = float(tc_s if tc_s else 50)
             col_b_dim = float(col_b_val if col_b_val else 30)
@@ -20408,8 +20595,23 @@ def render(is_standalone: bool = False):
                         or {}
                     )
 
-                c_w_cm = float(c_prop.get("b_cm") or c_item.get("b_cm") or c_item.get("bc") or col_b_dim)
-                c_d_cm = float(c_prop.get("t_cm") or c_item.get("t_cm") or c_item.get("tc") or col_c_dim)
+                c_type = c_item.get("type", "Interior")
+                c_models_src = (
+                    fs_col_models_dict
+                    if ('fs_col_models_dict' in locals() and fs_col_models_dict)
+                    else (st.session_state.get("fs_col_models_dict") or S.cfg_val("fs_col_models_dict") or {})
+                )
+                c_m_info = c_models_src.get(c_type) or c_models_src.get(c_item.get("model_mark", ""))
+                if c_m_info:
+                    c_w_cm = float(c_m_info["b_cm"])
+                    c_d_cm = float(c_m_info["t_cm"])
+                    c_model_mark = c_m_info["mark"]
+                    c_spec_str = c_m_info["spec_str"]
+                else:
+                    c_w_cm = float(c_item.get("b_cm") or c_item.get("bc") or col_b_dim)
+                    c_d_cm = float(c_item.get("t_cm") or c_item.get("tc") or col_c_dim)
+                    c_model_mark = c_item.get("model_mark") or (col_label_map.get(c_type, "C1") if 'col_label_map' in locals() else ("C1" if c_type == "Interior" else ("C2" if c_type == "Edge" else "C3")))
+                    c_spec_str = f"{c_model_mark} = {int(round(c_w_cm))}*{int(round(c_d_cm))} cm"
 
                 c_trans = {}
                 if isinstance(_col_transforms, dict):
@@ -20461,6 +20663,8 @@ def render(is_standalone: bool = False):
                     "tc": geom["tc"],
                     "b_cm": c_w_cm,
                     "t_cm": c_d_cm,
+                    "model_mark": c_model_mark,
+                    "col_spec_str": c_spec_str,
                     "pu_tot": pu_val,
                     "grid_x": c_item.get("grid_x", ""),
                     "grid_y": c_item.get("grid_y", ""),
@@ -20483,6 +20687,11 @@ def render(is_standalone: bool = False):
                 })
 
             # Run Comprehensive Multi-Module Engine
+            c_models_src = (
+                fs_col_models_dict
+                if ('fs_col_models_dict' in locals() and fs_col_models_dict)
+                else (st.session_state.get("fs_col_models_dict") or S.cfg_val("fs_col_models_dict") or {})
+            )
             ftg_analysis = classify_and_design_building_foundations(
                 active_columns=fs_active_columns,
                 neighbor_col_ids=sel_neighbor_ids,
@@ -20498,6 +20707,8 @@ def render(is_standalone: bool = False):
                 slab_bounds=_slab_bounds_current,
                 col_transforms=_col_transforms,
                 col_props=_col_props,
+                user_overrides=ftg_user_overrides,
+                col_models=c_models_src,
             )
             st.session_state["fs_ftg_analysis"] = ftg_analysis
             counts = ftg_analysis["summary_counts"]
@@ -20580,6 +20791,195 @@ def render(is_standalone: bool = False):
                 slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
             )
             st.session_state["fs_rb_analysis"] = rb_analysis
+
+            # 3. Design Parameters & Rebar Diameters Controls (Philosophy matching Ground Beams)
+            with st.container(border=True):
+                st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:6px;'>⚙️ محددات ومعايير وتخصيص تسليح الأساسات (Foundations Design Parameters & Rebar Selection)</div>", unsafe_allow_html=True)
+                fpc1, fpc2, fpc3, fpc4, fpc5 = st.columns(5)
+                with fpc1:
+                    new_qnet = st.number_input(
+                        "إجهاد التربة q_net (kg/cm²):",
+                        min_value=0.5, max_value=5.0,
+                        value=float(ftg_qnet), step=0.1,
+                        format="%.2f",
+                        key=f"{prefix}w_ftg_qnet",
+                        help="جهد التأسيس الصافي المسموح به للتربة من تقرير أبحاث التربة والجسات (q_all_net)."
+                    )
+                    if new_qnet != ftg_qnet:
+                        S.cfg_set("tcf_q_net", new_qnet)
+                        st.rerun()
+
+                with fpc2:
+                    new_fcu = st.number_input(
+                        "رتبة الخرسانة Fcu (kg/cm²):",
+                        min_value=150.0, max_value=600.0,
+                        value=float(ftg_fcu), step=25.0,
+                        key=f"{prefix}w_ftg_fcu",
+                        help="المقاومة المميزة لخرسانة الأساسات بعد 28 يوماً."
+                    )
+                    if new_fcu != ftg_fcu:
+                        S.cfg_set("tcf_Fcu", new_fcu)
+                        st.rerun()
+
+                with fpc3:
+                    new_fy = st.number_input(
+                        "إجهاد خضوع الحديد Fy (kg/cm²):",
+                        min_value=2400.0, max_value=5000.0,
+                        value=float(ftg_fy), step=400.0,
+                        key=f"{prefix}w_ftg_fy",
+                        help="إجهاد خضوع حديد التسليح الرئيسي (4000 للحديد المشرشر عالي المقاومة)."
+                    )
+                    if new_fy != ftg_fy:
+                        S.cfg_set("tcf_Fy", new_fy)
+                        st.rerun()
+
+                with fpc4:
+                    new_cov = st.number_input(
+                        "الغطاء الخرساني Cover (cm):",
+                        min_value=4.0, max_value=12.0,
+                        value=float(ftg_cov), step=1.0,
+                        key=f"{prefix}w_ftg_cov",
+                        help="سمك الغطاء الخرساني لحماية حديد الأساسات من الرطوبة والمياه الجوفية (طبقاً للكود 7 سم)."
+                    )
+                    if new_cov != ftg_cov:
+                        S.cfg_set("tcf_cover", new_cov)
+                        st.rerun()
+
+                with fpc5:
+                    dia_opts_ftg_main = [10, 12, 16, 18, 20, 22, 25]  # حذف حديد قطر 14 مم نهائياً
+                    idx_phi = dia_opts_ftg_main.index(ftg_phi) if ftg_phi in dia_opts_ftg_main else 2
+                    new_ftg_phi = st.selectbox(
+                        "قطر الحديد الموحد (mm):",
+                        options=dia_opts_ftg_main,
+                        index=idx_phi,
+                        key=f"{prefix}w_ftg_phi_default",
+                        help="القطر الافتراضي الموحد لحديد القواعد قبل التخصيص المستقل لكل نموذج."
+                    )
+                    if new_ftg_phi != ftg_phi:
+                        S.cfg_set("tcf_Phi_index", dia_opts_ftg_main.index(new_ftg_phi))
+                        st.rerun()
+
+                # ── تعديل أقطار حديد التسليح المستقلة لكل نموذج (F1, F2, F3) ──
+                st.markdown("<hr style='margin:12px 0 10px 0; border:0; border-top:1.5px dashed #cbd5e1;'/>", unsafe_allow_html=True)
+
+                models_d = ftg_analysis.get("models", {})
+                active_ftg_models = [
+                    m for k, m in models_d.items()
+                    if m and isinstance(m, dict) and k.startswith("F") and k not in ["Interior", "Edge", "Corner"]
+                ]
+
+                cur_ftg_overrides = dict(ftg_user_overrides)
+                has_any_ftg_ov = any(f"{m['model_id']}_phi" in cur_ftg_overrides or f"{m['model_id']}_t" in cur_ftg_overrides for m in active_ftg_models)
+
+                if has_any_ftg_ov:
+                    hdr_c1, hdr_c2 = st.columns([4.2, 1.3])
+                    with hdr_c1:
+                        st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; line-height:36px;'>📏 تخصيص قطر حديد التسليح المستقل لكل نموذج من نماذج القواعد (F1, F2, F3):</div>", unsafe_allow_html=True)
+                    with hdr_c2:
+                        if st.button("🔄 استعادة القيم التصميمية", key=f"{prefix}btn_reset_ftg_overrides", use_container_width=True):
+                            for m in active_ftg_models:
+                                mk = m["model_id"]
+                                cur_ftg_overrides.pop(f"{mk}_phi", None)
+                                cur_ftg_overrides.pop(f"{mk}_t", None)
+                                st.session_state.pop(f"{prefix}w_ftg_{mk.lower()}_phi", None)
+                                st.session_state.pop(f"{prefix}inp_ftg_depth_{mk}", None)
+                            S.cfg_set("ftg_overrides", cur_ftg_overrides)
+                            st.session_state[f"{prefix}ftg_overrides"] = cur_ftg_overrides
+                            S.save_settings()
+                            st.rerun()
+                else:
+                    st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; margin-bottom:8px;'>📏 تخصيص قطر حديد التسليح المستقل لكل نموذج من نماذج القواعد (F1, F2, F3):</div>", unsafe_allow_html=True)
+
+                dia_opts_ftg = [10, 12, 16, 18, 20, 22, 25]  # حذف حديد قطر 14 مم من أي قائمة نهائياً
+                ftg_changed = False
+
+                if active_ftg_models:
+                    cols_m = st.columns(len(active_ftg_models))
+                    for idx_m, m in enumerate(active_ftg_models):
+                        with cols_m[idx_m]:
+                            mk = m["model_id"]
+                            m_label = m.get("model_label", mk)
+                            pu_t = float(m.get("Pu_ton", 0.0))
+                            L_c = float(m.get("L_cm", 0.0))
+                            B_c = float(m.get("B_cm", 0.0))
+                            t_c = float(m.get("t_cm", 0.0))
+
+                            badge_color = "#166534" if mk == "F1" else ("#0369a1" if mk == "F2" else "#7e22ce")
+                            bg_card = "#f0fdf4" if mk == "F1" else ("#f0f9ff" if mk == "F2" else "#faf5ff")
+                            border_card = "#bbf7d0" if mk == "F1" else ("#bae6fd" if mk == "F2" else "#e9d5ff")
+
+                            col_spec_badge = m.get("col_spec_str") or (
+                                f"{m.get('col_model_mark', 'C1')} = {int(round(float(m.get('col_b_cm', 30))))}*{int(round(float(m.get('col_t_cm', 50))))} cm"
+                            )
+                            st.markdown(
+                                f"""
+                                <div style="background:{bg_card}; border:1.5px solid {border_card}; border-radius:8px; padding:6px 12px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;">
+                                    <span style="font-weight:800; color:{badge_color}; font-size:13.5px;">■ نموذج {mk} ({m_label})</span>
+                                    <span style="background:{badge_color}; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">Pu = {pu_t:.1f} t</span>
+                                </div>
+                                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:4px 10px; margin-bottom:8px; font-size:12.5px; color:#1e293b; display:flex; align-items:center; justify-content:space-between;">
+                                    <span>🏛️ <b>نموذج العمود المعتمد:</b></span>
+                                    <span style="color:#0284c7; font-weight:800; direction:ltr;">{col_spec_badge}</span>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+
+                            st.caption(f"📏 أبعاد المسلحة: **{L_c:.0f} × {B_c:.0f} × {t_c:.0f} cm**")
+
+                            curr_phi = int(cur_ftg_overrides.get(f"{mk}_phi", m.get("selected_phi", 16)))
+                            if curr_phi == 14:
+                                curr_phi = 16
+                            idx_sel = dia_opts_ftg.index(curr_phi) if curr_phi in dia_opts_ftg else (dia_opts_ftg.index(16) if 16 in dia_opts_ftg else 2)
+
+                            new_phi_m = st.selectbox(
+                                f"قطر حديد التسليح ({mk}):",
+                                options=dia_opts_ftg,
+                                index=idx_sel,
+                                key=f"{prefix}w_ftg_{mk.lower()}_phi",
+                                help=f"قطر أسياخ حديد التسليح الرئيسي لفرش وغطاء القاعدة للنموذج {mk} (Φ بالملليمتر). يؤثر مباشرة على حساب عدد الأسياخ والمسافات والوزن والحصر."
+                            )
+
+                            if new_phi_m != curr_phi:
+                                cur_ftg_overrides[f"{mk}_phi"] = new_phi_m
+                                ftg_changed = True
+
+                            # التحقق الكودي ومراجعة عدد الأسياخ في المتر طبقاً لـ ECP 203
+                            if m.get("phi_rejected"):
+                                st.error(
+                                    f"⚠️ **مطلوب زيادة قطر حديد التسليح الرئيسي**\n\n"
+                                    f"**الكود والسبب:**\n"
+                                    f"• طبقاً للكود المصري لتصميم وتنفيذ المنشآت الخرسانية (ECP 203 - بند 4-2-1-2 و 6-2-1):\n"
+                                    f"الحد الأقصى لعدد أسياخ التسليح في المتر الطولي هو **10 أسياخ/م'** (بحيث لا تقل المسافة بين محاور الأسياخ عن 100 مم والمسافة الخالصة لا تقل عن 70 مم) لمنع حدوث التعشيش وضمان تغلغل الخرسانة والركام حول الأسياخ بالكامل.\n"
+                                    f"• القطر المختار **Φ{m['selected_phi']} مم** يتطلب **{m['max_bars_m_selected']} أسياخ/م'** وهو عدد كبير ولا يتماشى مع الكود المصري.\n"
+                                    f"• ⛔ **تم رفض هذا القطر كودياً ولا يقبله البرنامج** — تم تلقائياً الترقية واعتماد القطر الآمن **Φ{m['safe_phi']} مم** (بواقع {m['max_bars_m_safe']} أسياخ/م')."
+                                )
+                            else:
+                                st.success(f"✅ تسليح محقق للكود: **{m.get('rft_long_str', '')}** (فرش) | **{m.get('rft_short_str', '')}** (غطاء)")
+
+                # If any model rejected, show OK dialog
+                rej_ftg_m = [m for m in active_ftg_models if m.get("phi_rejected")]
+                if rej_ftg_m:
+                    ftg_rej_msgs = [
+                        f"نموذج {m['model_id']} ({m.get('model_label', '')}): القطر المختار Φ{m['selected_phi']} يتطلب {m['max_bars_m_selected']} أسياخ/م' (تجاوز الحد الأقصى 10 أسياخ/م'). تم رفضه واعتماد القطر الآمن Φ{m['safe_phi']}."
+                        for m in rej_ftg_m
+                    ]
+                    tok_ftg_rej = f"ftg_rej_{hash(tuple(ftg_rej_msgs))}"
+                    if st.session_state.get("_eng_err_dialog_dismissed_token") != tok_ftg_rej:
+                        st.session_state["_eng_err_pending_token"] = tok_ftg_rej
+                        _show_engineering_error_dialog(
+                            error_title="مطلوب زيادة قطر حديد التسليح الرئيسي للقواعد (ECP 203)",
+                            error_details=ftg_rej_msgs,
+                            location_hint="🟦 Module 1 — قسم تصميم الأساسات (Foundations Design)"
+                        )
+
+                if ftg_changed:
+                    S.cfg_set("ftg_overrides", cur_ftg_overrides)
+                    st.session_state[f"{prefix}ftg_overrides"] = cur_ftg_overrides
+                    S.save_settings()
+                    st.rerun()
+
+            st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
 
             # 4. Footings Detailed Table (Unified Schedule: All 4 Types)
             st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)</div>", unsafe_allow_html=True)

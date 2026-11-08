@@ -1286,7 +1286,7 @@ def render_diagonal_strap_module():
             st.markdown("<div class='m10-hdr'>🔩 مواصفات وأقطار حديد التسليح والكانات — Reinforcement & Stirrups Specifications</div>", unsafe_allow_html=True)
             r_c1, r_c2, r_c3, r_c4 = st.columns(4)
             with r_c1:
-                _td_opts = [12, 14, 16, 18, 20, 22]
+                _td_opts = [12, 16, 18, 20, 22]
                 d["trans_bar_dia"] = st.selectbox(
                     "قطر حديد تسليح القواعد (mm)",
                     options=_td_opts,
@@ -1304,7 +1304,7 @@ def render_diagonal_strap_module():
                     help="قطر أسياخ الحديد الطولي الرئيسي لكمرة الشداد (علوي وسفلي)",
                 )
             with r_c3:
-                _st_opts = [8, 10, 12, 14, 16]
+                _st_opts = [8, 10, 12, 16]
                 d["stirrup_dia"] = st.selectbox(
                     "قطر الكانات (mm)",
                     options=_st_opts,

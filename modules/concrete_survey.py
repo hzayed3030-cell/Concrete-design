@@ -1489,7 +1489,7 @@ def render() -> None:
                             help="إذا كان أقل من 8 أسياخ يتم تعيين الكانات إلى Box وتحديد 3/2 صفوف تلقائياً",
                         )
                     with r2_c2:
-                        phi_opts_list = [10, 12, 14, 16, 18, 20, 22, 25, 28, 32]
+                        phi_opts_list = [10, 12, 16, 18, 20, 22, 25, 28, 32]
                         c_phi_in = st.selectbox(
                             "قطر الحديد الرئيسي (mm)",
                             options=phi_opts_list,
@@ -1699,7 +1699,7 @@ def render() -> None:
             def_fs_phi_top = int(cfg_val("cs_fs_phi_top", 10))
             def_fs_nb_top = int(cfg_val("cs_fs_nb_top", 6))
 
-            mesh_dia_opts = [10, 12, 14, 16, 18, 20]
+            mesh_dia_opts = [10, 12, 16, 18, 20]
 
             fs_cg1, fs_cg2, fs_cg3 = st.columns([1.2, 1.4, 1.4])
             with fs_cg1:
@@ -2080,7 +2080,7 @@ def render() -> None:
         # ── Auto-persist all current inputs to user_settings.json on change ──
         lap_opts_list = [40, 45, 50, 60]
         st_dia_opts_list = [6, 8, 10, 12]
-        phi_main_opts_list = [10, 12, 14, 16, 18, 20, 22, 25, 28, 32]
+        phi_main_opts_list = [10, 12, 16, 18, 20, 22, 25, 28, 32]
         tie_opts_list = ["Box (كانة صندوقية)", "Automatic (كانة أوتوماتيك)"]
 
         cfg_updates = {
