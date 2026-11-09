@@ -20794,7 +20794,7 @@ def render(is_standalone: bool = False):
 
             # 3. Design Parameters & Rebar Diameters Controls (Philosophy matching Ground Beams)
             with st.container(border=True):
-                st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:6px;'>⚙️ محددات ومعايير وتخصيص تسليح الأساسات (Foundations Design Parameters & Rebar Selection)</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:14px;'>⚙️ محددات ومعايير وتخصيص تسليح الأساسات (Foundations Design Parameters & Rebar Selection)</div>", unsafe_allow_html=True)
                 fpc1, fpc2, fpc3, fpc4, fpc5 = st.columns(5)
                 with fpc1:
                     new_qnet = st.number_input(
@@ -20888,7 +20888,7 @@ def render(is_standalone: bool = False):
                             S.save_settings()
                             st.rerun()
                 else:
-                    st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; margin-bottom:8px;'>📏 تخصيص قطر حديد التسليح المستقل لكل نموذج من نماذج القواعد (F1, F2, F3):</div>", unsafe_allow_html=True)
+                    st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; margin-bottom:16px;'>📏 تخصيص قطر حديد التسليح المستقل لكل نموذج من نماذج القواعد (F1, F2, F3):</div>", unsafe_allow_html=True)
 
                 dia_opts_ftg = [10, 12, 16, 18, 20, 22, 25]  # حذف حديد قطر 14 مم من أي قائمة نهائياً
                 ftg_changed = False
@@ -20913,19 +20913,20 @@ def render(is_standalone: bool = False):
                             )
                             st.markdown(
                                 f"""
-                                <div style="background:{bg_card}; border:1.5px solid {border_card}; border-radius:8px; padding:6px 12px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;">
+                                <div style="background:{bg_card}; border:1.5px solid {border_card}; border-radius:8px; padding:7px 12px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between;">
                                     <span style="font-weight:800; color:{badge_color}; font-size:13.5px;">■ نموذج {mk} ({m_label})</span>
                                     <span style="background:{badge_color}; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">Pu = {pu_t:.1f} t</span>
                                 </div>
-                                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:4px 10px; margin-bottom:8px; font-size:12.5px; color:#1e293b; display:flex; align-items:center; justify-content:space-between;">
+                                <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:6px 11px; margin-bottom:16px; font-size:12.5px; color:#1e293b; display:flex; align-items:center; justify-content:space-between;">
                                     <span>🏛️ <b>نموذج العمود المعتمد:</b></span>
                                     <span style="color:#0284c7; font-weight:800; direction:ltr;">{col_spec_badge}</span>
+                                </div>
+                                <div style="margin-top:16px; margin-bottom:12px; font-size:14px; font-weight:800; color:#38bdf8; line-height:1.6;">
+                                    📏 أبعاد المسلحة: <span style="color:#38bdf8; font-weight:900; font-size:14.5px;">{L_c:.0f} × {B_c:.0f} × {t_c:.0f} cm</span>
                                 </div>
                                 """,
                                 unsafe_allow_html=True
                             )
-
-                            st.caption(f"📏 أبعاد المسلحة: **{L_c:.0f} × {B_c:.0f} × {t_c:.0f} cm**")
 
                             curr_phi = int(cur_ftg_overrides.get(f"{mk}_phi", m.get("selected_phi", 16)))
                             if curr_phi == 14:
@@ -20993,7 +20994,7 @@ def render(is_standalone: bool = False):
         with st.expander(f"🧱 Ground Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج الميدات والسملات الأرضية)", expanded=False):
             # 1. Design Parameters & Controls
             with st.container(border=True):
-                st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:6px;'>⚙️ محددات ومعايير تصميم السملات الأرضية (Ground Beam Design Parameters)</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:14px;'>⚙️ محددات ومعايير تصميم السملات الأرضية (Ground Beam Design Parameters)</div>", unsafe_allow_html=True)
                 gbc1, gbc2, gbc3, gbc4, gbc5 = st.columns(5)
                 with gbc1:
                     lvl_opts = [
@@ -21130,7 +21131,7 @@ def render(is_standalone: bool = False):
                             st.session_state[f"{prefix}gb_overrides"] = cur_ov_depths
                             st.rerun()
                 else:
-                    st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; margin-bottom:8px;'>📏 تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج (GB1, GB2, GB3):</div>", unsafe_allow_html=True)
+                    st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; margin-bottom:16px;'>📏 تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج (GB1, GB2, GB3):</div>", unsafe_allow_html=True)
                 models_d = gb_analysis.get("models_dict", {})
                 m_b1 = models_d.get("GB1", models_d.get("B1", {}))
                 m_b2 = models_d.get("GB2", models_d.get("B2", {}))
@@ -21169,7 +21170,7 @@ def render(is_standalone: bool = False):
                 with col_gb1:
                     st.markdown(
                         """
-                        <div style="background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:8px; padding:6px 12px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;">
+                        <div style="background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
                             <span style="font-weight:800; color:#1d4ed8; font-size:13.5px;">■ نموذج GB1 (Heavy)</span>
                             <span style="background:#1d4ed8; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">القطاع الثقيل</span>
                         </div>
@@ -21199,7 +21200,7 @@ def render(is_standalone: bool = False):
                 with col_gb2:
                     st.markdown(
                         """
-                        <div style="background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:8px; padding:6px 12px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;">
+                        <div style="background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
                             <span style="font-weight:800; color:#15803d; font-size:13.5px;">■ نموذج GB2 (Medium)</span>
                             <span style="background:#15803d; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">القطاع المتوسط</span>
                         </div>
@@ -21229,7 +21230,7 @@ def render(is_standalone: bool = False):
                 with col_gb3:
                     st.markdown(
                         """
-                        <div style="background:#faf5ff; border:1.5px solid #e9d5ff; border-radius:8px; padding:6px 12px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;">
+                        <div style="background:#faf5ff; border:1.5px solid #e9d5ff; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
                             <span style="font-weight:800; color:#7e22ce; font-size:13.5px;">■ نموذج GB3 (Light)</span>
                             <span style="background:#7e22ce; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">القطاع الخفيف</span>
                         </div>
@@ -21362,7 +21363,7 @@ def render(is_standalone: bool = False):
         with st.expander(f"🧱 Roof Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج كمرات السقف والكوابيل)", expanded=False):
             # 1. Design Parameters & Controls
             with st.container(border=True):
-                st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:6px;'>⚙️ محددات ومعايير تصميم كمرات السقف (Roof Beam Design Parameters)</div>", unsafe_allow_html=True)
+                st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:14px;'>⚙️ محددات ومعايير تصميم كمرات السقف (Roof Beam Design Parameters)</div>", unsafe_allow_html=True)
                 rbc1, rbc2, rbc3, rbc4, rbc5 = st.columns(5)
                 with rbc1:
                     new_rb_b = st.number_input(
@@ -21456,7 +21457,7 @@ def render(is_standalone: bool = False):
                 else:
                     st.markdown(
                         f"""
-                        <div style="font-size:15px; font-weight:800; color:#38bdf8; margin-bottom:8px;">
+                        <div style="font-size:15px; font-weight:800; color:#38bdf8; margin-bottom:16px;">
                             📏 تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج ({'B1, B2, B3, CB1' if has_cb1 else 'B1, B2, B3'}):
                         </div>
                         """,
@@ -21505,7 +21506,7 @@ def render(is_standalone: bool = False):
                 with c_dep1:
                     st.markdown(
                         """
-                        <div style="background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:8px; padding:6px 12px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;">
+                        <div style="background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
                             <span style="font-weight:800; color:#1d4ed8; font-size:13.5px;">■ نموذج B1 (Heavy)</span>
                             <span style="background:#1d4ed8; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">القطاع الثقيل</span>
                         </div>
@@ -21535,7 +21536,7 @@ def render(is_standalone: bool = False):
                 with c_dep2:
                     st.markdown(
                         """
-                        <div style="background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:8px; padding:6px 12px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;">
+                        <div style="background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
                             <span style="font-weight:800; color:#15803d; font-size:13.5px;">■ نموذج B2 (Medium)</span>
                             <span style="background:#15803d; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">القطاع المتوسط</span>
                         </div>
@@ -21565,7 +21566,7 @@ def render(is_standalone: bool = False):
                 with c_dep3:
                     st.markdown(
                         """
-                        <div style="background:#faf5ff; border:1.5px solid #e9d5ff; border-radius:8px; padding:6px 12px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;">
+                        <div style="background:#faf5ff; border:1.5px solid #e9d5ff; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
                             <span style="font-weight:800; color:#7e22ce; font-size:13.5px;">■ نموذج B3 (Light)</span>
                             <span style="background:#7e22ce; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">القطاع الخفيف</span>
                         </div>
@@ -21596,7 +21597,7 @@ def render(is_standalone: bool = False):
                     with c_dep4:
                         st.markdown(
                             """
-                            <div style="background:#fff7ed; border:1.5px solid #fed7aa; border-radius:8px; padding:6px 12px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;">
+                            <div style="background:#fff7ed; border:1.5px solid #fed7aa; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
                                 <span style="font-weight:800; color:#c2410c; font-size:13.5px;">■ نموذج CB1 (Cantilever)</span>
                                 <span style="background:#ea580c; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">كمرات الكوابيل</span>
                             </div>

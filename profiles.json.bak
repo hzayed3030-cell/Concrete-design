@@ -5,8 +5,8 @@
       "name": "Control test",
       "description": "نسخة من Control room",
       "created_at": "2026-11-02 10:47",
-      "updated_at": "2026-11-08 15:37",
-      "last_used_at": "2026-11-08 15:37:01",
+      "updated_at": "2026-11-09 15:04",
+      "last_used_at": "2026-11-09 15:04:31",
       "data": {
         "selected_module_idx": 0,
         "apartment_name": "Control test",
@@ -925,9 +925,9 @@
                 "grid_y": "X2",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه X",
                 "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
                 "shift_y": "متمركز على المحور (Centered)",
@@ -936,11 +936,11 @@
                 "width_cm": 60.0,
                 "height_cm": 30.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 0.09,
-                "y_min": 2.1,
+                "y_min": 2.15,
                 "x_max": 0.39,
-                "y_max": 2.9,
+                "y_max": 2.85,
                 "center_x": 0.24,
                 "center_y": 2.5,
                 "is_edge_col": false,
@@ -977,7 +977,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supp2": {
@@ -1209,9 +1209,9 @@
                 "grid_y": "X4",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه Y",
                 "shift_x": "متمركز على المحور (Centered)",
                 "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -1220,11 +1220,11 @@
                 "width_cm": 30.0,
                 "height_cm": 60.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 5.0,
-                "y_min": 6.919999999999999,
+                "y_min": 6.97,
                 "x_max": 5.300000000000001,
-                "y_max": 7.72,
+                "y_max": 7.669999999999999,
                 "center_x": 5.15,
                 "center_y": 7.319999999999999,
                 "is_edge_col": false,
@@ -1269,7 +1269,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C7 ⟷ عمود C8)",
@@ -1353,9 +1353,9 @@
                 "grid_y": "X4",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه Y",
                 "shift_x": "متمركز على المحور (Centered)",
                 "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -1364,11 +1364,11 @@
                 "width_cm": 30.0,
                 "height_cm": 60.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 5.0,
-                "y_min": 6.919999999999999,
+                "y_min": 6.97,
                 "x_max": 5.300000000000001,
-                "y_max": 7.72,
+                "y_max": 7.669999999999999,
                 "center_x": 5.15,
                 "center_y": 7.319999999999999,
                 "is_edge_col": false,
@@ -1413,7 +1413,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supp2": {
@@ -1435,9 +1435,9 @@
                 "grid_y": "X4",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه X",
                 "shift_x": "متمركز على المحور (Centered)",
                 "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -1446,11 +1446,11 @@
                 "width_cm": 60.0,
                 "height_cm": 30.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 10.56,
-                "y_min": 7.069999999999999,
+                "y_min": 7.12,
                 "x_max": 10.860000000000001,
-                "y_max": 7.87,
+                "y_max": 7.819999999999999,
                 "center_x": 10.71,
                 "center_y": 7.47,
                 "is_edge_col": false,
@@ -1487,7 +1487,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C8 ⟷ عمود C9)",
@@ -1571,9 +1571,9 @@
                 "grid_y": "X4",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه X",
                 "shift_x": "متمركز على المحور (Centered)",
                 "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -1582,11 +1582,11 @@
                 "width_cm": 60.0,
                 "height_cm": 30.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 10.56,
-                "y_min": 7.069999999999999,
+                "y_min": 7.12,
                 "x_max": 10.860000000000001,
-                "y_max": 7.87,
+                "y_max": 7.819999999999999,
                 "center_x": 10.71,
                 "center_y": 7.47,
                 "is_edge_col": false,
@@ -1623,7 +1623,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supp2": {
@@ -1645,9 +1645,9 @@
                 "grid_y": "X4",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه X",
                 "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
                 "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -1656,11 +1656,11 @@
                 "width_cm": 60.0,
                 "height_cm": 30.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 16.05,
-                "y_min": 7.069999999999999,
+                "y_min": 7.12,
                 "x_max": 16.349999999999998,
-                "y_max": 7.87,
+                "y_max": 7.819999999999999,
                 "center_x": 16.2,
                 "center_y": 7.47,
                 "is_edge_col": false,
@@ -1705,7 +1705,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C9 ⟷ عمود C10)",
@@ -1791,9 +1791,9 @@
                 "grid_y": "X1",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه X",
                 "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
                 "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
@@ -1802,11 +1802,11 @@
                 "width_cm": 60.0,
                 "height_cm": 30.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 16.05,
-                "y_min": -0.31000000000000005,
+                "y_min": -0.26,
                 "x_max": 16.349999999999998,
-                "y_max": 0.49,
+                "y_max": 0.43999999999999995,
                 "center_x": 16.2,
                 "center_y": 0.09,
                 "is_edge_col": false,
@@ -1851,7 +1851,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supp2": {
@@ -2009,9 +2009,9 @@
                 "grid_y": "X1",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه Y",
                 "shift_x": "متمركز على المحور (Centered)",
                 "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
@@ -2020,11 +2020,11 @@
                 "width_cm": 30.0,
                 "height_cm": 60.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 10.56,
-                "y_min": -0.16000000000000003,
+                "y_min": -0.10999999999999999,
                 "x_max": 10.860000000000001,
-                "y_max": 0.64,
+                "y_max": 0.59,
                 "center_x": 10.71,
                 "center_y": 0.24,
                 "is_edge_col": false,
@@ -2061,7 +2061,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supp2": {
@@ -2083,9 +2083,9 @@
                 "grid_y": "X1",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه X",
                 "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
                 "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
@@ -2094,11 +2094,11 @@
                 "width_cm": 60.0,
                 "height_cm": 30.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 16.05,
-                "y_min": -0.31000000000000005,
+                "y_min": -0.26,
                 "x_max": 16.349999999999998,
-                "y_max": 0.49,
+                "y_max": 0.43999999999999995,
                 "center_x": 16.2,
                 "center_y": 0.09,
                 "is_edge_col": false,
@@ -2143,7 +2143,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C2 ⟷ عمود C3)",
@@ -2227,9 +2227,9 @@
                 "grid_y": "X1",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه X",
                 "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
                 "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
@@ -2238,11 +2238,11 @@
                 "width_cm": 60.0,
                 "height_cm": 30.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 5.24,
-                "y_min": -0.31000000000000005,
+                "y_min": -0.26,
                 "x_max": 5.540000000000001,
-                "y_max": 0.49,
+                "y_max": 0.43999999999999995,
                 "center_x": 5.390000000000001,
                 "center_y": 0.09,
                 "is_edge_col": false,
@@ -2279,7 +2279,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supp2": {
@@ -2301,9 +2301,9 @@
                 "grid_y": "X1",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه Y",
                 "shift_x": "متمركز على المحور (Centered)",
                 "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
@@ -2312,11 +2312,11 @@
                 "width_cm": 30.0,
                 "height_cm": 60.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 10.56,
-                "y_min": -0.16000000000000003,
+                "y_min": -0.10999999999999999,
                 "x_max": 10.860000000000001,
-                "y_max": 0.64,
+                "y_max": 0.59,
                 "center_x": 10.71,
                 "center_y": 0.24,
                 "is_edge_col": false,
@@ -2353,7 +2353,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C1 ⟷ عمود C2)",
@@ -2437,9 +2437,9 @@
                 "grid_y": "X2",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه X",
                 "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
                 "shift_y": "متمركز على المحور (Centered)",
@@ -2448,11 +2448,11 @@
                 "width_cm": 60.0,
                 "height_cm": 30.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 0.09,
-                "y_min": 2.1,
+                "y_min": 2.15,
                 "x_max": 0.39,
-                "y_max": 2.9,
+                "y_max": 2.85,
                 "center_x": 0.24,
                 "center_y": 2.5,
                 "is_edge_col": false,
@@ -2489,7 +2489,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supp2": {
@@ -2566,35 +2566,7 @@
                     "placed": true,
                     "removed": false,
                     "i_eff": 1,
-                    "j_eff": 0,
-                    "Atrib_0": 3.4749999999999996,
-                    "Pu_slab_0": 7.592874999999998,
-                    "Pu_slab": 22.393684297575774,
-                    "Pu_punch": 4.25,
-                    "Pu_beam": 19.09,
-                    "framing_beams": [
-                      "B7",
-                      "B11"
-                    ],
-                    "Pu_0": 8.352162499999999,
-                    "Pu": 24.63305272733335,
-                    "beam_reactions": [
-                      {
-                        "beam_id": "B7",
-                        "rxn_ton": 6.75,
-                        "net_col_rxn_ton": 0.01,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B11",
-                        "rxn_ton": 12.34,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      }
-                    ],
-                    "model_mark": "C1"
+                    "j_eff": 0
                   }
                 },
                 "supp2": {
@@ -2639,43 +2611,7 @@
                     "placed": true,
                     "removed": false,
                     "i_eff": 1,
-                    "j_eff": 3,
-                    "Atrib_0": 6.131475,
-                    "Pu_slab_0": 13.397272874999997,
-                    "Pu_slab": 33.50814249899895,
-                    "Pu_punch": 4.56,
-                    "Pu_beam": 25.49,
-                    "framing_beams": [
-                      "B2",
-                      "B3",
-                      "B11"
-                    ],
-                    "Pu_0": 14.737000162499998,
-                    "Pu": 36.85895674889885,
-                    "beam_reactions": [
-                      {
-                        "beam_id": "B2",
-                        "rxn_ton": 5.85,
-                        "net_col_rxn_ton": 0.01,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B3",
-                        "rxn_ton": 7.3,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B11",
-                        "rxn_ton": 12.34,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      }
-                    ],
-                    "model_mark": "C1"
+                    "j_eff": 3
                   }
                 },
                 "supports_desc": "كمرة رئيسية (مرتكزة على عمود C1 ⟷ عمود C8)",
@@ -2871,9 +2807,9 @@
                 "grid_y": "X3",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه X",
                 "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
                 "shift_y": "متمركز على المحور (Centered)",
@@ -2882,11 +2818,11 @@
                 "width_cm": 60.0,
                 "height_cm": 30.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 22.2,
-                "y_min": 4.869999999999999,
+                "y_min": 4.92,
                 "x_max": 22.499999999999996,
-                "y_max": 5.67,
+                "y_max": 5.619999999999999,
                 "center_x": 22.349999999999998,
                 "center_y": 5.27,
                 "is_edge_col": false,
@@ -2923,7 +2859,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C4 ⟷ عمود C6)",
@@ -3007,9 +2943,9 @@
                 "grid_y": "X1",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه X",
                 "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
                 "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
@@ -3018,11 +2954,11 @@
                 "width_cm": 60.0,
                 "height_cm": 30.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 16.05,
-                "y_min": -0.31000000000000005,
+                "y_min": -0.26,
                 "x_max": 16.349999999999998,
-                "y_max": 0.49,
+                "y_max": 0.43999999999999995,
                 "center_x": 16.2,
                 "center_y": 0.09,
                 "is_edge_col": false,
@@ -3067,7 +3003,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supp2": {
@@ -3089,9 +3025,9 @@
                 "grid_y": "X4",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه X",
                 "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
                 "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -3100,11 +3036,11 @@
                 "width_cm": 60.0,
                 "height_cm": 30.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 16.05,
-                "y_min": 7.069999999999999,
+                "y_min": 7.12,
                 "x_max": 16.349999999999998,
-                "y_max": 7.87,
+                "y_max": 7.819999999999999,
                 "center_x": 16.2,
                 "center_y": 7.47,
                 "is_edge_col": false,
@@ -3149,7 +3085,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C3 ⟷ عمود C10)",
@@ -3233,9 +3169,9 @@
                 "grid_y": "X1",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه X",
                 "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
                 "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
@@ -3244,11 +3180,11 @@
                 "width_cm": 60.0,
                 "height_cm": 30.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 5.24,
-                "y_min": -0.31000000000000005,
+                "y_min": -0.26,
                 "x_max": 5.540000000000001,
-                "y_max": 0.49,
+                "y_max": 0.43999999999999995,
                 "center_x": 5.390000000000001,
                 "center_y": 0.09,
                 "is_edge_col": false,
@@ -3285,7 +3221,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supp2": {
@@ -3307,9 +3243,9 @@
                 "grid_y": "X4",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه Y",
                 "shift_x": "متمركز على المحور (Centered)",
                 "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -3318,11 +3254,11 @@
                 "width_cm": 30.0,
                 "height_cm": 60.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 5.0,
-                "y_min": 6.919999999999999,
+                "y_min": 6.97,
                 "x_max": 5.300000000000001,
-                "y_max": 7.72,
+                "y_max": 7.669999999999999,
                 "center_x": 5.15,
                 "center_y": 7.319999999999999,
                 "is_edge_col": false,
@@ -3367,7 +3303,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C1 ⟷ عمود C8)",
@@ -3506,43 +3442,7 @@
                     "placed": true,
                     "removed": false,
                     "i_eff": 3,
-                    "j_eff": 0,
-                    "Atrib_0": 5.268750000000001,
-                    "Pu_slab_0": 11.512218749999999,
-                    "Pu_slab": 34.09334777856426,
-                    "Pu_punch": 3.91,
-                    "Pu_beam": 28.79,
-                    "framing_beams": [
-                      "B5",
-                      "B6",
-                      "B10"
-                    ],
-                    "Pu_0": 12.663440625,
-                    "Pu": 37.50268255642069,
-                    "beam_reactions": [
-                      {
-                        "beam_id": "B5",
-                        "rxn_ton": 8.38,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B6",
-                        "rxn_ton": 7.14,
-                        "net_col_rxn_ton": 0.01,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B10",
-                        "rxn_ton": 13.27,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      }
-                    ],
-                    "model_mark": "C1"
+                    "j_eff": 0
                   }
                 },
                 "supp2": {
@@ -3587,43 +3487,7 @@
                     "placed": true,
                     "removed": false,
                     "i_eff": 3,
-                    "j_eff": 3,
-                    "Atrib_0": 4.826175,
-                    "Pu_slab_0": 10.545192375,
-                    "Pu_slab": 35.68420577276169,
-                    "Pu_punch": 3.59,
-                    "Pu_beam": 27.32,
-                    "framing_beams": [
-                      "B4",
-                      "B10",
-                      "B13"
-                    ],
-                    "Pu_0": 11.5997116125,
-                    "Pu": 39.252626350037865,
-                    "beam_reactions": [
-                      {
-                        "beam_id": "B4",
-                        "rxn_ton": 8.33,
-                        "net_col_rxn_ton": 1.53,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": true
-                      },
-                      {
-                        "beam_id": "B10",
-                        "rxn_ton": 13.27,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B13",
-                        "rxn_ton": 5.72,
-                        "net_col_rxn_ton": 5.72,
-                        "Mu_transferred_ton_m": 7.55,
-                        "full_moment_continuity": true
-                      }
-                    ],
-                    "model_mark": "C1"
+                    "j_eff": 3
                   }
                 },
                 "supports_desc": "كمرة رئيسية (مرتكزة على عمود C3 ⟷ عمود C10)",
@@ -3683,9 +3547,9 @@
                 "grid_y": "X3",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه X",
                 "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
                 "shift_y": "متمركز على المحور (Centered)",
@@ -3694,11 +3558,11 @@
                 "width_cm": 60.0,
                 "height_cm": 30.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 22.2,
-                "y_min": 4.869999999999999,
+                "y_min": 4.92,
                 "x_max": 22.499999999999996,
-                "y_max": 5.67,
+                "y_max": 5.619999999999999,
                 "center_x": 22.349999999999998,
                 "center_y": 5.27,
                 "is_edge_col": false,
@@ -3735,7 +3599,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supports_desc": "كمرة ثانوية (مرتكزة على كمرة B10 ⟷ عمود C6)",
@@ -3819,9 +3683,9 @@
                 "grid_y": "X4",
                 "type": "Edge",
                 "bc": 30.0,
-                "tc": 80.0,
+                "tc": 70.0,
                 "b_cm": 30.0,
-                "t_cm": 80.0,
+                "t_cm": 70.0,
                 "direction": "اتجاه X",
                 "shift_x": "جسم العمود يساراً (الوجه يمين المحور +6 cm)",
                 "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور +6 cm)",
@@ -3830,11 +3694,11 @@
                 "width_cm": 60.0,
                 "height_cm": 30.0,
                 "width_m": 0.3,
-                "height_m": 0.8,
+                "height_m": 0.7,
                 "x_min": 16.05,
-                "y_min": 7.069999999999999,
+                "y_min": 7.12,
                 "x_max": 16.349999999999998,
-                "y_max": 7.87,
+                "y_max": 7.819999999999999,
                 "center_x": 16.2,
                 "center_y": 7.47,
                 "is_edge_col": false,
@@ -3879,7 +3743,7 @@
                   }
                 ],
                 "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "col_spec_str": "C1 = 30*70 cm"
               }
             },
             "supp2": {
@@ -4039,8 +3903,8 @@
             "raw_type": "Edge",
             "label": "C1 (أعمدة جانبية)",
             "b_cm": 30.0,
-            "t_cm": 80.0,
-            "spec_str": "C1 = 30*80 cm",
+            "t_cm": 70.0,
+            "spec_str": "C1 = 30*70 cm",
             "Pu_tot": 165.97419157448564
           },
           "C1": {
@@ -4048,8 +3912,8 @@
             "raw_type": "Edge",
             "label": "C1 (أعمدة جانبية)",
             "b_cm": 30.0,
-            "t_cm": 80.0,
-            "spec_str": "C1 = 30*80 cm",
+            "t_cm": 70.0,
+            "spec_str": "C1 = 30*70 cm",
             "Pu_tot": 165.97419157448564
           },
           "Corner": {
@@ -4074,7 +3938,7 @@
         "fs_confirmed_col_dims": {
           "Edge": {
             "b": 30.0,
-            "t": 80.0
+            "t": 70.0
           },
           "Corner": {
             "b": 30.0,
