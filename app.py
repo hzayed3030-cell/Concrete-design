@@ -1837,6 +1837,160 @@ def get_github_repo_url():
         return "https://github.com/hzayed3030-cell/Concrete-design"
 
 
+def pull_project_from_github(repo_dir: str, custom_token: str = None):
+    """
+    Executes a clean, rock-solid, non-hanging Git pull from GitHub.
+    1. Sets GCM_INTERACTIVE=never and GIT_TERMINAL_PROMPT=0 so git NEVER hangs waiting for prompts.
+    2. Sweeps git locks and aborts any interrupted rebase/merge states.
+    3. Discards local tracking modifications on configuration/profile files:
+       git restore profiles.json profiles.json.bak user_settings.json
+       (with fallback to git checkout -- if needed).
+    4. Safely pulls latest changes from GitHub for the active branch.
+    5. Returns: (success: bool, user_message: str, detailed_log: str)
+    """
+    git_env = os.environ.copy()
+    git_env["PYTHONIOENCODING"] = "utf-8"
+    git_env["LC_ALL"] = "C.UTF-8"
+    git_env["GIT_TERMINAL_PROMPT"] = "0"
+    git_env["GCM_INTERACTIVE"] = "never"
+    git_env["GIT_ASKPASS"] = ""
+
+    logs = []
+    def log(step, res=None):
+        line = f"[{step}]"
+        if res is not None:
+            line += f" exit={res.returncode}"
+            if (res.stdout or "").strip():
+                line += f"\n  STDOUT: {(res.stdout or '').strip()}"
+            if (res.stderr or "").strip():
+                line += f"\n  STDERR: {(res.stderr or '').strip()}"
+        logs.append(line)
+
+    def run_cmd(args, timeout=40):
+        try:
+            p = subprocess.Popen(
+                ["git"] + args,
+                cwd=repo_dir,
+                env=git_env,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            try:
+                stdout, stderr = p.communicate(timeout=timeout)
+                return subprocess.CompletedProcess(p.args, p.returncode, stdout, stderr)
+            except subprocess.TimeoutExpired:
+                try:
+                    subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(p.pid)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        timeout=5
+                    )
+                except Exception:
+                    p.kill()
+                try:
+                    stdout, stderr = p.communicate(timeout=2)
+                except Exception:
+                    stdout, stderr = "", "تم إنهاء العملية لتجاوز المهلة الزمنية (Process timed out)."
+                return subprocess.CompletedProcess(p.args, 124, stdout, f"Timeout after {timeout}s: " + stderr)
+        except Exception as ex:
+            return subprocess.CompletedProcess(["git"] + args, 1, "", str(ex))
+
+    # 1. Clean stale locks & interrupted states
+    import time
+    if sys.platform == "win32":
+        try:
+            subprocess.run(["taskkill", "/F", "/IM", "git.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3)
+        except Exception:
+            pass
+        time.sleep(0.2)
+
+    def _sweep_git_locks():
+        git_dir = os.path.join(repo_dir, ".git")
+        if os.path.isdir(git_dir):
+            for root, dirs, files in os.walk(git_dir):
+                for f in files:
+                    if f.endswith(".lock"):
+                        lp = os.path.join(root, f)
+                        for _ in range(3):
+                            try:
+                                os.chmod(lp, 0o777)
+                                os.remove(lp)
+                                break
+                            except Exception:
+                                time.sleep(0.15)
+
+    _sweep_git_locks()
+
+    run_cmd(["rebase", "--abort"], timeout=10)
+    run_cmd(["merge", "--abort"], timeout=10)
+
+    # 2. Guarantee SSL backend & HTTP version
+    run_cmd(["config", "http.sslBackend", "openssl"], timeout=10)
+    run_cmd(["config", "http.version", "HTTP/1.1"], timeout=10)
+
+    # 3. Discard local tracking changes on profile/settings files
+    files_to_restore = ["profiles.json", "profiles.json.bak", "user_settings.json"]
+    existing_restore_files = [f for f in files_to_restore if os.path.exists(os.path.join(repo_dir, f))]
+    if existing_restore_files:
+        r_restore = run_cmd(["restore"] + existing_restore_files, timeout=15)
+        log(f"git restore {' '.join(existing_restore_files)}", r_restore)
+        if r_restore.returncode != 0:
+            r_co = run_cmd(["checkout", "--"] + existing_restore_files, timeout=15)
+            log(f"git checkout -- {' '.join(existing_restore_files)} fallback", r_co)
+
+    # 4. Determine current active branch
+    r_br = run_cmd(["rev-parse", "--abbrev-ref", "HEAD"], timeout=10)
+    current_branch = (r_br.stdout or "main").strip() or "main"
+
+    # 5. Pull strategy (Token auth if available, standard pull otherwise)
+    token = (custom_token or "").strip() or get_saved_github_token(repo_dir)
+    pulled = False
+    stdout_result = ""
+
+    if token:
+        auth_url = f"https://x-access-token:{token}@github.com/hzayed3030-cell/Concrete-design.git"
+        r_pull = run_cmd(["-c", "credential.helper=", "pull", auth_url, current_branch], timeout=60)
+        log("git pull (token auth)", r_pull)
+        if r_pull.returncode == 0:
+            pulled = True
+            stdout_result = r_pull.stdout or ""
+        else:
+            r_pull_std = run_cmd(["pull", "origin", current_branch], timeout=45)
+            log("git pull (origin standard fallback)", r_pull_std)
+            if r_pull_std.returncode == 0:
+                pulled = True
+                stdout_result = r_pull_std.stdout or ""
+    else:
+        r_pull_std = run_cmd(["pull", "origin", current_branch], timeout=45)
+        log("git pull (origin standard)", r_pull_std)
+        if r_pull_std.returncode == 0:
+            pulled = True
+            stdout_result = r_pull_std.stdout or ""
+
+    if pulled:
+        run_cmd(["update-ref", f"refs/remotes/origin/{current_branch}", f"refs/heads/{current_branch}"], timeout=10)
+        try:
+            load_settings()
+        except Exception:
+            pass
+
+        if "already up to date" in stdout_result.lower():
+            msg = "المشروع على هذا الجهاز محدث بالفعل ومطابق تماماً لأحدث نسخة على GitHub! (Already up to date)"
+        else:
+            msg = "تم سحب أحدث التعديلات والمشاريع بنجاح من GitHub وتحديث التطبيق!"
+        return True, msg, "\n\n".join(logs)
+    else:
+        last_log = "\n\n".join(logs).lower()
+        if not token and any(kw in last_log for kw in ["fatal: could not read", "empty reply", "authentication failed", "terminal prompts disabled", "exit=128", "exit=1", "401", "403"]):
+            return False, "⚠️ هذا الجهاز يحتاج رمز Personal Access Token للوصول إلى GitHub. يرجى إدخال الرمز من زر (Update git hub) أولاً.", "\n\n".join(logs)
+        return False, "تعذر سحب التحديثات من GitHub (تحقق من اتصال الإنترنت أو وجود تعارض)", "\n\n".join(logs)
+
+
 def render_profile_manager():
     """Start Screen: Ultra-Compact High-Density Dark Mode Projects Dashboard."""
     projects = get_all_projects()
@@ -1846,6 +2000,11 @@ def render_profile_manager():
         st.success(st.session_state["git_push_success_msg"])
         st.balloons()
         del st.session_state["git_push_success_msg"]
+
+    if st.session_state.get("git_pull_success_msg"):
+        st.success(st.session_state["git_pull_success_msg"])
+        st.balloons()
+        del st.session_state["git_pull_success_msg"]
 
     # ── Centered Distinctive Header Banner ──
     render_custom_html(
@@ -1922,8 +2081,33 @@ def render_profile_manager():
         """
     )
 
-    # ── Global Actions Toolbar (Compact) ────────────────────────────────────
-    g1, g2, g3, g4, g5 = st.columns([1.1, 1.1, 1.3, 1.3, 1.3])
+    # ── Global Actions Toolbar (Compact) & Cohesive Distinctive Buttons ───
+    st.markdown(
+        """
+        <style>
+        /* Pull from GitHub button - Dark Teal Tint at 30% with enhanced prominent turquoise border */
+        div[class*="st-key-btn_global_github_pull"] button,
+        .st-key-btn_global_github_pull button {
+            background: linear-gradient(135deg, rgba(20, 184, 166, 0.30) 0%, rgba(13, 148, 136, 0.30) 100%) !important;
+            border: 2.5px solid rgba(45, 212, 191, 0.80) !important;
+            color: #ffffff !important;
+            font-weight: 800 !important;
+            box-shadow: 0 2px 10px rgba(45, 212, 191, 0.25) !important;
+            transition: all 0.2s ease-in-out !important;
+        }
+        div[class*="st-key-btn_global_github_pull"] button:hover,
+        .st-key-btn_global_github_pull button:hover {
+            background: linear-gradient(135deg, rgba(20, 184, 166, 0.45) 0%, rgba(13, 148, 136, 0.45) 100%) !important;
+            border-color: #2dd4bf !important;
+            box-shadow: 0 4px 18px rgba(45, 212, 191, 0.50) !important;
+            transform: translateY(-1px) !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    g1, g2, g3, g4, g5, g6 = st.columns([1.0, 1.0, 1.25, 1.25, 1.2, 1.45])
     with g1:
         if st.button("➕ مشروع جديد", use_container_width=True, type="primary", key="btn_global_new"):
             is_open = st.session_state.get("show_create_profile_form", False)
@@ -1931,6 +2115,7 @@ def render_profile_manager():
             st.session_state["_new_proj_step"] = 1
             st.session_state["show_import_profile_form"] = False
             st.session_state["show_git_update_form"] = False
+            st.session_state["show_git_pull_form"] = False
             if not is_open:
                 st.session_state.pop("_new_proj_saved_name", None)
                 st.session_state.pop("_new_proj_selected_indices", None)
@@ -1942,6 +2127,7 @@ def render_profile_manager():
             st.session_state["show_import_profile_form"] = not st.session_state.get("show_import_profile_form", False)
             st.session_state["show_create_profile_form"] = False
             st.session_state["show_git_update_form"] = False
+            st.session_state["show_git_pull_form"] = False
             st.rerun()
     with g3:
         all_projects_json = export_all_projects_json()
@@ -1958,10 +2144,18 @@ def render_profile_manager():
             st.session_state["show_git_update_form"] = not st.session_state.get("show_git_update_form", False)
             st.session_state["show_create_profile_form"] = False
             st.session_state["show_import_profile_form"] = False
+            st.session_state["show_git_pull_form"] = False
             st.rerun()
     with g5:
         gh_url = get_github_repo_url()
         st.link_button("🌐 Explore git hub", gh_url, use_container_width=True)
+    with g6:
+        if st.button("⬇️ سحب التعديلات من Github", use_container_width=True, key="btn_global_github_pull"):
+            st.session_state["show_git_pull_form"] = not st.session_state.get("show_git_pull_form", False)
+            st.session_state["show_create_profile_form"] = False
+            st.session_state["show_import_profile_form"] = False
+            st.session_state["show_git_update_form"] = False
+            st.rerun()
 
     # ── Update GitHub Form & Verification ──────────────────────────────────
     if st.session_state.get("show_git_update_form", False):
@@ -2094,6 +2288,7 @@ def render_profile_manager():
 
                         if btn_cancel:
                             st.session_state["show_git_update_form"] = False
+                            st.session_state["show_git_pull_form"] = False
                             st.session_state.pop("input_git_commit_msg", None)
                             st.rerun()
 
@@ -2136,6 +2331,73 @@ def render_profile_manager():
                                         st.error(f"❌ حدث خطأ أثناء معالجة الرفع: {ex}")
 
                     st.markdown("<hr style='margin: 10px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
+
+    # ── Pull from GitHub Confirmation Form ────────────────────────────────
+    if st.session_state.get("show_git_pull_form", False):
+        col_pull_pad1, col_pull_center, col_pull_pad2 = st.columns([0.6, 6.8, 0.6])
+        with col_pull_center:
+            with st.container(border=True):
+                st.markdown(
+                    """
+                    <div style="background: linear-gradient(135deg, #042f2e 0%, #115e59 50%, #042f2e 100%);
+                                border: 2px solid #2dd4bf; border-radius: 10px; padding: 16px 20px; margin-bottom: 12px;
+                                box-shadow: 0 4px 18px rgba(45, 212, 191, 0.25);">
+                        <div style="display:flex; align-items:center; gap:8px; font-weight:900; font-size:1.18rem; color:#2dd4bf;">
+                            <span>⬇️</span> سحب وتحديث التعديلات من منصة GitHub (Git Pull)
+                        </div>
+                        <div style="color:#f1f5f9; font-size:0.95rem; margin-top:8px; line-height: 1.7;">
+                            • سيتم استعادة وتصفير ملفات المشروعات والإعدادات المؤقتة محلياً عبر:<br>
+                            &nbsp;&nbsp;<code style="background:rgba(0,0,0,0.4); color:#a7f3d0; padding:2px 8px; border-radius:4px;">git restore profiles.json profiles.json.bak user_settings.json</code><br>
+                            • ثم سحب وتطبيق أحدث التعديلات والملفات والمشاريع من مستودع GitHub عبر:<br>
+                            &nbsp;&nbsp;<code style="background:rgba(0,0,0,0.4); color:#a7f3d0; padding:2px 8px; border-radius:4px;">git pull</code><br>
+                            • بعد انتهاء العملية سيتم تحديث شاشة التطبيق فوراً لعرض أحدث المشروعات والتحديثات البرمجية.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                saved_pull_gh_token = get_saved_github_token(app_dir)
+                token_pull_val = ""
+                if not saved_pull_gh_token:
+                    col_tok1, col_tok2 = st.columns([3.2, 1.2])
+                    with col_tok1:
+                        token_pull_val = st.text_input(
+                            "🔑 رمز GitHub Token (اختياري - مطلوب فقط للمستودعات الخاصة):",
+                            type="password",
+                            placeholder="ghp_xxxxxxxxxxxxxxxxxxxx...",
+                            key="input_pull_gh_pat_token",
+                            help="إذا كان المستودع خاصاً ولم تقم بحفظ الرمز بعد، يمكنك إدخاله هنا."
+                        )
+
+                col_pbtn1, col_pbtn2 = st.columns([2, 1])
+                with col_pbtn1:
+                    btn_exec_pull = st.button("✅ تأكيد وسحب التعديلات الآن (Pull)", use_container_width=True, type="primary", key="btn_confirm_git_pull")
+                with col_pbtn2:
+                    btn_cancel_pull = st.button("❌ إلغاء السحب (Cancel)", use_container_width=True, key="btn_cancel_git_pull")
+
+                if btn_cancel_pull:
+                    st.session_state["show_git_pull_form"] = False
+                    st.rerun()
+
+                if btn_exec_pull:
+                    active_pull_token = saved_pull_gh_token or (token_pull_val or "").strip()
+                    with st.spinner("⏳ جاري سحب أحدث التحديثات والمشروعات من مستودع GitHub..."):
+                        try:
+                            success, user_msg, detailed_log = pull_project_from_github(app_dir, custom_token=active_pull_token)
+                            if success:
+                                st.session_state["git_pull_success_msg"] = f"✅ {user_msg}"
+                                st.session_state["show_git_pull_form"] = False
+                                st.balloons()
+                                st.rerun()
+                            else:
+                                st.error(f"❌ {user_msg}")
+                                with st.expander("🔍 تفاصيل التشخيص الفني ومخرجات Git (Diagnostics Log)", expanded=True):
+                                    st.code(detailed_log, language="text")
+                        except Exception as ex:
+                            st.error(f"❌ حدث خطأ أثناء سحب التعديلات: {ex}")
+
+                st.markdown("<hr style='margin: 10px 0; border-color: rgba(148, 163, 184, 0.2);'>", unsafe_allow_html=True)
 
     # ── Create New Project Form (Enhanced 2-Step Workflow with Dependency Validation) ──
     if st.session_state.get("show_create_profile_form", False):

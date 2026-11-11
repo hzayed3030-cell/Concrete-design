@@ -13,6 +13,7 @@ Units: ton, m, kg, cm, kg/cm²
 """
 
 import os
+import re
 import io
 import json
 import hashlib
