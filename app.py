@@ -2149,10 +2149,6 @@ def render_profile_manager():
         st.balloons()
         del st.session_state["git_push_success_msg"]
 
-    if st.session_state.get("git_push_info_msg"):
-        st.info(st.session_state["git_push_info_msg"])
-        del st.session_state["git_push_info_msg"]
-
     if st.session_state.get("git_pull_success_msg"):
         st.success(st.session_state["git_pull_success_msg"])
         st.balloons()
@@ -2318,6 +2314,40 @@ def render_profile_manager():
             st.session_state["show_import_profile_form"] = False
             st.session_state["show_git_update_form"] = False
             st.rerun()
+
+    # ── Immediate Notification Banner (Positioned directly below the toolbar) ─
+    if st.session_state.get("git_push_info_msg"):
+        _info_text = st.session_state.pop("git_push_info_msg")
+        try:
+            st.toast(_info_text, icon="💡")
+        except Exception:
+            pass
+        _clean_text = _info_text.replace("💡", "").strip()
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 58, 138, 0.40) 50%, rgba(15, 23, 42, 0.95) 100%);
+                border: 2px solid #38bdf8;
+                border-radius: 10px;
+                padding: 14px 22px;
+                margin-top: 10px;
+                margin-bottom: 14px;
+                box-shadow: 0 4px 20px rgba(56, 189, 248, 0.35);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 12px;
+                direction: rtl;
+                text-align: center;
+            ">
+                <span style="font-size: 26px; filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.8));">💡</span>
+                <span style="color: #ffffff; font-size: 1.15rem; font-weight: 800; text-shadow: 0 1px 4px rgba(0,0,0,0.7); letter-spacing: 0.3px;">
+                    {_clean_text}
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     # ── Update GitHub Form & Verification ──────────────────────────────────
     if st.session_state.get("show_git_update_form", False):
