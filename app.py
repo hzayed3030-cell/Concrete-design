@@ -1762,6 +1762,21 @@ def sync_project_to_github(commit_msg: str, repo_dir: str, custom_token: str = N
         return False, "تعذر تجهيز الملفات (git add)", "\n\n".join(logs)
 
     # 4.5 Verification: Check if there are actual modifications in working tree / staged
+    # Check if only profiles timestamp changed
+    prof_path = os.path.join(repo_dir, "profiles.json")
+    if os.path.exists(prof_path):
+        try:
+            with open(prof_path, "r", encoding="utf-8") as f:
+                cur_p = json.load(f)
+            r_head_p = run_cmd(["show", "HEAD:profiles.json"], timeout=8)
+            if r_head_p.returncode == 0:
+                head_p = json.loads(r_head_p.stdout)
+                if _strip_ephemeral_profile_timestamps(cur_p) == _strip_ephemeral_profile_timestamps(head_p):
+                    run_cmd(["restore", "--staged", "profiles.json", "profiles.json.bak"], timeout=5)
+                    run_cmd(["restore", "profiles.json", "profiles.json.bak"], timeout=5)
+        except Exception:
+            pass
+
     r_diff_cached = run_cmd(["diff", "--cached", "--quiet"], timeout=10)
     has_staged_changes = (r_diff_cached.returncode != 0)
     
@@ -1853,9 +1868,23 @@ def get_github_repo_url():
         return "https://github.com/hzayed3030-cell/Concrete-design"
 
 
+def _strip_ephemeral_profile_timestamps(obj):
+    """Recursively strip volatile runtime timestamps from profile dictionaries for pure data comparison."""
+    if isinstance(obj, dict):
+        return {
+            k: _strip_ephemeral_profile_timestamps(v)
+            for k, v in obj.items()
+            if k not in ("updated_at", "last_used_at", "timestamp", "last_opened")
+        }
+    elif isinstance(obj, list):
+        return [_strip_ephemeral_profile_timestamps(x) for x in obj]
+    return obj
+
+
 def check_has_unpushed_changes(repo_dir: str):
     """
-    Checks if there are any uncommitted working tree modifications or unpushed commits.
+    Checks if there are real changes to push (code, new/deleted files, or project data changes).
+    Ignores ephemeral runtime timestamp updates in profiles.json / profiles.json.bak / user_settings.json.
     Returns: (has_changes: bool, info_message: str)
     """
     git_env = os.environ.copy()
@@ -1863,18 +1892,7 @@ def check_has_unpushed_changes(repo_dir: str):
     git_env["GCM_INTERACTIVE"] = "never"
 
     try:
-        # Check 1: Working tree / staged modifications
-        res_stat = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=repo_dir,
-            env=git_env,
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
-        has_local_mods = bool((res_stat.stdout or "").strip())
-
-        # Check 2: Branch ahead of origin
+        # Check 1: Branch ahead of origin
         res_br = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             cwd=repo_dir,
@@ -1898,9 +1916,71 @@ def check_has_unpushed_changes(repo_dir: str):
         except Exception:
             ahead_count = 0
 
-        if not has_local_mods and ahead_count == 0:
+        if ahead_count > 0:
+            return True, ""
+
+        # Check 2: Working tree / staged modifications
+        res_stat = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo_dir,
+            env=git_env,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        status_lines = [line.strip() for line in (res_stat.stdout or "").splitlines() if line.strip()]
+        if not status_lines:
             return False, "💡 لا توجد أي تعديلات جديدة في الملفات أو المشروعات لرفعها، المشروع على هذا الجهاز مطابق بالفعل لما هو موجود على GitHub."
-        return True, ""
+
+        real_files_changed = []
+        profiles_changed = False
+
+        for line in status_lines:
+            parts = line.split(maxsplit=1)
+            if len(parts) == 2:
+                path = parts[1].strip('"').strip("'")
+                norm_path = os.path.normpath(path).replace("\\", "/")
+                basename = os.path.basename(norm_path)
+                if basename in ("profiles.json", "profiles.json.bak"):
+                    profiles_changed = True
+                elif basename == "user_settings.json":
+                    continue
+                else:
+                    real_files_changed.append(norm_path)
+            else:
+                real_files_changed.append(line)
+
+        # If any code, module, template or other file changed -> REAL CHANGE
+        if real_files_changed:
+            return True, ""
+
+        # If only profiles.json / profiles.json.bak changed, check if actual project data changed
+        if profiles_changed:
+            prof_path = os.path.join(repo_dir, "profiles.json")
+            if os.path.exists(prof_path):
+                with open(prof_path, "r", encoding="utf-8") as f:
+                    cur_prof = json.load(f)
+                res_head = subprocess.run(
+                    ["git", "show", "HEAD:profiles.json"],
+                    cwd=repo_dir,
+                    env=git_env,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    timeout=8
+                )
+                if res_head.returncode == 0:
+                    head_prof = json.loads(res_head.stdout)
+                    if _strip_ephemeral_profile_timestamps(cur_prof) != _strip_ephemeral_profile_timestamps(head_prof):
+                        return True, ""
+                    else:
+                        # Project data is identical, only timestamps changed!
+                        # Silently revert the volatile timestamp modifications
+                        subprocess.run(["git", "restore", "profiles.json", "profiles.json.bak"], cwd=repo_dir, env=git_env, capture_output=True, timeout=5)
+                        return False, "💡 لا توجد أي تعديلات جديدة في الملفات أو المشروعات لرفعها، المشروع على هذا الجهاز مطابق بالفعل لما هو موجود على GitHub."
+
+        return False, "💡 لا توجد أي تعديلات جديدة في الملفات أو المشروعات لرفعها، المشروع على هذا الجهاز مطابق بالفعل لما هو موجود على GitHub."
+
     except Exception:
         return True, ""
 
