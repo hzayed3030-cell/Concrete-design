@@ -3503,6 +3503,11 @@ def save_settings() -> None:
                 if "cfg" in st.session_state:
                     st.session_state["cfg"][ek] = ev
 
+    # ── Guard: If data has not changed, do not touch disk to prevent false git dirty status ──
+    prev_data = profiles.get(active_name, {}).get("data", {})
+    if prev_data == clean_cfg and pdata.get("active_profile") == active_name:
+        return
+
     profiles[active_name]["data"] = clean_cfg
     profiles[active_name]["updated_at"] = _get_now_str()
     profiles[active_name]["last_used_at"] = _get_now_str(with_seconds=True)
