@@ -1761,11 +1761,27 @@ def sync_project_to_github(commit_msg: str, repo_dir: str, custom_token: str = N
     if r_add.returncode != 0:
         return False, "تعذر تجهيز الملفات (git add)", "\n\n".join(logs)
 
-    # 5. Commit changes (supports both English and Arabic UTF-8)
-    r_commit = run_cmd(git_id + ["commit", "--allow-empty", "-m", commit_msg], timeout=30)
-    log("git commit", r_commit)
-    if r_commit.returncode != 0 and "nothing to commit" not in (r_commit.stdout + r_commit.stderr).lower():
-        return False, "تعذر حفظ التعديل محلياً (git commit)", "\n\n".join(logs)
+    # 4.5 Verification: Check if there are actual modifications in working tree / staged
+    r_diff_cached = run_cmd(["diff", "--cached", "--quiet"], timeout=10)
+    has_staged_changes = (r_diff_cached.returncode != 0)
+    
+    # Check if local commits are ahead of remote
+    r_ahead = run_cmd(["rev-list", f"origin/{current_branch}..HEAD", "--count"], timeout=10)
+    try:
+        ahead_count = int((r_ahead.stdout or "0").strip())
+    except Exception:
+        ahead_count = 0
+    log(f"changes check: has_staged={has_staged_changes}, ahead_count={ahead_count}")
+
+    if not has_staged_changes and ahead_count == 0:
+        return True, "💡 لا توجد أي تعديلات جديدة في الملفات أو المشروعات لرفعها، المشروع على هذا الجهاز مطابق بالفعل لما هو موجود على GitHub.", "\n\n".join(logs)
+
+    # 5. Commit changes only if there are actual staged modifications (clean commit without --allow-empty)
+    if has_staged_changes:
+        r_commit = run_cmd(git_id + ["commit", "-m", commit_msg], timeout=30)
+        log("git commit", r_commit)
+        if r_commit.returncode != 0 and "nothing to commit" not in (r_commit.stdout + r_commit.stderr).lower():
+            return False, "تعذر حفظ التعديل محلياً (git commit)", "\n\n".join(logs)
 
     # 6. Push strategy: Direct Token Push first (if token provided), OR Fallback Standard Push (if other PC already has saved credentials)
     token = (custom_token or "").strip() or get_saved_github_token(repo_dir)
@@ -1835,6 +1851,58 @@ def get_github_repo_url():
         return url
     except Exception:
         return "https://github.com/hzayed3030-cell/Concrete-design"
+
+
+def check_has_unpushed_changes(repo_dir: str):
+    """
+    Checks if there are any uncommitted working tree modifications or unpushed commits.
+    Returns: (has_changes: bool, info_message: str)
+    """
+    git_env = os.environ.copy()
+    git_env["GIT_TERMINAL_PROMPT"] = "0"
+    git_env["GCM_INTERACTIVE"] = "never"
+
+    try:
+        # Check 1: Working tree / staged modifications
+        res_stat = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo_dir,
+            env=git_env,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        has_local_mods = bool((res_stat.stdout or "").strip())
+
+        # Check 2: Branch ahead of origin
+        res_br = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=repo_dir,
+            env=git_env,
+            capture_output=True,
+            text=True,
+            timeout=8
+        )
+        current_branch = (res_br.stdout or "main").strip() or "main"
+
+        res_ahead = subprocess.run(
+            ["git", "rev-list", f"origin/{current_branch}..HEAD", "--count"],
+            cwd=repo_dir,
+            env=git_env,
+            capture_output=True,
+            text=True,
+            timeout=8
+        )
+        try:
+            ahead_count = int((res_ahead.stdout or "0").strip())
+        except Exception:
+            ahead_count = 0
+
+        if not has_local_mods and ahead_count == 0:
+            return False, "💡 لا توجد أي تعديلات جديدة في الملفات أو المشروعات لرفعها، المشروع على هذا الجهاز مطابق بالفعل لما هو موجود على GitHub."
+        return True, ""
+    except Exception:
+        return True, ""
 
 
 def pull_project_from_github(repo_dir: str, custom_token: str = None):
@@ -2001,6 +2069,10 @@ def render_profile_manager():
         st.balloons()
         del st.session_state["git_push_success_msg"]
 
+    if st.session_state.get("git_push_info_msg"):
+        st.info(st.session_state["git_push_info_msg"])
+        del st.session_state["git_push_info_msg"]
+
     if st.session_state.get("git_pull_success_msg"):
         st.success(st.session_state["git_pull_success_msg"])
         st.balloons()
@@ -2141,11 +2213,21 @@ def render_profile_manager():
         )
     with g4:
         if st.button("🚀 Update git hub", use_container_width=True, key="btn_global_github_sync"):
-            st.session_state["show_git_update_form"] = not st.session_state.get("show_git_update_form", False)
-            st.session_state["show_create_profile_form"] = False
-            st.session_state["show_import_profile_form"] = False
-            st.session_state["show_git_pull_form"] = False
-            st.rerun()
+            if st.session_state.get("show_git_update_form", False):
+                st.session_state["show_git_update_form"] = False
+                st.rerun()
+            else:
+                has_changes, changes_msg = check_has_unpushed_changes(app_dir)
+                if not has_changes:
+                    st.session_state["git_push_info_msg"] = changes_msg
+                    st.session_state["show_git_update_form"] = False
+                    st.rerun()
+                else:
+                    st.session_state["show_git_update_form"] = True
+                    st.session_state["show_create_profile_form"] = False
+                    st.session_state["show_import_profile_form"] = False
+                    st.session_state["show_git_pull_form"] = False
+                    st.rerun()
     with g5:
         gh_url = get_github_repo_url()
         st.link_button("🌐 Explore git hub", gh_url, use_container_width=True)
@@ -2318,10 +2400,13 @@ def render_profile_manager():
                                     try:
                                         success, user_msg, detailed_log = sync_project_to_github(msg_final, app_dir, custom_token=active_token)
                                         if success:
-                                            st.session_state["git_push_success_msg"] = f"✅ {user_msg}"
+                                            if "💡" in user_msg or "لا توجد أي تعديلات" in user_msg:
+                                                st.session_state["git_push_info_msg"] = user_msg
+                                            else:
+                                                st.session_state["git_push_success_msg"] = f"✅ {user_msg}"
+                                                st.balloons()
                                             st.session_state["show_git_update_form"] = False
                                             st.session_state.pop("input_git_commit_msg", None)
-                                            st.balloons()
                                             st.rerun()
                                         else:
                                             st.error(f"❌ {user_msg}")
