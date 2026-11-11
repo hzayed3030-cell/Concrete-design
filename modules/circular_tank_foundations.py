@@ -124,6 +124,196 @@ def play_siren_alarm():
 #  1. ENGINEERING COMPUTATION ENGINE — EQUIPMENT FOUNDATIONS (STATIC & DYNAMIC)
 # ===============================================================================
 
+def compute_equipment_foundation_T_design(
+    Lf_m: float,
+    Bf_m: float,
+    eq_weight_ton: float,
+    eq_shape: str,
+    Lm_m: float,
+    Bm_m: float,
+    is_isolated: bool,
+    P_eq_design_ton: float,
+    target_mass_ratio: float,
+    fc_kg_cm2: float,
+    cover_cm: float,
+    gamma_c: float = 2.50,
+) -> float:
+    """
+    Computes the minimum code-safe structural thickness (T_design) for Equipment Foundation
+    given plan dimensions (Lf, Bf), strictly satisfying:
+    1. Code minimum baseline thickness (0.50m for isolated, 0.70m for fixed-base).
+    2. Minimum inertia mass ratio (2.0x - 3.0x) for fixed-base dynamic machinery.
+    3. ECP 203 punching shear safety (q_up <= q_cup).
+    4. ECP 203 one-way beam shear safety (qu_1way <= qcu_1way).
+    Returns thickness rounded up to nearest 0.05m (5 cm).
+    """
+    is_circular_eq = "دائرية" in eq_shape or "Circular" in eq_shape
+    Af_m2 = max(float(Lf_m) * float(Bf_m), 0.10)
+
+    # 1. Baseline rigidity & mass requirement
+    if is_isolated:
+        t_cand = 0.50
+    else:
+        clamped_ratio = max(2.0, min(3.0, float(target_mass_ratio)))
+        req_min_wf_ton = float(eq_weight_ton) * clamped_ratio
+        req_vol_m3 = req_min_wf_ton / gamma_c
+        t_mass = req_vol_m3 / Af_m2
+        t_cand = max(0.70, math.ceil(t_mass * 20.0) / 20.0)
+
+    # 2. Iterative shear & punching convergence loop
+    fcu_mpa = float(fc_kg_cm2) / 10.0
+    gamma_c_mat = 1.50
+    Pu_eq_ton = 1.50 * float(P_eq_design_ton)
+    qu_net_ton_m2 = Pu_eq_ton / Af_m2
+    alpha_col = 4.0
+
+    for _ in range(60):
+        t_cand = math.ceil(t_cand * 20.0) / 20.0
+        d_cm = max(t_cand * 100.0 - float(cover_cm), 10.0)
+        d_m = d_cm / 100.0
+
+        if is_circular_eq:
+            bo_m = math.pi * (Lm_m + d_m)
+            area_punch_m2 = (math.pi / 4.0) * ((Lm_m + d_m) ** 2)
+            q_cup_all = min(0.316 * math.sqrt(fcu_mpa / gamma_c_mat) * 10.0, 16.0)
+        else:
+            bo_m = 2.0 * ((Lm_m + d_m) + (Bm_m + d_m))
+            area_punch_m2 = (Lm_m + d_m) * (Bm_m + d_m)
+            beta_c = min(Lm_m, Bm_m) / max(Lm_m, Bm_m, 0.01)
+            q_cup_1 = 0.80 * ((alpha_col * d_cm / (bo_m * 100.0)) + 0.20) * math.sqrt(fcu_mpa / gamma_c_mat) * 10.0
+            q_cup_2 = 0.316 * (0.50 + beta_c) * math.sqrt(fcu_mpa / gamma_c_mat) * 10.0
+            q_cup_3 = 0.316 * math.sqrt(fcu_mpa / gamma_c_mat) * 10.0
+            q_cup_all = min(q_cup_1, q_cup_2, q_cup_3, 16.0)
+
+        Q_up_ton = max(0.0, Pu_eq_ton - qu_net_ton_m2 * min(area_punch_m2, Af_m2))
+        q_up_kg_cm2 = (Q_up_ton * 1000.0) / (bo_m * 100.0 * d_cm)
+
+        # One-way beam shear check
+        cant_L_m = max(0.0, (float(Lf_m) - Lm_m) / 2.0)
+        cant_B_m = max(0.0, (float(Bf_m) - Bm_m) / 2.0)
+        crit_shear_arm_m = max(0.0, max(cant_L_m, cant_B_m) - d_m)
+        Qu_1way_ton_m = qu_net_ton_m2 * crit_shear_arm_m
+        qu_1way_kg_cm2 = (Qu_1way_ton_m * 1000.0) / (100.0 * d_cm)
+        qcu_1way_kg_cm2 = 0.16 * math.sqrt(fcu_mpa / gamma_c_mat) * 10.0
+
+        if (q_up_kg_cm2 > q_cup_all) or (qu_1way_kg_cm2 > qcu_1way_kg_cm2):
+            t_cand = round(t_cand + 0.05, 2)
+            continue
+        break
+
+    return round(t_cand, 2)
+
+
+def compute_equipment_foundation_auto_dimensions(
+    eq_weight_ton: float,
+    eq_shape: str,
+    eq_length_m: float,
+    eq_width_m: float,
+    eq_dia_m: float,
+    isolation_type: str,
+    target_mass_ratio: float,
+    q_all_kg_cm2: float,
+    fc_kg_cm2: float,
+    cover_cm: float,
+) -> tuple:
+    """
+    Computes auto-sized plan dimensions (Lf, Bf) and corresponding code-safe design
+    thickness T_design for equipment foundation.
+    """
+    gamma_c = 2.50
+    q_all_ton_m2 = float(q_all_kg_cm2) * 10.0
+
+    is_circular_eq = "دائرية" in eq_shape or "Circular" in eq_shape
+    is_fixed_base = "عدم وجود" in isolation_type or "Fixed Base" in isolation_type
+    is_isolated = not is_fixed_base
+
+    if is_circular_eq:
+        Lm_m = max(float(eq_dia_m), 0.20)
+        Bm_m = max(float(eq_dia_m), 0.20)
+    else:
+        Lm_m = max(float(eq_length_m), 0.20)
+        Bm_m = max(float(eq_width_m), 0.20)
+
+    min_clearance_m = 0.40
+    min_Lf = round(Lm_m + 2.0 * min_clearance_m, 2)
+    min_Bf = round(Bm_m + 2.0 * min_clearance_m, 2)
+
+    if is_isolated:
+        dyn_factor = 1.20
+        P_eq_design_ton = float(eq_weight_ton) * dyn_factor
+        req_min_wf_ton = 0.0
+    else:
+        dyn_factor = 1.50
+        P_eq_design_ton = float(eq_weight_ton) * dyn_factor
+        clamped_ratio = max(2.0, min(3.0, float(target_mass_ratio)))
+        req_min_wf_ton = float(eq_weight_ton) * clamped_ratio
+
+    Lf_m = max(min_Lf, 1.20)
+    Bf_m = max(min_Bf, 1.20)
+    tf_m = 0.50 if is_isolated else 0.70
+
+    if not is_isolated:
+        req_vol_m3 = req_min_wf_ton / gamma_c
+        current_vol = Lf_m * Bf_m * tf_m
+        if current_vol < req_vol_m3:
+            scale_3d = (req_vol_m3 / max(current_vol, 0.01)) ** (1.0 / 3.0)
+            Lf_m = math.ceil((Lf_m * scale_3d) * 20.0) / 20.0
+            Bf_m = math.ceil((Bf_m * scale_3d) * 20.0) / 20.0
+            tf_m = math.ceil((req_vol_m3 / (Lf_m * Bf_m)) * 20.0) / 20.0
+            tf_m = max(tf_m, 0.60)
+
+    for _ in range(50):
+        vol_f = Lf_m * Bf_m * tf_m
+        Wf_ton = vol_f * gamma_c
+        P_total_working = P_eq_design_ton + Wf_ton
+        Af_m2 = Lf_m * Bf_m
+        q_act_ton_m2 = P_total_working / Af_m2
+
+        if q_act_ton_m2 > q_all_ton_m2:
+            Lf_m = round(Lf_m + 0.15, 2)
+            Bf_m = round(Bf_m + 0.15, 2)
+            continue
+
+        d_cm = max(tf_m * 100.0 - float(cover_cm), 15.0)
+        d_m = d_cm / 100.0
+        if is_circular_eq:
+            bo_m = math.pi * (Lm_m + d_m)
+            area_punch_m2 = (math.pi / 4.0) * ((Lm_m + d_m) ** 2)
+        else:
+            bo_m = 2.0 * ((Lm_m + d_m) + (Bm_m + d_m))
+            area_punch_m2 = (Lm_m + d_m) * (Bm_m + d_m)
+
+        Pu_eq_ton = 1.50 * P_eq_design_ton
+        qu_net_ton_m2 = Pu_eq_ton / Af_m2
+        Q_up_ton = max(0.0, Pu_eq_ton - qu_net_ton_m2 * min(area_punch_m2, Af_m2))
+        q_up_kg_cm2 = (Q_up_ton * 1000.0) / (bo_m * 100.0 * d_cm)
+
+        fcu_mpa = float(fc_kg_cm2) / 10.0
+        q_cup_kg_cm2 = min(0.316 * math.sqrt(fcu_mpa / 1.50) * 10.0, 16.0)
+
+        if q_up_kg_cm2 > q_cup_kg_cm2:
+            tf_m = round(tf_m + 0.05, 2)
+            continue
+
+        break
+
+    T_design = compute_equipment_foundation_T_design(
+        Lf_m=Lf_m,
+        Bf_m=Bf_m,
+        eq_weight_ton=eq_weight_ton,
+        eq_shape=eq_shape,
+        Lm_m=Lm_m,
+        Bm_m=Bm_m,
+        is_isolated=is_isolated,
+        P_eq_design_ton=P_eq_design_ton,
+        target_mass_ratio=target_mass_ratio,
+        fc_kg_cm2=fc_kg_cm2,
+        cover_cm=cover_cm,
+        gamma_c=gamma_c,
+    )
+    return (round(Lf_m, 2), round(Bf_m, 2), max(round(tf_m, 2), T_design))
+
+
 def compute_equipment_foundation_design(
     eq_weight_ton: float = 15.0,
     eq_shape: str = "مستطيلة (Rectangular)",
@@ -139,7 +329,7 @@ def compute_equipment_foundation_design(
     sizing_mode: str = "حساب أوتوماتيكي للأبعاد (Auto-Sizing)",
     manual_Lf_m: float = 3.50,
     manual_Bf_m: float = 2.50,
-    manual_tf_m: float = 0.80,
+    manual_tf_m: float = None,
     target_mass_ratio: float = 2.50,
     cover_cm: float = 7.5,
     phi_bot_mm: int = 16,
@@ -180,67 +370,47 @@ def compute_equipment_foundation_design(
         clamped_ratio = max(2.0, min(3.0, target_mass_ratio))
         req_min_wf_ton = eq_weight_ton * clamped_ratio
 
-    # Determine Foundation Dimensions (Lf, Bf, tf)
+    # Determine Foundation Dimensions (Lf, Bf, tf) and Safe Design Thickness (T_design)
     if "Auto" in sizing_mode or "أوتوماتيكي" in sizing_mode:
-        # Start with minimum plan dimensions
-        Lf_m = max(min_Lf, 1.20)
-        Bf_m = max(min_Bf, 1.20)
-        tf_m = 0.50 if is_isolated else 0.70
-
-        # If Fixed Base, ensure volume satisfies W_f >= target_mass_ratio * W_eq
-        if not is_isolated:
-            req_vol_m3 = req_min_wf_ton / gamma_c
-            current_vol = Lf_m * Bf_m * tf_m
-            if current_vol < req_vol_m3:
-                # Scale plan & thickness proportionally
-                scale_3d = (req_vol_m3 / max(current_vol, 0.01)) ** (1.0 / 3.0)
-                Lf_m = math.ceil((Lf_m * scale_3d) * 20.0) / 20.0
-                Bf_m = math.ceil((Bf_m * scale_3d) * 20.0) / 20.0
-                tf_m = math.ceil((req_vol_m3 / (Lf_m * Bf_m)) * 20.0) / 20.0
-                tf_m = max(tf_m, 0.60)
-
-        # Iterative Soil Bearing & Punching Convergence Loop
-        for _ in range(40):
-            vol_f = Lf_m * Bf_m * tf_m
-            Wf_ton = vol_f * gamma_c
-            P_total_working = P_eq_design_ton + Wf_ton
-            Af_m2 = Lf_m * Bf_m
-            q_act_ton_m2 = P_total_working / Af_m2
-
-            # Check soil pressure
-            if q_act_ton_m2 > q_all_ton_m2:
-                # Expand plan area
-                Lf_m = round(Lf_m + 0.15, 2)
-                Bf_m = round(Bf_m + 0.15, 2)
-                continue
-
-            # Check punching shear
-            d_cm = max(tf_m * 100.0 - cover_cm, 15.0)
-            d_m = d_cm / 100.0
-            if is_circular_eq:
-                bo_m = math.pi * (Lm_m + d_m)
-                area_punch_m2 = (math.pi / 4.0) * ((Lm_m + d_m) ** 2)
-            else:
-                bo_m = 2.0 * ((Lm_m + d_m) + (Bm_m + d_m))
-                area_punch_m2 = (Lm_m + d_m) * (Bm_m + d_m)
-
-            Pu_eq_ton = 1.50 * P_eq_design_ton
-            qu_net_ton_m2 = Pu_eq_ton / Af_m2
-            Q_up_ton = max(0.0, Pu_eq_ton - qu_net_ton_m2 * min(area_punch_m2, Af_m2))
-            q_up_kg_cm2 = (Q_up_ton * 1000.0) / (bo_m * 100.0 * d_cm)
-
-            fcu_mpa = fc_kg_cm2 / 10.0
-            q_cup_kg_cm2 = min(0.316 * math.sqrt(fcu_mpa / 1.50) * 10.0, 16.0)
-
-            if q_up_kg_cm2 > q_cup_kg_cm2:
-                tf_m = round(tf_m + 0.05, 2)
-                continue
-
-            break
+        auto_Lf, auto_Bf, T_design = compute_equipment_foundation_auto_dimensions(
+            eq_weight_ton=eq_weight_ton,
+            eq_shape=eq_shape,
+            eq_length_m=eq_length_m,
+            eq_width_m=eq_width_m,
+            eq_dia_m=eq_dia_m,
+            isolation_type=isolation_type,
+            target_mass_ratio=target_mass_ratio,
+            q_all_kg_cm2=q_all_kg_cm2,
+            fc_kg_cm2=fc_kg_cm2,
+            cover_cm=cover_cm,
+        )
+        Lf_m = auto_Lf
+        Bf_m = auto_Bf
+        if manual_tf_m is not None and float(manual_tf_m) >= T_design - 1e-4:
+            tf_m = round(float(manual_tf_m), 2)
+        else:
+            tf_m = T_design
     else:
-        Lf_m = max(manual_Lf_m, 0.50)
-        Bf_m = max(manual_Bf_m, 0.50)
-        tf_m = max(manual_tf_m, 0.25)
+        Lf_m = max(float(manual_Lf_m), 0.50)
+        Bf_m = max(float(manual_Bf_m), 0.50)
+        T_design = compute_equipment_foundation_T_design(
+            Lf_m=Lf_m,
+            Bf_m=Bf_m,
+            eq_weight_ton=eq_weight_ton,
+            eq_shape=eq_shape,
+            Lm_m=Lm_m,
+            Bm_m=Bm_m,
+            is_isolated=is_isolated,
+            P_eq_design_ton=P_eq_design_ton,
+            target_mass_ratio=target_mass_ratio,
+            fc_kg_cm2=fc_kg_cm2,
+            cover_cm=cover_cm,
+            gamma_c=gamma_c,
+        )
+        if manual_tf_m is not None and float(manual_tf_m) >= T_design - 1e-4:
+            tf_m = round(float(manual_tf_m), 2)
+        else:
+            tf_m = T_design
 
     # Final Geometry & Self-Weight Automatic Calculation
     Af_m2 = Lf_m * Bf_m
@@ -421,6 +591,10 @@ def compute_equipment_foundation_design(
         "Lf_m": Lf_m,
         "Bf_m": Bf_m,
         "tf_m": tf_m,
+        "T_design": T_design,
+        "T_design_m": T_design,
+        "T_design_cm": round(T_design * 100.0, 1),
+        "is_tf_overridden": bool(tf_m > T_design + 1e-4),
         "tf_cm": tf_m * 100.0,
         "d_cm": d_cm,
         "cover_cm": cover_cm,
@@ -1614,7 +1788,7 @@ def _render_equipment_foundations_tab():
             st.markdown(
                 """
                 <style>
-                /* Align label baselines and uniform heights across the 6 columns */
+                /* Align label baselines and uniform heights across the columns */
                 div[data-testid="column"] label {
                     min-height: 44px !important;
                     display: flex !important;
@@ -1646,8 +1820,8 @@ def _render_equipment_foundations_tab():
                 if "w_m10_eq_man_Bf" in st.session_state and float(st.session_state["w_m10_eq_man_Bf"]) < 0.50:
                     st.session_state["w_m10_eq_man_Bf"] = 0.50
 
-            # 6 equal columns so all 6 input boxes have exactly the same width
-            c_in1, c_in2, c_in3, c_in4, c_in5, c_in6 = st.columns(6)
+            # 5 equal columns for rebar diameters, cover, and manual L & B
+            c_in1, c_in2, c_in3, c_in4, c_in5 = st.columns(5)
             with c_in1:
                 phi_bot_eq = S.selectbox("قطر التسليح السفلي Φ_bot [mm]:", "m10_eq_phi_bot", ECP_DIAMETERS, index=2)
             with c_in2:
@@ -1674,20 +1848,28 @@ def _render_equipment_foundations_tab():
                     step=0.10,
                     help=f"يجب ألا يقل عرض القاعدة عن عرض بصمة المعدة ({min_Bf_req:.2f} m) لتأمين مسامير التثبيت ومسافة الخلوص الكودية.",
                 )
-            with c_in6:
-                man_tf = S.number_input(
-                    "السمك tf [m]:",
-                    "m10_eq_man_tf",
-                    value=0.80,
-                    min_value=0.30,
-                    max_value=5.0,
-                    step=0.05,
-                    help="السمك الإنشائي للقاعدة (الموصى به ≥ 0.50m لقواعد العوازل، و ≥ 0.70m للقواعد الثابتة).",
-                )
+
+            # Compute safe design thickness T_design for the manual L & B dimensions
+            is_iso_bool = ("Fixed Base" not in iso_type and "عدم وجود" not in iso_type)
+            dyn_factor_val = 1.20 if is_iso_bool else 1.50
+            P_eq_design_val = float(eq_weight) * dyn_factor_val
+            T_design = compute_equipment_foundation_T_design(
+                Lf_m=float(man_Lf),
+                Bf_m=float(man_Bf),
+                eq_weight_ton=float(eq_weight),
+                eq_shape=eq_shape,
+                Lm_m=float(eq_dia) if "دائرية" in eq_shape else float(eq_len),
+                Bm_m=float(eq_dia) if "دائرية" in eq_shape else float(eq_wid),
+                is_isolated=is_iso_bool,
+                P_eq_design_ton=P_eq_design_val,
+                target_mass_ratio=float(mass_ratio_target),
+                fc_kg_cm2=float(fc_eq),
+                cover_cm=float(cover_eq),
+            )
         else:
             st.markdown(
                 """<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:22px; font-weight:900; color:#38bdf8; margin: 18px 0 14px 0; border-bottom: 2px solid rgba(56, 189, 248, 0.35); padding-bottom: 8px;'>
-                    🔩 مدخلات قطر حديد التسليح والغطاء الخرساني (Reinforcement Settings)
+                    🔩 مدخلات قطر حديد التسليح والغطاء الخرساني والأبعاد المحسوبة (Reinforcement & Geometry)
                 </div>""",
                 unsafe_allow_html=True,
             )
@@ -1699,13 +1881,121 @@ def _render_equipment_foundations_tab():
             with c_in3:
                 cover_eq = S.number_input("الغطاء الخرساني Cover [cm]:", "m10_eq_cover", value=7.5, min_value=5.0, max_value=12.0, step=0.5)
 
-            man_Lf, man_Bf, man_tf = 3.50, 2.50, 0.80
             min_Lf_req = round(float(eq_len), 2)
             min_Bf_req = round(float(eq_wid), 2)
+
+            # Compute auto-sized dimensions and T_design
+            auto_Lf, auto_Bf, T_design = compute_equipment_foundation_auto_dimensions(
+                eq_weight_ton=float(eq_weight),
+                eq_shape=eq_shape,
+                eq_length_m=float(eq_len),
+                eq_width_m=float(eq_wid),
+                eq_dia_m=float(eq_dia),
+                isolation_type=iso_type,
+                target_mass_ratio=float(mass_ratio_target),
+                q_all_kg_cm2=float(q_all_eq),
+                fc_kg_cm2=float(fc_eq),
+                cover_cm=float(cover_eq),
+            )
+            man_Lf, man_Bf = auto_Lf, auto_Bf
             st.markdown(
-                "<div dir='rtl' style='direction:rtl !important; background:rgba(16,185,129,0.15); border:1.5px solid #10b981; border-radius:8px; padding:10px; text-align:center; color:#a7f3d0; font-weight:800; margin-top:8px;'>✨ الأبعاد تحسب أوتوماتيكياً لتحقيق الأمان الكامل واستيفاء مسافات الخلوص الكودية</div>",
+                f"""<div dir='rtl' style='direction:rtl !important; background:rgba(16,185,129,0.12); border:1.5px solid #10b981; border-radius:8px; padding:10px 14px; text-align:center; color:#a7f3d0; font-weight:800; margin-top:8px;'>
+                    ✨ <b>الأبعاد المحسوبة أوتوماتيكياً:</b> الطول <span dir="ltr" style="color:#ffffff; font-weight:900;">Lf = {man_Lf:.2f} m</span> | العرض <span dir="ltr" style="color:#ffffff; font-weight:900;">Bf = {man_Bf:.2f} m</span> (مستوفية لإجهاد التربة ومسافات الخلوص الكودية).
+                </div>""",
                 unsafe_allow_html=True,
             )
+
+        # ── INTERACTIVE THICKNESS / DEPTH VALIDATION & RECALCULATION ──
+        st.markdown(
+            """
+            <div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:20px; font-weight:900; color:#38bdf8; margin: 18px 0 10px 0; border-bottom: 2px solid rgba(56, 189, 248, 0.35); padding-bottom: 6px;'>
+                📏 سمك الخرسانة والعمق الإنشائي للقاعدة (Concrete Thickness / Depth tf)
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Signature to detect changes in foundation parameters and auto-update T_design
+        curr_m10_design_sig = (
+            float(eq_weight), str(eq_shape), float(eq_len), float(eq_wid), float(eq_dia),
+            str(iso_type), float(op_rpm), float(fc_eq), float(fy_eq), float(q_all_eq), float(ks_eq),
+            float(mass_ratio_target), str(sizing_mode_eq), round(float(man_Lf), 2), round(float(man_Bf), 2),
+            float(cover_eq)
+        )
+        prev_m10_design_sig = st.session_state.get("_m10_eq_last_design_sig")
+
+        if prev_m10_design_sig is None or prev_m10_design_sig != curr_m10_design_sig:
+            st.session_state["_m10_eq_last_design_sig"] = curr_m10_design_sig
+            st.session_state["w_m10_eq_man_tf"] = float(T_design)
+            S.cfg_set("m10_eq_man_tf", float(T_design))
+            st.session_state.pop("_m10_tf_error_msg", None)
+
+        current_val_in_state = st.session_state.get("w_m10_eq_man_tf")
+        if current_val_in_state is None:
+            saved_tf = S.cfg_val("m10_eq_man_tf")
+            current_val_in_state = float(saved_tf) if saved_tf is not None else float(T_design)
+            st.session_state["w_m10_eq_man_tf"] = float(current_val_in_state)
+
+        c_tf1, c_tf2 = st.columns([1.5, 2.5], vertical_alignment="center")
+        with c_tf1:
+            raw_tf = st.number_input(
+                f"السمك tf [m] (سمك التصميم T_design = {T_design:.2f} m):",
+                min_value=0.10,
+                max_value=6.0,
+                step=0.05,
+                key="w_m10_eq_man_tf",
+                help=f"سمك القاعدة الإنشائي tf. سمك التصميم الآمن الأدنى T_design = {T_design:.2f} m. يُسمح بزيادة السمك لإعادة حساب حديد التسليح والتحققات تلقائياً، ويتم قفل المخرجات ومنع عرضها إذا قل عن {T_design:.2f} m.",
+            )
+
+        is_thickness_safe = (float(raw_tf) >= T_design - 1e-4)
+
+        if not is_thickness_safe:
+            play_siren_alarm()
+            st.html(
+                f"""<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #7f1d1d 0%, #b91c1c 50%, #7f1d1d 100%) !important; color: #ffffff !important; border: 2.5px solid #ef4444 !important; border-radius: 12px !important; padding: 14px 20px !important; margin: 10px 0 14px 0 !important; box-shadow: 0 6px 18px rgba(239, 68, 68, 0.45) !important;">
+                    <div style="font-size: 19px; font-weight: 900; color: #ffffff !important; display: flex; align-items: center; gap: 8px;">
+                        <span>🚨 ❌ خطأ في إدخال سمك الخرسانة:</span>
+                    </div>
+                    <div style="font-size: 18px; font-weight: 900; color: #fef08a !important; margin-top: 6px; line-height: 1.6;">
+                        لا يمكن أن يقل العمق الآمن عن القيمة الناتجة في التصميم ([{T_design:.2f} m])
+                    </div>
+                </div>"""
+            )
+            with c_tf2:
+                st.html(
+                    f"""<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: rgba(239, 68, 68, 0.15); border: 1.5px solid #ef4444; border-radius: 10px !important; padding: 10px 16px !important; margin: 2px 0 !important;">
+                        <div style="font-size: 14.5px; font-weight: 800; color: #fca5a5 !important; line-height: 1.5;">
+                            ⛔ <b>السمك غير آمن:</b> القيمة المدخلة (<span dir="ltr" style="color: #ffffff;">{raw_tf:.2f} m</span>) أقل من سمك التصميم الإنشائي المطلوب (<span dir="ltr" style="color: #fde047;">[{T_design:.2f} m]</span>).
+                            <br>
+                            🔒 <b>تم قفل الأقسام ومنع عرض المخرجات حتى يتم تصحيح السمك.</b>
+                        </div>
+                    </div>"""
+                )
+        else:
+            S.cfg_set("m10_eq_man_tf", float(raw_tf))
+            with c_tf2:
+                if float(raw_tf) > T_design + 1e-4:
+                    st.html(
+                        f"""<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #064e3b 0%, #059669 50%, #064e3b 100%) !important; color: #ffffff !important; border: 2px solid #34d399 !important; border-radius: 10px !important; padding: 10px 16px !important; margin: 2px 0 !important; box-shadow: 0 4px 14px rgba(5, 150, 105, 0.3) !important;">
+                            <div style="font-size: 15px; font-weight: 800; color: #ffffff !important; line-height: 1.5;">
+                                ✅ <b>تم زيادة واعتماد السمك الجديد:</b> <span dir="ltr" style="font-weight: 900; color: #fde047;">tf = {raw_tf:.2f} m</span> (أكبر من سمك التصميم <span dir="ltr" style="color: #a7f3d0;">T_design = {T_design:.2f} m</span>).
+                                <br>
+                                🔄 <b>تم اعتماد السمك الجديد وإعادة حساب حديد التسليح والتحققات الإنشائية تلقائياً.</b>
+                            </div>
+                        </div>"""
+                    )
+                else:
+                    st.html(
+                        f"""<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: rgba(15, 23, 42, 0.75); border: 1.5px solid #38bdf8; border-radius: 10px !important; padding: 10px 16px !important; margin: 2px 0 !important;">
+                            <div style="font-size: 14.5px; font-weight: 700; color: #e2e8f0 !important; line-height: 1.5;">
+                                📐 <b>سمك التصميم المعتمد تلقائياً:</b> <span dir="ltr" style="font-weight: 900; color: #38bdf8;">T_design = {T_design:.2f} m</span> (محقق للقص الثاقب والقص ذي الاتجاه الواحد والوزن الذاتي).
+                                <br>
+                                💡 <span style="color: #94a3b8; font-size: 13px;">يمكنك زيادة السمك في خانة الإدخال وسيقوم البرنامج فوراً بإعادة حساب حديد التسليح تلقائياً.</span>
+                            </div>
+                        </div>"""
+                    )
+
+        man_tf = float(raw_tf)
 
         is_manual_sizing = "Manual" in sizing_mode_eq or "يدوي" in sizing_mode_eq
         c_L_side = (man_Lf - min_Lf_req) / 2.0
@@ -1754,31 +2044,22 @@ def _render_equipment_foundations_tab():
         else:
             is_edge_clearance_safe = True
 
-    res_eq = compute_equipment_foundation_design(
-        eq_weight_ton=float(eq_weight),
-        eq_shape=eq_shape,
-        eq_length_m=float(eq_len),
-        eq_width_m=float(eq_wid),
-        eq_dia_m=float(eq_dia),
-        isolation_type=iso_type,
-        operating_rpm=float(op_rpm),
-        ks_kg_cm3=float(ks_eq),
-        fc_kg_cm2=float(fc_eq),
-        fy_kg_cm2=float(fy_eq),
-        q_all_kg_cm2=float(q_all_eq),
-        sizing_mode=sizing_mode_eq,
-        manual_Lf_m=float(man_Lf),
-        manual_Bf_m=float(man_Bf),
-        manual_tf_m=float(man_tf),
-        target_mass_ratio=float(mass_ratio_target),
-        cover_cm=float(cover_eq),
-        phi_bot_mm=int(phi_bot_eq),
-        phi_top_mm=int(phi_top_eq),
-    )
-
     # ── OUTPUT SECTIONS & EXPANDERS ──
-    if not is_edge_clearance_safe:
+    is_outputs_allowed = is_edge_clearance_safe and is_thickness_safe
+
+    if not is_outputs_allowed:
         # Sections 2 & 3 are completely locked and cannot be opened or expanded
+        lock_reasons = []
+        if not is_thickness_safe:
+            lock_reasons.append(
+                f"سمك الخرسانة الفعلي المدخل (<span dir='ltr' style='color:#fca5a5; font-weight:900;'>{man_tf:.2f} m</span>) أقل من الحد الأدنى للعمق الآمن الناتج عن التصميم الإنشائي (<span dir='ltr' style='color:#fde047; font-weight:900;'>[{T_design:.2f} m]</span>). يُرجى تعديل السمك ليصبح ≥ <span dir='ltr' style='color:#fde047; font-weight:900;'>{T_design:.2f} m</span>."
+            )
+        if not is_edge_clearance_safe:
+            lock_reasons.append(
+                f"أبعاد القاعدة الخرسانية أو خلوص الحواف الفعلي (<span dir='ltr' style='color:#fef08a; font-weight:900;'>{max(0.0, c_L_side*100):.1f} cm طولياً / {max(0.0, c_B_side*100):.1f} cm عرضياً</span>) غير مستوفية للحد الأدنى الموصى به كودياً (<span dir='ltr' style='color:#fde047; font-weight:900;'>20 ~ 40 cm</span>) لتأمين مسامير التثبيت ومنع تشظي الحواف."
+            )
+        reasons_html = "<br>⚠️ ".join(lock_reasons)
+
         st.html(
             f"""<div dir="rtl" style="direction: rtl !important; text-align: right !important; margin: 20px 0;">
 <div style="background: rgba(15, 23, 42, 0.75); border: 2px dashed #ef4444; border-radius: 12px; padding: 18px 24px; margin-bottom: 16px; box-shadow: 0 4px 16px rgba(239, 68, 68, 0.15); cursor: not-allowed;">
@@ -1787,8 +2068,8 @@ def _render_equipment_foundations_tab():
 <span>📊 2. المخرجات النهائية والتحققات الهندسية والتسليح (مُقفل - غير متاح للفتح)</span>
 </div>
 <div style="font-size: 16px; color: #cbd5e1; line-height: 1.8; font-weight: 700;">
-⚠️ <b>تم قفل هذا القسم بالكامل وتعطيل إمكانية فتحه:</b> خلوص الحواف الفعلي (<span dir="ltr" style="color:#fef08a; font-weight:900;">{max(0.0, c_L_side*100):.1f} cm طولياً / {max(0.0, c_B_side*100):.1f} cm عرضياً</span>) أو أبعاد القاعدة غير مستوفية للحد الأدنى الموصى به كودياً (<span dir="ltr" style="color:#fde047; font-weight:900;">20 ~ 40 cm</span>) من كل جهة لتأمين مسامير التثبيت ومنع تشظي الحواف.<br>
-⚙️ يُرجى زيادة طول وعرض القاعدة في قسم المدخلات أعلاه ليستوفي خلوص الحواف الكودي، وسيتم تلقائياً فك القفل وجعل الأقسام متاحة كـ Expanders وعرض كامل الحسابات والتسليح والمخططات.
+⚠️ <b>تم قفل هذا القسم بالكامل وتعطيل إمكانية فتحه:</b> {reasons_html}<br>
+⚙️ يُرجى تصحيح المدخلات في قسم البيانات أعلاه لتستوفي المحددات الهندسية والكودية، وسيتم تلقائياً فك القفل وجعل الأقسام متاحة كـ Expanders وعرض كامل الحسابات والتسليح والمخططات.
 </div>
 </div>
 
@@ -1798,22 +2079,45 @@ def _render_equipment_foundations_tab():
 <span>📐 3. المخططات الهندسية وتصدير المذكرة الحسابية (مُقفل - غير متاح للفتح)</span>
 </div>
 <div style="font-size: 16px; color: #cbd5e1; line-height: 1.8; font-weight: 700;">
-⚠️ <b>تم قفل هذا القسم بالكامل وتعطيل إمكانية فتحه:</b> لا يمكن توليد المخططات الهندسية (2D CAD Blueprints) أو تصدير المذكرات الحسابية (HTML / PDF) قبل استيفاء خلوص الحواف الكودي وأبعاد بصمة المعدة.
+⚠️ <b>تم قفل هذا القسم بالكامل وتعطيل إمكانية فتحه:</b> لا يمكن توليد المخططات الهندسية (2D CAD Blueprints) أو تصدير المذكرات الحسابية (HTML / PDF) قبل استيفاء سمك الخرسانة الآمن المطلوب كودياً وخلوص الحواف وأبعاد بصمة المعدة.
 </div>
 </div>
 </div>"""
         )
     else:
+        res_eq = compute_equipment_foundation_design(
+            eq_weight_ton=float(eq_weight),
+            eq_shape=eq_shape,
+            eq_length_m=float(eq_len),
+            eq_width_m=float(eq_wid),
+            eq_dia_m=float(eq_dia),
+            isolation_type=iso_type,
+            operating_rpm=float(op_rpm),
+            ks_kg_cm3=float(ks_eq),
+            fc_kg_cm2=float(fc_eq),
+            fy_kg_cm2=float(fy_eq),
+            q_all_kg_cm2=float(q_all_eq),
+            sizing_mode=sizing_mode_eq,
+            manual_Lf_m=float(man_Lf),
+            manual_Bf_m=float(man_Bf),
+            manual_tf_m=float(man_tf),
+            target_mass_ratio=float(mass_ratio_target),
+            cover_cm=float(cover_eq),
+            phi_bot_mm=int(phi_bot_eq),
+            phi_top_mm=int(phi_top_eq),
+        )
         with st.expander("📊 2. المخرجات النهائية والتحققات الهندسية والتسليح (Final Outputs & Code Verification)", expanded=True):
             k1, k2, k3, k4 = st.columns(4)
             with k1:
                 bg_k1 = "#0f172a" if res_eq["is_footprint_safe"] else "#7f1d1d"
                 bd_k1 = "#38bdf8" if res_eq["is_footprint_safe"] else "#ef4444"
                 footprint_badge = "✅ مستوفية لبصمة المعدة" if res_eq["is_footprint_safe"] else "⚠️ أصغر من بصمة المعدة!"
+                overridden_lbl = " (مُعدل بالزيادة)" if res_eq.get("is_tf_overridden") else " (المعتمد كودياً)"
                 st.markdown(
                     f"""<div dir="rtl" style="direction:rtl !important; background:{bg_k1}; border:2px solid {bd_k1}; border-radius:10px; padding:14px; text-align:center;">
                         <div style="font-size:15px; color:#93c5fd; font-weight:800;">الأبعاد النهائية للقاعدة (Lf × Bf × tf)</div>
                         <div style="font-size:25px; font-weight:900; color:#ffffff; margin:6px 0;" dir="ltr">{res_eq['Lf_m']:.2f} × {res_eq['Bf_m']:.2f} × {res_eq['tf_m']:.2f} m</div>
+                        <div style="font-size:13.5px; color:#fde047; font-weight:700;">سمك التصميم: <span dir="ltr">T_design = {res_eq['T_design_m']:.2f} m</span>{overridden_lbl}</div>
                         <div style="font-size:14px; color:{'#a7f3d0' if res_eq['is_footprint_safe'] else '#fca5a5'}; font-weight:700;">{footprint_badge} (الحجم = <span dir="ltr">{res_eq['vol_f_m3']:.2f} m³</span>)</div>
                     </div>""",
                     unsafe_allow_html=True,
@@ -1893,31 +2197,37 @@ def _render_equipment_foundations_tab():
                     res_eq["is_footprint_safe"],
                 ),
                 (
-                    "2. الوزن الذاتي للقاعدة ونسبة القصور الذاتي (Foundation Self-Weight Ratio)",
+                    "2. كفاية سمك الخرسانة والعمق الآمن (Safe Concrete Thickness tf ≥ T_design)",
+                    f"tf = {res_eq['tf_m']:.2f} m ({'مُزاد ومُعاد حسابه' if res_eq.get('is_tf_overridden') else 'مطابق لسمك التصميم'})",
+                    f"≥ T_design ({res_eq['T_design_m']:.2f} m)",
+                    res_eq["tf_m"] >= res_eq["T_design_m"] - 1e-4,
+                ),
+                (
+                    "3. الوزن الذاتي للقاعدة ونسبة القصور الذاتي (Foundation Self-Weight Ratio)",
                     f"W_f = {res_eq['Wf_ton']:.2f} t ({res_eq['actual_mass_ratio']:.2f} W_eq)",
                     "محسوب تلقائياً (DF = 1.2)" if res_eq["is_isolated"] else f"≥ {res_eq['req_mass_ratio_min']:.1f}×W_eq ({res_eq['req_min_wf_ton']:.1f} t)",
                     res_eq["is_mass_ratio_safe"],
                 ),
                 (
-                    "3. فحص إجهاد التربة تحت الأحمال الكلية (Soil Bearing Capacity Check)",
+                    "4. فحص إجهاد التربة تحت الأحمال الكلية (Soil Bearing Capacity Check)",
                     f"q_act = {res_eq['q_act_kg_cm2']:.2f} kg/cm² ({res_eq['q_act_ton_m2']:.1f} t/m²)",
                     f"q_all = {res_eq['q_all_kg_cm2']:.2f} kg/cm² ({res_eq['q_all_ton_m2']:.1f} t/m²)",
                     res_eq["is_soil_safe"],
                 ),
                 (
-                    "4. فحص القص الثاقب / الاختراق (Punching Shear Check - ECP 203)",
+                    "5. فحص القص الثاقب / الاختراق (Punching Shear Check - ECP 203)",
                     f"q_up = {res_eq['q_up_kg_cm2']:.2f} kg/cm²",
                     f"q_cup = {res_eq['q_cup_all_kg_cm2']:.2f} kg/cm²",
                     res_eq["is_punching_safe"],
                 ),
                 (
-                    "5. فحص القص الحرج ذو الاتجاه الواحد (One-Way Beam Shear Check)",
+                    "6. فحص القص الحرج ذو الاتجاه الواحد (One-Way Beam Shear Check)",
                     f"q_u = {res_eq['qu_1way_kg_cm2']:.2f} kg/cm²",
                     f"q_cu = {res_eq['qcu_1way_kg_cm2']:.2f} kg/cm²",
                     res_eq["is_1way_shear_safe"],
                 ),
                 (
-                    "6. التحقق من التردد الطبيعي وتجنب الرنين (Resonance Check)",
+                    "7. التحقق من التردد الطبيعي وتجنب الرنين (Resonance Check)",
                     f"f_op / f_n = {res_eq['freq_ratio']:.2f} ({res_eq['f_op_hz']:.1f} / {res_eq['fn_hz']:.1f} Hz)",
                     "خارج نطاق الرنين [0.70 – 1.30]",
                     res_eq["is_resonance_safe"],
