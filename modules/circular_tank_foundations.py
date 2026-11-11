@@ -14,6 +14,9 @@ import base64
 import datetime
 import numpy as np
 import streamlit as st
+import streamlit.components.v1 as components
+import wave
+import struct
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -28,6 +31,94 @@ BAR_WEIGHTS = {b["dia_mm"]: b["weight_kgm"] for b in BARS}
 BAR_AREAS = {b["dia_mm"]: b["area_cm2"] for b in BARS}
 ECP_DIAMETERS = [10, 12, 16, 18, 20, 22, 25, 28, 32]
 
+
+
+# ── GENTLE SOFT WARNING CHIME HELPER ──
+@st.cache_data
+def _get_siren_wav_base64():
+    sample_rate = 16000
+    duration = 0.38  # 380 ms short gentle alert
+    n_samples = int(sample_rate * duration)
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        frames = bytearray()
+        phase = 0.0
+        for i in range(n_samples):
+            t = i / sample_rate
+            # 2 soft gentle tones: 520 Hz for first 180ms, then 620 Hz for remaining 200ms
+            freq = 520.0 if t < 0.18 else 620.0
+            phase += 2.0 * math.pi * freq / sample_rate
+            t_note = t if t < 0.18 else (t - 0.18)
+            dur_note = 0.18 if t < 0.18 else 0.20
+            env = math.sin(math.pi * min(1.0, t_note / dur_note)) ** 1.5
+            # Soft, calm amplitude (3500 out of 32767, pleasant and gentle)
+            val = int(3500.0 * env * math.sin(phase))
+            val = max(-32767, min(32767, val))
+            frames.extend(struct.pack("<h", val))
+        wf.writeframes(frames)
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def play_siren_alarm():
+    """Plays a calm, soft 380ms gentle chime using pure sine waves and low gain."""
+    wav_b64 = _get_siren_wav_base64()
+    components.html(
+        f"""
+        <audio id="siren-audio" autoplay style="display:none;">
+            <source src="data:audio/wav;base64,{wav_b64}" type="audio/wav">
+        </audio>
+        <script>
+        (function() {{
+            try {{
+                var AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (AudioContext) {{
+                    var ctx = new AudioContext();
+                    var playSoft = function() {{
+                        var now = ctx.currentTime;
+                        var osc = ctx.createOscillator();
+                        var gain = ctx.createGain();
+                        osc.type = 'sine';  // Pure, soft sine wave (zero harsh distortion)
+                        osc.frequency.setValueAtTime(520, now);
+                        osc.frequency.setValueAtTime(620, now + 0.18);
+                        
+                        // Very soft, quiet ambient gain (0.06 instead of 0.35)
+                        gain.gain.setValueAtTime(0.01, now);
+                        gain.gain.linearRampToValueAtTime(0.06, now + 0.04);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+                        
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start(now);
+                        osc.stop(now + 0.38);
+                    }};
+                    if (ctx.state === 'suspended') {{
+                        ctx.resume().then(playSoft).catch(function(){{}});
+                    }} else {{
+                        playSoft();
+                    }}
+                }} else {{
+                    var a = document.getElementById('siren-audio');
+                    if (a) {{
+                        a.volume = 0.25;
+                        a.play().catch(function(){{}});
+                    }}
+                }}
+            }} catch(e) {{
+                var a = document.getElementById('siren-audio');
+                if (a) {{
+                    a.volume = 0.25;
+                    a.play().catch(function(){{}});
+                }}
+            }}
+        }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
 # ===============================================================================
 #  1. ENGINEERING COMPUTATION ENGINE — EQUIPMENT FOUNDATIONS (STATIC & DYNAMIC)
@@ -297,7 +388,20 @@ def compute_equipment_foundation_design(
     total_rebar_weight_ton = total_rebar_weight_kg / 1000.0
     steel_rate_kg_m3 = total_rebar_weight_kg / max(vol_f_m3, 0.01)
 
-    is_all_safe = is_soil_safe and is_punching_safe and is_1way_shear_safe and is_mass_ratio_safe and is_resonance_safe
+    # Geometric Footprint & Edge Clearance Safety Check
+    clearance_L_m = (Lf_m - Lm_m) / 2.0
+    clearance_B_m = (Bf_m - Bm_m) / 2.0
+    is_footprint_safe = (Lf_m >= Lm_m - 0.001) and (Bf_m >= Bm_m - 0.001)
+    is_clearance_safe = (clearance_L_m >= 0.20 - 0.001) and (clearance_B_m >= 0.20 - 0.001)
+
+    is_all_safe = (
+        is_footprint_safe
+        and is_soil_safe
+        and is_punching_safe
+        and is_1way_shear_safe
+        and is_mass_ratio_safe
+        and is_resonance_safe
+    )
 
     return {
         "eq_weight_ton": eq_weight_ton,
@@ -369,6 +473,12 @@ def compute_equipment_foundation_design(
         "total_rebar_weight_kg": total_rebar_weight_kg,
         "total_rebar_weight_ton": total_rebar_weight_ton,
         "steel_rate_kg_m3": steel_rate_kg_m3,
+        "is_footprint_safe": is_footprint_safe,
+        "is_clearance_safe": is_clearance_safe,
+        "clearance_L_cm": round(clearance_L_m * 100.0, 1),
+        "clearance_B_cm": round(clearance_B_m * 100.0, 1),
+        "min_req_Lf_m": round(Lm_m, 2),
+        "min_req_Bf_m": round(Bm_m, 2),
         "is_all_safe": is_all_safe,
     }
 
@@ -1061,14 +1171,251 @@ def generate_m10_calculation_sheet_html(title_ar: str, subtitle_en: str, rows_su
 #  5. STREAMLIT UI RENDERER — SECTION 1: EQUIPMENT FOUNDATIONS
 # ===============================================================================
 
+# ===============================================================================
+#  4.5 MODAL DIALOG: VIBRATION ISOLATION PHILOSOPHY & FOUNDATION DESIGN
+# ===============================================================================
+
+@st.dialog("📖 فلسفة التصميم للعزل الاهتزازي وقواعد المعدات (ECP 203 & ACI 351.3R)", width="large")
+def show_dialog_vibration_philosophy():
+    html_content = """<style>
+div[data-testid="stDialog"],
+div[data-testid="stDialog"] > div,
+div[data-testid="stDialog"] div[data-testid="stVerticalBlock"],
+div[data-testid="stDialog"] [data-testid="stMarkdownContainer"],
+div[role="dialog"],
+div[role="dialog"] * {
+direction: rtl !important;
+text-align: right !important;
+}
+div[data-testid="stDialog"] [dir="ltr"],
+div[role="dialog"] [dir="ltr"],
+span[dir="ltr"] {
+direction: ltr !important;
+unicode-bidi: isolate !important;
+display: inline-block !important;
+}
+div[data-testid="stDialog"] ul,
+div[data-testid="stDialog"] ol,
+div[role="dialog"] ul,
+div[role="dialog"] ol {
+direction: rtl !important;
+text-align: right !important;
+padding-right: 26px !important;
+padding-left: 0 !important;
+margin-right: 0 !important;
+list-style-position: outside !important;
+}
+div[data-testid="stDialog"] li,
+div[role="dialog"] li {
+direction: rtl !important;
+text-align: right !important;
+margin-bottom: 12px !important;
+line-height: 1.95 !important;
+}
+</style>
+<div dir="rtl" style="direction: rtl !important; text-align: right !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.9; color: #0f172a;">
+<div dir="rtl" style="direction: rtl !important; text-align: center !important; background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0f172a 100%); color: #ffffff; padding: 22px 26px; border-radius: 14px; margin-bottom: 22px; border: 2px solid #38bdf8; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.35);">
+<h2 dir="rtl" style="direction: rtl !important; text-align: center !important; margin: 0 0 10px 0; color: #fde047; font-size: 22px; font-weight: 900; line-height: 1.4;">
+📳 فلسفة التصميم الإنشائي والديناميكي للعزل الاهتزازي وقواعد المعدات الميكانيكية
+</h2>
+<div style="font-size: 15.5px; color: #bfdbfe; font-weight: 700; margin-bottom: 10px; text-align: center;" dir="ltr">
+ECP 203-2018 & ACI 351.3R (Foundations for Dynamic Equipment)
+</div>
+<p dir="rtl" style="direction: rtl !important; text-align: center !important; margin: 0; font-size: 15.5px; color: #e2e8f0; line-height: 1.85;">
+دليل هندسي استرشادي شامل يوضح فلسفة التصميم وميكانيكية عمل أنظمة التخميد والعزل الاهتزازي للماكينات، والأسس الكودية لحساب الأحمال الاستاتيكية والديناميكية، والفارق الجوهري بين <b>وجود نظام عزل (Springs & Isolators)</b> و<b>القاعدة الثابتة الجاسئة (Fixed Base)</b>.
+</p>
+</div>
+<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: #ffffff; border: 2px solid #cbd5e1; border-right: 8px solid #0284c7; border-radius: 12px; padding: 22px 26px; margin-bottom: 22px; box-shadow: 0 4px 14px rgba(0,0,0,0.06);">
+<div dir="rtl" style="display: flex; align-items: center; justify-content: space-between; flex-direction: row; direction: rtl !important; text-align: right !important; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 16px;">
+<div dir="rtl" style="color: #0369a1; font-size: 19.5px; font-weight: 900; direction: rtl !important; text-align: right !important;">
+1️⃣ الحالة الأولى: وجود نظام عزل اهتزازات (Springs & Isolators)
+</div>
+<span dir="ltr" style="background: #e0f2fe; color: #0284c7; padding: 5px 14px; border-radius: 20px; font-size: 13.5px; font-weight: 800; direction: ltr !important; unicode-bidi: isolate;">Isolated Base</span>
+</div>
+<h4 dir="rtl" style="direction: rtl !important; text-align: right !important; color: #0f172a; font-size: 17px; font-weight: 800; margin: 16px 0 10px 0;">
+🔹 أ. فلسفة التصميم وميكانيكية عمل نظام العزل (Isolation Mechanism & Decoupling):
+</h4>
+<ul dir="rtl" style="direction: rtl !important; text-align: right !important; margin: 0; padding-right: 26px; padding-left: 0; font-size: 16px; line-height: 1.95; color: #334155; list-style-position: outside;">
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 12px;">
+<b>مبدأ فك الارتباط الديناميكي (Dynamic Decoupling):</b> ترتكز شاسيهات المعدة على وسائط مرنة ميكانيكية متخصصة تشمل النوابض الفولاذية الحلزونية (<span dir="ltr"><b>Helical Steel Springs</b></span>) أو وسائد ومخمدات المطاط الصناعي والنيوبرين (<span dir="ltr"><b>Elastomeric / Neoprene Pads</b></span>) أو النوابض الهوائية (<span dir="ltr"><b>Air Springs</b></span>). تعمل هذه الوسائط كمرشح ميكانيكي عازل يمنع انتقال موجات الطاقة الحركية والترددات إلى كتلة الخرسانة وتربة التأسيس.
+</li>
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 12px;">
+<b>معامل الانتقال الديناميكي (Transmissibility Ratio Tr):</b> تُصمم العوازل وتُضبط بحيث يكون ترددها الطبيعي (<span dir="ltr"><b>ωn</b></span>) أقل بكثير من تردد دوران وتشغيل الماكينة (<span dir="ltr"><b>ω</b></span>) بنسبة ضبط (<span dir="ltr"><b>ω / ωn ≥ 3.0</b></span>). يؤدي ذلك إلى خفض معامل انتقال القوة الاهتزازية إلى أقل من <span dir="ltr"><b>Tr ≤ 0.05 ~ 0.10</b></span>، ما يعني <b>امتصاص وعزل أكثر من 90% إلى 95% من القوى الاهتزازية</b> وتشتيتها داخل النوابض دون أن تصل إلى القاعدة الخرسانية.
+</li>
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 12px;">
+<b>حماية التربة والمنشآت المجاورة:</b> نظراً لاختزال وتبديد الطاقة الحركية داخل النوابض، فإن الإجهادات المنقولة لتربة التأسيس تكون شبه استاتيكية وهادئة، مما يمنع حدوث أي هبوط تفاضلي أو تخلخل في حبيبات التربة الرملية أو تصدع للمباني المجاورة.
+</li>
+</ul>
+<h4 dir="rtl" style="direction: rtl !important; text-align: right !important; color: #0f172a; font-size: 17px; font-weight: 800; margin: 18px 0 10px 0;">
+🔹 ب. نظام حساب الأحمال والمعاملات التصميمية (Load Calculation):
+</h4>
+<ul dir="rtl" style="direction: rtl !important; text-align: right !important; margin: 0; padding-right: 26px; padding-left: 0; font-size: 16px; line-height: 1.95; color: #334155; list-style-position: outside;">
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 12px;">
+<b>الحمل الرأسي التصميمي للمعدة (<span dir="ltr">Peq,design</span>):</b>
+<div dir="ltr" style="direction: ltr !important; text-align: center !important; background: #f8fafc; border: 1.5px solid #94a3b8; border-radius: 8px; padding: 10px 16px; margin: 10px 0; font-family: Consolas, monospace; font-size: 15.5px; font-weight: bold; color: #0369a1; unicode-bidi: isolate;">
+Peq,design = Weq × 1.20 &nbsp; (Dynamic Amplification Factor = 1.20)
+</div>
+يطبق الكود معامل أثر ديناميكي خفيف قدره <b>1.20</b> فقط (زيادة 20% استاتيكية مكافئة)، وهو مخصص فقط لتغطية القوى العابرة اللحظية أثناء مراحل بدء التشغيل والتوقف والمرور بالتردد الحرج للنوابض (<span dir="ltr">Transient Resonant Passing at Startup & Rundown</span>)، نظراً لأن الاهتزازات التشغيلية الدائمة تُمتص بالكامل داخل منظومة العزل.
+</li>
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 12px;">
+<b>الوزن الذاتي المطلوب للقاعدة الخرسانية (<span dir="ltr">Wf</span>):</b>
+<b>لا يشترط الكود نسبة كتلة ضخمة</b> (مثل 2.5x أو 3.0x)، بل يتم حساب وتحديد أبعاد وسمك القاعدة أوتوماتيكياً استناداً إلى المحددات الهندسية التالية:
+<ol dir="rtl" style="direction: rtl !important; text-align: right !important; margin-top: 8px; padding-right: 28px; padding-left: 0; line-height: 1.95; list-style-position: outside;">
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 8px;">استيعاب بصمة المعدة ونقاط ارتكاز النوابض مع توفير خلوص أمان محيطي إضافي لا يقل عن <span dir="ltr"><b>40 cm</b></span> من جميع الجوانب لسهولة التركيب والصيانة وتثبيت المسامير.</li>
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 8px;">التحقق التام من مقاومة إجهادات القص الثاقب (<span dir="ltr"><b>Punching Shear Check</b></span>) المركزة أسفل ركائز النوابض والعوازل.</li>
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 8px;">ألا يتعدى إجهاد التماس الفعلي مع التربة إجهاد التحمل المسموح به (<span dir="ltr"><b>q_act ≤ q_all</b></span>).</li>
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 8px;">تحقيق سمك إنشائي أدنى لا يقل عن <span dir="ltr"><b>0.50 m</b></span> لضمان تصرف القاعدة كعنصر جاسيء (<span dir="ltr">Rigid Foundation</span>).</li>
+</ol>
+</li>
+</ul>
+<h4 dir="rtl" style="direction: rtl !important; text-align: right !important; color: #0f172a; font-size: 17px; font-weight: 800; margin: 18px 0 10px 0;">
+🔹 ج. التطبيقات والمعدات النموذجية:
+</h4>
+<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: #f0f9ff; border: 1.5px solid #bae6fd; border-radius: 8px; padding: 14px 18px; font-size: 15.5px; color: #0369a1; line-height: 1.85;">
+تعتبر الخيار القياسي والإلزامي للمعدات ذات سرعات الدوران العالية (<span dir="ltr"><b>Rotary Equipment > 1000 RPM</b></span>) مثل التوربينات، مضخات الطرد المركزي، الضواغط الدوارة، ومولدات الكهرباء، وكافة المعدات المركبة في الطوابق العليا أو فوق أسقف المباني السكنية والتجارية لمنع انتشار الاهتزازات والضوضاء.
+</div>
+</div>
+<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: #ffffff; border: 2px solid #cbd5e1; border-right: 8px solid #dc2626; border-radius: 12px; padding: 22px 26px; margin-bottom: 22px; box-shadow: 0 4px 14px rgba(0,0,0,0.06);">
+<div dir="rtl" style="display: flex; align-items: center; justify-content: space-between; flex-direction: row; direction: rtl !important; text-align: right !important; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-bottom: 16px;">
+<div dir="rtl" style="color: #b91c1c; font-size: 19.5px; font-weight: 900; direction: rtl !important; text-align: right !important;">
+2️⃣ الحالة الثانية: عدم وجود نظام عزل - قاعدة ثابتة (Fixed Base)
+</div>
+<span dir="ltr" style="background: #fee2e2; color: #dc2626; padding: 5px 14px; border-radius: 20px; font-size: 13.5px; font-weight: 800; direction: ltr !important; unicode-bidi: isolate;">Inertia Block (2.5x ~ 3.0x)</span>
+</div>
+<h4 dir="rtl" style="direction: rtl !important; text-align: right !important; color: #0f172a; font-size: 17px; font-weight: 800; margin: 16px 0 10px 0;">
+🔹 أ. فلسفة التصميم بكتلة القصور الذاتي الضخمة (Inertia Block & Mass-Damping Philosophy):
+</h4>
+<ul dir="rtl" style="direction: rtl !important; text-align: right !important; margin: 0; padding-right: 26px; padding-left: 0; font-size: 16px; line-height: 1.95; color: #334155; list-style-position: outside;">
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 12px;">
+<b>التثبيت المباشر الصلب:</b> يتم ربط شاسيه المعدة ميكانيكياً بصورة صلبة ومباشرة على القاعدة الخرسانية بواسطة مسامير تثبيت جشمة (<span dir="ltr"><b>Anchor Bolts</b></span>) ومونة جراوت إيبوكسية أو أسمنتية غير قابلة للانكماش عالية المقاومة (<span dir="ltr"><b>Non-Shrink High-Strength Grout</b></span>). في هذا النظام، تنتقل كامل القوى الديناميكية والقوى الطاردة المركزية غير المتزنة (<span dir="ltr"><b>Centrifugal Unbalanced Forces & Couples</b></span>) مباشرة وبلا وسيط إلى القاعدة وتربة التأسيس.
+</li>
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 12px;">
+<b>آلية التخميد بكتلة القصور الذاتي (Ballast Inertia Mass):</b> نظراً لغياب عوازل النوابض، تعتمد الفلسفة الهندسية بالكامل على تحويل القاعدة الخرسانية المسلحة إلى "كتلة قصور ذاتي هائلة" (<span dir="ltr"><b>Inertia Block</b></span>) لامتصاص وتبديد الطاقة الحركية، وتقييد سعة الإزاحة الاهتزازية (<span dir="ltr"><b>Vibration Amplitude</b></span>) في حدود ميكرونية ضئيلة جداً تتطابق بدقة مع اشتراطات الكود الدولي <span dir="ltr"><b>ISO 10816</b></span> و <span dir="ltr"><b>ACI 351.3R</b></span>.
+</li>
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 12px;">
+<b>خفض مركز ثقل المنظومة (Center of Gravity Alignment):</b> توفر الكتلة الخرسانية الضخمة عمقاً كافياً لخفض مركز ثقل النظام المجمع (المعدة + القاعدة) إلى أدنى مستوى ممكن، مما يقلل ذراع العزم ويحد من العزوم الانقلابية الديناميكية المتأرجحة (<span dir="ltr">Dynamic Rocking & Pitching Moments</span>).
+</li>
+</ul>
+<h4 dir="rtl" style="direction: rtl !important; text-align: right !important; color: #0f172a; font-size: 17px; font-weight: 800; margin: 18px 0 10px 0;">
+🔹 ب. اشتراط نسبة الكتلة الكودية الإلزامية (Mass Ratio ≥ 2.5x ~ 3.0x):
+</h4>
+<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: #fff1f2; border: 1.5px solid #fecdd3; border-radius: 8px; padding: 16px 20px; margin: 12px 0; font-size: 16px; line-height: 1.95; color: #9f1239;">
+ينص كود معهد الخرسانة الأمريكي <b>ACI 351.3R (Section 3.2)</b> ومحددات الكود المصري <b>ECP 203</b> على الاشتراطات الصارمة التالية للوزن الذاتي للقاعدة الخرسانية:
+<ul dir="rtl" style="direction: rtl !important; text-align: right !important; margin: 10px 0 0 0; padding-right: 24px; padding-left: 0;">
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 10px;">
+<b>للمعدات الدوارة الطاردة المركزية (<span dir="ltr">Rotary Machinery</span>):</b> يجب ألا يقل وزن القاعدة الخرسانية المسلحة عن <b>2.5 ضعف</b> وزن المعدة التشغيلي الكامل:
+<div dir="ltr" style="direction: ltr !important; text-align: center !important; background: #ffffff; border: 1px solid #fda4af; border-radius: 6px; padding: 8px 14px; margin: 8px 0; font-family: Consolas, monospace; font-size: 15.5px; font-weight: bold; color: #be123c; unicode-bidi: isolate;">
+W_foundation ≥ 2.50 × W_equipment &nbsp; [Wf ≥ 2.50 Weq]
+</div>
+</li>
+<li dir="rtl" style="direction: rtl !important; text-align: right !important;">
+<b>للمعدات الترددية ذات المكابس (<span dir="ltr">Reciprocating Machinery</span>):</b> مثل ضواغط الهواء الترددية ومحركات الديزل، يرتفع الاشتراط الكودي الإلزامي إلى <b>3.0 إلى 5.0 أضعاف</b> وزن المعدة (<span dir="ltr"><b>Wf ≥ 3.0 ~ 5.0 Weq</b></span>) نظراً لوجود قوى ترددية غير متزنة وعزوم دورانية ديناميكية من الدرجة الأولى والثانية (<span dir="ltr">Primary & Secondary Dynamic Couples</span>).
+</li>
+</ul>
+</div>
+<h4 dir="rtl" style="direction: rtl !important; text-align: right !important; color: #0f172a; font-size: 17px; font-weight: 800; margin: 18px 0 10px 0;">
+🔹 ج. نظام حساب الأحمال والمعاملات التصميمية:
+</h4>
+<ul dir="rtl" style="direction: rtl !important; text-align: right !important; margin: 0; padding-right: 26px; padding-left: 0; font-size: 16px; line-height: 1.95; color: #334155; list-style-position: outside;">
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 12px;">
+<b>الحمل التشغيلي الديناميكي المكافئ للمعدة (<span dir="ltr">Peq,design</span>):</b>
+<div dir="ltr" style="direction: ltr !important; text-align: center !important; background: #f8fafc; border: 1.5px solid #94a3b8; border-radius: 8px; padding: 10px 16px; margin: 10px 0; font-family: Consolas, monospace; font-size: 15.5px; font-weight: bold; color: #b91c1c; unicode-bidi: isolate;">
+Peq,design = Weq × 1.50 &nbsp; (Dynamic Impact Factor = 1.50)
+</div>
+يطبق معامل تكبير ديناميكي مقداره <b>1.50</b> (زيادة 50% استاتيكية مكافئة) لأخذ أثر قوى الصدم والنبضات الاهتزازية المباشرة في الحسبان عند فحص إجهادات التربة ومقاومة القطاعات الخرسانية.
+</li>
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 12px;">
+<b>الحمل الإجمالي المنقول لتربة التأسيس (<span dir="ltr">Ptotal</span>):</b>
+<div dir="ltr" style="direction: ltr !important; text-align: center !important; background: #f8fafc; border: 1.5px solid #94a3b8; border-radius: 8px; padding: 10px 16px; margin: 10px 0; font-family: Consolas, monospace; font-size: 15.5px; font-weight: bold; color: #0f172a; unicode-bidi: isolate;">
+Ptotal = Peq,design + Wf = 1.50 × Weq + (γc × Lf × Bf × tf)
+</div>
+مع شرط التحقق الصارم من عدم تجاوز إجهاد التحمل المسموح للتربة: <span dir="ltr"><b>q_act = Ptotal / (Lf × Bf) ≤ q_all</b></span>.
+</li>
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 12px;">
+<b>السمك الإنشائي الأدنى والجساءة العالية (<span dir="ltr">Rigid Body Behavior</span>):</b>
+يجب ألا يقل سمك القاعدة الخرسانية عن <span dir="ltr"><b>0.70 m</b></span> (أو <span dir="ltr">Lf / 6</span>) لضمان تصرف الكتلة كجسم جاسيء غير قابل للانحناء الموضعي، وحماية محاذاة واستقامة أعمدة الدوران الميكانيكية (<span dir="ltr">Shaft Alignment</span>) من أي انحرافات قد تؤدي إلى تآكل الكراسي والمحامل.
+</li>
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 12px;">
+<b>التحقق من الرنين مع التردد الطبيعي للتربة (<span dir="ltr">Resonance Check</span>):</b>
+يتم حساب التردد الطبيعي الرأسي للمنظومة التأسيسية مع التربة (<span dir="ltr">fn</span>):
+<div dir="ltr" style="direction: ltr !important; text-align: center !important; background: #f8fafc; border: 1.5px solid #94a3b8; border-radius: 8px; padding: 10px 14px; margin: 8px 0; font-family: Consolas, monospace; font-size: 15px; font-weight: bold; color: #0f172a; unicode-bidi: isolate;">
+fn = (1 / 2π) × √(Kz / m_total) &nbsp; [حيث Kz = ks × Af]
+</div>
+ويشترط الكود ابتعاد تردد دوران الماكينة التشغيلي (<span dir="ltr">f_op = RPM / 60</span>) عن التردد الطبيعي لمنظومة التربة بنسبة أمان لا تقل عن <b>±20%</b> منعاً لحدوث ظاهرة الرنين الخطرة وتسييل حبيبات التربة (<span dir="ltr">Avoid Resonance: f_op / fn &lt; 0.80 or f_op / fn &gt; 1.20</span>).
+</li>
+</ul>
+</div>
+<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: #ffffff; border: 2px solid #cbd5e1; border-radius: 12px; padding: 22px 24px; margin-bottom: 22px; box-shadow: 0 4px 14px rgba(0,0,0,0.06);">
+<h3 dir="rtl" style="direction: rtl !important; text-align: center !important; color: #0f172a; margin: 0 0 16px 0; font-size: 19px; font-weight: 900;">
+⚖️ جدول المقارنة الفنية والهندسية الشاملة بين حالتي التأسيس
+</h3>
+<table dir="rtl" style="direction: rtl !important; text-align: right !important; width: 100%; border-collapse: collapse; font-size: 15.5px;">
+<thead>
+<tr style="background: #0f172a; color: #ffffff;">
+<th dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #334155; width: 28%; font-size: 15.5px;">بند المقارنة (Criterion)</th>
+<th dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #334155; width: 36%; color: #38bdf8; font-size: 15.5px;">1️⃣ وجود نظام عزل (Springs & Isolators)</th>
+<th dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #334155; width: 36%; color: #f87171; font-size: 15.5px;">2️⃣ قاعدة ثابتة بدون عزل (Fixed Base)</th>
+</tr>
+</thead>
+<tbody>
+<tr style="background: #f8fafc;">
+<td dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #e2e8f0; font-weight: 800; color: #0f172a;">نسبة وزن القاعدة لوزن المعدة (Wf / Weq)</td>
+<td dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #e2e8f0; color: #0284c7; font-weight: 700;">غير مقيدة بنسبة محددة (محكومة بالتربة والقص الثاقب فقط)</td>
+<td dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #e2e8f0; color: #b91c1c; font-weight: 800;">إلزامية: لا تقل عن 2.5x إلى 3.0x أضعاف وزن المعدة</td>
+</tr>
+<tr>
+<td dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #e2e8f0; font-weight: 800; color: #0f172a;">معامل الحمل الديناميكي المكافئ (Dynamic Factor)</td>
+<td dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #e2e8f0; color: #0284c7; font-weight: 700;"><span dir="ltr"><b>1.20</b></span> (أحمال هادئة ومنقولة بنسبة ضئيلة)</td>
+<td dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #e2e8f0; color: #b91c1c; font-weight: 800;"><span dir="ltr"><b>1.50</b></span> (أثر صدم واهتزاز مستمر مباشر)</td>
+</tr>
+<tr style="background: #f8fafc;">
+<td dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #e2e8f0; font-weight: 800; color: #0f172a;">آلية إخماد وتبديد الاهتزازات</td>
+<td dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #e2e8f0; color: #334155;">امتصاص ميكانيكي وتشتيت بالزنبرك والمطاط (<span dir="ltr">Tr &lt; 0.10</span>)</td>
+<td dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #e2e8f0; color: #334155;">تخميد بالكتلة الخرسانية الضخمة القاصرة (<span dir="ltr">Inertia Mass</span>)</td>
+</tr>
+<tr>
+<td dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #e2e8f0; font-weight: 800; color: #0f172a;">انتقال الاهتزازات للتربة والمجاورات</td>
+<td dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #e2e8f0; color: #16a34a; font-weight: 800;">معزولة ومشتتة بنسبة تفوق 90% إلى 95%</td>
+<td dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #e2e8f0; color: #ea580c; font-weight: 700;">تنتقل قوى للتربة وتتطلب أمان كافي ضد الرنين (<span dir="ltr">Resonance</span>)</td>
+</tr>
+<tr style="background: #f8fafc;">
+<td dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #e2e8f0; font-weight: 800; color: #0f172a;">السمك الإنشائي الأدنى للقاعدة (tf)</td>
+<td dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #e2e8f0; color: #334155;">يبدأ من <span dir="ltr"><b>0.50 m</b></span></td>
+<td dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #e2e8f0; color: #334155;">يبدأ من <span dir="ltr"><b>0.70 m</b></span> لضمان الجساءة العالية وتأمين الوزن</td>
+</tr>
+<tr>
+<td dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #e2e8f0; font-weight: 800; color: #0f172a;">حالات الاستخدام المثالية</td>
+<td dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #e2e8f0; color: #334155;">الماكينات السريعة (> 1000 RPM) والمعدات داخل المباني والأسقف</td>
+<td dir="rtl" style="direction: rtl !important; text-align: right !important; padding: 12px 14px; border: 1px solid #e2e8f0; color: #334155;">محطات التوليد والمصانع المفتوحة وقواعد التأسيس المباشر بالأرض</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: #f1f5f9; border: 1.5px solid #cbd5e1; border-radius: 12px; padding: 20px 24px; margin-bottom: 16px;">
+<h4 dir="rtl" style="direction: rtl !important; text-align: right !important; color: #0f172a; margin: 0 0 12px 0; font-size: 17px; font-weight: 800;">
+📐 اشتراطات التسليح والتنفيذ الإنشائي طبقاً للكود المصري (ECP 203) و ACI 351.3R:
+</h4>
+<ul dir="rtl" style="direction: rtl !important; text-align: right !important; margin: 0; padding-right: 26px; padding-left: 0; font-size: 15.5px; line-height: 1.95; color: #334155; list-style-position: outside;">
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 10px;"><b>شبكة تسليح مزدوجة (Top & Bottom Meshes):</b> يلزم تزويد القاعدة بشبكتين من حديد التسليح (سفلية وعلوية) في الاتجاهين الطولي والعرضي لمقاومة إجهادات الانحناء والانكماش والاهتزازات الدورية المتكررة.</li>
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 10px;"><b>الحد الأدنى لنسبة التسليح (As,min):</b> لا تقل مساحة حديد التسليح عن <span dir="ltr"><b>0.15%</b></span> من مساحة القطاع الخرساني الفعال لكل شبكة في كل اتجاه (<span dir="ltr">As,min = 0.0015 × b × d</span>).</li>
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 10px;"><b>الغطاء الخرساني الصافي (Concrete Cover):</b> لا يقل عن <span dir="ltr"><b>7.5 cm</b></span> في الأسطح الملامسة لتربة التأسيس لتأمين حماية حديد التسليح من الرطوبة والمياه الجوفية.</li>
+<li dir="rtl" style="direction: rtl !important; text-align: right !important; margin-bottom: 10px;"><b>مسامير التثبيت والجراوت (Anchor Bolts & Grouting):</b> تستخدم مسامير تثبيت مجلفنة عالية المقاومة مع لوحات ارتكاز (<span dir="ltr">Anchor Plates / Sleeves</span>) لسهولة الضبط الدقيق لمحاذاة شاسيه الماكينة قبل صب مونة الجراوت غير المنكمشة (<span dir="ltr">Non-Shrink High-Strength Grout</span>).</li>
+</ul>
+</div>
+</div>"""
+    st.html(html_content)
+    if st.button("✖️ إغلاق نافذة الشرح (Close)", key="btn_close_vibration_modal", use_container_width=True):
+        st.rerun()
+
+
 def _render_equipment_foundations_tab():
     st.markdown(
         """
-        <div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #0f172a 100%); border: 2px solid #38bdf8; border-radius: 12px; padding: 16px 22px; margin-bottom: 18px; box-shadow: 0 4px 18px rgba(56, 189, 248, 0.2);">
-            <div style="font-size: 20px; font-weight: 900; color: #fde047; margin-bottom: 6px; direction: rtl !important; text-align: right !important;">
+        <div class="m10-centered-panel" dir="rtl" style="direction: rtl !important; text-align: center !important; background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #0f172a 100%); border: 2px solid #38bdf8; border-radius: 12px; padding: 18px 24px; margin-bottom: 18px; box-shadow: 0 4px 18px rgba(56, 189, 248, 0.2);">
+            <div style="font-size: 20px; font-weight: 900; color: #fde047; margin-bottom: 8px; direction: rtl !important; text-align: center !important;">
                 ⚙️ أولاً: تصميم القواعد الإنشائية للمعدات الميكانيكية الثابتة والديناميكية (Equipment Foundation Design)
             </div>
-            <div style="font-size: 14.5px; color: #e2e8f0; line-height: 1.75; font-weight: 600; direction: rtl !important; text-align: right !important;">
+            <div style="font-size: 14.5px; color: #e2e8f0; line-height: 1.8; font-weight: 600; direction: rtl !important; text-align: center !important;">
                 تصميم متكامل لقواعد الماكينات والمضخات والضواغط والمولدات وفقاً للكود المصري <span dir="ltr">ECP 203</span> و <span dir="ltr">ACI 351.3R</span>، مع الحساب التلقائي للوزن الذاتي للقاعدة (<span dir="ltr">γc = 2.5 t/m³</span>) ومعالجة الأحمال الاهتزازية في حالتي وجود نظام عزل (<span dir="ltr">Springs & Isolators</span>) أو القاعدة الثابتة (<span dir="ltr">Fixed Base</span>).
             </div>
         </div>
@@ -1163,7 +1510,69 @@ def _render_equipment_foundations_tab():
             )
 
         with c3:
-            st.markdown("<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:18px; font-weight:900; color:#38bdf8; margin-bottom:10px;'>📳 3. نظام العزل الاهتزازي والأبعاد</div>", unsafe_allow_html=True)
+            st.markdown(
+                """
+                <style>
+                /* Red Vibration Philosophy Button */
+                div[class*="st-key-btn_vibration_philosophy"] button,
+                .st-key-btn_vibration_philosophy button {
+                    background-color: #dc2626 !important;
+                    background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%) !important;
+                    color: #ffffff !important;
+                    border: 1.5px solid #ef4444 !important;
+                    border-radius: 8px !important;
+                    font-weight: 800 !important;
+                    font-size: 13px !important;
+                    padding: 5px 10px !important;
+                    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.45) !important;
+                    transition: all 0.25s ease-in-out !important;
+                    white-space: nowrap !important;
+                }
+                div[class*="st-key-btn_vibration_philosophy"] button *,
+                div[class*="st-key-btn_vibration_philosophy"] button p,
+                div[class*="st-key-btn_vibration_philosophy"] button span,
+                .st-key-btn_vibration_philosophy button *,
+                .st-key-btn_vibration_philosophy button p,
+                .st-key-btn_vibration_philosophy button span {
+                    color: #ffffff !important;
+                    font-weight: 800 !important;
+                    font-size: 13px !important;
+                }
+                div[class*="st-key-btn_vibration_philosophy"] button:hover,
+                .st-key-btn_vibration_philosophy button:hover {
+                    background-color: #b91c1c !important;
+                    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 50%, #991b1b 100%) !important;
+                    color: #ffffff !important;
+                    border-color: #fca5a5 !important;
+                    box-shadow: 0 6px 16px rgba(220, 38, 38, 0.65) !important;
+                    transform: translateY(-1.5px) !important;
+                }
+                div[class*="st-key-btn_vibration_philosophy"] button:hover *,
+                div[class*="st-key-btn_vibration_philosophy"] button:hover p,
+                div[class*="st-key-btn_vibration_philosophy"] button:hover span,
+                .st-key-btn_vibration_philosophy button:hover *,
+                .st-key-btn_vibration_philosophy button:hover p,
+                .st-key-btn_vibration_philosophy button:hover span {
+                    color: #ffffff !important;
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
+            col_iso_t, col_iso_b = st.columns([1.1, 1.1], vertical_alignment="center")
+            with col_iso_t:
+                st.markdown(
+                    "<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:16px; font-weight:900; color:#38bdf8; line-height:1.3;'>📳 3. نظام العزل الاهتزازي والأبعاد</div>",
+                    unsafe_allow_html=True,
+                )
+            with col_iso_b:
+                if st.button(
+                    "فلسفة التصميم للعزل الاهتزازي",
+                    key="btn_vibration_philosophy",
+                    use_container_width=True,
+                    help="عرض شرح وفلسفة التصميم الإنشائي والديناميكي للعزل الاهتزازي وقواعد المعدات (ACI 351.3R & ECP 203)",
+                ):
+                    show_dialog_vibration_philosophy()
             iso_type = S.selectbox(
                 "حالة العزل الديناميكي (Vibration Isolation):",
                 "m10_eq_iso_type",
@@ -1199,28 +1608,151 @@ def _render_equipment_foundations_tab():
             )
 
         st.markdown("---")
-        c_reb1, c_reb2, c_reb3, c_reb4 = st.columns(4)
-        with c_reb1:
-            phi_bot_eq = S.selectbox("قطر التسليح السفلي Φ_bot [mm]:", "m10_eq_phi_bot", ECP_DIAMETERS, index=2)
-        with c_reb2:
-            phi_top_eq = S.selectbox("قطر التسليح العلوي Φ_top [mm]:", "m10_eq_phi_top", ECP_DIAMETERS, index=1)
-        with c_reb3:
-            cover_eq = S.number_input("الغطاء الخرساني Cover [cm]:", "m10_eq_cover", value=7.5, min_value=5.0, max_value=12.0, step=0.5)
-        with c_reb4:
-            if "Manual" in sizing_mode_eq or "يدوي" in sizing_mode_eq:
-                m_c1, m_c2, m_c3 = st.columns(3)
-                with m_c1:
-                    man_Lf = S.number_input("الطول Lf [m]:", "m10_eq_man_Lf", value=3.50, min_value=1.0, max_value=30.0, step=0.10)
-                with m_c2:
-                    man_Bf = S.number_input("العرض Bf [m]:", "m10_eq_man_Bf", value=2.50, min_value=1.0, max_value=30.0, step=0.10)
-                with m_c3:
-                    man_tf = S.number_input("السمك tf [m]:", "m10_eq_man_tf", value=0.80, min_value=0.30, max_value=5.0, step=0.05)
-            else:
-                man_Lf, man_Bf, man_tf = 3.50, 2.50, 0.80
-                st.markdown(
-                    "<div dir='rtl' style='direction:rtl !important; background:rgba(16,185,129,0.15); border:1.5px solid #10b981; border-radius:8px; padding:10px; text-align:center; color:#a7f3d0; font-weight:800; margin-top:6px;'>✨ الأبعاد تحسب أوتوماتيكياً لتحقيق الأمان الكامل</div>",
-                    unsafe_allow_html=True,
+        is_manual_mode = ("Manual" in sizing_mode_eq or "يدوي" in sizing_mode_eq)
+
+        if is_manual_mode:
+            st.markdown(
+                """
+                <style>
+                /* Align label baselines and uniform heights across the 6 columns */
+                div[data-testid="column"] label {
+                    min-height: 44px !important;
+                    display: flex !important;
+                    align-items: flex-end !important;
+                }
+                </style>
+                <div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:23px; font-weight:900; color:#38bdf8; margin: 18px 0 14px 0; border-bottom: 2px solid rgba(56, 189, 248, 0.35); padding-bottom: 8px;'>
+                    🛠️ المدخلات اليدوية لأبعاد القاعدة الخرسانية وقطر حديد التسليح
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            min_Lf_req = round(float(eq_len), 2)
+            min_Bf_req = round(float(eq_wid), 2)
+
+            # Ensure saved / session values do not violate the min_value constraint before widget instantiation
+            saved_man_Lf = S.cfg_val("m10_eq_man_Lf")
+            if saved_man_Lf is not None and float(saved_man_Lf) < 0.50:
+                if "cfg" in st.session_state:
+                    st.session_state["cfg"]["m10_eq_man_Lf"] = 0.50
+                if "w_m10_eq_man_Lf" in st.session_state and float(st.session_state["w_m10_eq_man_Lf"]) < 0.50:
+                    st.session_state["w_m10_eq_man_Lf"] = 0.50
+
+            saved_man_Bf = S.cfg_val("m10_eq_man_Bf")
+            if saved_man_Bf is not None and float(saved_man_Bf) < 0.50:
+                if "cfg" in st.session_state:
+                    st.session_state["cfg"]["m10_eq_man_Bf"] = 0.50
+                if "w_m10_eq_man_Bf" in st.session_state and float(st.session_state["w_m10_eq_man_Bf"]) < 0.50:
+                    st.session_state["w_m10_eq_man_Bf"] = 0.50
+
+            # 6 equal columns so all 6 input boxes have exactly the same width
+            c_in1, c_in2, c_in3, c_in4, c_in5, c_in6 = st.columns(6)
+            with c_in1:
+                phi_bot_eq = S.selectbox("قطر التسليح السفلي Φ_bot [mm]:", "m10_eq_phi_bot", ECP_DIAMETERS, index=2)
+            with c_in2:
+                phi_top_eq = S.selectbox("قطر التسليح العلوي Φ_top [mm]:", "m10_eq_phi_top", ECP_DIAMETERS, index=1)
+            with c_in3:
+                cover_eq = S.number_input("الغطاء الخرساني Cover [cm]:", "m10_eq_cover", value=7.5, min_value=5.0, max_value=12.0, step=0.5)
+            with c_in4:
+                man_Lf = S.number_input(
+                    f"الطول Lf [m] (الموصى به ≥ {min_Lf_req:.2f} m):",
+                    "m10_eq_man_Lf",
+                    value=max(3.50, min_Lf_req + 0.40),
+                    min_value=0.50,
+                    max_value=30.0,
+                    step=0.10,
+                    help=f"يجب ألا يقل طول القاعدة عن طول بصمة المعدة ({min_Lf_req:.2f} m) لتأمين مسامير التثبيت ومسافة الخلوص الكودية.",
                 )
+            with c_in5:
+                man_Bf = S.number_input(
+                    f"العرض Bf [m] (الموصى به ≥ {min_Bf_req:.2f} m):",
+                    "m10_eq_man_Bf",
+                    value=max(2.50, min_Bf_req + 0.40),
+                    min_value=0.50,
+                    max_value=30.0,
+                    step=0.10,
+                    help=f"يجب ألا يقل عرض القاعدة عن عرض بصمة المعدة ({min_Bf_req:.2f} m) لتأمين مسامير التثبيت ومسافة الخلوص الكودية.",
+                )
+            with c_in6:
+                man_tf = S.number_input(
+                    "السمك tf [m]:",
+                    "m10_eq_man_tf",
+                    value=0.80,
+                    min_value=0.30,
+                    max_value=5.0,
+                    step=0.05,
+                    help="السمك الإنشائي للقاعدة (الموصى به ≥ 0.50m لقواعد العوازل، و ≥ 0.70m للقواعد الثابتة).",
+                )
+        else:
+            st.markdown(
+                """<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:22px; font-weight:900; color:#38bdf8; margin: 18px 0 14px 0; border-bottom: 2px solid rgba(56, 189, 248, 0.35); padding-bottom: 8px;'>
+                    🔩 مدخلات قطر حديد التسليح والغطاء الخرساني (Reinforcement Settings)
+                </div>""",
+                unsafe_allow_html=True,
+            )
+            c_in1, c_in2, c_in3 = st.columns(3)
+            with c_in1:
+                phi_bot_eq = S.selectbox("قطر التسليح السفلي Φ_bot [mm]:", "m10_eq_phi_bot", ECP_DIAMETERS, index=2)
+            with c_in2:
+                phi_top_eq = S.selectbox("قطر التسليح العلوي Φ_top [mm]:", "m10_eq_phi_top", ECP_DIAMETERS, index=1)
+            with c_in3:
+                cover_eq = S.number_input("الغطاء الخرساني Cover [cm]:", "m10_eq_cover", value=7.5, min_value=5.0, max_value=12.0, step=0.5)
+
+            man_Lf, man_Bf, man_tf = 3.50, 2.50, 0.80
+            min_Lf_req = round(float(eq_len), 2)
+            min_Bf_req = round(float(eq_wid), 2)
+            st.markdown(
+                "<div dir='rtl' style='direction:rtl !important; background:rgba(16,185,129,0.15); border:1.5px solid #10b981; border-radius:8px; padding:10px; text-align:center; color:#a7f3d0; font-weight:800; margin-top:8px;'>✨ الأبعاد تحسب أوتوماتيكياً لتحقيق الأمان الكامل واستيفاء مسافات الخلوص الكودية</div>",
+                unsafe_allow_html=True,
+            )
+
+        is_manual_sizing = "Manual" in sizing_mode_eq or "يدوي" in sizing_mode_eq
+        c_L_side = (man_Lf - min_Lf_req) / 2.0
+        c_B_side = (man_Bf - min_Bf_req) / 2.0
+
+        if is_manual_sizing:
+            is_edge_clearance_safe = (
+                (man_Lf >= min_Lf_req - 1e-4)
+                and (man_Bf >= min_Bf_req - 1e-4)
+                and (c_L_side >= 0.20 - 1e-4)
+                and (c_B_side >= 0.20 - 1e-4)
+            )
+            if man_Lf < min_Lf_req or man_Bf < min_Bf_req:
+                play_siren_alarm()
+                st.html(
+                    f"""<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #7f1d1d 0%, #b91c1c 50%, #7f1d1d 100%) !important; color: #ffffff !important; border: 3px solid #ef4444 !important; border-radius: 14px !important; padding: 20px 24px !important; margin: 16px 0 !important; box-shadow: 0 10px 28px rgba(185, 28, 28, 0.6) !important;">
+<div style="font-size: 24px; font-weight: 900; color: #ffffff !important; margin-bottom: 10px; line-height: 1.4; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
+🚨 ❌ خطأ هندسي وإنشائي جسيم (Footprint Dimensions Violation):
+</div>
+<div style="font-size: 21px; font-weight: 800; color: #ffffff !important; line-height: 1.9; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">
+أبعاد القاعدة الخرسانية (<span dir="ltr" style="color: #fca5a5 !important; font-weight: 900; background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 6px;">{man_Lf:.2f} × {man_Bf:.2f} m</span>) أصغر من بصمة المعدة (<span dir="ltr" style="color: #fde047 !important; font-weight: 900;">{min_Lf_req:.2f} × {min_Bf_req:.2f} m</span>)! يجب ألا يقل طول وعرض القاعدة عن بصمة المعدة لتأمين تثبيت مسامير الجشمة (<span dir="ltr">Anchor Bolts</span>) والعوازل داخل الكتلة الخرسانية.
+</div>
+</div>"""
+                )
+            elif not is_edge_clearance_safe:
+                play_siren_alarm()
+                st.html(
+                    f"""<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #991b1b 0%, #dc2626 50%, #991b1b 100%) !important; color: #ffffff !important; border: 3px solid #fca5a5 !important; border-radius: 14px !important; padding: 22px 26px !important; margin: 16px 0 !important; box-shadow: 0 10px 28px rgba(220, 38, 38, 0.65) !important;">
+<div style="font-size: 25px; font-weight: 900; color: #ffffff !important; margin-bottom: 12px; line-height: 1.4; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
+🚨 ⚠️ تنبيه هندسي لخلوص الحواف (Edge Distance Warning):
+</div>
+<div style="font-size: 22px; font-weight: 800; color: #ffffff !important; line-height: 1.95; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">
+خلوص الحواف الفعلي (<span dir="ltr" style="color: #fef08a !important; font-weight: 900; background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 6px;">{max(0.0, c_L_side*100):.1f} cm طولياً / {max(0.0, c_B_side*100):.1f} cm عرضياً</span>) أقل من الموصى به كودياً (<span dir="ltr" style="color: #ffffff !important; font-weight: 900;">20 ~ 40 cm</span>). يُرجى زيادة الأبعاد لتأمين مسامير التثبيت ومنع تشظي حواف الخرسانة (<span dir="ltr">Edge Spalling</span>).
+</div>
+</div>"""
+                )
+            else:
+                st.html(
+                    f"""<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #064e3b 0%, #059669 50%, #064e3b 100%) !important; color: #ffffff !important; border: 2px solid #34d399 !important; border-radius: 12px !important; padding: 16px 22px !important; margin: 14px 0 !important; box-shadow: 0 6px 20px rgba(5, 150, 105, 0.35) !important;">
+<div style="font-size: 20px; font-weight: 900; color: #ffffff !important; line-height: 1.6;">
+✅ أبعاد القاعدة وخلوص الحواف آمنة ومستوفية كودياً:
+<span style="font-size: 18px; font-weight: 800; color: #a7f3d0 !important;">خلوص إضافي = <span dir="ltr">{c_L_side*100:.1f} cm</span> طولياً، و <span dir="ltr">{c_B_side*100:.1f} cm</span> عرضياً.</span>
+</div>
+</div>"""
+                )
+        else:
+            is_edge_clearance_safe = True
 
     res_eq = compute_equipment_foundation_design(
         eq_weight_ton=float(eq_weight),
@@ -1244,201 +1776,236 @@ def _render_equipment_foundations_tab():
         phi_top_mm=int(phi_top_eq),
     )
 
-    # ── OUTPUT KPI CARDS ──
-    with st.expander("📊 2. المخرجات النهائية والتحققات الهندسية والتسليح (Final Outputs & Code Verification)", expanded=True):
-        k1, k2, k3, k4 = st.columns(4)
-        with k1:
-            st.markdown(
-                f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:2px solid #38bdf8; border-radius:10px; padding:14px; text-align:center;">
-                    <div style="font-size:15px; color:#93c5fd; font-weight:800;">الأبعاد النهائية للقاعدة (Lf × Bf × tf)</div>
-                    <div style="font-size:25px; font-weight:900; color:#ffffff; margin:6px 0;" dir="ltr">{res_eq['Lf_m']:.2f} × {res_eq['Bf_m']:.2f} × {res_eq['tf_m']:.2f} m</div>
-                    <div style="font-size:14px; color:#cbd5e1; font-weight:700;">الحجم الخرساني = <span dir="ltr">{res_eq['vol_f_m3']:.2f} m³</span></div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
-        with k2:
-            st.markdown(
-                f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:2px solid #f59e0b; border-radius:10px; padding:14px; text-align:center;">
-                    <div style="font-size:15px; color:#fde047; font-weight:800;">الوزن الذاتي المحسوب تلقائياً (W_f)</div>
-                    <div style="font-size:26px; font-weight:900; color:#fde047; margin:6px 0;" dir="ltr">{res_eq['Wf_ton']:.2f} ton</div>
-                    <div style="font-size:14px; color:#cbd5e1; font-weight:700;">نسبة الكتلة <span dir="ltr">W_f / W_eq = {res_eq['actual_mass_ratio']:.2f}x</span></div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
-        with k3:
-            bg_s = "#064e3b" if res_eq["is_soil_safe"] else "#7f1d1d"
-            bd_s = "#22c55e" if res_eq["is_soil_safe"] else "#ef4444"
-            st.markdown(
-                f"""<div dir="rtl" style="direction:rtl !important; background:{bg_s}; border:2px solid {bd_s}; border-radius:10px; padding:14px; text-align:center;">
-                    <div style="font-size:15px; color:#e2e8f0; font-weight:800;">إجهاد التربة الفعلي / المسموح</div>
-                    <div style="font-size:25px; font-weight:900; color:#ffffff; margin:6px 0;" dir="ltr">{res_eq['q_act_kg_cm2']:.2f} / {res_eq['q_all_kg_cm2']:.2f} kg/cm²</div>
-                    <div style="font-size:14px; color:#a7f3d0; font-weight:700;">{'✅ آمن (SAFE)' if res_eq['is_soil_safe'] else '⚠️ غير آمن (UNSAFE)'} (<span dir="ltr">{res_eq['ratio_soil']*100:.1f}%</span>)</div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
-        with k4:
-            bg_p = "#064e3b" if res_eq["is_punching_safe"] else "#7f1d1d"
-            bd_p = "#22c55e" if res_eq["is_punching_safe"] else "#ef4444"
-            st.markdown(
-                f"""<div dir="rtl" style="direction:rtl !important; background:{bg_p}; border:2px solid {bd_p}; border-radius:10px; padding:14px; text-align:center;">
-                    <div style="font-size:15px; color:#e2e8f0; font-weight:800;">فحص الاختراق (Punching Shear)</div>
-                    <div style="font-size:25px; font-weight:900; color:#ffffff; margin:6px 0;" dir="ltr">{res_eq['q_up_kg_cm2']:.2f} / {res_eq['q_cup_all_kg_cm2']:.2f} kg/cm²</div>
-                    <div style="font-size:14px; color:#a7f3d0; font-weight:700;">{'✅ آمن (SAFE)' if res_eq['is_punching_safe'] else '⚠️ غير آمن (UNSAFE)'} (<span dir="ltr">{res_eq['ratio_punching']*100:.1f}%</span>)</div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
+    # ── OUTPUT SECTIONS & EXPANDERS ──
+    if not is_edge_clearance_safe:
+        # Sections 2 & 3 are completely locked and cannot be opened or expanded
+        st.html(
+            f"""<div dir="rtl" style="direction: rtl !important; text-align: right !important; margin: 20px 0;">
+<div style="background: rgba(15, 23, 42, 0.75); border: 2px dashed #ef4444; border-radius: 12px; padding: 18px 24px; margin-bottom: 16px; box-shadow: 0 4px 16px rgba(239, 68, 68, 0.15); cursor: not-allowed;">
+<div style="font-size: 20px; font-weight: 900; color: #f87171; display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+<span style="font-size: 22px;">🔒</span>
+<span>📊 2. المخرجات النهائية والتحققات الهندسية والتسليح (مُقفل - غير متاح للفتح)</span>
+</div>
+<div style="font-size: 16px; color: #cbd5e1; line-height: 1.8; font-weight: 700;">
+⚠️ <b>تم قفل هذا القسم بالكامل وتعطيل إمكانية فتحه:</b> خلوص الحواف الفعلي (<span dir="ltr" style="color:#fef08a; font-weight:900;">{max(0.0, c_L_side*100):.1f} cm طولياً / {max(0.0, c_B_side*100):.1f} cm عرضياً</span>) أو أبعاد القاعدة غير مستوفية للحد الأدنى الموصى به كودياً (<span dir="ltr" style="color:#fde047; font-weight:900;">20 ~ 40 cm</span>) من كل جهة لتأمين مسامير التثبيت ومنع تشظي الحواف.<br>
+⚙️ يُرجى زيادة طول وعرض القاعدة في قسم المدخلات أعلاه ليستوفي خلوص الحواف الكودي، وسيتم تلقائياً فك القفل وجعل الأقسام متاحة كـ Expanders وعرض كامل الحسابات والتسليح والمخططات.
+</div>
+</div>
 
-        st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
-
-        # Reinforcement & Dynamic Summary Banner
-        r_c1, r_c2 = st.columns(2)
-        with r_c1:
-            st.markdown(
-                f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #22c55e; border-radius:12px; padding:16px 20px; unicode-bidi:isolate;">
-                    <div dir="rtl" style="font-size:18px; font-weight:900; color:#4ade80; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">🔩 تسليح القاعدة السفلي والعلوي والكميات (Reinforcement Summary)</div>
-                    <div dir="rtl" style="font-size:15.5px; color:#f1f5f9; line-height:1.95; font-weight:700; direction:rtl !important; text-align:right !important; width:100%;">
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>شبكة التسليح السفلية (Bottom Mesh):</b> <span dir="ltr" style="color:#fde047; font-size:18px; font-weight:900; unicode-bidi:isolate;">{res_eq['n_bars_bot_m']} Φ {res_eq['phi_bot_mm']} / m'</span> في الاتجاهين (المسافة = <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['spacing_bot_cm']} cm</span>)</div>
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important; padding-right:16px;">▫️ المساحة المطلوبة = <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['As_bot_req_cm2_m']:.2f} cm²/m'</span> | المساحة المتوفرة = <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_eq['As_bot_prov_cm2_m']:.2f} cm²/m'</span></div>
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>شبكة التسليح العلوية (Top Mesh):</b> <span dir="ltr" style="color:#38bdf8; font-size:18px; font-weight:900; unicode-bidi:isolate;">{res_eq['n_bars_top_m']} Φ {res_eq['phi_top_mm']} / m'</span> في الاتجاهين (المسافة = <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['spacing_top_cm']} cm</span>)</div>
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important; padding-right:16px;">▫️ المساحة المطلوبة = <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['As_top_req_cm2_m']:.2f} cm²/m'</span> | المساحة المتوفرة = <span dir="ltr" style="color:#38bdf8; unicode-bidi:isolate;">{res_eq['As_top_prov_cm2_m']:.2f} cm²/m'</span></div>
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>إجمالي وزن حديد التسليح للقاعدة:</b> <span dir="ltr" style="color:#f472b6; font-size:17px; font-weight:900; unicode-bidi:isolate;">{res_eq['total_rebar_weight_kg']:.1f} kg ({res_eq['total_rebar_weight_ton']:.3f} ton)</span> — بمعدل <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['steel_rate_kg_m3']:.1f} kg/m³</span></div>
-                    </div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
-
-        with r_c2:
-            st.markdown(
-                f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #38bdf8; border-radius:12px; padding:16px 20px; unicode-bidi:isolate;">
-                    <div dir="rtl" style="font-size:18px; font-weight:900; color:#38bdf8; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">📳 تحليل الأحمال الاهتزازية والرنين (Dynamic & Vibration Analysis)</div>
-                    <div dir="rtl" style="font-size:15.5px; color:#f1f5f9; line-height:1.95; font-weight:700; direction:rtl !important; text-align:right !important; width:100%;">
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>حالة الارتكاز والعزل:</b> {res_eq['isolation_type']}</div>
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>حمل المعدة التصميمي بالمضاعف الديناميكي (<span dir="ltr" style="unicode-bidi:isolate;">DF = {res_eq['dyn_factor']:.2f}</span>):</b> <span dir="ltr" style="color:#fde047; unicode-bidi:isolate;">{res_eq['P_eq_design_ton']:.2f} ton</span></div>
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>الوزن الذاتي للقاعدة (<span dir="ltr" style="unicode-bidi:isolate;">V × 2.5 t/m³</span>):</b> <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_eq['Wf_ton']:.2f} ton</span> | <b>الحمل الكلي:</b> <span dir="ltr" style="color:#38bdf8; unicode-bidi:isolate;">{res_eq['P_total_working_ton']:.2f} ton</span></div>
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>التردد الطبيعي للقاعدة والتربة (<span dir="ltr" style="unicode-bidi:isolate;">fn</span>):</b> <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['fn_hz']:.2f} Hz</span> | <b>تردد التشغيل (<span dir="ltr" style="unicode-bidi:isolate;">f_op</span>):</b> <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['f_op_hz']:.2f} Hz</span></div>
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>حالة الرنين الديناميكي:</b> <span style="color:{'#4ade80' if res_eq['is_resonance_safe'] else '#f87171'};">{res_eq['resonance_status_ar']}</span></div>
-                    </div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
-
-        # Detailed Verification Table
-        eq_checks = [
-            (
-                "1. الوزن الذاتي للقاعدة ونسبة القصور الذاتي (Foundation Self-Weight Ratio)",
-                f"W_f = {res_eq['Wf_ton']:.2f} t ({res_eq['actual_mass_ratio']:.2f} W_eq)",
-                "محسوب تلقائياً (DF = 1.2)" if res_eq["is_isolated"] else f"≥ {res_eq['req_mass_ratio_min']:.1f}×W_eq ({res_eq['req_min_wf_ton']:.1f} t)",
-                res_eq["is_mass_ratio_safe"],
-            ),
-            (
-                "2. فحص إجهاد التربة تحت الأحمال الكلية (Soil Bearing Capacity Check)",
-                f"q_act = {res_eq['q_act_kg_cm2']:.2f} kg/cm² ({res_eq['q_act_ton_m2']:.1f} t/m²)",
-                f"q_all = {res_eq['q_all_kg_cm2']:.2f} kg/cm² ({res_eq['q_all_ton_m2']:.1f} t/m²)",
-                res_eq["is_soil_safe"],
-            ),
-            (
-                "3. فحص القص الثاقب / الاختراق (Punching Shear Check - ECP 203)",
-                f"q_up = {res_eq['q_up_kg_cm2']:.2f} kg/cm²",
-                f"q_cup = {res_eq['q_cup_all_kg_cm2']:.2f} kg/cm²",
-                res_eq["is_punching_safe"],
-            ),
-            (
-                "4. فحص القص الحرج ذو الاتجاه الواحد (One-Way Beam Shear Check)",
-                f"q_u = {res_eq['qu_1way_kg_cm2']:.2f} kg/cm²",
-                f"q_cu = {res_eq['qcu_1way_kg_cm2']:.2f} kg/cm²",
-                res_eq["is_1way_shear_safe"],
-            ),
-            (
-                "5. التحقق من التردد الطبيعي وتجنب الرنين (Resonance Check)",
-                f"f_op / f_n = {res_eq['freq_ratio']:.2f} ({res_eq['f_op_hz']:.1f} / {res_eq['fn_hz']:.1f} Hz)",
-                "خارج نطاق الرنين [0.70 – 1.30]",
-                res_eq["is_resonance_safe"],
-            ),
-        ]
-
-        rows_html = []
-        for idx, (c_name, c_act, c_lim, c_ok) in enumerate(eq_checks):
-            bg_r = "rgba(15, 23, 42, 0.75)" if idx % 2 == 0 else "rgba(30, 41, 59, 0.75)"
-            badge = (
-                '<span style="background:rgba(34,197,94,0.2); color:#4ade80; border:1.5px solid #22c55e; padding:4px 12px; border-radius:8px; font-weight:900;">✅ آمن ومطابق (SAFE)</span>'
-                if c_ok else
-                '<span style="background:rgba(239,68,68,0.2); color:#f87171; border:1.5px solid #ef4444; padding:4px 12px; border-radius:8px; font-weight:900;">⚠️ غير آمن (UNSAFE)</span>'
-            )
-            rows_html.append(
-                f'<tr style="background:{bg_r}; border-bottom:1px solid #334155;">'
-                f'<td style="padding:12px 16px; font-size:17px; font-weight:800; color:#ffffff; text-align:right; direction:rtl;">{c_name}</td>'
-                f'<td style="padding:12px 16px; font-size:18px; font-weight:900; color:#38bdf8; text-align:center;" dir="ltr">{c_act}</td>'
-                f'<td style="padding:12px 16px; font-size:17px; font-weight:800; color:#fbbf24; text-align:center;" dir="ltr">{c_lim}</td>'
-                f'<td style="padding:12px 16px; text-align:center;">{badge}</td>'
-                f'</tr>'
-            )
-
-        st.markdown(
-            '<div dir="rtl" style="direction:rtl !important; overflow-x:auto; border:2px solid #38bdf8; border-radius:12px; margin-top:16px;">'
-            '<table dir="rtl" style="direction:rtl !important; width:100%; border-collapse:collapse; background:#0b1329;">'
-            '<thead><tr style="background:#1e293b; border-bottom:2px solid #38bdf8;">'
-            '<th style="padding:14px 16px; font-size:18px; color:#38bdf8; text-align:right;">بند التحقق الكودي (Verification Item)</th>'
-            '<th style="padding:14px 16px; font-size:18px; color:#38bdf8; text-align:center;">القيمة المحسوبة (Actual)</th>'
-            '<th style="padding:14px 16px; font-size:18px; color:#fbbf24; text-align:center;">الحد المسموح (Allowable)</th>'
-            '<th style="padding:14px 16px; font-size:18px; color:#4ade80; text-align:center;">الحالة (Status)</th>'
-            '</tr></thead><tbody>' + "".join(rows_html) + '</tbody></table></div>',
-            unsafe_allow_html=True,
+<div style="background: rgba(15, 23, 42, 0.75); border: 2px dashed #ef4444; border-radius: 12px; padding: 18px 24px; box-shadow: 0 4px 16px rgba(239, 68, 68, 0.15); cursor: not-allowed;">
+<div style="font-size: 20px; font-weight: 900; color: #f87171; display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+<span style="font-size: 22px;">🔒</span>
+<span>📐 3. المخططات الهندسية وتصدير المذكرة الحسابية (مُقفل - غير متاح للفتح)</span>
+</div>
+<div style="font-size: 16px; color: #cbd5e1; line-height: 1.8; font-weight: 700;">
+⚠️ <b>تم قفل هذا القسم بالكامل وتعطيل إمكانية فتحه:</b> لا يمكن توليد المخططات الهندسية (2D CAD Blueprints) أو تصدير المذكرات الحسابية (HTML / PDF) قبل استيفاء خلوص الحواف الكودي وأبعاد بصمة المعدة.
+</div>
+</div>
+</div>"""
         )
+    else:
+        with st.expander("📊 2. المخرجات النهائية والتحققات الهندسية والتسليح (Final Outputs & Code Verification)", expanded=True):
+            k1, k2, k3, k4 = st.columns(4)
+            with k1:
+                bg_k1 = "#0f172a" if res_eq["is_footprint_safe"] else "#7f1d1d"
+                bd_k1 = "#38bdf8" if res_eq["is_footprint_safe"] else "#ef4444"
+                footprint_badge = "✅ مستوفية لبصمة المعدة" if res_eq["is_footprint_safe"] else "⚠️ أصغر من بصمة المعدة!"
+                st.markdown(
+                    f"""<div dir="rtl" style="direction:rtl !important; background:{bg_k1}; border:2px solid {bd_k1}; border-radius:10px; padding:14px; text-align:center;">
+                        <div style="font-size:15px; color:#93c5fd; font-weight:800;">الأبعاد النهائية للقاعدة (Lf × Bf × tf)</div>
+                        <div style="font-size:25px; font-weight:900; color:#ffffff; margin:6px 0;" dir="ltr">{res_eq['Lf_m']:.2f} × {res_eq['Bf_m']:.2f} × {res_eq['tf_m']:.2f} m</div>
+                        <div style="font-size:14px; color:{'#a7f3d0' if res_eq['is_footprint_safe'] else '#fca5a5'}; font-weight:700;">{footprint_badge} (الحجم = <span dir="ltr">{res_eq['vol_f_m3']:.2f} m³</span>)</div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+            with k2:
+                st.markdown(
+                    f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:2px solid #f59e0b; border-radius:10px; padding:14px; text-align:center;">
+                        <div style="font-size:15px; color:#fde047; font-weight:800;">الوزن الذاتي المحسوب تلقائياً (W_f)</div>
+                        <div style="font-size:26px; font-weight:900; color:#fde047; margin:6px 0;" dir="ltr">{res_eq['Wf_ton']:.2f} ton</div>
+                        <div style="font-size:14px; color:#cbd5e1; font-weight:700;">نسبة الكتلة <span dir="ltr">W_f / W_eq = {res_eq['actual_mass_ratio']:.2f}x</span></div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+            with k3:
+                bg_s = "#064e3b" if res_eq["is_soil_safe"] else "#7f1d1d"
+                bd_s = "#22c55e" if res_eq["is_soil_safe"] else "#ef4444"
+                st.markdown(
+                    f"""<div dir="rtl" style="direction:rtl !important; background:{bg_s}; border:2px solid {bd_s}; border-radius:10px; padding:14px; text-align:center;">
+                        <div style="font-size:15px; color:#e2e8f0; font-weight:800;">إجهاد التربة الفعلي / المسموح</div>
+                        <div style="font-size:25px; font-weight:900; color:#ffffff; margin:6px 0;" dir="ltr">{res_eq['q_act_kg_cm2']:.2f} / {res_eq['q_all_kg_cm2']:.2f} kg/cm²</div>
+                        <div style="font-size:14px; color:#a7f3d0; font-weight:700;">{'✅ آمن (SAFE)' if res_eq['is_soil_safe'] else '⚠️ غير آمن (UNSAFE)'} (<span dir="ltr">{res_eq['ratio_soil']*100:.1f}%</span>)</div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+            with k4:
+                bg_p = "#064e3b" if res_eq["is_punching_safe"] else "#7f1d1d"
+                bd_p = "#22c55e" if res_eq["is_punching_safe"] else "#ef4444"
+                st.markdown(
+                    f"""<div dir="rtl" style="direction:rtl !important; background:{bg_p}; border:2px solid {bd_p}; border-radius:10px; padding:14px; text-align:center;">
+                        <div style="font-size:15px; color:#e2e8f0; font-weight:800;">فحص الاختراق (Punching Shear)</div>
+                        <div style="font-size:25px; font-weight:900; color:#ffffff; margin:6px 0;" dir="ltr">{res_eq['q_up_kg_cm2']:.2f} / {res_eq['q_cup_all_kg_cm2']:.2f} kg/cm²</div>
+                        <div style="font-size:14px; color:#a7f3d0; font-weight:700;">{'✅ آمن (SAFE)' if res_eq['is_punching_safe'] else '⚠️ غير آمن (UNSAFE)'} (<span dir="ltr">{res_eq['ratio_punching']*100:.1f}%</span>)</div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
 
-    # ── CAD SKETCH & REPORT EXPORT ──
-    with st.expander("📐 3. المخططات الهندسية وتصدير المذكرة الحسابية (2D CAD Blueprints & Report Export)", expanded=True):
-        sketch_eq_b64 = generate_equipment_foundation_sketches(res_eq)
-        st.image(f"data:image/png;base64,{sketch_eq_b64}", use_container_width=True)
+            st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
 
-        summary_eq_rows = [
-            ("الوزن التشغيلي للمعدة (Operating Weight)", f"{res_eq['eq_weight_ton']:.2f} ton"),
-            ("حالة العزل الاهتزازي (Isolation Mode)", res_eq["isolation_type"]),
-            ("الأبعاد النهائية للقاعدة (Lf × Bf × tf)", f"{res_eq['Lf_m']:.2f} m × {res_eq['Bf_m']:.2f} m × {res_eq['tf_m']:.2f} m"),
-            ("حجم الخرسانة والوزن الذاتي للقاعدة (W_f @ 2.5 t/m³)", f"V = {res_eq['vol_f_m3']:.2f} m³ | W_f = {res_eq['Wf_ton']:.2f} ton"),
-            ("إجمالي الحمل التصميمي التشغيلي (Total Working Load)", f"{res_eq['P_total_working_ton']:.2f} ton"),
-            ("إجهاد التربة الفعلي / المسموح به", f"{res_eq['q_act_kg_cm2']:.2f} / {res_eq['q_all_kg_cm2']:.2f} kg/cm²"),
-            ("إجهاد الاختراق الفعلي / المسموح (Punching Shear)", f"{res_eq['q_up_kg_cm2']:.2f} / {res_eq['q_cup_all_kg_cm2']:.2f} kg/cm²"),
-            ("التسليح السفلي في الاتجاهين (Bottom Reinforcement)", f"{res_eq['n_bars_bot_m']} Φ {res_eq['phi_bot_mm']} / m' (As = {res_eq['As_bot_prov_cm2_m']:.2f} cm²/m')"),
-            ("التسليح العلوي في الاتجاهين (Top Reinforcement)", f"{res_eq['n_bars_top_m']} Φ {res_eq['phi_top_mm']} / m' (As = {res_eq['As_top_prov_cm2_m']:.2f} cm²/m')"),
-            ("إجمالي كمية حديد التسليح للقاعدة", f"{res_eq['total_rebar_weight_kg']:.1f} kg ({res_eq['total_rebar_weight_ton']:.3f} ton)"),
-        ]
-        html_eq_report = generate_m10_calculation_sheet_html(
-            title_ar="مذكرة الحسابات الإنشائية لقاعدة المعدة الميكانيكية",
-            subtitle_en="Equipment Foundation Structural & Dynamic Calculation Sheet (ECP 203 / ACI 351.3R)",
-            rows_summary=summary_eq_rows,
-            checks_list=eq_checks,
-            sketch_b64=sketch_eq_b64,
-        )
+            # Reinforcement & Dynamic Summary Banner
+            r_c1, r_c2 = st.columns(2)
+            with r_c1:
+                st.markdown(
+                    f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #22c55e; border-radius:12px; padding:16px 20px; unicode-bidi:isolate;">
+                        <div dir="rtl" style="font-size:18px; font-weight:900; color:#4ade80; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">🔩 تسليح القاعدة السفلي والعلوي والكميات (Reinforcement Summary)</div>
+                        <div dir="rtl" style="font-size:15.5px; color:#f1f5f9; line-height:1.95; font-weight:700; direction:rtl !important; text-align:right !important; width:100%;">
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>شبكة التسليح السفلية (Bottom Mesh):</b> <span dir="ltr" style="color:#fde047; font-size:18px; font-weight:900; unicode-bidi:isolate;">{res_eq['n_bars_bot_m']} Φ {res_eq['phi_bot_mm']} / m'</span> في الاتجاهين (المسافة = <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['spacing_bot_cm']} cm</span>)</div>
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important; padding-right:16px;">▫️ المساحة المطلوبة = <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['As_bot_req_cm2_m']:.2f} cm²/m'</span> | المساحة المتوفرة = <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_eq['As_bot_prov_cm2_m']:.2f} cm²/m'</span></div>
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>شبكة التسليح العلوية (Top Mesh):</b> <span dir="ltr" style="color:#38bdf8; font-size:18px; font-weight:900; unicode-bidi:isolate;">{res_eq['n_bars_top_m']} Φ {res_eq['phi_top_mm']} / m'</span> في الاتجاهين (المسافة = <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['spacing_top_cm']} cm</span>)</div>
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important; padding-right:16px;">▫️ المساحة المطلوبة = <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['As_top_req_cm2_m']:.2f} cm²/m'</span> | المساحة المتوفرة = <span dir="ltr" style="color:#38bdf8; unicode-bidi:isolate;">{res_eq['As_top_prov_cm2_m']:.2f} cm²/m'</span></div>
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>إجمالي وزن حديد التسليح للقاعدة:</b> <span dir="ltr" style="color:#f472b6; font-size:17px; font-weight:900; unicode-bidi:isolate;">{res_eq['total_rebar_weight_kg']:.1f} kg ({res_eq['total_rebar_weight_ton']:.3f} ton)</span> — بمعدل <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['steel_rate_kg_m3']:.1f} kg/m³</span></div>
+                        </div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
 
-        dl1, dl2, dl3 = st.columns(3)
-        with dl1:
-            st.download_button(
-                "📥 تحميل المخطط الهندسي (PNG)",
-                data=base64.b64decode(sketch_eq_b64),
-                file_name=f"Equipment_Foundation_{res_eq['Lf_m']:.1f}x{res_eq['Bf_m']:.1f}m.png",
-                mime="image/png",
-                use_container_width=True,
+            with r_c2:
+                st.markdown(
+                    f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #38bdf8; border-radius:12px; padding:16px 20px; unicode-bidi:isolate;">
+                        <div dir="rtl" style="font-size:18px; font-weight:900; color:#38bdf8; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">📳 تحليل الأحمال الاهتزازية والرنين (Dynamic & Vibration Analysis)</div>
+                        <div dir="rtl" style="font-size:15.5px; color:#f1f5f9; line-height:1.95; font-weight:700; direction:rtl !important; text-align:right !important; width:100%;">
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>حالة الارتكاز والعزل:</b> {res_eq['isolation_type']}</div>
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>حمل المعدة التصميمي بالمضاعف الديناميكي (<span dir="ltr" style="unicode-bidi:isolate;">DF = {res_eq['dyn_factor']:.2f}</span>):</b> <span dir="ltr" style="color:#fde047; unicode-bidi:isolate;">{res_eq['P_eq_design_ton']:.2f} ton</span></div>
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>الوزن الذاتي للقاعدة (<span dir="ltr" style="unicode-bidi:isolate;">V × 2.5 t/m³</span>):</b> <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_eq['Wf_ton']:.2f} ton</span> | <b>الحمل الكلي:</b> <span dir="ltr" style="color:#38bdf8; unicode-bidi:isolate;">{res_eq['P_total_working_ton']:.2f} ton</span></div>
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>التردد الطبيعي للقاعدة والتربة (<span dir="ltr" style="unicode-bidi:isolate;">fn</span>):</b> <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['fn_hz']:.2f} Hz</span> | <b>تردد التشغيل (<span dir="ltr" style="unicode-bidi:isolate;">f_op</span>):</b> <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['f_op_hz']:.2f} Hz</span></div>
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>حالة الرنين الديناميكي:</b> <span style="color:{'#4ade80' if res_eq['is_resonance_safe'] else '#f87171'};">{res_eq['resonance_status_ar']}</span></div>
+                        </div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+            # Detailed Verification Table
+            eq_checks = [
+                (
+                    "1. كفاية الأبعاد الهندسية وبصمة المعدة (Footprint & Clearance Check)",
+                    f"Lf = {res_eq['Lf_m']:.2f} m, Bf = {res_eq['Bf_m']:.2f} m (خلوص: {res_eq['clearance_L_cm']:.0f}×{res_eq['clearance_B_cm']:.0f} cm)",
+                    f"≥ بصمة المعدة ({res_eq['min_req_Lf_m']:.2f}×{res_eq['min_req_Bf_m']:.2f} m)",
+                    res_eq["is_footprint_safe"],
+                ),
+                (
+                    "2. الوزن الذاتي للقاعدة ونسبة القصور الذاتي (Foundation Self-Weight Ratio)",
+                    f"W_f = {res_eq['Wf_ton']:.2f} t ({res_eq['actual_mass_ratio']:.2f} W_eq)",
+                    "محسوب تلقائياً (DF = 1.2)" if res_eq["is_isolated"] else f"≥ {res_eq['req_mass_ratio_min']:.1f}×W_eq ({res_eq['req_min_wf_ton']:.1f} t)",
+                    res_eq["is_mass_ratio_safe"],
+                ),
+                (
+                    "3. فحص إجهاد التربة تحت الأحمال الكلية (Soil Bearing Capacity Check)",
+                    f"q_act = {res_eq['q_act_kg_cm2']:.2f} kg/cm² ({res_eq['q_act_ton_m2']:.1f} t/m²)",
+                    f"q_all = {res_eq['q_all_kg_cm2']:.2f} kg/cm² ({res_eq['q_all_ton_m2']:.1f} t/m²)",
+                    res_eq["is_soil_safe"],
+                ),
+                (
+                    "4. فحص القص الثاقب / الاختراق (Punching Shear Check - ECP 203)",
+                    f"q_up = {res_eq['q_up_kg_cm2']:.2f} kg/cm²",
+                    f"q_cup = {res_eq['q_cup_all_kg_cm2']:.2f} kg/cm²",
+                    res_eq["is_punching_safe"],
+                ),
+                (
+                    "5. فحص القص الحرج ذو الاتجاه الواحد (One-Way Beam Shear Check)",
+                    f"q_u = {res_eq['qu_1way_kg_cm2']:.2f} kg/cm²",
+                    f"q_cu = {res_eq['qcu_1way_kg_cm2']:.2f} kg/cm²",
+                    res_eq["is_1way_shear_safe"],
+                ),
+                (
+                    "6. التحقق من التردد الطبيعي وتجنب الرنين (Resonance Check)",
+                    f"f_op / f_n = {res_eq['freq_ratio']:.2f} ({res_eq['f_op_hz']:.1f} / {res_eq['fn_hz']:.1f} Hz)",
+                    "خارج نطاق الرنين [0.70 – 1.30]",
+                    res_eq["is_resonance_safe"],
+                ),
+            ]
+
+            rows_html = []
+            for idx, (c_name, c_act, c_lim, c_ok) in enumerate(eq_checks):
+                bg_r = "rgba(15, 23, 42, 0.75)" if idx % 2 == 0 else "rgba(30, 41, 59, 0.75)"
+                badge = (
+                    '<span style="background:rgba(34,197,94,0.2); color:#4ade80; border:1.5px solid #22c55e; padding:4px 12px; border-radius:8px; font-weight:900;">✅ آمن ومطابق (SAFE)</span>'
+                    if c_ok else
+                    '<span style="background:rgba(239,68,68,0.2); color:#f87171; border:1.5px solid #ef4444; padding:4px 12px; border-radius:8px; font-weight:900;">⚠️ غير آمن (UNSAFE)</span>'
+                )
+                rows_html.append(
+                    f'<tr style="background:{bg_r}; border-bottom:1px solid #334155;">'
+                    f'<td style="padding:12px 16px; font-size:17px; font-weight:800; color:#ffffff; text-align:right; direction:rtl;">{c_name}</td>'
+                    f'<td style="padding:12px 16px; font-size:18px; font-weight:900; color:#38bdf8; text-align:center;" dir="ltr">{c_act}</td>'
+                    f'<td style="padding:12px 16px; font-size:17px; font-weight:800; color:#fbbf24; text-align:center;" dir="ltr">{c_lim}</td>'
+                    f'<td style="padding:12px 16px; text-align:center;">{badge}</td>'
+                    f'</tr>'
+                )
+
+            st.markdown(
+                '<div dir="rtl" style="direction:rtl !important; overflow-x:auto; border:2px solid #38bdf8; border-radius:12px; margin-top:16px;">'
+                '<table dir="rtl" style="direction:rtl !important; width:100%; border-collapse:collapse; background:#0b1329;">'
+                '<thead><tr style="background:#1e293b; border-bottom:2px solid #38bdf8;">'
+                '<th style="padding:14px 16px; font-size:18px; color:#38bdf8; text-align:right;">بند التحقق الكودي (Verification Item)</th>'
+                '<th style="padding:14px 16px; font-size:18px; color:#38bdf8; text-align:center;">القيمة المحسوبة (Actual)</th>'
+                '<th style="padding:14px 16px; font-size:18px; color:#fbbf24; text-align:center;">الحد المسموح (Allowable)</th>'
+                '<th style="padding:14px 16px; font-size:18px; color:#4ade80; text-align:center;">الحالة (Status)</th>'
+                '</tr></thead><tbody>' + "".join(rows_html) + '</tbody></table></div>',
+                unsafe_allow_html=True,
             )
-        with dl2:
-            st.download_button(
-                "🌐 تحميل المذكرة الحسابية (HTML)",
-                data=html_eq_report,
-                file_name=f"Equipment_Foundation_Report_{res_eq['Lf_m']:.1f}x{res_eq['Bf_m']:.1f}m.html",
-                mime="text/html",
-                use_container_width=True,
+
+        with st.expander("📐 3. المخططات الهندسية وتصدير المذكرة الحسابية (2D CAD Blueprints & Report Export)", expanded=True):
+            sketch_eq_b64 = generate_equipment_foundation_sketches(res_eq)
+            st.image(f"data:image/png;base64,{sketch_eq_b64}", use_container_width=True)
+
+            summary_eq_rows = [
+                ("الوزن التشغيلي للمعدة (Operating Weight)", f"{res_eq['eq_weight_ton']:.2f} ton"),
+                ("حالة العزل الاهتزازي (Isolation Mode)", res_eq["isolation_type"]),
+                ("الأبعاد النهائية للقاعدة (Lf × Bf × tf)", f"{res_eq['Lf_m']:.2f} m × {res_eq['Bf_m']:.2f} m × {res_eq['tf_m']:.2f} m"),
+                ("حجم الخرسانة والوزن الذاتي للقاعدة (W_f @ 2.5 t/m³)", f"V = {res_eq['vol_f_m3']:.2f} m³ | W_f = {res_eq['Wf_ton']:.2f} ton"),
+                ("إجمالي الحمل التصميمي التشغيلي (Total Working Load)", f"{res_eq['P_total_working_ton']:.2f} ton"),
+                ("إجهاد التربة الفعلي / المسموح به", f"{res_eq['q_act_kg_cm2']:.2f} / {res_eq['q_all_kg_cm2']:.2f} kg/cm²"),
+                ("إجهاد الاختراق الفعلي / المسموح (Punching Shear)", f"{res_eq['q_up_kg_cm2']:.2f} / {res_eq['q_cup_all_kg_cm2']:.2f} kg/cm²"),
+                ("التسليح السفلي في الاتجاهين (Bottom Reinforcement)", f"{res_eq['n_bars_bot_m']} Φ {res_eq['phi_bot_mm']} / m' (As = {res_eq['As_bot_prov_cm2_m']:.2f} cm²/m')"),
+                ("التسليح العلوي في الاتجاهين (Top Reinforcement)", f"{res_eq['n_bars_top_m']} Φ {res_eq['phi_top_mm']} / m' (As = {res_eq['As_top_prov_cm2_m']:.2f} cm²/m')"),
+                ("إجمالي كمية حديد التسليح للقاعدة", f"{res_eq['total_rebar_weight_kg']:.1f} kg ({res_eq['total_rebar_weight_ton']:.3f} ton)"),
+            ]
+            html_eq_report = generate_m10_calculation_sheet_html(
+                title_ar="مذكرة الحسابات الإنشائية لقاعدة المعدة الميكانيكية",
+                subtitle_en="Equipment Foundation Structural & Dynamic Calculation Sheet (ECP 203 / ACI 351.3R)",
+                rows_summary=summary_eq_rows,
+                checks_list=eq_checks,
+                sketch_b64=sketch_eq_b64,
             )
-        with dl3:
-            if st.button("📕 توليد وتحميل ملف PDF", key="btn_m10_eq_pdf", use_container_width=True):
-                with st.spinner("جاري تجهيز ملف PDF..."):
-                    pdf_b = html_to_pdf_bytes(html_eq_report)
-                    if pdf_b:
-                        st.download_button(
-                            "📥 اضغط لحفظ التقرير PDF",
-                            data=pdf_b,
-                            file_name="Equipment_Foundation_Report.pdf",
-                            mime="application/pdf",
-                            use_container_width=True,
-                        )
+
+            dl1, dl2, dl3 = st.columns(3)
+            with dl1:
+                st.download_button(
+                    "📥 تحميل المخطط الهندسي (PNG)",
+                    data=base64.b64decode(sketch_eq_b64),
+                    file_name=f"Equipment_Foundation_{res_eq['Lf_m']:.1f}x{res_eq['Bf_m']:.1f}m.png",
+                    mime="image/png",
+                    use_container_width=True,
+                )
+            with dl2:
+                st.download_button(
+                    "🌐 تحميل المذكرة الحسابية (HTML)",
+                    data=html_eq_report,
+                    file_name=f"Equipment_Foundation_Report_{res_eq['Lf_m']:.1f}x{res_eq['Bf_m']:.1f}m.html",
+                    mime="text/html",
+                    use_container_width=True,
+                )
+            with dl3:
+                if st.button("📕 توليد وتحميل ملف PDF", key="btn_m10_eq_pdf", use_container_width=True):
+                    with st.spinner("جاري تجهيز ملف PDF..."):
+                        pdf_b = html_to_pdf_bytes(html_eq_report)
+                        if pdf_b:
+                            st.download_button(
+                                "📥 اضغط لحفظ التقرير PDF",
+                                data=pdf_b,
+                                file_name="Equipment_Foundation_Report.pdf",
+                                mime="application/pdf",
+                                use_container_width=True,
+                            )
 
 
 # ===============================================================================
@@ -1868,6 +2435,12 @@ def render_circular_tank_foundations_module():
         [data-testid="stMainBlockContainer"] .m10-rtl-panel div {
             direction: rtl !important;
             text-align: right !important;
+        }
+        [data-testid="stMainBlockContainer"] .m10-centered-panel,
+        [data-testid="stMainBlockContainer"] .m10-centered-panel > div,
+        [data-testid="stMainBlockContainer"] .m10-centered-panel div {
+            direction: rtl !important;
+            text-align: center !important;
         }
         </style>
         """,
