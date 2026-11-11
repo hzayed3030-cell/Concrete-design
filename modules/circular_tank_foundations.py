@@ -1349,7 +1349,7 @@ def generate_m10_calculation_sheet_html(title_ar: str, subtitle_en: str, rows_su
 #  4.5 MODAL DIALOG: VIBRATION ISOLATION PHILOSOPHY & FOUNDATION DESIGN
 # ===============================================================================
 
-@st.dialog("📖 فلسفة التصميم للعزل الاهتزازي وقواعد المعدات (ECP 203 & ACI 351.3R)", width="large")
+@st.dialog("📖 Vibration Isolation & Equipment Foundation Philosophy (فلسفة التصميم للعزل الاهتزازي وقواعد المعدات)", width="large")
 def show_dialog_vibration_philosophy():
     html_content = """<style>
 div[data-testid="stDialog"],
@@ -1390,7 +1390,7 @@ line-height: 1.95 !important;
 <div dir="rtl" style="direction: rtl !important; text-align: right !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.9; color: #0f172a;">
 <div dir="rtl" style="direction: rtl !important; text-align: center !important; background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0f172a 100%); color: #ffffff; padding: 22px 26px; border-radius: 14px; margin-bottom: 22px; border: 2px solid #38bdf8; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.35);">
 <h2 dir="rtl" style="direction: rtl !important; text-align: center !important; margin: 0 0 10px 0; color: #fde047; font-size: 22px; font-weight: 900; line-height: 1.4;">
-📳 فلسفة التصميم الإنشائي والديناميكي للعزل الاهتزازي وقواعد المعدات الميكانيكية
+📳 Vibration Isolation & Dynamic Foundation Philosophy (فلسفة التصميم الإنشائي والديناميكي للعزل الاهتزازي وقواعد المعدات)
 </h2>
 <div style="font-size: 15.5px; color: #bfdbfe; font-weight: 700; margin-bottom: 10px; text-align: center;" dir="ltr">
 ECP 203-2018 & ACI 351.3R (Foundations for Dynamic Equipment)
@@ -1587,7 +1587,7 @@ def _render_equipment_foundations_tab():
         """
         <div class="m10-centered-panel" dir="rtl" style="direction: rtl !important; text-align: center !important; background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 60%, #0f172a 100%); border: 2px solid #38bdf8; border-radius: 12px; padding: 18px 24px; margin-bottom: 18px; box-shadow: 0 4px 18px rgba(56, 189, 248, 0.2);">
             <div style="font-size: 20px; font-weight: 900; color: #fde047; margin-bottom: 8px; direction: rtl !important; text-align: center !important;">
-                ⚙️ أولاً: تصميم القواعد الإنشائية للمعدات الميكانيكية الثابتة والديناميكية (Equipment Foundation Design)
+                ⚙️ Equipment Foundation Design (أولاً: تصميم القواعد الإنشائية للمعدات الميكانيكية الثابتة والديناميكية)
             </div>
             <div style="font-size: 14.5px; color: #e2e8f0; line-height: 1.8; font-weight: 600; direction: rtl !important; text-align: center !important;">
                 تصميم متكامل لقواعد الماكينات والمضخات والضواغط والمولدات وفقاً للكود المصري <span dir="ltr">ECP 203</span> و <span dir="ltr">ACI 351.3R</span>، مع الحساب التلقائي للوزن الذاتي للقاعدة (<span dir="ltr">γc = 2.5 t/m³</span>) ومعالجة الأحمال الاهتزازية في حالتي وجود نظام عزل (<span dir="ltr">Springs & Isolators</span>) أو القاعدة الثابتة (<span dir="ltr">Fixed Base</span>).
@@ -1597,11 +1597,11 @@ def _render_equipment_foundations_tab():
         unsafe_allow_html=True,
     )
 
-    with st.expander("📥 1. مدخلات المعدة والتربة والمواد ونظام العزل (Equipment, Materials & Soil Inputs)", expanded=True):
+    with st.expander("📥 1. Equipment, Materials & Soil Inputs (مدخلات المعدة والتربة والمواد ونظام العزل)", expanded=True):
         c1, c2, c3 = st.columns(3)
 
         with c1:
-            st.markdown("<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:18px; font-weight:900; color:#38bdf8; margin-bottom:10px;'>⚙️ 1. بيانات المعدة (Equipment Data)</div>", unsafe_allow_html=True)
+            st.markdown("<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:18px; font-weight:900; color:#38bdf8; margin-bottom:10px;'>⚙️ 1. Equipment Data (بيانات المعدة)</div>", unsafe_allow_html=True)
             eq_weight = S.number_input(
                 "الوزن التشغيلي للمعدة (Operating Weight) [ton]:",
                 "m10_eq_weight_ton",
@@ -1648,7 +1648,7 @@ def _render_equipment_foundations_tab():
                 eq_dia = eq_len
 
         with c2:
-            st.markdown("<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:18px; font-weight:900; color:#38bdf8; margin-bottom:10px;'>🧱 2. خواص المواد والتربة (Materials & Soil)</div>", unsafe_allow_html=True)
+            st.markdown("<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:18px; font-weight:900; color:#38bdf8; margin-bottom:10px;'>🧱 2. Materials & Soil (خواص المواد والتربة)</div>", unsafe_allow_html=True)
             fc_eq = S.number_input(
                 "إجهاد الخرسانة fc' / fcu [kg/cm²]:",
                 "m10_eq_fc",
@@ -1736,7 +1736,7 @@ def _render_equipment_foundations_tab():
             col_iso_t, col_iso_b = st.columns([1.1, 1.1], vertical_alignment="center")
             with col_iso_t:
                 st.markdown(
-                    "<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:16px; font-weight:900; color:#38bdf8; line-height:1.3;'>📳 3. نظام العزل الاهتزازي والأبعاد</div>",
+                    "<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:16px; font-weight:900; color:#38bdf8; line-height:1.3;'>📳 3. Vibration Isolation & Dimensions (نظام العزل الاهتزازي والأبعاد)</div>",
                     unsafe_allow_html=True,
                 )
             with col_iso_b:
@@ -1796,7 +1796,7 @@ def _render_equipment_foundations_tab():
                 }
                 </style>
                 <div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:23px; font-weight:900; color:#38bdf8; margin: 18px 0 14px 0; border-bottom: 2px solid rgba(56, 189, 248, 0.35); padding-bottom: 8px;'>
-                    🛠️ المدخلات اليدوية لأبعاد القاعدة الخرسانية وقطر حديد التسليح
+                    🛠️ Manual Dimensions & Rebar Inputs (المدخلات اليدوية لأبعاد القاعدة الخرسانية وقطر حديد التسليح)
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -1869,7 +1869,7 @@ def _render_equipment_foundations_tab():
         else:
             st.markdown(
                 """<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:22px; font-weight:900; color:#38bdf8; margin: 18px 0 14px 0; border-bottom: 2px solid rgba(56, 189, 248, 0.35); padding-bottom: 8px;'>
-                    🔩 مدخلات قطر حديد التسليح والغطاء الخرساني والأبعاد المحسوبة (Reinforcement & Geometry)
+                    🔩 Reinforcement & Calculated Geometry (مدخلات قطر حديد التسليح والغطاء الخرساني والأبعاد المحسوبة)
                 </div>""",
                 unsafe_allow_html=True,
             )
@@ -1909,7 +1909,7 @@ def _render_equipment_foundations_tab():
         st.markdown(
             """
             <div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:20px; font-weight:900; color:#38bdf8; margin: 18px 0 10px 0; border-bottom: 2px solid rgba(56, 189, 248, 0.35); padding-bottom: 6px;'>
-                📏 سمك الخرسانة والعمق الإنشائي للقاعدة (Concrete Thickness / Depth tf)
+                📏 Concrete Thickness / Depth tf (سمك الخرسانة والعمق الإنشائي للقاعدة)
             </div>
             """,
             unsafe_allow_html=True,
@@ -2106,7 +2106,7 @@ def _render_equipment_foundations_tab():
             phi_bot_mm=int(phi_bot_eq),
             phi_top_mm=int(phi_top_eq),
         )
-        with st.expander("📊 2. المخرجات النهائية والتحققات الهندسية والتسليح (Final Outputs & Code Verification)", expanded=True):
+        with st.expander("📊 2. Final Outputs & Code Verification (المخرجات النهائية والتحققات الهندسية والتسليح)", expanded=True):
             k1, k2, k3, k4 = st.columns(4)
             with k1:
                 bg_k1 = "#0f172a" if res_eq["is_footprint_safe"] else "#7f1d1d"
@@ -2161,7 +2161,7 @@ def _render_equipment_foundations_tab():
             with r_c1:
                 st.markdown(
                     f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #22c55e; border-radius:12px; padding:16px 20px; unicode-bidi:isolate;">
-                        <div dir="rtl" style="font-size:18px; font-weight:900; color:#4ade80; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">🔩 تسليح القاعدة السفلي والعلوي والكميات (Reinforcement Summary)</div>
+                        <div dir="rtl" style="font-size:18px; font-weight:900; color:#4ade80; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">🔩 Reinforcement Summary (تسليح القاعدة السفلي والعلوي والكميات)</div>
                         <div dir="rtl" style="font-size:15.5px; color:#f1f5f9; line-height:1.95; font-weight:700; direction:rtl !important; text-align:right !important; width:100%;">
                             <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>شبكة التسليح السفلية (Bottom Mesh):</b> <span dir="ltr" style="color:#fde047; font-size:18px; font-weight:900; unicode-bidi:isolate;">{res_eq['n_bars_bot_m']} Φ {res_eq['phi_bot_mm']} / m'</span> في الاتجاهين (المسافة = <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['spacing_bot_cm']} cm</span>)</div>
                             <div dir="rtl" style="direction:rtl !important; text-align:right !important; padding-right:16px;">▫️ المساحة المطلوبة = <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['As_bot_req_cm2_m']:.2f} cm²/m'</span> | المساحة المتوفرة = <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_eq['As_bot_prov_cm2_m']:.2f} cm²/m'</span></div>
@@ -2176,7 +2176,7 @@ def _render_equipment_foundations_tab():
             with r_c2:
                 st.markdown(
                     f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #38bdf8; border-radius:12px; padding:16px 20px; unicode-bidi:isolate;">
-                        <div dir="rtl" style="font-size:18px; font-weight:900; color:#38bdf8; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">📳 تحليل الأحمال الاهتزازية والرنين (Dynamic & Vibration Analysis)</div>
+                        <div dir="rtl" style="font-size:18px; font-weight:900; color:#38bdf8; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">📳 Dynamic & Vibration Analysis (تحليل الأحمال الاهتزازية والرنين)</div>
                         <div dir="rtl" style="font-size:15.5px; color:#f1f5f9; line-height:1.95; font-weight:700; direction:rtl !important; text-align:right !important; width:100%;">
                             <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>حالة الارتكاز والعزل:</b> {res_eq['isolation_type']}</div>
                             <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>حمل المعدة التصميمي بالمضاعف الديناميكي (<span dir="ltr" style="unicode-bidi:isolate;">DF = {res_eq['dyn_factor']:.2f}</span>):</b> <span dir="ltr" style="color:#fde047; unicode-bidi:isolate;">{res_eq['P_eq_design_ton']:.2f} ton</span></div>
@@ -2263,7 +2263,7 @@ def _render_equipment_foundations_tab():
                 unsafe_allow_html=True,
             )
 
-        with st.expander("📐 3. المخططات الهندسية وتصدير المذكرة الحسابية (2D CAD Blueprints & Report Export)", expanded=True):
+        with st.expander("📐 3. 2D CAD Blueprints & Report Export (المخططات الهندسية وتصدير المذكرة الحسابية)", expanded=True):
             sketch_eq_b64 = generate_equipment_foundation_sketches(res_eq)
             st.image(f"data:image/png;base64,{sketch_eq_b64}", use_container_width=True)
 
@@ -2327,7 +2327,7 @@ def _render_liquid_storage_tanks_tab():
         """
         <div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #0f172a 0%, #064e3b 60%, #0f172a 100%); border: 2px solid #10b981; border-radius: 12px; padding: 16px 22px; margin-bottom: 18px; box-shadow: 0 4px 18px rgba(16, 185, 129, 0.25);">
             <div style="font-size: 20px; font-weight: 900; color: #fde047; margin-bottom: 6px; direction: rtl !important; text-align: right !important;">
-                🛢️ ثانياً: قسم تصميم قواعد الخزانات السائلة (Liquid Storage Tank Foundations)
+                🛢️ Liquid Storage Tank Foundations (ثانياً: تصميم قواعد الخزانات السائلة)
             </div>
             <div style="font-size: 14.5px; color: #e2e8f0; line-height: 1.75; font-weight: 600; direction: rtl !important; text-align: right !important;">
                 قسم مستقل ومتكامل لتصميم القواعد الخرسانية المسلحة للخزانات الدائرية (<span dir="ltr">Circular</span>) والمستطيلة (<span dir="ltr">Rectangular</span>) المصنوعة من الصاج (<span dir="ltr">Steel Sheet</span>) أو البلاستيك (<span dir="ltr">Plastic</span>)، مع الحساب التلقائي لوزن الخزان ووزن السائل من السعة بالبراميل (<span dir="ltr">Barrels</span>) والوزن الذاتي الإجباري للقاعدة (<span dir="ltr">2.5 t/m³</span>) وفقاً للكود المصري <span dir="ltr">ECP 203</span> و <span dir="ltr">ACI 350</span>.
@@ -2337,11 +2337,11 @@ def _render_liquid_storage_tanks_tab():
         unsafe_allow_html=True,
     )
 
-    with st.expander("📥 1. مدخلات الخزان الهندسية وسعة التخزين والمواد والتربة (Tank, Capacity & Soil Inputs)", expanded=True):
+    with st.expander("📥 1. Tank, Capacity & Soil Inputs (مدخلات الخزان الهندسية وسعة التخزين والمواد والتربة)", expanded=True):
         c1, c2, c3 = st.columns(3)
 
         with c1:
-            st.markdown("<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:18px; font-weight:900; color:#34d399; margin-bottom:10px;'>🛢️ 1. بيانات هندسية ومادية للخزان</div>", unsafe_allow_html=True)
+            st.markdown("<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:18px; font-weight:900; color:#34d399; margin-bottom:10px;'>🛢️ 1. Tank Geometry & Material (بيانات هندسية ومادية للخزان)</div>", unsafe_allow_html=True)
             tank_shape = S.selectbox(
                 "الشكل الهندسي للخزان (Tank Shape):",
                 "m10_tk_shape",
@@ -2394,7 +2394,7 @@ def _render_liquid_storage_tanks_tab():
             )
 
         with c2:
-            st.markdown("<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:18px; font-weight:900; color:#34d399; margin-bottom:10px;'>🛢️ 2. سعة التخزين وخصائص السائل</div>", unsafe_allow_html=True)
+            st.markdown("<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:18px; font-weight:900; color:#34d399; margin-bottom:10px;'>🛢️ 2. Storage Capacity & Fluid Properties (سعة التخزين وخصائص السائل)</div>", unsafe_allow_html=True)
             cap_bbl = S.number_input(
                 "سعة الخزان بالبراميل (Storage Capacity) [Barrels]:",
                 "m10_tk_cap_bbl",
@@ -2431,7 +2431,7 @@ def _render_liquid_storage_tanks_tab():
             )
 
         with c3:
-            st.markdown("<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:18px; font-weight:900; color:#34d399; margin-bottom:10px;'>🧱 3. خواص المواد والتربة وأبعاد القاعدة</div>", unsafe_allow_html=True)
+            st.markdown("<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:18px; font-weight:900; color:#34d399; margin-bottom:10px;'>🧱 3. Materials, Soil & Foundation Sizing (خواص المواد والتربة وأبعاد القاعدة)</div>", unsafe_allow_html=True)
             fc_tk = S.number_input(
                 "إجهاد الخرسانة fc' / fcu [kg/cm²]:",
                 "m10_tk_fc",
@@ -2507,7 +2507,7 @@ def _render_liquid_storage_tanks_tab():
     )
 
     # ── DETAILED WEIGHTS & OUTPUTS ──
-    with st.expander("📊 2. التقرير الحسابي التفصيلي للأوزان والأبعاد والتحققات والتسليح (Detailed Calculation Report)", expanded=True):
+    with st.expander("📊 2. Detailed Calculation Report (التقرير الحسابي التفصيلي للأوزان والأبعاد والتحققات والتسليح)", expanded=True):
         # 4 Weight & Dimension Highlight Cards
         w1, w2, w3, w4 = st.columns(4)
         with w1:
@@ -2558,7 +2558,7 @@ def _render_liquid_storage_tanks_tab():
         with tk_c1:
             st.markdown(
                 f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #22c55e; border-radius:12px; padding:16px 20px; unicode-bidi:isolate;">
-                    <div dir="rtl" style="font-size:18px; font-weight:900; color:#4ade80; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">🔩 تسليح قاعدة الخزان السفلي والعلوي طبقاً للكود (Reinforcement)</div>
+                    <div dir="rtl" style="font-size:18px; font-weight:900; color:#4ade80; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">🔩 Reinforcement Summary (تسليح قاعدة الخزان السفلي والعلوي طبقاً للكود)</div>
                     <div dir="rtl" style="font-size:15.5px; color:#f1f5f9; line-height:1.95; font-weight:700; direction:rtl !important; text-align:right !important; width:100%;">
                         <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>شبكة التسليح السفلية (Bottom Mesh):</b> <span dir="ltr" style="color:#fde047; font-size:18px; font-weight:900; unicode-bidi:isolate;">{res_tk['n_bars_bot_m']} Φ {res_tk['phi_bot_mm']} / m'</span> في الاتجاهين (المسافة = <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['spacing_bot_cm']} cm</span>)</div>
                         <div dir="rtl" style="direction:rtl !important; text-align:right !important; padding-right:16px;">▫️ المساحة المطلوبة = <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['As_bot_req_cm2_m']:.2f} cm²/m'</span> | المساحة المتوفرة = <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_tk['As_bot_prov_cm2_m']:.2f} cm²/m'</span></div>
@@ -2573,7 +2573,7 @@ def _render_liquid_storage_tanks_tab():
         with tk_c2:
             st.markdown(
                 f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #38bdf8; border-radius:12px; padding:16px 20px; unicode-bidi:isolate;">
-                    <div dir="rtl" style="font-size:18px; font-weight:900; color:#38bdf8; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">🌊 الضغط الهيدروستاتيكي والاتزان ضد الانقلاب والطفو</div>
+                    <div dir="rtl" style="font-size:18px; font-weight:900; color:#38bdf8; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">🌊 Hydrostatic Pressure & Stability Checks (الضغط الهيدروستاتيكي والاتزان ضد الانقلاب والطفو)</div>
                     <div dir="rtl" style="font-size:15.5px; color:#f1f5f9; line-height:1.95; font-weight:700; direction:rtl !important; text-align:right !important; width:100%;">
                         <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>ارتفاع السائل داخل الخزان (<span dir="ltr" style="unicode-bidi:isolate;">H_liquid</span>):</b> <span dir="ltr" style="color:#fde047; unicode-bidi:isolate;">{res_tk['H_liquid_m']:.2f} m</span> (الارتفاع الكلي = <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['H_tank_total_m']:.2f} m</span>)</div>
                         <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>الضغط الهيدروستاتيكي على القاع (<span dir="ltr" style="unicode-bidi:isolate;">p = γ_liq × H</span>):</b> <span dir="ltr" style="color:#38bdf8; unicode-bidi:isolate;">{res_tk['p_hydrostatic_ton_m2']:.2f} ton/m² ({res_tk['p_hydrostatic_kg_cm2']:.2f} kg/cm²)</span></div>
@@ -2648,7 +2648,7 @@ def _render_liquid_storage_tanks_tab():
         )
 
     # ── CAD SKETCH & REPORT EXPORT ──
-    with st.expander("📐 3. المخططات الهندسية وتصدير التقرير الحسابي للخزان (2D Tank Blueprints & Report)", expanded=True):
+    with st.expander("📐 3. 2D Tank Blueprints & Report (المخططات الهندسية وتصدير التقرير الحسابي للخزان)", expanded=True):
         sketch_tk_b64 = generate_liquid_tank_foundation_sketches(res_tk)
         st.image(f"data:image/png;base64,{sketch_tk_b64}", use_container_width=True)
 
@@ -2758,8 +2758,8 @@ def render_circular_tank_foundations_module():
     )
 
     tab_eq, tab_tank = st.tabs([
-        "⚙️ أولاً: تصميم قواعد المعدات الميكانيكية (Equipment Foundations)",
-        "🛢️ ثانياً: تصميم قواعد الخزانات السائلة (Liquid Storage Tank Foundations)",
+        "⚙️ Equipment Foundations (أولاً: تصميم قواعد المعدات الميكانيكية)",
+        "🛢️ Liquid Storage Tank Foundations (ثانياً: تصميم قواعد الخزانات السائلة)",
     ])
 
     with tab_eq:
