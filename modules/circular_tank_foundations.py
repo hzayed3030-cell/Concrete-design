@@ -719,6 +719,9 @@ def compute_liquid_tank_foundation_design(
     cover_cm: float = 7.5,
     phi_bot_mm: int = 16,
     phi_top_mm: int = 12,
+    manual_Df_m: float = None,
+    manual_Lf_m: float = None,
+    manual_Bf_m: float = None,
 ) -> dict:
     """
     Executes full structural, hydrostatic, buoyancy, overturning, punching shear,
@@ -829,27 +832,52 @@ def compute_liquid_tank_foundation_design(
 
             break
     else:
-        overhang_m = max(manual_overhang_m, 0.15)
-        tf_m = max(manual_tf_m, 0.25)
+        if manual_Df_m is not None and is_circular:
+            Df_m = round(float(manual_Df_m), 2)
+            overhang_m = round((Df_m - D_tank_m) / 2.0, 3)
+            tf_m = max(float(manual_tf_m), 0.10)
+        elif manual_Lf_m is not None and manual_Bf_m is not None and not is_circular:
+            Lf_m = round(float(manual_Lf_m), 2)
+            Bf_m = round(float(manual_Bf_m), 2)
+            overhang_m = round(min((Lf_m - L_tank_m) / 2.0, (Bf_m - B_tank_m) / 2.0), 3)
+            tf_m = max(float(manual_tf_m), 0.10)
+        else:
+            overhang_m = float(manual_overhang_m)
+            tf_m = max(float(manual_tf_m), 0.10)
+            if is_circular:
+                Df_m = round(D_tank_m + 2.0 * overhang_m, 2)
+            else:
+                Lf_m = round(L_tank_m + 2.0 * overhang_m, 2)
+                Bf_m = round(B_tank_m + 2.0 * overhang_m, 2)
 
     # Final Geometry & Mandatory Foundation Self-Weight Calculation
     if is_circular:
-        Df_m = round(D_tank_m + 2.0 * overhang_m, 2)
+        if "Auto" in sizing_mode or "أوتوماتيكي" in sizing_mode:
+            Df_m = round(D_tank_m + 2.0 * overhang_m, 2)
         Lf_m = Df_m
         Bf_m = Df_m
-        Af_m2 = (math.pi / 4.0) * (Df_m ** 2)
-        If_m4 = (math.pi / 64.0) * (Df_m ** 4)
-        c_edge_m = Df_m / 2.0
+        Af_m2 = (math.pi / 4.0) * (max(Df_m, 0.50) ** 2)
+        If_m4 = (math.pi / 64.0) * (max(Df_m, 0.50) ** 4)
+        c_edge_m = max(Df_m, 0.50) / 2.0
     else:
-        Lf_m = round(L_tank_m + 2.0 * overhang_m, 2)
-        Bf_m = round(B_tank_m + 2.0 * overhang_m, 2)
+        if "Auto" in sizing_mode or "أوتوماتيكي" in sizing_mode:
+            Lf_m = round(L_tank_m + 2.0 * overhang_m, 2)
+            Bf_m = round(B_tank_m + 2.0 * overhang_m, 2)
         Df_m = Lf_m
-        Af_m2 = Lf_m * Bf_m
-        # Bending about shorter axis Bf_m for conservative overturning check
-        B_gov_m = min(Lf_m, Bf_m)
-        L_gov_m = max(Lf_m, Bf_m)
+        Af_m2 = max(Lf_m, 0.50) * max(Bf_m, 0.50)
+        B_gov_m = min(max(Lf_m, 0.50), max(Bf_m, 0.50))
+        L_gov_m = max(max(Lf_m, 0.50), max(Bf_m, 0.50))
         If_m4 = (L_gov_m * (B_gov_m ** 3)) / 12.0
         c_edge_m = B_gov_m / 2.0
+
+    min_overhang_code_m = 0.30
+    min_Df_code_m = round(D_tank_m + 2.0 * min_overhang_code_m, 2)
+    min_Lf_code_m = round(L_tank_m + 2.0 * min_overhang_code_m, 2)
+    min_Bf_code_m = round(B_tank_m + 2.0 * min_overhang_code_m, 2)
+
+    is_footprint_safe = (Df_m >= D_tank_m - 1e-4) if is_circular else (Lf_m >= L_tank_m - 1e-4 and Bf_m >= B_tank_m - 1e-4)
+    is_overhang_safe = (overhang_m >= min_overhang_code_m - 1e-4)
+    is_dimensions_safe = is_footprint_safe and is_overhang_safe
 
     vol_f_m3 = Af_m2 * tf_m
     Wf_ton = vol_f_m3 * gamma_c  # Mandatory Self-Weight = V_f * 2.5 ton/m³
@@ -1048,6 +1076,13 @@ def compute_liquid_tank_foundation_design(
         "q_min_kg_cm2": q_min_kg_cm2,
         "ratio_soil": ratio_soil,
         "is_soil_safe": is_soil_safe,
+        "min_overhang_code_m": min_overhang_code_m,
+        "min_Df_code_m": min_Df_code_m,
+        "min_Lf_code_m": min_Lf_code_m,
+        "min_Bf_code_m": min_Bf_code_m,
+        "is_footprint_safe": is_footprint_safe,
+        "is_overhang_safe": is_overhang_safe,
+        "is_dimensions_safe": is_dimensions_safe,
         "bo_m": bo_m,
         "Q_up_ton": Q_up_ton,
         "q_up_kg_cm2": q_up_kg_cm2,
@@ -1318,7 +1353,7 @@ def generate_liquid_tank_foundation_sketches(res: dict) -> str:
     ax1.axis("off")
 
     # --- Panel 2: Elevation Section (Tank + Liquid + RC Foundation) ---
-    ax2.set_title("2. Cross-Section & Top/Bottom Rebar Detailing", color="#38bdf8", fontsize=13, fontweight="bold", pad=12)
+    ax2.set_title("2. Cross-Section & Top/Bottom Rebar Detailing", color="#38bdf8", fontsize=11.0, fontweight="bold", pad=12)
 
     H_draw_tank = min(max(res["H_tank_total_m"] * 0.35, 1.20), 2.60)
     H_draw_liq = H_draw_tank * (res["H_liquid_m"] / max(res["H_tank_total_m"], 0.1))
@@ -1336,48 +1371,80 @@ def generate_liquid_tank_foundation_sketches(res: dict) -> str:
     ax2.plot([-Lf / 2 + cov_m, -Lf / 2 + cov_m], [cov_m, tf - cov_m], color="#4ade80", linewidth=2.5, zorder=4)
     ax2.plot([Lf / 2 - cov_m, Lf / 2 - cov_m], [cov_m, tf - cov_m], color="#4ade80", linewidth=2.5, zorder=4)
 
-    # --- Rebar Direction Indicators (خطوط متقاطعة بتباعد موسع مع عبارتي For both directions و Top & Bottom) ---
+    # --- Rebar Direction Indicators & Detailing Callouts (Enlarged 1.3x) ---
     y_mid_ind = tf * 0.50
-    x_start_x = -0.34 * Lf
-    len_ind_x = min(0.65, 0.20 * Lf)
-    x_end_x = x_start_x + len_ind_x
-    dy_ind = max(0.065, 0.13 * tf)
+    dy_ind = max(0.13, 0.28 * tf)
+    dy_ind = min(dy_ind, max(0.12, (tf - 2 * cov_m) * 0.72))
+    y_top_ind = y_mid_ind + dy_ind / 2
+    y_bot_ind = y_mid_ind - dy_ind / 2
 
-    # 1. خطين متوازيين في اتجاه X بتباعد كافٍ ومميز
-    ax2.plot([x_start_x, x_end_x], [y_mid_ind - dy_ind / 2, y_mid_ind - dy_ind / 2], color="#4ade80", linewidth=3.0, zorder=6)
-    ax2.plot([x_start_x, x_end_x], [y_mid_ind + dy_ind / 2, y_mid_ind + dy_ind / 2], color="#4ade80", linewidth=3.0, zorder=6)
-    ax2.text(x_start_x - 0.04, y_mid_ind, "X", color="#4ade80", fontsize=11, fontweight="bold", ha="right", va="center")
+    x_start_x = -0.47 * Lf
+    len_ind_x = min(0.45, 0.08 * Lf)
+    x_end_x = x_start_x + len_ind_x
+    x_mid_y = (x_start_x + x_end_x) / 2
+
+    # 1. خطان متوازيان في اتجاه X بتباعد مناسب (العلوي لحديد Top Mesh والسفلي لحديد Bottom Mesh)
+    ax2.plot([x_start_x, x_end_x], [y_top_ind, y_top_ind], color="#38bdf8", linewidth=2.5, zorder=6)
+    ax2.plot([x_start_x, x_end_x], [y_bot_ind, y_bot_ind], color="#4ade80", linewidth=2.5, zorder=6)
+    ax2.text(x_start_x - 0.02 * Lf, y_mid_ind, "X", color="#4ade80", fontsize=10.0, fontweight="bold", ha="right", va="center")
 
     # 2. خط رأسي واحد في اتجاه Y يتقاطع معهما
-    x_mid_y = (x_start_x + x_end_x) / 2
-    len_ind_y = min(0.42, 0.46 * tf)
-    ax2.plot([x_mid_y, x_mid_y], [y_mid_ind - len_ind_y / 2, y_mid_ind + len_ind_y / 2], color="#facc15", linewidth=3.2, zorder=6)
-    ax2.plot([x_mid_y - 0.025, x_mid_y + 0.025], [y_mid_ind - len_ind_y / 2, y_mid_ind - len_ind_y / 2], color="#facc15", linewidth=2.0, zorder=6)
-    ax2.plot([x_mid_y - 0.025, x_mid_y + 0.025], [y_mid_ind + len_ind_y / 2, y_mid_ind + len_ind_y / 2], color="#facc15", linewidth=2.0, zorder=6)
-    ax2.text(x_mid_y, y_mid_ind + len_ind_y / 2 + 0.025, "Y", color="#facc15", fontsize=11, fontweight="bold", ha="center", va="bottom")
+    len_ind_y = dy_ind + max(0.06, 0.08 * tf)
+    ax2.plot([x_mid_y, x_mid_y], [y_mid_ind - len_ind_y / 2, y_mid_ind + len_ind_y / 2], color="#facc15", linewidth=2.6, zorder=6)
+    ax2.plot([x_mid_y - 0.025, x_mid_y + 0.025], [y_mid_ind - len_ind_y / 2, y_mid_ind - len_ind_y / 2], color="#facc15", linewidth=1.8, zorder=6)
+    ax2.plot([x_mid_y - 0.025, x_mid_y + 0.025], [y_mid_ind + len_ind_y / 2, y_mid_ind + len_ind_y / 2], color="#facc15", linewidth=1.8, zorder=6)
+    ax2.text(x_mid_y, y_mid_ind + len_ind_y / 2 + 0.02 * tf, "Y", color="#facc15", fontsize=10.0, fontweight="bold", ha="center", va="bottom")
 
-    # 3. كتابة عبارتي For both directions وأسفلها Top & Bottom بجوار خطي اتجاه X في منتصف الشاشة
-    ax2.text(x_end_x + 0.05, y_mid_ind, "For both directions\nTop & Bottom", color="#ffffff", fontsize=9.5, fontweight="bold", ha="left", va="center", linespacing=1.35)
+    # 3. كتابة نصوص حديد التسليح Top & Bottom بجوار خطي اتجاه X بتباعد رأسي مميز لمنع أي تداخل (تكبير بنسبة 1.3x)
+    x_txt_ind = x_end_x + max(0.08, 0.015 * Lf)
+    t_top = ax2.text(x_txt_ind, y_top_ind,
+                     f"Top: {res['n_bars_top_m']} Φ {res['phi_top_mm']}/m' (As = {res['As_top_prov_cm2_m']:.2f} cm²/m') — For both directions",
+                     color="#38bdf8", fontsize=8.7, fontweight="bold", ha="left", va="center")
+    t_bot = ax2.text(x_txt_ind, y_bot_ind,
+                     f"Bottom: {res['n_bars_bot_m']} Φ {res['phi_bot_mm']}/m' (As = {res['As_bot_prov_cm2_m']:.2f} cm²/m') — For both directions",
+                     color="#4ade80", fontsize=8.7, fontweight="bold", ha="left", va="center")
 
     # Tank Shell & Liquid Fill
     ax2.add_patch(Rectangle((-Lt / 2, tf), Lt, H_draw_liq, facecolor="#0284c7", alpha=0.55, edgecolor="none"))
     ax2.add_patch(Rectangle((-Lt / 2, tf), Lt, H_draw_tank, facecolor="none", edgecolor="#fde047", linewidth=2.8))
 
-    # Labels
+    # Labels (تكبير بنسبة 1.3x)
     ax2.text(0, tf + H_draw_liq / 2,
              f"Stored Liquid (SG = {res['specific_gravity']:.2f})\nH_liq = {res['H_liquid_m']:.2f} m | p_hyd = {res['p_hydrostatic_ton_m2']:.2f} t/m²\nW_liquid = {res['W_liquid_ton']:.2f} ton",
-             color="#ffffff", fontsize=9.5, fontweight="bold", ha="center", va="center")
-    ax2.text(0, cov_m + 0.04 * tf,
-             f"Bottom: {res['n_bars_bot_m']} Φ {res['phi_bot_mm']}/m' (As = {res['As_bot_prov_cm2_m']:.2f} cm²/m')",
-             color="#4ade80", fontsize=9.5, fontweight="bold", ha="center")
-    ax2.text(0, tf - cov_m - 0.08 * tf,
-             f"Top: {res['n_bars_top_m']} Φ {res['phi_top_mm']}/m' (As = {res['As_top_prov_cm2_m']:.2f} cm²/m')",
-             color="#38bdf8", fontsize=9.5, fontweight="bold", ha="center")
+             color="#ffffff", fontsize=8.7, fontweight="bold", ha="center", va="center")
     ax2.text(0, -0.22,
              f"q_max = {res['q_max_kg_cm2']:.2f} kg/cm² ≤ {res['q_all_kg_cm2']:.2f} kg/cm² | FOS_overturn = {res['fos_overturning']:.2f} | FOS_uplift = {res['fos_buoyancy']:.2f}",
-             color="#fde047", fontsize=9.5, fontweight="bold", ha="center")
+             color="#fde047", fontsize=8.7, fontweight="bold", ha="center")
 
-    ax2.set_xlim(-Lf / 2 - 0.9, Lf / 2 + 0.9)
+    # --- Elevation Dimensions: Foundation Thickness (tf) & Tank Height (H_tank) ---
+    fig.canvas.draw()
+    inv = ax2.transData.inverted()
+    bb_top = t_top.get_window_extent().transformed(inv)
+    bb_bot = t_bot.get_window_extent().transformed(inv)
+    max_text_x = max(bb_top.x1, bb_bot.x1)
+
+    x_dim_chain = max(Lf / 2 + max(0.35, Lf * 0.07), max_text_x + 0.25)
+    x_txt_chain = x_dim_chain + max(0.24, Lf * 0.05)
+
+    # 1. Foundation Thickness (tf) Dimension Line & Extension Lines
+    ax2.plot([Lf / 2, x_dim_chain + 0.12], [0, 0], color="#f87171", linestyle=":", lw=1.2, alpha=0.7)
+    ax2.plot([Lf / 2, x_dim_chain + 0.12], [tf, tf], color="#e2e8f0", linestyle=":", lw=1.2, alpha=0.7)
+    ax2.annotate("", xy=(x_dim_chain, 0), xytext=(x_dim_chain, tf),
+                 arrowprops=dict(arrowstyle="<->", color="#f87171", lw=1.8))
+    ax2.text(x_txt_chain, tf / 2, f"tf = {tf:.2f} m", color="#f87171", fontsize=9.4, fontweight="bold",
+             ha="left", va="center", rotation=90,
+             bbox=dict(boxstyle="round,pad=0.2", facecolor="#0f172a", edgecolor="#f87171", lw=1.0))
+
+    # 2. Tank Height (H_tank) Dimension Line & Extension Lines
+    ax2.plot([Lt / 2, x_dim_chain + 0.12], [tf + H_draw_tank, tf + H_draw_tank], color="#fde047", linestyle=":", lw=1.2, alpha=0.7)
+    ax2.annotate("", xy=(x_dim_chain, tf), xytext=(x_dim_chain, tf + H_draw_tank),
+                 arrowprops=dict(arrowstyle="<->", color="#fde047", lw=1.8))
+    ax2.text(x_txt_chain, tf + H_draw_tank / 2, f"H_tank = {res['H_tank_total_m']:.2f} m", color="#fde047", fontsize=9.4, fontweight="bold",
+             ha="left", va="center", rotation=90,
+             bbox=dict(boxstyle="round,pad=0.2", facecolor="#0f172a", edgecolor="#fde047", lw=1.0))
+
+    margin_r = (x_txt_chain - Lf / 2) + 0.65
+    ax2.set_xlim(-Lf / 2 - 0.9, Lf / 2 + margin_r)
     ax2.set_ylim(-0.55, tf + H_draw_tank + 0.45)
     ax2.axis("off")
 
@@ -1799,6 +1866,552 @@ fn = (1 / 2π) × √(Kz / m_total) &nbsp; [حيث Kz = ks × Af]
     st.html(html_content)
     if st.button("✖️ إغلاق نافذة الشرح (Close)", key="btn_close_vibration_modal", use_container_width=True):
         st.rerun()
+
+
+# ===============================================================================
+#  4.6 MODAL DIALOG: LIQUID TANK LOAD CALCULATIONS METHODOLOGY & PHILOSOPHY
+# ===============================================================================
+
+@st.dialog("⚖️ Load Calculations & Structural Loading Methodology (دليل وطريقة حساب وتفصيل الأحمال الإنشائية لقواعد الخزانات)", width="large")
+def show_dialog_tank_load_calculations(res: dict = None):
+    has_res = res is not None
+    is_circular = res.get("is_circular", True) if has_res else True
+    d_tank = res.get("D_tank_m", 10.0) if has_res else 10.0
+    l_tank = res.get("L_tank_m", 10.0) if has_res else 10.0
+    b_tank = res.get("B_tank_m", 10.0) if has_res else 10.0
+    a_tank = res.get("A_tank_m2", 78.54) if has_res else 78.54
+    cap_bbl = res.get("capacity_barrels", 4940.0) if has_res else 4940.0
+    vol_liq = res.get("vol_liquid_m3", 785.4) if has_res else 785.4
+    sg = res.get("specific_gravity", 0.85) if has_res else 0.85
+    gamma_liq = res.get("gamma_liquid_ton_m3", sg * 1.00) if has_res else (sg * 1.00)
+    h_liq = res.get("H_liquid_m", 10.0) if has_res else 10.0
+    h_tank = res.get("H_tank_total_m", 11.0) if has_res else 11.0
+    thk_mm = res.get("sheet_thk_mm", 8.0) if has_res else 8.0
+    thk_m = thk_mm / 1000.0
+    mat_name = res.get("tank_material", "صاج صلب مسحوب (Steel Plates)") if has_res else "صاج صلب"
+    is_steel = res.get("is_steel", True) if has_res else True
+    gamma_mat = 7.85 if is_steel else 1.40
+
+    # Geometric properties & surface area of the tank plates
+    if is_circular:
+        perim_tank = math.pi * d_tank
+        base_calc_str = f"(π / 4) × D² = (π / 4) × ({d_tank:.2f})² = {a_tank:.2f} m²"
+        perim_calc_str = f"π × D = π × {d_tank:.2f} = {perim_tank:.2f} m"
+    else:
+        perim_tank = 2.0 * (l_tank + b_tank)
+        base_calc_str = f"L × B = {l_tank:.2f} × {b_tank:.2f} = {a_tank:.2f} m²"
+        perim_calc_str = f"2 × (L + B) = 2 × ({l_tank:.2f} + {b_tank:.2f}) = {perim_tank:.2f} m"
+
+    area_shell = perim_tank * h_tank
+    area_plates_net = 2.0 * a_tank + area_shell
+    area_total_plates = area_plates_net * 1.15  # +15% stiffeners, wind girders, nozzles, manholes, ladders
+
+    w_tank = res.get("W_tank_empty_ton", area_total_plates * thk_m * gamma_mat) if has_res else (area_total_plates * thk_m * gamma_mat)
+    w_liq = res.get("W_liquid_ton", vol_liq * gamma_liq) if has_res else (vol_liq * gamma_liq)
+    p_hyd_t = res.get("p_hydrostatic_ton_m2", gamma_liq * h_liq) if has_res else (gamma_liq * h_liq)
+    p_hyd_kg = res.get("p_hydrostatic_kg_cm2", p_hyd_t / 10.0) if has_res else (p_hyd_t / 10.0)
+
+    # Foundation geometry & properties
+    df = res.get("Df_m", 11.0) if has_res else 11.0
+    lf = res.get("Lf_m", 11.0) if has_res else 11.0
+    bf = res.get("Bf_m", 11.0) if has_res else 11.0
+    tf = res.get("tf_m", 0.50) if has_res else 0.50
+    af_m2 = res.get("Af_m2", (math.pi / 4.0 * df**2) if is_circular else (lf * bf)) if has_res else ((math.pi / 4.0 * df**2) if is_circular else (lf * bf))
+    vol_f = res.get("vol_f_m3", af_m2 * tf) if has_res else (af_m2 * tf)
+    w_f = res.get("Wf_ton", vol_f * 2.50) if has_res else (vol_f * 2.50)
+
+    # Load Combinations
+    p_work = res.get("P_total_working_ton", w_tank + w_liq + w_f) if has_res else (w_tank + w_liq + w_f)
+    p_ult = res.get("Pu_total_ton", 1.40 * (w_tank + w_f) + 1.50 * w_liq) if has_res else (1.40 * (w_tank + w_f) + 1.50 * w_liq)
+    q_act_ton_m2 = p_work / max(af_m2, 0.01)
+    q_act_kg_cm2 = q_act_ton_m2 / 10.0
+    q_all_kg = res.get("q_all_kg_cm2", 2.0) if has_res else 2.0
+    qu_net_ton_m2 = p_ult / max(af_m2, 0.01)
+
+    # Lateral & Overturning Stability
+    lat_coeff_frac = res.get("wind_seismic_coeff", 0.08) if has_res else 0.08
+    lat_coeff_pct = lat_coeff_frac * 100.0
+    v_lat = res.get("V_lateral_ton", lat_coeff_frac * (w_tank + w_liq)) if has_res else (lat_coeff_frac * (w_tank + w_liq))
+    lever_arm = 0.50 * h_liq + tf
+    m_ot = res.get("M_overturning_tm", v_lat * lever_arm) if has_res else (v_lat * lever_arm)
+    c_edge = (df / 2.0) if is_circular else (min(lf, bf) / 2.0)
+    m_res = res.get("M_resisting_full_tm", p_work * c_edge) if has_res else (p_work * c_edge)
+    fos_ot = res.get("fos_overturning", m_res / max(m_ot, 0.01)) if has_res else (m_res / max(m_ot, 0.01))
+
+    # Buoyancy & Uplift Safety
+    gwt = res.get("gwt_depth_m", 1.0) if has_res else 1.0
+    u_buoy = res.get("U_buoyancy_ton", af_m2 * gwt * 1.00) if has_res else (af_m2 * gwt * 1.00)
+    w_empty = w_tank + w_f
+    fos_buoy = res.get("fos_buoyancy", w_empty / max(u_buoy, 0.01)) if has_res else (w_empty / max(u_buoy, 0.01))
+
+    f_circ_geom = f"(π / 4) × Df² = (π / 4) × ({df:.2f})²" if is_circular else f"Lf × Bf = {lf:.2f} × {bf:.2f}"
+
+    html_content = f"""<style>
+div[data-testid="stDialog"],
+div[data-testid="stDialog"] > div,
+div[data-testid="stDialog"] div[data-testid="stVerticalBlock"],
+div[data-testid="stDialog"] [data-testid="stMarkdownContainer"],
+div[role="dialog"] {{
+    direction: rtl !important;
+    text-align: right !important;
+}}
+div[role="dialog"] h2,
+div[role="dialog"] p,
+div[role="dialog"] ul,
+div[role="dialog"] ol,
+div[role="dialog"] li,
+div[data-testid="stDialog"] ul,
+div[data-testid="stDialog"] ol,
+div[data-testid="stDialog"] li {{
+    direction: rtl !important;
+    text-align: right !important;
+}}
+div[data-testid="stDialog"] ul,
+div[data-testid="stDialog"] ol,
+div[role="dialog"] ul,
+div[role="dialog"] ol {{
+    padding-right: 26px !important;
+    padding-left: 0 !important;
+    margin-right: 0 !important;
+    list-style-position: outside !important;
+}}
+div[data-testid="stDialog"] li,
+div[role="dialog"] li {{
+    margin-bottom: 12px !important;
+    line-height: 1.95 !important;
+}}
+
+/* STRICT LTR FOR ALL CALCULATION BOXES AND CODE BLOCKS */
+div[role="dialog"] .calc-box-ltr,
+div[role="dialog"] .calc-box-ltr *,
+div[data-testid="stDialog"] .calc-box-ltr,
+div[data-testid="stDialog"] .calc-box-ltr *,
+div[role="dialog"] [dir="ltr"].calc-box-ltr,
+div[role="dialog"] [dir="ltr"].calc-box-ltr *,
+div[data-testid="stDialog"] [dir="ltr"].calc-box-ltr,
+div[data-testid="stDialog"] [dir="ltr"].calc-box-ltr * {{
+    direction: ltr !important;
+    text-align: left !important;
+    unicode-bidi: isolate !important;
+}}
+
+div[data-testid="stDialog"] [dir="ltr"],
+div[role="dialog"] [dir="ltr"],
+span[dir="ltr"] {{
+    direction: ltr !important;
+    unicode-bidi: isolate !important;
+}}
+</style>
+<div dir="rtl" style="direction: rtl !important; text-align: right !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.9; color: #0f172a;">
+    <div dir="rtl" style="direction: rtl !important; text-align: center !important; background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #0f172a 100%); color: #ffffff; padding: 22px 26px; border-radius: 14px; margin-bottom: 22px; border: 2px solid #fbbf24; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.35);">
+        <h2 dir="rtl" style="direction: rtl !important; text-align: center !important; margin: 0 0 10px 0; color: #fde047; font-size: 22px; font-weight: 900; line-height: 1.4;">
+            ⚖️ Load Calculations & Structural Loading Methodology (دليل وطريقة حساب وتفصيل الأحمال الإنشائية لقواعد الخزانات)
+        </h2>
+        <div style="font-size: 15.5px; color: #fde68a; font-weight: 700; margin-bottom: 10px; text-align: center;" dir="ltr">
+            ECP 203-2018 (كود الخرسانة المصري) & ECP 201 (كود الأحمال) & ACI 350 / API 650
+        </div>
+        <p dir="rtl" style="direction: rtl !important; text-align: center !important; margin: 0; font-size: 15.5px; color: #e2e8f0; line-height: 1.85;">
+            دليل هندسي تفصيلي يوضح الأسس النظرية والكودية والمعادلات الرياضية المستخدمة لحساب كل حمل من الأحمال المرتكزة على قاعدة الخزان، مع تطبيق الحسابات العددية خطوة بخطوة بالقيم الفعلية للمشروع.
+        </p>
+    </div>
+
+    <!-- 1. W_tank -->
+    <div dir="rtl" style="background: #ffffff; border: 2px solid #cbd5e1; border-right: 8px solid #64748b; border-radius: 12px; padding: 20px 24px; margin-bottom: 22px; box-shadow: 0 4px 14px rgba(0,0,0,0.06);">
+        <div dir="rtl" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 14px;">
+            <div style="color: #1e293b; font-size: 18.5px; font-weight: 900;">
+                1️⃣ وزن هيكل الخزان الفارغ (<span dir="ltr">W_tank / Empty Tank Self-Weight</span>)
+            </div>
+            <span dir="ltr" style="background: #f1f5f9; color: #475569; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 800;">Dead Load (D)</span>
+        </div>
+        <ul style="margin: 0; padding-right: 24px; color: #334155; font-size: 15px;">
+            <li><b>مكونات الهيكل:</b> يشمل مجموع أوزان: لوح القاع السفلي (<span dir="ltr">Bottom Plate</span>) + جدار الخزان الجانبي الأسطواني (<span dir="ltr">Shell Wall</span>) + الغطاء والسقف العلوي (<span dir="ltr">Roof Cover</span>).</li>
+            <li><b>معامل المقويات والفوهات (+15%):</b> يضاف كودياً نسبة 15% إضافية لمجموع ألواح الخزان لتغطية العوارض الحلقية المقوية للرياح (<span dir="ltr">Wind Girders & Stiffeners</span>)، الفوهات والمحابس (<span dir="ltr">Nozzles</span>)، فتحات التفتيش (<span dir="ltr">Manholes</span>)، وسلالم ومنصات الصيانة (<span dir="ltr">Ladders & Platforms</span>).</li>
+            <li><b>كثافة مادة الصنع:</b> تبلغ كثافة ألواح الصلب <span dir="ltr"><b>γ_steel = 7.85 ton/m³</b></span>، وألواح البلاستيك المقوى/الفايبرجلاس <span dir="ltr"><b>γ_GRP = 1.40 ton/m³</b></span>.</li>
+        </ul>
+        <div class="calc-box-ltr" dir="ltr" style="direction: ltr !important; text-align: left !important; background: #f8fafc; border: 1.5px solid #94a3b8; border-radius: 8px; padding: 12px 16px; margin: 14px 0; font-family: Consolas, monospace; font-size: 14.5px; color: #0f172a; line-height: 1.8;">
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-weight: 800; color: #1e293b; margin-bottom: 6px;">
+                W_tank = Area_total × (t_sheet / 1000) × γ_mat
+            </div>
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-size: 13.5px; color: #475569; border-top: 1px dashed #cbd5e1; padding-top: 6px;">
+                ▫️ A_base = {base_calc_str}<br>
+                ▫️ Perimeter = {perim_calc_str}<br>
+                ▫️ Area_shell = Perimeter × H_tank = {perim_tank:.2f} × {h_tank:.2f} = {area_shell:.2f} m²<br>
+                ▫️ Area_total = [ 2 × A_base + Area_shell ] × 1.15 = [ 2 × {a_tank:.2f} + {area_shell:.2f} ] × 1.15 = {area_plates_net:.2f} × 1.15 = <b>{area_total_plates:.2f} m²</b><br>
+                ▫️ t_sheet = {thk_mm:.1f} mm = {thk_m:.4f} m | γ_mat ({'Steel' if is_steel else 'Plastic/GRP'}) = {gamma_mat:.2f} ton/m³
+            </div>
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; margin-top: 8px; background: #ecfdf5; border: 1.2px solid #86efac; border-radius: 6px; padding: 6px 12px; font-weight: 800; color: #15803d; font-size: 14px;">
+                ➔ W_tank = {area_total_plates:.2f} m² × ({thk_mm:.1f} / 1000) × {gamma_mat:.2f} = <span style="color: #b91c1c; font-size: 15.5px;">{w_tank:.2f} ton</span>
+            </div>
+        </div>
+        <div dir="rtl" style="direction: rtl !important; text-align: right !important; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; padding: 10px 16px; font-size: 14.5px; color: #166534;">
+            <b>القيمة المحسوبة حالياً للمشروع:</b> <span dir="ltr"><b>W_tank = {w_tank:.2f} ton</b></span> (مادة الخزان: {mat_name} بسماكة <span dir="ltr">{thk_mm:.1f} mm</span>).
+        </div>
+    </div>
+
+    <!-- 2. W_liquid -->
+    <div dir="rtl" style="background: #ffffff; border: 2px solid #cbd5e1; border-right: 8px solid #0284c7; border-radius: 12px; padding: 20px 24px; margin-bottom: 22px; box-shadow: 0 4px 14px rgba(0,0,0,0.06);">
+        <div dir="rtl" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 14px;">
+            <div style="color: #0369a1; font-size: 18.5px; font-weight: 900;">
+                2️⃣ وزن السائل الإجمالي المخزن (<span dir="ltr">W_liquid / Stored Liquid Weight</span>)
+            </div>
+            <span dir="ltr" style="background: #e0f2fe; color: #0284c7; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 800;">Fluid Live Load (F / L)</span>
+        </div>
+        <ul style="margin: 0; padding-right: 24px; color: #334155; font-size: 15px;">
+            <li><b>حجم السائل الصافي:</b> يُحسب من سعة الخزان بالبراميل الأمريكية (<span dir="ltr">1 BBL = 0.1589873 m³</span>) أو حاصل ضرب مساحة المقطع في عمق السائل التشغيلي (<span dir="ltr">H_liquid</span>).</li>
+            <li><b>الكثافة النوعية (<span dir="ltr">Specific Gravity - SG</span>):</b> الكثافة الوزنية للسائل المخزن = <span dir="ltr">SG × γ_water = SG × 1.00 ton/m³</span>.</li>
+            <li><b>الضغط الهيدروستاتيكي على قاع الخزان (<span dir="ltr">p_hyd</span>):</b> الضغط الرأسي المباشر المؤثر على بلاطة القاعدة = <span dir="ltr">γ_liquid × H_liquid</span> بوحدة <span dir="ltr">t/m²</span> أو <span dir="ltr">kg/cm²</span>.</li>
+        </ul>
+        <div class="calc-box-ltr" dir="ltr" style="direction: ltr !important; text-align: left !important; background: #f0f9ff; border: 1.5px solid #7dd3fc; border-radius: 8px; padding: 12px 16px; margin: 14px 0; font-family: Consolas, monospace; font-size: 14.5px; color: #0369a1; line-height: 1.8;">
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-weight: 800; color: #0369a1; margin-bottom: 6px;">
+                W_liquid = Vol_liquid (m³) × (SG × 1.00 ton/m³)<br>
+                p_hyd = γ_liquid × H_liquid [t/m²] = p_hyd / 10 [kg/cm²]
+            </div>
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-size: 13.5px; color: #0284c7; border-top: 1px dashed #bae6fd; padding-top: 6px;">
+                ▫️ Capacity = {cap_bbl:.0f} BBL ➔ Vol_liquid = {cap_bbl:.0f} × 0.1589873 = <b>{vol_liq:.2f} m³</b><br>
+                ▫️ Specific Gravity (SG) = {sg:.2f} ➔ γ_liquid = {sg:.2f} × 1.00 = <b>{gamma_liq:.2f} ton/m³</b><br>
+                ▫️ H_liquid = Vol_liquid / A_base = {vol_liq:.2f} / {a_tank:.2f} = <b>{h_liq:.2f} m</b>
+            </div>
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; margin-top: 8px; background: #ecfdf5; border: 1.2px solid #86efac; border-radius: 6px; padding: 6px 12px; font-weight: 800; color: #15803d; font-size: 14px;">
+                ➔ W_liquid = {vol_liq:.2f} m³ × {gamma_liq:.2f} ton/m³ = <span style="color: #b91c1c; font-size: 15.5px;">{w_liq:.2f} ton</span><br>
+                ➔ p_hyd = {gamma_liq:.2f} × {h_liq:.2f} = <span style="color: #0369a1; font-size: 15px;">{p_hyd_t:.2f} t/m²</span> (<span style="color: #0369a1;">{p_hyd_kg:.2f} kg/cm²</span>)
+            </div>
+        </div>
+        <div dir="rtl" style="direction: rtl !important; text-align: right !important; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; padding: 10px 16px; font-size: 14.5px; color: #166534;">
+            <b>القيمة المحسوبة حالياً للمشروع:</b> <span dir="ltr"><b>W_liquid = {w_liq:.2f} ton</b></span> (الحجم = <span dir="ltr">{vol_liq:.1f} m³</span> | الارتفاع = <span dir="ltr">{h_liq:.2f} m</span> | الضغط = <span dir="ltr">{p_hyd_t:.2f} t/m²</span> يعادل <span dir="ltr">{p_hyd_kg:.2f} kg/cm²</span>).
+        </div>
+    </div>
+
+    <!-- 3. W_f -->
+    <div dir="rtl" style="background: #ffffff; border: 2px solid #cbd5e1; border-right: 8px solid #ca8a04; border-radius: 12px; padding: 20px 24px; margin-bottom: 22px; box-shadow: 0 4px 14px rgba(0,0,0,0.06);">
+        <div dir="rtl" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 14px;">
+            <div style="color: #a16207; font-size: 18.5px; font-weight: 900;">
+                3️⃣ الوزن الذاتي لقاعدة الخزان المسلحة (<span dir="ltr">W_f / Foundation Self-Weight</span>)
+            </div>
+            <span dir="ltr" style="background: #fef9c3; color: #a16207; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 800;">Dead Load (D) - Mandatory</span>
+        </div>
+        <ul style="margin: 0; padding-right: 24px; color: #334155; font-size: 15px;">
+            <li><b>كثافة الخرسانة المسلحة الإلزامية كودياً:</b> يحدد الكود المصري <span dir="ltr"><b>ECP 203 (Section 6-3)</b></span> كثافة الخرسانة المسلحة الإلزامية بـ <span dir="ltr"><b>γ_c = 2.50 ton/m³</b></span> شاملة حديد التسليح.</li>
+            <li><b>حجم كتلة الأساس (<span dir="ltr">V_f</span>):</b> حاصل ضرب مساحة مسقط القاعدة (<span dir="ltr">A_f</span>) في سمك القاعدة الخرسانية (<span dir="ltr">t_f</span>).</li>
+            <li><b>الدور الإنشائي الحرج لوزن القاعدة:</b> ثقل التثبيت الموازن لمقاومة الانقلاب والطفو وتوزيع إجهادات التماس على التربة.</li>
+        </ul>
+        <div class="calc-box-ltr" dir="ltr" style="direction: ltr !important; text-align: left !important; background: #fefce8; border: 1.5px solid #fde047; border-radius: 8px; padding: 12px 16px; margin: 14px 0; font-family: Consolas, monospace; font-size: 14.5px; color: #a16207; line-height: 1.8;">
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-weight: 800; color: #a16207; margin-bottom: 6px;">
+                W_f = Af (m²) × tf (m) × γ_c (2.50 ton/m³) = Vol_f (m³) × 2.50
+            </div>
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-size: 13.5px; color: #854d0e; border-top: 1px dashed #fef08a; padding-top: 6px;">
+                ▫️ Af = {f_circ_geom} = <b>{af_m2:.2f} m²</b><br>
+                ▫️ tf = <b>{tf:.2f} m</b> ➔ Vol_f = {af_m2:.2f} × {tf:.2f} = <b>{vol_f:.2f} m³</b><br>
+                ▫️ γ_c = <b>2.50 ton/m³</b> (Mandatory RC Density - ECP 203 Section 6-3)
+            </div>
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; margin-top: 8px; background: #ecfdf5; border: 1.2px solid #86efac; border-radius: 6px; padding: 6px 12px; font-weight: 800; color: #15803d; font-size: 14px;">
+                ➔ W_f = {af_m2:.2f} m² × {tf:.2f} m × 2.50 ton/m³ = {vol_f:.2f} m³ × 2.50 = <span style="color: #b91c1c; font-size: 15.5px;">{w_f:.2f} ton</span>
+            </div>
+        </div>
+        <div dir="rtl" style="direction: rtl !important; text-align: right !important; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; padding: 10px 16px; font-size: 14.5px; color: #166534;">
+            <b>القيمة المحسوبة حالياً للمشروع:</b> <span dir="ltr"><b>W_f = {w_f:.2f} ton</b></span> (الحجم = <span dir="ltr">{vol_f:.2f} m³</span> بسمك <span dir="ltr">t_f = {tf:.2f} m</span>).
+        </div>
+    </div>
+
+    <!-- 4. P_working -->
+    <div dir="rtl" style="background: #ffffff; border: 2px solid #cbd5e1; border-right: 8px solid #16a34a; border-radius: 12px; padding: 20px 24px; margin-bottom: 22px; box-shadow: 0 4px 14px rgba(0,0,0,0.06);">
+        <div dir="rtl" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 14px;">
+            <div style="color: #15803d; font-size: 18.5px; font-weight: 900;">
+                4️⃣ إجمالي الحمل الرأسي التشغيلي (<span dir="ltr">P_working / Total Service Load</span>)
+            </div>
+            <span dir="ltr" style="background: #dcfce7; color: #15803d; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 800;">Serviceability Limit State (SLS)</span>
+        </div>
+        <ul style="margin: 0; padding-right: 24px; color: #334155; font-size: 15px;">
+            <li><b>الجمع الاستاتيكي المباشر:</b> مجموع كافة الأحمال الرأسية في حالة التشغيل العادية دون معاملات تضخيم (<span dir="ltr">P_working = W_tank + W_liquid + W_f</span>).</li>
+            <li><b>الاستخدامات الهندسية:</b> حساب إجهادات التماس على التربة (<span dir="ltr">q_max ≤ q_all</span>)، وحساب عزم التثبيت المقاوم للانقلاب.</li>
+        </ul>
+        <div class="calc-box-ltr" dir="ltr" style="direction: ltr !important; text-align: left !important; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; padding: 12px 16px; margin: 14px 0; font-family: Consolas, monospace; font-size: 14.5px; color: #15803d; line-height: 1.8;">
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-weight: 800; color: #15803d; margin-bottom: 6px;">
+                P_working = W_tank + W_liquid + W_f<br>
+                q_contact = P_working / Af
+            </div>
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-size: 13.5px; color: #166534; border-top: 1px dashed #bbf7d0; padding-top: 6px;">
+                ▫️ W_tank = {w_tank:.2f} ton (Empty Tank Shell)<br>
+                ▫️ W_liquid = {w_liq:.2f} ton (Stored Liquid)<br>
+                ▫️ W_f = {w_f:.2f} ton (RC Foundation)
+            </div>
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; margin-top: 8px; background: #ffffff; border: 1.2px solid #86efac; border-radius: 6px; padding: 6px 12px; font-weight: 800; color: #15803d; font-size: 14px;">
+                ➔ P_working = {w_tank:.2f} + {w_liq:.2f} + {w_f:.2f} = <span style="color: #b91c1c; font-size: 15.5px;">{p_work:.2f} ton</span><br>
+                ➔ q_contact = {p_work:.2f} / {af_m2:.2f} = <span style="color: #0369a1;">{q_act_ton_m2:.2f} t/m²</span> (<span style="color: #0369a1;">{q_act_kg_cm2:.2f} kg/cm²</span> ≤ q_all = {q_all_kg:.2f} kg/cm² [SAFE ✅])
+            </div>
+        </div>
+        <div dir="rtl" style="direction: rtl !important; text-align: right !important; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; padding: 10px 16px; font-size: 14.5px; color: #166534;">
+            <b>القيمة المحسوبة حالياً للمشروع:</b> <span dir="ltr"><b>P_working = {w_tank:.2f} + {w_liq:.2f} + {w_f:.2f} = {p_work:.2f} ton</b></span>.
+        </div>
+    </div>
+
+    <!-- 5. P_ult -->
+    <div dir="rtl" style="background: #ffffff; border: 2px solid #cbd5e1; border-right: 8px solid #ea580c; border-radius: 12px; padding: 20px 24px; margin-bottom: 22px; box-shadow: 0 4px 14px rgba(0,0,0,0.06);">
+        <div dir="rtl" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 14px;">
+            <div style="color: #c2410c; font-size: 18.5px; font-weight: 900;">
+                5️⃣ الحمل التصميمي الأقصى للأساسات (<span dir="ltr">P_ult / Factored Ultimate Load</span>)
+            </div>
+            <span dir="ltr" style="background: #ffedd5; color: #c2410c; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 800;">Ultimate Limit State (ULS)</span>
+        </div>
+        <ul style="margin: 0; padding-right: 24px; color: #334155; font-size: 15px;">
+            <li><b>تراكب الأحمال القصوى كودياً:</b> استناداً لـ <span dir="ltr"><b>ECP 203 & ACI 350-06</b></span>، تُضرب الأحمال الميتة في <span dir="ltr"><b>1.40</b></span> وأحمال السوائل في <span dir="ltr"><b>1.50</b></span>.</li>
+            <li><b>الاستخدامات الهندسية:</b> حساب رد فعل التربة الأقصى، التحقق من القص الثاقب (<span dir="ltr">Punching</span>)، وتصميم مساحات حديد التسليح.</li>
+        </ul>
+        <div class="calc-box-ltr" dir="ltr" style="direction: ltr !important; text-align: left !important; background: #fff7ed; border: 1.5px solid #fdba74; border-radius: 8px; padding: 12px 16px; margin: 14px 0; font-family: Consolas, monospace; font-size: 14.5px; color: #c2410c; line-height: 1.8;">
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-weight: 800; color: #c2410c; margin-bottom: 6px;">
+                P_ult = 1.40 × (W_tank + W_f) + 1.50 × W_liquid<br>
+                qu_net = P_ult / Af
+            </div>
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-size: 13.5px; color: #9a3412; border-top: 1px dashed #fed7aa; padding-top: 6px;">
+                ▫️ Dead Load (D) = W_tank + W_f = {w_tank:.2f} + {w_f:.2f} = <b>{w_tank + w_f:.2f} ton</b><br>
+                ▫️ Liquid Live Load (F) = W_liquid = <b>{w_liq:.2f} ton</b><br>
+                ▫️ Factored D = 1.40 × {w_tank + w_f:.2f} = <b>{1.40 * (w_tank + w_f):.2f} ton</b> | Factored F = 1.50 × {w_liq:.2f} = <b>{1.50 * w_liq:.2f} ton</b>
+            </div>
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; margin-top: 8px; background: #ffffff; border: 1.2px solid #fdba74; border-radius: 6px; padding: 6px 12px; font-weight: 800; color: #c2410c; font-size: 14px;">
+                ➔ P_ult = 1.40 × ({w_tank:.2f} + {w_f:.2f}) + 1.50 × {w_liq:.2f} = {1.40 * (w_tank + w_f):.2f} + {1.50 * w_liq:.2f} = <span style="color: #b91c1c; font-size: 15.5px;">{p_ult:.2f} ton</span><br>
+                ➔ qu_net = {p_ult:.2f} / {af_m2:.2f} = <span style="color: #c2410c;">{qu_net_ton_m2:.2f} t/m²</span> (<span style="color: #c2410c;">{qu_net_ton_m2/10.0:.2f} kg/cm²</span>)
+            </div>
+        </div>
+        <div dir="rtl" style="direction: rtl !important; text-align: right !important; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; padding: 10px 16px; font-size: 14.5px; color: #166534;">
+            <b>القيمة المحسوبة حالياً للمشروع:</b> <span dir="ltr"><b>P_ult = 1.40 × ({w_tank:.2f} + {w_f:.2f}) + 1.50 × {w_liq:.2f} = {p_ult:.2f} ton</b></span>.
+        </div>
+    </div>
+
+    <!-- 6. V_lateral -->
+    <div dir="rtl" style="background: #ffffff; border: 2px solid #cbd5e1; border-right: 8px solid #db2777; border-radius: 12px; padding: 20px 24px; margin-bottom: 22px; box-shadow: 0 4px 14px rgba(0,0,0,0.06);">
+        <div dir="rtl" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 14px;">
+            <div style="color: #be185d; font-size: 18.5px; font-weight: 900;">
+                6️⃣ القوى الأفقية الجانبية وعزم الانقلاب (<span dir="ltr">V_lateral & Overturning Stability</span>)
+            </div>
+            <span dir="ltr" style="background: #fce7f3; color: #db2777; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 800;">Wind & Seismic (W / E)</span>
+        </div>
+        <ul style="margin: 0; padding-right: 24px; color: #334155; font-size: 15px;">
+            <li><b>القوة الجانبية الإجمالية (<span dir="ltr">V_lateral</span>):</b> نسبة مكافئة (<span dir="ltr">C_lateral = {lat_coeff_pct:.1f}%</span>) من إجمالي وزن الخزان والسائل طبقاً لـ <span dir="ltr"><b>ECP 201 & API 650</b></span>.</li>
+            <li><b>معامل الأمان ضد الانقلاب (<span dir="ltr">FOS_overturning</span>):</b> يشترط الكود نسبة لا تقل عن <span dir="ltr"><b>1.50</b></span> بين عزم التثبيت المقاوم وعزم الانقلاب.</li>
+        </ul>
+        <div class="calc-box-ltr" dir="ltr" style="direction: ltr !important; text-align: left !important; background: #fdf2f8; border: 1.5px solid #f472b6; border-radius: 8px; padding: 12px 16px; margin: 14px 0; font-family: Consolas, monospace; font-size: 14.5px; color: #be185d; line-height: 1.8;">
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-weight: 800; color: #be185d; margin-bottom: 6px;">
+                V_lateral = Cs × (W_tank + W_liquid)<br>
+                M_overturning = V_lateral × (0.50 × H_liquid + tf)<br>
+                M_resisting = P_working × (Df / 2) ➔ FOS_ot = M_res / M_ot ≥ 1.50
+            </div>
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-size: 13.5px; color: #9d174d; border-top: 1px dashed #fbcfe8; padding-top: 6px;">
+                ▫️ Cs = {lat_coeff_pct:.1f}% = {lat_coeff_frac:.3f} | W_mass = {w_tank:.2f} + {w_liq:.2f} = <b>{w_tank + w_liq:.2f} ton</b><br>
+                ▫️ Lever arm = 0.50 × H_liquid + tf = 0.50 × {h_liq:.2f} + {tf:.2f} = {0.50 * h_liq:.2f} + {tf:.2f} = <b>{lever_arm:.2f} m</b><br>
+                ▫️ Toe distance (c_edge) = Df / 2 = {df:.2f} / 2 = <b>{c_edge:.2f} m</b>
+            </div>
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; margin-top: 8px; background: #ffffff; border: 1.2px solid #f472b6; border-radius: 6px; padding: 6px 12px; font-weight: 800; color: #be185d; font-size: 14px;">
+                ➔ V_lateral = {lat_coeff_frac:.3f} × {w_tank + w_liq:.2f} = <span style="color: #b91c1c; font-size: 15px;">{v_lat:.2f} ton</span><br>
+                ➔ M_overturning = {v_lat:.2f} ton × {lever_arm:.2f} m = <span style="color: #b91c1c; font-size: 15px;">{m_ot:.1f} t.m</span><br>
+                ➔ M_resisting = {p_work:.2f} ton × {c_edge:.2f} m = <span style="color: #15803d; font-size: 15px;">{m_res:.1f} t.m</span><br>
+                ➔ FOS_overturning = {m_res:.1f} / {m_ot:.1f} = <span style="color: #15803d; font-size: 15.5px;">{fos_ot:.2f} ≥ 1.50 (SAFE ✅)</span>
+            </div>
+        </div>
+        <div dir="rtl" style="direction: rtl !important; text-align: right !important; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; padding: 10px 16px; font-size: 14.5px; color: #166534;">
+            <b>القيم المحسوبة حالياً للمشروع:</b> القوة الجانبية = <span dir="ltr"><b>{v_lat:.2f} ton</b></span> | عزم الانقلاب = <span dir="ltr"><b>{m_ot:.1f} t.m</b></span> | عزم التثبيت المقاوم = <span dir="ltr"><b>{m_res:.1f} t.m</b></span> | معامل الأمان ضد الانقلاب = <span dir="ltr"><b>{fos_ot:.2f} ≥ 1.50 (آمن تماماً ✅)</b></span>.
+        </div>
+    </div>
+
+    <!-- 7. U_buoyancy -->
+    <div dir="rtl" style="background: #ffffff; border: 2px solid #cbd5e1; border-right: 8px solid #0891b2; border-radius: 12px; padding: 20px 24px; margin-bottom: 22px; box-shadow: 0 4px 14px rgba(0,0,0,0.06);">
+        <div dir="rtl" style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; margin-bottom: 14px;">
+            <div style="color: #0e7490; font-size: 18.5px; font-weight: 900;">
+                7️⃣ قوى الطفو وأمان تفريغ الخزان (<span dir="ltr">U_buoyancy & Floatation Safety</span>)
+            </div>
+            <span dir="ltr" style="background: #cffafe; color: #0891b2; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 800;">Hydrostatic Uplift (U)</span>
+        </div>
+        <ul style="margin: 0; padding-right: 24px; color: #334155; font-size: 15px;">
+            <li><b>الحالة الحرجة للطفو:</b> تحدث أقصى خطورة عند تفريغ الخزان بالكامل للصيانة (<span dir="ltr">W_liquid = 0</span>) مع وجود مياه جوفية.</li>
+            <li><b>معامل الأمان الكودي ضد الطفو (<span dir="ltr">FOS_uplift</span>):</b> يشترط الكود ألا يقل معامل الأمان عن <span dir="ltr"><b>1.25</b></span>.</li>
+        </ul>
+        <div class="calc-box-ltr" dir="ltr" style="direction: ltr !important; text-align: left !important; background: #ecfeff; border: 1.5px solid #a5f3fc; border-radius: 8px; padding: 12px 16px; margin: 14px 0; font-family: Consolas, monospace; font-size: 14.5px; color: #0e7490; line-height: 1.8;">
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-weight: 800; color: #0e7490; margin-bottom: 6px;">
+                U_buoyancy = Af × h_gwt × γ_water (1.00 ton/m³)<br>
+                FOS_uplift = (W_tank + W_f) / U_buoyancy ≥ 1.25
+            </div>
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-size: 13.5px; color: #155e75; border-top: 1px dashed #cffafe; padding-top: 6px;">
+                ▫️ Af = {af_m2:.2f} m² | h_gwt = {gwt:.2f} m (Groundwater Head above Foundation Base)<br>
+                ▫️ V_water_displaced = {af_m2:.2f} × {gwt:.2f} = <b>{af_m2 * gwt:.2f} m³</b><br>
+                ▫️ W_empty_resisting = W_tank + W_f = {w_tank:.2f} + {w_f:.2f} = <b>{w_empty:.2f} ton</b>
+            </div>
+            <div dir="ltr" style="direction: ltr !important; text-align: left !important; margin-top: 8px; background: #ffffff; border: 1.2px solid #a5f3fc; border-radius: 6px; padding: 6px 12px; font-weight: 800; color: #0e7490; font-size: 14px;">
+                ➔ U_buoyancy = {af_m2:.2f} m² × {gwt:.2f} m × 1.00 = <span style="color: #b91c1c; font-size: 15px;">{u_buoy:.2f} ton</span><br>
+                ➔ W_empty_resisting = {w_tank:.2f} + {w_f:.2f} = <span style="color: #15803d; font-size: 15px;">{w_empty:.2f} ton</span><br>
+                ➔ FOS_uplift = {w_empty:.2f} / {u_buoy:.2f} = <span style="color: #15803d; font-size: 15.5px;">{fos_buoy:.2f} ≥ 1.25 (SAFE ✅)</span>
+            </div>
+        </div>
+        <div dir="rtl" style="direction: rtl !important; text-align: right !important; background: #f0fdf4; border: 1.5px solid #86efac; border-radius: 8px; padding: 10px 16px; font-size: 14.5px; color: #166534;">
+            <b>القيم المحسوبة حالياً للمشروع:</b> عمق المياه الجوفية الغامرة = <span dir="ltr"><b>{gwt:.2f} m</b></span> | قوة الطفو الصاعدة = <span dir="ltr"><b>{u_buoy:.2f} ton</b></span> | الوزن المقاوم = <span dir="ltr"><b>{w_empty:.2f} ton</b></span> | معامل الأمان ضد الطفو = <span dir="ltr"><b>{fos_buoy:.2f} ≥ 1.25 (آمن تماماً ✅)</b></span>.
+        </div>
+    </div>
+
+    <!-- 8. Detailed Comparison Table with Comprehensive Variable Explanations -->
+    <div dir="rtl" style="background: #ffffff; border: 2px solid #cbd5e1; border-radius: 12px; padding: 18px 22px; margin-bottom: 22px; box-shadow: 0 4px 14px rgba(0,0,0,0.06);">
+        <div style="font-size: 18px; font-weight: 900; color: #0f172a; margin-bottom: 6px;">
+            📋 جدول ملخص مقارن لمنظومة الأحمال ومعادلاتها ودورها الكودي
+        </div>
+        <div style="font-size: 13.5px; color: #64748b; font-weight: 600; margin-bottom: 14px;">
+            يوضح الجدول طريقة اشتقاق كل متغير تفصيلياً مع تعويض الأرقام الفعلية للمشروع والدور الهندسي لكل حمل:
+        </div>
+        <table dir="rtl" style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: right;">
+            <thead>
+                <tr style="background: #0f172a; color: #ffffff;">
+                    <th style="padding: 10px 12px; border: 1px solid #334155; width: 4%; text-align: center;">م</th>
+                    <th style="padding: 10px 12px; border: 1px solid #334155; width: 14%;">اسم الحمل</th>
+                    <th style="padding: 10px 12px; border: 1px solid #334155; width: 9%; text-align: center;">الرمز</th>
+                    <th style="padding: 10px 12px; border: 1px solid #334155; width: 44%; text-align: center;">المعادلة وتفصيل المتغيرات والتطبيق بالأرقام</th>
+                    <th style="padding: 10px 12px; border: 1px solid #334155; width: 10%; text-align: center;">معامل الكود</th>
+                    <th style="padding: 10px 12px; border: 1px solid #334155; width: 19%;">الدور في التصميم والتحقق</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="background: #f8fafc;">
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 800; text-align: center;">1</td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 700;">وزن هيكل الخزان الفارغ</td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 800; text-align: center;" dir="ltr">W_tank</td>
+                    <td class="calc-box-ltr" dir="ltr" style="direction: ltr !important; text-align: left !important; padding: 10px 12px; border: 1px solid #e2e8f0;">
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-weight: 800; color: #1e293b; font-size: 12.5px;">
+                            Area_total × (t_sheet / 1000) × γ_mat
+                        </div>
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-size: 11px; color: #475569; margin: 3px 0; background: #f1f5f9; padding: 4px 6px; border-radius: 4px; border: 1px solid #e2e8f0; line-height: 1.6;">
+                            ▫ A_base = {base_calc_str}<br>
+                            ▫ Area_shell = Perimeter × H_tank = {perim_tank:.2f} × {h_tank:.2f} = {area_shell:.2f} m²<br>
+                            ▫ Area_total = [ 2×A_base + Area_shell ] × 1.15 = [ 2×{a_tank:.2f} + {area_shell:.2f} ] × 1.15 = <b>{area_total_plates:.2f} m²</b><br>
+                            ▫ t_sheet = {thk_mm:.1f} mm | γ_mat = {gamma_mat:.2f} t/m³ ({'Steel' if is_steel else 'GRP'})
+                        </div>
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; color: #0369a1; font-weight: 800; font-size: 12px; background: #f0fdf4; padding: 4px 6px; border-radius: 4px; border: 1px solid #bbf7d0;">
+                            = {area_total_plates:.2f} × ({thk_mm:.1f}/1000) × {gamma_mat:.2f} = <span style="color: #b91c1c; font-size: 13.5px;">{w_tank:.2f} ton</span>
+                        </div>
+                    </td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; text-align: center;" dir="ltr">1.40 (ULS)<br><span style="font-size:11px; color:#64748b;">1.00 (SLS)</span></td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0;">تثبيت الخزان ومقاومة قوى الطفو والانقلاب</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 800; text-align: center;">2</td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 700;">وزن السائل المخزن الصافي</td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 800; text-align: center;" dir="ltr">W_liquid</td>
+                    <td class="calc-box-ltr" dir="ltr" style="direction: ltr !important; text-align: left !important; padding: 10px 12px; border: 1px solid #e2e8f0;">
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-weight: 800; color: #1e293b; font-size: 12.5px;">
+                            Vol_liquid (m³) × (SG × 1.00 ton/m³)
+                        </div>
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-size: 11px; color: #0284c7; margin: 3px 0; background: #f0f9ff; padding: 4px 6px; border-radius: 4px; border: 1px solid #bae6fd; line-height: 1.6;">
+                            ▫ Vol_liquid = {cap_bbl:.0f} BBL × 0.1589873 = <b>{vol_liq:.2f} m³</b><br>
+                            ▫ γ_liquid = SG ({sg:.2f}) × 1.00 = <b>{gamma_liq:.2f} ton/m³</b><br>
+                            ▫ H_liquid = Vol_liquid / A_base = {vol_liq:.2f} / {a_tank:.2f} = <b>{h_liq:.2f} m</b>
+                        </div>
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; color: #0369a1; font-weight: 800; font-size: 12px; background: #f0fdf4; padding: 4px 6px; border-radius: 4px; border: 1px solid #bbf7d0;">
+                            = {vol_liq:.2f} m³ × {gamma_liq:.2f} = <span style="color: #b91c1c; font-size: 13.5px;">{w_liq:.2f} ton</span> (p_hyd = {p_hyd_t:.2f} t/m² = {p_hyd_kg:.2f} kg/cm²)
+                        </div>
+                    </td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; text-align: center;" dir="ltr">1.50 (ULS)<br><span style="font-size:11px; color:#64748b;">1.00 (SLS)</span></td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0;">ضغط القاع وقص الاختراق وعزوم تسليح القاعدة</td>
+                </tr>
+                <tr style="background: #f8fafc;">
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 800; text-align: center;">3</td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 700;">الوزن الذاتي للقاعدة المسلحة</td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 800; text-align: center;" dir="ltr">W_f</td>
+                    <td class="calc-box-ltr" dir="ltr" style="direction: ltr !important; text-align: left !important; padding: 10px 12px; border: 1px solid #e2e8f0;">
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-weight: 800; color: #1e293b; font-size: 12.5px;">
+                            Af × tf × γ_c (2.50 ton/m³) = Vol_f × 2.50
+                        </div>
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-size: 11px; color: #854d0e; margin: 3px 0; background: #fefce8; padding: 4px 6px; border-radius: 4px; border: 1px solid #fef08a; line-height: 1.6;">
+                            ▫ Af = {f"(π/4) × ({df:.2f})²" if is_circular else f"{lf:.2f} × {bf:.2f}"} = <b>{af_m2:.2f} m²</b><br>
+                            ▫ tf = <b>{tf:.2f} m</b> ➔ Vol_f = {af_m2:.2f} × {tf:.2f} = <b>{vol_f:.2f} m³</b><br>
+                            ▫ γ_c = <b>2.50 ton/m³</b> (Mandatory RC Density - ECP 203)
+                        </div>
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; color: #0369a1; font-weight: 800; font-size: 12px; background: #f0fdf4; padding: 4px 6px; border-radius: 4px; border: 1px solid #bbf7d0;">
+                            = {af_m2:.2f} × {tf:.2f} × 2.50 = {vol_f:.2f} m³ × 2.50 = <span style="color: #b91c1c; font-size: 13.5px;">{w_f:.2f} ton</span>
+                        </div>
+                    </td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; text-align: center;" dir="ltr">1.40 (ULS)<br><span style="font-size:11px; color:#64748b;">1.00 (SLS)</span></td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0;">ثقل موازنة إجباري لمنع قوى الانقلاب والطفو</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 800; text-align: center;">4</td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 700;">إجمالي الحمل الرأسي التشغيلي</td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 800; text-align: center;" dir="ltr">P_working</td>
+                    <td class="calc-box-ltr" dir="ltr" style="direction: ltr !important; text-align: left !important; padding: 10px 12px; border: 1px solid #e2e8f0;">
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-weight: 800; color: #1e293b; font-size: 12.5px;">
+                            W_tank + W_liquid + W_f
+                        </div>
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-size: 11px; color: #166534; margin: 3px 0; background: #f0fdf4; padding: 4px 6px; border-radius: 4px; border: 1px solid #bbf7d0; line-height: 1.6;">
+                            ▫ W_tank = <b>{w_tank:.2f} ton</b> | W_liquid = <b>{w_liq:.2f} ton</b> | W_f = <b>{w_f:.2f} ton</b><br>
+                            ▫ q_contact = P_working / Af = {p_work:.2f} / {af_m2:.2f} = <b>{q_act_ton_m2:.2f} t/m²</b> ({q_act_kg_cm2:.2f} kg/cm² ≤ {q_all_kg:.2f} kg/cm²)
+                        </div>
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; color: #0369a1; font-weight: 800; font-size: 12px; background: #f0fdf4; padding: 4px 6px; border-radius: 4px; border: 1px solid #bbf7d0;">
+                            = {w_tank:.2f} + {w_liq:.2f} + {w_f:.2f} = <span style="color: #b91c1c; font-size: 13.5px;">{p_work:.2f} ton</span>
+                        </div>
+                    </td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; text-align: center;" dir="ltr">1.00 (SLS)</td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0;">التحقق من إجهاد التربة المسموح q_all وعزم التثبيت</td>
+                </tr>
+                <tr style="background: #f8fafc;">
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 800; text-align: center;">5</td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 700;">الحمل التصميمي الأقصى</td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 800; text-align: center;" dir="ltr">P_ult</td>
+                    <td class="calc-box-ltr" dir="ltr" style="direction: ltr !important; text-align: left !important; padding: 10px 12px; border: 1px solid #e2e8f0;">
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-weight: 800; color: #1e293b; font-size: 12.5px;">
+                            1.40 × (W_tank + W_f) + 1.50 × W_liquid
+                        </div>
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-size: 11px; color: #9a3412; margin: 3px 0; background: #fff7ed; padding: 4px 6px; border-radius: 4px; border: 1px solid #fed7aa; line-height: 1.6;">
+                            ▫ Dead Load (D) = {w_tank:.2f} + {w_f:.2f} = <b>{w_tank + w_f:.2f} ton</b> ➔ 1.40×D = <b>{1.40 * (w_tank + w_f):.2f} ton</b><br>
+                            ▫ Fluid Load (F) = <b>{w_liq:.2f} ton</b> ➔ 1.50×F = <b>{1.50 * w_liq:.2f} ton</b><br>
+                            ▫ qu_net = P_ult / Af = {p_ult:.2f} / {af_m2:.2f} = <b>{qu_net_ton_m2:.2f} t/m²</b> ({qu_net_ton_m2/10.0:.2f} kg/cm²)
+                        </div>
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; color: #0369a1; font-weight: 800; font-size: 12px; background: #f0fdf4; padding: 4px 6px; border-radius: 4px; border: 1px solid #bbf7d0;">
+                            = 1.40 × ({w_tank + w_f:.2f}) + 1.50 × ({w_liq:.2f}) = {1.40 * (w_tank + w_f):.2f} + {1.50 * w_liq:.2f} = <span style="color: #b91c1c; font-size: 13.5px;">{p_ult:.2f} ton</span>
+                        </div>
+                    </td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; text-align: center;" dir="ltr">Factored (ULS)<br><span style="font-size:11px; color:#64748b;">1.40D + 1.50F</span></td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0;">تصميم سمك القاعدة وتسليح شبكتي الحديد وقص الثقب</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 800; text-align: center;">6</td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 700;">القوة الجانبية وعزم الانقلاب</td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 800; text-align: center;" dir="ltr">V_lat / M_ot</td>
+                    <td class="calc-box-ltr" dir="ltr" style="direction: ltr !important; text-align: left !important; padding: 10px 12px; border: 1px solid #e2e8f0;">
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-weight: 800; color: #1e293b; font-size: 12.5px;">
+                            V_lat = Cs × (W_tank + W_liq) & M_ot = V_lat × (0.50×H_liq + tf)
+                        </div>
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-size: 11px; color: #9d174d; margin: 3px 0; background: #fdf2f8; padding: 4px 6px; border-radius: 4px; border: 1px solid #fbcfe8; line-height: 1.6;">
+                            ▫ Cs = {lat_coeff_pct:.1f}% ({lat_coeff_frac:.3f}) | W_mass = {w_tank:.2f} + {w_liq:.2f} = <b>{w_tank + w_liq:.2f} ton</b><br>
+                            ▫ Arm = 0.50 × {h_liq:.2f} + {tf:.2f} = <b>{lever_arm:.2f} m</b> | c_edge = {df:.2f}/2 = <b>{c_edge:.2f} m</b><br>
+                            ▫ M_res = {p_work:.2f} × {c_edge:.2f} = <b>{m_res:.1f} t.m</b>
+                        </div>
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; color: #0369a1; font-weight: 800; font-size: 12px; background: #f0fdf4; padding: 4px 6px; border-radius: 4px; border: 1px solid #bbf7d0;">
+                            V_lat = {lat_coeff_frac:.3f} × {w_tank + w_liq:.2f} = <span style="color: #b91c1c;">{v_lat:.2f} ton</span> | M_ot = {v_lat:.2f} × {lever_arm:.2f} = <span style="color: #b91c1c;">{m_ot:.1f} t.m</span><br>
+                            ➔ FOS_ot = {m_res:.1f} / {m_ot:.1f} = <span style="color: #15803d; font-size: 13px;">{fos_ot:.2f} ≥ 1.50 [SAFE ✅]</span>
+                        </div>
+                    </td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; text-align: center;" dir="ltr">FOS ≥ 1.50<br><span style="font-size:11px; color:#64748b;">ECP 201</span></td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0;">أمان الاتزان الاستاتيكي والديناميكي ضد الرياح والزلازل</td>
+                </tr>
+                <tr style="background: #f8fafc;">
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 800; text-align: center;">7</td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 700;">قوة الطفو للمياه الجوفية</td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; font-weight: 800; text-align: center;" dir="ltr">U_buoyancy</td>
+                    <td class="calc-box-ltr" dir="ltr" style="direction: ltr !important; text-align: left !important; padding: 10px 12px; border: 1px solid #e2e8f0;">
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-weight: 800; color: #1e293b; font-size: 12.5px;">
+                            Af × h_gwt × γ_w (1.00 ton/m³) & FOS = W_empty / U_buoy
+                        </div>
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; font-size: 11px; color: #155e75; margin: 3px 0; background: #ecfeff; padding: 4px 6px; border-radius: 4px; border: 1px solid #cffafe; line-height: 1.6;">
+                            ▫ Af = <b>{af_m2:.2f} m²</b> | h_gwt = <b>{gwt:.2f} m</b> | V_displaced = {af_m2:.2f} × {gwt:.2f} = <b>{af_m2 * gwt:.2f} m³</b><br>
+                            ▫ W_empty = W_tank + W_f = {w_tank:.2f} + {w_f:.2f} = <b>{w_empty:.2f} ton</b>
+                        </div>
+                        <div dir="ltr" style="direction: ltr !important; text-align: left !important; color: #0369a1; font-weight: 800; font-size: 12px; background: #f0fdf4; padding: 4px 6px; border-radius: 4px; border: 1px solid #bbf7d0;">
+                            U_buoy = {af_m2:.2f} × {gwt:.2f} × 1.00 = <span style="color: #b91c1c; font-size: 13px;">{u_buoy:.2f} ton</span> | FOS_uplift = {w_empty:.2f} / {u_buoy:.2f} = <span style="color: #15803d; font-size: 13px;">{fos_buoy:.2f} ≥ 1.25 [SAFE ✅]</span>
+                        </div>
+                    </td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0; text-align: center;" dir="ltr">FOS ≥ 1.25<br><span style="font-size:11px; color:#64748b;">ECP 203</span></td>
+                    <td style="padding: 10px 12px; border: 1px solid #e2e8f0;">أمان تفريغ الخزان للصيانة الدورية في المياه الجوفية</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>"""
+    st.html(html_content)
+    if st.button("✖️ إغلاق نافذة الشرح (Close)", key="btn_close_tank_load_modal", use_container_width=True):
+        st.rerun()
+
 
 
 def _render_equipment_foundations_tab():
@@ -2696,26 +3309,255 @@ def _render_liquid_storage_tanks_tab():
             )
 
         st.markdown("---")
-        t_reb1, t_reb2, t_reb3, t_reb4 = st.columns(4)
+        is_circular_tk = "دائري" in tank_shape or "Circular" in tank_shape
+        min_overhang_code = 0.30  # الحد الأدنى الكودي للرفرفة طبقاً لـ ECP 203 و ACI 350 = 30 cm
+
+        if is_circular_tk:
+            min_Df_tank = round(float(tank_dia), 2)
+            min_Df_code = round(float(tank_dia) + 2.0 * min_overhang_code, 2)
+        else:
+            min_Lf_tank = round(float(tank_len), 2)
+            min_Bf_tank = round(float(tank_wid), 2)
+            min_Lf_code = round(float(tank_len) + 2.0 * min_overhang_code, 2)
+            min_Bf_code = round(float(tank_wid) + 2.0 * min_overhang_code, 2)
+
+        st.markdown(
+            """<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:19px; font-weight:900; color:#38bdf8; margin: 10px 0 10px 0; border-bottom: 2px solid rgba(56, 189, 248, 0.35); padding-bottom: 6px;'>
+                🔩 4. Reinforcement Details & Cover (بيانات حديد التسليح والغطاء الخرساني)
+            </div>""",
+            unsafe_allow_html=True,
+        )
+        t_reb1, t_reb2, t_reb3 = st.columns(3)
         with t_reb1:
             phi_bot_tk = S.selectbox("قطر التسليح السفلي Φ_bot [mm]:", "m10_tk_phi_bot", ECP_DIAMETERS, index=2)
         with t_reb2:
             phi_top_tk = S.selectbox("قطر التسليح العلوي Φ_top [mm]:", "m10_tk_phi_top", ECP_DIAMETERS, index=1)
         with t_reb3:
             cover_tk = S.number_input("الغطاء الخرساني Cover [cm]:", "m10_tk_cover", value=7.5, min_value=5.0, max_value=12.0, step=0.5)
-        with t_reb4:
-            if "Manual" in sizing_mode_tk or "يدوي" in sizing_mode_tk:
-                mc1, mc2 = st.columns(2)
-                with mc1:
-                    man_ov_tk = S.number_input("رفرفة القاعدة c [m]:", "m10_tk_man_ov", value=0.60, min_value=0.20, max_value=5.0, step=0.10)
-                with mc2:
-                    man_tf_tk = S.number_input("سمك القاعدة tf [m]:", "m10_tk_man_tf", value=0.60, min_value=0.30, max_value=4.0, step=0.05)
+
+        # Baseline Auto-Sizing for reference safe thickness & dimensions
+        auto_base_res = compute_liquid_tank_foundation_design(
+            tank_shape=tank_shape,
+            tank_dia_m=float(tank_dia),
+            tank_length_m=float(tank_len),
+            tank_width_m=float(tank_wid),
+            tank_material=tank_mat,
+            sheet_thk_mm=float(sheet_thk),
+            capacity_barrels=float(cap_bbl),
+            specific_gravity=float(sg_liq),
+            fc_kg_cm2=float(fc_tk),
+            fy_kg_cm2=float(fy_tk),
+            q_all_kg_cm2=float(q_all_tk),
+            sizing_mode="Auto-Sizing",
+            gwt_depth_m=float(gwt_head),
+            wind_seismic_coeff=float(lat_coeff),
+            cover_cm=float(cover_tk),
+            phi_bot_mm=int(phi_bot_tk),
+            phi_top_mm=int(phi_top_tk),
+        )
+        T_design_tk = auto_base_res["tf_m"]
+        auto_Df_val = auto_base_res["Df_m"]
+        auto_Lf_val = auto_base_res["Lf_m"]
+        auto_Bf_val = auto_base_res["Bf_m"]
+        auto_ov_val = auto_base_res["overhang_m"]
+
+        st.markdown(
+            """<div dir='rtl' style='direction:rtl !important; text-align:right !important; font-size:19px; font-weight:900; color:#38bdf8; margin: 16px 0 10px 0; border-bottom: 2px solid rgba(56, 189, 248, 0.35); padding-bottom: 6px;'>
+                📐 5. Foundation Geometry & Sizing (أبعاد القاعدة الخرسانية والرفرفة وسمك الخرسانة)
+            </div>""",
+            unsafe_allow_html=True,
+        )
+
+        is_manual_sizing = "Manual" in sizing_mode_tk or "يدوي" in sizing_mode_tk
+
+        if is_manual_sizing:
+            if is_circular_tk:
+                g_c1, g_c2, g_c3 = st.columns([1.5, 1.3, 1.2], vertical_alignment="center")
+                with g_c1:
+                    man_Df_tk = S.number_input(
+                        f"قطر القاعدة Df [m] (المشترط كودياً ≥ {min_Df_code:.2f} m):",
+                        "m10_tk_man_Df",
+                        value=max(auto_Df_val, min_Df_code),
+                        min_value=0.50,
+                        max_value=60.0,
+                        step=0.10,
+                        help=f"قطر القاعدة المسلحة Df. الحد الأدنى المشترط كودياً = قطر الخزان ({min_Df_tank:.2f} m) + 2 × الرفرفة الكودية (لا تقل عن 0.30 m) لتأمين مسامير التثبيت ومقاومة الاختراق.",
+                    )
+                with g_c2:
+                    man_tf_tk = S.number_input(
+                        f"سمك القاعدة tf [m] (سمك التصميم = {T_design_tk:.2f} m):",
+                        "m10_tk_man_tf",
+                        value=max(0.60, T_design_tk),
+                        min_value=0.10,
+                        max_value=6.0,
+                        step=0.05,
+                        help=f"سمك القاعدة الإنشائي tf. سمك التصميم الآمن المطلوب كودياً T_design = {T_design_tk:.2f} m لمقاومة القص الثاقب وقوى الطفو.",
+                    )
+                with g_c3:
+                    man_ov_val = round((float(man_Df_tk) - min_Df_tank) / 2.0, 3)
+                    ov_color = "#4ade80" if man_ov_val >= 0.30 else ("#facc15" if man_ov_val >= 0.0 else "#f87171")
+                    st.markdown(
+                        f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:1.5px solid {ov_color}; border-radius:10px; padding:10px 14px; text-align:center;">
+                            <div style="font-size:13px; color:#94a3b8; font-weight:700;">الرفرفة المتوفرة (c)</div>
+                            <div style="font-size:20px; font-weight:900; color:{ov_color};" dir="ltr">{man_ov_val*100:.1f} cm</div>
+                            <div style="font-size:12px; color:#cbd5e1;">الحد الكودي ≥ 30 cm</div>
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
+                man_Lf_tk = float(man_Df_tk)
+                man_Bf_tk = float(man_Df_tk)
             else:
-                man_ov_tk, man_tf_tk = 0.60, 0.60
+                g_c1, g_c2, g_c3, g_c4 = st.columns(4, vertical_alignment="center")
+                with g_c1:
+                    man_Lf_tk = S.number_input(
+                        f"طول القاعدة Lf [m] (كودياً ≥ {min_Lf_code:.2f} m):",
+                        "m10_tk_man_Lf",
+                        value=max(auto_Lf_val, min_Lf_code),
+                        min_value=0.50,
+                        max_value=60.0,
+                        step=0.10,
+                    )
+                with g_c2:
+                    man_Bf_tk = S.number_input(
+                        f"عرض القاعدة Bf [m] (كودياً ≥ {min_Bf_code:.2f} m):",
+                        "m10_tk_man_Bf",
+                        value=max(auto_Bf_val, min_Bf_code),
+                        min_value=0.50,
+                        max_value=60.0,
+                        step=0.10,
+                    )
+                with g_c3:
+                    man_tf_tk = S.number_input(
+                        f"سمك القاعدة tf [m] (سمك التصميم = {T_design_tk:.2f} m):",
+                        "m10_tk_man_tf",
+                        value=max(0.60, T_design_tk),
+                        min_value=0.10,
+                        max_value=6.0,
+                        step=0.05,
+                    )
+                with g_c4:
+                    c_L_val = round((float(man_Lf_tk) - min_Lf_tank) / 2.0, 3)
+                    c_B_val = round((float(man_Bf_tk) - min_Bf_tank) / 2.0, 3)
+                    man_ov_val = min(c_L_val, c_B_val)
+                    ov_color = "#4ade80" if man_ov_val >= 0.30 else ("#facc15" if man_ov_val >= 0.0 else "#f87171")
+                    st.markdown(
+                        f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:1.5px solid {ov_color}; border-radius:10px; padding:8px 12px; text-align:center;">
+                            <div style="font-size:12.5px; color:#94a3b8; font-weight:700;">الرفرفة (L / B)</div>
+                            <div style="font-size:17px; font-weight:900; color:{ov_color};" dir="ltr">{c_L_val*100:.1f} / {c_B_val*100:.1f} cm</div>
+                            <div style="font-size:11.5px; color:#cbd5e1;">الحد الكودي ≥ 30 cm</div>
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
+                man_Df_tk = float(man_Lf_tk)
+        else:
+            man_Df_tk = auto_Df_val
+            man_Lf_tk = auto_Lf_val
+            man_Bf_tk = auto_Bf_val
+            man_tf_tk = T_design_tk
+            man_ov_val = auto_ov_val
+            if is_circular_tk:
                 st.markdown(
-                    "<div dir='rtl' style='direction:rtl !important; background:rgba(16,185,129,0.15); border:1.5px solid #10b981; border-radius:8px; padding:10px; text-align:center; color:#a7f3d0; font-weight:800; margin-top:6px;'>✨ الأبعاد والرفرفة والسمك تحسب تلقائياً</div>",
+                    f"""<div dir='rtl' style='direction:rtl !important; background:rgba(16,185,129,0.12); border:1.5px solid #10b981; border-radius:8px; padding:12px 16px; text-align:center; color:#a7f3d0; font-weight:800; margin-top:6px;'>
+                        ✨ <b>الأبعاد والسمك المحسوبة أوتوماتيكياً:</b> القطر <span dir="ltr" style="color:#ffffff; font-weight:900;">Df = {auto_Df_val:.2f} m</span> | السمك <span dir="ltr" style="color:#ffffff; font-weight:900;">tf = {T_design_tk:.2f} m</span> | الرفرفة = <span dir="ltr" style="color:#fde047; font-weight:900;">{auto_ov_val*100:.1f} cm</span> (مستوفية لإجهاد التربة واشتراطات الكود <span dir="ltr">ECP 203 / ACI 350</span>).
+                    </div>""",
                     unsafe_allow_html=True,
                 )
+            else:
+                st.markdown(
+                    f"""<div dir='rtl' style='direction:rtl !important; background:rgba(16,185,129,0.12); border:1.5px solid #10b981; border-radius:8px; padding:12px 16px; text-align:center; color:#a7f3d0; font-weight:800; margin-top:6px;'>
+                        ✨ <b>الأبعاد والسمك المحسوبة أوتوماتيكياً:</b> <span dir="ltr" style="color:#ffffff; font-weight:900;">{auto_Lf_val:.2f} × {auto_Bf_val:.2f} m</span> | السمك <span dir="ltr" style="color:#ffffff; font-weight:900;">tf = {T_design_tk:.2f} m</span> | الرفرفة = <span dir="ltr" style="color:#fde047; font-weight:900;">{auto_ov_val*100:.1f} cm</span> (مستوفية لإجهاد التربة واشتراطات الكود <span dir="ltr">ECP 203 / ACI 350</span>).
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+        # ── INTERACTIVE VALIDATION BANNERS (DIMENSIONS & OVERHANG & THICKNESS) ──
+        if is_manual_sizing:
+            if is_circular_tk:
+                is_footprint_safe = (float(man_Df_tk) >= min_Df_tank - 1e-4)
+                is_overhang_safe = (man_ov_val >= min_overhang_code - 1e-4)
+                is_dimensions_safe = is_footprint_safe and is_overhang_safe
+                if not is_footprint_safe:
+                    play_siren_alarm()
+                    st.html(f"""<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #7f1d1d 0%, #b91c1c 50%, #7f1d1d 100%) !important; color: #ffffff !important; border: 3px solid #ef4444 !important; border-radius: 14px !important; padding: 20px 24px !important; margin: 16px 0 !important; box-shadow: 0 10px 28px rgba(185, 28, 28, 0.6) !important;">
+<div style="font-size: 24px; font-weight: 900; color: #ffffff !important; margin-bottom: 10px; line-height: 1.4; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
+🚨 ❌ خطأ هندسي وإنشائي جسيم (Tank Footprint Dimensions Violation):
+</div>
+<div style="font-size: 20px; font-weight: 800; color: #ffffff !important; line-height: 1.9; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">
+قطر القاعدة الخرسانية المدخل (<span dir="ltr" style="color: #fca5a5 !important; font-weight: 900; background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 6px;">Df = {float(man_Df_tk):.2f} m</span>) أصغر من قطر الخزان (<span dir="ltr" style="color: #fde047 !important; font-weight: 900;">D_tank = {min_Df_tank:.2f} m</span>)! يجب ألا يقل قطر القاعدة عن قطر الخزان لتأمين ارتكاز جدار الخزان وتثبيت مسامير الربط داخل الكتلة الخرسانية.
+</div>
+</div>""")
+                elif not is_overhang_safe:
+                    play_siren_alarm()
+                    st.html(f"""<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #991b1b 0%, #dc2626 50%, #991b1b 100%) !important; color: #ffffff !important; border: 3px solid #fca5a5 !important; border-radius: 14px !important; padding: 22px 26px !important; margin: 16px 0 !important; box-shadow: 0 10px 28px rgba(220, 38, 38, 0.65) !important;">
+<div style="font-size: 24px; font-weight: 900; color: #ffffff !important; margin-bottom: 12px; line-height: 1.4; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
+🚨 ⚠️ تنبيه كودي لرفرفة وخلوص القاعدة (Tank Foundation Overhang Warning):
+</div>
+<div style="font-size: 20px; font-weight: 800; color: #ffffff !important; line-height: 1.95; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">
+أبعاد القاعدة المدخلة (<span dir="ltr" style="color: #fef08a !important; font-weight: 900; background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 6px;">Df = {float(man_Df_tk):.2f} m</span>) أقل من اشتراطات الكود (أبعاد الخزان + الرفرفة الكودية = <span dir="ltr" style="color: #4ade80 !important; font-weight: 900;">{min_Df_code:.2f} m</span>)!
+<br>
+الرفرفة الفعلية المتوفرة (<span dir="ltr" style="color: #fca5a5 !important; font-weight: 900;">{man_ov_val*100:.1f} cm</span>) أقل من الحد الأدنى المشترط بالكود المصري <span dir="ltr">ECP 203</span> وكود المنشآت المائية <span dir="ltr">ACI 350</span> (<span dir="ltr">30 cm</span> على الأقل، والموصى به <span dir="ltr">50 cm</span>) لتأمين تثبيت جدار الخزان ومسامير التثبيت (<span dir="ltr">Anchor Bolts</span>) ومنع تشظي الحواف الخرسانية (<span dir="ltr">Edge Spalling</span>) ومقاومة القص الثاقب.
+<br>
+🔒 <b>تم قفل الأقسام ومنع عرض المخرجات حتى يتم استيفاء الرفرفة الكودية المطلوبة ({min_Df_code:.2f} m).</b>
+</div>
+</div>""")
+                else:
+                    st.html(f"""<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #064e3b 0%, #059669 50%, #064e3b 100%) !important; color: #ffffff !important; border: 2px solid #34d399 !important; border-radius: 12px !important; padding: 16px 22px !important; margin: 14px 0 !important; box-shadow: 0 6px 20px rgba(5, 150, 105, 0.35) !important;">
+<div style="font-size: 20px; font-weight: 900; color: #ffffff !important; line-height: 1.6;">
+✅ أبعاد القاعدة ورفرفة الأطراف آمنة ومستوفية كودياً (ECP 203 / ACI 350):
+<span style="font-size: 18px; font-weight: 800; color: #a7f3d0 !important;">الرفرفة المتوفرة = <span dir="ltr">{man_ov_val*100:.1f} cm</span> (أكبر من الحد الأدنى الكودي 30 cm).</span>
+</div>
+</div>""")
+            else:
+                is_footprint_safe = (float(man_Lf_tk) >= min_Lf_tank - 1e-4) and (float(man_Bf_tk) >= min_Bf_tank - 1e-4)
+                is_overhang_safe = (c_L_val >= min_overhang_code - 1e-4) and (c_B_val >= min_overhang_code - 1e-4)
+                is_dimensions_safe = is_footprint_safe and is_overhang_safe
+                if not is_footprint_safe:
+                    play_siren_alarm()
+                    st.html(f"""<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #7f1d1d 0%, #b91c1c 50%, #7f1d1d 100%) !important; color: #ffffff !important; border: 3px solid #ef4444 !important; border-radius: 14px !important; padding: 20px 24px !important; margin: 16px 0 !important; box-shadow: 0 10px 28px rgba(185, 28, 28, 0.6) !important;">
+<div style="font-size: 24px; font-weight: 900; color: #ffffff !important; margin-bottom: 10px; line-height: 1.4; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
+🚨 ❌ خطأ هندسي وإنشائي جسيم (Tank Footprint Dimensions Violation):
+</div>
+<div style="font-size: 20px; font-weight: 800; color: #ffffff !important; line-height: 1.9; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">
+أبعاد القاعدة الخرسانية المدخلة (<span dir="ltr" style="color: #fca5a5 !important; font-weight: 900; background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 6px;">{float(man_Lf_tk):.2f} × {float(man_Bf_tk):.2f} m</span>) أصغر من أبعاد الخزان (<span dir="ltr" style="color: #fde047 !important; font-weight: 900;">{min_Lf_tank:.2f} × {min_Bf_tank:.2f} m</span>)!
+</div>
+</div>""")
+                elif not is_overhang_safe:
+                    play_siren_alarm()
+                    st.html(f"""<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #991b1b 0%, #dc2626 50%, #991b1b 100%) !important; color: #ffffff !important; border: 3px solid #fca5a5 !important; border-radius: 14px !important; padding: 22px 26px !important; margin: 16px 0 !important; box-shadow: 0 10px 28px rgba(220, 38, 38, 0.65) !important;">
+<div style="font-size: 24px; font-weight: 900; color: #ffffff !important; margin-bottom: 12px; line-height: 1.4; text-shadow: 0 2px 4px rgba(0,0,0,0.5);">
+🚨 ⚠️ تنبيه كودي لرفرفة وخلوص القاعدة (Tank Foundation Overhang Warning):
+</div>
+<div style="font-size: 20px; font-weight: 800; color: #ffffff !important; line-height: 1.95; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">
+أبعاد القاعدة المدخلة (<span dir="ltr" style="color: #fef08a !important; font-weight: 900; background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 6px;">{float(man_Lf_tk):.2f} × {float(man_Bf_tk):.2f} m</span>) أقل من اشتراطات الكود (أبعاد الخزان + الرفرفة الكودية = <span dir="ltr" style="color: #4ade80 !important; font-weight: 900;">{min_Lf_code:.2f} × {min_Bf_code:.2f} m</span>)!
+الرفرفة المتوفرة (<span dir="ltr" style="color: #fca5a5 !important; font-weight: 900;">{c_L_val*100:.1f} cm طولياً / {c_B_val*100:.1f} cm عرضياً</span>) أقل من الحد الأدنى المشترط كودياً (30 cm).
+<br>
+🔒 <b>تم قفل الأقسام ومنع عرض المخرجات حتى يتم استيفاء الرفرفة الكودية المطلوبة.</b>
+</div>
+</div>""")
+                else:
+                    st.html(f"""<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #064e3b 0%, #059669 50%, #064e3b 100%) !important; color: #ffffff !important; border: 2px solid #34d399 !important; border-radius: 12px !important; padding: 16px 22px !important; margin: 14px 0 !important; box-shadow: 0 6px 20px rgba(5, 150, 105, 0.35) !important;">
+<div style="font-size: 20px; font-weight: 900; color: #ffffff !important; line-height: 1.6;">
+✅ أبعاد القاعدة ورفرفة الأطراف آمنة ومستوفية كودياً (ECP 203 / ACI 350):
+<span style="font-size: 18px; font-weight: 800; color: #a7f3d0 !important;">الرفرفة = <span dir="ltr">{c_L_val*100:.1f} cm</span> طولياً، و <span dir="ltr">{c_B_val*100:.1f} cm</span> عرضياً.</span>
+</div>
+</div>""")
+
+            is_thickness_safe = (float(man_tf_tk) >= T_design_tk - 1e-4)
+            if not is_thickness_safe:
+                play_siren_alarm()
+                st.html(f"""<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #7f1d1d 0%, #b91c1c 50%, #7f1d1d 100%) !important; color: #ffffff !important; border: 2.5px solid #ef4444 !important; border-radius: 12px !important; padding: 14px 20px !important; margin: 10px 0 14px 0 !important; box-shadow: 0 6px 18px rgba(239, 68, 68, 0.45) !important;">
+<div style="font-size: 19px; font-weight: 900; color: #ffffff !important; display: flex; align-items: center; gap: 8px;">
+<span>🚨 ❌ خطأ في إدخال سمك الخرسانة:</span>
+</div>
+<div style="font-size: 18px; font-weight: 900; color: #fef08a !important; margin-top: 6px; line-height: 1.6;">
+لا يمكن أن يقل سمك القاعدة الآمن عن القيمة الناتجة في التصميم ([{T_design_tk:.2f} m]) لمقاومة القص الثاقب وقوى الطفو.
+<br>
+🔒 <b>تم قفل الأقسام ومنع عرض المخرجات حتى يتم تصحيح السمك.</b>
+</div>
+</div>""")
+        else:
+            is_dimensions_safe = True
+            is_thickness_safe = True
 
     res_tk = compute_liquid_tank_foundation_design(
         tank_shape=tank_shape,
@@ -2730,8 +3572,11 @@ def _render_liquid_storage_tanks_tab():
         fy_kg_cm2=float(fy_tk),
         q_all_kg_cm2=float(q_all_tk),
         sizing_mode=sizing_mode_tk,
-        manual_overhang_m=float(man_ov_tk),
+        manual_overhang_m=float(man_ov_val),
         manual_tf_m=float(man_tf_tk),
+        manual_Df_m=float(man_Df_tk) if is_circular_tk else None,
+        manual_Lf_m=float(man_Lf_tk) if not is_circular_tk else None,
+        manual_Bf_m=float(man_Bf_tk) if not is_circular_tk else None,
         gwt_depth_m=float(gwt_head),
         wind_seismic_coeff=float(lat_coeff),
         cover_cm=float(cover_tk),
@@ -2739,7 +3584,25 @@ def _render_liquid_storage_tanks_tab():
         phi_top_mm=int(phi_top_tk),
     )
 
-    if not res_tk["is_rebar_spacing_safe"]:
+    is_outputs_allowed = is_dimensions_safe and is_thickness_safe
+
+    if not is_outputs_allowed:
+        st.html("""<div dir="rtl" style="background: rgba(15, 23, 42, 0.75); border: 2px dashed #ef4444; border-radius: 12px; padding: 18px 24px; margin-bottom: 16px; box-shadow: 0 4px 16px rgba(239, 68, 68, 0.15); cursor: not-allowed; text-align: right;">
+<div style="font-size: 20px; font-weight: 900; color: #f87171; display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+<span style="font-size: 22px;">🔒</span>
+<span>📊 2. Final Outputs & Code Verification (مُقفل - غير متاح للفتح لحين تصحيح أبعاد القاعدة والرفرفة والسمك)</span>
+</div>
+<div style="font-size: 15.5px; color: #cbd5e1; line-height: 1.8; font-weight: 700;">
+⚠️ <b>تم قفل هذا القسم بالكامل وتعطيل إمكانية فتحه:</b> أبعاد القاعدة الخرسانية المدخلة أقل من أبعاد الخزان أو أقل من الرفرفة الكودية المشترطة (30 cm) أو أقل من سمك التصميم الإنشائي المطلوب. يُرجى تصحيح الأبعاد في قسم المدخلات أعلاه لعرض النتائج والتحققات.
+</div>
+</div>
+<div dir="rtl" style="background: rgba(15, 23, 42, 0.75); border: 2px dashed #ef4444; border-radius: 12px; padding: 18px 24px; box-shadow: 0 4px 16px rgba(239, 68, 68, 0.15); cursor: not-allowed; text-align: right;">
+<div style="font-size: 20px; font-weight: 900; color: #f87171; display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+<span style="font-size: 22px;">🔒</span>
+<span>📐 3. 2D CAD Blueprints & Report Export (مُقفل - غير متاح للفتح لحين تصحيح أبعاد القاعدة والرفرفة والسمك)</span>
+</div>
+</div>""")
+    elif not res_tk["is_rebar_spacing_safe"]:
         render_rebar_spacing_violation_banner(
             res_tk,
             input_section_name="مدخلات قطر حديد التسليح في القسم 1 أعلاه",
@@ -2749,32 +3612,32 @@ def _render_liquid_storage_tanks_tab():
             play_light_whistle_sound()
         # ── DETAILED WEIGHTS & OUTPUTS ──
         with st.expander("📊 2. Detailed Calculation Report (التقرير الحسابي التفصيلي للأوزان والأبعاد والتحققات والتسليح)", expanded=True):
-            # 4 Weight & Dimension Highlight Cards
+            # 4 Weight & Dimension Highlight Cards (مع ضبط الارتفاع والتباعد بنسبة 70%)
             w1, w2, w3, w4 = st.columns(4)
             with w1:
                 st.markdown(
-                    f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:2px solid #38bdf8; border-radius:10px; padding:14px; text-align:center;">
+                    f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:2px solid #38bdf8; border-radius:10px; padding:14px; text-align:center; min-height:136px; display:flex; flex-direction:column; justify-content:center; margin-bottom:8px; box-shadow:0 4px 12px rgba(15,23,42,0.4);">
                         <div style="font-size:15px; color:#93c5fd; font-weight:800;">وزن هيكل الخزان الفارغ (W_tank)</div>
-                        <div style="font-size:26px; font-weight:900; color:#ffffff; margin:6px 0;" dir="ltr">{res_tk['W_tank_empty_ton']:.2f} ton</div>
-                        <div style="font-size:13.5px; color:#cbd5e1; font-weight:700;">{res_tk['tank_material']} (تخانة <span dir="ltr">{res_tk['sheet_thk_mm']:.1f} mm</span>)</div>
+                        <div style="font-size:25px; font-weight:900; color:#ffffff; margin:6px 0;" dir="ltr">{res_tk['W_tank_empty_ton']:.2f} ton</div>
+                        <div style="font-size:13px; color:#cbd5e1; font-weight:700;">{res_tk['tank_material']} (تخانة <span dir="ltr">{res_tk['sheet_thk_mm']:.1f} mm</span>)</div>
                     </div>""",
                     unsafe_allow_html=True,
                 )
             with w2:
                 st.markdown(
-                    f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:2px solid #0ea5e9; border-radius:10px; padding:14px; text-align:center;">
+                    f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:2px solid #0ea5e9; border-radius:10px; padding:14px; text-align:center; min-height:136px; display:flex; flex-direction:column; justify-content:center; margin-bottom:8px; box-shadow:0 4px 12px rgba(15,23,42,0.4);">
                         <div style="font-size:15px; color:#7dd3fc; font-weight:800;">وزن السائل الإجمالي (W_liquid)</div>
-                        <div style="font-size:26px; font-weight:900; color:#38bdf8; margin:6px 0;" dir="ltr">{res_tk['W_liquid_ton']:.2f} ton</div>
-                        <div style="font-size:13.5px; color:#cbd5e1; font-weight:700;" dir="ltr">{res_tk['capacity_barrels']:.0f} BBL = {res_tk['vol_liquid_m3']:.1f} m³ (SG={res_tk['specific_gravity']:.2f})</div>
+                        <div style="font-size:25px; font-weight:900; color:#38bdf8; margin:6px 0;" dir="ltr">{res_tk['W_liquid_ton']:.2f} ton</div>
+                        <div style="font-size:13px; color:#cbd5e1; font-weight:700;" dir="ltr">{res_tk['capacity_barrels']:.0f} BBL = {res_tk['vol_liquid_m3']:.1f} m³ (SG={res_tk['specific_gravity']:.2f})</div>
                     </div>""",
                     unsafe_allow_html=True,
                 )
             with w3:
                 st.markdown(
-                    f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:2px solid #f59e0b; border-radius:10px; padding:14px; text-align:center;">
+                    f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:2px solid #f59e0b; border-radius:10px; padding:14px; text-align:center; min-height:136px; display:flex; flex-direction:column; justify-content:center; margin-bottom:8px; box-shadow:0 4px 12px rgba(15,23,42,0.4);">
                         <div style="font-size:15px; color:#fde047; font-weight:800;">الوزن الذاتي للقاعدة (W_foundation)</div>
-                        <div style="font-size:26px; font-weight:900; color:#fde047; margin:6px 0;" dir="ltr">{res_tk['Wf_ton']:.2f} ton</div>
-                        <div style="font-size:13.5px; color:#cbd5e1; font-weight:700;">الحجم = <span dir="ltr">{res_tk['vol_f_m3']:.2f} m³ × 2.5 t/m³</span></div>
+                        <div style="font-size:25px; font-weight:900; color:#fde047; margin:6px 0;" dir="ltr">{res_tk['Wf_ton']:.2f} ton</div>
+                        <div style="font-size:13px; color:#cbd5e1; font-weight:700;">الحجم = <span dir="ltr">{res_tk['vol_f_m3']:.2f} m³ × 2.5 t/m³</span></div>
                     </div>""",
                     unsafe_allow_html=True,
                 )
@@ -2785,46 +3648,163 @@ def _render_liquid_storage_tanks_tab():
                     else f"{res_tk['Lf_m']:.2f} × {res_tk['Bf_m']:.2f} × {res_tk['tf_m']:.2f} m"
                 )
                 st.markdown(
-                    f"""<div dir="rtl" style="direction:rtl !important; background:#064e3b; border:2px solid #10b981; border-radius:10px; padding:14px; text-align:center;">
+                    f"""<div dir="rtl" style="direction:rtl !important; background:#064e3b; border:2px solid #10b981; border-radius:10px; padding:14px; text-align:center; min-height:136px; display:flex; flex-direction:column; justify-content:center; margin-bottom:8px; box-shadow:0 4px 12px rgba(6,78,59,0.4);">
                         <div style="font-size:15px; color:#a7f3d0; font-weight:800;">الأبعاد الهندسية النهائية للقاعدة</div>
-                        <div style="font-size:22px; font-weight:900; color:#ffffff; margin:8px 0;" dir="ltr">{dim_str}</div>
-                        <div style="font-size:13.5px; color:#fde047; font-weight:700;">الحمل الكلي = <span dir="ltr">{res_tk['P_total_working_ton']:.2f} ton</span></div>
+                        <div style="font-size:19px; font-weight:900; color:#ffffff; margin:6px 0; word-break:break-word;" dir="ltr">{dim_str}</div>
+                        <div style="font-size:13px; color:#fde047; font-weight:700;">الحمل الكلي = <span dir="ltr">{res_tk['P_total_working_ton']:.2f} ton</span></div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+            # تباعد متوازن ومدروس بنسبة 70% لمنع التباعد المفرط مع الحفاظ على وضوح الفصل
+            st.markdown(
+                """<div style="height: 22px; min-height: 22px; margin: 12px 0 20px 0; border-bottom: 1.5px dashed rgba(148, 163, 184, 0.25); clear: both; display: block;"></div>""",
+                unsafe_allow_html=True,
+            )
+
+            tk_c1, tk_c2, tk_c3 = st.columns(3)
+
+            # Panel 1: Load Calculations (حساب وتفصيل الأحمال الإنشائية)
+            with tk_c1:
+                st.markdown(
+                    """<style>
+                    /* Custom Compact Style for Load Details Button: 50% height, smaller font, customized colors */
+                    div[class*="st-key-btn_tank_load_details"] button,
+                    .st-key-btn_tank_load_details button {
+                        background: linear-gradient(135deg, #b45309 0%, #d97706 50%, #f59e0b 100%) !important;
+                        background-color: #d97706 !important;
+                        color: #ffffff !important;
+                        border: 1.2px solid #fde68a !important;
+                        border-radius: 6px !important;
+                        font-weight: 800 !important;
+                        font-size: 11px !important;
+                        min-height: 22px !important;
+                        height: 24px !important;
+                        padding: 0px 8px !important;
+                        line-height: 22px !important;
+                        box-shadow: 0 2px 6px rgba(217, 119, 6, 0.4) !important;
+                        transition: all 0.2s ease-in-out !important;
+                        white-space: nowrap !important;
+                    }
+                    div[class*="st-key-btn_tank_load_details"] button *,
+                    div[class*="st-key-btn_tank_load_details"] button p,
+                    div[class*="st-key-btn_tank_load_details"] button span,
+                    .st-key-btn_tank_load_details button *,
+                    .st-key-btn_tank_load_details button p,
+                    .st-key-btn_tank_load_details button span {
+                        color: #ffffff !important;
+                        font-weight: 800 !important;
+                        font-size: 11px !important;
+                        line-height: 22px !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                    }
+                    div[class*="st-key-btn_tank_load_details"] button:hover,
+                    .st-key-btn_tank_load_details button:hover {
+                        background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%) !important;
+                        border-color: #ffffff !important;
+                        box-shadow: 0 4px 10px rgba(245, 158, 11, 0.6) !important;
+                    }
+                    </style>""",
+                    unsafe_allow_html=True,
+                )
+                hdr_load_t, hdr_load_b = st.columns([1.65, 1.15], vertical_alignment="center")
+                with hdr_load_t:
+                    st.markdown(
+                        "<div dir='rtl' style='font-size:15px; font-weight:900; color:#fbbf24; line-height:1.3; text-align:right; min-height:44px; display:flex; flex-direction:column; justify-content:center; margin-bottom:10px;'>⚖️ Load Calculations<br><span style='font-size:12px; color:#fde68a;'>(حساب وتفصيل الأحمال)</span></div>",
+                        unsafe_allow_html=True,
+                    )
+                with hdr_load_b:
+                    if st.button(
+                        "تفاصيل الاحمال",
+                        key="btn_tank_load_details",
+                        use_container_width=True,
+                        help="شرح تفصيلي لطريقة ومعادلات حساب كافة الأحمال الإنشائية لقاعدة الخزان طبقاً للكود",
+                    ):
+                        show_dialog_tank_load_calculations(res_tk)
+
+                st.markdown(
+                    f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #f59e0b; border-radius:12px; padding:14px 15px; unicode-bidi:isolate; word-wrap:break-word !important; overflow-wrap:break-word !important; word-break:break-word !important; white-space:normal !important; min-height:100%;">
+                        <div dir="rtl" style="font-size:13.5px; color:#f1f5f9; line-height:1.75; font-weight:700; direction:rtl !important; text-align:right !important; width:100%; word-wrap:break-word;">
+                            <div style="margin-bottom:8px;">• <b>وزن هيكل الخزان الفارغ (<span dir="ltr">W_tank</span>):</b> <span dir="ltr" style="color:#ffffff; font-weight:900;">{res_tk['W_tank_empty_ton']:.2f} ton</span>
+                                <div style="font-size:12px; color:#cbd5e1; font-weight:600; padding-right:12px;">▫️ وزن القاع والجدار والغطاء ({res_tk['sheet_thk_mm']:.1f} mm) + 15% للمقويات والفوهات.</div>
+                            </div>
+                            <div style="margin-bottom:8px;">• <b>وزن السائل الإجمالي (<span dir="ltr">W_liquid</span>):</b> <span dir="ltr" style="color:#38bdf8; font-weight:900;">{res_tk['W_liquid_ton']:.2f} ton</span>
+                                <div style="font-size:12px; color:#cbd5e1; font-weight:600; padding-right:12px;">▫️ حجم السائل ({res_tk['vol_liquid_m3']:.1f} m³) × الكثافة النوعية (SG = {res_tk['specific_gravity']:.2f}).</div>
+                            </div>
+                            <div style="margin-bottom:8px;">• <b>الوزن الذاتي للقاعدة المسلحة (<span dir="ltr">W_f</span>):</b> <span dir="ltr" style="color:#fde047; font-weight:900;">{res_tk['Wf_ton']:.2f} ton</span>
+                                <div style="font-size:12px; color:#cbd5e1; font-weight:600; padding-right:12px;">▫️ الحجم ({res_tk['vol_f_m3']:.2f} m³) × 2.5 t/m³ (إجباري لمقاومة قوى الانقلاب والطفو).</div>
+                            </div>
+                            <div style="margin-bottom:8px;">• <b>إجمالي الحمل الرأسي التشغيلي (<span dir="ltr">P_working</span>):</b> <span dir="ltr" style="color:#4ade80; font-weight:900;">{res_tk['P_total_working_ton']:.2f} ton</span>
+                                <div style="font-size:12px; color:#cbd5e1; font-weight:600; padding-right:12px;">▫️ الحمل الكلي (W_tank + W_liq + W_f) المرتكز على التربة لحساب الإجهاد الفعلي.</div>
+                            </div>
+                            <div style="margin-bottom:8px;">• <b>الحمل التصميمي الأقصى (<span dir="ltr">P_ult</span>):</b> <span dir="ltr" style="color:#fbbf24; font-weight:900;">{res_tk['Pu_total_ton']:.2f} ton</span>
+                                <div style="font-size:12px; color:#cbd5e1; font-weight:600; padding-right:12px;">▫️ التراكب الأقصى (1.40D + 1.50L) لتصميم التسليح وعزوم الانحناء وقص الاختراق.</div>
+                            </div>
+                            <div>• <b>القوة الأفقية الجانبية (<span dir="ltr">V_lateral</span>):</b> <span dir="ltr" style="color:#f472b6; font-weight:900;">{res_tk['V_lateral_ton']:.2f} ton</span>
+                                <div style="font-size:12px; color:#cbd5e1; font-weight:600; padding-right:12px;">▫️ قوى رياح وزلازل ({res_tk['wind_seismic_coeff']*100:.1f}%) تسبب عزم انقلاب {res_tk['M_overturning_tm']:.1f} t.m.</div>
+                            </div>
+                        </div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+            # Panel 2: Hydrostatic Pressure & Stability Checks
+            with tk_c2:
+                st.markdown(
+                    "<div dir='rtl' style='font-size:15px; font-weight:900; color:#38bdf8; line-height:1.3; text-align:right; min-height:44px; display:flex; align-items:center; margin-bottom:10px;'>🌊 Hydrostatic & Stability<br><span style='font-size:12px; color:#bae6fd;'>(الضغط والاتزان)</span></div>",
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #38bdf8; border-radius:12px; padding:14px 15px; unicode-bidi:isolate; word-wrap:break-word !important; overflow-wrap:break-word !important; word-break:break-word !important; white-space:normal !important; min-height:100%;">
+                        <div dir="rtl" style="font-size:13.5px; color:#f1f5f9; line-height:1.75; font-weight:700; direction:rtl !important; text-align:right !important; width:100%; word-wrap:break-word;">
+                            <div style="margin-bottom:8px;">• <b>ارتفاع السائل داخل الخزان (<span dir="ltr">H_liquid</span>):</b> <span dir="ltr" style="color:#fde047; font-weight:900;">{res_tk['H_liquid_m']:.2f} m</span>
+                                <div style="font-size:12px; color:#cbd5e1; font-weight:600; padding-right:12px;">▫️ ارتفاع جدار الخزان الكلي = <span dir="ltr">{res_tk['H_tank_total_m']:.2f} m</span> (مع خلوص Freeboard).</div>
+                            </div>
+                            <div style="margin-bottom:8px;">• <b>الضغط الهيدروستاتيكي للقاع (<span dir="ltr">p_hyd</span>):</b> <span dir="ltr" style="color:#38bdf8; font-weight:900;">{res_tk['p_hydrostatic_ton_m2']:.2f} t/m²</span>
+                                <div style="font-size:12px; color:#cbd5e1; font-weight:600; padding-right:12px;">▫️ يعادل (<span dir="ltr">{res_tk['p_hydrostatic_kg_cm2']:.2f} kg/cm²</span>) ضغط عمود السائل الصافي على القاعدة.</div>
+                            </div>
+                            <div style="margin-bottom:8px;">• <b>معامل الأمان ضد الانقلاب (<span dir="ltr">FOS_ot</span>):</b> <span dir="ltr" style="color:#4ade80; font-weight:900;">{res_tk['fos_overturning']:.2f}</span>
+                                <div style="font-size:12px; color:#cbd5e1; font-weight:600; padding-right:12px;">▫️ عزم التثبيت المقاوم = <span dir="ltr">{res_tk['M_resisting_full_tm']:.1f} t.m</span> (المطلوب كودياً ≥ 1.50).</div>
+                            </div>
+                            <div style="margin-bottom:8px;">• <b>معامل الأمان ضد الطفو (<span dir="ltr">FOS_uplift</span>):</b> <span dir="ltr" style="color:#4ade80; font-weight:900;">{res_tk['fos_buoyancy']:.2f}</span>
+                                <div style="font-size:12px; color:#cbd5e1; font-weight:600; padding-right:12px;">▫️ عند تفريغ الخزان ووجود مياه جوفية ({res_tk['gwt_depth_m']:.2f} m)، المطلوب ≥ 1.25.</div>
+                            </div>
+                            <div>• <b>أقصى إجهاد فعلي على التربة (<span dir="ltr">q_max</span>):</b> <span dir="ltr" style="color:#fde047; font-weight:900;">{res_tk['q_max_kg_cm2']:.2f} kg/cm²</span>
+                                <div style="font-size:12px; color:#cbd5e1; font-weight:600; padding-right:12px;">▫️ أقل من الإجهاد المسموح كودياً (<span dir="ltr">{res_tk['q_all_kg_cm2']:.2f} kg/cm²</span>).</div>
+                            </div>
+                        </div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+            # Panel 3: Reinforcement Summary (تسليح قاعدة الخزان طبقاً للكود)
+            with tk_c3:
+                st.markdown(
+                    "<div dir='rtl' style='font-size:15px; font-weight:900; color:#4ade80; line-height:1.3; text-align:right; min-height:44px; display:flex; align-items:center; margin-bottom:10px;'>🔩 Reinforcement Summary<br><span style='font-size:12px; color:#bbf7d0;'>(تسليح قاعدة الخزان طبقاً للكود)</span></div>",
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #22c55e; border-radius:12px; padding:14px 15px; unicode-bidi:isolate; word-wrap:break-word !important; overflow-wrap:break-word !important; word-break:break-word !important; white-space:normal !important; min-height:100%;">
+                        <div dir="rtl" style="font-size:13.5px; color:#f1f5f9; line-height:1.75; font-weight:700; direction:rtl !important; text-align:right !important; width:100%; word-wrap:break-word;">
+                            <div style="margin-bottom:8px;">• <b>شبكة التسليح السفلية (Bottom Mesh):</b>
+                                <div style="color:#fde047; font-size:15.5px; font-weight:900;" dir="ltr">{res_tk['n_bars_bot_m']} Φ {res_tk['phi_bot_mm']} / m'</div>
+                                <div style="font-size:12px; color:#cbd5e1; font-weight:600; padding-right:12px;">▫️ المسافة = <span dir="ltr">{res_tk['spacing_bot_cm']} cm</span> | المطلوبة = <span dir="ltr">{res_tk['As_bot_req_cm2_m']:.2f}</span> | المتوفرة = <span dir="ltr" style="color:#4ade80;">{res_tk['As_bot_prov_cm2_m']:.2f} cm²/m'</span>.</div>
+                            </div>
+                            <div style="margin-bottom:8px;">• <b>شبكة التسليح العلوية (Top Mesh):</b>
+                                <div style="color:#38bdf8; font-size:15.5px; font-weight:900;" dir="ltr">{res_tk['n_bars_top_m']} Φ {res_tk['phi_top_mm']} / m'</div>
+                                <div style="font-size:12px; color:#cbd5e1; font-weight:600; padding-right:12px;">▫️ المسافة = <span dir="ltr">{res_tk['spacing_top_cm']} cm</span> | المطلوبة = <span dir="ltr">{res_tk['As_top_req_cm2_m']:.2f}</span> | المتوفرة = <span dir="ltr" style="color:#38bdf8;">{res_tk['As_top_prov_cm2_m']:.2f} cm²/m'</span>.</div>
+                            </div>
+                            <div>• <b>إجمالي وزن حديد التسليح للقاعدة:</b>
+                                <div style="color:#f472b6; font-size:15.5px; font-weight:900;" dir="ltr">{res_tk['total_rebar_weight_kg']:.1f} kg ({res_tk['total_rebar_weight_ton']:.3f} ton)</div>
+                                <div style="font-size:12px; color:#cbd5e1; font-weight:600; padding-right:12px;">▫️ معدل استهلاك الحديد = <span dir="ltr">{res_tk['steel_rate_kg_m3']:.1f} kg/m³</span> خرسانة مسلحة.</div>
+                            </div>
+                        </div>
                     </div>""",
                     unsafe_allow_html=True,
                 )
 
             st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
-
-            tk_c1, tk_c2 = st.columns(2)
-            with tk_c1:
-                st.markdown(
-                    f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #22c55e; border-radius:12px; padding:16px 20px; unicode-bidi:isolate;">
-                        <div dir="rtl" style="font-size:18px; font-weight:900; color:#4ade80; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">🔩 Reinforcement Summary (تسليح قاعدة الخزان السفلي والعلوي طبقاً للكود)</div>
-                        <div dir="rtl" style="font-size:15.5px; color:#f1f5f9; line-height:1.95; font-weight:700; direction:rtl !important; text-align:right !important; width:100%;">
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>شبكة التسليح السفلية (Bottom Mesh):</b> <span dir="ltr" style="color:#fde047; font-size:18px; font-weight:900; unicode-bidi:isolate;">{res_tk['n_bars_bot_m']} Φ {res_tk['phi_bot_mm']} / m'</span> في الاتجاهين (المسافة = <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['spacing_bot_cm']} cm</span>)</div>
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important; padding-right:16px;">▫️ المساحة المطلوبة = <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['As_bot_req_cm2_m']:.2f} cm²/m'</span> | المساحة المتوفرة = <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_tk['As_bot_prov_cm2_m']:.2f} cm²/m'</span></div>
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>شبكة التسليح العلوية (Top Mesh):</b> <span dir="ltr" style="color:#38bdf8; font-size:18px; font-weight:900; unicode-bidi:isolate;">{res_tk['n_bars_top_m']} Φ {res_tk['phi_top_mm']} / m'</span> في الاتجاهين (المسافة = <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['spacing_top_cm']} cm</span>)</div>
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important; padding-right:16px;">▫️ المساحة المطلوبة = <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['As_top_req_cm2_m']:.2f} cm²/m'</span> | المساحة المتوفرة = <span dir="ltr" style="color:#38bdf8; unicode-bidi:isolate;">{res_tk['As_top_prov_cm2_m']:.2f} cm²/m'</span></div>
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>إجمالي وزن حديد التسليح للقاعدة:</b> <span dir="ltr" style="color:#f472b6; font-size:17px; font-weight:900; unicode-bidi:isolate;">{res_tk['total_rebar_weight_kg']:.1f} kg ({res_tk['total_rebar_weight_ton']:.3f} ton)</span> — بمعدل <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['steel_rate_kg_m3']:.1f} kg/m³</span></div>
-                        </div>
-                    </div>""",
-                    unsafe_allow_html=True,
-                )
-
-            with tk_c2:
-                st.markdown(
-                    f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #38bdf8; border-radius:12px; padding:16px 20px; unicode-bidi:isolate;">
-                        <div dir="rtl" style="font-size:18px; font-weight:900; color:#38bdf8; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">🌊 Hydrostatic Pressure & Stability Checks (الضغط الهيدروستاتيكي والاتزان ضد الانقلاب والطفو)</div>
-                        <div dir="rtl" style="font-size:15.5px; color:#f1f5f9; line-height:1.95; font-weight:700; direction:rtl !important; text-align:right !important; width:100%;">
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>ارتفاع السائل داخل الخزان (<span dir="ltr" style="unicode-bidi:isolate;">H_liquid</span>):</b> <span dir="ltr" style="color:#fde047; unicode-bidi:isolate;">{res_tk['H_liquid_m']:.2f} m</span> (الارتفاع الكلي = <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['H_tank_total_m']:.2f} m</span>)</div>
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>الضغط الهيدروستاتيكي على القاع (<span dir="ltr" style="unicode-bidi:isolate;">p = γ_liq × H</span>):</b> <span dir="ltr" style="color:#38bdf8; unicode-bidi:isolate;">{res_tk['p_hydrostatic_ton_m2']:.2f} ton/m² ({res_tk['p_hydrostatic_kg_cm2']:.2f} kg/cm²)</span></div>
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>معامل الأمان ضد الانقلاب (<span dir="ltr" style="unicode-bidi:isolate;">FOS_overturning</span>):</b> <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_tk['fos_overturning']:.2f}</span> (المطلوب ≥ 1.50)</div>
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>معامل الأمان ضد الطفو (<span dir="ltr" style="unicode-bidi:isolate;">FOS_buoyancy</span>):</b> <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_tk['fos_buoyancy']:.2f}</span> (المطلوب ≥ 1.25)</div>
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>أقصى إجهاد تربة فعلي (<span dir="ltr" style="unicode-bidi:isolate;">q_max</span>):</b> <span dir="ltr" style="color:#fde047; unicode-bidi:isolate;">{res_tk['q_max_kg_cm2']:.2f} kg/cm²</span> ≤ المسموح <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['q_all_kg_cm2']:.2f} kg/cm²</span></div>
-                        </div>
-                    </div>""",
-                    unsafe_allow_html=True,
-                )
 
             tk_checks = [
                 (
