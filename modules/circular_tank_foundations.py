@@ -33,11 +33,17 @@ ECP_DIAMETERS = [10, 12, 16, 18, 20, 22, 25, 28, 32]
 
 
 
-# ── GENTLE SOFT WARNING CHIME HELPER ──
+import time
+import threading
+
+# ── CRISP LIGHT QUICK WHISTLE SOUND HELPER (صافرة خفيفة سريعة للتنبيهات والأخطاء) ──
+_LAST_WHISTLE_TIME: float = 0.0
+
 @st.cache_data
-def _get_siren_wav_base64():
-    sample_rate = 16000
-    duration = 0.38  # 380 ms short gentle alert
+def _get_whistle_wav_base64() -> str:
+    """Generates a crisp, light, quick whistle tone (2500 Hz pure sine wave, 150ms) as base64 WAV."""
+    sample_rate = 22050
+    duration = 0.15  # 150 ms quick light whistle
     n_samples = int(sample_rate * duration)
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
@@ -45,80 +51,95 @@ def _get_siren_wav_base64():
         wf.setsampwidth(2)
         wf.setframerate(sample_rate)
         frames = bytearray()
-        phase = 0.0
         for i in range(n_samples):
-            t = i / sample_rate
-            # 2 soft gentle tones: 520 Hz for first 180ms, then 620 Hz for remaining 200ms
-            freq = 520.0 if t < 0.18 else 620.0
-            phase += 2.0 * math.pi * freq / sample_rate
-            t_note = t if t < 0.18 else (t - 0.18)
-            dur_note = 0.18 if t < 0.18 else 0.20
-            env = math.sin(math.pi * min(1.0, t_note / dur_note)) ** 1.5
-            # Soft, calm amplitude (3500 out of 32767, pleasant and gentle)
-            val = int(3500.0 * env * math.sin(phase))
+            t = float(i) / sample_rate
+            # 2500 Hz pure crisp whistle with smooth attack and decay
+            envelope = math.sin(math.pi * (i / n_samples)) ** 0.8
+            sample = envelope * math.sin(2.0 * math.pi * 2500.0 * t)
+            val = int(sample * 32767.0 * 0.45)
             val = max(-32767, min(32767, val))
             frames.extend(struct.pack("<h", val))
         wf.writeframes(frames)
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
-def play_siren_alarm():
-    """Plays a calm, soft 380ms gentle chime using pure sine waves and low gain."""
-    wav_b64 = _get_siren_wav_base64()
-    components.html(
-        f"""
-        <audio id="siren-audio" autoplay style="display:none;">
-            <source src="data:audio/wav;base64,{wav_b64}" type="audio/wav">
-        </audio>
-        <script>
-        (function() {{
-            try {{
-                var AudioContext = window.AudioContext || window.webkitAudioContext;
-                if (AudioContext) {{
-                    var ctx = new AudioContext();
-                    var playSoft = function() {{
-                        var now = ctx.currentTime;
+def play_light_whistle_sound(force: bool = False):
+    """
+    Plays a light, quick whistle sound (صافرة خفيفة سريعة - 2500 Hz, 150ms) for warnings and errors.
+    Combines:
+    1. Background thread host sound (winsound.Beep) on Windows for guaranteed immediate audible output.
+    2. Active Web Audio API on parent / top window context and HTML5 audio element for browser output.
+    3. 1.2-second debounce to prevent duplicate beeps on fast Streamlit state reruns.
+    """
+    global _LAST_WHISTLE_TIME
+    now = time.time()
+    if not force and (now - _LAST_WHISTLE_TIME < 1.2):
+        return
+    _LAST_WHISTLE_TIME = now
+
+    # 1. Guaranteed Direct Host OS Sound on Windows
+    def _host_beep():
+        try:
+            import winsound
+            winsound.Beep(2500, 150)
+        except Exception:
+            pass
+    threading.Thread(target=_host_beep, daemon=True).start()
+
+    # 2. Browser Audio Playback
+    wav_b64 = _get_whistle_wav_base64()
+    try:
+        components.html(
+            f"""
+            <div style="position:fixed;top:-100px;left:-100px;width:1px;height:1px;opacity:0.01;pointer-events:none;">
+                <audio id="whistle-audio" autoplay preload="auto">
+                    <source src="data:audio/wav;base64,{wav_b64}" type="audio/wav">
+                </audio>
+            </div>
+            <script>
+            (function() {{
+                try {{
+                    // 1. Play HTML5 Audio element
+                    var aud = document.getElementById('whistle-audio');
+                    if (aud) {{
+                        aud.volume = 0.50;
+                        var p = aud.play();
+                        if (p && p.catch) p.catch(function(){{}});
+                    }}
+
+                    // 2. Synthesize via Web Audio API on parent / top window (bypasses iframe restrictions)
+                    var pWin = window.parent || window.top || window;
+                    var AudioCtx = pWin.AudioContext || pWin.webkitAudioContext || window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) {{
+                        var ctx = pWin.__m10AudioCtx || new AudioCtx();
+                        pWin.__m10AudioCtx = ctx;
+                        if (ctx.state === 'suspended') {{ ctx.resume().catch(function(){{}}); }}
+                        var t = ctx.currentTime;
+                        var dur = 0.15;
                         var osc = ctx.createOscillator();
                         var gain = ctx.createGain();
-                        osc.type = 'sine';  // Pure, soft sine wave (zero harsh distortion)
-                        osc.frequency.setValueAtTime(520, now);
-                        osc.frequency.setValueAtTime(620, now + 0.18);
-                        
-                        // Very soft, quiet ambient gain (0.06 instead of 0.35)
-                        gain.gain.setValueAtTime(0.01, now);
-                        gain.gain.linearRampToValueAtTime(0.06, now + 0.04);
-                        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
-                        
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(2500, t);
+                        gain.gain.setValueAtTime(0.001, t);
+                        gain.gain.linearRampToValueAtTime(0.30, t + 0.015);
+                        gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
                         osc.connect(gain);
                         gain.connect(ctx.destination);
-                        osc.start(now);
-                        osc.stop(now + 0.38);
-                    }};
-                    if (ctx.state === 'suspended') {{
-                        ctx.resume().then(playSoft).catch(function(){{}});
-                    }} else {{
-                        playSoft();
+                        osc.start(t);
+                        osc.stop(t + dur);
                     }}
-                }} else {{
-                    var a = document.getElementById('siren-audio');
-                    if (a) {{
-                        a.volume = 0.25;
-                        a.play().catch(function(){{}});
-                    }}
-                }}
-            }} catch(e) {{
-                var a = document.getElementById('siren-audio');
-                if (a) {{
-                    a.volume = 0.25;
-                    a.play().catch(function(){{}});
-                }}
-            }}
-        }})();
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
+                }} catch(e) {{}}
+            }})();
+            </script>
+            """,
+            height=1,
+            width=1,
+        )
+    except Exception:
+        pass
+
+
+play_siren_alarm = play_light_whistle_sound
 
 # ===============================================================================
 #  1. ENGINEERING COMPUTATION ENGINE — EQUIPMENT FOUNDATIONS (STATIC & DYNAMIC)
@@ -534,6 +555,17 @@ def compute_equipment_foundation_design(
     spacing_bot_cm = round(100.0 / n_bars_bot_m, 1)
     spacing_top_cm = round(100.0 / n_bars_top_m, 1)
 
+    # ECP 203 Rebar Spacing Compliance Check (Max 10 bars/m -> min spacing 10 cm, min 5 bars/m)
+    is_rebar_bot_spacing_safe = (n_bars_bot_m <= 10)
+    is_rebar_top_spacing_safe = (n_bars_top_m <= 10)
+    is_rebar_spacing_safe = is_rebar_bot_spacing_safe and is_rebar_top_spacing_safe
+
+    # Recommend minimum safe diameters to satisfy <= 10 bars/m (spacing >= 10 cm)
+    rec_bot_list = [d for d in ECP_DIAMETERS if math.ceil(As_bot_req_cm2_m / BAR_AREAS.get(d, 1.0)) <= 10]
+    rec_phi_bot = min(rec_bot_list) if rec_bot_list else 32
+    rec_top_list = [d for d in ECP_DIAMETERS if math.ceil(As_top_req_cm2_m / BAR_AREAS.get(d, 1.0)) <= 10]
+    rec_phi_top = min(rec_top_list) if rec_top_list else 32
+
     As_bot_prov_cm2_m = n_bars_bot_m * area_bar_bot
     As_top_prov_cm2_m = n_bars_top_m * area_bar_top
 
@@ -571,6 +603,7 @@ def compute_equipment_foundation_design(
         and is_1way_shear_safe
         and is_mass_ratio_safe
         and is_resonance_safe
+        and is_rebar_spacing_safe
     )
 
     return {
@@ -653,6 +686,11 @@ def compute_equipment_foundation_design(
         "clearance_B_cm": round(clearance_B_m * 100.0, 1),
         "min_req_Lf_m": round(Lm_m, 2),
         "min_req_Bf_m": round(Bm_m, 2),
+        "is_rebar_spacing_safe": is_rebar_spacing_safe,
+        "is_rebar_bot_spacing_safe": is_rebar_bot_spacing_safe,
+        "is_rebar_top_spacing_safe": is_rebar_top_spacing_safe,
+        "rec_phi_bot": rec_phi_bot,
+        "rec_phi_top": rec_phi_top,
         "is_all_safe": is_all_safe,
     }
 
@@ -915,6 +953,17 @@ def compute_liquid_tank_foundation_design(
     spacing_bot_cm = round(100.0 / n_bars_bot_m, 1)
     spacing_top_cm = round(100.0 / n_bars_top_m, 1)
 
+    # ECP 203 Rebar Spacing Compliance Check (Max 10 bars/m -> min spacing 10 cm, min 5 bars/m)
+    is_rebar_bot_spacing_safe = (n_bars_bot_m <= 10)
+    is_rebar_top_spacing_safe = (n_bars_top_m <= 10)
+    is_rebar_spacing_safe = is_rebar_bot_spacing_safe and is_rebar_top_spacing_safe
+
+    # Recommend minimum safe diameters to satisfy <= 10 bars/m (spacing >= 10 cm)
+    rec_bot_list = [d for d in ECP_DIAMETERS if math.ceil(As_bot_req_cm2_m / BAR_AREAS.get(d, 1.0)) <= 10]
+    rec_phi_bot = min(rec_bot_list) if rec_bot_list else 32
+    rec_top_list = [d for d in ECP_DIAMETERS if math.ceil(As_top_req_cm2_m / BAR_AREAS.get(d, 1.0)) <= 10]
+    rec_phi_top = min(rec_top_list) if rec_top_list else 32
+
     As_bot_prov_cm2_m = n_bars_bot_m * area_bar_bot
     As_top_prov_cm2_m = n_bars_top_m * area_bar_top
 
@@ -939,6 +988,7 @@ def compute_liquid_tank_foundation_design(
         and is_1way_shear_safe
         and is_overturning_safe
         and is_buoyancy_safe
+        and is_rebar_spacing_safe
     )
 
     return {
@@ -1026,6 +1076,11 @@ def compute_liquid_tank_foundation_design(
         "total_rebar_weight_kg": total_rebar_weight_kg,
         "total_rebar_weight_ton": total_rebar_weight_ton,
         "steel_rate_kg_m3": steel_rate_kg_m3,
+        "is_rebar_spacing_safe": is_rebar_spacing_safe,
+        "is_rebar_bot_spacing_safe": is_rebar_bot_spacing_safe,
+        "is_rebar_top_spacing_safe": is_rebar_top_spacing_safe,
+        "rec_phi_bot": rec_phi_bot,
+        "rec_phi_top": rec_phi_top,
         "is_all_safe": is_all_safe,
     }
 
@@ -1117,10 +1172,33 @@ def generate_equipment_foundation_sketches(res: dict) -> str:
 
     # Rebar Cage (Bottom & Top U-Bars)
     cov_m = res["cover_cm"] / 100.0
-    ax2.plot([-Lf / 2 + cov_m, Lf / 2 - cov_m], [cov_m, cov_m], color="#4ade80", linewidth=3.2, label="Bottom Mesh")
-    ax2.plot([-Lf / 2 + cov_m, Lf / 2 - cov_m], [tf - cov_m, tf - cov_m], color="#38bdf8", linewidth=2.8, label="Top Mesh")
-    ax2.plot([-Lf / 2 + cov_m, -Lf / 2 + cov_m], [cov_m, tf - cov_m], color="#4ade80", linewidth=2.5)
-    ax2.plot([Lf / 2 - cov_m, Lf / 2 - cov_m], [cov_m, tf - cov_m], color="#4ade80", linewidth=2.5)
+    ax2.plot([-Lf / 2 + cov_m, Lf / 2 - cov_m], [cov_m, cov_m], color="#4ade80", linewidth=3.0, zorder=4, label="Bottom Mesh")
+    ax2.plot([-Lf / 2 + cov_m, Lf / 2 - cov_m], [tf - cov_m, tf - cov_m], color="#38bdf8", linewidth=2.8, zorder=4, label="Top Mesh")
+    ax2.plot([-Lf / 2 + cov_m, -Lf / 2 + cov_m], [cov_m, tf - cov_m], color="#4ade80", linewidth=2.5, zorder=4)
+    ax2.plot([Lf / 2 - cov_m, Lf / 2 - cov_m], [cov_m, tf - cov_m], color="#4ade80", linewidth=2.5, zorder=4)
+
+    # --- Rebar Direction Indicators (خطوط متقاطعة بتباعد موسع مع عبارتي For both directions و Top & Bottom) ---
+    y_mid_ind = tf * 0.50
+    x_start_x = -0.34 * Lf
+    len_ind_x = min(0.65, 0.20 * Lf)
+    x_end_x = x_start_x + len_ind_x
+    dy_ind = max(0.065, 0.13 * tf)
+
+    # 1. خطين متوازيين في اتجاه X بتباعد كافٍ ومميز
+    ax2.plot([x_start_x, x_end_x], [y_mid_ind - dy_ind / 2, y_mid_ind - dy_ind / 2], color="#4ade80", linewidth=3.0, zorder=6)
+    ax2.plot([x_start_x, x_end_x], [y_mid_ind + dy_ind / 2, y_mid_ind + dy_ind / 2], color="#4ade80", linewidth=3.0, zorder=6)
+    ax2.text(x_start_x - 0.04, y_mid_ind, "X", color="#4ade80", fontsize=11, fontweight="bold", ha="right", va="center")
+
+    # 2. خط رأسي واحد في اتجاه Y يتقاطع معهما
+    x_mid_y = (x_start_x + x_end_x) / 2
+    len_ind_y = min(0.42, 0.46 * tf)
+    ax2.plot([x_mid_y, x_mid_y], [y_mid_ind - len_ind_y / 2, y_mid_ind + len_ind_y / 2], color="#facc15", linewidth=3.2, zorder=6)
+    ax2.plot([x_mid_y - 0.025, x_mid_y + 0.025], [y_mid_ind - len_ind_y / 2, y_mid_ind - len_ind_y / 2], color="#facc15", linewidth=2.0, zorder=6)
+    ax2.plot([x_mid_y - 0.025, x_mid_y + 0.025], [y_mid_ind + len_ind_y / 2, y_mid_ind + len_ind_y / 2], color="#facc15", linewidth=2.0, zorder=6)
+    ax2.text(x_mid_y, y_mid_ind + len_ind_y / 2 + 0.025, "Y", color="#facc15", fontsize=11, fontweight="bold", ha="center", va="bottom")
+
+    # 3. كتابة عبارتي For both directions وأسفلها Top & Bottom بجوار خطي اتجاه X في منتصف الشاشة
+    ax2.text(x_end_x + 0.05, y_mid_ind, "For both directions\nTop & Bottom", color="#ffffff", fontsize=9.5, fontweight="bold", ha="left", va="center", linespacing=1.35)
 
     # Isolators / Springs or Anchor Bolts
     eq_base_y = tf + (0.18 if res["is_isolated"] else 0.04)
@@ -1156,7 +1234,7 @@ def generate_equipment_foundation_sketches(res: dict) -> str:
     ax2.text(tf_txt_x, tf / 2, f"tf = {tf:.2f} m", color="#f87171", fontsize=11, fontweight="bold",
              ha="left", va="center", rotation=90, bbox=dict(boxstyle="round,pad=0.2", facecolor="#0f172a", edgecolor="#f87171", lw=1.0))
 
-    ax2.set_xlim(-Lf / 2 - max(0.85, Lf * 0.20), tf_txt_x + max(0.55, Lf * 0.14))
+    ax2.set_xlim(-Lf / 2 - max(0.45, Lf * 0.12), tf_txt_x + max(0.45, Lf * 0.12))
     ax2.set_ylim(-0.55, eq_base_y + eq_h + 0.35)
     ax2.axis("off")
 
@@ -1240,7 +1318,7 @@ def generate_liquid_tank_foundation_sketches(res: dict) -> str:
     ax1.axis("off")
 
     # --- Panel 2: Elevation Section (Tank + Liquid + RC Foundation) ---
-    ax2.set_title("2. Structural Elevation, Hydrostatic Load & Rebar Mesh", color="#38bdf8", fontsize=13, fontweight="bold", pad=12)
+    ax2.set_title("2. Cross-Section & Top/Bottom Rebar Detailing", color="#38bdf8", fontsize=13, fontweight="bold", pad=12)
 
     H_draw_tank = min(max(res["H_tank_total_m"] * 0.35, 1.20), 2.60)
     H_draw_liq = H_draw_tank * (res["H_liquid_m"] / max(res["H_tank_total_m"], 0.1))
@@ -1251,10 +1329,35 @@ def generate_liquid_tank_foundation_sketches(res: dict) -> str:
     # RC Foundation Slab
     ax2.add_patch(Rectangle((-Lf / 2, 0), Lf, tf, facecolor="#334155", edgecolor="#94a3b8", linewidth=2.5))
 
-    # Rebar Top & Bottom
+    # Rebar Top & Bottom Mesh
     cov_m = min(res["cover_cm"] / 100.0, tf * 0.2)
-    ax2.plot([-Lf / 2 + cov_m, Lf / 2 - cov_m], [cov_m, cov_m], color="#4ade80", linewidth=3.0)
-    ax2.plot([-Lf / 2 + cov_m, Lf / 2 - cov_m], [tf - cov_m, tf - cov_m], color="#38bdf8", linewidth=2.8)
+    ax2.plot([-Lf / 2 + cov_m, Lf / 2 - cov_m], [cov_m, cov_m], color="#4ade80", linewidth=3.0, zorder=4)
+    ax2.plot([-Lf / 2 + cov_m, Lf / 2 - cov_m], [tf - cov_m, tf - cov_m], color="#38bdf8", linewidth=2.8, zorder=4)
+    ax2.plot([-Lf / 2 + cov_m, -Lf / 2 + cov_m], [cov_m, tf - cov_m], color="#4ade80", linewidth=2.5, zorder=4)
+    ax2.plot([Lf / 2 - cov_m, Lf / 2 - cov_m], [cov_m, tf - cov_m], color="#4ade80", linewidth=2.5, zorder=4)
+
+    # --- Rebar Direction Indicators (خطوط متقاطعة بتباعد موسع مع عبارتي For both directions و Top & Bottom) ---
+    y_mid_ind = tf * 0.50
+    x_start_x = -0.34 * Lf
+    len_ind_x = min(0.65, 0.20 * Lf)
+    x_end_x = x_start_x + len_ind_x
+    dy_ind = max(0.065, 0.13 * tf)
+
+    # 1. خطين متوازيين في اتجاه X بتباعد كافٍ ومميز
+    ax2.plot([x_start_x, x_end_x], [y_mid_ind - dy_ind / 2, y_mid_ind - dy_ind / 2], color="#4ade80", linewidth=3.0, zorder=6)
+    ax2.plot([x_start_x, x_end_x], [y_mid_ind + dy_ind / 2, y_mid_ind + dy_ind / 2], color="#4ade80", linewidth=3.0, zorder=6)
+    ax2.text(x_start_x - 0.04, y_mid_ind, "X", color="#4ade80", fontsize=11, fontweight="bold", ha="right", va="center")
+
+    # 2. خط رأسي واحد في اتجاه Y يتقاطع معهما
+    x_mid_y = (x_start_x + x_end_x) / 2
+    len_ind_y = min(0.42, 0.46 * tf)
+    ax2.plot([x_mid_y, x_mid_y], [y_mid_ind - len_ind_y / 2, y_mid_ind + len_ind_y / 2], color="#facc15", linewidth=3.2, zorder=6)
+    ax2.plot([x_mid_y - 0.025, x_mid_y + 0.025], [y_mid_ind - len_ind_y / 2, y_mid_ind - len_ind_y / 2], color="#facc15", linewidth=2.0, zorder=6)
+    ax2.plot([x_mid_y - 0.025, x_mid_y + 0.025], [y_mid_ind + len_ind_y / 2, y_mid_ind + len_ind_y / 2], color="#facc15", linewidth=2.0, zorder=6)
+    ax2.text(x_mid_y, y_mid_ind + len_ind_y / 2 + 0.025, "Y", color="#facc15", fontsize=11, fontweight="bold", ha="center", va="bottom")
+
+    # 3. كتابة عبارتي For both directions وأسفلها Top & Bottom بجوار خطي اتجاه X في منتصف الشاشة
+    ax2.text(x_end_x + 0.05, y_mid_ind, "For both directions\nTop & Bottom", color="#ffffff", fontsize=9.5, fontweight="bold", ha="left", va="center", linespacing=1.35)
 
     # Tank Shell & Liquid Fill
     ax2.add_patch(Rectangle((-Lt / 2, tf), Lt, H_draw_liq, facecolor="#0284c7", alpha=0.55, edgecolor="none"))
@@ -1264,9 +1367,12 @@ def generate_liquid_tank_foundation_sketches(res: dict) -> str:
     ax2.text(0, tf + H_draw_liq / 2,
              f"Stored Liquid (SG = {res['specific_gravity']:.2f})\nH_liq = {res['H_liquid_m']:.2f} m | p_hyd = {res['p_hydrostatic_ton_m2']:.2f} t/m²\nW_liquid = {res['W_liquid_ton']:.2f} ton",
              color="#ffffff", fontsize=9.5, fontweight="bold", ha="center", va="center")
-    ax2.text(0, tf / 2,
-             f"RC Foundation (tf = {tf:.2f} m, W_f = {res['Wf_ton']:.2f} ton)\nBot: {res['n_bars_bot_m']}Φ{res['phi_bot_mm']}/m' | Top: {res['n_bars_top_m']}Φ{res['phi_top_mm']}/m'",
-             color="#4ade80", fontsize=9.5, fontweight="bold", ha="center", va="center")
+    ax2.text(0, cov_m + 0.04 * tf,
+             f"Bottom: {res['n_bars_bot_m']} Φ {res['phi_bot_mm']}/m' (As = {res['As_bot_prov_cm2_m']:.2f} cm²/m')",
+             color="#4ade80", fontsize=9.5, fontweight="bold", ha="center")
+    ax2.text(0, tf - cov_m - 0.08 * tf,
+             f"Top: {res['n_bars_top_m']} Φ {res['phi_top_mm']}/m' (As = {res['As_top_prov_cm2_m']:.2f} cm²/m')",
+             color="#38bdf8", fontsize=9.5, fontweight="bold", ha="center")
     ax2.text(0, -0.22,
              f"q_max = {res['q_max_kg_cm2']:.2f} kg/cm² ≤ {res['q_all_kg_cm2']:.2f} kg/cm² | FOS_overturn = {res['fos_overturning']:.2f} | FOS_uplift = {res['fos_buoyancy']:.2f}",
              color="#fde047", fontsize=9.5, fontweight="bold", ha="center")
@@ -1284,8 +1390,121 @@ def generate_liquid_tank_foundation_sketches(res: dict) -> str:
 
 
 # ===============================================================================
-#  4. STANDALONE HTML/PDF CALCULATION SHEET GENERATOR
+#  4. REBAR SPACING VIOLATION BANNER & STANDALONE CALCULATION SHEET GENERATOR
 # ===============================================================================
+
+def render_rebar_spacing_violation_banner(res: dict, input_section_name: str = "المدخلات"):
+    """
+    Renders an elegant, prominent RTL warning banner when the calculated number of rebar
+    bars per meter exceeds the Egyptian Code of Practice (ECP 203) allowable limit (max 10 bars/m, s >= 10 cm).
+    Instructs the user to increase the rebar diameter and provides code summary.
+    """
+    play_siren_alarm()
+
+    bot_safe = res.get("is_rebar_bot_spacing_safe", True)
+    top_safe = res.get("is_rebar_top_spacing_safe", True)
+    n_bot = res.get("n_bars_bot_m", 0)
+    phi_bot = res.get("phi_bot_mm", 0)
+    s_bot = res.get("spacing_bot_cm", 0.0)
+    n_top = res.get("n_bars_top_m", 0)
+    phi_top = res.get("phi_top_mm", 0)
+    s_top = res.get("spacing_top_cm", 0.0)
+    rec_bot = res.get("rec_phi_bot", 20)
+    rec_top = res.get("rec_phi_top", 16)
+
+    bot_status_li = (
+        f"<li style='margin-bottom: 8px;'><b style='color:#f87171;'>❌ شبكة التسليح السفلية (Bottom Mesh):</b> "
+        f"المحسوب حالياً <span dir='ltr' style='color:#fde047; font-weight:900;'>{n_bot} Φ {phi_bot} / m'</span> "
+        f"(التباعد = <span dir='ltr' style='color:#f87171; font-weight:800;'>{s_bot:.1f} cm</span>) "
+        f"— <b style='color:#f87171;'>مخالف لاشتراطات الكود!</b> يتجاوز الحد الأقصى للكود (أقصى عدد 10 أسياخ/م، وأدنى مسافة 10 سم). "
+        f"يُنصح باختيار قطر <span dir='ltr' style='color:#4ade80; font-weight:900;'>Φ {rec_bot} mm</span> أو أكبر.</li>"
+        if not bot_safe else
+        f"<li style='margin-bottom: 8px;'><b style='color:#4ade80;'>✅ شبكة التسليح السفلية (Bottom Mesh):</b> "
+        f"<span dir='ltr'>{n_bot} Φ {phi_bot} / m'</span> (التباعد = <span dir='ltr'>{s_bot:.1f} cm</span>) — مطابق كودياً (ضمن 5-10 أسياخ/م).</li>"
+    )
+
+    top_status_li = (
+        f"<li style='margin-bottom: 8px;'><b style='color:#f87171;'>❌ شبكة التسليح العلوية (Top Mesh):</b> "
+        f"المحسوب حالياً <span dir='ltr' style='color:#fde047; font-weight:900;'>{n_top} Φ {phi_top} / m'</span> "
+        f"(التباعد = <span dir='ltr' style='color:#f87171; font-weight:800;'>{s_top:.1f} cm</span>) "
+        f"— <b style='color:#f87171;'>مخالف لاشتراطات الكود!</b> يتجاوز الحد الأقصى للكود (أقصى عدد 10 أسياخ/م، وأدنى مسافة 10 سم). "
+        f"يُنصح باختيار قطر <span dir='ltr' style='color:#4ade80; font-weight:900;'>Φ {rec_top} mm</span> أو أكبر.</li>"
+        if not top_safe else
+        f"<li style='margin-bottom: 8px;'><b style='color:#4ade80;'>✅ شبكة التسليح العلوية (Top Mesh):</b> "
+        f"<span dir='ltr'>{n_top} Φ {phi_top} / m'</span> (التباعد = <span dir='ltr'>{s_top:.1f} cm</span>) — مطابق كودياً (ضمن 5-10 أسياخ/م).</li>"
+    )
+
+    advice_items = []
+    if not bot_safe:
+        advice_items.append(f"زيادة قطر حديد التسليح السفلي من <span dir='ltr'><b>Φ {phi_bot} mm</b></span> إلى <span dir='ltr'><b style='color:#4ade80;'>Φ {rec_bot} mm</b></span> أو أكبر")
+    if not top_safe:
+        advice_items.append(f"زيادة قطر حديد التسليح العلوي من <span dir='ltr'><b>Φ {phi_top} mm</b></span> إلى <span dir='ltr'><b style='color:#4ade80;'>Φ {rec_top} mm</b></span> أو أكبر")
+    advice_str = " و ".join(advice_items)
+
+    banner_html = f"""<div dir="rtl" style="direction: rtl !important; text-align: right !important; background: linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #450a0a 100%); border: 2.5px solid #ef4444; border-radius: 14px; padding: 22px 26px; margin: 20px 0; box-shadow: 0 6px 25px rgba(239, 68, 68, 0.35);">
+<div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; direction: rtl !important; text-align: right !important;">
+<span style="font-size: 28px;">⛔</span>
+<div style="font-size: 21px; font-weight: 900; color: #fecaca; line-height: 1.4;">
+تنبيه كودي حرج: عدد أسياخ حديد التسليح يتجاوز الحد الأقصى المسموح به في الكود المصري (ECP 203)
+</div>
+</div>
+
+<div style="font-size: 15.5px; color: #fee2e2; line-height: 1.85; font-weight: 700; margin-bottom: 16px; direction: rtl !important; text-align: right !important;">
+تم <b>منع وحجب ظهور أقسام المخرجات والمخططات الهندسية</b> (<span dir="ltr">Final Outputs & CAD Blueprints</span>) تلقائياً، وذلك لوجود خطأ فني يتمثل في تجاوز عدد الأسياخ المحسوبة للحد الأقصى المسموح به كودياً في المتر الواحد، مما يسبب تقارب وتزاحم الأسياخ بدرجة تمنع الصب والدمك السليم.
+</div>
+
+<div style="background: rgba(15, 23, 42, 0.75); border: 1.5px solid #f87171; border-radius: 10px; padding: 14px 18px; margin-bottom: 16px; direction: rtl !important; text-align: right !important;">
+<div style="font-size: 16px; font-weight: 900; color: #fde047; margin-bottom: 8px;">
+📊 تفاصيل التسليح المحسوب حالياً ومدى مطابقته للكود:
+</div>
+<ul style="margin: 0; padding-right: 22px; color: #ffffff; font-size: 15px; line-height: 1.95;">
+{bot_status_li}
+{top_status_li}
+</ul>
+</div>
+
+<div style="background: rgba(15, 23, 42, 0.75); border: 1.5px solid #38bdf8; border-radius: 10px; padding: 14px 18px; margin-bottom: 16px; direction: rtl !important; text-align: right !important;">
+<div style="font-size: 16px; font-weight: 900; color: #38bdf8; margin-bottom: 8px;">
+📜 ملخص اشتراطات الكود المصري (ECP 203 - الباب الرابع) في تباعد أسياخ القواعد والبلاطات:
+</div>
+<ol style="margin: 0; padding-right: 22px; color: #e2e8f0; font-size: 14.5px; line-height: 1.95;">
+<li style="margin-bottom: 6px;"><b>الحد الأقصى للتباعد (<span dir="ltr">s_max</span>):</b> يجب ألا يزيد التباعد بين محاور الأسياخ عن <span dir="ltr"><b>20 cm</b></span> (<span dir="ltr">200 mm</span>) أو ضعف سمك القاعدة (<span dir="ltr">2d</span>) أيهما أقل، مما يعني أن <b>الحد الأدنى لعدد الأسياخ هو 5 أسياخ في المتر</b> (<span dir="ltr">5Φ/m'</span>).</li>
+<li style="margin-bottom: 6px;"><b>الحد الأدنى للتباعد (<span dir="ltr">s_min</span>):</b> يجب ألا يقل التباعد الصافي بين الأسياخ عن <span dir="ltr"><b>10 cm</b></span> (<span dir="ltr">100 mm</span>) في التطبيقات العملية للبلاطات والقواعد، مما يعني أن <b>الحد الأقصى لعدد الأسياخ هو 10 أسياخ في المتر</b> (<span dir="ltr">10Φ/m'</span>)، كما يجب ألا يقل عن قطر أكبر سيخ (<span dir="ltr">Φ_max</span>) وعن المقاس الاعتباري الأكبر للركام + <span dir="ltr">5 mm</span>.</li>
+<li style="margin-bottom: 6px;"><b>العلة الهندسية والتنفيذية:</b> منع حدوث التعشيش (<span dir="ltr">Honeycombing</span>) والانفصال الحبيبي، وتسهيل انسياب ومرور حبيبات الركام الخشن، وضمان إمكانية إدخال رؤوس الهزازات الميكانيكية لدمك الخرسانة بكفاءة وتحقيق التماسك الكامل (<span dir="ltr">Bond</span>) بين الخرسانة وأسياخ الصلب.</li>
+</ol>
+</div>
+
+<div style="background: rgba(22, 101, 52, 0.45); border: 2px solid #22c55e; border-radius: 10px; padding: 14px 18px; margin-bottom: 20px; direction: rtl !important; text-align: right !important;">
+<div style="font-size: 16.5px; font-weight: 900; color: #4ade80; margin-bottom: 6px;">
+💡 الإجراء المطلوب لتصحيح التصميم واستعراض المخرجات:
+</div>
+<div style="font-size: 15px; color: #f0fdf4; line-height: 1.85; font-weight: 700;">
+يُرجى الرجوع لقسم المدخلات أعلاه (<span dir="ltr">{input_section_name}</span>) والقيام بـ: <b>{advice_str}</b>، وذلك لتخفيض عدد الأسياخ في المتر ليصبح ضمن النطاق الكودي المسموح (<span dir="ltr">5 إلى 10 أسياخ/م</span>). وستظهر كافة أقسام المخرجات والمخططات الهندسية والمذكرة الحسابية فور تطبيق التعديل المناسب.
+</div>
+</div>
+
+<div style="background: rgba(15, 23, 42, 0.75); border: 2px dashed #ef4444; border-radius: 12px; padding: 18px 24px; margin-bottom: 16px; box-shadow: 0 4px 16px rgba(239, 68, 68, 0.15); cursor: not-allowed;">
+<div style="font-size: 20px; font-weight: 900; color: #f87171; display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+<span style="font-size: 22px;">🔒</span>
+<span>📊 2. Final Outputs & Code Verification (مُقفل - غير متاح للفتح لحين تعديل قطر التسليح)</span>
+</div>
+<div style="font-size: 15.5px; color: #cbd5e1; line-height: 1.8; font-weight: 700;">
+⚠️ <b>تم قفل هذا القسم بالكامل وتعطيل إمكانية فتحه:</b> عدد أسياخ التسليح المحسوبة يتجاوز الحد الأقصى كودياً (أكثر من 10 أسياخ/متر طولي). يُرجى تعديل القطر في قسم المدخلات أعلاه لإلغاء القفل وعرض النتائج المعتمدة.
+</div>
+</div>
+
+<div style="background: rgba(15, 23, 42, 0.75); border: 2px dashed #ef4444; border-radius: 12px; padding: 18px 24px; box-shadow: 0 4px 16px rgba(239, 68, 68, 0.15); cursor: not-allowed;">
+<div style="font-size: 20px; font-weight: 900; color: #f87171; display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+<span style="font-size: 22px;">🔒</span>
+<span>📐 3. 2D CAD Blueprints & Report Export (مُقفل - غير متاح للفتح لحين تعديل قطر التسليح)</span>
+</div>
+<div style="font-size: 15.5px; color: #cbd5e1; line-height: 1.8; font-weight: 700;">
+⚠️ <b>تم قفل هذا القسم بالكامل وتعطيل إمكانية فتحه:</b> لا يمكن توليد المخططات الهندسية (2D CAD Blueprints) أو تصدير المذكرات الحسابية (HTML / PDF) قبل استيفاء اشتراطات التباعد الكودي الآمن بين أسياخ التسليح (<span dir="ltr">s ≥ 10 cm</span>).
+</div>
+</div>
+</div>"""
+    st.html(banner_html)
+
 
 def generate_m10_calculation_sheet_html(title_ar: str, subtitle_en: str, rows_summary: list, checks_list: list, sketch_b64: str) -> str:
     """Generates a clean, print-ready Arabic RTL HTML calculation report for Module 10."""
@@ -2106,216 +2325,230 @@ def _render_equipment_foundations_tab():
             phi_bot_mm=int(phi_bot_eq),
             phi_top_mm=int(phi_top_eq),
         )
-        with st.expander("📊 2. Final Outputs & Code Verification (المخرجات النهائية والتحققات الهندسية والتسليح)", expanded=True):
-            k1, k2, k3, k4 = st.columns(4)
-            with k1:
-                bg_k1 = "#0f172a" if res_eq["is_footprint_safe"] else "#7f1d1d"
-                bd_k1 = "#38bdf8" if res_eq["is_footprint_safe"] else "#ef4444"
-                footprint_badge = "✅ مستوفية لبصمة المعدة" if res_eq["is_footprint_safe"] else "⚠️ أصغر من بصمة المعدة!"
-                overridden_lbl = " (مُعدل بالزيادة)" if res_eq.get("is_tf_overridden") else " (المعتمد كودياً)"
-                st.markdown(
-                    f"""<div dir="rtl" style="direction:rtl !important; background:{bg_k1}; border:2px solid {bd_k1}; border-radius:10px; padding:14px; text-align:center;">
-                        <div style="font-size:15px; color:#93c5fd; font-weight:800;">الأبعاد النهائية للقاعدة (Lf × Bf × tf)</div>
-                        <div style="font-size:25px; font-weight:900; color:#ffffff; margin:6px 0;" dir="ltr">{res_eq['Lf_m']:.2f} × {res_eq['Bf_m']:.2f} × {res_eq['tf_m']:.2f} m</div>
-                        <div style="font-size:13.5px; color:#fde047; font-weight:700;">سمك التصميم: <span dir="ltr">T_design = {res_eq['T_design_m']:.2f} m</span>{overridden_lbl}</div>
-                        <div style="font-size:14px; color:{'#a7f3d0' if res_eq['is_footprint_safe'] else '#fca5a5'}; font-weight:700;">{footprint_badge} (الحجم = <span dir="ltr">{res_eq['vol_f_m3']:.2f} m³</span>)</div>
-                    </div>""",
-                    unsafe_allow_html=True,
-                )
-            with k2:
-                st.markdown(
-                    f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:2px solid #f59e0b; border-radius:10px; padding:14px; text-align:center;">
-                        <div style="font-size:15px; color:#fde047; font-weight:800;">الوزن الذاتي المحسوب تلقائياً (W_f)</div>
-                        <div style="font-size:26px; font-weight:900; color:#fde047; margin:6px 0;" dir="ltr">{res_eq['Wf_ton']:.2f} ton</div>
-                        <div style="font-size:14px; color:#cbd5e1; font-weight:700;">نسبة الكتلة <span dir="ltr">W_f / W_eq = {res_eq['actual_mass_ratio']:.2f}x</span></div>
-                    </div>""",
-                    unsafe_allow_html=True,
-                )
-            with k3:
-                bg_s = "#064e3b" if res_eq["is_soil_safe"] else "#7f1d1d"
-                bd_s = "#22c55e" if res_eq["is_soil_safe"] else "#ef4444"
-                st.markdown(
-                    f"""<div dir="rtl" style="direction:rtl !important; background:{bg_s}; border:2px solid {bd_s}; border-radius:10px; padding:14px; text-align:center;">
-                        <div style="font-size:15px; color:#e2e8f0; font-weight:800;">إجهاد التربة الفعلي / المسموح</div>
-                        <div style="font-size:25px; font-weight:900; color:#ffffff; margin:6px 0;" dir="ltr">{res_eq['q_act_kg_cm2']:.2f} / {res_eq['q_all_kg_cm2']:.2f} kg/cm²</div>
-                        <div style="font-size:14px; color:#a7f3d0; font-weight:700;">{'✅ آمن (SAFE)' if res_eq['is_soil_safe'] else '⚠️ غير آمن (UNSAFE)'} (<span dir="ltr">{res_eq['ratio_soil']*100:.1f}%</span>)</div>
-                    </div>""",
-                    unsafe_allow_html=True,
-                )
-            with k4:
-                bg_p = "#064e3b" if res_eq["is_punching_safe"] else "#7f1d1d"
-                bd_p = "#22c55e" if res_eq["is_punching_safe"] else "#ef4444"
-                st.markdown(
-                    f"""<div dir="rtl" style="direction:rtl !important; background:{bg_p}; border:2px solid {bd_p}; border-radius:10px; padding:14px; text-align:center;">
-                        <div style="font-size:15px; color:#e2e8f0; font-weight:800;">فحص الاختراق (Punching Shear)</div>
-                        <div style="font-size:25px; font-weight:900; color:#ffffff; margin:6px 0;" dir="ltr">{res_eq['q_up_kg_cm2']:.2f} / {res_eq['q_cup_all_kg_cm2']:.2f} kg/cm²</div>
-                        <div style="font-size:14px; color:#a7f3d0; font-weight:700;">{'✅ آمن (SAFE)' if res_eq['is_punching_safe'] else '⚠️ غير آمن (UNSAFE)'} (<span dir="ltr">{res_eq['ratio_punching']*100:.1f}%</span>)</div>
-                    </div>""",
-                    unsafe_allow_html=True,
-                )
-
-            st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
-
-            # Reinforcement & Dynamic Summary Banner
-            r_c1, r_c2 = st.columns(2)
-            with r_c1:
-                st.markdown(
-                    f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #22c55e; border-radius:12px; padding:16px 20px; unicode-bidi:isolate;">
-                        <div dir="rtl" style="font-size:18px; font-weight:900; color:#4ade80; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">🔩 Reinforcement Summary (تسليح القاعدة السفلي والعلوي والكميات)</div>
-                        <div dir="rtl" style="font-size:15.5px; color:#f1f5f9; line-height:1.95; font-weight:700; direction:rtl !important; text-align:right !important; width:100%;">
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>شبكة التسليح السفلية (Bottom Mesh):</b> <span dir="ltr" style="color:#fde047; font-size:18px; font-weight:900; unicode-bidi:isolate;">{res_eq['n_bars_bot_m']} Φ {res_eq['phi_bot_mm']} / m'</span> في الاتجاهين (المسافة = <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['spacing_bot_cm']} cm</span>)</div>
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important; padding-right:16px;">▫️ المساحة المطلوبة = <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['As_bot_req_cm2_m']:.2f} cm²/m'</span> | المساحة المتوفرة = <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_eq['As_bot_prov_cm2_m']:.2f} cm²/m'</span></div>
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>شبكة التسليح العلوية (Top Mesh):</b> <span dir="ltr" style="color:#38bdf8; font-size:18px; font-weight:900; unicode-bidi:isolate;">{res_eq['n_bars_top_m']} Φ {res_eq['phi_top_mm']} / m'</span> في الاتجاهين (المسافة = <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['spacing_top_cm']} cm</span>)</div>
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important; padding-right:16px;">▫️ المساحة المطلوبة = <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['As_top_req_cm2_m']:.2f} cm²/m'</span> | المساحة المتوفرة = <span dir="ltr" style="color:#38bdf8; unicode-bidi:isolate;">{res_eq['As_top_prov_cm2_m']:.2f} cm²/m'</span></div>
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>إجمالي وزن حديد التسليح للقاعدة:</b> <span dir="ltr" style="color:#f472b6; font-size:17px; font-weight:900; unicode-bidi:isolate;">{res_eq['total_rebar_weight_kg']:.1f} kg ({res_eq['total_rebar_weight_ton']:.3f} ton)</span> — بمعدل <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['steel_rate_kg_m3']:.1f} kg/m³</span></div>
-                        </div>
-                    </div>""",
-                    unsafe_allow_html=True,
-                )
-
-            with r_c2:
-                st.markdown(
-                    f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #38bdf8; border-radius:12px; padding:16px 20px; unicode-bidi:isolate;">
-                        <div dir="rtl" style="font-size:18px; font-weight:900; color:#38bdf8; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">📳 Dynamic & Vibration Analysis (تحليل الأحمال الاهتزازية والرنين)</div>
-                        <div dir="rtl" style="font-size:15.5px; color:#f1f5f9; line-height:1.95; font-weight:700; direction:rtl !important; text-align:right !important; width:100%;">
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>حالة الارتكاز والعزل:</b> {res_eq['isolation_type']}</div>
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>حمل المعدة التصميمي بالمضاعف الديناميكي (<span dir="ltr" style="unicode-bidi:isolate;">DF = {res_eq['dyn_factor']:.2f}</span>):</b> <span dir="ltr" style="color:#fde047; unicode-bidi:isolate;">{res_eq['P_eq_design_ton']:.2f} ton</span></div>
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>الوزن الذاتي للقاعدة (<span dir="ltr" style="unicode-bidi:isolate;">V × 2.5 t/m³</span>):</b> <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_eq['Wf_ton']:.2f} ton</span> | <b>الحمل الكلي:</b> <span dir="ltr" style="color:#38bdf8; unicode-bidi:isolate;">{res_eq['P_total_working_ton']:.2f} ton</span></div>
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>التردد الطبيعي للقاعدة والتربة (<span dir="ltr" style="unicode-bidi:isolate;">fn</span>):</b> <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['fn_hz']:.2f} Hz</span> | <b>تردد التشغيل (<span dir="ltr" style="unicode-bidi:isolate;">f_op</span>):</b> <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['f_op_hz']:.2f} Hz</span></div>
-                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>حالة الرنين الديناميكي:</b> <span style="color:{'#4ade80' if res_eq['is_resonance_safe'] else '#f87171'};">{res_eq['resonance_status_ar']}</span></div>
-                        </div>
-                    </div>""",
-                    unsafe_allow_html=True,
-                )
-
-            # Detailed Verification Table
-            eq_checks = [
-                (
-                    "1. كفاية الأبعاد الهندسية وبصمة المعدة (Footprint & Clearance Check)",
-                    f"Lf = {res_eq['Lf_m']:.2f} m, Bf = {res_eq['Bf_m']:.2f} m (خلوص: {res_eq['clearance_L_cm']:.0f}×{res_eq['clearance_B_cm']:.0f} cm)",
-                    f"≥ بصمة المعدة ({res_eq['min_req_Lf_m']:.2f}×{res_eq['min_req_Bf_m']:.2f} m)",
-                    res_eq["is_footprint_safe"],
-                ),
-                (
-                    "2. كفاية سمك الخرسانة والعمق الآمن (Safe Concrete Thickness tf ≥ T_design)",
-                    f"tf = {res_eq['tf_m']:.2f} m ({'مُزاد ومُعاد حسابه' if res_eq.get('is_tf_overridden') else 'مطابق لسمك التصميم'})",
-                    f"≥ T_design ({res_eq['T_design_m']:.2f} m)",
-                    res_eq["tf_m"] >= res_eq["T_design_m"] - 1e-4,
-                ),
-                (
-                    "3. الوزن الذاتي للقاعدة ونسبة القصور الذاتي (Foundation Self-Weight Ratio)",
-                    f"W_f = {res_eq['Wf_ton']:.2f} t ({res_eq['actual_mass_ratio']:.2f} W_eq)",
-                    "محسوب تلقائياً (DF = 1.2)" if res_eq["is_isolated"] else f"≥ {res_eq['req_mass_ratio_min']:.1f}×W_eq ({res_eq['req_min_wf_ton']:.1f} t)",
-                    res_eq["is_mass_ratio_safe"],
-                ),
-                (
-                    "4. فحص إجهاد التربة تحت الأحمال الكلية (Soil Bearing Capacity Check)",
-                    f"q_act = {res_eq['q_act_kg_cm2']:.2f} kg/cm² ({res_eq['q_act_ton_m2']:.1f} t/m²)",
-                    f"q_all = {res_eq['q_all_kg_cm2']:.2f} kg/cm² ({res_eq['q_all_ton_m2']:.1f} t/m²)",
-                    res_eq["is_soil_safe"],
-                ),
-                (
-                    "5. فحص القص الثاقب / الاختراق (Punching Shear Check - ECP 203)",
-                    f"q_up = {res_eq['q_up_kg_cm2']:.2f} kg/cm²",
-                    f"q_cup = {res_eq['q_cup_all_kg_cm2']:.2f} kg/cm²",
-                    res_eq["is_punching_safe"],
-                ),
-                (
-                    "6. فحص القص الحرج ذو الاتجاه الواحد (One-Way Beam Shear Check)",
-                    f"q_u = {res_eq['qu_1way_kg_cm2']:.2f} kg/cm²",
-                    f"q_cu = {res_eq['qcu_1way_kg_cm2']:.2f} kg/cm²",
-                    res_eq["is_1way_shear_safe"],
-                ),
-                (
-                    "7. التحقق من التردد الطبيعي وتجنب الرنين (Resonance Check)",
-                    f"f_op / f_n = {res_eq['freq_ratio']:.2f} ({res_eq['f_op_hz']:.1f} / {res_eq['fn_hz']:.1f} Hz)",
-                    "خارج نطاق الرنين [0.70 – 1.30]",
-                    res_eq["is_resonance_safe"],
-                ),
-            ]
-
-            rows_html = []
-            for idx, (c_name, c_act, c_lim, c_ok) in enumerate(eq_checks):
-                bg_r = "rgba(15, 23, 42, 0.75)" if idx % 2 == 0 else "rgba(30, 41, 59, 0.75)"
-                badge = (
-                    '<span style="background:rgba(34,197,94,0.2); color:#4ade80; border:1.5px solid #22c55e; padding:4px 12px; border-radius:8px; font-weight:900;">✅ آمن ومطابق (SAFE)</span>'
-                    if c_ok else
-                    '<span style="background:rgba(239,68,68,0.2); color:#f87171; border:1.5px solid #ef4444; padding:4px 12px; border-radius:8px; font-weight:900;">⚠️ غير آمن (UNSAFE)</span>'
-                )
-                rows_html.append(
-                    f'<tr style="background:{bg_r}; border-bottom:1px solid #334155;">'
-                    f'<td style="padding:12px 16px; font-size:17px; font-weight:800; color:#ffffff; text-align:right; direction:rtl;">{c_name}</td>'
-                    f'<td style="padding:12px 16px; font-size:18px; font-weight:900; color:#38bdf8; text-align:center;" dir="ltr">{c_act}</td>'
-                    f'<td style="padding:12px 16px; font-size:17px; font-weight:800; color:#fbbf24; text-align:center;" dir="ltr">{c_lim}</td>'
-                    f'<td style="padding:12px 16px; text-align:center;">{badge}</td>'
-                    f'</tr>'
-                )
-
-            st.markdown(
-                '<div dir="rtl" style="direction:rtl !important; overflow-x:auto; border:2px solid #38bdf8; border-radius:12px; margin-top:16px;">'
-                '<table dir="rtl" style="direction:rtl !important; width:100%; border-collapse:collapse; background:#0b1329;">'
-                '<thead><tr style="background:#1e293b; border-bottom:2px solid #38bdf8;">'
-                '<th style="padding:14px 16px; font-size:18px; color:#38bdf8; text-align:right;">بند التحقق الكودي (Verification Item)</th>'
-                '<th style="padding:14px 16px; font-size:18px; color:#38bdf8; text-align:center;">القيمة المحسوبة (Actual)</th>'
-                '<th style="padding:14px 16px; font-size:18px; color:#fbbf24; text-align:center;">الحد المسموح (Allowable)</th>'
-                '<th style="padding:14px 16px; font-size:18px; color:#4ade80; text-align:center;">الحالة (Status)</th>'
-                '</tr></thead><tbody>' + "".join(rows_html) + '</tbody></table></div>',
-                unsafe_allow_html=True,
+        if not res_eq["is_rebar_spacing_safe"]:
+            render_rebar_spacing_violation_banner(
+                res_eq,
+                input_section_name="مدخلات قطر حديد التسليح في القسم 1 أعلاه",
             )
+        else:
+            if not res_eq["is_all_safe"]:
+                play_light_whistle_sound()
+            with st.expander("📊 2. Final Outputs & Code Verification (المخرجات النهائية والتحققات الهندسية والتسليح)", expanded=True):
+                k1, k2, k3, k4 = st.columns(4)
+                with k1:
+                    bg_k1 = "#0f172a" if res_eq["is_footprint_safe"] else "#7f1d1d"
+                    bd_k1 = "#38bdf8" if res_eq["is_footprint_safe"] else "#ef4444"
+                    footprint_badge = "✅ مستوفية لبصمة المعدة" if res_eq["is_footprint_safe"] else "⚠️ أصغر من بصمة المعدة!"
+                    overridden_lbl = " (مُعدل بالزيادة)" if res_eq.get("is_tf_overridden") else " (المعتمد كودياً)"
+                    st.markdown(
+                        f"""<div dir="rtl" style="direction:rtl !important; background:{bg_k1}; border:2px solid {bd_k1}; border-radius:10px; padding:14px; text-align:center;">
+                            <div style="font-size:15px; color:#93c5fd; font-weight:800;">الأبعاد النهائية للقاعدة (Lf × Bf × tf)</div>
+                            <div style="font-size:25px; font-weight:900; color:#ffffff; margin:6px 0;" dir="ltr">{res_eq['Lf_m']:.2f} × {res_eq['Bf_m']:.2f} × {res_eq['tf_m']:.2f} m</div>
+                            <div style="font-size:13.5px; color:#fde047; font-weight:700;">سمك التصميم: <span dir="ltr">T_design = {res_eq['T_design_m']:.2f} m</span>{overridden_lbl}</div>
+                            <div style="font-size:14px; color:{'#a7f3d0' if res_eq['is_footprint_safe'] else '#fca5a5'}; font-weight:700;">{footprint_badge} (الحجم = <span dir="ltr">{res_eq['vol_f_m3']:.2f} m³</span>)</div>
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
+                with k2:
+                    st.markdown(
+                        f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:2px solid #f59e0b; border-radius:10px; padding:14px; text-align:center;">
+                            <div style="font-size:15px; color:#fde047; font-weight:800;">الوزن الذاتي المحسوب تلقائياً (W_f)</div>
+                            <div style="font-size:26px; font-weight:900; color:#fde047; margin:6px 0;" dir="ltr">{res_eq['Wf_ton']:.2f} ton</div>
+                            <div style="font-size:14px; color:#cbd5e1; font-weight:700;">نسبة الكتلة <span dir="ltr">W_f / W_eq = {res_eq['actual_mass_ratio']:.2f}x</span></div>
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
+                with k3:
+                    bg_s = "#064e3b" if res_eq["is_soil_safe"] else "#7f1d1d"
+                    bd_s = "#22c55e" if res_eq["is_soil_safe"] else "#ef4444"
+                    st.markdown(
+                        f"""<div dir="rtl" style="direction:rtl !important; background:{bg_s}; border:2px solid {bd_s}; border-radius:10px; padding:14px; text-align:center;">
+                            <div style="font-size:15px; color:#e2e8f0; font-weight:800;">إجهاد التربة الفعلي / المسموح</div>
+                            <div style="font-size:25px; font-weight:900; color:#ffffff; margin:6px 0;" dir="ltr">{res_eq['q_act_kg_cm2']:.2f} / {res_eq['q_all_kg_cm2']:.2f} kg/cm²</div>
+                            <div style="font-size:14px; color:#a7f3d0; font-weight:700;">{'✅ آمن (SAFE)' if res_eq['is_soil_safe'] else '⚠️ غير آمن (UNSAFE)'} (<span dir="ltr">{res_eq['ratio_soil']*100:.1f}%</span>)</div>
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
+                with k4:
+                    bg_p = "#064e3b" if res_eq["is_punching_safe"] else "#7f1d1d"
+                    bd_p = "#22c55e" if res_eq["is_punching_safe"] else "#ef4444"
+                    st.markdown(
+                        f"""<div dir="rtl" style="direction:rtl !important; background:{bg_p}; border:2px solid {bd_p}; border-radius:10px; padding:14px; text-align:center;">
+                            <div style="font-size:15px; color:#e2e8f0; font-weight:800;">فحص الاختراق (Punching Shear)</div>
+                            <div style="font-size:25px; font-weight:900; color:#ffffff; margin:6px 0;" dir="ltr">{res_eq['q_up_kg_cm2']:.2f} / {res_eq['q_cup_all_kg_cm2']:.2f} kg/cm²</div>
+                            <div style="font-size:14px; color:#a7f3d0; font-weight:700;">{'✅ آمن (SAFE)' if res_eq['is_punching_safe'] else '⚠️ غير آمن (UNSAFE)'} (<span dir="ltr">{res_eq['ratio_punching']*100:.1f}%</span>)</div>
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
 
-        with st.expander("📐 3. 2D CAD Blueprints & Report Export (المخططات الهندسية وتصدير المذكرة الحسابية)", expanded=True):
-            sketch_eq_b64 = generate_equipment_foundation_sketches(res_eq)
-            st.image(f"data:image/png;base64,{sketch_eq_b64}", use_container_width=True)
+                st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
 
-            summary_eq_rows = [
-                ("الوزن التشغيلي للمعدة (Operating Weight)", f"{res_eq['eq_weight_ton']:.2f} ton"),
-                ("حالة العزل الاهتزازي (Isolation Mode)", res_eq["isolation_type"]),
-                ("الأبعاد النهائية للقاعدة (Lf × Bf × tf)", f"{res_eq['Lf_m']:.2f} m × {res_eq['Bf_m']:.2f} m × {res_eq['tf_m']:.2f} m"),
-                ("حجم الخرسانة والوزن الذاتي للقاعدة (W_f @ 2.5 t/m³)", f"V = {res_eq['vol_f_m3']:.2f} m³ | W_f = {res_eq['Wf_ton']:.2f} ton"),
-                ("إجمالي الحمل التصميمي التشغيلي (Total Working Load)", f"{res_eq['P_total_working_ton']:.2f} ton"),
-                ("إجهاد التربة الفعلي / المسموح به", f"{res_eq['q_act_kg_cm2']:.2f} / {res_eq['q_all_kg_cm2']:.2f} kg/cm²"),
-                ("إجهاد الاختراق الفعلي / المسموح (Punching Shear)", f"{res_eq['q_up_kg_cm2']:.2f} / {res_eq['q_cup_all_kg_cm2']:.2f} kg/cm²"),
-                ("التسليح السفلي في الاتجاهين (Bottom Reinforcement)", f"{res_eq['n_bars_bot_m']} Φ {res_eq['phi_bot_mm']} / m' (As = {res_eq['As_bot_prov_cm2_m']:.2f} cm²/m')"),
-                ("التسليح العلوي في الاتجاهين (Top Reinforcement)", f"{res_eq['n_bars_top_m']} Φ {res_eq['phi_top_mm']} / m' (As = {res_eq['As_top_prov_cm2_m']:.2f} cm²/m')"),
-                ("إجمالي كمية حديد التسليح للقاعدة", f"{res_eq['total_rebar_weight_kg']:.1f} kg ({res_eq['total_rebar_weight_ton']:.3f} ton)"),
-            ]
-            html_eq_report = generate_m10_calculation_sheet_html(
-                title_ar="مذكرة الحسابات الإنشائية لقاعدة المعدة الميكانيكية",
-                subtitle_en="Equipment Foundation Structural & Dynamic Calculation Sheet (ECP 203 / ACI 351.3R)",
-                rows_summary=summary_eq_rows,
-                checks_list=eq_checks,
-                sketch_b64=sketch_eq_b64,
-            )
+                # Reinforcement & Dynamic Summary Banner
+                r_c1, r_c2 = st.columns(2)
+                with r_c1:
+                    st.markdown(
+                        f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #22c55e; border-radius:12px; padding:16px 20px; unicode-bidi:isolate;">
+                            <div dir="rtl" style="font-size:18px; font-weight:900; color:#4ade80; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">🔩 Reinforcement Summary (تسليح القاعدة السفلي والعلوي والكميات)</div>
+                            <div dir="rtl" style="font-size:15.5px; color:#f1f5f9; line-height:1.95; font-weight:700; direction:rtl !important; text-align:right !important; width:100%;">
+                                <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>شبكة التسليح السفلية (Bottom Mesh):</b> <span dir="ltr" style="color:#fde047; font-size:18px; font-weight:900; unicode-bidi:isolate;">{res_eq['n_bars_bot_m']} Φ {res_eq['phi_bot_mm']} / m'</span> في الاتجاهين (المسافة = <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['spacing_bot_cm']} cm</span>)</div>
+                                <div dir="rtl" style="direction:rtl !important; text-align:right !important; padding-right:16px;">▫️ المساحة المطلوبة = <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['As_bot_req_cm2_m']:.2f} cm²/m'</span> | المساحة المتوفرة = <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_eq['As_bot_prov_cm2_m']:.2f} cm²/m'</span></div>
+                                <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>شبكة التسليح العلوية (Top Mesh):</b> <span dir="ltr" style="color:#38bdf8; font-size:18px; font-weight:900; unicode-bidi:isolate;">{res_eq['n_bars_top_m']} Φ {res_eq['phi_top_mm']} / m'</span> في الاتجاهين (المسافة = <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['spacing_top_cm']} cm</span>)</div>
+                                <div dir="rtl" style="direction:rtl !important; text-align:right !important; padding-right:16px;">▫️ المساحة المطلوبة = <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['As_top_req_cm2_m']:.2f} cm²/m'</span> | المساحة المتوفرة = <span dir="ltr" style="color:#38bdf8; unicode-bidi:isolate;">{res_eq['As_top_prov_cm2_m']:.2f} cm²/m'</span></div>
+                                <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>إجمالي وزن حديد التسليح للقاعدة:</b> <span dir="ltr" style="color:#f472b6; font-size:17px; font-weight:900; unicode-bidi:isolate;">{res_eq['total_rebar_weight_kg']:.1f} kg ({res_eq['total_rebar_weight_ton']:.3f} ton)</span> — بمعدل <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['steel_rate_kg_m3']:.1f} kg/m³</span></div>
+                            </div>
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
 
-            dl1, dl2, dl3 = st.columns(3)
-            with dl1:
-                st.download_button(
-                    "📥 تحميل المخطط الهندسي (PNG)",
-                    data=base64.b64decode(sketch_eq_b64),
-                    file_name=f"Equipment_Foundation_{res_eq['Lf_m']:.1f}x{res_eq['Bf_m']:.1f}m.png",
-                    mime="image/png",
-                    use_container_width=True,
+                with r_c2:
+                    st.markdown(
+                        f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #38bdf8; border-radius:12px; padding:16px 20px; unicode-bidi:isolate;">
+                            <div dir="rtl" style="font-size:18px; font-weight:900; color:#38bdf8; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">📳 Dynamic & Vibration Analysis (تحليل الأحمال الاهتزازية والرنين)</div>
+                            <div dir="rtl" style="font-size:15.5px; color:#f1f5f9; line-height:1.95; font-weight:700; direction:rtl !important; text-align:right !important; width:100%;">
+                                <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>حالة الارتكاز والعزل:</b> {res_eq['isolation_type']}</div>
+                                <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>حمل المعدة التصميمي بالمضاعف الديناميكي (<span dir="ltr" style="unicode-bidi:isolate;">DF = {res_eq['dyn_factor']:.2f}</span>):</b> <span dir="ltr" style="color:#fde047; unicode-bidi:isolate;">{res_eq['P_eq_design_ton']:.2f} ton</span></div>
+                                <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>الوزن الذاتي للقاعدة (<span dir="ltr" style="unicode-bidi:isolate;">V × 2.5 t/m³</span>):</b> <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_eq['Wf_ton']:.2f} ton</span> | <b>الحمل الكلي:</b> <span dir="ltr" style="color:#38bdf8; unicode-bidi:isolate;">{res_eq['P_total_working_ton']:.2f} ton</span></div>
+                                <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>التردد الطبيعي للقاعدة والتربة (<span dir="ltr" style="unicode-bidi:isolate;">fn</span>):</b> <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['fn_hz']:.2f} Hz</span> | <b>تردد التشغيل (<span dir="ltr" style="unicode-bidi:isolate;">f_op</span>):</b> <span dir="ltr" style="unicode-bidi:isolate;">{res_eq['f_op_hz']:.2f} Hz</span></div>
+                                <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>حالة الرنين الديناميكي:</b> <span style="color:{'#4ade80' if res_eq['is_resonance_safe'] else '#f87171'};">{res_eq['resonance_status_ar']}</span></div>
+                            </div>
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
+
+                # Detailed Verification Table
+                eq_checks = [
+                    (
+                        "1. كفاية الأبعاد الهندسية وبصمة المعدة (Footprint & Clearance Check)",
+                        f"Lf = {res_eq['Lf_m']:.2f} m, Bf = {res_eq['Bf_m']:.2f} m (خلوص: {res_eq['clearance_L_cm']:.0f}×{res_eq['clearance_B_cm']:.0f} cm)",
+                        f"≥ بصمة المعدة ({res_eq['min_req_Lf_m']:.2f}×{res_eq['min_req_Bf_m']:.2f} m)",
+                        res_eq["is_footprint_safe"],
+                    ),
+                    (
+                        "2. كفاية سمك الخرسانة والعمق الآمن (Safe Concrete Thickness tf ≥ T_design)",
+                        f"tf = {res_eq['tf_m']:.2f} m ({'مُزاد ومُعاد حسابه' if res_eq.get('is_tf_overridden') else 'مطابق لسمك التصميم'})",
+                        f"≥ T_design ({res_eq['T_design_m']:.2f} m)",
+                        res_eq["tf_m"] >= res_eq["T_design_m"] - 1e-4,
+                    ),
+                    (
+                        "3. الوزن الذاتي للقاعدة ونسبة القصور الذاتي (Foundation Self-Weight Ratio)",
+                        f"W_f = {res_eq['Wf_ton']:.2f} t ({res_eq['actual_mass_ratio']:.2f} W_eq)",
+                        "محسوب تلقائياً (DF = 1.2)" if res_eq["is_isolated"] else f"≥ {res_eq['req_mass_ratio_min']:.1f}×W_eq ({res_eq['req_min_wf_ton']:.1f} t)",
+                        res_eq["is_mass_ratio_safe"],
+                    ),
+                    (
+                        "4. فحص إجهاد التربة تحت الأحمال الكلية (Soil Bearing Capacity Check)",
+                        f"q_act = {res_eq['q_act_kg_cm2']:.2f} kg/cm² ({res_eq['q_act_ton_m2']:.1f} t/m²)",
+                        f"q_all = {res_eq['q_all_kg_cm2']:.2f} kg/cm² ({res_eq['q_all_ton_m2']:.1f} t/m²)",
+                        res_eq["is_soil_safe"],
+                    ),
+                    (
+                        "5. فحص القص الثاقب / الاختراق (Punching Shear Check - ECP 203)",
+                        f"q_up = {res_eq['q_up_kg_cm2']:.2f} kg/cm²",
+                        f"q_cup = {res_eq['q_cup_all_kg_cm2']:.2f} kg/cm²",
+                        res_eq["is_punching_safe"],
+                    ),
+                    (
+                        "6. فحص القص الحرج ذو الاتجاه الواحد (One-Way Beam Shear Check)",
+                        f"q_u = {res_eq['qu_1way_kg_cm2']:.2f} kg/cm²",
+                        f"q_cu = {res_eq['qcu_1way_kg_cm2']:.2f} kg/cm²",
+                        res_eq["is_1way_shear_safe"],
+                    ),
+                    (
+                        "7. التحقق من التردد الطبيعي وتجنب الرنين (Resonance Check)",
+                        f"f_op / f_n = {res_eq['freq_ratio']:.2f} ({res_eq['f_op_hz']:.1f} / {res_eq['fn_hz']:.1f} Hz)",
+                        "خارج نطاق الرنين [0.70 – 1.30]",
+                        res_eq["is_resonance_safe"],
+                    ),
+                    (
+                        "8. فحص عدد الأسياخ والتباعد الكودي (ECP 203 Rebar Spacing)",
+                        f"Bot: {res_eq['n_bars_bot_m']} Φ {res_eq['phi_bot_mm']} / Top: {res_eq['n_bars_top_m']} Φ {res_eq['phi_top_mm']}",
+                        "5 ≤ n ≤ 10 أسياخ/م (s ≥ 10 cm)",
+                        res_eq["is_rebar_spacing_safe"],
+                    ),
+                ]
+
+                rows_html = []
+                for idx, (c_name, c_act, c_lim, c_ok) in enumerate(eq_checks):
+                    bg_r = "rgba(15, 23, 42, 0.75)" if idx % 2 == 0 else "rgba(30, 41, 59, 0.75)"
+                    badge = (
+                        '<span style="background:rgba(34,197,94,0.2); color:#4ade80; border:1.5px solid #22c55e; padding:4px 12px; border-radius:8px; font-weight:900;">✅ آمن ومطابق (SAFE)</span>'
+                        if c_ok else
+                        '<span style="background:rgba(239,68,68,0.2); color:#f87171; border:1.5px solid #ef4444; padding:4px 12px; border-radius:8px; font-weight:900;">⚠️ غير آمن (UNSAFE)</span>'
+                    )
+                    rows_html.append(
+                        f'<tr style="background:{bg_r}; border-bottom:1px solid #334155;">'
+                        f'<td style="padding:12px 16px; font-size:17px; font-weight:800; color:#ffffff; text-align:right; direction:rtl;">{c_name}</td>'
+                        f'<td style="padding:12px 16px; font-size:18px; font-weight:900; color:#38bdf8; text-align:center;" dir="ltr">{c_act}</td>'
+                        f'<td style="padding:12px 16px; font-size:17px; font-weight:800; color:#fbbf24; text-align:center;" dir="ltr">{c_lim}</td>'
+                        f'<td style="padding:12px 16px; text-align:center;">{badge}</td>'
+                        f'</tr>'
+                    )
+
+                st.markdown(
+                    '<div dir="rtl" style="direction:rtl !important; overflow-x:auto; border:2px solid #38bdf8; border-radius:12px; margin-top:16px;">'
+                    '<table dir="rtl" style="direction:rtl !important; width:100%; border-collapse:collapse; background:#0b1329;">'
+                    '<thead><tr style="background:#1e293b; border-bottom:2px solid #38bdf8;">'
+                    '<th style="padding:14px 16px; font-size:18px; color:#38bdf8; text-align:right;">بند التحقق الكودي (Verification Item)</th>'
+                    '<th style="padding:14px 16px; font-size:18px; color:#38bdf8; text-align:center;">القيمة المحسوبة (Actual)</th>'
+                    '<th style="padding:14px 16px; font-size:18px; color:#fbbf24; text-align:center;">الحد المسموح (Allowable)</th>'
+                    '<th style="padding:14px 16px; font-size:18px; color:#4ade80; text-align:center;">الحالة (Status)</th>'
+                    '</tr></thead><tbody>' + "".join(rows_html) + '</tbody></table></div>',
+                    unsafe_allow_html=True,
                 )
-            with dl2:
-                st.download_button(
-                    "🌐 تحميل المذكرة الحسابية (HTML)",
-                    data=html_eq_report,
-                    file_name=f"Equipment_Foundation_Report_{res_eq['Lf_m']:.1f}x{res_eq['Bf_m']:.1f}m.html",
-                    mime="text/html",
-                    use_container_width=True,
+
+            with st.expander("📐 3. 2D CAD Blueprints & Report Export (المخططات الهندسية وتصدير المذكرة الحسابية)", expanded=True):
+                sketch_eq_b64 = generate_equipment_foundation_sketches(res_eq)
+                st.image(f"data:image/png;base64,{sketch_eq_b64}", use_container_width=True)
+
+                summary_eq_rows = [
+                    ("الوزن التشغيلي للمعدة (Operating Weight)", f"{res_eq['eq_weight_ton']:.2f} ton"),
+                    ("حالة العزل الاهتزازي (Isolation Mode)", res_eq["isolation_type"]),
+                    ("الأبعاد النهائية للقاعدة (Lf × Bf × tf)", f"{res_eq['Lf_m']:.2f} m × {res_eq['Bf_m']:.2f} m × {res_eq['tf_m']:.2f} m"),
+                    ("حجم الخرسانة والوزن الذاتي للقاعدة (W_f @ 2.5 t/m³)", f"V = {res_eq['vol_f_m3']:.2f} m³ | W_f = {res_eq['Wf_ton']:.2f} ton"),
+                    ("إجمالي الحمل التصميمي التشغيلي (Total Working Load)", f"{res_eq['P_total_working_ton']:.2f} ton"),
+                    ("إجهاد التربة الفعلي / المسموح به", f"{res_eq['q_act_kg_cm2']:.2f} / {res_eq['q_all_kg_cm2']:.2f} kg/cm²"),
+                    ("إجهاد الاختراق الفعلي / المسموح (Punching Shear)", f"{res_eq['q_up_kg_cm2']:.2f} / {res_eq['q_cup_all_kg_cm2']:.2f} kg/cm²"),
+                    ("التسليح السفلي في الاتجاهين (Bottom Reinforcement)", f"{res_eq['n_bars_bot_m']} Φ {res_eq['phi_bot_mm']} / m' (As = {res_eq['As_bot_prov_cm2_m']:.2f} cm²/m')"),
+                    ("التسليح العلوي في الاتجاهين (Top Reinforcement)", f"{res_eq['n_bars_top_m']} Φ {res_eq['phi_top_mm']} / m' (As = {res_eq['As_top_prov_cm2_m']:.2f} cm²/m')"),
+                    ("إجمالي كمية حديد التسليح للقاعدة", f"{res_eq['total_rebar_weight_kg']:.1f} kg ({res_eq['total_rebar_weight_ton']:.3f} ton)"),
+                ]
+                html_eq_report = generate_m10_calculation_sheet_html(
+                    title_ar="مذكرة الحسابات الإنشائية لقاعدة المعدة الميكانيكية",
+                    subtitle_en="Equipment Foundation Structural & Dynamic Calculation Sheet (ECP 203 / ACI 351.3R)",
+                    rows_summary=summary_eq_rows,
+                    checks_list=eq_checks,
+                    sketch_b64=sketch_eq_b64,
                 )
-            with dl3:
-                if st.button("📕 توليد وتحميل ملف PDF", key="btn_m10_eq_pdf", use_container_width=True):
-                    with st.spinner("جاري تجهيز ملف PDF..."):
-                        pdf_b = html_to_pdf_bytes(html_eq_report)
-                        if pdf_b:
-                            st.download_button(
-                                "📥 اضغط لحفظ التقرير PDF",
-                                data=pdf_b,
-                                file_name="Equipment_Foundation_Report.pdf",
-                                mime="application/pdf",
-                                use_container_width=True,
-                            )
+
+                dl1, dl2, dl3 = st.columns(3)
+                with dl1:
+                    st.download_button(
+                        "📥 تحميل المخطط الهندسي (PNG)",
+                        data=base64.b64decode(sketch_eq_b64),
+                        file_name=f"Equipment_Foundation_{res_eq['Lf_m']:.1f}x{res_eq['Bf_m']:.1f}m.png",
+                        mime="image/png",
+                        use_container_width=True,
+                    )
+                with dl2:
+                    st.download_button(
+                        "🌐 تحميل المذكرة الحسابية (HTML)",
+                        data=html_eq_report,
+                        file_name=f"Equipment_Foundation_Report_{res_eq['Lf_m']:.1f}x{res_eq['Bf_m']:.1f}m.html",
+                        mime="text/html",
+                        use_container_width=True,
+                    )
+                with dl3:
+                    if st.button("📕 توليد وتحميل ملف PDF", key="btn_m10_eq_pdf", use_container_width=True):
+                        with st.spinner("جاري تجهيز ملف PDF..."):
+                            pdf_b = html_to_pdf_bytes(html_eq_report)
+                            if pdf_b:
+                                st.download_button(
+                                    "📥 اضغط لحفظ التقرير PDF",
+                                    data=pdf_b,
+                                    file_name="Equipment_Foundation_Report.pdf",
+                                    mime="application/pdf",
+                                    use_container_width=True,
+                                )
 
 
 # ===============================================================================
@@ -2506,202 +2739,216 @@ def _render_liquid_storage_tanks_tab():
         phi_top_mm=int(phi_top_tk),
     )
 
-    # ── DETAILED WEIGHTS & OUTPUTS ──
-    with st.expander("📊 2. Detailed Calculation Report (التقرير الحسابي التفصيلي للأوزان والأبعاد والتحققات والتسليح)", expanded=True):
-        # 4 Weight & Dimension Highlight Cards
-        w1, w2, w3, w4 = st.columns(4)
-        with w1:
-            st.markdown(
-                f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:2px solid #38bdf8; border-radius:10px; padding:14px; text-align:center;">
-                    <div style="font-size:15px; color:#93c5fd; font-weight:800;">وزن هيكل الخزان الفارغ (W_tank)</div>
-                    <div style="font-size:26px; font-weight:900; color:#ffffff; margin:6px 0;" dir="ltr">{res_tk['W_tank_empty_ton']:.2f} ton</div>
-                    <div style="font-size:13.5px; color:#cbd5e1; font-weight:700;">{res_tk['tank_material']} (تخانة <span dir="ltr">{res_tk['sheet_thk_mm']:.1f} mm</span>)</div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
-        with w2:
-            st.markdown(
-                f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:2px solid #0ea5e9; border-radius:10px; padding:14px; text-align:center;">
-                    <div style="font-size:15px; color:#7dd3fc; font-weight:800;">وزن السائل الإجمالي (W_liquid)</div>
-                    <div style="font-size:26px; font-weight:900; color:#38bdf8; margin:6px 0;" dir="ltr">{res_tk['W_liquid_ton']:.2f} ton</div>
-                    <div style="font-size:13.5px; color:#cbd5e1; font-weight:700;" dir="ltr">{res_tk['capacity_barrels']:.0f} BBL = {res_tk['vol_liquid_m3']:.1f} m³ (SG={res_tk['specific_gravity']:.2f})</div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
-        with w3:
-            st.markdown(
-                f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:2px solid #f59e0b; border-radius:10px; padding:14px; text-align:center;">
-                    <div style="font-size:15px; color:#fde047; font-weight:800;">الوزن الذاتي للقاعدة (W_foundation)</div>
-                    <div style="font-size:26px; font-weight:900; color:#fde047; margin:6px 0;" dir="ltr">{res_tk['Wf_ton']:.2f} ton</div>
-                    <div style="font-size:13.5px; color:#cbd5e1; font-weight:700;">الحجم = <span dir="ltr">{res_tk['vol_f_m3']:.2f} m³ × 2.5 t/m³</span></div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
-        with w4:
-            dim_str = (
-                f"D_f = {res_tk['Df_m']:.2f} m × tf = {res_tk['tf_m']:.2f} m"
-                if res_tk["is_circular"]
-                else f"{res_tk['Lf_m']:.2f} × {res_tk['Bf_m']:.2f} × {res_tk['tf_m']:.2f} m"
-            )
-            st.markdown(
-                f"""<div dir="rtl" style="direction:rtl !important; background:#064e3b; border:2px solid #10b981; border-radius:10px; padding:14px; text-align:center;">
-                    <div style="font-size:15px; color:#a7f3d0; font-weight:800;">الأبعاد الهندسية النهائية للقاعدة</div>
-                    <div style="font-size:22px; font-weight:900; color:#ffffff; margin:8px 0;" dir="ltr">{dim_str}</div>
-                    <div style="font-size:13.5px; color:#fde047; font-weight:700;">الحمل الكلي = <span dir="ltr">{res_tk['P_total_working_ton']:.2f} ton</span></div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
-
-        st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
-
-        tk_c1, tk_c2 = st.columns(2)
-        with tk_c1:
-            st.markdown(
-                f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #22c55e; border-radius:12px; padding:16px 20px; unicode-bidi:isolate;">
-                    <div dir="rtl" style="font-size:18px; font-weight:900; color:#4ade80; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">🔩 Reinforcement Summary (تسليح قاعدة الخزان السفلي والعلوي طبقاً للكود)</div>
-                    <div dir="rtl" style="font-size:15.5px; color:#f1f5f9; line-height:1.95; font-weight:700; direction:rtl !important; text-align:right !important; width:100%;">
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>شبكة التسليح السفلية (Bottom Mesh):</b> <span dir="ltr" style="color:#fde047; font-size:18px; font-weight:900; unicode-bidi:isolate;">{res_tk['n_bars_bot_m']} Φ {res_tk['phi_bot_mm']} / m'</span> في الاتجاهين (المسافة = <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['spacing_bot_cm']} cm</span>)</div>
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important; padding-right:16px;">▫️ المساحة المطلوبة = <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['As_bot_req_cm2_m']:.2f} cm²/m'</span> | المساحة المتوفرة = <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_tk['As_bot_prov_cm2_m']:.2f} cm²/m'</span></div>
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>شبكة التسليح العلوية (Top Mesh):</b> <span dir="ltr" style="color:#38bdf8; font-size:18px; font-weight:900; unicode-bidi:isolate;">{res_tk['n_bars_top_m']} Φ {res_tk['phi_top_mm']} / m'</span> في الاتجاهين (المسافة = <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['spacing_top_cm']} cm</span>)</div>
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important; padding-right:16px;">▫️ المساحة المطلوبة = <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['As_top_req_cm2_m']:.2f} cm²/m'</span> | المساحة المتوفرة = <span dir="ltr" style="color:#38bdf8; unicode-bidi:isolate;">{res_tk['As_top_prov_cm2_m']:.2f} cm²/m'</span></div>
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>إجمالي وزن حديد التسليح للقاعدة:</b> <span dir="ltr" style="color:#f472b6; font-size:17px; font-weight:900; unicode-bidi:isolate;">{res_tk['total_rebar_weight_kg']:.1f} kg ({res_tk['total_rebar_weight_ton']:.3f} ton)</span> — بمعدل <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['steel_rate_kg_m3']:.1f} kg/m³</span></div>
-                    </div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
-
-        with tk_c2:
-            st.markdown(
-                f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #38bdf8; border-radius:12px; padding:16px 20px; unicode-bidi:isolate;">
-                    <div dir="rtl" style="font-size:18px; font-weight:900; color:#38bdf8; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">🌊 Hydrostatic Pressure & Stability Checks (الضغط الهيدروستاتيكي والاتزان ضد الانقلاب والطفو)</div>
-                    <div dir="rtl" style="font-size:15.5px; color:#f1f5f9; line-height:1.95; font-weight:700; direction:rtl !important; text-align:right !important; width:100%;">
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>ارتفاع السائل داخل الخزان (<span dir="ltr" style="unicode-bidi:isolate;">H_liquid</span>):</b> <span dir="ltr" style="color:#fde047; unicode-bidi:isolate;">{res_tk['H_liquid_m']:.2f} m</span> (الارتفاع الكلي = <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['H_tank_total_m']:.2f} m</span>)</div>
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>الضغط الهيدروستاتيكي على القاع (<span dir="ltr" style="unicode-bidi:isolate;">p = γ_liq × H</span>):</b> <span dir="ltr" style="color:#38bdf8; unicode-bidi:isolate;">{res_tk['p_hydrostatic_ton_m2']:.2f} ton/m² ({res_tk['p_hydrostatic_kg_cm2']:.2f} kg/cm²)</span></div>
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>معامل الأمان ضد الانقلاب (<span dir="ltr" style="unicode-bidi:isolate;">FOS_overturning</span>):</b> <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_tk['fos_overturning']:.2f}</span> (المطلوب ≥ 1.50)</div>
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>معامل الأمان ضد الطفو (<span dir="ltr" style="unicode-bidi:isolate;">FOS_buoyancy</span>):</b> <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_tk['fos_buoyancy']:.2f}</span> (المطلوب ≥ 1.25)</div>
-                        <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>أقصى إجهاد تربة فعلي (<span dir="ltr" style="unicode-bidi:isolate;">q_max</span>):</b> <span dir="ltr" style="color:#fde047; unicode-bidi:isolate;">{res_tk['q_max_kg_cm2']:.2f} kg/cm²</span> ≤ المسموح <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['q_all_kg_cm2']:.2f} kg/cm²</span></div>
-                    </div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
-
-        tk_checks = [
-            (
-                "1. التحقق من عدم تجاوز إجهاد التربة المسموح به (Soil Bearing Pressure)",
-                f"q_max = {res_tk['q_max_kg_cm2']:.2f} kg/cm² ({res_tk['q_max_ton_m2']:.1f} t/m²)",
-                f"q_all = {res_tk['q_all_kg_cm2']:.2f} kg/cm² ({res_tk['q_all_ton_m2']:.1f} t/m²)",
-                res_tk["is_soil_safe"],
-            ),
-            (
-                "2. فحص مقاومة الاختراق تحت جدار وحمل الخزان (Punching Shear - ECP 203)",
-                f"q_up = {res_tk['q_up_kg_cm2']:.2f} kg/cm²",
-                f"q_cup = {res_tk['q_cup_all_kg_cm2']:.2f} kg/cm²",
-                res_tk["is_punching_safe"],
-            ),
-            (
-                "3. فحص مقاومة القص ذو الاتجاه الواحد (One-Way Shear Strength)",
-                f"q_u = {res_tk['qu_1way_kg_cm2']:.2f} kg/cm²",
-                f"q_cu = {res_tk['qcu_1way_kg_cm2']:.2f} kg/cm²",
-                res_tk["is_1way_shear_safe"],
-            ),
-            (
-                "4. التحقق من الاستقرار ضد الانقلاب (Overturning Stability)",
-                f"FOS = {res_tk['fos_overturning']:.2f} (M_res={res_tk['M_resisting_full_tm']:.1f} / M_ot={res_tk['M_overturning_tm']:.1f})",
-                "FOS ≥ 1.50",
-                res_tk["is_overturning_safe"],
-            ),
-            (
-                "5. التحقق من مقاومة قوى الطفو (Buoyancy / Uplift Stability)",
-                f"FOS = {res_tk['fos_buoyancy']:.2f} (W_empty={res_tk['W_empty_total_ton']:.1f} t / U={res_tk['U_buoyancy_ton']:.1f} t)",
-                "FOS ≥ 1.25",
-                res_tk["is_buoyancy_safe"],
-            ),
-        ]
-
-        rows_tk_html = []
-        for idx, (c_name, c_act, c_lim, c_ok) in enumerate(tk_checks):
-            bg_r = "rgba(15, 23, 42, 0.75)" if idx % 2 == 0 else "rgba(30, 41, 59, 0.75)"
-            badge = (
-                '<span style="background:rgba(34,197,94,0.2); color:#4ade80; border:1.5px solid #22c55e; padding:4px 12px; border-radius:8px; font-weight:900;">✅ آمن ومطابق (SAFE)</span>'
-                if c_ok else
-                '<span style="background:rgba(239,68,68,0.2); color:#f87171; border:1.5px solid #ef4444; padding:4px 12px; border-radius:8px; font-weight:900;">⚠️ غير آمن (UNSAFE)</span>'
-            )
-            rows_tk_html.append(
-                f'<tr style="background:{bg_r}; border-bottom:1px solid #334155;">'
-                f'<td style="padding:12px 16px; font-size:17px; font-weight:800; color:#ffffff; text-align:right; direction:rtl;">{c_name}</td>'
-                f'<td style="padding:12px 16px; font-size:18px; font-weight:900; color:#38bdf8; text-align:center;" dir="ltr">{c_act}</td>'
-                f'<td style="padding:12px 16px; font-size:17px; font-weight:800; color:#fbbf24; text-align:center;" dir="ltr">{c_lim}</td>'
-                f'<td style="padding:12px 16px; text-align:center;">{badge}</td>'
-                f'</tr>'
-            )
-
-        st.markdown(
-            '<div dir="rtl" style="direction:rtl !important; overflow-x:auto; border:2px solid #10b981; border-radius:12px; margin-top:16px;">'
-            '<table dir="rtl" style="direction:rtl !important; width:100%; border-collapse:collapse; background:#0b1329;">'
-            '<thead><tr style="background:#1e293b; border-bottom:2px solid #10b981;">'
-            '<th style="padding:14px 16px; font-size:18px; color:#34d399; text-align:right;">بند التحقق الكودي للخزان (Verification Item)</th>'
-            '<th style="padding:14px 16px; font-size:18px; color:#38bdf8; text-align:center;">القيمة المحسوبة (Actual)</th>'
-            '<th style="padding:14px 16px; font-size:18px; color:#fbbf24; text-align:center;">الحد المسموح (Allowable)</th>'
-            '<th style="padding:14px 16px; font-size:18px; color:#4ade80; text-align:center;">الحالة (Status)</th>'
-            '</tr></thead><tbody>' + "".join(rows_tk_html) + '</tbody></table></div>',
-            unsafe_allow_html=True,
+    if not res_tk["is_rebar_spacing_safe"]:
+        render_rebar_spacing_violation_banner(
+            res_tk,
+            input_section_name="مدخلات قطر حديد التسليح في القسم 1 أعلاه",
         )
+    else:
+        if not res_tk["is_all_safe"]:
+            play_light_whistle_sound()
+        # ── DETAILED WEIGHTS & OUTPUTS ──
+        with st.expander("📊 2. Detailed Calculation Report (التقرير الحسابي التفصيلي للأوزان والأبعاد والتحققات والتسليح)", expanded=True):
+            # 4 Weight & Dimension Highlight Cards
+            w1, w2, w3, w4 = st.columns(4)
+            with w1:
+                st.markdown(
+                    f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:2px solid #38bdf8; border-radius:10px; padding:14px; text-align:center;">
+                        <div style="font-size:15px; color:#93c5fd; font-weight:800;">وزن هيكل الخزان الفارغ (W_tank)</div>
+                        <div style="font-size:26px; font-weight:900; color:#ffffff; margin:6px 0;" dir="ltr">{res_tk['W_tank_empty_ton']:.2f} ton</div>
+                        <div style="font-size:13.5px; color:#cbd5e1; font-weight:700;">{res_tk['tank_material']} (تخانة <span dir="ltr">{res_tk['sheet_thk_mm']:.1f} mm</span>)</div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+            with w2:
+                st.markdown(
+                    f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:2px solid #0ea5e9; border-radius:10px; padding:14px; text-align:center;">
+                        <div style="font-size:15px; color:#7dd3fc; font-weight:800;">وزن السائل الإجمالي (W_liquid)</div>
+                        <div style="font-size:26px; font-weight:900; color:#38bdf8; margin:6px 0;" dir="ltr">{res_tk['W_liquid_ton']:.2f} ton</div>
+                        <div style="font-size:13.5px; color:#cbd5e1; font-weight:700;" dir="ltr">{res_tk['capacity_barrels']:.0f} BBL = {res_tk['vol_liquid_m3']:.1f} m³ (SG={res_tk['specific_gravity']:.2f})</div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+            with w3:
+                st.markdown(
+                    f"""<div dir="rtl" style="direction:rtl !important; background:#0f172a; border:2px solid #f59e0b; border-radius:10px; padding:14px; text-align:center;">
+                        <div style="font-size:15px; color:#fde047; font-weight:800;">الوزن الذاتي للقاعدة (W_foundation)</div>
+                        <div style="font-size:26px; font-weight:900; color:#fde047; margin:6px 0;" dir="ltr">{res_tk['Wf_ton']:.2f} ton</div>
+                        <div style="font-size:13.5px; color:#cbd5e1; font-weight:700;">الحجم = <span dir="ltr">{res_tk['vol_f_m3']:.2f} m³ × 2.5 t/m³</span></div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+            with w4:
+                dim_str = (
+                    f"D_f = {res_tk['Df_m']:.2f} m × tf = {res_tk['tf_m']:.2f} m"
+                    if res_tk["is_circular"]
+                    else f"{res_tk['Lf_m']:.2f} × {res_tk['Bf_m']:.2f} × {res_tk['tf_m']:.2f} m"
+                )
+                st.markdown(
+                    f"""<div dir="rtl" style="direction:rtl !important; background:#064e3b; border:2px solid #10b981; border-radius:10px; padding:14px; text-align:center;">
+                        <div style="font-size:15px; color:#a7f3d0; font-weight:800;">الأبعاد الهندسية النهائية للقاعدة</div>
+                        <div style="font-size:22px; font-weight:900; color:#ffffff; margin:8px 0;" dir="ltr">{dim_str}</div>
+                        <div style="font-size:13.5px; color:#fde047; font-weight:700;">الحمل الكلي = <span dir="ltr">{res_tk['P_total_working_ton']:.2f} ton</span></div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
 
-    # ── CAD SKETCH & REPORT EXPORT ──
-    with st.expander("📐 3. 2D Tank Blueprints & Report (المخططات الهندسية وتصدير التقرير الحسابي للخزان)", expanded=True):
-        sketch_tk_b64 = generate_liquid_tank_foundation_sketches(res_tk)
-        st.image(f"data:image/png;base64,{sketch_tk_b64}", use_container_width=True)
+            st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
 
-        summary_tk_rows = [
-            ("الشكل الهندسي ومادة الخزان", f"{res_tk['tank_shape']} — {res_tk['tank_material']} (تخانة {res_tk['sheet_thk_mm']:.1f} mm)"),
-            ("سعة وحجم التخزين", f"{res_tk['capacity_barrels']:.0f} Barrels ({res_tk['vol_liquid_m3']:.2f} m³) — الكثافة النوعية = {res_tk['specific_gravity']:.2f}"),
-            ("وزن الخزان الفارغ المحسوب تلقائياً (W_tank)", f"{res_tk['W_tank_empty_ton']:.2f} ton"),
-            ("وزن السائل الإجمالي المحسوب تلقائياً (W_liquid)", f"{res_tk['W_liquid_ton']:.2f} ton"),
-            ("الوزن الذاتي للقاعدة الخرسانية (W_foundation @ 2.5 t/m³)", f"V = {res_tk['vol_f_m3']:.2f} m³ | W_f = {res_tk['Wf_ton']:.2f} ton"),
-            ("إجمالي الأحمال الكلية (المعدة + السائل + القاعدة)", f"{res_tk['P_total_working_ton']:.2f} ton"),
-            ("الأبعاد الهندسية النهائية للقاعدة (Lf × Bf × tf)", f"{res_tk['Lf_m']:.2f} m × {res_tk['Bf_m']:.2f} m × {res_tk['tf_m']:.2f} m"),
-            ("إجهاد التربة الأقصى الفعلي / المسموح به", f"{res_tk['q_max_kg_cm2']:.2f} / {res_tk['q_all_kg_cm2']:.2f} kg/cm²"),
-            ("تسليح القاعدة السفلي (Bottom Mesh)", f"{res_tk['n_bars_bot_m']} Φ {res_tk['phi_bot_mm']} / m' (As = {res_tk['As_bot_prov_cm2_m']:.2f} cm²/m')"),
-            ("تسليح القاعدة العلوي (Top Mesh)", f"{res_tk['n_bars_top_m']} Φ {res_tk['phi_top_mm']} / m' (As = {res_tk['As_top_prov_cm2_m']:.2f} cm²/m')"),
-            ("إجمالي وزن حديد التسليح للقاعدة", f"{res_tk['total_rebar_weight_kg']:.1f} kg ({res_tk['total_rebar_weight_ton']:.3f} ton)"),
-        ]
-        html_tk_report = generate_m10_calculation_sheet_html(
-            title_ar="التقرير الحسابي التفصيلي لقاعدة خزان السوائل",
-            subtitle_en="Liquid Storage Tank Foundation Calculation Sheet (ECP 203 / ACI 350)",
-            rows_summary=summary_tk_rows,
-            checks_list=tk_checks,
-            sketch_b64=sketch_tk_b64,
-        )
+            tk_c1, tk_c2 = st.columns(2)
+            with tk_c1:
+                st.markdown(
+                    f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #22c55e; border-radius:12px; padding:16px 20px; unicode-bidi:isolate;">
+                        <div dir="rtl" style="font-size:18px; font-weight:900; color:#4ade80; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">🔩 Reinforcement Summary (تسليح قاعدة الخزان السفلي والعلوي طبقاً للكود)</div>
+                        <div dir="rtl" style="font-size:15.5px; color:#f1f5f9; line-height:1.95; font-weight:700; direction:rtl !important; text-align:right !important; width:100%;">
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>شبكة التسليح السفلية (Bottom Mesh):</b> <span dir="ltr" style="color:#fde047; font-size:18px; font-weight:900; unicode-bidi:isolate;">{res_tk['n_bars_bot_m']} Φ {res_tk['phi_bot_mm']} / m'</span> في الاتجاهين (المسافة = <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['spacing_bot_cm']} cm</span>)</div>
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important; padding-right:16px;">▫️ المساحة المطلوبة = <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['As_bot_req_cm2_m']:.2f} cm²/m'</span> | المساحة المتوفرة = <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_tk['As_bot_prov_cm2_m']:.2f} cm²/m'</span></div>
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>شبكة التسليح العلوية (Top Mesh):</b> <span dir="ltr" style="color:#38bdf8; font-size:18px; font-weight:900; unicode-bidi:isolate;">{res_tk['n_bars_top_m']} Φ {res_tk['phi_top_mm']} / m'</span> في الاتجاهين (المسافة = <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['spacing_top_cm']} cm</span>)</div>
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important; padding-right:16px;">▫️ المساحة المطلوبة = <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['As_top_req_cm2_m']:.2f} cm²/m'</span> | المساحة المتوفرة = <span dir="ltr" style="color:#38bdf8; unicode-bidi:isolate;">{res_tk['As_top_prov_cm2_m']:.2f} cm²/m'</span></div>
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>إجمالي وزن حديد التسليح للقاعدة:</b> <span dir="ltr" style="color:#f472b6; font-size:17px; font-weight:900; unicode-bidi:isolate;">{res_tk['total_rebar_weight_kg']:.1f} kg ({res_tk['total_rebar_weight_ton']:.3f} ton)</span> — بمعدل <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['steel_rate_kg_m3']:.1f} kg/m³</span></div>
+                        </div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
 
-        td1, td2, td3 = st.columns(3)
-        with td1:
-            st.download_button(
-                "📥 تحميل مخطط قاعدة الخزان (PNG)",
-                data=base64.b64decode(sketch_tk_b64),
-                file_name=f"Liquid_Tank_Foundation_{res_tk['Lf_m']:.1f}x{res_tk['Bf_m']:.1f}m.png",
-                mime="image/png",
-                use_container_width=True,
+            with tk_c2:
+                st.markdown(
+                    f"""<div class="m10-rtl-panel" dir="rtl" style="direction:rtl !important; text-align:right !important; background:rgba(15,23,42,0.85); border:2px solid #38bdf8; border-radius:12px; padding:16px 20px; unicode-bidi:isolate;">
+                        <div dir="rtl" style="font-size:18px; font-weight:900; color:#38bdf8; margin-bottom:10px; direction:rtl !important; text-align:right !important; width:100%;">🌊 Hydrostatic Pressure & Stability Checks (الضغط الهيدروستاتيكي والاتزان ضد الانقلاب والطفو)</div>
+                        <div dir="rtl" style="font-size:15.5px; color:#f1f5f9; line-height:1.95; font-weight:700; direction:rtl !important; text-align:right !important; width:100%;">
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>ارتفاع السائل داخل الخزان (<span dir="ltr" style="unicode-bidi:isolate;">H_liquid</span>):</b> <span dir="ltr" style="color:#fde047; unicode-bidi:isolate;">{res_tk['H_liquid_m']:.2f} m</span> (الارتفاع الكلي = <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['H_tank_total_m']:.2f} m</span>)</div>
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>الضغط الهيدروستاتيكي على القاع (<span dir="ltr" style="unicode-bidi:isolate;">p = γ_liq × H</span>):</b> <span dir="ltr" style="color:#38bdf8; unicode-bidi:isolate;">{res_tk['p_hydrostatic_ton_m2']:.2f} ton/m² ({res_tk['p_hydrostatic_kg_cm2']:.2f} kg/cm²)</span></div>
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>معامل الأمان ضد الانقلاب (<span dir="ltr" style="unicode-bidi:isolate;">FOS_overturning</span>):</b> <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_tk['fos_overturning']:.2f}</span> (المطلوب ≥ 1.50)</div>
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>معامل الأمان ضد الطفو (<span dir="ltr" style="unicode-bidi:isolate;">FOS_buoyancy</span>):</b> <span dir="ltr" style="color:#4ade80; unicode-bidi:isolate;">{res_tk['fos_buoyancy']:.2f}</span> (المطلوب ≥ 1.25)</div>
+                            <div dir="rtl" style="direction:rtl !important; text-align:right !important;">• <b>أقصى إجهاد تربة فعلي (<span dir="ltr" style="unicode-bidi:isolate;">q_max</span>):</b> <span dir="ltr" style="color:#fde047; unicode-bidi:isolate;">{res_tk['q_max_kg_cm2']:.2f} kg/cm²</span> ≤ المسموح <span dir="ltr" style="unicode-bidi:isolate;">{res_tk['q_all_kg_cm2']:.2f} kg/cm²</span></div>
+                        </div>
+                    </div>""",
+                    unsafe_allow_html=True,
+                )
+
+            tk_checks = [
+                (
+                    "1. التحقق من عدم تجاوز إجهاد التربة المسموح به (Soil Bearing Pressure)",
+                    f"q_max = {res_tk['q_max_kg_cm2']:.2f} kg/cm² ({res_tk['q_max_ton_m2']:.1f} t/m²)",
+                    f"q_all = {res_tk['q_all_kg_cm2']:.2f} kg/cm² ({res_tk['q_all_ton_m2']:.1f} t/m²)",
+                    res_tk["is_soil_safe"],
+                ),
+                (
+                    "2. فحص مقاومة الاختراق تحت جدار وحمل الخزان (Punching Shear - ECP 203)",
+                    f"q_up = {res_tk['q_up_kg_cm2']:.2f} kg/cm²",
+                    f"q_cup = {res_tk['q_cup_all_kg_cm2']:.2f} kg/cm²",
+                    res_tk["is_punching_safe"],
+                ),
+                (
+                    "3. فحص مقاومة القص ذو الاتجاه الواحد (One-Way Shear Strength)",
+                    f"q_u = {res_tk['qu_1way_kg_cm2']:.2f} kg/cm²",
+                    f"q_cu = {res_tk['qcu_1way_kg_cm2']:.2f} kg/cm²",
+                    res_tk["is_1way_shear_safe"],
+                ),
+                (
+                    "4. التحقق من الاستقرار ضد الانقلاب (Overturning Stability)",
+                    f"FOS = {res_tk['fos_overturning']:.2f} (M_res={res_tk['M_resisting_full_tm']:.1f} / M_ot={res_tk['M_overturning_tm']:.1f})",
+                    "FOS ≥ 1.50",
+                    res_tk["is_overturning_safe"],
+                ),
+                (
+                    "5. التحقق من مقاومة قوى الطفو (Buoyancy / Uplift Stability)",
+                    f"FOS = {res_tk['fos_buoyancy']:.2f} (W_empty={res_tk['W_empty_total_ton']:.1f} t / U={res_tk['U_buoyancy_ton']:.1f} t)",
+                    "FOS ≥ 1.25",
+                    res_tk["is_buoyancy_safe"],
+                ),
+                (
+                    "6. فحص عدد الأسياخ والتباعد الكودي (ECP 203 Rebar Spacing)",
+                    f"Bot: {res_tk['n_bars_bot_m']} Φ {res_tk['phi_bot_mm']} / Top: {res_tk['n_bars_top_m']} Φ {res_tk['phi_top_mm']}",
+                    "5 ≤ n ≤ 10 أسياخ/م (s ≥ 10 cm)",
+                    res_tk["is_rebar_spacing_safe"],
+                ),
+            ]
+
+            rows_tk_html = []
+            for idx, (c_name, c_act, c_lim, c_ok) in enumerate(tk_checks):
+                bg_r = "rgba(15, 23, 42, 0.75)" if idx % 2 == 0 else "rgba(30, 41, 59, 0.75)"
+                badge = (
+                    '<span style="background:rgba(34,197,94,0.2); color:#4ade80; border:1.5px solid #22c55e; padding:4px 12px; border-radius:8px; font-weight:900;">✅ آمن ومطابق (SAFE)</span>'
+                    if c_ok else
+                    '<span style="background:rgba(239,68,68,0.2); color:#f87171; border:1.5px solid #ef4444; padding:4px 12px; border-radius:8px; font-weight:900;">⚠️ غير آمن (UNSAFE)</span>'
+                )
+                rows_tk_html.append(
+                    f'<tr style="background:{bg_r}; border-bottom:1px solid #334155;">'
+                    f'<td style="padding:12px 16px; font-size:17px; font-weight:800; color:#ffffff; text-align:right; direction:rtl;">{c_name}</td>'
+                    f'<td style="padding:12px 16px; font-size:18px; font-weight:900; color:#38bdf8; text-align:center;" dir="ltr">{c_act}</td>'
+                    f'<td style="padding:12px 16px; font-size:17px; font-weight:800; color:#fbbf24; text-align:center;" dir="ltr">{c_lim}</td>'
+                    f'<td style="padding:12px 16px; text-align:center;">{badge}</td>'
+                    f'</tr>'
+                )
+
+            st.markdown(
+                '<div dir="rtl" style="direction:rtl !important; overflow-x:auto; border:2px solid #10b981; border-radius:12px; margin-top:16px;">'
+                '<table dir="rtl" style="direction:rtl !important; width:100%; border-collapse:collapse; background:#0b1329;">'
+                '<thead><tr style="background:#1e293b; border-bottom:2px solid #10b981;">'
+                '<th style="padding:14px 16px; font-size:18px; color:#34d399; text-align:right;">بند التحقق الكودي للخزان (Verification Item)</th>'
+                '<th style="padding:14px 16px; font-size:18px; color:#38bdf8; text-align:center;">القيمة المحسوبة (Actual)</th>'
+                '<th style="padding:14px 16px; font-size:18px; color:#fbbf24; text-align:center;">الحد المسموح (Allowable)</th>'
+                '<th style="padding:14px 16px; font-size:18px; color:#4ade80; text-align:center;">الحالة (Status)</th>'
+                '</tr></thead><tbody>' + "".join(rows_tk_html) + '</tbody></table></div>',
+                unsafe_allow_html=True,
             )
-        with td2:
-            st.download_button(
-                "🌐 تحميل التقرير الحسابي للخزان (HTML)",
-                data=html_tk_report,
-                file_name=f"Liquid_Tank_Foundation_Report_{res_tk['capacity_barrels']:.0f}BBL.html",
-                mime="text/html",
-                use_container_width=True,
+
+        # ── CAD SKETCH & REPORT EXPORT ──
+        with st.expander("📐 3. 2D Tank Blueprints & Report (المخططات الهندسية وتصدير التقرير الحسابي للخزان)", expanded=True):
+            sketch_tk_b64 = generate_liquid_tank_foundation_sketches(res_tk)
+            st.image(f"data:image/png;base64,{sketch_tk_b64}", use_container_width=True)
+
+            summary_tk_rows = [
+                ("الشكل الهندسي ومادة الخزان", f"{res_tk['tank_shape']} — {res_tk['tank_material']} (تخانة {res_tk['sheet_thk_mm']:.1f} mm)"),
+                ("سعة وحجم التخزين", f"{res_tk['capacity_barrels']:.0f} Barrels ({res_tk['vol_liquid_m3']:.2f} m³) — الكثافة النوعية = {res_tk['specific_gravity']:.2f}"),
+                ("وزن الخزان الفارغ المحسوب تلقائياً (W_tank)", f"{res_tk['W_tank_empty_ton']:.2f} ton"),
+                ("وزن السائل الإجمالي المحسوب تلقائياً (W_liquid)", f"{res_tk['W_liquid_ton']:.2f} ton"),
+                ("الوزن الذاتي للقاعدة الخرسانية (W_foundation @ 2.5 t/m³)", f"V = {res_tk['vol_f_m3']:.2f} m³ | W_f = {res_tk['Wf_ton']:.2f} ton"),
+                ("إجمالي الأحمال الكلية (المعدة + السائل + القاعدة)", f"{res_tk['P_total_working_ton']:.2f} ton"),
+                ("الأبعاد الهندسية النهائية للقاعدة (Lf × Bf × tf)", f"{res_tk['Lf_m']:.2f} m × {res_tk['Bf_m']:.2f} m × {res_tk['tf_m']:.2f} m"),
+                ("إجهاد التربة الأقصى الفعلي / المسموح به", f"{res_tk['q_max_kg_cm2']:.2f} / {res_tk['q_all_kg_cm2']:.2f} kg/cm²"),
+                ("تسليح القاعدة السفلي (Bottom Mesh)", f"{res_tk['n_bars_bot_m']} Φ {res_tk['phi_bot_mm']} / m' (As = {res_tk['As_bot_prov_cm2_m']:.2f} cm²/m')"),
+                ("تسليح القاعدة العلوي (Top Mesh)", f"{res_tk['n_bars_top_m']} Φ {res_tk['phi_top_mm']} / m' (As = {res_tk['As_top_prov_cm2_m']:.2f} cm²/m')"),
+                ("إجمالي وزن حديد التسليح للقاعدة", f"{res_tk['total_rebar_weight_kg']:.1f} kg ({res_tk['total_rebar_weight_ton']:.3f} ton)"),
+            ]
+            html_tk_report = generate_m10_calculation_sheet_html(
+                title_ar="التقرير الحسابي التفصيلي لقاعدة خزان السوائل",
+                subtitle_en="Liquid Storage Tank Foundation Calculation Sheet (ECP 203 / ACI 350)",
+                rows_summary=summary_tk_rows,
+                checks_list=tk_checks,
+                sketch_b64=sketch_tk_b64,
             )
-        with td3:
-            if st.button("📕 توليد وتحميل ملف PDF للخزان", key="btn_m10_tk_pdf", use_container_width=True):
-                with st.spinner("جاري تجهيز ملف PDF..."):
-                    pdf_b2 = html_to_pdf_bytes(html_tk_report)
-                    if pdf_b2:
-                        st.download_button(
-                            "📥 اضغط لحفظ التقرير PDF",
-                            data=pdf_b2,
-                            file_name="Liquid_Tank_Foundation_Report.pdf",
-                            mime="application/pdf",
-                            use_container_width=True,
-                        )
+
+            td1, td2, td3 = st.columns(3)
+            with td1:
+                st.download_button(
+                    "📥 تحميل مخطط قاعدة الخزان (PNG)",
+                    data=base64.b64decode(sketch_tk_b64),
+                    file_name=f"Liquid_Tank_Foundation_{res_tk['Lf_m']:.1f}x{res_tk['Bf_m']:.1f}m.png",
+                    mime="image/png",
+                    use_container_width=True,
+                )
+            with td2:
+                st.download_button(
+                    "🌐 تحميل التقرير الحسابي للخزان (HTML)",
+                    data=html_tk_report,
+                    file_name=f"Liquid_Tank_Foundation_Report_{res_tk['capacity_barrels']:.0f}BBL.html",
+                    mime="text/html",
+                    use_container_width=True,
+                )
+            with td3:
+                if st.button("📕 توليد وتحميل ملف PDF للخزان", key="btn_m10_tk_pdf", use_container_width=True):
+                    with st.spinner("جاري تجهيز ملف PDF..."):
+                        pdf_b2 = html_to_pdf_bytes(html_tk_report)
+                        if pdf_b2:
+                            st.download_button(
+                                "📥 اضغط لحفظ التقرير PDF",
+                                data=pdf_b2,
+                                file_name="Liquid_Tank_Foundation_Report.pdf",
+                                mime="application/pdf",
+                                use_container_width=True,
+                            )
 
 
 # ===============================================================================

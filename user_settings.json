@@ -413,7 +413,7 @@
   "m10_eq_iso_type": 0,
   "m10_eq_rpm": 1500.0,
   "m10_eq_sizing_mode": 1,
-  "m10_eq_phi_bot": 1,
+  "m10_eq_phi_bot": 2,
   "m10_eq_phi_top": 1,
   "m10_eq_cover": 5.0,
   "m10_tk_shape": 0,
