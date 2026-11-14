@@ -4,7 +4,14 @@ Module 13 -- Standalone Flat Slabs Design (ECP 203)
 100% Standalone - No dependencies on Columns, Footings, or Ground Beams.
 """
 
-from modules.flat_slab import render as _render_flat_slab
+from modules.flat_slab import (
+    render as _render_flat_slab,
+    get_unified_panel_contour,
+    detect_column_bounded_panels,
+    build_slab_moment_field,
+    generate_flat_slab_moment_contour,
+    generate_flat_slab_dual_moment_contour,
+)
 
 
 def render():

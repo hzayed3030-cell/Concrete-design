@@ -2881,6 +2881,302 @@ def generate_flat_slab_reactions_sketch(
 #  ④ 2D BENDING MOMENT MATRIX & COLOR CONTOUR VISUALIZATIONS (M11 & M22)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+try:
+    from scipy.interpolate import griddata as _scipy_griddata
+    from scipy.ndimage import gaussian_filter as _scipy_gaussian_filter
+except ImportError:
+    _scipy_griddata = None
+    _scipy_gaussian_filter = None
+
+
+def _apply_2d_gaussian_smoothing(arr, sigma=6.0):
+    """Applies 2D Gaussian smoothing using scipy.ndimage.gaussian_filter with a pure-NumPy fallback."""
+    if sigma <= 0:
+        return arr
+    if _scipy_gaussian_filter is not None:
+        return _scipy_gaussian_filter(arr, sigma=sigma, mode="nearest")
+    radius = max(1, int(math.ceil(3.0 * sigma)))
+    k_ax = np.arange(-radius, radius + 1, dtype=float)
+    kernel = np.exp(-0.5 * (k_ax / sigma) ** 2)
+    kernel /= np.sum(kernel)
+    padded_x = np.pad(arr, ((radius, radius), (0, 0)), mode="edge")
+    temp = np.apply_along_axis(lambda m: np.convolve(m, kernel, mode="valid"), axis=0, arr=padded_x)
+    padded_y = np.pad(temp, ((0, 0), (radius, radius)), mode="edge")
+    return np.apply_along_axis(lambda m: np.convolve(m, kernel, mode="valid"), axis=1, arr=padded_y)
+
+
+def get_unified_panel_contour(x_nodes, y_nodes, moments, panel_bounds, sigma=6.0):
+    """
+    Isolates a column-bounded slab panel, interpolates onto a uniform 100x100 grid,
+    and applies Gaussian spatial smoothing to merge fragmented mesh local peaks into
+    a single continuous field contour group with ONE unified center (peak).
+    """
+    x_min, x_max, y_min, y_max = panel_bounds
+
+    # Isolate the column-bounded area as a single slab panel
+    mask = (x_nodes >= x_min - 1e-4) & (x_nodes <= x_max + 1e-4) & (y_nodes >= y_min - 1e-4) & (y_nodes <= y_max + 1e-4)
+    px, py, pm = x_nodes[mask], y_nodes[mask], moments[mask]
+    valid = ~np.isnan(pm)
+    px, py, pm = px[valid], py[valid], pm[valid]
+
+    # Create uniform grid for the panel
+    grid_x, grid_y = np.mgrid[x_min:x_max:100j, y_min:y_max:100j]
+
+    if len(pm) < 4:
+        grid_m = np.zeros_like(grid_x)
+    elif _scipy_griddata is not None:
+        grid_m = _scipy_griddata((px, py), pm, (grid_x, grid_y), method="cubic")
+        nan_mask = np.isnan(grid_m)
+        if np.any(nan_mask):
+            grid_m[nan_mask] = _scipy_griddata((px, py), pm, (grid_x[nan_mask], grid_y[nan_mask]), method="nearest")
+    else:
+        # Pure-NumPy 2D separable bilinear interpolation when x_nodes, y_nodes come from meshgrid
+        ux = np.unique(np.round(px, 6))
+        uy = np.unique(np.round(py, 6))
+        if len(ux) * len(uy) == len(pm) and len(ux) >= 2 and len(uy) >= 2:
+            # Determine reshape order (meshgrid default has Y on axis 0, X on axis 1)
+            pm_2d = pm.reshape(len(uy), len(ux))
+            gx_vec = grid_x[:, 0]
+            gy_vec = grid_y[0, :]
+            # Interpolate along X for each Y row -> shape (len(uy), 100)
+            tmp_x = np.array([np.interp(gx_vec, ux, pm_2d[r, :]) for r in range(len(uy))])
+            # Interpolate along Y for each X col -> shape (100, 100) matching np.mgrid[x, y]
+            grid_m = np.array([np.interp(gy_vec, uy, tmp_x[:, c]) for c in range(len(gx_vec))])
+        else:
+            grid_m = np.full_like(grid_x, float(np.mean(pm)))
+
+    # Apply Gaussian smoothing on the positive sagging field to enforce a single unified contour and center
+    # without allowing localized perimeter column negative spikes (e.g. C2/C9 on panel edges) to pinch mid-span
+    pos_grid = np.maximum(0.0, grid_m)
+    raw_pos_max = float(np.max(pos_grid)) if np.any(pos_grid > 0) else 0.0
+    smoothed_pos = _apply_2d_gaussian_smoothing(pos_grid, sigma=sigma)
+
+    # Preserve exact DDM design positive peak intensity after spatial smoothing
+    margin = 15
+    interior = smoothed_pos[margin:-margin, margin:-margin]
+    sm_pos_max = float(np.max(interior)) if interior.size > 0 else 0.0
+    if raw_pos_max > 0 and sm_pos_max > 1e-6:
+        smoothed_pos *= (raw_pos_max / sm_pos_max)
+        interior = smoothed_pos[margin:-margin, margin:-margin]
+
+    # Recombine smoothed unified positive field with localized negative support zones at boundaries
+    smoothed_moment = np.where(grid_m < 0.0, grid_m, smoothed_pos)
+
+    # Find the single peak center inside the panel span (excluding column support edges)
+    max_idx = np.unravel_index(np.argmax(interior, axis=None), interior.shape)
+
+    center_x = float(grid_x[max_idx[0] + margin, max_idx[1] + margin])
+    center_y = float(grid_y[max_idx[0] + margin, max_idx[1] + margin])
+    max_val = float(interior[max_idx])
+
+    return grid_x, grid_y, smoothed_moment, (center_x, center_y, max_val)
+
+
+def detect_column_bounded_panels(x_coords, y_coords, active_cols=None, removed_cols=None, drop_beams=None, void_panel_ids=None, void_boxes=None):
+    """
+    Automatically detects each structural slab area bounded by columns/drop-beams ([x_min, x_max, y_min, y_max])
+    as one unified structural panel (merging adjacent bays when intermediate column supports and drop beams are absent).
+    Returns a list of dicts with keys:
+      'bounds': (x_min, x_max, y_min, y_max),
+      'i_range': (i_min, i_max),
+      'j_range': (j_min, j_max),
+      'panel_ids': list of pid strings.
+    """
+    Lx_spans = [x_coords[i + 1] - x_coords[i] for i in range(len(x_coords) - 1)]
+    Ly_spans = [y_coords[j + 1] - y_coords[j] for j in range(len(y_coords) - 1)]
+
+    rem_set = set()
+    rem_coords = []
+    if removed_cols:
+        for item in removed_cols:
+            if isinstance(item, str):
+                rem_set.add(item)
+            elif isinstance(item, dict):
+                if "orig_id" in item:
+                    rem_set.add(item["orig_id"])
+                if "id" in item:
+                    rem_set.add(item["id"])
+                rx = item.get("grid_x_m", item.get("x"))
+                ry = item.get("grid_y_m", item.get("y"))
+                if rx is not None and ry is not None:
+                    rem_coords.append((float(rx), float(ry)))
+
+    active_col_set = set()
+    active_col_coords = []
+    if active_cols:
+        for c in active_cols:
+            if isinstance(c, dict):
+                cid = c.get("orig_id", c.get("id"))
+                if cid:
+                    active_col_set.add(cid)
+                cx = c.get("grid_x_m", c.get("x"))
+                cy = c.get("grid_y_m", c.get("y"))
+                if cx is not None and cy is not None:
+                    active_col_coords.append((float(cx), float(cy)))
+
+    drop_beams_list = _get_active_drop_beams_list(drop_beams)
+
+    def is_vertex_col_active(i_idx, j_idx):
+        if not active_cols and not removed_cols:
+            return True
+        gx = x_coords[i_idx]
+        gy = y_coords[j_idx]
+        # Match by physical coordinates first (immune to grid re-indexing when axes without columns merge)
+        if active_col_coords:
+            return any(abs(cx - gx) <= 0.35 and abs(cy - gy) <= 0.35 for (cx, cy) in active_col_coords)
+        if rem_coords:
+            return not any(abs(rx - gx) <= 0.35 and abs(ry - gy) <= 0.35 for (rx, ry) in rem_coords)
+        cid = f"C{j_idx * len(x_coords) + i_idx + 1}"
+        if active_col_set:
+            return cid in active_col_set
+        if rem_set:
+            return cid not in rem_set
+        return True
+
+    void_set = set(void_panel_ids) if void_panel_ids else set()
+
+    def is_panel_void(i_idx, j_idx):
+        pid = f"P_{i_idx+1}_{j_idx+1}"
+        if pid in void_set:
+            return True
+        if void_boxes:
+            px1, px2 = x_coords[i_idx], x_coords[i_idx + 1]
+            py1, py2 = y_coords[j_idx], y_coords[j_idx + 1]
+            for (vx1, vx2, vy1, vy2, *_) in void_boxes:
+                ov_x = max(0.0, min(px2, vx2) - max(px1, vx1))
+                ov_y = max(0.0, min(py2, vy2) - max(py1, vy1))
+                if ov_x * ov_y > 0.60 * max(0.01, (px2 - px1) * (py2 - py1)):
+                    return True
+        return False
+
+    # Precompute solid vertical j-ranges per column i, and solid horizontal i-ranges per row j,
+    # so that bays bounded by voids (stepped slab geometry) do not merge across mismatched spans.
+    col_solid_j = {
+        i_idx: tuple(j_idx for j_idx in range(len(Ly_spans)) if not is_panel_void(i_idx, j_idx))
+        for i_idx in range(len(Lx_spans))
+    }
+    row_solid_i = {
+        j_idx: tuple(i_idx for i_idx in range(len(Lx_spans)) if not is_panel_void(i_idx, j_idx))
+        for j_idx in range(len(Ly_spans))
+    }
+
+    def is_vert_edge_supported(k_idx, j_idx):
+        """
+        True if vertical edge at x = x_coords[k_idx] between y_j and y_{j+1} is a structural panel boundary:
+          1. Both endpoints (k_idx, j_idx) and (k_idx, j_idx + 1) have active columns, OR
+          2. A vertical drop beam runs along x = x_coords[k_idx] covering this segment, OR
+          3. Adjacent strips k_idx-1 and k_idx have different solid Y-spans (bounded by a void).
+        Note: Having only top & bottom perimeter columns (like C2 and C9 on Y3 without interior columns
+        and without a drop beam along Y3) does NOT divide the interior slab panel.
+        """
+        gx = x_coords[k_idx]
+        gy1, gy2 = y_coords[j_idx], y_coords[j_idx + 1]
+        # 1. Both local endpoints of this cell edge have active columns
+        if is_vertex_col_active(k_idx, j_idx) and is_vertex_col_active(k_idx, j_idx + 1):
+            return True
+        # 2. A vertical drop beam covers this segment (e.g. B11 on Y2 or B10 on Y4)
+        if drop_beams_list:
+            for db in drop_beams_list:
+                if not isinstance(db, dict) or db.get("beam_type_category") == "unsupported_beam":
+                    continue
+                bp1 = db.get("p1_grid", db.get("p1"))
+                bp2 = db.get("p2_grid", db.get("p2"))
+                if bp1 and bp2 and len(bp1) >= 2 and len(bp2) >= 2:
+                    bx1, by1 = float(bp1[0]), float(bp1[1])
+                    bx2, by2 = float(bp2[0]), float(bp2[1])
+                    if abs(bx1 - gx) <= 0.35 and abs(bx2 - gx) <= 0.35:
+                        ov = min(gy2, max(by1, by2)) - max(gy1, min(by1, by2))
+                        if ov >= 0.40 * (gy2 - gy1):
+                            return True
+        # 3. Prevent merging across a void step boundary where adjacent X-strips have different solid Y-extents
+        if 0 < k_idx < len(Lx_spans):
+            if col_solid_j.get(k_idx - 1) != col_solid_j.get(k_idx):
+                return True
+        return False
+
+    def is_horiz_edge_supported(i_idx, m_idx):
+        """
+        True if horizontal edge at y = y_coords[m_idx] between x_i and x_{i+1} is a structural panel boundary:
+          1. Both endpoints (i_idx, m_idx) and (i_idx + 1, m_idx) have active columns, OR
+          2. A horizontal drop beam runs along y = y_coords[m_idx] covering this segment.
+        """
+        gy = y_coords[m_idx]
+        gx1, gx2 = x_coords[i_idx], x_coords[i_idx + 1]
+        # 1. Both local endpoints of this cell edge have active columns
+        if is_vertex_col_active(i_idx, m_idx) and is_vertex_col_active(i_idx + 1, m_idx):
+            return True
+        # 2. A horizontal drop beam covers this segment (e.g. B8 on X2 or B12 on X3)
+        if drop_beams_list:
+            for db in drop_beams_list:
+                if not isinstance(db, dict) or db.get("beam_type_category") == "unsupported_beam":
+                    continue
+                bp1 = db.get("p1_grid", db.get("p1"))
+                bp2 = db.get("p2_grid", db.get("p2"))
+                if bp1 and bp2 and len(bp1) >= 2 and len(bp2) >= 2:
+                    bx1, by1 = float(bp1[0]), float(bp1[1])
+                    bx2, by2 = float(bp2[0]), float(bp2[1])
+                    if abs(by1 - gy) <= 0.35 and abs(by2 - gy) <= 0.35:
+                        ov = min(gx2, max(bx1, bx2)) - max(gx1, min(bx1, bx2))
+                        if ov >= 0.40 * (gx2 - gx1):
+                            return True
+        return False
+
+    solid_panels = []
+    panel_map = {}
+    for j_idx in range(len(Ly_spans)):
+        for i_idx in range(len(Lx_spans)):
+            if not is_panel_void(i_idx, j_idx):
+                pid = f"P_{i_idx+1}_{j_idx+1}"
+                solid_panels.append((i_idx, j_idx, pid))
+                panel_map[(i_idx, j_idx)] = (i_idx, j_idx, pid)
+
+    adj = {pid: set() for _, _, pid in solid_panels}
+    pid_to_ij = {pid: (i_idx, j_idx) for i_idx, j_idx, pid in solid_panels}
+
+    for i_idx, j_idx, pid in solid_panels:
+        if (i_idx + 1, j_idx) in panel_map:
+            if not is_vert_edge_supported(i_idx + 1, j_idx):
+                _, _, nbr_pid = panel_map[(i_idx + 1, j_idx)]
+                adj[pid].add(nbr_pid)
+                adj[nbr_pid].add(pid)
+        if (i_idx, j_idx + 1) in panel_map:
+            if not is_horiz_edge_supported(i_idx, j_idx + 1):
+                _, _, nbr_pid = panel_map[(i_idx, j_idx + 1)]
+                adj[pid].add(nbr_pid)
+                adj[nbr_pid].add(pid)
+
+    visited = set()
+    unified_panels = []
+    for _, _, pid in solid_panels:
+        if pid not in visited:
+            comp = []
+            queue = [pid]
+            visited.add(pid)
+            while queue:
+                curr = queue.pop(0)
+                comp.append(curr)
+                for nbr in adj[curr]:
+                    if nbr not in visited:
+                        visited.add(nbr)
+                        queue.append(nbr)
+            i_vals = [pid_to_ij[p][0] for p in comp]
+            j_vals = [pid_to_ij[p][1] for p in comp]
+            i_min, i_max = min(i_vals), max(i_vals)
+            j_min, j_max = min(j_vals), max(j_vals)
+            px_min = x_coords[i_min]
+            px_max = x_coords[i_max + 1]
+            py_min = y_coords[j_min]
+            py_max = y_coords[j_max + 1]
+            unified_panels.append({
+                "bounds": (px_min, px_max, py_min, py_max),
+                "i_range": (i_min, i_max),
+                "j_range": (j_min, j_max),
+                "panel_ids": comp,
+            })
+
+    return unified_panels
+
+
 def build_slab_moment_field(
     Lx_spans,
     Ly_spans,
@@ -3026,193 +3322,85 @@ def build_slab_moment_field(
                     return True
         return False
 
-    # ── 4. Detect Multi-Bay Clusters / Merged Macro-Panels ────────────────────
-    solid_panels = []
-    panel_map = {}
-    for j_idx in range(len(Ly_spans)):
-        for i_idx in range(len(Lx_spans)):
-            if not is_panel_void(i_idx, j_idx):
-                pid = f"P_{i_idx+1}_{j_idx+1}"
-                solid_panels.append((i_idx, j_idx, pid))
-                panel_map[(i_idx, j_idx)] = pid
+    # ── 4. Detect Multi-Bay Clusters / Merged Column-Bounded Macro-Panels ─────
+    unified_panels = detect_column_bounded_panels(
+        x_coords, y_coords,
+        active_cols=active_cols,
+        removed_cols=removed_cols,
+        drop_beams=drop_beams,
+        void_panel_ids=void_panel_ids,
+        void_boxes=void_boxes,
+    )
 
-    adj = {pid: set() for _, _, pid in solid_panels}
-    for i_idx, j_idx, pid in solid_panels:
-        # Check right neighbor across boundary at x_{i+1}:
-        if (i_idx + 1, j_idx) in panel_map:
-            c_bot = is_vertex_col_active(i_idx + 1, j_idx)
-            c_top = is_vertex_col_active(i_idx + 1, j_idx + 1)
-            # If not supported at both ends by active columns, merge horizontally:
-            if not (c_bot and c_top):
-                nbr_pid = panel_map[(i_idx + 1, j_idx)]
-                adj[pid].add(nbr_pid)
-                adj[nbr_pid].add(pid)
-        # Check top neighbor across boundary at y_{j+1}:
-        if (i_idx, j_idx + 1) in panel_map:
-            c_left = is_vertex_col_active(i_idx, j_idx + 1)
-            c_right = is_vertex_col_active(i_idx + 1, j_idx + 1)
-            # If not supported at both ends by active columns, merge vertically:
-            if not (c_left and c_right):
-                nbr_pid = panel_map[(i_idx, j_idx + 1)]
-                adj[pid].add(nbr_pid)
-                adj[nbr_pid].add(pid)
+    # ── 5. Generate Unified Positive Moment Field per Column-Bounded Panel ───
+    # Each area bounded by columns ([px_min, px_max, py_min, py_max]) is treated
+    # as ONE unified structural slab panel with a SINGLE continuous field contour
+    # group and a SINGLE center (peak) for both M11 and M22.
+    for upanel in unified_panels:
+        px_min, px_max, py_min, py_max = upanel["bounds"]
+        i_min, i_max = upanel["i_range"]
+        j_min, j_max = upanel["j_range"]
+        L_panel_x = max(0.5, px_max - px_min)
+        L_panel_y = max(0.5, py_max - py_min)
 
-    # Connected components
-    visited = set()
-    components = []
-    for _, _, pid in solid_panels:
-        if pid not in visited:
-            comp = []
-            queue = [pid]
-            visited.add(pid)
-            while queue:
-                curr = queue.pop(0)
-                comp.append(curr)
-                for nbr in adj[curr]:
-                    if nbr not in visited:
-                        visited.add(nbr)
-                        queue.append(nbr)
-            components.append(comp)
+        is_merged_x = (i_max > i_min)
+        is_merged_y = (j_max > j_min)
 
-    # ── 5. Generate Continuous Positive Moment Ribbons (M11 & M22) ───────────
-    # 5a. M22: Spans in Y-direction, forms continuous horizontal ribbons across X:
-    for j_idx, ly_val in enumerate(Ly_spans):
-        y_bot = y_coords[j_idx]
-        y_top = y_coords[j_idx + 1]
-        L_span_y = max(0.5, y_top - y_bot)
+        # Governing positive moment intensity M11+ for this unified panel:
+        m_pos_11_list = []
+        for i_idx in range(i_min, i_max + 1):
+            lx_val = Lx_spans[i_idx]
+            if rows_x and i_idx < len(rows_x):
+                r_x = rows_x[i_idx]
+                m_val_x = r_x.get("cs_pos", 0.60 * r_x.get("M_pos", 10.0)) / max(0.1, r_x.get("cs_w", min(lx_val, Ly_avg) / 2.0))
+            else:
+                m_val_x = 0.52 * Wu * (min(lx_val, 6.0) ** 2) / 8.0
+            m_pos_11_list.append(m_val_x)
+        m_pos_11 = max(m_pos_11_list) if m_pos_11_list else (0.52 * Wu * (min(L_panel_x, 6.0) ** 2) / 8.0)
+        if is_merged_x:
+            w_eff_ratio_x = L_panel_y / max(1.0, Ly_avg)
+            m_pos_11 = max(m_pos_11 * (0.50 / 0.35), 0.52 * Wu * (min(L_panel_x, 7.5) ** 2) / 8.0) * (0.75 + 0.25 * min(w_eff_ratio_x, 2.2))
 
-        solid_i = [i_idx for i_idx in range(len(Lx_spans)) if not is_panel_void(i_idx, j_idx)]
-        if not solid_i:
+        # Governing positive moment intensity M22+ for this unified panel:
+        m_pos_22_list = []
+        for j_idx in range(j_min, j_max + 1):
+            ly_val = Ly_spans[j_idx]
+            if rows_y and j_idx < len(rows_y):
+                r_y = rows_y[j_idx]
+                m_val_y = r_y.get("cs_pos", 0.60 * r_y.get("M_pos", 10.0)) / max(0.1, r_y.get("cs_w", min(ly_val, Lx_avg) / 2.0))
+            else:
+                m_val_y = 0.52 * Wu * (min(ly_val, 6.0) ** 2) / 8.0
+            m_pos_22_list.append(m_val_y)
+        m_pos_22 = max(m_pos_22_list) if m_pos_22_list else (0.52 * Wu * (min(L_panel_y, 6.0) ** 2) / 8.0)
+        if is_merged_y:
+            # When spans merge along Y (e.g. X1..X4 without internal columns), scale by effective panel span L_panel_y and width L_panel_x
+            w_eff_ratio = L_panel_x / max(1.0, Lx_avg)
+            m_pos_22 = max(m_pos_22 * (0.50 / 0.35), 0.52 * Wu * (min(L_panel_y, 7.5) ** 2) / 8.0) * (0.75 + 0.25 * min(w_eff_ratio, 2.2))
+
+        mask_panel = (X >= px_min - 1e-4) & (X <= px_max + 1e-4) & (Y >= py_min - 1e-4) & (Y <= py_max + 1e-4)
+        if not np.any(mask_panel):
             continue
 
-        # Group contiguous solid spans along X:
-        contiguous_groups_x = []
-        curr_g = [solid_i[0]]
-        for idx in solid_i[1:]:
-            if idx == curr_g[-1] + 1:
-                curr_g.append(idx)
-            else:
-                contiguous_groups_x.append(curr_g)
-                curr_g = [idx]
-        contiguous_groups_x.append(curr_g)
+        xi = np.clip((X[mask_panel] - px_min) / L_panel_x, 0.0, 1.0)
+        eta = np.clip((Y[mask_panel] - py_min) / L_panel_y, 0.0, 1.0)
 
-        # Governing design positive moment for this Y-span:
-        if rows_y and j_idx < len(rows_y):
-            r_y = rows_y[j_idx]
-            m_pos_22 = (r_y.get("cs_pos", 0.60 * r_y.get("M_pos", 10.0)) / max(0.1, r_y.get("cs_w", min(ly_val, Lx_avg) / 2.0)))
-        else:
-            m_pos_22 = 0.52 * Wu * (min(L_span_y, 6.0) ** 2) / 8.0
+        # Unified single-dome 2D positive moment surface across the entire column-bounded panel:
+        fx = np.sin(np.pi * xi) ** 1.35
+        fy = np.sin(np.pi * eta) ** 1.35
+        fx_trans = 0.35 + 0.65 * (np.sin(np.pi * xi) ** 1.15)
+        fy_trans = 0.35 + 0.65 * (np.sin(np.pi * eta) ** 1.15)
 
-        for group in contiguous_groups_x:
-            x_start = x_coords[group[0]]
-            x_end = x_coords[group[-1] + 1]
-            L_ribbon_x = max(0.5, x_end - x_start)
-
-            mask_seg = (X >= x_start - 1e-4) & (X <= x_end + 1e-4) & (Y >= y_bot - 1e-4) & (Y <= y_top + 1e-4)
-            if not np.any(mask_seg):
-                continue
-
-            eta = np.clip((Y[mask_seg] - y_bot) / L_span_y, 0.0, 1.0)
-            xi_trans = np.clip((X[mask_seg] - x_start) / L_ribbon_x, 0.0, 1.0)
-
-            # Smooth parabolic sagging along Y across the entire span:
-            fy = 4.0 * eta * (1.0 - eta)
-            # Continuous smooth ribbon across X without dropping at internal grid lines:
-            fx_ribbon = 0.75 + 0.25 * (np.sin(np.pi * xi_trans) ** 0.5)
-
-            M22[mask_seg] = np.maximum(M22[mask_seg], m_pos_22 * (fy ** 0.85) * fx_ribbon)
-
-    # 5b. M11: Spans in X-direction, forms continuous vertical ribbons across Y:
-    for i_idx, lx_val in enumerate(Lx_spans):
-        x_left = x_coords[i_idx]
-        x_right = x_coords[i_idx + 1]
-        L_span_x = max(0.5, x_right - x_left)
-
-        solid_j = [j_idx for j_idx in range(len(Ly_spans)) if not is_panel_void(i_idx, j_idx)]
-        if not solid_j:
-            continue
-
-        # Group contiguous solid spans along Y:
-        contiguous_groups_y = []
-        curr_g = [solid_j[0]]
-        for idx in solid_j[1:]:
-            if idx == curr_g[-1] + 1:
-                curr_g.append(idx)
-            else:
-                contiguous_groups_y.append(curr_g)
-                curr_g = [idx]
-        contiguous_groups_y.append(curr_g)
-
-        # Governing design positive moment for this X-span:
-        if rows_x and i_idx < len(rows_x):
-            r_x = rows_x[i_idx]
-            m_pos_11 = (r_x.get("cs_pos", 0.60 * r_x.get("M_pos", 10.0)) / max(0.1, r_x.get("cs_w", min(lx_val, Ly_avg) / 2.0)))
-        else:
-            m_pos_11 = 0.52 * Wu * (min(L_span_x, 6.0) ** 2) / 8.0
-
-        for group in contiguous_groups_y:
-            y_start = y_coords[group[0]]
-            y_end = y_coords[group[-1] + 1]
-            L_ribbon_y = max(0.5, y_end - y_start)
-
-            mask_seg = (X >= x_left - 1e-4) & (X <= x_right + 1e-4) & (Y >= y_start - 1e-4) & (Y <= y_end + 1e-4)
-            if not np.any(mask_seg):
-                continue
-
-            xi = np.clip((X[mask_seg] - x_left) / L_span_x, 0.0, 1.0)
-            eta_trans = np.clip((Y[mask_seg] - y_start) / L_ribbon_y, 0.0, 1.0)
-
-            # Smooth parabolic sagging along X across the entire span:
-            fx = 4.0 * xi * (1.0 - xi)
-            # Continuous smooth ribbon across Y without dropping at internal grid lines:
-            fy_ribbon = 0.75 + 0.25 * (np.sin(np.pi * eta_trans) ** 0.5)
-
-            M11[mask_seg] = np.maximum(M11[mask_seg], m_pos_11 * (fx ** 0.85) * fy_ribbon)
-
-    # ── 5c. Continuous Positive Moment Bridging Across Deleted/Absent Columns ─
-    h_bridge_y = max(1.2, Ly_avg * 0.45)
-    h_bridge_x = max(1.2, Lx_avg * 0.45)
-    for j_idx, gy in enumerate(y_coords):
-        for i_idx, gx in enumerate(x_coords):
-            if is_vertex_col_active(i_idx, j_idx):
-                continue
-            # Bridge M11 continuously across gx when internal column at (i_idx, j_idx) is absent
-            if 0 < i_idx < len(x_coords) - 1:
-                if not (j_idx < len(Ly_spans) and is_panel_void(i_idx - 1, j_idx) and is_panel_void(i_idx, j_idx)):
-                    x_l_m = x_coords[i_idx - 1]
-                    x_r_m = x_coords[i_idx + 1]
-                    L_merged_x = max(0.5, x_r_m - x_l_m)
-                    m_pos_11_a = (rows_x[i_idx - 1].get("cs_pos", 10.0) / max(0.1, rows_x[i_idx - 1].get("cs_w", 2.0))) if (rows_x and i_idx - 1 < len(rows_x)) else (0.50 * Wu * (Lx_avg ** 2) / 8.0)
-                    m_pos_11_b = (rows_x[min(i_idx, len(rows_x) - 1)].get("cs_pos", 10.0) / max(0.1, rows_x[min(i_idx, len(rows_x) - 1)].get("cs_w", 2.0))) if rows_x else m_pos_11_a
-                    m_pos_merged_x = max(m_pos_11_a, m_pos_11_b) * (0.50 / 0.35)
-                    mask_bx = (X >= x_l_m - 1e-4) & (X <= x_r_m + 1e-4) & (np.abs(Y - gy) <= h_bridge_y)
-                    if np.any(mask_bx):
-                        xi_m = np.clip((X[mask_bx] - x_l_m) / L_merged_x, 0.0, 1.0)
-                        fx_m = 4.0 * xi_m * (1.0 - xi_m)
-                        wy_m = np.clip(1.0 - (np.abs(Y[mask_bx] - gy) / h_bridge_y) ** 1.5, 0.0, 1.0)
-                        M11[mask_bx] = np.maximum(M11[mask_bx], m_pos_merged_x * (fx_m ** 0.85) * wy_m)
-            # Bridge M22 continuously across gy when internal column at (i_idx, j_idx) is absent
-            if 0 < j_idx < len(y_coords) - 1:
-                if not (i_idx < len(Lx_spans) and is_panel_void(i_idx, j_idx - 1) and is_panel_void(i_idx, j_idx)):
-                    y_b_m = y_coords[j_idx - 1]
-                    y_t_m = y_coords[j_idx + 1]
-                    L_merged_y = max(0.5, y_t_m - y_b_m)
-                    m_pos_22_a = (rows_y[j_idx - 1].get("cs_pos", 10.0) / max(0.1, rows_y[j_idx - 1].get("cs_w", 2.0))) if (rows_y and j_idx - 1 < len(rows_y)) else (0.50 * Wu * (Ly_avg ** 2) / 8.0)
-                    m_pos_22_b = (rows_y[min(j_idx, len(rows_y) - 1)].get("cs_pos", 10.0) / max(0.1, rows_y[min(j_idx, len(rows_y) - 1)].get("cs_w", 2.0))) if rows_y else m_pos_22_a
-                    m_pos_merged_y = max(m_pos_22_a, m_pos_22_b) * (0.50 / 0.35)
-                    mask_by = (Y >= y_b_m - 1e-4) & (Y <= y_t_m + 1e-4) & (np.abs(X - gx) <= h_bridge_x)
-                    if np.any(mask_by):
-                        eta_m = np.clip((Y[mask_by] - y_b_m) / L_merged_y, 0.0, 1.0)
-                        fy_m = 4.0 * eta_m * (1.0 - eta_m)
-                        wx_m = np.clip(1.0 - (np.abs(X[mask_by] - gx) / h_bridge_x) ** 1.5, 0.0, 1.0)
-                        M22[mask_by] = np.maximum(M22[mask_by], m_pos_merged_y * (fy_m ** 0.85) * wx_m)
+        M11[mask_panel] = np.maximum(M11[mask_panel], m_pos_11 * fx * fy_trans)
+        M22[mask_panel] = np.maximum(M22[mask_panel], m_pos_22 * fy * fx_trans)
 
     # ── 6. Localized Negative Moments at Active Column Supports ───────────────
+    # Compute per-column negative moments based on the actual unified panel spans (L_panel_x, L_panel_y)
+    # framing into each column (matching SAFE / ETABS tributary stiffness & DDM support moments).
     active_column_coords = []
     if active_cols is not None:
         for c in active_cols:
-            cx = c.get("grid_x_m", c.get("x"))
-            cy = c.get("grid_y_m", c.get("y"))
+            cx = c.get("x", c.get("grid_x_m"))
+            cy = c.get("y", c.get("grid_y_m"))
             if cx is not None and cy is not None:
                 active_column_coords.append((float(cx), float(cy)))
     else:
@@ -3221,22 +3409,54 @@ def build_slab_moment_field(
                 if is_vertex_col_active(i_idx, j_idx):
                     active_column_coords.append((x, y))
 
-    # Base design negative moment intensity
-    m_neg_peak_x = 0.75 * Wu * (Lx_avg ** 2) / 8.0 * 0.65 / max(0.1, h_cs_x) if Lx_avg else 8.0
-    m_neg_peak_y = 0.75 * Wu * (Ly_avg ** 2) / 8.0 * 0.65 / max(0.1, h_cs_y) if Ly_avg else 8.0
+    # Base reference negative moment intensities from DDM rows
+    base_neg_x = 0.70 * Wu * (Lx_avg ** 2) / 8.0 * 0.65 / max(0.1, h_cs_x) if Lx_avg else 6.0
+    base_neg_y = 0.70 * Wu * (Ly_avg ** 2) / 8.0 * 0.65 / max(0.1, h_cs_y) if Ly_avg else 6.0
     if rows_x:
-        m_neg_peak_x = max(m_neg_peak_x, max((r.get("cs_neg_int", 10.0) / max(0.1, r.get("cs_w", 2.0))) for r in rows_x))
+        base_neg_x = max(base_neg_x, max((r.get("cs_neg_int", 8.0) / max(0.1, r.get("cs_w", 2.0))) for r in rows_x))
     if rows_y:
-        m_neg_peak_y = max(m_neg_peak_y, max((r.get("cs_neg_int", 10.0) / max(0.1, r.get("cs_w", 2.0))) for r in rows_y))
+        base_neg_y = max(base_neg_y, max((r.get("cs_neg_int", 8.0) / max(0.1, r.get("cs_w", 2.0))) for r in rows_y))
 
-    r_col_eff = max(0.75, min(Lx_avg, Ly_avg) * 0.18)
+    r_col_eff = max(0.75, min(Lx_avg, max(Ly_avg, 4.0)) * 0.18)
     for (cx, cy) in active_column_coords:
+        # Identify unified panels supported by this column
+        adj_panels = []
+        for up in unified_panels:
+            px1, px2, py1, py2 = up["bounds"]
+            if (px1 - 0.65 <= cx <= px2 + 0.65) and (py1 - 0.65 <= cy <= py2 + 0.65):
+                adj_panels.append(up)
+
+        if adj_panels:
+            max_lx_c = max(up["bounds"][1] - up["bounds"][0] for up in adj_panels)
+            max_ly_c = max(up["bounds"][3] - up["bounds"][2] for up in adj_panels)
+            # Check if column is at an interior continuity line vs outer corner
+            is_int_x = len(adj_panels) >= 2 or any((up["bounds"][0] + 0.8 < cx < up["bounds"][1] - 0.8) for up in adj_panels)
+            is_int_y = len(adj_panels) >= 2 or any((up["bounds"][2] + 0.8 < cy < up["bounds"][3] - 0.8) for up in adj_panels)
+            coeff_x = 0.70 if is_int_x else 0.48
+            coeff_y = 0.70 if is_int_y else 0.48
+            eff_lx_calc = min(max_lx_c, 8.2)
+            eff_ly_calc = min(max_ly_c, 8.2)
+            w_cs_col_x = max(1.2, min(eff_lx_calc, eff_ly_calc) / 2.0)
+            w_cs_col_y = max(1.2, min(eff_lx_calc, eff_ly_calc) / 2.0)
+            m_col_neg_x = coeff_x * Wu * (eff_lx_calc ** 2) / 8.0 * 0.75 * (eff_ly_calc / w_cs_col_x) * 0.45
+            m_col_neg_y = coeff_y * Wu * (eff_ly_calc ** 2) / 8.0 * 0.75 * (eff_lx_calc / w_cs_col_y) * 0.45
+            if not (any(up["i_range"][1] > up["i_range"][0] for up in adj_panels)):
+                m_col_neg_x = max(m_col_neg_x, base_neg_x * (0.95 if is_int_x else 0.75))
+            if not (any(up["j_range"][1] > up["j_range"][0] for up in adj_panels)):
+                m_col_neg_y = max(m_col_neg_y, base_neg_y * (0.95 if is_int_y else 0.75))
+        else:
+            m_col_neg_x = base_neg_x
+            m_col_neg_y = base_neg_y
+
         dist_sq = (X - cx) ** 2 + (Y - cy) ** 2
         near_mask = dist_sq <= (r_col_eff * 2.2) ** 2
         if np.any(near_mask):
             w_neg = np.exp(-0.5 * (np.sqrt(dist_sq[near_mask]) / (r_col_eff * 0.52)) ** 2)
-            M11[near_mask] = M11[near_mask] - m_neg_peak_x * w_neg
-            M22[near_mask] = M22[near_mask] - m_neg_peak_y * w_neg
+            M11[near_mask] = M11[near_mask] * (1.0 - w_neg) - m_col_neg_x * w_neg
+            M22[near_mask] = M22[near_mask] * (1.0 - w_neg) - m_col_neg_y * w_neg
+
+    m_neg_peak_x = base_neg_x
+    m_neg_peak_y = base_neg_y
 
     # ── 6b. Full Moment Continuity at Cantilever Drop Beam Root Supports ──────
     if drop_beams:
@@ -3326,36 +3546,39 @@ def build_slab_moment_field(
                         M11_sub[pos_perp] = M11_sub[pos_perp] * (1.0 - 0.22 * w_strip[pos_perp])
                         M11[mask_par] = M11_sub
 
-    # ── 7. Adjust Positive Moment in Enlarged Bays (if any) ──────────────────
-    if btm_extra_spans:
-        ratio_enl = 0.50 / 0.35
-        for item in btm_extra_spans:
-            if not item.get("is_enlarged", False):
-                continue
-            item_dir = item.get("dir", "Y")
-            cx = item.get("cx", None)
-            cy = item.get("cy", None)
-            span_len = item.get("span_len", 0.0)
-            w_bay = item.get("W_bay", 0.0)
-            if cx is None or cy is None or span_len <= 0 or w_bay <= 0:
-                continue
+    # ── 7. Spatial Smoothing & Unified Panel Contour Integration ─────────────
+    # Apply `get_unified_panel_contour` across each column-bounded structural panel
+    # to eliminate mesh fragmentation and merge multiple local peaks into a single
+    # continuous contour with ONE center (peak) per panel for both M11 and M22.
+    x_vec_f = X[0, :]
+    y_vec_f = Y[:, 0]
+    for upanel in unified_panels:
+        p_bounds = upanel["bounds"]
+        px_min, px_max, py_min, py_max = p_bounds
+        mask_p = (X >= px_min - 1e-4) & (X <= px_max + 1e-4) & (Y >= py_min - 1e-4) & (Y <= py_max + 1e-4)
+        if not np.any(mask_p):
+            continue
 
-            if item_dir == "X":
-                px1 = cx - span_len / 2.0
-                px2 = cx + span_len / 2.0
-                py1 = cy - w_bay / 2.0
-                py2 = cy + w_bay / 2.0
-                mask_bay = (X >= px1 - 0.02) & (X <= px2 + 0.02) & (Y >= py1 - 0.02) & (Y <= py2 + 0.02)
-                pos_mask = mask_bay & (M11 > 0)
-                M11[pos_mask] = M11[pos_mask] * ratio_enl
-            elif item_dir == "Y":
-                px1 = cx - w_bay / 2.0
-                px2 = cx + w_bay / 2.0
-                py1 = cy - span_len / 2.0
-                py2 = cy + span_len / 2.0
-                mask_bay = (X >= px1 - 0.02) & (X <= px2 + 0.02) & (Y >= py1 - 0.02) & (Y <= py2 + 0.02)
-                pos_mask = mask_bay & (M22 > 0)
-                M22[pos_mask] = M22[pos_mask] * ratio_enl
+        gx11, gy11, sm11, _ = get_unified_panel_contour(X, Y, M11, p_bounds, sigma=6.0)
+        gx22, gy22, sm22, _ = get_unified_panel_contour(X, Y, M22, p_bounds, sigma=6.0)
+
+        # Map smoothed 100x100 panel grid back onto global (X, Y) mesh interior positive field
+        ix_sub = np.where((x_vec_f >= px_min - 1e-4) & (x_vec_f <= px_max + 1e-4))[0]
+        iy_sub = np.where((y_vec_f >= py_min - 1e-4) & (y_vec_f <= py_max + 1e-4))[0]
+        if len(ix_sub) >= 2 and len(iy_sub) >= 2:
+            gx_u = gx11[:, 0]
+            gy_u = gy11[0, :]
+            # Interpolate sm11 / sm22 (shape 100x100 on [gx_u, gy_u]) onto [x_vec_f[ix_sub], y_vec_f[iy_sub]]
+            t11 = np.array([np.interp(x_vec_f[ix_sub], gx_u, sm11[:, c]) for c in range(len(gy_u))])
+            s11_sub = np.array([np.interp(y_vec_f[iy_sub], gy_u, t11[:, r]) for r in range(len(ix_sub))]).T
+            t22 = np.array([np.interp(x_vec_f[ix_sub], gx_u, sm22[:, c]) for c in range(len(gy_u))])
+            s22_sub = np.array([np.interp(y_vec_f[iy_sub], gy_u, t22[:, r]) for r in range(len(ix_sub))]).T
+
+            sub_m11 = M11[np.ix_(iy_sub, ix_sub)]
+            sub_m22 = M22[np.ix_(iy_sub, ix_sub)]
+            # Blend smoothed positive field while preserving negative support hogging peaks at columns
+            M11[np.ix_(iy_sub, ix_sub)] = np.where(sub_m11 < 0.0, np.minimum(sub_m11, s11_sub), s11_sub)
+            M22[np.ix_(iy_sub, ix_sub)] = np.where(sub_m22 < 0.0, np.minimum(sub_m22, s22_sub), s22_sub)
 
     # Keep unmasked copies for sampling support values
     M11_raw = np.copy(M11)
@@ -4158,6 +4381,156 @@ def generate_flat_slab_moment_cross_section(
     return fig
 
 
+def _place_clean_contour_labels(
+    ax,
+    cs_lines,
+    X,
+    Y,
+    M_field,
+    line_levels,
+    unified_panels,
+    badge_centers,
+    active_cols=None,
+    drop_beams=None,
+    x_slab_min=0.0,
+    x_slab_max=20.0,
+    y_slab_min=0.0,
+    y_slab_max=10.0,
+    void_boxes=None,
+    fontsize=15.5,
+    pad=0.34,
+):
+    """
+    Places enlarged, high-contrast black-on-white contour value panels along the contour lines
+    of each unified panel while avoiding collisions with columns, drop beams, voids, and M+ badges.
+    """
+    x_vec = X[0, :]
+    y_vec = Y[:, 0]
+    col_pts = [(float(c["x"]), float(c["y"])) for c in (active_cols or []) if "x" in c and "y" in c]
+    dbs = _get_active_drop_beams_list(drop_beams)
+
+    def _dist_to_seg(px, py, x1, y1, x2, y2):
+        dx, dy = x2 - x1, y2 - y1
+        l2 = dx * dx + dy * dy
+        if l2 < 1e-8:
+            return math.hypot(px - x1, py - y1)
+        t = max(0.0, min(1.0, ((px - x1) * dx + (py - y1) * dy) / l2))
+        return math.hypot(px - (x1 + t * dx), py - (y1 + t * dy))
+
+    def _is_point_clean(px, py, kept_pts, min_sep=0.68):
+        if px < x_slab_min + 0.58 or px > x_slab_max - 0.58 or py < y_slab_min + 0.58 or py > y_slab_max - 0.58:
+            return False
+        if void_boxes:
+            if any((vx1 - 0.35 <= px <= vx2 + 0.35 and vy1 - 0.35 <= py <= vy2 + 0.35) for (vx1, vx2, vy1, vy2, *_) in void_boxes):
+                return False
+        if any(math.hypot(px - cx, py - cy) < 1.15 for (cx, cy) in col_pts):
+            return False
+        if any(abs(px - bx) < 1.55 and abs(py - by) < 1.00 for (bx, by) in badge_centers):
+            return False
+        if dbs:
+            for db in dbs:
+                if not isinstance(db, dict):
+                    continue
+                bp1 = db.get("p1_grid", db.get("p1"))
+                bp2 = db.get("p2_grid", db.get("p2"))
+                if bp1 and bp2 and len(bp1) >= 2 and len(bp2) >= 2:
+                    if _dist_to_seg(px, py, float(bp1[0]), float(bp1[1]), float(bp2[0]), float(bp2[1])) < 0.55:
+                        return False
+        if any(math.hypot(px - kx, py - ky) < min_sep for (kx, ky) in kept_pts):
+            return False
+        return True
+
+    pos_levels = [float(lv) for lv in line_levels if lv > 0.15]
+    if not pos_levels:
+        pos_levels = [float(lv) for lv in line_levels]
+
+    kept_pts = []
+    manual_pts = []
+
+    for idx_p, upanel in enumerate(unified_panels):
+        px_min, px_max, py_min, py_max = upanel["bounds"]
+        if idx_p < len(badge_centers):
+            cx_p, cy_p = badge_centers[idx_p]
+        else:
+            cx_p, cy_p = 0.5 * (px_min + px_max), 0.5 * (py_min + py_max)
+
+        ix_c = int(np.argmin(np.abs(x_vec - cx_p)))
+        iy_c = int(np.argmin(np.abs(y_vec - cy_p)))
+
+        # Candidate rays from panel center: Down, Up, Left, Right
+        iy_down = np.where((y_vec >= py_min + 0.55) & (y_vec <= cy_p - 0.95))[0]
+        iy_up = np.where((y_vec >= cy_p + 0.95) & (y_vec <= py_max - 0.55))[0]
+        ix_left = np.where((x_vec >= px_min + 0.60) & (x_vec <= cx_p - 1.50))[0]
+        ix_right = np.where((x_vec >= cx_p + 1.50) & (x_vec <= px_max - 0.60))[0]
+
+        for lv in sorted(pos_levels, reverse=True):
+            placed_lv = False
+            # Try vertical rays (bottom ray then top ray) then horizontal rays (right ray then left ray)
+            for ray_type, indices in (("v", iy_down), ("v", iy_up), ("h", ix_right), ("h", ix_left)):
+                if len(indices) < 2:
+                    continue
+                if ray_type == "v":
+                    vals = M_field[indices, ix_c]
+                    coords = y_vec[indices]
+                else:
+                    vals = M_field[iy_c, indices]
+                    coords = x_vec[indices]
+                valid_mask = ~np.isnan(vals)
+                if np.sum(valid_mask) < 2:
+                    continue
+                vals_v = vals[valid_mask]
+                coords_v = coords[valid_mask]
+                if float(np.min(vals_v)) <= lv <= float(np.max(vals_v)):
+                    # Find crossing coordinate
+                    diff = vals_v - lv
+                    sign_changes = np.where(np.diff(np.sign(diff)) != 0)[0]
+                    if len(sign_changes) > 0:
+                        k = int(sign_changes[0])
+                        v0, v1 = float(vals_v[k]), float(vals_v[k + 1])
+                        c0, c1 = float(coords_v[k]), float(coords_v[k + 1])
+                        frac = (lv - v0) / (v1 - v0) if abs(v1 - v0) > 1e-8 else 0.5
+                        c_cross = c0 + frac * (c1 - c0)
+                    else:
+                        k = int(np.argmin(np.abs(diff)))
+                        c_cross = float(coords_v[k])
+                    cand_x, cand_y = (cx_p, c_cross) if ray_type == "v" else (c_cross, cy_p)
+                    if _is_point_clean(cand_x, cand_y, kept_pts):
+                        kept_pts.append((cand_x, cand_y))
+                        manual_pts.append((cand_x, cand_y))
+                        placed_lv = True
+                        break
+
+    if manual_pts:
+        clabels = ax.clabel(
+            cs_lines,
+            levels=pos_levels,
+            manual=manual_pts,
+            inline=True,
+            inline_spacing=8,
+            fontsize=fontsize,
+            fmt="%.1f",
+            colors="#000000",
+        )
+    else:
+        clabels = ax.clabel(
+            cs_lines,
+            levels=pos_levels,
+            inline=True,
+            inline_spacing=8,
+            fontsize=fontsize,
+            fmt="%.1f",
+            colors="#000000",
+        )
+
+    for txt_obj in list(clabels):
+        txt_obj.set_rotation(0)
+        txt_obj.set_color("#000000")
+        txt_obj.set_fontweight("bold")
+        txt_obj.set_fontsize(fontsize)
+        txt_obj.set_zorder(7)
+        txt_obj.set_bbox(dict(boxstyle=f"round,pad={pad}", facecolor="#ffffff", edgecolor="#000000", lw=1.4, alpha=1.0))
+
+
 def generate_flat_slab_moment_contour(
     Lx_spans,
     Ly_spans,
@@ -4185,6 +4558,7 @@ def generate_flat_slab_moment_contour(
     Fy=None,
     mesh_btm_str="",
     mesh_top_str="",
+    drop_beams=None,
 ):
     """
     Renders an engineering 2D Bending Moment Matrix & Color Contour Map (M11 or M22)
@@ -4231,6 +4605,7 @@ def generate_flat_slab_moment_contour(
         btm_extra_spans=btm_extra_spans,
         active_cols=active_cols,
         removed_cols=removed_cols,
+        drop_beams=drop_beams,
     )
 
     M_field = M11 if mode == "M11" else M22
@@ -4277,14 +4652,17 @@ def generate_flat_slab_moment_contour(
 
     levels = np.linspace(m_min, m_max, 36)
 
-    # 1. Filled Contour Map
+    # 1. Filled Contour Map (TwoSlopeNorm centered at 0.0 so positive field is always warm orange/red and negative is cool blue)
     cmap_chosen = "RdYlBu_r"   # Red: positive sagging (+M), Blue: negative hogging (-M)
-    cs = ax_plan.contourf(X, Y, M_field, levels=levels, cmap=cmap_chosen, extend="both", zorder=1, alpha=0.92)
+    if m_min < -1e-3 and m_max > 1e-3:
+        norm_c = mcolors.TwoSlopeNorm(vmin=m_min, vcenter=0.0, vmax=m_max)
+    else:
+        norm_c = None
+    cs = ax_plan.contourf(X, Y, M_field, levels=levels, cmap=cmap_chosen, norm=norm_c, extend="both", zorder=1, alpha=0.92)
 
     # 2. Line Contours & Zero Inflection Line
     line_levels = np.linspace(m_min, m_max, 14)
-    cs_lines = ax_plan.contour(X, Y, M_field, levels=line_levels, colors="#1e293b", linewidths=0.75, alpha=0.45, zorder=2)
-    ax_plan.clabel(cs_lines, inline=True, fontsize=10.5, fmt="%.1f", colors="#0f172a")
+    cs_lines = ax_plan.contour(X, Y, M_field, levels=line_levels, colors="#1e293b", linewidths=1.05, alpha=0.65, zorder=2)
 
     if m_min < 0 < m_max:
         # Bold dashed zero contour line
@@ -4415,8 +4793,8 @@ def generate_flat_slab_moment_contour(
             ax_plan.text(
                 cx, badge_y,
                 f"M⁻ = {m_val:.2f} t.m",
-                color="#1e3a8a", fontsize=12.0, weight="bold", ha="center", va=va_pos,
-                bbox=dict(boxstyle="round,pad=0.28", facecolor="#ffffff", edgecolor="#3b82f6", lw=1.5, alpha=0.96),
+                color="#000000", fontsize=13.5, weight="bold", ha="center", va=va_pos,
+                bbox=dict(boxstyle="round,pad=0.34", facecolor="#ffffff", edgecolor="#1e3a8a", lw=1.8, alpha=0.99),
                 zorder=8
             )
     else:
@@ -4467,66 +4845,80 @@ def generate_flat_slab_moment_contour(
                 ax_plan.text(
                     x, badge_y,
                     f"M⁻ = {m_val:.2f} t.m",
-                    color="#1e3a8a", fontsize=12.0, weight="bold", ha="center", va=va_pos,
-                    bbox=dict(boxstyle="round,pad=0.28", facecolor="#ffffff", edgecolor="#3b82f6", lw=1.5, alpha=0.96),
+                    color="#000000", fontsize=13.5, weight="bold", ha="center", va=va_pos,
+                    bbox=dict(boxstyle="round,pad=0.34", facecolor="#ffffff", edgecolor="#1e3a8a", lw=1.8, alpha=0.99),
                     zorder=8
                 )
 
     # ── Drop Beams (الكمرات الساقطة والكابولية) ──
-    _render_drop_beams_on_ax(ax_plan, is_steel_layout=False)
+    _render_drop_beams_on_ax(ax_plan, drop_beams=drop_beams, is_steel_layout=False)
 
-    # Peak Positive Moment Badges at Bay Midspans (with Anti-Overlap Staggering)
-    for j in range(len(Ly_spans)):
-        Ly = y_coords[j+1] - y_coords[j]
-        for i in range(len(Lx_spans)):
-            Lx = x_coords[i+1] - x_coords[i]
-            mid_x = (x_coords[i] + x_coords[i+1]) / 2.0
-            mid_y = (y_coords[j] + y_coords[j+1]) / 2.0
-            # Check if midspan is inside any void
-            in_void = False
-            if void_boxes:
-                in_void = any((vx1 <= mid_x <= vx2 and vy1 <= mid_y <= vy2) for (vx1, vx2, vy1, vy2, *_) in void_boxes)
-            elif void_panel_ids:
-                pid = f"P_{i+1}_{j+1}"
-                in_void = (pid in set(void_panel_ids))
-            if in_void:
-                continue
+    # Single Unified Peak Positive Moment Badge per Column-Bounded Structural Panel
+    unified_panels = detect_column_bounded_panels(
+        x_coords, y_coords,
+        active_cols=active_cols,
+        removed_cols=removed_cols,
+        drop_beams=drop_beams,
+        void_panel_ids=void_panel_ids,
+        void_boxes=void_boxes,
+    )
+    badge_centers = []
+    for upanel in unified_panels:
+        p_bounds = upanel["bounds"]
+        px_min, px_max, py_min, py_max = p_bounds
+        Lx = px_max - px_min
+        Ly = py_max - py_min
 
-            ix = np.argmin(np.abs(x_vec - mid_x))
-            iy = np.argmin(np.abs(y_vec - mid_y))
-            m_pos_val = M_raw[iy, ix]
+        _, _, _, (center_x, center_y, m_pos_val) = get_unified_panel_contour(
+            X, Y, M_raw, p_bounds, sigma=6.0
+        )
 
-            # Prevent badge overlap in narrow spans:
-            has_narrow_x = (Lx < 2.5) or (i > 0 and Lx_spans[i-1] < 2.5) or (i < len(Lx_spans)-1 and Lx_spans[i+1] < 2.5)
-            has_narrow_y = (Ly < 2.5) or (j > 0 and Ly_spans[j-1] < 2.5) or (j < len(Ly_spans)-1 and Ly_spans[j+1] < 2.5)
+        # Ensure badge is not inside any void box
+        in_void = False
+        if void_boxes:
+            in_void = any((vx1 <= center_x <= vx2 and vy1 <= center_y <= vy2) for (vx1, vx2, vy1, vy2, *_) in void_boxes)
+        if in_void:
+            continue
 
-            tag_x = mid_x
-            tag_y = mid_y
-            if has_narrow_x and Ly >= 2.0:
-                y_stagger = min(1.10, Ly * 0.20)
-                tag_y = mid_y + (y_stagger if (i % 2 == 1) else -y_stagger)
-                tag_y = max(y_coords[j] + 0.45, min(y_coords[j+1] - 0.45, tag_y))
-            elif has_narrow_y and Lx >= 2.0:
-                x_stagger = min(1.10, Lx * 0.18)
-                tag_x = mid_x + (x_stagger if (j % 2 == 1) else -x_stagger)
-                tag_x = max(x_coords[i] + 0.45, min(x_coords[i+1] - 0.45, tag_x))
+        badge_centers.append((center_x, center_y))
 
-            if Lx < 2.2:
-                txt_label = f"M⁺ = +{m_pos_val:.2f}"
-                lbl_font = 9.5
-                lbl_pad = 0.22
-            else:
-                txt_label = f"M⁺ = +{m_pos_val:.2f}\nt.m/m"
-                lbl_font = 12.0
-                lbl_pad = 0.32
+        if Lx < 2.2:
+            txt_label = f"M⁺ = +{m_pos_val:.2f}"
+            lbl_font = 14.0
+            lbl_pad = 0.38
+        else:
+            txt_label = f"M⁺ = +{m_pos_val:.2f}\nt.m/m"
+            lbl_font = 17.5
+            lbl_pad = 0.52
 
-            ax_plan.text(
-                tag_x, tag_y,
-                txt_label,
-                color="#991b1b", fontsize=lbl_font, weight="bold", ha="center", va="center",
-                bbox=dict(boxstyle=f"round,pad={lbl_pad}", facecolor="#fff7ed", edgecolor="#ea580c", lw=1.6, alpha=0.96),
-                zorder=7
-            )
+        ax_plan.text(
+            center_x, center_y,
+            txt_label,
+            color="#000000", fontsize=lbl_font, weight="bold", ha="center", va="center",
+            bbox=dict(boxstyle=f"round,pad={lbl_pad}", facecolor="#ffffff", edgecolor="#000000", lw=2.4, alpha=1.0),
+            zorder=7
+        )
+
+    # Place enlarged, high-contrast black-on-white contour value panels along contour lines
+    _place_clean_contour_labels(
+        ax_plan,
+        cs_lines,
+        X,
+        Y,
+        M_field,
+        line_levels,
+        unified_panels,
+        badge_centers,
+        active_cols=active_cols,
+        drop_beams=drop_beams,
+        x_slab_min=x_slab_min,
+        x_slab_max=x_slab_max,
+        y_slab_min=y_slab_min,
+        y_slab_max=y_slab_max,
+        void_boxes=void_boxes,
+        fontsize=15.5,
+        pad=0.34,
+    )
 
     # Span Dimensions (Lx along Bottom)
     y_dim_lx = y_slab_min - dim_offset_bot
@@ -4635,6 +5027,7 @@ def generate_flat_slab_dual_moment_contour(
     btm_extra_spans=None,
     void_boxes=None,
     active_cols=None,
+    drop_beams=None,
 ):
     """
     Renders dual side-by-side engineering contour maps for both M11 and M22 on a unified canvas.
@@ -4668,6 +5061,7 @@ def generate_flat_slab_dual_moment_contour(
         btm_extra_spans=btm_extra_spans,
         active_cols=active_cols,
         removed_cols=removed_cols,
+        drop_beams=drop_beams,
     )
 
     bubble_radius = max(0.40, min(slab_w, slab_h) * 0.030)
@@ -4704,12 +5098,63 @@ def generate_flat_slab_dual_moment_contour(
         m_max = float(np.max(valid_m)) if len(valid_m) > 0 else 10.0
         levels = np.linspace(m_min, m_max, 32)
 
-        cs = ax.contourf(X, Y, M_data, levels=levels, cmap="RdYlBu_r", extend="both", zorder=1, alpha=0.92)
-        cs_lines = ax.contour(X, Y, M_data, levels=np.linspace(m_min, m_max, 12), colors="#1e293b", linewidths=0.7, alpha=0.4, zorder=2)
-        ax.clabel(cs_lines, inline=True, fontsize=9.5, fmt="%.1f", colors="#0f172a")
+        if m_min < -1e-3 and m_max > 1e-3:
+            norm_d = mcolors.TwoSlopeNorm(vmin=m_min, vcenter=0.0, vmax=m_max)
+        else:
+            norm_d = None
+        cs = ax.contourf(X, Y, M_data, levels=levels, cmap="RdYlBu_r", norm=norm_d, extend="both", zorder=1, alpha=0.92)
+        d_levels = np.linspace(m_min, m_max, 12)
+        cs_lines = ax.contour(X, Y, M_data, levels=d_levels, colors="#1e293b", linewidths=0.95, alpha=0.60, zorder=2)
 
         if m_min < 0 < m_max:
             ax.contour(X, Y, M_data, levels=[0.0], colors="#000000", linewidths=2.0, linestyles="--", zorder=3)
+
+        # Single Unified Peak Positive Moment Badge per Column-Bounded Panel
+        M_raw_d = M11_raw if mode_name == "M11" else M22_raw
+        unified_panels_d = detect_column_bounded_panels(
+            x_coords, y_coords,
+            active_cols=active_cols,
+            removed_cols=removed_cols,
+            drop_beams=drop_beams,
+            void_panel_ids=void_panel_ids,
+            void_boxes=void_boxes,
+        )
+        badge_centers_d = []
+        for upanel in unified_panels_d:
+            p_bounds = upanel["bounds"]
+            _, _, _, (cx_p, cy_p, m_pos_p) = get_unified_panel_contour(X, Y, M_raw_d, p_bounds, sigma=6.0)
+            in_v = False
+            if void_boxes:
+                in_v = any((vx1 <= cx_p <= vx2 and vy1 <= cy_p <= vy2) for (vx1, vx2, vy1, vy2, *_) in void_boxes)
+            if not in_v:
+                badge_centers_d.append((cx_p, cy_p))
+                ax.text(
+                    cx_p, cy_p,
+                    f"M⁺ = +{m_pos_p:.2f}\nt.m/m",
+                    color="#000000", fontsize=14.0, weight="bold", ha="center", va="center",
+                    bbox=dict(boxstyle="round,pad=0.42", facecolor="#ffffff", edgecolor="#000000", lw=2.0, alpha=1.0),
+                    zorder=7
+                )
+
+        _place_clean_contour_labels(
+            ax,
+            cs_lines,
+            X,
+            Y,
+            M_data,
+            d_levels,
+            unified_panels_d,
+            badge_centers_d,
+            active_cols=active_cols,
+            drop_beams=drop_beams,
+            x_slab_min=x_slab_min,
+            x_slab_max=x_slab_max,
+            y_slab_min=y_slab_min,
+            y_slab_max=y_slab_max,
+            void_boxes=void_boxes,
+            fontsize=13.5,
+            pad=0.30,
+        )
 
         cbar = fig.colorbar(cs, ax=ax, orientation="horizontal", pad=0.08, shrink=0.75)
         cbar.set_label(f"Bending Moment {mode_name} (t·m/m)", fontsize=13, weight="bold")
