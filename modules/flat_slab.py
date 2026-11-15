@@ -438,6 +438,101 @@ def compute_column_geometry(grid_x, grid_y, bc_cm, tc_cm, trans=None):
     }
 
 
+def update_column_section_geometry(col_obj, new_b_cm, new_t_cm, model_mark=None):
+    """
+    Updates the cross-section dimensions (b and t in cm) of a column object while:
+    1. Strictly preserving the original strike direction (horizontal / vertical - X or Y axis).
+    2. Strictly preserving the original offsets / eccentricities relative to grid axes (6cm or custom shift).
+    3. Recomputing all geometric bounds and coordinates without recentering or rotating.
+    """
+    if not isinstance(col_obj, dict):
+        return col_obj
+
+    gx = col_obj.get("grid_x_m")
+    if gx is None:
+        gx = col_obj.get("grid_x")
+    try:
+        gx = float(gx)
+    except (ValueError, TypeError):
+        gx = float(col_obj.get("x", 0.0))
+
+    gy = col_obj.get("grid_y_m")
+    if gy is None:
+        gy = col_obj.get("grid_y")
+    try:
+        gy = float(gy)
+    except (ValueError, TypeError):
+        gy = float(col_obj.get("y", 0.0))
+
+    trans = {
+        "direction": col_obj.get("direction", "اتجاه X"),
+        "shift_x": col_obj.get("shift_x", "متمركز على المحور (Centered)"),
+        "shift_y": col_obj.get("shift_y", "متمركز على المحور (Centered)"),
+    }
+
+    geom = compute_column_geometry(gx, gy, new_b_cm, new_t_cm, trans=trans)
+
+    col_obj["b_cm"] = float(new_b_cm)
+    col_obj["t_cm"] = float(new_t_cm)
+    col_obj["bc"] = float(geom["bc"])
+    col_obj["tc"] = float(geom["tc"])
+    col_obj["D"] = float(geom["D"])
+    col_obj["B"] = float(geom["B"])
+    col_obj["width_cm"] = float(geom["width_cm"])
+    col_obj["height_cm"] = float(geom["height_cm"])
+    col_obj["width_m"] = float(geom["width_m"])
+    col_obj["height_m"] = float(geom["height_m"])
+    col_obj["x_min"] = float(geom["x_min"])
+    col_obj["y_min"] = float(geom["y_min"])
+    col_obj["x_max"] = float(geom["x_max"])
+    col_obj["y_max"] = float(geom["y_max"])
+    col_obj["center_x"] = float(geom["center_x"])
+    col_obj["center_y"] = float(geom["center_y"])
+    col_obj["x"] = float(geom["center_x"])
+    col_obj["y"] = float(geom["center_y"])
+    col_obj["grid_x_m"] = gx
+    col_obj["grid_y_m"] = gy
+    col_obj["direction"] = geom["direction"]
+    col_obj["shift_x"] = geom["shift_x"]
+    col_obj["shift_y"] = geom["shift_y"]
+
+    if model_mark:
+        col_obj["model_mark"] = model_mark
+        col_obj["col_spec_str"] = f"{model_mark} = {int(round(float(new_b_cm)))}*{int(round(float(new_t_cm)))} cm"
+
+    return col_obj
+
+
+def sync_all_columns_with_models(cols, model_dims_map, col_label_map=None):
+    """
+    Synchronizes a collection of column dicts with confirmed model dimensions.
+    Key constraints enforced:
+    1. Only cross-section dimensions (b, t) are modified according to Rectangular Columns Design.
+    2. Column strike direction (X/Y) is 100% preserved.
+    3. Offsets/eccentricities (6cm, shifts) relative to grid axes are 100% preserved.
+    """
+    if not isinstance(cols, (list, tuple)) or not isinstance(model_dims_map, dict):
+        return cols
+
+    for c in cols:
+        if not isinstance(c, dict):
+            continue
+        c_type = str(c.get("type") or c.get("Raw Type") or "Interior").strip()
+        c_mark = c.get("model_mark") or (col_label_map.get(c_type) if col_label_map else None)
+
+        dims = (
+            model_dims_map.get(c_type)
+            or (model_dims_map.get(c_mark) if c_mark else None)
+            or (model_dims_map.get("Interior") if c_type == "Interior" else None)
+            or (model_dims_map.get("Edge") if c_type == "Edge" else None)
+            or (model_dims_map.get("Corner") if c_type == "Corner" else None)
+        )
+        if isinstance(dims, dict) and "b" in dims and "t" in dims:
+            update_column_section_geometry(c, dims["b"], dims["t"], model_mark=c_mark)
+
+    return cols
+
+
 def validate_edge_column_offset(geom, edge_dir, slab_bounds=None):
     """
     Validates if an edge column satisfies:
@@ -1151,6 +1246,7 @@ def generate_flat_slab_sketch(
     show_panel_labels=True, # if True, render slab panel IDs (e.g. P_1_1)
     show_col_labels=True,   # if True, render column labels (e.g. C1, C2)
     show_beam_labels=True,  # if True, render beam names and dimensions (e.g. B1 (250×600))
+    active_cols=None,       # optional list of active column dicts with updated dimensions & offsets
 ):
     """
     Generate the confirmatory geometric sketch for the flat slab with detailed Data Card.
@@ -1465,6 +1561,16 @@ def generate_flat_slab_sketch(
             new_label[orig_id] = None  # removed
 
     # Draw columns
+    active_by_orig = {}
+    if active_cols:
+        for c in active_cols:
+            if isinstance(c, dict):
+                orig_k = c.get("orig_id") or c.get("id")
+                if orig_k:
+                    active_by_orig[str(orig_k)] = c
+                if "i" in c and "j" in c:
+                    active_by_orig[f"{c['i']},{c['j']}"] = c
+
     for orig_id, info in orig_to_info.items():
         x, y = info["x"], info["y"]
         i_idx, j_idx = info["i"], info["j"]
@@ -1475,29 +1581,38 @@ def generate_flat_slab_sketch(
         if is_removed:
             continue
 
+        c_active = active_by_orig.get(orig_id) or active_by_orig.get(f"{i_idx},{j_idx}")
+        if c_active and not is_pending:
+            rx = float(c_active.get("x_min", x - col_w_m / 2.0))
+            ry = float(c_active.get("y_min", y - col_d_m / 2.0))
+            rw = float(c_active.get("width_m", col_w_m))
+            rh = float(c_active.get("height_m", col_d_m))
+            cx = float(c_active.get("center_x", c_active.get("x", x)))
+            cy = float(c_active.get("center_y", c_active.get("y", y)))
+            geom = c_active
+        else:
+            c_prop = {}
+            if isinstance(col_props, dict):
+                c_prop = col_props.get(orig_id) or col_props.get(f"{i_idx},{j_idx}") or col_props.get((i_idx, j_idx)) or {}
+            c_w_use = float(c_prop.get("b_cm", col_w_cm)) if isinstance(c_prop, dict) and c_prop.get("b_cm") else float(col_w_cm)
+            c_d_use = float(c_prop.get("t_cm", col_d_cm)) if isinstance(c_prop, dict) and c_prop.get("t_cm") else float(col_d_cm)
 
-        c_prop = {}
-        if isinstance(col_props, dict):
-            c_prop = col_props.get(orig_id) or col_props.get(f"{i_idx},{j_idx}") or col_props.get((i_idx, j_idx)) or {}
-        c_w_use = float(c_prop.get("b_cm", col_w_cm)) if isinstance(c_prop, dict) and c_prop.get("b_cm") else float(col_w_cm)
-        c_d_use = float(c_prop.get("t_cm", col_d_cm)) if isinstance(c_prop, dict) and c_prop.get("t_cm") else float(col_d_cm)
+            c_trans = dict((col_transforms or {}).get(orig_id) or (col_transforms or {}).get(f"{i_idx},{j_idx}") or {})
+            if isinstance(c_prop, dict):
+                if not c_trans.get("direction") and c_prop.get("direction"):
+                    c_trans["direction"] = c_prop["direction"]
+                if not c_trans.get("shift_x") and c_prop.get("shift_x"):
+                    c_trans["shift_x"] = c_prop["shift_x"]
+                if not c_trans.get("shift_y") and c_prop.get("shift_y"):
+                    c_trans["shift_y"] = c_prop["shift_y"]
 
-        c_trans = dict((col_transforms or {}).get(orig_id) or (col_transforms or {}).get(f"{i_idx},{j_idx}") or {})
-        if isinstance(c_prop, dict):
-            if not c_trans.get("direction") and c_prop.get("direction"):
-                c_trans["direction"] = c_prop["direction"]
-            if not c_trans.get("shift_x") and c_prop.get("shift_x"):
-                c_trans["shift_x"] = c_prop["shift_x"]
-            if not c_trans.get("shift_y") and c_prop.get("shift_y"):
-                c_trans["shift_y"] = c_prop["shift_y"]
-
-        geom = compute_column_geometry(x, y, c_w_use, c_d_use, c_trans)
-        rx = geom["x_min"]
-        ry = geom["y_min"]
-        rw = geom["width_m"]
-        rh = geom["height_m"]
-        cx = geom["center_x"]
-        cy = geom["center_y"]
+            geom = compute_column_geometry(x, y, c_w_use, c_d_use, c_trans)
+            rx = geom["x_min"]
+            ry = geom["y_min"]
+            rw = geom["width_m"]
+            rh = geom["height_m"]
+            cx = geom["center_x"]
+            cy = geom["center_y"]
 
         if is_pending:
             # Faded/pale orange dashed border — selected in review stage before confirmation
@@ -2149,6 +2264,7 @@ def generate_flat_slab_bottom_rft_sketch(
     direction="both",   # "X", "Y", or "both"
     col_transforms=None,
     edge_columns=None,
+    active_cols=None,
 ):
     """
     Generate the full-width engineering Bottom Reinforcement Drawing (المخطط الإنشائي للحديد السفلي).
@@ -2293,6 +2409,16 @@ def generate_flat_slab_bottom_rft_sketch(
     min_span_y = min(Ly_spans) if Ly_spans else 6.0
 
     # Draw Columns
+    active_by_orig = {}
+    if active_cols:
+        for c in active_cols:
+            if isinstance(c, dict):
+                orig_k = c.get("orig_id") or c.get("id")
+                if orig_k:
+                    active_by_orig[str(orig_k)] = c
+                if "i" in c and "j" in c:
+                    active_by_orig[f"{c['i']},{c['j']}"] = c
+
     rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
     grid_num = 1
     col_num = 1
@@ -2303,11 +2429,21 @@ def generate_flat_slab_bottom_rft_sketch(
             if (x, y) in rem_coords:
                 continue
             cid = f"C{col_num}"
-            c_trans = (col_transforms or {}).get(orig_id, {})
-            geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
-            rx, ry = geom["x_min"], geom["y_min"]
-            rw, rh = geom["width_m"], geom["height_m"]
-            cx, cy = geom["center_x"], geom["center_y"]
+            c_active = active_by_orig.get(orig_id) or active_by_orig.get(f"{i_idx},{j_idx}")
+            if c_active:
+                rx = float(c_active.get("x_min", x - col_w_m / 2.0))
+                ry = float(c_active.get("y_min", y - col_d_m / 2.0))
+                rw = float(c_active.get("width_m", col_w_m))
+                rh = float(c_active.get("height_m", col_d_m))
+                cx = float(c_active.get("center_x", c_active.get("x", x)))
+                cy = float(c_active.get("center_y", c_active.get("y", y)))
+                geom = c_active
+            else:
+                c_trans = (col_transforms or {}).get(orig_id, {})
+                geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+                rx, ry = geom["x_min"], geom["y_min"]
+                rw, rh = geom["width_m"], geom["height_m"]
+                cx, cy = geom["center_x"], geom["center_y"]
             is_edge_c = is_edge_column_verified(orig_id, geom=geom, edge_columns=edge_columns)
             col_box = patches.Rectangle(
                 (rx, ry), rw, rh,
@@ -3003,14 +3139,37 @@ def detect_column_bounded_panels(x_coords, y_coords, active_cols=None, removed_c
 
     active_col_set = set()
     active_col_coords = []
+    active_grid_coords = []
+    active_col_ij = set()
     if active_cols:
         for c in active_cols:
             if isinstance(c, dict):
                 cid = c.get("orig_id", c.get("id"))
                 if cid:
                     active_col_set.add(cid)
-                cx = c.get("grid_x_m", c.get("x"))
-                cy = c.get("grid_y_m", c.get("y"))
+                if c.get("id"):
+                    active_col_set.add(c["id"])
+                if c.get("orig_id"):
+                    active_col_set.add(c["orig_id"])
+                if c.get("i") is not None and c.get("j") is not None:
+                    try:
+                        active_col_ij.add((int(c["i"]), int(c["j"])))
+                    except (ValueError, TypeError):
+                        pass
+                gx_str = c.get("grid_x", "")
+                gy_str = c.get("grid_y", "")
+                if isinstance(gx_str, str) and isinstance(gy_str, str):
+                    if gx_str.startswith("Y") and gy_str.startswith("X"):
+                        try:
+                            active_col_ij.add((int(gx_str[1:]) - 1, int(gy_str[1:]) - 1))
+                        except (ValueError, TypeError):
+                            pass
+                gx_val = c.get("grid_x_m")
+                gy_val = c.get("grid_y_m")
+                if gx_val is not None and gy_val is not None:
+                    active_grid_coords.append((float(gx_val), float(gy_val)))
+                cx = c.get("x")
+                cy = c.get("y")
                 if cx is not None and cy is not None:
                     active_col_coords.append((float(cx), float(cy)))
 
@@ -3019,13 +3178,19 @@ def detect_column_bounded_panels(x_coords, y_coords, active_cols=None, removed_c
     def is_vertex_col_active(i_idx, j_idx):
         if not active_cols and not removed_cols:
             return True
+        if (i_idx, j_idx) in active_col_ij:
+            return True
         gx = x_coords[i_idx]
         gy = y_coords[j_idx]
-        # Match by physical coordinates first (immune to grid re-indexing when axes without columns merge)
+        if active_grid_coords:
+            if any(abs(agx - gx) <= 0.20 and abs(agy - gy) <= 0.20 for (agx, agy) in active_grid_coords):
+                return True
         if active_col_coords:
-            return any(abs(cx - gx) <= 0.35 and abs(cy - gy) <= 0.35 for (cx, cy) in active_col_coords)
+            if any(abs(cx - gx) <= 0.65 and abs(cy - gy) <= 0.65 for (cx, cy) in active_col_coords):
+                return True
         if rem_coords:
-            return not any(abs(rx - gx) <= 0.35 and abs(ry - gy) <= 0.35 for (rx, ry) in rem_coords)
+            if any(abs(rx - gx) <= 0.35 and abs(ry - gy) <= 0.35 for (rx, ry) in rem_coords):
+                return False
         cid = f"C{j_idx * len(x_coords) + i_idx + 1}"
         if active_col_set:
             return cid in active_col_set
@@ -3064,17 +3229,27 @@ def detect_column_bounded_panels(x_coords, y_coords, active_cols=None, removed_c
         """
         True if vertical edge at x = x_coords[k_idx] between y_j and y_{j+1} is a structural panel boundary:
           1. Both endpoints (k_idx, j_idx) and (k_idx, j_idx + 1) have active columns, OR
-          2. A vertical drop beam runs along x = x_coords[k_idx] covering this segment, OR
-          3. Adjacent strips k_idx-1 and k_idx have different solid Y-spans (bounded by a void).
+          2. A continuous column line along line k_idx spans across this segment between an active column below
+             and an active column above (within standard structural span <= 10.5m), OR
+          3. A vertical drop beam covers this segment (e.g. B11 on Y2 or B10 on Y4), OR
+          4. Adjacent strips k_idx-1 and k_idx have different solid Y-spans (bounded by a void).
         Note: Having only top & bottom perimeter columns (like C2 and C9 on Y3 without interior columns
-        and without a drop beam along Y3) does NOT divide the interior slab panel.
+        and without a drop beam along Y3) with span > 10.5m does NOT divide the interior slab panel.
         """
         gx = x_coords[k_idx]
         gy1, gy2 = y_coords[j_idx], y_coords[j_idx + 1]
         # 1. Both local endpoints of this cell edge have active columns
         if is_vertex_col_active(k_idx, j_idx) and is_vertex_col_active(k_idx, j_idx + 1):
             return True
-        # 2. A vertical drop beam covers this segment (e.g. B11 on Y2 or B10 on Y4)
+        # 2. Continuous column line across intermediate sub-grid axes without columns
+        cols_below = [j_b for j_b in range(j_idx + 1) if is_vertex_col_active(k_idx, j_b)]
+        cols_above = [j_a for j_a in range(j_idx + 1, len(y_coords)) if is_vertex_col_active(k_idx, j_a)]
+        if cols_below and cols_above:
+            j_b = max(cols_below)
+            j_a = min(cols_above)
+            if (y_coords[j_a] - y_coords[j_b]) <= 10.5:
+                return True
+        # 3. A vertical drop beam covers this segment (e.g. B11 on Y2 or B10 on Y4)
         if drop_beams_list:
             for db in drop_beams_list:
                 if not isinstance(db, dict) or db.get("beam_type_category") == "unsupported_beam":
@@ -3088,7 +3263,7 @@ def detect_column_bounded_panels(x_coords, y_coords, active_cols=None, removed_c
                         ov = min(gy2, max(by1, by2)) - max(gy1, min(by1, by2))
                         if ov >= 0.40 * (gy2 - gy1):
                             return True
-        # 3. Prevent merging across a void step boundary where adjacent X-strips have different solid Y-extents
+        # 4. Prevent merging across a void step boundary where adjacent X-strips have different solid Y-extents
         if 0 < k_idx < len(Lx_spans):
             if col_solid_j.get(k_idx - 1) != col_solid_j.get(k_idx):
                 return True
@@ -3098,14 +3273,24 @@ def detect_column_bounded_panels(x_coords, y_coords, active_cols=None, removed_c
         """
         True if horizontal edge at y = y_coords[m_idx] between x_i and x_{i+1} is a structural panel boundary:
           1. Both endpoints (i_idx, m_idx) and (i_idx + 1, m_idx) have active columns, OR
-          2. A horizontal drop beam runs along y = y_coords[m_idx] covering this segment.
+          2. A continuous column line along line m_idx spans across this segment between an active column to the left
+             and an active column to the right (within standard structural span <= 10.5m), OR
+          3. A horizontal drop beam covers this segment.
         """
         gy = y_coords[m_idx]
         gx1, gx2 = x_coords[i_idx], x_coords[i_idx + 1]
         # 1. Both local endpoints of this cell edge have active columns
         if is_vertex_col_active(i_idx, m_idx) and is_vertex_col_active(i_idx + 1, m_idx):
             return True
-        # 2. A horizontal drop beam covers this segment (e.g. B8 on X2 or B12 on X3)
+        # 2. Continuous column line across intermediate sub-grid axes without columns
+        cols_left = [i_l for i_l in range(i_idx + 1) if is_vertex_col_active(i_l, m_idx)]
+        cols_right = [i_r for i_r in range(i_idx + 1, len(x_coords)) if is_vertex_col_active(i_r, m_idx)]
+        if cols_left and cols_right:
+            i_l = max(cols_left)
+            i_r = min(cols_right)
+            if (x_coords[i_r] - x_coords[i_l]) <= 10.5:
+                return True
+        # 3. A horizontal drop beam covers this segment (e.g. B8 on X2 or B12 on X3)
         if drop_beams_list:
             for db in drop_beams_list:
                 if not isinstance(db, dict) or db.get("beam_type_category") == "unsupported_beam":
@@ -3266,17 +3451,40 @@ def build_slab_moment_field(
                     rem_coords.add((round(float(item["x"]), 2), round(float(item["y"]), 2)))
 
     active_col_set = set()
-    active_col_coords = set()
+    active_col_coords = []
+    active_grid_coords = []
+    active_col_ij = set()
     if active_cols:
         for c in active_cols:
             if isinstance(c, dict):
                 cid = c.get("orig_id", c.get("id"))
                 if cid:
                     active_col_set.add(cid)
-                cx = c.get("grid_x_m", c.get("x"))
-                cy = c.get("grid_y_m", c.get("y"))
+                if c.get("id"):
+                    active_col_set.add(c["id"])
+                if c.get("orig_id"):
+                    active_col_set.add(c["orig_id"])
+                if c.get("i") is not None and c.get("j") is not None:
+                    try:
+                        active_col_ij.add((int(c["i"]), int(c["j"])))
+                    except (ValueError, TypeError):
+                        pass
+                gx_str = c.get("grid_x", "")
+                gy_str = c.get("grid_y", "")
+                if isinstance(gx_str, str) and isinstance(gy_str, str):
+                    if gx_str.startswith("Y") and gy_str.startswith("X"):
+                        try:
+                            active_col_ij.add((int(gx_str[1:]) - 1, int(gy_str[1:]) - 1))
+                        except (ValueError, TypeError):
+                            pass
+                gx_val = c.get("grid_x_m")
+                gy_val = c.get("grid_y_m")
+                if gx_val is not None and gy_val is not None:
+                    active_grid_coords.append((float(gx_val), float(gy_val)))
+                cx = c.get("x")
+                cy = c.get("y")
                 if cx is not None and cy is not None:
-                    active_col_coords.add((round(float(cx), 2), round(float(cy), 2)))
+                    active_col_coords.append((float(cx), float(cy)))
 
     beam_supported_coords = set()
     drop_beams = _get_active_drop_beams_list(drop_beams)
@@ -3294,15 +3502,26 @@ def build_slab_moment_field(
     def is_vertex_col_active(i_idx, j_idx):
         if not active_cols and not removed_cols:
             return True
+        if (i_idx, j_idx) in active_col_ij:
+            return True
         gx = x_coords[i_idx]
         gy = y_coords[j_idx]
         if (round(gx, 2), round(gy, 2)) in beam_supported_coords:
             return True
+        if active_grid_coords:
+            if any(abs(agx - gx) <= 0.20 and abs(agy - gy) <= 0.20 for (agx, agy) in active_grid_coords):
+                return True
+        if active_col_coords:
+            if any(abs(cx - gx) <= 0.65 and abs(cy - gy) <= 0.65 for (cx, cy) in active_col_coords):
+                return True
+        if rem_coords:
+            if any(abs(rx - gx) <= 0.35 and abs(ry - gy) <= 0.35 for (rx, ry) in rem_coords):
+                return False
         cid = f"C{j_idx * len(x_coords) + i_idx + 1}"
-        if active_col_set or active_col_coords:
-            return (cid in active_col_set) or ((round(gx, 2), round(gy, 2)) in active_col_coords)
-        if rem_set or rem_coords:
-            return (cid not in rem_set) and ((round(gx, 2), round(gy, 2)) not in rem_coords)
+        if active_col_set:
+            return cid in active_col_set
+        if rem_set:
+            return cid not in rem_set
         return True
 
     # ── 3. Detect Void Panels ────────────────────────────────────────────────
@@ -3454,8 +3673,18 @@ def build_slab_moment_field(
         near_mask = dist_sq <= (r_col_eff * 2.2) ** 2
         if np.any(near_mask):
             w_neg = np.exp(-0.5 * (np.sqrt(dist_sq[near_mask]) / (r_col_eff * 0.52)) ** 2)
-            M11[near_mask] = M11[near_mask] * (1.0 - w_neg) - m_col_neg_x * w_neg
-            M22[near_mask] = M22[near_mask] * (1.0 - w_neg) - m_col_neg_y * w_neg
+            target_neg_11 = -m_col_neg_x * w_neg
+            target_neg_22 = -m_col_neg_y * w_neg
+            M11[near_mask] = np.where(
+                w_neg > 0.12,
+                np.minimum(M11[near_mask] * (1.0 - w_neg) + target_neg_11, target_neg_11 * 0.45),
+                M11[near_mask] * (1.0 - w_neg) + target_neg_11
+            )
+            M22[near_mask] = np.where(
+                w_neg > 0.12,
+                np.minimum(M22[near_mask] * (1.0 - w_neg) + target_neg_22, target_neg_22 * 0.45),
+                M22[near_mask] * (1.0 - w_neg) + target_neg_22
+            )
 
     m_neg_peak_x = base_neg_x
     m_neg_peak_y = base_neg_y
@@ -3581,6 +3810,15 @@ def build_slab_moment_field(
             # Blend smoothed positive field while preserving negative support hogging peaks at columns
             M11[np.ix_(iy_sub, ix_sub)] = np.where(sub_m11 < 0.0, np.minimum(sub_m11, s11_sub), s11_sub)
             M22[np.ix_(iy_sub, ix_sub)] = np.where(sub_m22 < 0.0, np.minimum(sub_m22, s22_sub), s22_sub)
+
+    # ── 7b. Re-anchor column support negative hogging peaks after spatial smoothing ───
+    for (cx, cy) in active_column_coords:
+        dist_sq = (X - cx) ** 2 + (Y - cy) ** 2
+        near_mask = dist_sq <= (r_col_eff * 1.5) ** 2
+        if np.any(near_mask):
+            w_neg = np.exp(-0.5 * (np.sqrt(dist_sq[near_mask]) / (r_col_eff * 0.48)) ** 2)
+            M11[near_mask] = np.where(w_neg > 0.15, np.minimum(M11[near_mask], -base_neg_x * 0.70 * w_neg), M11[near_mask])
+            M22[near_mask] = np.where(w_neg > 0.15, np.minimum(M22[near_mask], -base_neg_y * 0.70 * w_neg), M22[near_mask])
 
     # Keep unmasked copies for sampling support values
     M11_raw = np.copy(M11)
@@ -10777,6 +11015,7 @@ def generate_flat_slab_master_steel_layout_sketch(
     col_transforms=None,
     edge_columns=None,
     drop_beams=None,
+    active_cols=None,
 ):
     """
     Generates a master 2D structural floor plan (Steel Layout - مسقط أفقي لتسليح البلاطة)
@@ -10893,6 +11132,16 @@ def generate_flat_slab_master_steel_layout_sketch(
     col_d_m   = max(col_d_cm / 100.0, slab_h * 0.04)
     rem_coords = {(c["x"], c["y"]) for c in removed_cols} if removed_cols else set()
 
+    active_by_orig = {}
+    if active_cols:
+        for c in active_cols:
+            if isinstance(c, dict):
+                orig_k = c.get("orig_id") or c.get("id")
+                if orig_k:
+                    active_by_orig[str(orig_k)] = c
+                if "i" in c and "j" in c:
+                    active_by_orig[f"{c['i']},{c['j']}"] = c
+
     col_dict = {}
     grid_idx = 1
     col_idx = 1
@@ -10904,11 +11153,21 @@ def generate_flat_slab_master_steel_layout_sketch(
                 continue
             cid = f"C{col_idx}"
             col_idx += 1
-            c_trans = (col_transforms or {}).get(orig_id, {})
-            geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
-            rx, ry = geom["x_min"], geom["y_min"]
-            rw, rh = geom["width_m"], geom["height_m"]
-            cx, cy = geom["center_x"], geom["center_y"]
+            c_active = active_by_orig.get(orig_id) or active_by_orig.get(f"{i_idx},{j_idx}")
+            if c_active:
+                rx = float(c_active.get("x_min", x - col_w_m / 2.0))
+                ry = float(c_active.get("y_min", y - col_d_m / 2.0))
+                rw = float(c_active.get("width_m", col_w_m))
+                rh = float(c_active.get("height_m", col_d_m))
+                cx = float(c_active.get("center_x", c_active.get("x", x)))
+                cy = float(c_active.get("center_y", c_active.get("y", y)))
+                geom = c_active
+            else:
+                c_trans = (col_transforms or {}).get(orig_id, {})
+                geom = compute_column_geometry(x, y, col_w_cm, col_d_cm, c_trans)
+                rx, ry = geom["x_min"], geom["y_min"]
+                rw, rh = geom["width_m"], geom["height_m"]
+                cx, cy = geom["center_x"], geom["center_y"]
             col_dict[cid] = (cx, cy, i_idx, j_idx)
             is_edge_c = is_edge_column_verified(orig_id, geom=geom, edge_columns=edge_columns)
             ax_plan.add_patch(patches.Rectangle(
@@ -16674,6 +16933,7 @@ def _section_fs_add_columns(
             show_panel_labels=show_panel_labels,
             show_col_labels=show_col_labels,
             show_beam_labels=show_beam_labels,
+            active_cols=_active_cols,
         )
         # ── تنبيه مكان إسقاط الكمرة مرفوض إنشائياً مع زر موافق الإلزامي ──
         rejected_alert_plan = st.session_state.get("_fs_invalid_beam_rejected_alert")
@@ -18311,6 +18571,21 @@ def render(is_standalone: bool = False):
     )
 
     st.session_state["_fs_active_cols"] = _active_cols
+
+    # ── Pre-synchronize columns with confirmed or active model dimensions ──
+    _pre_confirmed_col_dims = st.session_state.get("fs_confirmed_col_dims") or S.cfg_val("fs_confirmed_col_dims", {})
+    if isinstance(_pre_confirmed_col_dims, dict) and _pre_confirmed_col_dims:
+        _effective_pre_dims = {}
+        for _mk, _dims in _pre_confirmed_col_dims.items():
+            if isinstance(_dims, dict):
+                _b_use = float(_dims.get("b", _bc_col))
+                _t_use = float(_dims.get("t", _tc_col))
+                _effective_pre_dims[_mk] = {"b": _b_use, "t": _t_use}
+        if _effective_pre_dims:
+            sync_all_columns_with_models(_active_cols, _effective_pre_dims)
+            sync_all_columns_with_models(_all_cols, _effective_pre_dims)
+            st.session_state["_fs_active_cols"] = _active_cols
+
     _effective_removed_ids = {c["orig_id"] for c in _all_cols if c["removed"]}
     _col_w_sk = _bc_col
     _col_d_sk = _tc_col
@@ -18985,121 +19260,121 @@ def render(is_standalone: bool = False):
     summary_models = []
     img_reactions_b64 = None
 
-    if not is_standalone:
-        # ── 🏛️ COLUMN REACTIONS & MULTI-STOREY LOADS (ردود أفعال وتوزيع أحمال الأعمدة) ────
-        col_reactions_data = []
-        for c in _active_cols:
-            pu_1f = c.get("Pu", 0.0)
-            pu_tot = pu_1f * num_floors
-            atrib = c.get("Atrib_0", 0.0)
-            raw_type = c.get("type", "Interior")
-            col_reactions_data.append({
-                "Column ID": c["id"],
-                "Orig ID": c.get("orig_id", c["id"]),
-                "Grid": f"{c['grid_x']} - {c['grid_y']}",
-                "Location Type": {"Interior": "داخلي (Interior)", "Edge": "طرفي / وسط خارجي (Edge)", "Corner": "ركن (Corner)"}.get(raw_type, raw_type),
-                "Raw Type": raw_type,
-                "Tributary Area (m²)": f"{atrib:.2f}",
-                "Pu (1 Floor) [ton]": f"{pu_1f:.2f}",
-                f"Total Pu ({num_floors} Floors) [ton]": f"{pu_tot:.2f}",
-                "pu_1f_val": pu_1f,
-                "pu_tot_val": pu_tot,
-                "pu_beam_val": float(c.get("Pu_beam", 0.0)),
-                "atrib_val": atrib,
-                "x_min": c.get("x_min"),
-                "y_min": c.get("y_min"),
-                "x_max": c.get("x_max"),
-                "y_max": c.get("y_max"),
-                "width_m": c.get("width_m"),
-                "height_m": c.get("height_m"),
-                "center_x": c.get("center_x", c.get("x")),
-                "center_y": c.get("center_y", c.get("y")),
-            })
+    # ── 🏛️ COLUMN REACTIONS & MULTI-STOREY LOADS (ردود أفعال وتوزيع أحمال الأعمدة) ────
+    col_reactions_data = []
+    for c in _active_cols:
+        pu_1f = c.get("Pu", 0.0)
+        pu_tot = pu_1f * num_floors
+        atrib = c.get("Atrib_0", 0.0)
+        raw_type = c.get("type", "Interior")
+        col_reactions_data.append({
+            "Column ID": c["id"],
+            "Orig ID": c.get("orig_id", c["id"]),
+            "Grid": f"{c['grid_x']} - {c['grid_y']}",
+            "Location Type": {"Interior": "داخلي (Interior)", "Edge": "طرفي / وسط خارجي (Edge)", "Corner": "ركن (Corner)"}.get(raw_type, raw_type),
+            "Raw Type": raw_type,
+            "Tributary Area (m²)": f"{atrib:.2f}",
+            "Pu (1 Floor) [ton]": f"{pu_1f:.2f}",
+            f"Total Pu ({num_floors} Floors) [ton]": f"{pu_tot:.2f}",
+            "pu_1f_val": pu_1f,
+            "pu_tot_val": pu_tot,
+            "pu_beam_val": float(c.get("Pu_beam", 0.0)),
+            "atrib_val": atrib,
+            "x_min": c.get("x_min"),
+            "y_min": c.get("y_min"),
+            "x_max": c.get("x_max"),
+            "y_max": c.get("y_max"),
+            "width_m": c.get("width_m"),
+            "height_m": c.get("height_m"),
+            "center_x": c.get("center_x", c.get("x")),
+            "center_y": c.get("center_y", c.get("y")),
+        })
 
-        img_reactions_b64 = None
+    img_reactions_b64 = None
 
-        # ── 📊 CLASSIFICATION INTO GOVERNING COLUMN TYPES (DYNAMIC RE-INDEXING C1, C2, C3) ──
-        int_cols = [r for r in col_reactions_data if r["Raw Type"] == "Interior"]
-        edge_cols = [r for r in col_reactions_data if r["Raw Type"] == "Edge"]
-        corner_cols = [r for r in col_reactions_data if r["Raw Type"] == "Corner"]
+    # ── 📊 CLASSIFICATION INTO GOVERNING COLUMN TYPES (DYNAMIC RE-INDEXING C1, C2, C3) ──
+    int_cols = [r for r in col_reactions_data if r["Raw Type"] == "Interior"]
+    edge_cols = [r for r in col_reactions_data if r["Raw Type"] == "Edge"]
+    corner_cols = [r for r in col_reactions_data if r["Raw Type"] == "Corner"]
 
-        max_int = max(int_cols, key=lambda x: x["pu_1f_val"]) if int_cols else None
-        max_edge = max(edge_cols, key=lambda x: x["pu_1f_val"]) if edge_cols else None
-        max_corner = max(corner_cols, key=lambda x: x["pu_1f_val"]) if corner_cols else None
+    max_int = max(int_cols, key=lambda x: x["pu_1f_val"]) if int_cols else None
+    max_edge = max(edge_cols, key=lambda x: x["pu_1f_val"]) if edge_cols else None
+    max_corner = max(corner_cols, key=lambda x: x["pu_1f_val"]) if corner_cols else None
 
-        # Dynamic re-indexing priority: (Interior -> Edge -> Corner)
-        col_group_specs = [
-            ("Interior", int_cols, max_int, "أعمدة داخلية", "داخلي (Interior)", "أقصى عمود داخلي", "قواعد داخلية"),
-            ("Edge", edge_cols, max_edge, "أعمدة جانبية", "جانبي / طرفي (Edge)", "أقصى عمود جانبي", "قواعد جانبية"),
-            ("Corner", corner_cols, max_corner, "أعمدة ركن", "ركن (Corner)", "أقصى عمود ركن", "قواعد أركان"),
-        ]
-        active_col_groups = [g for g in col_group_specs if g[1]]
-        col_label_map = {}
-        for idx_c, (grp_key, grp_cols, grp_max, grp_ar, grp_loc, grp_gov_lbl, ftg_ar) in enumerate(active_col_groups, start=1):
-            col_label_map[grp_key] = f"C{idx_c}"
+    # Dynamic re-indexing priority: (Interior -> Edge -> Corner)
+    col_group_specs = [
+        ("Interior", int_cols, max_int, "أعمدة داخلية", "داخلي (Interior)", "أقصى عمود داخلي", "قواعد داخلية"),
+        ("Edge", edge_cols, max_edge, "أعمدة جانبية", "جانبي / طرفي (Edge)", "أقصى عمود جانبي", "قواعد جانبية"),
+        ("Corner", corner_cols, max_corner, "أعمدة ركن", "ركن (Corner)", "أقصى عمود ركن", "قواعد أركان"),
+    ]
+    active_col_groups = [g for g in col_group_specs if g[1]]
+    col_label_map = {}
+    for idx_c, (grp_key, grp_cols, grp_max, grp_ar, grp_loc, grp_gov_lbl, ftg_ar) in enumerate(active_col_groups, start=1):
+        col_label_map[grp_key] = f"C{idx_c}"
 
-        # Governing summary model table with dynamic marks (C1, C2...)
-        summary_models = []
+    # Governing summary model table with dynamic marks (C1, C2...)
+    summary_models = []
+    for grp_key, grp_cols, grp_max, grp_ar, grp_loc, grp_gov_lbl, ftg_ar in active_col_groups:
+        c_mark = col_label_map[grp_key]
+        clean_ar = "الداخلي" if grp_key == "Interior" else ("الجانبي" if grp_key == "Edge" else "الركن")
+        summary_models.append({
+            "Column Model (نموذج التصميم)": f"{c_mark} ({grp_gov_lbl})",
+            "Governing Column": f"{grp_max['Column ID']} ({grp_max['Grid']})",
+            "Location Type": grp_loc,
+            "Tributary Area (m²)": f"{grp_max['atrib_val']:.2f}",
+            "Pu (1 Floor) [ton]": f"{grp_max['pu_1f_val']:.2f}",
+            f"Total Pu ({num_floors} Floors) [ton]": f"{grp_max['pu_tot_val']:.2f}",
+        })
+
+    with st.expander(f"📊 Column Reactions Table — {num_floors} Floors (جدول ردود أفعال وتوزيع أحمال الأعمدة)", expanded=False):
+        # 1. Top Table: Governing Column Models & Loads (C1 الداخلي - C2 الجانبي - C3 الركن)
+        st.markdown(
+            f"""
+            <div dir="rtl" style="direction:rtl; text-align:right; background:linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border:1.5px solid #93c5fd; border-right:5px solid #2563eb; padding:10px 14px; border-radius:8px; margin-bottom:10px; color:#1e3a8a; font-weight:700; font-size:14.5px;">
+                📌 نماذج وأحمال الأعمدة الحاكمة (C1 الداخلي - C2 الجانبي - C3 الركن):
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        gov_models_table = []
         for grp_key, grp_cols, grp_max, grp_ar, grp_loc, grp_gov_lbl, ftg_ar in active_col_groups:
             c_mark = col_label_map[grp_key]
             clean_ar = "الداخلي" if grp_key == "Interior" else ("الجانبي" if grp_key == "Edge" else "الركن")
-            summary_models.append({
-                "Column Model (نموذج التصميم)": f"{c_mark} ({grp_gov_lbl})",
-                "Governing Column": f"{grp_max['Column ID']} ({grp_max['Grid']})",
-                "Location Type": grp_loc,
-                "Tributary Area (m²)": f"{grp_max['atrib_val']:.2f}",
-                "Pu (1 Floor) [ton]": f"{grp_max['pu_1f_val']:.2f}",
-                f"Total Pu ({num_floors} Floors) [ton]": f"{grp_max['pu_tot_val']:.2f}",
+            gov_models_table.append({
+                "نموذج العمود (Model)": f"{c_mark} ({clean_ar})",
+                "العدد بالمسقط": f"{len(grp_cols)} عمود",
+                "العمود الحاكم (Gov Col)": f"{grp_max['Column ID']} ({grp_max['Grid']})",
+                "موقع وتصنيف العمود": grp_loc,
+                "مساحة التأثير Atrib (m²)": f"{grp_max['atrib_val']:.2f}",
+                "حمل الدور Pu (1F) [ton]": f"{grp_max['pu_1f_val']:.2f}",
+                f"إجمالي الحمل ({num_floors}F) [ton]": f"{grp_max['pu_tot_val']:.2f}",
             })
 
-        with st.expander(f"📊 Column Reactions Table — {num_floors} Floors (جدول ردود أفعال وتوزيع أحمال الأعمدة)", expanded=False):
-            # 1. Top Table: Governing Column Models & Loads (C1 الداخلي - C2 الجانبي - C3 الركن)
-            st.markdown(
-                f"""
-                <div dir="rtl" style="direction:rtl; text-align:right; background:linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border:1.5px solid #93c5fd; border-right:5px solid #2563eb; padding:10px 14px; border-radius:8px; margin-bottom:10px; color:#1e3a8a; font-weight:700; font-size:14.5px;">
-                    📌 نماذج وأحمال الأعمدة الحاكمة (C1 الداخلي - C2 الجانبي - C3 الركن):
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+        render_styled_table(gov_models_table)
 
-            gov_models_table = []
-            for grp_key, grp_cols, grp_max, grp_ar, grp_loc, grp_gov_lbl, ftg_ar in active_col_groups:
-                c_mark = col_label_map[grp_key]
-                clean_ar = "الداخلي" if grp_key == "Interior" else ("الجانبي" if grp_key == "Edge" else "الركن")
-                gov_models_table.append({
-                    "نموذج العمود (Model)": f"{c_mark} ({clean_ar})",
-                    "العدد بالمسقط": f"{len(grp_cols)} عمود",
-                    "العمود الحاكم (Gov Col)": f"{grp_max['Column ID']} ({grp_max['Grid']})",
-                    "موقع وتصنيف العمود": grp_loc,
-                    "مساحة التأثير Atrib (m²)": f"{grp_max['atrib_val']:.2f}",
-                    "حمل الدور Pu (1F) [ton]": f"{grp_max['pu_1f_val']:.2f}",
-                    f"إجمالي الحمل ({num_floors}F) [ton]": f"{grp_max['pu_tot_val']:.2f}",
-                })
+        st.markdown("<div style='margin: 16px 0 10px 0; border-top: 1.5px dashed #cbd5e1;'></div>", unsafe_allow_html=True)
+        st.markdown(
+            f"##### 📋 تفاصيل ردود أفعال وتوزيع أحمال كافة أعمدة المسقط الإنشائي ({len(col_reactions_data)} عمود):"
+        )
 
-            render_styled_table(gov_models_table)
+        # 2. Existing Table: All Individual Column Reactions
+        reactions_df = pd.DataFrame([
+            {
+                "Column ID": r["Column ID"],
+                "Grid": r["Grid"],
+                "Location Type": r["Location Type"],
+                "Tributary Area (m²)": r["Tributary Area (m²)"],
+                "Pu (1 Floor) [ton]": r["Pu (1 Floor) [ton]"],
+                f"Total Pu ({num_floors} Floors) [ton]": r[f"Total Pu ({num_floors} Floors) [ton]"],
+            }
+            for r in col_reactions_data
+        ])
+        render_styled_table(reactions_df)
+        st.caption(f"ℹ️ الأحمال المحورية $P_u$ تشمل معامل الأمان ووزن الأعمدة (Factor of Safety & Columns Weight = **{col_sf_val:.2f}**).")
 
-            st.markdown("<div style='margin: 16px 0 10px 0; border-top: 1.5px dashed #cbd5e1;'></div>", unsafe_allow_html=True)
-            st.markdown(
-                f"##### 📋 تفاصيل ردود أفعال وتوزيع أحمال كافة أعمدة المسقط الإنشائي ({len(col_reactions_data)} عمود):"
-            )
-
-            # 2. Existing Table: All Individual Column Reactions
-            reactions_df = pd.DataFrame([
-                {
-                    "Column ID": r["Column ID"],
-                    "Grid": r["Grid"],
-                    "Location Type": r["Location Type"],
-                    "Tributary Area (m²)": r["Tributary Area (m²)"],
-                    "Pu (1 Floor) [ton]": r["Pu (1 Floor) [ton]"],
-                    f"Total Pu ({num_floors} Floors) [ton]": r[f"Total Pu ({num_floors} Floors) [ton]"],
-                }
-                for r in col_reactions_data
-            ])
-            render_styled_table(reactions_df)
-            st.caption(f"ℹ️ الأحمال المحورية $P_u$ تشمل معامل الأمان ووزن الأعمدة (Factor of Safety & Columns Weight = **{col_sf_val:.2f}**).")
-
-        # ── 💾 PERSIST GOVERNING COLUMN LOADS FOR MODULE 2 & MODULE 7 ─────────────
+    # ── 💾 PERSIST GOVERNING COLUMN LOADS FOR MODULE 2 & MODULE 7 ─────────────
+    if not is_standalone:
         if max_int and max_int.get("pu_1f_val", 0) > 0:
             pu_int_1f = float(max_int["pu_1f_val"])
             pu_int_tot = float(max_int["pu_tot_val"])
@@ -19128,506 +19403,497 @@ def render(is_standalone: bool = False):
             st.session_state["fs_col_tot_pu_corner"] = pu_corner_tot
             st.session_state["pu_tot_corner"] = pu_corner_tot
 
-        # Export full building columns layout (coordinates, dimensions, loads, types)
-        cols_export = []
-        for c in _active_cols:
-            c_raw_type = c.get("type", "Interior")
-            c_mark = col_label_map.get(c_raw_type, "C1") if 'col_label_map' in locals() else "C1"
-            c["model_mark"] = c_mark
-            cols_export.append({
-                "id": c["id"],
-                "orig_id": c.get("orig_id", c["id"]),
-                "grid_x": c.get("grid_x", ""),
-                "grid_y": c.get("grid_y", ""),
-                "type": c_raw_type,
-                "model_mark": c_mark,
-                "x": float(c["x"]),
-                "y": float(c["y"]),
-                "bc": float(c.get("bc", bc_s)),
-                "tc": float(c.get("tc", tc_s)),
-                "pu_1f": float(c.get("Pu", 0.0)),
-                "pu_tot": float(c.get("Pu", 0.0) * num_floors),
-                "atrib": float(c.get("Atrib_0", 0.0)),
-            })
-        st.session_state["fs_building_columns"] = cols_export
-        st.session_state["fs_num_floors"] = num_floors
-        st.session_state["fs_Lx_spans"] = [float(x) for x in Lx_calc]
-        st.session_state["fs_Ly_spans"] = [float(y) for y in Ly_calc]
-        st.session_state["fs_col_b"] = float(bc_s)
-        st.session_state["fs_col_c"] = float(tc_s)
-        S.cfg_set("fs_building_columns", cols_export)
-        S.cfg_set("fs_col_b", float(bc_s))
-        S.cfg_set("fs_col_c", float(tc_s))
-        S.cfg_set("fs_Lx_spans", [float(x) for x in Lx_calc])
-        S.cfg_set("fs_Ly_spans", [float(y) for y in Ly_calc])
+    # Export full building columns layout (coordinates, dimensions, loads, types)
+    cols_export = []
+    for c in _active_cols:
+        c_raw_type = c.get("type", "Interior")
+        c_mark = col_label_map.get(c_raw_type, "C1") if 'col_label_map' in locals() else "C1"
+        c["model_mark"] = c_mark
+        cols_export.append({
+            "id": c["id"],
+            "orig_id": c.get("orig_id", c["id"]),
+            "grid_x": c.get("grid_x", ""),
+            "grid_y": c.get("grid_y", ""),
+            "type": c_raw_type,
+            "model_mark": c_mark,
+            "x": float(c["x"]),
+            "y": float(c["y"]),
+            "bc": float(c.get("bc", bc_s)),
+            "tc": float(c.get("tc", tc_s)),
+            "pu_1f": float(c.get("Pu", 0.0)),
+            "pu_tot": float(c.get("Pu", 0.0) * num_floors),
+            "atrib": float(c.get("Atrib_0", 0.0)),
+        })
+    st.session_state["fs_building_columns"] = cols_export
+    st.session_state["fs_num_floors"] = num_floors
+    st.session_state["fs_Lx_spans"] = [float(x) for x in Lx_calc]
+    st.session_state["fs_Ly_spans"] = [float(y) for y in Ly_calc]
+    st.session_state["fs_col_b"] = float(bc_s)
+    st.session_state["fs_col_c"] = float(tc_s)
+    S.cfg_set("fs_building_columns", cols_export)
+    S.cfg_set("fs_col_b", float(bc_s))
+    S.cfg_set("fs_col_c", float(tc_s))
+    S.cfg_set("fs_Lx_spans", [float(x) for x in Lx_calc])
+    S.cfg_set("fs_Ly_spans", [float(y) for y in Ly_calc])
 
-        # ── 🏛️ RECTANGULAR COLUMNS DESIGN FROM FLAT SLAB LOADS ─────────────────────
-        from modules.columns import design_rectangular_column
+    # ── 🏛️ RECTANGULAR COLUMNS DESIGN FROM FLAT SLAB LOADS ─────────────────────
+    from modules.columns import design_rectangular_column
 
-        col_sf = S.cfg_val("col_Safety_Factor", 1.20)
-        col_b_val = S.cfg_val("col_b", bc_s if bc_s else 30)
-        col_H = S.cfg_val("col_H_clear", 300)
-        col_K_idx = S.cfg_val("col_K_index", 1)
-        K_opts = [0.50, 0.70, 1.00, 1.20, 2.00]
-        col_K = K_opts[col_K_idx] if 0 <= col_K_idx < len(K_opts) else 0.70
-        col_Fcu = S.cfg_val("col_Fcu", Fcu if Fcu else 250)
-        col_Fy = S.cfg_val("col_Fy", Fy if Fy else 4000)
-        col_Fyk = S.cfg_val("col_Fyk", 2400)
-        col_mu = S.cfg_val("col_mu_target", 1.0)
-        phi_opts = [12, 16, 18, 20, 25]
-        col_phi_idx = S.cfg_val("col_Phi_index", 1)
-        col_phi = phi_opts[col_phi_idx] if 0 <= col_phi_idx < len(phi_opts) else 16
-        phi_st_opts = [6, 8, 10]
-        col_phist_idx = S.cfg_val("col_Phi_st_index", 1)
-        col_phi_st = phi_st_opts[col_phist_idx] if 0 <= col_phist_idx < len(phi_st_opts) else 8
+    col_sf = S.cfg_val("col_Safety_Factor", 1.20)
+    col_b_val = S.cfg_val("col_b", bc_s if bc_s else 30)
+    col_H = S.cfg_val("col_H_clear", 300)
+    col_K_idx = S.cfg_val("col_K_index", 1)
+    K_opts = [0.50, 0.70, 1.00, 1.20, 2.00]
+    col_K = K_opts[col_K_idx] if 0 <= col_K_idx < len(K_opts) else 0.70
+    col_Fcu = S.cfg_val("col_Fcu", Fcu if Fcu else 250)
+    col_Fy = S.cfg_val("col_Fy", Fy if Fy else 4000)
+    col_Fyk = S.cfg_val("col_Fyk", 2400)
+    col_mu = S.cfg_val("col_mu_target", 1.0)
+    phi_opts = [12, 16, 18, 20, 25]
+    col_phi_idx = S.cfg_val("col_Phi_index", 1)
+    col_phi = phi_opts[col_phi_idx] if 0 <= col_phi_idx < len(phi_opts) else 16
+    phi_st_opts = [6, 8, 10]
+    col_phist_idx = S.cfg_val("col_Phi_st_index", 1)
+    col_phi_st = phi_st_opts[col_phist_idx] if 0 <= col_phist_idx < len(phi_st_opts) else 8
 
-        cnt_int = sum(1 for c in _active_cols if c.get("type") == "Interior")
-        cnt_edge = sum(1 for c in _active_cols if c.get("type") == "Edge")
-        cnt_corner = sum(1 for c in _active_cols if c.get("type") == "Corner")
-        tot_active_cols = len(_active_cols)
-        tot_conc_vol_1f = 0.0
-        tot_main_steel_kg_1f = 0.0
-        tot_stirrup_steel_kg_1f = 0.0
-        tot_steel_kg_1f = 0.0
-        tot_ratio_1f = 0.0
-        tot_conc_vol_bld = 0.0
-        tot_steel_ton_bld = 0.0
-        tot_steel_kg_bld = 0.0
-        cement_ton_cols = 0.0
-        cement_bags_cols = 0
-        gravel_m3_cols = 0.0
-        sand_m3_cols = 0.0
+    cnt_int = sum(1 for c in _active_cols if c.get("type") == "Interior")
+    cnt_edge = sum(1 for c in _active_cols if c.get("type") == "Edge")
+    cnt_corner = sum(1 for c in _active_cols if c.get("type") == "Corner")
+    tot_active_cols = len(_active_cols)
+    tot_conc_vol_1f = 0.0
+    tot_main_steel_kg_1f = 0.0
+    tot_stirrup_steel_kg_1f = 0.0
+    tot_steel_kg_1f = 0.0
+    tot_ratio_1f = 0.0
+    tot_conc_vol_bld = 0.0
+    tot_steel_ton_bld = 0.0
+    tot_steel_kg_bld = 0.0
+    cement_ton_cols = 0.0
+    cement_bags_cols = 0
+    gravel_m3_cols = 0.0
+    sand_m3_cols = 0.0
 
-        col_designs = []
-        # Dynamic loop over active column groups (Priority: Interior -> Edge -> Corner)
-        for grp_key, grp_cols, col_obj, grp_ar, grp_loc, grp_gov_lbl, ftg_ar in active_col_groups:
-            if col_obj and col_obj.get("pu_tot_val", 0) > 0:
-                pu_tot = float(col_obj["pu_tot_val"])
-                pu_1f = float(col_obj["pu_1f_val"])
-                des = design_rectangular_column(
-                    Pu_input=pu_tot,
-                    Safety_Factor=1.0,
-                    b=col_b_val,
-                    H_clear=col_H,
-                    K=col_K,
-                    Fcu=col_Fcu,
-                    Fy=col_Fy,
-                    Fyk=col_Fyk,
-                    mu_target=col_mu,
-                    Phi=col_phi,
-                    Phi_st=col_phi_st,
-                )
-                m_mark = col_label_map[grp_key]
-                des["model_mark"] = m_mark
-                des["model_label"] = f"{m_mark} ({grp_ar})"
-                des["model_key"] = f"C_{grp_key.lower()}"
-                des["raw_type"] = grp_key
-                des["gov_col"] = f"{col_obj['Column ID']} ({col_obj['Grid']})"
-                des["loc_type"] = col_obj["Location Type"]
-                des["atrib"] = col_obj["atrib_val"]
-                des["pu_1f"] = pu_1f
-                des["pu_tot"] = pu_tot
-                col_designs.append(des)
-        st.session_state[f"{prefix}fs_col_designs"] = col_designs
-        st.session_state["fs_col_designs"] = col_designs
+    col_designs = []
+    # Dynamic loop over active column groups (Priority: Interior -> Edge -> Corner)
+    for grp_key, grp_cols, col_obj, grp_ar, grp_loc, grp_gov_lbl, ftg_ar in active_col_groups:
+        if col_obj and col_obj.get("pu_tot_val", 0) > 0:
+            pu_tot = float(col_obj["pu_tot_val"])
+            pu_1f = float(col_obj["pu_1f_val"])
+            des = design_rectangular_column(
+                Pu_input=pu_tot,
+                Safety_Factor=1.0,
+                b=col_b_val,
+                H_clear=col_H,
+                K=col_K,
+                Fcu=col_Fcu,
+                Fy=col_Fy,
+                Fyk=col_Fyk,
+                mu_target=col_mu,
+                Phi=col_phi,
+                Phi_st=col_phi_st,
+            )
+            m_mark = col_label_map[grp_key]
+            des["model_mark"] = m_mark
+            des["model_label"] = f"{m_mark} ({grp_ar})"
+            des["model_key"] = f"C_{grp_key.lower()}"
+            des["raw_type"] = grp_key
+            des["gov_col"] = f"{col_obj['Column ID']} ({col_obj['Grid']})"
+            des["loc_type"] = col_obj["Location Type"]
+            des["atrib"] = col_obj["atrib_val"]
+            des["pu_1f"] = pu_1f
+            des["pu_tot"] = pu_tot
+            col_designs.append(des)
+    st.session_state[f"{prefix}fs_col_designs"] = col_designs
+    st.session_state["fs_col_designs"] = col_designs
 
-        # Design calculation for all individual columns
-        indiv_col_designs = []
-        for r in col_reactions_data:
-            r_pu_tot = float(r["pu_tot_val"])
-            r_pu_1f = float(r["pu_1f_val"])
-            if r_pu_tot > 0:
-                r_des = design_rectangular_column(
-                    Pu_input=r_pu_tot,
-                    Safety_Factor=1.0,
-                    b=col_b_val,
-                    H_clear=col_H,
-                    K=col_K,
-                    Fcu=col_Fcu,
-                    Fy=col_Fy,
-                    Fyk=col_Fyk,
-                    mu_target=col_mu,
-                    Phi=col_phi,
-                    Phi_st=col_phi_st,
-                )
-                r_des["col_id"] = r["Column ID"]
-                r_des["grid"] = r["Grid"]
-                r_des["loc_type"] = r["Location Type"]
-                r_des["atrib"] = r["atrib_val"]
-                r_des["pu_1f"] = r_pu_1f
-                r_des["pu_tot"] = r_pu_tot
-                indiv_col_designs.append(r_des)
+    # Design calculation for all individual columns
+    indiv_col_designs = []
+    for r in col_reactions_data:
+        r_pu_tot = float(r["pu_tot_val"])
+        r_pu_1f = float(r["pu_1f_val"])
+        if r_pu_tot > 0:
+            r_des = design_rectangular_column(
+                Pu_input=r_pu_tot,
+                Safety_Factor=1.0,
+                b=col_b_val,
+                H_clear=col_H,
+                K=col_K,
+                Fcu=col_Fcu,
+                Fy=col_Fy,
+                Fyk=col_Fyk,
+                mu_target=col_mu,
+                Phi=col_phi,
+                Phi_st=col_phi_st,
+            )
+            r_des["col_id"] = r["Column ID"]
+            r_des["grid"] = r["Grid"]
+            r_des["loc_type"] = r["Location Type"]
+            r_des["atrib"] = r["atrib_val"]
+            r_des["pu_1f"] = r_pu_1f
+            r_des["pu_tot"] = r_pu_tot
+            indiv_col_designs.append(r_des)
 
-        if col_designs:
-            # ── 1. Determine Confirmed Column Dimensions & Track Pending Edits ──
-            confirmed_col_dims = st.session_state.get("fs_confirmed_col_dims")
-            if not isinstance(confirmed_col_dims, dict) or not confirmed_col_dims:
-                confirmed_col_dims = S.cfg_val("fs_confirmed_col_dims", {})
-                if not isinstance(confirmed_col_dims, dict):
-                    confirmed_col_dims = {}
+    if col_designs:
+        # ── 1. Determine Confirmed Column Dimensions & Track Pending Edits ──
+        confirmed_col_dims = st.session_state.get("fs_confirmed_col_dims")
+        if not isinstance(confirmed_col_dims, dict) or not confirmed_col_dims:
+            confirmed_col_dims = S.cfg_val("fs_confirmed_col_dims", {})
+            if not isinstance(confirmed_col_dims, dict):
+                confirmed_col_dims = {}
 
-            # Populate defaults for any model not yet confirmed
+        # Populate defaults for any model not yet confirmed
+        for des in col_designs:
+            m_key = des["raw_type"]
+            if m_key not in confirmed_col_dims:
+                leg_b = st.session_state.get(f"fs_adopted_b_{m_key}")
+                leg_t = st.session_state.get(f"fs_adopted_t_{m_key}")
+                b_init = float(leg_b) if leg_b is not None else float(des["b"])
+                t_init = float(leg_t) if leg_t is not None else float(des["t"])
+                confirmed_col_dims[m_key] = {"b": b_init, "t": t_init}
+        st.session_state["fs_confirmed_col_dims"] = confirmed_col_dims
+
+        # Pre-check if any widget input currently in session_state differs from confirmed
+        has_pending_col_diff = False
+        for des in col_designs:
+            m_key = des["raw_type"]
+            curr_b_val = st.session_state.get(f"fs_adopted_b_{m_key}")
+            curr_t_val = st.session_state.get(f"fs_adopted_t_{m_key}")
+            if curr_b_val is not None and abs(float(curr_b_val) - float(confirmed_col_dims[m_key]["b"])) > 0.01:
+                has_pending_col_diff = True
+            if curr_t_val is not None and abs(float(curr_t_val) - float(confirmed_col_dims[m_key]["t"])) > 0.01:
+                has_pending_col_diff = True
+
+        with st.expander(f"🏛️ Rectangular Columns Design — {num_floors} Floors (التصميم الإنشائي لنماذج الأعمدة المستطيلة)", expanded=has_pending_col_diff):
+            # ── 📊 حصر كميات الخرسانة والحديد ومواد البناء لجميع الأعمدة (Columns BOQ & Materials) ──
+            cnt_int = sum(1 for c in _active_cols if c.get("type") == "Interior")
+            cnt_edge = sum(1 for c in _active_cols if c.get("type") == "Edge")
+            cnt_corner = sum(1 for c in _active_cols if c.get("type") == "Corner")
+            tot_active_cols = len(_active_cols)
+
+            H_m = col_H / 100.0  # column height in meters
+            col_boq_rows = []
+            tot_conc_vol_1f = 0.0
+            tot_main_steel_kg_1f = 0.0
+            tot_stirrup_steel_kg_1f = 0.0
+            tot_steel_kg_1f = 0.0
+
             for des in col_designs:
-                m_key = des["raw_type"]
-                if m_key not in confirmed_col_dims:
-                    leg_b = st.session_state.get(f"fs_adopted_b_{m_key}")
-                    leg_t = st.session_state.get(f"fs_adopted_t_{m_key}")
-                    b_init = float(leg_b) if leg_b is not None else float(des["b"])
-                    t_init = float(leg_t) if leg_t is not None else float(des["t"])
-                    confirmed_col_dims[m_key] = {"b": b_init, "t": t_init}
-            st.session_state["fs_confirmed_col_dims"] = confirmed_col_dims
+                m_key = des.get("raw_type", "Interior")
+                count = cnt_int if m_key == "Interior" else (cnt_edge if m_key == "Edge" else cnt_corner)
+                m_label = des["model_label"]
+                if count > 0:
+                    b_cm = des["b"]
+                    t_cm = des["t"]
+                    phi_m = des["Phi"]
+                    n_b = des["n_bars"]
+                    phi_st = des["Phi_st"]
+                    n_st_m = des["n_st_per_m"]
 
-            # Pre-check if any widget input currently in session_state differs from confirmed
-            has_pending_col_diff = False
-            for des in col_designs:
-                m_key = des["raw_type"]
-                curr_b_val = st.session_state.get(f"fs_adopted_b_{m_key}")
-                curr_t_val = st.session_state.get(f"fs_adopted_t_{m_key}")
-                if curr_b_val is not None and abs(float(curr_b_val) - float(confirmed_col_dims[m_key]["b"])) > 0.01:
-                    has_pending_col_diff = True
-                if curr_t_val is not None and abs(float(curr_t_val) - float(confirmed_col_dims[m_key]["t"])) > 0.01:
-                    has_pending_col_diff = True
+                    # Concrete volume for 1 column and all columns of this type (m³)
+                    vol_1col = (b_cm / 100.0) * (t_cm / 100.0) * H_m
+                    vol_total = vol_1col * count
+                    vol_total_bld = vol_total * num_floors
 
-            with st.expander(f"🏛️ Rectangular Columns Design — {num_floors} Floors (التصميم الإنشائي لنماذج الأعمدة المستطيلة)", expanded=has_pending_col_diff):
-                # ── 📊 حصر كميات الخرسانة والحديد ومواد البناء لجميع الأعمدة (Columns BOQ & Materials) ──
-                cnt_int = sum(1 for c in _active_cols if c.get("type") == "Interior")
-                cnt_edge = sum(1 for c in _active_cols if c.get("type") == "Edge")
-                cnt_corner = sum(1 for c in _active_cols if c.get("type") == "Corner")
-                tot_active_cols = len(_active_cols)
+                    # Main longitudinal rebar: L = H + splice (m)
+                    L_bar = H_m + max(1.0, (50.0 * phi_m) / 1000.0)
+                    unit_w_main = (phi_m ** 2) / 162.0
+                    tot_len_main_1col = n_b * L_bar
+                    w_main_1col = tot_len_main_1col * unit_w_main
+                    tot_w_main = w_main_1col * count
 
-                H_m = col_H / 100.0  # column height in meters
-                col_boq_rows = []
-                tot_conc_vol_1f = 0.0
-                tot_main_steel_kg_1f = 0.0
-                tot_stirrup_steel_kg_1f = 0.0
-                tot_steel_kg_1f = 0.0
+                    # Stirrups / Ties
+                    n_ties_1col = max(5, int(math.ceil(H_m * n_st_m)))
+                    cov_cm = 2.5
+                    tie_perim = 2.0 * (((b_cm - 2.0 * cov_cm) + (t_cm - 2.0 * cov_cm)) / 100.0) + 0.20
+                    unit_w_st = (phi_st ** 2) / 162.0
+                    tot_len_st_1col = n_ties_1col * tie_perim
+                    w_st_1col = tot_len_st_1col * unit_w_st
+                    tot_w_st = w_st_1col * count
 
-                for des in col_designs:
-                    m_key = des.get("raw_type", "Interior")
-                    count = cnt_int if m_key == "Interior" else (cnt_edge if m_key == "Edge" else cnt_corner)
-                    m_label = des["model_label"]
-                    if count > 0:
-                        b_cm = des["b"]
-                        t_cm = des["t"]
-                        phi_m = des["Phi"]
-                        n_b = des["n_bars"]
-                        phi_st = des["Phi_st"]
-                        n_st_m = des["n_st_per_m"]
+                    # Total steel weight & ratio
+                    tot_w_steel = tot_w_main + tot_w_st
+                    ratio_kg_m3 = (tot_w_steel / vol_total) if vol_total > 0 else 0.0
 
-                        # Concrete volume for 1 column and all columns of this type (m³)
-                        vol_1col = (b_cm / 100.0) * (t_cm / 100.0) * H_m
-                        vol_total = vol_1col * count
-                        vol_total_bld = vol_total * num_floors
+                    tot_conc_vol_1f += vol_total
+                    tot_main_steel_kg_1f += tot_w_main
+                    tot_stirrup_steel_kg_1f += tot_w_st
+                    tot_steel_kg_1f += tot_w_steel
 
-                        # Main longitudinal rebar: L = H + splice (m)
-                        L_bar = H_m + max(1.0, (50.0 * phi_m) / 1000.0)
-                        unit_w_main = (phi_m ** 2) / 162.0
-                        tot_len_main_1col = n_b * L_bar
-                        w_main_1col = tot_len_main_1col * unit_w_main
-                        tot_w_main = w_main_1col * count
+                    # Cement, Sand, Gravel for building floors
+                    cement_ton_mod = vol_total_bld * 0.350
+                    cement_bags_mod = int(round(vol_total_bld * 7.0))
+                    sand_m3_mod = vol_total_bld * 0.40
+                    gravel_m3_mod = vol_total_bld * 0.80
 
-                        # Stirrups / Ties
-                        n_ties_1col = max(5, int(math.ceil(H_m * n_st_m)))
-                        cov_cm = 2.5
-                        tie_perim = 2.0 * (((b_cm - 2.0 * cov_cm) + (t_cm - 2.0 * cov_cm)) / 100.0) + 0.20
-                        unit_w_st = (phi_st ** 2) / 162.0
-                        tot_len_st_1col = n_ties_1col * tie_perim
-                        w_st_1col = tot_len_st_1col * unit_w_st
-                        tot_w_st = w_st_1col * count
-
-                        # Total steel weight & ratio
-                        tot_w_steel = tot_w_main + tot_w_st
-                        ratio_kg_m3 = (tot_w_steel / vol_total) if vol_total > 0 else 0.0
-
-                        tot_conc_vol_1f += vol_total
-                        tot_main_steel_kg_1f += tot_w_main
-                        tot_stirrup_steel_kg_1f += tot_w_st
-                        tot_steel_kg_1f += tot_w_steel
-
-                        # Cement, Sand, Gravel for building floors
-                        cement_ton_mod = vol_total_bld * 0.350
-                        cement_bags_mod = int(round(vol_total_bld * 7.0))
-                        sand_m3_mod = vol_total_bld * 0.40
-                        gravel_m3_mod = vol_total_bld * 0.80
-
-                        col_boq_rows.append({
-                            "نموذج العمود (Model)": m_label,
-                            "العدد في المسقط (Count)": f"{count} عمود",
-                            "القطاع b × t (cm)": f"{b_cm:.0f} × {t_cm:.0f}",
-                            "الخرسانة (1F) [m³]": f"{vol_total:.2f} m³",
-                            f"خرسانة ({num_floors}F) [m³]": f"{vol_total_bld:.2f} m³",
-                            "التسليح الرئيسي (kg)": f"{tot_w_main:,.1f}",
-                            "الكانات (kg)": f"{tot_w_st:,.1f}",
-                            f"إجمالي الحديد ({num_floors}F) [Ton]": f"{(tot_w_steel * num_floors) / 1000.0:.3f} Ton",
-                            f"الأسمنت ({num_floors}F) [Ton]": f"{cement_ton_mod:.2f} t ({cement_bags_mod} شكارة)",
-                            f"الرمل ({num_floors}F) [m³]": f"{sand_m3_mod:.2f} m³",
-                            f"الزلط ({num_floors}F) [m³]": f"{gravel_m3_mod:.2f} m³",
-                            "معدل التسليح (kg/m³)": f"{ratio_kg_m3:.1f} kg/m³",
-                        })
-
-                # Total row
-                tot_conc_vol_bld = tot_conc_vol_1f * num_floors
-                tot_steel_ton_bld = (tot_steel_kg_1f / 1000.0) * num_floors
-                tot_ratio_1f = (tot_steel_kg_1f / tot_conc_vol_1f) if tot_conc_vol_1f > 0 else 0.0
-
-                col_boq_rows.append({
-                    "نموذج العمود (Model)": f"📌 الإجمالي العام ({tot_active_cols} عمود — {num_floors} طابق)",
-                    "العدد في المسقط (Count)": f"{tot_active_cols} عمود",
-                    "القطاع b × t (cm)": f"H = {H_m:.2f} m",
-                    "الخرسانة (1F) [m³]": f"{tot_conc_vol_1f:.2f} m³",
-                    f"خرسانة ({num_floors}F) [m³]": f"{tot_conc_vol_bld:.2f} m³",
-                    "التسليح الرئيسي (kg)": f"{tot_main_steel_kg_1f * num_floors:,.1f} kg",
-                    "الكانات (kg)": f"{tot_stirrup_steel_kg_1f * num_floors:,.1f} kg",
-                    f"إجمالي الحديد ({num_floors}F) [Ton]": f"{tot_steel_ton_bld:.3f} Ton",
-                    f"الأسمنت ({num_floors}F) [Ton]": f"{tot_conc_vol_bld * 0.350:.2f} t ({int(round(tot_conc_vol_bld * 7.0))} شكارة)",
-                    f"الرمل ({num_floors}F) [m³]": f"{tot_conc_vol_bld * 0.40:.2f} m³",
-                    f"الزلط ({num_floors}F) [m³]": f"{tot_conc_vol_bld * 0.80:.2f} m³",
-                    "معدل التسليح (kg/m³)": f"{tot_ratio_1f:.1f} kg/m³",
-                })
-
-                st.markdown(
-                    f"##### 📊 حصر كميات الخرسانة والحديد لجميع الأعمدة في المسقط الإنشائي "
-                    f"({tot_active_cols} عمود: {cnt_int} داخلي + {cnt_edge} طرفي + {cnt_corner} ركن)"
-                )
-
-                render_styled_table(col_boq_rows, font_size_override=14.0)
-
-                st.markdown("<div style='margin: 18px 0; border-top: 1.5px solid #cbd5e1;'></div>", unsafe_allow_html=True)
-
-                col_designs_table = []
-                for des in col_designs:
-                    col_designs_table.append({
-                        "نموذج العمود (Model)": des["model_label"],
-                        "العمود الحاكم (Gov Col)": des["gov_col"],
-                        "حمل الدور Pu_1F (t)": f"{des['pu_1f']:.2f}",
-                        f"حمل التصميم الكلي ({num_floors}F) [ton]": f"{des['pu_tot']:.2f}",
-                        "القطاع المصمم b × t (cm)": f"{des['b']:.0f} × {des['t']:.0f}",
-                        "التسليح الطولي (Main RFT)": f"{des['main_steel_str']} (μ={des['mu_provided']:.2f}%)",
-                        "الكانات (Stirrups / Ties)": des["stirrups_str"],
-                        "سعة التحمل Pu,cap (t)": f"{des['Pu_cap_t']:.2f}",
-                        "نسبة الاستخدام (Util %)": f"{des['util_percent']:.1f} %",
-                        "فحص النحافة والأمان": "✅ Safe" if des["is_safe"] else "⚠️ Review",
+                    col_boq_rows.append({
+                        "نموذج العمود (Model)": m_label,
+                        "العدد في المسقط (Count)": f"{count} عمود",
+                        "القطاع b × t (cm)": f"{b_cm:.0f} × {t_cm:.0f}",
+                        "الخرسانة (1F) [m³]": f"{vol_total:.2f} m³",
+                        f"خرسانة ({num_floors}F) [m³]": f"{vol_total_bld:.2f} m³",
+                        "التسليح الرئيسي (kg)": f"{tot_w_main:,.1f}",
+                        "الكانات (kg)": f"{tot_w_st:,.1f}",
+                        f"إجمالي الحديد ({num_floors}F) [Ton]": f"{(tot_w_steel * num_floors) / 1000.0:.3f} Ton",
+                        f"الأسمنت ({num_floors}F) [Ton]": f"{cement_ton_mod:.2f} t ({cement_bags_mod} شكارة)",
+                        f"الرمل ({num_floors}F) [m³]": f"{sand_m3_mod:.2f} m³",
+                        f"الزلط ({num_floors}F) [m³]": f"{gravel_m3_mod:.2f} m³",
+                        "معدل التسليح (kg/m³)": f"{ratio_kg_m3:.1f} kg/m³",
                     })
 
-                render_styled_table(col_designs_table, font_size_override=14.0)
+            # Total row
+            tot_conc_vol_bld = tot_conc_vol_1f * num_floors
+            tot_steel_ton_bld = (tot_steel_kg_1f / 1000.0) * num_floors
+            tot_ratio_1f = (tot_steel_kg_1f / tot_conc_vol_1f) if tot_conc_vol_1f > 0 else 0.0
 
-                # ── ⚙️ اعتماد وتعديل قطاعات الأعمدة للتحليل الإنشائي للبلاطة ──
-                st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
-                st.markdown(
-                    f"""
-                    <div dir="rtl" style="direction:rtl; text-align:right; background:#f0fdf4; border:1.5px solid #86efac; border-right:6px solid #16a34a; padding:12px 18px; border-radius:8px; margin-bottom:12px; color:#14532d; line-height:1.6;">
-                        <div style="font-size:15px; font-weight:800; color:#166534; margin-bottom:4px;">
-                            ⚙️ اعتماد وتعديل قطاعات الأعمدة للتحليل الإنشائي للبلاطة (Adopted Column Dimensions for Slab Checks):
-                        </div>
-                        <div style="font-size:13.5px; color:#1e293b; font-weight:600;">
-                            تنتقل هذه القطاعات المعتمدة فوراً إلى حسابات البحور الصافية <code style="background:#e2e8f0; padding:2px 6px; border-radius:4px;">Clear Spans Ln</code> وفحص القص الثاقب <code style="background:#e2e8f0; padding:2px 6px; border-radius:4px;">Punching Shear</code> وسهم الانحناء <code style="background:#e2e8f0; padding:2px 6px; border-radius:4px;">Deflection</code> في الأقسام التالية مباشرة.
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-                adopt_cols = st.columns(len(col_designs)) if col_designs else [st.container()]
-                for idx_ac, des in enumerate(col_designs):
-                    m_key = des["raw_type"]
-                    conf_m = confirmed_col_dims.get(m_key, {"b": float(des["b"]), "t": float(des["t"])})
-                    def_b = float(st.session_state.get(f"fs_adopted_b_{m_key}", conf_m["b"]))
-                    def_t = float(st.session_state.get(f"fs_adopted_t_{m_key}", conf_m["t"]))
-                    with adopt_cols[idx_ac]:
-                        st.markdown(f"**📐 اعتماد قطاع {des['model_mark']} ({des['model_label'].split('(')[-1].replace(')', '')})**")
-                        st.number_input(
-                            f"العرض b (cm) — {des['model_mark']}",
-                            min_value=20.0,
-                            max_value=200.0,
-                            value=def_b,
-                            step=5.0,
-                            key=f"fs_adopted_b_{m_key}"
-                        )
-                        st.number_input(
-                            f"الطول t (cm) — {des['model_mark']}",
-                            min_value=20.0,
-                            max_value=300.0,
-                            value=def_t,
-                            step=5.0,
-                            key=f"fs_adopted_t_{m_key}"
-                        )
+            col_boq_rows.append({
+                "نموذج العمود (Model)": f"📌 الإجمالي العام ({tot_active_cols} عمود — {num_floors} طابق)",
+                "العدد في المسقط (Count)": f"{tot_active_cols} عمود",
+                "القطاع b × t (cm)": f"H = {H_m:.2f} m",
+                "الخرسانة (1F) [m³]": f"{tot_conc_vol_1f:.2f} m³",
+                f"خرسانة ({num_floors}F) [m³]": f"{tot_conc_vol_bld:.2f} m³",
+                "التسليح الرئيسي (kg)": f"{tot_main_steel_kg_1f * num_floors:,.1f} kg",
+                "الكانات (kg)": f"{tot_stirrup_steel_kg_1f * num_floors:,.1f} kg",
+                f"إجمالي الحديد ({num_floors}F) [Ton]": f"{tot_steel_ton_bld:.3f} Ton",
+                f"الأسمنت ({num_floors}F) [Ton]": f"{tot_conc_vol_bld * 0.350:.2f} t ({int(round(tot_conc_vol_bld * 7.0))} شكارة)",
+                f"الرمل ({num_floors}F) [m³]": f"{tot_conc_vol_bld * 0.40:.2f} m³",
+                f"الزلط ({num_floors}F) [m³]": f"{tot_conc_vol_bld * 0.80:.2f} m³",
+                "معدل التسليح (kg/m³)": f"{tot_ratio_1f:.1f} kg/m³",
+            })
 
-                # Check if user made any edits that differ from confirmed dimensions
-                unadopted_col_changes = []
-                for des in col_designs:
-                    m_key = des["raw_type"]
-                    conf_m = confirmed_col_dims.get(m_key, {"b": float(des["b"]), "t": float(des["t"])})
-                    val_b = float(st.session_state.get(f"fs_adopted_b_{m_key}", conf_m["b"]))
-                    val_t = float(st.session_state.get(f"fs_adopted_t_{m_key}", conf_m["t"]))
-                    if abs(val_b - float(conf_m["b"])) > 0.01 or abs(val_t - float(conf_m["t"])) > 0.01:
-                        unadopted_col_changes.append({
-                            "model_mark": des["model_mark"],
-                            "raw_type": m_key,
-                            "old_b": conf_m["b"],
-                            "old_t": conf_m["t"],
-                            "new_b": val_b,
-                            "new_t": val_t,
-                        })
-                has_unadopted = len(unadopted_col_changes) > 0
-
-                if has_unadopted:
-                    chg_lines = [
-                        f"• <b>{c['model_mark']}</b>: تم تعديل القطاع في المدخلات إلى <b>{int(round(c['new_b']))} × {int(round(c['new_t']))} سم</b> (المعتمد حالياً: {int(round(c['old_b']))} × {int(round(c['old_t']))} سم)"
-                        for c in unadopted_col_changes
-                    ]
-                    st.markdown(
-                        f"""
-                        <div dir="rtl" style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 2px solid #f59e0b; border-right: 6px solid #d97706; border-radius: 10px; padding: 14px 18px; margin: 14px 0 10px 0; color: #92400e; line-height: 1.8;">
-                            <div style="font-size: 15.5px; font-weight: 800; color: #b45309; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
-                                ⏳ <span>تنبيه: تم تعديل قطاعات نماذج الأعمدة في المدخلات — يلزم النقر على زر الاعتماد أدناه</span>
-                            </div>
-                            <div style="font-size: 13.5px; font-weight: 600; margin-bottom: 6px; color: #78350f;">
-                                تم رصد التعديلات غير المعتمدة التالية:
-                            </div>
-                            <div style="margin-bottom: 10px; font-size: 13px; font-weight: 700; color: #b45309;">
-                                {'<br>'.join(chg_lines)}
-                            </div>
-                            <div style="font-size: 13.5px; font-weight: 700; color: #1e293b;">
-                                ⛔ <b>تم إيقاف كافة الحسابات والتصميمات الإنشائية وإخفاء جميع الأقسام التالية مؤقتاً.</b><br>
-                                👇 اضغط على الزر الأحمر أدناه لاعتماد وتطبيق هذه القطاعات فوراً وتشغيل التحليل الإنشائي والتصميم وإظهار كافة الأقسام.
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-
-                st.markdown(
-                    """
-                    <style>
-                    div[class*="st-key-"][class*="btn_fs_adopt_col_dims"] button,
-                    div.stButton > button[key*="btn_fs_adopt_col_dims"],
-                    button[key*="btn_fs_adopt_col_dims"],
-                    .st-key-btn_fs_adopt_col_dims button,
-                    div[data-testid="stVerticalBlock"] div:has(> button[key*="btn_fs_adopt_col_dims"]) button {
-                        background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
-                        background-color: #dc2626 !important;
-                        color: #ffffff !important;
-                        font-size: 20px !important;
-                        font-weight: 800 !important;
-                        padding: 16px 28px !important;
-                        min-height: 62px !important;
-                        border-radius: 12px !important;
-                        border: 2px solid #f87171 !important;
-                        box-shadow: 0 4px 15px rgba(220, 38, 38, 0.45) !important;
-                        transition: all 0.25s ease !important;
-                        margin: 14px 0px !important;
-                        display: flex !important;
-                        align-items: center !important;
-                        justify-content: center !important;
-                        cursor: pointer !important;
-                    }
-                    div[class*="st-key-"][class*="btn_fs_adopt_col_dims"] button:hover,
-                    div.stButton > button[key*="btn_fs_adopt_col_dims"]:hover,
-                    button[key*="btn_fs_adopt_col_dims"]:hover {
-                        background: linear-gradient(135deg, #b91c1c 0%, #991b1b 100%) !important;
-                        border-color: #fca5a5 !important;
-                        box-shadow: 0 8px 24px rgba(220, 38, 38, 0.65) !important;
-                        transform: translateY(-2px) !important;
-                    }
-                    div[class*="st-key-"][class*="btn_fs_adopt_col_dims"] button *,
-                    div.stButton > button[key*="btn_fs_adopt_col_dims"] *,
-                    button[key*="btn_fs_adopt_col_dims"] * {
-                        color: #ffffff !important;
-                        font-size: 20px !important;
-                        font-weight: 800 !important;
-                        line-height: 1.3 !important;
-                    }
-                    </style>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                btn_adopt_clicked = st.button("🔄 اعتماد وتحديث قطاعات الأعمدة وإعادة تحليل السقف (Adopt & Re-analyze Slab)", key=f"{prefix}btn_fs_adopt_col_dims", use_container_width=True, type="primary")
-                if btn_adopt_clicked:
-                    for des in col_designs:
-                        m_key = des["raw_type"]
-                        confirmed_col_dims[m_key] = {
-                            "b": float(st.session_state.get(f"fs_adopted_b_{m_key}", des["b"])),
-                            "t": float(st.session_state.get(f"fs_adopted_t_{m_key}", des["t"])),
-                        }
-                    st.session_state["fs_confirmed_col_dims"] = confirmed_col_dims
-                    S.cfg_set("fs_confirmed_col_dims", confirmed_col_dims)
-                    S.save_settings()
-                    has_unadopted = False
-                    st.rerun()
-
-        # ── ⛔ GATE: HIDE ALL DOWNSTREAM SECTIONS IF UNADOPTED CHANGES EXIST ──
-        if 'has_unadopted' in locals() and has_unadopted:
             st.markdown(
-                """
-                <div dir="rtl" style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 2.5px dashed #d97706; border-radius: 12px; padding: 24px 28px; margin: 24px 0; text-align: center; box-shadow: 0 4px 14px rgba(217, 119, 6, 0.15);">
-                    <div style="font-size: 20px; font-weight: 800; color: #b45309; margin-bottom: 8px;">
-                        ⏸️ تم إيقاف الحسابات وإخفاء كافة الأقسام التالية مؤقتاً
+                f"##### 📊 حصر كميات الخرسانة والحديد لجميع الأعمدة في المسقط الإنشائي "
+                f"({tot_active_cols} عمود: {cnt_int} داخلي + {cnt_edge} طرفي + {cnt_corner} ركن)"
+            )
+
+            render_styled_table(col_boq_rows, font_size_override=14.0)
+
+            st.markdown("<div style='margin: 18px 0; border-top: 1.5px solid #cbd5e1;'></div>", unsafe_allow_html=True)
+
+            col_designs_table = []
+            for des in col_designs:
+                col_designs_table.append({
+                    "نموذج العمود (Model)": des["model_label"],
+                    "العمود الحاكم (Gov Col)": des["gov_col"],
+                    "حمل الدور Pu_1F (t)": f"{des['pu_1f']:.2f}",
+                    f"حمل التصميم الكلي ({num_floors}F) [ton]": f"{des['pu_tot']:.2f}",
+                    "القطاع المصمم b × t (cm)": f"{des['b']:.0f} × {des['t']:.0f}",
+                    "التسليح الطولي (Main RFT)": f"{des['main_steel_str']} (μ={des['mu_provided']:.2f}%)",
+                    "الكانات (Stirrups / Ties)": des["stirrups_str"],
+                    "سعة التحمل Pu,cap (t)": f"{des['Pu_cap_t']:.2f}",
+                    "نسبة الاستخدام (Util %)": f"{des['util_percent']:.1f} %",
+                    "فحص النحافة والأمان": "✅ Safe" if des["is_safe"] else "⚠️ Review",
+                })
+
+            render_styled_table(col_designs_table, font_size_override=14.0)
+
+            # ── ⚙️ اعتماد وتعديل قطاعات الأعمدة للتحليل الإنشائي للبلاطة ──
+            st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
+            st.markdown(
+                f"""
+                <div dir="rtl" style="direction:rtl; text-align:right; background:#f0fdf4; border:1.5px solid #86efac; border-right:6px solid #16a34a; padding:12px 18px; border-radius:8px; margin-bottom:12px; color:#14532d; line-height:1.6;">
+                    <div style="font-size:15px; font-weight:800; color:#166534; margin-bottom:4px;">
+                        ⚙️ اعتماد وتعديل قطاعات الأعمدة للتحليل الإنشائي للبلاطة (Adopted Column Dimensions for Slab Checks):
                     </div>
-                    <div style="font-size: 15px; color: #92400e; font-weight: 600; line-height: 1.8; margin-bottom: 14px;">
-                        يوجد تعديل في مدخلات قطاعات نماذج الأعمدة في قسم <b>🏛️ Rectangular Columns Design</b> لم يتم اعتماده بعد.<br>
-                        تم إيقاف التحليل الإنشائي والتصميم وإخفاء مخرجات البلاطة والكمرات والأساسات لضمان عدم إجراء أي حسابات على قطاعات غير معتمدة.
-                    </div>
-                    <div style="font-size: 14.5px; color: #1e293b; font-weight: 700;">
-                        👉 يرجى فتح قسم <b>🏛️ Rectangular Columns Design</b> أعلاه والنقر على الزر الأحمر <b>"(Adopt & Re-analyze Slab) اعتماد وتحديث قطاعات الأعمدة وإعادة تحليل السقف"</b> للمتابعة.
+                    <div style="font-size:13.5px; color:#1e293b; font-weight:600;">
+                        تنتقل هذه القطاعات المعتمدة فوراً إلى حسابات البحور الصافية <code style="background:#e2e8f0; padding:2px 6px; border-radius:4px;">Clear Spans Ln</code> وفحص القص الثاقب <code style="background:#e2e8f0; padding:2px 6px; border-radius:4px;">Punching Shear</code> وسهم الانحناء <code style="background:#e2e8f0; padding:2px 6px; border-radius:4px;">Deflection</code> في الأقسام التالية مباشرة.
                     </div>
                 </div>
                 """,
                 unsafe_allow_html=True
             )
-            return
+            adopt_cols = st.columns(len(col_designs)) if col_designs else [st.container()]
+            for idx_ac, des in enumerate(col_designs):
+                m_key = des["raw_type"]
+                conf_m = confirmed_col_dims.get(m_key, {"b": float(des["b"]), "t": float(des["t"])})
+                def_b = float(st.session_state.get(f"fs_adopted_b_{m_key}", conf_m["b"]))
+                def_t = float(st.session_state.get(f"fs_adopted_t_{m_key}", conf_m["t"]))
+                with adopt_cols[idx_ac]:
+                    st.markdown(f"**📐 اعتماد قطاع {des['model_mark']} ({des['model_label'].split('(')[-1].replace(')', '')})**")
+                    st.number_input(
+                        f"العرض b (cm) — {des['model_mark']}",
+                        min_value=20.0,
+                        max_value=200.0,
+                        value=def_b,
+                        step=5.0,
+                        key=f"fs_adopted_b_{m_key}"
+                    )
+                    st.number_input(
+                        f"الطول t (cm) — {des['model_mark']}",
+                        min_value=20.0,
+                        max_value=300.0,
+                        value=def_t,
+                        step=5.0,
+                        key=f"fs_adopted_t_{m_key}"
+                    )
 
-        # ── 🔄 ADOPTION & SYNCHRONIZATION OF COLUMN SIZES FOR SLAB ANALYSIS & FOUNDATIONS ────
-        des_map_type = {d["raw_type"]: d for d in col_designs} if 'col_designs' in locals() and col_designs else {}
-        fs_col_models_dict = {}
-        if 'col_designs' in locals() and col_designs:
+            # Check if user made any edits that differ from confirmed dimensions
+            unadopted_col_changes = []
             for des in col_designs:
-                raw_t = des["raw_type"]
-                m_mark = des.get("model_mark") or (col_label_map.get(raw_t, "C1") if 'col_label_map' in locals() else "C1")
-                b_val = float(confirmed_col_dims.get(raw_t, {}).get("b", des["b"]))
-                t_val = float(confirmed_col_dims.get(raw_t, {}).get("t", des["t"]))
-                spec_str = f"{m_mark} = {int(round(b_val))}*{int(round(t_val))} cm"
-                entry = {
-                    "mark": m_mark,
-                    "raw_type": raw_t,
-                    "label": des.get("model_label", f"{m_mark} ({raw_t})"),
-                    "b_cm": b_val,
-                    "t_cm": t_val,
-                    "spec_str": spec_str,
-                    "Pu_tot": des.get("pu_tot", 0.0),
+                m_key = des["raw_type"]
+                conf_m = confirmed_col_dims.get(m_key, {"b": float(des["b"]), "t": float(des["t"])})
+                val_b = float(st.session_state.get(f"fs_adopted_b_{m_key}", conf_m["b"]))
+                val_t = float(st.session_state.get(f"fs_adopted_t_{m_key}", conf_m["t"]))
+                if abs(val_b - float(conf_m["b"])) > 0.01 or abs(val_t - float(conf_m["t"])) > 0.01:
+                    unadopted_col_changes.append({
+                        "model_mark": des["model_mark"],
+                        "raw_type": m_key,
+                        "old_b": conf_m["b"],
+                        "old_t": conf_m["t"],
+                        "new_b": val_b,
+                        "new_t": val_t,
+                    })
+            has_unadopted = len(unadopted_col_changes) > 0
+
+            if has_unadopted:
+                chg_lines = [
+                    f"• <b>{c['model_mark']}</b>: تم تعديل القطاع في المدخلات إلى <b>{int(round(c['new_b']))} × {int(round(c['new_t']))} سم</b> (المعتمد حالياً: {int(round(c['old_b']))} × {int(round(c['old_t']))} سم)"
+                    for c in unadopted_col_changes
+                ]
+                st.markdown(
+                    f"""
+                    <div dir="rtl" style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 2px solid #f59e0b; border-right: 6px solid #d97706; border-radius: 10px; padding: 16px 20px; margin: 16px 0 12px 0; color: #92400e; line-height: 1.8;">
+                        <div style="font-size: 16px; font-weight: 800; color: #b45309; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
+                            ⏳ <span>تنبيه: تم تعديل قطاعات نماذج الأعمدة في المدخلات — يلزم النقر على زر إعادة التصميم أدناه</span>
+                        </div>
+                        <div style="font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #78350f;">
+                            تم رصد التعديلات الجديدة التالية على قطاعات الأعمدة:
+                        </div>
+                        <div style="margin-bottom: 12px; font-size: 13.5px; font-weight: 700; color: #b45309;">
+                            {'<br>'.join(chg_lines)}
+                        </div>
+                        <div style="font-size: 14px; font-weight: 700; color: #1e293b;">
+                            ⛔ <b>تم حجب مخرجات كافة الأقسام واللوحات الإنشائية مؤقتاً للسماح بإجراء أي تغييرات إضافية.</b><br>
+                            👇 بعد الانتهاء من التعديل، اضغط على زر <b>«إعادة التصميم طبقاً لتغيير مدخلات الأعمدة»</b> أدناه لاعتماد المتغيرات وإعادة الحسابات والتصميمات والرسومات بالكامل.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+            st.markdown(
+                """
+                <style>
+                div[class*="st-key-"][class*="btn_fs_adopt_col_dims"] button,
+                div.stButton > button[key*="btn_fs_adopt_col_dims"],
+                button[key*="btn_fs_adopt_col_dims"],
+                .st-key-btn_fs_adopt_col_dims button,
+                div[data-testid="stVerticalBlock"] div:has(> button[key*="btn_fs_adopt_col_dims"]) button {
+                    background: #ffffff !important;
+                    background-color: #ffffff !important;
+                    color: #0f172a !important;
+                    font-size: 24px !important;
+                    font-weight: 900 !important;
+                    padding: 18px 30px !important;
+                    min-height: 72px !important;
+                    border-radius: 14px !important;
+                    border: 3px solid #0284c7 !important;
+                    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15), 0 0 0 3px rgba(2, 132, 199, 0.25) !important;
+                    transition: all 0.25s ease !important;
+                    margin: 16px 0px !important;
+                    width: 100% !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    cursor: pointer !important;
                 }
-                fs_col_models_dict[raw_t] = entry
-                fs_col_models_dict[m_mark] = entry
-            st.session_state["fs_col_models_dict"] = fs_col_models_dict
-            st.session_state[f"{prefix}fs_col_models_dict"] = fs_col_models_dict
-            S.cfg_set("fs_col_models_dict", fs_col_models_dict)
+                div[class*="st-key-"][class*="btn_fs_adopt_col_dims"] button:hover,
+                div.stButton > button[key*="btn_fs_adopt_col_dims"]:hover,
+                button[key*="btn_fs_adopt_col_dims"]:hover {
+                    background: #f8fafc !important;
+                    background-color: #f8fafc !important;
+                    color: #0284c7 !important;
+                    border-color: #0369a1 !important;
+                    box-shadow: 0 10px 28px rgba(2, 132, 199, 0.35) !important;
+                    transform: translateY(-2px) !important;
+                }
+                div[class*="st-key-"][class*="btn_fs_adopt_col_dims"] button *,
+                div.stButton > button[key*="btn_fs_adopt_col_dims"] *,
+                button[key*="btn_fs_adopt_col_dims"] * {
+                    color: inherit !important;
+                    font-size: 24px !important;
+                    font-weight: 900 !important;
+                    line-height: 1.3 !important;
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
+            btn_adopt_clicked = st.button("🔄 إعادة التصميم طبقاً لتغيير مدخلات الأعمدة", key=f"{prefix}btn_fs_adopt_col_dims", use_container_width=True)
+            if btn_adopt_clicked:
+                for des in col_designs:
+                    m_key = des["raw_type"]
+                    confirmed_col_dims[m_key] = {
+                        "b": float(st.session_state.get(f"fs_adopted_b_{m_key}", des["b"])),
+                        "t": float(st.session_state.get(f"fs_adopted_t_{m_key}", des["t"])),
+                    }
+                st.session_state["fs_confirmed_col_dims"] = confirmed_col_dims
+                S.cfg_set("fs_confirmed_col_dims", confirmed_col_dims)
+                S.save_settings()
+                has_unadopted = False
+                st.rerun()
 
-        for c in _active_cols:
-            c_type = c.get("type", "Interior")
-            des_m = des_map_type.get(c_type)
-            if des_m:
-                c_b = float(confirmed_col_dims.get(c_type, {}).get("b", des_m["b"]))
-                c_t = float(confirmed_col_dims.get(c_type, {}).get("t", des_m["t"]))
-                c_mk = des_m.get("model_mark") or (col_label_map.get(c_type, "C1") if 'col_label_map' in locals() else "C1")
-                c["b_cm"] = c_b
-                c["t_cm"] = c_t
-                c["bc"] = c_b
-                c["tc"] = c_t
-                c["model_mark"] = c_mk
-                c["col_spec_str"] = f"{c_mk} = {int(round(c_b))}*{int(round(c_t))} cm"
-                c["width_m"] = c_b / 100.0
-                c["height_m"] = c_t / 100.0
-                gx = float(c.get("center_x", c.get("x", 0.0)))
-                gy = float(c.get("center_y", c.get("y", 0.0)))
-                c["x_min"] = gx - (c["width_m"] / 2.0)
-                c["x_max"] = gx + (c["width_m"] / 2.0)
-                c["y_min"] = gy - (c["height_m"] / 2.0)
-                c["y_max"] = gy + (c["height_m"] / 2.0)
+            if has_unadopted:
+                st.info("ℹ️ قم بإجراء أي تعديلات مطلوبة على أبعاد الأعمدة أعلاه، ثم اضغط على زر «إعادة التصميم طبقاً لتغيير مدخلات الأعمدة» لإعادة الحسابات وتحديث المخرجات والرسومات بالكامل.")
+                st.stop()
 
-        if 'col_designs' in locals() and col_designs:
-            gov_m = next((d for d in col_designs if d.get("raw_type") == "Interior"), col_designs[0])
-            bc_s = float(confirmed_col_dims.get(gov_m["raw_type"], {}).get("b", gov_m["b"]))
-            tc_s = float(confirmed_col_dims.get(gov_m["raw_type"], {}).get("t", gov_m["t"]))
-            bc_m = bc_s / 100.0
-            tc_m = tc_s / 100.0
+    st.markdown(
+        """
+        <div dir="rtl" style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 1.5px solid #86efac; border-right: 5px solid #16a34a; border-radius: 8px; padding: 12px 16px; margin: 12px 0; color: #166534; font-size: 14px; font-weight: 700; line-height: 1.8;">
+            ✅ <b>تم تفعيل وتطبيق قطاعات نماذج الأعمدة المعدلة تلقائياً على كافة المساقط واللوحات الإنشائية</b> (بما في ذلك لوحات الأعمدة، واختراق الأعمدة Punching Shear، ولوحات البلاطات والتسليح، والرسومات التنفيذية النهائية و3D BIM) دون تغيير اتجاه ضرب الأعمدة أو ترحيلاتها على المحاور.
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # ── 🔄 ADOPTION & SYNCHRONIZATION OF COLUMN SIZES FOR SLAB ANALYSIS & FOUNDATIONS ────
+    des_map_type = {d["raw_type"]: d for d in col_designs} if 'col_designs' in locals() and col_designs else {}
+    fs_col_models_dict = {}
+    if 'col_designs' in locals() and col_designs:
+        for des in col_designs:
+            raw_t = des["raw_type"]
+            m_mark = des.get("model_mark") or (col_label_map.get(raw_t, "C1") if 'col_label_map' in locals() else "C1")
+            b_val = float(confirmed_col_dims.get(raw_t, {}).get("b", des["b"]))
+            t_val = float(confirmed_col_dims.get(raw_t, {}).get("t", des["t"]))
+            spec_str = f"{m_mark} = {int(round(b_val))}*{int(round(t_val))} cm"
+            entry = {
+                "mark": m_mark,
+                "raw_type": raw_t,
+                "label": des.get("model_label", f"{m_mark} ({raw_t})"),
+                "b_cm": b_val,
+                "t_cm": t_val,
+                "spec_str": spec_str,
+                "Pu_tot": des.get("pu_tot", 0.0),
+            }
+            fs_col_models_dict[raw_t] = entry
+            fs_col_models_dict[m_mark] = entry
+        st.session_state["fs_col_models_dict"] = fs_col_models_dict
+        st.session_state[f"{prefix}fs_col_models_dict"] = fs_col_models_dict
+        S.cfg_set("fs_col_models_dict", fs_col_models_dict)
+
+    # ── 🔄 UNIFIED SYNCHRONIZATION: Update _active_cols and _all_cols ──
+    sync_all_columns_with_models(_active_cols, confirmed_col_dims, col_label_map=col_label_map if 'col_label_map' in locals() else None)
+    sync_all_columns_with_models(_all_cols, confirmed_col_dims, col_label_map=col_label_map if 'col_label_map' in locals() else None)
+    st.session_state["_fs_active_cols"] = _active_cols
+
+    # Update geometry bounds in col_reactions_data
+    for r in col_reactions_data:
+        c_match = next((c for c in _active_cols if c.get("id") == r.get("Column ID") or c.get("orig_id") == r.get("Orig ID")), None)
+        if c_match:
+            r["x_min"] = c_match.get("x_min")
+            r["y_min"] = c_match.get("y_min")
+            r["x_max"] = c_match.get("x_max")
+            r["y_max"] = c_match.get("y_max")
+            r["width_m"] = c_match.get("width_m")
+            r["height_m"] = c_match.get("height_m")
+            r["center_x"] = c_match.get("center_x")
+            r["center_y"] = c_match.get("center_y")
+
+    if 'col_designs' in locals() and col_designs:
+        gov_m = next((d for d in col_designs if d.get("raw_type") == "Interior"), col_designs[0])
+        bc_s = float(confirmed_col_dims.get(gov_m["raw_type"], {}).get("b", gov_m["b"]))
+        tc_s = float(confirmed_col_dims.get(gov_m["raw_type"], {}).get("t", gov_m["t"]))
+        bc_m = bc_s / 100.0
+        tc_m = tc_s / 100.0
 
     # ── Multi-Bay & Merged-Bay Moments Analysis (X & Y) ──────────────────────
     btm_extra_spans = []

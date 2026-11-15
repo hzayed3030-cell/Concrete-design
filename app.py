@@ -2139,6 +2139,135 @@ def pull_project_from_github(repo_dir: str, custom_token: str = None):
         return False, "تعذر سحب التحديثات من GitHub (تحقق من اتصال الإنترنت أو وجود تعارض)", "\n\n".join(logs)
 
 
+def trigger_rocket_celebration():
+    """Renders a dynamic, high-tech full-screen celebratory rocket launch animation.
+    Non-blocking, GPU-accelerated CSS animation with flying rockets, trails, and sparkle stars.
+    """
+    rocket_items = [
+        {"left": 6, "delay": 0.0, "dur": 2.2, "size": 42, "tilt": -6, "trail": "🔥✨"},
+        {"left": 14, "delay": 0.35, "dur": 2.4, "size": 48, "tilt": 4, "trail": "🚀🔥"},
+        {"left": 22, "delay": 0.15, "dur": 2.1, "size": 38, "tilt": -3, "trail": "✨🌟"},
+        {"left": 31, "delay": 0.5, "dur": 2.3, "size": 54, "tilt": 7, "trail": "🔥💨"},
+        {"left": 40, "delay": 0.1, "dur": 2.0, "size": 44, "tilt": -5, "trail": "🌟✨"},
+        {"left": 49, "delay": 0.4, "dur": 2.5, "size": 52, "tilt": 2, "trail": "🚀✨"},
+        {"left": 58, "delay": 0.2, "dur": 2.2, "size": 46, "tilt": -8, "trail": "🔥🌟"},
+        {"left": 67, "delay": 0.6, "dur": 2.4, "size": 50, "tilt": 5, "trail": "✨💨"},
+        {"left": 76, "delay": 0.25, "dur": 2.1, "size": 40, "tilt": -4, "trail": "🚀🔥"},
+        {"left": 84, "delay": 0.45, "dur": 2.3, "size": 48, "tilt": 6, "trail": "🌟✨"},
+        {"left": 92, "delay": 0.1, "dur": 2.2, "size": 44, "tilt": -7, "trail": "🔥✨"},
+    ]
+    
+    stars = [
+        {"top": 18, "left": 15, "delay": 0.3, "scale": 1.4, "sym": "✨"},
+        {"top": 28, "left": 45, "delay": 0.1, "scale": 1.8, "sym": "🌟"},
+        {"top": 22, "left": 75, "delay": 0.5, "scale": 1.5, "sym": "💫"},
+        {"top": 40, "left": 28, "delay": 0.7, "scale": 1.3, "sym": "⭐"},
+        {"top": 35, "left": 62, "delay": 0.4, "scale": 1.6, "sym": "✨"},
+        {"top": 50, "left": 82, "delay": 0.6, "scale": 1.4, "sym": "🌟"},
+        {"top": 45, "left": 10, "delay": 0.2, "scale": 1.5, "sym": "⚡"},
+        {"top": 55, "left": 50, "delay": 0.8, "scale": 1.7, "sym": "💫"},
+    ]
+
+    rockets_html = "".join([
+        f"""<div class="cg-rocket-unit" style="left: {r['left']}vw; animation-delay: {r['delay']}s; animation-duration: {r['dur']}s; font-size: {r['size']}px; transform: rotate({r['tilt']}deg);">
+            <div class="cg-rocket-body">🚀</div>
+            <div class="cg-rocket-exhaust">{r['trail']}</div>
+        </div>"""
+        for r in rocket_items
+    ])
+
+    stars_html = "".join([
+        f"""<div class="cg-star" style="top: {s['top']}vh; left: {s['left']}vw; animation-delay: {s['delay']}s; transform: scale({s['scale']});">{s['sym']}</div>"""
+        for s in stars
+    ])
+
+    html_content = f"""
+    <div class="cg-celebration-container" aria-hidden="true">
+        <style>
+            .cg-celebration-container {{
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100vw;
+                height: 100vh;
+                pointer-events: none;
+                z-index: 9999999;
+                overflow: hidden;
+            }}
+            .cg-rocket-unit {{
+                position: absolute;
+                bottom: -120px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                animation: cgRocketFlight 2.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+                filter: drop-shadow(0 0 16px rgba(255, 140, 0, 0.85)) drop-shadow(0 0 28px rgba(56, 189, 248, 0.75));
+                will-change: transform, opacity;
+            }}
+            .cg-rocket-body {{
+                animation: cgRocketWiggle 0.18s ease-in-out infinite alternate;
+                user-select: none;
+            }}
+            .cg-rocket-exhaust {{
+                font-size: 0.45em;
+                margin-top: -6px;
+                opacity: 0.9;
+                filter: drop-shadow(0 0 8px #ff4500);
+                animation: cgExhaustPulse 0.12s ease-in-out infinite alternate;
+                user-select: none;
+            }}
+            .cg-star {{
+                position: absolute;
+                font-size: 26px;
+                animation: cgStarSparkle 1.6s ease-in-out infinite;
+                opacity: 0;
+                pointer-events: none;
+                filter: drop-shadow(0 0 10px #fbbf24);
+                user-select: none;
+            }}
+            @keyframes cgRocketFlight {{
+                0% {{
+                    bottom: -120px;
+                    opacity: 0;
+                    transform: translateY(0) scale(0.65);
+                }}
+                10% {{
+                    opacity: 1;
+                    transform: translateY(-40px) scale(1.05);
+                }}
+                75% {{
+                    opacity: 1;
+                }}
+                100% {{
+                    bottom: 115vh;
+                    opacity: 0;
+                    transform: translateY(-80px) scale(1.15);
+                }}
+            }}
+            @keyframes cgRocketWiggle {{
+                from {{ transform: rotate(-4deg); }}
+                to {{ transform: rotate(4deg); }}
+            }}
+            @keyframes cgExhaustPulse {{
+                from {{ transform: scale(0.9) translateY(0); opacity: 0.75; }}
+                to {{ transform: scale(1.25) translateY(3px); opacity: 1; }}
+            }}
+            @keyframes cgStarSparkle {{
+                0% {{ opacity: 0; transform: scale(0.4) rotate(0deg); }}
+                50% {{ opacity: 1; transform: scale(1.3) rotate(180deg); }}
+                100% {{ opacity: 0; transform: scale(0.3) rotate(360deg); }}
+            }}
+        </style>
+        {rockets_html}
+        {stars_html}
+    </div>
+    """
+    try:
+        render_custom_html(html_content)
+    except Exception:
+        st.markdown(html_content, unsafe_allow_html=True)
+
+
 def render_profile_manager():
     """Start Screen: Ultra-Compact High-Density Dark Mode Projects Dashboard."""
     projects = get_all_projects()
@@ -2146,12 +2275,12 @@ def render_profile_manager():
 
     if st.session_state.get("git_push_success_msg"):
         st.success(st.session_state["git_push_success_msg"])
-        st.balloons()
+        trigger_rocket_celebration()
         del st.session_state["git_push_success_msg"]
 
     if st.session_state.get("git_pull_success_msg"):
         st.success(st.session_state["git_pull_success_msg"])
-        st.balloons()
+        trigger_rocket_celebration()
         del st.session_state["git_pull_success_msg"]
 
     # ── Centered Distinctive Header Banner ──
@@ -2514,7 +2643,7 @@ def render_profile_manager():
                                                 st.session_state["git_push_info_msg"] = user_msg
                                             else:
                                                 st.session_state["git_push_success_msg"] = f"✅ {user_msg}"
-                                                st.balloons()
+                                                trigger_rocket_celebration()
                                             st.session_state["show_git_update_form"] = False
                                             st.session_state.pop("input_git_commit_msg", None)
                                             st.rerun()
@@ -2583,7 +2712,7 @@ def render_profile_manager():
                             if success:
                                 st.session_state["git_pull_success_msg"] = f"✅ {user_msg}"
                                 st.session_state["show_git_pull_form"] = False
-                                st.balloons()
+                                trigger_rocket_celebration()
                                 st.rerun()
                             else:
                                 st.error(f"❌ {user_msg}")
