@@ -3045,7 +3045,7 @@ def detect_column_bounded_panels(x_coords, y_coords, active_cols=None, removed_c
             for (vx1, vx2, vy1, vy2, *_) in void_boxes:
                 ov_x = max(0.0, min(px2, vx2) - max(px1, vx1))
                 ov_y = max(0.0, min(py2, vy2) - max(py1, vy1))
-                if ov_x * ov_y > 0.60 * max(0.01, (px2 - px1) * (py2 - py1)):
+                if ov_x * ov_y > 0.40 * max(0.01, (px2 - px1) * (py2 - py1)):
                     return True
         return False
 
@@ -3399,6 +3399,8 @@ def build_slab_moment_field(
     active_column_coords = []
     if active_cols is not None:
         for c in active_cols:
+            if not isinstance(c, dict):
+                continue
             cx = c.get("x", c.get("grid_x_m"))
             cy = c.get("y", c.get("grid_y_m"))
             if cx is not None and cy is not None:
@@ -3646,15 +3648,19 @@ def build_grid_axes_info(x_coords, y_coords, active_cols, active_x_labels=None, 
 
 import matplotlib.ticker as ticker
 
-def get_strip_true_supports(direction, cut_pos, active_cols, drop_beams, is_col_strip, w_strip, s_min, s_max, void_boxes=None):
+def get_strip_true_supports(
+    direction, cut_pos, active_cols, drop_beams, is_col_strip, w_strip, s_min, s_max,
+    void_boxes=None, unified_panels=None
+):
     """
-    Identifies TRUE physical structural supports (columns and supporting transverse beams)
-    that physically intersect the section cut line, strictly excluding any column or beam
-    whose physical boundaries do not cross the section line.
+    Identifies TRUE physical structural supports (columns, supporting transverse beams,
+    and unified column-bounded panel support lines) that bound the structural spans along
+    the section cut line, strictly excluding virtual/unrestrained internal grid lines.
     Returns a sorted list of TrueSupport dicts:
-    [{'coord': s_val, 'label': 'C2', 'type': 'column', 'width': 0.30, 'col': col_dict, 'beam': beam_dict}, ...]
+    [{'coord': s_val, 'label': 'C2', 'type': 'column', 'width': 0.30, 'col': col_dict, 'beam': beam_dict, 'support_cols': [...]}, ...]
     """
     supports_raw = []
+    col_parsed_list = []
 
     # 1. Active Columns physically intersecting this section cut line
     for c in (active_cols or []):
@@ -3667,8 +3673,8 @@ def get_strip_true_supports(direction, cut_pos, active_cols, drop_beams, is_col_
             c_xmax = float(c["x_max"])
             c_ymin = float(c["y_min"])
             c_ymax = float(c["y_max"])
-            cx = float(c.get("center_x", (c_xmin + c_xmax) / 2.0))
-            cy = float(c.get("center_y", (c_ymin + c_ymax) / 2.0))
+            cx = float(c.get("center_x", c.get("x", (c_xmin + c_xmax) / 2.0)))
+            cy = float(c.get("center_y", c.get("y", (c_ymin + c_ymax) / 2.0)))
         else:
             cx = float(c.get("center_x", c.get("grid_x_m", c.get("x", 0.0))))
             cy = float(c.get("center_y", c.get("grid_y_m", c.get("y", 0.0))))
@@ -3686,34 +3692,46 @@ def get_strip_true_supports(direction, cut_pos, active_cols, drop_beams, is_col_
             c_ymin = cy - hy / 2.0
             c_ymax = cy + hy / 2.0
 
-        cid = c.get("id", c.get("orig_id", "C"))
+        cid = str(c.get("id", c.get("orig_id", "C")))
+        col_parsed_list.append({
+            "c": c,
+            "cid": cid,
+            "cx": cx,
+            "cy": cy,
+            "c_xmin": c_xmin,
+            "c_xmax": c_xmax,
+            "c_ymin": c_ymin,
+            "c_ymax": c_ymax,
+            "wx": max(0.20, c_xmax - c_xmin),
+            "hy": max(0.20, c_ymax - c_ymin),
+        })
 
         # Strict physical spatial intersection test:
         if direction == "X":
             # Cut line is horizontal at Y = cut_pos
-            # Column is intersected if and only if cut_pos falls within column's physical Y bounds
-            if (c_ymin - 0.02) <= cut_pos <= (c_ymax + 0.02):
+            if (c_ymin - 0.04) <= cut_pos <= (c_ymax + 0.04):
                 col_w_x = max(0.20, c_xmax - c_xmin)
                 supports_raw.append({
                     "coord": cx,
-                    "label": str(cid),
+                    "label": cid,
                     "type": "column",
                     "width": col_w_x,
                     "col": c,
                     "beam": None,
+                    "support_cols": [c],
                 })
         else:
             # Direction Y: Cut line is vertical at X = cut_pos
-            # Column is intersected if and only if cut_pos falls within column's physical X bounds
-            if (c_xmin - 0.02) <= cut_pos <= (c_xmax + 0.02):
+            if (c_xmin - 0.04) <= cut_pos <= (c_xmax + 0.04):
                 col_h_y = max(0.20, c_ymax - c_ymin)
                 supports_raw.append({
                     "coord": cy,
-                    "label": str(cid),
+                    "label": cid,
                     "type": "column",
                     "width": col_h_y,
                     "col": c,
                     "beam": None,
+                    "support_cols": [c],
                 })
 
     # 2. Transverse Drop Beams physically crossing this section cut line
@@ -3728,45 +3746,100 @@ def get_strip_true_supports(direction, cut_pos, active_cols, drop_beams, is_col_
             continue
         bx1, by1 = float(bp1[0]), float(bp1[1])
         bx2, by2 = float(bp2[0]), float(bp2[1])
-        bid = b.get("id", "Beam")
+        bid = str(b.get("id", "Beam"))
         bw_m = float(b.get("b_cm", 25.0)) / 100.0
 
         if direction == "X":
             # Transverse beam must run predominantly in Y across the horizontal cut line
             by_min, by_max = min(by1, by2), max(by1, by2)
-            if (by_min - 0.04) <= cut_pos <= (by_max + 0.04) and abs(by2 - by1) >= 0.35:
+            if (by_min - 0.05) <= cut_pos <= (by_max + 0.05) and abs(by2 - by1) >= 0.35:
                 if abs(by2 - by1) > 1e-4:
                     frac_y = np.clip((cut_pos - by1) / (by2 - by1), 0.0, 1.0)
                     bx_cross = bx1 + frac_y * (bx2 - bx1)
                 else:
                     bx_cross = 0.5 * (bx1 + bx2)
+                beam_cols = [
+                    cp["c"] for cp in col_parsed_list
+                    if abs(cp["cx"] - bx_cross) <= 0.65 and (by_min - 0.65) <= cp["cy"] <= (by_max + 0.65)
+                ]
                 supports_raw.append({
                     "coord": bx_cross,
-                    "label": str(bid),
+                    "label": bid,
                     "type": "beam",
                     "width": max(0.20, bw_m),
                     "col": None,
                     "beam": b,
+                    "support_cols": beam_cols,
                 })
         else:
             # Transverse beam must run predominantly in X across the vertical cut line
             bx_min, bx_max = min(bx1, bx2), max(bx1, bx2)
-            if (bx_min - 0.04) <= cut_pos <= (bx_max + 0.04) and abs(bx2 - bx1) >= 0.35:
+            if (bx_min - 0.05) <= cut_pos <= (bx_max + 0.05) and abs(bx2 - bx1) >= 0.35:
                 if abs(bx2 - bx1) > 1e-4:
                     frac_x = np.clip((cut_pos - bx1) / (bx2 - bx1), 0.0, 1.0)
                     by_cross = by1 + frac_x * (by2 - by1)
                 else:
                     by_cross = 0.5 * (by1 + by2)
+                beam_cols = [
+                    cp["c"] for cp in col_parsed_list
+                    if abs(cp["cy"] - by_cross) <= 0.65 and (bx_min - 0.65) <= cp["cx"] <= (bx_max + 0.65)
+                ]
                 supports_raw.append({
                     "coord": by_cross,
-                    "label": str(bid),
+                    "label": bid,
                     "type": "beam",
                     "width": max(0.20, bw_m),
                     "col": None,
                     "beam": b,
+                    "support_cols": beam_cols,
                 })
 
-    # 3. Merge coincident/near supports (within 0.35m)
+    # 3. Unified Structural Panel Boundaries (Column-Strip Support Lines on Field Strips)
+    # When cutting through a column-bounded unified panel (e.g. at its peak M+ center),
+    # the boundaries of that unified panel are supported by the panel's corner/edge columns.
+    if unified_panels:
+        for upanel in unified_panels:
+            px_min, px_max, py_min, py_max = upanel["bounds"]
+            if direction == "X":
+                if (py_min - 0.08) <= cut_pos <= (py_max + 0.08):
+                    for b_coord in (px_min, px_max):
+                        if not any(abs(s["coord"] - b_coord) <= 0.40 for s in supports_raw):
+                            b_cols = [
+                                cp for cp in col_parsed_list
+                                if abs(cp["cx"] - b_coord) <= 0.65 and (py_min - 0.65) <= cp["cy"] <= (py_max + 0.65)
+                            ]
+                            if b_cols:
+                                c_ids_str = "/".join(cp["cid"] for cp in b_cols[:2])
+                                supports_raw.append({
+                                    "coord": float(b_coord),
+                                    "label": c_ids_str,
+                                    "type": "column",
+                                    "width": max(cp["wx"] for cp in b_cols),
+                                    "col": b_cols[0]["c"] if len(b_cols) == 1 else None,
+                                    "beam": None,
+                                    "support_cols": [cp["c"] for cp in b_cols],
+                                })
+            else:
+                if (px_min - 0.08) <= cut_pos <= (px_max + 0.08):
+                    for b_coord in (py_min, py_max):
+                        if not any(abs(s["coord"] - b_coord) <= 0.40 for s in supports_raw):
+                            b_cols = [
+                                cp for cp in col_parsed_list
+                                if abs(cp["cy"] - b_coord) <= 0.65 and (px_min - 0.65) <= cp["cx"] <= (px_max + 0.65)
+                            ]
+                            if b_cols:
+                                c_ids_str = "/".join(cp["cid"] for cp in b_cols[:2])
+                                supports_raw.append({
+                                    "coord": float(b_coord),
+                                    "label": c_ids_str,
+                                    "type": "column",
+                                    "width": max(cp["hy"] for cp in b_cols),
+                                    "col": b_cols[0]["c"] if len(b_cols) == 1 else None,
+                                    "beam": None,
+                                    "support_cols": [cp["c"] for cp in b_cols],
+                                })
+
+    # 4. Merge coincident/near supports (within 0.35m)
     supports_raw.sort(key=lambda s: s["coord"])
     merged = []
     for s in supports_raw:
@@ -3775,33 +3848,438 @@ def get_strip_true_supports(direction, cut_pos, active_cols, drop_beams, is_col_
         else:
             prev = merged[-1]
             if abs(s["coord"] - prev["coord"]) <= 0.35:
+                if s["label"] not in prev["label"].split("/"):
+                    prev["label"] = f"{prev['label']}/{s['label']}"
                 if prev["type"] != s["type"]:
-                    prev["label"] = f"{prev['label']}/{s['label']}"
                     prev["type"] = "column_beam"
-                else:
-                    prev["label"] = f"{prev['label']}/{s['label']}"
                 prev["width"] = max(prev["width"], s["width"])
-                if s["col"] and not prev["col"]: prev["col"] = s["col"]
-                if s["beam"] and not prev["beam"]: prev["beam"] = s["beam"]
+                if s["col"] and not prev["col"]:
+                    prev["col"] = s["col"]
+                if s["beam"] and not prev["beam"]:
+                    prev["beam"] = s["beam"]
+                prev_scols = prev.setdefault("support_cols", [])
+                for sc in s.get("support_cols", []):
+                    if sc not in prev_scols:
+                        prev_scols.append(sc)
             else:
                 merged.append(s)
 
     merged = [s for s in merged if s_min - 0.20 <= s["coord"] <= s_max + 0.20]
 
-    # 4. Fallback if fewer than 2 physical supports found along this section
+    # 5. Fallback if fewer than 2 physical supports found along this section
     if len(merged) < 2:
         if len(merged) == 1:
             c0 = merged[0]["coord"]
             if c0 - s_min > s_max - c0:
-                merged.insert(0, {"coord": s_min, "label": "حافة البلاطة (Edge)", "type": "edge", "width": 0.25, "col": None, "beam": None})
+                merged.insert(0, {"coord": s_min, "label": "حافة البلاطة (Edge)", "type": "edge", "width": 0.25, "col": None, "beam": None, "support_cols": []})
             else:
-                merged.append({"coord": s_max, "label": "حافة البلاطة (Edge)", "type": "edge", "width": 0.25, "col": None, "beam": None})
+                merged.append({"coord": s_max, "label": "حافة البلاطة (Edge)", "type": "edge", "width": 0.25, "col": None, "beam": None, "support_cols": []})
         else:
             merged = [
-                {"coord": s_min, "label": "حافة البلاطة (Edge 1)", "type": "edge", "width": 0.25, "col": None, "beam": None},
-                {"coord": s_max, "label": "حافة البلاطة (Edge 2)", "type": "edge", "width": 0.25, "col": None, "beam": None},
+                {"coord": s_min, "label": "حافة البلاطة (Edge 1)", "type": "edge", "width": 0.25, "col": None, "beam": None, "support_cols": []},
+                {"coord": s_max, "label": "حافة البلاطة (Edge 2)", "type": "edge", "width": 0.25, "col": None, "beam": None, "support_cols": []},
             ]
     return merged
+
+
+def generate_flat_slab_moment_sections_plan(
+    Lx_spans,
+    Ly_spans,
+    cantilevers,
+    sections_to_draw,
+    selected_code=None,
+    active_dir="X",
+    active_cols=None,
+    removed_cols=None,
+    drop_beams=None,
+    void_boxes=None,
+    void_panel_ids=None,
+    active_x_labels=None,
+    active_y_labels=None,
+    X_mf=None,
+    Y_mf=None,
+    M11_raw_mf=None,
+    M22_raw_mf=None,
+    col_w_cm=30,
+    col_d_cm=30,
+):
+    """
+    Renders a Horizontal Plan View showing the slab layout (columns, drop beams, voids,
+    grid axes, unified panel zones, and subtle contour background) with all bending moment
+    section cutting lines and their simplified section names (AA, BB, CC, DD... for Horizontal
+    X-sections, and MM, NN, PP, QQ... for Vertical Y-sections) clearly identified on the plan.
+    Highlights the currently selected section (`selected_code`).
+    """
+    plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
+
+    x_coords = [0.0]
+    for lx in Lx_spans:
+        x_coords.append(round(x_coords[-1] + float(lx), 4))
+
+    y_coords = [0.0]
+    for ly in Ly_spans:
+        y_coords.append(round(y_coords[-1] + float(ly), 4))
+
+    cant_left   = float((cantilevers or {}).get("left",   0.0))
+    cant_right  = float((cantilevers or {}).get("right",  0.0))
+    cant_bottom = float((cantilevers or {}).get("bottom", 0.0))
+    cant_top    = float((cantilevers or {}).get("top",    0.0))
+
+    x_slab_min = x_coords[0]  - cant_left
+    x_slab_max = x_coords[-1] + cant_right
+    y_slab_min = y_coords[0]  - cant_bottom
+    y_slab_max = y_coords[-1] + cant_top
+
+    slab_w = max(1.0, x_slab_max - x_slab_min)
+    slab_h = max(1.0, y_slab_max - y_slab_min)
+
+    bubble_radius = max(0.38, min(slab_w, slab_h) * 0.032)
+    offset_grid_top = max(2.3, slab_h * 0.17)
+    offset_grid_left = max(2.6, slab_w * 0.12)
+    dim_offset_bot = max(1.95, slab_h * 0.16)
+    dim_offset_right = max(2.25, slab_w * 0.11)
+    margin_right = dim_offset_right + 3.1
+    margin_bot = dim_offset_bot + 2.3
+
+    total_w = slab_w + offset_grid_left + margin_right + 1.4
+    total_h = slab_h + offset_grid_top + margin_bot + 1.4
+    ar_plan = total_w / max(1.0, total_h)
+
+    fig_h = 11.2
+    fig_w = max(15.5, min(25.0, fig_h * ar_plan))
+
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), dpi=100, facecolor="#ffffff")
+    fig.subplots_adjust(left=0.04, right=0.96, top=0.90, bottom=0.10)
+    ax.set_facecolor("#f8fafc")
+
+    # 1. Subtle Contour Background (for visual correlation with 2D Moment Contour Map)
+    if X_mf is not None and Y_mf is not None:
+        M_bg = np.copy(M11_raw_mf if active_dir == "X" else M22_raw_mf)
+        if M_bg is not None:
+            if void_boxes:
+                for (vx1, vx2, vy1, vy2, *_) in void_boxes:
+                    v_mask = (X_mf >= vx1) & (X_mf <= vx2) & (Y_mf >= vy1) & (Y_mf <= vy2)
+                    M_bg[v_mask] = np.nan
+            valid_m = M_bg[~np.isnan(M_bg)]
+            if len(valid_m) > 0:
+                m_min, m_max = float(np.min(valid_m)), float(np.max(valid_m))
+                if m_max > m_min + 1e-3:
+                    levels_bg = np.linspace(m_min, m_max, 24)
+                    norm_bg = mcolors.TwoSlopeNorm(vmin=m_min, vcenter=0.0, vmax=m_max) if (m_min < -1e-3 and m_max > 1e-3) else None
+                    ax.contourf(X_mf, Y_mf, M_bg, levels=levels_bg, cmap="RdYlBu_r", norm=norm_bg, alpha=0.22, zorder=1)
+                    ax.contour(X_mf, Y_mf, M_bg, levels=np.linspace(m_min, m_max, 10), colors="#94a3b8", linewidths=0.65, alpha=0.35, zorder=2)
+
+    # 2. Slab Perimeter & Cantilevers
+    ax.add_patch(patches.Rectangle(
+        (x_slab_min, y_slab_min), slab_w, slab_h,
+        linewidth=2.8, edgecolor="#0f172a", facecolor="none", zorder=4
+    ))
+    cant_style = dict(linewidth=1.4, edgecolor="#1d4ed8", facecolor="none", linestyle="--", zorder=4)
+    if cant_left > 0:
+        ax.add_patch(patches.Rectangle((x_slab_min, y_slab_min), cant_left, slab_h, **cant_style))
+    if cant_right > 0:
+        ax.add_patch(patches.Rectangle((x_coords[-1], y_slab_min), cant_right, slab_h, **cant_style))
+    if cant_bottom > 0:
+        ax.add_patch(patches.Rectangle((x_slab_min, y_slab_min), slab_w, cant_bottom, **cant_style))
+    if cant_top > 0:
+        ax.add_patch(patches.Rectangle((x_slab_min, y_coords[-1]), slab_w, cant_top, **cant_style))
+
+    # 3. Unified Structural Panel Outlines
+    unified_panels = detect_column_bounded_panels(
+        x_coords, y_coords,
+        active_cols=active_cols,
+        removed_cols=removed_cols,
+        drop_beams=drop_beams,
+        void_panel_ids=void_panel_ids,
+        void_boxes=void_boxes,
+    )
+    for up in unified_panels:
+        px1, px2, py1, py2 = up["bounds"]
+        ax.add_patch(patches.Rectangle(
+            (px1, py1), px2 - px1, py2 - py1,
+            linewidth=1.2, edgecolor="#475569", facecolor="none", linestyle=":", alpha=0.6, zorder=3
+        ))
+
+    # 4. Voids / Openings
+    if void_boxes:
+        for (vx1, vx2, vy1, vy2, *rest) in void_boxes:
+            lx, ly = vx2 - vx1, vy2 - vy1
+            varea = rest[0] if rest else (lx * ly)
+            ax.add_patch(patches.Rectangle((vx1, vy1), lx, ly, linewidth=2.0, edgecolor="#ef4444", facecolor="#ffffff", zorder=5))
+            ax.plot([vx1, vx2], [vy1, vy2], color="#ef4444", linestyle="--", linewidth=1.4, zorder=5)
+            ax.plot([vx1, vx2], [vy2, vy1], color="#ef4444", linestyle="--", linewidth=1.4, zorder=5)
+            ax.text(
+                (vx1 + vx2) / 2.0, (vy1 + vy2) / 2.0, f"VOID\n{varea:.1f} m²",
+                ha="center", va="center", fontsize=9.5, weight="bold", color="#b91c1c",
+                bbox=dict(boxstyle="round,pad=0.24", facecolor="#ffffff", edgecolor="#ef4444", lw=1.2),
+                zorder=6
+            )
+
+    # 5. Structural Grid Axes & CAD Bubbles
+    axes_x_info, axes_y_info = build_grid_axes_info(x_coords, y_coords, active_cols, active_x_labels, active_y_labels)
+    for x, lbl_x in axes_x_info:
+        y_top_ext = y_slab_max + offset_grid_top
+        y_bot_ext = y_slab_min - 0.35
+        ax.plot([x, x], [y_bot_ext, y_top_ext], color="#dc2626", linestyle=":", linewidth=1.1, alpha=0.55, zorder=2)
+        bubble = Circle((x, y_top_ext), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=1.8, zorder=6)
+        ax.add_patch(bubble)
+        ax.text(x, y_top_ext, lbl_x, color="#991b1b", fontsize=11.0, weight="bold", ha="center", va="center", zorder=7)
+
+    for y, lbl_y in axes_y_info:
+        x_left_ext = x_slab_min - offset_grid_left
+        x_right_ext = x_slab_max + 0.35
+        ax.plot([x_left_ext, x_right_ext], [y, y], color="#dc2626", linestyle=":", linewidth=1.1, alpha=0.55, zorder=2)
+        bubble = Circle((x_left_ext, y), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=1.8, zorder=6)
+        ax.add_patch(bubble)
+        ax.text(x_left_ext, y, lbl_y, color="#991b1b", fontsize=11.0, weight="bold", ha="center", va="center", zorder=7)
+
+    # 6. Drop Beams & Active Columns
+    _render_drop_beams_on_ax(ax, drop_beams=drop_beams, is_steel_layout=False)
+    if active_cols:
+        for c in active_cols:
+            if not isinstance(c, dict):
+                continue
+            cid = str(c.get("id", c.get("orig_id", "C")))
+            cx = float(c.get("x", c.get("center_x", 0.0)))
+            cy = float(c.get("y", c.get("center_y", 0.0)))
+            rw = float(c.get("width_m", max(col_w_cm / 100.0, 0.30)))
+            rh = float(c.get("height_m", max(col_d_cm / 100.0, 0.30)))
+            rx = float(c.get("x_min", cx - rw / 2.0))
+            ry = float(c.get("y_min", cy - rh / 2.0))
+            ax.add_patch(patches.Rectangle(
+                (rx, ry), rw, rh, linewidth=1.6, edgecolor="#0f172a", facecolor="#1e293b", zorder=7
+            ))
+            ax.text(
+                cx, cy + rh / 2.0 + 0.16, cid,
+                fontsize=8.5, weight="bold", color="#0f172a", ha="center", va="bottom",
+                bbox=dict(boxstyle="round,pad=0.14", facecolor="#ffffff", edgecolor="#94a3b8", lw=0.8, alpha=0.92),
+                zorder=8
+            )
+
+    # 7. Draw Section Cutting Lines & Section Code Callout Badges (AA, BB, CC... / MM, NN, PP...)
+    horiz_secs = [s for s in (sections_to_draw or []) if s.get("dir", "X") == "X"]
+    vert_secs  = [s for s in (sections_to_draw or []) if s.get("dir", "X") == "Y"]
+
+    # Sort for clean staggering of end callout badges if two sections are close
+    horiz_secs.sort(key=lambda s: float(s.get("coord", 0.0)))
+    vert_secs.sort(key=lambda s: float(s.get("coord", 0.0)))
+
+    # Draw Horizontal Sections (AA, BB, CC, DD...) — Deep Purple/Magenta (distinct from blue/cyan beams & green vertical sections)
+    for idx_h, sec in enumerate(horiz_secs):
+        code = str(sec.get("code", "AA"))
+        y_c = float(sec.get("coord", 0.0))
+        s_type = str(sec.get("strip_type", "field"))
+        is_sel = (selected_code is not None and code == selected_code)
+        is_act_dir = (active_dir == "X")
+
+        if is_sel:
+            line_col = "#dc2626"
+            line_lw = 3.5
+            line_ls = "-."
+            badge_bg = "#fef08a"
+            badge_ec = "#dc2626"
+            txt_col = "#7f1d1d"
+            badge_lw = 2.4
+            font_sz = 12.0
+            z_ord = 12
+            # Highlight glow underlay
+            ax.plot(
+                [x_slab_min - 0.55, x_slab_max + 0.55], [y_c, y_c],
+                color="#fde047", linewidth=8.0, alpha=0.60, zorder=10
+            )
+        else:
+            line_col = "#9333ea" if s_type == "field" else "#701a75"
+            line_lw = 2.3 if is_act_dir else 1.65
+            line_ls = "--" if s_type == "field" else "-."
+            badge_bg = "#faf5ff" if is_act_dir else "#f5f3ff"
+            badge_ec = line_col
+            txt_col = "#581c87"
+            badge_lw = 1.9 if is_act_dir else 1.4
+            font_sz = 10.8 if is_act_dir else 9.8
+            z_ord = 9 if is_act_dir else 6
+
+        ax.plot(
+            [x_slab_min - 0.55, x_slab_max + 0.55], [y_c, y_c],
+            color=line_col, linewidth=line_lw, linestyle=line_ls, alpha=0.95 if is_act_dir else 0.72, zorder=z_ord
+        )
+
+        # Stagger X position of end badges slightly outside perimeter beams
+        stagger_x = 0.95 if (idx_h % 2 == 0) else 1.45
+        x_left_badge  = x_slab_min - stagger_x
+        x_right_badge = x_slab_max + stagger_x
+
+        lbl_end = f"► {code} ◄" if is_sel else f"{code}"
+        # Left and Right Section Badges
+        for x_b in (x_left_badge, x_right_badge):
+            ax.text(
+                x_b, y_c, lbl_end,
+                ha="center", va="center", fontsize=font_sz, weight="bold", color=txt_col,
+                bbox=dict(boxstyle="round,pad=0.30", facecolor=badge_bg, edgecolor=badge_ec, lw=badge_lw, alpha=0.99),
+                zorder=z_ord + 1
+            )
+
+        # Mid-panel / Center Section Identification Badge directly on the slab (shifted slightly along X so it never collides with vertical section badge at panel peak)
+        ref_x_raw = float(sec.get("ref_x", 0.5 * (x_slab_min + x_slab_max)))
+        ref_x = max(x_slab_min + 1.4, min(x_slab_max - 1.4, ref_x_raw - 1.15))
+        m_tag = sec.get("m_short", "")
+        mid_txt = f"{code} ({m_tag})" if (is_sel and m_tag) else f"{code}"
+        ax.text(
+            ref_x, y_c, mid_txt,
+            ha="center", va="center", fontsize=font_sz, weight="bold", color=txt_col,
+            bbox=dict(boxstyle="round,pad=0.28", facecolor=badge_bg, edgecolor=badge_ec, lw=badge_lw, alpha=0.98),
+            zorder=z_ord + 2
+        )
+
+    # Draw Vertical Sections (MM, NN, PP, QQ...) — Forest Emerald Green (distinct from blue/cyan beams & purple horizontal sections)
+    for idx_v, sec in enumerate(vert_secs):
+        code = str(sec.get("code", "MM"))
+        x_c = float(sec.get("coord", 0.0))
+        s_type = str(sec.get("strip_type", "field"))
+        is_sel = (selected_code is not None and code == selected_code)
+        is_act_dir = (active_dir == "Y")
+
+        if is_sel:
+            line_col = "#dc2626"
+            line_lw = 3.5
+            line_ls = "-."
+            badge_bg = "#fef08a"
+            badge_ec = "#dc2626"
+            txt_col = "#7f1d1d"
+            badge_lw = 2.4
+            font_sz = 12.0
+            z_ord = 12
+            ax.plot(
+                [x_c, x_c], [y_slab_min - 0.55, y_slab_max + 0.55],
+                color="#fde047", linewidth=8.0, alpha=0.60, zorder=10
+            )
+        else:
+            line_col = "#15803d" if s_type == "field" else "#14532d"
+            line_lw = 2.3 if is_act_dir else 1.65
+            line_ls = "--" if s_type == "field" else "-."
+            badge_bg = "#f0fdf4" if is_act_dir else "#ecfdf5"
+            badge_ec = line_col
+            txt_col = "#14532d"
+            badge_lw = 1.9 if is_act_dir else 1.4
+            font_sz = 10.8 if is_act_dir else 9.8
+            z_ord = 9 if is_act_dir else 6
+
+        ax.plot(
+            [x_c, x_c], [y_slab_min - 0.55, y_slab_max + 0.55],
+            color=line_col, linewidth=line_lw, linestyle=line_ls, alpha=0.95 if is_act_dir else 0.72, zorder=z_ord
+        )
+
+        stagger_y = 0.80 if (idx_v % 2 == 0) else 1.25
+        y_bot_badge = y_slab_min - stagger_y
+        y_top_badge = y_slab_max + stagger_y
+
+        lbl_end = f"▼ {code} ▲" if is_sel else f"{code}"
+        for y_b in (y_bot_badge, y_top_badge):
+            ax.text(
+                x_c, y_b, lbl_end,
+                ha="center", va="center", fontsize=font_sz, weight="bold", color=txt_col,
+                bbox=dict(boxstyle="round,pad=0.30", facecolor=badge_bg, edgecolor=badge_ec, lw=badge_lw, alpha=0.99),
+                zorder=z_ord + 1
+            )
+
+        ref_y_raw = float(sec.get("ref_y", 0.5 * (y_slab_min + y_slab_max)))
+        ref_y = max(y_slab_min + 1.0, min(y_slab_max - 1.0, ref_y_raw + 0.72))
+        m_tag = sec.get("m_short", "")
+        mid_txt = f"{code} ({m_tag})" if (is_sel and m_tag) else f"{code}"
+        ax.text(
+            x_c, ref_y, mid_txt,
+            ha="center", va="center", fontsize=font_sz, weight="bold", color=txt_col,
+            bbox=dict(boxstyle="round,pad=0.28", facecolor=badge_bg, edgecolor=badge_ec, lw=badge_lw, alpha=0.98),
+            zorder=z_ord + 2
+        )
+
+    # 8. Span & Total Dimensions on Plan View (Lx along Bottom & Ly along Right — matching 2D Contour Map)
+    y_dim_lx = y_slab_min - dim_offset_bot
+    for i, span_lx in enumerate(Lx_spans):
+        x1_d, x2_d = x_coords[i], x_coords[i + 1]
+        if span_lx <= 0.05:
+            continue
+        mid_x = 0.5 * (x1_d + x2_d)
+        ax.annotate(
+            "", xy=(x2_d, y_dim_lx), xytext=(x1_d, y_dim_lx),
+            arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.7, shrinkA=0, shrinkB=0),
+            zorder=8
+        )
+        ax.plot([x1_d, x1_d], [y_dim_lx - 0.25, y_dim_lx + 0.25], color="#0f172a", lw=1.4, zorder=8)
+        ax.plot([x2_d, x2_d], [y_dim_lx - 0.25, y_dim_lx + 0.25], color="#0f172a", lw=1.4, zorder=8)
+        ax.text(
+            mid_x, y_dim_lx - 0.30, f"{span_lx:.2f} m",
+            color="#0f172a", fontsize=10.5, weight="bold", ha="center", va="top", zorder=9
+        )
+
+    y_dim_tot = y_dim_lx - 1.15
+    ax.annotate(
+        "", xy=(x_slab_max, y_dim_tot), xytext=(x_slab_min, y_dim_tot),
+        arrowprops=dict(arrowstyle="<->", color="#334155", lw=1.9, shrinkA=0, shrinkB=0),
+        zorder=8
+    )
+    ax.plot([x_slab_min, x_slab_min], [y_dim_tot - 0.25, y_dim_tot + 0.25], color="#334155", lw=1.5, zorder=8)
+    ax.plot([x_slab_max, x_slab_max], [y_dim_tot - 0.25, y_dim_tot + 0.25], color="#334155", lw=1.5, zorder=8)
+    ax.text(
+        0.5 * (x_slab_min + x_slab_max), y_dim_tot - 0.30, f"Total Lx = {slab_w:.2f} m",
+        color="#0f172a", fontsize=11.0, weight="bold", ha="center", va="top", zorder=9
+    )
+
+    x_dim_ly = x_slab_max + dim_offset_right
+    for j, span_ly in enumerate(Ly_spans):
+        y1_d, y2_d = y_coords[j], y_coords[j + 1]
+        if span_ly <= 0.05:
+            continue
+        mid_y = 0.5 * (y1_d + y2_d)
+        ax.annotate(
+            "", xy=(x_dim_ly, y2_d), xytext=(x_dim_ly, y1_d),
+            arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.7, shrinkA=0, shrinkB=0),
+            zorder=8
+        )
+        ax.plot([x_dim_ly - 0.25, x_dim_ly + 0.25], [y1_d, y1_d], color="#0f172a", lw=1.4, zorder=8)
+        ax.plot([x_dim_ly - 0.25, x_dim_ly + 0.25], [y2_d, y2_d], color="#0f172a", lw=1.4, zorder=8)
+        ax.text(
+            x_dim_ly + 0.30, mid_y, f"{span_ly:.2f} m",
+            color="#0f172a", fontsize=10.5, weight="bold", ha="left", va="center", zorder=9
+        )
+
+    x_dim_tot = x_dim_ly + 1.85
+    ax.annotate(
+        "", xy=(x_dim_tot, y_slab_max), xytext=(x_dim_tot, y_slab_min),
+        arrowprops=dict(arrowstyle="<->", color="#334155", lw=1.9, shrinkA=0, shrinkB=0),
+        zorder=8
+    )
+    ax.plot([x_dim_tot - 0.25, x_dim_tot + 0.25], [y_slab_min, y_slab_min], color="#334155", lw=1.5, zorder=8)
+    ax.plot([x_dim_tot - 0.25, x_dim_tot + 0.25], [y_slab_max, y_slab_max], color="#334155", lw=1.5, zorder=8)
+    ax.text(
+        x_dim_tot + 0.35, 0.5 * (y_slab_min + y_slab_max), f"Total Ly = {slab_h:.2f} m",
+        color="#0f172a", fontsize=11.0, weight="bold", ha="left", va="center", rotation=270, zorder=9
+    )
+
+    # 9. Title & Legend
+    sel_txt = f" | Active Selected Section: [{selected_code}]" if selected_code else ""
+    fig.suptitle(
+        f"Horizontal Plan View — Bending Moment Section Locations (AA, BB, CC... Horizontal | MM, NN, PP... Vertical){sel_txt}",
+        fontsize=13.5, fontweight="bold", color="#0f172a", y=0.96
+    )
+
+    legend_handles = [
+        patches.Patch(facecolor="#fef08a", edgecolor="#dc2626", linewidth=2.0, label=f"Selected Section ({selected_code or 'Active'})"),
+        plt.Line2D([0], [0], color="#9333ea", lw=2.3, linestyle="--", label="Horizontal Sections (AA, BB, CC... — M11 Field M⁺)"),
+        plt.Line2D([0], [0], color="#701a75", lw=2.0, linestyle="-.", label="Horizontal Support Sections (DD, EE... — M11 Column M⁻)"),
+        plt.Line2D([0], [0], color="#15803d", lw=2.3, linestyle="--", label="Vertical Sections (MM, NN, PP... — M22 Field M⁺)"),
+        plt.Line2D([0], [0], color="#14532d", lw=2.0, linestyle="-.", label="Vertical Support Sections (QQ, RR... — M22 Column M⁻)"),
+    ]
+    ax.legend(
+        handles=legend_handles, loc="upper center", bbox_to_anchor=(0.5, -0.05),
+        ncol=3, frameon=True, facecolor="#ffffff", edgecolor="#cbd5e1", fontsize=9.0
+    )
+
+    ax.set_xlim(x_slab_min - offset_grid_left - bubble_radius * 2.2, x_slab_max + margin_right)
+    ax.set_ylim(y_slab_min - margin_bot, y_slab_max + offset_grid_top + bubble_radius * 2.2)
+    ax.set_aspect("equal", adjustable="box")
+    ax.axis("off")
+
+    return fig
 
 
 def generate_flat_slab_moment_cross_section(
@@ -3810,8 +4288,8 @@ def generate_flat_slab_moment_cross_section(
     cantilevers,
     ts_cm,
     direction="X",
-    strip_type="column",
-    strip_coord=0.0,
+    strip_type="field",
+    strip_coord=None,
     strip_title_custom=None,
     active_cols=None,
     drop_beams=None,
@@ -3825,25 +4303,35 @@ def generate_flat_slab_moment_cross_section(
     show_capacities=True,
     active_x_labels=None,
     active_y_labels=None,
-    # Backward compatibility
+    # Backward compatibility & 2D Moment Field synchronization
     strip_index=0,
     X_mf=None,
     Y_mf=None,
     M11_raw_mf=None,
     M22_raw_mf=None,
+    rows_x=None,
+    rows_y=None,
+    removed_cols=None,
+    void_panel_ids=None,
+    btm_extra_spans=None,
 ):
     """
     Renders an engineering-grade structural cross-section of the flat slab & true physical supports (columns & beams)
     coupled synchronously with the Bending Moment Diagram (BMD) across the full width/length.
-    Strictly ignores virtual grid lines, computing spans, supports, and moments from TRUE physical supports only.
+    Strictly synchronized with the 2D Bending Moment Matrix & Color Contours (M11 & M22) using:
+      - `detect_column_bounded_panels` for unified column/beam-bounded structural panels,
+      - `get_unified_panel_contour` for unified positive peak moments (M+),
+      - `build_slab_moment_field` (`M11_raw_mf` / `M22_raw_mf`) for exact column/support negative moments (M-).
     Legend / Info panel is positioned strictly below the plot area in a single horizontal row.
     """
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "Segoe UI", "sans-serif"]
 
     x_coords = [0.0]
-    for lx in Lx_spans: x_coords.append(round(x_coords[-1] + float(lx), 4))
+    for lx in Lx_spans:
+        x_coords.append(round(x_coords[-1] + float(lx), 4))
     y_coords = [0.0]
-    for ly in Ly_spans: y_coords.append(round(y_coords[-1] + float(ly), 4))
+    for ly in Ly_spans:
+        y_coords.append(round(y_coords[-1] + float(ly), 4))
 
     cant_l = float(cantilevers.get('left', 0.0) or 0.0)
     cant_r = float(cantilevers.get('right', 0.0) or 0.0)
@@ -3851,52 +4339,93 @@ def generate_flat_slab_moment_cross_section(
     cant_t = float(cantilevers.get('top', 0.0) or 0.0)
 
     slab_h = max(0.15, float(ts_cm) / 100.0)
+    Wu_eff = max(0.50, float(Wu or 1.45))
     is_col_strip = (strip_type == "column")
+
+    # ── 0. Synchronize 2D Moment Field & Unified Structural Panels ─────────────
+    if X_mf is None or Y_mf is None or M11_raw_mf is None or M22_raw_mf is None:
+        X_mf, Y_mf, _, _, M11_raw_mf, M22_raw_mf = build_slab_moment_field(
+            Lx_spans, Ly_spans, cantilevers, rows_x or [], rows_y or [], Wu_eff,
+            void_panel_ids=void_panel_ids,
+            void_boxes=void_boxes,
+            btm_extra_spans=btm_extra_spans,
+            active_cols=active_cols,
+            removed_cols=removed_cols,
+            drop_beams=drop_beams,
+        )
+
+    M_raw = M11_raw_mf if direction == "X" else M22_raw_mf
+    x_vec_mf = X_mf[0, :]
+    y_vec_mf = Y_mf[:, 0]
+
+    unified_panels = detect_column_bounded_panels(
+        x_coords, y_coords,
+        active_cols=active_cols,
+        removed_cols=removed_cols,
+        drop_beams=drop_beams,
+        void_panel_ids=void_panel_ids,
+        void_boxes=void_boxes,
+    )
+    for upanel in unified_panels:
+        gx_u, gy_u, sm_u, (ucx, ucy, u_m_pos) = get_unified_panel_contour(
+            X_mf, Y_mf, M_raw, upanel["bounds"], sigma=6.0
+        )
+        upanel["gx_vec"] = gx_u[:, 0]
+        upanel["gy_vec"] = gy_u[0, :]
+        upanel["sm_grid"] = sm_u
+        upanel["peak_x"] = float(ucx)
+        upanel["peak_y"] = float(ucy)
+        upanel["peak_m_pos"] = round(float(u_m_pos), 2)
+
+    # Determine section cut position (defaulting to the global max moment unified panel center if None)
+    if strip_coord is None:
+        if unified_panels:
+            best_up = max(unified_panels, key=lambda up: up.get("peak_m_pos", 0.0))
+            cut_pos = float(best_up["peak_y"] if direction == "X" else best_up["peak_x"])
+        else:
+            cut_pos = float(y_coords[min(strip_index, len(y_coords)-1)] if direction == "X" else x_coords[min(strip_index, len(x_coords)-1)])
+    else:
+        cut_pos = float(strip_coord)
 
     if direction == "X":
         s_min = x_coords[0] - cant_l
         s_max = x_coords[-1] + cant_r
-        cut_pos = float(strip_coord if strip_coord != 0.0 or strip_index == 0 else (y_coords[min(strip_index, len(y_coords)-1)]))
         w_strip = min(np.mean(Lx_spans), np.mean(Ly_spans)) / 2.0
         strip_title = strip_title_custom or (
-            f"قطاع رأسي لعزوم الانحناء (اتجاه X) — {'شريحة عمود حرجة (Column Strip)' if is_col_strip else 'شريحة وسط (Field Strip)'} [Y = {cut_pos:.2f} m]"
+            f"قطاع رأسي لعزوم الانحناء (اتجاه X — M11) — {'شريحة ركائز وأعمدة (Column Strip)' if is_col_strip else 'منطقة أقصى عزم بالبلاطة الموحدة (Max Moment Section)'} [Y = {cut_pos:.2f} m]"
         )
     else:  # Direction Y
         s_min = y_coords[0] - cant_b
         s_max = y_coords[-1] + cant_t
-        cut_pos = float(strip_coord if strip_coord != 0.0 or strip_index == 0 else (x_coords[min(strip_index, len(x_coords)-1)]))
         w_strip = min(np.mean(Lx_spans), np.mean(Ly_spans)) / 2.0
         strip_title = strip_title_custom or (
-            f"قطاع رأسي لعزوم الانحناء (اتجاه Y) — {'شريحة عمود حرجة (Column Strip)' if is_col_strip else 'شريحة وسط (Field Strip)'} [X = {cut_pos:.2f} m]"
+            f"قطاع رأسي لعزوم الانحناء (اتجاه Y — M22) — {'شريحة ركائز وأعمدة (Column Strip)' if is_col_strip else 'منطقة أقصى عزم بالبلاطة الموحدة (Max Moment Section)'} [X = {cut_pos:.2f} m]"
         )
 
-    # ── 1. Resolve TRUE SUPPORTS (Columns & Beams only — Grid Lines completely ignored) ──
+    # ── 1. Resolve TRUE SUPPORTS (Columns, Transverse Beams & Unified Panel Boundaries) ──
     true_supports = get_strip_true_supports(
-        direction, cut_pos, active_cols, drop_beams, is_col_strip, w_strip, s_min, s_max, void_boxes=void_boxes
+        direction, cut_pos, active_cols, drop_beams, is_col_strip, w_strip, s_min, s_max,
+        void_boxes=void_boxes, unified_panels=unified_panels
     )
-
-    support_pts = [s["coord"] for s in true_supports]
-    support_labels = [s["label"] for s in true_supports]
-
-    # Calculate true spans
-    num_spans = max(1, len(support_pts) - 1)
-    true_spans = [support_pts[k+1] - support_pts[k] for k in range(num_spans)]
 
     # ── 2. Identify Drop Beams along or crossing this section ───────────────────
     cut_beams = []
     for b in (drop_beams or []):
-        if not isinstance(b, dict): continue
-        if b.get("beam_type_category") == "unsupported_beam": continue
+        if not isinstance(b, dict):
+            continue
+        if b.get("beam_type_category") == "unsupported_beam":
+            continue
         bp1 = b.get("p1_grid", b.get("p1", [0, 0]))
         bp2 = b.get("p2_grid", b.get("p2", [0, 0]))
-        if not bp1 or not bp2 or len(bp1) < 2 or len(bp2) < 2: continue
+        if not bp1 or not bp2 or len(bp1) < 2 or len(bp2) < 2:
+            continue
         bx1, by1 = float(bp1[0]), float(bp1[1])
         bx2, by2 = float(bp2[0]), float(bp2[1])
         if direction == "X":
-            if abs(by1 - by2) <= 0.35 and abs((by1 + by2)/2.0 - cut_pos) <= 0.40:
+            if abs(by1 - by2) <= 0.35 and abs((by1 + by2) / 2.0 - cut_pos) <= 0.40:
                 cut_beams.append(b)
         else:
-            if abs(bx1 - bx2) <= 0.35 and abs((bx1 + bx2)/2.0 - cut_pos) <= 0.40:
+            if abs(bx1 - bx2) <= 0.35 and abs((bx1 + bx2) / 2.0 - cut_pos) <= 0.40:
                 cut_beams.append(b)
 
     # ── 3. Identify Voids crossing this section ────────────────────────────────
@@ -3919,9 +4448,19 @@ def generate_flat_slab_moment_cross_section(
                 void_intervals.append((min(vy1, vy2), max(vy1, vy2)))
 
     # ── 3b. Cantilever Validation Check & Boundary Clipping against Voids ──────
-    # A true cantilever can only exist in solid slab domain. If a void lies before s_start or after s_end,
-    # clip the section boundaries immediately to the outer face of the outermost supports,
-    # completely excluding voids from the section and setting cantilever length = 0.
+    # Exclude supports that lie strictly inside a void interval before boundary clipping
+    if void_intervals:
+        filtered_sups = []
+        for s_item in true_supports:
+            sc = s_item["coord"]
+            # A support is valid if it sits on the boundary of a solid region (not strictly inside a void interior)
+            strictly_in_void = any((v1 + 0.15 < sc < v2 - 0.15) for (v1, v2) in void_intervals)
+            if not strictly_in_void:
+                filtered_sups.append(s_item)
+        if len(filtered_sups) >= 2:
+            true_supports = filtered_sups
+
+    support_pts = [s["coord"] for s in true_supports]
     s_start = support_pts[0]
     s_end = support_pts[-1]
     sup_start_w = true_supports[0].get("width", 0.25)
@@ -3947,8 +4486,23 @@ def generate_flat_slab_moment_cross_section(
             else:
                 s_max = min(s_max, v1)
 
-    cant_start_len = 0.0 if void_at_start else max(0.0, s_start - s_min)
-    cant_end_len = 0.0 if void_at_end else max(0.0, s_max - s_end)
+    raw_cant_start = cant_l if direction == "X" else cant_b
+    raw_cant_end = cant_r if direction == "X" else cant_t
+
+    cant_start_len = 0.0 if (void_at_start or raw_cant_start <= 0.05) else max(0.0, s_start - s_min)
+    cant_end_len = 0.0 if (void_at_end or raw_cant_end <= 0.05) else max(0.0, s_max - s_end)
+
+    if cant_start_len <= 0.05 and abs(s_start - s_min) <= 0.35:
+        s_min = s_start
+    if cant_end_len <= 0.05 and abs(s_max - s_end) <= 0.35:
+        s_max = s_end
+
+    # Filter supports to active solid range [s_min, s_max]
+    true_supports = [s for s in true_supports if (s_min - 0.25) <= s["coord"] <= (s_max + 0.25)]
+    support_pts = [s["coord"] for s in true_supports]
+    support_labels = [s["label"] for s in true_supports]
+    num_spans = max(1, len(support_pts) - 1)
+    true_spans = [support_pts[k+1] - support_pts[k] for k in range(num_spans)]
 
     # Active internal void intervals (strictly within the clipped solid slab [s_min, s_max])
     active_void_intervals = [
@@ -3957,8 +4511,7 @@ def generate_flat_slab_moment_cross_section(
         if v2 > s_min + 0.20 and v1 < s_max - 0.20
     ]
 
-    # ── 4. Generate Continuous Bending Moment Curve m(s) from TRUE SUPPORTS ────
-    Wu_eff = max(0.50, float(Wu or 1.45))
+    # ── 4. Generate Continuous Bending Moment Curve m(s) Synchronized with 2D Contour Map ──
     s_vec = np.linspace(s_min, s_max, 600)
     m_vec = np.zeros_like(s_vec)
 
@@ -3978,92 +4531,158 @@ def generate_flat_slab_moment_cross_section(
     else:
         m_cant_end = 0.0
 
-    # Compute static moment m0_k = Wu * Lk^2 / 8 for each true span
-    m0_list = []
-    for k in range(num_spans):
-        Lk = max(0.5, true_supports[k+1]["coord"] - true_supports[k]["coord"])
-        m0_list.append(Wu_eff * (Lk ** 2) / 8.0)
+    def _sample_col_neg_moment(c_obj):
+        cx_c = float(c_obj.get("x", c_obj.get("center_x", 0.0)))
+        cy_c = float(c_obj.get("y", c_obj.get("center_y", 0.0)))
+        ix_c = int(np.argmin(np.abs(x_vec_mf - cx_c)))
+        iy_c = int(np.argmin(np.abs(y_vec_mf - cy_c)))
+        return round(float(M_raw[iy_c, ix_c]), 2)
 
-    # Compute continuous negative moments at each support j = 0 .. num_spans (ECP 203)
+    def _col_perp_dist(c_obj):
+        cx_c = float(c_obj.get("x", c_obj.get("center_x", 0.0)))
+        cy_c = float(c_obj.get("y", c_obj.get("center_y", 0.0)))
+        return abs(cy_c - cut_pos) if direction == "X" else abs(cx_c - cut_pos)
+
+    L_perp_tot = max(2.5, (y_coords[-1] - y_coords[0]) if direction == "X" else (x_coords[-1] - x_coords[0]))
+
+    # Extract negative moments at each support j = 0 .. num_spans along the actual section line `cut_pos`
     support_neg_moments = [0.0] * (num_spans + 1)
-    if num_spans == 1:
-        # Single Span (Simple / Partially Restrained Span on True Supports)
-        is_left_edge = (true_supports[0].get("type") == "edge")
-        is_right_edge = (true_supports[1].get("type") == "edge")
-        neg_ext_coeff = -0.25 if is_col_strip else -0.16
-        support_neg_moments[0] = (
-            0.0 if is_left_edge else (m_cant_start if cant_start_len > 0.20 else neg_ext_coeff * m0_list[0])
-        )
-        support_neg_moments[1] = (
-            0.0 if is_right_edge else (m_cant_end if cant_end_len > 0.20 else neg_ext_coeff * m0_list[0])
-        )
-    else:
-        # Multi-Span Continuous System
-        neg_ext_coeff = -0.30 if is_col_strip else -0.15
-        neg_int_coeff = -0.65 if is_col_strip else -0.325
-        for j in range(num_spans + 1):
-            sup_j = true_supports[j]
-            is_edge_j = (sup_j.get("type") == "edge")
-            if j == 0:
-                support_neg_moments[0] = (
-                    0.0 if is_edge_j else (m_cant_start if cant_start_len > 0.20 else neg_ext_coeff * m0_list[0])
-                )
-            elif j == num_spans:
-                support_neg_moments[num_spans] = (
-                    0.0 if is_edge_j else (m_cant_end if cant_end_len > 0.20 else neg_ext_coeff * m0_list[-1])
-                )
-            else:
-                if is_edge_j:
-                    support_neg_moments[j] = 0.0
-                else:
-                    m0_avg_int = 0.50 * m0_list[j - 1] + 0.50 * m0_list[j]
-                    support_neg_moments[j] = neg_int_coeff * m0_avg_int
+    for j in range(num_spans + 1):
+        sup_j = true_supports[j]
+        s_coord = float(sup_j["coord"])
+        if sup_j.get("type") == "edge":
+            support_neg_moments[j] = 0.0
+            continue
 
-    # Build span_moments with true net mid-span positive moment (m_pos_k > 0) and free sagging height (h_free_k)
+        m_neg_j = None
+        has_beam_sup = (sup_j.get("beam") is not None) or ("beam" in str(sup_j.get("type", "")))
+
+        # Collect candidate columns aligned with this support line
+        cand_cols = []
+        if sup_j.get("col") is not None:
+            cand_cols.append(sup_j["col"])
+        for sc in (sup_j.get("support_cols") or []):
+            if sc not in cand_cols:
+                cand_cols.append(sc)
+        if not cand_cols and active_cols:
+            for c_obj in active_cols:
+                if not isinstance(c_obj, dict):
+                    continue
+                cx_c = float(c_obj.get("x", c_obj.get("center_x", 0.0)))
+                cy_c = float(c_obj.get("y", c_obj.get("center_y", 0.0)))
+                if (direction == "X" and abs(cx_c - s_coord) <= 0.65) or (direction == "Y" and abs(cy_c - s_coord) <= 0.65):
+                    cand_cols.append(c_obj)
+
+        if cand_cols:
+            # Evaluate each column's peak M- and its perpendicular distance from the section cut line `cut_pos`
+            col_evals = []
+            for sc in cand_cols:
+                m_c_peak = _sample_col_neg_moment(sc)
+                d_perp = _col_perp_dist(sc)
+                cid = str(sc.get("id", sc.get("orig_id", "C")))
+                if d_perp <= 0.50:
+                    # Section line physically intersects the column / column head -> exact peak M-
+                    m_eff_at_cut = m_c_peak
+                else:
+                    # Section line cuts between columns (along a drop beam or slab strip at `cut_pos`)
+                    if has_beam_sup:
+                        atten = 0.42 + 0.58 * math.exp(-0.5 * (d_perp / max(1.1, 0.30 * L_perp_tot)) ** 2)
+                    else:
+                        atten = 0.30 + 0.70 * math.exp(-0.5 * (d_perp / max(0.9, 0.24 * L_perp_tot)) ** 2)
+                    m_eff_at_cut = round(m_c_peak * atten, 2)
+                col_evals.append((m_eff_at_cut, d_perp, m_c_peak, cid))
+
+            # Pick the column exerting the strongest negative moment at `cut_pos`
+            col_evals.sort(key=lambda item: (item[0], item[1]))
+            m_neg_j, best_dist, best_col_peak, gov_cid = col_evals[0]
+            all_cids = [item[3] for item in col_evals]
+            if "(" not in sup_j["label"] and has_beam_sup:
+                if best_dist <= 0.50:
+                    sup_j["label"] = f"{sup_j['label']} ({gov_cid})"
+                elif len(all_cids) > 1:
+                    sup_j["label"] = f"{sup_j['label']} ({'/'.join(all_cids[:2])})"
+
+        if m_neg_j is None:
+            ix_s = int(np.argmin(np.abs(x_vec_mf - (s_coord if direction == "X" else cut_pos))))
+            iy_s = int(np.argmin(np.abs(y_vec_mf - (cut_pos if direction == "X" else s_coord))))
+            m_neg_j = round(float(M_raw[iy_s, ix_s]), 2)
+
+        if j == 0 and cant_start_len > 0.20:
+            m_neg_j = min(m_neg_j, round(m_cant_start, 2))
+        if j == num_spans and cant_end_len > 0.20:
+            m_neg_j = min(m_neg_j, round(m_cant_end, 2))
+
+        support_neg_moments[j] = round(min(0.0, float(m_neg_j)), 2)
+
+    # Build span_moments by slicing the 2D Unified Panel Contour Surface (`sm_grid`) at the actual section coordinate `cut_pos`
     span_moments = []
     for k in range(num_spans):
         sup_left = true_supports[k]
         sup_right = true_supports[k+1]
-        sk_left = sup_left["coord"]
-        sk_right = sup_right["coord"]
+        sk_left = float(sup_left["coord"])
+        sk_right = float(sup_right["coord"])
         Lk = max(0.5, sk_right - sk_left)
-        m0_k = m0_list[k]
+        s_mid = 0.5 * (sk_left + sk_right)
 
         m_neg_left = support_neg_moments[k]
         m_neg_right = support_neg_moments[k+1]
 
-        # Net positive mid-span moment M_pos (strictly positive, sagging below baseline) per ECP 203:
-        if num_spans == 1:
-            # Single span: ~ WL^2/10.7 for Column Strip, ~ WL^2/12.3 for Field Strip
-            pos_coeff = 0.75 if is_col_strip else 0.65
-        elif k == 0 or k == num_spans - 1:
-            # Exterior / End span in continuous system
-            pos_coeff = 0.60 if is_col_strip else 0.45
+        # Match this span to the Unified Structural Panel intersected by the cutting plane at (s_mid, cut_pos)
+        matched_panels = []
+        for upanel in unified_panels:
+            px_min, px_max, py_min, py_max = upanel["bounds"]
+            if direction == "X":
+                if (px_min - 0.25 <= s_mid <= px_max + 0.25) and (py_min - 0.35 <= cut_pos <= py_max + 0.35):
+                    is_in_y = (py_min - 0.04 <= cut_pos <= py_max + 0.04)
+                    dist_center = abs(cut_pos - upanel["peak_y"]) + 0.25 * abs(s_mid - upanel["peak_x"])
+                    matched_panels.append((0 if is_in_y else 1, dist_center, -upanel["peak_m_pos"], upanel))
+            else:
+                if (py_min - 0.25 <= s_mid <= py_max + 0.25) and (px_min - 0.35 <= cut_pos <= px_max + 0.35):
+                    is_in_x = (px_min - 0.04 <= cut_pos <= px_max + 0.04)
+                    dist_center = abs(cut_pos - upanel["peak_x"]) + 0.25 * abs(s_mid - upanel["peak_y"])
+                    matched_panels.append((0 if is_in_x else 1, dist_center, -upanel["peak_m_pos"], upanel))
+
+        is_at_panel_peak = True
+        panel_peak_m = 0.0
+        panel_peak_coord = cut_pos
+
+        if matched_panels:
+            matched_panels.sort(key=lambda it: (it[0], it[1], it[2]))
+            chosen_up = matched_panels[0][3]
+            panel_peak_m = round(float(chosen_up["peak_m_pos"]), 2)
+            panel_peak_coord = float(chosen_up["peak_y"] if direction == "X" else chosen_up["peak_x"])
+
+            if abs(cut_pos - panel_peak_coord) <= 0.14:
+                # Section passes directly through the unified panel's peak center -> exact peak M+
+                m_pos_k = panel_peak_m
+                is_at_panel_peak = True
+            else:
+                # Section cuts this unified panel OFF-CENTER -> sample the exact 1D slice at `cut_pos` from `sm_grid`
+                is_at_panel_peak = False
+                sm_grid = chosen_up["sm_grid"]
+                gx_v = chosen_up["gx_vec"]
+                gy_v = chosen_up["gy_vec"]
+                if direction == "X":
+                    c_clamped = float(np.clip(cut_pos, gy_v[0], gy_v[-1]))
+                    slice_1d = np.array([np.interp(c_clamped, gy_v, sm_grid[r, :]) for r in range(15, 85)])
+                else:
+                    c_clamped = float(np.clip(cut_pos, gx_v[0], gx_v[-1]))
+                    slice_1d = np.array([np.interp(c_clamped, gx_v, sm_grid[:, c]) for c in range(15, 85)])
+
+                slice_pos_max = float(np.max(slice_1d)) if slice_1d.size > 0 else 0.10
+                # Ensure off-center slice value reflects the true contour drop away from the peak
+                m_pos_k = round(max(0.10, min(panel_peak_m - 0.05, slice_pos_max)), 2)
         else:
-            # Interior span in continuous system
-            pos_coeff = 0.42 if is_col_strip else 0.32
+            # Fallback: sample maximum positive moment along [sk_left, sk_right] at cut_pos from M_raw
+            s_sample = np.linspace(sk_left + 0.12 * Lk, sk_right - 0.12 * Lk, 25)
+            vals_s = []
+            for sv in s_sample:
+                ix_s = int(np.argmin(np.abs(x_vec_mf - (sv if direction == "X" else cut_pos))))
+                iy_s = int(np.argmin(np.abs(y_vec_mf - (cut_pos if direction == "X" else sv))))
+                vals_s.append(float(M_raw[iy_s, ix_s]))
+            m_pos_k = round(max(0.10, max(vals_s) if vals_s else 0.10), 2)
+            panel_peak_m = m_pos_k
 
-        m_pos_k = pos_coeff * m0_k
-
-        # Check if a longitudinal beam in cut_beams physically covers THIS specific span (Column Strip only)
-        if is_col_strip and cut_beams:
-            span_covered = False
-            for cb in cut_beams:
-                cbp1 = cb.get("p1_grid", cb.get("p1", [0, 0]))
-                cbp2 = cb.get("p2_grid", cb.get("p2", [0, 0]))
-                cb1 = float(cbp1[0] if direction == "X" else cbp1[1])
-                cb2 = float(cbp2[0] if direction == "X" else cbp2[1])
-                ov_len = max(0.0, min(sk_right, max(cb1, cb2)) - max(sk_left, min(cb1, cb2)))
-                if ov_len >= 0.60 * Lk:
-                    span_covered = True
-                    break
-            if span_covered:
-                m_pos_k *= 0.45
-                m_neg_left *= 0.45
-                m_neg_right *= 0.45
-
-        # Total parabolic free sagging drop height from negative support chord line to positive mid-span peak:
-        # At xi = 0.5: m(0.5) = 0.5*(m_neg_left + m_neg_right) + h_free_k = +m_pos_k > 0
         h_free_k = m_pos_k - 0.5 * (m_neg_left + m_neg_right)
 
         span_moments.append({
@@ -4074,6 +4693,9 @@ def generate_flat_slab_moment_cross_section(
             "Lk": Lk,
             "sk_left": sk_left,
             "sk_right": sk_right,
+            "is_at_panel_peak": is_at_panel_peak,
+            "panel_peak_m": panel_peak_m,
+            "panel_peak_coord": panel_peak_coord,
         })
 
     for k in range(num_spans):
@@ -4097,8 +4719,12 @@ def generate_flat_slab_moment_cross_section(
             continue
 
         xi = np.clip((s_vec[mask_span] - sk_left) / Lk, 0.0, 1.0)
-        # Exact superposition: linear negative support chord + parabolic positive sagging drop
-        m_span = sm["left_neg"] * (1.0 - xi) + sm["right_neg"] * xi + 4.0 * sm["h_free"] * xi * (1.0 - xi)
+        # C1-continuous piecewise parabolic arch: hits exact left_neg at xi=0, exact +pos peak at xi=0.5, and exact right_neg at xi=1
+        m_span = np.where(
+            xi <= 0.5,
+            sm["pos"] + (sm["left_neg"] - sm["pos"]) * ((1.0 - 2.0 * xi) ** 2),
+            sm["pos"] + (sm["right_neg"] - sm["pos"]) * ((2.0 * xi - 1.0) ** 2),
+        )
         m_vec[mask_span] = m_span
 
     for v_start, v_end in active_void_intervals:
@@ -4154,8 +4780,11 @@ def generate_flat_slab_moment_cross_section(
         bp2 = b.get("p2_grid", b.get("p2", [0, 0]))
         bx1 = float(bp1[0] if direction == "X" else bp1[1])
         bx2 = float(bp2[0] if direction == "X" else bp2[1])
-        b_min_pos = min(bx1, bx2)
-        b_len = abs(bx2 - bx1)
+        b_min_pos = max(s_min, min(bx1, bx2))
+        b_max_pos = min(s_max, max(bx1, bx2))
+        b_len = max(0.0, b_max_pos - b_min_pos)
+        if b_len <= 0.05:
+            continue
         tb_m = float(b.get("t_cm", 60.0)) / 100.0
         drop_rib_h = max(0.10, tb_m - slab_h)
         beam_rib = patches.Rectangle(
@@ -4213,6 +4842,17 @@ def generate_flat_slab_moment_cross_section(
                 ha='center', va='top', fontsize=7.5, fontweight='bold', color='#475569', zorder=4,
                 bbox=dict(boxstyle='round,pad=0.15', facecolor='#ffffff', edgecolor='#94a3b8', alpha=0.9)
             )
+        else:
+            col_box = patches.Rectangle(
+                (s_coord - s_w/2.0, -col_h_draw), s_w, col_h_draw,
+                linewidth=1.3, edgecolor='#0f172a', facecolor='#94a3b8', hatch='///', zorder=3
+            )
+            ax_slab.add_patch(col_box)
+            ax_slab.text(
+                s_coord, -col_h_draw * 0.50, s_lbl,
+                ha='center', va='center', fontsize=8.5, fontweight='bold', color='#0f172a', zorder=4,
+                bbox=dict(boxstyle='round,pad=0.2', facecolor='#ffffff', edgecolor='#64748b', alpha=0.92)
+            )
 
     # Vertical centerlines and True Support Badges (ONLY at True Supports!)
     for s_info in true_supports:
@@ -4238,8 +4878,8 @@ def generate_flat_slab_moment_cross_section(
         )
         ax_slab.text(
             mid_span, slab_h + 0.14, f"L{k+1} = {span_len:.2f} m",
-            ha='center', va='bottom', fontsize=8.2, fontweight='bold', color='#334155',
-            bbox=dict(boxstyle='round,pad=0.15', facecolor='#ffffff', edgecolor='none', alpha=0.75)
+            ha='center', va='bottom', fontsize=8.5, fontweight='bold', color='#0f172a',
+            bbox=dict(boxstyle='round,pad=0.18', facecolor='#ffffff', edgecolor='none', alpha=0.85)
         )
 
     # Cantilever dimensions if present
@@ -4251,7 +4891,7 @@ def generate_flat_slab_moment_cross_section(
         ax_slab.text((support_pts[-1] + s_max)/2.0, slab_h + 0.14, f"Cant = {cant_end_len:.2f}m", ha='center', va='bottom', fontsize=7.8, fontweight='bold', color='#b45309')
 
     ax_slab.set_ylim(-0.85, slab_h + 0.70)
-    ax_slab.set_ylabel("قطاع الخرسانة والأعمدة\nElevation Section", fontsize=9.5, fontweight='bold', color='#1e293b')
+    ax_slab.set_ylabel("قطاع الخرسانة والركائز\nElevation Section", fontsize=9.5, fontweight='bold', color='#1e293b')
     ax_slab.set_title(f"{strip_title}\n[سمك البلاطة ts = {ts_cm:.0f} cm | عرض الشريحة b = {w_strip:.2f} m | الحمل التصميمي Wu = {Wu:.2f} t/m² | الركائز الفعلية: {len(true_supports)}]", fontsize=11.5, fontweight='bold', color='#0f172a', pad=16)
     ax_slab.set_yticks([])
 
@@ -4260,7 +4900,7 @@ def generate_flat_slab_moment_cross_section(
     # ═════════════════════════════════════════════════════════════════════════
     y_bmd = -m_vec
 
-    ax_bmd.plot(s_vec, y_bmd, color='#1e3a8a', linewidth=2.5, label='منحنى عزم الانحناء Bending Moment (BMD)', zorder=4)
+    ax_bmd.plot(s_vec, y_bmd, color='#1e3a8a', linewidth=2.6, label='منحنى عزم الانحناء Bending Moment (BMD)', zorder=4)
     ax_bmd.axhline(0, color='#0f172a', linewidth=1.5, zorder=3)
 
     # Fill negative tension (above baseline, y_bmd > 0)
@@ -4277,73 +4917,78 @@ def generate_flat_slab_moment_cross_section(
                       label=f'سعة الشبكة السفلية Mcap,btm = {M_cap_btm_m:.2f} t·m/m ({mesh_btm_str})')
 
     # Format Y-Axis range first so label offsets scale cleanly with diagram amplitude
-    ax_bmd.set_xlim(s_min - 0.35, s_max + 0.35)
+    ax_bmd.set_xlim(s_min - 0.45, s_max + 0.45)
     valid_y = np.abs(y_bmd[~np.isnan(y_bmd)])
-    max_y_val = max(1.5, (np.max(valid_y) * 1.42) if len(valid_y) > 0 else 5.0)
-    lbl_offset = max(0.35, max_y_val * 0.10)
+    max_y_val = max(1.5, (np.max(valid_y) * 1.48) if len(valid_y) > 0 else 5.0)
+    lbl_offset = max(0.38, max_y_val * 0.11)
     ax_bmd.set_ylim(-max_y_val, max_y_val)
 
-    # Annotate Negative Peaks (EXCLUSIVELY over TRUE SUPPORTS!)
+    # Annotate Negative Peaks (EXCLUSIVELY over TRUE SUPPORTS — matching 2D Contour Map M⁻!)
     if show_labels:
-        for s_info in true_supports:
-            sp_coord = s_info["coord"]
+        for j, s_info in enumerate(true_supports):
+            sp_coord = float(s_info["coord"])
             sp_lbl = s_info["label"]
-            idx_near = np.where(np.abs(s_vec - sp_coord) <= 0.35)[0]
-            if len(idx_near) > 0:
-                valid_near = m_vec[idx_near][~np.isnan(m_vec[idx_near])]
-                if len(valid_near) > 0:
-                    m_peak = float(np.min(valid_near))
-                    if m_peak < -0.05:
-                        y_peak = -m_peak
-                        ax_bmd.plot(sp_coord, y_peak, 'o', color='#dc2626', markersize=5.5, zorder=5)
+            m_peak = float(support_neg_moments[j])
+            if m_peak < -0.05:
+                y_peak = -m_peak
+                ax_bmd.plot(sp_coord, y_peak, 'o', color='#dc2626', markersize=6.0, zorder=5)
 
-                        needs_extra = abs(m_peak) > M_cap_top_m
-                        lbl_color = '#991b1b' if needs_extra else '#1e293b'
-                        bg_color = '#fef2f2' if needs_extra else '#ffffff'
-                        border_color = '#dc2626' if needs_extra else '#94a3b8'
+                needs_extra = abs(m_peak) > M_cap_top_m
+                border_color = '#dc2626' if needs_extra else '#1e3a8a'
 
-                        txt = f"M⁻ = {m_peak:.2f} t·m/m\n[{sp_lbl}]"
-                        if needs_extra:
-                            txt += "\n[⚠️ إضافي علوي]"
+                txt = f"M⁻ = {m_peak:.2f} t·m/m\n[{sp_lbl}]"
+                if needs_extra:
+                    txt += "\n[Extra Top RFT | إضافي علوي]"
 
-                        ax_bmd.annotate(
-                            txt, xy=(sp_coord, y_peak),
-                            xytext=(sp_coord, y_peak + lbl_offset),
-                            ha='center', va='bottom', fontsize=8.0, fontweight='bold', color=lbl_color,
-                            bbox=dict(boxstyle='round,pad=0.25', facecolor=bg_color, edgecolor=border_color, lw=1.2),
-                            arrowprops=dict(arrowstyle='->', color='#dc2626', lw=1.0)
-                        )
+                ax_bmd.annotate(
+                    txt, xy=(sp_coord, y_peak),
+                    xytext=(sp_coord, y_peak + lbl_offset),
+                    ha='center', va='bottom', fontsize=9.2, fontweight='bold', color='#000000',
+                    bbox=dict(boxstyle='round,pad=0.32', facecolor='#ffffff', edgecolor=border_color, lw=1.6, alpha=0.99),
+                    arrowprops=dict(arrowstyle='->', color='#dc2626', lw=1.2),
+                    zorder=6
+                )
 
-        # Annotate Positive Peaks (EXCLUSIVELY at MID-SPANS between TRUE SUPPORTS!)
+        # Annotate Positive Peaks (at MID-SPANS between TRUE SUPPORTS — showing exact contour slice value at cut_pos!)
+        coord_perp_sym = "Y" if direction == "X" else "X"
         for k in range(num_spans):
-            x_left = support_pts[k]
-            x_right = support_pts[k+1]
-            idx_span = np.where((s_vec >= x_left + 0.15) & (s_vec <= x_right - 0.15))[0]
-            if len(idx_span) > 0:
-                valid_span = m_vec[idx_span]
-                if not np.all(np.isnan(valid_span)):
-                    m_pos_peak = float(np.nanmax(valid_span))
-                    if m_pos_peak > 0.05:
-                        s_pos_peak = float(s_vec[idx_span[np.nanargmax(valid_span)]])
-                        y_pos_peak = -m_pos_peak
-                        ax_bmd.plot(s_pos_peak, y_pos_peak, 'o', color='#0284c7', markersize=5.5, zorder=5)
+            sm = span_moments[k]
+            x_left = sm["sk_left"]
+            x_right = sm["sk_right"]
+            # Skip span if covered by an internal void
+            s_pos_peak = 0.5 * (x_left + x_right)
+            if any((v1 <= s_pos_peak <= v2) for (v1, v2) in active_void_intervals):
+                continue
+            m_pos_peak = float(sm["pos"])
+            if m_pos_peak > 0.05:
+                y_pos_peak = -m_pos_peak
+                ax_bmd.plot(s_pos_peak, y_pos_peak, 'o', color='#0284c7', markersize=6.0, zorder=5)
 
-                        needs_extra = m_pos_peak > M_cap_btm_m
-                        lbl_color = '#0369a1' if needs_extra else '#1e293b'
-                        bg_color = '#f0f9ff' if needs_extra else '#ffffff'
-                        border_color = '#0284c7' if needs_extra else '#94a3b8'
+                needs_extra = m_pos_peak > M_cap_btm_m
+                border_color = '#0284c7' if needs_extra else '#0f172a'
 
-                        txt = f"M⁺ = +{m_pos_peak:.2f} t·m/m\n[L{k+1}={x_right-x_left:.2f}m]"
-                        if needs_extra:
-                            txt += "\n[⚠️ إضافي سفلي]"
+                is_peak_here = sm.get("is_at_panel_peak", True)
+                p_peak_m = float(sm.get("panel_peak_m", m_pos_peak))
+                p_peak_c = float(sm.get("panel_peak_coord", cut_pos))
 
-                        ax_bmd.annotate(
-                            txt, xy=(s_pos_peak, y_pos_peak),
-                            xytext=(s_pos_peak, y_pos_peak - lbl_offset),
-                            ha='center', va='top', fontsize=8.0, fontweight='bold', color=lbl_color,
-                            bbox=dict(boxstyle='round,pad=0.25', facecolor=bg_color, edgecolor=border_color, lw=1.2),
-                            arrowprops=dict(arrowstyle='->', color='#0284c7', lw=1.0)
-                        )
+                if is_peak_here or abs(p_peak_m - m_pos_peak) <= 0.04:
+                    txt = f"M⁺(Peak) = +{m_pos_peak:.2f} t·m/m\n[L{k+1}={x_right-x_left:.2f}m | Panel Center]"
+                else:
+                    txt = (
+                        f"M⁺({coord_perp_sym}={cut_pos:.2f}m) = +{m_pos_peak:.2f} t·m/m\n"
+                        f"[Panel Peak: +{p_peak_m:.2f} @ {coord_perp_sym}={p_peak_c:.2f}m]"
+                    )
+                if needs_extra:
+                    txt += "\n[Extra Btm RFT | إضافي سفلي]"
+
+                ax_bmd.annotate(
+                    txt, xy=(s_pos_peak, y_pos_peak),
+                    xytext=(s_pos_peak, y_pos_peak - lbl_offset),
+                    ha='center', va='top', fontsize=9.2, fontweight='bold', color='#000000',
+                    bbox=dict(boxstyle='round,pad=0.34', facecolor='#ffffff', edgecolor=border_color, lw=1.8, alpha=0.99),
+                    arrowprops=dict(arrowstyle='->', color='#0284c7', lw=1.2),
+                    zorder=6
+                )
 
     def _moment_tick_formatter(val, pos):
         if abs(val) < 0.05:
@@ -14628,14 +15273,16 @@ def _render_fs_interactive_plan(
 
 def _render_gb_interactive_viewer(b64_img: str, viewer_h: int = 740):
     """
-    عرض المسقط الأفقي للسملات الأرضية تفاعلياً بدقة عالية وبنفس فلسفة المسقط الأفقي للكمرات والأعمدة:
-    - تكبير وتصظير سلس بعجلة الماوس (Mouse Wheel Zoom) متمركز حول مؤشر الفأرة.
+    عرض المخططات والرسومات الهندسية تفاعلياً بدقة عالية وبنفس فلسفة المسقط الأفقي للكمرات والأعمدة
+    ("🏛️ Plan & Structure Management"):
+    - تكبير وتصغير سلس بعجلة الماوس (Mouse Wheel Zoom In / Zoom Out) متمركز حول مؤشر الفأرة (من 35% حتى 800%).
     - سحب وتحريك سلس بالماوس (Pan Drag) بالزر الأيسر مع تغيير شكل المؤشر (grab / grabbing).
     - نقر مزدوج (Double-Click) لإعادة ضبط الموضع والحجم إلى 100%.
     - الاعتماد حصراً على الماوس بدون أي أشرطة أدوات أو أزرار أو لوحات عائمة.
     """
     import streamlit.components.v1 as components
 
+    img_max_h = max(int(viewer_h) - 34, 300)
     html_code = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -14675,12 +15322,14 @@ def _render_gb_interactive_viewer(b64_img: str, viewer_h: int = 740):
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    max-width: 100%;
-    max-height: 100%;
+    max-width: 98%;
+    max-height: 98%;
   }}
   #gb-plan-img {{
     max-width: 100%;
-    max-height: 100%;
+    max-height: {img_max_h}px;
+    width: auto;
+    height: auto;
     object-fit: contain;
     display: block;
     pointer-events: none;
@@ -14703,11 +15352,11 @@ def _render_gb_interactive_viewer(b64_img: str, viewer_h: int = 740):
 <body>
   <div id="gb-viewer-viewport">
     <div id="gb-canvas">
-      <img id="gb-plan-img" src="data:image/png;base64,{b64_img}" alt="Ground Beams Plan" />
+      <img id="gb-plan-img" src="data:image/png;base64,{b64_img}" alt="Engineering Drawing" draggable="false" />
     </div>
   </div>
   <div id="gb-mouse-hint">
-    🖱️ تفاعل بالماوس فقط: عجلة الماوس للتكبير والتصظير (Zoom In/Out) • السحب بالماوس للتحريك (Pan) • النقر المزدوج لإعادة الضبط (Reset)
+    🖱️ تفاعل بالماوس فقط: عجلة الماوس للتكبير والتصغير (Zoom In/Out) • السحب بالماوس للتحريك (Pan) • النقر المزدوج لإعادة الضبط (Reset)
   </div>
   <script>
   (function() {{
@@ -14726,7 +15375,7 @@ def _render_gb_interactive_viewer(b64_img: str, viewer_h: int = 740):
     }}
 
     function applyZoom(factor, clientX, clientY) {{
-      const newScale = Math.min(Math.max(scale * factor, 0.4), 8.0);
+      const newScale = Math.min(Math.max(scale * factor, 0.35), 8.0);
       if (clientX !== undefined && clientY !== undefined) {{
         const rect = viewport.getBoundingClientRect();
         const cx = clientX - rect.left - rect.width / 2;
@@ -14826,6 +15475,45 @@ def _render_gb_interactive_viewer(b64_img: str, viewer_h: int = 740):
 </body>
 </html>"""
     components.html(html_code, height=viewer_h, scrolling=False)
+
+
+def _render_fs_zoomable_figure(
+    fig,
+    viewer_h: int = None,
+    dpi: int = 180,
+    close_fig: bool = True,
+    return_buf: bool = False,
+):
+    """
+    عرض أي رسم هندسي (Matplotlib Figure) في تصميم الفلات سلاب (موديول 1 وموديول 11)
+    بنفس فلسفة التكبير والتصغير والتحريك التفاعلي (Zoom In, Zoom Out & Pan) المطبقة في
+    قسم "🏛️ Plan & Structure Management":
+    - تكبير وتصغير فوري وسلس بعجلة الماوس (Mouse Wheel Zoom In / Zoom Out) من 35% حتى 800% متمركز حول مؤشر الماوس.
+    - تحريك وسحب سلس (Pan Drag) بالزر الأيسر للماوس في جميع الاتجاهات.
+    - نقر مزدوج (Double-Click) لإعادة ضبط الموضع والحجم فوراً إلى 100%.
+    """
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight", dpi=dpi)
+    buf.seek(0)
+    b64_str = base64.b64encode(buf.getvalue()).decode("utf-8")
+
+    if viewer_h is None:
+        try:
+            fw, fh = fig.get_size_inches()
+            aspect = float(fh) / max(float(fw), 1.0)
+            viewer_h = int(min(max(aspect * 1060.0 + 40.0, 560.0), 800.0))
+        except Exception:
+            viewer_h = 740
+
+    if close_fig:
+        plt.close(fig)
+
+    _render_gb_interactive_viewer(b64_str, viewer_h=viewer_h)
+
+    if return_buf:
+        buf.seek(0)
+        return buf, b64_str
+    return b64_str
 
 
 def _section_fs_add_columns(
@@ -16335,30 +17023,35 @@ def inject_module1_drawings_pan_zoom():
       var startY = 0;
 
       function applyTransform(instant) {
+        var curImg = container.querySelector('img') || img;
+        if (!curImg) return;
         if (instant) {
-          img.style.transition = 'none';
+          curImg.style.transition = 'none';
         } else {
-          img.style.transition = 'transform 0.05s ease-out';
+          curImg.style.transition = 'transform 0.05s ease-out';
         }
-        img.style.transform = 'translate(' + panX.toFixed(2) + 'px, ' + panY.toFixed(2) + 'px) scale(' + scale.toFixed(3) + ')';
+        curImg.style.transform = 'translate(' + panX.toFixed(2) + 'px, ' + panY.toFixed(2) + 'px) scale(' + scale.toFixed(3) + ')';
         if (badgeEl) {
           badgeEl.textContent = Math.round(scale * 100) + '%';
         }
       }
 
       function resetView() {
+        var curImg = container.querySelector('img') || img;
         scale = 1.0;
         panX = 0;
         panY = 0;
-        img.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1)';
+        if (curImg) {
+          curImg.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1)';
+        }
         applyTransform(false);
         setTimeout(function() {
-          img.style.transition = 'transform 0.05s ease-out';
+          if (curImg) curImg.style.transition = 'transform 0.05s ease-out';
         }, 240);
       }
 
       function zoomBy(factor, clientX, clientY) {
-        var newScale = Math.min(Math.max(scale * factor, 0.4), 8.0);
+        var newScale = Math.min(Math.max(scale * factor, 0.35), 8.0);
         if (Math.abs(newScale - scale) < 0.001) return;
 
         if (clientX !== undefined && clientY !== undefined) {
@@ -16375,16 +17068,12 @@ def inject_module1_drawings_pan_zoom():
         applyTransform(false);
       }
 
-      // Mouse Wheel
+      // Mouse Wheel (Zoom In & Zoom Out centered at cursor, matching Plan & Structure Management)
       container.addEventListener('wheel', function(e) {
-        // Allow natural page scroll if at 100% and scrolling down
-        if (scale <= 1.01 && e.deltaY > 0) {
-          return;
-        }
         e.preventDefault();
         e.stopPropagation();
 
-        var factor = e.deltaY < 0 ? 1.15 : (1 / 1.15);
+        var factor = e.deltaY < 0 ? 1.15 : 0.87;
         zoomBy(factor, e.clientX, e.clientY);
       }, { passive: false });
 
@@ -19603,8 +20292,7 @@ def render(is_standalone: bool = False):
                     active_x_labels=_active_x_labels,
                     active_y_labels=_active_y_labels,
                 )
-                st.pyplot(fig_punch, clear_figure=True, use_container_width=True)
-                plt.close(fig_punch)
+                _render_fs_zoomable_figure(fig_punch, viewer_h=740, dpi=180)
 
             with tab_punch_photo:
                 st.markdown(
@@ -19920,8 +20608,7 @@ def render(is_standalone: bool = False):
                         stirrup_dia_mm=sel_stirrup_dia,
                         is_high_safety=high_safety_mode,
                     )
-                    st.pyplot(fig_det, clear_figure=True, use_container_width=True)
-                    plt.close(fig_det)
+                    _render_fs_zoomable_figure(fig_det, viewer_h=640, dpi=180)
 
                 with tab_3d_det:
                     fig_3d = generate_punching_stirrups_3d_sketch(
@@ -19936,8 +20623,7 @@ def render(is_standalone: bool = False):
                         stirrup_dia_mm=sel_stirrup_dia,
                         is_high_safety=high_safety_mode,
                     )
-                    st.pyplot(fig_3d, clear_figure=True, use_container_width=True)
-                    plt.close(fig_3d)
+                    _render_fs_zoomable_figure(fig_3d, viewer_h=720, dpi=180)
 
                 with tab_photo_det:
                     st.markdown(
@@ -20099,12 +20785,10 @@ def render(is_standalone: bool = False):
                     mesh_btm_str=mesh_btm_str,
                     mesh_top_str=mesh_top_str,
                 )
-                st.pyplot(fig_m11, clear_figure=True, use_container_width=True)
-                buf_m11 = io.BytesIO()
-                fig_m11.savefig(buf_m11, format="png", bbox_inches="tight", dpi=180)
-                buf_m11.seek(0)
-                img_m11_b64 = "data:image/png;base64," + base64.b64encode(buf_m11.getvalue()).decode("utf-8")
-                plt.close(fig_m11)
+                buf_m11, b64_m11_raw = _render_fs_zoomable_figure(
+                    fig_m11, viewer_h=740, dpi=180, return_buf=True
+                )
+                img_m11_b64 = "data:image/png;base64," + b64_m11_raw
 
             else:
                 fig_m22 = generate_flat_slab_moment_contour(
@@ -20129,12 +20813,10 @@ def render(is_standalone: bool = False):
                     mesh_btm_str=mesh_btm_str,
                     mesh_top_str=mesh_top_str,
                 )
-                st.pyplot(fig_m22, clear_figure=True, use_container_width=True)
-                buf_m22 = io.BytesIO()
-                fig_m22.savefig(buf_m22, format="png", bbox_inches="tight", dpi=180)
-                buf_m22.seek(0)
-                img_m22_b64 = "data:image/png;base64," + base64.b64encode(buf_m22.getvalue()).decode("utf-8")
-                plt.close(fig_m22)
+                buf_m22, b64_m22_raw = _render_fs_zoomable_figure(
+                    fig_m22, viewer_h=740, dpi=180, return_buf=True
+                )
+                img_m22_b64 = "data:image/png;base64," + b64_m22_raw
         else:
             st.info("💡 انقر لتوسيع هذا القسم وعرض مصفوفة العزوم والمخططات اللونية الكنتورية (M11 & M22).")
 
@@ -20150,12 +20832,12 @@ def render(is_standalone: bool = False):
             st.markdown(
                 """
                 <div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:8px; padding:10px 14px; margin-bottom:12px;">
-                    <div style="font-size:0.95rem; font-weight:800; color:#38bdf8; display:flex; align-items:center; gap:8px;">
-                        <span>📈</span>
-                        <span>قطاعات رأسية تمتد بكامل طول وعرض البلاطة مع الاعتماد الحصري على الركائز الفعلية (الأعمدة والكمرات) وتجاهل خطوط المحاور الوهمية</span>
+                    <div style="font-size:0.95rem; font-weight:800; color:#0284c7; display:flex; align-items:center; gap:8px;">
+                        <span>🗺️</span>
+                        <span>المسقط الأفقي لمواقع قطاعات العزوم (Horizontal Plan View) والقطاعات الرأسية المناظرة (AA, BB, CC... | MM, NN, PP...)</span>
                     </div>
                     <div style="font-size:0.85rem; color:#475569; margin-top:4px;">
-                        تعتمد هذه الأداة على الإحداثيات الحقيقية للعناصر الإنشائية لتحديد البحور والعزوم القصوى، مع عرض مفتاح الرسم أسفل اللوحة بالكامل دون حجب أي قيم.
+                        تُسمّى القطاعات الأفقية (اتجاه X — M11) بالرموز <b>AA, BB, CC, DD...</b> والقطاعات الرأسية (اتجاه Y — M22) بالرموز المنفصلة <b>MM, NN, PP, QQ...</b> لمنع أي التباس بين الاتجاهين. اختر رمز القطاع من القائمة المنسدلة ليتم تمييزه على المسقط الأفقي وعرض منحنى عزوم الانحناء الخاص به تلقائياً.
                     </div>
                 </div>
                 """,
@@ -20168,128 +20850,278 @@ def render(is_standalone: bool = False):
                     "🧭 اتجاه القطاع الإنشائي (Section Direction):",
                     f"{prefix}sec_moment_dir",
                     options=[
-                        "↔️ اتجاه المحور الأفقي (Direction X — يمر بالبحور الأفقية)",
-                        "↕️ اتجاه المحور الرأسي (Direction Y — يمر بالبحور الرأسية)",
+                        "↔️ قطاعات أفقية (Direction X — M11) [تسمية: AA, BB, CC, DD...]",
+                        "↕️ قطاعات رأسية (Direction Y — M22) [تسمية: MM, NN, PP, QQ...]",
                     ],
                     index=0,
                 )
-            is_dir_x = "X" in sec_dir
+            is_dir_x = "X" in sec_dir or "أفقية" in sec_dir
             dir_code = "X" if is_dir_x else "Y"
 
             x_coords_ui = [0.0]
-            for lx in Lx_calc: x_coords_ui.append(round(x_coords_ui[-1] + float(lx), 4))
+            for lx in Lx_calc:
+                x_coords_ui.append(round(x_coords_ui[-1] + float(lx), 4))
             y_coords_ui = [0.0]
-            for ly in Ly_calc: y_coords_ui.append(round(y_coords_ui[-1] + float(ly), 4))
+            for ly in Ly_calc:
+                y_coords_ui.append(round(y_coords_ui[-1] + float(ly), 4))
 
             with col_sec_s:
                 sec_strip_type = S.radio(
-                    "📍 مسار وموضع شريحة القطع (Strip Cutting Plane):",
+                    "📍 نوع شريحة القطع (Strip Type Filter):",
                     f"{prefix}sec_strip_type",
                     options=[
-                        "🏛️ شريحة عمود حرجة (Column Strip / Critical Zone — على خطوط الأعمدة الفعلية)",
-                        "📍 شريحة وسط (Field Strip / Mid-Span — في منتصف البحور بين الأعمدة)",
+                        "🎯 شرائح مراكز البلاطات الموحدة (Field Strips M⁺)",
+                        "🏛️ شرائح خطوط الأعمدة والركائز (Column Strips M⁻)",
+                        "📋 جميع القطاعات معاً (All Sections M⁺ & M⁻)",
                     ],
                     index=0,
                 )
-            is_col_strip = "Column Strip" in sec_strip_type
-            strip_type_code = "column" if is_col_strip else "field"
+            is_all_strips = ("All Sections" in sec_strip_type) or ("جميع" in sec_strip_type)
+            is_col_strip = ("Column Strips" in sec_strip_type) or ("الأعمدة" in sec_strip_type)
 
-            # ── Dynamically discover real structural lines (True Alignments) ──
-            strip_choices = []
-            if is_dir_x:
-                col_y_list = []
-                for c in (_active_cols or []):
-                    if isinstance(c, dict):
-                        cy = float(c.get("center_y", c.get("grid_y_m", c.get("y", 0.0))))
-                        cid = c.get("id", c.get("orig_id", "C"))
-                        col_y_list.append((cy, cid))
-                for b in (_cur_beams_list or []):
-                    if isinstance(b, dict):
-                        bp1 = b.get("p1_grid", b.get("p1", [0, 0]))
-                        bp2 = b.get("p2_grid", b.get("p2", [0, 0]))
-                        if bp1 and bp2 and len(bp1) >= 2 and len(bp2) >= 2:
-                            if abs(float(bp1[1]) - float(bp2[1])) <= 0.35:
-                                col_y_list.append(((float(bp1[1]) + float(bp2[1])) / 2.0, b.get("id", "Beam")))
+            # ── Build complete Horizontal (AA, BB, CC, DD...) & Vertical (MM, NN, PP, QQ...) Section Catalog ──
+            x_vec_ui = X_mf[0, :]
+            y_vec_ui = Y_mf[:, 0]
+            axes_x_ui, axes_y_ui = build_grid_axes_info(
+                x_coords_ui, y_coords_ui, _active_cols, _active_x_labels, _active_y_labels
+            )
 
-                col_y_list.sort(key=lambda it: it[0])
-                clusters_y = []
-                for y_val, el_id in col_y_list:
-                    if not clusters_y or abs(y_val - clusters_y[-1]["y"]) > 0.40:
-                        clusters_y.append({"y": y_val, "elements": [el_id]})
-                    else:
-                        clusters_y[-1]["elements"].append(el_id)
+            def _nearest_axis_lbl(coord_val, axes_list, fallback_prefix):
+                if not axes_list:
+                    return f"{fallback_prefix}={coord_val:.2f}m"
+                best_ax = min(axes_list, key=lambda ax_it: abs(float(ax_it[0]) - float(coord_val)))
+                return str(best_ax[1])
 
-                if not clusters_y:
-                    clusters_y = [{"y": y_v, "elements": [f"Y={y_v:.2f}m"]} for y_v in y_coords_ui]
+            unified_panels_ui = detect_column_bounded_panels(
+                x_coords_ui, y_coords_ui,
+                active_cols=_active_cols,
+                removed_cols=_removed_col_objs,
+                drop_beams=_cur_beams_list,
+                void_panel_ids=set(_confirmed_voids),
+                void_boxes=_void_boxes_sk,
+            )
 
-                if is_col_strip:
-                    for idx_cl, cl in enumerate(clusters_y):
-                        y_v = cl["y"]
-                        els_str = ", ".join(cl["elements"][:4])
-                        if len(cl["elements"]) > 4: els_str += "..."
-                        lbl = f"🏛️ خط عناصر إنشائية عند Y = {y_v:.2f} m — [{els_str}]"
-                        strip_choices.append((y_v, lbl))
+            horiz_pool = ["AA", "BB", "CC", "DD", "EE", "FF", "GG", "HH", "JJ", "KK", "LL"]
+            vert_pool  = ["MM", "NN", "PP", "QQ", "RR", "SS", "TT", "UU", "VV", "WW", "XX", "YY", "ZZ"]
+
+            def _get_h_code(idx_c):
+                return horiz_pool[idx_c] if idx_c < len(horiz_pool) else f"H{idx_c + 1}"
+
+            def _get_v_code(idx_c):
+                return vert_pool[idx_c] if idx_c < len(vert_pool) else f"V{idx_c + 1}"
+
+            # 1) Build Horizontal Sections (dir="X", M11)
+            h_field_raw = []
+            for up in unified_panels_ui:
+                px_min, px_max, py_min, py_max = up["bounds"]
+                _, _, _, (ucx, ucy, u_m_pos) = get_unified_panel_contour(
+                    X_mf, Y_mf, M11_raw_mf, up["bounds"], sigma=6.0
+                )
+                if _void_boxes_sk and any((vx1 <= ucx <= vx2 and vy1 <= ucy <= vy2) for (vx1, vx2, vy1, vy2, *_) in _void_boxes_sk):
+                    continue
+                lx_lbl1 = _nearest_axis_lbl(px_min, axes_x_ui, "Y")
+                lx_lbl2 = _nearest_axis_lbl(px_max, axes_x_ui, "Y")
+                ly_lbl1 = _nearest_axis_lbl(py_min, axes_y_ui, "X")
+                ly_lbl2 = _nearest_axis_lbl(py_max, axes_y_ui, "X")
+                cut_y = round(float(ucy), 2)
+                if not any(abs(it["coord"] - cut_y) <= 0.12 for it in h_field_raw):
+                    h_field_raw.append({
+                        "dir": "X",
+                        "strip_type": "field",
+                        "coord": cut_y,
+                        "ref_x": round(float(ucx), 2),
+                        "ref_y": cut_y,
+                        "m_val": round(float(u_m_pos), 2),
+                        "m_short": f"M11⁺=+{u_m_pos:.2f}",
+                        "grid_lbl": f"{lx_lbl1}–{lx_lbl2} / {ly_lbl1}–{ly_lbl2}",
+                        "desc": f"قطاع مركز البلاطة الموحدة ({lx_lbl1}–{lx_lbl2} / {ly_lbl1}–{ly_lbl2}) عند Y = {cut_y:.2f} m [M11⁺ = +{u_m_pos:.2f} t.m/m]",
+                    })
+            # Sort Horizontal Field sections from top to bottom (descending Y) for natural plan reading
+            h_field_raw.sort(key=lambda it: (-it["coord"], it["ref_x"]))
+
+            h_col_raw = []
+            col_y_list = []
+            for c in (_active_cols or []):
+                if isinstance(c, dict):
+                    cy = float(c.get("center_y", c.get("grid_y_m", c.get("y", 0.0))))
+                    cx = float(c.get("center_x", c.get("grid_x_m", c.get("x", 0.0))))
+                    cid = str(c.get("id", c.get("orig_id", "C")))
+                    ix_c = int(np.argmin(np.abs(x_vec_ui - cx)))
+                    iy_c = int(np.argmin(np.abs(y_vec_ui - cy)))
+                    m_neg_c = round(float(M11_raw_mf[iy_c, ix_c]), 2)
+                    col_y_list.append((cy, cx, cid, m_neg_c))
+            for b in (_cur_beams_list or []):
+                if isinstance(b, dict):
+                    bp1 = b.get("p1_grid", b.get("p1", [0, 0]))
+                    bp2 = b.get("p2_grid", b.get("p2", [0, 0]))
+                    if bp1 and bp2 and len(bp1) >= 2 and len(bp2) >= 2:
+                        if abs(float(bp1[1]) - float(bp2[1])) <= 0.35:
+                            col_y_list.append(((float(bp1[1]) + float(bp2[1])) / 2.0, (float(bp1[0]) + float(bp2[0])) / 2.0, str(b.get("id", "Beam")), 0.0))
+            col_y_list.sort(key=lambda it: it[0])
+            clusters_y = []
+            for y_val, x_val, el_id, m_neg_c in col_y_list:
+                if not clusters_y or abs(y_val - clusters_y[-1]["y"]) > 0.40:
+                    clusters_y.append({"y": round(float(y_val), 2), "xs": [x_val], "elements": [el_id], "min_neg": m_neg_c})
                 else:
-                    for idx_cl in range(len(clusters_y) - 1):
-                        y1_v = clusters_y[idx_cl]["y"]
-                        y2_v = clusters_y[idx_cl + 1]["y"]
-                        y_mid = (y1_v + y2_v) / 2.0
-                        lbl = f"📍 شريحة منتصف البحر بين Y={y1_v:.2f}m و Y={y2_v:.2f}m — (Y = {y_mid:.2f} m)"
-                        strip_choices.append((y_mid, lbl))
+                    clusters_y[-1]["xs"].append(x_val)
+                    clusters_y[-1]["elements"].append(el_id)
+                    clusters_y[-1]["min_neg"] = min(clusters_y[-1]["min_neg"], m_neg_c)
+            clusters_y.sort(key=lambda cl: -cl["y"])
+            for cl in clusters_y:
+                y_v = cl["y"]
+                els_str = ", ".join(cl["elements"][:5]) + ("..." if len(cl["elements"]) > 5 else "")
+                ax_lbl = _nearest_axis_lbl(y_v, axes_y_ui, "X")
+                neg_str = f"M11⁻={cl['min_neg']:.2f}" if cl["min_neg"] < -0.05 else "Support"
+                h_col_raw.append({
+                    "dir": "X",
+                    "strip_type": "column",
+                    "coord": y_v,
+                    "ref_x": round(float(np.mean(cl["xs"])), 2) if cl["xs"] else round(0.5 * x_coords_ui[-1], 2),
+                    "ref_y": y_v,
+                    "m_val": round(float(cl["min_neg"]), 2),
+                    "m_short": neg_str,
+                    "grid_lbl": ax_lbl,
+                    "desc": f"قطاع خط الركائز ({ax_lbl}) عند Y = {y_v:.2f} m [{els_str} | {neg_str} t.m/m]",
+                })
+
+            horiz_sections_all = []
+            h_counter = 0
+            for item in h_field_raw:
+                item["code"] = _get_h_code(h_counter)
+                h_counter += 1
+                horiz_sections_all.append(item)
+            for item in h_col_raw:
+                item["code"] = _get_h_code(h_counter)
+                h_counter += 1
+                horiz_sections_all.append(item)
+
+            # 2) Build Vertical Sections (dir="Y", M22)
+            v_field_raw = []
+            for up in unified_panels_ui:
+                px_min, px_max, py_min, py_max = up["bounds"]
+                _, _, _, (ucx, ucy, u_m_pos) = get_unified_panel_contour(
+                    X_mf, Y_mf, M22_raw_mf, up["bounds"], sigma=6.0
+                )
+                if _void_boxes_sk and any((vx1 <= ucx <= vx2 and vy1 <= ucy <= vy2) for (vx1, vx2, vy1, vy2, *_) in _void_boxes_sk):
+                    continue
+                lx_lbl1 = _nearest_axis_lbl(px_min, axes_x_ui, "Y")
+                lx_lbl2 = _nearest_axis_lbl(px_max, axes_x_ui, "Y")
+                ly_lbl1 = _nearest_axis_lbl(py_min, axes_y_ui, "X")
+                ly_lbl2 = _nearest_axis_lbl(py_max, axes_y_ui, "X")
+                cut_x = round(float(ucx), 2)
+                if not any(abs(it["coord"] - cut_x) <= 0.12 for it in v_field_raw):
+                    v_field_raw.append({
+                        "dir": "Y",
+                        "strip_type": "field",
+                        "coord": cut_x,
+                        "ref_x": cut_x,
+                        "ref_y": round(float(ucy), 2),
+                        "m_val": round(float(u_m_pos), 2),
+                        "m_short": f"M22⁺=+{u_m_pos:.2f}",
+                        "grid_lbl": f"{lx_lbl1}–{lx_lbl2} / {ly_lbl1}–{ly_lbl2}",
+                        "desc": f"قطاع مركز البلاطة الموحدة ({lx_lbl1}–{lx_lbl2} / {ly_lbl1}–{ly_lbl2}) عند X = {cut_x:.2f} m [M22⁺ = +{u_m_pos:.2f} t.m/m]",
+                    })
+            # Sort Vertical Field sections from left to right (ascending X) for natural plan reading
+            v_field_raw.sort(key=lambda it: (it["coord"], it["ref_y"]))
+
+            v_col_raw = []
+            col_x_list = []
+            for c in (_active_cols or []):
+                if isinstance(c, dict):
+                    cx = float(c.get("center_x", c.get("grid_x_m", c.get("x", 0.0))))
+                    cy = float(c.get("center_y", c.get("grid_y_m", c.get("y", 0.0))))
+                    cid = str(c.get("id", c.get("orig_id", "C")))
+                    ix_c = int(np.argmin(np.abs(x_vec_ui - cx)))
+                    iy_c = int(np.argmin(np.abs(y_vec_ui - cy)))
+                    m_neg_c = round(float(M22_raw_mf[iy_c, ix_c]), 2)
+                    col_x_list.append((cx, cy, cid, m_neg_c))
+            for b in (_cur_beams_list or []):
+                if isinstance(b, dict):
+                    bp1 = b.get("p1_grid", b.get("p1", [0, 0]))
+                    bp2 = b.get("p2_grid", b.get("p2", [0, 0]))
+                    if bp1 and bp2 and len(bp1) >= 2 and len(bp2) >= 2:
+                        if abs(float(bp1[0]) - float(bp2[0])) <= 0.35:
+                            col_x_list.append(((float(bp1[0]) + float(bp2[0])) / 2.0, (float(bp1[1]) + float(bp2[1])) / 2.0, str(b.get("id", "Beam")), 0.0))
+            col_x_list.sort(key=lambda it: it[0])
+            clusters_x = []
+            for x_val, y_val, el_id, m_neg_c in col_x_list:
+                if not clusters_x or abs(x_val - clusters_x[-1]["x"]) > 0.40:
+                    clusters_x.append({"x": round(float(x_val), 2), "ys": [y_val], "elements": [el_id], "min_neg": m_neg_c})
+                else:
+                    clusters_x[-1]["ys"].append(y_val)
+                    clusters_x[-1]["elements"].append(el_id)
+                    clusters_x[-1]["min_neg"] = min(clusters_x[-1]["min_neg"], m_neg_c)
+            clusters_x.sort(key=lambda cl: cl["x"])
+            for cl in clusters_x:
+                x_v = cl["x"]
+                els_str = ", ".join(cl["elements"][:5]) + ("..." if len(cl["elements"]) > 5 else "")
+                ax_lbl = _nearest_axis_lbl(x_v, axes_x_ui, "Y")
+                neg_str = f"M22⁻={cl['min_neg']:.2f}" if cl["min_neg"] < -0.05 else "Support"
+                v_col_raw.append({
+                    "dir": "Y",
+                    "strip_type": "column",
+                    "coord": x_v,
+                    "ref_x": x_v,
+                    "ref_y": round(float(np.mean(cl["ys"])), 2) if cl["ys"] else round(0.5 * y_coords_ui[-1], 2),
+                    "m_val": round(float(cl["min_neg"]), 2),
+                    "m_short": neg_str,
+                    "grid_lbl": ax_lbl,
+                    "desc": f"قطاع خط الركائز ({ax_lbl}) عند X = {x_v:.2f} m [{els_str} | {neg_str} t.m/m]",
+                })
+
+            vert_sections_all = []
+            v_counter = 0
+            for item in v_field_raw:
+                item["code"] = _get_v_code(v_counter)
+                v_counter += 1
+                vert_sections_all.append(item)
+            for item in v_col_raw:
+                item["code"] = _get_v_code(v_counter)
+                v_counter += 1
+                vert_sections_all.append(item)
+
+            # Filter active direction sections for the dropdown list
+            dir_sections = horiz_sections_all if is_dir_x else vert_sections_all
+            if is_all_strips:
+                dropdown_sections = list(dir_sections)
+                plan_sections_to_draw = horiz_sections_all + vert_sections_all
+            elif is_col_strip:
+                dropdown_sections = [s for s in dir_sections if s["strip_type"] == "column"]
+                plan_sections_to_draw = [s for s in (horiz_sections_all + vert_sections_all) if s["strip_type"] == "column"]
             else:
-                col_x_list = []
-                for c in (_active_cols or []):
-                    if isinstance(c, dict):
-                        cx = float(c.get("center_x", c.get("grid_x_m", c.get("x", 0.0))))
-                        cid = c.get("id", c.get("orig_id", "C"))
-                        col_x_list.append((cx, cid))
-                for b in (_cur_beams_list or []):
-                    if isinstance(b, dict):
-                        bp1 = b.get("p1_grid", b.get("p1", [0, 0]))
-                        bp2 = b.get("p2_grid", b.get("p2", [0, 0]))
-                        if bp1 and bp2 and len(bp1) >= 2 and len(bp2) >= 2:
-                            if abs(float(bp1[0]) - float(bp2[0])) <= 0.35:
-                                col_x_list.append(((float(bp1[0]) + float(bp2[0])) / 2.0, b.get("id", "Beam")))
+                dropdown_sections = [s for s in dir_sections if s["strip_type"] == "field"]
+                plan_sections_to_draw = [s for s in (horiz_sections_all + vert_sections_all) if s["strip_type"] == "field"]
 
-                col_x_list.sort(key=lambda it: it[0])
-                clusters_x = []
-                for x_val, el_id in col_x_list:
-                    if not clusters_x or abs(x_val - clusters_x[-1]["x"]) > 0.40:
-                        clusters_x.append({"x": x_val, "elements": [el_id]})
-                    else:
-                        clusters_x[-1]["elements"].append(el_id)
+            if not dropdown_sections:
+                dropdown_sections = [{
+                    "code": "AA" if is_dir_x else "MM",
+                    "dir": dir_code,
+                    "strip_type": "field",
+                    "coord": 0.0,
+                    "ref_x": 0.0,
+                    "ref_y": 0.0,
+                    "m_val": 0.0,
+                    "m_short": "",
+                    "grid_lbl": "",
+                    "desc": "القطاع الافتراضي الرئيسي",
+                }]
+                plan_sections_to_draw = list(dropdown_sections)
 
-                if not clusters_x:
-                    clusters_x = [{"x": x_v, "elements": [f"X={x_v:.2f}m"]} for x_v in x_coords_ui]
-
-                if is_col_strip:
-                    for idx_cl, cl in enumerate(clusters_x):
-                        x_v = cl["x"]
-                        els_str = ", ".join(cl["elements"][:4])
-                        if len(cl["elements"]) > 4: els_str += "..."
-                        lbl = f"🏛️ خط عناصر إنشائية عند X = {x_v:.2f} m — [{els_str}]"
-                        strip_choices.append((x_v, lbl))
-                else:
-                    for idx_cl in range(len(clusters_x) - 1):
-                        x1_v = clusters_x[idx_cl]["x"]
-                        x2_v = clusters_x[idx_cl + 1]["x"]
-                        x_mid = (x1_v + x2_v) / 2.0
-                        lbl = f"📍 شريحة منتصف البحر بين X={x1_v:.2f}m و X={x2_v:.2f}m — (X = {x_mid:.2f} m)"
-                        strip_choices.append((x_mid, lbl))
-
-            if not strip_choices:
-                strip_choices = [(0.0, "القطاع الافتراضي الرئيسي")]
-
-            col_choice, col_opts1, col_opts2 = st.columns([2.5, 1.2, 1.2])
+            col_choice, col_opts1, col_opts2 = st.columns([2.2, 1.3, 1.3])
             with col_choice:
-                chosen_strip_coord = S.selectbox(
-                    "🔍 اختر موقع القطاع الإنشائي المراد دراسته:",
-                    f"{prefix}sec_chosen_strip_coord",
-                    options=[item[0] for item in strip_choices],
-                    format_func=lambda c_val: next((item[1] for item in strip_choices if item[0] == c_val), str(c_val)),
+                # Dropdown displays ONLY the simplified section names (AA, BB, CC... or MM, NN, PP...)
+                section_codes_list = [s["code"] for s in dropdown_sections]
+                chosen_sec_code = S.selectbox(
+                    "🔍 اختر رمز القطاع من القائمة (Select Section Name):",
+                    f"{prefix}sec_chosen_code_{dir_code}_{'all' if is_all_strips else ('col' if is_col_strip else 'fld')}",
+                    options=section_codes_list,
+                    format_func=lambda s_code: str(s_code),
                     index=0,
                 )
-                chosen_label = next((item[1] for item in strip_choices if item[0] == chosen_strip_coord), "")
+                chosen_sec_obj = next((s for s in dropdown_sections if s["code"] == chosen_sec_code), dropdown_sections[0])
+                chosen_strip_coord = float(chosen_sec_obj["coord"])
+                strip_type_code = str(chosen_sec_obj["strip_type"])
+                chosen_label = f"Section {chosen_sec_code}–{chosen_sec_code} — {chosen_sec_obj['desc']}"
 
             with col_opts1:
                 show_sec_labels = st.checkbox(
@@ -20306,6 +21138,46 @@ def render(is_standalone: bool = False):
                     help="رسم خطوط سعة مقاومة شبكتي التسليح العلوية والسفلية الأساسية لتحديد مناطق الإضافي",
                 )
 
+            # Compact active section badge
+            st.markdown(
+                f"""
+                <div style="background:#eff6ff; border-right:4px solid #dc2626; border-radius:6px; padding:8px 12px; margin-bottom:10px; font-size:0.88rem; color:#0f172a;">
+                    <b>📌 القطاع المختار حالياً:</b> <span style="background:#fef08a; border:1.5px solid #dc2626; padding:1px 8px; border-radius:4px; font-weight:900; color:#000000;">{chosen_sec_code}</span>
+                    &nbsp;|&nbsp; {chosen_sec_obj['desc']}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # ── 1) HORIZONTAL PLAN VIEW SHOWING ALL SECTION LOCATIONS (AA, BB, CC... / MM, NN, PP...) ──
+            st.markdown("##### 🗺️ 1. المسقط الأفقي لمواقع قطاعات العزوم (Horizontal Plan View — Section Locations)")
+            fig_sec_plan = generate_flat_slab_moment_sections_plan(
+                Lx_calc,
+                Ly_calc,
+                cantilevers,
+                sections_to_draw=plan_sections_to_draw,
+                selected_code=chosen_sec_code,
+                active_dir=dir_code,
+                active_cols=_active_cols,
+                removed_cols=_removed_col_objs,
+                drop_beams=_cur_beams_list,
+                void_boxes=_void_boxes_sk,
+                void_panel_ids=set(_confirmed_voids),
+                active_x_labels=_active_x_labels,
+                active_y_labels=_active_y_labels,
+                X_mf=X_mf,
+                Y_mf=Y_mf,
+                M11_raw_mf=M11_raw_mf,
+                M22_raw_mf=M22_raw_mf,
+                col_w_cm=bc_s,
+                col_d_cm=tc_s,
+            )
+            _render_fs_zoomable_figure(
+                fig_sec_plan, viewer_h=600, dpi=180, return_buf=False
+            )
+
+            # ── 2) AUTOMATICALLY DISPLAYED BENDING MOMENT DIAGRAM FOR SELECTED SECTION ──
+            st.markdown(f"##### 📈 2. منحنى عزوم الانحناء للقطاع المختار (`Section {chosen_sec_code}–{chosen_sec_code}`)")
             fig_sec = generate_flat_slab_moment_cross_section(
                 Lx_calc,
                 Ly_calc,
@@ -20327,19 +21199,25 @@ def render(is_standalone: bool = False):
                 show_capacities=show_sec_caps,
                 active_x_labels=_active_x_labels,
                 active_y_labels=_active_y_labels,
+                X_mf=X_mf,
+                Y_mf=Y_mf,
+                M11_raw_mf=M11_raw_mf,
+                M22_raw_mf=M22_raw_mf,
+                rows_x=rows_x,
+                rows_y=rows_y,
+                removed_cols=_removed_col_objs,
+                void_panel_ids=set(_confirmed_voids),
+                btm_extra_spans=btm_extra_spans,
             )
 
-            st.pyplot(fig_sec, clear_figure=True, use_container_width=True)
+            buf_sec, _ = _render_fs_zoomable_figure(
+                fig_sec, viewer_h=680, dpi=180, return_buf=True
+            )
+            sec_filename = f"{prefix}Flat_Slab_Moment_Section_{chosen_sec_code}_{dir_code}_{strip_type_code}_{chosen_strip_coord:.2f}m_ts{ts:.0f}cm.png"
 
-            buf_sec = io.BytesIO()
-            fig_sec.savefig(buf_sec, format="png", bbox_inches="tight", dpi=180)
-            buf_sec.seek(0)
-            sec_filename = f"{prefix}Flat_Slab_Moment_Section_{dir_code}_{strip_type_code}_{chosen_strip_coord:.2f}m_ts{ts:.0f}cm.png"
-
-            st.caption("📐 دقة المخطط: 180 DPI | تم الحساب استناداً إلى الركائز الفعلية حصرياً مع تجاهل خطوط المحاور.")
-            plt.close(fig_sec)
+            st.caption("📐 دقة المخطط: 180 DPI | يتم تحديث منحنى العزوم تلقائياً بمجرد اختيار رمز القطاع (AA, BB, CC... أو MM, NN, PP...) من القائمة المنسدلة.")
         else:
-            st.info("💡 انقر لتوسيع هذا القسم واختيار مسارات القطاعات الرأسية (شرائح الأعمدة وشرائح الوسط) وعرض مخططات عزوم الانحناء (BMD).")
+            st.info("💡 انقر لتوسيع هذا القسم وعرض القطاعات الرأسية في مناطق أقصى عزوم الانحناء (M⁺ & M⁻) المتطابقة مع المخطط الكنتوري.")
 
 
     # ── 🟢 2. TOP REINFORCEMENT PLAN (Initialized for exports) ────────────────
@@ -20546,8 +21424,7 @@ def render(is_standalone: bool = False):
                     active_y_labels=_active_y_labels,
                     void_boxes=_void_boxes_sk,
                 )
-                st.pyplot(fig_cc, clear_figure=True, use_container_width=True)
-                plt.close(fig_cc)
+                _render_fs_zoomable_figure(fig_cc, viewer_h=740, dpi=180)
 
                 upgraded_caps_m1 = [
                     f"العمود <b>{c.get('id', '')}</b> (من Φ{c.get('dia_input', 12)} مم إلى <b>Φ{c.get('dia_extra', 16)} مم</b>)"
@@ -20599,8 +21476,7 @@ def render(is_standalone: bool = False):
                     void_boxes=_void_boxes_sk,
                     mesh_inc_bays=mesh_inc_btm_x,
                 )
-                st.pyplot(fig_bes_x, clear_figure=True, use_container_width=True)
-                plt.close(fig_bes_x)
+                _render_fs_zoomable_figure(fig_bes_x, viewer_h=740, dpi=180)
 
             # ── Tab 2B: Bottom Extra (Y-Direction)
             with tab_m2b:
@@ -20635,8 +21511,7 @@ def render(is_standalone: bool = False):
                     void_boxes=_void_boxes_sk,
                     mesh_inc_bays=mesh_inc_btm_y,
                 )
-                st.pyplot(fig_bes_y, clear_figure=True, use_container_width=True)
-                plt.close(fig_bes_y)
+                _render_fs_zoomable_figure(fig_bes_y, viewer_h=740, dpi=180)
 
             # ── Tab 3A: Top Base Mesh, Extra Slab Top Mesh & Shawka (X-Direction)
             with tab_m3a:
@@ -20670,8 +21545,7 @@ def render(is_standalone: bool = False):
                     void_boxes=_void_boxes_sk,
                     top_extra_cols=None,
                 )
-                st.pyplot(fig_tmes_x, clear_figure=True, use_container_width=True)
-                plt.close(fig_tmes_x)
+                _render_fs_zoomable_figure(fig_tmes_x, viewer_h=740, dpi=180)
 
             # ── Tab 3B: Top Base Mesh, Extra Slab Top Mesh & Shawka (Y-Direction)
             with tab_m3b:
@@ -20705,8 +21579,7 @@ def render(is_standalone: bool = False):
                     void_boxes=_void_boxes_sk,
                     top_extra_cols=None,
                 )
-                st.pyplot(fig_tmes_y, clear_figure=True, use_container_width=True)
-                plt.close(fig_tmes_y)
+                _render_fs_zoomable_figure(fig_tmes_y, viewer_h=740, dpi=180)
         else:
             st.info("💡 انقر لتوسيع هذا القسم وعرض مساقط ولوحات تفريد تسليح البلاطة (Steel Layout).")
 
@@ -20744,9 +21617,7 @@ def render(is_standalone: bool = False):
                 active_x_labels=_active_x_labels,
                 active_y_labels=_active_y_labels,
             )
-            st.pyplot(fig_def, clear_figure=True, use_container_width=True)
-
-            plt.close(fig_def)
+            _render_fs_zoomable_figure(fig_def, viewer_h=740, dpi=180)
 
             # ── الإرشاد الإنشائي لدلالة الألوان والمعالجة ──
             st.markdown(
@@ -20913,8 +21784,7 @@ def render(is_standalone: bool = False):
                         fig_opt_curve = generate_deflection_optimization_curves_sketch(
                             sel_panel_data, opt_res, DL_tot, LL, Fcu
                         )
-                        st.pyplot(fig_opt_curve, clear_figure=True, use_container_width=True)
-                        plt.close(fig_opt_curve)
+                        _render_fs_zoomable_figure(fig_opt_curve, viewer_h=650, dpi=180)
 
                     else:
                         # ── SUCCESS: Organized Comparison Table & Engineering Visualizations ──
@@ -20972,17 +21842,13 @@ def render(is_standalone: bool = False):
                             fig_opt_curve = generate_deflection_optimization_curves_sketch(
                                 sel_panel_data, opt_res, DL_tot, LL, Fcu
                             )
-                            st.pyplot(fig_opt_curve, clear_figure=True, use_container_width=True)
-
-                            plt.close(fig_opt_curve)
+                            _render_fs_zoomable_figure(fig_opt_curve, viewer_h=650, dpi=180)
 
                         with tab_opt_s:
                             fig_opt_sec = generate_deflection_rebar_cross_section_sketch(
                                 sel_panel_data, opt_res
                             )
-                            st.pyplot(fig_opt_sec, clear_figure=True, use_container_width=True)
-
-                            plt.close(fig_opt_sec)
+                            _render_fs_zoomable_figure(fig_opt_sec, viewer_h=640, dpi=180)
         else:
             st.info("💡 انقر لتوسيع هذا القسم وعرض التحقق الإنشائي النهائي من سهم الانحناء طويل الأمد (Deflection Verification).")
 
@@ -24131,13 +24997,15 @@ def render(is_standalone: bool = False):
                                     )
                                     fig_sk = generate_flat_slab_moment_cross_section(
                                         Lx_calc, Ly_calc, cantilevers, ts_cm=ts,
-                                        direction="X", strip_type="column", strip_coord=0.0,
+                                        direction="X", strip_type="field", strip_coord=None,
                                         X_mf=_X_sec, Y_mf=_Y_sec, M11_raw_mf=_M11_raw_sec, M22_raw_mf=_M22_raw_sec,
                                         active_cols=_active_cols, drop_beams=_cur_beams_list, void_boxes=_void_boxes_sk,
                                         M_cap_top_m=M_cap_top_m, M_cap_btm_m=M_cap_btm_m,
                                         mesh_top_str=mesh_top_str, mesh_btm_str=mesh_btm_str, Wu=Wu,
                                         show_labels=True, show_capacities=True,
                                         active_x_labels=_active_x_labels, active_y_labels=_active_y_labels,
+                                        rows_x=rows_x, rows_y=rows_y, removed_cols=_removed_col_objs,
+                                        void_panel_ids=set(_confirmed_voids), btm_extra_spans=btm_extra_spans,
                                     )
                                 elif "Master Steel Layout" in sk_title:
                                     fig_sk = generate_flat_slab_master_steel_layout_sketch(
