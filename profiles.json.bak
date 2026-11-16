@@ -5,8 +5,8 @@
       "name": "Control room (نسخة)",
       "description": "نسخة من Control room",
       "created_at": "2026-11-14 11:08",
-      "updated_at": "2026-11-16 11:49",
-      "last_used_at": "2026-11-16 11:49:51",
+      "updated_at": "2026-11-16 13:55",
+      "last_used_at": "2026-11-16 13:55:33",
       "data": {
         "selected_module_idx": 0,
         "apartment_name": "Control room (نسخة)",
@@ -2614,7 +2614,8 @@
                         "full_moment_continuity": false
                       }
                     ],
-                    "model_mark": "C1"
+                    "model_mark": "C1",
+                    "col_spec_str": "C1 = 30*80 cm"
                   }
                 },
                 "supp2": {
@@ -2695,7 +2696,8 @@
                         "full_moment_continuity": false
                       }
                     ],
-                    "model_mark": "C1"
+                    "model_mark": "C1",
+                    "col_spec_str": "C1 = 30*80 cm"
                   }
                 },
                 "supports_desc": "كمرة رئيسية (مرتكزة على عمود C1 ⟷ عمود C8)",
@@ -3562,7 +3564,8 @@
                         "full_moment_continuity": false
                       }
                     ],
-                    "model_mark": "C1"
+                    "model_mark": "C1",
+                    "col_spec_str": "C1 = 30*80 cm"
                   }
                 },
                 "supp2": {
@@ -3643,7 +3646,8 @@
                         "full_moment_continuity": true
                       }
                     ],
-                    "model_mark": "C1"
+                    "model_mark": "C1",
+                    "col_spec_str": "C1 = 30*80 cm"
                   }
                 },
                 "supports_desc": "كمرة رئيسية (مرتكزة على عمود C3 ⟷ عمود C10)",

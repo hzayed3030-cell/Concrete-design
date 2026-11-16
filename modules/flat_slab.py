@@ -24923,26 +24923,50 @@ def render(is_standalone: bool = False):
 
             cols_tbl = []
             if 'col_designs' in locals() and col_designs:
+                from modules.columns import design_rectangular_column
                 for des in col_designs:
                     _rtype = des.get("raw_type", "Interior")
+                    m_mark = des.get("model_mark") or (col_label_map.get(_rtype) if 'col_label_map' in locals() else "C1")
                     c_cnt = cnt_int if _rtype == "Interior" else (cnt_edge if _rtype == "Edge" else cnt_corner)
+
+                    # Look up adopted dimensions confirmed by user
+                    conf_map = confirmed_col_dims if ('confirmed_col_dims' in locals() and confirmed_col_dims) else st.session_state.get("fs_confirmed_col_dims", {})
+                    dims_conf = conf_map.get(_rtype) or conf_map.get(m_mark) or {}
+                    final_b = float(dims_conf.get("b", des.get("b", 30.0)))
+                    final_t = float(dims_conf.get("t", des.get("t", 50.0)))
+
+                    # Recompute design with final adopted dimensions to get final longitudinal rebar & stirrups
+                    pu_val = float(des.get("pu_tot", des.get("pu_tot_val", 0.0)))
+                    final_des = design_rectangular_column(
+                        Pu_input=pu_val,
+                        Safety_Factor=1.0,
+                        b=final_b,
+                        t_override=final_t,
+                        H_clear=float(col_H) if 'col_H' in locals() else 300.0,
+                        K=float(col_K) if 'col_K' in locals() else 0.70,
+                        Fcu=float(col_Fcu) if 'col_Fcu' in locals() else 250.0,
+                        Fy=float(col_Fy) if 'col_Fy' in locals() else 4000.0,
+                        Fyk=float(col_Fyk) if 'col_Fyk' in locals() else 2400.0,
+                        mu_target=float(col_mu) if 'col_mu' in locals() else 1.0,
+                        Phi=int(col_phi) if 'col_phi' in locals() else 16,
+                        Phi_st=int(col_phi_st) if 'col_phi_st' in locals() else 8,
+                    )
+
                     cols_tbl.append({
-                        "نموذج العمود": des.get("model_label", des.get("model_mark", "C1")),
-                        "موقع وتصنيف العمود": des.get("loc_type", "داخلي"),
-                        "أبعاد القطاع b × t": f"{des['b']:.0f} × {des['t']:.0f} cm",
-                        "التسليح الرأسي الطولي": f"{des.get('main_steel_str', '8Ø16')} (μ={des.get('mu_provided', 1.0):.2f}%)",
-                        "تسليح الكانات": des.get("stirrups_str", "5Ø8/m"),
-                        "أقصى حمل تصميمي Pu": f"{des.get('pu_tot', 0.0):.1f} ton",
-                        "عدد الأعمدة بالمبنى": f"{c_cnt} عمود",
+                        "Column Model (Tag)": str(m_mark).split("(")[0].strip(),
+                        "Section b × t (cm)": f"{final_b:.0f} × {final_t:.0f} cm",
+                        "Longitudinal Rebar": f"{final_des.get('main_steel_str', des.get('main_steel_str', '8Ø16'))} (μ={final_des.get('mu_provided', des.get('mu_provided', 1.0)):.2f}%)",
+                        "Ties / Stirrups": final_des.get("stirrups_str", des.get("stirrups_str", "5Ø8/m")),
+                        "Column Count": f"{c_cnt}",
                     })
             if not cols_tbl:
                 # Dynamic fallback
                 fallback_groups = []
-                if cnt_int > 0: fallback_groups.append(("C1 (أعمدة داخلية)", "داخلي", cnt_int))
-                if cnt_edge > 0: fallback_groups.append((f"C{len(fallback_groups)+1} (أعمدة طرفية)", "طرفي", cnt_edge))
-                if cnt_corner > 0: fallback_groups.append((f"C{len(fallback_groups)+1} (أعمدة ركن)", "ركن", cnt_corner))
+                if cnt_int > 0: fallback_groups.append(("C1", cnt_int))
+                if cnt_edge > 0: fallback_groups.append((f"C{len(fallback_groups)+1}", cnt_edge))
+                if cnt_corner > 0: fallback_groups.append((f"C{len(fallback_groups)+1}", cnt_corner))
                 cols_tbl = [
-                    {"نموذج العمود": fg[0], "موقع وتصنيف العمود": fg[1], "أبعاد القطاع b × t": f"{bc_s:.0f} × {tc_s:.0f} cm", "التسليح الرأسي الطولي": "8Ø16", "تسليح الكانات": "5Ø8/m", "أقصى حمل تصميمي Pu": "—", "عدد الأعمدة بالمبنى": f"{fg[2]} عمود"}
+                    {"Column Model (Tag)": fg[0], "Section b × t (cm)": f"{bc_s:.0f} × {tc_s:.0f} cm", "Longitudinal Rebar": "8Ø16", "Ties / Stirrups": "5Ø8/m", "Column Count": f"{fg[1]}"}
                     for fg in fallback_groups
                 ]
 
@@ -25005,6 +25029,10 @@ def render(is_standalone: bool = False):
                 mesh_btm_str=mesh_btm_str if 'mesh_btm_str' in locals() else f"{n_mesh_btm:.0f}Ø{bottom_mesh_dia}/m'",
                 mesh_top_str=mesh_top_str if 'mesh_top_str' in locals() else f"{n_mesh_top:.0f}Ø{top_mesh_dia}/m'",
                 slab_area_val=slab_area_val if 'slab_area_val' in locals() else sum(Lx_calc)*sum(Ly_calc),
+                btm_extra_spans=btm_extra_spans if 'btm_extra_spans' in locals() else None,
+                cant_rft_list=cant_rft_list if 'cant_rft_list' in locals() else None,
+                cantilevers=cantilevers if 'cantilevers' in locals() else None,
+                top_extra_cols=top_extra_cols if 'top_extra_cols' in locals() else [],
             )
 
         # 4 Dedicated Red Export Buttons

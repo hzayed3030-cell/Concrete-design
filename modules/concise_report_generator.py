@@ -225,12 +225,12 @@ def draw_page2_columns_plan(
 ) -> plt.Figure:
     """
     Page 2: Column plan with ONLY model tags (C1, C2, C3...) written on columns.
-    Legend is positioned cleanly below the drawing to prevent any text overlapping.
+    Legend is positioned cleanly below the drawing in a dedicated enlarged subplot (1.7x panel).
     """
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "sans-serif"]
     fig, (ax, ax_leg) = plt.subplots(
         2, 1, figsize=(14, 8.5), dpi=140, facecolor="#ffffff",
-        gridspec_kw={"height_ratios": [1, 0.08], "hspace": 0.06}
+        gridspec_kw={"height_ratios": [1, 0.14], "hspace": 0.07}
     )
     ax.set_facecolor("#f8fafc")
     ax_leg.set_facecolor("#ffffff")
@@ -310,22 +310,29 @@ def draw_page2_columns_plan(
         cr = patches.Rectangle((cx - cw / 2.0, cy - ch / 2.0), cw, ch,
                                facecolor=cfg["fc"], edgecolor=cfg["ec"], lw=1.8, zorder=5)
         ax.add_patch(cr)
-        ax.text(cx, cy, model_tag, ha="center", va="center", color=cfg["tc"], fontweight="bold", fontsize=9.5, zorder=7)
+        # Label model tag OUTSIDE the column element (positioned above column rectangle)
+        y_lbl = cy + ch / 2.0 + 0.30
+        ax.text(cx, y_lbl, model_tag, ha="center", va="bottom", color=cfg["ec"], fontweight="bold", fontsize=10.5,
+                bbox=dict(boxstyle="round,pad=0.18", fc="#ffffff", ec=cfg["ec"], lw=1.2, alpha=0.95), zorder=7)
 
-    # Dynamic Legend placed cleanly below drawing in ax_leg
+    # Dynamic Legend placed cleanly below drawing in ax_leg (English Only, 2 Lines, 1.7x panel)
     leg_items = []
     if has_int:
-        leg_items.append(f"■ {dyn_col_map['interior']}: " + _ar("أعمدة داخلية (Interior)"))
+        leg_items.append(f"■ {dyn_col_map['interior']}: Interior Columns")
     if has_edge:
-        leg_items.append(f"■ {dyn_col_map['edge']}: " + _ar("أعمدة طرفية (Edge)"))
+        leg_items.append(f"■ {dyn_col_map['edge']}: Edge Columns")
     if has_corner:
-        leg_items.append(f"■ {dyn_col_map['corner']}: " + _ar("أعمدة ركن (Corner)"))
-    leg_str = _ar("نماذج الأعمدة (Column Models):  ") + "   |   ".join(leg_items)
-    ax_leg.text(0.5, 0.5, leg_str, ha="center", va="center", fontsize=9.2, fontweight="bold", color="#1e293b",
-                bbox=dict(boxstyle="round,pad=0.45", fc="#ffffff", ec="#cbd5e1", lw=1.2, alpha=0.96))
+        leg_items.append(f"■ {dyn_col_map['corner']}: Corner Columns")
+    items_str = "    |    ".join([f"[ {it} ]" for it in leg_items])
+    leg_str = f"COLUMN MODELS (LEGEND)\n{items_str}"
+    ax_leg.text(0.5, 0.5, leg_str, ha="center", va="center", fontsize=12.5, fontweight="bold", color="#1e293b",
+                bbox=dict(boxstyle="round,pad=0.6", fc="#ffffff", ec="#cbd5e1", lw=1.5, alpha=0.98))
 
     ax.set_xlim(x_min_slab - 1.8, x_max_slab + 1.2)
     ax.set_ylim(y_min_slab - 0.8, y_max_slab + 1.8)
+    ax.set_aspect("equal", adjustable="box")
+    ax.axis("off")
+    return fig
     ax.set_aspect("equal", adjustable="box")
     ax.axis("off")
     return fig
@@ -341,12 +348,12 @@ def draw_page3_footings_plan(
 ) -> plt.Figure:
     """
     Page 3: Footings layout plan with ONLY model tags (F1, F2, F3...) on footings.
-    Legend is positioned cleanly below the drawing to prevent any text overlapping.
+    Legend is positioned cleanly below the drawing in a dedicated enlarged subplot (1.7x panel).
     """
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "sans-serif"]
     fig, (ax, ax_leg) = plt.subplots(
         2, 1, figsize=(14, 8.5), dpi=140, facecolor="#ffffff",
-        gridspec_kw={"height_ratios": [1, 0.08], "hspace": 0.06}
+        gridspec_kw={"height_ratios": [1, 0.14], "hspace": 0.07}
     )
     ax.set_facecolor("#f8fafc")
     ax_leg.set_facecolor("#ffffff")
@@ -448,29 +455,31 @@ def draw_page3_footings_plan(
                                facecolor="#1e293b", edgecolor="#0f172a", lw=1.2, zorder=5)
         ax.add_patch(cr)
 
-        # Label ONLY model tag
-        ax.text(cx, cy - B_ftg / 2.0 + 0.35, ftg_tag, ha="center", va="center", color=cfg["tc"], fontweight="bold", fontsize=10, zorder=7,
-                bbox=dict(boxstyle="round,pad=0.15", fc="#ffffff", ec=cfg["ec"], lw=0.9, alpha=0.92))
+        # Label model tag OUTSIDE the footing rectangle (positioned below the footing)
+        y_ftg_lbl = cy - B_ftg / 2.0 - 0.35
+        ax.text(cx, y_ftg_lbl, ftg_tag, ha="center", va="top", color=cfg["tc"], fontweight="bold", fontsize=11.0, zorder=7,
+                bbox=dict(boxstyle="round,pad=0.20", fc="#ffffff", ec=cfg["ec"], lw=1.2, alpha=0.96))
 
-    # Dynamic Legend placed cleanly below drawing in ax_leg
+    # Dynamic Legend placed cleanly below drawing in ax_leg (English Only, 2 Lines, 1.7x panel)
     leg_items = []
     if "Interior" in dyn_ftg_map:
-        leg_items.append(f"■ {dyn_ftg_map['Interior']}: " + _ar("قواعد الأعمدة الداخلية (Interior Footings)"))
+        leg_items.append(f"■ {dyn_ftg_map['Interior']}: Interior Footings")
     if "Edge" in dyn_ftg_map:
-        leg_items.append(f"■ {dyn_ftg_map['Edge']}: " + _ar("قواعد الأعمدة الطرفية (Edge Footings)"))
+        leg_items.append(f"■ {dyn_ftg_map['Edge']}: Edge Footings")
     if "Corner" in dyn_ftg_map:
-        leg_items.append(f"■ {dyn_ftg_map['Corner']}: " + _ar("قواعد أعمدة الأركان (Corner Footings)"))
-    leg_str = _ar("نماذج القواعد المسلحة (RC Footing Models):  ") + "   |   ".join(leg_items)
-    ax_leg.text(0.5, 0.5, leg_str, ha="center", va="center", fontsize=9.2, fontweight="bold", color="#1e293b",
-                bbox=dict(boxstyle="round,pad=0.45", fc="#ffffff", ec="#cbd5e1", lw=1.2, alpha=0.96))
+        leg_items.append(f"■ {dyn_ftg_map['Corner']}: Corner Footings")
+    items_str = "    |    ".join([f"[ {it} ]" for it in leg_items])
+    leg_str = f"RC FOOTING MODELS (LEGEND)\n{items_str}"
+    ax_leg.text(0.5, 0.5, leg_str, ha="center", va="center", fontsize=12.5, fontweight="bold", color="#1e293b",
+                bbox=dict(boxstyle="round,pad=0.6", fc="#ffffff", ec="#cbd5e1", lw=1.5, alpha=0.98))
 
     min_xc = min(float(c.get("center_x", c.get("x", 0.0))) for c in active_cols) if active_cols else x_min_slab
     max_xc = max(float(c.get("center_x", c.get("x", 0.0))) for c in active_cols) if active_cols else x_max_slab
-    min_yc = min(float(c.get("center_y", c.get("y", 0.0))) for c in active_cols) if active_cols else y_min_slab
-    max_yc = max(float(c.get("center_y", c.get("y", 0.0))) for c in active_cols) if active_cols else y_max_slab
+    min_yc = min(float(c.get("center_y", c.get("y", 0.0))) - 1.5 for c in active_cols) if active_cols else y_min_slab
+    max_yc = max(float(c.get("center_y", c.get("y", 0.0))) + 1.5 for c in active_cols) if active_cols else y_max_slab
 
     ax.set_xlim(min(x_min_slab - 1.8, min_xc - 1.8), max(x_max_slab + 1.2, max_xc + 1.8))
-    ax.set_ylim(min(y_min_slab - 0.8, min_yc - 1.8), max(y_max_slab + 1.8, max_yc + 1.8))
+    ax.set_ylim(min(y_min_slab - 1.2, min_yc - 1.2), max(y_max_slab + 1.8, max_yc + 1.8))
     ax.set_aspect("equal", adjustable="box")
     ax.axis("off")
     return fig
@@ -486,12 +495,12 @@ def draw_page4_ground_beams_plan(
 ) -> plt.Figure:
     """
     Page 4: Ground beams layout plan with ONLY model tags (B1, B2, B3...) on beams.
-    Legend is positioned cleanly below the drawing to prevent any text overlapping.
+    Legend is positioned cleanly below the drawing in a dedicated enlarged subplot (1.7x panel).
     """
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "sans-serif"]
     fig, (ax, ax_leg) = plt.subplots(
         2, 1, figsize=(14, 8.5), dpi=140, facecolor="#ffffff",
-        gridspec_kw={"height_ratios": [1, 0.08], "hspace": 0.06}
+        gridspec_kw={"height_ratios": [1, 0.14], "hspace": 0.07}
     )
     ax.set_facecolor("#f8fafc")
     ax_leg.set_facecolor("#ffffff")
@@ -554,20 +563,22 @@ def draw_page4_ground_beams_plan(
             bx0 = alg.get("bx0", min(p1[0], p2[0]))
             bw = alg.get("bw", abs(p2[0] - p1[0]))
             by0 = alg.get("by0", alg["cl_y"] - bw_m / 2.0)
-            mid_y = alg.get("mid_y", by0 + bw_m / 2.0)
             r_b = patches.Rectangle((bx0, by0), bw, bw_m, facecolor=cfg["fc"], edgecolor=cfg["ec"], lw=1.8, alpha=0.92, zorder=3)
             ax.add_patch(r_b)
-            ax.text(bx0 + bw / 2.0, mid_y, tag, ha="center", va="center", color=cfg["tc"], fontweight="bold", fontsize=9.5, zorder=6,
-                    bbox=dict(boxstyle="round,pad=0.12", fc="#ffffff", ec=cfg["ec"], lw=0.8, alpha=0.9))
+            # Label model tag OUTSIDE the ground beam element (above beam)
+            y_lbl = by0 + bw_m + 0.20
+            ax.text(bx0 + bw / 2.0, y_lbl, tag, ha="center", va="bottom", color=cfg["tc"], fontweight="bold", fontsize=10.5, zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.15", fc="#ffffff", ec=cfg["ec"], lw=1.0, alpha=0.95))
         elif dir_b == "Y":
             by0 = alg.get("by0", min(p1[1], p2[1]))
             bh = alg.get("bh", abs(p2[1] - p1[1]))
             bx0 = alg.get("bx0", alg["cl_x"] - bw_m / 2.0)
-            mid_x = alg.get("mid_x", bx0 + bw_m / 2.0)
             r_b = patches.Rectangle((bx0, by0), bw_m, bh, facecolor=cfg["fc"], edgecolor=cfg["ec"], lw=1.8, alpha=0.92, zorder=3)
             ax.add_patch(r_b)
-            ax.text(mid_x, by0 + bh / 2.0, tag, ha="center", va="center", rotation=90, color=cfg["tc"], fontweight="bold", fontsize=9.5, zorder=6,
-                    bbox=dict(boxstyle="round,pad=0.12", fc="#ffffff", ec=cfg["ec"], lw=0.8, alpha=0.9))
+            # Label model tag OUTSIDE the ground beam element (to the right of beam)
+            x_lbl = bx0 + bw_m + 0.20
+            ax.text(x_lbl, by0 + bh / 2.0, tag, ha="left", va="center", color=cfg["tc"], fontweight="bold", fontsize=10.5, zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.15", fc="#ffffff", ec=cfg["ec"], lw=1.0, alpha=0.95))
         else:
             dx = p2[0] - p1[0]
             dy = p2[1] - p1[1]
@@ -579,15 +590,15 @@ def draw_page4_ground_beams_plan(
                 (p2[0] - nx_gb, p2[1] - ny_gb), (p1[0] - nx_gb, p1[1] - ny_gb)
             ], facecolor=cfg["fc"], edgecolor=cfg["ec"], lw=1.8, alpha=0.92, zorder=3)
             ax.add_patch(poly_b)
-            mid_x = (p1[0] + p2[0]) / 2.0
-            mid_y = (p1[1] + p2[1]) / 2.0
+            mid_x = (p1[0] + p2[0]) / 2.0 + nx_gb * 1.4
+            mid_y = (p1[1] + p2[1]) / 2.0 + ny_gb * 1.4
             rot_deg = math.degrees(th_gb)
             if rot_deg > 90:
                 rot_deg -= 180
             elif rot_deg < -90:
                 rot_deg += 180
-            ax.text(mid_x, mid_y, tag, ha="center", va="center", rotation=rot_deg, color=cfg["tc"], fontweight="bold", fontsize=9.5, zorder=6,
-                    bbox=dict(boxstyle="round,pad=0.12", fc="#ffffff", ec=cfg["ec"], lw=0.8, alpha=0.9))
+            ax.text(mid_x, mid_y, tag, ha="center", va="center", rotation=rot_deg, color=cfg["tc"], fontweight="bold", fontsize=10.5, zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.15", fc="#ffffff", ec=cfg["ec"], lw=1.0, alpha=0.95))
 
     # Draw Columns
     for c in active_cols:
@@ -598,15 +609,16 @@ def draw_page4_ground_beams_plan(
         cr = patches.Rectangle((cx - cw / 2.0, cy - ch / 2.0), cw, ch, facecolor="#1e293b", edgecolor="#0f172a", lw=1.4, zorder=5)
         ax.add_patch(cr)
 
-    # Dynamic Legend placed cleanly below drawing in ax_leg
+    # Dynamic Legend placed cleanly below drawing in ax_leg (English Only, 2 Lines, 1.7x panel)
     leg_items = [
-        "■ B1: " + _ar("سملات قطاع ثقيل (Heavy GB)"),
-        "■ B2: " + _ar("سملات قطاع متوسط (Medium GB)"),
-        "■ B3: " + _ar("سملات قطاع خفيف (Light GB)"),
+        "■ B1: Heavy Ground Beams",
+        "■ B2: Medium Ground Beams",
+        "■ B3: Light Ground Beams",
     ]
-    leg_str = _ar("نماذج السملات الأرضية (Ground Beam Models):  ") + "   |   ".join(leg_items)
-    ax_leg.text(0.5, 0.5, leg_str, ha="center", va="center", fontsize=9.2, fontweight="bold", color="#1e293b",
-                bbox=dict(boxstyle="round,pad=0.45", fc="#ffffff", ec="#cbd5e1", lw=1.2, alpha=0.96))
+    items_str = "    |    ".join([f"[ {it} ]" for it in leg_items])
+    leg_str = f"GROUND BEAM MODELS (LEGEND)\n{items_str}"
+    ax_leg.text(0.5, 0.5, leg_str, ha="center", va="center", fontsize=12.5, fontweight="bold", color="#1e293b",
+                bbox=dict(boxstyle="round,pad=0.6", fc="#ffffff", ec="#cbd5e1", lw=1.5, alpha=0.98))
 
     ax.set_xlim(x_min_slab - 1.8, x_max_slab + 1.2)
     ax.set_ylim(y_min_slab - 0.8, y_max_slab + 1.8)
@@ -628,12 +640,12 @@ def draw_page5_roof_beams_plan(
     Page 5: Roof beams & cantilevers layout plan synchronized 100% with actual user inputs.
     Displays modeled roof drop beams (B1, B2, B3) and cantilever beams (CB1) with their dimensions (b x t),
     slab footprint, cantilever zones, grid lines, and columns.
-    Legend is positioned cleanly below the drawing in a dedicated subplot to prevent any text overlapping.
+    Legend is positioned cleanly below the drawing in a dedicated enlarged subplot (1.7x panel).
     """
     plt.rcParams["font.sans-serif"] = ["DejaVu Sans", "Arial", "Calibri", "sans-serif"]
     fig, (ax, ax_leg) = plt.subplots(
         2, 1, figsize=(14, 8.5), dpi=140, facecolor="#ffffff",
-        gridspec_kw={"height_ratios": [1, 0.08], "hspace": 0.06}
+        gridspec_kw={"height_ratios": [1, 0.14], "hspace": 0.07}
     )
     ax.set_facecolor("#f8fafc")
     ax_leg.set_facecolor("#ffffff")
@@ -692,22 +704,22 @@ def draw_page5_roof_beams_plan(
         if cant_l > 0.05:
             ax.add_patch(patches.Rectangle((x_slab_min, y_slab_min), cant_l, slab_h,
                                           facecolor="#fffbeb", edgecolor="#f59e0b", lw=1.0, ls=":", alpha=0.5, zorder=1.2))
-            ax.text(x_slab_min + cant_l / 2.0, (y_slab_min + y_slab_max) / 2.0, _ar(f"كابولي أيسر ({cant_l:.2f}m)"),
+            ax.text(x_slab_min + cant_l / 2.0, (y_slab_min + y_slab_max) / 2.0, f"Left Cantilever ({cant_l:.2f}m)",
                     ha="center", va="center", fontsize=8.0, color="#b45309", fontweight="bold", rotation=90, zorder=2)
         if cant_r > 0.05:
             ax.add_patch(patches.Rectangle((x_core_max, y_slab_min), cant_r, slab_h,
                                           facecolor="#fffbeb", edgecolor="#f59e0b", lw=1.0, ls=":", alpha=0.5, zorder=1.2))
-            ax.text(x_core_max + cant_r / 2.0, (y_slab_min + y_slab_max) / 2.0, _ar(f"كابولي أيمن ({cant_r:.2f}m)"),
+            ax.text(x_core_max + cant_r / 2.0, (y_slab_min + y_slab_max) / 2.0, f"Right Cantilever ({cant_r:.2f}m)",
                     ha="center", va="center", fontsize=8.0, color="#b45309", fontweight="bold", rotation=90, zorder=2)
         if cant_t > 0.05:
             ax.add_patch(patches.Rectangle((x_slab_min, y_core_max), slab_w, cant_t,
                                           facecolor="#fffbeb", edgecolor="#f59e0b", lw=1.0, ls=":", alpha=0.5, zorder=1.2))
-            ax.text((x_slab_min + x_slab_max) / 2.0, y_core_max + cant_t / 2.0, _ar(f"كابولي علوي ({cant_t:.2f}m)"),
+            ax.text((x_slab_min + x_slab_max) / 2.0, y_core_max + cant_t / 2.0, f"Top Cantilever ({cant_t:.2f}m)",
                     ha="center", va="center", fontsize=8.0, color="#b45309", fontweight="bold", zorder=2)
         if cant_b > 0.05:
             ax.add_patch(patches.Rectangle((x_slab_min, y_slab_min), slab_w, cant_b,
                                           facecolor="#fffbeb", edgecolor="#f59e0b", lw=1.0, ls=":", alpha=0.5, zorder=1.2))
-            ax.text((x_slab_min + x_slab_max) / 2.0, y_slab_min + cant_b / 2.0, _ar(f"كابولي سفلي ({cant_b:.2f}m)"),
+            ax.text((x_slab_min + x_slab_max) / 2.0, y_slab_min + cant_b / 2.0, f"Bottom Cantilever ({cant_b:.2f}m)",
                     ha="center", va="center", fontsize=8.0, color="#b45309", fontweight="bold", zorder=2)
 
     # Grid lines & bubbles
@@ -757,9 +769,10 @@ def draw_page5_roof_beams_plan(
             r_b = patches.Rectangle((bx0, by0), bw, bw_m, facecolor=cfg["fc"], edgecolor=cfg["ec"],
                                     hatch=cfg["hatch"], lw=1.8, alpha=0.92, zorder=3)
             ax.add_patch(r_b)
-            lbl = f"{tag} ({b_cm}×{t_cm})"
-            ax.text(bx0 + bw / 2.0, by0 + bw_m / 2.0, lbl, ha="center", va="center", color=cfg["tc"], fontweight="bold", fontsize=8.2, zorder=6,
-                    bbox=dict(boxstyle="round,pad=0.15", fc=cfg["badge_bg"], ec=cfg["ec"], lw=0.8, alpha=0.92))
+            # Label model tag ONLY (no dimensions) OUTSIDE the beam (above beam)
+            y_lbl = by0 + bw_m + 0.20
+            ax.text(bx0 + bw / 2.0, y_lbl, tag, ha="center", va="bottom", color=cfg["tc"], fontweight="bold", fontsize=10.5, zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.15", fc="#ffffff", ec=cfg["ec"], lw=1.0, alpha=0.95))
         else:
             by0 = min(p1[1], p2[1])
             bh = abs(dy)
@@ -767,11 +780,12 @@ def draw_page5_roof_beams_plan(
             r_b = patches.Rectangle((bx0, by0), bw_m, bh, facecolor=cfg["fc"], edgecolor=cfg["ec"],
                                     hatch=cfg["hatch"], lw=1.8, alpha=0.92, zorder=3)
             ax.add_patch(r_b)
-            lbl = f"{tag} ({b_cm}×{t_cm})"
-            ax.text(bx0 + bw_m / 2.0, by0 + bh / 2.0, lbl, ha="center", va="center", rotation=90, color=cfg["tc"], fontweight="bold", fontsize=8.2, zorder=6,
-                    bbox=dict(boxstyle="round,pad=0.15", fc=cfg["badge_bg"], ec=cfg["ec"], lw=0.8, alpha=0.92))
+            # Label model tag ONLY (no dimensions) OUTSIDE the beam (to the right of beam)
+            x_lbl = bx0 + bw_m + 0.20
+            ax.text(x_lbl, by0 + bh / 2.0, tag, ha="left", va="center", color=cfg["tc"], fontweight="bold", fontsize=10.5, zorder=6,
+                    bbox=dict(boxstyle="round,pad=0.15", fc="#ffffff", ec=cfg["ec"], lw=1.0, alpha=0.95))
 
-    # Draw Columns
+    # Draw Columns with label OUTSIDE the column
     for c in active_cols:
         cx = float(c.get("center_x", c.get("x", 0.0)))
         cy = float(c.get("center_y", c.get("y", 0.0)))
@@ -779,30 +793,33 @@ def draw_page5_roof_beams_plan(
         ch = float(c.get("height_m", c.get("bc", 30.0) / 100.0))
         cr = patches.Rectangle((cx - cw / 2.0, cy - ch / 2.0), cw, ch, facecolor="#1e293b", edgecolor="#0f172a", lw=1.4, zorder=5)
         ax.add_patch(cr)
-        c_lbl = str(c.get("orig_id", c.get("id", "C")))
-        ax.text(cx, cy, c_lbl, ha="center", va="center", color="#ffffff", fontweight="bold", fontsize=8.2, zorder=7)
+        c_lbl = str(c.get("model_mark") or c.get("orig_id") or c.get("id", "C")).split("(")[0].strip()
+        y_clbl = cy + ch / 2.0 + 0.25
+        ax.text(cx, y_clbl, c_lbl, ha="center", va="bottom", color="#1e293b", fontweight="bold", fontsize=10.5,
+                bbox=dict(boxstyle="round,pad=0.18", fc="#ffffff", ec="#334155", lw=1.2, alpha=0.95), zorder=7)
 
-    # Dynamic Legend placed cleanly below drawing in ax_leg
+    # Dynamic Legend placed cleanly below drawing in ax_leg (English Only, 2 Lines, 1.7x panel)
     models_dict = rb_analysis.get("models_dict", {}) if rb_analysis else {}
     leg_items = []
     for mk in ["B1", "B2", "B3", "CB1"]:
         if mk in models_dict:
             m = models_dict[mk]
-            if mk == "B1": dot = "■ B1: " + _ar("ساقطة ثقيل (Heavy)")
-            elif mk == "B2": dot = "■ B2: " + _ar("ساقطة متوسط (Medium)")
-            elif mk == "B3": dot = "■ B3: " + _ar("ساقطة خفيف (Light)")
-            else: dot = "■ CB1: " + _ar("كابولية بشوك (Cantilever)")
-            leg_items.append(f"{dot} [{m['dimensions_str']} cm]")
+            if mk == "CB1":
+                dot = f"■ CB1: Cantilever Beam [{m['dimensions_str']} cm]"
+            else:
+                dot = f"■ {mk}: Drop Beam [{m['dimensions_str']} cm]"
+            leg_items.append(dot)
     if not leg_items:
         leg_items = [
-            "■ B1: " + _ar("كمرات ساقطة ثقيل (Heavy)"),
-            "■ B2: " + _ar("كمرات ساقطة متوسط (Medium)"),
-            "■ B3: " + _ar("كمرات ساقطة خفيف (Light)"),
-            "■ CB1: " + _ar("كمرات كابولية (Cantilever)"),
+            "■ B1: Drop Beam [25×60 cm]",
+            "■ B2: Drop Beam [25×50 cm]",
+            "■ B3: Drop Beam [25×40 cm]",
+            "■ CB1: Cantilever Beam [25×60 cm]",
         ]
-    leg_str = _ar("نماذج كمرات السقف والكوابيل (Roof Beam Models):  ") + "   |   ".join(leg_items)
-    ax_leg.text(0.5, 0.5, leg_str, ha="center", va="center", fontsize=8.8, fontweight="bold", color="#1e293b",
-                bbox=dict(boxstyle="round,pad=0.45", fc="#ffffff", ec="#cbd5e1", lw=1.2, alpha=0.96))
+    items_str = "    |    ".join([f"[ {it} ]" for it in leg_items])
+    leg_str = f"ROOF BEAMS & CANTILEVERS (LEGEND)\n{items_str}"
+    ax_leg.text(0.5, 0.5, leg_str, ha="center", va="center", fontsize=12.5, fontweight="bold", color="#1e293b",
+                bbox=dict(boxstyle="round,pad=0.6", fc="#ffffff", ec="#cbd5e1", lw=1.5, alpha=0.98))
 
     ax.set_xlim(x_slab_min - 1.8, x_slab_max + 1.2)
     ax.set_ylim(y_slab_min - 0.8, y_slab_max + 1.8)
@@ -900,7 +917,7 @@ def draw_page6_slab_bottom_rebar(
                     ax.plot([bx1, bx2], [y_mid - 0.25, y_mid - 0.25], color="#1d4ed8", lw=3.0, zorder=6)
                     ax.plot([bx1, bx1], [y_mid - 0.25, y_mid - 0.10], color="#1d4ed8", lw=2.5, zorder=6)
                     ax.plot([bx2, bx2], [y_mid - 0.25, y_mid - 0.10], color="#1d4ed8", lw=2.5, zorder=6)
-                    ax.text(x_mid, y_mid - 0.45, f"إضافي سفلي X: + {nb}Ø{dia}/م' (L={L_m:.2f}m)",
+                    ax.text(x_mid, y_mid - 0.45, f"Bottom Extra X: + {nb}Ø{dia}/m (L={L_m:.2f}m)",
                             ha="center", va="top", fontsize=8.2, fontweight="bold", color="#1e3a8a",
                             bbox=dict(boxstyle="round,pad=0.12", fc="#eff6ff", ec="#3b82f6", lw=0.9, alpha=0.95), zorder=7)
                 else:
@@ -910,14 +927,14 @@ def draw_page6_slab_bottom_rebar(
                     ax.plot([x_mid + 0.25, x_mid + 0.25], [by1, by2], color="#7e22ce", lw=3.0, zorder=6)
                     ax.plot([x_mid + 0.25, x_mid + 0.40], [by1, by1], color="#7e22ce", lw=2.5, zorder=6)
                     ax.plot([x_mid + 0.25, x_mid + 0.40], [by2, by2], color="#7e22ce", lw=2.5, zorder=6)
-                    ax.text(x_mid + 0.50, y_mid, f"إضافي سفلي Y: + {nb}Ø{dia}/م' (L={L_m:.2f}m)",
+                    ax.text(x_mid + 0.50, y_mid, f"Bottom Extra Y: + {nb}Ø{dia}/m (L={L_m:.2f}m)",
                             ha="left", va="center", rotation=90, fontsize=8.2, fontweight="bold", color="#581c87",
                             bbox=dict(boxstyle="round,pad=0.12", fc="#faf5ff", ec="#a855f7", lw=0.9, alpha=0.95), zorder=7)
 
     # Base Mesh Banner Box
-    mesh_box_text = f"الشبكة السفلية الرئيسية: {n_mesh_btm:.0f}Ø{bottom_mesh_dia}/م' (فرش وغطاء في الاتجاهين T1 & T2)"
+    mesh_box_text = f"Bottom Base Mesh: {n_mesh_btm:.0f}Ø{bottom_mesh_dia}/m (Both Directions T1 & T2)"
     if not has_any_extra:
-        mesh_box_text += "\n[OK] الشبكة السفلية الأساسية كافية لتغطية كامل العزوم الموجبة ولا يلزم إضافي سفلي"
+        mesh_box_text += "\n[OK] Base mesh is sufficient to resist all positive moments — No bottom extra rebar required"
     ax.text(0.50, 0.96, mesh_box_text, transform=ax.transAxes, ha="center", va="top",
             fontsize=10.5, fontweight="bold", color="#064e3b",
             bbox=dict(boxstyle="round,pad=0.45", fc="#dcfce7", ec="#16a34a", lw=1.6, alpha=0.96), zorder=9)
@@ -1010,7 +1027,7 @@ def draw_page7_slab_top_rebar(
                     ax.plot([x_tip, x_tip], [gy - 0.15, gy + 0.15], color="#dc2626", lw=2.6, zorder=6)
                     ax.plot([x_end, x_end], [gy, gy - 0.15], color="#dc2626", lw=2.2, zorder=6)
                 ax.text(x_min_slab + c_val / 2.0, (y_grid[0] + y_grid[-1]) / 2.0,
-                        f"شوك كابولي أيسر:\n{n_cant}Ø{dia_cant}/م' (L_tot={c_val + ext_len:.2f}m)",
+                        f"Left Cantilever Forks:\n{n_cant}Ø{dia_cant}/m (L_tot={c_val + ext_len:.2f}m)",
                         ha="center", va="center", rotation=90, fontsize=8.5, fontweight="bold", color="#991b1b",
                         bbox=dict(boxstyle="round,pad=0.15", fc="#fef2f2", ec="#ef4444", lw=1.0, alpha=0.92), zorder=7)
 
@@ -1022,7 +1039,7 @@ def draw_page7_slab_top_rebar(
                     ax.plot([x_tip, x_tip], [gy - 0.15, gy + 0.15], color="#dc2626", lw=2.6, zorder=6)
                     ax.plot([x_end, x_end], [gy, gy - 0.15], color="#dc2626", lw=2.2, zorder=6)
                 ax.text(x_max_slab - c_val / 2.0, (y_grid[0] + y_grid[-1]) / 2.0,
-                        f"شوك كابولي أيمن:\n{n_cant}Ø{dia_cant}/م' (L_tot={c_val + ext_len:.2f}m)",
+                        f"Right Cantilever Forks:\n{n_cant}Ø{dia_cant}/m (L_tot={c_val + ext_len:.2f}m)",
                         ha="center", va="center", rotation=90, fontsize=8.5, fontweight="bold", color="#991b1b",
                         bbox=dict(boxstyle="round,pad=0.15", fc="#fef2f2", ec="#ef4444", lw=1.0, alpha=0.92), zorder=7)
 
@@ -1034,7 +1051,7 @@ def draw_page7_slab_top_rebar(
                     ax.plot([gx - 0.15, gx + 0.15], [y_tip, y_tip], color="#dc2626", lw=2.6, zorder=6)
                     ax.plot([gx, gx - 0.15], [y_end, y_end], color="#dc2626", lw=2.2, zorder=6)
                 ax.text((x_grid[0] + x_grid[-1]) / 2.0, y_min_slab + c_val / 2.0,
-                        f"شوك كابولي سفلي: {n_cant}Ø{dia_cant}/م' (L_tot={c_val + ext_len:.2f}m)",
+                        f"Bottom Cantilever Forks: {n_cant}Ø{dia_cant}/m (L_tot={c_val + ext_len:.2f}m)",
                         ha="center", va="center", fontsize=8.5, fontweight="bold", color="#991b1b",
                         bbox=dict(boxstyle="round,pad=0.15", fc="#fef2f2", ec="#ef4444", lw=1.0, alpha=0.92), zorder=7)
 
@@ -1046,14 +1063,14 @@ def draw_page7_slab_top_rebar(
                     ax.plot([gx - 0.15, gx + 0.15], [y_tip, y_tip], color="#dc2626", lw=2.6, zorder=6)
                     ax.plot([gx, gx - 0.15], [y_end, y_end], color="#dc2626", lw=2.2, zorder=6)
                 ax.text((x_grid[0] + x_grid[-1]) / 2.0, y_max_slab - c_val / 2.0,
-                        f"شوك كابولي علوي: {n_cant}Ø{dia_cant}/م' (L_tot={c_val + ext_len:.2f}m)",
+                        f"Top Cantilever Forks: {n_cant}Ø{dia_cant}/m (L_tot={c_val + ext_len:.2f}m)",
                         ha="center", va="center", fontsize=8.5, fontweight="bold", color="#991b1b",
                         bbox=dict(boxstyle="round,pad=0.15", fc="#fef2f2", ec="#ef4444", lw=1.0, alpha=0.92), zorder=7)
 
     # Top Mesh Banner Box
-    top_mesh_box = f"الشبكة العلوية الرئيسية: {n_mesh_top:.0f}Ø{top_mesh_dia}/م' (في الاتجاهين T1 & T2)"
+    top_mesh_box = f"Top Base Mesh: {n_mesh_top:.0f}Ø{top_mesh_dia}/m (Both Directions T1 & T2)"
     if not has_cantilevers:
-        top_mesh_box += "\nℹ️ لا توجد كوابيل خارجية بالمبنى — حديد الرقة العلوية موزع بكامل مسطح البلاطة"
+        top_mesh_box += "\nℹ️ No exterior cantilevers — Top base mesh distributed across full slab area"
     ax.text(0.50, 0.96, top_mesh_box, transform=ax.transAxes, ha="center", va="top",
             fontsize=10.5, fontweight="bold", color="#1e3a8a",
             bbox=dict(boxstyle="round,pad=0.45", fc="#eff6ff", ec="#2563eb", lw=1.6, alpha=0.96), zorder=9)
@@ -1120,18 +1137,24 @@ def draw_page8_column_caps(
         cr = patches.Rectangle((cx - cw / 2.0, cy - ch / 2.0), cw, ch, facecolor="#1e293b", edgecolor="#0f172a", lw=1.4, zorder=4)
         ax.add_patch(cr)
 
+        # Label ONLY column model/tag outside element (matching Page 4 font size 10.5 bold, no safe/unsafe text)
+        col_tag = str(c.get("model_mark") or c.get("orig_id") or c.get("id", "C")).split("(")[0].strip()
+        y_lbl = cy + ch / 2.0 + 0.28
+        ax.text(cx, y_lbl, col_tag, ha="center", va="bottom", color="#1e293b", fontweight="bold", fontsize=10.5,
+                bbox=dict(boxstyle="round,pad=0.18", fc="#ffffff", ec="#334155", lw=1.2, alpha=0.95), zorder=7)
+
     # Draw Column Caps (Top Extra over columns in both directions)
     if top_extra_cols:
         for cap in top_extra_cols:
             cx = float(cap.get("center_x", cap.get("x", 0.0)))
             cy = float(cap.get("center_y", cap.get("y", 0.0)))
-            col_id = cap.get("col_id", cap.get("id", "C"))
-            req_as = float(cap.get("As_extra_req", cap.get("req_as", 0.0)))
-            nb = int(cap.get("n_bars", cap.get("n", 5)))
-            dia = int(cap.get("dia", cap.get("phi", 12)))
-            L_cap = float(cap.get("bar_len", cap.get("L", 2.40)))
+            req_as = float(cap.get("As_extra_req", cap.get("req_as", cap.get("As_extra", 0.0))))
+            is_needed = cap.get("is_needed", False) or (req_as > 0.05) or (int(cap.get("bars_per_m", 0)) > 0)
+            nb = int(cap.get("n_bars", cap.get("bars_per_m", 5)))
+            dia = int(cap.get("dia", cap.get("dia_extra", cap.get("phi", 12))))
+            L_cap = float(cap.get("bar_len", cap.get("L_extra", cap.get("L", 2.40))))
 
-            if req_as > 0.05:
+            if is_needed:
                 # Cap X-bars (Horizontal)
                 x1, x2 = cx - L_cap / 2.0, cx + L_cap / 2.0
                 ax.plot([x1, x2], [cy + 0.18, cy + 0.18], color="#b91c1c", lw=2.8, zorder=6)
@@ -1144,17 +1167,8 @@ def draw_page8_column_caps(
                 ax.plot([cx + 0.18, cx + 0.08], [y1, y1], color="#991b1b", lw=2.4, zorder=6)
                 ax.plot([cx + 0.18, cx + 0.08], [y2, y2], color="#991b1b", lw=2.4, zorder=6)
 
-                # Callout Label
-                ax.text(cx, cy + L_cap / 2.0 + 0.22, f"{col_id}: + {nb}Ø{dia}/م' (L={L_cap:.2f}m)",
-                        ha="center", va="bottom", fontsize=7.8, fontweight="bold", color="#991b1b",
-                        bbox=dict(boxstyle="round,pad=0.10", fc="#fef2f2", ec="#ef4444", lw=0.9, alpha=0.95), zorder=7)
-            else:
-                ax.text(cx, cy + 0.40, f"{col_id}: آمن بالشبكة", ha="center", va="bottom",
-                        fontsize=7.2, fontweight="bold", color="#15803d",
-                        bbox=dict(boxstyle="round,pad=0.08", fc="#f0fdf4", ec="#22c55e", lw=0.7, alpha=0.9), zorder=7)
-
     # Title Banner Box
-    title_text = "حديد الكبات الإضافي العلوي فوق الأعمدة لمقاومة العزوم السالبة والقص الثاقب (Column Caps — Top Extra)"
+    title_text = "Column Caps Top Extra Reinforcement for Negative Moments & Punching Shear (ECP 203)"
     ax.text(0.50, 0.96, title_text, transform=ax.transAxes, ha="center", va="top",
             fontsize=10.5, fontweight="bold", color="#991b1b",
             bbox=dict(boxstyle="round,pad=0.40", fc="#fef2f2", ec="#ef4444", lw=1.6, alpha=0.96), zorder=9)
@@ -1192,39 +1206,224 @@ def generate_concise_design_report_html(
     mesh_btm_str: str,
     mesh_top_str: str,
     slab_area_val: float,
+    btm_extra_spans: Optional[List[Dict[str, Any]]] = None,
+    cant_rft_list: Optional[List[Dict[str, Any]]] = None,
+    cantilevers: Optional[Dict[str, float]] = None,
+    top_extra_cols: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """
     Builds the complete 8-page standalone HTML calculation report ready for PDF printing.
     """
-    # Filter and normalize Page 5 Roof Beams schedule table:
-    # 1. Remove redundant beam lengths column (إجمالي الأطوال / طول الكمرة)
-    # 2. Normalize and order columns exactly into 8 cells matching the 8 headers
-    clean_rb_table = []
-    if rb_table_data:
-        for r in rb_table_data:
-            row_clean = {k: v for k, v in r.items() if not any(sub in k.lower() for sub in ["أطوال", "طول", "length", "len"])}
-            def _find_val(terms, default="—"):
-                for k, val in row_clean.items():
-                    if any(t in k for t in terms):
+    # Filter and normalize tables for concise PDF:
+    # 1. Page 2 Columns Table: exactly 5 cells (Model, Section, Longitudinal Rebar, Stirrups, Count)
+    clean_cols_table = []
+    if cols_table_data:
+        for r in cols_table_data:
+            def _find_val_c(terms, default="—"):
+                for k, val in r.items():
+                    if any(t.lower() in str(k).lower() for t in terms):
+                        return val
+                return default
+            raw_model = str(_find_val_c(["column model", "نموذج العمود", "model", "tag"], "C1"))
+            clean_model = raw_model.split("(")[0].strip() if "(" in raw_model else raw_model.strip()
+            ordered = {
+                "mark": clean_model,
+                "b_t": _find_val_c(["section", "القطاع", "الأبعاد", "b × t"]),
+                "rebar": _find_val_c(["longitudinal", "التسليح الرأسي", "التسليح الطولي", "rebar", "main"]),
+                "ties": _find_val_c(["ties", "stirrups", "الكانات"]),
+                "count": _find_val_c(["column count", "count", "العدد"]),
+            }
+            clean_cols_table.append(ordered)
+
+    # 2. Page 3 Footings Table: exactly 5 cells (Model, Supported Columns, RC Footing, PC Footing, Reinforcement)
+    # Excluded per user request: Classification, Design Axial Load, Structural Status
+    clean_ftgs_table = []
+    if ftgs_table_data:
+        for r in ftgs_table_data:
+            def _find_val_f(terms, default="—"):
+                for k, val in r.items():
+                    if any(t.lower() in str(k).lower() for t in terms):
+                        return val
+                return default
+            raw_model = str(_find_val_f(["نموذج القاعدة", "footing model", "model", "mark"], "F1"))
+            clean_model = raw_model.split("(")[0].strip() if "(" in raw_model else raw_model.strip()
+            ordered = {
+                "model": clean_model,
+                "cols": _find_val_f(["الأعمدة المرتكزة", "supported columns", "نموذج العمود", "columns", "cols"]),
+                "rc": _find_val_f(["أبعاد المسلحة", "rc footing", "r.c."]),
+                "pc": _find_val_f(["أبعاد العادية", "pc footing", "p.c."]),
+                "rft": _find_val_f(["التسليح", "reinforcement", "rft"]),
+            }
+            clean_ftgs_table.append(ordered)
+
+    # 3. Page 4 Ground Beams Table: exactly 6 cells (Beam Mark, Section, Bottom, Top, Stirrups, Side Bars)
+    # Excluded per user request: Classification, Count, Total Length
+    clean_gb_table = []
+    if gb_table_data:
+        for r in gb_table_data:
+            def _find_val_g(terms, default="—"):
+                for k, val in r.items():
+                    if any(t.lower() in str(k).lower() for t in terms):
                         return val
                 return default
             ordered = {
-                "mark": _find_val(["النموذج", "Mark"]),
-                "class": _find_val(["التصنيف", "الأهمية"]),
-                "b_t": _find_val(["الأبعاد", "القطاع", "b × t"]),
-                "bot": _find_val(["السفلي", "Bottom"]),
-                "top": _find_val(["العلوي", "Top"]),
-                "stirrups": _find_val(["الكانات", "Stirrups"]),
-                "side": _find_val(["براندات", "Side"]),
-                "count": _find_val(["العدد", "Count"]),
+                "mark": _find_val_g(["النموذج", "mark", "tag"]),
+                "b_t": _find_val_g(["الأبعاد", "القطاع", "b × t", "section"]),
+                "bot": _find_val_g(["السفلي", "bottom", "bot"]),
+                "top": _find_val_g(["العلوي", "top"]),
+                "stirrups": _find_val_g(["الكانات", "stirrups"]),
+                "side": _find_val_g(["براندات", "side"]),
+            }
+            clean_gb_table.append(ordered)
+
+    # 4. Page 5 Roof Beams Table: exactly 6 cells (Beam Mark, Section, Bottom, Top/Forks, Stirrups, Side Bars)
+    # Excluded per user request: Classification, Count, Total Length (Identical structure to Page 4)
+    clean_rb_table = []
+    if rb_table_data:
+        for r in rb_table_data:
+            def _find_val_r(terms, default="—"):
+                for k, val in r.items():
+                    if any(t.lower() in str(k).lower() for t in terms):
+                        return val
+                return default
+            ordered = {
+                "mark": _find_val_r(["النموذج", "mark", "tag"]),
+                "b_t": _find_val_r(["الأبعاد", "القطاع", "b × t", "section"]),
+                "bot": _find_val_r(["السفلي", "bottom", "bot"]),
+                "top": _find_val_r(["العلوي", "top", "شوك"]),
+                "stirrups": _find_val_r(["الكانات", "stirrups"]),
+                "side": _find_val_r(["براندات", "side"]),
             }
             clean_rb_table.append(ordered)
 
+    # 5. Page 6 Slab Bottom Reinforcement Table (Base Mesh & Additional Bottom Rebar)
+    clean_btm_table = []
+    clean_btm_table.append({
+        "comp": "Bottom Base Mesh (T1 & T2)",
+        "zone": "Full Slab Area (Both Directions)",
+        "rft": _clean_cell_to_en(mesh_btm_str),
+        "cut_len": "Continuous across all spans",
+        "notes": "Bottom Main Layer (ECP 203)",
+    })
+    has_btm_extra = False
+    if btm_extra_spans:
+        for sp in btm_extra_spans:
+            req_as = float(sp.get("As_extra_req", sp.get("req_as", sp.get("delta_As", 0.0))))
+            is_nec = sp.get("is_needed", False) or (req_as > 0.05) or (int(sp.get("n_extra", sp.get("bars_per_m", 0))) > 0)
+            if is_nec:
+                has_btm_extra = True
+                s_dir = str(sp.get("dir", sp.get("direction", "X"))).upper()
+                nb = int(sp.get("n_bars", sp.get("bars_per_m", sp.get("n_extra", 4))))
+                dia = int(sp.get("dia", sp.get("dia_extra", sp.get("phi", 12))))
+                L_m = float(sp.get("bar_len", sp.get("L_extra", sp.get("L", 3.8))))
+                B_m = float(sp.get("B_zone", sp.get("w_ms", 2.4)))
+                bay_lbl = str(sp.get("bay_label", sp.get("panel_id", "Mid-span Bay")))
+                clean_btm_table.append({
+                    "comp": f"Bottom Extra Rebar ({s_dir}-Dir)",
+                    "zone": bay_lbl,
+                    "rft": f"+ {nb}Ø{dia}/m",
+                    "cut_len": f"L = {L_m:.2f} m",
+                    "notes": f"Band B = {B_m:.2f} m (Mid-span)",
+                })
+    if not has_btm_extra:
+        clean_btm_table.append({
+            "comp": "Bottom Extra Reinforcement",
+            "zone": "All Spans (X & Y Directions)",
+            "rft": "None Required",
+            "cut_len": "—",
+            "notes": "Base mesh is 100% sufficient for all positive moments",
+        })
+
+    # 6. Page 7 Slab Top Reinforcement Table (Base Mesh & Cantilever Forks)
+    clean_top_table = []
+    clean_top_table.append({
+        "comp": "Top Base Mesh (T1 & T2)",
+        "zone": "Full Slab Area (Both Directions)",
+        "rft": _clean_cell_to_en(mesh_top_str),
+        "cut_len": "Continuous across full slab",
+        "notes": "Top Layer for Shrinkage & Secondary Moments",
+    })
+    has_cant_forks = False
+    if cant_rft_list:
+        for cr in cant_rft_list:
+            lc = float(cr.get("length", 0.0))
+            if lc > 0.05:
+                has_cant_forks = True
+                side = str(cr.get("side", "Cantilever")).title()
+                rft_txt = str(cr.get("rft_callout", "6Ø12/m'"))
+                ext_l = float(cr.get("ext_length", lc * 1.5))
+                L_tot = lc + ext_l
+                clean_top_table.append({
+                    "comp": "Cantilever Forks (U-bars / Shok)",
+                    "zone": f"{side} Cantilever (L={lc:.2f}m)",
+                    "rft": _clean_cell_to_en(rft_txt),
+                    "cut_len": f"L_tot = {L_tot:.2f} m",
+                    "notes": f"Ext inside = {ext_l:.2f}m (1.5 × L_cant)",
+                })
+    elif cantilevers:
+        for c_side, c_val in cantilevers.items():
+            if float(c_val or 0.0) > 0.05:
+                has_cant_forks = True
+                lc = float(c_val)
+                ext_l = lc * 1.5
+                clean_top_table.append({
+                    "comp": "Cantilever Forks (U-bars / Shok)",
+                    "zone": f"{c_side.title()} Cantilever (L={lc:.2f}m)",
+                    "rft": "6Ø12/m",
+                    "cut_len": f"L_tot = {lc + ext_l:.2f} m",
+                    "notes": f"Ext inside = {ext_l:.2f}m (1.5 × L_cant)",
+                })
+    if not has_cant_forks:
+        clean_top_table.append({
+            "comp": "Cantilever Forks / Top Extra",
+            "zone": "Perimeter & Cantilever Zones",
+            "rft": "None Required",
+            "cut_len": "—",
+            "notes": "No exterior cantilevers — Top base mesh covers entire slab",
+        })
+
+    # 7. Page 8 Column Caps Top Reinforcement Table
+    clean_caps_table = []
+    has_cap_extras = False
+    if top_extra_cols:
+        for cap in top_extra_cols:
+            req_as = float(cap.get("As_extra_req", cap.get("req_as", cap.get("As_extra", 0.0))))
+            is_nec = cap.get("is_needed", False) or (req_as > 0.05) or (int(cap.get("bars_per_m", 0)) > 0)
+            if is_nec:
+                has_cap_extras = True
+                cid = str(cap.get("col_id", cap.get("id", "C"))).split("(")[0].strip()
+                ctype = str(cap.get("type", "Column")).title()
+                grid_txt = str(cap.get("grid", "—"))
+                bx = int(cap.get("bars_per_m_x", cap.get("bars_per_m", 4)))
+                by = int(cap.get("bars_per_m_y", cap.get("bars_per_m", 4)))
+                dia = int(cap.get("dia_extra", cap.get("dia", 12)))
+                Lx = float(cap.get("L_extra_x", cap.get("L_extra", 2.40)))
+                Ly = float(cap.get("L_extra_y", cap.get("L_extra", 2.40)))
+                wx = float(cap.get("cap_width_x", cap.get("cap_width", 2.0)))
+                wy = float(cap.get("cap_width_y", cap.get("cap_width", 2.0)))
+                clean_caps_table.append({
+                    "col": cid,
+                    "loc": f"{ctype} ({grid_txt})",
+                    "x_rft": f"+ {bx}Ø{dia}/m",
+                    "y_rft": f"+ {by}Ø{dia}/m",
+                    "cut_len": f"Lx={Lx:.2f}m, Ly={Ly:.2f}m",
+                    "band": f"Bx={wx:.2f}m, By={wy:.2f}m",
+                })
+    if not has_cap_extras:
+        clean_caps_table.append({
+            "col": "All Columns (C1 to C_max)",
+            "loc": "Full Structural Grid (Over-Column Heads)",
+            "x_rft": "Safe by Base Mesh",
+            "y_rft": "Safe by Base Mesh",
+            "cut_len": "—",
+            "band": "Top base mesh covers negative moments & punching shear",
+        })
+
     html_content = f"""<!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en" dir="ltr">
 <head>
     <meta charset="UTF-8">
-    <title>مخرجات التصميم الإنشائي المختصرة — {project_name}</title>
+    <title>Concise Structural Design Outputs — {project_name}</title>
     <style>
         @page {{
             size: A4 portrait;
@@ -1234,15 +1433,15 @@ def generate_concise_design_report_html(
             box-sizing: border-box;
             margin: 0;
             padding: 0;
-            font-family: 'Segoe UI', 'Cairo', 'Amiri', Tahoma, Arial, sans-serif;
+            font-family: 'Segoe UI', 'Arial', 'Calibri', sans-serif;
         }}
         body {{
             background: #ffffff;
             color: #0f172a;
             font-size: 11pt;
             line-height: 1.5;
-            direction: rtl;
-            text-align: right;
+            direction: ltr;
+            text-align: left;
         }}
         .pdf-page {{
             width: 100%;
@@ -1288,7 +1487,7 @@ def generate_concise_design_report_html(
             font-weight: 800;
             padding: 4px 10px;
             border-radius: 6px;
-            text-align: left;
+            text-align: right;
         }}
         /* Drawing Area */
         .drawing-container {{
@@ -1318,7 +1517,7 @@ def generate_concise_design_report_html(
         table.design-table {{
             width: 100%;
             border-collapse: collapse;
-            font-size: 8.5pt;
+            font-size: 9.5pt;
             text-align: center;
             border: 1.2px solid #cbd5e1;
             border-radius: 6px;
@@ -1328,14 +1527,16 @@ def generate_concise_design_report_html(
             background: #1e3a8a;
             color: #ffffff;
             font-weight: 800;
-            padding: 5px 6px;
+            padding: 5.5px 7px;
+            font-size: 9.5pt;
             border: 1px solid #0f172a;
         }}
         table.design-table td {{
-            padding: 4.5px 6px;
+            padding: 5px 7px;
             border: 1px solid #e2e8f0;
             font-weight: 600;
             color: #1e293b;
+            font-size: 9.5pt;
         }}
         table.design-table tr:nth-child(even) {{
             background: #f8fafc;
@@ -1344,7 +1545,8 @@ def generate_concise_design_report_html(
         .info-card {{
             background: #f8fafc;
             border: 1.2px solid #cbd5e1;
-            border-right: 5px solid #1e3a8a;
+            border-left: 5px solid #1e3a8a;
+            border-right: none;
             border-radius: 6px;
             padding: 8px 12px;
             font-size: 9pt;
@@ -1389,13 +1591,13 @@ def generate_concise_design_report_html(
 <body>
 
     <!-- ══════════════════════════════════════════════════════════════════════
-         PAGE 1: Inputs Plan View (مسقط أفقي للمدخلات الإنشائية - صامت)
+         PAGE 1: Inputs Plan View
          ══════════════════════════════════════════════════════════════════════ -->
     <div class="pdf-page">
         <div class="page-header">
             <div>
-                <div class="header-title">الصفحة الأولى: مسقط أفقي للمدخلات الإنشائية (Inputs Plan View)</div>
-                <div class="header-subtitle">رسم هندسي صامت بالأبعاد فقط للبلاطات والكمرات والأعمدة والفراغات (طبقاً لـ ECP 203)</div>
+                <div class="header-title">Inputs Plan View</div>
+                <div class="header-subtitle">Engineering geometry and dimensioned layout for slabs, beams, columns and openings (ECP 203)</div>
             </div>
             <div class="header-badge">Page 1 of 8</div>
         </div>
@@ -1406,59 +1608,59 @@ def generate_concise_design_report_html(
 
         <div class="info-card">
             <div style="font-size: 10pt; font-weight: 800; color: #1e3a8a; margin-bottom: 4px;">
-                📋 ملخص البيانات الهندسية للمشروع (Project Structural Data Summary):
+                📋 Project Structural Parameters & Design Criteria:
             </div>
             <div class="info-grid">
                 <div class="info-item">
-                    <div class="info-item-label">مسطح البلاطة</div>
+                    <div class="info-item-label">Slab Area</div>
                     <div class="info-item-val">{slab_area_val:.1f} m²</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-item-label">سُمك البلاطة ts</div>
+                    <div class="info-item-label">Slab Thickness ts</div>
                     <div class="info-item-val">{ts:.0f} cm</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-item-label">عدد الأدوار</div>
-                    <div class="info-item-val">{num_floors} طوابق</div>
+                    <div class="info-item-label">Number of Stories</div>
+                    <div class="info-item-val">{num_floors} Floors</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-item-label">الحمل الأقصى Wu</div>
+                    <div class="info-item-label">Ultimate Load Wu</div>
                     <div class="info-item-val">{Wu:.2f} t/m²</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-item-label">رتبة الخرسانة Fcu</div>
+                    <div class="info-item-label">Concrete Strength Fcu</div>
                     <div class="info-item-val">{Fcu:.0f} kg/cm²</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-item-label">إجهاد الحديد Fy</div>
+                    <div class="info-item-label">Steel Yield Fy</div>
                     <div class="info-item-val">{Fy:.0f} kg/cm²</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-item-label">الحمل الحي LL</div>
+                    <div class="info-item-label">Live Load LL</div>
                     <div class="info-item-val">{LL:.2f} t/m²</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-item-label">حمل التشطيبات SDL</div>
+                    <div class="info-item-label">Superimposed Dead Load SDL</div>
                     <div class="info-item-val">{SDL:.2f} t/m²</div>
                 </div>
             </div>
         </div>
 
         <div class="page-footer">
-            <span>المشروع: {project_name}</span>
-            <span>نظام التصميم الإنشائي المتكامل — ECP 203</span>
-            <span>الصفحة 1 من 8</span>
+            <span>Project: {project_name}</span>
+            <span>Integrated Structural Design System — ECP 203</span>
+            <span>Page 1 of 8</span>
         </div>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════════
-         PAGE 2: Columns Design (ملخص تصميم الأعمدة بعد النمذجة)
+         PAGE 2: Columns Design
          ══════════════════════════════════════════════════════════════════════ -->
     <div class="pdf-page">
         <div class="page-header">
             <div>
-                <div class="header-title">الصفحة الثانية: ملخص تصميم الأعمدة بعد النمذجة (Columns Design)</div>
-                <div class="header-subtitle">مسقط توزيع نماذج الأعمدة (C1, C2, C3) وجدول التصميم الإنشائي الحاكم لعدد {num_floors} طابق</div>
+                <div class="header-title">Columns Design & Layout Plan</div>
+                <div class="header-subtitle">Column models layout (C1, C2, C3) and governing axial design schedule for {num_floors} floors</div>
             </div>
             <div class="header-badge">Page 2 of 8</div>
         </div>
@@ -1471,36 +1673,34 @@ def generate_concise_design_report_html(
             <table class="design-table">
                 <thead>
                     <tr>
-                        <th>نموذج العمود (Model Tag)</th>
-                        <th>موقع وتصنيف العمود</th>
-                        <th>أبعاد القطاع الخرساني b × t (cm)</th>
-                        <th>التسليح الرأسي الطولي (Vertical Rebar)</th>
-                        <th>تسليح الكانات (Ties / Stirrups)</th>
-                        <th>أقصى حمل تصميمي Pu ({num_floors}F)</th>
-                        <th>عدد الأعمدة بالمبنى</th>
+                        <th>Column Model (Tag)</th>
+                        <th>Section b × t (cm)</th>
+                        <th>Longitudinal Rebar</th>
+                        <th>Ties / Stirrups</th>
+                        <th>Column Count</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {_render_html_table_rows(cols_table_data)}
+                    {_render_html_table_rows(clean_cols_table)}
                 </tbody>
             </table>
         </div>
 
         <div class="page-footer">
-            <span>المشروع: {project_name}</span>
-            <span>نظام تصميم الأعمدة الخرسانية — Direct Axial Design (ECP 203)</span>
-            <span>الصفحة 2 من 8</span>
+            <span>Project: {project_name}</span>
+            <span>Columns Direct Axial Design — ECP 203</span>
+            <span>Page 2 of 8</span>
         </div>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════════
-         PAGE 3: Footings Design (ملخص تصميم القواعد المسلحة بعد النمذجة)
+         PAGE 3: Footings Design
          ══════════════════════════════════════════════════════════════════════ -->
     <div class="pdf-page">
         <div class="page-header">
             <div>
-                <div class="header-title">الصفحة الثالثة: ملخص تصميم القواعد المسلحة بعد النمذجة (Footings Design)</div>
-                <div class="header-subtitle">مسقط توزيع نماذج القواعد (F1, F2, F3) وجدول أبعاد وتسليح الخرسانة العادية والمسلحة</div>
+                <div class="header-title">Reinforced Concrete Footings Design</div>
+                <div class="header-subtitle">Isolated footings layout (F1, F2, F3) with reinforced & plain concrete dimensions and schedule</div>
             </div>
             <div class="header-badge">Page 3 of 8</div>
         </div>
@@ -1511,39 +1711,43 @@ def generate_concise_design_report_html(
 
         <div class="table-container">
             <table class="design-table">
+                <colgroup>
+                    <col style="width: 15%;">
+                    <col style="width: 20%;">
+                    <col style="width: 18%;">
+                    <col style="width: 18%;">
+                    <col style="width: 29%;">
+                </colgroup>
                 <thead>
                     <tr>
-                        <th>نموذج القاعدة (Model)</th>
-                        <th>النوع والتصنيف</th>
-                        <th>الأعمدة المرتكزة (Columns)</th>
-                        <th>أقصى حمل تصميمي Pu (ton)</th>
-                        <th>أبعاد المسلحة R.C. (cm)</th>
-                        <th>أبعاد العادية P.C. (cm)</th>
-                        <th>التسليح والتفاصيل الإنشائية</th>
-                        <th>حالة التحقق الإنشائي (Status)</th>
+                        <th>Footing Model (Tag)</th>
+                        <th>Supported Columns</th>
+                        <th>RC Footing b × a × t (cm)</th>
+                        <th>PC Footing b × a × t (cm)</th>
+                        <th>Reinforcement Details</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {_render_html_table_rows(ftgs_table_data)}
+                    {_render_html_table_rows(clean_ftgs_table)}
                 </tbody>
             </table>
         </div>
 
         <div class="page-footer">
-            <span>المشروع: {project_name}</span>
-            <span>تصميم أساسات المبنى — Module 3 (ECP 203)</span>
-            <span>الصفحة 3 من 8</span>
+            <span>Project: {project_name}</span>
+            <span>Building Foundation Design — ECP 203</span>
+            <span>Page 3 of 8</span>
         </div>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════════
-         PAGE 4: Ground Beams Design (ملخص تصميم السملات الأرضية)
+         PAGE 4: Ground Beams Design
          ══════════════════════════════════════════════════════════════════════ -->
     <div class="pdf-page">
         <div class="page-header">
             <div>
-                <div class="header-title">الصفحة الرابعة: ملخص تصميم السملات الأرضية (Ground Beams Design)</div>
-                <div class="header-subtitle">مسقط توزيع نماذج السملات (B1, B2, B3) وجدول القطاعات والتسليح والكانات والبراندات</div>
+                <div class="header-title">Ground Beams Design & Schedule</div>
+                <div class="header-subtitle">Ground beams layout (B1, B2, B3) with cross-sections, reinforcement, ties and skin bars</div>
             </div>
             <div class="header-badge">Page 4 of 8</div>
         </div>
@@ -1554,39 +1758,45 @@ def generate_concise_design_report_html(
 
         <div class="table-container">
             <table class="design-table">
+                <colgroup>
+                    <col style="width: 14%;">
+                    <col style="width: 16%;">
+                    <col style="width: 18%;">
+                    <col style="width: 18%;">
+                    <col style="width: 17%;">
+                    <col style="width: 17%;">
+                </colgroup>
                 <thead>
                     <tr>
-                        <th>النموذج (Mark)</th>
-                        <th>التصنيف الإنشائي الحاكم</th>
-                        <th>القطاع b × t (cm)</th>
-                        <th>التسليح السفلي (Bottom Rft)</th>
-                        <th>التسليح العلوي (Top Rft)</th>
-                        <th>الكانات (Stirrups)</th>
-                        <th>براندات الجوانب (Side Bars)</th>
-                        <th>العدد بالمشروع</th>
+                        <th>Beam Mark</th>
+                        <th>Section b × t (cm)</th>
+                        <th>Bottom Reinforcement</th>
+                        <th>Top Reinforcement</th>
+                        <th>Stirrups</th>
+                        <th>Side Shrinkage Bars</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {_render_html_table_rows(gb_table_data)}
+                    {_render_html_table_rows(clean_gb_table)}
                 </tbody>
             </table>
         </div>
 
         <div class="page-footer">
-            <span>المشروع: {project_name}</span>
-            <span>تصميم السملات والميدات الأرضية — Module 11 (ECP 203)</span>
-            <span>الصفحة 4 من 8</span>
+            <span>Project: {project_name}</span>
+            <span>Ground Beams & Straps Design — ECP 203</span>
+            <span>Page 4 of 8</span>
         </div>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════════
-         PAGE 5: Slab Beams & Cantilevers Design (ملخص كمرات السقف والكوابيل)
+         PAGE 5: Slab Beams & Cantilevers Design
          ══════════════════════════════════════════════════════════════════════ -->
     <div class="pdf-page">
         <div class="page-header">
             <div>
-                <div class="header-title">الصفحة الخامسة: ملخص تصميم كمرات السقف والكوابيل (Slab Beams & Cantilevers)</div>
-                <div class="header-subtitle">مسقط توزيع نماذج الكمرات والكوابيل (B1, B2, B3, CB1) وجدول القطاعات والتسليح</div>
+                <div class="header-title">Roof Beams & Cantilevers Design</div>
+                <div class="header-subtitle">Roof drop beams and cantilever layout (B1, B2, B3, CB1) with structural schedule</div>
             </div>
             <div class="header-badge">Page 5 of 8</div>
         </div>
@@ -1598,25 +1808,21 @@ def generate_concise_design_report_html(
         <div class="table-container">
             <table class="design-table">
                 <colgroup>
-                    <col style="width: 10%;">
-                    <col style="width: 20%;">
-                    <col style="width: 11%;">
                     <col style="width: 14%;">
-                    <col style="width: 15%;">
-                    <col style="width: 11%;">
-                    <col style="width: 10%;">
-                    <col style="width: 9%;">
+                    <col style="width: 16%;">
+                    <col style="width: 18%;">
+                    <col style="width: 18%;">
+                    <col style="width: 17%;">
+                    <col style="width: 17%;">
                 </colgroup>
                 <thead>
                     <tr>
-                        <th style="width: 10%;">النموذج (Mark)</th>
-                        <th style="width: 20%;">التصنيف والأهمية بالسقف</th>
-                        <th style="width: 11%;">القطاع b × t (cm)</th>
-                        <th style="width: 14%;">التسليح السفلي (Bottom Rft)</th>
-                        <th style="width: 15%;">التسليح العلوي / الشوك (Top Rft)</th>
-                        <th style="width: 11%;">الكانات (Stirrups)</th>
-                        <th style="width: 10%;">براندات الجوانب (Side Bars)</th>
-                        <th style="width: 9%;">العدد بالسقف</th>
+                        <th>Beam Mark</th>
+                        <th>Section b × t (cm)</th>
+                        <th>Bottom Reinforcement</th>
+                        <th>Top Rebar / Forks</th>
+                        <th>Stirrups</th>
+                        <th>Side Shrinkage Bars</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1626,20 +1832,20 @@ def generate_concise_design_report_html(
         </div>
 
         <div class="page-footer">
-            <span>المشروع: {project_name}</span>
-            <span>تصميم كمرات السقف الساقطة والكوابيل — ECP 203</span>
-            <span>الصفحة 5 من 8</span>
+            <span>Project: {project_name}</span>
+            <span>Roof Drop Beams & Cantilevers Design — ECP 203</span>
+            <span>Page 5 of 8</span>
         </div>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════════
-         PAGE 6: Slab Bottom Reinforcement (مسقط تسليح الرقة السفلية)
+         PAGE 6: Slab Bottom Reinforcement
          ══════════════════════════════════════════════════════════════════════ -->
     <div class="pdf-page">
         <div class="page-header">
             <div>
-                <div class="header-title">الصفحة السادسة: مسقط أفقي لتسليح الطبقة السفلية للبلاطة (Slab Bottom Reinforcement)</div>
-                <div class="header-subtitle">توزيع الشبكة السفلية الرئيسية وتوقيع الحديد الإضافي السفلي بالاتجاهين وقيمه مباشرة على الرسم</div>
+                <div class="header-title">Slab Bottom Reinforcement Plan</div>
+                <div class="header-subtitle">Bottom base mesh layout and orthogonal bottom extra reinforcement detailed schedule</div>
             </div>
             <div class="header-badge">Page 6 of 8</div>
         </div>
@@ -1648,32 +1854,45 @@ def generate_concise_design_report_html(
             <img class="drawing-img" src="{img_page6_b64}" alt="Slab Bottom Reinforcement Plan">
         </div>
 
-        <div class="info-card">
-            <div style="font-size: 10pt; font-weight: 800; color: #166534; margin-bottom: 4px;">
-                🔩 اشتراطات وتفاصيل تسليح الرقة السفلية للبلاطة اللاكمرية (ECP 203):
-            </div>
-            <div style="font-size: 9pt; color: #334155; line-height: 1.7;">
-                • <b>الشبكة السفلية الأساسية:</b> <span style="color:#15803d; font-weight:800;">{mesh_btm_str}</span> ممتدة بكامل مسطح البلاطة في الاتجاهين (فرش اتجاه X وغطاء اتجاه Y).
-                <br>• <b>الحديد الإضافي السفلي:</b> يُركب في منتصف البحور في مناطق العزوم الموجبة القصوى بارتفاع مسافة التماسك والتثبيت المقررة كودياً.
-                <br>• يتم تفريد الأسياخ الإضافية السفلية بطول صافي لا يقل عن <span dir="ltr">0.7 Ln</span> من بحر الباكية مع التجنيش والربط طبقاً لأصول الصناعة.
-            </div>
+        <div class="table-container">
+            <table class="design-table">
+                <colgroup>
+                    <col style="width: 22%;">
+                    <col style="width: 24%;">
+                    <col style="width: 18%;">
+                    <col style="width: 18%;">
+                    <col style="width: 18%;">
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th>Reinforcement Component</th>
+                        <th>Zone / Location</th>
+                        <th>Rebar Details</th>
+                        <th>Cut Length (L)</th>
+                        <th>Distribution Band / Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {_render_html_table_rows(clean_btm_table)}
+                </tbody>
+            </table>
         </div>
 
         <div class="page-footer">
-            <span>المشروع: {project_name}</span>
-            <span>تفريد وتسليح البلاطة اللاكمرية (Bottom Rebar Plan)</span>
-            <span>الصفحة 6 من 8</span>
+            <span>Project: {project_name}</span>
+            <span>Flat Slab Bottom Reinforcement Plan — ECP 203</span>
+            <span>Page 6 of 8</span>
         </div>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════════
-         PAGE 7: Slab Top Reinforcement (مسقط تسليح الرقة العلوية + شوك الكوابيل)
+         PAGE 7: Slab Top Reinforcement
          ══════════════════════════════════════════════════════════════════════ -->
     <div class="pdf-page">
         <div class="page-header">
             <div>
-                <div class="header-title">الصفحة السابعة: مسقط أفقي لتسليح الطبقة العلوية للبلاطة (Slab Top Reinforcement)</div>
-                <div class="header-subtitle">توزيع الشبكة العلوية الرئيسية وتفاصيل شوك الكوابيل وامتدادها داخل البحور المجاورة</div>
+                <div class="header-title">Slab Top Reinforcement & Cantilever Forks Plan</div>
+                <div class="header-subtitle">Top base mesh distribution and cantilever U-bars (shok) extension schedule</div>
             </div>
             <div class="header-badge">Page 7 of 8</div>
         </div>
@@ -1682,32 +1901,45 @@ def generate_concise_design_report_html(
             <img class="drawing-img" src="{img_page7_b64}" alt="Slab Top Reinforcement Plan">
         </div>
 
-        <div class="info-card">
-            <div style="font-size: 10pt; font-weight: 800; color: #1e40af; margin-bottom: 4px;">
-                📐 اشتراطات وتفاصيل تسليح الرقة العلوية وشوك الكوابيل (ECP 203):
-            </div>
-            <div style="font-size: 9pt; color: #334155; line-height: 1.7;">
-                • <b>الشبكة العلوية الأساسية:</b> <span style="color:#1d4ed8; font-weight:800;">{mesh_top_str}</span> لمقاومة الانكماش والعزوم الثانوية بكامل المسطح.
-                <br>• <b>شوك الكوابيل (Cantilever Forks):</b> تمتد بطول <span dir="ltr">1.5 × L_cant</span> على الأقل داخل البحر المجاور للعمود لمقاومة عزوم الاتزان والانقلاب.
-                <br>• يتم تركيب كراسي حديد (Chairs) بقطر <span dir="ltr">Ø12</span> بمعدل كرسي/م² للحفاظ على الـ Cover الخرساني الفعال للرقة العلوية.
-            </div>
+        <div class="table-container">
+            <table class="design-table">
+                <colgroup>
+                    <col style="width: 22%;">
+                    <col style="width: 24%;">
+                    <col style="width: 18%;">
+                    <col style="width: 18%;">
+                    <col style="width: 18%;">
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th>Reinforcement Component</th>
+                        <th>Zone / Location</th>
+                        <th>Rebar Details</th>
+                        <th>Cut Length (L)</th>
+                        <th>Anchorage & Extension Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {_render_html_table_rows(clean_top_table)}
+                </tbody>
+            </table>
         </div>
 
         <div class="page-footer">
-            <span>المشروع: {project_name}</span>
-            <span>تفريد وتسليح البلاطة اللاكمرية (Top Rebar & Cantilever Forks Plan)</span>
-            <span>الصفحة 7 من 8</span>
+            <span>Project: {project_name}</span>
+            <span>Flat Slab Top Reinforcement & Cantilevers — ECP 203</span>
+            <span>Page 7 of 8</span>
         </div>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════════
-         PAGE 8: Column Caps Reinforcement (مسقط كبات الأعمدة - الإضافي العلوي)
+         PAGE 8: Column Caps Reinforcement
          ══════════════════════════════════════════════════════════════════════ -->
     <div class="pdf-page">
         <div class="page-header">
             <div>
-                <div class="header-title">الصفحة الثامنة: مسقط تسليح الكبات فوق الأعمدة (Column Caps Top Reinforcement)</div>
-                <div class="header-subtitle">الحديد الإضافي العلوي فوق رؤوس الأعمدة بالاتجاهين لمقاومة العزوم السالبة والقص الثاقب (Punching)</div>
+                <div class="header-title">Column Caps Top Reinforcement Plan</div>
+                <div class="header-subtitle">Top extra rebar over column heads for negative moments and punching shear resistance (ECP 203)</div>
             </div>
             <div class="header-badge">Page 8 of 8</div>
         </div>
@@ -1716,21 +1948,36 @@ def generate_concise_design_report_html(
             <img class="drawing-img" src="{img_page8_b64}" alt="Column Caps Plan">
         </div>
 
-        <div class="info-card">
-            <div style="font-size: 10pt; font-weight: 800; color: #991b1b; margin-bottom: 4px;">
-                🔴 معايير واشتراطات كبات ورؤوس الأعمدة (Column Caps & Punching Resistance):
-            </div>
-            <div style="font-size: 9pt; color: #334155; line-height: 1.7;">
-                • <b>طول الامتداد:</b> يمتد حديد الكابة مسافة لا تقل عن <span dir="ltr">L/3</span> في كل اتجاه مقاساً من سنتر العمود لتغطية العزم السالب الحاكم.
-                <br>• <b>مقاومة القص الثاقب:</b> يعمل حديد الكبات بالتعاون مع سمك البلاطة على ضمان أمان كافة الأعمدة بنسبة <span dir="ltr">100%</span> ضد الـ Punching Shear.
-                <br>• تُثبت كبات الأعمدة فوق الرقة السفلية مع تجنيش الأطراف لضمان الترابط التام مع الخرسانة.
-            </div>
+        <div class="table-container">
+            <table class="design-table">
+                <colgroup>
+                    <col style="width: 15%;">
+                    <col style="width: 20%;">
+                    <col style="width: 17%;">
+                    <col style="width: 17%;">
+                    <col style="width: 16%;">
+                    <col style="width: 15%;">
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th>Column Tag (ID)</th>
+                        <th>Location & Grid</th>
+                        <th>Top Extra Rebar (X-Dir)</th>
+                        <th>Top Extra Rebar (Y-Dir)</th>
+                        <th>Cut Length (L)</th>
+                        <th>Band Width (B)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {_render_html_table_rows(clean_caps_table)}
+                </tbody>
+            </table>
         </div>
 
         <div class="page-footer">
-            <span>المشروع: {project_name}</span>
-            <span>تفاصيل كبات الأعمدة — Column Caps Layout Plan (ECP 203)</span>
-            <span>الصفحة 8 من 8</span>
+            <span>Project: {project_name}</span>
+            <span>Column Caps Layout Plan — ECP 203</span>
+            <span>Page 8 of 8</span>
         </div>
     </div>
 
@@ -1740,12 +1987,128 @@ def generate_concise_design_report_html(
     return html_content
 
 
+def _clean_cell_to_en(val: Any) -> str:
+    """Translates Arabic phrases and units into clean structural engineering English, removing any residual Arabic text."""
+    if val is None:
+        return "—"
+    s = str(val).strip()
+    if not s or s in ["—", "-", "None"]:
+        return "—"
+
+    # Extensive replacements for all Arabic technical engineering terms
+    replacements = [
+        # Columns & classification
+        ("أعمدة داخلية", "Interior Columns"),
+        ("أعمدة طرفية", "Edge Columns"),
+        ("أعمدة ركن", "Corner Columns"),
+        ("أعمدة جانبية", "Edge Columns"),
+        ("عمود ركن", "Corner Col"),
+        ("داخلي", "Interior"),
+        ("طرفي", "Edge"),
+        ("ركن", "Corner"),
+        ("أركان", "Corners"),
+        ("داخلية", "Interior"),
+        ("طرفية", "Edge"),
+        ("جانبي", "Side"),
+        ("جانبية", "Side"),
+        # Governing & Design criteria
+        ("الحاكم", "Gov"),
+        ("حاكم", "Gov"),
+        ("أقصى عمود", "Max Col"),
+        ("أقصى", "Max"),
+        # Beams
+        ("سملات قطاع ثقيل", "Heavy Ground Beam"),
+        ("سملات قطاع متوسط", "Medium Ground Beam"),
+        ("سملات قطاع خفيف", "Light Ground Beam"),
+        ("كمرات ساقطة ثقيل", "Heavy Drop Beam"),
+        ("كمرات ساقطة متوسط", "Medium Drop Beam"),
+        ("كمرات ساقطة خفيف", "Light Drop Beam"),
+        ("كمرات كابولية", "Cantilever Beam"),
+        ("ساقطة ثقيل", "Heavy Drop Beam"),
+        ("ساقطة متوسط", "Medium Drop Beam"),
+        ("ساقطة خفيف", "Light Drop Beam"),
+        ("كابولية بشوك", "Cantilever Beam"),
+        ("كابولي", "Cantilever"),
+        ("كوابيل", "Cantilevers"),
+        ("سملة", "GB"),
+        ("سملات", "Ground Beams"),
+        ("كمرة", "Beam"),
+        ("كمرات", "Beams"),
+        # Footings
+        ("قاعدة منفصلة", "Isolated Footing"),
+        ("قواعد منفصلة", "Isolated Footings"),
+        ("قاعدة مشتركة", "Combined Footing"),
+        ("قواعد مشتركة", "Combined Footings"),
+        ("قواعد", "Footings"),
+        ("قاعدة", "Footing"),
+        # Structural status & reinforcement terms
+        ("Safe ومحقق للكود", "Safe (ECP 203)"),
+        ("آمن ومحقق للكود", "Safe (ECP 203)"),
+        ("آمن تماماً", "Safe (ECP 203)"),
+        ("آمن بالشبكة", "Safe by Mesh"),
+        ("آمن", "Safe"),
+        ("غير آمن", "Unsafe"),
+        ("محقق", "Compliant"),
+        ("للكود", "to Code"),
+        ("فرش:", "Btm (Main):"),
+        ("فرش", "Btm (Main)"),
+        ("غطاء:", "Btm (Sec):"),
+        ("غطاء", "Btm (Sec)"),
+        ("علوي:", "Top:"),
+        ("علوي", "Top"),
+        ("سفلي:", "Bottom:"),
+        ("سفلي", "Bottom"),
+        ("كانات:", "Stirrups:"),
+        ("كانات", "Stirrups"),
+        ("كانة", "Stirrup"),
+        ("براندات الانكماش", "Side Shrinkage Bars"),
+        ("براندات جانبية", "Side Bars"),
+        ("براندات الجوانب", "Side Bars"),
+        ("براندات:", "Side:"),
+        ("براندات", "Side Bars"),
+        ("انكماش", "Shrinkage"),
+        ("تسليح جانبي", "Side Rebar"),
+        ("تسليح رئيسي", "Main Rebar"),
+        ("تسليح", "Rebar"),
+        ("شوك", "Forks"),
+        ("شوكة", "Forks"),
+        ("عمود", "Cols"),
+        ("أعمدة", "Cols"),
+        ("طوابق", "Floors"),
+        ("طابق", "Floors"),
+        ("دور", "Floors"),
+        ("أدوار", "Floors"),
+        ("سقف", "Slab"),
+        ("بلاطة", "Slab"),
+        ("/م'", "/m"),
+        ("/م", "/m"),
+    ]
+    for ar_term, en_term in replacements:
+        s = s.replace(ar_term, en_term)
+
+    # Secondary regex sweep: completely purge any residual Arabic characters
+    import re
+    if re.search(r'[\u0600-\u06FF]', s):
+        s = re.sub(r'[\u0600-\u06FF]+', '', s)
+        s = re.sub(r'\(\s*\)', '', s)
+        s = re.sub(r'\[\s*\]', '', s)
+        s = re.sub(r'\{\s*\}', '', s)
+        s = re.sub(r'\|\s*\|', '|', s)
+        s = re.sub(r'—\s*—', '—', s)
+        s = re.sub(r'\s+', ' ', s).strip()
+        s = s.strip(' |-,:')
+        if not s:
+            s = "—"
+
+    return s
+
+
 def _render_html_table_rows(data_rows: List[Dict[str, Any]]) -> str:
-    """Helper to convert list of dict rows to clean HTML table rows."""
+    """Helper to convert list of dict rows to clean English HTML table rows."""
     if not data_rows:
-        return '<tr><td colspan="8">لا توجد بيانات متاحة</td></tr>'
+        return '<tr><td colspan="8">No data available</td></tr>'
     html_rows = []
     for r in data_rows:
-        tds = "".join([f"<td>{val}</td>" for val in r.values()])
+        tds = "".join([f"<td>{_clean_cell_to_en(val)}</td>" for val in r.values()])
         html_rows.append(f"<tr>{tds}</tr>")
     return "\n".join(html_rows)
