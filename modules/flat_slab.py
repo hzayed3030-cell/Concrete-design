@@ -22331,10 +22331,12 @@ def render(is_standalone: bool = False):
         from modules.two_col_footings import (
             design_isolated_footing_model,
             design_combined_footing_model,
+            verify_isolated_footing_manual,
             check_building_clearances_and_overlaps,
             draw_foundation_layout_plan,
             classify_and_design_building_foundations,
             draw_comprehensive_foundation_sketch,
+            safe_to_excel_bytes,
         )
 
         with st.expander(f"🪸 Foundations Design — {num_floors} Floors (تصميم الاساسات)", expanded=False):
@@ -22653,9 +22655,16 @@ def render(is_standalone: bool = False):
                     m for k, m in models_d.items()
                     if m and isinstance(m, dict) and k.startswith("F") and k not in ["Interior", "Edge", "Corner"]
                 ]
+                active_ftg_models.sort(
+                    key=lambda m: (0, int(m["model_id"][1:])) if str(m.get("model_id", ""))[1:].isdigit() else (1, str(m.get("model_id", "")))
+                )
 
                 cur_ftg_overrides = dict(ftg_user_overrides)
-                has_any_ftg_ov = any(f"{m['model_id']}_phi" in cur_ftg_overrides or f"{m['model_id']}_t" in cur_ftg_overrides for m in active_ftg_models)
+                _ov_suffixes = ("_phi", "_t", "_L_cm", "_B_cm", "_nx", "_ny", "_manual_confirmed")
+                has_any_ftg_ov = any(
+                    any(f"{m['model_id']}{suf}" in cur_ftg_overrides for suf in _ov_suffixes)
+                    for m in active_ftg_models
+                )
 
                 if has_any_ftg_ov:
                     hdr_c1, hdr_c2 = st.columns([4.2, 1.3])
@@ -22665,11 +22674,24 @@ def render(is_standalone: bool = False):
                         if st.button("🔄 استعادة القيم التصميمية", key=f"{prefix}btn_reset_ftg_overrides", use_container_width=True):
                             for m in active_ftg_models:
                                 mk = m["model_id"]
-                                cur_ftg_overrides.pop(f"{mk}_phi", None)
-                                cur_ftg_overrides.pop(f"{mk}_t", None)
+                                for suf in _ov_suffixes:
+                                    cur_ftg_overrides.pop(f"{mk}{suf}", None)
                                 st.session_state.pop(f"{prefix}w_ftg_{mk.lower()}_phi", None)
                                 st.session_state.pop(f"{prefix}inp_ftg_depth_{mk}", None)
+                                for wk in (f"manual_L_{mk}", f"manual_B_{mk}", f"manual_t_{mk}", f"manual_Phi_{mk}", f"manual_Nx_{mk}", f"manual_Ny_{mk}"):
+                                    st.session_state.pop(wk, None)
+                            st.session_state.pop("manual_footings", None)
+                            st.session_state.pop("confirmed_manual_footings", None)
+                            st.session_state["ftg_outputs_collapsed"] = False
+                            st.session_state["ftg_outputs_exp_ver"] = int(st.session_state.get("ftg_outputs_exp_ver", 0)) + 1
+                            st.session_state.pop(f"{prefix}foundation_sketch_b64", None)
+                            st.session_state.pop(f"{prefix}_last_outputs_pdf_bytes", None)
+                            st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
+                            st.session_state.pop(f"{prefix}_last_full_pdf_bytes", None)
+                            st.session_state.pop(f"{prefix}_cached_report_html", None)
+                            st.session_state.pop(f"{prefix}_last_drawings_pdf_bytes", None)
                             S.cfg_set("ftg_overrides", cur_ftg_overrides)
+                            S.cfg_set("confirmed_manual_footings", {})
                             st.session_state[f"{prefix}ftg_overrides"] = cur_ftg_overrides
                             S.save_settings()
                             st.rerun()
@@ -22729,6 +22751,13 @@ def render(is_standalone: bool = False):
 
                             if new_phi_m != curr_phi:
                                 cur_ftg_overrides[f"{mk}_phi"] = new_phi_m
+                                cur_ftg_overrides.pop(f"{mk}_nx", None)
+                                cur_ftg_overrides.pop(f"{mk}_ny", None)
+                                if isinstance(st.session_state.get("manual_footings"), dict):
+                                    st.session_state["manual_footings"].pop(mk, None)
+                                st.session_state.pop(f"manual_Phi_{mk}", None)
+                                st.session_state.pop(f"manual_Nx_{mk}", None)
+                                st.session_state.pop(f"manual_Ny_{mk}", None)
                                 ftg_changed = True
 
                             # التحقق الكودي ومراجعة عدد الأسياخ في المتر طبقاً لـ ECP 203
@@ -22768,12 +22797,389 @@ def render(is_standalone: bool = False):
 
             st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
 
-            # 4. Footings Detailed Table (Unified Schedule: All 4 Types)
-            st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)</div>", unsafe_allow_html=True)
-            df_fs_export = pd.DataFrame(ftg_analysis["unified_rows"])
-            render_styled_table(df_fs_export, font_size_override=14.0)
+            # ── 🛠️ لوحة التعديل اليدوي والتحقق الإنشائي لنماذج القواعد (F1, F2, F3...) ──
+            if "manual_footings" not in st.session_state or not isinstance(st.session_state["manual_footings"], dict):
+                st.session_state["manual_footings"] = {}
+            if "confirmed_manual_footings" not in st.session_state or not isinstance(st.session_state["confirmed_manual_footings"], dict):
+                saved_cmf = S.cfg_val("confirmed_manual_footings", {})
+                st.session_state["confirmed_manual_footings"] = dict(saved_cmf) if isinstance(saved_cmf, dict) else {}
+            st.session_state.setdefault("ftg_outputs_collapsed", False)
+            st.session_state.setdefault("ftg_outputs_exp_ver", 0)
 
-            # Export Excel & CSV
+            manual_phi_opts = [12, 16, 18, 20, 22, 25]
+            manual_models_by_id = {m["model_id"]: m for m in active_ftg_models}
+            manual_model_ids = [m["model_id"] for m in active_ftg_models]
+
+            for m in active_ftg_models:
+                mk = m["model_id"]
+                phi_m_val = int(m.get("Phi_mm", 16))
+                if phi_m_val not in manual_phi_opts:
+                    phi_m_val = min(manual_phi_opts, key=lambda x: abs(x - phi_m_val))
+                base_entry = {
+                    "L_m": round(float(m.get("L_cm", 200.0)) / 100.0, 2),
+                    "B_m": round(float(m.get("B_cm", 200.0)) / 100.0, 2),
+                    "t_cm": float(m.get("t_cm", 50.0)),
+                    "Phi_mm": phi_m_val,
+                    "Nx_m": int(m.get("n_m_L", 5)),
+                    "Ny_m": int(m.get("n_m_B", 5)),
+                    "_dirty": False,
+                }
+                if cur_ftg_overrides.get(f"{mk}_manual_confirmed") and mk not in st.session_state["confirmed_manual_footings"]:
+                    st.session_state["confirmed_manual_footings"][mk] = {
+                        k: v for k, v in base_entry.items() if k != "_dirty"
+                    }
+                if mk not in st.session_state["manual_footings"]:
+                    st.session_state["manual_footings"][mk] = dict(base_entry)
+                elif not st.session_state["manual_footings"][mk].get("_dirty", False):
+                    prev_mf = st.session_state["manual_footings"][mk]
+                    changed_upstream = (
+                        abs(float(prev_mf.get("L_m", 0.0)) - base_entry["L_m"]) > 1e-4
+                        or abs(float(prev_mf.get("B_m", 0.0)) - base_entry["B_m"]) > 1e-4
+                        or abs(float(prev_mf.get("t_cm", 0.0)) - base_entry["t_cm"]) > 1e-2
+                        or int(prev_mf.get("Phi_mm", 0)) != base_entry["Phi_mm"]
+                        or int(prev_mf.get("Nx_m", 0)) != base_entry["Nx_m"]
+                        or int(prev_mf.get("Ny_m", 0)) != base_entry["Ny_m"]
+                    )
+                    if changed_upstream:
+                        st.session_state["manual_footings"][mk] = dict(base_entry)
+                        for wk in (f"manual_L_{mk}", f"manual_B_{mk}", f"manual_t_{mk}", f"manual_Phi_{mk}", f"manual_Nx_{mk}", f"manual_Ny_{mk}"):
+                            st.session_state.pop(wk, None)
+
+            def _on_manual_ftg_change(mk_changed: str):
+                mf_map = st.session_state.setdefault("manual_footings", {})
+                entry = dict(mf_map.get(mk_changed, {}))
+                if f"manual_L_{mk_changed}" in st.session_state:
+                    entry["L_m"] = float(st.session_state[f"manual_L_{mk_changed}"])
+                if f"manual_B_{mk_changed}" in st.session_state:
+                    entry["B_m"] = float(st.session_state[f"manual_B_{mk_changed}"])
+                if f"manual_t_{mk_changed}" in st.session_state:
+                    entry["t_cm"] = float(st.session_state[f"manual_t_{mk_changed}"])
+                if f"manual_Phi_{mk_changed}" in st.session_state:
+                    entry["Phi_mm"] = int(st.session_state[f"manual_Phi_{mk_changed}"])
+                if f"manual_Nx_{mk_changed}" in st.session_state:
+                    entry["Nx_m"] = int(st.session_state[f"manual_Nx_{mk_changed}"])
+                if f"manual_Ny_{mk_changed}" in st.session_state:
+                    entry["Ny_m"] = int(st.session_state[f"manual_Ny_{mk_changed}"])
+                entry["_dirty"] = True
+                mf_map[mk_changed] = entry
+                st.session_state["ftg_outputs_collapsed"] = True
+                st.session_state["ftg_outputs_exp_ver"] = int(st.session_state.get("ftg_outputs_exp_ver", 0)) + 1
+
+            if manual_model_ids:
+                with st.expander("🛠️ تعديل أبعاد وتسليح نماذج القواعد يدوياً", expanded=True):
+                    selected_model = st.selectbox(
+                        "اختر نموذج القاعدة للتعديل اليدوي والتحقق (Footing Model):",
+                        options=manual_model_ids,
+                        format_func=lambda mk: f"{mk} — {manual_models_by_id[mk].get('model_label', mk)} ({manual_models_by_id[mk].get('col_spec_str', '')} | Pu={float(manual_models_by_id[mk].get('Pu_ton', 0.0)):.1f} t)",
+                        key=f"{prefix}sel_manual_ftg_model",
+                    )
+
+                    m_sel_obj = manual_models_by_id[selected_model]
+                    mf_curr = st.session_state["manual_footings"][selected_model]
+
+                    w_defaults_mf = {
+                        f"manual_L_{selected_model}": float(mf_curr["L_m"]),
+                        f"manual_B_{selected_model}": float(mf_curr["B_m"]),
+                        f"manual_t_{selected_model}": float(mf_curr["t_cm"]),
+                        f"manual_Phi_{selected_model}": int(mf_curr["Phi_mm"]) if int(mf_curr["Phi_mm"]) in manual_phi_opts else 16,
+                        f"manual_Nx_{selected_model}": int(mf_curr["Nx_m"]),
+                        f"manual_Ny_{selected_model}": int(mf_curr["Ny_m"]),
+                    }
+                    for wk, wv in w_defaults_mf.items():
+                        if wk not in st.session_state:
+                            st.session_state[wk] = wv
+                    if st.session_state.get(f"manual_Phi_{selected_model}") not in manual_phi_opts:
+                        st.session_state[f"manual_Phi_{selected_model}"] = 16
+
+                    col_t_sel = float(m_sel_obj.get("col_t_cm", col_c_dim))
+                    col_b_sel = float(m_sel_obj.get("col_b_cm", col_b_dim))
+                    pu_sel = float(m_sel_obj.get("Pu_ton", 10.0))
+
+                    st.markdown(
+                        f"""
+                        <div dir="rtl" style="background:rgba(15, 23, 42, 0.04); border:1px solid #cbd5e1; border-right:5px solid #0284c7; border-radius:8px; padding:8px 14px; margin-bottom:12px; display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:space-between; font-size:13.5px;">
+                            <span>🧱 <b>النموذج المختار:</b> <span style="color:#0284c7; font-weight:800;">{selected_model} ({m_sel_obj.get('model_label', '')})</span></span>
+                            <span>🏛️ <b>العمود الحاكم:</b> <span style="direction:ltr; display:inline-block; font-weight:800;">{m_sel_obj.get('col_spec_str', '')} ({col_t_sel:.0f}×{col_b_sel:.0f} cm)</span></span>
+                            <span>⚖️ <b>الحمل التصميمي:</b> <span style="font-weight:800;">Pu = {pu_sel:.2f} ton</span></span>
+                            <span>🌱 <b>جهد التربة المسموح:</b> <span style="font-weight:800;">q_net = {ftg_qnet:.2f} kg/cm²</span></span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                    mr1_c1, mr1_c2, mr1_c3 = st.columns(3)
+                    with mr1_c1:
+                        man_L_m = st.number_input(
+                            f"1. طول القاعدة L (m) — [{selected_model}]:",
+                            min_value=0.40, max_value=15.0,
+                            step=0.05, format="%.2f",
+                            key=f"manual_L_{selected_model}",
+                            on_change=_on_manual_ftg_change,
+                            args=(selected_model,),
+                        )
+                    with mr1_c2:
+                        man_B_m = st.number_input(
+                            f"2. عرض القاعدة B (m) — [{selected_model}]:",
+                            min_value=0.40, max_value=15.0,
+                            step=0.05, format="%.2f",
+                            key=f"manual_B_{selected_model}",
+                            on_change=_on_manual_ftg_change,
+                            args=(selected_model,),
+                        )
+                    with mr1_c3:
+                        man_t_cm = st.number_input(
+                            f"3. عمق / سمك القاعدة الكلي t (cm) — [{selected_model}]:",
+                            min_value=20.0, max_value=250.0,
+                            step=5.0, format="%.1f",
+                            key=f"manual_t_{selected_model}",
+                            on_change=_on_manual_ftg_change,
+                            args=(selected_model,),
+                        )
+
+                    mr2_c1, mr2_c2, mr2_c3 = st.columns(3)
+                    with mr2_c1:
+                        man_Phi = st.selectbox(
+                            f"4. قطر التسليح الرئيسي Φ (mm) — [{selected_model}]:",
+                            options=manual_phi_opts,
+                            key=f"manual_Phi_{selected_model}",
+                            on_change=_on_manual_ftg_change,
+                            args=(selected_model,),
+                        )
+                    with mr2_c2:
+                        man_Nx = st.number_input(
+                            f"5. عدد الأسياخ في المتر اتجاه X (Nx / m) — [{selected_model}]:",
+                            min_value=1, max_value=20,
+                            step=1,
+                            key=f"manual_Nx_{selected_model}",
+                            on_change=_on_manual_ftg_change,
+                            args=(selected_model,),
+                        )
+                    with mr2_c3:
+                        man_Ny = st.number_input(
+                            f"6. عدد الأسياخ في المتر اتجاه Y (Ny / m) — [{selected_model}]:",
+                            min_value=1, max_value=20,
+                            step=1,
+                            key=f"manual_Ny_{selected_model}",
+                            on_change=_on_manual_ftg_change,
+                            args=(selected_model,),
+                        )
+
+                    # Sync current session dictionary for selected_model
+                    st.session_state["manual_footings"][selected_model] = {
+                        "L_m": float(man_L_m),
+                        "B_m": float(man_B_m),
+                        "t_cm": float(man_t_cm),
+                        "Phi_mm": int(man_Phi),
+                        "Nx_m": int(man_Nx),
+                        "Ny_m": int(man_Ny),
+                        "_dirty": bool(st.session_state["manual_footings"][selected_model].get("_dirty", False)),
+                    }
+
+                    # Real-time structural verification (ECP 203)
+                    verif_res = verify_isolated_footing_manual(
+                        model_id=selected_model,
+                        L_m=float(man_L_m),
+                        B_m=float(man_B_m),
+                        t_cm=float(man_t_cm),
+                        Phi_mm=int(man_Phi),
+                        Nx_m=int(man_Nx),
+                        Ny_m=int(man_Ny),
+                        Pu_ton=pu_sel,
+                        c_cm=col_t_sel,
+                        b_cm=col_b_sel,
+                        q_net_kgcm2=ftg_qnet,
+                        Fcu=ftg_fcu,
+                        Fy=ftg_fy,
+                        cover_cm=ftg_cov,
+                    )
+
+                    # Live Engineering Verification Summary Strip
+                    st.markdown(
+                        f"""
+                        <div dir="rtl" style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px 14px; margin:8px 0 10px 0; font-size:12.5px; color:#1e293b; display:grid; grid-template-columns:repeat(auto-fit, minmax(175px, 1fr)); gap:8px;">
+                            <div><b>إجهاد التربة q_act:</b> <span style="color:{'#16a34a' if verif_res['q_ok'] else '#dc2626'}; font-weight:800;">{verif_res['q_act']:.2f} / {verif_res['q_net']:.2f} kg/cm²</span></div>
+                            <div><b>القص الثاقب Punching:</b> <span style="color:{'#16a34a' if verif_res['punch_ok'] else '#dc2626'}; font-weight:800;">{verif_res['tau_p']:.2f} / {verif_res['tau_p_allow']:.2f} kg/cm²</span></div>
+                            <div><b>القص أحادي الاتجاه:</b> <span style="color:{'#16a34a' if verif_res['shear_ok'] else '#dc2626'}; font-weight:800;">{verif_res['tau_s']:.2f} / {verif_res['tau_s_allow']:.2f} kg/cm²</span></div>
+                            <div><b>تسليح X (متوفر/مطلوب/أدنى):</b> <span style="color:{'#16a34a' if (verif_res['flex_x_ok'] and verif_res['min_x_ok']) else '#dc2626'}; font-weight:800;">{verif_res['As_prov_x']:.2f} / {verif_res['As_req_x']:.2f} / {verif_res['As_min']:.2f} cm²/m</span></div>
+                            <div><b>تسليح Y (متوفر/مطلوب/أدنى):</b> <span style="color:{'#16a34a' if (verif_res['flex_y_ok'] and verif_res['min_y_ok']) else '#dc2626'}; font-weight:800;">{verif_res['As_prov_y']:.2f} / {verif_res['As_req_y']:.2f} / {verif_res['As_min']:.2f} cm²/m</span></div>
+                            <div><b>المسافة الخالصة (X / Y):</b> <span style="color:{'#16a34a' if verif_res['spacing_ok'] else '#dc2626'}; font-weight:800;">{verif_res['s_clear_x_mm']:.0f} / {verif_res['s_clear_y_mm']:.0f} mm</span></div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                    if verif_res["is_safe"]:
+                        st.success(f"✅ تصميم النموذج {selected_model} آمن ومطابق لاشتراطات الكود.")
+                        if st.button("اعادة التصميم نتيجة تغيير مدخلات القاعدة", key=f"{prefix}btn_apply_manual_footing", type="primary", use_container_width=True):
+                            adopted_entry = {
+                                "L_m": float(man_L_m),
+                                "B_m": float(man_B_m),
+                                "t_cm": float(man_t_cm),
+                                "Phi_mm": int(man_Phi),
+                                "Nx_m": int(man_Nx),
+                                "Ny_m": int(man_Ny),
+                            }
+                            st.session_state["confirmed_manual_footings"][selected_model] = dict(adopted_entry)
+                            st.session_state["manual_footings"][selected_model] = dict(adopted_entry, _dirty=False)
+
+                            cur_ftg_overrides[f"{selected_model}_L_cm"] = round(float(man_L_m) * 100.0, 1)
+                            cur_ftg_overrides[f"{selected_model}_B_cm"] = round(float(man_B_m) * 100.0, 1)
+                            cur_ftg_overrides[f"{selected_model}_t"] = float(man_t_cm)
+                            cur_ftg_overrides[f"{selected_model}_phi"] = int(man_Phi)
+                            cur_ftg_overrides[f"{selected_model}_nx"] = int(man_Nx)
+                            cur_ftg_overrides[f"{selected_model}_ny"] = int(man_Ny)
+                            cur_ftg_overrides[f"{selected_model}_manual_confirmed"] = True
+
+                            S.cfg_set("ftg_overrides", cur_ftg_overrides)
+                            S.cfg_set("confirmed_manual_footings", dict(st.session_state["confirmed_manual_footings"]))
+                            st.session_state[f"{prefix}ftg_overrides"] = cur_ftg_overrides
+                            S.save_settings()
+
+                            st.session_state.pop(f"{prefix}w_ftg_{selected_model.lower()}_phi", None)
+                            st.session_state["ftg_outputs_collapsed"] = False
+                            st.session_state["ftg_outputs_exp_ver"] = int(st.session_state.get("ftg_outputs_exp_ver", 0)) + 1
+
+                            st.session_state.pop(f"{prefix}foundation_sketch_b64", None)
+                            st.session_state.pop(f"{prefix}_last_outputs_pdf_bytes", None)
+                            st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
+                            st.session_state.pop(f"{prefix}_last_full_pdf_bytes", None)
+                            st.session_state.pop(f"{prefix}_cached_report_html", None)
+                            st.session_state.pop(f"{prefix}_last_drawings_pdf_bytes", None)
+                            st.rerun()
+                    else:
+                        err_bullets = "\n".join(f"• {err}" for err in verif_res["errors"])
+                        st.error(f"❌ **التصميم غير آمن للنموذج {selected_model}:**\n{err_bullets}")
+
+            st.markdown("<div style='margin-top:12px;'></div>", unsafe_allow_html=True)
+
+            # ── 4. Outputs Expanders (Auto-Collapsed when manual edits are pending) ──
+            _ftg_collapsed = bool(st.session_state.get("ftg_outputs_collapsed", False))
+            _ftg_exp_ver = int(st.session_state.get("ftg_outputs_exp_ver", 0))
+            _ftg_out_expanded = not _ftg_collapsed
+            _ftg_exp_suf = "\u200b" * (_ftg_exp_ver % 4)
+
+            with st.expander(f"📋 ملخص النتائج وجداول الحسابات وتصميم القواعد (Foundations Summary & Calculations Schedule){_ftg_exp_suf}", expanded=_ftg_out_expanded):
+                if _ftg_collapsed:
+                    st.warning("⏳ تم تعديل مدخلات أحد نماذج القواعد يدوياً — يُرجى مراجعة التحقق الإنشائي والضغط على زر «اعادة التصميم نتيجة تغيير مدخلات القاعدة» لاعتماد التعديلات وعرض النتائج المحدثة.")
+                else:
+                    fq_sum = ftg_analysis.get("quantities", {})
+                    sc1, sc2, sc3, sc4 = st.columns(4)
+                    with sc1:
+                        st.metric("القواعد المنفصلة (Isolated)", f"{counts.get('isolated_count', 0)} قاعدة")
+                    with sc2:
+                        st.metric("الشدادات / المشتركة", f"{counts.get('edge_strap_count', 0) + counts.get('corner_strap_count', 0) + counts.get('combined_count', 0)}")
+                    with sc3:
+                        st.metric("خرسانة مسلحة / عادية", f"{fq_sum.get('ftgs_conc_rc_val', 0.0):.2f} / {fq_sum.get('ftgs_conc_pc_val', 0.0):.2f} m³")
+                    with sc4:
+                        st.metric("إجمالي حديد القواعد", f"{fq_sum.get('ftgs_steel_ton_val', 0.0):.3f} Ton")
+
+                    # Verification summary table per model
+                    if active_ftg_models:
+                        st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; margin: 10px 0 8px 0;'>🔍 ملخص التحقق الإنشائي والحسابات التفصيلية لنماذج القواعد (ECP 203 Verification)</div>", unsafe_allow_html=True)
+                        ftg_calc_rows = []
+                        for m in active_ftg_models:
+                            ftg_calc_rows.append({
+                                "النموذج": m["model_id"],
+                                "العمود": m.get("col_spec_str", m.get("supported_col_str", "—")),
+                                "Pu (ton)": f"{float(m.get('Pu_ton', 0.0)):.2f}",
+                                "L × B × t (cm)": f"{float(m.get('L_cm', 0)):.0f} × {float(m.get('B_cm', 0)):.0f} × {float(m.get('t_cm', 0)):.0f}",
+                                "q_act / q_net (kg/cm²)": f"{float(m.get('q_act', 0)):.2f} / {float(m.get('q_net', ftg_qnet)):.2f}",
+                                "قص أحادي τ_s (kg/cm²)": f"{float(m.get('tau_s', 0)):.2f} / {float(m.get('tau_s_allow', 0)):.2f}",
+                                "قص ثاقب τ_p (kg/cm²)": f"{float(m.get('tau_p', 0)):.2f} / {float(m.get('tau_p_allow', 0)):.2f}",
+                                "التسليح X (فرش)": m.get("rft_long_str", "—"),
+                                "التسليح Y (غطاء)": m.get("rft_short_str", "—"),
+                                "الحالة": m.get("status_str", "✅ Safe"),
+                            })
+                        render_styled_table(pd.DataFrame(ftg_calc_rows), font_size_override=13.5)
+
+                    st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)</div>", unsafe_allow_html=True)
+                    df_fs_export = pd.DataFrame(ftg_analysis["unified_rows"])
+                    render_styled_table(df_fs_export, font_size_override=14.0)
+
+                    # Export Excel & CSV
+                    ex_c1, ex_c2 = st.columns(2)
+                    with ex_c1:
+                        xlsx_ftg_bytes = safe_to_excel_bytes(df_fs_export, sheet_name="Footings_Schedule")
+                        if xlsx_ftg_bytes:
+                            st.download_button(
+                                label="📥 تصدير جدول القواعد Excel (.xlsx)",
+                                data=xlsx_ftg_bytes,
+                                file_name=f"{prefix}Footings_Schedule_{num_floors}Floors.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                key=f"{prefix}btn_dl_ftg_xlsx",
+                                use_container_width=True,
+                            )
+                    with ex_c2:
+                        csv_ftg_bytes = df_fs_export.to_csv(index=False).encode("utf-8-sig")
+                        st.download_button(
+                            label="📄 تصدير جدول القواعد CSV",
+                            data=csv_ftg_bytes,
+                            file_name=f"{prefix}Footings_Schedule_{num_floors}Floors.csv",
+                            mime="text/csv",
+                            key=f"{prefix}btn_dl_ftg_csv",
+                            use_container_width=True,
+                        )
+
+            with st.expander(f"📐 الرسومات الهندسية وتفاصيل تسليح القواعد (Footings Layout, Plans & Cross-Sections){_ftg_exp_suf}", expanded=_ftg_out_expanded):
+                if _ftg_collapsed:
+                    st.warning("⏳ تم طي الرسومات الهندسية مؤقتاً لحين اعتماد التعديلات اليدوية بالضغط على زر «اعادة التصميم نتيجة تغيير مدخلات القاعدة».")
+                else:
+                    try:
+                        overlap_disp = check_building_clearances_and_overlaps(fs_active_columns, ftg_analysis.get("models", {}))
+                        fig_ftg_layout = draw_foundation_layout_plan(
+                            fs_active_columns,
+                            ftg_analysis.get("models", {}),
+                            overlap_disp,
+                            ftg_analysis.get("combined_footings"),
+                        )
+                        st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; margin-bottom:8px;'>🗺️ المسقط الأفقي العام لأساسات المبنى وجدول القواعد:</div>", unsafe_allow_html=True)
+                        _render_fs_zoomable_figure(fig_ftg_layout, viewer_h=680, dpi=160)
+                    except Exception as _e_flay:
+                        st.warning(f"تعذر رسم المسقط الأفقي العام للقواعد: {_e_flay}")
+
+                    if active_ftg_models:
+                        from modules.footings import generate_footing_plan_sketch, generate_footing_section_sketch
+                        st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>✏️ الرسومات التنفيذية التفصيلية لكل نموذج قاعدة (المسقط الأفقي والقطاع الرأسي A-A):</div>", unsafe_allow_html=True)
+                        ftg_tabs = st.tabs([
+                            f"🧱 {m['model_id']} ({float(m['L_cm']):.0f}×{float(m['B_cm']):.0f}×{float(m['t_cm']):.0f} cm)"
+                            for m in active_ftg_models
+                        ])
+                        for tab_f, m in zip(ftg_tabs, active_ftg_models):
+                            with tab_f:
+                                L_cm_m = int(round(float(m.get("L_cm", 200))))
+                                B_cm_m = int(round(float(m.get("B_cm", 200))))
+                                t_cm_m = int(round(float(m.get("t_cm", 50))))
+                                col_b_m = int(round(float(m.get("col_b_cm", col_b_dim))))
+                                col_t_m = int(round(float(m.get("col_t_cm", col_c_dim))))
+                                phi_m = int(m.get("Phi_mm", 16))
+                                nx_m = int(m.get("n_m_L", 5))
+                                ny_m = int(m.get("n_m_B", 5))
+                                tot_x = int(m.get("total_bars_L", math.ceil(nx_m * B_cm_m / 100.0)))
+                                tot_y = int(m.get("total_bars_B", math.ceil(ny_m * L_cm_m / 100.0)))
+                                sp_x = 100.0 / max(1, nx_m)
+                                sp_y = 100.0 / max(1, ny_m)
+
+                                sk_c1, sk_c2 = st.columns(2)
+                                with sk_c1:
+                                    fig_p_m = generate_footing_plan_sketch(
+                                        L_cm=L_cm_m, B_cm=B_cm_m, t_rc_cm=t_cm_m,
+                                        bc_cm=col_b_m, tc_cm=col_t_m, Phi=phi_m,
+                                        n_long=tot_x, n_m_long=nx_m, sp_long=sp_x,
+                                        n_sht=tot_y, n_m_sht=ny_m, sp_sht=sp_y,
+                                        cover_cm=ftg_cov, t_pc_cm=20, pc_offset_cm=20,
+                                    )
+                                    st.pyplot(fig_p_m, use_container_width=True)
+                                    plt.close(fig_p_m)
+                                with sk_c2:
+                                    fig_s_m = generate_footing_section_sketch(
+                                        L_cm=L_cm_m, B_cm=B_cm_m, t_rc_cm=t_cm_m,
+                                        bc_cm=col_b_m, tc_cm=col_t_m, Phi=phi_m,
+                                        n_long=tot_x, n_m_long=nx_m, sp_long=sp_x,
+                                        n_sht=tot_y, n_m_sht=ny_m, sp_sht=sp_y,
+                                        cover_cm=ftg_cov, Df_m=1.5, t_pc_cm=20, pc_offset_cm=20,
+                                    )
+                                    st.pyplot(fig_s_m, use_container_width=True)
+                                    plt.close(fig_s_m)
 
 
         # ── 🧱 GROUND BEAMS DESIGN SECTION (ECP 203) ───────────────────────────────────
@@ -23504,180 +23910,182 @@ def render(is_standalone: bool = False):
 
 
         # ── 🏛️ FINAL DESIGN OF FOUNDATIONS AND GROUND BEAMS (ECP 203) ───────────────────
-        with st.expander(f"🏛️ Final Design of Columns, Foundations and Ground Beams — {num_floors} Floors (التصميم النهائي للاعمدة و للقواعد والسملات الأرضية)", expanded=False):
+        _ftg_collapsed_fin = bool(st.session_state.get("ftg_outputs_collapsed", False))
+        _ftg_exp_ver_fin = int(st.session_state.get("ftg_outputs_exp_ver", 0))
+        _final_ftg_suf = ("\u200b" * (_ftg_exp_ver_fin % 4)) if _ftg_collapsed_fin else ""
+        with st.expander(f"🏛️ Final Design of Columns, Foundations and Ground Beams — {num_floors} Floors (التصميم النهائي للاعمدة و للقواعد والسملات الأرضية){_final_ftg_suf}", expanded=False):
+            if _ftg_collapsed_fin:
+                st.warning("⏳ تم تعديل مدخلات أحد نماذج القواعد يدوياً — يُرجى مراجعة التحقق الإنشائي والضغط على زر «اعادة التصميم نتيجة تغيير مدخلات القاعدة» في قسم Foundations Design لتحديث لوحة التصميم النهائي والمخرجات.")
+            else:
+                ftg_analysis_final = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
+                gb_analysis_final = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis")
+                active_cols_final = fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols
 
+                if ftg_analysis_final and active_cols_final:
+                    # ── 1. CONSOLIDATED 2D PLAN SKETCH (TOP SECTION) ──
+                    st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 10px 0 8px 0;'>🗺️ 1. المسقط الأفقي التنفيذي الموحد للأساسات والميدات (Consolidated 2D Plan Sketch)</div>", unsafe_allow_html=True)
 
-            ftg_analysis_final = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
-            gb_analysis_final = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis")
-            active_cols_final = fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols
+                    gb_list_final = gb_analysis_final.get("ground_beams", []) if gb_analysis_final else []
+                    fig_final_sketch = draw_comprehensive_foundation_sketch(
+                        active_cols_final, ftg_analysis_final, ground_beams=gb_analysis_final if gb_analysis_final else gb_list_final,
+                        edge_columns=_edge_columns if '_edge_columns' in locals() else None,
+                        slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
+                        include_legend=False,
+                        col_transforms=_col_transforms if '_col_transforms' in locals() else None,
+                        col_props=_col_props if '_col_props' in locals() else None,
+                    )
+                    buf_final_sketch = io.BytesIO()
+                    fig_final_sketch.savefig(buf_final_sketch, format="png", bbox_inches="tight", dpi=160)
+                    plt.close(fig_final_sketch)
+                    buf_final_sketch.seek(0)
+                    final_b64 = base64.b64encode(buf_final_sketch.getvalue()).decode("utf-8")
+                    try:
+                        st.session_state[f"{prefix}foundation_sketch_b64"] = final_b64
+                    except Exception:
+                        pass
 
-            if ftg_analysis_final and active_cols_final:
-                # ── 1. CONSOLIDATED 2D PLAN SKETCH (TOP SECTION) ──
-                st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 10px 0 8px 0;'>🗺️ 1. المسقط الأفقي التنفيذي الموحد للأساسات والميدات (Consolidated 2D Plan Sketch)</div>", unsafe_allow_html=True)
+                    _render_gb_interactive_viewer(final_b64, viewer_h=760)
 
-                gb_list_final = gb_analysis_final.get("ground_beams", []) if gb_analysis_final else []
-                fig_final_sketch = draw_comprehensive_foundation_sketch(
-                    active_cols_final, ftg_analysis_final, ground_beams=gb_analysis_final if gb_analysis_final else gb_list_final,
-                    edge_columns=_edge_columns if '_edge_columns' in locals() else None,
-                    slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
-                    include_legend=False,
-                    col_transforms=_col_transforms if '_col_transforms' in locals() else None,
-                    col_props=_col_props if '_col_props' in locals() else None,
-                )
-                buf_final_sketch = io.BytesIO()
-                fig_final_sketch.savefig(buf_final_sketch, format="png", bbox_inches="tight", dpi=160)
-                plt.close(fig_final_sketch)
-                buf_final_sketch.seek(0)
-                final_b64 = base64.b64encode(buf_final_sketch.getvalue()).decode("utf-8")
-                try:
-                    st.session_state[f"{prefix}foundation_sketch_b64"] = final_b64
-                except Exception:
-                    pass
-
-                _render_gb_interactive_viewer(final_b64, viewer_h=760)
-
-
-
-                # ── 2. EXECUTIVE COLUMNS SCHEDULE TABLE (جدول نماذج الأعمدة التنفيذي) ──
-                st.markdown(
-                    """
-                    <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.05) 0%, rgba(15, 23, 42, 0.09) 100%); border: 1.5px solid #cbd5e1; border-right: 6px solid #38bdf8; border-radius: 10px; padding: 12px 16px; margin: 20px 0 12px 0; text-align: right;">
-                        <div style="font-size: 16px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                            <span>🏛️ جدول نماذج الأعمدة التنفيذي (Columns Executive Schedule)</span>
-                            <span style="font-size: 12px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Executive</span>
+                    # ── 2. EXECUTIVE COLUMNS SCHEDULE TABLE (جدول نماذج الأعمدة التنفيذي) ──
+                    st.markdown(
+                        """
+                        <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.05) 0%, rgba(15, 23, 42, 0.09) 100%); border: 1.5px solid #cbd5e1; border-right: 6px solid #38bdf8; border-radius: 10px; padding: 12px 16px; margin: 20px 0 12px 0; text-align: right;">
+                            <div style="font-size: 16px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                                <span>🏛️ جدول نماذج الأعمدة التنفيذي (Columns Executive Schedule)</span>
+                                <span style="font-size: 12px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Executive</span>
+                            </div>
                         </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
-                raw_col_rows = []
-                col_designs_final = col_designs if ('col_designs' in locals() and col_designs) else st.session_state.get(f"{prefix}fs_col_designs", st.session_state.get("fs_col_designs", []))
-                if col_designs_final:
-                    for des in col_designs_final:
-                        m_key = des.get("raw_type", "")
-                        b_val = float(st.session_state.get(f"fs_adopted_b_{m_key}", des.get("b", 30.0)))
-                        t_val = float(st.session_state.get(f"fs_adopted_t_{m_key}", des.get("t", 60.0)))
-                        mu_val = des.get("mu_provided", 1.0)
-                        raw_col_rows.append({
-                            "اسم نموذج العمود": des.get("model_label", des.get("model_mark", "C")),
-                            "القطاع": f"{int(round(b_val))} × {int(round(t_val))} cm",
-                            "التسليح الرئيسي": des.get("main_steel_str", "—"),
-                            "الكانات": des.get("stirrups_str", "—"),
-                            "نسبة التسليح للقطاع": f"{mu_val:.2f} %",
+                    raw_col_rows = []
+                    col_designs_final = col_designs if ('col_designs' in locals() and col_designs) else st.session_state.get(f"{prefix}fs_col_designs", st.session_state.get("fs_col_designs", []))
+                    if col_designs_final:
+                        for des in col_designs_final:
+                            m_key = des.get("raw_type", "")
+                            b_val = float(st.session_state.get(f"fs_adopted_b_{m_key}", des.get("b", 30.0)))
+                            t_val = float(st.session_state.get(f"fs_adopted_t_{m_key}", des.get("t", 60.0)))
+                            mu_val = des.get("mu_provided", 1.0)
+                            raw_col_rows.append({
+                                "اسم نموذج العمود": des.get("model_label", des.get("model_mark", "C")),
+                                "القطاع": f"{int(round(b_val))} × {int(round(t_val))} cm",
+                                "التسليح الرئيسي": des.get("main_steel_str", "—"),
+                                "الكانات": des.get("stirrups_str", "—"),
+                                "نسبة التسليح للقطاع": f"{mu_val:.2f} %",
+                            })
+
+                    if raw_col_rows:
+                        df_cols_summary = pd.DataFrame(raw_col_rows)
+                        render_styled_table(df_cols_summary, font_size_override=14.0)
+                    else:
+                        st.info("💡 لم يتم استخراج نماذج للأعمدة أو جاري حساب وتصميم قطاعات الأعمدة.")
+
+                    st.markdown("<hr style='margin: 24px 0; border: none; border-top: 1.5px solid #cbd5e1;' />", unsafe_allow_html=True)
+
+                    # ── 3. EXECUTIVE GROUND BEAMS SCHEDULE TABLE (جدول السملات الأرضية بخط كبير وغامق) ──
+                    st.markdown(
+                        """
+                        <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.05) 0%, rgba(15, 23, 42, 0.09) 100%); border: 1.5px solid #cbd5e1; border-right: 6px solid #38bdf8; border-radius: 10px; padding: 12px 16px; margin: 20px 0 12px 0; text-align: right;">
+                            <div style="font-size: 16px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                                <span>🧱 جدول نماذج السملات والشدادات الأرضية التنفيذي (Ground Beams & Strap Beams Schedule)</span>
+                                <span style="font-size: 12px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Executive</span>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                    raw_gb_rows = []
+                    if gb_analysis_final and gb_analysis_final.get("models_schedule"):
+                        raw_gb_rows = [dict(r) for r in gb_analysis_final.get("models_schedule", [])]
+                    elif gb_analysis_final and gb_analysis_final.get("models_dict"):
+                        for gb_mk in ["GB1", "GB2", "GB3"]:
+                            if gb_mk in gb_analysis_final["models_dict"]:
+                                gbm = gb_analysis_final["models_dict"][gb_mk]
+                                b_val = int(gbm.get("b_cm", 25))
+                                t_val = int(gbm.get("t_cm", 60))
+                                raw_gb_rows.append({
+                                    "النموذج (Mark)": gb_mk,
+                                    "التصنيف والأهمية الإنشائية": gbm.get("label", f"سملة أرضية {gb_mk}"),
+                                    "الأبعاد b × t (cm)": f"{b_val} × {t_val}",
+                                    "التسليح السفلي (Bottom Rft)": f"{gbm.get('n_bot', 2)}Ø{gbm.get('phi_bot', 16)}",
+                                    "التسليح العلوي (Top Rft)": f"{gbm.get('n_top', 2)}Ø{gbm.get('phi_top', 12)}",
+                                    "براندات الانكماش (Side Bars)": f"{gbm.get('side_bars', 0)}Ø{gbm.get('phi_side', 10)}" if gbm.get("side_bars", 0) > 0 else "—",
+                                    "الكانات (Stirrups)": f"{gbm.get('stirrups_per_m', 6)}Ø{gbm.get('phi_st', 8)}/m ({gbm.get('n_branches', 2)} فروع)",
+                                    "العدد بالمشروع (Count)": f"{gbm.get('count', 0)} سملة",
+                                    "إجمالي الأطوال (Total Length)": f"{gbm.get('total_len_m', 0.0):.2f} m",
+                                })
+
+                    # Append Strap Beams row (ST) if available
+                    st_beams_final = gb_analysis_final.get("strap_beams", []) if gb_analysis_final else []
+                    if st_beams_final and not any("ST" in str(r.get("النموذج (Mark)", "")) for r in raw_gb_rows):
+                        cnt_st_b = len(st_beams_final)
+                        len_st_b = sum(b.get("span_m", 0.0) for b in st_beams_final)
+                        raw_gb_rows.append({
+                            "النموذج (Mark)": "ST",
+                            "التصنيف والأهمية الإنشائية": "شدادات الجار والركن (Strap Beams)",
+                            "الأبعاد b × t (cm)": "40 × 100",
+                            "التسليح السفلي (Bottom Rft)": "2Ø16 (سفلي ثانوي)",
+                            "التسليح العلوي (Top Rft)": "5Ø22 (علوي رئيسي)",
+                            "براندات الانكماش (Side Bars)": "4Ø10 (انكماش)",
+                            "الكانات (Stirrups)": "5Ø10/m (4 فروع)",
+                            "العدد بالمشروع (Count)": f"{cnt_st_b} شداد",
+                            "إجمالي الأطوال (Total Length)": f"{len_st_b:.2f} m",
                         })
 
-                if raw_col_rows:
-                    df_cols_summary = pd.DataFrame(raw_col_rows)
-                    render_styled_table(df_cols_summary, font_size_override=14.0)
-                else:
-                    st.info("💡 لم يتم استخراج نماذج للأعمدة أو جاري حساب وتصميم قطاعات الأعمدة.")
+                    if raw_gb_rows:
+                        df_gb_summary = pd.DataFrame(raw_gb_rows)
+                        render_styled_table(df_gb_summary, font_size_override=14.0)
+                    else:
+                        st.info("💡 لم يتم استخراج نماذج للسملات الأرضية أو لم يتم تفعيل قسم Ground Beams Design بعد.")
 
-                st.markdown("<hr style='margin: 24px 0; border: none; border-top: 1.5px solid #cbd5e1;' />", unsafe_allow_html=True)
+                    st.markdown("<hr style='margin: 24px 0; border: none; border-top: 1.5px solid #cbd5e1;' />", unsafe_allow_html=True)
 
-                # ── 3. EXECUTIVE GROUND BEAMS SCHEDULE TABLE (جدول السملات الأرضية بخط كبير وغامق) ──
-                st.markdown(
-                    """
-                    <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.05) 0%, rgba(15, 23, 42, 0.09) 100%); border: 1.5px solid #cbd5e1; border-right: 6px solid #38bdf8; border-radius: 10px; padding: 12px 16px; margin: 20px 0 12px 0; text-align: right;">
-                        <div style="font-size: 16px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                            <span>🧱 جدول نماذج السملات والشدادات الأرضية التنفيذي (Ground Beams & Strap Beams Schedule)</span>
-                            <span style="font-size: 12px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Executive</span>
+                    # ── 4. EXECUTIVE FOUNDATIONS SCHEDULE TABLE (جدول القواعد بخط كبير وغامق) ──
+                    st.markdown(
+                        """
+                        <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.05) 0%, rgba(15, 23, 42, 0.09) 100%); border: 1.5px solid #cbd5e1; border-right: 6px solid #38bdf8; border-radius: 10px; padding: 12px 16px; margin: 16px 0 12px 0; text-align: right;">
+                            <div style="font-size: 16px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                                <span>📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)</span>
+                                <span style="font-size: 12px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Executive</span>
+                            </div>
                         </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
-                raw_gb_rows = []
-                if gb_analysis_final and gb_analysis_final.get("models_schedule"):
-                    raw_gb_rows = [dict(r) for r in gb_analysis_final.get("models_schedule", [])]
-                elif gb_analysis_final and gb_analysis_final.get("models_dict"):
-                    for gb_mk in ["GB1", "GB2", "GB3"]:
-                        if gb_mk in gb_analysis_final["models_dict"]:
-                            gbm = gb_analysis_final["models_dict"][gb_mk]
-                            b_val = int(gbm.get("b_cm", 25))
-                            t_val = int(gbm.get("t_cm", 60))
-                            raw_gb_rows.append({
-                                "النموذج (Mark)": gb_mk,
-                                "التصنيف والأهمية الإنشائية": gbm.get("label", f"سملة أرضية {gb_mk}"),
-                                "الأبعاد b × t (cm)": f"{b_val} × {t_val}",
-                                "التسليح السفلي (Bottom Rft)": f"{gbm.get('n_bot', 2)}Ø{gbm.get('phi_bot', 16)}",
-                                "التسليح العلوي (Top Rft)": f"{gbm.get('n_top', 2)}Ø{gbm.get('phi_top', 12)}",
-                                "براندات الانكماش (Side Bars)": f"{gbm.get('side_bars', 0)}Ø{gbm.get('phi_side', 10)}" if gbm.get("side_bars", 0) > 0 else "—",
-                                "الكانات (Stirrups)": f"{gbm.get('stirrups_per_m', 6)}Ø{gbm.get('phi_st', 8)}/m ({gbm.get('n_branches', 2)} فروع)",
-                                "العدد بالمشروع (Count)": f"{gbm.get('count', 0)} سملة",
-                                "إجمالي الأطوال (Total Length)": f"{gbm.get('total_len_m', 0.0):.2f} m",
-                            })
+                    raw_ftg_rows = []
+                    if ftg_analysis_final and ftg_analysis_final.get("unified_rows"):
+                        raw_ftg_rows = [dict(r) for r in ftg_analysis_final.get("unified_rows", [])]
+                    elif ftg_analysis_final and ftg_analysis_final.get("models"):
+                        ftg_models_dict = ftg_analysis_final.get("models", {})
+                        for f_mk in ["F1", "F2", "F3"]:
+                            if f_mk in ftg_models_dict and ftg_models_dict[f_mk]:
+                                fm = ftg_models_dict[f_mk]
+                                L_c = int(round(float(fm.get("L_cm", 200))))
+                                B_c = int(round(float(fm.get("B_cm", 200))))
+                                t_c = int(round(float(fm.get("t_cm", fm.get("tc_cm", 60)))))
+                                cols_m = fm.get("cols_list", [])
+                                c_names = ", ".join([c["id"] for c in cols_m]) if cols_m else "—"
+                                raw_ftg_rows.append({
+                                    "نموذج القاعدة (Model)": f_mk,
+                                    "النوع والتصنيف": fm.get("model_label", "قاعدة منفصلة"),
+                                    "الأعمدة المرتكزة (Columns)": f"{len(cols_m)} أعمدة ({c_names})",
+                                    "أقصى حمل تصميمي Pu (ton)": f"{fm.get('pu_gov', 0.0):.1f} ton",
+                                    "أبعاد المسلحة R.C. (cm)": f"{L_c} × {B_c} × {t_c}",
+                                    "أبعاد العادية P.C. (cm)": f"{L_c + 40} × {B_c + 40} × 20",
+                                    "التسليح والتفاصيل الإنشائية": f"فرش: {fm.get('rft_long_str', '5Ø16/m')} | غطاء: {fm.get('rft_short_str', '5Ø16/m')}",
+                                    "حالة التحقق الإنشائي (Status)": "✅ Safe ومحقق للكود",
+                                })
 
-                # Append Strap Beams row (ST) if available
-                st_beams_final = gb_analysis_final.get("strap_beams", []) if gb_analysis_final else []
-                if st_beams_final and not any("ST" in str(r.get("النموذج (Mark)", "")) for r in raw_gb_rows):
-                    cnt_st_b = len(st_beams_final)
-                    len_st_b = sum(b.get("span_m", 0.0) for b in st_beams_final)
-                    raw_gb_rows.append({
-                        "النموذج (Mark)": "ST",
-                        "التصنيف والأهمية الإنشائية": "شدادات الجار والركن (Strap Beams)",
-                        "الأبعاد b × t (cm)": "40 × 100",
-                        "التسليح السفلي (Bottom Rft)": "2Ø16 (سفلي ثانوي)",
-                        "التسليح العلوي (Top Rft)": "5Ø22 (علوي رئيسي)",
-                        "براندات الانكماش (Side Bars)": "4Ø10 (انكماش)",
-                        "الكانات (Stirrups)": "5Ø10/m (4 فروع)",
-                        "العدد بالمشروع (Count)": f"{cnt_st_b} شداد",
-                        "إجمالي الأطوال (Total Length)": f"{len_st_b:.2f} m",
-                    })
-
-                if raw_gb_rows:
-                    df_gb_summary = pd.DataFrame(raw_gb_rows)
-                    render_styled_table(df_gb_summary, font_size_override=14.0)
+                    if raw_ftg_rows:
+                        df_ftg_summary = pd.DataFrame(raw_ftg_rows)
+                        render_styled_table(df_ftg_summary, font_size_override=14.0)
+                    else:
+                        st.info("💡 لم يتم استخراج نماذج للقواعد أو جاري حساب وتحليل الأساسات.")
                 else:
-                    st.info("💡 لم يتم استخراج نماذج للسملات الأرضية أو لم يتم تفعيل قسم Ground Beams Design بعد.")
-
-                st.markdown("<hr style='margin: 24px 0; border: none; border-top: 1.5px solid #cbd5e1;' />", unsafe_allow_html=True)
-
-                # ── 4. EXECUTIVE FOUNDATIONS SCHEDULE TABLE (جدول القواعد بخط كبير وغامق) ──
-                st.markdown(
-                    """
-                    <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.05) 0%, rgba(15, 23, 42, 0.09) 100%); border: 1.5px solid #cbd5e1; border-right: 6px solid #38bdf8; border-radius: 10px; padding: 12px 16px; margin: 16px 0 12px 0; text-align: right;">
-                        <div style="font-size: 16px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                            <span>📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)</span>
-                            <span style="font-size: 12px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Executive</span>
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-                raw_ftg_rows = []
-                if ftg_analysis_final and ftg_analysis_final.get("unified_rows"):
-                    raw_ftg_rows = [dict(r) for r in ftg_analysis_final.get("unified_rows", [])]
-                elif ftg_analysis_final and ftg_analysis_final.get("models"):
-                    ftg_models_dict = ftg_analysis_final.get("models", {})
-                    for f_mk in ["F1", "F2", "F3"]:
-                        if f_mk in ftg_models_dict:
-                            fm = ftg_models_dict[f_mk]
-                            L_c = int(fm.get("L_cm", 200))
-                            B_c = int(fm.get("B_cm", 200))
-                            t_c = int(fm.get("tc_cm", 60))
-                            cols_m = fm.get("cols_list", [])
-                            c_names = ", ".join([c["id"] for c in cols_m]) if cols_m else "—"
-                            raw_ftg_rows.append({
-                                "نموذج القاعدة (Model)": f_mk,
-                                "النوع والتصنيف": fm.get("model_label", "قاعدة منفصلة"),
-                                "الأعمدة المرتكزة (Columns)": f"{len(cols_m)} أعمدة ({c_names})",
-                                "أقصى حمل تصميمي Pu (ton)": f"{fm.get('pu_gov', 0.0):.1f} ton",
-                                "أبعاد المسلحة R.C. (cm)": f"{L_c} × {B_c} × {t_c}",
-                                "أبعاد العادية P.C. (cm)": f"{L_c + 40} × {B_c + 40} × 20",
-                                "التسليح والتفاصيل الإنشائية": f"فرش: {fm.get('rft_long_str', '5Ø16/m')} | غطاء: {fm.get('rft_short_str', '5Ø16/m')}",
-                                "حالة التحقق الإنشائي (Status)": "✅ Safe ومحقق للكود",
-                            })
-
-                if raw_ftg_rows:
-                    df_ftg_summary = pd.DataFrame(raw_ftg_rows)
-                    render_styled_table(df_ftg_summary, font_size_override=14.0)
-                else:
-                    st.info("💡 لم يتم استخراج نماذج للقواعد أو جاري حساب وتحليل الأساسات.")
-            else:
-                st.info("💡 جاري معالجة وحساب بيانات الأساسات والسملات لتوليد لوحة ومخرجات التصميم النهائي للقواعد والسملات.")
+                    st.info("💡 جاري معالجة وحساب بيانات الأساسات والسملات لتوليد لوحة ومخرجات التصميم النهائي للقواعد والسملات.")
 
         # ── 📊 الحصر التقريبي للكميات — APPROXIMATE QUANTITY SURVEY ──────────────
         # 1. Slab Quantities (السقف)
@@ -24578,6 +24986,7 @@ def render(is_standalone: bool = False):
                 deflection_results=deflection_results, all_deflection_safe=all_deflection_safe,
                 img_verif_b64=_img_verif,
                 gb_analysis=gb_analysis_obj if 'gb_analysis_obj' in locals() else st.session_state.get('fs_gb_analysis'),
+                ftg_analysis=None if is_standalone else (ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get('fs_ftg_analysis')),
             )
 
         def _build_flat_slab_full_html():
@@ -24884,6 +25293,7 @@ def render(is_standalone: bool = False):
                 img_reactions_b64=_img_reac,
                 img_rebar_bbs_b64=_img_bbs,
                 gb_analysis=gb_analysis_obj if 'gb_analysis_obj' in locals() else st.session_state.get('fs_gb_analysis'),
+                ftg_analysis=None if is_standalone else (ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get('fs_ftg_analysis')),
             )
 
         def _build_flat_slab_concise_html():

@@ -68,25 +68,271 @@ def _punch_allow_kgcm2(Fcu, c_cm, b_cm, d_cm, bo_cm):
     return min(q1, q2, q3, q4)
 
 
-def _As_design_cm2(Mu_kgcm, d_cm, b_cm, Fcu, Fy):
-    """Required steel area (cm²) by Whitney stress block with 0.15% minimum."""
+def _As_flex_only_cm2(Mu_kgcm, d_cm, b_cm, Fcu, Fy):
+    """Required steel area (cm²) by Whitney stress block for flexure only (without As_min)."""
     if Mu_kgcm <= 0 or d_cm <= 0 or b_cm <= 0:
-        return 0.0015 * b_cm * d_cm
+        return 0.0
 
     a = 0.10 * d_cm
+    As = 0.0
     for _ in range(30):
         lever = d_cm - a / 2.0
         if lever <= 0:
             lever = 0.50 * d_cm
         As = Mu_kgcm / (0.9 * Fy * lever)
-        a = (As * Fy) / (0.85 * Fcu * b_cm) if (Fcu * b_cm) > 0 else 0
+        a = (As * Fy) / (0.85 * Fcu * b_cm) if (Fcu * b_cm) > 0 else 0.0
+    return As
+
+
+def _As_design_cm2(Mu_kgcm, d_cm, b_cm, Fcu, Fy):
+    """Required steel area (cm²) by Whitney stress block with 0.15% minimum."""
+    As = _As_flex_only_cm2(Mu_kgcm, d_cm, b_cm, Fcu, Fy)
     As_min = 0.0015 * b_cm * d_cm
     return max(As, As_min)
 
 
+def _clean_cm_val(val):
+    """Round cm value cleanly without distorting intentional manual dimensions."""
+    v = round(float(val), 1)
+    if abs(v - round(v)) < 1e-4:
+        return int(round(v))
+    return v
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
-#  2. ISOLATED FOOTING MODEL DESIGN ENGINE (ECP 203)
+#  2. ISOLATED FOOTING MODEL DESIGN & MANUAL VERIFICATION ENGINE (ECP 203)
 # ═══════════════════════════════════════════════════════════════════════════════
+
+def verify_isolated_footing_manual(
+    model_id: str,
+    L_m: float,
+    B_m: float,
+    t_cm: float,
+    Phi_mm: int,
+    Nx_m: int,
+    Ny_m: int,
+    Pu_ton: float,
+    c_cm: float,
+    b_cm: float,
+    q_net_kgcm2: float,
+    Fcu: float = 250.0,
+    Fy: float = 4000.0,
+    cover_cm: float = 7.0,
+) -> dict:
+    """
+    Real-time structural verification of a manually edited isolated footing model (ECP 203).
+    Checks:
+      1. Geometry & minimum thickness / effective depth
+      2. Net soil bearing pressure (q_act <= q_net)
+      3. One-way shear in both X and Y directions
+      4. Two-way punching shear around column perimeter
+      5. Flexure reinforcement As_req and minimum reinforcement As_min in X and Y directions
+      6. Bar spacing limits (5 <= n <= 10 bars/m and clear spacing >= 70 mm)
+    Returns detailed verification dict with `is_safe` and accurate Arabic `errors` list.
+    """
+    L_cm = float(L_m) * 100.0
+    B_cm = float(B_m) * 100.0
+    t_val_cm = float(t_cm)
+    Phi_val = int(Phi_mm)
+    Nx_val = int(Nx_m)
+    Ny_val = int(Ny_m)
+    Pu_val = max(0.01, float(Pu_ton))
+    c_val = float(c_cm)
+    b_val = float(b_cm)
+    q_net = float(q_net_kgcm2)
+
+    d_cm = t_val_cm - float(cover_cm) - (Phi_val / 20.0)
+    cant_L = (L_cm - c_val) / 2.0
+    cant_B = (B_cm - b_val) / 2.0
+
+    errors = []
+
+    # 1. Geometry & Thickness Checks
+    dims_ok = (L_cm > c_val + 10.0) and (B_cm > b_val + 10.0)
+    if L_cm <= c_val or B_cm <= b_val:
+        errors.append(
+            f"أبعاد القاعدة ({L_cm:.0f} × {B_cm:.0f} cm) يجب أن تكون أكبر من أبعاد العمود ({c_val:.0f} × {b_val:.0f} cm) في الاتجاهين."
+        )
+    elif cant_L < 5.0 or cant_B < 5.0:
+        errors.append(
+            f"رفرفة القاعدة حول العمود غير كافية (cL = {cant_L:.1f} cm, cB = {cant_B:.1f} cm — يلزم رفرفة موجبة ≥ 5 cm)."
+        )
+
+    thick_ok = (t_val_cm >= 30.0) and (d_cm > 15.0)
+    if t_val_cm < 30.0:
+        errors.append(
+            f"سمك القاعدة الكلي (t = {t_val_cm:.0f} cm) أقل من الحد الأدنى المسموح به إنشائياً (30 cm)."
+        )
+    elif d_cm <= 15.0:
+        errors.append(
+            f"العمق الفعال للقاعدة (d = {d_cm:.1f} cm) غير كافٍ بعد خصم الغطاء الخرساني ({cover_cm:.1f} cm)."
+        )
+
+    # 2. Net Soil Bearing Pressure Check
+    A_cm2 = max(L_cm * B_cm, 1.0)
+    P_working_kg = (Pu_val / 1.5) * 1000.0
+    q_act = 1.05 * P_working_kg / A_cm2
+    util_q = (q_act / q_net) * 100.0 if q_net > 0 else 999.0
+    q_ok = q_act <= q_net + 1e-6
+    if not q_ok:
+        errors.append(
+            f"إجهاد التربة الفعلي (q_act = {q_act:.2f} kg/cm²) يتجاوز الإجهاد الصافي المسموح به للتربة (q_net = {q_net:.2f} kg/cm²)."
+        )
+
+    # Ultimate soil pressure
+    Pu_kg = Pu_val * 1000.0
+    q_u = Pu_kg / A_cm2
+
+    # 3. One-Way Shear Check (Both X & Y directions)
+    q_cu = _shear_allow_kgcm2(Fcu)
+    if d_cm > 1.0 and B_cm > 0 and L_cm > 0:
+        a_L = max(cant_L - d_cm / 2.0, 0.0)
+        V_L = q_u * B_cm * a_L
+        tau_sx = V_L / (B_cm * d_cm)
+
+        a_B = max(cant_B - d_cm / 2.0, 0.0)
+        V_B = q_u * L_cm * a_B
+        tau_sy = V_B / (L_cm * d_cm)
+        tau_s = max(tau_sx, tau_sy)
+    else:
+        tau_sx = 999.0
+        tau_sy = 999.0
+        tau_s = 999.0
+
+    shear_ok = (d_cm > 15.0) and (tau_s <= q_cu + 1e-6)
+    if not shear_ok and d_cm > 15.0:
+        errors.append(
+            f"فشل في مقاومة القص أحادي الاتجاه (One-Way Shear): الإجهاد الفعلي ({tau_s:.2f} kg/cm²) يتجاوز المسموح به ({q_cu:.2f} kg/cm²) — يلزم زيادة سمك القاعدة t."
+        )
+
+    # 4. Two-Way Punching Shear Check
+    if d_cm > 1.0:
+        bo = 2.0 * ((c_val + d_cm) + (b_val + d_cm))
+        Ap = (c_val + d_cm) * (b_val + d_cm)
+        Qp = max(0.0, Pu_kg - q_u * Ap)
+        tau_p = Qp / (bo * d_cm) if (bo * d_cm) > 0 else 999.0
+        tau_p_allow = _punch_allow_kgcm2(Fcu, c_val, b_val, d_cm, bo)
+    else:
+        bo = 0.0
+        tau_p = 999.0
+        tau_p_allow = _punch_allow_kgcm2(Fcu, c_val, b_val, 15.0, 2.0 * (c_val + b_val + 30.0))
+
+    punch_ok = (d_cm > 15.0) and (tau_p <= tau_p_allow + 1e-6)
+    if not punch_ok and d_cm > 15.0:
+        errors.append(
+            f"فشل في مقاومة القص الثاقب (Punching Shear): الإجهاد الفعلي ({tau_p:.2f} kg/cm²) يتجاوز المسموح به ({tau_p_allow:.2f} kg/cm²) — يلزم زيادة سمك القاعدة t."
+        )
+
+    # 5. Flexure & Minimum Steel Check (X and Y per meter width)
+    M_x_kgcm_m = q_u * 100.0 * (max(cant_L, 0.0) ** 2) / 2.0
+    M_y_kgcm_m = q_u * 100.0 * (max(cant_B, 0.0) ** 2) / 2.0
+    M_x_tm_m = M_x_kgcm_m / 100000.0
+    M_y_tm_m = M_y_kgcm_m / 100000.0
+
+    As_req_x = _As_flex_only_cm2(M_x_kgcm_m, max(d_cm, 1.0), 100.0, Fcu, Fy)
+    As_req_y = _As_flex_only_cm2(M_y_kgcm_m, max(d_cm, 1.0), 100.0, Fcu, Fy)
+    As_min = 0.0015 * 100.0 * max(d_cm, 0.0)
+
+    a_bar_cm2 = math.pi * ((Phi_val / 10.0) ** 2) / 4.0
+    As_prov_x = Nx_val * a_bar_cm2
+    As_prov_y = Ny_val * a_bar_cm2
+
+    flex_x_ok = As_prov_x + 1e-6 >= As_req_x
+    flex_y_ok = As_prov_y + 1e-6 >= As_req_y
+    min_x_ok = As_prov_x + 1e-6 >= As_min
+    min_y_ok = As_prov_y + 1e-6 >= As_min
+
+    if not flex_x_ok:
+        errors.append(
+            f"نقص مساحة التسليح في اتجاه X: التسليح المتوفر ({As_prov_x:.2f} cm²/m لـ {Nx_val}Ø{Phi_val}/m) أقل من المطلوب لمقاومة العزوم (As,req = {As_req_x:.2f} cm²/m)."
+        )
+    if not min_x_ok:
+        errors.append(
+            f"نسبة التسليح في اتجاه X أقل من الحد الأدنى للكود: المتوفر ({As_prov_x:.2f} cm²/m) أقل من الحد الأدنى (As,min = {As_min:.2f} cm²/m)."
+        )
+
+    if not flex_y_ok:
+        errors.append(
+            f"نقص مساحة التسليح في اتجاه Y: التسليح المتوفر ({As_prov_y:.2f} cm²/m لـ {Ny_val}Ø{Phi_val}/m) أقل من المطلوب لمقاومة العزوم (As,req = {As_req_y:.2f} cm²/m)."
+        )
+    if not min_y_ok:
+        errors.append(
+            f"نسبة التسليح في اتجاه Y أقل من الحد الأدنى للكود: المتوفر ({As_prov_y:.2f} cm²/m) أقل من الحد الأدنى (As,min = {As_min:.2f} cm²/m)."
+        )
+
+    # 6. Bar Spacing Checks (ECP 203: 5 <= n <= 10 bars/m and s_clear >= 70 mm)
+    s_cc_x_mm = 1000.0 / max(1, Nx_val)
+    s_cc_y_mm = 1000.0 / max(1, Ny_val)
+    s_clear_x_mm = (1000.0 - Nx_val * Phi_val) / max(1, Nx_val - 1) if Nx_val > 1 else (1000.0 - Phi_val)
+    s_clear_y_mm = (1000.0 - Ny_val * Phi_val) / max(1, Ny_val - 1) if Ny_val > 1 else (1000.0 - Phi_val)
+
+    spacing_x_ok = (5 <= Nx_val <= 10) and (s_clear_x_mm >= 70.0)
+    spacing_y_ok = (5 <= Ny_val <= 10) and (s_clear_y_mm >= 70.0)
+
+    if Nx_val < 5:
+        errors.append(
+            f"عدد الأسياخ في اتجاه X ({Nx_val} أسياخ/م') أقل من الحد الأدنى للكود (5 أسياخ/م' — أقصى مسافة تقسيط 200 mm)."
+        )
+    elif Nx_val > 10 or s_clear_x_mm < 70.0:
+        errors.append(
+            f"مسافات التقسيط في اتجاه X غير مطابقة للكود ({Nx_val}Ø{Phi_val}/m، المسافة الخالصة {s_clear_x_mm:.0f} mm) — الحد الأقصى 10 أسياخ/م' وأقل مسافة خالصة 70 mm لمنع التعشيش."
+        )
+
+    if Ny_val < 5:
+        errors.append(
+            f"عدد الأسياخ في اتجاه Y ({Ny_val} أسياخ/م') أقل من الحد الأدنى للكود (5 أسياخ/م' — أقصى مسافة تقسيط 200 mm)."
+        )
+    elif Ny_val > 10 or s_clear_y_mm < 70.0:
+        errors.append(
+            f"مسافات التقسيط في اتجاه Y غير مطابقة للكود ({Ny_val}Ø{Phi_val}/m، المسافة الخالصة {s_clear_y_mm:.0f} mm) — الحد الأقصى 10 أسياخ/م' وأقل مسافة خالصة 70 mm لمنع التعشيش."
+        )
+
+    is_safe = len(errors) == 0
+
+    return {
+        "model_id": model_id,
+        "is_safe": is_safe,
+        "errors": errors,
+        "dims_ok": dims_ok,
+        "thick_ok": thick_ok,
+        "q_act": q_act,
+        "q_net": q_net,
+        "util_q": util_q,
+        "q_ok": q_ok,
+        "tau_s": tau_s,
+        "tau_sx": tau_sx,
+        "tau_sy": tau_sy,
+        "tau_s_allow": q_cu,
+        "shear_ok": shear_ok,
+        "tau_p": tau_p,
+        "tau_p_allow": tau_p_allow,
+        "punch_ok": punch_ok,
+        "bo_cm": bo,
+        "M_x_tm_m": M_x_tm_m,
+        "M_y_tm_m": M_y_tm_m,
+        "As_req_x": As_req_x,
+        "As_req_y": As_req_y,
+        "As_min": As_min,
+        "As_prov_x": As_prov_x,
+        "As_prov_y": As_prov_y,
+        "flex_x_ok": flex_x_ok,
+        "flex_y_ok": flex_y_ok,
+        "min_x_ok": min_x_ok,
+        "min_y_ok": min_y_ok,
+        "s_cc_x_mm": s_cc_x_mm,
+        "s_cc_y_mm": s_cc_y_mm,
+        "s_clear_x_mm": s_clear_x_mm,
+        "s_clear_y_mm": s_clear_y_mm,
+        "spacing_ok": spacing_x_ok and spacing_y_ok,
+        "d_cm": d_cm,
+        "t_cm": t_val_cm,
+        "L_cm": L_cm,
+        "B_cm": B_cm,
+        "Phi_mm": Phi_val,
+        "Nx_m": Nx_val,
+        "Ny_m": Ny_val,
+    }
+
 
 def design_isolated_footing_model(
     model_id: str,
@@ -102,10 +348,15 @@ def design_isolated_footing_model(
     Phi_mm: int = 16,
     Phi_col_mm: int = 16,
     t_override_cm: float = None,
+    L_override_cm: float = None,
+    B_override_cm: float = None,
+    nx_override_m: int = None,
+    ny_override_m: int = None,
 ):
     """
     Design unified isolated footing model (F1, F2, F3) according to ECP 203.
-    Returns complete dictionary with all 9 schedule columns and verification metrics.
+    Supports optional confirmed manual overrides for L, B, t, Phi, Nx, Ny.
+    Returns complete dictionary with all schedule columns and verification metrics.
     """
     if Pu_ton <= 0:
         Pu_ton = 10.0
@@ -121,13 +372,21 @@ def design_isolated_footing_model(
     B_raw = (-delta + math.sqrt(max(disc, 1.0))) / 2.0
     L_raw = B_raw + delta
 
-    L_cm = _r5(max(L_raw, c_cm + 30))
-    B_cm = _r5(max(B_raw, b_cm + 30))
+    L_cm_calc = _r5(max(L_raw, c_cm + 30))
+    B_cm_calc = _r5(max(B_raw, b_cm + 30))
+
+    has_manual_override = any(
+        v is not None and float(v) > 0
+        for v in (L_override_cm, B_override_cm, t_override_cm, nx_override_m, ny_override_m)
+    )
+
+    L_cm = _clean_cm_val(L_override_cm) if (L_override_cm is not None and float(L_override_cm) > 0) else L_cm_calc
+    B_cm = _clean_cm_val(B_override_cm) if (B_override_cm is not None and float(B_override_cm) > 0) else B_cm_calc
 
     # Actual contact pressure at working load
     A_cm2 = L_cm * B_cm
     q_act = 1.05 * P_working_kg / A_cm2
-    q_ok = q_act <= q_net_kgcm2
+    q_ok = q_act <= q_net_kgcm2 + 1e-6
     util_q = (q_act / q_net_kgcm2) * 100.0
 
     # Ultimate uniform soil reaction
@@ -139,7 +398,9 @@ def design_isolated_footing_model(
 
     # Thickness check (governed by shear, punching, and minimum 40 cm)
     q_cu = _shear_allow_kgcm2(Fcu)
-    d_shear = (q_u * cant_L) / (q_cu + 0.5 * q_u) if (q_cu + 0.5 * q_u) > 0 else 30.0
+    d_shear_L = (q_u * cant_L) / (q_cu + 0.5 * q_u) if (q_cu + 0.5 * q_u) > 0 else 30.0
+    d_shear_B = (q_u * cant_B) / (q_cu + 0.5 * q_u) if (q_cu + 0.5 * q_u) > 0 else 30.0
+    d_shear = max(d_shear_L, d_shear_B)
 
     d_punch = 35.0
     for _ in range(5):
@@ -150,33 +411,39 @@ def design_isolated_footing_model(
         d_req = Qp / (bo * tau_p_allow) if (bo * tau_p_allow) > 0 else 30.0
         d_punch = max(d_punch, d_req)
 
-    d_cm = _r5(max(d_shear, d_punch, 35.0))
-    t_cm_calc = _r5(d_cm + cover_cm + (Phi_mm / 20.0))
+    d_cm_calc = _r5(max(d_shear, d_punch, 35.0))
+    t_cm_calc = _r5(d_cm_calc + cover_cm + (Phi_mm / 20.0))
     if t_cm_calc < 40:
-        t_cm_calc = 40.0
+        t_cm_calc = 40
     if t_override_cm is not None and float(t_override_cm) > 0:
-        t_cm = _r5(max(float(t_override_cm), 40.0))
+        t_cm = _clean_cm_val(max(float(t_override_cm), 30.0))
         d_cm = t_cm - cover_cm - (Phi_mm / 20.0)
     else:
         t_cm = t_cm_calc
         d_cm = t_cm - cover_cm - (Phi_mm / 20.0)
 
-    # Re-verify shear and punching stresses
+    # Re-verify shear and punching stresses in both directions
     a_L = max(cant_L - d_cm / 2.0, 0)
     V_L = q_u * B_cm * a_L
-    tau_s = V_L / (B_cm * d_cm) if (B_cm * d_cm) > 0 else 0.0
-    s_ok = tau_s <= q_cu
+    tau_s_L = V_L / (B_cm * d_cm) if (B_cm * d_cm) > 0 else 0.0
+
+    a_B = max(cant_B - d_cm / 2.0, 0)
+    V_B = q_u * L_cm * a_B
+    tau_s_B = V_B / (L_cm * d_cm) if (L_cm * d_cm) > 0 else 0.0
+
+    tau_s = max(tau_s_L, tau_s_B)
+    s_ok = tau_s <= q_cu + 1e-6
 
     bo_final = 2.0 * ((c_cm + d_cm) + (b_cm + d_cm))
     Ap_final = (c_cm + d_cm) * (b_cm + d_cm)
-    Qp_final = Pu_kg - q_u * Ap_final
+    Qp_final = max(0.0, Pu_kg - q_u * Ap_final)
     tau_p = Qp_final / (bo_final * d_cm) if (bo_final * d_cm) > 0 else 0.0
     tau_p_allow = _punch_allow_kgcm2(Fcu, c_cm, b_cm, d_cm, bo_final)
-    p_ok = tau_p <= tau_p_allow
+    p_ok = tau_p <= tau_p_allow + 1e-6
 
     # Flexure & Reinforcement
-    M_L_kgcm = q_u * B_cm * (cant_L**2) / 2.0
-    M_B_kgcm = q_u * L_cm * (cant_B**2) / 2.0
+    M_L_kgcm = q_u * B_cm * (max(cant_L, 0.0)**2) / 2.0
+    M_B_kgcm = q_u * L_cm * (max(cant_B, 0.0)**2) / 2.0
 
     As_L = _As_design_cm2(M_L_kgcm, d_cm, B_cm, Fcu, Fy)
     As_B = _As_design_cm2(M_B_kgcm, d_cm, L_cm, Fcu, Fy)
@@ -185,62 +452,94 @@ def design_isolated_footing_model(
     a_bar_cm2 = math.pi * ((Phi_mm / 10.0)**2) / 4.0
     n_m_L_sel = max(5, math.ceil((As_L / (B_cm / 100.0)) / a_bar_cm2))
     n_m_B_sel = max(5, math.ceil((As_B / (L_cm / 100.0)) / a_bar_cm2))
-    max_bars_m_sel = max(n_m_L_sel, n_m_B_sel)
 
-    # Spacing checks:
-    # Clear spacing in mm: (1000 - n * Phi) / (n - 1)
-    s_clear_mm = (1000.0 - max_bars_m_sel * Phi_mm) / max(1, max_bars_m_sel - 1)
+    has_manual_bars = (nx_override_m is not None and int(nx_override_m) > 0) or (ny_override_m is not None and int(ny_override_m) > 0)
+    if has_manual_bars:
+        actual_phi = int(Phi_mm)
+        actual_n_L = int(nx_override_m) if (nx_override_m is not None and int(nx_override_m) > 0) else n_m_L_sel
+        actual_n_B = int(ny_override_m) if (ny_override_m is not None and int(ny_override_m) > 0) else n_m_B_sel
+        max_bars_m_sel = max(actual_n_L, actual_n_B)
+        s_clear_mm = (1000.0 - max_bars_m_sel * actual_phi) / max(1, max_bars_m_sel - 1)
+        phi_rejected = False
+        safe_phi = actual_phi
+        safe_n_L = actual_n_L
+        safe_n_B = actual_n_B
+        man_chk = verify_isolated_footing_manual(
+            model_id=model_id,
+            L_m=L_cm / 100.0,
+            B_m=B_cm / 100.0,
+            t_cm=t_cm,
+            Phi_mm=actual_phi,
+            Nx_m=actual_n_L,
+            Ny_m=actual_n_B,
+            Pu_ton=Pu_ton,
+            c_cm=c_cm,
+            b_cm=b_cm,
+            q_net_kgcm2=q_net_kgcm2,
+            Fcu=Fcu,
+            Fy=Fy,
+            cover_cm=cover_cm,
+        )
+        is_safe = man_chk["is_safe"]
+        rejection_reason = ""
+    else:
+        max_bars_m_sel = max(n_m_L_sel, n_m_B_sel)
 
-    # ECP 203 Check:
-    # Egyptian Code Clause 4-2-1-2 & 6-2-1:
-    # - Maximum bars per meter is 10 bars/m (spacing c/c >= 100 mm).
-    # - Clear spacing between bars >= 70 mm (and >= max aggregate size 25mm + 5mm) to prevent honeycombing.
-    phi_rejected = (max_bars_m_sel > 10) or (s_clear_mm < 70.0)
+        # Spacing checks:
+        # Clear spacing in mm: (1000 - n * Phi) / (n - 1)
+        s_clear_mm = (1000.0 - max_bars_m_sel * Phi_mm) / max(1, max_bars_m_sel - 1)
 
-    # Standard Egyptian footings rebar diameters (strictly excluding 14 mm!)
-    std_ftg_dias = [10, 12, 16, 18, 20, 22, 25]
+        # ECP 203 Check:
+        # Egyptian Code Clause 4-2-1-2 & 6-2-1:
+        # - Maximum bars per meter is 10 bars/m (spacing c/c >= 100 mm).
+        # - Clear spacing between bars >= 70 mm (and >= max aggregate size 25mm + 5mm) to prevent honeycombing.
+        phi_rejected = (max_bars_m_sel > 10) or (s_clear_mm < 70.0)
 
-    safe_phi = Phi_mm
-    safe_n_L = n_m_L_sel
-    safe_n_B = n_m_B_sel
+        # Standard Egyptian footings rebar diameters (strictly excluding 14 mm!)
+        std_ftg_dias = [10, 12, 16, 18, 20, 22, 25]
 
-    if phi_rejected:
-        # Search for the minimum safe diameter that satisfies ECP 203 spacing
-        for cand_phi in std_ftg_dias:
-            a_cand = math.pi * ((cand_phi / 10.0)**2) / 4.0
-            n_L_c = max(5, math.ceil((As_L / (B_cm / 100.0)) / a_cand))
-            n_B_c = max(5, math.ceil((As_B / (L_cm / 100.0)) / a_cand))
-            max_c = max(n_L_c, n_B_c)
-            s_clr_c = (1000.0 - max_c * cand_phi) / max(1, max_c - 1)
-            if max_c <= 10 and s_clr_c >= 70.0:
-                safe_phi = cand_phi
-                safe_n_L = n_L_c
-                safe_n_B = n_B_c
-                break
-        else:
-            safe_phi = 25
-            a_cand = math.pi * ((25 / 10.0)**2) / 4.0
-            safe_n_L = max(5, math.ceil((As_L / (B_cm / 100.0)) / a_cand))
-            safe_n_B = max(5, math.ceil((As_B / (L_cm / 100.0)) / a_cand))
+        safe_phi = Phi_mm
+        safe_n_L = n_m_L_sel
+        safe_n_B = n_m_B_sel
 
-    # The program DOES NOT ACCEPT the failing diameter:
-    # It enforces safe_phi for final execution and quantities
-    actual_phi = safe_phi if phi_rejected else Phi_mm
-    actual_n_L = safe_n_L if phi_rejected else n_m_L_sel
-    actual_n_B = safe_n_B if phi_rejected else n_m_B_sel
+        if phi_rejected:
+            # Search for the minimum safe diameter that satisfies ECP 203 spacing
+            for cand_phi in std_ftg_dias:
+                a_cand = math.pi * ((cand_phi / 10.0)**2) / 4.0
+                n_L_c = max(5, math.ceil((As_L / (B_cm / 100.0)) / a_cand))
+                n_B_c = max(5, math.ceil((As_B / (L_cm / 100.0)) / a_cand))
+                max_c = max(n_L_c, n_B_c)
+                s_clr_c = (1000.0 - max_c * cand_phi) / max(1, max_c - 1)
+                if max_c <= 10 and s_clr_c >= 70.0:
+                    safe_phi = cand_phi
+                    safe_n_L = n_L_c
+                    safe_n_B = n_B_c
+                    break
+            else:
+                safe_phi = 25
+                a_cand = math.pi * ((25 / 10.0)**2) / 4.0
+                safe_n_L = max(5, math.ceil((As_L / (B_cm / 100.0)) / a_cand))
+                safe_n_B = max(5, math.ceil((As_B / (L_cm / 100.0)) / a_cand))
+
+        # The program DOES NOT ACCEPT the failing diameter:
+        # It enforces safe_phi for final execution and quantities
+        actual_phi = safe_phi if phi_rejected else Phi_mm
+        actual_n_L = safe_n_L if phi_rejected else n_m_L_sel
+        actual_n_B = safe_n_B if phi_rejected else n_m_B_sel
+        is_safe = q_ok and s_ok and p_ok
+
+        rejection_reason = (
+            f"طبقاً للكود المصري لتصميم وتنفيذ المنشآت الخرسانية (ECP 203 - بند 4-2-1 و 6-2-1): "
+            f"الحد الأقصى لعدد أسياخ التسليح في المتر هو 10 أسياخ/م' (المسافة لا تقل عن 100 مم لمنع التعشيش وضمان تغلغل الخرسانة والركام). "
+            f"القطر المختار Φ{Phi_mm} يتطلب {max_bars_m_sel} أسياخ/م' وهو ما يتجاوز الحد الكودي المسموح به. "
+            f"تم رفض هذا القطر كودياً ولا يقبله البرنامج، وتم الترقية واعتماد القطر الآمن Φ{safe_phi} مم بواقع {max(safe_n_L, safe_n_B)} أسياخ/م'."
+        ) if phi_rejected else ""
 
     total_bars_L = math.ceil(actual_n_L * (B_cm / 100.0))
     total_bars_B = math.ceil(actual_n_B * (L_cm / 100.0))
 
     rft_long_str = f"{actual_n_L}Ø{actual_phi}/m ({total_bars_L}Ø{actual_phi})"
     rft_short_str = f"{actual_n_B}Ø{actual_phi}/m ({total_bars_B}Ø{actual_phi})"
-
-    rejection_reason = (
-        f"طبقاً للكود المصري لتصميم وتنفيذ المنشآت الخرسانية (ECP 203 - بند 4-2-1 و 6-2-1): "
-        f"الحد الأقصى لعدد أسياخ التسليح في المتر هو 10 أسياخ/م' (المسافة لا تقل عن 100 مم لمنع التعشيش وضمان تغلغل الخرسانة والركام). "
-        f"القطر المختار Φ{Phi_mm} يتطلب {max_bars_m_sel} أسياخ/م' وهو ما يتجاوز الحد الكودي المسموح به. "
-        f"تم رفض هذا القطر كودياً ولا يقبله البرنامج، وتم الترقية واعتماد القطر الآمن Φ{safe_phi} مم بواقع {max(safe_n_L, safe_n_B)} أسياخ/م'."
-    ) if phi_rejected else ""
 
     # Top reinforcement (shrinkage if t >= 80 cm)
     if t_cm >= 80:
@@ -251,14 +550,14 @@ def design_isolated_footing_model(
     # Column dowel length Ld (60 Phi)
     Ld_cm = int(math.ceil(60.0 * (Phi_col_mm / 10.0)))
 
-    is_safe = q_ok and s_ok and p_ok
-
     Pu_kN = Pu_ton * 9.80665
 
     if phi_rejected:
         status_str = f"⚠️ تم رفض Φ{Phi_mm} واعتماد Φ{safe_phi} (مطلوب زيادة القطر كودياً)"
     elif not is_safe:
         status_str = "Review ⚠️ (تحقق من إجهادات التربة أو القص)"
+    elif has_manual_override:
+        status_str = "Safe ✅ ومحقق للكود (معدل يدوياً)"
     else:
         status_str = "Safe ✅ ومحقق للكود"
 
@@ -276,9 +575,13 @@ def design_isolated_footing_model(
         "L_cm": L_cm,
         "B_cm": B_cm,
         "t_cm": t_cm,
-        "t_cm_calc": locals().get("t_cm_calc", t_cm),
+        "tc_cm": t_cm,
+        "L_cm_calc": L_cm_calc,
+        "B_cm_calc": B_cm_calc,
+        "t_cm_calc": t_cm_calc,
         "d_cm": d_cm,
         "dims_str": f"{L_cm} × {B_cm} × {t_cm} cm",
+        "is_manual_override": has_manual_override,
         "selected_phi": Phi_mm,
         "Phi_mm": actual_phi,
         "actual_phi": actual_phi,
@@ -296,6 +599,7 @@ def design_isolated_footing_model(
         "total_bars_B": total_bars_B,
         "rft_long_str": rft_long_str,
         "rft_short_str": rft_short_str,
+        "rft_str": f"فرش: {rft_long_str} | غطاء: {rft_short_str}",
         "top_rft_str": top_rft_str,
         "Ld_str": f"{Ld_cm} cm (60Ø)",
         "status_str": status_str,
@@ -769,10 +1073,10 @@ def draw_foundation_layout_plan(
     unique_xs, unique_ys, label_map_x, label_map_y = _get_grid_axes(columns_list)
 
     # 2. Compute bounding box for ALL elements (isolated footings + combined footings + grid axes)
-    min_ftg_x = min(c["x"] - ((footings_map.get(c["type"], {}).get("L_cm", 200.0) / 200.0)) for c in columns_list)
-    max_ftg_x = max(c["x"] + ((footings_map.get(c["type"], {}).get("L_cm", 200.0) / 200.0)) for c in columns_list)
-    min_ftg_y = min(c["y"] - ((footings_map.get(c["type"], {}).get("B_cm", 200.0) / 200.0)) for c in columns_list)
-    max_ftg_y = max(c["y"] + ((footings_map.get(c["type"], {}).get("B_cm", 200.0) / 200.0)) for c in columns_list)
+    min_ftg_x = min(c["x"] - (((footings_map.get(c["type"]) or {}).get("L_cm", 200.0) / 200.0)) for c in columns_list)
+    max_ftg_x = max(c["x"] + (((footings_map.get(c["type"]) or {}).get("L_cm", 200.0) / 200.0)) for c in columns_list)
+    min_ftg_y = min(c["y"] - (((footings_map.get(c["type"]) or {}).get("B_cm", 200.0) / 200.0)) for c in columns_list)
+    max_ftg_y = max(c["y"] + (((footings_map.get(c["type"]) or {}).get("B_cm", 200.0) / 200.0)) for c in columns_list)
 
     if combined_footings_list:
         for cf in combined_footings_list:
@@ -886,12 +1190,13 @@ def draw_foundation_layout_plan(
             alpha=0.85, zorder=2
         )
         ax.add_patch(rect)
-        ax.text(x0 + 0.12, y0 + 0.12, f"{ftg['model_id']}", ha="left", va="bottom",
+        f_lbl_id = ftg["model_id"] if ftg else "F"
+        ax.text(x0 + 0.12, y0 + 0.12, f"{f_lbl_id}", ha="left", va="bottom",
                 fontsize=10, fontweight="bold", color="#1e3a8a", zorder=4)
 
-        if is_rep:
-            _hdim(ax, y0, x0, x0 + L_m, f"L = {ftg['L_cm']} cm", side="bottom", fs=9.0, offset=0.25, draw_ext=True)
-            _vdim(ax, x0 + L_m, y0, y0 + B_m, f"B = {ftg['B_cm']} cm", side="right", fs=9.0, offset=0.25, draw_ext=True)
+        if is_rep and ftg:
+            _hdim(ax, y0, x0, x0 + L_m, f"L = {int(round(ftg['L_cm']))} cm", side="bottom", fs=9.0, offset=0.25, draw_ext=True)
+            _vdim(ax, x0 + L_m, y0, y0 + B_m, f"B = {int(round(ftg['B_cm']))} cm", side="right", fs=9.0, offset=0.25, draw_ext=True)
 
     # 7. Draw Combined Footings (Dimensions on representative combined footing only)
     if combined_footings_list:
@@ -982,34 +1287,51 @@ def draw_foundation_layout_plan(
         )
 
     # 9. INTEGRATED FOOTINGS SCHEDULE TABLE AT THE BOTTOM (NO CARDS)
-    f1 = footings_map.get("Corner")
-    f2 = footings_map.get("Edge")
-    f3 = footings_map.get("Interior")
-
-    headers = ["Footing Model", "Type", "Supported Columns", "R.C. Dims (L × B × t cm)", "P.C. Dims (L × B × t cm)"]
-    col_widths = [0.18, 0.16, 0.24, 0.21, 0.21]
+    headers = ["Footing Model", "Type", "Supported Columns", "R.C. Dims (L × B × t cm)", "P.C. Dims (L × B × t cm)", "Rebar (X / Y)"]
+    col_widths = [0.14, 0.09, 0.17, 0.19, 0.18, 0.23]
 
     cell_text = []
     row_colors = []
 
-    if f1:
-        cell_text.append([f1["model_name"], "Isolated", f1["supported_col_str"], f"{f1['L_cm']} × {f1['B_cm']} × {f1['t_cm']}", f"{f1['L_cm'] + 40} × {f1['B_cm'] + 40} × 20"])
-        row_colors.append("#eff6ff")
-    if f2:
-        cell_text.append([f2["model_name"], "Isolated", f2["supported_col_str"], f"{f2['L_cm']} × {f2['B_cm']} × {f2['t_cm']}", f"{f2['L_cm'] + 40} × {f2['B_cm'] + 40} × 20"])
-        row_colors.append("#eff6ff")
-    if f3:
-        cell_text.append([f3["model_name"], "Isolated", f3["supported_col_str"], f"{f3['L_cm']} × {f3['B_cm']} × {f3['t_cm']}", f"{f3['L_cm'] + 40} × {f3['B_cm'] + 40} × 20"])
+    seen_ftg_ids = set()
+    ordered_ftgs = []
+    for k in ["F1", "F2", "F3", "Corner", "Edge", "Interior"]:
+        fm = footings_map.get(k)
+        if isinstance(fm, dict):
+            fid_k = fm.get("model_id", k)
+            if fid_k not in seen_ftg_ids:
+                seen_ftg_ids.add(fid_k)
+                ordered_ftgs.append(fm)
+
+    for fm in ordered_ftgs:
+        Lc_i = int(round(float(fm.get("L_cm", 200))))
+        Bc_i = int(round(float(fm.get("B_cm", 200))))
+        tc_i = int(round(float(fm.get("t_cm", fm.get("tc_cm", 50)))))
+        nx_i = int(fm.get("n_m_L", 5))
+        ny_i = int(fm.get("n_m_B", 5))
+        phi_i = int(fm.get("Phi_mm", 16))
+        cell_text.append([
+            fm.get("model_name", fm.get("model_id", "F")),
+            "Isolated",
+            fm.get("supported_col_str", fm.get("col_spec_str", "—")),
+            f"{Lc_i} × {Bc_i} × {tc_i}",
+            f"{Lc_i + 40} × {Bc_i + 40} × 20",
+            f"X:{nx_i}Ø{phi_i}/m | Y:{ny_i}Ø{phi_i}/m",
+        ])
         row_colors.append("#eff6ff")
 
     if combined_footings_list:
         for cf in combined_footings_list:
+            Lc_ci = int(round(float(cf.get("Lc_cm", 300))))
+            Bc_ci = int(round(float(cf.get("Bc_cm", 200))))
+            tc_ci = int(round(float(cf.get("tc_cm", 60))))
             cell_text.append([
                 cf["name"],
                 "Combined",
                 cf["supported_cols"],
-                f"{cf['Lc_cm']} × {cf['Bc_cm']} × {cf['tc_cm']}",
-                f"{cf['Lc_cm'] + 40} × {cf['Bc_cm'] + 40} × 20"
+                f"{Lc_ci} × {Bc_ci} × {tc_ci}",
+                f"{Lc_ci + 40} × {Bc_ci + 40} × 20",
+                f"Bot:{cf.get('rft_bot_str', '—')}",
             ])
             row_colors.append("#f0fdf4")
 
@@ -1706,11 +2028,19 @@ def classify_and_design_building_foundations(
         if m_phi == 14:
             m_phi = 16
         m_t_ov = overrides.get(f"{m_id}_t", overrides.get(f"{grp_key}_t"))
+        m_L_ov = overrides.get(f"{m_id}_L_cm", overrides.get(f"{grp_key}_L_cm"))
+        m_B_ov = overrides.get(f"{m_id}_B_cm", overrides.get(f"{grp_key}_B_cm"))
+        m_nx_ov = overrides.get(f"{m_id}_nx", overrides.get(f"{grp_key}_nx"))
+        m_ny_ov = overrides.get(f"{m_id}_ny", overrides.get(f"{grp_key}_ny"))
 
         m_obj = design_isolated_footing_model(
             m_id, grp_title, col_mk_ftg,
             pu_gov, c_gov, b_gov, q_all_net, fcu, fy, cov, m_phi,
-            t_override_cm=m_t_ov
+            t_override_cm=m_t_ov,
+            L_override_cm=m_L_ov,
+            B_override_cm=m_B_ov,
+            nx_override_m=m_nx_ov,
+            ny_override_m=m_ny_ov,
         )
         m_obj["col_model_mark"] = col_mk_ftg
         m_obj["col_spec_str"] = col_spec_ftg
@@ -1794,11 +2124,13 @@ def classify_and_design_building_foundations(
         if phi_f == 14:
             phi_f = 16
         unit_w = (phi_f ** 2) / 162.0
-        n_L = max(5, int(math.ceil(B_m * 5.0)))
+        n_m_L_f = int(f.get("n_m_L", 5))
+        n_m_B_f = int(f.get("n_m_B", 5))
+        n_L = int(f.get("total_bars_L") or max(5, int(math.ceil(B_m * n_m_L_f))))
         len_L = L_m - 0.10 + 2.0 * max(0.20, t_m - 0.10)
         wt_L = n_L * len_L * unit_w
 
-        n_B = max(5, int(math.ceil(L_m * 5.0)))
+        n_B = int(f.get("total_bars_B") or max(5, int(math.ceil(L_m * n_m_B_f))))
         len_B = B_m - 0.10 + 2.0 * max(0.20, t_m - 0.10)
         wt_B = n_B * len_B * unit_w
         wt_iso = wt_L + wt_B
@@ -2670,14 +3002,16 @@ def draw_comprehensive_foundation_sketch(
             m = ftg_models[mk]
             if not m:
                 continue
-            L_c = int(m.get("L_cm", 200))
-            B_c = int(m.get("B_cm", 200))
-            t_c = int(m.get("tc_cm", 60))
-            rft_str = m.get("rft_long_str", "5Ø16/m")
+            L_c = int(round(float(m.get("L_cm", 200))))
+            B_c = int(round(float(m.get("B_cm", 200))))
+            t_c = int(round(float(m.get("t_cm", m.get("tc_cm", 60)))))
+            nx_c = int(m.get("n_m_L", 5))
+            ny_c = int(m.get("n_m_B", 5))
+            phi_c = int(m.get("Phi_mm", 16))
             pc_L = L_c + 40
             pc_B = B_c + 40
             grp_name = m.get("raw_type", "Isolated")
-            ftg_lines.append(f"■ {mk} ({grp_name}): RC {L_c}×{B_c}×{t_c} cm  |  Mesh: {rft_str}  |  PC {pc_L}×{pc_B}×20 cm")
+            ftg_lines.append(f"■ {mk} ({grp_name}): RC {L_c}×{B_c}×{t_c} cm | X:{nx_c}Ø{phi_c}/m Y:{ny_c}Ø{phi_c}/m | PC {pc_L}×{pc_B}×20 cm")
 
         comb_list = foundation_res.get("combined_footings", [])
         if comb_list:

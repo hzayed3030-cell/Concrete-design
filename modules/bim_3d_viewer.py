@@ -778,7 +778,7 @@ def extract_bim_3d_scene_data(
                     "العمود المرتكز": cid,
                     "أبعاد المسلحة (L × B × t)": f"{int(round(L_rc * 100))} × {int(round(B_rc * 100))} × {int(round(t_rc * 100))} سم",
                     "أبعاد العادية (L × B × t)": f"{int(round(L_pc * 100))} × {int(round(B_pc * 100))} × {int(round(t_pc * 100))} سم",
-                    "التسليح السفلي (فرش وغطاء)": f_iso.get("rft_str", "6Ø16/m (اتجاهين)"),
+                    "التسليح السفلي (فرش وغطاء)": f_iso.get("rft_str") or f"فرش: {f_iso.get('rft_long_str', '5Ø16/m')} | غطاء: {f_iso.get('rft_short_str', '5Ø16/m')}",
                     "إجهاد التربة الفعلي (q_act)": f"{f_iso.get('q_act', 1.25):.2f} كجم/سم²",
                     "حالة الأمان": "✅ Safe ومحقق للكود",
                 }
@@ -810,8 +810,10 @@ def extract_bim_3d_scene_data(
             z_mesh = z_ground - t_rc + f_cov
             hook_h = max(0.15, t_rc - 2 * f_cov)
 
+            n_m_x_iso = float(f_iso.get("n_m_L", 6.0))
+            n_m_y_iso = float(f_iso.get("n_m_B", 6.0))
             ftg_mesh_lines = []
-            n_bars_y = max(5, int(math.ceil(rebar_d * 6.0)))
+            n_bars_y = max(5, int(f_iso.get("total_bars_L") or math.ceil(rebar_d * n_m_x_iso)))
             for k in range(n_bars_y):
                 y_pos = fy_coord - (rebar_d / 2.0) + (k / max(1, n_bars_y - 1)) * rebar_d
                 x_start = fx - (rebar_w / 2.0)
@@ -820,7 +822,7 @@ def extract_bim_3d_scene_data(
                 ftg_mesh_lines.extend([x_start, y_pos, z_mesh, x_start, y_pos, z_mesh + hook_h])
                 ftg_mesh_lines.extend([x_end, y_pos, z_mesh, x_end, y_pos, z_mesh + hook_h])
 
-            n_bars_x = max(5, int(math.ceil(rebar_w * 6.0)))
+            n_bars_x = max(5, int(f_iso.get("total_bars_B") or math.ceil(rebar_w * n_m_y_iso)))
             for k in range(n_bars_x):
                 x_pos = fx - (rebar_w / 2.0) + (k / max(1, n_bars_x - 1)) * rebar_w
                 y_start = fy_coord - (rebar_d / 2.0)

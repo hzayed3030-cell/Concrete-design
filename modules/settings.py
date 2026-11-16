@@ -3458,6 +3458,8 @@ def save_settings() -> None:
             or bool(existing_data.get("fs_col_transforms"))
             or bool(existing_data.get("rb_overrides"))
             or bool(existing_data.get("gb_overrides"))
+            or bool(existing_data.get("ftg_overrides"))
+            or bool(existing_data.get("confirmed_manual_footings"))
         )
         is_clean_cfg_default_geometry = (
             int(clean_cfg.get("fs_n_lx", 2) or 2) == 2
@@ -3473,7 +3475,7 @@ def save_settings() -> None:
                 "fs_n_lx", "fs_n_ly", "fs_cant_left", "fs_cant_right", "fs_cant_bottom", "fs_cant_top",
                 "fs_zero_col_mode", "fs_placed_cols", "fs_removed_cols", "fs_col_props", "fs_col_transforms",
                 "fs_edge_columns", "fs_void_panels", "fs_building_columns", "fs_drop_beams",
-                "rb_overrides", "gb_overrides", "_fs_grid_ver",
+                "rb_overrides", "gb_overrides", "ftg_overrides", "confirmed_manual_footings", "_fs_grid_ver",
                 "slab_bc", "slab_tc", "slab_ts_initial", "slab_n_floors", "slab_col_safety_factor",
                 "slab_SDL", "slab_wall_load", "slab_LL", "slab_gamma_c", "slab_Fcu", "slab_Fy", "slab_cover",
                 "slab_bottom_mesh_dia_idx", "slab_n_btm_mesh", "slab_top_mesh_dia_idx", "slab_n_top_mesh",
@@ -3498,7 +3500,7 @@ def save_settings() -> None:
         for ek, ev in existing_data.items():
             if ek not in clean_cfg or clean_cfg[ek] is None:
                 clean_cfg[ek] = ev
-            elif ek in ("fs_building_columns", "fs_drop_beams", "rb_overrides", "gb_overrides", "fs_void_panels", "fs_col_transforms") and not clean_cfg[ek] and ev:
+            elif ek in ("fs_building_columns", "fs_drop_beams", "rb_overrides", "gb_overrides", "ftg_overrides", "confirmed_manual_footings", "fs_void_panels", "fs_col_transforms") and not clean_cfg[ek] and ev:
                 clean_cfg[ek] = ev
                 if "cfg" in st.session_state:
                     st.session_state["cfg"][ek] = ev

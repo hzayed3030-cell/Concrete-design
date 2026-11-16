@@ -575,6 +575,66 @@ def _get_base_report_css() -> str:
     """
 
 
+def _build_ftg_section_html(ftg_analysis: Optional[Dict[str, Any]], section_title: str) -> str:
+    """Builds the Foundations Design unified schedule HTML table for reports."""
+    if not ftg_analysis or not ftg_analysis.get("unified_rows"):
+        return ""
+    ftg_rows_html = ""
+    for row in ftg_analysis.get("unified_rows", []):
+        ftg_rows_html += (
+            "<tr>"
+            f"<td><b>{row.get('نموذج القاعدة (Model)', '')}</b></td>"
+            f"<td>{row.get('النوع والتصنيف', '')}</td>"
+            f"<td>{row.get('نموذج العمود', '')}</td>"
+            f"<td>{row.get('أقصى حمل تصميمي Pu (ton)', '')}</td>"
+            f"<td style='color:#1e40af; font-weight:bold;'>{row.get('أبعاد المسلحة R.C. (cm)', '')}</td>"
+            f"<td>{row.get('أبعاد العادية P.C. (cm)', '')}</td>"
+            f"<td>{row.get('التسليح والتفاصيل الإنشائية', '')}</td>"
+            f"<td>{row.get('حالة التحقق الإنشائي (Status)', '')}</td>"
+            "</tr>"
+        )
+    fq = ftg_analysis.get("quantities", {})
+    summary_grid = ""
+    if fq:
+        summary_grid = f"""
+        <div class="info-grid">
+            <div class="info-card">
+                <div class="card-lbl">خرسانة القواعد المسلحة (R.C.)</div>
+                <div class="card-val" style="color:#1e40af;">{float(fq.get('ftgs_conc_rc_val', 0.0)):.2f} m³</div>
+            </div>
+            <div class="info-card">
+                <div class="card-lbl">خرسانة النظافة العادية (P.C.)</div>
+                <div class="card-val">{float(fq.get('ftgs_conc_pc_val', 0.0)):.2f} m³</div>
+            </div>
+            <div class="info-card">
+                <div class="card-lbl">إجمالي حديد القواعد</div>
+                <div class="card-val" style="color:#15803d;">{float(fq.get('ftgs_steel_ton_val', 0.0)):.3f} Ton ({float(fq.get('ftgs_steel_kg_val', 0.0)):,.0f} kg)</div>
+            </div>
+        </div>
+        """
+    return f"""
+    <div class="section-title page-break">{section_title}</div>
+    {summary_grid}
+    <table>
+        <thead>
+            <tr>
+                <th>نموذج القاعدة</th>
+                <th>النوع والتصنيف</th>
+                <th>نموذج العمود</th>
+                <th>الحمل التصميمي</th>
+                <th>أبعاد المسلحة R.C. (cm)</th>
+                <th>أبعاد العادية P.C. (cm)</th>
+                <th>التسليح والتفاصيل الإنشائية</th>
+                <th>الحالة الكودية</th>
+            </tr>
+        </thead>
+        <tbody>
+            {ftg_rows_html}
+        </tbody>
+    </table>
+    """
+
+
 def generate_flat_slab_report_html(
     project_name: str,
     ts: float,
@@ -619,6 +679,7 @@ def generate_flat_slab_report_html(
     img_reactions_b64: Optional[str] = None,
     img_rebar_bbs_b64: Optional[str] = None,
     gb_analysis: Optional[Dict[str, Any]] = None,
+    ftg_analysis: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Generates a complete, standalone, print-ready HTML engineering calculation sheet
@@ -1134,6 +1195,11 @@ def generate_flat_slab_report_html(
         </table>
         """
 
+    ftg_section_html = _build_ftg_section_html(
+        ftg_analysis,
+        "🪸 7. جدول نماذج تصميم الأساسات والقواعد المعتمد (Unified Footings Schedule — ECP 203)"
+    )
+
     html_content = f"""<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -1213,6 +1279,8 @@ def generate_flat_slab_report_html(
 
     {gb_section_html}
 
+    {ftg_section_html}
+
     <!-- Sign-off Block -->
     <div class="signature-block">
         <div class="sig-box">
@@ -1261,6 +1329,7 @@ def generate_flat_slab_outputs_report_html(
     all_deflection_safe: bool = True,
     img_verif_b64: Optional[str] = None,
     gb_analysis: Optional[Dict[str, Any]] = None,
+    ftg_analysis: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Generates a concise, high-level Output Summary calculation sheet (تقرير مخرجات التصميم المعتمد).
@@ -1452,6 +1521,11 @@ def generate_flat_slab_outputs_report_html(
         </table>
         """
 
+    ftg_outputs_html = _build_ftg_section_html(
+        ftg_analysis,
+        "4. جدول نماذج القواعد والأساسات المعتمدة (Approved Footings Schedule — ECP 203)"
+    )
+
     html_content = f"""<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -1492,6 +1566,8 @@ def generate_flat_slab_outputs_report_html(
     {outputs_table_html}
 
     {gb_outputs_html}
+
+    {ftg_outputs_html}
 
     <!-- Sign-off Block -->
     <div class="signature-block">
