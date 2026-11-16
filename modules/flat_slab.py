@@ -716,9 +716,76 @@ if hasattr(st, "dialog"):
         if st.button("موافق (OK) ✅", key="_btn_dismiss_eng_err_dialog", use_container_width=True, type="primary"):
             st.session_state["_eng_err_dialog_dismissed_token"] = st.session_state.get("_eng_err_pending_token")
             st.rerun()
+
+    @st.dialog("⚠️ تنبيه: عدم توافق اتجاه القطاع مع المخطط اللوني للكنتور", width="large")
+    def _show_moment_direction_mismatch_dialog(contour_lbl: str, sec_lbl: str, prefix_str: str, mismatch_token: str):
+        st.markdown(
+            f"""
+            <div dir="rtl" style="direction:rtl; text-align:right; font-family:sans-serif; line-height:1.8;">
+                <div style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 2px solid #f59e0b; border-right: 6px solid #d97706; border-radius: 12px; padding: 18px 22px; margin-bottom: 16px; color: #92400e; box-shadow: 0 4px 14px rgba(245, 158, 11, 0.15);">
+                    <div style="font-size: 17.5px; font-weight: 800; color: #b45309; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                        <span>⚠️</span> <span>تنبيه: عدم توافق اتجاه القطاع الإنشائي مع اتجاه مخطط الكنتور المعروض</span>
+                    </div>
+                    <div style="font-size: 14.5px; color: #1e293b; font-weight: 600; margin-bottom: 12px; line-height: 1.7;">
+                        لقد تم اختيار اتجاه لقطاع العزم لا يتطابق مع اتجاه خريطة العزوم الكنتورية المعروضة حالياً في قسم مصفوفة العزوم والمخطط اللوني:
+                    </div>
+                    <div style="background: #ffffff; border: 1.5px solid #fde68a; border-radius: 8px; padding: 12px 16px; margin-bottom: 14px; font-size: 14px; line-height: 1.9;">
+                        • <b>خريطة العزوم الكنتورية المعروضة حالياً:</b> <span style="color:#0284c7; font-weight:700;">{contour_lbl}</span><br>
+                        • <b>اتجاه القطاع الرأسي المختار للعرض:</b> <span style="color:#dc2626; font-weight:700;">{sec_lbl}</span>
+                    </div>
+                    <div style="font-size: 13.5px; color: #78350f; font-weight: 600; line-height: 1.7;">
+                        💡 <b>فلسفة التصميم والمطابقة الهندسية:</b><br>
+                        يقتضي التصميم الإنشائي المتكامل مطابقة اتجاه القطاع مع اتجاه العزم المعروض (القطاعات الأفقية <b>Direction X — M11</b> مع كنتور <b>M11</b>، والقطاعات الرأسية <b>Direction Y — M22</b> مع كنتور <b>M22</b>) لضمان التحقق الهندسي والمقارنة البصرية المباشرة لمواقع وقيم ذروة العزوم.
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        col_ok, col_sync = st.columns([0.55, 0.45])
+        with col_ok:
+            if st.button("موافق (OK) — المتابعة بهذا الاختيار ✅", key=f"{prefix_str}btn_ack_mismatch_ok", type="primary", use_container_width=True):
+                st.session_state[f"{prefix_str}mismatch_dialog_ack"] = mismatch_token
+                st.rerun()
+        with col_sync:
+            if st.button("🔄 توحيد وضبط اتجاه القطاع مع الكنتور", key=f"{prefix_str}btn_sync_mismatch", use_container_width=True):
+                target_idx = 0 if "M11" in contour_lbl else 1
+                target_val = (
+                    "↔️ قطاعات أفقية (Direction X — M11) [تسمية: AA, BB, CC, DD...]"
+                    if target_idx == 0 else
+                    "↕️ قطاعات رأسية (Direction Y — M22) [تسمية: MM, NN, PP, QQ...]"
+                )
+                st.session_state[f"w_{prefix_str}sec_moment_dir"] = target_val
+                if "cfg" in st.session_state:
+                    st.session_state["cfg"][f"{prefix_str}sec_moment_dir"] = target_idx
+                S.cfg_set(f"{prefix_str}sec_moment_dir", target_idx)
+                S.save_settings()
+                st.session_state.pop(f"{prefix_str}mismatch_dialog_ack", None)
+                st.rerun()
 else:
     def _show_engineering_error_dialog(error_title: str, error_details: list, location_hint: str):
         pass
+
+    def _show_moment_direction_mismatch_dialog(contour_lbl: str, sec_lbl: str, prefix_str: str, mismatch_token: str):
+        st.markdown(
+            f"""
+            <div dir="rtl" style="direction:rtl; text-align:right; font-family:sans-serif; line-height:1.8;">
+                <div style="background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%); border: 2px solid #f59e0b; border-right: 6px solid #d97706; border-radius: 12px; padding: 18px 22px; margin-bottom: 16px; color: #92400e;">
+                    <div style="font-size: 17.5px; font-weight: 800; color: #b45309; margin-bottom: 10px;">
+                        ⚠️ تنبيه: عدم توافق اتجاه القطاع الإنشائي مع اتجاه مخطط الكنتور المعروض
+                    </div>
+                    <div style="background: #ffffff; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 14px; margin-bottom: 12px; font-size: 14px;">
+                        • <b>خريطة العزوم الكنتورية المعروضة حالياً:</b> <span style="color:#0284c7; font-weight:700;">{contour_lbl}</span><br>
+                        • <b>اتجاه القطاع الرأسي المختار للعرض:</b> <span style="color:#dc2626; font-weight:700;">{sec_lbl}</span>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button("موافق (OK) — المتابعة بهذا الاختيار ✅", key=f"{prefix_str}btn_ack_mismatch_ok", type="primary", use_container_width=True):
+            st.session_state[f"{prefix_str}mismatch_dialog_ack"] = mismatch_token
+            st.rerun()
 
 
 def is_edge_column_verified(col_id, geom=None, edge_columns=None, alt_id=None, slab_bounds=None):
@@ -4359,8 +4426,7 @@ def generate_flat_slab_moment_sections_plan(
         # Mid-panel / Center Section Identification Badge directly on the slab (shifted slightly along X so it never collides with vertical section badge at panel peak)
         ref_x_raw = float(sec.get("ref_x", 0.5 * (x_slab_min + x_slab_max)))
         ref_x = max(x_slab_min + 1.4, min(x_slab_max - 1.4, ref_x_raw - 1.15))
-        m_tag = sec.get("m_short", "")
-        mid_txt = f"{code} ({m_tag})" if (is_sel and m_tag) else f"{code}"
+        mid_txt = f"{code}"
         ax.text(
             ref_x, y_c, mid_txt,
             ha="center", va="center", fontsize=font_sz, weight="bold", color=txt_col,
@@ -4421,8 +4487,7 @@ def generate_flat_slab_moment_sections_plan(
 
         ref_y_raw = float(sec.get("ref_y", 0.5 * (y_slab_min + y_slab_max)))
         ref_y = max(y_slab_min + 1.0, min(y_slab_max - 1.0, ref_y_raw + 0.72))
-        m_tag = sec.get("m_short", "")
-        mid_txt = f"{code} ({m_tag})" if (is_sel and m_tag) else f"{code}"
+        mid_txt = f"{code}"
         ax.text(
             x_c, ref_y, mid_txt,
             ha="center", va="center", fontsize=font_sz, weight="bold", color=txt_col,
@@ -5442,6 +5507,7 @@ def generate_flat_slab_moment_contour(
     mesh_btm_str="",
     mesh_top_str="",
     drop_beams=None,
+    show_contour_labels: bool = True,
 ):
     """
     Renders an engineering 2D Bending Moment Matrix & Color Contour Map (M11 or M22)
@@ -5675,7 +5741,7 @@ def generate_flat_slab_moment_contour(
 
             ax_plan.text(
                 cx, badge_y,
-                f"M⁻ = {m_val:.2f} t.m",
+                f"M⁻ = {m_val:.2f}",
                 color="#000000", fontsize=13.5, weight="bold", ha="center", va=va_pos,
                 bbox=dict(boxstyle="round,pad=0.34", facecolor="#ffffff", edgecolor="#1e3a8a", lw=1.8, alpha=0.99),
                 zorder=8
@@ -5727,7 +5793,7 @@ def generate_flat_slab_moment_contour(
 
                 ax_plan.text(
                     x, badge_y,
-                    f"M⁻ = {m_val:.2f} t.m",
+                    f"M⁻ = {m_val:.2f}",
                     color="#000000", fontsize=13.5, weight="bold", ha="center", va=va_pos,
                     bbox=dict(boxstyle="round,pad=0.34", facecolor="#ffffff", edgecolor="#1e3a8a", lw=1.8, alpha=0.99),
                     zorder=8
@@ -5765,12 +5831,11 @@ def generate_flat_slab_moment_contour(
 
         badge_centers.append((center_x, center_y))
 
+        txt_label = f"M⁺ = +{m_pos_val:.2f}"
         if Lx < 2.2:
-            txt_label = f"M⁺ = +{m_pos_val:.2f}"
             lbl_font = 14.0
             lbl_pad = 0.38
         else:
-            txt_label = f"M⁺ = +{m_pos_val:.2f}\nt.m/m"
             lbl_font = 17.5
             lbl_pad = 0.52
 
@@ -5783,25 +5848,26 @@ def generate_flat_slab_moment_contour(
         )
 
     # Place enlarged, high-contrast black-on-white contour value panels along contour lines
-    _place_clean_contour_labels(
-        ax_plan,
-        cs_lines,
-        X,
-        Y,
-        M_field,
-        line_levels,
-        unified_panels,
-        badge_centers,
-        active_cols=active_cols,
-        drop_beams=drop_beams,
-        x_slab_min=x_slab_min,
-        x_slab_max=x_slab_max,
-        y_slab_min=y_slab_min,
-        y_slab_max=y_slab_max,
-        void_boxes=void_boxes,
-        fontsize=15.5,
-        pad=0.34,
-    )
+    if show_contour_labels:
+        _place_clean_contour_labels(
+            ax_plan,
+            cs_lines,
+            X,
+            Y,
+            M_field,
+            line_levels,
+            unified_panels,
+            badge_centers,
+            active_cols=active_cols,
+            drop_beams=drop_beams,
+            x_slab_min=x_slab_min,
+            x_slab_max=x_slab_max,
+            y_slab_min=y_slab_min,
+            y_slab_max=y_slab_max,
+            void_boxes=void_boxes,
+            fontsize=15.5,
+            pad=0.34,
+        )
 
     # Span Dimensions (Lx along Bottom)
     y_dim_lx = y_slab_min - dim_offset_bot
@@ -6013,7 +6079,7 @@ def generate_flat_slab_dual_moment_contour(
                 badge_centers_d.append((cx_p, cy_p))
                 ax.text(
                     cx_p, cy_p,
-                    f"M⁺ = +{m_pos_p:.2f}\nt.m/m",
+                    f"M⁺ = +{m_pos_p:.2f}",
                     color="#000000", fontsize=14.0, weight="bold", ha="center", va="center",
                     bbox=dict(boxstyle="round,pad=0.42", facecolor="#ffffff", edgecolor="#000000", lw=2.0, alpha=1.0),
                     zorder=7
@@ -17016,8 +17082,8 @@ def _section_fs_add_columns(
         # شريط أزرار إظهار وإخفاء المسميات السريع فوق المسقط (مع زيادة التباعد الرأسي بين العنوان والأزرار)
         st.markdown(
             """
-            <div dir="rtl" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; padding:8px 14px; background:#f8fafc; border:1px solid #cbd5e1; border-right:4px solid #1e40af; border-radius:8px;">
-                <span style="font-size:0.92rem; font-weight:800; color:#0f172a;">👁️ إظهار / إخفاء المسميات الهندسية على المسقط:</span>
+            <div dir="rtl" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; padding:8px 14px; background:rgba(15, 23, 42, 0.75); border:1px solid #334155; border-right:4px solid #38bdf8; border-radius:8px;">
+                <span style="font-size:0.92rem; font-weight:800; color:#38bdf8;">👁️ إظهار / إخفاء المسميات الهندسية على المسقط:</span>
             </div>
             <div style="height: 8px;"></div>
             """,
@@ -18387,6 +18453,17 @@ def render(is_standalone: bool = False):
     _bc_col = bc_s if bc_s else 30
     _tc_col = tc_s if tc_s else 30
 
+    _pre_confirmed_col_dims = st.session_state.get("fs_confirmed_col_dims") or S.cfg_val("fs_confirmed_col_dims", {})
+    if isinstance(_pre_confirmed_col_dims, dict) and _pre_confirmed_col_dims:
+        _gov_conf = _pre_confirmed_col_dims.get("Interior") or _pre_confirmed_col_dims.get("C1") or next(iter(_pre_confirmed_col_dims.values()), None)
+        if isinstance(_gov_conf, dict):
+            if _gov_conf.get("b"):
+                _bc_col = float(_gov_conf["b"])
+                bc_s = _bc_col
+            if _gov_conf.get("t"):
+                _tc_col = float(_gov_conf["t"])
+                tc_s = _tc_col
+
 
 
     # ── 5a. Geometry-change guard & Drop beams remapping ─────────────────────
@@ -18584,6 +18661,17 @@ def render(is_standalone: bool = False):
         if _effective_pre_dims:
             sync_all_columns_with_models(_active_cols, _effective_pre_dims)
             sync_all_columns_with_models(_all_cols, _effective_pre_dims)
+            for c in _active_cols:
+                c_type = c.get("type", "Interior")
+                c_mark = c.get("model_mark", "C1")
+                dims = _effective_pre_dims.get(c_type) or _effective_pre_dims.get(c_mark)
+                if dims:
+                    for k in (c.get("orig_id"), f"{c['i']},{c['j']}", c.get("id")):
+                        if k:
+                            if k not in _col_props:
+                                _col_props[k] = {}
+                            _col_props[k]["b_cm"] = float(dims["b"])
+                            _col_props[k]["t_cm"] = float(dims["t"])
             st.session_state["_fs_active_cols"] = _active_cols
 
     _effective_removed_ids = {c["orig_id"] for c in _all_cols if c["removed"]}
@@ -19822,10 +19910,50 @@ def render(is_standalone: bool = False):
             if btn_adopt_clicked:
                 for des in col_designs:
                     m_key = des["raw_type"]
-                    confirmed_col_dims[m_key] = {
-                        "b": float(st.session_state.get(f"fs_adopted_b_{m_key}", des["b"])),
-                        "t": float(st.session_state.get(f"fs_adopted_t_{m_key}", des["t"])),
-                    }
+                    m_mark = des.get("model_mark") or (col_label_map.get(m_key) if 'col_label_map' in locals() else None)
+                    b_new = float(st.session_state.get(f"fs_adopted_b_{m_key}", des["b"]))
+                    t_new = float(st.session_state.get(f"fs_adopted_t_{m_key}", des["t"]))
+                    dims_entry = {"b": b_new, "t": t_new}
+                    confirmed_col_dims[m_key] = dims_entry
+                    if m_mark:
+                        confirmed_col_dims[m_mark] = dims_entry
+
+                # Governing model (Interior or first model)
+                gov_m = next((d for d in col_designs if d.get("raw_type") == "Interior"), col_designs[0])
+                gov_b = float(confirmed_col_dims[gov_m["raw_type"]]["b"])
+                gov_t = float(confirmed_col_dims[gov_m["raw_type"]]["t"])
+
+                # Update main slab inputs in session_state and settings
+                st.session_state["slab_bc"] = gov_b
+                st.session_state["slab_tc"] = gov_t
+                S.cfg_set("slab_bc", gov_b)
+                S.cfg_set("slab_tc", gov_t)
+
+                # Synchronize fs_col_props so individual column settings track updated models
+                col_props_dict = S.cfg_val("fs_col_props", {})
+                if not isinstance(col_props_dict, dict):
+                    col_props_dict = {}
+                for c in _active_cols:
+                    c_type = c.get("type", "Interior")
+                    c_mark = c.get("model_mark", "C1")
+                    dims = confirmed_col_dims.get(c_type) or confirmed_col_dims.get(c_mark)
+                    if dims:
+                        for k in (c.get("orig_id"), f"{c['i']},{c['j']}", c.get("id")):
+                            if k:
+                                p_entry = dict(col_props_dict.get(k, {}))
+                                p_entry["b_cm"] = float(dims["b"])
+                                p_entry["t_cm"] = float(dims["t"])
+                                col_props_dict[k] = p_entry
+                st.session_state["fs_col_props"] = col_props_dict
+                S.cfg_set("fs_col_props", col_props_dict)
+
+                # Clear plan and verification caches to force instant fresh rerender
+                st.session_state.pop("_fs_cached_interactive_b64", None)
+                st.session_state.pop("flat_slab_plan_b64", None)
+                st.session_state.pop(f"{prefix}flat_slab_plan_b64", None)
+                st.session_state.pop("fs_flat_slab_plan_b64", None)
+                st.session_state.pop("_fs_plan_bbox_info", None)
+
                 st.session_state["fs_confirmed_col_dims"] = confirmed_col_dims
                 S.cfg_set("fs_confirmed_col_dims", confirmed_col_dims)
                 S.save_settings()
@@ -20994,6 +21122,15 @@ def render(is_standalone: bool = False):
             f"<li style='margin-bottom:4px;'>🔶 <b>الشبكة السفلية (<span {_ltr_inline}>Bottom Mesh</span> — {_dirs_str}):</b> أقصى فرق تسليح مطلوب لمقاومة العزم الموجب يبلغ <span {_ltr_badge}>ΔAs = {_max_def_btm:.2f} cm²/m</span> (وهو أقل من مساحة <span {_ltr_badge}>3 Φ 12 / m' = 3.39 cm²/m</span>) — يُوصى بزيادة عدد أسياخ الشبكة السفلية بالمدخلات بمقدار <span {_ltr_badge}>+{_max_inc_btm} Φ {bottom_mesh_dia} / m'</span> لتصبح <span {_ltr_badge}>{_rec_tot_btm} Φ {bottom_mesh_dia} / m'</span> (أي <span {_ltr_inline}>{_rec_tot_btm}</span> أسياخ قطر <span {_ltr_inline}>{bottom_mesh_dia} mm</span> في المتر) بدلاً من <span {_ltr_badge}>{n_mesh_btm} Φ {bottom_mesh_dia} / m'</span>، دون الحاجة لتفريد حديد إضافي سفلي في هذه الباكيات.</li>"
         )
 
+    # ── الوضع الافتراضي لاتجاه عزم الانحناء والقطاعات المناظرة ──
+    _saved_contour_idx = int(S.cfg_val(f"{prefix}fs_moment_contour_view_mode_idx", S.cfg_val("fs_moment_contour_view_mode_idx", 0) or 0))
+    _contour_view_options = [
+        "↔️ M11 — X-Direction Moment (عزوم المحور الأفقي)",
+        "↕️ M22 — Y-Direction Moment (عزوم المحور الرأسي)",
+    ]
+    moment_view_mode = _contour_view_options[min(len(_contour_view_options) - 1, max(0, _saved_contour_idx))]
+    curr_contour_code = "X" if "M11" in moment_view_mode else "Y"
+
     exp_mom = st.expander(
         "📊 1. 2D Bending Moment Matrix & Color Contours (مصفوفة العزوم والمخطط اللوني M11 & M22)",
         expanded=False,
@@ -21018,15 +21155,61 @@ def render(is_standalone: bool = False):
                     unsafe_allow_html=True,
                 )
 
+            # إعداد زر إظهار / إخفاء قيم خطوط الكنتور بنفس فلسفة زر أسماء البلاطات
+            show_contour_vals = st.session_state.get(
+                f"{prefix}fs_show_contour_vals",
+                bool(S.cfg_val("fs_show_contour_vals", True)),
+            )
+
+            col_head_lbl, col_head_tog = st.columns([0.65, 0.35])
+            with col_head_lbl:
+                st.markdown(
+                    "<div style='display:flex; align-items:center; min-height:38px; font-weight:700; font-size:15px; color:#38bdf8;'>"
+                    "👁️ Select Moment View Mode (اختر اتجاه عزم الانحناء للعرض):"
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+            with col_head_tog:
+                val_cv = st.toggle(
+                    "🏷️ قيم خطوط الكنتور",
+                    value=show_contour_vals,
+                    key=f"{prefix}quick_tog_contour_vals",
+                )
+                if val_cv != show_contour_vals:
+                    st.session_state[f"{prefix}fs_show_contour_vals"] = val_cv
+                    st.session_state["fs_show_contour_vals"] = val_cv
+                    S.cfg_set("fs_show_contour_vals", val_cv)
+                    S.save_settings()
+                    st.rerun()
+
             moment_view_mode = S.radio(
                 "👁️ Select Moment View Mode (اختر اتجاه عزم الانحناء للعرض):",
-                "fs_moment_contour_view_mode_idx",
-                options=[
-                    "↔️ M11 — X-Direction Moment (عزوم المحور الأفقي)",
-                    "↕️ M22 — Y-Direction Moment (عزوم المحور الرأسي)",
-                ],
-                index=0,
+                f"{prefix}fs_moment_contour_view_mode_idx",
+                options=_contour_view_options,
+                index=min(len(_contour_view_options) - 1, max(0, _saved_contour_idx)),
+                label_visibility="collapsed",
             )
+            curr_contour_code = "X" if "M11" in moment_view_mode else "Y"
+
+            # ── مزامنة الاتجاه الافتراضي للقطاعات مع اتجاه الكنتور المختار فوراً ──
+            last_contour_code = st.session_state.get(f"{prefix}last_contour_code")
+            if last_contour_code is not None and last_contour_code != curr_contour_code:
+                st.session_state[f"{prefix}last_contour_code"] = curr_contour_code
+                new_sec_idx = 0 if curr_contour_code == "X" else 1
+                new_sec_val = (
+                    "↔️ قطاعات أفقية (Direction X — M11) [تسمية: AA, BB, CC, DD...]"
+                    if new_sec_idx == 0 else
+                    "↕️ قطاعات رأسية (Direction Y — M22) [تسمية: MM, NN, PP, QQ...]"
+                )
+                st.session_state[f"w_{prefix}sec_moment_dir"] = new_sec_val
+                if "cfg" in st.session_state:
+                    st.session_state["cfg"][f"{prefix}sec_moment_dir"] = new_sec_idx
+                S.cfg_set(f"{prefix}sec_moment_dir", new_sec_idx)
+                S.save_settings()
+                st.session_state.pop(f"{prefix}mismatch_dialog_ack", None)
+                st.rerun()
+            elif last_contour_code is None:
+                st.session_state[f"{prefix}last_contour_code"] = curr_contour_code
 
             if "M11" in moment_view_mode:
                 fig_m11 = generate_flat_slab_moment_contour(
@@ -21050,6 +21233,7 @@ def render(is_standalone: bool = False):
                     Fy=Fy,
                     mesh_btm_str=mesh_btm_str,
                     mesh_top_str=mesh_top_str,
+                    show_contour_labels=val_cv,
                 )
                 buf_m11, b64_m11_raw = _render_fs_zoomable_figure(
                     fig_m11, viewer_h=740, dpi=180, return_buf=True
@@ -21078,6 +21262,7 @@ def render(is_standalone: bool = False):
                     Fy=Fy,
                     mesh_btm_str=mesh_btm_str,
                     mesh_top_str=mesh_top_str,
+                    show_contour_labels=val_cv,
                 )
                 buf_m22, b64_m22_raw = _render_fs_zoomable_figure(
                     fig_m22, viewer_h=740, dpi=180, return_buf=True
@@ -21112,6 +21297,7 @@ def render(is_standalone: bool = False):
 
             col_sec_d, col_sec_s = st.columns(2)
             with col_sec_d:
+                sec_default_idx = 0 if curr_contour_code == "X" else 1
                 sec_dir = S.radio(
                     "🧭 اتجاه القطاع الإنشائي (Section Direction):",
                     f"{prefix}sec_moment_dir",
@@ -21119,10 +21305,32 @@ def render(is_standalone: bool = False):
                         "↔️ قطاعات أفقية (Direction X — M11) [تسمية: AA, BB, CC, DD...]",
                         "↕️ قطاعات رأسية (Direction Y — M22) [تسمية: MM, NN, PP, QQ...]",
                     ],
-                    index=0,
+                    index=sec_default_idx,
                 )
             is_dir_x = "X" in sec_dir or "أفقية" in sec_dir
             dir_code = "X" if is_dir_x else "Y"
+
+            # ── فحص عدم توافق اتجاه القطاع مع اتجاه الكنتور وإطلاق التنبيه في منتصف الشاشة ──
+            is_dir_mismatch = (curr_contour_code == "X" and dir_code != "X") or (curr_contour_code == "Y" and dir_code != "Y")
+            if is_dir_mismatch:
+                mismatch_token = f"mismatch_{curr_contour_code}_vs_{dir_code}"
+                if st.session_state.get(f"{prefix}mismatch_dialog_ack") != mismatch_token:
+                    _show_moment_direction_mismatch_dialog(
+                        contour_lbl=moment_view_mode,
+                        sec_lbl=sec_dir,
+                        prefix_str=prefix,
+                        mismatch_token=mismatch_token,
+                    )
+                st.markdown(
+                    f"""
+                    <div dir="rtl" style="background:#fffbeb; border:1.5px solid #f59e0b; border-right:5px solid #d97706; border-radius:8px; padding:10px 16px; margin:8px 0 12px 0; color:#92400e; font-size:13.5px; font-weight:700; line-height:1.6;">
+                        ⚠️ <b>تنبيه عدم توافق هندسي:</b> يتم حالياً عرض قطاعات (<b>Direction {dir_code}</b>) بينما المخطط اللوني للكنتور المعروض بقسم العزوم هو (<b>M{11 if curr_contour_code=='X' else 22} — {curr_contour_code}</b>). تم تأكيد هذا الاختيار بموافقتك.
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.session_state.pop(f"{prefix}mismatch_dialog_ack", None)
 
             x_coords_ui = [0.0]
             for lx in Lx_calc:
@@ -24351,6 +24559,7 @@ def render(is_standalone: bool = False):
                         void_panel_ids=set(_confirmed_voids),
                         pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", []) if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
                         col_transforms=_col_transforms, edge_columns=_edge_columns,
+                        col_props=_col_props, active_cols=_active_cols,
                     )
                     _img_verif = _fig_to_b64(_f)
                     img_verif_b64 = _img_verif
@@ -24401,6 +24610,7 @@ def render(is_standalone: bool = False):
                         void_panel_ids=set(_confirmed_voids),
                         pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", []) if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
                         col_transforms=_col_transforms, edge_columns=_edge_columns,
+                        col_props=_col_props, active_cols=_active_cols,
                     )
                     _img_verif = _fig_to_b64(_f)
                     img_verif_b64 = _img_verif
@@ -25104,6 +25314,7 @@ def render(is_standalone: bool = False):
                                         col_transforms=_col_transforms,
                                         edge_columns=_edge_columns,
                                         col_props=_col_props,
+                                        active_cols=_active_cols,
                                     )
                                 elif "1. Column Caps Layout" in sk_title:
                                     fig_sk = generate_flat_slab_column_caps_sketch(

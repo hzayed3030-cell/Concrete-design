@@ -2275,7 +2275,7 @@ def render_profile_manager():
 
     if st.session_state.get("git_push_success_msg"):
         st.success(st.session_state["git_push_success_msg"])
-        trigger_rocket_celebration()
+        st.balloons()
         del st.session_state["git_push_success_msg"]
 
     if st.session_state.get("git_pull_success_msg"):
@@ -2643,7 +2643,7 @@ def render_profile_manager():
                                                 st.session_state["git_push_info_msg"] = user_msg
                                             else:
                                                 st.session_state["git_push_success_msg"] = f"✅ {user_msg}"
-                                                trigger_rocket_celebration()
+                                                st.balloons()
                                             st.session_state["show_git_update_form"] = False
                                             st.session_state.pop("input_git_commit_msg", None)
                                             st.rerun()
