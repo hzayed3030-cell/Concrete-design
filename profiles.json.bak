@@ -5,8 +5,8 @@
       "name": "Control room (نسخة)",
       "description": "نسخة من Control room",
       "created_at": "2026-11-14 11:08",
-      "updated_at": "2026-11-17 11:44",
-      "last_used_at": "2026-11-17 11:44:01",
+      "updated_at": "2026-11-17 12:25",
+      "last_used_at": "2026-11-17 12:25:09",
       "data": {
         "selected_module_idx": 0,
         "apartment_name": "Control room (نسخة)",
@@ -995,8 +995,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": false
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supp2": {
@@ -1068,8 +1067,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": false
                   }
-                ],
-                "model_mark": "C2"
+                ]
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C5 ⟷ عمود C7)",
@@ -1203,8 +1201,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": false
                   }
-                ],
-                "model_mark": "C2"
+                ]
               }
             },
             "supp2": {
@@ -1284,8 +1281,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": false
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C7 ⟷ عمود C8)",
@@ -1427,8 +1423,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": false
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supp2": {
@@ -1500,8 +1495,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": true
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C8 ⟷ عمود C9)",
@@ -1635,8 +1629,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": true
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supp2": {
@@ -1716,8 +1709,7 @@
                     "Mu_transferred_ton_m": 7.55,
                     "full_moment_continuity": true
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C9 ⟷ عمود C10)",
@@ -1861,8 +1853,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": false
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supp2": {
@@ -1934,8 +1925,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": false
                   }
-                ],
-                "model_mark": "C2"
+                ]
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C3 ⟷ عمود C4)",
@@ -2069,8 +2059,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": false
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supp2": {
@@ -2150,8 +2139,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": false
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C2 ⟷ عمود C3)",
@@ -2285,8 +2273,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": false
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supp2": {
@@ -2358,8 +2345,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": false
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C1 ⟷ عمود C2)",
@@ -2493,8 +2479,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": false
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supp2": {
@@ -2854,8 +2839,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": false
                   }
-                ],
-                "model_mark": "C2"
+                ]
               }
             },
             "supp2": {
@@ -2927,8 +2911,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": false
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C4 ⟷ عمود C6)",
@@ -3070,8 +3053,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": false
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supp2": {
@@ -3151,8 +3133,7 @@
                     "Mu_transferred_ton_m": 7.55,
                     "full_moment_continuity": true
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C3 ⟷ عمود C10)",
@@ -3286,8 +3267,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": false
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supp2": {
@@ -3367,8 +3347,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": false
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C1 ⟷ عمود C8)",
@@ -3736,8 +3715,7 @@
                     "Mu_transferred_ton_m": 0.0,
                     "full_moment_continuity": false
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supports_desc": "كمرة ثانوية (مرتكزة على كمرة B10 ⟷ عمود C6)",
@@ -3879,8 +3857,7 @@
                     "Mu_transferred_ton_m": 7.55,
                     "full_moment_continuity": true
                   }
-                ],
-                "model_mark": "C1"
+                ]
               }
             },
             "supp2": {

@@ -22845,6 +22845,20 @@ def render(is_standalone: bool = False):
                         for wk in (f"manual_L_{mk}", f"manual_B_{mk}", f"manual_t_{mk}", f"manual_Phi_{mk}", f"manual_Nx_{mk}", f"manual_Ny_{mk}"):
                             st.session_state.pop(wk, None)
 
+                # Clear stale dirty flag if current values match confirmed or base design
+                conf_k = st.session_state.get("confirmed_manual_footings", {}).get(mk) or base_entry
+                curr_mf_k = st.session_state.get("manual_footings", {}).get(mk, {})
+                k_differs = (
+                    abs(float(curr_mf_k.get("L_m", conf_k["L_m"])) - float(conf_k["L_m"])) > 1e-4
+                    or abs(float(curr_mf_k.get("B_m", conf_k["B_m"])) - float(conf_k["B_m"])) > 1e-4
+                    or abs(float(curr_mf_k.get("t_cm", conf_k["t_cm"])) - float(conf_k["t_cm"])) > 1e-2
+                    or int(curr_mf_k.get("Phi_mm", conf_k["Phi_mm"])) != int(conf_k["Phi_mm"])
+                    or int(curr_mf_k.get("Nx_m", conf_k["Nx_m"])) != int(conf_k["Nx_m"])
+                    or int(curr_mf_k.get("Ny_m", conf_k["Ny_m"])) != int(conf_k["Ny_m"])
+                )
+                if not k_differs and mk in st.session_state.get("manual_footings", {}):
+                    st.session_state["manual_footings"][mk]["_dirty"] = False
+
             def _on_manual_ftg_change(mk_changed: str):
                 mf_map = st.session_state.setdefault("manual_footings", {})
                 entry = dict(mf_map.get(mk_changed, {}))
@@ -22975,7 +22989,18 @@ def render(is_standalone: bool = False):
 
                 # Sync current session dictionary for selected_model & detect unsaved modifications
                 curr_manual_vals = (float(man_L_m), float(man_B_m), float(man_t_cm), int(man_Phi), int(man_Nx), int(man_Ny))
-                conf_m = st.session_state.get("confirmed_manual_footings", {}).get(selected_model) or base_entry
+                sel_phi_base = int(m_sel_obj.get("Phi_mm", 16))
+                if sel_phi_base not in manual_phi_opts:
+                    sel_phi_base = min(manual_phi_opts, key=lambda x: abs(x - sel_phi_base))
+                sel_base_entry = {
+                    "L_m": round(float(m_sel_obj.get("L_cm", 200.0)) / 100.0, 2),
+                    "B_m": round(float(m_sel_obj.get("B_cm", 200.0)) / 100.0, 2),
+                    "t_cm": float(m_sel_obj.get("t_cm", 50.0)),
+                    "Phi_mm": sel_phi_base,
+                    "Nx_m": int(m_sel_obj.get("n_m_L", 5)),
+                    "Ny_m": int(m_sel_obj.get("n_m_B", 5)),
+                }
+                conf_m = st.session_state.get("confirmed_manual_footings", {}).get(selected_model) or sel_base_entry
                 conf_vals = (
                     float(conf_m.get("L_m", 0.0)),
                     float(conf_m.get("B_m", 0.0)),
@@ -23000,7 +23025,7 @@ def render(is_standalone: bool = False):
                     "Phi_mm": int(man_Phi),
                     "Nx_m": int(man_Nx),
                     "Ny_m": int(man_Ny),
-                    "_dirty": bool(is_dirty_m or st.session_state["manual_footings"][selected_model].get("_dirty", False)),
+                    "_dirty": bool(is_dirty_m),
                 }
 
                 if is_dirty_m and not st.session_state.get("ftg_outputs_collapsed", False):
@@ -23221,11 +23246,13 @@ def render(is_standalone: bool = False):
 
             st.markdown("<div style='margin-top:12px;'></div>", unsafe_allow_html=True)
 
-            # ── 4. Outputs Expanders (Auto-Collapsed when manual edits are pending) ──
-            _ftg_collapsed = bool(
-                st.session_state.get("ftg_outputs_collapsed", False)
-                or any(isinstance(mf, dict) and mf.get("_dirty") for mf in st.session_state.get("manual_footings", {}).values())
+            # ── 4. Outputs Expanders (Auto-Collapsed ONLY when manual edits are pending) ──
+            _has_dirty_models = any(
+                isinstance(mf, dict) and bool(mf.get("_dirty"))
+                for mf in st.session_state.get("manual_footings", {}).values()
             )
+            _ftg_collapsed = bool(_has_dirty_models)
+            st.session_state["ftg_outputs_collapsed"] = _ftg_collapsed
             _ftg_exp_ver = int(st.session_state.get("ftg_outputs_exp_ver", 0))
             _ftg_out_expanded = not _ftg_collapsed
             _ftg_exp_suf = f" {'⏳' if _ftg_collapsed else ''}"
