@@ -22896,23 +22896,31 @@ def render(is_standalone: bool = False):
                     /* Custom distinct selectbox for footing model */
                     div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] > div,
                     .st-key-{prefix}sel_manual_ftg_model div[data-baseweb="select"] > div {{
-                        border: 3px solid #0284c7 !important;
+                        border: 3px solid #f59e0b !important;
                         border-radius: 10px !important;
-                        min-height: 50px !important;
-                        background: rgba(15, 23, 42, 0.03) !important;
-                        box-shadow: 0 0 14px rgba(2, 132, 199, 0.25) !important;
+                        min-height: 54px !important;
+                        background: rgba(15, 23, 42, 0.05) !important;
+                        box-shadow: 0 0 16px rgba(245, 158, 11, 0.30) !important;
                     }}
                     div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] span,
                     div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] div,
                     .st-key-{prefix}sel_manual_ftg_model div[data-baseweb="select"] span,
                     .st-key-{prefix}sel_manual_ftg_model div[data-baseweb="select"] div {{
-                        font-size: 1.25rem !important;
+                        font-size: 1.38rem !important;
                         font-weight: 800 !important;
                         color: #0284c7 !important;
                     }}
+                    div[data-baseweb="popover"] li,
+                    div[role="listbox"] li,
+                    li[role="option"] {{
+                        font-size: 1.30rem !important;
+                        font-weight: 700 !important;
+                        color: #0369a1 !important;
+                        padding: 10px 14px !important;
+                    }}
                     </style>
-                    <div style="text-align: center; margin: 10px 0 8px 0;">
-                        <span style="color: #38bdf8; font-size: 1.35rem; font-weight: 800; letter-spacing: 0.5px; text-shadow: 0 0 10px rgba(56, 189, 248, 0.35);">
+                    <div style="text-align: center; margin: 14px 0 8px 0;">
+                        <span style="color: #facc15; font-size: 1.55rem; font-weight: 900; letter-spacing: 0.5px; text-shadow: 0 0 14px rgba(250, 204, 21, 0.40);">
                             🎯 اختر نموذج القاعدة للتعديل اليدوي والتحقق (Footing Model):
                         </span>
                     </div>
@@ -23119,18 +23127,21 @@ def render(is_standalone: bool = False):
                             unsafe_allow_html=True,
                         )
                 else:
-                    err_html_list = "".join(f"<li style='margin: 4px 0;'>{err}</li>" for err in verif_res["errors"])
+                    err_bullets_html = "".join(
+                        f"<div dir='rtl' style='text-align: right; direction: rtl; margin: 6px 0; line-height: 1.9;'>• {err}</div>"
+                        for err in verif_res["errors"]
+                    )
                     st.markdown(
                         f"""
-                        <div dir="rtl" style="background: linear-gradient(135deg, rgba(153, 27, 27, 0.15) 0%, rgba(127, 29, 29, 0.25) 100%);
-                                    border: 2px solid #ef4444; border-radius: 10px; padding: 14px 20px; margin: 12px 0 12px 0;
-                                    box-shadow: 0 4px 14px rgba(239, 68, 68, 0.15);">
-                            <div style="font-size: 1.50rem; font-weight: 800; color: #ef4444; margin-bottom: 6px; text-align: center;">
+                        <div dir="rtl" style="direction: rtl; text-align: right; background: linear-gradient(135deg, rgba(153, 27, 27, 0.16) 0%, rgba(127, 29, 29, 0.26) 100%);
+                                    border: 2px solid #ef4444; border-radius: 10px; padding: 16px 22px; margin: 14px 0 12px 0;
+                                    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.18);">
+                            <div style="font-size: 1.55rem; font-weight: 800; color: #ef4444; margin-bottom: 8px; text-align: center; direction: rtl;">
                                 ❌ التصميم غير آمن للنموذج {selected_model}:
                             </div>
-                            <ul style="font-size: 1.25rem; font-weight: 700; color: #f87171; line-height: 1.8; margin: 0; padding-right: 20px;">
-                                {err_html_list}
-                            </ul>
+                            <div dir="rtl" style="font-size: 1.25rem; font-weight: 700; color: #fca5a5; direction: rtl; text-align: right;">
+                                {err_bullets_html}
+                            </div>
                         </div>
                         """,
                         unsafe_allow_html=True,
@@ -23165,8 +23176,8 @@ def render(is_standalone: bool = False):
                             row_L_cm = round(float(man_L_m) * 100.0)
                             row_B_cm = round(float(man_B_m) * 100.0)
                             row_t_cm = float(man_t_cm)
-                            row_rft_x = f"{int(man_Nx)} Φ {int(man_Phi)} / م"
-                            row_rft_y = f"{int(man_Ny)} Φ {int(man_Phi)} / م"
+                            row_rft_x = f"{int(man_Nx)}Ø{int(man_Phi)}/m"
+                            row_rft_y = f"{int(man_Ny)}Ø{int(man_Phi)}/m"
                             row_q = f"{verif_res['q_act']:.2f} / {verif_res['q_net']:.2f}"
                             if is_dirty_m:
                                 row_status = "✅ آمن ومحدث (مُعدل لحظياً)"
@@ -23179,14 +23190,14 @@ def render(is_standalone: bool = False):
                                 row_L_cm = round(float(conf_entry["L_m"]) * 100.0)
                                 row_B_cm = round(float(conf_entry["B_m"]) * 100.0)
                                 row_t_cm = float(conf_entry["t_cm"])
-                                row_rft_x = f"{int(conf_entry['Nx_m'])} Φ {int(conf_entry['Phi_mm'])} / م"
-                                row_rft_y = f"{int(conf_entry['Ny_m'])} Φ {int(conf_entry['Phi_mm'])} / م"
+                                row_rft_x = f"{int(conf_entry['Nx_m'])}Ø{int(conf_entry['Phi_mm'])}/m"
+                                row_rft_y = f"{int(conf_entry['Ny_m'])}Ø{int(conf_entry['Phi_mm'])}/m"
                             else:
                                 row_L_cm = round(float(m.get("L_cm", 200.0)))
                                 row_B_cm = round(float(m.get("B_cm", 200.0)))
                                 row_t_cm = float(m.get("t_cm", 50.0))
-                                row_rft_x = m.get("rft_long_str", f"{m.get('n_m_L', 5)} Φ {m.get('Phi_mm', 16)} / م")
-                                row_rft_y = m.get("rft_short_str", f"{m.get('n_m_B', 5)} Φ {m.get('Phi_mm', 16)} / م")
+                                row_rft_x = f"{int(m.get('n_m_L', 5))}Ø{int(m.get('Phi_mm', 16))}/m"
+                                row_rft_y = f"{int(m.get('n_m_B', 5))}Ø{int(m.get('Phi_mm', 16))}/m"
                             row_q = f"{float(m.get('q_act', 0.0)):.2f} / {ftg_qnet:.2f}"
                             row_status = "⚠️ تعديل غير آمن (لم يُطبق)"
                     else:
@@ -23197,8 +23208,8 @@ def render(is_standalone: bool = False):
                             row_L_cm = round(float(conf_entry["L_m"]) * 100.0)
                             row_B_cm = round(float(conf_entry["B_m"]) * 100.0)
                             row_t_cm = float(conf_entry["t_cm"])
-                            row_rft_x = f"{int(conf_entry['Nx_m'])} Φ {int(conf_entry['Phi_mm'])} / م"
-                            row_rft_y = f"{int(conf_entry['Ny_m'])} Φ {int(conf_entry['Phi_mm'])} / م"
+                            row_rft_x = f"{int(conf_entry['Nx_m'])}Ø{int(conf_entry['Phi_mm'])}/m"
+                            row_rft_y = f"{int(conf_entry['Ny_m'])}Ø{int(conf_entry['Phi_mm'])}/m"
                             row_q = f"{float(m.get('q_act', 0.0)):.2f} / {ftg_qnet:.2f}"
                             row_status = "✅ آمن معتمد"
                         elif mf_entry and mf_entry.get("_dirty"):
@@ -23223,24 +23234,24 @@ def render(is_standalone: bool = False):
                                 row_L_cm = round(float(mf_entry["L_m"]) * 100.0)
                                 row_B_cm = round(float(mf_entry["B_m"]) * 100.0)
                                 row_t_cm = float(mf_entry["t_cm"])
-                                row_rft_x = f"{int(mf_entry['Nx_m'])} Φ {int(mf_entry['Phi_mm'])} / م"
-                                row_rft_y = f"{int(mf_entry['Ny_m'])} Φ {int(mf_entry['Phi_mm'])} / م"
+                                row_rft_x = f"{int(mf_entry['Nx_m'])}Ø{int(mf_entry['Phi_mm'])}/m"
+                                row_rft_y = f"{int(mf_entry['Ny_m'])}Ø{int(mf_entry['Phi_mm'])}/m"
                                 row_q = f"{other_verif['q_act']:.2f} / {other_verif['q_net']:.2f}"
                                 row_status = "✅ آمن ومحدث (بانتظار الاعتماد)"
                             else:
                                 row_L_cm = round(float(m.get("L_cm", 200.0)))
                                 row_B_cm = round(float(m.get("B_cm", 200.0)))
                                 row_t_cm = float(m.get("t_cm", 50.0))
-                                row_rft_x = m.get("rft_long_str", f"{m.get('n_m_L', 5)} Φ {m.get('Phi_mm', 16)} / م")
-                                row_rft_y = m.get("rft_short_str", f"{m.get('n_m_B', 5)} Φ {m.get('Phi_mm', 16)} / م")
+                                row_rft_x = f"{int(m.get('n_m_L', 5))}Ø{int(m.get('Phi_mm', 16))}/m"
+                                row_rft_y = f"{int(m.get('n_m_B', 5))}Ø{int(m.get('Phi_mm', 16))}/m"
                                 row_q = f"{float(m.get('q_act', 0.0)):.2f} / {ftg_qnet:.2f}"
                                 row_status = "⚠️ تعديل غير آمن (لم يُطبق)"
                         else:
                             row_L_cm = round(float(m.get("L_cm", 200.0)))
                             row_B_cm = round(float(m.get("B_cm", 200.0)))
                             row_t_cm = float(m.get("t_cm", 50.0))
-                            row_rft_x = m.get("rft_long_str", f"{m.get('n_m_L', 5)} Φ {m.get('Phi_mm', 16)} / م")
-                            row_rft_y = m.get("rft_short_str", f"{m.get('n_m_B', 5)} Φ {m.get('Phi_mm', 16)} / م")
+                            row_rft_x = f"{int(m.get('n_m_L', 5))}Ø{int(m.get('Phi_mm', 16))}/m"
+                            row_rft_y = f"{int(m.get('n_m_B', 5))}Ø{int(m.get('Phi_mm', 16))}/m"
                             row_q = f"{float(m.get('q_act', 0.0)):.2f} / {ftg_qnet:.2f}"
                             row_status = m.get("status_str", "✅ آمن ومطابق للكود")
 
@@ -23249,8 +23260,8 @@ def render(is_standalone: bool = False):
                         "العمود المرتكز": col_str,
                         "Pu (ton)": f"{pu_val:.2f}",
                         "الأبعاد المسلحة L × B × t (cm)": f"{row_L_cm} × {row_B_cm} × {row_t_cm:.0f}",
-                        "التسليح X (فرش)": row_rft_x,
-                        "التسليح Y (غطاء)": row_rft_y,
+                        "فرش (اتجاه X)": row_rft_x,
+                        "غطاء (اتجاه Y)": row_rft_y,
                         "إجهاد التربة (kg/cm²)": row_q,
                         "الحالة الإنشائية": row_status,
                     })
