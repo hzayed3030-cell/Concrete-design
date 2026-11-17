@@ -19675,8 +19675,8 @@ def render(is_standalone: bool = False):
                 count = cnt_int if m_key == "Interior" else (cnt_edge if m_key == "Edge" else cnt_corner)
                 m_label = des["model_label"]
                 if count > 0:
-                    b_cm = des["b"]
-                    t_cm = des["t"]
+                    b_cm = float(confirmed_col_dims.get(m_key, {}).get("b", des["b"]))
+                    t_cm = float(confirmed_col_dims.get(m_key, {}).get("t", des["t"]))
                     phi_m = des["Phi"]
                     n_b = des["n_bars"]
                     phi_st = des["Phi_st"]
@@ -25234,6 +25234,286 @@ def render(is_standalone: bool = False):
         st.markdown("---")
 
     if not _ftg_collapsed:
+        # ── 🏗️ COMPREHENSIVE BUILDING WORKS QUANTITY SURVEY (حصر شامل لجميع الأعمال الخاصة بالمبنى) ──
+        comp_works_table_rows = []
+        with st.expander(
+            f"🏗️ حصر شامل لجميع الأعمال الخاصة بالمبنى{_ftg_exp_suf}",
+            expanded=False,
+            key=f"{prefix}exp_comp_bldg_works_v{_ftg_exp_ver}",
+        ):
+            if _ftg_collapsed:
+                st.warning(_ftg_warn_msg)
+
+            # Retrieve latest structural analysis objects dynamically
+            _ftg_cw = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis", {})
+            _gb_cw = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis", {})
+            _rb_cw = rb_analysis if ('rb_analysis' in locals() and rb_analysis) else st.session_state.get("fs_rb_analysis", {})
+
+            _iso_ftgs_cw = _ftg_cw.get("isolated_footings", []) if isinstance(_ftg_cw, dict) else []
+            _comb_ftgs_cw = _ftg_cw.get("combined_footings", []) if isinstance(_ftg_cw, dict) else []
+            _edge_straps_cw = _ftg_cw.get("edge_strap_footings", []) if isinstance(_ftg_cw, dict) else []
+            _corner_straps_cw = _ftg_cw.get("corner_strap_footings", []) if isinstance(_ftg_cw, dict) else []
+
+            _avg_ftg_t_m = (sum(float(f.get("t_cm", 50.0)) for f in _iso_ftgs_cw) / len(_iso_ftgs_cw) / 100.0) if _iso_ftgs_cw else 0.50
+            _gb_list_cw = _gb_cw.get("ground_beams", []) if isinstance(_gb_cw, dict) else []
+            _gb_models_cw = _gb_cw.get("models_dict", {}) if isinstance(_gb_cw, dict) else {}
+            if _gb_models_cw:
+                _avg_gb_t_m = sum(float(m.get("t_cm", 60.0)) for m in _gb_models_cw.values()) / len(_gb_models_cw) / 100.0
+                _avg_gb_b_m = sum(float(m.get("b_cm", 25.0)) for m in _gb_models_cw.values()) / len(_gb_models_cw) / 100.0
+            elif _gb_list_cw:
+                _avg_gb_t_m = sum(float(b.get("t_calc", 60.0)) for b in _gb_list_cw) / len(_gb_list_cw) / 100.0
+                _avg_gb_b_m = sum(float(b.get("b_cm", 25.0)) for b in _gb_list_cw) / len(_gb_list_cw) / 100.0
+            else:
+                _avg_gb_t_m = 0.60
+                _avg_gb_b_m = 0.25
+
+            _gb_lvl_cw = str(S.cfg_val("gb_level_type", S.cfg_val(f"{prefix}gb_level_type", "Above Footing Level")))
+            _t_pc_cw_m = 0.10
+
+            _saved_df = float(S.cfg_val(f"{prefix}cw_df_m", S.cfg_val("cw_df_m", 1.50)))
+            _saved_h_above = float(S.cfg_val(f"{prefix}cw_h_above_m", S.cfg_val("cw_h_above_m", 0.60)))
+            _saved_t_wall = float(S.cfg_val(f"{prefix}cw_t_wall_m", S.cfg_val("cw_t_wall_m", 0.25)))
+            _saved_brick_l = float(S.cfg_val(f"{prefix}cw_brick_l_cm", S.cfg_val("cw_brick_l_cm", 25.0)))
+            _saved_brick_w = float(S.cfg_val(f"{prefix}cw_brick_w_cm", S.cfg_val("cw_brick_w_cm", 12.0)))
+            _saved_brick_h = float(S.cfg_val(f"{prefix}cw_brick_h_cm", S.cfg_val("cw_brick_h_cm", 6.0)))
+
+            # 1. Top Part (Inputs)
+            with st.container(border=True):
+                cw_r1c1, cw_r1c2, cw_r1c3, cw_r1c4 = st.columns(4)
+                with cw_r1c1:
+                    cw_df_m = st.number_input(
+                        "1. عمق الأساسات (Foundation Depth) [m]:",
+                        min_value=0.50, max_value=10.00,
+                        value=_saved_df, step=0.10, format="%.2f",
+                        key=f"{prefix}w_cw_df_m",
+                    )
+                with cw_r1c2:
+                    cw_h_above_m = st.number_input(
+                        "2. ارتفاع المبنى عن الأرض / منسوب الردم أعلى سطح الأرض [m]:",
+                        min_value=0.00, max_value=5.00,
+                        value=_saved_h_above, step=0.10, format="%.2f",
+                        key=f"{prefix}w_cw_h_above_m",
+                    )
+                with cw_r1c3:
+                    cw_t_wall_m = st.number_input(
+                        "3. سمك المباني (Masonry Wall Thickness) [m]:",
+                        min_value=0.10, max_value=1.00,
+                        value=_saved_t_wall, step=0.05, format="%.2f",
+                        key=f"{prefix}w_cw_t_wall_m",
+                    )
+
+                if "At Footing Level" in _gb_lvl_cw:
+                    _sub_gb_top_from_bot = _t_pc_cw_m + max(_avg_ftg_t_m, _avg_gb_t_m)
+                else:
+                    _sub_gb_top_from_bot = min(cw_df_m, _t_pc_cw_m + _avg_ftg_t_m + _avg_gb_t_m)
+                _auto_h_wall_m = round(max(0.20, (cw_df_m - _sub_gb_top_from_bot) + cw_h_above_m), 2)
+
+                _auto_ref_tuple = (round(cw_df_m, 2), round(cw_h_above_m, 2), round(_avg_ftg_t_m, 2), round(_avg_gb_t_m, 2), _gb_lvl_cw)
+                if st.session_state.get(f"{prefix}_cw_auto_h_ref") != _auto_ref_tuple:
+                    st.session_state[f"{prefix}_cw_auto_h_ref"] = _auto_ref_tuple
+                    st.session_state[f"{prefix}w_cw_h_wall_m"] = _auto_h_wall_m
+                    S.cfg_set(f"{prefix}cw_h_wall_m", _auto_h_wall_m)
+                    S.cfg_set("cw_h_wall_m", _auto_h_wall_m)
+
+                _saved_h_wall = float(S.cfg_val(f"{prefix}cw_h_wall_m", S.cfg_val("cw_h_wall_m", _auto_h_wall_m)))
+                with cw_r1c4:
+                    cw_h_wall_m = st.number_input(
+                        f"4. ارتفاع المباني (تلقائي: {_auto_h_wall_m:.2f} m) [m]:",
+                        min_value=0.10, max_value=10.00,
+                        value=_saved_h_wall, step=0.05, format="%.2f",
+                        key=f"{prefix}w_cw_h_wall_m",
+                    )
+
+                cw_r2c1, cw_r2c2, cw_r2c3 = st.columns(3)
+                with cw_r2c1:
+                    cw_brick_l_cm = st.number_input(
+                        "5. طول الطوبة الأسمنتية (Brick Length) [cm]:",
+                        min_value=10.0, max_value=50.0,
+                        value=_saved_brick_l, step=1.0, format="%.1f",
+                        key=f"{prefix}w_cw_brick_l_cm",
+                    )
+                with cw_r2c2:
+                    cw_brick_w_cm = st.number_input(
+                        "6. عرض الطوبة الأسمنتية (Brick Width) [cm]:",
+                        min_value=5.0, max_value=40.0,
+                        value=_saved_brick_w, step=1.0, format="%.1f",
+                        key=f"{prefix}w_cw_brick_w_cm",
+                    )
+                with cw_r2c3:
+                    cw_brick_h_cm = st.number_input(
+                        "7. ارتفاع الطوبة الأسمنتية (Brick Height) [cm]:",
+                        min_value=4.0, max_value=30.0,
+                        value=_saved_brick_h, step=1.0, format="%.1f",
+                        key=f"{prefix}w_cw_brick_h_cm",
+                    )
+
+                # Persist input changes and invalidate cached export HTML/PDF if modified
+                if (
+                    abs(cw_df_m - _saved_df) > 1e-4
+                    or abs(cw_h_above_m - _saved_h_above) > 1e-4
+                    or abs(cw_t_wall_m - _saved_t_wall) > 1e-4
+                    or abs(cw_h_wall_m - _saved_h_wall) > 1e-4
+                    or abs(cw_brick_l_cm - _saved_brick_l) > 1e-4
+                    or abs(cw_brick_w_cm - _saved_brick_w) > 1e-4
+                    or abs(cw_brick_h_cm - _saved_brick_h) > 1e-4
+                ):
+                    S.cfg_set(f"{prefix}cw_df_m", cw_df_m)
+                    S.cfg_set("cw_df_m", cw_df_m)
+                    S.cfg_set(f"{prefix}cw_h_above_m", cw_h_above_m)
+                    S.cfg_set("cw_h_above_m", cw_h_above_m)
+                    S.cfg_set(f"{prefix}cw_t_wall_m", cw_t_wall_m)
+                    S.cfg_set("cw_t_wall_m", cw_t_wall_m)
+                    S.cfg_set(f"{prefix}cw_h_wall_m", cw_h_wall_m)
+                    S.cfg_set("cw_h_wall_m", cw_h_wall_m)
+                    S.cfg_set(f"{prefix}cw_brick_l_cm", cw_brick_l_cm)
+                    S.cfg_set("cw_brick_l_cm", cw_brick_l_cm)
+                    S.cfg_set(f"{prefix}cw_brick_w_cm", cw_brick_w_cm)
+                    S.cfg_set("cw_brick_w_cm", cw_brick_w_cm)
+                    S.cfg_set(f"{prefix}cw_brick_h_cm", cw_brick_h_cm)
+                    S.cfg_set("cw_brick_h_cm", cw_brick_h_cm)
+                    S.save_settings()
+                    st.session_state.pop(f"{prefix}_cached_report_html", None)
+                    st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
+
+            # 2. Engineering Logic & Dynamic Quantities Calculation
+            # (A) Concrete Quantities (m³)
+            _v_slabs_conc = float(slab_conc_val * num_floors)
+            _v_beams_1f = float(_rb_cw.get("boq", {}).get("conc_vol_rc", 0.0)) if isinstance(_rb_cw, dict) else 0.0
+            _v_beams_conc = _v_beams_1f * num_floors
+            _v_gb_conc = float(gb_conc_rc_val) if 'gb_conc_rc_val' in locals() else (float(_gb_cw.get("boq", {}).get("conc_vol_rc", 0.0)) if isinstance(_gb_cw, dict) else 0.0)
+            _v_cols_conc = float(cols_conc_tot_val) if 'cols_conc_tot_val' in locals() else float(tot_conc_vol_1f * num_floors)
+            _v_ftgs_rc = float(ftgs_conc_rc_val) if 'ftgs_conc_rc_val' in locals() else 0.0
+            _v_ftgs_pc = float(ftgs_conc_pc_val) if 'ftgs_conc_pc_val' in locals() else 0.0
+            _v_ftgs_conc = _v_ftgs_rc + _v_ftgs_pc
+            _v_total_conc = _v_slabs_conc + _v_beams_conc + _v_gb_conc + _v_cols_conc + _v_ftgs_conc
+
+            # (B) Earthworks — Excavation & Backfilling (m³)
+            _ftg_exc_area_m2 = 0.0
+            for _f in _iso_ftgs_cw:
+                _ftg_exc_area_m2 += ((float(_f.get("L_cm", 150.0)) + 20.0) / 100.0) * ((float(_f.get("B_cm", 150.0)) + 20.0) / 100.0)
+            for _cf in _comb_ftgs_cw:
+                _ftg_exc_area_m2 += ((float(_cf.get("Lc_cm", 300.0)) + 20.0) / 100.0) * ((float(_cf.get("Bc_cm", 180.0)) + 20.0) / 100.0)
+            for _sf in _edge_straps_cw:
+                _r9 = _sf.get("calc_res", {})
+                _l1 = float(_r9.get("L1", _sf.get("L1", 2.0)))
+                _b1 = float(_r9.get("B1", _sf.get("B1", 2.0)))
+                _l2 = float(_r9.get("L2", _sf.get("L2", 2.2)))
+                _b2 = float(_r9.get("B2", _sf.get("B2", 2.2)))
+                _ftg_exc_area_m2 += (_l1 + 0.20) * (_b1 + 0.20) + (_l2 + 0.20) * (_b2 + 0.20)
+            for _dsf in _corner_straps_cw:
+                _r10 = _dsf.get("calc_res", {})
+                _l1x = float(_r10.get("L1x", _dsf.get("L1x", 2.0)))
+                _l1y = float(_r10.get("L1y", _dsf.get("L1y", 1.8)))
+                _l2x = float(_r10.get("L2x", _dsf.get("L2x", 2.2)))
+                _l2y = float(_r10.get("L2y", _dsf.get("L2y", 2.2)))
+                _ftg_exc_area_m2 += (_l1x + 0.20) * (_l1y + 0.20) + (_l2x + 0.20) * (_l2y + 0.20)
+            if _ftg_exc_area_m2 <= 0.0 and _v_ftgs_pc > 0.0:
+                _ftg_exc_area_m2 = _v_ftgs_pc / 0.10
+
+            # Total Ground Beams clear length
+            _L_gb_net_m = sum(float(b.get("clear_span_m", b.get("span_m", 0.0))) for b in _gb_list_cw)
+            if _L_gb_net_m <= 0.0 and _gb_models_cw:
+                _L_gb_net_m = sum(float(m.get("total_len_m", 0.0)) for m in _gb_models_cw.values())
+
+            # Ground beam trench excavation outside footing pits
+            _n_gb_spans = len(_gb_list_cw) if _gb_list_cw else 0
+            _L_gb_trench_outside = max(0.0, _L_gb_net_m - _n_gb_spans * 0.80)
+            _v_gb_trench_exc = _L_gb_trench_outside * (_avg_gb_b_m + 0.20) * min(cw_df_m, _avg_gb_t_m + 0.20)
+
+            _v_excavation = (_ftg_exc_area_m2 * cw_df_m) + _v_gb_trench_exc
+
+            # Substructure concrete volume below NGL (Footings + Ground Beams + Column Necks below NGL)
+            _col_plan_area_1f = (tot_conc_vol_1f / (col_H / 100.0)) if ('col_H' in locals() and col_H > 0) else 0.0
+            _h_neck_sub = max(0.0, cw_df_m - _t_pc_cw_m - _avg_ftg_t_m)
+            _v_col_necks_sub = _col_plan_area_1f * _h_neck_sub
+            _v_sub_conc_below_ngl = _v_ftgs_conc + _v_gb_conc + _v_col_necks_sub
+            _v_backfill_sub = max(0.0, _v_excavation - _v_sub_conc_below_ngl)
+
+            # Above-ground backfilling based on building footprint area between ground beams / foundation walls
+            _grid_footprint_m2 = float(sum(Lx_calc) * sum(Ly_calc)) if (Lx_calc and Ly_calc) else float(slab_area_val)
+            _void_area_m2 = sum(float(vb.get("w", 0.0)) * float(vb.get("h", 0.0)) for vb in (_void_boxes_sk or [])) if '_void_boxes_sk' in locals() and _void_boxes_sk else 0.0
+            _bldg_footprint_m2 = max(0.0, _grid_footprint_m2 - _void_area_m2) if _grid_footprint_m2 > 0 else float(slab_area_val)
+            _walls_plan_area_m2 = _L_gb_net_m * cw_t_wall_m
+            _net_fill_area_above_m2 = max(0.0, _bldg_footprint_m2 - _walls_plan_area_m2 - _col_plan_area_1f)
+            _v_backfill_above = _net_fill_area_above_m2 * cw_h_above_m
+
+            # (C) Masonry / Brickwork Quantities (above Ground Beams up to top backfilling level)
+            _v_masonry_m3 = _L_gb_net_m * cw_t_wall_m * cw_h_wall_m
+            _v_one_brick_with_mortar_m3 = ((cw_brick_l_cm + 1.0) / 100.0) * ((cw_brick_w_cm + 1.0) / 100.0) * ((cw_brick_h_cm + 1.0) / 100.0)
+            _n_bricks_total = int(math.ceil(_v_masonry_m3 / max(1e-6, _v_one_brick_with_mortar_m3))) if _v_masonry_m3 > 0 else 0
+
+            # 3. Bottom Part (Output): Clean Quantities Summary Table Only
+            comp_works_table_rows = [
+                {
+                    "البند / بيان الأعمال (Work Item)": "1. خرسانة السقف (Slabs Concrete)",
+                    "الكمية (Quantity)": f"{_v_slabs_conc:.2f}",
+                    "الوحدة (Unit)": "م³ (m³)",
+                    "المحددات والتفصيل (Details)": f"مسطح السقف {slab_area_val:.1f} m² × سمك {ts:.0f} cm × {num_floors} طوابق",
+                },
+                {
+                    "البند / بيان الأعمال (Work Item)": "2. خرسانة الكاميرات (Beams Concrete)",
+                    "الكمية (Quantity)": f"{_v_beams_conc:.2f}",
+                    "الوحدة (Unit)": "م³ (m³)",
+                    "المحددات والتفصيل (Details)": f"كمرات السقف للدور ({_v_beams_1f:.2f} m³) × {num_floors} طوابق",
+                },
+                {
+                    "البند / بيان الأعمال (Work Item)": "3. خرسانة السملات (Ground Beams Concrete)",
+                    "الكمية (Quantity)": f"{_v_gb_conc:.2f}",
+                    "الوحدة (Unit)": "م³ (m³)",
+                    "المحددات والتفصيل (Details)": f"إجمالي أطوال السملات الصافية {_L_gb_net_m:.2f} m",
+                },
+                {
+                    "البند / بيان الأعمال (Work Item)": "4. خرسانة الأعمدة (Columns Concrete)",
+                    "الكمية (Quantity)": f"{_v_cols_conc:.2f}",
+                    "الوحدة (Unit)": "م³ (m³)",
+                    "المحددات والتفصيل (Details)": f"أعمدة الدور ({tot_conc_vol_1f:.2f} m³) × {num_floors} طوابق ({len(_active_cols)} عمود)",
+                },
+                {
+                    "البند / بيان الأعمال (Work Item)": "5. خرسانة القواعد (Footings / Foundations Concrete)",
+                    "الكمية (Quantity)": f"{_v_ftgs_conc:.2f}",
+                    "الوحدة (Unit)": "م³ (m³)",
+                    "المحددات والتفصيل (Details)": f"مسلحة: {_v_ftgs_rc:.2f} m³ + عادية نظافة (10 سم): {_v_ftgs_pc:.2f} m³",
+                },
+                {
+                    "البند / بيان الأعمال (Work Item)": "📌 إجمالي الخرسانات للمبنى (Total Concrete)",
+                    "الكمية (Quantity)": f"{_v_total_conc:.2f}",
+                    "الوحدة (Unit)": "م³ (m³)",
+                    "المحددات والتفصيل (Details)": f"شامل السقف والكاميرات والسملات والأعمدة والقواعد ({num_floors} طوابق)",
+                },
+                {
+                    "البند / بيان الأعمال (Work Item)": "6. كميات الحفر (Excavation Volume)",
+                    "الكمية (Quantity)": f"{_v_excavation:.2f}",
+                    "الوحدة (Unit)": "م³ (m³)",
+                    "المحددات والتفصيل (Details)": f"مسطح حفر القواعد {_ftg_exc_area_m2:.2f} m² × عمق الأساسات {cw_df_m:.2f} m + خنادق السملات",
+                },
+                {
+                    "البند / بيان الأعمال (Work Item)": "7. أعمال الردم أسفل سطح الأرض (Sub-surface Backfilling)",
+                    "الكمية (Quantity)": f"{_v_backfill_sub:.2f}",
+                    "الوحدة (Unit)": "م³ (m³)",
+                    "المحددات والتفصيل (Details)": f"حجم الحفر ({_v_excavation:.2f} m³) − خرسانات تحت الأرض ({_v_sub_conc_below_ngl:.2f} m³)",
+                },
+                {
+                    "البند / بيان الأعمال (Work Item)": "8. أعمال الردم أعلى سطح الأرض (Above-ground Backfilling)",
+                    "الكمية (Quantity)": f"{_v_backfill_above:.2f}",
+                    "الوحدة (Unit)": "م³ (m³)",
+                    "المحددات والتفصيل (Details)": f"المسطح الصافي بين السملات والمباني ({_net_fill_area_above_m2:.2f} m²) × ارتفاع الردم {cw_h_above_m:.2f} m",
+                },
+                {
+                    "البند / بيان الأعمال (Work Item)": "9. حجم مباني الأساسات أعلى السملات (Masonry Volume)",
+                    "الكمية (Quantity)": f"{_v_masonry_m3:.2f}",
+                    "الوحدة (Unit)": "م³ (m³)",
+                    "المحددات والتفصيل (Details)": f"طول {_L_gb_net_m:.2f} m × سمك {cw_t_wall_m:.2f} m × ارتفاع {cw_h_wall_m:.2f} m",
+                },
+                {
+                    "البند / بيان الأعمال (Work Item)": "10. إجمالي عدد الطوب الأسمنتي (Total Cement Bricks Count)",
+                    "الكمية (Quantity)": f"{_n_bricks_total:,}",
+                    "الوحدة (Unit)": "طوبة (Brick)",
+                    "المحددات والتفصيل (Details)": f"{_n_bricks_total / 1000.0:.2f} ألف طوبة │ مقاس الطوبة {cw_brick_l_cm:.0f}×{cw_brick_w_cm:.0f}×{cw_brick_h_cm:.0f} cm (شامل لحام المونة)",
+                },
+            ]
+            st.session_state[f"{prefix}comp_works_table_rows"] = comp_works_table_rows
+            render_styled_table(comp_works_table_rows, font_size_override=14.0)
+
         # ── 💾 SAVE & EXPORT COMPLETE CALCULATION SHEET (COLLAPSED EXPANDER) ────────
         with st.expander(
             f"💾 Save & Export Design Calculation Sheet (حفظ وتصدير المذكرة الحسابية الكاملة){_ftg_exp_suf}",
@@ -25613,7 +25893,7 @@ def render(is_standalone: bool = False):
                 except Exception:
                     pass
 
-                return generate_flat_slab_report_html(
+                _base_full_html = generate_flat_slab_report_html(
                     project_name="Standalone Flat Slab Reinforced Concrete Design (ECP 203)" if is_standalone else "Integrated Structural Design (ECP 203)",
                     ts=ts, d=d, num_floors=num_floors, Wu=Wu,
                     Lx_spans=Lx_calc, Ly_spans=Ly_calc, cantilevers=cantilevers,
@@ -25641,6 +25921,35 @@ def render(is_standalone: bool = False):
                     gb_analysis=gb_analysis_obj if 'gb_analysis_obj' in locals() else st.session_state.get('fs_gb_analysis'),
                     ftg_analysis=None if is_standalone else (ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get('fs_ftg_analysis')),
                 )
+                if comp_works_table_rows:
+                    _cw_trs = "".join(
+                        f"<tr>"
+                        f"<td style='text-align:right; font-weight:700;'>{r.get('البند / بيان الأعمال (Work Item)', '')}</td>"
+                        f"<td style='text-align:center; font-weight:800; color:#1e40af;'>{r.get('الكمية (Quantity)', '')}</td>"
+                        f"<td style='text-align:center;'>{r.get('الوحدة (Unit)', '')}</td>"
+                        f"<td style='text-align:right;'>{r.get('المحددات والتفصيل (Details)', '')}</td>"
+                        f"</tr>"
+                        for r in comp_works_table_rows
+                    )
+                    _cw_sec_html = f"""
+                    <div class="section-title page-break">🏗️ حصر شامل لجميع الأعمال الخاصة بالمبنى (Comprehensive Building Works Survey)</div>
+                    <table class="data-table" style="width:100%; border-collapse:collapse; margin-top:10px; margin-bottom:18px;" dir="rtl">
+                        <thead>
+                            <tr>
+                                <th style="text-align:right;">البند / بيان الأعمال (Work Item)</th>
+                                <th style="text-align:center;">الكمية (Quantity)</th>
+                                <th style="text-align:center;">الوحدة (Unit)</th>
+                                <th style="text-align:right;">المحددات والتفصيل (Details)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {_cw_trs}
+                        </tbody>
+                    </table>
+                    """
+                    if "<!-- Sign-off Block -->" in _base_full_html:
+                        _base_full_html = _base_full_html.replace("<!-- Sign-off Block -->", _cw_sec_html + "\n    <!-- Sign-off Block -->", 1)
+                return _base_full_html
 
             def _build_flat_slab_concise_html():
                 _act_cols = fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols
@@ -25760,7 +26069,7 @@ def render(is_standalone: bool = False):
                 b8 = fig_to_b64(f8)
 
                 proj_title = "Standalone Flat Slab Reinforced Concrete Design (ECP 203)" if is_standalone else "Integrated Structural Design (ECP 203)"
-                return generate_concise_design_report_html(
+                _base_concise_html = generate_concise_design_report_html(
                     project_name=proj_title,
                     num_floors=num_floors,
                     ts=ts,
@@ -25790,6 +26099,51 @@ def render(is_standalone: bool = False):
                     cantilevers=cantilevers if 'cantilevers' in locals() else None,
                     top_extra_cols=top_extra_cols if 'top_extra_cols' in locals() else [],
                 )
+                if comp_works_table_rows:
+                    _cw_pdf_trs = "".join(
+                        f"<tr>"
+                        f"<td style='text-align:right; font-weight:700;'>{r.get('البند / بيان الأعمال (Work Item)', '')}</td>"
+                        f"<td style='text-align:center; font-weight:800; color:#1e3a8a;'>{r.get('الكمية (Quantity)', '')}</td>"
+                        f"<td style='text-align:center;'>{r.get('الوحدة (Unit)', '')}</td>"
+                        f"<td style='text-align:right;'>{r.get('المحددات والتفصيل (Details)', '')}</td>"
+                        f"</tr>"
+                        for r in comp_works_table_rows
+                    )
+                    _cw_pdf_page = f"""
+    <div class="pdf-page" dir="rtl" style="direction:rtl; text-align:right;">
+        <div>
+            <div class="page-header" style="direction:rtl;">
+                <div>
+                    <div class="header-title">🏗️ حصر شامل لجميع الأعمال الخاصة بالمبنى</div>
+                    <div class="header-subtitle">Comprehensive Building Works Quantity Survey (Concrete, Earthworks & Masonry — ECP 203)</div>
+                </div>
+                <div class="header-badge">BOQ Summary</div>
+            </div>
+            <div class="table-container" style="margin-top:14px;">
+                <table class="design-table" dir="rtl" style="direction:rtl;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:right; width:34%;">البند / بيان الأعمال (Work Item)</th>
+                            <th style="text-align:center; width:16%;">الكمية (Quantity)</th>
+                            <th style="text-align:center; width:14%;">الوحدة (Unit)</th>
+                            <th style="text-align:right; width:36%;">المحددات والتفصيل (Details)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {_cw_pdf_trs}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="page-footer" dir="ltr">
+            <span>Project: {proj_title}</span>
+            <span>Comprehensive Building Works Survey — ECP 203</span>
+            <span>Summary BOQ</span>
+        </div>
+    </div>
+"""
+                    _base_concise_html = _base_concise_html.replace("</body>", _cw_pdf_page + "\n</body>", 1)
+                return _base_concise_html
 
             # Export Buttons (Concise PDF & HTML)
             exp_c1, exp_c2 = st.columns([1.5, 1.2], gap="medium")
