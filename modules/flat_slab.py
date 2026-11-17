@@ -23066,58 +23066,69 @@ def render(is_standalone: bool = False):
                     unsafe_allow_html=True,
                 )
 
+                _has_pending_changes = bool(
+                    is_dirty_m
+                    or any(
+                        isinstance(mf, dict) and bool(mf.get("_dirty"))
+                        for mf in st.session_state.get("manual_footings", {}).values()
+                    )
+                )
+
                 if verif_res["is_safe"]:
-                    st.success(f"✅ تصميم النموذج {selected_model} آمن ومطابق لاشتراطات الكود.")
-                    if st.button("اعادة التصميم نتيجة تغيير مدخلات القاعدة", key=f"{prefix}btn_apply_manual_footing", type="primary", use_container_width=True):
-                        adopted_entry = {
-                            "L_m": float(man_L_m),
-                            "B_m": float(man_B_m),
-                            "t_cm": float(man_t_cm),
-                            "Phi_mm": int(man_Phi),
-                            "Nx_m": int(man_Nx),
-                            "Ny_m": int(man_Ny),
-                        }
-                        st.session_state["confirmed_manual_footings"][selected_model] = dict(adopted_entry)
-                        st.session_state["manual_footings"][selected_model] = dict(adopted_entry, _dirty=False)
+                    if _has_pending_changes:
+                        st.success(f"✅ التعديل المقترح للنموذج {selected_model} آمن ومطابق لاشتراطات الكود.")
+                        if st.button("اعادة التصميم نتيجة تغيير مدخلات القاعدة", key=f"{prefix}btn_apply_manual_footing", type="primary", use_container_width=True):
+                            adopted_entry = {
+                                "L_m": float(man_L_m),
+                                "B_m": float(man_B_m),
+                                "t_cm": float(man_t_cm),
+                                "Phi_mm": int(man_Phi),
+                                "Nx_m": int(man_Nx),
+                                "Ny_m": int(man_Ny),
+                            }
+                            st.session_state["confirmed_manual_footings"][selected_model] = dict(adopted_entry)
+                            st.session_state["manual_footings"][selected_model] = dict(adopted_entry, _dirty=False)
 
-                        # Save all other models that were modified
-                        for mk_k, mf_v in st.session_state.get("manual_footings", {}).items():
-                            if isinstance(mf_v, dict) and mf_v.get("_dirty"):
-                                st.session_state["confirmed_manual_footings"][mk_k] = {
-                                    "L_m": float(mf_v.get("L_m", 2.0)),
-                                    "B_m": float(mf_v.get("B_m", 2.0)),
-                                    "t_cm": float(mf_v.get("t_cm", 50.0)),
-                                    "Phi_mm": int(mf_v.get("Phi_mm", 16)),
-                                    "Nx_m": int(mf_v.get("Nx_m", 5)),
-                                    "Ny_m": int(mf_v.get("Ny_m", 5)),
-                                }
-                                mf_v["_dirty"] = False
+                            # Save all other models that were modified
+                            for mk_k, mf_v in st.session_state.get("manual_footings", {}).items():
+                                if isinstance(mf_v, dict) and mf_v.get("_dirty"):
+                                    st.session_state["confirmed_manual_footings"][mk_k] = {
+                                        "L_m": float(mf_v.get("L_m", 2.0)),
+                                        "B_m": float(mf_v.get("B_m", 2.0)),
+                                        "t_cm": float(mf_v.get("t_cm", 50.0)),
+                                        "Phi_mm": int(mf_v.get("Phi_mm", 16)),
+                                        "Nx_m": int(mf_v.get("Nx_m", 5)),
+                                        "Ny_m": int(mf_v.get("Ny_m", 5)),
+                                    }
+                                    mf_v["_dirty"] = False
 
-                        for mk_k, c_entry in st.session_state["confirmed_manual_footings"].items():
-                            cur_ftg_overrides[f"{mk_k}_L_cm"] = round(float(c_entry["L_m"]) * 100.0, 1)
-                            cur_ftg_overrides[f"{mk_k}_B_cm"] = round(float(c_entry["B_m"]) * 100.0, 1)
-                            cur_ftg_overrides[f"{mk_k}_t"] = float(c_entry["t_cm"])
-                            cur_ftg_overrides[f"{mk_k}_phi"] = int(c_entry["Phi_mm"])
-                            cur_ftg_overrides[f"{mk_k}_nx"] = int(c_entry["Nx_m"])
-                            cur_ftg_overrides[f"{mk_k}_ny"] = int(c_entry["Ny_m"])
-                            cur_ftg_overrides[f"{mk_k}_manual_confirmed"] = True
+                            for mk_k, c_entry in st.session_state["confirmed_manual_footings"].items():
+                                cur_ftg_overrides[f"{mk_k}_L_cm"] = round(float(c_entry["L_m"]) * 100.0, 1)
+                                cur_ftg_overrides[f"{mk_k}_B_cm"] = round(float(c_entry["B_m"]) * 100.0, 1)
+                                cur_ftg_overrides[f"{mk_k}_t"] = float(c_entry["t_cm"])
+                                cur_ftg_overrides[f"{mk_k}_phi"] = int(c_entry["Phi_mm"])
+                                cur_ftg_overrides[f"{mk_k}_nx"] = int(c_entry["Nx_m"])
+                                cur_ftg_overrides[f"{mk_k}_ny"] = int(c_entry["Ny_m"])
+                                cur_ftg_overrides[f"{mk_k}_manual_confirmed"] = True
 
-                        S.cfg_set("ftg_overrides", cur_ftg_overrides)
-                        S.cfg_set("confirmed_manual_footings", dict(st.session_state["confirmed_manual_footings"]))
-                        st.session_state[f"{prefix}ftg_overrides"] = cur_ftg_overrides
-                        S.save_settings()
+                            S.cfg_set("ftg_overrides", cur_ftg_overrides)
+                            S.cfg_set("confirmed_manual_footings", dict(st.session_state["confirmed_manual_footings"]))
+                            st.session_state[f"{prefix}ftg_overrides"] = cur_ftg_overrides
+                            S.save_settings()
 
-                        st.session_state.pop(f"{prefix}w_ftg_{selected_model.lower()}_phi", None)
-                        st.session_state["ftg_outputs_collapsed"] = False
-                        st.session_state["ftg_outputs_exp_ver"] = int(st.session_state.get("ftg_outputs_exp_ver", 0)) + 1
+                            st.session_state.pop(f"{prefix}w_ftg_{selected_model.lower()}_phi", None)
+                            st.session_state["ftg_outputs_collapsed"] = False
+                            st.session_state["ftg_outputs_exp_ver"] = int(st.session_state.get("ftg_outputs_exp_ver", 0)) + 1
 
-                        st.session_state.pop(f"{prefix}foundation_sketch_b64", None)
-                        st.session_state.pop(f"{prefix}_last_outputs_pdf_bytes", None)
-                        st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
-                        st.session_state.pop(f"{prefix}_last_full_pdf_bytes", None)
-                        st.session_state.pop(f"{prefix}_cached_report_html", None)
-                        st.session_state.pop(f"{prefix}_last_drawings_pdf_bytes", None)
-                        st.rerun()
+                            st.session_state.pop(f"{prefix}foundation_sketch_b64", None)
+                            st.session_state.pop(f"{prefix}_last_outputs_pdf_bytes", None)
+                            st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
+                            st.session_state.pop(f"{prefix}_last_full_pdf_bytes", None)
+                            st.session_state.pop(f"{prefix}_cached_report_html", None)
+                            st.session_state.pop(f"{prefix}_last_drawings_pdf_bytes", None)
+                            st.rerun()
+                    else:
+                        st.success(f"✅ تصميم النموذج {selected_model} آمن ومطابق لاشتراطات الكود.")
                 else:
                     err_bullets = "\n".join(f"• {err}" for err in verif_res["errors"])
                     st.error(f"❌ **التصميم غير آمن للنموذج {selected_model}:**\n{err_bullets}")
