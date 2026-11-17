@@ -5,8 +5,8 @@
       "name": "Control room (نسخة)",
       "description": "نسخة من Control room",
       "created_at": "2026-11-14 11:08",
-      "updated_at": "2026-11-17 13:19",
-      "last_used_at": "2026-11-17 13:19:49",
+      "updated_at": "2026-11-17 13:21",
+      "last_used_at": "2026-11-17 13:21:13",
       "data": {
         "selected_module_idx": 0,
         "apartment_name": "Control room (نسخة)",
@@ -2571,36 +2571,7 @@
                     "placed": true,
                     "removed": false,
                     "i_eff": 1,
-                    "j_eff": 0,
-                    "Atrib_0": 3.4749999999999996,
-                    "Pu_slab_0": 7.592874999999998,
-                    "Pu_slab": 22.35950079097398,
-                    "Pu_punch": 4.25,
-                    "Pu_beam": 18.03,
-                    "framing_beams": [
-                      "B7",
-                      "B11"
-                    ],
-                    "Pu_0": 8.352162499999999,
-                    "Pu": 24.59545087007138,
-                    "beam_reactions": [
-                      {
-                        "beam_id": "B7",
-                        "rxn_ton": 6.3,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B11",
-                        "rxn_ton": 11.73,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      }
-                    ],
-                    "model_mark": "C1",
-                    "col_spec_str": "C1 = 30*80 cm"
+                    "j_eff": 0
                   }
                 },
                 "supp2": {
@@ -2645,44 +2616,7 @@
                     "placed": true,
                     "removed": false,
                     "i_eff": 1,
-                    "j_eff": 3,
-                    "Atrib_0": 6.131475,
-                    "Pu_slab_0": 13.397272874999997,
-                    "Pu_slab": 33.7916942525847,
-                    "Pu_punch": 4.56,
-                    "Pu_beam": 25.080000000000002,
-                    "framing_beams": [
-                      "B2",
-                      "B3",
-                      "B11"
-                    ],
-                    "Pu_0": 14.737000162499998,
-                    "Pu": 37.17086367784318,
-                    "beam_reactions": [
-                      {
-                        "beam_id": "B2",
-                        "rxn_ton": 6.28,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B3",
-                        "rxn_ton": 7.07,
-                        "net_col_rxn_ton": 0.01,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B11",
-                        "rxn_ton": 11.73,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      }
-                    ],
-                    "model_mark": "C1",
-                    "col_spec_str": "C1 = 30*80 cm"
+                    "j_eff": 3
                   }
                 },
                 "supports_desc": "كمرة رئيسية (مرتكزة على عمود C1 ⟷ عمود C8)",
@@ -3507,44 +3441,7 @@
                     "placed": true,
                     "removed": false,
                     "i_eff": 3,
-                    "j_eff": 0,
-                    "Atrib_0": 5.268750000000001,
-                    "Pu_slab_0": 11.512218749999999,
-                    "Pu_slab": 33.93850855653044,
-                    "Pu_punch": 3.91,
-                    "Pu_beam": 28.84,
-                    "framing_beams": [
-                      "B5",
-                      "B6",
-                      "B10"
-                    ],
-                    "Pu_0": 12.663440625,
-                    "Pu": 37.332359412183486,
-                    "beam_reactions": [
-                      {
-                        "beam_id": "B5",
-                        "rxn_ton": 8.89,
-                        "net_col_rxn_ton": 0.01,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B6",
-                        "rxn_ton": 6.68,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B10",
-                        "rxn_ton": 13.27,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      }
-                    ],
-                    "model_mark": "C1",
-                    "col_spec_str": "C1 = 30*80 cm"
+                    "j_eff": 0
                   }
                 },
                 "supp2": {
@@ -3589,44 +3486,7 @@
                     "placed": true,
                     "removed": false,
                     "i_eff": 3,
-                    "j_eff": 3,
-                    "Atrib_0": 4.826175,
-                    "Pu_slab_0": 10.545192375,
-                    "Pu_slab": 35.727946583101904,
-                    "Pu_punch": 3.59,
-                    "Pu_beam": 26.759999999999998,
-                    "framing_beams": [
-                      "B4",
-                      "B10",
-                      "B13"
-                    ],
-                    "Pu_0": 11.5997116125,
-                    "Pu": 39.300741241412105,
-                    "beam_reactions": [
-                      {
-                        "beam_id": "B4",
-                        "rxn_ton": 7.77,
-                        "net_col_rxn_ton": 1.64,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": true
-                      },
-                      {
-                        "beam_id": "B10",
-                        "rxn_ton": 13.27,
-                        "net_col_rxn_ton": 0.0,
-                        "Mu_transferred_ton_m": 0.0,
-                        "full_moment_continuity": false
-                      },
-                      {
-                        "beam_id": "B13",
-                        "rxn_ton": 5.72,
-                        "net_col_rxn_ton": 5.72,
-                        "Mu_transferred_ton_m": 7.55,
-                        "full_moment_continuity": true
-                      }
-                    ],
-                    "model_mark": "C1",
-                    "col_spec_str": "C1 = 30*80 cm"
+                    "j_eff": 3
                   }
                 },
                 "supports_desc": "كمرة رئيسية (مرتكزة على عمود C3 ⟷ عمود C10)",

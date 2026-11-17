@@ -22893,34 +22893,52 @@ def render(is_standalone: bool = False):
                 st.markdown(
                     f"""
                     <style>
-                    /* Custom distinct selectbox for footing model */
+                    /* Blue Arrow Label: Light Violet */
+                    div[class*="sel_manual_ftg_model"] label,
+                    .st-key-{prefix}sel_manual_ftg_model label {{
+                        color: #c084fc !important;
+                        font-size: 1.15rem !important;
+                        font-weight: 800 !important;
+                        letter-spacing: 0.5px !important;
+                        margin-bottom: 6px !important;
+                    }}
+                    /* Red Arrow Border: Very Thick Red */
                     div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] > div,
                     .st-key-{prefix}sel_manual_ftg_model div[data-baseweb="select"] > div {{
-                        border: 3px solid #f59e0b !important;
-                        border-radius: 10px !important;
+                        border: 4px solid #ef4444 !important;
+                        border-radius: 12px !important;
                         min-height: 54px !important;
-                        background: rgba(15, 23, 42, 0.05) !important;
-                        box-shadow: 0 0 16px rgba(245, 158, 11, 0.30) !important;
+                        background: rgba(15, 23, 42, 0.20) !important;
+                        box-shadow: 0 0 20px rgba(239, 68, 68, 0.45) !important;
                     }}
+                    /* Red Arrow Text Inside Selectbox: Light Violet */
                     div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] span,
                     div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] div,
                     .st-key-{prefix}sel_manual_ftg_model div[data-baseweb="select"] span,
                     .st-key-{prefix}sel_manual_ftg_model div[data-baseweb="select"] div {{
-                        font-size: 1.38rem !important;
+                        font-size: 1.35rem !important;
                         font-weight: 800 !important;
-                        color: #0284c7 !important;
+                        color: #d8b4fe !important;
                     }}
+                    /* Popover Options List: Light Violet */
                     div[data-baseweb="popover"] li,
                     div[role="listbox"] li,
                     li[role="option"] {{
-                        font-size: 1.30rem !important;
+                        font-size: 1.25rem !important;
                         font-weight: 700 !important;
-                        color: #0369a1 !important;
+                        color: #d8b4fe !important;
+                        background: #0f172a !important;
                         padding: 10px 14px !important;
+                    }}
+                    div[data-baseweb="popover"] li:hover,
+                    div[role="listbox"] li:hover,
+                    li[role="option"]:hover {{
+                        background: #1e293b !important;
+                        color: #ffffff !important;
                     }}
                     </style>
                     <div style="text-align: center; margin: 14px 0 8px 0;">
-                        <span style="color: #facc15; font-size: 1.55rem; font-weight: 900; letter-spacing: 0.5px; text-shadow: 0 0 14px rgba(250, 204, 21, 0.40);">
+                        <span style="color: #c084fc; font-size: 1.55rem; font-weight: 900; letter-spacing: 0.5px; text-shadow: 0 0 14px rgba(192, 132, 252, 0.45);">
                             🎯 اختر نموذج القاعدة للتعديل اليدوي والتحقق (Footing Model):
                         </span>
                     </div>
@@ -22932,7 +22950,6 @@ def render(is_standalone: bool = False):
                     options=manual_model_ids,
                     format_func=lambda mk: f"{mk} — {manual_models_by_id[mk].get('model_label', mk)} ({manual_models_by_id[mk].get('col_spec_str', '')} | Pu={float(manual_models_by_id[mk].get('Pu_ton', 0.0)):.1f} t)",
                     key=f"{prefix}sel_manual_ftg_model",
-                    label_visibility="collapsed",
                 )
 
                 m_sel_obj = manual_models_by_id[selected_model]
