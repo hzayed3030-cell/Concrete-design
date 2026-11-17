@@ -23097,6 +23097,128 @@ def render(is_standalone: bool = False):
                     err_bullets = "\n".join(f"• {err}" for err in verif_res["errors"])
                     st.error(f"❌ **التصميم غير آمن للنموذج {selected_model}:**\n{err_bullets}")
 
+                # ── Live Updated Footings Schedule Table (ECP 203) ──
+                st.markdown(
+                    """
+                    <div style="margin: 20px 0 10px 0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                        <span style="font-size: 1.15rem; font-weight: 800; color: #38bdf8;">
+                            📋 جدول نماذج القواعد المحدث بالأبعاد والتسليح (Live Footings Schedule — ECP 203)
+                        </span>
+                        <span style="font-size: 0.85rem; color: #94a3b8; background: rgba(30, 41, 59, 0.6); padding: 4px 10px; border-radius: 6px; border: 1px solid #334155;">
+                            ⚡ يتم تحديث الأبعاد والتسليح لحظياً في هذا الجدول بمجرد أن تكون التعديلات آمنة
+                        </span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                live_ftg_rows = []
+                for m in active_ftg_models:
+                    mk = m["model_id"]
+                    col_str = m.get("col_spec_str", m.get("supported_col_str", "—"))
+                    pu_val = float(m.get("Pu_ton", 0.0))
+                    col_t_val = float(m.get("col_t_cm", col_c_dim))
+                    col_b_val = float(m.get("col_b_cm", col_b_dim))
+
+                    if mk == selected_model:
+                        # If user modification on selected model is safe, apply and update immediately
+                        if verif_res["is_safe"]:
+                            row_L_cm = round(float(man_L_m) * 100.0)
+                            row_B_cm = round(float(man_B_m) * 100.0)
+                            row_t_cm = float(man_t_cm)
+                            row_rft_x = f"{int(man_Nx)} Φ {int(man_Phi)} / م"
+                            row_rft_y = f"{int(man_Ny)} Φ {int(man_Phi)} / م"
+                            row_q = f"{verif_res['q_act']:.2f} / {verif_res['q_net']:.2f}"
+                            if is_dirty_m:
+                                row_status = "✅ آمن ومحدث (مُعدل لحظياً)"
+                            else:
+                                row_status = "✅ آمن ومطابق للكود"
+                        else:
+                            # Not safe: do NOT apply unsafe values; display confirmed safe values
+                            conf_entry = st.session_state.get("confirmed_manual_footings", {}).get(mk)
+                            if conf_entry:
+                                row_L_cm = round(float(conf_entry["L_m"]) * 100.0)
+                                row_B_cm = round(float(conf_entry["B_m"]) * 100.0)
+                                row_t_cm = float(conf_entry["t_cm"])
+                                row_rft_x = f"{int(conf_entry['Nx_m'])} Φ {int(conf_entry['Phi_mm'])} / م"
+                                row_rft_y = f"{int(conf_entry['Ny_m'])} Φ {int(conf_entry['Phi_mm'])} / م"
+                            else:
+                                row_L_cm = round(float(m.get("L_cm", 200.0)))
+                                row_B_cm = round(float(m.get("B_cm", 200.0)))
+                                row_t_cm = float(m.get("t_cm", 50.0))
+                                row_rft_x = m.get("rft_long_str", f"{m.get('n_m_L', 5)} Φ {m.get('Phi_mm', 16)} / م")
+                                row_rft_y = m.get("rft_short_str", f"{m.get('n_m_B', 5)} Φ {m.get('Phi_mm', 16)} / م")
+                            row_q = f"{float(m.get('q_act', 0.0)):.2f} / {ftg_qnet:.2f}"
+                            row_status = "⚠️ تعديل غير آمن (لم يُطبق)"
+                    else:
+                        # Non-selected models: check if confirmed or previously edited
+                        conf_entry = st.session_state.get("confirmed_manual_footings", {}).get(mk)
+                        mf_entry = st.session_state.get("manual_footings", {}).get(mk)
+                        if conf_entry:
+                            row_L_cm = round(float(conf_entry["L_m"]) * 100.0)
+                            row_B_cm = round(float(conf_entry["B_m"]) * 100.0)
+                            row_t_cm = float(conf_entry["t_cm"])
+                            row_rft_x = f"{int(conf_entry['Nx_m'])} Φ {int(conf_entry['Phi_mm'])} / م"
+                            row_rft_y = f"{int(conf_entry['Ny_m'])} Φ {int(conf_entry['Phi_mm'])} / م"
+                            row_q = f"{float(m.get('q_act', 0.0)):.2f} / {ftg_qnet:.2f}"
+                            row_status = "✅ آمن معتمد"
+                        elif mf_entry and mf_entry.get("_dirty"):
+                            # Check safety of dirty edits on this model
+                            other_verif = verify_isolated_footing_manual(
+                                model_id=mk,
+                                L_m=float(mf_entry.get("L_m", 2.0)),
+                                B_m=float(mf_entry.get("B_m", 2.0)),
+                                t_cm=float(mf_entry.get("t_cm", 50.0)),
+                                Phi_mm=int(mf_entry.get("Phi_mm", 16)),
+                                Nx_m=int(mf_entry.get("Nx_m", 5)),
+                                Ny_m=int(mf_entry.get("Ny_m", 5)),
+                                Pu_ton=pu_val,
+                                c_cm=col_t_val,
+                                b_cm=col_b_val,
+                                q_net_kgcm2=ftg_qnet,
+                                Fcu=ftg_fcu,
+                                Fy=ftg_fy,
+                                cover_cm=ftg_cov,
+                            )
+                            if other_verif["is_safe"]:
+                                row_L_cm = round(float(mf_entry["L_m"]) * 100.0)
+                                row_B_cm = round(float(mf_entry["B_m"]) * 100.0)
+                                row_t_cm = float(mf_entry["t_cm"])
+                                row_rft_x = f"{int(mf_entry['Nx_m'])} Φ {int(mf_entry['Phi_mm'])} / م"
+                                row_rft_y = f"{int(mf_entry['Ny_m'])} Φ {int(mf_entry['Phi_mm'])} / م"
+                                row_q = f"{other_verif['q_act']:.2f} / {other_verif['q_net']:.2f}"
+                                row_status = "✅ آمن ومحدث (بانتظار الاعتماد)"
+                            else:
+                                row_L_cm = round(float(m.get("L_cm", 200.0)))
+                                row_B_cm = round(float(m.get("B_cm", 200.0)))
+                                row_t_cm = float(m.get("t_cm", 50.0))
+                                row_rft_x = m.get("rft_long_str", f"{m.get('n_m_L', 5)} Φ {m.get('Phi_mm', 16)} / م")
+                                row_rft_y = m.get("rft_short_str", f"{m.get('n_m_B', 5)} Φ {m.get('Phi_mm', 16)} / م")
+                                row_q = f"{float(m.get('q_act', 0.0)):.2f} / {ftg_qnet:.2f}"
+                                row_status = "⚠️ تعديل غير آمن (لم يُطبق)"
+                        else:
+                            row_L_cm = round(float(m.get("L_cm", 200.0)))
+                            row_B_cm = round(float(m.get("B_cm", 200.0)))
+                            row_t_cm = float(m.get("t_cm", 50.0))
+                            row_rft_x = m.get("rft_long_str", f"{m.get('n_m_L', 5)} Φ {m.get('Phi_mm', 16)} / م")
+                            row_rft_y = m.get("rft_short_str", f"{m.get('n_m_B', 5)} Φ {m.get('Phi_mm', 16)} / م")
+                            row_q = f"{float(m.get('q_act', 0.0)):.2f} / {ftg_qnet:.2f}"
+                            row_status = m.get("status_str", "✅ آمن ومطابق للكود")
+
+                    live_ftg_rows.append({
+                        "النموذج": mk,
+                        "العمود المرتكز": col_str,
+                        "Pu (ton)": f"{pu_val:.2f}",
+                        "الأبعاد المسلحة L × B × t (cm)": f"{row_L_cm} × {row_B_cm} × {row_t_cm:.0f}",
+                        "التسليح X (فرش)": row_rft_x,
+                        "التسليح Y (غطاء)": row_rft_y,
+                        "إجهاد التربة (kg/cm²)": row_q,
+                        "الحالة الإنشائية": row_status,
+                    })
+
+                if live_ftg_rows:
+                    render_styled_table(pd.DataFrame(live_ftg_rows), font_size_override=13.5)
+
             st.markdown("<div style='margin-top:12px;'></div>", unsafe_allow_html=True)
 
             # ── 4. Outputs Expanders (Auto-Collapsed when manual edits are pending) ──
