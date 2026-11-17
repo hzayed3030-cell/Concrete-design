@@ -693,6 +693,7 @@ play_sharp_whistle_alert = S.play_warning_sound
 if hasattr(st, "dialog"):
     @st.dialog("🚨 تنبيه تحقق هندسي: مدخل أو فحص غير مطابق للكود")
     def _show_engineering_error_dialog(error_title: str, error_details: list, location_hint: str):
+        play_sharp_whistle_alert()
         st.markdown(
             f"""
             <div dir="rtl" style="text-align:right; font-family:sans-serif;">
@@ -16551,6 +16552,7 @@ def _section_fs_add_columns(
             }
 
             if selected_del_ids:
+                play_sharp_whistle_alert()
                 cur_siren_sel = tuple(selected_del_ids)
                 if st.session_state.get("_fs_last_del_siren_sel") != cur_siren_sel:
                     st.session_state["_fs_last_del_siren_sel"] = cur_siren_sel
@@ -16906,6 +16908,7 @@ def _section_fs_add_columns(
 
             # Mandatory Confirmation Alert (رسالة التأكيد الإلزامية الفورية عند اختيار كمرة أو أكثر)
             if selected_del_beam_ids:
+                play_sharp_whistle_alert()
                 beam_badges_html = "".join(
                     f"<span style='background:#ffffff; border:1.5px solid #f97316; border-radius:5px; padding:3px 9px; font-size:12.5px; font-weight:800; color:#9a3412; white-space:nowrap;'>• {beam_labels.get(bid, bid)}</span>"
                     for bid in selected_del_beam_ids
@@ -18801,6 +18804,7 @@ def render(is_standalone: bool = False):
                 for pid in _selected_voids
             )
 
+            play_sharp_whistle_alert()
             st.markdown(
                 f"""
                 <div dir='rtl' style='direction:rtl; text-align:right; background:#fef2f2; border:2px solid #dc2626; border-right:6px solid #dc2626; padding:10px 14px; border-radius:8px; margin:8px 0 10px 0; line-height:1.6; box-shadow:0 2px 8px rgba(220,38,38,0.14);'>
@@ -19108,6 +19112,7 @@ def render(is_standalone: bool = False):
     # ── Columns Registry Table (removed per user request) ────────────────────
 
     if errs:
+        play_sharp_whistle_alert()
         st.error("⚠️ **Illogical Input Detected — Calculation Stopped.**")
         for e in errs:
             st.warning(f"• {e}")
@@ -20753,6 +20758,7 @@ def render(is_standalone: bool = False):
             # 4. Actionable Advisory Cards (رسائل التوصيات التنفيذية على الشاشة)
             unsafe_cols = [p for p in punching_results if not p["is_safe"]]
             if unsafe_cols:
+                play_sharp_whistle_alert()
                 st.markdown(
                     """
                     <div dir="rtl" style="font-size:18px; font-weight:800; color:#f8fafc; margin-bottom:10px; display:flex; align-items:center; gap:8px;">
@@ -22148,6 +22154,7 @@ def render(is_standalone: bool = False):
 
             # 4. Recommendations & Status Advisories
             if not all_deflection_safe:
+                play_sharp_whistle_alert()
                 unsafe_panels = [p for p in deflection_results if not p["is_safe"]]
                 names_unsafe_p = ", ".join([f"<b>{p['Panel ID']}</b> ({p['Bay Label']})" for p in unsafe_panels])
                 st.markdown(
@@ -22762,6 +22769,7 @@ def render(is_standalone: bool = False):
 
                             # التحقق الكودي ومراجعة عدد الأسياخ في المتر طبقاً لـ ECP 203
                             if m.get("phi_rejected"):
+                                play_sharp_whistle_alert()
                                 st.error(
                                     f"⚠️ **مطلوب زيادة قطر حديد التسليح الرئيسي**\n\n"
                                     f"**الكود والسبب:**\n"
@@ -23264,6 +23272,7 @@ def render(is_standalone: bool = False):
                             unsafe_allow_html=True,
                         )
                 else:
+                    play_sharp_whistle_alert()
                     err_bullets_html = "".join(
                         f"<div dir='rtl' style='text-align: right; direction: rtl; margin: 6px 0; line-height: 1.9;'>• {err}</div>"
                         for err in verif_res["errors"]
