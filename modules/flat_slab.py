@@ -23582,7 +23582,7 @@ def render(is_standalone: bool = False):
                                             bc_cm=col_b_m, tc_cm=col_t_m, Phi=phi_m,
                                             n_long=tot_x, n_m_long=nx_m, sp_long=sp_x,
                                             n_sht=tot_y, n_m_sht=ny_m, sp_sht=sp_y,
-                                            cover_cm=ftg_cov, t_pc_cm=20, pc_offset_cm=20,
+                                            cover_cm=ftg_cov, t_pc_cm=10, pc_offset_cm=10,
                                         )
                                         st.pyplot(fig_p_m, use_container_width=True)
                                         plt.close(fig_p_m)
@@ -23592,7 +23592,7 @@ def render(is_standalone: bool = False):
                                             bc_cm=col_b_m, tc_cm=col_t_m, Phi=phi_m,
                                             n_long=tot_x, n_m_long=nx_m, sp_long=sp_x,
                                             n_sht=tot_y, n_m_sht=ny_m, sp_sht=sp_y,
-                                            cover_cm=ftg_cov, Df_m=1.5, t_pc_cm=20, pc_offset_cm=20,
+                                            cover_cm=ftg_cov, Df_m=1.5, t_pc_cm=10, pc_offset_cm=10,
                                         )
                                         st.pyplot(fig_s_m, use_container_width=True)
                                         plt.close(fig_s_m)
@@ -24504,7 +24504,7 @@ def render(is_standalone: bool = False):
                                         "الأعمدة المرتكزة (Columns)": f"{len(cols_m)} أعمدة ({c_names})",
                                         "أقصى حمل تصميمي Pu (ton)": f"{fm.get('pu_gov', 0.0):.1f} ton",
                                         "أبعاد المسلحة R.C. (cm)": f"{L_c} × {B_c} × {t_c}",
-                                        "أبعاد العادية P.C. (cm)": f"{L_c + 40} × {B_c + 40} × 20",
+                                        "أبعاد العادية P.C. (cm)": f"{L_c + 20} × {B_c + 20} × 10",
                                         "التسليح والتفاصيل الإنشائية": f"فرش: {fm.get('rft_long_str', '5Ø16/m')} | غطاء: {fm.get('rft_short_str', '5Ø16/m')}",
                                         "حالة التحقق الإنشائي (Status)": "✅ Safe ومحقق للكود",
                                     })
@@ -24577,10 +24577,10 @@ def render(is_standalone: bool = False):
                     t_m = f_model["t_cm"] / 100.0
                     ftgs_conc_rc_val += L_m * B_m * t_m
 
-                    # P.C. Blinding Layer (20 cm thick with 20 cm projection)
-                    L_pc_m = (f_model["L_cm"] + 40.0) / 100.0
-                    B_pc_m = (f_model["B_cm"] + 40.0) / 100.0
-                    ftgs_conc_pc_val += L_pc_m * B_pc_m * 0.20
+                    # P.C. Blinding Layer (10 cm thick with 10 cm projection)
+                    L_pc_m = (f_model["L_cm"] + 20.0) / 100.0
+                    B_pc_m = (f_model["B_cm"] + 20.0) / 100.0
+                    ftgs_conc_pc_val += L_pc_m * B_pc_m * 0.10
 
                     # Steel: bottom longitudinal & transverse
                     phi_f = f_model.get("Phi", 16)
@@ -24605,9 +24605,9 @@ def render(is_standalone: bool = False):
                         ftgs_conc_rc_val += Lc_m * Bc_m * tc_m
 
                         # P.C. Blinding for Combined Footings
-                        Lc_pc_m = (cf["Lc_cm"] + 40.0) / 100.0
-                        Bc_pc_m = (cf["Bc_cm"] + 40.0) / 100.0
-                        ftgs_conc_pc_val += Lc_pc_m * Bc_pc_m * 0.20
+                        Lc_pc_m = (cf["Lc_cm"] + 20.0) / 100.0
+                        Bc_pc_m = (cf["Bc_cm"] + 20.0) / 100.0
+                        ftgs_conc_pc_val += Lc_pc_m * Bc_pc_m * 0.10
 
                         # Rebar: Bottom longitudinal
                         phi_bot = cf.get("Phi_mm", 18)
@@ -24868,7 +24868,7 @@ def render(is_standalone: bool = False):
                             "سملات وميدات (Ground Beams)": "—",
                             "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_conc_pc_val:.2f} m³",
                             "الوحدة (Unit)": "متر مكعب (m³)",
-                            "الملاحظات والمواصفات (Notes & Specs)": "فرشة نظافة بسمك 20 سم ورفرفة 20 سم أسفل كامل القواعد",
+                            "الملاحظات والمواصفات (Notes & Specs)": "فرشة نظافة بسمك 10 سم ورفرفة 10 سم أسفل كامل القواعد",
                         },
                         {
                             "البند / المكون الإنشائي (Item / Material)": "3. إجمالي وزن حديد التسليح (Total Reinforcement Steel)",
@@ -24946,7 +24946,7 @@ def render(is_standalone: bool = False):
                             "سملات وميدات (Ground Beams)": "—",
                             "الإجمالي الشامل (Grand Total)": f"{grand_conc_pc_val:.2f} m³",
                             "الوحدة (Unit)": "متر مكعب (m³)",
-                            "الملاحظات والمواصفات (Notes & Specs)": "فرشة نظافة بسمك 20 سم ورفرفة 20 سم أسفل كامل القواعد",
+                            "الملاحظات والمواصفات (Notes & Specs)": "فرشة نظافة بسمك 10 سم ورفرفة 10 سم أسفل كامل القواعد",
                         },
                         {
                             "البند / المكون الإنشائي (Item / Material)": "3. إجمالي وزن حديد التسليح (Total Reinforcement Steel)",

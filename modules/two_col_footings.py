@@ -2088,8 +2088,8 @@ def classify_and_design_building_foundations(
     for m, m_cols in designed_models:
         if m is None or not m_cols:
             continue
-        pc_L = m["L_cm"] + 40
-        pc_B = m["B_cm"] + 40
+        pc_L = m["L_cm"] + 20
+        pc_B = m["B_cm"] + 20
         col_model_cell = m.get("col_spec_str")
         if not col_model_cell:
             col_mk = m.get("col_model_mark") or m_cols[0].get("model_mark") or ("C1" if m.get("raw_type") == "Interior" else ("C2" if m.get("raw_type") == "Edge" else "C3"))
@@ -2102,7 +2102,7 @@ def classify_and_design_building_foundations(
             "نموذج العمود": col_model_cell,
             "أقصى حمل تصميمي Pu (ton)": f"{m['Pu_ton']:.2f} ton (الحاكم)",
             "أبعاد المسلحة R.C. (cm)": f"{m['L_cm']} × {m['B_cm']} × {m['t_cm']}",
-            "أبعاد العادية P.C. (cm)": f"{pc_L} × {pc_B} × 20",
+            "أبعاد العادية P.C. (cm)": f"{pc_L} × {pc_B} × 10",
             "التسليح والتفاصيل الإنشائية": f"فرش: {m['rft_long_str']} | غطاء: {m['rft_short_str']}",
             "حالة التحقق الإنشائي (Status)": m.get("status_str", "✅ Safe ومحقق للكود"),
         })
@@ -2116,7 +2116,7 @@ def classify_and_design_building_foundations(
         t_m = float(f["t_cm"]) / 100.0
 
         v_rc = L_m * B_m * t_m
-        v_pc = (L_m + 0.40) * (B_m + 0.40) * 0.20
+        v_pc = (L_m + 0.20) * (B_m + 0.20) * 0.10
         ftgs_conc_rc_val += v_rc
         ftgs_conc_pc_val += v_pc
 
@@ -2151,7 +2151,7 @@ def classify_and_design_building_foundations(
         tc_m = float(cf["tc_cm"]) / 100.0
 
         v_rc = Lc_m * Bc_m * tc_m
-        v_pc = (Lc_m + 0.40) * (Bc_m + 0.40) * 0.20
+        v_pc = (Lc_m + 0.20) * (Bc_m + 0.20) * 0.10
         ftgs_conc_rc_val += v_rc
         ftgs_conc_pc_val += v_pc
 
@@ -2174,8 +2174,8 @@ def classify_and_design_building_foundations(
         _add_dia(phi_cf, wt_top, "تسليح علوي رئيسي لقواعد مشتركة (Combined Footings)")
         _add_dia(16, wt_trans, "تسليح عرضي لقواعد مشتركة (Combined Footings)")
 
-        cf_pc_L = cf["Lc_cm"] + 40
-        cf_pc_B = cf["Bc_cm"] + 40
+        cf_pc_L = cf["Lc_cm"] + 20
+        cf_pc_B = cf["Bc_cm"] + 20
         c1_spec = cf.get("col1", {}).get("col_spec_str")
         if not c1_spec:
             c1_mk = cf.get("col1", {}).get("model_mark") or ("C2" if cf.get("col1", {}).get("type") == "Edge" else "C1")
@@ -2197,7 +2197,7 @@ def classify_and_design_building_foundations(
             "نموذج العمود": cf_col_str,
             "أقصى حمل تصميمي Pu (ton)": f"Ru = {ru_cf:.2f} ton",
             "أبعاد المسلحة R.C. (cm)": f"{cf['Lc_cm']} × {cf['Bc_cm']} × {cf['tc_cm']}",
-            "أبعاد العادية P.C. (cm)": f"{cf_pc_L} × {cf_pc_B} × 20",
+            "أبعاد العادية P.C. (cm)": f"{cf_pc_L} × {cf_pc_B} × 10",
             "التسليح والتفاصيل الإنشائية": f"علوي: {cf['rft_top_str']} | سفلي: {cf['rft_bot_str']}",
             "حالة التحقق الإنشائي (Status)": cf.get("status_str", "✅ Safe"),
         })
@@ -2215,7 +2215,7 @@ def classify_and_design_building_foundations(
         t1 = float(r9.get("t1_cm", sf.get("t1", 55.0)))
         L1_cm, B1_cm, t1_cm = int(round(L1 * 100)), int(round(B1 * 100)), int(round(t1))
         v_rc1 = L1 * B1 * (t1 / 100.0)
-        v_pc1 = (L1 + 0.40) * (B1 + 0.40) * 0.20
+        v_pc1 = (L1 + 0.20) * (B1 + 0.20) * 0.10
         ftgs_conc_rc_val += v_rc1
         ftgs_conc_pc_val += v_pc1
 
@@ -2252,7 +2252,7 @@ def classify_and_design_building_foundations(
             "نموذج العمود": f"{sf_c1_spec} (عمود جار)",
             "أقصى حمل تصميمي Pu (ton)": f"Pu = {P1:.1f}t (R1u = {r9.get('Ru1', P1):.1f}t)",
             "أبعاد المسلحة R.C. (cm)": f"{L1_cm} × {B1_cm} × {t1_cm}",
-            "أبعاد العادية P.C. (cm)": f"{L1_cm + 40} × {B1_cm + 40} × 20",
+            "أبعاد العادية P.C. (cm)": f"{L1_cm + 20} × {B1_cm + 20} × 10",
             "التسليح والتفاصيل الإنشائية": f"عرضي: {n_tr1}Ø16/m ({N_tr1_tot}Ø16) | طولي: 5Ø12/m | q1 = {r9.get('q_act1', 1.0):.2f} kg/cm²",
             "حالة التحقق الإنشائي (Status)": "✅ Safe" if r9.get("q_act1", 1.0) <= q_all_net else "⚠️ Review",
         })
@@ -2263,7 +2263,7 @@ def classify_and_design_building_foundations(
         t2 = float(r9.get("t2_cm", sf.get("t2", 50.0)))
         L2_cm, B2_cm, t2_cm = int(round(L2 * 100)), int(round(B2 * 100)), int(round(t2))
         v_rc2 = L2 * B2 * (t2 / 100.0)
-        v_pc2 = (L2 + 0.40) * (B2 + 0.40) * 0.20
+        v_pc2 = (L2 + 0.20) * (B2 + 0.20) * 0.10
         ftgs_conc_rc_val += v_rc2
         ftgs_conc_pc_val += v_pc2
 
@@ -2286,7 +2286,7 @@ def classify_and_design_building_foundations(
             "نموذج العمود": f"{sf_c2_spec} (عمود داخلي)",
             "أقصى حمل تصميمي Pu (ton)": f"Pu = {P2:.1f}t (R2u = {r9.get('R2', P2/1.5)*1.5:.1f}t)",
             "أبعاد المسلحة R.C. (cm)": f"{L2_cm} × {B2_cm} × {t2_cm}",
-            "أبعاد العادية P.C. (cm)": f"{L2_cm + 40} × {B2_cm + 40} × 20",
+            "أبعاد العادية P.C. (cm)": f"{L2_cm + 20} × {B2_cm + 20} × 10",
             "التسليح والتفاصيل الإنشائية": f"فرش: {n_tr2}Ø16/m ({N_tr2_tot}Ø16) | غطاء: 5Ø12/m | q2 = {r9.get('q_act2', 1.0):.2f} kg/cm²",
             "حالة التحقق الإنشائي (Status)": "✅ Safe" if r9.get("q_act2", 1.0) <= q_all_net else "⚠️ Review",
         })
@@ -2323,7 +2323,7 @@ def classify_and_design_building_foundations(
             "نموذج العمود": f"يربط {sf_c1_spec} مع {sf_c2_spec} (بحر S = {S_m:.2f}m)",
             "أقصى حمل تصميمي Pu (ton)": f"Mu = {abs(r9.get('Mu_neg', 0.0)):.1f} t.m | Vu = {r9.get('Vu_ton', 0.0):.1f} t",
             "أبعاد المسلحة R.C. (cm)": f"{int(round(sb_m*100))} × {int(round(sD_cm))} × {int(round(S_m*100))} (b×D×L)",
-            "أبعاد العادية P.C. (cm)": "دكة عادية أسفل الشداد 20 cm",
+            "أبعاد العادية P.C. (cm)": "دكة عادية أسفل الشداد 10 cm",
             "التسليح والتفاصيل الإنشائية": f"علوي: {n_top_sb}Ø22 | سفلي: {n_bot_sb}Ø16 | كانات: {n_st_sb}Ø10/m ({n_br_sb} فروع)",
             "حالة التحقق الإنشائي (Status)": "✅ Safe (عزم وقص محقق)" if (r9.get("shear_max_ok", True) and r9.get("stirrups_shear_ok", True)) else "⚠️ Review",
         })
@@ -2342,7 +2342,7 @@ def classify_and_design_building_foundations(
         t1 = float(r10.get("t1_cm", rec10.get("t1", dsf.get("t1", 60.0))))
         L1x_cm, L1y_cm, t1_cm = int(round(L1x * 100)), int(round(L1y * 100)), int(round(t1))
         v_rc1 = L1x * L1y * (t1 / 100.0)
-        v_pc1 = (L1x + 0.40) * (L1y + 0.40) * 0.20
+        v_pc1 = (L1x + 0.20) * (L1y + 0.20) * 0.10
         ftgs_conc_rc_val += v_rc1
         ftgs_conc_pc_val += v_pc1
 
@@ -2378,7 +2378,7 @@ def classify_and_design_building_foundations(
             "نموذج العمود": f"{dsf_c1_spec} (عمود ركن)",
             "أقصى حمل تصميمي Pu (ton)": f"Pu = {P1:.1f}t (R1u = {r10.get('R1u', P1):.1f}t)",
             "أبعاد المسلحة R.C. (cm)": f"{L1x_cm} × {L1y_cm} × {t1_cm}",
-            "أبعاد العادية P.C. (cm)": f"{L1x_cm + 40} × {L1y_cm + 40} × 20",
+            "أبعاد العادية P.C. (cm)": f"{L1x_cm + 20} × {L1y_cm + 20} × 10",
             "التسليح والتفاصيل الإنشائية": f"شبكة اتجاهين: {n_tr1}Ø16/m ({N1x}Ø اتجاه X + {N1y}Ø اتجاه Y) | q1 = {r10.get('q_act1', 1.0):.2f} kg/cm²",
             "حالة التحقق الإنشائي (Status)": "✅ Safe" if r10.get("q_act1", 1.0) <= q_all_net else "⚠️ Review",
         })
@@ -2389,7 +2389,7 @@ def classify_and_design_building_foundations(
         t2 = float(r10.get("t2_cm", rec10.get("t2", dsf.get("t2", 50.0))))
         L2x_cm, L2y_cm, t2_cm = int(round(L2x * 100)), int(round(L2y * 100)), int(round(t2))
         v_rc2 = L2x * L2y * (t2 / 100.0)
-        v_pc2 = (L2x + 0.40) * (L2y + 0.40) * 0.20
+        v_pc2 = (L2x + 0.20) * (L2y + 0.20) * 0.10
         ftgs_conc_rc_val += v_rc2
         ftgs_conc_pc_val += v_pc2
 
@@ -2412,7 +2412,7 @@ def classify_and_design_building_foundations(
             "نموذج العمود": f"{dsf_c2_spec} (عمود داخلي)",
             "أقصى حمل تصميمي Pu (ton)": f"Pu = {P2:.1f}t (R2u = {r10.get('R2u', P2):.1f}t)",
             "أبعاد المسلحة R.C. (cm)": f"{L2x_cm} × {L2y_cm} × {t2_cm}",
-            "أبعاد العادية P.C. (cm)": f"{L2x_cm + 40} × {L2y_cm + 40} × 20",
+            "أبعاد العادية P.C. (cm)": f"{L2x_cm + 20} × {L2y_cm + 20} × 10",
             "التسليح والتفاصيل الإنشائية": f"فرش: {n_tr2}Ø16/m ({N2x}Ø16) | غطاء: 5Ø12/m | q2 = {r10.get('q_act2', 1.0):.2f} kg/cm²",
             "حالة التحقق الإنشائي (Status)": "✅ Safe" if r10.get("q_act2", 1.0) <= q_all_net else "⚠️ Review",
         })
@@ -2451,7 +2451,7 @@ def classify_and_design_building_foundations(
             "نموذج العمود": f"يربط {dsf_c1_spec} مع {dsf_c2_spec} قطرياً (بحر S = {S_m:.2f}m @ {dsf['theta_deg']:.1f}°)",
             "أقصى حمل تصميمي Pu (ton)": f"Mu = {abs(r10.get('Mu_neg_tm', 0.0)):.1f} t.m | Vu = {r10.get('Vu_ton', 0.0):.1f} t",
             "أبعاد المسلحة R.C. (cm)": f"{int(round(sb_m*100))} × {int(round(sD_cm))} × {int(round(S_m*100))} (b×D×L)",
-            "أبعاد العادية P.C. (cm)": "دكة عادية أسفل الشداد 20 cm",
+            "أبعاد العادية P.C. (cm)": "دكة عادية أسفل الشداد 10 cm",
             "التسليح والتفاصيل الإنشائية": f"علوي: {n_top_dsb}Ø22 | سفلي: {n_bot_dsb}Ø16 | كانات: {n_st_dsb}Ø10/m ({n_br_dsb} فروع)",
             "حالة التحقق الإنشائي (Status)": "✅ Safe (انحناء وقص ولي محقق)" if (r10.get("shear_max_ok", True) and r10.get("stirrups_shear_ok", True)) else "⚠️ Review",
         })
@@ -3164,7 +3164,7 @@ def _draw_plan(mode, *, S_m, c1_cm, b1_cm, c2_cm, b2_cm,
     b1_m = float(b1_cm) / 100.0
     c2_m = float(c2_cm) / 100.0
     b2_m = float(b2_cm) / 100.0
-    p_proj = 0.20  # 20 cm PC blinding projection
+    p_proj = 0.10  # 10 cm PC blinding projection
 
     def _dim_h(x1, x2, y, text, y_wit=None, color="#1e293b", fs=8.8):
         if y_wit is not None:
@@ -3300,7 +3300,7 @@ def _draw_plan(mode, *, S_m, c1_cm, b1_cm, c2_cm, b2_cm,
 
         # PC patch
         ax.add_patch(patches.Rectangle((x_pc_l, y_pc_b), L_pc, B_pc, fc="#f1f5f9", ec="#94a3b8", lw=1.5, ls="--", zorder=1))
-        ax.text(x_pc_l + 0.08, y_pc_t - 0.12, "P.C. Blinding 20cm (فرشة عادية)", fontsize=8, color="#64748b", va="top", zorder=3)
+        ax.text(x_pc_l + 0.08, y_pc_t - 0.12, "P.C. Blinding 10cm (فرشة عادية)", fontsize=8, color="#64748b", va="top", zorder=3)
 
         # RC patch
         ax.add_patch(patches.Rectangle((x_l, y_b), Lc_m, Bc_m, fc="#ffffff", ec="#0f172a", lw=2.8, zorder=2))
