@@ -22890,11 +22890,41 @@ def render(is_standalone: bool = False):
                     """,
                     unsafe_allow_html=True,
                 )
+                st.markdown(
+                    f"""
+                    <style>
+                    /* Custom distinct selectbox for footing model */
+                    div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] > div,
+                    .st-key-{prefix}sel_manual_ftg_model div[data-baseweb="select"] > div {
+                        border: 3px solid #0284c7 !important;
+                        border-radius: 10px !important;
+                        min-height: 50px !important;
+                        background: rgba(15, 23, 42, 0.03) !important;
+                        box-shadow: 0 0 14px rgba(2, 132, 199, 0.25) !important;
+                    }
+                    div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] span,
+                    div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] div,
+                    .st-key-{prefix}sel_manual_ftg_model div[data-baseweb="select"] span,
+                    .st-key-{prefix}sel_manual_ftg_model div[data-baseweb="select"] div {
+                        font-size: 1.25rem !important;
+                        font-weight: 800 !important;
+                        color: #0284c7 !important;
+                    }
+                    </style>
+                    <div style="text-align: center; margin: 10px 0 8px 0;">
+                        <span style="color: #38bdf8; font-size: 1.35rem; font-weight: 800; letter-spacing: 0.5px; text-shadow: 0 0 10px rgba(56, 189, 248, 0.35);">
+                            🎯 اختر نموذج القاعدة للتعديل اليدوي والتحقق (Footing Model):
+                        </span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
                 selected_model = st.selectbox(
                     "اختر نموذج القاعدة للتعديل اليدوي والتحقق (Footing Model):",
                     options=manual_model_ids,
                     format_func=lambda mk: f"{mk} — {manual_models_by_id[mk].get('model_label', mk)} ({manual_models_by_id[mk].get('col_spec_str', '')} | Pu={float(manual_models_by_id[mk].get('Pu_ton', 0.0)):.1f} t)",
                     key=f"{prefix}sel_manual_ftg_model",
+                    label_visibility="collapsed",
                 )
 
                 m_sel_obj = manual_models_by_id[selected_model]
@@ -23061,70 +23091,56 @@ def render(is_standalone: bool = False):
                     )
                 )
 
+                # ── Safety / Verification Alert Messages (1.7x font size) ──
                 if verif_res["is_safe"]:
                     if _has_pending_changes:
-                        st.success(f"✅ التعديل المقترح للنموذج {selected_model} آمن ومطابق لاشتراطات الكود.")
-                        if st.button("اعادة التصميم نتيجة تغيير مدخلات القاعدة", key=f"{prefix}btn_apply_manual_footing", type="primary", use_container_width=True):
-                            adopted_entry = {
-                                "L_m": float(man_L_m),
-                                "B_m": float(man_B_m),
-                                "t_cm": float(man_t_cm),
-                                "Phi_mm": int(man_Phi),
-                                "Nx_m": int(man_Nx),
-                                "Ny_m": int(man_Ny),
-                            }
-                            st.session_state["confirmed_manual_footings"][selected_model] = dict(adopted_entry)
-                            st.session_state["manual_footings"][selected_model] = dict(adopted_entry, _dirty=False)
-
-                            # Save all other models that were modified
-                            for mk_k, mf_v in st.session_state.get("manual_footings", {}).items():
-                                if isinstance(mf_v, dict) and mf_v.get("_dirty"):
-                                    st.session_state["confirmed_manual_footings"][mk_k] = {
-                                        "L_m": float(mf_v.get("L_m", 2.0)),
-                                        "B_m": float(mf_v.get("B_m", 2.0)),
-                                        "t_cm": float(mf_v.get("t_cm", 50.0)),
-                                        "Phi_mm": int(mf_v.get("Phi_mm", 16)),
-                                        "Nx_m": int(mf_v.get("Nx_m", 5)),
-                                        "Ny_m": int(mf_v.get("Ny_m", 5)),
-                                    }
-                                    mf_v["_dirty"] = False
-
-                            for mk_k, c_entry in st.session_state["confirmed_manual_footings"].items():
-                                cur_ftg_overrides[f"{mk_k}_L_cm"] = round(float(c_entry["L_m"]) * 100.0, 1)
-                                cur_ftg_overrides[f"{mk_k}_B_cm"] = round(float(c_entry["B_m"]) * 100.0, 1)
-                                cur_ftg_overrides[f"{mk_k}_t"] = float(c_entry["t_cm"])
-                                cur_ftg_overrides[f"{mk_k}_phi"] = int(c_entry["Phi_mm"])
-                                cur_ftg_overrides[f"{mk_k}_nx"] = int(c_entry["Nx_m"])
-                                cur_ftg_overrides[f"{mk_k}_ny"] = int(c_entry["Ny_m"])
-                                cur_ftg_overrides[f"{mk_k}_manual_confirmed"] = True
-
-                            S.cfg_set("ftg_overrides", cur_ftg_overrides)
-                            S.cfg_set("confirmed_manual_footings", dict(st.session_state["confirmed_manual_footings"]))
-                            st.session_state[f"{prefix}ftg_overrides"] = cur_ftg_overrides
-                            S.save_settings()
-
-                            st.session_state.pop(f"{prefix}w_ftg_{selected_model.lower()}_phi", None)
-                            st.session_state["ftg_outputs_collapsed"] = False
-                            st.session_state["ftg_outputs_exp_ver"] = int(st.session_state.get("ftg_outputs_exp_ver", 0)) + 1
-
-                            st.session_state.pop(f"{prefix}foundation_sketch_b64", None)
-                            st.session_state.pop(f"{prefix}_last_outputs_pdf_bytes", None)
-                            st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
-                            st.session_state.pop(f"{prefix}_last_full_pdf_bytes", None)
-                            st.session_state.pop(f"{prefix}_cached_report_html", None)
-                            st.session_state.pop(f"{prefix}_last_drawings_pdf_bytes", None)
-                            st.rerun()
+                        st.markdown(
+                            f"""
+                            <div dir="rtl" style="background: linear-gradient(135deg, rgba(22, 101, 52, 0.15) 0%, rgba(20, 83, 45, 0.25) 100%);
+                                        border: 2px solid #22c55e; border-radius: 10px; padding: 14px 20px; margin: 14px 0 12px 0; text-align: center;
+                                        box-shadow: 0 4px 14px rgba(34, 197, 94, 0.20);">
+                                <span style="font-size: 1.50rem; font-weight: 800; color: #16a34a; line-height: 1.6;">
+                                    ✅ التعديل المقترح للنموذج {selected_model} آمن ومطابق لاشتراطات الكود ECP 203.
+                                </span>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
                     else:
-                        st.success(f"✅ تصميم النموذج {selected_model} آمن ومطابق لاشتراطات الكود.")
+                        st.markdown(
+                            f"""
+                            <div dir="rtl" style="background: linear-gradient(135deg, rgba(22, 101, 52, 0.12) 0%, rgba(20, 83, 45, 0.18) 100%);
+                                        border: 1.5px solid #22c55e; border-radius: 10px; padding: 12px 18px; margin: 12px 0 12px 0; text-align: center;">
+                                <span style="font-size: 1.45rem; font-weight: 800; color: #16a34a; line-height: 1.6;">
+                                    ✅ تصميم النموذج {selected_model} آمن ومطابق لاشتراطات الكود ECP 203.
+                                </span>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
                 else:
-                    err_bullets = "\n".join(f"• {err}" for err in verif_res["errors"])
-                    st.error(f"❌ **التصميم غير آمن للنموذج {selected_model}:**\n{err_bullets}")
+                    err_html_list = "".join(f"<li style='margin: 4px 0;'>{err}</li>" for err in verif_res["errors"])
+                    st.markdown(
+                        f"""
+                        <div dir="rtl" style="background: linear-gradient(135deg, rgba(153, 27, 27, 0.15) 0%, rgba(127, 29, 29, 0.25) 100%);
+                                    border: 2px solid #ef4444; border-radius: 10px; padding: 14px 20px; margin: 12px 0 12px 0;
+                                    box-shadow: 0 4px 14px rgba(239, 68, 68, 0.15);">
+                            <div style="font-size: 1.50rem; font-weight: 800; color: #ef4444; margin-bottom: 6px; text-align: center;">
+                                ❌ التصميم غير آمن للنموذج {selected_model}:
+                            </div>
+                            <ul style="font-size: 1.25rem; font-weight: 700; color: #f87171; line-height: 1.8; margin: 0; padding-right: 20px;">
+                                {err_html_list}
+                            </ul>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
-                # ── Live Updated Footings Schedule Table (ECP 203) ──
+                # ── Live Updated Footings Schedule Table (ECP 203) — Placed ABOVE the button ──
                 st.markdown(
                     """
                     <div style="margin: 20px 0 10px 0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                        <span style="font-size: 1.15rem; font-weight: 800; color: #38bdf8;">
+                        <span style="font-size: 1.20rem; font-weight: 800; color: #38bdf8;">
                             📋 جدول نماذج القواعد المحدث بالأبعاد والتسليح (Live Footings Schedule — ECP 203)
                         </span>
                         <span style="font-size: 0.85rem; color: #94a3b8; background: rgba(30, 41, 59, 0.6); padding: 4px 10px; border-radius: 6px; border: 1px solid #334155;">
@@ -23241,6 +23257,87 @@ def render(is_standalone: bool = False):
 
                 if live_ftg_rows:
                     render_styled_table(pd.DataFrame(live_ftg_rows), font_size_override=13.5)
+
+                # ── Redesign Button (Placed BELOW the table, 2.5x font size, Bold, increased height) ──
+                if verif_res["is_safe"] and _has_pending_changes:
+                    st.markdown(
+                        f"""
+                        <style>
+                        div[class*="btn_apply_manual_footing"] button,
+                        div.stButton > button[key*="btn_apply_manual_footing"],
+                        .st-key-{prefix}btn_apply_manual_footing button,
+                        div[data-testid="stVerticalBlock"] div:has(> button[key*="btn_apply_manual_footing"]) button {
+                            font-size: 2.20rem !important;
+                            font-weight: 800 !important;
+                            min-height: 72px !important;
+                            padding: 14px 28px !important;
+                            line-height: 1.4 !important;
+                            letter-spacing: 0.5px !important;
+                            border-radius: 10px !important;
+                            box-shadow: 0 4px 20px rgba(2, 132, 199, 0.45) !important;
+                            margin: 12px 0 !important;
+                        }
+                        div[class*="btn_apply_manual_footing"] button p,
+                        div.stButton > button[key*="btn_apply_manual_footing"] p,
+                        .st-key-{prefix}btn_apply_manual_footing button p {
+                            font-size: 2.20rem !important;
+                            font-weight: 800 !important;
+                            line-height: 1.4 !important;
+                        }
+                        </style>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    if st.button("«اعادة التصميم نتيجة تغيير مدخلات القاعدة»", key=f"{prefix}btn_apply_manual_footing", type="primary", use_container_width=True):
+                        adopted_entry = {
+                            "L_m": float(man_L_m),
+                            "B_m": float(man_B_m),
+                            "t_cm": float(man_t_cm),
+                            "Phi_mm": int(man_Phi),
+                            "Nx_m": int(man_Nx),
+                            "Ny_m": int(man_Ny),
+                        }
+                        st.session_state["confirmed_manual_footings"][selected_model] = dict(adopted_entry)
+                        st.session_state["manual_footings"][selected_model] = dict(adopted_entry, _dirty=False)
+
+                        # Save all other models that were modified
+                        for mk_k, mf_v in st.session_state.get("manual_footings", {}).items():
+                            if isinstance(mf_v, dict) and mf_v.get("_dirty"):
+                                st.session_state["confirmed_manual_footings"][mk_k] = {
+                                    "L_m": float(mf_v.get("L_m", 2.0)),
+                                    "B_m": float(mf_v.get("B_m", 2.0)),
+                                    "t_cm": float(mf_v.get("t_cm", 50.0)),
+                                    "Phi_mm": int(mf_v.get("Phi_mm", 16)),
+                                    "Nx_m": int(mf_v.get("Nx_m", 5)),
+                                    "Ny_m": int(mf_v.get("Ny_m", 5)),
+                                }
+                                mf_v["_dirty"] = False
+
+                        for mk_k, c_entry in st.session_state["confirmed_manual_footings"].items():
+                            cur_ftg_overrides[f"{mk_k}_L_cm"] = round(float(c_entry["L_m"]) * 100.0, 1)
+                            cur_ftg_overrides[f"{mk_k}_B_cm"] = round(float(c_entry["B_m"]) * 100.0, 1)
+                            cur_ftg_overrides[f"{mk_k}_t"] = float(c_entry["t_cm"])
+                            cur_ftg_overrides[f"{mk_k}_phi"] = int(c_entry["Phi_mm"])
+                            cur_ftg_overrides[f"{mk_k}_nx"] = int(c_entry["Nx_m"])
+                            cur_ftg_overrides[f"{mk_k}_ny"] = int(c_entry["Ny_m"])
+                            cur_ftg_overrides[f"{mk_k}_manual_confirmed"] = True
+
+                        S.cfg_set("ftg_overrides", cur_ftg_overrides)
+                        S.cfg_set("confirmed_manual_footings", dict(st.session_state["confirmed_manual_footings"]))
+                        st.session_state[f"{prefix}ftg_overrides"] = cur_ftg_overrides
+                        S.save_settings()
+
+                        st.session_state.pop(f"{prefix}w_ftg_{selected_model.lower()}_phi", None)
+                        st.session_state["ftg_outputs_collapsed"] = False
+                        st.session_state["ftg_outputs_exp_ver"] = int(st.session_state.get("ftg_outputs_exp_ver", 0)) + 1
+
+                        st.session_state.pop(f"{prefix}foundation_sketch_b64", None)
+                        st.session_state.pop(f"{prefix}_last_outputs_pdf_bytes", None)
+                        st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
+                        st.session_state.pop(f"{prefix}_last_full_pdf_bytes", None)
+                        st.session_state.pop(f"{prefix}_cached_report_html", None)
+                        st.session_state.pop(f"{prefix}_last_drawings_pdf_bytes", None)
+                        st.rerun()
 
             st.markdown("<div style='margin-top:12px;'></div>", unsafe_allow_html=True)
 
