@@ -6,7 +6,7 @@
       "description": "نسخة من Control room",
       "created_at": "2026-11-14 11:08",
       "updated_at": "2026-11-17 13:49",
-      "last_used_at": "2026-11-17 13:49:28",
+      "last_used_at": "2026-11-17 13:49:36",
       "data": {
         "selected_module_idx": 0,
         "apartment_name": "Control room (نسخة)",
@@ -996,7 +996,8 @@
                     "full_moment_continuity": false
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supp2": {
@@ -1069,7 +1070,8 @@
                     "full_moment_continuity": false
                   }
                 ],
-                "model_mark": "C2"
+                "model_mark": "C2",
+                "col_spec_str": "C2 = 30*40 cm"
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C5 ⟷ عمود C7)",
@@ -1204,7 +1206,8 @@
                     "full_moment_continuity": false
                   }
                 ],
-                "model_mark": "C2"
+                "model_mark": "C2",
+                "col_spec_str": "C2 = 30*40 cm"
               }
             },
             "supp2": {
@@ -1285,7 +1288,8 @@
                     "full_moment_continuity": false
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C7 ⟷ عمود C8)",
@@ -1428,7 +1432,8 @@
                     "full_moment_continuity": false
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supp2": {
@@ -1501,7 +1506,8 @@
                     "full_moment_continuity": true
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C8 ⟷ عمود C9)",
@@ -1636,7 +1642,8 @@
                     "full_moment_continuity": true
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supp2": {
@@ -1717,7 +1724,8 @@
                     "full_moment_continuity": true
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C9 ⟷ عمود C10)",
@@ -1862,7 +1870,8 @@
                     "full_moment_continuity": false
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supp2": {
@@ -1935,7 +1944,8 @@
                     "full_moment_continuity": false
                   }
                 ],
-                "model_mark": "C2"
+                "model_mark": "C2",
+                "col_spec_str": "C2 = 30*40 cm"
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C3 ⟷ عمود C4)",
@@ -2070,7 +2080,8 @@
                     "full_moment_continuity": false
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supp2": {
@@ -2151,7 +2162,8 @@
                     "full_moment_continuity": false
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C2 ⟷ عمود C3)",
@@ -2286,7 +2298,8 @@
                     "full_moment_continuity": false
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supp2": {
@@ -2359,7 +2372,8 @@
                     "full_moment_continuity": false
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C1 ⟷ عمود C2)",
@@ -2494,7 +2508,8 @@
                     "full_moment_continuity": false
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supp2": {
@@ -2855,7 +2870,8 @@
                     "full_moment_continuity": false
                   }
                 ],
-                "model_mark": "C2"
+                "model_mark": "C2",
+                "col_spec_str": "C2 = 30*40 cm"
               }
             },
             "supp2": {
@@ -2928,7 +2944,8 @@
                     "full_moment_continuity": false
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C4 ⟷ عمود C6)",
@@ -3071,7 +3088,8 @@
                     "full_moment_continuity": false
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supp2": {
@@ -3152,7 +3170,8 @@
                     "full_moment_continuity": true
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C3 ⟷ عمود C10)",
@@ -3287,7 +3306,8 @@
                     "full_moment_continuity": false
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supp2": {
@@ -3368,7 +3388,8 @@
                     "full_moment_continuity": false
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C1 ⟷ عمود C8)",
@@ -3737,7 +3758,8 @@
                     "full_moment_continuity": false
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supports_desc": "كمرة ثانوية (مرتكزة على كمرة B10 ⟷ عمود C6)",
@@ -3880,7 +3902,8 @@
                     "full_moment_continuity": true
                   }
                 ],
-                "model_mark": "C1"
+                "model_mark": "C1",
+                "col_spec_str": "C1 = 30*80 cm"
               }
             },
             "supp2": {

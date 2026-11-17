@@ -25139,7 +25139,6 @@ def render(is_standalone: bool = False):
                 st.warning(_ftg_warn_msg)
             from modules.report_generator import (
                 generate_flat_slab_report_html,
-                generate_flat_slab_outputs_report_html,
                 html_to_pdf_bytes,
             )
             from modules.concise_report_generator import (
@@ -25157,42 +25156,15 @@ def render(is_standalone: bool = False):
             import streamlit.components.v1 as components
 
             rep_fn_tag = "ECP203_Standalone_Flat_Slab" if is_standalone else "ECP203_Integrated_Structural_Design"
-            pdf_outputs_filename = f"{prefix}{rep_fn_tag}_Design_Outputs_ts{ts:.0f}cm_{num_floors}Floors.pdf"
             pdf_concise_filename = f"{prefix}{rep_fn_tag}_Concise_Design_Outputs_{num_floors}Floors.pdf"
-            pdf_full_filename = f"{prefix}{rep_fn_tag}_Full_Inputs_Outputs_ts{ts:.0f}cm_{num_floors}Floors.pdf"
             html_filename = f"{prefix}{rep_fn_tag}_Calculation_Sheet_ts{ts:.0f}cm_{num_floors}Floors.html"
 
-            # Styling container for export card & red buttons with bold white font
+            # Styling for export red buttons with bold white font
             st.markdown(
-                f"""
+                """
                 <style>
-                .export-card-box {{
-                    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
-                    border: 2px solid #ef4444;
-                    border-radius: 12px;
-                    padding: 16px 20px;
-                    margin-bottom: 16px;
-                    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.20);
-                    text-align: right;
-                }}
-                .export-card-title {{
-                    font-size: 16px;
-                    font-weight: 800;
-                    color: #ffffff;
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                    border-bottom: 1px solid rgba(239, 68, 68, 0.4);
-                    padding-bottom: 8px;
-                    margin-bottom: 8px;
-                }}
-                .export-card-desc {{
-                    font-size: 13.5px;
-                    color: #cbd5e1;
-                    line-height: 1.6;
-                }}
                 /* Strict styling for export buttons: Red background, bold white text */
-                div[data-testid="stExpander"] div.stButton > button {{
+                div[data-testid="stExpander"] div.stButton > button {
                     background: linear-gradient(135deg, #dc2626 0%, #b91c1c 50%, #991b1b 100%) !important;
                     color: #ffffff !important;
                     border: 1.8px solid #ef4444 !important;
@@ -25201,20 +25173,20 @@ def render(is_standalone: bool = False):
                     font-size: 14.5px !important;
                     box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35) !important;
                     transition: all 0.25s ease-in-out !important;
-                }}
-                div[data-testid="stExpander"] div.stButton > button:hover {{
+                }
+                div[data-testid="stExpander"] div.stButton > button:hover {
                     background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%) !important;
                     color: #ffffff !important;
                     border-color: #f87171 !important;
                     box-shadow: 0 6px 20px rgba(239, 68, 68, 0.55) !important;
                     transform: translateY(-1.5px) !important;
-                }}
+                }
                 div[data-testid="stExpander"] div.stButton > button p,
-                div[data-testid="stExpander"] div.stButton > button span {{
+                div[data-testid="stExpander"] div.stButton > button span {
                     color: #ffffff !important;
                     font-weight: 800 !important;
-                }}
-                div[data-testid="stExpander"] div.stDownloadButton > button {{
+                }
+                div[data-testid="stExpander"] div.stDownloadButton > button {
                     background: linear-gradient(135deg, #dc2626 0%, #b91c1c 50%, #991b1b 100%) !important;
                     color: #ffffff !important;
                     border: 1.8px solid #ef4444 !important;
@@ -25223,45 +25195,20 @@ def render(is_standalone: bool = False):
                     font-size: 14.5px !important;
                     box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35) !important;
                     transition: all 0.25s ease-in-out !important;
-                }}
-                div[data-testid="stExpander"] div.stDownloadButton > button:hover {{
+                }
+                div[data-testid="stExpander"] div.stDownloadButton > button:hover {
                     background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%) !important;
                     color: #ffffff !important;
                     border-color: #f87171 !important;
                     box-shadow: 0 6px 20px rgba(239, 68, 68, 0.55) !important;
                     transform: translateY(-1.5px) !important;
-                }}
+                }
                 div[data-testid="stExpander"] div.stDownloadButton > button p,
-                div[data-testid="stExpander"] div.stDownloadButton > button span {{
+                div[data-testid="stExpander"] div.stDownloadButton > button span {
                     color: #ffffff !important;
                     font-weight: 800 !important;
-                }}
+                }
                 </style>
-                <div class="export-card-box" dir="rtl">
-                    <div class="export-card-title">
-                        <span>📄 تصدير المذكرات والتقارير الحسابية المعتمدة (Consulting Calculation Reports)</span>
-                        <span style="font-size: 12px; background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; padding: 3px 10px; border-radius: 20px;">
-                            ECP 203 & CSI SAFE
-                        </span>
-                    </div>
-                    <div class="export-card-desc">
-                        يتم تحديث جميع بيانات ومخرجات المذكرة الحسابية تلقائياً بمجرد تعديل أي مدخلات. يشمل التقرير الاستشاري الشامل الكامل (PDF / HTML) كافة المدخلات الحسابية والمخططات والرسومات الإنشائية بالترتيب المعتمد:
-                        <br><b>1.</b> 🗺️ مخطط التحقق الهندسي وتوزيع المحاور والأعمدة (Structural Geometry & Grid).
-                        <br><b>2.</b> 🥊 مخطط القص الثاقب للأعمدة وفحص الاختراق (Punching Shear Verification Plan).
-                        <br><b>3.</b> 📉 مخطط هبوط وترخيم البلاطة طويل المدى (Long-Term Deflection Contour Plan).
-                        <br><b>4.</b> 📈 كنتور عزوم الانحناء M11 اتجاه X (Moment M11 Contour Plan — X-Direction Moment).
-                        <br><b>5.</b> 📈 كنتور عزوم الانحناء M22 اتجاه Y (Moment M22 Contour Plan — Y-Direction Moment).
-                        <br><b>6.</b> 🔴 كابات وتفريد الإضافي العلوي للأعمدة (1. Column Caps Layout - Top Extra).
-                        <br><b>7.</b> 🔶 الحديد الإضافي السفلي اتجاه X وشبكات التسليح (2A. Bottom Extra X & Base Meshes).
-                        <br><b>8.</b> 🔶 الحديد الإضافي السفلي اتجاه Y وشبكات التسليح (2B. Bottom Extra Y & Base Meshes).
-                        <br><b>9.</b> 🔵 الرقة العلوية والإضافي وشوك الكوابيل اتجاه X (3A. Top Extra & Shawka X).
-                        <br><b>10.</b> 🔵 الرقة العلوية والإضافي وشوك الكوابيل اتجاه Y (3B. Top Extra & Shawka Y).
-                        <br><b>11.</b> 📋 لوحة تجميع التسليح الماستر الشاملة (Master Steel Layout & Detailing).
-                        <br><b>12.</b> ⚖️ مخطط ردود أفعال وأحمال الأعمدة التصميمية (Column Reactions Layout).
-                        <br><b>13.</b> 📐 تفاصيل وتفريد تكسيح وتجنيش الأسياخ (Rebar Detailing & BBS Schedule).
-                        <br>بالإضافة إلى جداول التحقق الإنشائي، كشوفات القص الثاقب، وجداول حصر الكميات والمواد بالكامل (BOQ).
-                    </div>
-                </div>
                 """,
                 unsafe_allow_html=True,
             )
@@ -25283,56 +25230,6 @@ def render(is_standalone: bool = False):
                         pass
 
             # Helper functions to build report HTML
-            def _build_flat_slab_outputs_html():
-                nonlocal img_verif_b64
-                _img_verif = img_verif_b64
-                if not _img_verif:
-                    try:
-                        _f = generate_flat_slab_sketch(
-                            Lx_spans, Ly_spans, cantilevers,
-                            ts_initial=ts_initial if ts_initial is not None else 20,
-                            n_floors=num_floors,
-                            bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
-                            bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
-                            top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
-                            top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
-                            col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
-                            strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
-                            strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
-                            concrete_cover=cov if cov is not None else 1.5,
-                            fcu=Fcu if Fcu is not None else 250,
-                            fy=Fy if Fy is not None else 4000,
-                            live_load=LL if LL is not None else 0.25,
-                            flooring_load=SDL if SDL is not None else 0.15,
-                            wall_load=wall_load if wall_load is not None else 0.50,
-                            col_w_cm=_col_w_sk, col_d_cm=_col_d_sk,
-                            removed_col_ids=set(_confirmed_removals),
-                            pending_col_ids=set(st.session_state.get("_fs_pending_snapshot", []) if st.session_state.get("_fs_show_confirm") else _pending_removals),
-                            void_panel_ids=set(_confirmed_voids),
-                            pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", []) if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
-                            col_transforms=_col_transforms, edge_columns=_edge_columns,
-                            col_props=_col_props, active_cols=_active_cols,
-                        )
-                        _img_verif = _fig_to_b64(_f)
-                        img_verif_b64 = _img_verif
-                    except Exception:
-                        pass
-
-                return generate_flat_slab_outputs_report_html(
-                    project_name="Standalone Flat Slab Reinforced Concrete Design (ECP 203)" if is_standalone else "Integrated Structural Design (ECP 203)",
-                    ts=ts, d=d, num_floors=num_floors, Wu=Wu,
-                    Fcu=Fcu, Fy=Fy, SDL=SDL, wall_load=wall_load, LL=LL,
-                    bc=bc_s, tc=tc_s,
-                    mesh_btm_str=mesh_btm_str, mesh_top_str=mesh_top_str,
-                    top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
-                    cant_rft_list=cant_rft_list,
-                    punching_results=punching_results, all_punching_safe=all_safe,
-                    deflection_results=deflection_results, all_deflection_safe=all_deflection_safe,
-                    img_verif_b64=_img_verif,
-                    gb_analysis=gb_analysis_obj if 'gb_analysis_obj' in locals() else st.session_state.get('fs_gb_analysis'),
-                    ftg_analysis=None if is_standalone else (ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get('fs_ftg_analysis')),
-                )
-
             def _build_flat_slab_full_html():
                 nonlocal img_verif_b64, img_m11_b64, img_m22_b64, img_reactions_b64
 
@@ -25789,70 +25686,13 @@ def render(is_standalone: bool = False):
                     top_extra_cols=top_extra_cols if 'top_extra_cols' in locals() else [],
                 )
 
-            # 4 Dedicated Red Export Buttons
-            exp_c1, exp_c2, exp_c3, exp_c4 = st.columns([1.3, 1.5, 1.4, 1.1], gap="medium")
+            # Export Buttons (Concise PDF & HTML)
+            exp_c1, exp_c2 = st.columns([1.5, 1.2], gap="medium")
 
             with exp_c1:
-                # Button 1: تصدير مخرجات التصميم في ملف PDF
-                if st.button("📕 تصدير مخرجات التصميم ملف PDF", key=f"{prefix}btn_export_outputs_pdf", use_container_width=True):
-                    with st.spinner("جاري توليد تقرير مخرجات التصميم المعتمد وتحويله إلى PDF..."):
-                        _outputs_html = _build_flat_slab_outputs_html()
-                        pdf_outputs_bytes = html_to_pdf_bytes(_outputs_html)
-                    if pdf_outputs_bytes:
-                        b64_pdf = base64.b64encode(pdf_outputs_bytes).decode("utf-8")
-                        js_dl = f"""
-                        <script>
-                        (function() {{
-                            try {{
-                                var b64Data = "{b64_pdf}";
-                                var byteChars = atob(b64Data);
-                                var byteNums = new Array(byteChars.length);
-                                for (var i = 0; i < byteChars.length; i++) {{ byteNums[i] = byteChars.charCodeAt(i); }}
-                                var byteArray = new Uint8Array(byteNums);
-                                var blob = new Blob([byteArray], {{type: "application/pdf"}});
-                                var blobUrl = URL.createObjectURL(blob);
-                                var targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
-                                var a = targetDoc.createElement("a");
-                                a.href = blobUrl;
-                                a.download = "{pdf_outputs_filename}";
-                                a.target = "_blank";
-                                targetDoc.body.appendChild(a);
-                                a.click();
-                                setTimeout(function() {{
-                                    try {{ targetDoc.body.removeChild(a); }} catch(e) {{}}
-                                    URL.revokeObjectURL(blobUrl);
-                                }}, 4000);
-                            }} catch(err) {{
-                                var aFallback = document.createElement("a");
-                                aFallback.href = "data:application/pdf;base64,{b64_pdf}";
-                                aFallback.download = "{pdf_outputs_filename}";
-                                document.body.appendChild(aFallback);
-                                aFallback.click();
-                            }}
-                        }})();
-                        </script>
-                        """
-                        components.html(js_dl, height=0, width=0)
-                        st.toast("✅ تم تصدير مخرجات التصميم PDF بنجاح!", icon="📕")
-                        st.session_state[f"{prefix}_last_outputs_pdf_bytes"] = pdf_outputs_bytes
-                    else:
-                        st.error("تعذر إنشاء ملف الـ PDF عبر المحرك التلقائي، يمكنك تنزيل ملف الـ HTML وفتحه للطباعة.")
-
-                # Show prominent instant download button if outputs PDF is available in session state
-                if st.session_state.get(f"{prefix}_last_outputs_pdf_bytes"):
-                    st.download_button(
-                        label=f"📥 حفظ وتحميل ملف مخرجات التصميم ({pdf_outputs_filename})",
-                        data=st.session_state[f"{prefix}_last_outputs_pdf_bytes"],
-                        file_name=pdf_outputs_filename,
-                        mime="application/pdf",
-                        key=f"{prefix}btn_instant_outputs_pdf_exp",
-                        use_container_width=True,
-                    )
-
-            with exp_c2:
-                # Button 2: تصدير مخرجات التصميم المختصرة في ملف PDF (8 صفحات)
+                # Button: تصدير مخرجات التصميم المختصرة في ملف PDF (8 صفحات)
                 if st.button("📑 تصدير مخرجات التصميم المختصرة", key=f"{prefix}btn_export_concise_pdf", use_container_width=True):
-                    with st.spinner("جاري توليد مخرجات التصميم المختصرة (8 صفحات هندسية معتمدة) وتحويلها إلى PDF..."):
+                    with st.spinner("جاري توليد مخرجات التصميم المختصرة (8 صفحات هندسية معتمدة) وتحويلها إلى PDF..."): 
                         _concise_html = _build_flat_slab_concise_html()
                         pdf_concise_bytes = html_to_pdf_bytes(_concise_html, timeout_sec=60)
                     if pdf_concise_bytes:
@@ -25905,65 +25745,8 @@ def render(is_standalone: bool = False):
                         use_container_width=True,
                     )
 
-            with exp_c3:
-                # Button 3: تصدير جميع المدخلات والمخرجات في ملف PDF
-                if st.button("📑 تصدير جميع المدخلات والمخرجات ملف PDF", key=f"{prefix}btn_export_full_pdf", use_container_width=True):
-                    with st.spinner("جاري توليد التقرير الاستشاري الكامل بجميع الرسومات والمخرجات وتحويله إلى PDF..."):
-                        _full_html = _build_flat_slab_full_html()
-                        pdf_full_bytes = html_to_pdf_bytes(_full_html, timeout_sec=60)
-                    if pdf_full_bytes:
-                        st.session_state[f"{prefix}_last_full_pdf_bytes"] = pdf_full_bytes
-                        st.toast("✅ تم تصدير كامل المدخلات والمخرجات PDF بنجاح!", icon="📑")
-                        b64_pdf_full = base64.b64encode(pdf_full_bytes).decode("utf-8")
-                        js_dl_full = f"""
-                        <script>
-                        (function() {{
-                            try {{
-                                var b64Data = "{b64_pdf_full}";
-                                var byteChars = atob(b64Data);
-                                var byteNums = new Array(byteChars.length);
-                                for (var i = 0; i < byteChars.length; i++) {{ byteNums[i] = byteChars.charCodeAt(i); }}
-                                var byteArray = new Uint8Array(byteNums);
-                                var blob = new Blob([byteArray], {{type: "application/pdf"}});
-                                var blobUrl = URL.createObjectURL(blob);
-                                var targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
-                                var a = targetDoc.createElement("a");
-                                a.href = blobUrl;
-                                a.download = "{pdf_full_filename}";
-                                a.target = "_blank";
-                                targetDoc.body.appendChild(a);
-                                a.click();
-                                setTimeout(function() {{
-                                    try {{ targetDoc.body.removeChild(a); }} catch(e) {{}}
-                                    URL.revokeObjectURL(blobUrl);
-                                }}, 4000);
-                            }} catch(err) {{
-                                var aFallback = document.createElement("a");
-                                aFallback.href = "data:application/pdf;base64,{b64_pdf_full}";
-                                aFallback.download = "{pdf_full_filename}";
-                                document.body.appendChild(aFallback);
-                                aFallback.click();
-                            }}
-                        }})();
-                        </script>
-                        """
-                        components.html(js_dl_full, height=0, width=0)
-                    else:
-                        st.error("تعذر إنشاء ملف الـ PDF عبر المحرك التلقائي، يمكنك تنزيل ملف الـ HTML وفتحه للطباعة.")
-
-                # Show prominent instant download button if full PDF is available in session state
-                if st.session_state.get(f"{prefix}_last_full_pdf_bytes"):
-                    st.download_button(
-                        label=f"📥 حفظ وتحميل ملف التقرير الشامل ({pdf_full_filename})",
-                        data=st.session_state[f"{prefix}_last_full_pdf_bytes"],
-                        file_name=pdf_full_filename,
-                        mime="application/pdf",
-                        key=f"{prefix}btn_instant_full_pdf_exp",
-                        use_container_width=True,
-                    )
-
-            with exp_c4:
-                # Button 4: حفظ التقرير بصيغة HTML
+            with exp_c2:
+                # Button: حفظ التقرير بصيغة HTML
                 _cached_html = st.session_state.get(f"{prefix}_cached_report_html")
                 if not _cached_html:
                     _cached_html = _build_flat_slab_full_html()
@@ -25978,17 +25761,7 @@ def render(is_standalone: bool = False):
                     use_container_width=True,
                 )
 
-            # Fallback download buttons if already generated
-            if st.session_state.get(f"{prefix}_last_outputs_pdf_bytes"):
-                st.download_button(
-                    label=f"📥 اضغط هنا إذا لم يبدأ تحميل ملف مخرجات التصميم ({pdf_outputs_filename})",
-                    data=st.session_state[f"{prefix}_last_outputs_pdf_bytes"],
-                    file_name=pdf_outputs_filename,
-                    mime="application/pdf",
-                    key=f"{prefix}btn_fallback_outputs_pdf",
-                    use_container_width=True,
-                )
-
+            # Fallback download button if already generated
             if st.session_state.get(f"{prefix}_last_concise_pdf_bytes"):
                 st.download_button(
                     label=f"📥 اضغط هنا إذا لم يبدأ تحميل ملف مخرجات التصميم المختصرة ({pdf_concise_filename})",
@@ -25996,16 +25769,6 @@ def render(is_standalone: bool = False):
                     file_name=pdf_concise_filename,
                     mime="application/pdf",
                     key=f"{prefix}btn_fallback_concise_pdf",
-                    use_container_width=True,
-                )
-
-            if st.session_state.get(f"{prefix}_last_full_pdf_bytes"):
-                st.download_button(
-                    label=f"📥 اضغط هنا إذا لم يبدأ تحميل ملف التقرير الشامل ({pdf_full_filename})",
-                    data=st.session_state[f"{prefix}_last_full_pdf_bytes"],
-                    file_name=pdf_full_filename,
-                    mime="application/pdf",
-                    key=f"{prefix}btn_fallback_full_pdf",
                     use_container_width=True,
                 )
 
