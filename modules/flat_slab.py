@@ -22895,21 +22895,21 @@ def render(is_standalone: bool = False):
                     <style>
                     /* Custom distinct selectbox for footing model */
                     div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] > div,
-                    .st-key-{prefix}sel_manual_ftg_model div[data-baseweb="select"] > div {
+                    .st-key-{prefix}sel_manual_ftg_model div[data-baseweb="select"] > div {{
                         border: 3px solid #0284c7 !important;
                         border-radius: 10px !important;
                         min-height: 50px !important;
                         background: rgba(15, 23, 42, 0.03) !important;
                         box-shadow: 0 0 14px rgba(2, 132, 199, 0.25) !important;
-                    }
+                    }}
                     div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] span,
                     div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] div,
                     .st-key-{prefix}sel_manual_ftg_model div[data-baseweb="select"] span,
-                    .st-key-{prefix}sel_manual_ftg_model div[data-baseweb="select"] div {
+                    .st-key-{prefix}sel_manual_ftg_model div[data-baseweb="select"] div {{
                         font-size: 1.25rem !important;
                         font-weight: 800 !important;
                         color: #0284c7 !important;
-                    }
+                    }}
                     </style>
                     <div style="text-align: center; margin: 10px 0 8px 0;">
                         <span style="color: #38bdf8; font-size: 1.35rem; font-weight: 800; letter-spacing: 0.5px; text-shadow: 0 0 10px rgba(56, 189, 248, 0.35);">
@@ -23266,7 +23266,7 @@ def render(is_standalone: bool = False):
                         div[class*="btn_apply_manual_footing"] button,
                         div.stButton > button[key*="btn_apply_manual_footing"],
                         .st-key-{prefix}btn_apply_manual_footing button,
-                        div[data-testid="stVerticalBlock"] div:has(> button[key*="btn_apply_manual_footing"]) button {
+                        div[data-testid="stVerticalBlock"] div:has(> button[key*="btn_apply_manual_footing"]) button {{
                             font-size: 2.20rem !important;
                             font-weight: 800 !important;
                             min-height: 72px !important;
@@ -23276,14 +23276,14 @@ def render(is_standalone: bool = False):
                             border-radius: 10px !important;
                             box-shadow: 0 4px 20px rgba(2, 132, 199, 0.45) !important;
                             margin: 12px 0 !important;
-                        }
+                        }}
                         div[class*="btn_apply_manual_footing"] button p,
                         div.stButton > button[key*="btn_apply_manual_footing"] p,
-                        .st-key-{prefix}btn_apply_manual_footing button p {
+                        .st-key-{prefix}btn_apply_manual_footing button p {{
                             font-size: 2.20rem !important;
                             font-weight: 800 !important;
                             line-height: 1.4 !important;
-                        }
+                        }}
                         </style>
                         """,
                         unsafe_allow_html=True,
