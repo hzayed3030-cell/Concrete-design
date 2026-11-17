@@ -22891,51 +22891,75 @@ def render(is_standalone: bool = False):
                     unsafe_allow_html=True,
                 )
                 st.markdown(
-                    f"""
+                    """
                     <style>
                     /* Blue Arrow Label: Light Violet */
+                    div.st-key-sel_manual_ftg_model label,
+                    div.st-key-sel_manual_ftg_model label p,
+                    div.st-key-sel_manual_ftg_model [data-testid="stWidgetLabel"],
+                    div.st-key-sel_manual_ftg_model [data-testid="stWidgetLabel"] p,
+                    div.st-key-sel_manual_ftg_model [data-testid="stWidgetLabel"] *,
                     div[class*="sel_manual_ftg_model"] label,
-                    .st-key-{prefix}sel_manual_ftg_model label {{
+                    div[class*="sel_manual_ftg_model"] label p {
                         color: #c084fc !important;
-                        font-size: 1.15rem !important;
+                        -webkit-text-fill-color: #c084fc !important;
+                        font-size: 1.25rem !important;
                         font-weight: 800 !important;
                         letter-spacing: 0.5px !important;
                         margin-bottom: 6px !important;
-                    }}
-                    /* Red Arrow Border: Very Thick Red */
+                    }
+                    /* Red Arrow Border: Very Thick Red (4px solid #ef4444) */
+                    div.st-key-sel_manual_ftg_model div[data-baseweb="select"] > div,
+                    div.st-key-sel_manual_ftg_model div[data-baseweb="select"] > div:hover,
+                    div.st-key-sel_manual_ftg_model div[data-baseweb="select"] > div:focus-within,
                     div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] > div,
-                    .st-key-{prefix}sel_manual_ftg_model div[data-baseweb="select"] > div {{
+                    div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] > div:hover,
+                    div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] > div:focus-within {
                         border: 4px solid #ef4444 !important;
+                        border-color: #ef4444 !important;
                         border-radius: 12px !important;
-                        min-height: 54px !important;
-                        background: rgba(15, 23, 42, 0.20) !important;
-                        box-shadow: 0 0 20px rgba(239, 68, 68, 0.45) !important;
-                    }}
-                    /* Red Arrow Text Inside Selectbox: Light Violet */
-                    div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] span,
+                        min-height: 56px !important;
+                        background: rgba(15, 23, 42, 0.35) !important;
+                        box-shadow: 0 0 22px rgba(239, 68, 68, 0.55) !important;
+                    }
+                    /* Red Arrow Text Inside Selectbox: Light Violet (#d8b4fe) */
+                    div.st-key-sel_manual_ftg_model div[data-baseweb="select"] div,
+                    div.st-key-sel_manual_ftg_model div[data-baseweb="select"] span,
+                    div.st-key-sel_manual_ftg_model div[data-baseweb="select"] p,
+                    div.st-key-sel_manual_ftg_model div[data-baseweb="select"] *,
+                    div.st-key-sel_manual_ftg_model div[aria-selected="true"],
+                    div.st-key-sel_manual_ftg_model div[role="combobox"],
+                    div.st-key-sel_manual_ftg_model div[role="combobox"] *,
                     div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] div,
-                    .st-key-{prefix}sel_manual_ftg_model div[data-baseweb="select"] span,
-                    .st-key-{prefix}sel_manual_ftg_model div[data-baseweb="select"] div {{
+                    div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] span,
+                    div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] p,
+                    div[class*="sel_manual_ftg_model"] div[data-baseweb="select"] * {
                         font-size: 1.35rem !important;
                         font-weight: 800 !important;
                         color: #d8b4fe !important;
-                    }}
+                        -webkit-text-fill-color: #d8b4fe !important;
+                    }
                     /* Popover Options List: Light Violet */
                     div[data-baseweb="popover"] li,
+                    div[data-baseweb="popover"] li *,
                     div[role="listbox"] li,
-                    li[role="option"] {{
+                    div[role="listbox"] li *,
+                    li[role="option"],
+                    li[role="option"] * {
                         font-size: 1.25rem !important;
                         font-weight: 700 !important;
                         color: #d8b4fe !important;
+                        -webkit-text-fill-color: #d8b4fe !important;
                         background: #0f172a !important;
                         padding: 10px 14px !important;
-                    }}
+                    }
                     div[data-baseweb="popover"] li:hover,
                     div[role="listbox"] li:hover,
-                    li[role="option"]:hover {{
+                    li[role="option"]:hover {
                         background: #1e293b !important;
                         color: #ffffff !important;
-                    }}
+                        -webkit-text-fill-color: #ffffff !important;
+                    }
                     </style>
                     <div style="text-align: center; margin: 14px 0 8px 0;">
                         <span style="color: #c084fc; font-size: 1.55rem; font-weight: 900; letter-spacing: 0.5px; text-shadow: 0 0 14px rgba(192, 132, 252, 0.45);">
@@ -22949,7 +22973,7 @@ def render(is_standalone: bool = False):
                     "اختر نموذج القاعدة للتعديل اليدوي والتحقق (Footing Model):",
                     options=manual_model_ids,
                     format_func=lambda mk: f"{mk} — {manual_models_by_id[mk].get('model_label', mk)} ({manual_models_by_id[mk].get('col_spec_str', '')} | Pu={float(manual_models_by_id[mk].get('Pu_ton', 0.0)):.1f} t)",
-                    key=f"{prefix}sel_manual_ftg_model",
+                    key="sel_manual_ftg_model",
                 )
 
                 m_sel_obj = manual_models_by_id[selected_model]
@@ -23289,12 +23313,11 @@ def render(is_standalone: bool = False):
                 # ── Redesign Button (Placed BELOW the table, 2.5x font size, Bold, increased height) ──
                 if verif_res["is_safe"] and _has_pending_changes:
                     st.markdown(
-                        f"""
+                        """
                         <style>
+                        div.st-key-btn_apply_manual_footing button,
                         div[class*="btn_apply_manual_footing"] button,
-                        div.stButton > button[key*="btn_apply_manual_footing"],
-                        .st-key-{prefix}btn_apply_manual_footing button,
-                        div[data-testid="stVerticalBlock"] div:has(> button[key*="btn_apply_manual_footing"]) button {{
+                        div[data-testid="stVerticalBlock"] div:has(> button[key="btn_apply_manual_footing"]) button {
                             font-size: 2.20rem !important;
                             font-weight: 800 !important;
                             min-height: 72px !important;
@@ -23304,19 +23327,18 @@ def render(is_standalone: bool = False):
                             border-radius: 10px !important;
                             box-shadow: 0 4px 20px rgba(2, 132, 199, 0.45) !important;
                             margin: 12px 0 !important;
-                        }}
-                        div[class*="btn_apply_manual_footing"] button p,
-                        div.stButton > button[key*="btn_apply_manual_footing"] p,
-                        .st-key-{prefix}btn_apply_manual_footing button p {{
+                        }
+                        div.st-key-btn_apply_manual_footing button p,
+                        div[class*="btn_apply_manual_footing"] button p {
                             font-size: 2.20rem !important;
                             font-weight: 800 !important;
                             line-height: 1.4 !important;
-                        }}
+                        }
                         </style>
                         """,
                         unsafe_allow_html=True,
                     )
-                    if st.button("«اعادة التصميم نتيجة تغيير مدخلات القاعدة»", key=f"{prefix}btn_apply_manual_footing", type="primary", use_container_width=True):
+                    if st.button("«اعادة التصميم نتيجة تغيير مدخلات القاعدة»", key="btn_apply_manual_footing", type="primary", use_container_width=True):
                         adopted_entry = {
                             "L_m": float(man_L_m),
                             "B_m": float(man_B_m),
