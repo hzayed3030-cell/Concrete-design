@@ -22939,26 +22939,114 @@ def render(is_standalone: bool = False):
                         color: #d8b4fe !important;
                         -webkit-text-fill-color: #d8b4fe !important;
                     }
-                    /* Popover Options List: Light Violet */
+                    /* Popover Options List Container: Dark Background & Violet Border */
+                    body div[data-baseweb="popover"],
+                    body div[data-baseweb="popover"] > div,
+                    div[data-baseweb="popover"] ul,
+                    div[data-baseweb="popover"] [role="listbox"],
+                    div[data-baseweb="menu"],
+                    div[data-baseweb="menu"] ul,
+                    ul[role="listbox"],
+                    [data-baseweb="popover"] {
+                        background-color: #0f172a !important;
+                        background: #0f172a !important;
+                        border: 2px solid #a855f7 !important;
+                        border-radius: 12px !important;
+                        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 18px rgba(168, 85, 247, 0.45) !important;
+                    }
+
+                    /* BaseWeb Option Item: Light Violet Bold with Dark Background */
+                    body div[data-baseweb="popover"] li,
+                    body div[data-baseweb="popover"] ul li,
+                    body div[data-baseweb="menu"] li,
+                    body ul[role="listbox"] li,
+                    body li[role="option"],
                     div[data-baseweb="popover"] li,
-                    div[data-baseweb="popover"] li *,
-                    div[role="listbox"] li,
-                    div[role="listbox"] li *,
+                    div[data-baseweb="popover"] ul li,
+                    div[data-baseweb="menu"] li,
+                    ul[role="listbox"] li,
                     li[role="option"],
-                    li[role="option"] * {
-                        font-size: 1.25rem !important;
-                        font-weight: 700 !important;
+                    [role="option"] {
+                        background-color: #0f172a !important;
+                        background: #0f172a !important;
                         color: #d8b4fe !important;
                         -webkit-text-fill-color: #d8b4fe !important;
-                        background: #0f172a !important;
-                        padding: 10px 14px !important;
+                        font-size: 1.30rem !important;
+                        font-weight: 800 !important;
+                        padding: 12px 18px !important;
+                        margin: 2px 4px !important;
+                        border-radius: 8px !important;
+                        cursor: pointer !important;
                     }
+
+                    /* Text, spans, divs inside the option */
+                    body div[data-baseweb="popover"] li *,
+                    body div[data-baseweb="popover"] ul li *,
+                    body div[data-baseweb="menu"] li *,
+                    body ul[role="listbox"] li *,
+                    body li[role="option"] *,
+                    div[data-baseweb="popover"] li *,
+                    div[data-baseweb="popover"] ul li *,
+                    div[data-baseweb="menu"] li *,
+                    ul[role="listbox"] li *,
+                    li[role="option"] *,
+                    [role="option"] * {
+                        color: #d8b4fe !important;
+                        -webkit-text-fill-color: #d8b4fe !important;
+                        font-size: 1.30rem !important;
+                        font-weight: 800 !important;
+                        background: transparent !important;
+                        background-color: transparent !important;
+                    }
+
+                    /* Hovered / Highlighted / Selected option */
+                    body div[data-baseweb="popover"] li:hover,
+                    body div[data-baseweb="popover"] li[aria-selected="true"],
+                    body div[data-baseweb="menu"] li:hover,
+                    body div[data-baseweb="menu"] li[aria-selected="true"],
+                    body ul[role="listbox"] li:hover,
+                    body ul[role="listbox"] li[aria-selected="true"],
+                    body li[role="option"]:hover,
+                    body li[role="option"][aria-selected="true"],
                     div[data-baseweb="popover"] li:hover,
-                    div[role="listbox"] li:hover,
-                    li[role="option"]:hover {
-                        background: #1e293b !important;
+                    div[data-baseweb="popover"] li[aria-selected="true"],
+                    div[data-baseweb="menu"] li:hover,
+                    div[data-baseweb="menu"] li[aria-selected="true"],
+                    ul[role="listbox"] li:hover,
+                    ul[role="listbox"] li[aria-selected="true"],
+                    li[role="option"]:hover,
+                    li[role="option"][aria-selected="true"],
+                    [role="option"]:hover,
+                    [role="option"][aria-selected="true"] {
+                        background-color: #3b0764 !important;
+                        background: #3b0764 !important;
                         color: #ffffff !important;
                         -webkit-text-fill-color: #ffffff !important;
+                        border: 1.5px solid #c084fc !important;
+                    }
+
+                    body div[data-baseweb="popover"] li:hover *,
+                    body div[data-baseweb="popover"] li[aria-selected="true"] *,
+                    body div[data-baseweb="menu"] li:hover *,
+                    body div[data-baseweb="menu"] li[aria-selected="true"] *,
+                    body ul[role="listbox"] li:hover *,
+                    body ul[role="listbox"] li[aria-selected="true"] *,
+                    body li[role="option"]:hover *,
+                    body li[role="option"][aria-selected="true"] *,
+                    div[data-baseweb="popover"] li:hover *,
+                    div[data-baseweb="popover"] li[aria-selected="true"] *,
+                    div[data-baseweb="menu"] li:hover *,
+                    div[data-baseweb="menu"] li[aria-selected="true"] *,
+                    ul[role="listbox"] li:hover *,
+                    ul[role="listbox"] li[aria-selected="true"] *,
+                    li[role="option"]:hover *,
+                    li[role="option"][aria-selected="true"] *,
+                    [role="option"]:hover *,
+                    [role="option"][aria-selected="true"] * {
+                        color: #ffffff !important;
+                        -webkit-text-fill-color: #ffffff !important;
+                        background: transparent !important;
+                        background-color: transparent !important;
                     }
                     </style>
                     <div style="text-align: center; margin: 14px 0 8px 0;">
@@ -22974,6 +23062,14 @@ def render(is_standalone: bool = False):
                     options=manual_model_ids,
                     format_func=lambda mk: f"{mk} — {manual_models_by_id[mk].get('model_label', mk)} ({manual_models_by_id[mk].get('col_spec_str', '')} | Pu={float(manual_models_by_id[mk].get('Pu_ton', 0.0)):.1f} t)",
                     key="sel_manual_ftg_model",
+                )
+
+                # ── فاصل بنفسجي عريض جداً بين القائمة المنسدلة والبانيل ──
+                st.markdown(
+                    """
+                    <div style="margin: 20px 0 18px 0; height: 6px; background: #a855f7; border-radius: 4px; box-shadow: 0 0 16px rgba(168, 85, 247, 0.75);"></div>
+                    """,
+                    unsafe_allow_html=True,
                 )
 
                 m_sel_obj = manual_models_by_id[selected_model]
