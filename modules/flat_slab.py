@@ -23051,20 +23051,7 @@ def render(is_standalone: bool = False):
                     cover_cm=ftg_cov,
                 )
 
-                # Live Engineering Verification Summary Strip
-                st.markdown(
-                    f"""
-                    <div dir="rtl" style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:10px 14px; margin:8px 0 10px 0; font-size:12.5px; color:#1e293b; display:grid; grid-template-columns:repeat(auto-fit, minmax(175px, 1fr)); gap:8px;">
-                        <div><b>إجهاد التربة q_act:</b> <span style="color:{'#16a34a' if verif_res['q_ok'] else '#dc2626'}; font-weight:800;">{verif_res['q_act']:.2f} / {verif_res['q_net']:.2f} kg/cm²</span></div>
-                        <div><b>القص الثاقب Punching:</b> <span style="color:{'#16a34a' if verif_res['punch_ok'] else '#dc2626'}; font-weight:800;">{verif_res['tau_p']:.2f} / {verif_res['tau_p_allow']:.2f} kg/cm²</span></div>
-                        <div><b>القص أحادي الاتجاه:</b> <span style="color:{'#16a34a' if verif_res['shear_ok'] else '#dc2626'}; font-weight:800;">{verif_res['tau_s']:.2f} / {verif_res['tau_s_allow']:.2f} kg/cm²</span></div>
-                        <div><b>تسليح X (متوفر/مطلوب/أدنى):</b> <span style="color:{'#16a34a' if (verif_res['flex_x_ok'] and verif_res['min_x_ok']) else '#dc2626'}; font-weight:800;">{verif_res['As_prov_x']:.2f} / {verif_res['As_req_x']:.2f} / {verif_res['As_min']:.2f} cm²/m</span></div>
-                        <div><b>تسليح Y (متوفر/مطلوب/أدنى):</b> <span style="color:{'#16a34a' if (verif_res['flex_y_ok'] and verif_res['min_y_ok']) else '#dc2626'}; font-weight:800;">{verif_res['As_prov_y']:.2f} / {verif_res['As_req_y']:.2f} / {verif_res['As_min']:.2f} cm²/m</span></div>
-                        <div><b>المسافة الخالصة (X / Y):</b> <span style="color:{'#16a34a' if verif_res['spacing_ok'] else '#dc2626'}; font-weight:800;">{verif_res['s_clear_x_mm']:.0f} / {verif_res['s_clear_y_mm']:.0f} mm</span></div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+
 
                 _has_pending_changes = bool(
                     is_dirty_m
@@ -23291,71 +23278,7 @@ def render(is_standalone: bool = False):
                     unsafe_allow_html=True,
                 )
             else:
-                with st.expander(
-                    f"📋 ملخص النتائج وجداول الحسابات وتصميم القواعد (Foundations Summary & Calculations Schedule){_ftg_exp_suf}",
-                    expanded=_ftg_out_expanded,
-                    key=f"{prefix}exp_ftg_summary_v{_ftg_exp_ver}",
-                ):
-                    if _ftg_collapsed:
-                        st.warning(_ftg_warn_msg)
-                    else:
-                        fq_sum = ftg_analysis.get("quantities", {})
-                        sc1, sc2, sc3, sc4 = st.columns(4)
-                        with sc1:
-                            st.metric("القواعد المنفصلة (Isolated)", f"{counts.get('isolated_count', 0)} قاعدة")
-                        with sc2:
-                            st.metric("الشدادات / المشتركة", f"{counts.get('edge_strap_count', 0) + counts.get('corner_strap_count', 0) + counts.get('combined_count', 0)}")
-                        with sc3:
-                            st.metric("خرسانة مسلحة / عادية", f"{fq_sum.get('ftgs_conc_rc_val', 0.0):.2f} / {fq_sum.get('ftgs_conc_pc_val', 0.0):.2f} m³")
-                        with sc4:
-                            st.metric("إجمالي حديد القواعد", f"{fq_sum.get('ftgs_steel_ton_val', 0.0):.3f} Ton")
 
-                        # Verification summary table per model
-                        if active_ftg_models:
-                            st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; margin: 10px 0 8px 0;'>🔍 ملخص التحقق الإنشائي والحسابات التفصيلية لنماذج القواعد (ECP 203 Verification)</div>", unsafe_allow_html=True)
-                            ftg_calc_rows = []
-                            for m in active_ftg_models:
-                                ftg_calc_rows.append({
-                                    "النموذج": m["model_id"],
-                                    "العمود": m.get("col_spec_str", m.get("supported_col_str", "—")),
-                                    "Pu (ton)": f"{float(m.get('Pu_ton', 0.0)):.2f}",
-                                    "L × B × t (cm)": f"{float(m.get('L_cm', 0)):.0f} × {float(m.get('B_cm', 0)):.0f} × {float(m.get('t_cm', 0)):.0f}",
-                                    "q_act / q_net (kg/cm²)": f"{float(m.get('q_act', 0)):.2f} / {float(m.get('q_net', ftg_qnet)):.2f}",
-                                    "قص أحادي τ_s (kg/cm²)": f"{float(m.get('tau_s', 0)):.2f} / {float(m.get('tau_s_allow', 0)):.2f}",
-                                    "قص ثاقب τ_p (kg/cm²)": f"{float(m.get('tau_p', 0)):.2f} / {float(m.get('tau_p_allow', 0)):.2f}",
-                                    "التسليح X (فرش)": m.get("rft_long_str", "—"),
-                                    "التسليح Y (غطاء)": m.get("rft_short_str", "—"),
-                                    "الحالة": m.get("status_str", "✅ Safe"),
-                                })
-                            render_styled_table(pd.DataFrame(ftg_calc_rows), font_size_override=13.5)
-
-                        st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)</div>", unsafe_allow_html=True)
-                        df_fs_export = pd.DataFrame(ftg_analysis["unified_rows"])
-                        render_styled_table(df_fs_export, font_size_override=14.0)
-
-                        # Export Excel & CSV
-                        ex_c1, ex_c2 = st.columns(2)
-                        with ex_c1:
-                            xlsx_ftg_bytes = safe_to_excel_bytes(df_fs_export, sheet_name="Footings_Schedule")
-                            if xlsx_ftg_bytes:
-                                st.download_button(
-                                    label="📥 تصدير جدول القواعد Excel (.xlsx)",
-                                    data=xlsx_ftg_bytes,
-                                    file_name=f"{prefix}Footings_Schedule_{num_floors}Floors.xlsx",
-                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                    key=f"{prefix}btn_dl_ftg_xlsx",
-                                    use_container_width=True,
-                                )
-                        with ex_c2:
-                            csv_ftg_bytes = df_fs_export.to_csv(index=False).encode("utf-8-sig")
-                            st.download_button(
-                                label="📄 تصدير جدول القواعد CSV",
-                                data=csv_ftg_bytes,
-                                file_name=f"{prefix}Footings_Schedule_{num_floors}Floors.csv",
-                                mime="text/csv",
-                                key=f"{prefix}btn_dl_ftg_csv",
-                                use_container_width=True,
-                            )
 
                 with st.expander(
                     f"📐 الرسومات الهندسية وتفاصيل تسليح القواعد (Footings Layout, Plans & Cross-Sections){_ftg_exp_suf}",
