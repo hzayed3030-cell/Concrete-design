@@ -2091,6 +2091,12 @@ def pull_project_from_github(repo_dir: str, custom_token: str = None):
             r_co = run_cmd(["checkout", "--"] + existing_restore_files, timeout=15)
             log(f"git checkout -- {' '.join(existing_restore_files)} fallback", r_co)
 
+    # 3.5 Auto-stash any remaining local modifications (code files, etc.) so pull never aborts
+    r_stash = run_cmd(["stash", "push", "-m", "auto_stash_before_pull"], timeout=20)
+    has_stash = (r_stash.returncode == 0 and "No local changes to save" not in (r_stash.stdout + r_stash.stderr))
+    if has_stash:
+        log("git stash push", r_stash)
+
     # 4. Determine current active branch
     r_br = run_cmd(["rev-parse", "--abbrev-ref", "HEAD"], timeout=10)
     current_branch = (r_br.stdout or "main").strip() or "main"
@@ -2122,6 +2128,12 @@ def pull_project_from_github(repo_dir: str, custom_token: str = None):
 
     if pulled:
         run_cmd(["update-ref", f"refs/remotes/origin/{current_branch}", f"refs/heads/{current_branch}"], timeout=10)
+        if has_stash:
+            r_pop = run_cmd(["stash", "pop"], timeout=20)
+            log("git stash pop", r_pop)
+            if r_pop.returncode != 0:
+                run_cmd(["checkout", "--", "."], timeout=15)
+                log("git stash pop conflict -> restored clean pulled state")
         try:
             load_settings()
         except Exception:
@@ -2133,6 +2145,8 @@ def pull_project_from_github(repo_dir: str, custom_token: str = None):
             msg = "تم سحب أحدث التعديلات والمشاريع بنجاح من GitHub وتحديث التطبيق!"
         return True, msg, "\n\n".join(logs)
     else:
+        if has_stash:
+            run_cmd(["stash", "pop"], timeout=20)
         last_log = "\n\n".join(logs).lower()
         if not token and any(kw in last_log for kw in ["fatal: could not read", "empty reply", "authentication failed", "terminal prompts disabled", "exit=128", "exit=1", "401", "403"]):
             return False, "⚠️ هذا الجهاز يحتاج رمز Personal Access Token للوصول إلى GitHub. يرجى إدخال الرمز من زر (Update git hub) أولاً.", "\n\n".join(logs)
