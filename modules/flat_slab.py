@@ -22964,7 +22964,26 @@ def render(is_standalone: bool = False):
                             args=(selected_model,),
                         )
 
-                    # Sync current session dictionary for selected_model
+                    # Sync current session dictionary for selected_model & detect unsaved modifications
+                    curr_manual_vals = (float(man_L_m), float(man_B_m), float(man_t_cm), int(man_Phi), int(man_Nx), int(man_Ny))
+                    conf_m = st.session_state.get("confirmed_manual_footings", {}).get(selected_model) or base_entry
+                    conf_vals = (
+                        float(conf_m.get("L_m", 0.0)),
+                        float(conf_m.get("B_m", 0.0)),
+                        float(conf_m.get("t_cm", 0.0)),
+                        int(conf_m.get("Phi_mm", 0)),
+                        int(conf_m.get("Nx_m", 0)),
+                        int(conf_m.get("Ny_m", 0)),
+                    )
+                    is_dirty_m = (
+                        abs(curr_manual_vals[0] - conf_vals[0]) > 1e-4
+                        or abs(curr_manual_vals[1] - conf_vals[1]) > 1e-4
+                        or abs(curr_manual_vals[2] - conf_vals[2]) > 1e-2
+                        or curr_manual_vals[3] != conf_vals[3]
+                        or curr_manual_vals[4] != conf_vals[4]
+                        or curr_manual_vals[5] != conf_vals[5]
+                    )
+
                     st.session_state["manual_footings"][selected_model] = {
                         "L_m": float(man_L_m),
                         "B_m": float(man_B_m),
@@ -22972,8 +22991,13 @@ def render(is_standalone: bool = False):
                         "Phi_mm": int(man_Phi),
                         "Nx_m": int(man_Nx),
                         "Ny_m": int(man_Ny),
-                        "_dirty": bool(st.session_state["manual_footings"][selected_model].get("_dirty", False)),
+                        "_dirty": bool(is_dirty_m or st.session_state["manual_footings"][selected_model].get("_dirty", False)),
                     }
+
+                    if is_dirty_m and not st.session_state.get("ftg_outputs_collapsed", False):
+                        st.session_state["ftg_outputs_collapsed"] = True
+                        st.session_state["ftg_outputs_exp_ver"] = int(st.session_state.get("ftg_outputs_exp_ver", 0)) + 1
+                        st.rerun()
 
                     # Real-time structural verification (ECP 203)
                     verif_res = verify_isolated_footing_manual(
@@ -23022,13 +23046,27 @@ def render(is_standalone: bool = False):
                             st.session_state["confirmed_manual_footings"][selected_model] = dict(adopted_entry)
                             st.session_state["manual_footings"][selected_model] = dict(adopted_entry, _dirty=False)
 
-                            cur_ftg_overrides[f"{selected_model}_L_cm"] = round(float(man_L_m) * 100.0, 1)
-                            cur_ftg_overrides[f"{selected_model}_B_cm"] = round(float(man_B_m) * 100.0, 1)
-                            cur_ftg_overrides[f"{selected_model}_t"] = float(man_t_cm)
-                            cur_ftg_overrides[f"{selected_model}_phi"] = int(man_Phi)
-                            cur_ftg_overrides[f"{selected_model}_nx"] = int(man_Nx)
-                            cur_ftg_overrides[f"{selected_model}_ny"] = int(man_Ny)
-                            cur_ftg_overrides[f"{selected_model}_manual_confirmed"] = True
+                            # Save all other models that were modified
+                            for mk_k, mf_v in st.session_state.get("manual_footings", {}).items():
+                                if isinstance(mf_v, dict) and mf_v.get("_dirty"):
+                                    st.session_state["confirmed_manual_footings"][mk_k] = {
+                                        "L_m": float(mf_v.get("L_m", 2.0)),
+                                        "B_m": float(mf_v.get("B_m", 2.0)),
+                                        "t_cm": float(mf_v.get("t_cm", 50.0)),
+                                        "Phi_mm": int(mf_v.get("Phi_mm", 16)),
+                                        "Nx_m": int(mf_v.get("Nx_m", 5)),
+                                        "Ny_m": int(mf_v.get("Ny_m", 5)),
+                                    }
+                                    mf_v["_dirty"] = False
+
+                            for mk_k, c_entry in st.session_state["confirmed_manual_footings"].items():
+                                cur_ftg_overrides[f"{mk_k}_L_cm"] = round(float(c_entry["L_m"]) * 100.0, 1)
+                                cur_ftg_overrides[f"{mk_k}_B_cm"] = round(float(c_entry["B_m"]) * 100.0, 1)
+                                cur_ftg_overrides[f"{mk_k}_t"] = float(c_entry["t_cm"])
+                                cur_ftg_overrides[f"{mk_k}_phi"] = int(c_entry["Phi_mm"])
+                                cur_ftg_overrides[f"{mk_k}_nx"] = int(c_entry["Nx_m"])
+                                cur_ftg_overrides[f"{mk_k}_ny"] = int(c_entry["Ny_m"])
+                                cur_ftg_overrides[f"{mk_k}_manual_confirmed"] = True
 
                             S.cfg_set("ftg_overrides", cur_ftg_overrides)
                             S.cfg_set("confirmed_manual_footings", dict(st.session_state["confirmed_manual_footings"]))
@@ -23053,14 +23091,22 @@ def render(is_standalone: bool = False):
             st.markdown("<div style='margin-top:12px;'></div>", unsafe_allow_html=True)
 
             # ── 4. Outputs Expanders (Auto-Collapsed when manual edits are pending) ──
-            _ftg_collapsed = bool(st.session_state.get("ftg_outputs_collapsed", False))
+            _ftg_collapsed = bool(
+                st.session_state.get("ftg_outputs_collapsed", False)
+                or any(isinstance(mf, dict) and mf.get("_dirty") for mf in st.session_state.get("manual_footings", {}).values())
+            )
             _ftg_exp_ver = int(st.session_state.get("ftg_outputs_exp_ver", 0))
             _ftg_out_expanded = not _ftg_collapsed
-            _ftg_exp_suf = "\u200b" * (_ftg_exp_ver % 4)
+            _ftg_exp_suf = f" {'⏳' if _ftg_collapsed else ''}"
+            _ftg_warn_msg = "⏳ تم تعديل مدخلات أحد نماذج القواعد يدوياً — يُرجى مراجعة التحقق الإنشائي والضغط على زر «اعادة التصميم نتيجة تغيير مدخلات القاعدة» بالأعلى لاعتماد التعديلات وإعادة حساب وتحديث جداول ورسومات التصميم."
 
-            with st.expander(f"📋 ملخص النتائج وجداول الحسابات وتصميم القواعد (Foundations Summary & Calculations Schedule){_ftg_exp_suf}", expanded=_ftg_out_expanded):
+            with st.expander(
+                f"📋 ملخص النتائج وجداول الحسابات وتصميم القواعد (Foundations Summary & Calculations Schedule){_ftg_exp_suf}",
+                expanded=_ftg_out_expanded,
+                key=f"{prefix}exp_ftg_summary_v{_ftg_exp_ver}",
+            ):
                 if _ftg_collapsed:
-                    st.warning("⏳ تم تعديل مدخلات أحد نماذج القواعد يدوياً — يُرجى مراجعة التحقق الإنشائي والضغط على زر «اعادة التصميم نتيجة تغيير مدخلات القاعدة» لاعتماد التعديلات وعرض النتائج المحدثة.")
+                    st.warning(_ftg_warn_msg)
                 else:
                     fq_sum = ftg_analysis.get("quantities", {})
                     sc1, sc2, sc3, sc4 = st.columns(4)
@@ -23120,9 +23166,13 @@ def render(is_standalone: bool = False):
                             use_container_width=True,
                         )
 
-            with st.expander(f"📐 الرسومات الهندسية وتفاصيل تسليح القواعد (Footings Layout, Plans & Cross-Sections){_ftg_exp_suf}", expanded=_ftg_out_expanded):
+            with st.expander(
+                f"📐 الرسومات الهندسية وتفاصيل تسليح القواعد (Footings Layout, Plans & Cross-Sections){_ftg_exp_suf}",
+                expanded=_ftg_out_expanded,
+                key=f"{prefix}exp_ftg_drawings_v{_ftg_exp_ver}",
+            ):
                 if _ftg_collapsed:
-                    st.warning("⏳ تم طي الرسومات الهندسية مؤقتاً لحين اعتماد التعديلات اليدوية بالضغط على زر «اعادة التصميم نتيجة تغيير مدخلات القاعدة».")
+                    st.warning(_ftg_warn_msg)
                 else:
                     try:
                         overlap_disp = check_building_clearances_and_overlaps(fs_active_columns, ftg_analysis.get("models", {}))
@@ -23183,7 +23233,13 @@ def render(is_standalone: bool = False):
 
 
         # ── 🧱 GROUND BEAMS DESIGN SECTION (ECP 203) ───────────────────────────────────
-        with st.expander(f"🧱 Ground Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج الميدات والسملات الأرضية)", expanded=False):
+        with st.expander(
+            f"🧱 Ground Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج الميدات والسملات الأرضية){_ftg_exp_suf}",
+            expanded=False,
+            key=f"{prefix}exp_gb_design_v{_ftg_exp_ver}",
+        ):
+            if _ftg_collapsed:
+                st.warning(_ftg_warn_msg)
             # 1. Design Parameters & Controls
             with st.container(border=True):
                 st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:14px;'>⚙️ محددات ومعايير تصميم السملات الأرضية (Ground Beam Design Parameters)</div>", unsafe_allow_html=True)
@@ -23552,7 +23608,13 @@ def render(is_standalone: bool = False):
 
 
         # ── 🧱 ROOF BEAMS DESIGN SECTION (ECP 203) ─────────────────────────────────────
-        with st.expander(f"🧱 Roof Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج كمرات السقف والكوابيل)", expanded=False):
+        with st.expander(
+            f"🧱 Roof Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج كمرات السقف والكوابيل){_ftg_exp_suf}",
+            expanded=False,
+            key=f"{prefix}exp_rb_design_v{_ftg_exp_ver}",
+        ):
+            if _ftg_collapsed:
+                st.warning(_ftg_warn_msg)
             # 1. Design Parameters & Controls
             with st.container(border=True):
                 st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:14px;'>⚙️ محددات ومعايير تصميم كمرات السقف (Roof Beam Design Parameters)</div>", unsafe_allow_html=True)
@@ -23910,12 +23972,13 @@ def render(is_standalone: bool = False):
 
 
         # ── 🏛️ FINAL DESIGN OF FOUNDATIONS AND GROUND BEAMS (ECP 203) ───────────────────
-        _ftg_collapsed_fin = bool(st.session_state.get("ftg_outputs_collapsed", False))
-        _ftg_exp_ver_fin = int(st.session_state.get("ftg_outputs_exp_ver", 0))
-        _final_ftg_suf = ("\u200b" * (_ftg_exp_ver_fin % 4)) if _ftg_collapsed_fin else ""
-        with st.expander(f"🏛️ Final Design of Columns, Foundations and Ground Beams — {num_floors} Floors (التصميم النهائي للاعمدة و للقواعد والسملات الأرضية){_final_ftg_suf}", expanded=False):
-            if _ftg_collapsed_fin:
-                st.warning("⏳ تم تعديل مدخلات أحد نماذج القواعد يدوياً — يُرجى مراجعة التحقق الإنشائي والضغط على زر «اعادة التصميم نتيجة تغيير مدخلات القاعدة» في قسم Foundations Design لتحديث لوحة التصميم النهائي والمخرجات.")
+        with st.expander(
+            f"🏛️ Final Design of Columns, Foundations and Ground Beams — {num_floors} Floors (التصميم النهائي للاعمدة و للقواعد والسملات الأرضية){_ftg_exp_suf}",
+            expanded=False,
+            key=f"{prefix}exp_final_design_v{_ftg_exp_ver}",
+        ):
+            if _ftg_collapsed:
+                st.warning(_ftg_warn_msg)
             else:
                 ftg_analysis_final = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
                 gb_analysis_final = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis")
@@ -24335,7 +24398,13 @@ def render(is_standalone: bool = False):
         except Exception as _e_3d:
             st.error(f"⚠️ خطأ أثناء تحميل العارض ثلاثي الأبعاد: {_e_3d}")
 
-        with st.expander("📊 Approximate Quantity Survey (الحصر التقريبي للكميات)", expanded=False):
+        with st.expander(
+            f"📊 Approximate Quantity Survey (الحصر التقريبي للكميات){_ftg_exp_suf}",
+            expanded=False,
+            key=f"{prefix}exp_qs_total_v{_ftg_exp_ver}",
+        ):
+            if _ftg_collapsed:
+                st.warning(_ftg_warn_msg)
             st.markdown(
                 f"""
                 <div style="background:#f8fafc; border-left:4px solid #1e40af; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
@@ -24685,7 +24754,13 @@ def render(is_standalone: bool = False):
             active_y_labels=_active_y_labels if '_active_y_labels' in locals() else None,
         )
 
-        with st.expander("📊 Approximate Quantity Survey (الحصر التقريبي لكميات ومواد السقف)", expanded=False):
+        with st.expander(
+            f"📊 Approximate Quantity Survey (الحصر التقريبي لكميات ومواد السقف){_ftg_exp_suf}",
+            expanded=False,
+            key=f"{prefix}exp_qs_slab_v{_ftg_exp_ver}",
+        ):
+            if _ftg_collapsed:
+                st.warning(_ftg_warn_msg)
             st.markdown(
                 f"""
                 <div style="background:#f8fafc; border-left:4px solid #0284c7; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
@@ -24792,7 +24867,13 @@ def render(is_standalone: bool = False):
         st.markdown("---")
 
     # ── 💾 SAVE & EXPORT COMPLETE CALCULATION SHEET (COLLAPSED EXPANDER) ────────
-    with st.expander("💾 Save & Export Design Calculation Sheet (حفظ وتصدير المذكرة الحسابية الكاملة)", expanded=False):
+    with st.expander(
+        f"💾 Save & Export Design Calculation Sheet (حفظ وتصدير المذكرة الحسابية الكاملة){_ftg_exp_suf}",
+        expanded=False,
+        key=f"{prefix}exp_export_calc_v{_ftg_exp_ver}",
+    ):
+        if _ftg_collapsed:
+            st.warning(_ftg_warn_msg)
         from modules.report_generator import (
             generate_flat_slab_report_html,
             generate_flat_slab_outputs_report_html,
