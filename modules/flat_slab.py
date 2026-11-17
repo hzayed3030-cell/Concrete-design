@@ -25431,7 +25431,13 @@ def render(is_standalone: bool = False):
 
             # Above-ground backfilling based on building footprint area between ground beams / foundation walls
             _grid_footprint_m2 = float(sum(Lx_calc) * sum(Ly_calc)) if (Lx_calc and Ly_calc) else float(slab_area_val)
-            _void_area_m2 = sum(float(vb.get("w", 0.0)) * float(vb.get("h", 0.0)) for vb in (_void_boxes_sk or [])) if '_void_boxes_sk' in locals() and _void_boxes_sk else 0.0
+            _void_area_m2 = 0.0
+            if '_void_boxes_sk' in locals() and _void_boxes_sk:
+                for _vb in _void_boxes_sk:
+                    if isinstance(_vb, dict):
+                        _void_area_m2 += float(_vb.get("w", 0.0)) * float(_vb.get("h", 0.0))
+                    elif isinstance(_vb, (tuple, list)) and len(_vb) >= 4:
+                        _void_area_m2 += abs(float(_vb[1]) - float(_vb[0])) * abs(float(_vb[3]) - float(_vb[2]))
             _bldg_footprint_m2 = max(0.0, _grid_footprint_m2 - _void_area_m2) if _grid_footprint_m2 > 0 else float(slab_area_val)
             _walls_plan_area_m2 = _L_gb_net_m * cw_t_wall_m
             _net_fill_area_above_m2 = max(0.0, _bldg_footprint_m2 - _walls_plan_area_m2 - _col_plan_area_1f)
