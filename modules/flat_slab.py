@@ -23109,1627 +23109,1650 @@ def render(is_standalone: bool = False):
             _ftg_exp_suf = f" {'⏳' if _ftg_collapsed else ''}"
             _ftg_warn_msg = "⏳ تم تعديل مدخلات أحد نماذج القواعد يدوياً — يُرجى مراجعة التحقق الإنشائي والضغط على زر «اعادة التصميم نتيجة تغيير مدخلات القاعدة» بالأعلى لاعتماد التعديلات وإعادة حساب وتحديث جداول ورسومات التصميم."
 
-            with st.expander(
-                f"📋 ملخص النتائج وجداول الحسابات وتصميم القواعد (Foundations Summary & Calculations Schedule){_ftg_exp_suf}",
-                expanded=_ftg_out_expanded,
-                key=f"{prefix}exp_ftg_summary_v{_ftg_exp_ver}",
-            ):
-                if _ftg_collapsed:
-                    st.warning(_ftg_warn_msg)
-                else:
-                    fq_sum = ftg_analysis.get("quantities", {})
-                    sc1, sc2, sc3, sc4 = st.columns(4)
-                    with sc1:
-                        st.metric("القواعد المنفصلة (Isolated)", f"{counts.get('isolated_count', 0)} قاعدة")
-                    with sc2:
-                        st.metric("الشدادات / المشتركة", f"{counts.get('edge_strap_count', 0) + counts.get('corner_strap_count', 0) + counts.get('combined_count', 0)}")
-                    with sc3:
-                        st.metric("خرسانة مسلحة / عادية", f"{fq_sum.get('ftgs_conc_rc_val', 0.0):.2f} / {fq_sum.get('ftgs_conc_pc_val', 0.0):.2f} m³")
-                    with sc4:
-                        st.metric("إجمالي حديد القواعد", f"{fq_sum.get('ftgs_steel_ton_val', 0.0):.3f} Ton")
+            if _ftg_collapsed:
+                st.markdown(
+                    """
+                    <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%);
+                                border: 2px dashed #f59e0b; border-radius: 12px; padding: 22px 24px; margin: 20px 0; text-align: center;
+                                box-shadow: 0 4px 20px rgba(245, 158, 11, 0.15);">
+                        <div style="font-size: 1.30rem; font-weight: 900; color: #fbbf24; margin-bottom: 8px;">
+                            ⚠️ تم حجب نتائج وجداول ورسومات التصميم
+                        </div>
+                        <div style="font-size: 1.05rem; font-weight: 700; color: #f1f5f9; line-height: 1.8;">
+                            تم حجب النتائج نتيجة تغيير مدخلات تصميم نماذج القواعد يدوياً.<br>
+                            إذا كان التصميم آمناً كودياً، يرجى مراجعة التحقق الإنشائي بالأعلى والضغط على زر:<br>
+                            <span style="display: inline-block; background: #0284c7; color: #ffffff; padding: 4px 18px; border-radius: 6px; font-weight: 800; margin-top: 8px; box-shadow: 0 2px 8px rgba(2, 132, 199, 0.4);">
+                                اعادة التصميم نتيجة تغيير مدخلات القاعدة
+                            </span><br>
+                            لاعتماد التعديلات وإعادة الحسابات الهندسية وإظهار المخرجات المحدثة.
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                with st.expander(
+                    f"📋 ملخص النتائج وجداول الحسابات وتصميم القواعد (Foundations Summary & Calculations Schedule){_ftg_exp_suf}",
+                    expanded=_ftg_out_expanded,
+                    key=f"{prefix}exp_ftg_summary_v{_ftg_exp_ver}",
+                ):
+                    if _ftg_collapsed:
+                        st.warning(_ftg_warn_msg)
+                    else:
+                        fq_sum = ftg_analysis.get("quantities", {})
+                        sc1, sc2, sc3, sc4 = st.columns(4)
+                        with sc1:
+                            st.metric("القواعد المنفصلة (Isolated)", f"{counts.get('isolated_count', 0)} قاعدة")
+                        with sc2:
+                            st.metric("الشدادات / المشتركة", f"{counts.get('edge_strap_count', 0) + counts.get('corner_strap_count', 0) + counts.get('combined_count', 0)}")
+                        with sc3:
+                            st.metric("خرسانة مسلحة / عادية", f"{fq_sum.get('ftgs_conc_rc_val', 0.0):.2f} / {fq_sum.get('ftgs_conc_pc_val', 0.0):.2f} m³")
+                        with sc4:
+                            st.metric("إجمالي حديد القواعد", f"{fq_sum.get('ftgs_steel_ton_val', 0.0):.3f} Ton")
 
-                    # Verification summary table per model
-                    if active_ftg_models:
-                        st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; margin: 10px 0 8px 0;'>🔍 ملخص التحقق الإنشائي والحسابات التفصيلية لنماذج القواعد (ECP 203 Verification)</div>", unsafe_allow_html=True)
-                        ftg_calc_rows = []
-                        for m in active_ftg_models:
-                            ftg_calc_rows.append({
-                                "النموذج": m["model_id"],
-                                "العمود": m.get("col_spec_str", m.get("supported_col_str", "—")),
-                                "Pu (ton)": f"{float(m.get('Pu_ton', 0.0)):.2f}",
-                                "L × B × t (cm)": f"{float(m.get('L_cm', 0)):.0f} × {float(m.get('B_cm', 0)):.0f} × {float(m.get('t_cm', 0)):.0f}",
-                                "q_act / q_net (kg/cm²)": f"{float(m.get('q_act', 0)):.2f} / {float(m.get('q_net', ftg_qnet)):.2f}",
-                                "قص أحادي τ_s (kg/cm²)": f"{float(m.get('tau_s', 0)):.2f} / {float(m.get('tau_s_allow', 0)):.2f}",
-                                "قص ثاقب τ_p (kg/cm²)": f"{float(m.get('tau_p', 0)):.2f} / {float(m.get('tau_p_allow', 0)):.2f}",
-                                "التسليح X (فرش)": m.get("rft_long_str", "—"),
-                                "التسليح Y (غطاء)": m.get("rft_short_str", "—"),
-                                "الحالة": m.get("status_str", "✅ Safe"),
-                            })
-                        render_styled_table(pd.DataFrame(ftg_calc_rows), font_size_override=13.5)
+                        # Verification summary table per model
+                        if active_ftg_models:
+                            st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; margin: 10px 0 8px 0;'>🔍 ملخص التحقق الإنشائي والحسابات التفصيلية لنماذج القواعد (ECP 203 Verification)</div>", unsafe_allow_html=True)
+                            ftg_calc_rows = []
+                            for m in active_ftg_models:
+                                ftg_calc_rows.append({
+                                    "النموذج": m["model_id"],
+                                    "العمود": m.get("col_spec_str", m.get("supported_col_str", "—")),
+                                    "Pu (ton)": f"{float(m.get('Pu_ton', 0.0)):.2f}",
+                                    "L × B × t (cm)": f"{float(m.get('L_cm', 0)):.0f} × {float(m.get('B_cm', 0)):.0f} × {float(m.get('t_cm', 0)):.0f}",
+                                    "q_act / q_net (kg/cm²)": f"{float(m.get('q_act', 0)):.2f} / {float(m.get('q_net', ftg_qnet)):.2f}",
+                                    "قص أحادي τ_s (kg/cm²)": f"{float(m.get('tau_s', 0)):.2f} / {float(m.get('tau_s_allow', 0)):.2f}",
+                                    "قص ثاقب τ_p (kg/cm²)": f"{float(m.get('tau_p', 0)):.2f} / {float(m.get('tau_p_allow', 0)):.2f}",
+                                    "التسليح X (فرش)": m.get("rft_long_str", "—"),
+                                    "التسليح Y (غطاء)": m.get("rft_short_str", "—"),
+                                    "الحالة": m.get("status_str", "✅ Safe"),
+                                })
+                            render_styled_table(pd.DataFrame(ftg_calc_rows), font_size_override=13.5)
 
-                    st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)</div>", unsafe_allow_html=True)
-                    df_fs_export = pd.DataFrame(ftg_analysis["unified_rows"])
-                    render_styled_table(df_fs_export, font_size_override=14.0)
+                        st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)</div>", unsafe_allow_html=True)
+                        df_fs_export = pd.DataFrame(ftg_analysis["unified_rows"])
+                        render_styled_table(df_fs_export, font_size_override=14.0)
 
-                    # Export Excel & CSV
-                    ex_c1, ex_c2 = st.columns(2)
-                    with ex_c1:
-                        xlsx_ftg_bytes = safe_to_excel_bytes(df_fs_export, sheet_name="Footings_Schedule")
-                        if xlsx_ftg_bytes:
+                        # Export Excel & CSV
+                        ex_c1, ex_c2 = st.columns(2)
+                        with ex_c1:
+                            xlsx_ftg_bytes = safe_to_excel_bytes(df_fs_export, sheet_name="Footings_Schedule")
+                            if xlsx_ftg_bytes:
+                                st.download_button(
+                                    label="📥 تصدير جدول القواعد Excel (.xlsx)",
+                                    data=xlsx_ftg_bytes,
+                                    file_name=f"{prefix}Footings_Schedule_{num_floors}Floors.xlsx",
+                                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                    key=f"{prefix}btn_dl_ftg_xlsx",
+                                    use_container_width=True,
+                                )
+                        with ex_c2:
+                            csv_ftg_bytes = df_fs_export.to_csv(index=False).encode("utf-8-sig")
                             st.download_button(
-                                label="📥 تصدير جدول القواعد Excel (.xlsx)",
-                                data=xlsx_ftg_bytes,
-                                file_name=f"{prefix}Footings_Schedule_{num_floors}Floors.xlsx",
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                key=f"{prefix}btn_dl_ftg_xlsx",
+                                label="📄 تصدير جدول القواعد CSV",
+                                data=csv_ftg_bytes,
+                                file_name=f"{prefix}Footings_Schedule_{num_floors}Floors.csv",
+                                mime="text/csv",
+                                key=f"{prefix}btn_dl_ftg_csv",
                                 use_container_width=True,
                             )
-                    with ex_c2:
-                        csv_ftg_bytes = df_fs_export.to_csv(index=False).encode("utf-8-sig")
-                        st.download_button(
-                            label="📄 تصدير جدول القواعد CSV",
-                            data=csv_ftg_bytes,
-                            file_name=f"{prefix}Footings_Schedule_{num_floors}Floors.csv",
-                            mime="text/csv",
-                            key=f"{prefix}btn_dl_ftg_csv",
-                            use_container_width=True,
-                        )
 
+                with st.expander(
+                    f"📐 الرسومات الهندسية وتفاصيل تسليح القواعد (Footings Layout, Plans & Cross-Sections){_ftg_exp_suf}",
+                    expanded=_ftg_out_expanded,
+                    key=f"{prefix}exp_ftg_drawings_v{_ftg_exp_ver}",
+                ):
+                    if _ftg_collapsed:
+                        st.warning(_ftg_warn_msg)
+                    else:
+                        try:
+                            overlap_disp = check_building_clearances_and_overlaps(fs_active_columns, ftg_analysis.get("models", {}))
+                            fig_ftg_layout = draw_foundation_layout_plan(
+                                fs_active_columns,
+                                ftg_analysis.get("models", {}),
+                                overlap_disp,
+                                ftg_analysis.get("combined_footings"),
+                            )
+                            st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; margin-bottom:8px;'>🗺️ المسقط الأفقي العام لأساسات المبنى وجدول القواعد:</div>", unsafe_allow_html=True)
+                            _render_fs_zoomable_figure(fig_ftg_layout, viewer_h=680, dpi=160)
+                        except Exception as _e_flay:
+                            st.warning(f"تعذر رسم المسقط الأفقي العام للقواعد: {_e_flay}")
+
+                        if active_ftg_models:
+                            from modules.footings import generate_footing_plan_sketch, generate_footing_section_sketch
+                            st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>✏️ الرسومات التنفيذية التفصيلية لكل نموذج قاعدة (المسقط الأفقي والقطاع الرأسي A-A):</div>", unsafe_allow_html=True)
+                            ftg_tabs = st.tabs([
+                                f"🧱 {m['model_id']} ({float(m['L_cm']):.0f}×{float(m['B_cm']):.0f}×{float(m['t_cm']):.0f} cm)"
+                                for m in active_ftg_models
+                            ])
+                            for tab_f, m in zip(ftg_tabs, active_ftg_models):
+                                with tab_f:
+                                    L_cm_m = int(round(float(m.get("L_cm", 200))))
+                                    B_cm_m = int(round(float(m.get("B_cm", 200))))
+                                    t_cm_m = int(round(float(m.get("t_cm", 50))))
+                                    col_b_m = int(round(float(m.get("col_b_cm", col_b_dim))))
+                                    col_t_m = int(round(float(m.get("col_t_cm", col_c_dim))))
+                                    phi_m = int(m.get("Phi_mm", 16))
+                                    nx_m = int(m.get("n_m_L", 5))
+                                    ny_m = int(m.get("n_m_B", 5))
+                                    tot_x = int(m.get("total_bars_L", math.ceil(nx_m * B_cm_m / 100.0)))
+                                    tot_y = int(m.get("total_bars_B", math.ceil(ny_m * L_cm_m / 100.0)))
+                                    sp_x = 100.0 / max(1, nx_m)
+                                    sp_y = 100.0 / max(1, ny_m)
+
+                                    sk_c1, sk_c2 = st.columns(2)
+                                    with sk_c1:
+                                        fig_p_m = generate_footing_plan_sketch(
+                                            L_cm=L_cm_m, B_cm=B_cm_m, t_rc_cm=t_cm_m,
+                                            bc_cm=col_b_m, tc_cm=col_t_m, Phi=phi_m,
+                                            n_long=tot_x, n_m_long=nx_m, sp_long=sp_x,
+                                            n_sht=tot_y, n_m_sht=ny_m, sp_sht=sp_y,
+                                            cover_cm=ftg_cov, t_pc_cm=20, pc_offset_cm=20,
+                                        )
+                                        st.pyplot(fig_p_m, use_container_width=True)
+                                        plt.close(fig_p_m)
+                                    with sk_c2:
+                                        fig_s_m = generate_footing_section_sketch(
+                                            L_cm=L_cm_m, B_cm=B_cm_m, t_rc_cm=t_cm_m,
+                                            bc_cm=col_b_m, tc_cm=col_t_m, Phi=phi_m,
+                                            n_long=tot_x, n_m_long=nx_m, sp_long=sp_x,
+                                            n_sht=tot_y, n_m_sht=ny_m, sp_sht=sp_y,
+                                            cover_cm=ftg_cov, Df_m=1.5, t_pc_cm=20, pc_offset_cm=20,
+                                        )
+                                        st.pyplot(fig_s_m, use_container_width=True)
+                                        plt.close(fig_s_m)
+
+
+        if not _ftg_collapsed:
+            # ── 🧱 GROUND BEAMS DESIGN SECTION (ECP 203) ───────────────────────────────────
             with st.expander(
-                f"📐 الرسومات الهندسية وتفاصيل تسليح القواعد (Footings Layout, Plans & Cross-Sections){_ftg_exp_suf}",
-                expanded=_ftg_out_expanded,
-                key=f"{prefix}exp_ftg_drawings_v{_ftg_exp_ver}",
+                f"🧱 Ground Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج الميدات والسملات الأرضية){_ftg_exp_suf}",
+                expanded=False,
+                key=f"{prefix}exp_gb_design_v{_ftg_exp_ver}",
             ):
                 if _ftg_collapsed:
                     st.warning(_ftg_warn_msg)
-                else:
-                    try:
-                        overlap_disp = check_building_clearances_and_overlaps(fs_active_columns, ftg_analysis.get("models", {}))
-                        fig_ftg_layout = draw_foundation_layout_plan(
-                            fs_active_columns,
-                            ftg_analysis.get("models", {}),
-                            overlap_disp,
-                            ftg_analysis.get("combined_footings"),
+                # 1. Design Parameters & Controls
+                with st.container(border=True):
+                    st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:14px;'>⚙️ محددات ومعايير تصميم السملات الأرضية (Ground Beam Design Parameters)</div>", unsafe_allow_html=True)
+                    gbc1, gbc2, gbc3, gbc4, gbc5 = st.columns(5)
+                    with gbc1:
+                        lvl_opts = [
+                            "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)",
+                            "At Footing Level (في منسوب القواعد المسلحة)",
+                        ]
+                        sel_lvl_idx = 0 if "Above" in gb_level_type else 1
+                        new_gb_level = st.selectbox(
+                            "منسوب الميدة الإنشائي:",
+                            options=lvl_opts,
+                            index=sel_lvl_idx,
+                            key=f"{prefix}w_gb_level_type",
+                            help="في منسوب القواعد تؤخذ عزوم وقوى الهبوط المتفاوت في الحسابات.",
                         )
-                        st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; margin-bottom:8px;'>🗺️ المسقط الأفقي العام لأساسات المبنى وجدول القواعد:</div>", unsafe_allow_html=True)
-                        _render_fs_zoomable_figure(fig_ftg_layout, viewer_h=680, dpi=160)
-                    except Exception as _e_flay:
-                        st.warning(f"تعذر رسم المسقط الأفقي العام للقواعد: {_e_flay}")
-
-                    if active_ftg_models:
-                        from modules.footings import generate_footing_plan_sketch, generate_footing_section_sketch
-                        st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>✏️ الرسومات التنفيذية التفصيلية لكل نموذج قاعدة (المسقط الأفقي والقطاع الرأسي A-A):</div>", unsafe_allow_html=True)
-                        ftg_tabs = st.tabs([
-                            f"🧱 {m['model_id']} ({float(m['L_cm']):.0f}×{float(m['B_cm']):.0f}×{float(m['t_cm']):.0f} cm)"
-                            for m in active_ftg_models
-                        ])
-                        for tab_f, m in zip(ftg_tabs, active_ftg_models):
-                            with tab_f:
-                                L_cm_m = int(round(float(m.get("L_cm", 200))))
-                                B_cm_m = int(round(float(m.get("B_cm", 200))))
-                                t_cm_m = int(round(float(m.get("t_cm", 50))))
-                                col_b_m = int(round(float(m.get("col_b_cm", col_b_dim))))
-                                col_t_m = int(round(float(m.get("col_t_cm", col_c_dim))))
-                                phi_m = int(m.get("Phi_mm", 16))
-                                nx_m = int(m.get("n_m_L", 5))
-                                ny_m = int(m.get("n_m_B", 5))
-                                tot_x = int(m.get("total_bars_L", math.ceil(nx_m * B_cm_m / 100.0)))
-                                tot_y = int(m.get("total_bars_B", math.ceil(ny_m * L_cm_m / 100.0)))
-                                sp_x = 100.0 / max(1, nx_m)
-                                sp_y = 100.0 / max(1, ny_m)
-
-                                sk_c1, sk_c2 = st.columns(2)
-                                with sk_c1:
-                                    fig_p_m = generate_footing_plan_sketch(
-                                        L_cm=L_cm_m, B_cm=B_cm_m, t_rc_cm=t_cm_m,
-                                        bc_cm=col_b_m, tc_cm=col_t_m, Phi=phi_m,
-                                        n_long=tot_x, n_m_long=nx_m, sp_long=sp_x,
-                                        n_sht=tot_y, n_m_sht=ny_m, sp_sht=sp_y,
-                                        cover_cm=ftg_cov, t_pc_cm=20, pc_offset_cm=20,
-                                    )
-                                    st.pyplot(fig_p_m, use_container_width=True)
-                                    plt.close(fig_p_m)
-                                with sk_c2:
-                                    fig_s_m = generate_footing_section_sketch(
-                                        L_cm=L_cm_m, B_cm=B_cm_m, t_rc_cm=t_cm_m,
-                                        bc_cm=col_b_m, tc_cm=col_t_m, Phi=phi_m,
-                                        n_long=tot_x, n_m_long=nx_m, sp_long=sp_x,
-                                        n_sht=tot_y, n_m_sht=ny_m, sp_sht=sp_y,
-                                        cover_cm=ftg_cov, Df_m=1.5, t_pc_cm=20, pc_offset_cm=20,
-                                    )
-                                    st.pyplot(fig_s_m, use_container_width=True)
-                                    plt.close(fig_s_m)
-
-
-        # ── 🧱 GROUND BEAMS DESIGN SECTION (ECP 203) ───────────────────────────────────
-        with st.expander(
-            f"🧱 Ground Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج الميدات والسملات الأرضية){_ftg_exp_suf}",
-            expanded=False,
-            key=f"{prefix}exp_gb_design_v{_ftg_exp_ver}",
-        ):
-            if _ftg_collapsed:
-                st.warning(_ftg_warn_msg)
-            # 1. Design Parameters & Controls
-            with st.container(border=True):
-                st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:14px;'>⚙️ محددات ومعايير تصميم السملات الأرضية (Ground Beam Design Parameters)</div>", unsafe_allow_html=True)
-                gbc1, gbc2, gbc3, gbc4, gbc5 = st.columns(5)
-                with gbc1:
-                    lvl_opts = [
-                        "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)",
-                        "At Footing Level (في منسوب القواعد المسلحة)",
-                    ]
-                    sel_lvl_idx = 0 if "Above" in gb_level_type else 1
-                    new_gb_level = st.selectbox(
-                        "منسوب الميدة الإنشائي:",
-                        options=lvl_opts,
-                        index=sel_lvl_idx,
-                        key=f"{prefix}w_gb_level_type",
-                        help="في منسوب القواعد تؤخذ عزوم وقوى الهبوط المتفاوت في الحسابات.",
-                    )
-                    if new_gb_level != gb_level_type:
-                        S.cfg_set("gb_level_type", new_gb_level)
-                        S.cfg_set(f"{prefix}gb_level_type", new_gb_level)
-                        st.rerun()
-
-                with gbc2:
-                    new_gb_b = st.number_input(
-                        "عرض الميدة الموحد b (cm):",
-                        min_value=15.0, max_value=60.0,
-                        value=float(gb_b_unified), step=5.0,
-                        key=f"{prefix}w_gb_b_unified",
-                    )
-                    if new_gb_b != gb_b_unified:
-                        S.cfg_set("gb_b_unified", new_gb_b)
-                        S.cfg_set(f"{prefix}gb_b_unified", new_gb_b)
-                        st.rerun()
-
-                with gbc3:
-                    new_gb_tie = st.number_input(
-                        "نسبة قوة الربط المحوري (Tie %):",
-                        min_value=0.05, max_value=0.25,
-                        value=float(gb_axial_tie), step=0.01,
-                        format="%.2f",
-                        help="نسبة حمل العمود الأكبر للربط المحوري لمقاومة الهبوط المتفاوت والزلازل (10% per ECP 203).",
-                        key=f"{prefix}w_gb_tie_ratio",
-                    )
-                    if new_gb_tie != gb_axial_tie:
-                        S.cfg_set("gb_axial_tie_ratio", new_gb_tie)
-                        S.cfg_set(f"{prefix}gb_axial_tie_ratio", new_gb_tie)
-                        st.rerun()
-
-                with gbc4:
-                    new_gb_st_m = st.number_input(
-                        "عدد الكانات الأساسية / م':",
-                        min_value=5, max_value=10,
-                        value=int(gb_stirrups_val), step=1,
-                        key=f"{prefix}w_gb_stirrups_m",
-                    )
-                    if new_gb_st_m != gb_stirrups_val:
-                        S.cfg_set("gb_stirrups_m", new_gb_st_m)
-                        S.cfg_set(f"{prefix}gb_stirrups_m", new_gb_st_m)
-                        st.rerun()
-
-                with gbc5:
-                    dia_st_opts = [8, 10, 12]
-                    idx_s = dia_st_opts.index(gb_phi_st_val) if gb_phi_st_val in dia_st_opts else 0
-                    new_gb_phi_st = st.selectbox(
-                        "قطر الكانات الموحد (mm):",
-                        options=dia_st_opts,
-                        index=idx_s,
-                        key=f"{prefix}w_gb_phi_st",
-                        help="قطر أسياخ الكانات المقاومة لقوى القص (Φ_st بالملليمتر).",
-                    )
-                    if new_gb_phi_st != gb_phi_st_val:
-                        S.cfg_set("gb_phi_st", new_gb_phi_st)
-                        S.cfg_set(f"{prefix}gb_phi_st", new_gb_phi_st)
-                        st.rerun()
-
-                wbc1, wbc2, wbc3, wbc4, wbc5 = st.columns(5)
-                with wbc1:
-                    st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
-                    new_gb_wall = st.checkbox("وجود حوائط مباني فوق السملات", value=bool(gb_has_wall), key=f"{prefix}w_gb_has_wall")
-                    if new_gb_wall != gb_has_wall:
-                        S.cfg_set("gb_has_wall", new_gb_wall)
-                        S.cfg_set(f"{prefix}gb_has_wall", new_gb_wall)
-                        st.rerun()
-
-                with wbc2:
-                    new_gb_hw = st.number_input(
-                        "ارتفاع الحائط H_wall (m):",
-                        min_value=1.0, max_value=6.0,
-                        value=float(gb_h_wall), step=0.25,
-                        disabled=not new_gb_wall,
-                        key=f"{prefix}w_gb_h_wall",
-                    )
-                    if new_gb_hw != gb_h_wall:
-                        S.cfg_set("gb_h_wall", new_gb_hw)
-                        S.cfg_set(f"{prefix}gb_h_wall", new_gb_hw)
-                        st.rerun()
-
-                with wbc3:
-                    new_gb_tw = st.number_input(
-                        "سُمك الحائط t_wall (cm):",
-                        min_value=10.0, max_value=40.0,
-                        value=float(gb_t_wall), step=2.0,
-                        disabled=not new_gb_wall,
-                        key=f"{prefix}w_gb_t_wall",
-                    )
-                    if new_gb_tw != gb_t_wall:
-                        S.cfg_set("gb_t_wall", new_gb_tw)
-                        S.cfg_set(f"{prefix}gb_t_wall", new_gb_tw)
-                        st.rerun()
-
-                # ── تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج (GB1, GB2, GB3) ──
-                st.markdown("<hr style='margin:12px 0 10px 0; border:0; border-top:1.5px dashed #cbd5e1;'/>", unsafe_allow_html=True)
-
-                cur_ov_depths = dict(S.cfg_val("gb_overrides") or st.session_state.get(f"{prefix}gb_overrides", {}))
-                has_any_ov = any(
-                    f"{mk}_t" in cur_ov_depths or f"{mk}_phi_bot" in cur_ov_depths or f"{mk}_phi_top" in cur_ov_depths
-                    for mk in ["GB1", "GB2", "GB3", "B1", "B2", "B3"]
-                )
-                if has_any_ov:
-                    hdr_c1, hdr_c2 = st.columns([4.2, 1.3])
-                    with hdr_c1:
-                        st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; line-height:36px;'>📏 تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج (GB1, GB2, GB3):</div>", unsafe_allow_html=True)
-                    with hdr_c2:
-                        if st.button("🔄 استعادة القيم التصميمية", key=f"{prefix}btn_reset_depths", use_container_width=True):
-                            for mk in ["GB1", "GB2", "GB3", "B1", "B2", "B3"]:
-                                cur_ov_depths.pop(f"{mk}_t", None)
-                                cur_ov_depths.pop(f"{mk}_phi_bot", None)
-                                cur_ov_depths.pop(f"{mk}_phi_top", None)
-                                cur_ov_depths.pop(f"{mk}_nbot", None)
-                                cur_ov_depths.pop(f"{mk}_ntop", None)
-                                cur_ov_depths.pop(f"{mk}_stirrups", None)
-                                st.session_state.pop(f"{prefix}inp_depth_{mk}", None)
-                                st.session_state.pop(f"{prefix}ov_t_{mk}", None)
-                                st.session_state.pop(f"{prefix}w_{mk.lower()}_phi_bot", None)
-                                st.session_state.pop(f"{prefix}w_{mk.lower()}_phi_top", None)
-                            S.cfg_set("gb_overrides", cur_ov_depths)
-                            st.session_state[f"{prefix}gb_overrides"] = cur_ov_depths
+                        if new_gb_level != gb_level_type:
+                            S.cfg_set("gb_level_type", new_gb_level)
+                            S.cfg_set(f"{prefix}gb_level_type", new_gb_level)
                             st.rerun()
-                else:
-                    st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; margin-bottom:16px;'>📏 تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج (GB1, GB2, GB3):</div>", unsafe_allow_html=True)
-                models_d = gb_analysis.get("models_dict", {})
-                m_b1 = models_d.get("GB1", models_d.get("B1", {}))
-                m_b2 = models_d.get("GB2", models_d.get("B2", {}))
-                m_b3 = models_d.get("GB3", models_d.get("B3", {}))
 
-                b1_calc = float(m_b1.get("t_env_calc", 60.0))
-                b2_calc = float(m_b2.get("t_env_calc", m_b1.get("t_env_calc", 50.0)))
-                b3_calc = float(m_b3.get("t_env_calc", m_b2.get("t_env_calc", m_b1.get("t_env_calc", 40.0))))
+                    with gbc2:
+                        new_gb_b = st.number_input(
+                            "عرض الميدة الموحد b (cm):",
+                            min_value=15.0, max_value=60.0,
+                            value=float(gb_b_unified), step=5.0,
+                            key=f"{prefix}w_gb_b_unified",
+                        )
+                        if new_gb_b != gb_b_unified:
+                            S.cfg_set("gb_b_unified", new_gb_b)
+                            S.cfg_set(f"{prefix}gb_b_unified", new_gb_b)
+                            st.rerun()
 
-                b1_curr = float(cur_ov_depths.get("GB1_t", cur_ov_depths.get("B1_t", m_b1.get("t_cm", b1_calc))))
-                b2_curr = float(cur_ov_depths.get("GB2_t", cur_ov_depths.get("B2_t", m_b2.get("t_cm", b2_calc))))
-                b3_curr = float(cur_ov_depths.get("GB3_t", cur_ov_depths.get("B3_t", m_b3.get("t_cm", b3_calc))))
+                    with gbc3:
+                        new_gb_tie = st.number_input(
+                            "نسبة قوة الربط المحوري (Tie %):",
+                            min_value=0.05, max_value=0.25,
+                            value=float(gb_axial_tie), step=0.01,
+                            format="%.2f",
+                            help="نسبة حمل العمود الأكبر للربط المحوري لمقاومة الهبوط المتفاوت والزلازل (10% per ECP 203).",
+                            key=f"{prefix}w_gb_tie_ratio",
+                        )
+                        if new_gb_tie != gb_axial_tie:
+                            S.cfg_set("gb_axial_tie_ratio", new_gb_tie)
+                            S.cfg_set(f"{prefix}gb_axial_tie_ratio", new_gb_tie)
+                            st.rerun()
 
-                dia_opts = [10, 12, 16, 18, 20, 22, 25]
+                    with gbc4:
+                        new_gb_st_m = st.number_input(
+                            "عدد الكانات الأساسية / م':",
+                            min_value=5, max_value=10,
+                            value=int(gb_stirrups_val), step=1,
+                            key=f"{prefix}w_gb_stirrups_m",
+                        )
+                        if new_gb_st_m != gb_stirrups_val:
+                            S.cfg_set("gb_stirrups_m", new_gb_st_m)
+                            S.cfg_set(f"{prefix}gb_stirrups_m", new_gb_st_m)
+                            st.rerun()
 
-                b1_pbot = int(cur_ov_depths.get("GB1_phi_bot", cur_ov_depths.get("B1_phi_bot", m_b1.get("phi_bot", gb_phi_bot_val))))
-                b1_ptop = int(cur_ov_depths.get("GB1_phi_top", cur_ov_depths.get("B1_phi_top", m_b1.get("phi_top", gb_phi_top_val))))
+                    with gbc5:
+                        dia_st_opts = [8, 10, 12]
+                        idx_s = dia_st_opts.index(gb_phi_st_val) if gb_phi_st_val in dia_st_opts else 0
+                        new_gb_phi_st = st.selectbox(
+                            "قطر الكانات الموحد (mm):",
+                            options=dia_st_opts,
+                            index=idx_s,
+                            key=f"{prefix}w_gb_phi_st",
+                            help="قطر أسياخ الكانات المقاومة لقوى القص (Φ_st بالملليمتر).",
+                        )
+                        if new_gb_phi_st != gb_phi_st_val:
+                            S.cfg_set("gb_phi_st", new_gb_phi_st)
+                            S.cfg_set(f"{prefix}gb_phi_st", new_gb_phi_st)
+                            st.rerun()
 
-                b2_pbot = int(cur_ov_depths.get("GB2_phi_bot", cur_ov_depths.get("B2_phi_bot", m_b2.get("phi_bot", gb_phi_bot_val))))
-                b2_ptop = int(cur_ov_depths.get("GB2_phi_top", cur_ov_depths.get("B2_phi_top", m_b2.get("phi_top", gb_phi_top_val))))
+                    wbc1, wbc2, wbc3, wbc4, wbc5 = st.columns(5)
+                    with wbc1:
+                        st.markdown("<div style='margin-top:28px;'></div>", unsafe_allow_html=True)
+                        new_gb_wall = st.checkbox("وجود حوائط مباني فوق السملات", value=bool(gb_has_wall), key=f"{prefix}w_gb_has_wall")
+                        if new_gb_wall != gb_has_wall:
+                            S.cfg_set("gb_has_wall", new_gb_wall)
+                            S.cfg_set(f"{prefix}gb_has_wall", new_gb_wall)
+                            st.rerun()
 
-                b3_pbot = int(cur_ov_depths.get("GB3_phi_bot", cur_ov_depths.get("B3_phi_bot", m_b3.get("phi_bot", gb_phi_bot_val))))
-                b3_ptop = int(cur_ov_depths.get("GB3_phi_top", cur_ov_depths.get("B3_phi_top", m_b3.get("phi_top", gb_phi_top_val))))
+                    with wbc2:
+                        new_gb_hw = st.number_input(
+                            "ارتفاع الحائط H_wall (m):",
+                            min_value=1.0, max_value=6.0,
+                            value=float(gb_h_wall), step=0.25,
+                            disabled=not new_gb_wall,
+                            key=f"{prefix}w_gb_h_wall",
+                        )
+                        if new_gb_hw != gb_h_wall:
+                            S.cfg_set("gb_h_wall", new_gb_hw)
+                            S.cfg_set(f"{prefix}gb_h_wall", new_gb_hw)
+                            st.rerun()
 
-                idx_b1_bot = dia_opts.index(b1_pbot) if b1_pbot in dia_opts else (dia_opts.index(16) if 16 in dia_opts else 2)
-                idx_b1_top = dia_opts.index(b1_ptop) if b1_ptop in dia_opts else (dia_opts.index(12) if 12 in dia_opts else 1)
+                    with wbc3:
+                        new_gb_tw = st.number_input(
+                            "سُمك الحائط t_wall (cm):",
+                            min_value=10.0, max_value=40.0,
+                            value=float(gb_t_wall), step=2.0,
+                            disabled=not new_gb_wall,
+                            key=f"{prefix}w_gb_t_wall",
+                        )
+                        if new_gb_tw != gb_t_wall:
+                            S.cfg_set("gb_t_wall", new_gb_tw)
+                            S.cfg_set(f"{prefix}gb_t_wall", new_gb_tw)
+                            st.rerun()
 
-                idx_b2_bot = dia_opts.index(b2_pbot) if b2_pbot in dia_opts else (dia_opts.index(16) if 16 in dia_opts else 2)
-                idx_b2_top = dia_opts.index(b2_ptop) if b2_ptop in dia_opts else (dia_opts.index(12) if 12 in dia_opts else 1)
+                    # ── تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج (GB1, GB2, GB3) ──
+                    st.markdown("<hr style='margin:12px 0 10px 0; border:0; border-top:1.5px dashed #cbd5e1;'/>", unsafe_allow_html=True)
 
-                idx_b3_bot = dia_opts.index(b3_pbot) if b3_pbot in dia_opts else (dia_opts.index(16) if 16 in dia_opts else 2)
-                idx_b3_top = dia_opts.index(b3_ptop) if b3_ptop in dia_opts else (dia_opts.index(12) if 12 in dia_opts else 1)
-
-                col_gb1, col_gb2, col_gb3 = st.columns(3)
-
-                with col_gb1:
-                    st.markdown(
-                        """
-                        <div style="background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
-                            <span style="font-weight:800; color:#1d4ed8; font-size:13.5px;">■ نموذج GB1 (Heavy)</span>
-                            <span style="background:#1d4ed8; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">القطاع الثقيل</span>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
+                    cur_ov_depths = dict(S.cfg_val("gb_overrides") or st.session_state.get(f"{prefix}gb_overrides", {}))
+                    has_any_ov = any(
+                        f"{mk}_t" in cur_ov_depths or f"{mk}_phi_bot" in cur_ov_depths or f"{mk}_phi_top" in cur_ov_depths
+                        for mk in ["GB1", "GB2", "GB3", "B1", "B2", "B3"]
                     )
-                    new_t_b1 = st.number_input(
-                        f"عمق السملة GB1 [{b1_calc:.0f} cm]:",
-                        min_value=25.0, max_value=150.0,
-                        value=float(b1_curr), step=5.0,
-                        key=f"{prefix}inp_depth_GB1",
-                        help=f"عمق السملة GB1 بالسم (العمق التصميمي المحسوب: {b1_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات والحصر فوراً."
-                    )
-                    new_p_bot_b1 = st.selectbox(
-                        "قطر الحديد السفلي (GB1):",
-                        options=dia_opts, index=idx_b1_bot,
-                        key=f"{prefix}w_gb1_phi_bot",
-                        help="قطر أسياخ حديد التسليح السفلي الرئيسي للنموذج GB1 (Φ بالملليمتر). يؤثر مباشرة على حساب عدد الأسياخ والوزن والحصر."
-                    )
-                    new_p_top_b1 = st.selectbox(
-                        "قطر الحديد العلوي (GB1):",
-                        options=dia_opts, index=idx_b1_top,
-                        key=f"{prefix}w_gb1_phi_top",
-                        help="قطر أسياخ حديد التسليح العلوي وعلاقات الكانات للنموذج GB1 (Φ بالملليمتر). يؤثر مباشرة على حساب عدد الأسياخ والوزن والحصر."
-                    )
+                    if has_any_ov:
+                        hdr_c1, hdr_c2 = st.columns([4.2, 1.3])
+                        with hdr_c1:
+                            st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; line-height:36px;'>📏 تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج (GB1, GB2, GB3):</div>", unsafe_allow_html=True)
+                        with hdr_c2:
+                            if st.button("🔄 استعادة القيم التصميمية", key=f"{prefix}btn_reset_depths", use_container_width=True):
+                                for mk in ["GB1", "GB2", "GB3", "B1", "B2", "B3"]:
+                                    cur_ov_depths.pop(f"{mk}_t", None)
+                                    cur_ov_depths.pop(f"{mk}_phi_bot", None)
+                                    cur_ov_depths.pop(f"{mk}_phi_top", None)
+                                    cur_ov_depths.pop(f"{mk}_nbot", None)
+                                    cur_ov_depths.pop(f"{mk}_ntop", None)
+                                    cur_ov_depths.pop(f"{mk}_stirrups", None)
+                                    st.session_state.pop(f"{prefix}inp_depth_{mk}", None)
+                                    st.session_state.pop(f"{prefix}ov_t_{mk}", None)
+                                    st.session_state.pop(f"{prefix}w_{mk.lower()}_phi_bot", None)
+                                    st.session_state.pop(f"{prefix}w_{mk.lower()}_phi_top", None)
+                                S.cfg_set("gb_overrides", cur_ov_depths)
+                                st.session_state[f"{prefix}gb_overrides"] = cur_ov_depths
+                                st.rerun()
+                    else:
+                        st.markdown("<div style='font-size:15px; font-weight:800; color:#38bdf8; margin-bottom:16px;'>📏 تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج (GB1, GB2, GB3):</div>", unsafe_allow_html=True)
+                    models_d = gb_analysis.get("models_dict", {})
+                    m_b1 = models_d.get("GB1", models_d.get("B1", {}))
+                    m_b2 = models_d.get("GB2", models_d.get("B2", {}))
+                    m_b3 = models_d.get("GB3", models_d.get("B3", {}))
 
-                with col_gb2:
-                    st.markdown(
-                        """
-                        <div style="background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
-                            <span style="font-weight:800; color:#15803d; font-size:13.5px;">■ نموذج GB2 (Medium)</span>
-                            <span style="background:#15803d; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">القطاع المتوسط</span>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-                    new_t_b2 = st.number_input(
-                        f"عمق السملة GB2 [{b2_calc:.0f} cm]:",
-                        min_value=25.0, max_value=150.0,
-                        value=float(b2_curr), step=5.0,
-                        key=f"{prefix}inp_depth_GB2",
-                        help=f"عمق السملة GB2 بالسم (العمق التصميمي المحسوب: {b2_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات والحصر فوراً."
-                    )
-                    new_p_bot_b2 = st.selectbox(
-                        "قطر الحديد السفلي (GB2):",
-                        options=dia_opts, index=idx_b2_bot,
-                        key=f"{prefix}w_gb2_phi_bot",
-                        help="قطر أسياخ حديد التسليح السفلي الرئيسي للنموذج GB2 (Φ بالملليمتر). يؤثر مباشرة على حساب عدد الأسياخ والوزن والحصر."
-                    )
-                    new_p_top_b2 = st.selectbox(
-                        "قطر الحديد العلوي (GB2):",
-                        options=dia_opts, index=idx_b2_top,
-                        key=f"{prefix}w_gb2_phi_top",
-                        help="قطر أسياخ حديد التسليح العلوي وعلاقات الكانات للنموذج GB2 (Φ بالملليمتر). يؤثر مباشرة على حساب عدد الأسياخ والوزن والحصر."
-                    )
+                    b1_calc = float(m_b1.get("t_env_calc", 60.0))
+                    b2_calc = float(m_b2.get("t_env_calc", m_b1.get("t_env_calc", 50.0)))
+                    b3_calc = float(m_b3.get("t_env_calc", m_b2.get("t_env_calc", m_b1.get("t_env_calc", 40.0))))
 
-                with col_gb3:
-                    st.markdown(
-                        """
-                        <div style="background:#faf5ff; border:1.5px solid #e9d5ff; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
-                            <span style="font-weight:800; color:#7e22ce; font-size:13.5px;">■ نموذج GB3 (Light)</span>
-                            <span style="background:#7e22ce; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">القطاع الخفيف</span>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-                    new_t_b3 = st.number_input(
-                        f"عمق السملة GB3 [{b3_calc:.0f} cm]:",
-                        min_value=25.0, max_value=150.0,
-                        value=float(b3_curr), step=5.0,
-                        key=f"{prefix}inp_depth_GB3",
-                        help=f"عمق السملة GB3 بالسم (العمق التصميمي المحسوب: {b3_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات والحصر فوراً."
-                    )
-                    new_p_bot_b3 = st.selectbox(
-                        "قطر الحديد السفلي (GB3):",
-                        options=dia_opts, index=idx_b3_bot,
-                        key=f"{prefix}w_gb3_phi_bot",
-                        help="قطر أسياخ حديد التسليح السفلي الرئيسي للنموذج GB3 (Φ بالملليمتر). يؤثر مباشرة على حساب عدد الأسياخ والوزن والحصر."
-                    )
-                    new_p_top_b3 = st.selectbox(
-                        "قطر الحديد العلوي (GB3):",
-                        options=dia_opts, index=idx_b3_top,
-                        key=f"{prefix}w_gb3_phi_top",
-                        help="قطر أسياخ حديد التسليح العلوي وعلاقات الكانات للنموذج GB3 (Φ بالملليمتر). يؤثر مباشرة على حساب عدد الأسياخ والوزن والحصر."
-                    )
+                    b1_curr = float(cur_ov_depths.get("GB1_t", cur_ov_depths.get("B1_t", m_b1.get("t_cm", b1_calc))))
+                    b2_curr = float(cur_ov_depths.get("GB2_t", cur_ov_depths.get("B2_t", m_b2.get("t_cm", b2_calc))))
+                    b3_curr = float(cur_ov_depths.get("GB3_t", cur_ov_depths.get("B3_t", m_b3.get("t_cm", b3_calc))))
 
-                changed = False
+                    dia_opts = [10, 12, 16, 18, 20, 22, 25]
 
-                # GB1 changes
-                if abs(new_t_b1 - b1_curr) > 0.01:
-                    cur_ov_depths["GB1_t"] = new_t_b1
-                    cur_ov_depths["B1_t"] = new_t_b1
-                    cur_ov_depths.pop("GB1_nbot", None)
-                    cur_ov_depths.pop("GB1_ntop", None)
-                    cur_ov_depths.pop("GB1_stirrups", None)
-                    cur_ov_depths.pop("B1_nbot", None)
-                    cur_ov_depths.pop("B1_ntop", None)
-                    cur_ov_depths.pop("B1_stirrups", None)
-                    changed = True
-                if new_p_bot_b1 != b1_pbot:
-                    cur_ov_depths["GB1_phi_bot"] = new_p_bot_b1
-                    cur_ov_depths["B1_phi_bot"] = new_p_bot_b1
-                    cur_ov_depths.pop("GB1_nbot", None)
-                    cur_ov_depths.pop("B1_nbot", None)
-                    changed = True
-                if new_p_top_b1 != b1_ptop:
-                    cur_ov_depths["GB1_phi_top"] = new_p_top_b1
-                    cur_ov_depths["B1_phi_top"] = new_p_top_b1
-                    cur_ov_depths.pop("GB1_ntop", None)
-                    cur_ov_depths.pop("B1_ntop", None)
-                    changed = True
+                    b1_pbot = int(cur_ov_depths.get("GB1_phi_bot", cur_ov_depths.get("B1_phi_bot", m_b1.get("phi_bot", gb_phi_bot_val))))
+                    b1_ptop = int(cur_ov_depths.get("GB1_phi_top", cur_ov_depths.get("B1_phi_top", m_b1.get("phi_top", gb_phi_top_val))))
 
-                # GB2 changes
-                if abs(new_t_b2 - b2_curr) > 0.01:
-                    cur_ov_depths["GB2_t"] = new_t_b2
-                    cur_ov_depths["B2_t"] = new_t_b2
-                    cur_ov_depths.pop("GB2_nbot", None)
-                    cur_ov_depths.pop("GB2_ntop", None)
-                    cur_ov_depths.pop("GB2_stirrups", None)
-                    cur_ov_depths.pop("B2_nbot", None)
-                    cur_ov_depths.pop("B2_ntop", None)
-                    cur_ov_depths.pop("B2_stirrups", None)
-                    changed = True
-                if new_p_bot_b2 != b2_pbot:
-                    cur_ov_depths["GB2_phi_bot"] = new_p_bot_b2
-                    cur_ov_depths["B2_phi_bot"] = new_p_bot_b2
-                    cur_ov_depths.pop("GB2_nbot", None)
-                    cur_ov_depths.pop("B2_nbot", None)
-                    changed = True
-                if new_p_top_b2 != b2_ptop:
-                    cur_ov_depths["GB2_phi_top"] = new_p_top_b2
-                    cur_ov_depths["B2_phi_top"] = new_p_top_b2
-                    cur_ov_depths.pop("GB2_ntop", None)
-                    cur_ov_depths.pop("B2_ntop", None)
-                    changed = True
+                    b2_pbot = int(cur_ov_depths.get("GB2_phi_bot", cur_ov_depths.get("B2_phi_bot", m_b2.get("phi_bot", gb_phi_bot_val))))
+                    b2_ptop = int(cur_ov_depths.get("GB2_phi_top", cur_ov_depths.get("B2_phi_top", m_b2.get("phi_top", gb_phi_top_val))))
 
-                # GB3 changes
-                if abs(new_t_b3 - b3_curr) > 0.01:
-                    cur_ov_depths["GB3_t"] = new_t_b3
-                    cur_ov_depths["B3_t"] = new_t_b3
-                    cur_ov_depths.pop("GB3_nbot", None)
-                    cur_ov_depths.pop("GB3_ntop", None)
-                    cur_ov_depths.pop("GB3_stirrups", None)
-                    cur_ov_depths.pop("B3_nbot", None)
-                    cur_ov_depths.pop("B3_ntop", None)
-                    cur_ov_depths.pop("B3_stirrups", None)
-                    changed = True
-                if new_p_bot_b3 != b3_pbot:
-                    cur_ov_depths["GB3_phi_bot"] = new_p_bot_b3
-                    cur_ov_depths["B3_phi_bot"] = new_p_bot_b3
-                    cur_ov_depths.pop("GB3_nbot", None)
-                    cur_ov_depths.pop("B3_nbot", None)
-                    changed = True
-                if new_p_top_b3 != b3_ptop:
-                    cur_ov_depths["GB3_phi_top"] = new_p_top_b3
-                    cur_ov_depths["B3_phi_top"] = new_p_top_b3
-                    cur_ov_depths.pop("GB3_ntop", None)
-                    cur_ov_depths.pop("B3_ntop", None)
-                    changed = True
+                    b3_pbot = int(cur_ov_depths.get("GB3_phi_bot", cur_ov_depths.get("B3_phi_bot", m_b3.get("phi_bot", gb_phi_bot_val))))
+                    b3_ptop = int(cur_ov_depths.get("GB3_phi_top", cur_ov_depths.get("B3_phi_top", m_b3.get("phi_top", gb_phi_top_val))))
 
-                if changed:
-                    S.cfg_set("gb_overrides", cur_ov_depths)
-                    st.session_state[f"{prefix}gb_overrides"] = cur_ov_depths
-                    for mk in ["GB1", "GB2", "GB3"]:
-                        if f"{mk}_t" in cur_ov_depths:
-                            st.session_state[f"{prefix}ov_t_{mk}"] = cur_ov_depths[f"{mk}_t"]
-                    st.rerun()
+                    idx_b1_bot = dia_opts.index(b1_pbot) if b1_pbot in dia_opts else (dia_opts.index(16) if 16 in dia_opts else 2)
+                    idx_b1_top = dia_opts.index(b1_ptop) if b1_ptop in dia_opts else (dia_opts.index(12) if 12 in dia_opts else 1)
 
+                    idx_b2_bot = dia_opts.index(b2_pbot) if b2_pbot in dia_opts else (dia_opts.index(16) if 16 in dia_opts else 2)
+                    idx_b2_top = dia_opts.index(b2_ptop) if b2_ptop in dia_opts else (dia_opts.index(12) if 12 in dia_opts else 1)
 
+                    idx_b3_bot = dia_opts.index(b3_pbot) if b3_pbot in dia_opts else (dia_opts.index(16) if 16 in dia_opts else 2)
+                    idx_b3_top = dia_opts.index(b3_ptop) if b3_ptop in dia_opts else (dia_opts.index(12) if 12 in dia_opts else 1)
 
-            st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
+                    col_gb1, col_gb2, col_gb3 = st.columns(3)
 
-            # ── 1. MASTER GROUND BEAMS SCHEDULE (GB1, GB2, GB3) ──
-            st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>🏛️ جدول نماذج السملات التنفيذي (Master Ground Beams Schedule — Governing Envelopes)</div>", unsafe_allow_html=True)
-            df_models_export = pd.DataFrame(gb_analysis["models_schedule"])
-            render_styled_table(df_models_export, font_size_override=14.0)
+                    with col_gb1:
+                        st.markdown(
+                            """
+                            <div style="background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
+                                <span style="font-weight:800; color:#1d4ed8; font-size:13.5px;">■ نموذج GB1 (Heavy)</span>
+                                <span style="background:#1d4ed8; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">القطاع الثقيل</span>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+                        new_t_b1 = st.number_input(
+                            f"عمق السملة GB1 [{b1_calc:.0f} cm]:",
+                            min_value=25.0, max_value=150.0,
+                            value=float(b1_curr), step=5.0,
+                            key=f"{prefix}inp_depth_GB1",
+                            help=f"عمق السملة GB1 بالسم (العمق التصميمي المحسوب: {b1_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات والحصر فوراً."
+                        )
+                        new_p_bot_b1 = st.selectbox(
+                            "قطر الحديد السفلي (GB1):",
+                            options=dia_opts, index=idx_b1_bot,
+                            key=f"{prefix}w_gb1_phi_bot",
+                            help="قطر أسياخ حديد التسليح السفلي الرئيسي للنموذج GB1 (Φ بالملليمتر). يؤثر مباشرة على حساب عدد الأسياخ والوزن والحصر."
+                        )
+                        new_p_top_b1 = st.selectbox(
+                            "قطر الحديد العلوي (GB1):",
+                            options=dia_opts, index=idx_b1_top,
+                            key=f"{prefix}w_gb1_phi_top",
+                            help="قطر أسياخ حديد التسليح العلوي وعلاقات الكانات للنموذج GB1 (Φ بالملليمتر). يؤثر مباشرة على حساب عدد الأسياخ والوزن والحصر."
+                        )
 
-            st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
+                    with col_gb2:
+                        st.markdown(
+                            """
+                            <div style="background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
+                                <span style="font-weight:800; color:#15803d; font-size:13.5px;">■ نموذج GB2 (Medium)</span>
+                                <span style="background:#15803d; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">القطاع المتوسط</span>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+                        new_t_b2 = st.number_input(
+                            f"عمق السملة GB2 [{b2_calc:.0f} cm]:",
+                            min_value=25.0, max_value=150.0,
+                            value=float(b2_curr), step=5.0,
+                            key=f"{prefix}inp_depth_GB2",
+                            help=f"عمق السملة GB2 بالسم (العمق التصميمي المحسوب: {b2_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات والحصر فوراً."
+                        )
+                        new_p_bot_b2 = st.selectbox(
+                            "قطر الحديد السفلي (GB2):",
+                            options=dia_opts, index=idx_b2_bot,
+                            key=f"{prefix}w_gb2_phi_bot",
+                            help="قطر أسياخ حديد التسليح السفلي الرئيسي للنموذج GB2 (Φ بالملليمتر). يؤثر مباشرة على حساب عدد الأسياخ والوزن والحصر."
+                        )
+                        new_p_top_b2 = st.selectbox(
+                            "قطر الحديد العلوي (GB2):",
+                            options=dia_opts, index=idx_b2_top,
+                            key=f"{prefix}w_gb2_phi_top",
+                            help="قطر أسياخ حديد التسليح العلوي وعلاقات الكانات للنموذج GB2 (Φ بالملليمتر). يؤثر مباشرة على حساب عدد الأسياخ والوزن والحصر."
+                        )
 
-            # ── 2. UNIFIED CLASSIFICATION TABLE (STRAP BEAMS & GROUND BEAMS) ──
-            st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>📋 جدول تصنيف عناصر الربط الإنشائية الشامل (Unified Structural Links Classification Table)</div>", unsafe_allow_html=True)
-            df_class_export = pd.DataFrame(gb_analysis["classification_rows"])
-            render_styled_table(df_class_export, font_size_override=13.5)
+                    with col_gb3:
+                        st.markdown(
+                            """
+                            <div style="background:#faf5ff; border:1.5px solid #e9d5ff; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
+                                <span style="font-weight:800; color:#7e22ce; font-size:13.5px;">■ نموذج GB3 (Light)</span>
+                                <span style="background:#7e22ce; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">القطاع الخفيف</span>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+                        new_t_b3 = st.number_input(
+                            f"عمق السملة GB3 [{b3_calc:.0f} cm]:",
+                            min_value=25.0, max_value=150.0,
+                            value=float(b3_curr), step=5.0,
+                            key=f"{prefix}inp_depth_GB3",
+                            help=f"عمق السملة GB3 بالسم (العمق التصميمي المحسوب: {b3_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات والحصر فوراً."
+                        )
+                        new_p_bot_b3 = st.selectbox(
+                            "قطر الحديد السفلي (GB3):",
+                            options=dia_opts, index=idx_b3_bot,
+                            key=f"{prefix}w_gb3_phi_bot",
+                            help="قطر أسياخ حديد التسليح السفلي الرئيسي للنموذج GB3 (Φ بالملليمتر). يؤثر مباشرة على حساب عدد الأسياخ والوزن والحصر."
+                        )
+                        new_p_top_b3 = st.selectbox(
+                            "قطر الحديد العلوي (GB3):",
+                            options=dia_opts, index=idx_b3_top,
+                            key=f"{prefix}w_gb3_phi_top",
+                            help="قطر أسياخ حديد التسليح العلوي وعلاقات الكانات للنموذج GB3 (Φ بالملليمتر). يؤثر مباشرة على حساب عدد الأسياخ والوزن والحصر."
+                        )
 
+                    changed = False
 
+                    # GB1 changes
+                    if abs(new_t_b1 - b1_curr) > 0.01:
+                        cur_ov_depths["GB1_t"] = new_t_b1
+                        cur_ov_depths["B1_t"] = new_t_b1
+                        cur_ov_depths.pop("GB1_nbot", None)
+                        cur_ov_depths.pop("GB1_ntop", None)
+                        cur_ov_depths.pop("GB1_stirrups", None)
+                        cur_ov_depths.pop("B1_nbot", None)
+                        cur_ov_depths.pop("B1_ntop", None)
+                        cur_ov_depths.pop("B1_stirrups", None)
+                        changed = True
+                    if new_p_bot_b1 != b1_pbot:
+                        cur_ov_depths["GB1_phi_bot"] = new_p_bot_b1
+                        cur_ov_depths["B1_phi_bot"] = new_p_bot_b1
+                        cur_ov_depths.pop("GB1_nbot", None)
+                        cur_ov_depths.pop("B1_nbot", None)
+                        changed = True
+                    if new_p_top_b1 != b1_ptop:
+                        cur_ov_depths["GB1_phi_top"] = new_p_top_b1
+                        cur_ov_depths["B1_phi_top"] = new_p_top_b1
+                        cur_ov_depths.pop("GB1_ntop", None)
+                        cur_ov_depths.pop("B1_ntop", None)
+                        changed = True
 
+                    # GB2 changes
+                    if abs(new_t_b2 - b2_curr) > 0.01:
+                        cur_ov_depths["GB2_t"] = new_t_b2
+                        cur_ov_depths["B2_t"] = new_t_b2
+                        cur_ov_depths.pop("GB2_nbot", None)
+                        cur_ov_depths.pop("GB2_ntop", None)
+                        cur_ov_depths.pop("GB2_stirrups", None)
+                        cur_ov_depths.pop("B2_nbot", None)
+                        cur_ov_depths.pop("B2_ntop", None)
+                        cur_ov_depths.pop("B2_stirrups", None)
+                        changed = True
+                    if new_p_bot_b2 != b2_pbot:
+                        cur_ov_depths["GB2_phi_bot"] = new_p_bot_b2
+                        cur_ov_depths["B2_phi_bot"] = new_p_bot_b2
+                        cur_ov_depths.pop("GB2_nbot", None)
+                        cur_ov_depths.pop("B2_nbot", None)
+                        changed = True
+                    if new_p_top_b2 != b2_ptop:
+                        cur_ov_depths["GB2_phi_top"] = new_p_top_b2
+                        cur_ov_depths["B2_phi_top"] = new_p_top_b2
+                        cur_ov_depths.pop("GB2_ntop", None)
+                        cur_ov_depths.pop("B2_ntop", None)
+                        changed = True
 
+                    # GB3 changes
+                    if abs(new_t_b3 - b3_curr) > 0.01:
+                        cur_ov_depths["GB3_t"] = new_t_b3
+                        cur_ov_depths["B3_t"] = new_t_b3
+                        cur_ov_depths.pop("GB3_nbot", None)
+                        cur_ov_depths.pop("GB3_ntop", None)
+                        cur_ov_depths.pop("GB3_stirrups", None)
+                        cur_ov_depths.pop("B3_nbot", None)
+                        cur_ov_depths.pop("B3_ntop", None)
+                        cur_ov_depths.pop("B3_stirrups", None)
+                        changed = True
+                    if new_p_bot_b3 != b3_pbot:
+                        cur_ov_depths["GB3_phi_bot"] = new_p_bot_b3
+                        cur_ov_depths["B3_phi_bot"] = new_p_bot_b3
+                        cur_ov_depths.pop("GB3_nbot", None)
+                        cur_ov_depths.pop("B3_nbot", None)
+                        changed = True
+                    if new_p_top_b3 != b3_ptop:
+                        cur_ov_depths["GB3_phi_top"] = new_p_top_b3
+                        cur_ov_depths["B3_phi_top"] = new_p_top_b3
+                        cur_ov_depths.pop("GB3_ntop", None)
+                        cur_ov_depths.pop("B3_ntop", None)
+                        changed = True
 
-        # ── 🧱 ROOF BEAMS DESIGN SECTION (ECP 203) ─────────────────────────────────────
-        with st.expander(
-            f"🧱 Roof Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج كمرات السقف والكوابيل){_ftg_exp_suf}",
-            expanded=False,
-            key=f"{prefix}exp_rb_design_v{_ftg_exp_ver}",
-        ):
-            if _ftg_collapsed:
-                st.warning(_ftg_warn_msg)
-            # 1. Design Parameters & Controls
-            with st.container(border=True):
-                st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:14px;'>⚙️ محددات ومعايير تصميم كمرات السقف (Roof Beam Design Parameters)</div>", unsafe_allow_html=True)
-                rbc1, rbc2, rbc3, rbc4, rbc5 = st.columns(5)
-                with rbc1:
-                    new_rb_b = st.number_input(
-                        "عرض الكمرة الموحد b (cm):",
-                        min_value=15.0, max_value=60.0,
-                        value=float(rb_b_unified), step=5.0,
-                        key=f"{prefix}w_rb_b_unified",
-                    )
-                    if new_rb_b != rb_b_unified:
-                        S.cfg_set("rb_b_unified", new_rb_b)
-                        S.cfg_set(f"{prefix}rb_b_unified", new_rb_b)
+                    if changed:
+                        S.cfg_set("gb_overrides", cur_ov_depths)
+                        st.session_state[f"{prefix}gb_overrides"] = cur_ov_depths
+                        for mk in ["GB1", "GB2", "GB3"]:
+                            if f"{mk}_t" in cur_ov_depths:
+                                st.session_state[f"{prefix}ov_t_{mk}"] = cur_ov_depths[f"{mk}_t"]
                         st.rerun()
 
-                with rbc2:
-                    new_rb_st_m = st.number_input(
-                        "عدد الكانات الأساسية / م':",
-                        min_value=5, max_value=10,
-                        value=int(rb_stirrups_val), step=1,
-                        key=f"{prefix}w_rb_stirrups_m",
+
+
+                st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
+
+                # ── 1. MASTER GROUND BEAMS SCHEDULE (GB1, GB2, GB3) ──
+                st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>🏛️ جدول نماذج السملات التنفيذي (Master Ground Beams Schedule — Governing Envelopes)</div>", unsafe_allow_html=True)
+                df_models_export = pd.DataFrame(gb_analysis["models_schedule"])
+                render_styled_table(df_models_export, font_size_override=14.0)
+
+                st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
+
+                # ── 2. UNIFIED CLASSIFICATION TABLE (STRAP BEAMS & GROUND BEAMS) ──
+                st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>📋 جدول تصنيف عناصر الربط الإنشائية الشامل (Unified Structural Links Classification Table)</div>", unsafe_allow_html=True)
+                df_class_export = pd.DataFrame(gb_analysis["classification_rows"])
+                render_styled_table(df_class_export, font_size_override=13.5)
+
+
+
+
+
+            # ── 🧱 ROOF BEAMS DESIGN SECTION (ECP 203) ─────────────────────────────────────
+            with st.expander(
+                f"🧱 Roof Beams Design — {num_floors} Floors (تصميم وتفريد ونماذج كمرات السقف والكوابيل){_ftg_exp_suf}",
+                expanded=False,
+                key=f"{prefix}exp_rb_design_v{_ftg_exp_ver}",
+            ):
+                if _ftg_collapsed:
+                    st.warning(_ftg_warn_msg)
+                # 1. Design Parameters & Controls
+                with st.container(border=True):
+                    st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin-bottom:14px;'>⚙️ محددات ومعايير تصميم كمرات السقف (Roof Beam Design Parameters)</div>", unsafe_allow_html=True)
+                    rbc1, rbc2, rbc3, rbc4, rbc5 = st.columns(5)
+                    with rbc1:
+                        new_rb_b = st.number_input(
+                            "عرض الكمرة الموحد b (cm):",
+                            min_value=15.0, max_value=60.0,
+                            value=float(rb_b_unified), step=5.0,
+                            key=f"{prefix}w_rb_b_unified",
+                        )
+                        if new_rb_b != rb_b_unified:
+                            S.cfg_set("rb_b_unified", new_rb_b)
+                            S.cfg_set(f"{prefix}rb_b_unified", new_rb_b)
+                            st.rerun()
+
+                    with rbc2:
+                        new_rb_st_m = st.number_input(
+                            "عدد الكانات الأساسية / م':",
+                            min_value=5, max_value=10,
+                            value=int(rb_stirrups_val), step=1,
+                            key=f"{prefix}w_rb_stirrups_m",
+                        )
+                        if new_rb_st_m != rb_stirrups_val:
+                            S.cfg_set("rb_stirrups_m", new_rb_st_m)
+                            S.cfg_set(f"{prefix}rb_stirrups_m", new_rb_st_m)
+                            st.rerun()
+
+                    with rbc3:
+                        rb_dia_opts = [12, 16, 18, 22, 25]
+                        rb_idx_b = rb_dia_opts.index(rb_phi_bot_val) if rb_phi_bot_val in rb_dia_opts else 1
+                        new_rb_p_bot = st.selectbox("قطر التسليح السفلي Φ_bot (mm):", options=rb_dia_opts, index=rb_idx_b, key=f"{prefix}w_rb_phi_bot")
+                        if new_rb_p_bot != rb_phi_bot_val:
+                            S.cfg_set("rb_phi_bot", new_rb_p_bot)
+                            S.cfg_set(f"{prefix}rb_phi_bot", new_rb_p_bot)
+                            st.rerun()
+
+                    with rbc4:
+                        rb_dia_opts = [12, 16, 18, 22, 25]
+                        rb_idx_t = rb_dia_opts.index(rb_phi_top_val) if rb_phi_top_val in rb_dia_opts else 0
+                        new_rb_p_top = st.selectbox("قطر التسليح العلوي Φ_top (mm):", options=rb_dia_opts, index=rb_idx_t, key=f"{prefix}w_rb_phi_top")
+                        if new_rb_p_top != rb_phi_top_val:
+                            S.cfg_set("rb_phi_top", new_rb_p_top)
+                            S.cfg_set(f"{prefix}rb_phi_top", new_rb_p_top)
+                            st.rerun()
+
+                    with rbc5:
+                        rb_dia_st_opts = [8, 10]
+                        rb_idx_s = rb_dia_st_opts.index(rb_phi_st_val) if rb_phi_st_val in rb_dia_st_opts else 0
+                        new_rb_p_st = st.selectbox("قطر الكانات Φ_st (mm):", options=rb_dia_st_opts, index=rb_idx_s, key=f"{prefix}w_rb_phi_st")
+                        if new_rb_p_st != rb_phi_st_val:
+                            S.cfg_set("rb_phi_st", new_rb_p_st)
+                            S.cfg_set(f"{prefix}rb_phi_st", new_rb_p_st)
+                            st.rerun()
+
+                    # ── تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج (B1, B2, B3 / CB1) ──
+                    st.markdown("<hr style='margin:12px 0 10px 0; border:0; border-top:1.5px dashed #cbd5e1;'/>", unsafe_allow_html=True)
+
+                    cur_ov_depths_rb = dict(S.cfg_val("rb_overrides") or st.session_state.get(f"{prefix}rb_overrides", {}))
+                    rb_models_d = rb_analysis.get("models_dict", {})
+                    has_cb1 = "CB1" in rb_models_d
+
+                    has_any_rb_ov = any(
+                        f"{mk}_t" in cur_ov_depths_rb or f"{mk}_phi_bot" in cur_ov_depths_rb or f"{mk}_phi_top" in cur_ov_depths_rb
+                        for mk in ["B1", "B2", "B3", "CB1"]
                     )
-                    if new_rb_st_m != rb_stirrups_val:
-                        S.cfg_set("rb_stirrups_m", new_rb_st_m)
-                        S.cfg_set(f"{prefix}rb_stirrups_m", new_rb_st_m)
-                        st.rerun()
-
-                with rbc3:
-                    rb_dia_opts = [12, 16, 18, 22, 25]
-                    rb_idx_b = rb_dia_opts.index(rb_phi_bot_val) if rb_phi_bot_val in rb_dia_opts else 1
-                    new_rb_p_bot = st.selectbox("قطر التسليح السفلي Φ_bot (mm):", options=rb_dia_opts, index=rb_idx_b, key=f"{prefix}w_rb_phi_bot")
-                    if new_rb_p_bot != rb_phi_bot_val:
-                        S.cfg_set("rb_phi_bot", new_rb_p_bot)
-                        S.cfg_set(f"{prefix}rb_phi_bot", new_rb_p_bot)
-                        st.rerun()
-
-                with rbc4:
-                    rb_dia_opts = [12, 16, 18, 22, 25]
-                    rb_idx_t = rb_dia_opts.index(rb_phi_top_val) if rb_phi_top_val in rb_dia_opts else 0
-                    new_rb_p_top = st.selectbox("قطر التسليح العلوي Φ_top (mm):", options=rb_dia_opts, index=rb_idx_t, key=f"{prefix}w_rb_phi_top")
-                    if new_rb_p_top != rb_phi_top_val:
-                        S.cfg_set("rb_phi_top", new_rb_p_top)
-                        S.cfg_set(f"{prefix}rb_phi_top", new_rb_p_top)
-                        st.rerun()
-
-                with rbc5:
-                    rb_dia_st_opts = [8, 10]
-                    rb_idx_s = rb_dia_st_opts.index(rb_phi_st_val) if rb_phi_st_val in rb_dia_st_opts else 0
-                    new_rb_p_st = st.selectbox("قطر الكانات Φ_st (mm):", options=rb_dia_st_opts, index=rb_idx_s, key=f"{prefix}w_rb_phi_st")
-                    if new_rb_p_st != rb_phi_st_val:
-                        S.cfg_set("rb_phi_st", new_rb_p_st)
-                        S.cfg_set(f"{prefix}rb_phi_st", new_rb_p_st)
-                        st.rerun()
-
-                # ── تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج (B1, B2, B3 / CB1) ──
-                st.markdown("<hr style='margin:12px 0 10px 0; border:0; border-top:1.5px dashed #cbd5e1;'/>", unsafe_allow_html=True)
-
-                cur_ov_depths_rb = dict(S.cfg_val("rb_overrides") or st.session_state.get(f"{prefix}rb_overrides", {}))
-                rb_models_d = rb_analysis.get("models_dict", {})
-                has_cb1 = "CB1" in rb_models_d
-
-                has_any_rb_ov = any(
-                    f"{mk}_t" in cur_ov_depths_rb or f"{mk}_phi_bot" in cur_ov_depths_rb or f"{mk}_phi_top" in cur_ov_depths_rb
-                    for mk in ["B1", "B2", "B3", "CB1"]
-                )
-                if has_any_rb_ov:
-                    hdr_rc1, hdr_rc2 = st.columns([4.2, 1.3])
-                    with hdr_rc1:
+                    if has_any_rb_ov:
+                        hdr_rc1, hdr_rc2 = st.columns([4.2, 1.3])
+                        with hdr_rc1:
+                            st.markdown(
+                                f"""
+                                <div style="font-size:15px; font-weight:800; color:#38bdf8; line-height:36px;">
+                                    📏 تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج ({'B1, B2, B3, CB1' if has_cb1 else 'B1, B2, B3'}):
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+                        with hdr_rc2:
+                            if st.button("🔄 استعادة القيم التصميمية", key=f"{prefix}btn_reset_rb_depths", use_container_width=True):
+                                for mk in ["B1", "B2", "B3", "CB1"]:
+                                    cur_ov_depths_rb.pop(f"{mk}_t", None)
+                                    cur_ov_depths_rb.pop(f"{mk}_phi_bot", None)
+                                    cur_ov_depths_rb.pop(f"{mk}_phi_top", None)
+                                    cur_ov_depths_rb.pop(f"{mk}_nbot", None)
+                                    cur_ov_depths_rb.pop(f"{mk}_ntop", None)
+                                    cur_ov_depths_rb.pop(f"{mk}_stirrups", None)
+                                    st.session_state.pop(f"{prefix}inp_rb_depth_{mk}", None)
+                                    st.session_state.pop(f"{prefix}ov_rb_t_{mk}", None)
+                                    st.session_state.pop(f"{prefix}w_rb_{mk.lower()}_phi_bot", None)
+                                    st.session_state.pop(f"{prefix}w_rb_{mk.lower()}_phi_top", None)
+                                S.cfg_set("rb_overrides", cur_ov_depths_rb)
+                                st.session_state[f"{prefix}rb_overrides"] = cur_ov_depths_rb
+                                st.rerun()
+                    else:
                         st.markdown(
                             f"""
-                            <div style="font-size:15px; font-weight:800; color:#38bdf8; line-height:36px;">
+                            <div style="font-size:15px; font-weight:800; color:#38bdf8; margin-bottom:16px;">
                                 📏 تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج ({'B1, B2, B3, CB1' if has_cb1 else 'B1, B2, B3'}):
                             </div>
                             """,
                             unsafe_allow_html=True
                         )
-                    with hdr_rc2:
-                        if st.button("🔄 استعادة القيم التصميمية", key=f"{prefix}btn_reset_rb_depths", use_container_width=True):
-                            for mk in ["B1", "B2", "B3", "CB1"]:
-                                cur_ov_depths_rb.pop(f"{mk}_t", None)
-                                cur_ov_depths_rb.pop(f"{mk}_phi_bot", None)
-                                cur_ov_depths_rb.pop(f"{mk}_phi_top", None)
-                                cur_ov_depths_rb.pop(f"{mk}_nbot", None)
-                                cur_ov_depths_rb.pop(f"{mk}_ntop", None)
-                                cur_ov_depths_rb.pop(f"{mk}_stirrups", None)
-                                st.session_state.pop(f"{prefix}inp_rb_depth_{mk}", None)
-                                st.session_state.pop(f"{prefix}ov_rb_t_{mk}", None)
-                                st.session_state.pop(f"{prefix}w_rb_{mk.lower()}_phi_bot", None)
-                                st.session_state.pop(f"{prefix}w_rb_{mk.lower()}_phi_top", None)
-                            S.cfg_set("rb_overrides", cur_ov_depths_rb)
-                            st.session_state[f"{prefix}rb_overrides"] = cur_ov_depths_rb
-                            st.rerun()
-                else:
-                    st.markdown(
-                        f"""
-                        <div style="font-size:15px; font-weight:800; color:#38bdf8; margin-bottom:16px;">
-                            📏 تعديل الأعماق التنفيذية وأقطار التسليح المستقلة لكل نموذج ({'B1, B2, B3, CB1' if has_cb1 else 'B1, B2, B3'}):
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-                rb_m_b1 = rb_models_d.get("B1", {})
-                rb_m_b2 = rb_models_d.get("B2", {})
-                rb_m_b3 = rb_models_d.get("B3", {})
-                rb_m_cb1 = rb_models_d.get("CB1", {})
+                    rb_m_b1 = rb_models_d.get("B1", {})
+                    rb_m_b2 = rb_models_d.get("B2", {})
+                    rb_m_b3 = rb_models_d.get("B3", {})
+                    rb_m_cb1 = rb_models_d.get("CB1", {})
 
-                rb_b1_calc = float(rb_m_b1.get("t_env_calc", 60.0))
-                rb_b2_calc = float(rb_m_b2.get("t_env_calc", rb_m_b1.get("t_env_calc", 50.0)))
-                rb_b3_calc = float(rb_m_b3.get("t_env_calc", rb_m_b2.get("t_env_calc", rb_m_b1.get("t_env_calc", 40.0))))
+                    rb_b1_calc = float(rb_m_b1.get("t_env_calc", 60.0))
+                    rb_b2_calc = float(rb_m_b2.get("t_env_calc", rb_m_b1.get("t_env_calc", 50.0)))
+                    rb_b3_calc = float(rb_m_b3.get("t_env_calc", rb_m_b2.get("t_env_calc", rb_m_b1.get("t_env_calc", 40.0))))
 
-                rb_b1_curr = float(cur_ov_depths_rb.get("B1_t", rb_m_b1.get("t_cm", rb_b1_calc)))
-                rb_b2_curr = float(cur_ov_depths_rb.get("B2_t", rb_m_b2.get("t_cm", rb_b2_calc)))
-                rb_b3_curr = float(cur_ov_depths_rb.get("B3_t", rb_m_b3.get("t_cm", rb_b3_calc)))
+                    rb_b1_curr = float(cur_ov_depths_rb.get("B1_t", rb_m_b1.get("t_cm", rb_b1_calc)))
+                    rb_b2_curr = float(cur_ov_depths_rb.get("B2_t", rb_m_b2.get("t_cm", rb_b2_calc)))
+                    rb_b3_curr = float(cur_ov_depths_rb.get("B3_t", rb_m_b3.get("t_cm", rb_b3_calc)))
 
-                dia_opts_rb = [10, 12, 16, 18, 20, 22, 25]
-                b1_pbot = int(cur_ov_depths_rb.get("B1_phi_bot", rb_m_b1.get("phi_bot", rb_phi_bot_val)))
-                b1_ptop = int(cur_ov_depths_rb.get("B1_phi_top", rb_m_b1.get("phi_top", rb_phi_top_val)))
-                b2_pbot = int(cur_ov_depths_rb.get("B2_phi_bot", rb_m_b2.get("phi_bot", rb_phi_bot_val)))
-                b2_ptop = int(cur_ov_depths_rb.get("B2_phi_top", rb_m_b2.get("phi_top", rb_phi_top_val)))
-                b3_pbot = int(cur_ov_depths_rb.get("B3_phi_bot", rb_m_b3.get("phi_bot", rb_phi_bot_val)))
-                b3_ptop = int(cur_ov_depths_rb.get("B3_phi_top", rb_m_b3.get("phi_top", rb_phi_top_val)))
+                    dia_opts_rb = [10, 12, 16, 18, 20, 22, 25]
+                    b1_pbot = int(cur_ov_depths_rb.get("B1_phi_bot", rb_m_b1.get("phi_bot", rb_phi_bot_val)))
+                    b1_ptop = int(cur_ov_depths_rb.get("B1_phi_top", rb_m_b1.get("phi_top", rb_phi_top_val)))
+                    b2_pbot = int(cur_ov_depths_rb.get("B2_phi_bot", rb_m_b2.get("phi_bot", rb_phi_bot_val)))
+                    b2_ptop = int(cur_ov_depths_rb.get("B2_phi_top", rb_m_b2.get("phi_top", rb_phi_top_val)))
+                    b3_pbot = int(cur_ov_depths_rb.get("B3_phi_bot", rb_m_b3.get("phi_bot", rb_phi_bot_val)))
+                    b3_ptop = int(cur_ov_depths_rb.get("B3_phi_top", rb_m_b3.get("phi_top", rb_phi_top_val)))
 
-                idx_b1_bot = dia_opts_rb.index(b1_pbot) if b1_pbot in dia_opts_rb else (dia_opts_rb.index(16) if 16 in dia_opts_rb else 2)
-                idx_b1_top = dia_opts_rb.index(b1_ptop) if b1_ptop in dia_opts_rb else (dia_opts_rb.index(12) if 12 in dia_opts_rb else 1)
-                idx_b2_bot = dia_opts_rb.index(b2_pbot) if b2_pbot in dia_opts_rb else (dia_opts_rb.index(16) if 16 in dia_opts_rb else 2)
-                idx_b2_top = dia_opts_rb.index(b2_ptop) if b2_ptop in dia_opts_rb else (dia_opts_rb.index(12) if 12 in dia_opts_rb else 1)
-                idx_b3_bot = dia_opts_rb.index(b3_pbot) if b3_pbot in dia_opts_rb else (dia_opts_rb.index(16) if 16 in dia_opts_rb else 2)
-                idx_b3_top = dia_opts_rb.index(b3_ptop) if b3_ptop in dia_opts_rb else (dia_opts_rb.index(12) if 12 in dia_opts_rb else 1)
+                    idx_b1_bot = dia_opts_rb.index(b1_pbot) if b1_pbot in dia_opts_rb else (dia_opts_rb.index(16) if 16 in dia_opts_rb else 2)
+                    idx_b1_top = dia_opts_rb.index(b1_ptop) if b1_ptop in dia_opts_rb else (dia_opts_rb.index(12) if 12 in dia_opts_rb else 1)
+                    idx_b2_bot = dia_opts_rb.index(b2_pbot) if b2_pbot in dia_opts_rb else (dia_opts_rb.index(16) if 16 in dia_opts_rb else 2)
+                    idx_b2_top = dia_opts_rb.index(b2_ptop) if b2_ptop in dia_opts_rb else (dia_opts_rb.index(12) if 12 in dia_opts_rb else 1)
+                    idx_b3_bot = dia_opts_rb.index(b3_pbot) if b3_pbot in dia_opts_rb else (dia_opts_rb.index(16) if 16 in dia_opts_rb else 2)
+                    idx_b3_top = dia_opts_rb.index(b3_ptop) if b3_ptop in dia_opts_rb else (dia_opts_rb.index(12) if 12 in dia_opts_rb else 1)
 
-                has_cb1 = "CB1" in rb_models_d
-                if has_cb1:
-                    rb_cb1_calc = float(rb_m_cb1.get("t_env_calc", 40.0))
-                    rb_cb1_curr = float(cur_ov_depths_rb.get("CB1_t", rb_m_cb1.get("t_cm", rb_cb1_calc)))
-                    cb1_pbot = int(cur_ov_depths_rb.get("CB1_phi_bot", rb_m_cb1.get("phi_bot", rb_phi_bot_val)))
-                    cb1_ptop = int(cur_ov_depths_rb.get("CB1_phi_top", rb_m_cb1.get("phi_top", rb_phi_top_val)))
-                    idx_cb1_bot = dia_opts_rb.index(cb1_pbot) if cb1_pbot in dia_opts_rb else (dia_opts_rb.index(16) if 16 in dia_opts_rb else 2)
-                    idx_cb1_top = dia_opts_rb.index(cb1_ptop) if cb1_ptop in dia_opts_rb else (dia_opts_rb.index(16) if 16 in dia_opts_rb else 2)
-                    c_dep1, c_dep2, c_dep3, c_dep4 = st.columns(4)
-                else:
-                    c_dep1, c_dep2, c_dep3 = st.columns(3)
+                    has_cb1 = "CB1" in rb_models_d
+                    if has_cb1:
+                        rb_cb1_calc = float(rb_m_cb1.get("t_env_calc", 40.0))
+                        rb_cb1_curr = float(cur_ov_depths_rb.get("CB1_t", rb_m_cb1.get("t_cm", rb_cb1_calc)))
+                        cb1_pbot = int(cur_ov_depths_rb.get("CB1_phi_bot", rb_m_cb1.get("phi_bot", rb_phi_bot_val)))
+                        cb1_ptop = int(cur_ov_depths_rb.get("CB1_phi_top", rb_m_cb1.get("phi_top", rb_phi_top_val)))
+                        idx_cb1_bot = dia_opts_rb.index(cb1_pbot) if cb1_pbot in dia_opts_rb else (dia_opts_rb.index(16) if 16 in dia_opts_rb else 2)
+                        idx_cb1_top = dia_opts_rb.index(cb1_ptop) if cb1_ptop in dia_opts_rb else (dia_opts_rb.index(16) if 16 in dia_opts_rb else 2)
+                        c_dep1, c_dep2, c_dep3, c_dep4 = st.columns(4)
+                    else:
+                        c_dep1, c_dep2, c_dep3 = st.columns(3)
 
-                with c_dep1:
-                    st.markdown(
-                        """
-                        <div style="background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
-                            <span style="font-weight:800; color:#1d4ed8; font-size:13.5px;">■ نموذج B1 (Heavy)</span>
-                            <span style="background:#1d4ed8; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">القطاع الثقيل</span>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-                    new_t_rb1 = st.number_input(
-                        f"عمق الكمرة B1 [{rb_b1_calc:.0f} cm]:",
-                        min_value=20.0, max_value=150.0,
-                        value=float(rb_b1_curr), step=5.0,
-                        key=f"{prefix}inp_rb_depth_B1",
-                        help=f"عمق الكمرة B1 بالسم (العمق التصميمي المحسوب: {rb_b1_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات فوراً."
-                    )
-                    new_p_bot_b1 = st.selectbox(
-                        "قطر الحديد السفلي (B1):",
-                        options=dia_opts_rb, index=idx_b1_bot,
-                        key=f"{prefix}w_rb_b1_phi_bot",
-                        help="قطر أسياخ حديد التسليح السفلي الرئيسي للنموذج B1 (Φ بالملليمتر)."
-                    )
-                    new_p_top_b1 = st.selectbox(
-                        "قطر الحديد العلوي (B1):",
-                        options=dia_opts_rb, index=idx_b1_top,
-                        key=f"{prefix}w_rb_b1_phi_top",
-                        help="قطر أسياخ حديد التسليح العلوي وعلاقات الكانات للنموذج B1 (Φ بالملليمتر)."
-                    )
-
-                with c_dep2:
-                    st.markdown(
-                        """
-                        <div style="background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
-                            <span style="font-weight:800; color:#15803d; font-size:13.5px;">■ نموذج B2 (Medium)</span>
-                            <span style="background:#15803d; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">القطاع المتوسط</span>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-                    new_t_rb2 = st.number_input(
-                        f"عمق الكمرة B2 [{rb_b2_calc:.0f} cm]:",
-                        min_value=20.0, max_value=150.0,
-                        value=float(rb_b2_curr), step=5.0,
-                        key=f"{prefix}inp_rb_depth_B2",
-                        help=f"عمق الكمرة B2 بالسم (العمق التصميمي المحسوب: {rb_b2_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات فوراً."
-                    )
-                    new_p_bot_b2 = st.selectbox(
-                        "قطر الحديد السفلي (B2):",
-                        options=dia_opts_rb, index=idx_b2_bot,
-                        key=f"{prefix}w_rb_b2_phi_bot",
-                        help="قطر أسياخ حديد التسليح السفلي الرئيسي للنموذج B2 (Φ بالملليمتر)."
-                    )
-                    new_p_top_b2 = st.selectbox(
-                        "قطر الحديد العلوي (B2):",
-                        options=dia_opts_rb, index=idx_b2_top,
-                        key=f"{prefix}w_rb_b2_phi_top",
-                        help="قطر أسياخ حديد التسليح العلوي وعلاقات الكانات للنموذج B2 (Φ بالملليمتر)."
-                    )
-
-                with c_dep3:
-                    st.markdown(
-                        """
-                        <div style="background:#faf5ff; border:1.5px solid #e9d5ff; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
-                            <span style="font-weight:800; color:#7e22ce; font-size:13.5px;">■ نموذج B3 (Light)</span>
-                            <span style="background:#7e22ce; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">القطاع الخفيف</span>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-                    new_t_rb3 = st.number_input(
-                        f"عمق الكمرة B3 [{rb_b3_calc:.0f} cm]:",
-                        min_value=20.0, max_value=150.0,
-                        value=float(rb_b3_curr), step=5.0,
-                        key=f"{prefix}inp_rb_depth_B3",
-                        help=f"عمق الكمرة B3 بالسم (العمق التصميمي المحسوب: {rb_b3_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات فوراً."
-                    )
-                    new_p_bot_b3 = st.selectbox(
-                        "قطر الحديد السفلي (B3):",
-                        options=dia_opts_rb, index=idx_b3_bot,
-                        key=f"{prefix}w_rb_b3_phi_bot",
-                        help="قطر أسياخ حديد التسليح السفلي الرئيسي للنموذج B3 (Φ بالملليمتر)."
-                    )
-                    new_p_top_b3 = st.selectbox(
-                        "قطر الحديد العلوي (B3):",
-                        options=dia_opts_rb, index=idx_b3_top,
-                        key=f"{prefix}w_rb_b3_phi_top",
-                        help="قطر أسياخ حديد التسليح العلوي وعلاقات الكانات للنموذج B3 (Φ بالملليمتر)."
-                    )
-
-                if has_cb1:
-                    with c_dep4:
+                    with c_dep1:
                         st.markdown(
                             """
-                            <div style="background:#fff7ed; border:1.5px solid #fed7aa; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
-                                <span style="font-weight:800; color:#c2410c; font-size:13.5px;">■ نموذج CB1 (Cantilever)</span>
-                                <span style="background:#ea580c; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">كمرات الكوابيل</span>
+                            <div style="background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
+                                <span style="font-weight:800; color:#1d4ed8; font-size:13.5px;">■ نموذج B1 (Heavy)</span>
+                                <span style="background:#1d4ed8; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">القطاع الثقيل</span>
                             </div>
                             """,
                             unsafe_allow_html=True
                         )
-                        new_t_rcb1 = st.number_input(
-                            f"عمق الكابولي CB1 [{rb_cb1_calc:.0f} cm]:",
+                        new_t_rb1 = st.number_input(
+                            f"عمق الكمرة B1 [{rb_b1_calc:.0f} cm]:",
                             min_value=20.0, max_value=150.0,
-                            value=float(rb_cb1_curr), step=5.0,
-                            key=f"{prefix}inp_rb_depth_CB1",
-                            help=f"عمق كمرة الكابولي CB1 بالسم (العمق التصميمي المحسوب: {rb_cb1_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات فوراً."
+                            value=float(rb_b1_curr), step=5.0,
+                            key=f"{prefix}inp_rb_depth_B1",
+                            help=f"عمق الكمرة B1 بالسم (العمق التصميمي المحسوب: {rb_b1_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات فوراً."
                         )
-                        new_p_bot_cb1 = st.selectbox(
-                            "قطر الحديد السفلي (CB1):",
-                            options=dia_opts_rb, index=idx_cb1_bot,
-                            key=f"{prefix}w_rb_cb1_phi_bot",
-                            help="قطر أسياخ حديد التسليح السفلي للنموذج CB1 (Φ بالملليمتر)."
+                        new_p_bot_b1 = st.selectbox(
+                            "قطر الحديد السفلي (B1):",
+                            options=dia_opts_rb, index=idx_b1_bot,
+                            key=f"{prefix}w_rb_b1_phi_bot",
+                            help="قطر أسياخ حديد التسليح السفلي الرئيسي للنموذج B1 (Φ بالملليمتر)."
                         )
-                        new_p_top_cb1 = st.selectbox(
-                            "قطر الحديد العلوي / الشوك (CB1):",
-                            options=dia_opts_rb, index=idx_cb1_top,
-                            key=f"{prefix}w_rb_cb1_phi_top",
-                            help="قطر أسياخ حديد التسليح العلوي الرئيسي والشوك للنموذج CB1 (Φ بالملليمتر)."
+                        new_p_top_b1 = st.selectbox(
+                            "قطر الحديد العلوي (B1):",
+                            options=dia_opts_rb, index=idx_b1_top,
+                            key=f"{prefix}w_rb_b1_phi_top",
+                            help="قطر أسياخ حديد التسليح العلوي وعلاقات الكانات للنموذج B1 (Φ بالملليمتر)."
                         )
 
-                changed_rb = False
-
-                # B1 changes
-                if abs(new_t_rb1 - rb_b1_curr) > 0.01:
-                    cur_ov_depths_rb["B1_t"] = new_t_rb1
-                    cur_ov_depths_rb.pop("B1_nbot", None)
-                    cur_ov_depths_rb.pop("B1_ntop", None)
-                    cur_ov_depths_rb.pop("B1_stirrups", None)
-                    changed_rb = True
-                if new_p_bot_b1 != b1_pbot:
-                    cur_ov_depths_rb["B1_phi_bot"] = new_p_bot_b1
-                    cur_ov_depths_rb.pop("B1_nbot", None)
-                    changed_rb = True
-                if new_p_top_b1 != b1_ptop:
-                    cur_ov_depths_rb["B1_phi_top"] = new_p_top_b1
-                    cur_ov_depths_rb.pop("B1_ntop", None)
-                    changed_rb = True
-
-                # B2 changes
-                if abs(new_t_rb2 - rb_b2_curr) > 0.01:
-                    cur_ov_depths_rb["B2_t"] = new_t_rb2
-                    cur_ov_depths_rb.pop("B2_nbot", None)
-                    cur_ov_depths_rb.pop("B2_ntop", None)
-                    cur_ov_depths_rb.pop("B2_stirrups", None)
-                    changed_rb = True
-                if new_p_bot_b2 != b2_pbot:
-                    cur_ov_depths_rb["B2_phi_bot"] = new_p_bot_b2
-                    cur_ov_depths_rb.pop("B2_nbot", None)
-                    changed_rb = True
-                if new_p_top_b2 != b2_ptop:
-                    cur_ov_depths_rb["B2_phi_top"] = new_p_top_b2
-                    cur_ov_depths_rb.pop("B2_ntop", None)
-                    changed_rb = True
-
-                # B3 changes
-                if abs(new_t_rb3 - rb_b3_curr) > 0.01:
-                    cur_ov_depths_rb["B3_t"] = new_t_rb3
-                    cur_ov_depths_rb.pop("B3_nbot", None)
-                    cur_ov_depths_rb.pop("B3_ntop", None)
-                    cur_ov_depths_rb.pop("B3_stirrups", None)
-                    changed_rb = True
-                if new_p_bot_b3 != b3_pbot:
-                    cur_ov_depths_rb["B3_phi_bot"] = new_p_bot_b3
-                    cur_ov_depths_rb.pop("B3_nbot", None)
-                    changed_rb = True
-                if new_p_top_b3 != b3_ptop:
-                    cur_ov_depths_rb["B3_phi_top"] = new_p_top_b3
-                    cur_ov_depths_rb.pop("B3_ntop", None)
-                    changed_rb = True
-
-                # CB1 changes
-                if has_cb1:
-                    if abs(new_t_rcb1 - rb_cb1_curr) > 0.01:
-                        cur_ov_depths_rb["CB1_t"] = new_t_rcb1
-                        cur_ov_depths_rb.pop("CB1_nbot", None)
-                        cur_ov_depths_rb.pop("CB1_ntop", None)
-                        cur_ov_depths_rb.pop("CB1_stirrups", None)
-                        changed_rb = True
-                    if new_p_bot_cb1 != cb1_pbot:
-                        cur_ov_depths_rb["CB1_phi_bot"] = new_p_bot_cb1
-                        cur_ov_depths_rb.pop("CB1_nbot", None)
-                        changed_rb = True
-                    if new_p_top_cb1 != cb1_ptop:
-                        cur_ov_depths_rb["CB1_phi_top"] = new_p_top_cb1
-                        cur_ov_depths_rb.pop("CB1_ntop", None)
-                        changed_rb = True
-
-                if changed_rb:
-                    S.cfg_set("rb_overrides", cur_ov_depths_rb)
-                    st.session_state[f"{prefix}rb_overrides"] = cur_ov_depths_rb
-                    for mk in ["B1", "B2", "B3", "CB1"]:
-                        if f"{mk}_t" in cur_ov_depths_rb:
-                            st.session_state[f"{prefix}ov_rb_t_{mk}"] = cur_ov_depths_rb[f"{mk}_t"]
-                    st.rerun()
-
-
-
-            st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
-
-            # ── 1. MASTER ROOF BEAMS SCHEDULE (B1, B2, B3, CB1) ──
-            st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>🏛️ جدول نماذج كمرات السقف التنفيذي (Master Roof Beams Schedule — Governing Envelopes)</div>", unsafe_allow_html=True)
-            df_rb_models_export = pd.DataFrame(rb_analysis["models_schedule"])
-            render_styled_table(df_rb_models_export, font_size_override=14.0)
-
-            st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
-
-            # ── 2. UNIFIED CLASSIFICATION TABLE ──
-            st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>📋 جدول تصنيف كمرات السقف الإنشائية الشامل (Unified Roof Beams Classification Table)</div>", unsafe_allow_html=True)
-            df_rb_class_export = pd.DataFrame(rb_analysis["classification_rows"])
-            render_styled_table(df_rb_class_export, font_size_override=13.5)
-
-
-
-        # ── 🏛️ FINAL DESIGN OF FOUNDATIONS AND GROUND BEAMS (ECP 203) ───────────────────
-        with st.expander(
-            f"🏛️ Final Design of Columns, Foundations and Ground Beams — {num_floors} Floors (التصميم النهائي للاعمدة و للقواعد والسملات الأرضية){_ftg_exp_suf}",
-            expanded=False,
-            key=f"{prefix}exp_final_design_v{_ftg_exp_ver}",
-        ):
-            if _ftg_collapsed:
-                st.warning(_ftg_warn_msg)
-            else:
-                ftg_analysis_final = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
-                gb_analysis_final = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis")
-                active_cols_final = fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols
-
-                if ftg_analysis_final and active_cols_final:
-                    # ── 1. CONSOLIDATED 2D PLAN SKETCH (TOP SECTION) ──
-                    st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 10px 0 8px 0;'>🗺️ 1. المسقط الأفقي التنفيذي الموحد للأساسات والميدات (Consolidated 2D Plan Sketch)</div>", unsafe_allow_html=True)
-
-                    gb_list_final = gb_analysis_final.get("ground_beams", []) if gb_analysis_final else []
-                    fig_final_sketch = draw_comprehensive_foundation_sketch(
-                        active_cols_final, ftg_analysis_final, ground_beams=gb_analysis_final if gb_analysis_final else gb_list_final,
-                        edge_columns=_edge_columns if '_edge_columns' in locals() else None,
-                        slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
-                        include_legend=False,
-                        col_transforms=_col_transforms if '_col_transforms' in locals() else None,
-                        col_props=_col_props if '_col_props' in locals() else None,
-                    )
-                    buf_final_sketch = io.BytesIO()
-                    fig_final_sketch.savefig(buf_final_sketch, format="png", bbox_inches="tight", dpi=160)
-                    plt.close(fig_final_sketch)
-                    buf_final_sketch.seek(0)
-                    final_b64 = base64.b64encode(buf_final_sketch.getvalue()).decode("utf-8")
-                    try:
-                        st.session_state[f"{prefix}foundation_sketch_b64"] = final_b64
-                    except Exception:
-                        pass
-
-                    _render_gb_interactive_viewer(final_b64, viewer_h=760)
-
-                    # ── 2. EXECUTIVE COLUMNS SCHEDULE TABLE (جدول نماذج الأعمدة التنفيذي) ──
-                    st.markdown(
-                        """
-                        <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.05) 0%, rgba(15, 23, 42, 0.09) 100%); border: 1.5px solid #cbd5e1; border-right: 6px solid #38bdf8; border-radius: 10px; padding: 12px 16px; margin: 20px 0 12px 0; text-align: right;">
-                            <div style="font-size: 16px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                                <span>🏛️ جدول نماذج الأعمدة التنفيذي (Columns Executive Schedule)</span>
-                                <span style="font-size: 12px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Executive</span>
+                    with c_dep2:
+                        st.markdown(
+                            """
+                            <div style="background:#f0fdf4; border:1.5px solid #bbf7d0; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
+                                <span style="font-weight:800; color:#15803d; font-size:13.5px;">■ نموذج B2 (Medium)</span>
+                                <span style="background:#15803d; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">القطاع المتوسط</span>
                             </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
+                            """,
+                            unsafe_allow_html=True
+                        )
+                        new_t_rb2 = st.number_input(
+                            f"عمق الكمرة B2 [{rb_b2_calc:.0f} cm]:",
+                            min_value=20.0, max_value=150.0,
+                            value=float(rb_b2_curr), step=5.0,
+                            key=f"{prefix}inp_rb_depth_B2",
+                            help=f"عمق الكمرة B2 بالسم (العمق التصميمي المحسوب: {rb_b2_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات فوراً."
+                        )
+                        new_p_bot_b2 = st.selectbox(
+                            "قطر الحديد السفلي (B2):",
+                            options=dia_opts_rb, index=idx_b2_bot,
+                            key=f"{prefix}w_rb_b2_phi_bot",
+                            help="قطر أسياخ حديد التسليح السفلي الرئيسي للنموذج B2 (Φ بالملليمتر)."
+                        )
+                        new_p_top_b2 = st.selectbox(
+                            "قطر الحديد العلوي (B2):",
+                            options=dia_opts_rb, index=idx_b2_top,
+                            key=f"{prefix}w_rb_b2_phi_top",
+                            help="قطر أسياخ حديد التسليح العلوي وعلاقات الكانات للنموذج B2 (Φ بالملليمتر)."
+                        )
 
-                    raw_col_rows = []
-                    col_designs_final = col_designs if ('col_designs' in locals() and col_designs) else st.session_state.get(f"{prefix}fs_col_designs", st.session_state.get("fs_col_designs", []))
-                    if col_designs_final:
-                        for des in col_designs_final:
-                            m_key = des.get("raw_type", "")
-                            b_val = float(st.session_state.get(f"fs_adopted_b_{m_key}", des.get("b", 30.0)))
-                            t_val = float(st.session_state.get(f"fs_adopted_t_{m_key}", des.get("t", 60.0)))
-                            mu_val = des.get("mu_provided", 1.0)
-                            raw_col_rows.append({
-                                "اسم نموذج العمود": des.get("model_label", des.get("model_mark", "C")),
-                                "القطاع": f"{int(round(b_val))} × {int(round(t_val))} cm",
-                                "التسليح الرئيسي": des.get("main_steel_str", "—"),
-                                "الكانات": des.get("stirrups_str", "—"),
-                                "نسبة التسليح للقطاع": f"{mu_val:.2f} %",
+                    with c_dep3:
+                        st.markdown(
+                            """
+                            <div style="background:#faf5ff; border:1.5px solid #e9d5ff; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
+                                <span style="font-weight:800; color:#7e22ce; font-size:13.5px;">■ نموذج B3 (Light)</span>
+                                <span style="background:#7e22ce; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">القطاع الخفيف</span>
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+                        new_t_rb3 = st.number_input(
+                            f"عمق الكمرة B3 [{rb_b3_calc:.0f} cm]:",
+                            min_value=20.0, max_value=150.0,
+                            value=float(rb_b3_curr), step=5.0,
+                            key=f"{prefix}inp_rb_depth_B3",
+                            help=f"عمق الكمرة B3 بالسم (العمق التصميمي المحسوب: {rb_b3_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات فوراً."
+                        )
+                        new_p_bot_b3 = st.selectbox(
+                            "قطر الحديد السفلي (B3):",
+                            options=dia_opts_rb, index=idx_b3_bot,
+                            key=f"{prefix}w_rb_b3_phi_bot",
+                            help="قطر أسياخ حديد التسليح السفلي الرئيسي للنموذج B3 (Φ بالملليمتر)."
+                        )
+                        new_p_top_b3 = st.selectbox(
+                            "قطر الحديد العلوي (B3):",
+                            options=dia_opts_rb, index=idx_b3_top,
+                            key=f"{prefix}w_rb_b3_phi_top",
+                            help="قطر أسياخ حديد التسليح العلوي وعلاقات الكانات للنموذج B3 (Φ بالملليمتر)."
+                        )
+
+                    if has_cb1:
+                        with c_dep4:
+                            st.markdown(
+                                """
+                                <div style="background:#fff7ed; border:1.5px solid #fed7aa; border-radius:8px; padding:6px 12px; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between;">
+                                    <span style="font-weight:800; color:#c2410c; font-size:13.5px;">■ نموذج CB1 (Cantilever)</span>
+                                    <span style="background:#ea580c; color:#fff; font-size:11px; padding:2px 8px; border-radius:4px; font-weight:700;">كمرات الكوابيل</span>
+                                </div>
+                                """,
+                                unsafe_allow_html=True
+                            )
+                            new_t_rcb1 = st.number_input(
+                                f"عمق الكابولي CB1 [{rb_cb1_calc:.0f} cm]:",
+                                min_value=20.0, max_value=150.0,
+                                value=float(rb_cb1_curr), step=5.0,
+                                key=f"{prefix}inp_rb_depth_CB1",
+                                help=f"عمق كمرة الكابولي CB1 بالسم (العمق التصميمي المحسوب: {rb_cb1_calc:.0f} cm). يمكنك تعديل القيمة لإعادة الحسابات والتصميم والرسومات فوراً."
+                            )
+                            new_p_bot_cb1 = st.selectbox(
+                                "قطر الحديد السفلي (CB1):",
+                                options=dia_opts_rb, index=idx_cb1_bot,
+                                key=f"{prefix}w_rb_cb1_phi_bot",
+                                help="قطر أسياخ حديد التسليح السفلي للنموذج CB1 (Φ بالملليمتر)."
+                            )
+                            new_p_top_cb1 = st.selectbox(
+                                "قطر الحديد العلوي / الشوك (CB1):",
+                                options=dia_opts_rb, index=idx_cb1_top,
+                                key=f"{prefix}w_rb_cb1_phi_top",
+                                help="قطر أسياخ حديد التسليح العلوي الرئيسي والشوك للنموذج CB1 (Φ بالملليمتر)."
+                            )
+
+                    changed_rb = False
+
+                    # B1 changes
+                    if abs(new_t_rb1 - rb_b1_curr) > 0.01:
+                        cur_ov_depths_rb["B1_t"] = new_t_rb1
+                        cur_ov_depths_rb.pop("B1_nbot", None)
+                        cur_ov_depths_rb.pop("B1_ntop", None)
+                        cur_ov_depths_rb.pop("B1_stirrups", None)
+                        changed_rb = True
+                    if new_p_bot_b1 != b1_pbot:
+                        cur_ov_depths_rb["B1_phi_bot"] = new_p_bot_b1
+                        cur_ov_depths_rb.pop("B1_nbot", None)
+                        changed_rb = True
+                    if new_p_top_b1 != b1_ptop:
+                        cur_ov_depths_rb["B1_phi_top"] = new_p_top_b1
+                        cur_ov_depths_rb.pop("B1_ntop", None)
+                        changed_rb = True
+
+                    # B2 changes
+                    if abs(new_t_rb2 - rb_b2_curr) > 0.01:
+                        cur_ov_depths_rb["B2_t"] = new_t_rb2
+                        cur_ov_depths_rb.pop("B2_nbot", None)
+                        cur_ov_depths_rb.pop("B2_ntop", None)
+                        cur_ov_depths_rb.pop("B2_stirrups", None)
+                        changed_rb = True
+                    if new_p_bot_b2 != b2_pbot:
+                        cur_ov_depths_rb["B2_phi_bot"] = new_p_bot_b2
+                        cur_ov_depths_rb.pop("B2_nbot", None)
+                        changed_rb = True
+                    if new_p_top_b2 != b2_ptop:
+                        cur_ov_depths_rb["B2_phi_top"] = new_p_top_b2
+                        cur_ov_depths_rb.pop("B2_ntop", None)
+                        changed_rb = True
+
+                    # B3 changes
+                    if abs(new_t_rb3 - rb_b3_curr) > 0.01:
+                        cur_ov_depths_rb["B3_t"] = new_t_rb3
+                        cur_ov_depths_rb.pop("B3_nbot", None)
+                        cur_ov_depths_rb.pop("B3_ntop", None)
+                        cur_ov_depths_rb.pop("B3_stirrups", None)
+                        changed_rb = True
+                    if new_p_bot_b3 != b3_pbot:
+                        cur_ov_depths_rb["B3_phi_bot"] = new_p_bot_b3
+                        cur_ov_depths_rb.pop("B3_nbot", None)
+                        changed_rb = True
+                    if new_p_top_b3 != b3_ptop:
+                        cur_ov_depths_rb["B3_phi_top"] = new_p_top_b3
+                        cur_ov_depths_rb.pop("B3_ntop", None)
+                        changed_rb = True
+
+                    # CB1 changes
+                    if has_cb1:
+                        if abs(new_t_rcb1 - rb_cb1_curr) > 0.01:
+                            cur_ov_depths_rb["CB1_t"] = new_t_rcb1
+                            cur_ov_depths_rb.pop("CB1_nbot", None)
+                            cur_ov_depths_rb.pop("CB1_ntop", None)
+                            cur_ov_depths_rb.pop("CB1_stirrups", None)
+                            changed_rb = True
+                        if new_p_bot_cb1 != cb1_pbot:
+                            cur_ov_depths_rb["CB1_phi_bot"] = new_p_bot_cb1
+                            cur_ov_depths_rb.pop("CB1_nbot", None)
+                            changed_rb = True
+                        if new_p_top_cb1 != cb1_ptop:
+                            cur_ov_depths_rb["CB1_phi_top"] = new_p_top_cb1
+                            cur_ov_depths_rb.pop("CB1_ntop", None)
+                            changed_rb = True
+
+                    if changed_rb:
+                        S.cfg_set("rb_overrides", cur_ov_depths_rb)
+                        st.session_state[f"{prefix}rb_overrides"] = cur_ov_depths_rb
+                        for mk in ["B1", "B2", "B3", "CB1"]:
+                            if f"{mk}_t" in cur_ov_depths_rb:
+                                st.session_state[f"{prefix}ov_rb_t_{mk}"] = cur_ov_depths_rb[f"{mk}_t"]
+                        st.rerun()
+
+
+
+                st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
+
+                # ── 1. MASTER ROOF BEAMS SCHEDULE (B1, B2, B3, CB1) ──
+                st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>🏛️ جدول نماذج كمرات السقف التنفيذي (Master Roof Beams Schedule — Governing Envelopes)</div>", unsafe_allow_html=True)
+                df_rb_models_export = pd.DataFrame(rb_analysis["models_schedule"])
+                render_styled_table(df_rb_models_export, font_size_override=14.0)
+
+                st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
+
+                # ── 2. UNIFIED CLASSIFICATION TABLE ──
+                st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 14px 0 8px 0;'>📋 جدول تصنيف كمرات السقف الإنشائية الشامل (Unified Roof Beams Classification Table)</div>", unsafe_allow_html=True)
+                df_rb_class_export = pd.DataFrame(rb_analysis["classification_rows"])
+                render_styled_table(df_rb_class_export, font_size_override=13.5)
+
+
+
+            # ── 🏛️ FINAL DESIGN OF FOUNDATIONS AND GROUND BEAMS (ECP 203) ───────────────────
+            with st.expander(
+                f"🏛️ Final Design of Columns, Foundations and Ground Beams — {num_floors} Floors (التصميم النهائي للاعمدة و للقواعد والسملات الأرضية){_ftg_exp_suf}",
+                expanded=False,
+                key=f"{prefix}exp_final_design_v{_ftg_exp_ver}",
+            ):
+                if _ftg_collapsed:
+                    st.warning(_ftg_warn_msg)
+                else:
+                    ftg_analysis_final = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
+                    gb_analysis_final = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis")
+                    active_cols_final = fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols
+
+                    if ftg_analysis_final and active_cols_final:
+                        # ── 1. CONSOLIDATED 2D PLAN SKETCH (TOP SECTION) ──
+                        st.markdown("<div style='font-size:16px; font-weight:800; color:#38bdf8; margin: 10px 0 8px 0;'>🗺️ 1. المسقط الأفقي التنفيذي الموحد للأساسات والميدات (Consolidated 2D Plan Sketch)</div>", unsafe_allow_html=True)
+
+                        gb_list_final = gb_analysis_final.get("ground_beams", []) if gb_analysis_final else []
+                        fig_final_sketch = draw_comprehensive_foundation_sketch(
+                            active_cols_final, ftg_analysis_final, ground_beams=gb_analysis_final if gb_analysis_final else gb_list_final,
+                            edge_columns=_edge_columns if '_edge_columns' in locals() else None,
+                            slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
+                            include_legend=False,
+                            col_transforms=_col_transforms if '_col_transforms' in locals() else None,
+                            col_props=_col_props if '_col_props' in locals() else None,
+                        )
+                        buf_final_sketch = io.BytesIO()
+                        fig_final_sketch.savefig(buf_final_sketch, format="png", bbox_inches="tight", dpi=160)
+                        plt.close(fig_final_sketch)
+                        buf_final_sketch.seek(0)
+                        final_b64 = base64.b64encode(buf_final_sketch.getvalue()).decode("utf-8")
+                        try:
+                            st.session_state[f"{prefix}foundation_sketch_b64"] = final_b64
+                        except Exception:
+                            pass
+
+                        _render_gb_interactive_viewer(final_b64, viewer_h=760)
+
+                        # ── 2. EXECUTIVE COLUMNS SCHEDULE TABLE (جدول نماذج الأعمدة التنفيذي) ──
+                        st.markdown(
+                            """
+                            <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.05) 0%, rgba(15, 23, 42, 0.09) 100%); border: 1.5px solid #cbd5e1; border-right: 6px solid #38bdf8; border-radius: 10px; padding: 12px 16px; margin: 20px 0 12px 0; text-align: right;">
+                                <div style="font-size: 16px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                                    <span>🏛️ جدول نماذج الأعمدة التنفيذي (Columns Executive Schedule)</span>
+                                    <span style="font-size: 12px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Executive</span>
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                        raw_col_rows = []
+                        col_designs_final = col_designs if ('col_designs' in locals() and col_designs) else st.session_state.get(f"{prefix}fs_col_designs", st.session_state.get("fs_col_designs", []))
+                        if col_designs_final:
+                            for des in col_designs_final:
+                                m_key = des.get("raw_type", "")
+                                b_val = float(st.session_state.get(f"fs_adopted_b_{m_key}", des.get("b", 30.0)))
+                                t_val = float(st.session_state.get(f"fs_adopted_t_{m_key}", des.get("t", 60.0)))
+                                mu_val = des.get("mu_provided", 1.0)
+                                raw_col_rows.append({
+                                    "اسم نموذج العمود": des.get("model_label", des.get("model_mark", "C")),
+                                    "القطاع": f"{int(round(b_val))} × {int(round(t_val))} cm",
+                                    "التسليح الرئيسي": des.get("main_steel_str", "—"),
+                                    "الكانات": des.get("stirrups_str", "—"),
+                                    "نسبة التسليح للقطاع": f"{mu_val:.2f} %",
+                                })
+
+                        if raw_col_rows:
+                            df_cols_summary = pd.DataFrame(raw_col_rows)
+                            render_styled_table(df_cols_summary, font_size_override=14.0)
+                        else:
+                            st.info("💡 لم يتم استخراج نماذج للأعمدة أو جاري حساب وتصميم قطاعات الأعمدة.")
+
+                        st.markdown("<hr style='margin: 24px 0; border: none; border-top: 1.5px solid #cbd5e1;' />", unsafe_allow_html=True)
+
+                        # ── 3. EXECUTIVE GROUND BEAMS SCHEDULE TABLE (جدول السملات الأرضية بخط كبير وغامق) ──
+                        st.markdown(
+                            """
+                            <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.05) 0%, rgba(15, 23, 42, 0.09) 100%); border: 1.5px solid #cbd5e1; border-right: 6px solid #38bdf8; border-radius: 10px; padding: 12px 16px; margin: 20px 0 12px 0; text-align: right;">
+                                <div style="font-size: 16px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                                    <span>🧱 جدول نماذج السملات والشدادات الأرضية التنفيذي (Ground Beams & Strap Beams Schedule)</span>
+                                    <span style="font-size: 12px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Executive</span>
+                                </div>
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+
+                        raw_gb_rows = []
+                        if gb_analysis_final and gb_analysis_final.get("models_schedule"):
+                            raw_gb_rows = [dict(r) for r in gb_analysis_final.get("models_schedule", [])]
+                        elif gb_analysis_final and gb_analysis_final.get("models_dict"):
+                            for gb_mk in ["GB1", "GB2", "GB3"]:
+                                if gb_mk in gb_analysis_final["models_dict"]:
+                                    gbm = gb_analysis_final["models_dict"][gb_mk]
+                                    b_val = int(gbm.get("b_cm", 25))
+                                    t_val = int(gbm.get("t_cm", 60))
+                                    raw_gb_rows.append({
+                                        "النموذج (Mark)": gb_mk,
+                                        "التصنيف والأهمية الإنشائية": gbm.get("label", f"سملة أرضية {gb_mk}"),
+                                        "الأبعاد b × t (cm)": f"{b_val} × {t_val}",
+                                        "التسليح السفلي (Bottom Rft)": f"{gbm.get('n_bot', 2)}Ø{gbm.get('phi_bot', 16)}",
+                                        "التسليح العلوي (Top Rft)": f"{gbm.get('n_top', 2)}Ø{gbm.get('phi_top', 12)}",
+                                        "براندات الانكماش (Side Bars)": f"{gbm.get('side_bars', 0)}Ø{gbm.get('phi_side', 10)}" if gbm.get("side_bars", 0) > 0 else "—",
+                                        "الكانات (Stirrups)": f"{gbm.get('stirrups_per_m', 6)}Ø{gbm.get('phi_st', 8)}/m ({gbm.get('n_branches', 2)} فروع)",
+                                        "العدد بالمشروع (Count)": f"{gbm.get('count', 0)} سملة",
+                                        "إجمالي الأطوال (Total Length)": f"{gbm.get('total_len_m', 0.0):.2f} m",
+                                    })
+
+                        # Append Strap Beams row (ST) if available
+                        st_beams_final = gb_analysis_final.get("strap_beams", []) if gb_analysis_final else []
+                        if st_beams_final and not any("ST" in str(r.get("النموذج (Mark)", "")) for r in raw_gb_rows):
+                            cnt_st_b = len(st_beams_final)
+                            len_st_b = sum(b.get("span_m", 0.0) for b in st_beams_final)
+                            raw_gb_rows.append({
+                                "النموذج (Mark)": "ST",
+                                "التصنيف والأهمية الإنشائية": "شدادات الجار والركن (Strap Beams)",
+                                "الأبعاد b × t (cm)": "40 × 100",
+                                "التسليح السفلي (Bottom Rft)": "2Ø16 (سفلي ثانوي)",
+                                "التسليح العلوي (Top Rft)": "5Ø22 (علوي رئيسي)",
+                                "براندات الانكماش (Side Bars)": "4Ø10 (انكماش)",
+                                "الكانات (Stirrups)": "5Ø10/m (4 فروع)",
+                                "العدد بالمشروع (Count)": f"{cnt_st_b} شداد",
+                                "إجمالي الأطوال (Total Length)": f"{len_st_b:.2f} m",
                             })
 
-                    if raw_col_rows:
-                        df_cols_summary = pd.DataFrame(raw_col_rows)
-                        render_styled_table(df_cols_summary, font_size_override=14.0)
-                    else:
-                        st.info("💡 لم يتم استخراج نماذج للأعمدة أو جاري حساب وتصميم قطاعات الأعمدة.")
+                        if raw_gb_rows:
+                            df_gb_summary = pd.DataFrame(raw_gb_rows)
+                            render_styled_table(df_gb_summary, font_size_override=14.0)
+                        else:
+                            st.info("💡 لم يتم استخراج نماذج للسملات الأرضية أو لم يتم تفعيل قسم Ground Beams Design بعد.")
 
-                    st.markdown("<hr style='margin: 24px 0; border: none; border-top: 1.5px solid #cbd5e1;' />", unsafe_allow_html=True)
+                        st.markdown("<hr style='margin: 24px 0; border: none; border-top: 1.5px solid #cbd5e1;' />", unsafe_allow_html=True)
 
-                    # ── 3. EXECUTIVE GROUND BEAMS SCHEDULE TABLE (جدول السملات الأرضية بخط كبير وغامق) ──
-                    st.markdown(
-                        """
-                        <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.05) 0%, rgba(15, 23, 42, 0.09) 100%); border: 1.5px solid #cbd5e1; border-right: 6px solid #38bdf8; border-radius: 10px; padding: 12px 16px; margin: 20px 0 12px 0; text-align: right;">
-                            <div style="font-size: 16px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                                <span>🧱 جدول نماذج السملات والشدادات الأرضية التنفيذي (Ground Beams & Strap Beams Schedule)</span>
-                                <span style="font-size: 12px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Executive</span>
+                        # ── 4. EXECUTIVE FOUNDATIONS SCHEDULE TABLE (جدول القواعد بخط كبير وغامق) ──
+                        st.markdown(
+                            """
+                            <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.05) 0%, rgba(15, 23, 42, 0.09) 100%); border: 1.5px solid #cbd5e1; border-right: 6px solid #38bdf8; border-radius: 10px; padding: 12px 16px; margin: 16px 0 12px 0; text-align: right;">
+                                <div style="font-size: 16px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                                    <span>📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)</span>
+                                    <span style="font-size: 12px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Executive</span>
+                                </div>
                             </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
+                            """,
+                            unsafe_allow_html=True,
+                        )
 
-                    raw_gb_rows = []
-                    if gb_analysis_final and gb_analysis_final.get("models_schedule"):
-                        raw_gb_rows = [dict(r) for r in gb_analysis_final.get("models_schedule", [])]
-                    elif gb_analysis_final and gb_analysis_final.get("models_dict"):
-                        for gb_mk in ["GB1", "GB2", "GB3"]:
-                            if gb_mk in gb_analysis_final["models_dict"]:
-                                gbm = gb_analysis_final["models_dict"][gb_mk]
-                                b_val = int(gbm.get("b_cm", 25))
-                                t_val = int(gbm.get("t_cm", 60))
-                                raw_gb_rows.append({
-                                    "النموذج (Mark)": gb_mk,
-                                    "التصنيف والأهمية الإنشائية": gbm.get("label", f"سملة أرضية {gb_mk}"),
-                                    "الأبعاد b × t (cm)": f"{b_val} × {t_val}",
-                                    "التسليح السفلي (Bottom Rft)": f"{gbm.get('n_bot', 2)}Ø{gbm.get('phi_bot', 16)}",
-                                    "التسليح العلوي (Top Rft)": f"{gbm.get('n_top', 2)}Ø{gbm.get('phi_top', 12)}",
-                                    "براندات الانكماش (Side Bars)": f"{gbm.get('side_bars', 0)}Ø{gbm.get('phi_side', 10)}" if gbm.get("side_bars", 0) > 0 else "—",
-                                    "الكانات (Stirrups)": f"{gbm.get('stirrups_per_m', 6)}Ø{gbm.get('phi_st', 8)}/m ({gbm.get('n_branches', 2)} فروع)",
-                                    "العدد بالمشروع (Count)": f"{gbm.get('count', 0)} سملة",
-                                    "إجمالي الأطوال (Total Length)": f"{gbm.get('total_len_m', 0.0):.2f} m",
-                                })
+                        raw_ftg_rows = []
+                        if ftg_analysis_final and ftg_analysis_final.get("unified_rows"):
+                            raw_ftg_rows = [dict(r) for r in ftg_analysis_final.get("unified_rows", [])]
+                        elif ftg_analysis_final and ftg_analysis_final.get("models"):
+                            ftg_models_dict = ftg_analysis_final.get("models", {})
+                            for f_mk in ["F1", "F2", "F3"]:
+                                if f_mk in ftg_models_dict and ftg_models_dict[f_mk]:
+                                    fm = ftg_models_dict[f_mk]
+                                    L_c = int(round(float(fm.get("L_cm", 200))))
+                                    B_c = int(round(float(fm.get("B_cm", 200))))
+                                    t_c = int(round(float(fm.get("t_cm", fm.get("tc_cm", 60)))))
+                                    cols_m = fm.get("cols_list", [])
+                                    c_names = ", ".join([c["id"] for c in cols_m]) if cols_m else "—"
+                                    raw_ftg_rows.append({
+                                        "نموذج القاعدة (Model)": f_mk,
+                                        "النوع والتصنيف": fm.get("model_label", "قاعدة منفصلة"),
+                                        "الأعمدة المرتكزة (Columns)": f"{len(cols_m)} أعمدة ({c_names})",
+                                        "أقصى حمل تصميمي Pu (ton)": f"{fm.get('pu_gov', 0.0):.1f} ton",
+                                        "أبعاد المسلحة R.C. (cm)": f"{L_c} × {B_c} × {t_c}",
+                                        "أبعاد العادية P.C. (cm)": f"{L_c + 40} × {B_c + 40} × 20",
+                                        "التسليح والتفاصيل الإنشائية": f"فرش: {fm.get('rft_long_str', '5Ø16/m')} | غطاء: {fm.get('rft_short_str', '5Ø16/m')}",
+                                        "حالة التحقق الإنشائي (Status)": "✅ Safe ومحقق للكود",
+                                    })
 
-                    # Append Strap Beams row (ST) if available
-                    st_beams_final = gb_analysis_final.get("strap_beams", []) if gb_analysis_final else []
-                    if st_beams_final and not any("ST" in str(r.get("النموذج (Mark)", "")) for r in raw_gb_rows):
-                        cnt_st_b = len(st_beams_final)
-                        len_st_b = sum(b.get("span_m", 0.0) for b in st_beams_final)
-                        raw_gb_rows.append({
-                            "النموذج (Mark)": "ST",
-                            "التصنيف والأهمية الإنشائية": "شدادات الجار والركن (Strap Beams)",
-                            "الأبعاد b × t (cm)": "40 × 100",
-                            "التسليح السفلي (Bottom Rft)": "2Ø16 (سفلي ثانوي)",
-                            "التسليح العلوي (Top Rft)": "5Ø22 (علوي رئيسي)",
-                            "براندات الانكماش (Side Bars)": "4Ø10 (انكماش)",
-                            "الكانات (Stirrups)": "5Ø10/m (4 فروع)",
-                            "العدد بالمشروع (Count)": f"{cnt_st_b} شداد",
-                            "إجمالي الأطوال (Total Length)": f"{len_st_b:.2f} m",
-                        })
-
-                    if raw_gb_rows:
-                        df_gb_summary = pd.DataFrame(raw_gb_rows)
-                        render_styled_table(df_gb_summary, font_size_override=14.0)
+                        if raw_ftg_rows:
+                            df_ftg_summary = pd.DataFrame(raw_ftg_rows)
+                            render_styled_table(df_ftg_summary, font_size_override=14.0)
+                        else:
+                            st.info("💡 لم يتم استخراج نماذج للقواعد أو جاري حساب وتحليل الأساسات.")
                     else:
-                        st.info("💡 لم يتم استخراج نماذج للسملات الأرضية أو لم يتم تفعيل قسم Ground Beams Design بعد.")
+                        st.info("💡 جاري معالجة وحساب بيانات الأساسات والسملات لتوليد لوحة ومخرجات التصميم النهائي للقواعد والسملات.")
 
-                    st.markdown("<hr style='margin: 24px 0; border: none; border-top: 1.5px solid #cbd5e1;' />", unsafe_allow_html=True)
+            # ── 📊 الحصر التقريبي للكميات — APPROXIMATE QUANTITY SURVEY ──────────────
+            # 1. Slab Quantities (السقف)
+            slab_area_val    = boq.get("slab_area_m2", 0.0)
+            slab_conc_val    = boq.get("concrete_vol_m3", 0.0)
+            slab_steel_kg    = boq.get("total_steel_kg", 0.0)
+            slab_steel_ton   = boq.get("total_steel_ton", 0.0)
+            slab_cement_ton  = boq.get("cement_ton", 0.0)
+            slab_cement_bags = boq.get("cement_bags", 0)
+            slab_gravel_val  = boq.get("gravel_m3", 0.0)
+            slab_sand_val    = boq.get("sand_m3", 0.0)
+            slab_ratio_val   = boq.get("steel_ratio_kg_m3", 0.0)
 
-                    # ── 4. EXECUTIVE FOUNDATIONS SCHEDULE TABLE (جدول القواعد بخط كبير وغامق) ──
-                    st.markdown(
-                        """
-                        <div dir="rtl" style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.05) 0%, rgba(15, 23, 42, 0.09) 100%); border: 1.5px solid #cbd5e1; border-right: 6px solid #38bdf8; border-radius: 10px; padding: 12px 16px; margin: 16px 0 12px 0; text-align: right;">
-                            <div style="font-size: 16px; font-weight: 800; color: #38bdf8; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                                <span>📋 جدول نماذج القواعد الموحد لأساسات المبنى (Unified Footings Schedule — ECP 203)</span>
-                                <span style="font-size: 12px; background: #0284c7; color: #ffffff; padding: 3px 10px; border-radius: 6px; font-weight: 700;">ECP 203 Executive</span>
-                            </div>
+            # 2. Columns Quantities (الأعمدة لجميع الأدوار)
+            cols_conc_1f_val      = tot_conc_vol_1f
+            cols_steel_kg_1f_val  = tot_steel_kg_1f
+            cols_steel_ton_1f_val = tot_steel_kg_1f / 1000.0
+
+            cols_conc_tot_val      = cols_conc_1f_val * num_floors
+            cols_steel_kg_tot_val  = cols_steel_kg_1f_val * num_floors
+            cols_steel_ton_tot_val = cols_steel_ton_1f_val * num_floors
+            cols_cement_tot_ton    = (cols_conc_tot_val * 350.0) / 1000.0
+            cols_cement_tot_bags   = int(round(cols_cement_tot_ton * 1000.0 / 50.0))
+            cols_gravel_tot_val    = cols_conc_tot_val * 0.80
+            cols_sand_tot_val      = cols_conc_tot_val * 0.40
+            cols_ratio_val         = (cols_steel_kg_tot_val / cols_conc_tot_val) if cols_conc_tot_val > 0 else 0.0
+
+            # 3. Foundations Quantities (أساسات المبنى: قواعد منفصلة + قواعد مشتركة)
+            ftgs_conc_rc_val  = 0.0
+            ftgs_conc_pc_val  = 0.0
+            ftgs_steel_kg_val = 0.0
+            ftg_dia_map = {}
+
+            def _add_ftg_dia_entry(phi_val, wt_kg, app_desc):
+                if phi_val not in ftg_dia_map:
+                    ftg_dia_map[phi_val] = {"weight_kg": 0.0, "apps": app_desc}
+                ftg_dia_map[phi_val]["weight_kg"] += wt_kg
+
+            ftg_analysis_obj = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
+            if ftg_analysis_obj and "quantities" in ftg_analysis_obj:
+                fq = ftg_analysis_obj["quantities"]
+                ftgs_conc_rc_val = float(fq.get("ftgs_conc_rc_val", 0.0))
+                ftgs_conc_pc_val = float(fq.get("ftgs_conc_pc_val", 0.0))
+                ftgs_steel_kg_val = float(fq.get("ftgs_steel_kg_val", 0.0))
+                ftg_dia_map = dict(fq.get("ftg_dia_map", {}))
+            elif 'fs_active_columns' in locals() and fs_active_columns:
+                ov_col_ids_set = overlap_data.get("overlapping_col_ids", set()) if 'overlap_data' in locals() else set()
+                for col_item in fs_active_columns:
+                    cid = col_item["id"]
+                    if cid in ov_col_ids_set:
+                        continue
+                    ctype = col_item.get("type", "Interior")
+                    f_model = ftgs_dict.get(ctype, ftgs_dict.get("Interior")) if 'ftgs_dict' in locals() else None
+                    if not f_model:
+                        continue
+
+                    L_m = f_model["L_cm"] / 100.0
+                    B_m = f_model["B_cm"] / 100.0
+                    t_m = f_model["t_cm"] / 100.0
+                    ftgs_conc_rc_val += L_m * B_m * t_m
+
+                    # P.C. Blinding Layer (20 cm thick with 20 cm projection)
+                    L_pc_m = (f_model["L_cm"] + 40.0) / 100.0
+                    B_pc_m = (f_model["B_cm"] + 40.0) / 100.0
+                    ftgs_conc_pc_val += L_pc_m * B_pc_m * 0.20
+
+                    # Steel: bottom longitudinal & transverse
+                    phi_f = f_model.get("Phi", 16)
+                    unit_w_f = (phi_f ** 2) / 162.0
+                    n_L = max(5, int(math.ceil(B_m * f_model.get("n_bars_L", 5.0))))
+                    len_L = L_m - 0.10 + 2.0 * max(0.20, t_m - 0.10)
+                    wt_L = n_L * len_L * unit_w_f
+
+                    n_B = max(5, int(math.ceil(L_m * f_model.get("n_bars_B", 5.0))))
+                    len_B = B_m - 0.10 + 2.0 * max(0.20, t_m - 0.10)
+                    wt_B = n_B * len_B * unit_w_f
+
+                    isolated_col_steel = wt_L + wt_B
+                    ftgs_steel_kg_val += isolated_col_steel
+                    _add_ftg_dia_entry(phi_f, isolated_col_steel, "تسليح سفلي لقواعد منفصلة (Isolated Footings)")
+
+                if 'combined_fs_models' in locals() and combined_fs_models:
+                    for cf in combined_fs_models:
+                        Lc_m = cf["Lc_cm"] / 100.0
+                        Bc_m = cf["Bc_cm"] / 100.0
+                        tc_m = cf["tc_cm"] / 100.0
+                        ftgs_conc_rc_val += Lc_m * Bc_m * tc_m
+
+                        # P.C. Blinding for Combined Footings
+                        Lc_pc_m = (cf["Lc_cm"] + 40.0) / 100.0
+                        Bc_pc_m = (cf["Bc_cm"] + 40.0) / 100.0
+                        ftgs_conc_pc_val += Lc_pc_m * Bc_pc_m * 0.20
+
+                        # Rebar: Bottom longitudinal
+                        phi_bot = cf.get("Phi_mm", 18)
+                        unit_w_bot = (phi_bot ** 2) / 162.0
+                        n_bot = max(5, int(math.ceil(Bc_m * 6.0)))
+                        len_bot = Lc_m - 0.10 + 2.0 * max(0.25, tc_m - 0.10)
+                        wt_bot = n_bot * len_bot * unit_w_bot
+
+                        # Rebar: Top longitudinal (Negative moment rebar)
+                        phi_top = cf.get("Phi_mm", 18)
+                        unit_w_top = (phi_top ** 2) / 162.0
+                        n_top = max(5, int(math.ceil(Bc_m * 8.0)))
+                        len_top = Lc_m - 0.10 + 2.0 * max(0.25, tc_m - 0.10)
+                        wt_top = n_top * len_top * unit_w_top
+
+                        # Rebar: Transverse steel
+                        phi_trans = 16
+                        unit_w_trans = (16 ** 2) / 162.0
+                        n_trans = max(5, int(math.ceil(Lc_m * 5.0)))
+                        len_trans = Bc_m - 0.10 + 2.0 * max(0.25, tc_m - 0.10)
+                        wt_trans = n_trans * len_trans * unit_w_trans
+
+                        combined_col_steel = wt_bot + wt_top + wt_trans
+                        ftgs_steel_kg_val += combined_col_steel
+                        _add_ftg_dia_entry(phi_bot, wt_bot, "تسليح سفلي لقواعد مشتركة (Combined Footings)")
+                        _add_ftg_dia_entry(phi_top, wt_top, "تسليح علوي رئيسي لقواعد مشتركة (Combined Footings)")
+                        _add_ftg_dia_entry(phi_trans, wt_trans, "تسليح عرضي لقواعد مشتركة (Combined Footings)")
+
+            ftgs_steel_ton_val  = ftgs_steel_kg_val / 1000.0
+            ftgs_cement_ton     = (ftgs_conc_rc_val * 350.0 + ftgs_conc_pc_val * 250.0) / 1000.0
+            ftgs_cement_bags    = int(round(ftgs_cement_ton * 1000.0 / 50.0))
+            ftgs_gravel_val     = (ftgs_conc_rc_val + ftgs_conc_pc_val) * 0.80
+            ftgs_sand_val       = (ftgs_conc_rc_val + ftgs_conc_pc_val) * 0.40
+            ftgs_ratio_val      = (ftgs_steel_kg_val / ftgs_conc_rc_val) if ftgs_conc_rc_val > 0 else 0.0
+
+            # 3b. Ground Beams Quantities (السملات والميدات الأرضية)
+            gb_analysis_obj = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis")
+            gb_conc_rc_val  = 0.0
+            gb_steel_kg_val = 0.0
+            gb_dia_map      = {}
+            if gb_analysis_obj and "boq" in gb_analysis_obj:
+                gboq = gb_analysis_obj["boq"]
+                gb_conc_rc_val  = float(gboq.get("conc_vol_rc", 0.0))
+                gb_steel_kg_val = float(gboq.get("steel_kg_tot", 0.0))
+                gb_dia_map      = dict(gboq.get("dia_map", {}))
+
+            gb_steel_ton_val  = gb_steel_kg_val / 1000.0
+            gb_cement_ton     = (gb_conc_rc_val * 350.0) / 1000.0
+            gb_cement_bags    = int(round(gb_cement_ton * 1000.0 / 50.0))
+            gb_gravel_val     = gb_conc_rc_val * 0.80
+            gb_sand_val       = gb_conc_rc_val * 0.40
+            gb_ratio_val      = (gb_steel_kg_val / gb_conc_rc_val) if gb_conc_rc_val > 0 else 0.0
+
+            # 1b. Full Building Slab Quantities (إجمالي أسقف المبنى بالكامل لعدد N طابق)
+            slab_conc_tot_val    = slab_conc_val * num_floors
+            slab_steel_kg_tot    = slab_steel_kg * num_floors
+            slab_steel_ton_tot   = slab_steel_ton * num_floors
+            slab_cement_tot_ton  = slab_cement_ton * num_floors
+            slab_cement_tot_bags = slab_cement_bags * num_floors
+            slab_gravel_tot_val  = slab_gravel_val * num_floors
+            slab_sand_tot_val    = slab_sand_val * num_floors
+
+            # 4. Grand Total Quantities (إجمالي أسقف المبنى + أعمدة المبنى + الأساسات + السملات)
+            grand_conc_rc_val   = slab_conc_tot_val + cols_conc_tot_val + ftgs_conc_rc_val + gb_conc_rc_val
+            grand_conc_pc_val   = ftgs_conc_pc_val
+            grand_conc_all_val  = grand_conc_rc_val + grand_conc_pc_val
+            grand_steel_kg_val  = slab_steel_kg_tot + cols_steel_kg_tot_val + ftgs_steel_kg_val + gb_steel_kg_val
+            grand_steel_ton_val = slab_steel_ton_tot + cols_steel_ton_tot_val + ftgs_steel_ton_val + gb_steel_ton_val
+            grand_cement_ton    = slab_cement_tot_ton + cols_cement_tot_ton + ftgs_cement_ton + gb_cement_ton
+            grand_cement_bags   = slab_cement_tot_bags + cols_cement_tot_bags + ftgs_cement_bags + gb_cement_bags
+            grand_gravel_val    = slab_gravel_tot_val + cols_gravel_tot_val + ftgs_gravel_val + gb_gravel_val
+            grand_sand_val      = slab_sand_tot_val + cols_sand_tot_val + ftgs_sand_val + gb_sand_val
+            grand_ratio_val     = (grand_steel_kg_val / grand_conc_rc_val) if grand_conc_rc_val > 0 else 0.0
+
+            # 5. Detailed Diameter Breakdown (Slab, Columns & Foundations)
+            all_dias_set = set()
+            slab_dia_map = {}
+            for d_row in boq.get("by_dia", []):
+                d_val = d_row.get("dia_mm") or d_row.get("dia")
+                if d_val:
+                    all_dias_set.add(d_val)
+                    slab_dia_map[d_val] = {
+                        "weight_kg": d_row.get("weight_kg", 0.0),
+                        "weight_ton": d_row.get("weight_ton", 0.0),
+                        "apps": d_row.get("apps", "—"),
+                    }
+
+            cols_dia_map = {}
+            if 'col_designs' in locals() and col_designs:
+                for des_item in col_designs:
+                    _rtype = des_item.get("raw_type", "Interior")
+                    cnt = cnt_int if _rtype == "Interior" else (cnt_edge if _rtype == "Edge" else cnt_corner)
+                    if cnt > 0:
+                        phi_m = des_item["Phi"]
+                        phi_st = des_item["Phi_st"]
+                        all_dias_set.add(phi_m)
+                        all_dias_set.add(phi_st)
+
+                        H_m_col = col_H / 100.0
+                        L_bar_col = H_m_col + max(1.0, (50.0 * phi_m) / 1000.0)
+                        unit_w_m = (phi_m ** 2) / 162.0
+                        wt_main_bld = des_item["n_bars"] * L_bar_col * unit_w_m * cnt * num_floors
+
+                        n_ties_col = max(5, int(math.ceil(H_m_col * des_item["n_st_per_m"])))
+                        tie_perim_col = 2.0 * (((des_item["b"] - 5.0) + (des_item["t"] - 5.0)) / 100.0) + 0.20
+                        unit_w_st = (phi_st ** 2) / 162.0
+                        wt_st_bld = n_ties_col * tie_perim_col * unit_w_st * cnt * num_floors
+
+                        if phi_m not in cols_dia_map:
+                            cols_dia_map[phi_m] = {"weight_kg": 0.0, "apps": "تسليح طولي رئيسي للأعمدة (Main Column Rebar)"}
+                        cols_dia_map[phi_m]["weight_kg"] += wt_main_bld
+
+                        if phi_st not in cols_dia_map:
+                            cols_dia_map[phi_st] = {"weight_kg": 0.0, "apps": "كانات وأطواق الأعمدة (Column Stirrup Ties)"}
+                        cols_dia_map[phi_st]["weight_kg"] += wt_st_bld
+
+            all_dias_set.update(ftg_dia_map.keys())
+            all_dias_set.update(gb_dia_map.keys())
+
+            # ── 🏢 3D Integrated Structural BIM & Rebar Viewer ──
+            try:
+                from modules.bim_3d_viewer import render_3d_bim_viewer
+                render_3d_bim_viewer(
+                    Lx_calc=Lx_calc,
+                    Ly_calc=Ly_calc,
+                    cantilevers=cantilevers,
+                    ts_cm=ts,
+                    active_cols=_active_cols,
+                    indiv_col_designs=indiv_col_designs if 'indiv_col_designs' in locals() else None,
+                    col_designs=col_designs if 'col_designs' in locals() else None,
+                    col_H_cm=col_H if 'col_H' in locals() else 300.0,
+                    num_floors=num_floors,
+                    ftg_analysis=ftg_analysis if 'ftg_analysis' in locals() else st.session_state.get("fs_ftg_analysis"),
+                    gb_analysis=gb_analysis if 'gb_analysis' in locals() else st.session_state.get("fs_gb_analysis"),
+                    punching_results=punching_results if 'punching_results' in locals() else None,
+                    top_extra_cols=top_extra_cols if 'top_extra_cols' in locals() else None,
+                    btm_extra_spans=btm_extra_spans if 'btm_extra_spans' in locals() else None,
+                    n_mesh_btm=n_mesh_btm if 'n_mesh_btm' in locals() else 5.0,
+                    bottom_mesh_dia=bottom_mesh_dia if 'bottom_mesh_dia' in locals() else 10,
+                    n_mesh_top=n_mesh_top if 'n_mesh_top' in locals() else 5.0,
+                    top_mesh_dia=top_mesh_dia if 'top_mesh_dia' in locals() else 10,
+                    fcu=float(Fcu) if 'Fcu' in locals() and Fcu else 250.0,
+                    fy=float(Fy) if 'Fy' in locals() and Fy else 4000.0,
+                    prefix=prefix,
+                    edge_columns=_edge_columns if '_edge_columns' in locals() else None,
+                    drop_beams=_cur_beams_list,
+                    void_panels=_confirmed_voids,
+                    void_boxes=_void_boxes_sk if '_void_boxes_sk' in locals() else None,
+                    Lx_spans=Lx_spans if 'Lx_spans' in locals() else None,
+                    Ly_spans=Ly_spans if 'Ly_spans' in locals() else None,
+                    active_x_labels=_active_x_labels if '_active_x_labels' in locals() else None,
+                    active_y_labels=_active_y_labels if '_active_y_labels' in locals() else None,
+                    layout_sketch_b64=st.session_state.get(f"{prefix}flat_slab_plan_b64", "") or st.session_state.get("fs_flat_slab_plan_b64", ""),
+                )
+            except Exception as _e_3d:
+                st.error(f"⚠️ خطأ أثناء تحميل العارض ثلاثي الأبعاد: {_e_3d}")
+
+            with st.expander(
+                f"📊 Approximate Quantity Survey (الحصر التقريبي للكميات){_ftg_exp_suf}",
+                expanded=False,
+                key=f"{prefix}exp_qs_total_v{_ftg_exp_ver}",
+            ):
+                if _ftg_collapsed:
+                    st.warning(_ftg_warn_msg)
+                st.markdown(
+                    f"""
+                    <div style="background:#f8fafc; border-left:4px solid #1e40af; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
+                        <div style="font-size:1.0rem; font-weight:800; color:#38bdf8;">
+                            📋 جدول الحصر الشامل لكميات ومواد السقف والأعمدة والأساسات والسملات والإجمالي الكلي للمبنى:
                         </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
+                        <div style="font-size:0.9rem; color:#475569; margin-top:3px;">
+                            حصر تفصيلي شامل للخرسانة المسلحة والعادية، وحديد التسليح (لكل قطر وإجمالي)، والأسمنت، والزلط، والرمل لسقف البلاطة اللاكمرية، وأعمدة المبنى ({num_floors} طوابق)، وأساسات المبنى بالكامل (القواعد المنفصلة والمشتركة)، وسملات الربط الأرضية (Ground Beams).
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-                    raw_ftg_rows = []
-                    if ftg_analysis_final and ftg_analysis_final.get("unified_rows"):
-                        raw_ftg_rows = [dict(r) for r in ftg_analysis_final.get("unified_rows", [])]
-                    elif ftg_analysis_final and ftg_analysis_final.get("models"):
-                        ftg_models_dict = ftg_analysis_final.get("models", {})
-                        for f_mk in ["F1", "F2", "F3"]:
-                            if f_mk in ftg_models_dict and ftg_models_dict[f_mk]:
-                                fm = ftg_models_dict[f_mk]
-                                L_c = int(round(float(fm.get("L_cm", 200))))
-                                B_c = int(round(float(fm.get("B_cm", 200))))
-                                t_c = int(round(float(fm.get("t_cm", fm.get("tc_cm", 60)))))
-                                cols_m = fm.get("cols_list", [])
-                                c_names = ", ".join([c["id"] for c in cols_m]) if cols_m else "—"
-                                raw_ftg_rows.append({
-                                    "نموذج القاعدة (Model)": f_mk,
-                                    "النوع والتصنيف": fm.get("model_label", "قاعدة منفصلة"),
-                                    "الأعمدة المرتكزة (Columns)": f"{len(cols_m)} أعمدة ({c_names})",
-                                    "أقصى حمل تصميمي Pu (ton)": f"{fm.get('pu_gov', 0.0):.1f} ton",
-                                    "أبعاد المسلحة R.C. (cm)": f"{L_c} × {B_c} × {t_c}",
-                                    "أبعاد العادية P.C. (cm)": f"{L_c + 40} × {B_c + 40} × 20",
-                                    "التسليح والتفاصيل الإنشائية": f"فرش: {fm.get('rft_long_str', '5Ø16/m')} | غطاء: {fm.get('rft_short_str', '5Ø16/m')}",
-                                    "حالة التحقق الإنشائي (Status)": "✅ Safe ومحقق للكود",
-                                })
+                # ── Summary Quantity Survey Table (بدلاً من البانيلات القديمة) ──
+                slab_sub_txt = f"أسقف ({num_floors}): {slab_steel_ton_tot:.2f}t (الدور: {slab_steel_ton:.2f}t)" if num_floors > 1 else f"سقف: {slab_steel_ton:.2f}t"
+                st.markdown(
+                    f"""
+                    <div style="direction: rtl; margin-bottom: 18px; border-radius: 10px; overflow: hidden; border: 2px solid #f97316; box-shadow: 0 4px 12px rgba(249, 115, 22, 0.12);">
+                        <table style="width: 100%; border-collapse: collapse; font-family: inherit; background-color: #fffaf5;">
+                            <thead>
+                                <tr style="background: linear-gradient(90deg, #fdba74 0%, #fed7aa 100%); border-bottom: 2px solid #f97316;">
+                                    <th style="padding: 12px 16px; text-align: right; font-size: 1.15rem; font-weight: 800; color: #7c2d12; width: 26%;">البند / المكون الإنشائي</th>
+                                    <th style="padding: 12px 16px; text-align: center; font-size: 1.15rem; font-weight: 800; color: #7c2d12; width: 24%;">إجمالي الكمية للمبنى</th>
+                                    <th style="padding: 12px 16px; text-align: center; font-size: 1.15rem; font-weight: 800; color: #7c2d12; width: 14%;">الوحدة</th>
+                                    <th style="padding: 12px 16px; text-align: right; font-size: 1.15rem; font-weight: 800; color: #7c2d12; width: 36%;">التفصيل والتوزيع الإنشائي</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr style="border-bottom: 1.5px solid #fed7aa; background-color: #fff7ed;">
+                                    <td style="padding: 12px 16px; font-size: 1.12rem; font-weight: 700; color: #9a3412;">🏢 إجمالي خرسانات المبنى ({num_floors} أدوار)</td>
+                                    <td style="padding: 12px 16px; text-align: center; font-size: 1.35rem; font-weight: 900; color: #c2410c;">{grand_conc_all_val:.2f}</td>
+                                    <td style="padding: 12px 16px; text-align: center; font-size: 1.10rem; font-weight: 700; color: #7c2d12;">متر مكعب (m³)</td>
+                                    <td style="padding: 12px 16px; font-size: 1.05rem; font-weight: 600; color: #431407;">مسلحة: <b>{grand_conc_rc_val:.1f} m³</b> │ عادية: <b>{grand_conc_pc_val:.1f} m³</b></td>
+                                </tr>
+                                <tr style="border-bottom: 1.5px solid #fed7aa; background-color: #fffaf5;">
+                                    <td style="padding: 12px 16px; font-size: 1.12rem; font-weight: 700; color: #9a3412;">🔩 إجمالي حديد المبنى بالكامل</td>
+                                    <td style="padding: 12px 16px; text-align: center; font-size: 1.35rem; font-weight: 900; color: #c2410c;">{grand_steel_ton_val:.3f}</td>
+                                    <td style="padding: 12px 16px; text-align: center; font-size: 1.10rem; font-weight: 700; color: #7c2d12;">طن (Ton)<br><span style="font-size: 0.95rem; font-weight: 600; color: #9a3412;">({grand_steel_kg_val:,.1f} kg)</span></td>
+                                    <td style="padding: 12px 16px; font-size: 1.05rem; font-weight: 600; color: #431407;">{slab_sub_txt} │ أعمدة: <b>{cols_steel_ton_tot_val:.2f}t</b> │ قواعد: <b>{ftgs_steel_ton_val:.2f}t</b> │ سملات: <b>{gb_steel_ton_val:.2f}t</b></td>
+                                </tr>
+                                <tr style="border-bottom: 1.5px solid #fed7aa; background-color: #fff7ed;">
+                                    <td style="padding: 12px 16px; font-size: 1.12rem; font-weight: 700; color: #9a3412;">🏗️ إجمالي أسمنت المبنى</td>
+                                    <td style="padding: 12px 16px; text-align: center; font-size: 1.35rem; font-weight: 900; color: #c2410c;">{grand_cement_ton:.2f}</td>
+                                    <td style="padding: 12px 16px; text-align: center; font-size: 1.10rem; font-weight: 700; color: #7c2d12;">طن (Ton)</td>
+                                    <td style="padding: 12px 16px; font-size: 1.05rem; font-weight: 600; color: #431407;"><b>{grand_cement_bags:,} شكارة</b> (وزن 50 كجم)</td>
+                                </tr>
+                                <tr style="background-color: #fffaf5;">
+                                    <td style="padding: 12px 16px; font-size: 1.12rem; font-weight: 700; color: #9a3412;">⏳ إجمالي الزلط والرمل</td>
+                                    <td style="padding: 12px 16px; text-align: center; font-size: 1.25rem; font-weight: 900; color: #c2410c;">زلط: {grand_gravel_val:.1f} │ رمل: {grand_sand_val:.1f}</td>
+                                    <td style="padding: 12px 16px; text-align: center; font-size: 1.10rem; font-weight: 700; color: #7c2d12;">متر مكعب (m³)</td>
+                                    <td style="padding: 12px 16px; font-size: 1.05rem; font-weight: 600; color: #431407;">معدل استهلاك الحديد الكلي: <b>{grand_ratio_val:.1f} kg/m³</b> خرسانة مسلحة</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-                    if raw_ftg_rows:
-                        df_ftg_summary = pd.DataFrame(raw_ftg_rows)
-                        render_styled_table(df_ftg_summary, font_size_override=14.0)
-                    else:
-                        st.info("💡 لم يتم استخراج نماذج للقواعد أو جاري حساب وتحليل الأساسات.")
+                st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
+
+                # ── Table 1: Main Materials Quantity Survey Table ──
+                st.markdown("##### 📋 1. جدول الحصر التقريبي العام للكميات والمواد الإنشائية (General Quantity Survey Table)")
+
+                st.markdown(
+                    """
+                    <div style="direction: rtl; font-size: 1.05rem; font-weight: 700; color: #9a3412; background: #fff7ed; border-right: 4px solid #f97316; border-radius: 6px; padding: 8px 14px; margin: 8px 0 14px 0; text-align: right;">
+                        ⚠️ <strong>تنبيه وإرشاد هندسي هام:</strong> إن هذا الحصر تقريبي واسترشادي طبقاً للتصميم، يرجى استخدام موديول حصر الكميات لإدخال الكميات التي سيتم التنفيذ طبقاً لها على أرض الواقع.
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                if num_floors > 1:
+                    main_survey_data = [
+                        {
+                            "البند / المكون الإنشائي (Item / Material)": "1. حجم الخرسانة المسلحة (Reinforced Concrete R.C.)",
+                            "سقف الدور النمطي (1 Floor)": f"{slab_conc_val:.2f} m³",
+                            f"إجمالي أسقف المبنى ({num_floors} أسقف)": f"{slab_conc_tot_val:.2f} m³",
+                            f"أعمدة المبنى ({num_floors} أدوار)": f"{cols_conc_tot_val:.2f} m³",
+                            "أساسات المبنى (Foundations)": f"{ftgs_conc_rc_val:.2f} m³",
+                            "سملات وميدات (Ground Beams)": f"{gb_conc_rc_val:.2f} m³",
+                            "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_conc_rc_val:.2f} m³",
+                            "الوحدة (Unit)": "متر مكعب (m³)",
+                            "الملاحظات والمواصفات (Notes & Specs)": f"سقف الدور الواحد مسطح {slab_area_val:.1f} m² (صبة كل دور) │ إجمالي الـ {num_floors} أسقف + كامل الأعمدة ({tot_active_cols} عمود) + القواعد المسلحة + السملات",
+                        },
+                        {
+                            "البند / المكون الإنشائي (Item / Material)": "2. حجم الخرسانة العادية (Plain Concrete P.C.)",
+                            "سقف الدور النمطي (1 Floor)": "—",
+                            f"إجمالي أسقف المبنى ({num_floors} أسقف)": "—",
+                            f"أعمدة المبنى ({num_floors} أدوار)": "—",
+                            "أساسات المبنى (Foundations)": f"{ftgs_conc_pc_val:.2f} m³",
+                            "سملات وميدات (Ground Beams)": "—",
+                            "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_conc_pc_val:.2f} m³",
+                            "الوحدة (Unit)": "متر مكعب (m³)",
+                            "الملاحظات والمواصفات (Notes & Specs)": "فرشة نظافة بسمك 20 سم ورفرفة 20 سم أسفل كامل القواعد",
+                        },
+                        {
+                            "البند / المكون الإنشائي (Item / Material)": "3. إجمالي وزن حديد التسليح (Total Reinforcement Steel)",
+                            "سقف الدور النمطي (1 Floor)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
+                            f"إجمالي أسقف المبنى ({num_floors} أسقف)": f"{slab_steel_ton_tot:.3f} Ton ({slab_steel_kg_tot:,.1f} kg)",
+                            f"أعمدة المبنى ({num_floors} أدوار)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
+                            "أساسات المبنى (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
+                            "سملات وميدات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
+                            "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
+                            "الوحدة (Unit)": "طن (Ton) / كجم (kg)",
+                            "الملاحظات والمواصفات (Notes & Specs)": f"حديد السقف الواحد للطلبية الميدانية │ الإجمالي يشمل {num_floors} أسقف + تسليح وكانات الأعمدة + القواعد + السملات",
+                        },
+                        {
+                            "البند / المكون الإنشائي (Item / Material)": "4. كمية الأسمنت البورتلاندي (Portland Cement)",
+                            "سقف الدور النمطي (1 Floor)": f"{slab_cement_ton:.2f} Ton ({slab_cement_bags:,} شكارة)",
+                            f"إجمالي أسقف المبنى ({num_floors} أسقف)": f"{slab_cement_tot_ton:.2f} Ton ({slab_cement_tot_bags:,} شكارة)",
+                            f"أعمدة المبنى ({num_floors} أدوار)": f"{cols_cement_tot_ton:.2f} Ton ({cols_cement_tot_bags:,} شكارة)",
+                            "أساسات المبنى (Foundations)": f"{ftgs_cement_ton:.2f} Ton ({ftgs_cement_bags:,} شكارة)",
+                            "سملات وميدات (Ground Beams)": f"{gb_cement_ton:.2f} Ton ({gb_cement_bags:,} شكارة)",
+                            "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_cement_ton:.2f} Ton ({grand_cement_bags:,} شكارة)",
+                            "الوحدة (Unit)": "طن (Ton) / شكارة",
+                            "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 350 كجم/م³ للمسلحة (7 شكاير) و 250 كجم/م³ للعادية (5 شكاير)",
+                        },
+                        {
+                            "البند / المكون الإنشائي (Item / Material)": "5. كمية الزلط / الركام الكبير (Gravel / Coarse Aggregate)",
+                            "سقف الدور النمطي (1 Floor)": f"{slab_gravel_val:.2f} m³",
+                            f"إجمالي أسقف المبنى ({num_floors} أسقف)": f"{slab_gravel_tot_val:.2f} m³",
+                            f"أعمدة المبنى ({num_floors} أدوار)": f"{cols_gravel_tot_val:.2f} m³",
+                            "أساسات المبنى (Foundations)": f"{ftgs_gravel_val:.2f} m³",
+                            "سملات وميدات (Ground Beams)": f"{gb_gravel_val:.2f} m³",
+                            "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_gravel_val:.2f} m³",
+                            "الوحدة (Unit)": "متر مكعب (m³)",
+                            "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.80 m³ زلط متدرج ونظيف لكل 1.0 m³ خرسانة (مسلحة وعادية)",
+                        },
+                        {
+                            "البند / المكون الإنشائي (Item / Material)": "6. كمية الرمل الحرش / الركام الصغير (Clean Sand)",
+                            "سقف الدور النمطي (1 Floor)": f"{slab_sand_val:.2f} m³",
+                            f"إجمالي أسقف المبنى ({num_floors} أسقف)": f"{slab_sand_tot_val:.2f} m³",
+                            f"أعمدة المبنى ({num_floors} أدوار)": f"{cols_sand_tot_val:.2f} m³",
+                            "أساسات المبنى (Foundations)": f"{ftgs_sand_val:.2f} m³",
+                            "سملات وميدات (Ground Beams)": f"{gb_sand_val:.2f} m³",
+                            "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_sand_val:.2f} m³",
+                            "الوحدة (Unit)": "متر مكعب (m³)",
+                            "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.40 m³ رمل حرش نظيف لكل 1.0 m³ خرسانة (نصف حجم الزلط)",
+                        },
+                        {
+                            "البند / المكون الإنشائي (Item / Material)": "7. معدل استهلاك الحديد (Steel Consumption Ratio)",
+                            "سقف الدور النمطي (1 Floor)": f"{slab_ratio_val:.1f} kg/m³",
+                            f"إجمالي أسقف المبنى ({num_floors} أسقف)": f"{slab_ratio_val:.1f} kg/m³",
+                            f"أعمدة المبنى ({num_floors} أدوار)": f"{cols_ratio_val:.1f} kg/m³",
+                            "أساسات المبنى (Foundations)": f"{ftgs_ratio_val:.1f} kg/m³",
+                            "سملات وميدات (Ground Beams)": f"{gb_ratio_val:.1f} kg/m³",
+                            "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_ratio_val:.1f} kg/m³",
+                            "الوحدة (Unit)": "كجم / م³ خرسانة مسلحة",
+                            "الملاحظات والمواصفات (Notes & Specs)": f"متوسط استهلاك الحديد المسلح لكامل عناصر المبنى ({grand_ratio_val:.1f} kg/m³)",
+                        },
+                    ]
                 else:
-                    st.info("💡 جاري معالجة وحساب بيانات الأساسات والسملات لتوليد لوحة ومخرجات التصميم النهائي للقواعد والسملات.")
+                    main_survey_data = [
+                        {
+                            "البند / المكون الإنشائي (Item / Material)": "1. حجم الخرسانة المسلحة (Reinforced Concrete R.C.)",
+                            "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_conc_val:.2f} m³",
+                            "أعمدة الدور الواحد (Columns)": f"{cols_conc_tot_val:.2f} m³",
+                            "أساسات المبنى (Foundations)": f"{ftgs_conc_rc_val:.2f} m³",
+                            "سملات وميدات (Ground Beams)": f"{gb_conc_rc_val:.2f} m³",
+                            "الإجمالي الشامل (Grand Total)": f"{grand_conc_rc_val:.2f} m³",
+                            "الوحدة (Unit)": "متر مكعب (m³)",
+                            "الملاحظات والمواصفات (Notes & Specs)": f"مسطح السقف الصافي {slab_area_val:.1f} m² + كامل الأعمدة ({tot_active_cols} عمود) + القواعد المسلحة + السملات الأرضية",
+                        },
+                        {
+                            "البند / المكون الإنشائي (Item / Material)": "2. حجم الخرسانة العادية (Plain Concrete P.C.)",
+                            "سقف البلاطة اللاكمرية (Flat Slab)": "—",
+                            "أعمدة الدور الواحد (Columns)": "—",
+                            "أساسات المبنى (Foundations)": f"{ftgs_conc_pc_val:.2f} m³",
+                            "سملات وميدات (Ground Beams)": "—",
+                            "الإجمالي الشامل (Grand Total)": f"{grand_conc_pc_val:.2f} m³",
+                            "الوحدة (Unit)": "متر مكعب (m³)",
+                            "الملاحظات والمواصفات (Notes & Specs)": "فرشة نظافة بسمك 20 سم ورفرفة 20 سم أسفل كامل القواعد",
+                        },
+                        {
+                            "البند / المكون الإنشائي (Item / Material)": "3. إجمالي وزن حديد التسليح (Total Reinforcement Steel)",
+                            "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
+                            "أعمدة الدور الواحد (Columns)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
+                            "أساسات المبنى (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
+                            "سملات وميدات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
+                            "الإجمالي الشامل (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
+                            "الوحدة (Unit)": "طن (Ton) / كجم (kg)",
+                            "الملاحظات والمواصفات (Notes & Specs)": "شامل شبكات السقف والإضافي + حديد الأعمدة والكانات + تسليح القواعد المنفصلة والمشتركة والشدادات والسملات",
+                        },
+                        {
+                            "البند / المكون الإنشائي (Item / Material)": "4. كمية الأسمنت البورتلاندي (Portland Cement)",
+                            "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_cement_ton:.2f} Ton ({slab_cement_bags:,} شكارة)",
+                            "أعمدة الدور الواحد (Columns)": f"{cols_cement_tot_ton:.2f} Ton ({cols_cement_tot_bags:,} شكارة)",
+                            "أساسات المبنى (Foundations)": f"{ftgs_cement_ton:.2f} Ton ({ftgs_cement_bags:,} شكارة)",
+                            "سملات وميدات (Ground Beams)": f"{gb_cement_ton:.2f} Ton ({gb_cement_bags:,} شكارة)",
+                            "الإجمالي الشامل (Grand Total)": f"{grand_cement_ton:.2f} Ton ({grand_cement_bags:,} شكارة)",
+                            "الوحدة (Unit)": "طن (Ton) / شكارة",
+                            "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 350 كجم/م³ للمسلحة (7 شكاير) و 250 كجم/م³ للعادية (5 شكاير)",
+                        },
+                        {
+                            "البند / المكون الإنشائي (Item / Material)": "5. كمية الزلط / الركام الكبير (Gravel / Coarse Aggregate)",
+                            "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_gravel_val:.2f} m³",
+                            "أعمدة الدور الواحد (Columns)": f"{cols_gravel_tot_val:.2f} m³",
+                            "أساسات المبنى (Foundations)": f"{ftgs_gravel_val:.2f} m³",
+                            "سملات وميدات (Ground Beams)": f"{gb_gravel_val:.2f} m³",
+                            "الإجمالي الشامل (Grand Total)": f"{grand_gravel_val:.2f} m³",
+                            "الوحدة (Unit)": "متر مكعب (m³)",
+                            "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.80 m³ زلط متدرج ونظيف لكل 1.0 m³ خرسانة (مسلحة وعادية)",
+                        },
+                        {
+                            "البند / المكون الإنشائي (Item / Material)": "6. كمية الرمل الحرش / الركام الصغير (Clean Sand)",
+                            "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_sand_val:.2f} m³",
+                            "أعمدة الدور الواحد (Columns)": f"{cols_sand_tot_val:.2f} m³",
+                            "أساسات المبنى (Foundations)": f"{ftgs_sand_val:.2f} m³",
+                            "سملات وميدات (Ground Beams)": f"{gb_sand_val:.2f} m³",
+                            "الإجمالي الشامل (Grand Total)": f"{grand_sand_val:.2f} m³",
+                            "الوحدة (Unit)": "متر مكعب (m³)",
+                            "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.40 m³ رمل حرش نظيف لكل 1.0 m³ خرسانة (نصف حجم الزلط)",
+                        },
+                        {
+                            "البند / المكون الإنشائي (Item / Material)": "7. معدل استهلاك الحديد (Steel Consumption Ratio)",
+                            "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_ratio_val:.1f} kg/m³",
+                            "أعمدة الدور الواحد (Columns)": f"{cols_ratio_val:.1f} kg/m³",
+                            "أساسات المبنى (Foundations)": f"{ftgs_ratio_val:.1f} kg/m³",
+                            "سملات وميدات (Ground Beams)": f"{gb_ratio_val:.1f} kg/m³",
+                            "الإجمالي الشامل (Grand Total)": f"{grand_ratio_val:.1f} kg/m³",
+                            "الوحدة (Unit)": "كجم / م³ خرسانة مسلحة",
+                            "الملاحظات والمواصفات (Notes & Specs)": "متوسط استهلاك الحديد المسلح لكافة عناصر المبنى",
+                        },
+                    ]
+                render_styled_table(main_survey_data)
 
-        # ── 📊 الحصر التقريبي للكميات — APPROXIMATE QUANTITY SURVEY ──────────────
-        # 1. Slab Quantities (السقف)
-        slab_area_val    = boq.get("slab_area_m2", 0.0)
-        slab_conc_val    = boq.get("concrete_vol_m3", 0.0)
-        slab_steel_kg    = boq.get("total_steel_kg", 0.0)
-        slab_steel_ton   = boq.get("total_steel_ton", 0.0)
-        slab_cement_ton  = boq.get("cement_ton", 0.0)
-        slab_cement_bags = boq.get("cement_bags", 0)
-        slab_gravel_val  = boq.get("gravel_m3", 0.0)
-        slab_sand_val    = boq.get("sand_m3", 0.0)
-        slab_ratio_val   = boq.get("steel_ratio_kg_m3", 0.0)
-
-        # 2. Columns Quantities (الأعمدة لجميع الأدوار)
-        cols_conc_1f_val      = tot_conc_vol_1f
-        cols_steel_kg_1f_val  = tot_steel_kg_1f
-        cols_steel_ton_1f_val = tot_steel_kg_1f / 1000.0
-
-        cols_conc_tot_val      = cols_conc_1f_val * num_floors
-        cols_steel_kg_tot_val  = cols_steel_kg_1f_val * num_floors
-        cols_steel_ton_tot_val = cols_steel_ton_1f_val * num_floors
-        cols_cement_tot_ton    = (cols_conc_tot_val * 350.0) / 1000.0
-        cols_cement_tot_bags   = int(round(cols_cement_tot_ton * 1000.0 / 50.0))
-        cols_gravel_tot_val    = cols_conc_tot_val * 0.80
-        cols_sand_tot_val      = cols_conc_tot_val * 0.40
-        cols_ratio_val         = (cols_steel_kg_tot_val / cols_conc_tot_val) if cols_conc_tot_val > 0 else 0.0
-
-        # 3. Foundations Quantities (أساسات المبنى: قواعد منفصلة + قواعد مشتركة)
-        ftgs_conc_rc_val  = 0.0
-        ftgs_conc_pc_val  = 0.0
-        ftgs_steel_kg_val = 0.0
-        ftg_dia_map = {}
-
-        def _add_ftg_dia_entry(phi_val, wt_kg, app_desc):
-            if phi_val not in ftg_dia_map:
-                ftg_dia_map[phi_val] = {"weight_kg": 0.0, "apps": app_desc}
-            ftg_dia_map[phi_val]["weight_kg"] += wt_kg
-
-        ftg_analysis_obj = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
-        if ftg_analysis_obj and "quantities" in ftg_analysis_obj:
-            fq = ftg_analysis_obj["quantities"]
-            ftgs_conc_rc_val = float(fq.get("ftgs_conc_rc_val", 0.0))
-            ftgs_conc_pc_val = float(fq.get("ftgs_conc_pc_val", 0.0))
-            ftgs_steel_kg_val = float(fq.get("ftgs_steel_kg_val", 0.0))
-            ftg_dia_map = dict(fq.get("ftg_dia_map", {}))
-        elif 'fs_active_columns' in locals() and fs_active_columns:
-            ov_col_ids_set = overlap_data.get("overlapping_col_ids", set()) if 'overlap_data' in locals() else set()
-            for col_item in fs_active_columns:
-                cid = col_item["id"]
-                if cid in ov_col_ids_set:
-                    continue
-                ctype = col_item.get("type", "Interior")
-                f_model = ftgs_dict.get(ctype, ftgs_dict.get("Interior")) if 'ftgs_dict' in locals() else None
-                if not f_model:
-                    continue
-
-                L_m = f_model["L_cm"] / 100.0
-                B_m = f_model["B_cm"] / 100.0
-                t_m = f_model["t_cm"] / 100.0
-                ftgs_conc_rc_val += L_m * B_m * t_m
-
-                # P.C. Blinding Layer (20 cm thick with 20 cm projection)
-                L_pc_m = (f_model["L_cm"] + 40.0) / 100.0
-                B_pc_m = (f_model["B_cm"] + 40.0) / 100.0
-                ftgs_conc_pc_val += L_pc_m * B_pc_m * 0.20
-
-                # Steel: bottom longitudinal & transverse
-                phi_f = f_model.get("Phi", 16)
-                unit_w_f = (phi_f ** 2) / 162.0
-                n_L = max(5, int(math.ceil(B_m * f_model.get("n_bars_L", 5.0))))
-                len_L = L_m - 0.10 + 2.0 * max(0.20, t_m - 0.10)
-                wt_L = n_L * len_L * unit_w_f
-
-                n_B = max(5, int(math.ceil(L_m * f_model.get("n_bars_B", 5.0))))
-                len_B = B_m - 0.10 + 2.0 * max(0.20, t_m - 0.10)
-                wt_B = n_B * len_B * unit_w_f
-
-                isolated_col_steel = wt_L + wt_B
-                ftgs_steel_kg_val += isolated_col_steel
-                _add_ftg_dia_entry(phi_f, isolated_col_steel, "تسليح سفلي لقواعد منفصلة (Isolated Footings)")
-
-            if 'combined_fs_models' in locals() and combined_fs_models:
-                for cf in combined_fs_models:
-                    Lc_m = cf["Lc_cm"] / 100.0
-                    Bc_m = cf["Bc_cm"] / 100.0
-                    tc_m = cf["tc_cm"] / 100.0
-                    ftgs_conc_rc_val += Lc_m * Bc_m * tc_m
-
-                    # P.C. Blinding for Combined Footings
-                    Lc_pc_m = (cf["Lc_cm"] + 40.0) / 100.0
-                    Bc_pc_m = (cf["Bc_cm"] + 40.0) / 100.0
-                    ftgs_conc_pc_val += Lc_pc_m * Bc_pc_m * 0.20
-
-                    # Rebar: Bottom longitudinal
-                    phi_bot = cf.get("Phi_mm", 18)
-                    unit_w_bot = (phi_bot ** 2) / 162.0
-                    n_bot = max(5, int(math.ceil(Bc_m * 6.0)))
-                    len_bot = Lc_m - 0.10 + 2.0 * max(0.25, tc_m - 0.10)
-                    wt_bot = n_bot * len_bot * unit_w_bot
-
-                    # Rebar: Top longitudinal (Negative moment rebar)
-                    phi_top = cf.get("Phi_mm", 18)
-                    unit_w_top = (phi_top ** 2) / 162.0
-                    n_top = max(5, int(math.ceil(Bc_m * 8.0)))
-                    len_top = Lc_m - 0.10 + 2.0 * max(0.25, tc_m - 0.10)
-                    wt_top = n_top * len_top * unit_w_top
-
-                    # Rebar: Transverse steel
-                    phi_trans = 16
-                    unit_w_trans = (16 ** 2) / 162.0
-                    n_trans = max(5, int(math.ceil(Lc_m * 5.0)))
-                    len_trans = Bc_m - 0.10 + 2.0 * max(0.25, tc_m - 0.10)
-                    wt_trans = n_trans * len_trans * unit_w_trans
-
-                    combined_col_steel = wt_bot + wt_top + wt_trans
-                    ftgs_steel_kg_val += combined_col_steel
-                    _add_ftg_dia_entry(phi_bot, wt_bot, "تسليح سفلي لقواعد مشتركة (Combined Footings)")
-                    _add_ftg_dia_entry(phi_top, wt_top, "تسليح علوي رئيسي لقواعد مشتركة (Combined Footings)")
-                    _add_ftg_dia_entry(phi_trans, wt_trans, "تسليح عرضي لقواعد مشتركة (Combined Footings)")
-
-        ftgs_steel_ton_val  = ftgs_steel_kg_val / 1000.0
-        ftgs_cement_ton     = (ftgs_conc_rc_val * 350.0 + ftgs_conc_pc_val * 250.0) / 1000.0
-        ftgs_cement_bags    = int(round(ftgs_cement_ton * 1000.0 / 50.0))
-        ftgs_gravel_val     = (ftgs_conc_rc_val + ftgs_conc_pc_val) * 0.80
-        ftgs_sand_val       = (ftgs_conc_rc_val + ftgs_conc_pc_val) * 0.40
-        ftgs_ratio_val      = (ftgs_steel_kg_val / ftgs_conc_rc_val) if ftgs_conc_rc_val > 0 else 0.0
-
-        # 3b. Ground Beams Quantities (السملات والميدات الأرضية)
-        gb_analysis_obj = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis")
-        gb_conc_rc_val  = 0.0
-        gb_steel_kg_val = 0.0
-        gb_dia_map      = {}
-        if gb_analysis_obj and "boq" in gb_analysis_obj:
-            gboq = gb_analysis_obj["boq"]
-            gb_conc_rc_val  = float(gboq.get("conc_vol_rc", 0.0))
-            gb_steel_kg_val = float(gboq.get("steel_kg_tot", 0.0))
-            gb_dia_map      = dict(gboq.get("dia_map", {}))
-
-        gb_steel_ton_val  = gb_steel_kg_val / 1000.0
-        gb_cement_ton     = (gb_conc_rc_val * 350.0) / 1000.0
-        gb_cement_bags    = int(round(gb_cement_ton * 1000.0 / 50.0))
-        gb_gravel_val     = gb_conc_rc_val * 0.80
-        gb_sand_val       = gb_conc_rc_val * 0.40
-        gb_ratio_val      = (gb_steel_kg_val / gb_conc_rc_val) if gb_conc_rc_val > 0 else 0.0
-
-        # 1b. Full Building Slab Quantities (إجمالي أسقف المبنى بالكامل لعدد N طابق)
-        slab_conc_tot_val    = slab_conc_val * num_floors
-        slab_steel_kg_tot    = slab_steel_kg * num_floors
-        slab_steel_ton_tot   = slab_steel_ton * num_floors
-        slab_cement_tot_ton  = slab_cement_ton * num_floors
-        slab_cement_tot_bags = slab_cement_bags * num_floors
-        slab_gravel_tot_val  = slab_gravel_val * num_floors
-        slab_sand_tot_val    = slab_sand_val * num_floors
-
-        # 4. Grand Total Quantities (إجمالي أسقف المبنى + أعمدة المبنى + الأساسات + السملات)
-        grand_conc_rc_val   = slab_conc_tot_val + cols_conc_tot_val + ftgs_conc_rc_val + gb_conc_rc_val
-        grand_conc_pc_val   = ftgs_conc_pc_val
-        grand_conc_all_val  = grand_conc_rc_val + grand_conc_pc_val
-        grand_steel_kg_val  = slab_steel_kg_tot + cols_steel_kg_tot_val + ftgs_steel_kg_val + gb_steel_kg_val
-        grand_steel_ton_val = slab_steel_ton_tot + cols_steel_ton_tot_val + ftgs_steel_ton_val + gb_steel_ton_val
-        grand_cement_ton    = slab_cement_tot_ton + cols_cement_tot_ton + ftgs_cement_ton + gb_cement_ton
-        grand_cement_bags   = slab_cement_tot_bags + cols_cement_tot_bags + ftgs_cement_bags + gb_cement_bags
-        grand_gravel_val    = slab_gravel_tot_val + cols_gravel_tot_val + ftgs_gravel_val + gb_gravel_val
-        grand_sand_val      = slab_sand_tot_val + cols_sand_tot_val + ftgs_sand_val + gb_sand_val
-        grand_ratio_val     = (grand_steel_kg_val / grand_conc_rc_val) if grand_conc_rc_val > 0 else 0.0
-
-        # 5. Detailed Diameter Breakdown (Slab, Columns & Foundations)
-        all_dias_set = set()
-        slab_dia_map = {}
-        for d_row in boq.get("by_dia", []):
-            d_val = d_row.get("dia_mm") or d_row.get("dia")
-            if d_val:
-                all_dias_set.add(d_val)
-                slab_dia_map[d_val] = {
-                    "weight_kg": d_row.get("weight_kg", 0.0),
-                    "weight_ton": d_row.get("weight_ton", 0.0),
-                    "apps": d_row.get("apps", "—"),
-                }
-
-        cols_dia_map = {}
-        if 'col_designs' in locals() and col_designs:
-            for des_item in col_designs:
-                _rtype = des_item.get("raw_type", "Interior")
-                cnt = cnt_int if _rtype == "Interior" else (cnt_edge if _rtype == "Edge" else cnt_corner)
-                if cnt > 0:
-                    phi_m = des_item["Phi"]
-                    phi_st = des_item["Phi_st"]
-                    all_dias_set.add(phi_m)
-                    all_dias_set.add(phi_st)
-
-                    H_m_col = col_H / 100.0
-                    L_bar_col = H_m_col + max(1.0, (50.0 * phi_m) / 1000.0)
-                    unit_w_m = (phi_m ** 2) / 162.0
-                    wt_main_bld = des_item["n_bars"] * L_bar_col * unit_w_m * cnt * num_floors
-
-                    n_ties_col = max(5, int(math.ceil(H_m_col * des_item["n_st_per_m"])))
-                    tie_perim_col = 2.0 * (((des_item["b"] - 5.0) + (des_item["t"] - 5.0)) / 100.0) + 0.20
-                    unit_w_st = (phi_st ** 2) / 162.0
-                    wt_st_bld = n_ties_col * tie_perim_col * unit_w_st * cnt * num_floors
-
-                    if phi_m not in cols_dia_map:
-                        cols_dia_map[phi_m] = {"weight_kg": 0.0, "apps": "تسليح طولي رئيسي للأعمدة (Main Column Rebar)"}
-                    cols_dia_map[phi_m]["weight_kg"] += wt_main_bld
-
-                    if phi_st not in cols_dia_map:
-                        cols_dia_map[phi_st] = {"weight_kg": 0.0, "apps": "كانات وأطواق الأعمدة (Column Stirrup Ties)"}
-                    cols_dia_map[phi_st]["weight_kg"] += wt_st_bld
-
-        all_dias_set.update(ftg_dia_map.keys())
-        all_dias_set.update(gb_dia_map.keys())
-
-        # ── 🏢 3D Integrated Structural BIM & Rebar Viewer ──
-        try:
-            from modules.bim_3d_viewer import render_3d_bim_viewer
-            render_3d_bim_viewer(
-                Lx_calc=Lx_calc,
-                Ly_calc=Ly_calc,
-                cantilevers=cantilevers,
-                ts_cm=ts,
-                active_cols=_active_cols,
-                indiv_col_designs=indiv_col_designs if 'indiv_col_designs' in locals() else None,
-                col_designs=col_designs if 'col_designs' in locals() else None,
-                col_H_cm=col_H if 'col_H' in locals() else 300.0,
-                num_floors=num_floors,
-                ftg_analysis=ftg_analysis if 'ftg_analysis' in locals() else st.session_state.get("fs_ftg_analysis"),
-                gb_analysis=gb_analysis if 'gb_analysis' in locals() else st.session_state.get("fs_gb_analysis"),
-                punching_results=punching_results if 'punching_results' in locals() else None,
-                top_extra_cols=top_extra_cols if 'top_extra_cols' in locals() else None,
-                btm_extra_spans=btm_extra_spans if 'btm_extra_spans' in locals() else None,
-                n_mesh_btm=n_mesh_btm if 'n_mesh_btm' in locals() else 5.0,
-                bottom_mesh_dia=bottom_mesh_dia if 'bottom_mesh_dia' in locals() else 10,
-                n_mesh_top=n_mesh_top if 'n_mesh_top' in locals() else 5.0,
-                top_mesh_dia=top_mesh_dia if 'top_mesh_dia' in locals() else 10,
-                fcu=float(Fcu) if 'Fcu' in locals() and Fcu else 250.0,
-                fy=float(Fy) if 'Fy' in locals() and Fy else 4000.0,
-                prefix=prefix,
-                edge_columns=_edge_columns if '_edge_columns' in locals() else None,
-                drop_beams=_cur_beams_list,
-                void_panels=_confirmed_voids,
-                void_boxes=_void_boxes_sk if '_void_boxes_sk' in locals() else None,
-                Lx_spans=Lx_spans if 'Lx_spans' in locals() else None,
-                Ly_spans=Ly_spans if 'Ly_spans' in locals() else None,
-                active_x_labels=_active_x_labels if '_active_x_labels' in locals() else None,
-                active_y_labels=_active_y_labels if '_active_y_labels' in locals() else None,
-                layout_sketch_b64=st.session_state.get(f"{prefix}flat_slab_plan_b64", "") or st.session_state.get("fs_flat_slab_plan_b64", ""),
-            )
-        except Exception as _e_3d:
-            st.error(f"⚠️ خطأ أثناء تحميل العارض ثلاثي الأبعاد: {_e_3d}")
-
-        with st.expander(
-            f"📊 Approximate Quantity Survey (الحصر التقريبي للكميات){_ftg_exp_suf}",
-            expanded=False,
-            key=f"{prefix}exp_qs_total_v{_ftg_exp_ver}",
-        ):
-            if _ftg_collapsed:
-                st.warning(_ftg_warn_msg)
-            st.markdown(
-                f"""
-                <div style="background:#f8fafc; border-left:4px solid #1e40af; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
-                    <div style="font-size:1.0rem; font-weight:800; color:#38bdf8;">
-                        📋 جدول الحصر الشامل لكميات ومواد السقف والأعمدة والأساسات والسملات والإجمالي الكلي للمبنى:
-                    </div>
-                    <div style="font-size:0.9rem; color:#475569; margin-top:3px;">
-                        حصر تفصيلي شامل للخرسانة المسلحة والعادية، وحديد التسليح (لكل قطر وإجمالي)، والأسمنت، والزلط، والرمل لسقف البلاطة اللاكمرية، وأعمدة المبنى ({num_floors} طوابق)، وأساسات المبنى بالكامل (القواعد المنفصلة والمشتركة)، وسملات الربط الأرضية (Ground Beams).
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            # ── Summary Quantity Survey Table (بدلاً من البانيلات القديمة) ──
-            slab_sub_txt = f"أسقف ({num_floors}): {slab_steel_ton_tot:.2f}t (الدور: {slab_steel_ton:.2f}t)" if num_floors > 1 else f"سقف: {slab_steel_ton:.2f}t"
-            st.markdown(
-                f"""
-                <div style="direction: rtl; margin-bottom: 18px; border-radius: 10px; overflow: hidden; border: 2px solid #f97316; box-shadow: 0 4px 12px rgba(249, 115, 22, 0.12);">
-                    <table style="width: 100%; border-collapse: collapse; font-family: inherit; background-color: #fffaf5;">
-                        <thead>
-                            <tr style="background: linear-gradient(90deg, #fdba74 0%, #fed7aa 100%); border-bottom: 2px solid #f97316;">
-                                <th style="padding: 12px 16px; text-align: right; font-size: 1.15rem; font-weight: 800; color: #7c2d12; width: 26%;">البند / المكون الإنشائي</th>
-                                <th style="padding: 12px 16px; text-align: center; font-size: 1.15rem; font-weight: 800; color: #7c2d12; width: 24%;">إجمالي الكمية للمبنى</th>
-                                <th style="padding: 12px 16px; text-align: center; font-size: 1.15rem; font-weight: 800; color: #7c2d12; width: 14%;">الوحدة</th>
-                                <th style="padding: 12px 16px; text-align: right; font-size: 1.15rem; font-weight: 800; color: #7c2d12; width: 36%;">التفصيل والتوزيع الإنشائي</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr style="border-bottom: 1.5px solid #fed7aa; background-color: #fff7ed;">
-                                <td style="padding: 12px 16px; font-size: 1.12rem; font-weight: 700; color: #9a3412;">🏢 إجمالي خرسانات المبنى ({num_floors} أدوار)</td>
-                                <td style="padding: 12px 16px; text-align: center; font-size: 1.35rem; font-weight: 900; color: #c2410c;">{grand_conc_all_val:.2f}</td>
-                                <td style="padding: 12px 16px; text-align: center; font-size: 1.10rem; font-weight: 700; color: #7c2d12;">متر مكعب (m³)</td>
-                                <td style="padding: 12px 16px; font-size: 1.05rem; font-weight: 600; color: #431407;">مسلحة: <b>{grand_conc_rc_val:.1f} m³</b> │ عادية: <b>{grand_conc_pc_val:.1f} m³</b></td>
-                            </tr>
-                            <tr style="border-bottom: 1.5px solid #fed7aa; background-color: #fffaf5;">
-                                <td style="padding: 12px 16px; font-size: 1.12rem; font-weight: 700; color: #9a3412;">🔩 إجمالي حديد المبنى بالكامل</td>
-                                <td style="padding: 12px 16px; text-align: center; font-size: 1.35rem; font-weight: 900; color: #c2410c;">{grand_steel_ton_val:.3f}</td>
-                                <td style="padding: 12px 16px; text-align: center; font-size: 1.10rem; font-weight: 700; color: #7c2d12;">طن (Ton)<br><span style="font-size: 0.95rem; font-weight: 600; color: #9a3412;">({grand_steel_kg_val:,.1f} kg)</span></td>
-                                <td style="padding: 12px 16px; font-size: 1.05rem; font-weight: 600; color: #431407;">{slab_sub_txt} │ أعمدة: <b>{cols_steel_ton_tot_val:.2f}t</b> │ قواعد: <b>{ftgs_steel_ton_val:.2f}t</b> │ سملات: <b>{gb_steel_ton_val:.2f}t</b></td>
-                            </tr>
-                            <tr style="border-bottom: 1.5px solid #fed7aa; background-color: #fff7ed;">
-                                <td style="padding: 12px 16px; font-size: 1.12rem; font-weight: 700; color: #9a3412;">🏗️ إجمالي أسمنت المبنى</td>
-                                <td style="padding: 12px 16px; text-align: center; font-size: 1.35rem; font-weight: 900; color: #c2410c;">{grand_cement_ton:.2f}</td>
-                                <td style="padding: 12px 16px; text-align: center; font-size: 1.10rem; font-weight: 700; color: #7c2d12;">طن (Ton)</td>
-                                <td style="padding: 12px 16px; font-size: 1.05rem; font-weight: 600; color: #431407;"><b>{grand_cement_bags:,} شكارة</b> (وزن 50 كجم)</td>
-                            </tr>
-                            <tr style="background-color: #fffaf5;">
-                                <td style="padding: 12px 16px; font-size: 1.12rem; font-weight: 700; color: #9a3412;">⏳ إجمالي الزلط والرمل</td>
-                                <td style="padding: 12px 16px; text-align: center; font-size: 1.25rem; font-weight: 900; color: #c2410c;">زلط: {grand_gravel_val:.1f} │ رمل: {grand_sand_val:.1f}</td>
-                                <td style="padding: 12px 16px; text-align: center; font-size: 1.10rem; font-weight: 700; color: #7c2d12;">متر مكعب (m³)</td>
-                                <td style="padding: 12px 16px; font-size: 1.05rem; font-weight: 600; color: #431407;">معدل استهلاك الحديد الكلي: <b>{grand_ratio_val:.1f} kg/m³</b> خرسانة مسلحة</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
-
-            # ── Table 1: Main Materials Quantity Survey Table ──
-            st.markdown("##### 📋 1. جدول الحصر التقريبي العام للكميات والمواد الإنشائية (General Quantity Survey Table)")
-
-            st.markdown(
-                """
-                <div style="direction: rtl; font-size: 1.05rem; font-weight: 700; color: #9a3412; background: #fff7ed; border-right: 4px solid #f97316; border-radius: 6px; padding: 8px 14px; margin: 8px 0 14px 0; text-align: right;">
-                    ⚠️ <strong>تنبيه وإرشاد هندسي هام:</strong> إن هذا الحصر تقريبي واسترشادي طبقاً للتصميم، يرجى استخدام موديول حصر الكميات لإدخال الكميات التي سيتم التنفيذ طبقاً لها على أرض الواقع.
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-            if num_floors > 1:
-                main_survey_data = [
-                    {
-                        "البند / المكون الإنشائي (Item / Material)": "1. حجم الخرسانة المسلحة (Reinforced Concrete R.C.)",
-                        "سقف الدور النمطي (1 Floor)": f"{slab_conc_val:.2f} m³",
-                        f"إجمالي أسقف المبنى ({num_floors} أسقف)": f"{slab_conc_tot_val:.2f} m³",
-                        f"أعمدة المبنى ({num_floors} أدوار)": f"{cols_conc_tot_val:.2f} m³",
-                        "أساسات المبنى (Foundations)": f"{ftgs_conc_rc_val:.2f} m³",
-                        "سملات وميدات (Ground Beams)": f"{gb_conc_rc_val:.2f} m³",
-                        "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_conc_rc_val:.2f} m³",
-                        "الوحدة (Unit)": "متر مكعب (m³)",
-                        "الملاحظات والمواصفات (Notes & Specs)": f"سقف الدور الواحد مسطح {slab_area_val:.1f} m² (صبة كل دور) │ إجمالي الـ {num_floors} أسقف + كامل الأعمدة ({tot_active_cols} عمود) + القواعد المسلحة + السملات",
-                    },
-                    {
-                        "البند / المكون الإنشائي (Item / Material)": "2. حجم الخرسانة العادية (Plain Concrete P.C.)",
-                        "سقف الدور النمطي (1 Floor)": "—",
-                        f"إجمالي أسقف المبنى ({num_floors} أسقف)": "—",
-                        f"أعمدة المبنى ({num_floors} أدوار)": "—",
-                        "أساسات المبنى (Foundations)": f"{ftgs_conc_pc_val:.2f} m³",
-                        "سملات وميدات (Ground Beams)": "—",
-                        "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_conc_pc_val:.2f} m³",
-                        "الوحدة (Unit)": "متر مكعب (m³)",
-                        "الملاحظات والمواصفات (Notes & Specs)": "فرشة نظافة بسمك 20 سم ورفرفة 20 سم أسفل كامل القواعد",
-                    },
-                    {
-                        "البند / المكون الإنشائي (Item / Material)": "3. إجمالي وزن حديد التسليح (Total Reinforcement Steel)",
-                        "سقف الدور النمطي (1 Floor)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
-                        f"إجمالي أسقف المبنى ({num_floors} أسقف)": f"{slab_steel_ton_tot:.3f} Ton ({slab_steel_kg_tot:,.1f} kg)",
-                        f"أعمدة المبنى ({num_floors} أدوار)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
-                        "أساسات المبنى (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
-                        "سملات وميدات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
-                        "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
-                        "الوحدة (Unit)": "طن (Ton) / كجم (kg)",
-                        "الملاحظات والمواصفات (Notes & Specs)": f"حديد السقف الواحد للطلبية الميدانية │ الإجمالي يشمل {num_floors} أسقف + تسليح وكانات الأعمدة + القواعد + السملات",
-                    },
-                    {
-                        "البند / المكون الإنشائي (Item / Material)": "4. كمية الأسمنت البورتلاندي (Portland Cement)",
-                        "سقف الدور النمطي (1 Floor)": f"{slab_cement_ton:.2f} Ton ({slab_cement_bags:,} شكارة)",
-                        f"إجمالي أسقف المبنى ({num_floors} أسقف)": f"{slab_cement_tot_ton:.2f} Ton ({slab_cement_tot_bags:,} شكارة)",
-                        f"أعمدة المبنى ({num_floors} أدوار)": f"{cols_cement_tot_ton:.2f} Ton ({cols_cement_tot_bags:,} شكارة)",
-                        "أساسات المبنى (Foundations)": f"{ftgs_cement_ton:.2f} Ton ({ftgs_cement_bags:,} شكارة)",
-                        "سملات وميدات (Ground Beams)": f"{gb_cement_ton:.2f} Ton ({gb_cement_bags:,} شكارة)",
-                        "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_cement_ton:.2f} Ton ({grand_cement_bags:,} شكارة)",
-                        "الوحدة (Unit)": "طن (Ton) / شكارة",
-                        "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 350 كجم/م³ للمسلحة (7 شكاير) و 250 كجم/م³ للعادية (5 شكاير)",
-                    },
-                    {
-                        "البند / المكون الإنشائي (Item / Material)": "5. كمية الزلط / الركام الكبير (Gravel / Coarse Aggregate)",
-                        "سقف الدور النمطي (1 Floor)": f"{slab_gravel_val:.2f} m³",
-                        f"إجمالي أسقف المبنى ({num_floors} أسقف)": f"{slab_gravel_tot_val:.2f} m³",
-                        f"أعمدة المبنى ({num_floors} أدوار)": f"{cols_gravel_tot_val:.2f} m³",
-                        "أساسات المبنى (Foundations)": f"{ftgs_gravel_val:.2f} m³",
-                        "سملات وميدات (Ground Beams)": f"{gb_gravel_val:.2f} m³",
-                        "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_gravel_val:.2f} m³",
-                        "الوحدة (Unit)": "متر مكعب (m³)",
-                        "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.80 m³ زلط متدرج ونظيف لكل 1.0 m³ خرسانة (مسلحة وعادية)",
-                    },
-                    {
-                        "البند / المكون الإنشائي (Item / Material)": "6. كمية الرمل الحرش / الركام الصغير (Clean Sand)",
-                        "سقف الدور النمطي (1 Floor)": f"{slab_sand_val:.2f} m³",
-                        f"إجمالي أسقف المبنى ({num_floors} أسقف)": f"{slab_sand_tot_val:.2f} m³",
-                        f"أعمدة المبنى ({num_floors} أدوار)": f"{cols_sand_tot_val:.2f} m³",
-                        "أساسات المبنى (Foundations)": f"{ftgs_sand_val:.2f} m³",
-                        "سملات وميدات (Ground Beams)": f"{gb_sand_val:.2f} m³",
-                        "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_sand_val:.2f} m³",
-                        "الوحدة (Unit)": "متر مكعب (m³)",
-                        "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.40 m³ رمل حرش نظيف لكل 1.0 m³ خرسانة (نصف حجم الزلط)",
-                    },
-                    {
-                        "البند / المكون الإنشائي (Item / Material)": "7. معدل استهلاك الحديد (Steel Consumption Ratio)",
-                        "سقف الدور النمطي (1 Floor)": f"{slab_ratio_val:.1f} kg/m³",
-                        f"إجمالي أسقف المبنى ({num_floors} أسقف)": f"{slab_ratio_val:.1f} kg/m³",
-                        f"أعمدة المبنى ({num_floors} أدوار)": f"{cols_ratio_val:.1f} kg/m³",
-                        "أساسات المبنى (Foundations)": f"{ftgs_ratio_val:.1f} kg/m³",
-                        "سملات وميدات (Ground Beams)": f"{gb_ratio_val:.1f} kg/m³",
-                        "الإجمالي الشامل للمبنى (Grand Total)": f"{grand_ratio_val:.1f} kg/m³",
-                        "الوحدة (Unit)": "كجم / م³ خرسانة مسلحة",
-                        "الملاحظات والمواصفات (Notes & Specs)": f"متوسط استهلاك الحديد المسلح لكامل عناصر المبنى ({grand_ratio_val:.1f} kg/m³)",
-                    },
-                ]
-            else:
-                main_survey_data = [
-                    {
-                        "البند / المكون الإنشائي (Item / Material)": "1. حجم الخرسانة المسلحة (Reinforced Concrete R.C.)",
-                        "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_conc_val:.2f} m³",
-                        "أعمدة الدور الواحد (Columns)": f"{cols_conc_tot_val:.2f} m³",
-                        "أساسات المبنى (Foundations)": f"{ftgs_conc_rc_val:.2f} m³",
-                        "سملات وميدات (Ground Beams)": f"{gb_conc_rc_val:.2f} m³",
-                        "الإجمالي الشامل (Grand Total)": f"{grand_conc_rc_val:.2f} m³",
-                        "الوحدة (Unit)": "متر مكعب (m³)",
-                        "الملاحظات والمواصفات (Notes & Specs)": f"مسطح السقف الصافي {slab_area_val:.1f} m² + كامل الأعمدة ({tot_active_cols} عمود) + القواعد المسلحة + السملات الأرضية",
-                    },
-                    {
-                        "البند / المكون الإنشائي (Item / Material)": "2. حجم الخرسانة العادية (Plain Concrete P.C.)",
-                        "سقف البلاطة اللاكمرية (Flat Slab)": "—",
-                        "أعمدة الدور الواحد (Columns)": "—",
-                        "أساسات المبنى (Foundations)": f"{ftgs_conc_pc_val:.2f} m³",
-                        "سملات وميدات (Ground Beams)": "—",
-                        "الإجمالي الشامل (Grand Total)": f"{grand_conc_pc_val:.2f} m³",
-                        "الوحدة (Unit)": "متر مكعب (m³)",
-                        "الملاحظات والمواصفات (Notes & Specs)": "فرشة نظافة بسمك 20 سم ورفرفة 20 سم أسفل كامل القواعد",
-                    },
-                    {
-                        "البند / المكون الإنشائي (Item / Material)": "3. إجمالي وزن حديد التسليح (Total Reinforcement Steel)",
-                        "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
-                        "أعمدة الدور الواحد (Columns)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
-                        "أساسات المبنى (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
-                        "سملات وميدات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
-                        "الإجمالي الشامل (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
-                        "الوحدة (Unit)": "طن (Ton) / كجم (kg)",
-                        "الملاحظات والمواصفات (Notes & Specs)": "شامل شبكات السقف والإضافي + حديد الأعمدة والكانات + تسليح القواعد المنفصلة والمشتركة والشدادات والسملات",
-                    },
-                    {
-                        "البند / المكون الإنشائي (Item / Material)": "4. كمية الأسمنت البورتلاندي (Portland Cement)",
-                        "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_cement_ton:.2f} Ton ({slab_cement_bags:,} شكارة)",
-                        "أعمدة الدور الواحد (Columns)": f"{cols_cement_tot_ton:.2f} Ton ({cols_cement_tot_bags:,} شكارة)",
-                        "أساسات المبنى (Foundations)": f"{ftgs_cement_ton:.2f} Ton ({ftgs_cement_bags:,} شكارة)",
-                        "سملات وميدات (Ground Beams)": f"{gb_cement_ton:.2f} Ton ({gb_cement_bags:,} شكارة)",
-                        "الإجمالي الشامل (Grand Total)": f"{grand_cement_ton:.2f} Ton ({grand_cement_bags:,} شكارة)",
-                        "الوحدة (Unit)": "طن (Ton) / شكارة",
-                        "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 350 كجم/م³ للمسلحة (7 شكاير) و 250 كجم/م³ للعادية (5 شكاير)",
-                    },
-                    {
-                        "البند / المكون الإنشائي (Item / Material)": "5. كمية الزلط / الركام الكبير (Gravel / Coarse Aggregate)",
-                        "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_gravel_val:.2f} m³",
-                        "أعمدة الدور الواحد (Columns)": f"{cols_gravel_tot_val:.2f} m³",
-                        "أساسات المبنى (Foundations)": f"{ftgs_gravel_val:.2f} m³",
-                        "سملات وميدات (Ground Beams)": f"{gb_gravel_val:.2f} m³",
-                        "الإجمالي الشامل (Grand Total)": f"{grand_gravel_val:.2f} m³",
-                        "الوحدة (Unit)": "متر مكعب (m³)",
-                        "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.80 m³ زلط متدرج ونظيف لكل 1.0 m³ خرسانة (مسلحة وعادية)",
-                    },
-                    {
-                        "البند / المكون الإنشائي (Item / Material)": "6. كمية الرمل الحرش / الركام الصغير (Clean Sand)",
-                        "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_sand_val:.2f} m³",
-                        "أعمدة الدور الواحد (Columns)": f"{cols_sand_tot_val:.2f} m³",
-                        "أساسات المبنى (Foundations)": f"{ftgs_sand_val:.2f} m³",
-                        "سملات وميدات (Ground Beams)": f"{gb_sand_val:.2f} m³",
-                        "الإجمالي الشامل (Grand Total)": f"{grand_sand_val:.2f} m³",
-                        "الوحدة (Unit)": "متر مكعب (m³)",
-                        "الملاحظات والمواصفات (Notes & Specs)": "بمعدل 0.40 m³ رمل حرش نظيف لكل 1.0 m³ خرسانة (نصف حجم الزلط)",
-                    },
-                    {
-                        "البند / المكون الإنشائي (Item / Material)": "7. معدل استهلاك الحديد (Steel Consumption Ratio)",
-                        "سقف البلاطة اللاكمرية (Flat Slab)": f"{slab_ratio_val:.1f} kg/m³",
-                        "أعمدة الدور الواحد (Columns)": f"{cols_ratio_val:.1f} kg/m³",
-                        "أساسات المبنى (Foundations)": f"{ftgs_ratio_val:.1f} kg/m³",
-                        "سملات وميدات (Ground Beams)": f"{gb_ratio_val:.1f} kg/m³",
-                        "الإجمالي الشامل (Grand Total)": f"{grand_ratio_val:.1f} kg/m³",
-                        "الوحدة (Unit)": "كجم / م³ خرسانة مسلحة",
-                        "الملاحظات والمواصفات (Notes & Specs)": "متوسط استهلاك الحديد المسلح لكافة عناصر المبنى",
-                    },
-                ]
-            render_styled_table(main_survey_data)
-
-            # Export Excel & CSV buttons for Quantity Survey
-            df_survey_export = pd.DataFrame(main_survey_data)
+                # Export Excel & CSV buttons for Quantity Survey
+                df_survey_export = pd.DataFrame(main_survey_data)
 
 
-            st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
+                st.markdown("<div style='margin-bottom:14px;'></div>", unsafe_allow_html=True)
 
-            # ── Table 2: Detailed Steel Reinforcement by Bar Diameter (جدول تفصيل حديد التسليح لكل قطر) ──
-            st.markdown("##### 🔩 2. جدول تفصيل أوزان حديد التسليح لكل قطر والإجمالي الكلي (Steel Breakdown by Bar Diameter)")
-            dia_table_rows = []
-            for d in sorted(all_dias_set):
-                s_kg_1f = slab_dia_map.get(d, {}).get("weight_kg", 0.0)
-                s_kg = s_kg_1f * num_floors
-                s_ton = s_kg / 1000.0
-                c_kg = cols_dia_map.get(d, {}).get("weight_kg", 0.0)
-                c_ton = c_kg / 1000.0
-                f_kg = ftg_dia_map.get(d, {}).get("weight_kg", 0.0)
-                f_ton = f_kg / 1000.0
-                gb_kg = gb_dia_map.get(d, {}).get("weight_kg", 0.0)
-                gb_ton = gb_kg / 1000.0
-                t_kg = s_kg + c_kg + f_kg + gb_kg
-                t_ton = t_kg / 1000.0
-                pct = (t_kg / max(0.001, grand_steel_kg_val)) * 100.0
+                # ── Table 2: Detailed Steel Reinforcement by Bar Diameter (جدول تفصيل حديد التسليح لكل قطر) ──
+                st.markdown("##### 🔩 2. جدول تفصيل أوزان حديد التسليح لكل قطر والإجمالي الكلي (Steel Breakdown by Bar Diameter)")
+                dia_table_rows = []
+                for d in sorted(all_dias_set):
+                    s_kg_1f = slab_dia_map.get(d, {}).get("weight_kg", 0.0)
+                    s_kg = s_kg_1f * num_floors
+                    s_ton = s_kg / 1000.0
+                    c_kg = cols_dia_map.get(d, {}).get("weight_kg", 0.0)
+                    c_ton = c_kg / 1000.0
+                    f_kg = ftg_dia_map.get(d, {}).get("weight_kg", 0.0)
+                    f_ton = f_kg / 1000.0
+                    gb_kg = gb_dia_map.get(d, {}).get("weight_kg", 0.0)
+                    gb_ton = gb_kg / 1000.0
+                    t_kg = s_kg + c_kg + f_kg + gb_kg
+                    t_ton = t_kg / 1000.0
+                    pct = (t_kg / max(0.001, grand_steel_kg_val)) * 100.0
 
-                sources_list = []
-                if s_kg > 0:
-                    sources_list.append(f"السقف: {slab_dia_map[d].get('apps', '—')}")
-                if c_kg > 0:
-                    sources_list.append(f"الأعمدة: {cols_dia_map[d].get('apps', '—')}")
-                if f_kg > 0:
-                    sources_list.append(f"الأساسات: {ftg_dia_map[d].get('apps', '—')}")
-                if gb_kg > 0:
-                    sources_list.append(f"السملات: {gb_dia_map[d].get('apps', '—')}")
+                    sources_list = []
+                    if s_kg > 0:
+                        sources_list.append(f"السقف: {slab_dia_map[d].get('apps', '—')}")
+                    if c_kg > 0:
+                        sources_list.append(f"الأعمدة: {cols_dia_map[d].get('apps', '—')}")
+                    if f_kg > 0:
+                        sources_list.append(f"الأساسات: {ftg_dia_map[d].get('apps', '—')}")
+                    if gb_kg > 0:
+                        sources_list.append(f"السملات: {gb_dia_map[d].get('apps', '—')}")
+
+                    if num_floors > 1:
+                        dia_table_rows.append({
+                            "قطر السيخ Ø (Bar Dia)": f"Ø{d} mm",
+                            "وزن المتر الطولي (kg/m')": f"{(d**2)/162.0:.4f} kg/m'",
+                            "سقف الدور (1F)": f"{s_kg_1f/1000.0:.3f} Ton ({s_kg_1f:,.1f} kg)" if s_kg_1f > 0 else "—",
+                            f"أسقف المبنى ({num_floors}F)": f"{s_ton:.3f} Ton ({s_kg:,.1f} kg)" if s_kg > 0 else "—",
+                            f"أعمدة المبنى ({num_floors}F)": f"{c_ton:.3f} Ton ({c_kg:,.1f} kg)" if c_kg > 0 else "—",
+                            "حديد الأساسات (Foundations)": f"{f_ton:.3f} Ton ({f_kg:,.1f} kg)" if f_kg > 0 else "—",
+                            "حديد السملات (Ground Beams)": f"{gb_ton:.3f} Ton ({gb_kg:,.1f} kg)" if gb_kg > 0 else "—",
+                            "الإجمالي الكلي للمبنى (Grand Total)": f"{t_ton:.3f} Ton ({t_kg:,.1f} kg)",
+                            "النسبة (%)": f"{pct:.1f} %",
+                            "مواقع الاستخدام في المشروع (Applications)": " │ ".join(sources_list) if sources_list else "—",
+                        })
+                    else:
+                        dia_table_rows.append({
+                            "قطر السيخ Ø (Bar Dia)": f"Ø{d} mm",
+                            "وزن المتر الطولي (kg/m')": f"{(d**2)/162.0:.4f} kg/m'",
+                            "حديد السقف (Slab Steel)": f"{s_ton:.3f} Ton ({s_kg:,.1f} kg)" if s_kg > 0 else "—",
+                            "حديد الأعمدة (Columns)": f"{c_ton:.3f} Ton ({c_kg:,.1f} kg)" if c_kg > 0 else "—",
+                            "حديد الأساسات (Foundations)": f"{f_ton:.3f} Ton ({f_kg:,.1f} kg)" if f_kg > 0 else "—",
+                            "حديد السملات (Ground Beams)": f"{gb_ton:.3f} Ton ({gb_kg:,.1f} kg)" if gb_kg > 0 else "—",
+                            "الإجمالي الكلي (Grand Total)": f"{t_ton:.3f} Ton ({t_kg:,.1f} kg)",
+                            "النسبة (%)": f"{pct:.1f} %",
+                            "مواقع الاستخدام في المشروع (Applications)": " │ ".join(sources_list) if sources_list else "—",
+                        })
 
                 if num_floors > 1:
                     dia_table_rows.append({
-                        "قطر السيخ Ø (Bar Dia)": f"Ø{d} mm",
-                        "وزن المتر الطولي (kg/m')": f"{(d**2)/162.0:.4f} kg/m'",
-                        "سقف الدور (1F)": f"{s_kg_1f/1000.0:.3f} Ton ({s_kg_1f:,.1f} kg)" if s_kg_1f > 0 else "—",
-                        f"أسقف المبنى ({num_floors}F)": f"{s_ton:.3f} Ton ({s_kg:,.1f} kg)" if s_kg > 0 else "—",
-                        f"أعمدة المبنى ({num_floors}F)": f"{c_ton:.3f} Ton ({c_kg:,.1f} kg)" if c_kg > 0 else "—",
-                        "حديد الأساسات (Foundations)": f"{f_ton:.3f} Ton ({f_kg:,.1f} kg)" if f_kg > 0 else "—",
-                        "حديد السملات (Ground Beams)": f"{gb_ton:.3f} Ton ({gb_kg:,.1f} kg)" if gb_kg > 0 else "—",
-                        "الإجمالي الكلي للمبنى (Grand Total)": f"{t_ton:.3f} Ton ({t_kg:,.1f} kg)",
-                        "النسبة (%)": f"{pct:.1f} %",
-                        "مواقع الاستخدام في المشروع (Applications)": " │ ".join(sources_list) if sources_list else "—",
+                        "قطر السيخ Φ (Bar Dia)": "📌 TOTAL STEEL (إجمالي حديد التسليح بالكامل)",
+                        "وزن المتر الطولي (kg/m')": "—",
+                        "سقف الدور (1F)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
+                        f"أسقف المبنى ({num_floors}F)": f"{slab_steel_ton_tot:.3f} Ton ({slab_steel_kg_tot:,.1f} kg)",
+                        f"أعمدة المبنى ({num_floors}F)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
+                        "حديد الأساسات (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
+                        "حديد السملات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
+                        "الإجمالي الكلي للمبنى (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
+                        "النسبة (%)": "100.0 %",
+                        "مواقع الاستخدام في المشروع (Applications)": f"متوسط استهلاك المشروع بالكامل: {grand_ratio_val:.1f} kg/m³ خرسانة مسلحة",
                     })
                 else:
                     dia_table_rows.append({
-                        "قطر السيخ Ø (Bar Dia)": f"Ø{d} mm",
-                        "وزن المتر الطولي (kg/m')": f"{(d**2)/162.0:.4f} kg/m'",
-                        "حديد السقف (Slab Steel)": f"{s_ton:.3f} Ton ({s_kg:,.1f} kg)" if s_kg > 0 else "—",
-                        "حديد الأعمدة (Columns)": f"{c_ton:.3f} Ton ({c_kg:,.1f} kg)" if c_kg > 0 else "—",
-                        "حديد الأساسات (Foundations)": f"{f_ton:.3f} Ton ({f_kg:,.1f} kg)" if f_kg > 0 else "—",
-                        "حديد السملات (Ground Beams)": f"{gb_ton:.3f} Ton ({gb_kg:,.1f} kg)" if gb_kg > 0 else "—",
-                        "الإجمالي الكلي (Grand Total)": f"{t_ton:.3f} Ton ({t_kg:,.1f} kg)",
-                        "النسبة (%)": f"{pct:.1f} %",
-                        "مواقع الاستخدام في المشروع (Applications)": " │ ".join(sources_list) if sources_list else "—",
+                        "قطر السيخ Φ (Bar Dia)": "📌 TOTAL STEEL (إجمالي حديد التسليح بالكامل)",
+                        "وزن المتر الطولي (kg/m')": "—",
+                        "حديد السقف (Slab Steel)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
+                        "حديد الأعمدة (Columns)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
+                        "حديد الأساسات (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
+                        "حديد السملات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
+                        "الإجمالي الكلي (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
+                        "النسبة (%)": "100.0 %",
+                        "مواقع الاستخدام في المشروع (Applications)": f"متوسط استهلاك المشروع بالكامل: {grand_ratio_val:.1f} kg/m³ خرسانة مسلحة",
                     })
+                render_styled_table(dia_table_rows)
 
-            if num_floors > 1:
-                dia_table_rows.append({
-                    "قطر السيخ Φ (Bar Dia)": "📌 TOTAL STEEL (إجمالي حديد التسليح بالكامل)",
-                    "وزن المتر الطولي (kg/m')": "—",
-                    "سقف الدور (1F)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
-                    f"أسقف المبنى ({num_floors}F)": f"{slab_steel_ton_tot:.3f} Ton ({slab_steel_kg_tot:,.1f} kg)",
-                    f"أعمدة المبنى ({num_floors}F)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
-                    "حديد الأساسات (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
-                    "حديد السملات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
-                    "الإجمالي الكلي للمبنى (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
-                    "النسبة (%)": "100.0 %",
-                    "مواقع الاستخدام في المشروع (Applications)": f"متوسط استهلاك المشروع بالكامل: {grand_ratio_val:.1f} kg/m³ خرسانة مسلحة",
-                })
-            else:
-                dia_table_rows.append({
-                    "قطر السيخ Φ (Bar Dia)": "📌 TOTAL STEEL (إجمالي حديد التسليح بالكامل)",
-                    "وزن المتر الطولي (kg/m')": "—",
-                    "حديد السقف (Slab Steel)": f"{slab_steel_ton:.3f} Ton ({slab_steel_kg:,.1f} kg)",
-                    "حديد الأعمدة (Columns)": f"{cols_steel_ton_tot_val:.3f} Ton ({cols_steel_kg_tot_val:,.1f} kg)",
-                    "حديد الأساسات (Foundations)": f"{ftgs_steel_ton_val:.3f} Ton ({ftgs_steel_kg_val:,.1f} kg)",
-                    "حديد السملات (Ground Beams)": f"{gb_steel_ton_val:.3f} Ton ({gb_steel_kg_val:,.1f} kg)",
-                    "الإجمالي الكلي (Grand Total)": f"{grand_steel_ton_val:.3f} Ton ({grand_steel_kg_val:,.1f} kg)",
-                    "النسبة (%)": "100.0 %",
-                    "مواقع الاستخدام في المشروع (Applications)": f"متوسط استهلاك المشروع بالكامل: {grand_ratio_val:.1f} kg/m³ خرسانة مسلحة",
-                })
-            render_styled_table(dia_table_rows)
-
-        st.markdown("---")
+            st.markdown("---")
     else:
         # ══════════════════════════════════════════════════════════════════════
         #  MODULE 13: STANDALONE FLAT SLAB 3D BIM VIEWER & QUANTITY SURVEY
@@ -24875,1264 +24898,1265 @@ def render(is_standalone: bool = False):
 
         st.markdown("---")
 
-    # ── 💾 SAVE & EXPORT COMPLETE CALCULATION SHEET (COLLAPSED EXPANDER) ────────
-    with st.expander(
-        f"💾 Save & Export Design Calculation Sheet (حفظ وتصدير المذكرة الحسابية الكاملة){_ftg_exp_suf}",
-        expanded=False,
-        key=f"{prefix}exp_export_calc_v{_ftg_exp_ver}",
-    ):
-        if _ftg_collapsed:
-            st.warning(_ftg_warn_msg)
-        from modules.report_generator import (
-            generate_flat_slab_report_html,
-            generate_flat_slab_outputs_report_html,
-            html_to_pdf_bytes,
-        )
-        from modules.concise_report_generator import (
-            generate_concise_design_report_html,
-            draw_page1_silent_inputs,
-            draw_page2_columns_plan,
-            draw_page3_footings_plan,
-            draw_page4_ground_beams_plan,
-            draw_page5_roof_beams_plan,
-            draw_page6_slab_bottom_rebar,
-            draw_page7_slab_top_rebar,
-            draw_page8_column_caps,
-            fig_to_b64,
-        )
-        import streamlit.components.v1 as components
+    if not _ftg_collapsed:
+        # ── 💾 SAVE & EXPORT COMPLETE CALCULATION SHEET (COLLAPSED EXPANDER) ────────
+        with st.expander(
+            f"💾 Save & Export Design Calculation Sheet (حفظ وتصدير المذكرة الحسابية الكاملة){_ftg_exp_suf}",
+            expanded=False,
+            key=f"{prefix}exp_export_calc_v{_ftg_exp_ver}",
+        ):
+            if _ftg_collapsed:
+                st.warning(_ftg_warn_msg)
+            from modules.report_generator import (
+                generate_flat_slab_report_html,
+                generate_flat_slab_outputs_report_html,
+                html_to_pdf_bytes,
+            )
+            from modules.concise_report_generator import (
+                generate_concise_design_report_html,
+                draw_page1_silent_inputs,
+                draw_page2_columns_plan,
+                draw_page3_footings_plan,
+                draw_page4_ground_beams_plan,
+                draw_page5_roof_beams_plan,
+                draw_page6_slab_bottom_rebar,
+                draw_page7_slab_top_rebar,
+                draw_page8_column_caps,
+                fig_to_b64,
+            )
+            import streamlit.components.v1 as components
 
-        rep_fn_tag = "ECP203_Standalone_Flat_Slab" if is_standalone else "ECP203_Integrated_Structural_Design"
-        pdf_outputs_filename = f"{prefix}{rep_fn_tag}_Design_Outputs_ts{ts:.0f}cm_{num_floors}Floors.pdf"
-        pdf_concise_filename = f"{prefix}{rep_fn_tag}_Concise_Design_Outputs_{num_floors}Floors.pdf"
-        pdf_full_filename = f"{prefix}{rep_fn_tag}_Full_Inputs_Outputs_ts{ts:.0f}cm_{num_floors}Floors.pdf"
-        html_filename = f"{prefix}{rep_fn_tag}_Calculation_Sheet_ts{ts:.0f}cm_{num_floors}Floors.html"
+            rep_fn_tag = "ECP203_Standalone_Flat_Slab" if is_standalone else "ECP203_Integrated_Structural_Design"
+            pdf_outputs_filename = f"{prefix}{rep_fn_tag}_Design_Outputs_ts{ts:.0f}cm_{num_floors}Floors.pdf"
+            pdf_concise_filename = f"{prefix}{rep_fn_tag}_Concise_Design_Outputs_{num_floors}Floors.pdf"
+            pdf_full_filename = f"{prefix}{rep_fn_tag}_Full_Inputs_Outputs_ts{ts:.0f}cm_{num_floors}Floors.pdf"
+            html_filename = f"{prefix}{rep_fn_tag}_Calculation_Sheet_ts{ts:.0f}cm_{num_floors}Floors.html"
 
-        # Styling container for export card & red buttons with bold white font
-        st.markdown(
-            f"""
-            <style>
-            .export-card-box {{
-                background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
-                border: 2px solid #ef4444;
-                border-radius: 12px;
-                padding: 16px 20px;
-                margin-bottom: 16px;
-                box-shadow: 0 6px 20px rgba(239, 68, 68, 0.20);
-                text-align: right;
-            }}
-            .export-card-title {{
-                font-size: 16px;
-                font-weight: 800;
-                color: #ffffff;
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                border-bottom: 1px solid rgba(239, 68, 68, 0.4);
-                padding-bottom: 8px;
-                margin-bottom: 8px;
-            }}
-            .export-card-desc {{
-                font-size: 13.5px;
-                color: #cbd5e1;
-                line-height: 1.6;
-            }}
-            /* Strict styling for export buttons: Red background, bold white text */
-            div[data-testid="stExpander"] div.stButton > button {{
-                background: linear-gradient(135deg, #dc2626 0%, #b91c1c 50%, #991b1b 100%) !important;
-                color: #ffffff !important;
-                border: 1.8px solid #ef4444 !important;
-                border-radius: 9px !important;
-                font-weight: 800 !important;
-                font-size: 14.5px !important;
-                box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35) !important;
-                transition: all 0.25s ease-in-out !important;
-            }}
-            div[data-testid="stExpander"] div.stButton > button:hover {{
-                background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%) !important;
-                color: #ffffff !important;
-                border-color: #f87171 !important;
-                box-shadow: 0 6px 20px rgba(239, 68, 68, 0.55) !important;
-                transform: translateY(-1.5px) !important;
-            }}
-            div[data-testid="stExpander"] div.stButton > button p,
-            div[data-testid="stExpander"] div.stButton > button span {{
-                color: #ffffff !important;
-                font-weight: 800 !important;
-            }}
-            div[data-testid="stExpander"] div.stDownloadButton > button {{
-                background: linear-gradient(135deg, #dc2626 0%, #b91c1c 50%, #991b1b 100%) !important;
-                color: #ffffff !important;
-                border: 1.8px solid #ef4444 !important;
-                border-radius: 9px !important;
-                font-weight: 800 !important;
-                font-size: 14.5px !important;
-                box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35) !important;
-                transition: all 0.25s ease-in-out !important;
-            }}
-            div[data-testid="stExpander"] div.stDownloadButton > button:hover {{
-                background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%) !important;
-                color: #ffffff !important;
-                border-color: #f87171 !important;
-                box-shadow: 0 6px 20px rgba(239, 68, 68, 0.55) !important;
-                transform: translateY(-1.5px) !important;
-            }}
-            div[data-testid="stExpander"] div.stDownloadButton > button p,
-            div[data-testid="stExpander"] div.stDownloadButton > button span {{
-                color: #ffffff !important;
-                font-weight: 800 !important;
-            }}
-            </style>
-            <div class="export-card-box" dir="rtl">
-                <div class="export-card-title">
-                    <span>📄 تصدير المذكرات والتقارير الحسابية المعتمدة (Consulting Calculation Reports)</span>
-                    <span style="font-size: 12px; background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; padding: 3px 10px; border-radius: 20px;">
-                        ECP 203 & CSI SAFE
-                    </span>
+            # Styling container for export card & red buttons with bold white font
+            st.markdown(
+                f"""
+                <style>
+                .export-card-box {{
+                    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+                    border: 2px solid #ef4444;
+                    border-radius: 12px;
+                    padding: 16px 20px;
+                    margin-bottom: 16px;
+                    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.20);
+                    text-align: right;
+                }}
+                .export-card-title {{
+                    font-size: 16px;
+                    font-weight: 800;
+                    color: #ffffff;
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    border-bottom: 1px solid rgba(239, 68, 68, 0.4);
+                    padding-bottom: 8px;
+                    margin-bottom: 8px;
+                }}
+                .export-card-desc {{
+                    font-size: 13.5px;
+                    color: #cbd5e1;
+                    line-height: 1.6;
+                }}
+                /* Strict styling for export buttons: Red background, bold white text */
+                div[data-testid="stExpander"] div.stButton > button {{
+                    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 50%, #991b1b 100%) !important;
+                    color: #ffffff !important;
+                    border: 1.8px solid #ef4444 !important;
+                    border-radius: 9px !important;
+                    font-weight: 800 !important;
+                    font-size: 14.5px !important;
+                    box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35) !important;
+                    transition: all 0.25s ease-in-out !important;
+                }}
+                div[data-testid="stExpander"] div.stButton > button:hover {{
+                    background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%) !important;
+                    color: #ffffff !important;
+                    border-color: #f87171 !important;
+                    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.55) !important;
+                    transform: translateY(-1.5px) !important;
+                }}
+                div[data-testid="stExpander"] div.stButton > button p,
+                div[data-testid="stExpander"] div.stButton > button span {{
+                    color: #ffffff !important;
+                    font-weight: 800 !important;
+                }}
+                div[data-testid="stExpander"] div.stDownloadButton > button {{
+                    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 50%, #991b1b 100%) !important;
+                    color: #ffffff !important;
+                    border: 1.8px solid #ef4444 !important;
+                    border-radius: 9px !important;
+                    font-weight: 800 !important;
+                    font-size: 14.5px !important;
+                    box-shadow: 0 4px 14px rgba(220, 38, 38, 0.35) !important;
+                    transition: all 0.25s ease-in-out !important;
+                }}
+                div[data-testid="stExpander"] div.stDownloadButton > button:hover {{
+                    background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%) !important;
+                    color: #ffffff !important;
+                    border-color: #f87171 !important;
+                    box-shadow: 0 6px 20px rgba(239, 68, 68, 0.55) !important;
+                    transform: translateY(-1.5px) !important;
+                }}
+                div[data-testid="stExpander"] div.stDownloadButton > button p,
+                div[data-testid="stExpander"] div.stDownloadButton > button span {{
+                    color: #ffffff !important;
+                    font-weight: 800 !important;
+                }}
+                </style>
+                <div class="export-card-box" dir="rtl">
+                    <div class="export-card-title">
+                        <span>📄 تصدير المذكرات والتقارير الحسابية المعتمدة (Consulting Calculation Reports)</span>
+                        <span style="font-size: 12px; background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; padding: 3px 10px; border-radius: 20px;">
+                            ECP 203 & CSI SAFE
+                        </span>
+                    </div>
+                    <div class="export-card-desc">
+                        يتم تحديث جميع بيانات ومخرجات المذكرة الحسابية تلقائياً بمجرد تعديل أي مدخلات. يشمل التقرير الاستشاري الشامل الكامل (PDF / HTML) كافة المدخلات الحسابية والمخططات والرسومات الإنشائية بالترتيب المعتمد:
+                        <br><b>1.</b> 🗺️ مخطط التحقق الهندسي وتوزيع المحاور والأعمدة (Structural Geometry & Grid).
+                        <br><b>2.</b> 🥊 مخطط القص الثاقب للأعمدة وفحص الاختراق (Punching Shear Verification Plan).
+                        <br><b>3.</b> 📉 مخطط هبوط وترخيم البلاطة طويل المدى (Long-Term Deflection Contour Plan).
+                        <br><b>4.</b> 📈 كنتور عزوم الانحناء M11 اتجاه X (Moment M11 Contour Plan — X-Direction Moment).
+                        <br><b>5.</b> 📈 كنتور عزوم الانحناء M22 اتجاه Y (Moment M22 Contour Plan — Y-Direction Moment).
+                        <br><b>6.</b> 🔴 كابات وتفريد الإضافي العلوي للأعمدة (1. Column Caps Layout - Top Extra).
+                        <br><b>7.</b> 🔶 الحديد الإضافي السفلي اتجاه X وشبكات التسليح (2A. Bottom Extra X & Base Meshes).
+                        <br><b>8.</b> 🔶 الحديد الإضافي السفلي اتجاه Y وشبكات التسليح (2B. Bottom Extra Y & Base Meshes).
+                        <br><b>9.</b> 🔵 الرقة العلوية والإضافي وشوك الكوابيل اتجاه X (3A. Top Extra & Shawka X).
+                        <br><b>10.</b> 🔵 الرقة العلوية والإضافي وشوك الكوابيل اتجاه Y (3B. Top Extra & Shawka Y).
+                        <br><b>11.</b> 📋 لوحة تجميع التسليح الماستر الشاملة (Master Steel Layout & Detailing).
+                        <br><b>12.</b> ⚖️ مخطط ردود أفعال وأحمال الأعمدة التصميمية (Column Reactions Layout).
+                        <br><b>13.</b> 📐 تفاصيل وتفريد تكسيح وتجنيش الأسياخ (Rebar Detailing & BBS Schedule).
+                        <br>بالإضافة إلى جداول التحقق الإنشائي، كشوفات القص الثاقب، وجداول حصر الكميات والمواد بالكامل (BOQ).
+                    </div>
                 </div>
-                <div class="export-card-desc">
-                    يتم تحديث جميع بيانات ومخرجات المذكرة الحسابية تلقائياً بمجرد تعديل أي مدخلات. يشمل التقرير الاستشاري الشامل الكامل (PDF / HTML) كافة المدخلات الحسابية والمخططات والرسومات الإنشائية بالترتيب المعتمد:
-                    <br><b>1.</b> 🗺️ مخطط التحقق الهندسي وتوزيع المحاور والأعمدة (Structural Geometry & Grid).
-                    <br><b>2.</b> 🥊 مخطط القص الثاقب للأعمدة وفحص الاختراق (Punching Shear Verification Plan).
-                    <br><b>3.</b> 📉 مخطط هبوط وترخيم البلاطة طويل المدى (Long-Term Deflection Contour Plan).
-                    <br><b>4.</b> 📈 كنتور عزوم الانحناء M11 اتجاه X (Moment M11 Contour Plan — X-Direction Moment).
-                    <br><b>5.</b> 📈 كنتور عزوم الانحناء M22 اتجاه Y (Moment M22 Contour Plan — Y-Direction Moment).
-                    <br><b>6.</b> 🔴 كابات وتفريد الإضافي العلوي للأعمدة (1. Column Caps Layout - Top Extra).
-                    <br><b>7.</b> 🔶 الحديد الإضافي السفلي اتجاه X وشبكات التسليح (2A. Bottom Extra X & Base Meshes).
-                    <br><b>8.</b> 🔶 الحديد الإضافي السفلي اتجاه Y وشبكات التسليح (2B. Bottom Extra Y & Base Meshes).
-                    <br><b>9.</b> 🔵 الرقة العلوية والإضافي وشوك الكوابيل اتجاه X (3A. Top Extra & Shawka X).
-                    <br><b>10.</b> 🔵 الرقة العلوية والإضافي وشوك الكوابيل اتجاه Y (3B. Top Extra & Shawka Y).
-                    <br><b>11.</b> 📋 لوحة تجميع التسليح الماستر الشاملة (Master Steel Layout & Detailing).
-                    <br><b>12.</b> ⚖️ مخطط ردود أفعال وأحمال الأعمدة التصميمية (Column Reactions Layout).
-                    <br><b>13.</b> 📐 تفاصيل وتفريد تكسيح وتجنيش الأسياخ (Rebar Detailing & BBS Schedule).
-                    <br>بالإضافة إلى جداول التحقق الإنشائي، كشوفات القص الثاقب، وجداول حصر الكميات والمواد بالكامل (BOQ).
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        def _fig_to_b64(fig):
-            if fig is None:
-                return None
-            try:
-                buf = io.BytesIO()
-                fig.savefig(buf, format="png", bbox_inches="tight", dpi=130)
-                buf.seek(0)
-                return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("utf-8")
-            except Exception:
-                return None
-            finally:
-                try:
-                    plt.close(fig)
-                except Exception:
-                    pass
-
-        # Helper functions to build report HTML
-        def _build_flat_slab_outputs_html():
-            nonlocal img_verif_b64
-            _img_verif = img_verif_b64
-            if not _img_verif:
-                try:
-                    _f = generate_flat_slab_sketch(
-                        Lx_spans, Ly_spans, cantilevers,
-                        ts_initial=ts_initial if ts_initial is not None else 20,
-                        n_floors=num_floors,
-                        bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
-                        bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
-                        top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
-                        top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
-                        col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
-                        strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
-                        strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
-                        concrete_cover=cov if cov is not None else 1.5,
-                        fcu=Fcu if Fcu is not None else 250,
-                        fy=Fy if Fy is not None else 4000,
-                        live_load=LL if LL is not None else 0.25,
-                        flooring_load=SDL if SDL is not None else 0.15,
-                        wall_load=wall_load if wall_load is not None else 0.50,
-                        col_w_cm=_col_w_sk, col_d_cm=_col_d_sk,
-                        removed_col_ids=set(_confirmed_removals),
-                        pending_col_ids=set(st.session_state.get("_fs_pending_snapshot", []) if st.session_state.get("_fs_show_confirm") else _pending_removals),
-                        void_panel_ids=set(_confirmed_voids),
-                        pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", []) if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
-                        col_transforms=_col_transforms, edge_columns=_edge_columns,
-                        col_props=_col_props, active_cols=_active_cols,
-                    )
-                    _img_verif = _fig_to_b64(_f)
-                    img_verif_b64 = _img_verif
-                except Exception:
-                    pass
-
-            return generate_flat_slab_outputs_report_html(
-                project_name="Standalone Flat Slab Reinforced Concrete Design (ECP 203)" if is_standalone else "Integrated Structural Design (ECP 203)",
-                ts=ts, d=d, num_floors=num_floors, Wu=Wu,
-                Fcu=Fcu, Fy=Fy, SDL=SDL, wall_load=wall_load, LL=LL,
-                bc=bc_s, tc=tc_s,
-                mesh_btm_str=mesh_btm_str, mesh_top_str=mesh_top_str,
-                top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
-                cant_rft_list=cant_rft_list,
-                punching_results=punching_results, all_punching_safe=all_safe,
-                deflection_results=deflection_results, all_deflection_safe=all_deflection_safe,
-                img_verif_b64=_img_verif,
-                gb_analysis=gb_analysis_obj if 'gb_analysis_obj' in locals() else st.session_state.get('fs_gb_analysis'),
-                ftg_analysis=None if is_standalone else (ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get('fs_ftg_analysis')),
+                """,
+                unsafe_allow_html=True,
             )
 
-        def _build_flat_slab_full_html():
-            nonlocal img_verif_b64, img_m11_b64, img_m22_b64, img_reactions_b64
-
-            # 1. Structural Geometry Sketch & Verification
-            _img_verif = img_verif_b64
-            if not _img_verif:
+            def _fig_to_b64(fig):
+                if fig is None:
+                    return None
                 try:
-                    _f = generate_flat_slab_sketch(
-                        Lx_spans, Ly_spans, cantilevers,
-                        ts_initial=ts_initial if ts_initial is not None else 20,
-                        n_floors=num_floors,
-                        bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
-                        bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
-                        top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
-                        top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
-                        col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
-                        strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
-                        strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
-                        concrete_cover=cov if cov is not None else 1.5,
-                        fcu=Fcu if Fcu is not None else 250,
-                        fy=Fy if Fy is not None else 4000,
-                        live_load=LL if LL is not None else 0.25,
-                        flooring_load=SDL if SDL is not None else 0.15,
-                        wall_load=wall_load if wall_load is not None else 0.50,
-                        col_w_cm=_col_w_sk, col_d_cm=_col_d_sk,
-                        removed_col_ids=set(_confirmed_removals),
-                        pending_col_ids=set(st.session_state.get("_fs_pending_snapshot", []) if st.session_state.get("_fs_show_confirm") else _pending_removals),
-                        void_panel_ids=set(_confirmed_voids),
-                        pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", []) if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
-                        col_transforms=_col_transforms, edge_columns=_edge_columns,
-                        col_props=_col_props, active_cols=_active_cols,
-                    )
-                    _img_verif = _fig_to_b64(_f)
-                    img_verif_b64 = _img_verif
+                    buf = io.BytesIO()
+                    fig.savefig(buf, format="png", bbox_inches="tight", dpi=130)
+                    buf.seek(0)
+                    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("utf-8")
                 except Exception:
-                    pass
+                    return None
+                finally:
+                    try:
+                        plt.close(fig)
+                    except Exception:
+                        pass
 
-            # 2. Punching Shear Verification Plan
-            _img_punch = None
-            try:
-                _f = generate_flat_slab_punching_shear_sketch(
-                    Lx_spans, Ly_spans, cantilevers, ts, d, Fcu, Wu,
-                    punching_results,
-                    col_w_cm=bc_s, col_d_cm=tc_s,
-                    removed_cols=_removed_col_objs,
-                    void_panel_ids=set(_confirmed_voids),
-                    edge_columns=_edge_columns,
-                    void_boxes=_void_boxes_sk,
-                    active_cols=_active_cols,
-                    active_x_labels=_active_x_labels,
-                    active_y_labels=_active_y_labels,
-                )
-                _img_punch = _fig_to_b64(_f)
-            except Exception:
-                pass
+            # Helper functions to build report HTML
+            def _build_flat_slab_outputs_html():
+                nonlocal img_verif_b64
+                _img_verif = img_verif_b64
+                if not _img_verif:
+                    try:
+                        _f = generate_flat_slab_sketch(
+                            Lx_spans, Ly_spans, cantilevers,
+                            ts_initial=ts_initial if ts_initial is not None else 20,
+                            n_floors=num_floors,
+                            bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
+                            bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
+                            top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
+                            top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
+                            col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
+                            strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
+                            strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
+                            concrete_cover=cov if cov is not None else 1.5,
+                            fcu=Fcu if Fcu is not None else 250,
+                            fy=Fy if Fy is not None else 4000,
+                            live_load=LL if LL is not None else 0.25,
+                            flooring_load=SDL if SDL is not None else 0.15,
+                            wall_load=wall_load if wall_load is not None else 0.50,
+                            col_w_cm=_col_w_sk, col_d_cm=_col_d_sk,
+                            removed_col_ids=set(_confirmed_removals),
+                            pending_col_ids=set(st.session_state.get("_fs_pending_snapshot", []) if st.session_state.get("_fs_show_confirm") else _pending_removals),
+                            void_panel_ids=set(_confirmed_voids),
+                            pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", []) if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
+                            col_transforms=_col_transforms, edge_columns=_edge_columns,
+                            col_props=_col_props, active_cols=_active_cols,
+                        )
+                        _img_verif = _fig_to_b64(_f)
+                        img_verif_b64 = _img_verif
+                    except Exception:
+                        pass
 
-            # 3. Long-Term Deflection Contour Plan
-            _img_defl = None
-            try:
-                _f = generate_flat_slab_deflection_contour_sketch(
-                    Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, DL_tot, LL,
-                    deflection_results,
-                    col_w_cm=bc_s, col_d_cm=tc_s,
-                    removed_cols=_removed_col_objs,
-                    void_panel_ids=set(_confirmed_voids),
-                    col_transforms=_col_transforms,
-                    edge_columns=_edge_columns,
-                    void_boxes=_void_boxes_sk,
-                    active_cols=_active_cols,
-                    active_x_labels=_active_x_labels,
-                    active_y_labels=_active_y_labels,
-                )
-                _img_defl = _fig_to_b64(_f)
-            except Exception:
-                pass
-
-            # 4. Moment M11 Contour Plan
-            _img_m11 = img_m11_b64
-            if not _img_m11:
-                try:
-                    _f = generate_flat_slab_moment_contour(
-                        Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
-                        mode="M11", col_w_cm=bc_s, col_d_cm=tc_s,
-                        removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
-                        top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
-                        col_transforms=_col_transforms, edge_columns=_edge_columns,
-                        active_cols=_active_cols,
-                        active_x_labels=_active_x_labels, active_y_labels=_active_y_labels,
-                        void_boxes=_void_boxes_sk,
-                    )
-                    _img_m11 = _fig_to_b64(_f)
-                    img_m11_b64 = _img_m11
-                except Exception:
-                    pass
-
-            # 5. Moment M22 Contour Plan
-            _img_m22 = img_m22_b64
-            if not _img_m22:
-                try:
-                    _f = generate_flat_slab_moment_contour(
-                        Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
-                        mode="M22", col_w_cm=bc_s, col_d_cm=tc_s,
-                        removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
-                        top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
-                        col_transforms=_col_transforms, edge_columns=_edge_columns,
-                        active_cols=_active_cols,
-                        active_x_labels=_active_x_labels, active_y_labels=_active_y_labels,
-                        void_boxes=_void_boxes_sk,
-                    )
-                    _img_m22 = _fig_to_b64(_f)
-                    img_m22_b64 = _img_m22
-                except Exception:
-                    pass
-
-            # 6. Column Caps Layout (Top Extra)
-            _img_col_caps = None
-            try:
-                _f = generate_flat_slab_column_caps_sketch(
-                    Lx_calc, Ly_calc, cantilevers, ts,
-                    top_extra_cols=top_extra_cols,
-                    col_w_cm=bc_s, col_d_cm=tc_s,
-                    removed_cols=_removed_col_objs,
-                    void_panel_ids=set(_confirmed_voids),
-                    col_transforms=_col_transforms,
-                    edge_columns=_edge_columns,
-                    active_cols=_active_cols,
-                    active_x_labels=_active_x_labels, active_y_labels=_active_y_labels,
-                    void_boxes=_void_boxes_sk,
-                )
-                _img_col_caps = _fig_to_b64(_f)
-            except Exception:
-                pass
-
-            # 7. Bottom Extra (X-Direction) & Base Meshes
-            _img_btm_x = None
-            try:
-                _f = generate_flat_slab_bottom_extra_shawka_sketch(
-                    Lx_calc, Ly_calc, cantilevers, ts,
-                    btm_extra_spans=btm_extra_spans,
-                    cant_rft_list=None,
-                    n_mesh_btm=n_mesh_btm, bottom_mesh_dia=bottom_mesh_dia,
-                    n_mesh_top=n_mesh_top, top_mesh_dia=top_mesh_dia,
-                    col_w_cm=bc_s, col_d_cm=tc_s,
-                    removed_cols=_removed_col_objs,
-                    void_panel_ids=set(_confirmed_voids),
-                    direction="X",
-                    col_transforms=_col_transforms,
-                    edge_columns=_edge_columns,
-                    active_cols=_active_cols,
-                    active_x_labels=_active_x_labels, active_y_labels=_active_y_labels,
-                    void_boxes=_void_boxes_sk,
-                )
-                _img_btm_x = _fig_to_b64(_f)
-            except Exception:
-                pass
-
-            # 8. Bottom Extra (Y-Direction) & Base Meshes
-            _img_btm_y = None
-            try:
-                _f = generate_flat_slab_bottom_extra_shawka_sketch(
-                    Lx_calc, Ly_calc, cantilevers, ts,
-                    btm_extra_spans=btm_extra_spans,
-                    cant_rft_list=None,
-                    n_mesh_btm=n_mesh_btm, bottom_mesh_dia=bottom_mesh_dia,
-                    n_mesh_top=n_mesh_top, top_mesh_dia=top_mesh_dia,
-                    col_w_cm=bc_s, col_d_cm=tc_s,
-                    removed_cols=_removed_col_objs,
-                    void_panel_ids=set(_confirmed_voids),
-                    direction="Y",
-                    col_transforms=_col_transforms,
-                    edge_columns=_edge_columns,
-                    active_cols=_active_cols,
-                    active_x_labels=_active_x_labels, active_y_labels=_active_y_labels,
-                    void_boxes=_void_boxes_sk,
-                )
-                _img_btm_y = _fig_to_b64(_f)
-            except Exception:
-                pass
-
-            # 9. Top Slab Extra & Shawka (X-Direction)
-            _img_top_x = None
-            try:
-                _f = generate_flat_slab_top_mesh_extra_sketch(
-                    Lx_calc, Ly_calc, cantilevers, ts,
-                    top_extra_slab_bays=top_extra_slab_bays,
+                return generate_flat_slab_outputs_report_html(
+                    project_name="Standalone Flat Slab Reinforced Concrete Design (ECP 203)" if is_standalone else "Integrated Structural Design (ECP 203)",
+                    ts=ts, d=d, num_floors=num_floors, Wu=Wu,
+                    Fcu=Fcu, Fy=Fy, SDL=SDL, wall_load=wall_load, LL=LL,
+                    bc=bc_s, tc=tc_s,
+                    mesh_btm_str=mesh_btm_str, mesh_top_str=mesh_top_str,
+                    top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
                     cant_rft_list=cant_rft_list,
-                    n_mesh_top=n_mesh_top, top_mesh_dia=top_mesh_dia,
-                    n_mesh_btm=n_mesh_btm, bottom_mesh_dia=bottom_mesh_dia,
-                    col_w_cm=bc_s, col_d_cm=tc_s,
-                    removed_cols=_removed_col_objs,
-                    void_panel_ids=set(_confirmed_voids),
-                    direction="X",
-                    col_transforms=_col_transforms,
-                    edge_columns=_edge_columns,
-                    active_cols=_active_cols,
-                    active_x_labels=_active_x_labels, active_y_labels=_active_y_labels,
-                    void_boxes=_void_boxes_sk,
+                    punching_results=punching_results, all_punching_safe=all_safe,
+                    deflection_results=deflection_results, all_deflection_safe=all_deflection_safe,
+                    img_verif_b64=_img_verif,
+                    gb_analysis=gb_analysis_obj if 'gb_analysis_obj' in locals() else st.session_state.get('fs_gb_analysis'),
+                    ftg_analysis=None if is_standalone else (ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get('fs_ftg_analysis')),
                 )
-                _img_top_x = _fig_to_b64(_f)
-            except Exception:
-                pass
 
-            # 10. Top Slab Extra & Shawka (Y-Direction)
-            _img_top_y = None
-            try:
-                _f = generate_flat_slab_top_mesh_extra_sketch(
-                    Lx_calc, Ly_calc, cantilevers, ts,
-                    top_extra_slab_bays=top_extra_slab_bays,
-                    cant_rft_list=cant_rft_list,
-                    n_mesh_top=n_mesh_top, top_mesh_dia=top_mesh_dia,
-                    n_mesh_btm=n_mesh_btm, bottom_mesh_dia=bottom_mesh_dia,
-                    col_w_cm=bc_s, col_d_cm=tc_s,
-                    removed_cols=_removed_col_objs,
-                    void_panel_ids=set(_confirmed_voids),
-                    direction="Y",
-                    col_transforms=_col_transforms,
-                    edge_columns=_edge_columns,
-                    active_cols=_active_cols,
-                    active_x_labels=_active_x_labels, active_y_labels=_active_y_labels,
-                    void_boxes=_void_boxes_sk,
-                )
-                _img_top_y = _fig_to_b64(_f)
-            except Exception:
-                pass
+            def _build_flat_slab_full_html():
+                nonlocal img_verif_b64, img_m11_b64, img_m22_b64, img_reactions_b64
 
-            # 11. Master Steel Layout & Detailing
-            _img_master_steel = None
-            try:
-                _f = generate_flat_slab_master_steel_layout_sketch(
-                    Lx_calc, Ly_calc, cantilevers, ts,
-                    n_mesh_btm=n_mesh_btm, bottom_mesh_dia=bottom_mesh_dia,
-                    n_mesh_top=n_mesh_top, top_mesh_dia=top_mesh_dia,
-                    top_extra_cols=top_extra_cols, cant_rft_list=cant_rft_list,
-                    btm_extra_spans=btm_extra_spans,
-                    col_w_cm=bc_s, col_d_cm=tc_s,
-                    removed_cols=_removed_col_objs,
-                    void_panel_ids=set(_confirmed_voids),
-                    col_transforms=_col_transforms,
-                    edge_columns=_edge_columns,
-                )
-                _img_master_steel = _fig_to_b64(_f)
-            except Exception:
-                pass
+                # 1. Structural Geometry Sketch & Verification
+                _img_verif = img_verif_b64
+                if not _img_verif:
+                    try:
+                        _f = generate_flat_slab_sketch(
+                            Lx_spans, Ly_spans, cantilevers,
+                            ts_initial=ts_initial if ts_initial is not None else 20,
+                            n_floors=num_floors,
+                            bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
+                            bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
+                            top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
+                            top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
+                            col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
+                            strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
+                            strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
+                            concrete_cover=cov if cov is not None else 1.5,
+                            fcu=Fcu if Fcu is not None else 250,
+                            fy=Fy if Fy is not None else 4000,
+                            live_load=LL if LL is not None else 0.25,
+                            flooring_load=SDL if SDL is not None else 0.15,
+                            wall_load=wall_load if wall_load is not None else 0.50,
+                            col_w_cm=_col_w_sk, col_d_cm=_col_d_sk,
+                            removed_col_ids=set(_confirmed_removals),
+                            pending_col_ids=set(st.session_state.get("_fs_pending_snapshot", []) if st.session_state.get("_fs_show_confirm") else _pending_removals),
+                            void_panel_ids=set(_confirmed_voids),
+                            pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", []) if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
+                            col_transforms=_col_transforms, edge_columns=_edge_columns,
+                            col_props=_col_props, active_cols=_active_cols,
+                        )
+                        _img_verif = _fig_to_b64(_f)
+                        img_verif_b64 = _img_verif
+                    except Exception:
+                        pass
 
-            # 12. Column Reactions Layout
-            _img_reac = img_reactions_b64
-            if not _img_reac:
+                # 2. Punching Shear Verification Plan
+                _img_punch = None
                 try:
-                    _f = generate_flat_slab_reactions_sketch(
-                        Lx_calc, Ly_calc, cantilevers, num_floors, Wu,
-                        col_reactions_data,
+                    _f = generate_flat_slab_punching_shear_sketch(
+                        Lx_spans, Ly_spans, cantilevers, ts, d, Fcu, Wu,
+                        punching_results,
                         col_w_cm=bc_s, col_d_cm=tc_s,
                         removed_cols=_removed_col_objs,
                         void_panel_ids=set(_confirmed_voids),
-                        col_sf=col_sf_val,
                         edge_columns=_edge_columns,
+                        void_boxes=_void_boxes_sk,
+                        active_cols=_active_cols,
+                        active_x_labels=_active_x_labels,
+                        active_y_labels=_active_y_labels,
                     )
-                    _img_reac = _fig_to_b64(_f)
-                    img_reactions_b64 = _img_reac
+                    _img_punch = _fig_to_b64(_f)
                 except Exception:
                     pass
 
-            # 13. Rebar BBS Details
-            _img_bbs = None
-            try:
-                _f = generate_flat_slab_rebar_bending_details(
-                    Lx_calc, Ly_calc, cantilevers, ts,
-                    mesh_btm_n=n_mesh_btm, mesh_btm_dia=bottom_mesh_dia,
-                    mesh_top_n=n_mesh_top, mesh_top_dia=top_mesh_dia,
-                    col_extras=top_extra_cols, cant_rft_list=cant_rft_list,
-                    btm_extra_spans=btm_extra_spans,
-                    void_panels=_void_boxes_sk,
-                    bc_cm=bc_s, tc_cm=tc_s,
+                # 3. Long-Term Deflection Contour Plan
+                _img_defl = None
+                try:
+                    _f = generate_flat_slab_deflection_contour_sketch(
+                        Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, DL_tot, LL,
+                        deflection_results,
+                        col_w_cm=bc_s, col_d_cm=tc_s,
+                        removed_cols=_removed_col_objs,
+                        void_panel_ids=set(_confirmed_voids),
+                        col_transforms=_col_transforms,
+                        edge_columns=_edge_columns,
+                        void_boxes=_void_boxes_sk,
+                        active_cols=_active_cols,
+                        active_x_labels=_active_x_labels,
+                        active_y_labels=_active_y_labels,
+                    )
+                    _img_defl = _fig_to_b64(_f)
+                except Exception:
+                    pass
+
+                # 4. Moment M11 Contour Plan
+                _img_m11 = img_m11_b64
+                if not _img_m11:
+                    try:
+                        _f = generate_flat_slab_moment_contour(
+                            Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+                            mode="M11", col_w_cm=bc_s, col_d_cm=tc_s,
+                            removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
+                            top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
+                            col_transforms=_col_transforms, edge_columns=_edge_columns,
+                            active_cols=_active_cols,
+                            active_x_labels=_active_x_labels, active_y_labels=_active_y_labels,
+                            void_boxes=_void_boxes_sk,
+                        )
+                        _img_m11 = _fig_to_b64(_f)
+                        img_m11_b64 = _img_m11
+                    except Exception:
+                        pass
+
+                # 5. Moment M22 Contour Plan
+                _img_m22 = img_m22_b64
+                if not _img_m22:
+                    try:
+                        _f = generate_flat_slab_moment_contour(
+                            Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+                            mode="M22", col_w_cm=bc_s, col_d_cm=tc_s,
+                            removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
+                            top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
+                            col_transforms=_col_transforms, edge_columns=_edge_columns,
+                            active_cols=_active_cols,
+                            active_x_labels=_active_x_labels, active_y_labels=_active_y_labels,
+                            void_boxes=_void_boxes_sk,
+                        )
+                        _img_m22 = _fig_to_b64(_f)
+                        img_m22_b64 = _img_m22
+                    except Exception:
+                        pass
+
+                # 6. Column Caps Layout (Top Extra)
+                _img_col_caps = None
+                try:
+                    _f = generate_flat_slab_column_caps_sketch(
+                        Lx_calc, Ly_calc, cantilevers, ts,
+                        top_extra_cols=top_extra_cols,
+                        col_w_cm=bc_s, col_d_cm=tc_s,
+                        removed_cols=_removed_col_objs,
+                        void_panel_ids=set(_confirmed_voids),
+                        col_transforms=_col_transforms,
+                        edge_columns=_edge_columns,
+                        active_cols=_active_cols,
+                        active_x_labels=_active_x_labels, active_y_labels=_active_y_labels,
+                        void_boxes=_void_boxes_sk,
+                    )
+                    _img_col_caps = _fig_to_b64(_f)
+                except Exception:
+                    pass
+
+                # 7. Bottom Extra (X-Direction) & Base Meshes
+                _img_btm_x = None
+                try:
+                    _f = generate_flat_slab_bottom_extra_shawka_sketch(
+                        Lx_calc, Ly_calc, cantilevers, ts,
+                        btm_extra_spans=btm_extra_spans,
+                        cant_rft_list=None,
+                        n_mesh_btm=n_mesh_btm, bottom_mesh_dia=bottom_mesh_dia,
+                        n_mesh_top=n_mesh_top, top_mesh_dia=top_mesh_dia,
+                        col_w_cm=bc_s, col_d_cm=tc_s,
+                        removed_cols=_removed_col_objs,
+                        void_panel_ids=set(_confirmed_voids),
+                        direction="X",
+                        col_transforms=_col_transforms,
+                        edge_columns=_edge_columns,
+                        active_cols=_active_cols,
+                        active_x_labels=_active_x_labels, active_y_labels=_active_y_labels,
+                        void_boxes=_void_boxes_sk,
+                    )
+                    _img_btm_x = _fig_to_b64(_f)
+                except Exception:
+                    pass
+
+                # 8. Bottom Extra (Y-Direction) & Base Meshes
+                _img_btm_y = None
+                try:
+                    _f = generate_flat_slab_bottom_extra_shawka_sketch(
+                        Lx_calc, Ly_calc, cantilevers, ts,
+                        btm_extra_spans=btm_extra_spans,
+                        cant_rft_list=None,
+                        n_mesh_btm=n_mesh_btm, bottom_mesh_dia=bottom_mesh_dia,
+                        n_mesh_top=n_mesh_top, top_mesh_dia=top_mesh_dia,
+                        col_w_cm=bc_s, col_d_cm=tc_s,
+                        removed_cols=_removed_col_objs,
+                        void_panel_ids=set(_confirmed_voids),
+                        direction="Y",
+                        col_transforms=_col_transforms,
+                        edge_columns=_edge_columns,
+                        active_cols=_active_cols,
+                        active_x_labels=_active_x_labels, active_y_labels=_active_y_labels,
+                        void_boxes=_void_boxes_sk,
+                    )
+                    _img_btm_y = _fig_to_b64(_f)
+                except Exception:
+                    pass
+
+                # 9. Top Slab Extra & Shawka (X-Direction)
+                _img_top_x = None
+                try:
+                    _f = generate_flat_slab_top_mesh_extra_sketch(
+                        Lx_calc, Ly_calc, cantilevers, ts,
+                        top_extra_slab_bays=top_extra_slab_bays,
+                        cant_rft_list=cant_rft_list,
+                        n_mesh_top=n_mesh_top, top_mesh_dia=top_mesh_dia,
+                        n_mesh_btm=n_mesh_btm, bottom_mesh_dia=bottom_mesh_dia,
+                        col_w_cm=bc_s, col_d_cm=tc_s,
+                        removed_cols=_removed_col_objs,
+                        void_panel_ids=set(_confirmed_voids),
+                        direction="X",
+                        col_transforms=_col_transforms,
+                        edge_columns=_edge_columns,
+                        active_cols=_active_cols,
+                        active_x_labels=_active_x_labels, active_y_labels=_active_y_labels,
+                        void_boxes=_void_boxes_sk,
+                    )
+                    _img_top_x = _fig_to_b64(_f)
+                except Exception:
+                    pass
+
+                # 10. Top Slab Extra & Shawka (Y-Direction)
+                _img_top_y = None
+                try:
+                    _f = generate_flat_slab_top_mesh_extra_sketch(
+                        Lx_calc, Ly_calc, cantilevers, ts,
+                        top_extra_slab_bays=top_extra_slab_bays,
+                        cant_rft_list=cant_rft_list,
+                        n_mesh_top=n_mesh_top, top_mesh_dia=top_mesh_dia,
+                        n_mesh_btm=n_mesh_btm, bottom_mesh_dia=bottom_mesh_dia,
+                        col_w_cm=bc_s, col_d_cm=tc_s,
+                        removed_cols=_removed_col_objs,
+                        void_panel_ids=set(_confirmed_voids),
+                        direction="Y",
+                        col_transforms=_col_transforms,
+                        edge_columns=_edge_columns,
+                        active_cols=_active_cols,
+                        active_x_labels=_active_x_labels, active_y_labels=_active_y_labels,
+                        void_boxes=_void_boxes_sk,
+                    )
+                    _img_top_y = _fig_to_b64(_f)
+                except Exception:
+                    pass
+
+                # 11. Master Steel Layout & Detailing
+                _img_master_steel = None
+                try:
+                    _f = generate_flat_slab_master_steel_layout_sketch(
+                        Lx_calc, Ly_calc, cantilevers, ts,
+                        n_mesh_btm=n_mesh_btm, bottom_mesh_dia=bottom_mesh_dia,
+                        n_mesh_top=n_mesh_top, top_mesh_dia=top_mesh_dia,
+                        top_extra_cols=top_extra_cols, cant_rft_list=cant_rft_list,
+                        btm_extra_spans=btm_extra_spans,
+                        col_w_cm=bc_s, col_d_cm=tc_s,
+                        removed_cols=_removed_col_objs,
+                        void_panel_ids=set(_confirmed_voids),
+                        col_transforms=_col_transforms,
+                        edge_columns=_edge_columns,
+                    )
+                    _img_master_steel = _fig_to_b64(_f)
+                except Exception:
+                    pass
+
+                # 12. Column Reactions Layout
+                _img_reac = img_reactions_b64
+                if not _img_reac:
+                    try:
+                        _f = generate_flat_slab_reactions_sketch(
+                            Lx_calc, Ly_calc, cantilevers, num_floors, Wu,
+                            col_reactions_data,
+                            col_w_cm=bc_s, col_d_cm=tc_s,
+                            removed_cols=_removed_col_objs,
+                            void_panel_ids=set(_confirmed_voids),
+                            col_sf=col_sf_val,
+                            edge_columns=_edge_columns,
+                        )
+                        _img_reac = _fig_to_b64(_f)
+                        img_reactions_b64 = _img_reac
+                    except Exception:
+                        pass
+
+                # 13. Rebar BBS Details
+                _img_bbs = None
+                try:
+                    _f = generate_flat_slab_rebar_bending_details(
+                        Lx_calc, Ly_calc, cantilevers, ts,
+                        mesh_btm_n=n_mesh_btm, mesh_btm_dia=bottom_mesh_dia,
+                        mesh_top_n=n_mesh_top, mesh_top_dia=top_mesh_dia,
+                        col_extras=top_extra_cols, cant_rft_list=cant_rft_list,
+                        btm_extra_spans=btm_extra_spans,
+                        void_panels=_void_boxes_sk,
+                        bc_cm=bc_s, tc_cm=tc_s,
+                    )
+                    _img_bbs = _fig_to_b64(_f)
+                except Exception:
+                    pass
+
+                return generate_flat_slab_report_html(
+                    project_name="Standalone Flat Slab Reinforced Concrete Design (ECP 203)" if is_standalone else "Integrated Structural Design (ECP 203)",
+                    ts=ts, d=d, num_floors=num_floors, Wu=Wu,
+                    Lx_spans=Lx_calc, Ly_spans=Ly_calc, cantilevers=cantilevers,
+                    mesh_btm_str=mesh_btm_str, mesh_top_str=mesh_top_str,
+                    prov_btm_mesh_cm2m=prov_btm_mesh_cm2m, prov_top_mesh_cm2m=prov_top_mesh_cm2m,
+                    Fcu=Fcu, Fy=Fy, SDL=SDL, wall_load=wall_load, LL=LL,
+                    bc=bc_s, tc=tc_s, boq=boq,
+                    top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
+                    punching_results=punching_results, all_punching_safe=all_safe,
+                    col_reactions_data=col_reactions_data, summary_models=summary_models,
+                    img_verif_b64=_img_verif,
+                    img_punching_b64=_img_punch,
+                    img_deflection_b64=_img_defl,
+                    img_m11_b64=_img_m11,
+                    img_m22_b64=_img_m22,
+                    img_dual_moment_b64=img_dual_moment_b64,
+                    img_col_caps_b64=_img_col_caps,
+                    img_btm_x_b64=_img_btm_x,
+                    img_btm_y_b64=_img_btm_y,
+                    img_top_x_b64=_img_top_x,
+                    img_top_y_b64=_img_top_y,
+                    img_master_steel_b64=_img_master_steel,
+                    img_reactions_b64=_img_reac,
+                    img_rebar_bbs_b64=_img_bbs,
+                    gb_analysis=gb_analysis_obj if 'gb_analysis_obj' in locals() else st.session_state.get('fs_gb_analysis'),
+                    ftg_analysis=None if is_standalone else (ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get('fs_ftg_analysis')),
                 )
-                _img_bbs = _fig_to_b64(_f)
-            except Exception:
-                pass
 
-            return generate_flat_slab_report_html(
-                project_name="Standalone Flat Slab Reinforced Concrete Design (ECP 203)" if is_standalone else "Integrated Structural Design (ECP 203)",
-                ts=ts, d=d, num_floors=num_floors, Wu=Wu,
-                Lx_spans=Lx_calc, Ly_spans=Ly_calc, cantilevers=cantilevers,
-                mesh_btm_str=mesh_btm_str, mesh_top_str=mesh_top_str,
-                prov_btm_mesh_cm2m=prov_btm_mesh_cm2m, prov_top_mesh_cm2m=prov_top_mesh_cm2m,
-                Fcu=Fcu, Fy=Fy, SDL=SDL, wall_load=wall_load, LL=LL,
-                bc=bc_s, tc=tc_s, boq=boq,
-                top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
-                punching_results=punching_results, all_punching_safe=all_safe,
-                col_reactions_data=col_reactions_data, summary_models=summary_models,
-                img_verif_b64=_img_verif,
-                img_punching_b64=_img_punch,
-                img_deflection_b64=_img_defl,
-                img_m11_b64=_img_m11,
-                img_m22_b64=_img_m22,
-                img_dual_moment_b64=img_dual_moment_b64,
-                img_col_caps_b64=_img_col_caps,
-                img_btm_x_b64=_img_btm_x,
-                img_btm_y_b64=_img_btm_y,
-                img_top_x_b64=_img_top_x,
-                img_top_y_b64=_img_top_y,
-                img_master_steel_b64=_img_master_steel,
-                img_reactions_b64=_img_reac,
-                img_rebar_bbs_b64=_img_bbs,
-                gb_analysis=gb_analysis_obj if 'gb_analysis_obj' in locals() else st.session_state.get('fs_gb_analysis'),
-                ftg_analysis=None if is_standalone else (ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get('fs_ftg_analysis')),
-            )
+            def _build_flat_slab_concise_html():
+                _act_cols = fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols
+                _ftg_obj = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis", {})
+                _gb_obj = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis", {})
+                _rb_obj = rb_analysis if ('rb_analysis' in locals() and rb_analysis) else st.session_state.get("fs_rb_analysis", {})
+                _dr_beams = _cur_beams_list if '_cur_beams_list' in locals() else []
+                _vboxes = _void_boxes_sk if '_void_boxes_sk' in locals() else None
 
-        def _build_flat_slab_concise_html():
-            _act_cols = fs_active_columns if ('fs_active_columns' in locals() and fs_active_columns) else _active_cols
-            _ftg_obj = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis", {})
-            _gb_obj = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis", {})
-            _rb_obj = rb_analysis if ('rb_analysis' in locals() and rb_analysis) else st.session_state.get("fs_rb_analysis", {})
-            _dr_beams = _cur_beams_list if '_cur_beams_list' in locals() else []
-            _vboxes = _void_boxes_sk if '_void_boxes_sk' in locals() else None
+                # Fallback if gb or rb not yet populated
+                if not _gb_obj:
+                    try:
+                        from modules.ground_beam_layout import extract_structural_links_and_beams
+                        _gb_obj = extract_structural_links_and_beams(_act_cols, _ftg_obj)
+                    except Exception:
+                        _gb_obj = {}
 
-            # Fallback if gb or rb not yet populated
-            if not _gb_obj:
-                try:
-                    from modules.ground_beam_layout import extract_structural_links_and_beams
-                    _gb_obj = extract_structural_links_and_beams(_act_cols, _ftg_obj)
-                except Exception:
-                    _gb_obj = {}
+                if not _rb_obj:
+                    try:
+                        from modules.roof_beam_layout import extract_roof_beams_and_models
+                        _rb_obj = extract_roof_beams_and_models(_act_cols, drop_beams=_dr_beams, cantilevers=cantilevers)
+                    except Exception:
+                        _rb_obj = {}
 
-            if not _rb_obj:
-                try:
-                    from modules.roof_beam_layout import extract_roof_beams_and_models
-                    _rb_obj = extract_roof_beams_and_models(_act_cols, drop_beams=_dr_beams, cantilevers=cantilevers)
-                except Exception:
-                    _rb_obj = {}
+                # Page 1: Silent Inputs Plan
+                f1 = draw_page1_silent_inputs(Lx_calc, Ly_calc, cantilevers, _act_cols, drop_beams=_dr_beams, void_boxes=_vboxes)
+                b1 = fig_to_b64(f1)
 
-            # Page 1: Silent Inputs Plan
-            f1 = draw_page1_silent_inputs(Lx_calc, Ly_calc, cantilevers, _act_cols, drop_beams=_dr_beams, void_boxes=_vboxes)
-            b1 = fig_to_b64(f1)
+                # Page 2: Columns Plan & Table
+                f2 = draw_page2_columns_plan(_act_cols, Lx_calc, Ly_calc, cantilevers)
+                b2 = fig_to_b64(f2)
 
-            # Page 2: Columns Plan & Table
-            f2 = draw_page2_columns_plan(_act_cols, Lx_calc, Ly_calc, cantilevers)
-            b2 = fig_to_b64(f2)
+                cnt_int = sum(1 for c in _act_cols if str(c.get("type", "")).lower() == "interior")
+                cnt_edge = sum(1 for c in _act_cols if "edge" in str(c.get("type", "")).lower())
+                cnt_corner = sum(1 for c in _act_cols if "corner" in str(c.get("type", "")).lower())
 
-            cnt_int = sum(1 for c in _act_cols if str(c.get("type", "")).lower() == "interior")
-            cnt_edge = sum(1 for c in _act_cols if "edge" in str(c.get("type", "")).lower())
-            cnt_corner = sum(1 for c in _act_cols if "corner" in str(c.get("type", "")).lower())
+                cols_tbl = []
+                if 'col_designs' in locals() and col_designs:
+                    from modules.columns import design_rectangular_column
+                    for des in col_designs:
+                        _rtype = des.get("raw_type", "Interior")
+                        m_mark = des.get("model_mark") or (col_label_map.get(_rtype) if 'col_label_map' in locals() else "C1")
+                        c_cnt = cnt_int if _rtype == "Interior" else (cnt_edge if _rtype == "Edge" else cnt_corner)
 
-            cols_tbl = []
-            if 'col_designs' in locals() and col_designs:
-                from modules.columns import design_rectangular_column
-                for des in col_designs:
-                    _rtype = des.get("raw_type", "Interior")
-                    m_mark = des.get("model_mark") or (col_label_map.get(_rtype) if 'col_label_map' in locals() else "C1")
-                    c_cnt = cnt_int if _rtype == "Interior" else (cnt_edge if _rtype == "Edge" else cnt_corner)
+                        # Look up adopted dimensions confirmed by user
+                        conf_map = confirmed_col_dims if ('confirmed_col_dims' in locals() and confirmed_col_dims) else st.session_state.get("fs_confirmed_col_dims", {})
+                        dims_conf = conf_map.get(_rtype) or conf_map.get(m_mark) or {}
+                        final_b = float(dims_conf.get("b", des.get("b", 30.0)))
+                        final_t = float(dims_conf.get("t", des.get("t", 50.0)))
 
-                    # Look up adopted dimensions confirmed by user
-                    conf_map = confirmed_col_dims if ('confirmed_col_dims' in locals() and confirmed_col_dims) else st.session_state.get("fs_confirmed_col_dims", {})
-                    dims_conf = conf_map.get(_rtype) or conf_map.get(m_mark) or {}
-                    final_b = float(dims_conf.get("b", des.get("b", 30.0)))
-                    final_t = float(dims_conf.get("t", des.get("t", 50.0)))
+                        # Recompute design with final adopted dimensions to get final longitudinal rebar & stirrups
+                        pu_val = float(des.get("pu_tot", des.get("pu_tot_val", 0.0)))
+                        final_des = design_rectangular_column(
+                            Pu_input=pu_val,
+                            Safety_Factor=1.0,
+                            b=final_b,
+                            t_override=final_t,
+                            H_clear=float(col_H) if 'col_H' in locals() else 300.0,
+                            K=float(col_K) if 'col_K' in locals() else 0.70,
+                            Fcu=float(col_Fcu) if 'col_Fcu' in locals() else 250.0,
+                            Fy=float(col_Fy) if 'col_Fy' in locals() else 4000.0,
+                            Fyk=float(col_Fyk) if 'col_Fyk' in locals() else 2400.0,
+                            mu_target=float(col_mu) if 'col_mu' in locals() else 1.0,
+                            Phi=int(col_phi) if 'col_phi' in locals() else 16,
+                            Phi_st=int(col_phi_st) if 'col_phi_st' in locals() else 8,
+                        )
 
-                    # Recompute design with final adopted dimensions to get final longitudinal rebar & stirrups
-                    pu_val = float(des.get("pu_tot", des.get("pu_tot_val", 0.0)))
-                    final_des = design_rectangular_column(
-                        Pu_input=pu_val,
-                        Safety_Factor=1.0,
-                        b=final_b,
-                        t_override=final_t,
-                        H_clear=float(col_H) if 'col_H' in locals() else 300.0,
-                        K=float(col_K) if 'col_K' in locals() else 0.70,
-                        Fcu=float(col_Fcu) if 'col_Fcu' in locals() else 250.0,
-                        Fy=float(col_Fy) if 'col_Fy' in locals() else 4000.0,
-                        Fyk=float(col_Fyk) if 'col_Fyk' in locals() else 2400.0,
-                        mu_target=float(col_mu) if 'col_mu' in locals() else 1.0,
-                        Phi=int(col_phi) if 'col_phi' in locals() else 16,
-                        Phi_st=int(col_phi_st) if 'col_phi_st' in locals() else 8,
+                        cols_tbl.append({
+                            "Column Model (Tag)": str(m_mark).split("(")[0].strip(),
+                            "Section b × t (cm)": f"{final_b:.0f} × {final_t:.0f} cm",
+                            "Longitudinal Rebar": f"{final_des.get('main_steel_str', des.get('main_steel_str', '8Ø16'))} (μ={final_des.get('mu_provided', des.get('mu_provided', 1.0)):.2f}%)",
+                            "Ties / Stirrups": final_des.get("stirrups_str", des.get("stirrups_str", "5Ø8/m")),
+                            "Column Count": f"{c_cnt}",
+                        })
+                if not cols_tbl:
+                    # Dynamic fallback
+                    fallback_groups = []
+                    if cnt_int > 0: fallback_groups.append(("C1", cnt_int))
+                    if cnt_edge > 0: fallback_groups.append((f"C{len(fallback_groups)+1}", cnt_edge))
+                    if cnt_corner > 0: fallback_groups.append((f"C{len(fallback_groups)+1}", cnt_corner))
+                    cols_tbl = [
+                        {"Column Model (Tag)": fg[0], "Section b × t (cm)": f"{bc_s:.0f} × {tc_s:.0f} cm", "Longitudinal Rebar": "8Ø16", "Ties / Stirrups": "5Ø8/m", "Column Count": f"{fg[1]}"}
+                        for fg in fallback_groups
+                    ]
+
+                # Page 3: Footings Plan & Table
+                f3 = draw_page3_footings_plan(_act_cols, _ftg_obj, Lx_calc, Ly_calc, cantilevers)
+                b3 = fig_to_b64(f3)
+                # Exclude summary totals row from concise PDF table
+                ftgs_tbl = [r for r in _ftg_obj.get("unified_rows", []) if not str(r.get("نموذج القاعدة (Model)", "")).startswith("📌")] if _ftg_obj else []
+
+                # Page 4: Ground Beams Plan & Table
+                f4 = draw_page4_ground_beams_plan(_gb_obj, _act_cols, Lx_calc, Ly_calc, cantilevers)
+                b4 = fig_to_b64(f4)
+                gb_tbl = _gb_obj.get("models_schedule", []) if _gb_obj else []
+
+                # Page 5: Roof Beams Plan & Table
+                _cur_sb = _slab_bounds_current if '_slab_bounds_current' in locals() else st.session_state.get("_fs_current_slab_bounds")
+                f5 = draw_page5_roof_beams_plan(_rb_obj, _act_cols, Lx_calc, Ly_calc, cantilevers, slab_bounds=_cur_sb)
+                b5 = fig_to_b64(f5)
+                # Exclude redundant beam length column from summary table
+                rb_tbl = [
+                    {k: v for k, v in r.items() if not any(sub in k.lower() for sub in ["أطوال", "طول", "length", "len"])}
+                    for r in _rb_obj.get("models_schedule", [])
+                ] if _rb_obj else []
+
+                # Page 6: Slab Bottom Rebar Plan
+                f6 = draw_page6_slab_bottom_rebar(Lx_calc, Ly_calc, cantilevers, btm_extra_spans if 'btm_extra_spans' in locals() else None, n_mesh_btm if 'n_mesh_btm' in locals() else 5.0, bottom_mesh_dia if 'bottom_mesh_dia' in locals() else 10, _act_cols, void_boxes=_vboxes)
+                b6 = fig_to_b64(f6)
+
+                # Page 7: Slab Top Rebar Plan
+                f7 = draw_page7_slab_top_rebar(Lx_calc, Ly_calc, cantilevers, cant_rft_list if 'cant_rft_list' in locals() else None, n_mesh_top if 'n_mesh_top' in locals() else 5.0, top_mesh_dia if 'top_mesh_dia' in locals() else 10, _act_cols, void_boxes=_vboxes)
+                b7 = fig_to_b64(f7)
+
+                # Page 8: Column Caps Plan
+                f8 = draw_page8_column_caps(Lx_calc, Ly_calc, cantilevers, ts, top_extra_cols if 'top_extra_cols' in locals() else [], _act_cols, void_boxes=_vboxes)
+                b8 = fig_to_b64(f8)
+
+                proj_title = "Standalone Flat Slab Reinforced Concrete Design (ECP 203)" if is_standalone else "Integrated Structural Design (ECP 203)"
+                return generate_concise_design_report_html(
+                    project_name=proj_title,
+                    num_floors=num_floors,
+                    ts=ts,
+                    Fcu=float(Fcu) if 'Fcu' in locals() and Fcu else 250.0,
+                    Fy=float(Fy) if 'Fy' in locals() and Fy else 4000.0,
+                    Wu=float(Wu) if 'Wu' in locals() and Wu else 1.45,
+                    SDL=float(SDL) if 'SDL' in locals() and SDL else 0.15,
+                    wall_load=float(wall_load) if 'wall_load' in locals() and wall_load else 0.45,
+                    LL=float(LL) if 'LL' in locals() and LL else 0.25,
+                    img_page1_b64=b1,
+                    img_page2_b64=b2,
+                    img_page3_b64=b3,
+                    img_page4_b64=b4,
+                    img_page5_b64=b5,
+                    img_page6_b64=b6,
+                    img_page7_b64=b7,
+                    img_page8_b64=b8,
+                    cols_table_data=cols_tbl,
+                    ftgs_table_data=ftgs_tbl,
+                    gb_table_data=gb_tbl,
+                    rb_table_data=rb_tbl,
+                    mesh_btm_str=mesh_btm_str if 'mesh_btm_str' in locals() else f"{n_mesh_btm:.0f}Ø{bottom_mesh_dia}/m'",
+                    mesh_top_str=mesh_top_str if 'mesh_top_str' in locals() else f"{n_mesh_top:.0f}Ø{top_mesh_dia}/m'",
+                    slab_area_val=slab_area_val if 'slab_area_val' in locals() else sum(Lx_calc)*sum(Ly_calc),
+                    btm_extra_spans=btm_extra_spans if 'btm_extra_spans' in locals() else None,
+                    cant_rft_list=cant_rft_list if 'cant_rft_list' in locals() else None,
+                    cantilevers=cantilevers if 'cantilevers' in locals() else None,
+                    top_extra_cols=top_extra_cols if 'top_extra_cols' in locals() else [],
+                )
+
+            # 4 Dedicated Red Export Buttons
+            exp_c1, exp_c2, exp_c3, exp_c4 = st.columns([1.3, 1.5, 1.4, 1.1], gap="medium")
+
+            with exp_c1:
+                # Button 1: تصدير مخرجات التصميم في ملف PDF
+                if st.button("📕 تصدير مخرجات التصميم ملف PDF", key=f"{prefix}btn_export_outputs_pdf", use_container_width=True):
+                    with st.spinner("جاري توليد تقرير مخرجات التصميم المعتمد وتحويله إلى PDF..."):
+                        _outputs_html = _build_flat_slab_outputs_html()
+                        pdf_outputs_bytes = html_to_pdf_bytes(_outputs_html)
+                    if pdf_outputs_bytes:
+                        b64_pdf = base64.b64encode(pdf_outputs_bytes).decode("utf-8")
+                        js_dl = f"""
+                        <script>
+                        (function() {{
+                            try {{
+                                var b64Data = "{b64_pdf}";
+                                var byteChars = atob(b64Data);
+                                var byteNums = new Array(byteChars.length);
+                                for (var i = 0; i < byteChars.length; i++) {{ byteNums[i] = byteChars.charCodeAt(i); }}
+                                var byteArray = new Uint8Array(byteNums);
+                                var blob = new Blob([byteArray], {{type: "application/pdf"}});
+                                var blobUrl = URL.createObjectURL(blob);
+                                var targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+                                var a = targetDoc.createElement("a");
+                                a.href = blobUrl;
+                                a.download = "{pdf_outputs_filename}";
+                                a.target = "_blank";
+                                targetDoc.body.appendChild(a);
+                                a.click();
+                                setTimeout(function() {{
+                                    try {{ targetDoc.body.removeChild(a); }} catch(e) {{}}
+                                    URL.revokeObjectURL(blobUrl);
+                                }}, 4000);
+                            }} catch(err) {{
+                                var aFallback = document.createElement("a");
+                                aFallback.href = "data:application/pdf;base64,{b64_pdf}";
+                                aFallback.download = "{pdf_outputs_filename}";
+                                document.body.appendChild(aFallback);
+                                aFallback.click();
+                            }}
+                        }})();
+                        </script>
+                        """
+                        components.html(js_dl, height=0, width=0)
+                        st.toast("✅ تم تصدير مخرجات التصميم PDF بنجاح!", icon="📕")
+                        st.session_state[f"{prefix}_last_outputs_pdf_bytes"] = pdf_outputs_bytes
+                    else:
+                        st.error("تعذر إنشاء ملف الـ PDF عبر المحرك التلقائي، يمكنك تنزيل ملف الـ HTML وفتحه للطباعة.")
+
+                # Show prominent instant download button if outputs PDF is available in session state
+                if st.session_state.get(f"{prefix}_last_outputs_pdf_bytes"):
+                    st.download_button(
+                        label=f"📥 حفظ وتحميل ملف مخرجات التصميم ({pdf_outputs_filename})",
+                        data=st.session_state[f"{prefix}_last_outputs_pdf_bytes"],
+                        file_name=pdf_outputs_filename,
+                        mime="application/pdf",
+                        key=f"{prefix}btn_instant_outputs_pdf_exp",
+                        use_container_width=True,
                     )
 
-                    cols_tbl.append({
-                        "Column Model (Tag)": str(m_mark).split("(")[0].strip(),
-                        "Section b × t (cm)": f"{final_b:.0f} × {final_t:.0f} cm",
-                        "Longitudinal Rebar": f"{final_des.get('main_steel_str', des.get('main_steel_str', '8Ø16'))} (μ={final_des.get('mu_provided', des.get('mu_provided', 1.0)):.2f}%)",
-                        "Ties / Stirrups": final_des.get("stirrups_str", des.get("stirrups_str", "5Ø8/m")),
-                        "Column Count": f"{c_cnt}",
-                    })
-            if not cols_tbl:
-                # Dynamic fallback
-                fallback_groups = []
-                if cnt_int > 0: fallback_groups.append(("C1", cnt_int))
-                if cnt_edge > 0: fallback_groups.append((f"C{len(fallback_groups)+1}", cnt_edge))
-                if cnt_corner > 0: fallback_groups.append((f"C{len(fallback_groups)+1}", cnt_corner))
-                cols_tbl = [
-                    {"Column Model (Tag)": fg[0], "Section b × t (cm)": f"{bc_s:.0f} × {tc_s:.0f} cm", "Longitudinal Rebar": "8Ø16", "Ties / Stirrups": "5Ø8/m", "Column Count": f"{fg[1]}"}
-                    for fg in fallback_groups
-                ]
+            with exp_c2:
+                # Button 2: تصدير مخرجات التصميم المختصرة في ملف PDF (8 صفحات)
+                if st.button("📑 تصدير مخرجات التصميم المختصرة", key=f"{prefix}btn_export_concise_pdf", use_container_width=True):
+                    with st.spinner("جاري توليد مخرجات التصميم المختصرة (8 صفحات هندسية معتمدة) وتحويلها إلى PDF..."):
+                        _concise_html = _build_flat_slab_concise_html()
+                        pdf_concise_bytes = html_to_pdf_bytes(_concise_html, timeout_sec=60)
+                    if pdf_concise_bytes:
+                        st.session_state[f"{prefix}_last_concise_pdf_bytes"] = pdf_concise_bytes
+                        st.toast("✅ تم تصدير مخرجات التصميم المختصرة (8 صفحات) PDF بنجاح!", icon="📑")
+                        b64_pdf_concise = base64.b64encode(pdf_concise_bytes).decode("utf-8")
+                        js_dl_concise = f"""
+                        <script>
+                        (function() {{
+                            try {{
+                                var b64Data = "{b64_pdf_concise}";
+                                var byteChars = atob(b64Data);
+                                var byteNums = new Array(byteChars.length);
+                                for (var i = 0; i < byteChars.length; i++) {{ byteNums[i] = byteChars.charCodeAt(i); }}
+                                var byteArray = new Uint8Array(byteNums);
+                                var blob = new Blob([byteArray], {{type: "application/pdf"}});
+                                var blobUrl = URL.createObjectURL(blob);
+                                var targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+                                var a = targetDoc.createElement("a");
+                                a.href = blobUrl;
+                                a.download = "{pdf_concise_filename}";
+                                a.target = "_blank";
+                                targetDoc.body.appendChild(a);
+                                a.click();
+                                setTimeout(function() {{
+                                    try {{ targetDoc.body.removeChild(a); }} catch(e) {{}}
+                                    URL.revokeObjectURL(blobUrl);
+                                }}, 4000);
+                            }} catch(err) {{
+                                var aFallback = document.createElement("a");
+                                aFallback.href = "data:application/pdf;base64,{b64_pdf_concise}";
+                                aFallback.download = "{pdf_concise_filename}";
+                                document.body.appendChild(aFallback);
+                                aFallback.click();
+                            }}
+                        }})();
+                        </script>
+                        """
+                        components.html(js_dl_concise, height=0, width=0)
+                    else:
+                        st.error("تعذر إنشاء ملف الـ PDF عبر المحرك التلقائي، يرجى المحاولة مرة أخرى.")
 
-            # Page 3: Footings Plan & Table
-            f3 = draw_page3_footings_plan(_act_cols, _ftg_obj, Lx_calc, Ly_calc, cantilevers)
-            b3 = fig_to_b64(f3)
-            # Exclude summary totals row from concise PDF table
-            ftgs_tbl = [r for r in _ftg_obj.get("unified_rows", []) if not str(r.get("نموذج القاعدة (Model)", "")).startswith("📌")] if _ftg_obj else []
+                if st.session_state.get(f"{prefix}_last_concise_pdf_bytes"):
+                    st.download_button(
+                        label=f"📥 حفظ وتحميل ملف المخرجات المختصرة ({pdf_concise_filename})",
+                        data=st.session_state[f"{prefix}_last_concise_pdf_bytes"],
+                        file_name=pdf_concise_filename,
+                        mime="application/pdf",
+                        key=f"{prefix}btn_instant_concise_pdf_exp",
+                        use_container_width=True,
+                    )
 
-            # Page 4: Ground Beams Plan & Table
-            f4 = draw_page4_ground_beams_plan(_gb_obj, _act_cols, Lx_calc, Ly_calc, cantilevers)
-            b4 = fig_to_b64(f4)
-            gb_tbl = _gb_obj.get("models_schedule", []) if _gb_obj else []
+            with exp_c3:
+                # Button 3: تصدير جميع المدخلات والمخرجات في ملف PDF
+                if st.button("📑 تصدير جميع المدخلات والمخرجات ملف PDF", key=f"{prefix}btn_export_full_pdf", use_container_width=True):
+                    with st.spinner("جاري توليد التقرير الاستشاري الكامل بجميع الرسومات والمخرجات وتحويله إلى PDF..."):
+                        _full_html = _build_flat_slab_full_html()
+                        pdf_full_bytes = html_to_pdf_bytes(_full_html, timeout_sec=60)
+                    if pdf_full_bytes:
+                        st.session_state[f"{prefix}_last_full_pdf_bytes"] = pdf_full_bytes
+                        st.toast("✅ تم تصدير كامل المدخلات والمخرجات PDF بنجاح!", icon="📑")
+                        b64_pdf_full = base64.b64encode(pdf_full_bytes).decode("utf-8")
+                        js_dl_full = f"""
+                        <script>
+                        (function() {{
+                            try {{
+                                var b64Data = "{b64_pdf_full}";
+                                var byteChars = atob(b64Data);
+                                var byteNums = new Array(byteChars.length);
+                                for (var i = 0; i < byteChars.length; i++) {{ byteNums[i] = byteChars.charCodeAt(i); }}
+                                var byteArray = new Uint8Array(byteNums);
+                                var blob = new Blob([byteArray], {{type: "application/pdf"}});
+                                var blobUrl = URL.createObjectURL(blob);
+                                var targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+                                var a = targetDoc.createElement("a");
+                                a.href = blobUrl;
+                                a.download = "{pdf_full_filename}";
+                                a.target = "_blank";
+                                targetDoc.body.appendChild(a);
+                                a.click();
+                                setTimeout(function() {{
+                                    try {{ targetDoc.body.removeChild(a); }} catch(e) {{}}
+                                    URL.revokeObjectURL(blobUrl);
+                                }}, 4000);
+                            }} catch(err) {{
+                                var aFallback = document.createElement("a");
+                                aFallback.href = "data:application/pdf;base64,{b64_pdf_full}";
+                                aFallback.download = "{pdf_full_filename}";
+                                document.body.appendChild(aFallback);
+                                aFallback.click();
+                            }}
+                        }})();
+                        </script>
+                        """
+                        components.html(js_dl_full, height=0, width=0)
+                    else:
+                        st.error("تعذر إنشاء ملف الـ PDF عبر المحرك التلقائي، يمكنك تنزيل ملف الـ HTML وفتحه للطباعة.")
 
-            # Page 5: Roof Beams Plan & Table
-            _cur_sb = _slab_bounds_current if '_slab_bounds_current' in locals() else st.session_state.get("_fs_current_slab_bounds")
-            f5 = draw_page5_roof_beams_plan(_rb_obj, _act_cols, Lx_calc, Ly_calc, cantilevers, slab_bounds=_cur_sb)
-            b5 = fig_to_b64(f5)
-            # Exclude redundant beam length column from summary table
-            rb_tbl = [
-                {k: v for k, v in r.items() if not any(sub in k.lower() for sub in ["أطوال", "طول", "length", "len"])}
-                for r in _rb_obj.get("models_schedule", [])
-            ] if _rb_obj else []
+                # Show prominent instant download button if full PDF is available in session state
+                if st.session_state.get(f"{prefix}_last_full_pdf_bytes"):
+                    st.download_button(
+                        label=f"📥 حفظ وتحميل ملف التقرير الشامل ({pdf_full_filename})",
+                        data=st.session_state[f"{prefix}_last_full_pdf_bytes"],
+                        file_name=pdf_full_filename,
+                        mime="application/pdf",
+                        key=f"{prefix}btn_instant_full_pdf_exp",
+                        use_container_width=True,
+                    )
 
-            # Page 6: Slab Bottom Rebar Plan
-            f6 = draw_page6_slab_bottom_rebar(Lx_calc, Ly_calc, cantilevers, btm_extra_spans if 'btm_extra_spans' in locals() else None, n_mesh_btm if 'n_mesh_btm' in locals() else 5.0, bottom_mesh_dia if 'bottom_mesh_dia' in locals() else 10, _act_cols, void_boxes=_vboxes)
-            b6 = fig_to_b64(f6)
+            with exp_c4:
+                # Button 4: حفظ التقرير بصيغة HTML
+                _cached_html = st.session_state.get(f"{prefix}_cached_report_html")
+                if not _cached_html:
+                    _cached_html = _build_flat_slab_full_html()
+                    st.session_state[f"{prefix}_cached_report_html"] = _cached_html
 
-            # Page 7: Slab Top Rebar Plan
-            f7 = draw_page7_slab_top_rebar(Lx_calc, Ly_calc, cantilevers, cant_rft_list if 'cant_rft_list' in locals() else None, n_mesh_top if 'n_mesh_top' in locals() else 5.0, top_mesh_dia if 'top_mesh_dia' in locals() else 10, _act_cols, void_boxes=_vboxes)
-            b7 = fig_to_b64(f7)
+                st.download_button(
+                    label="🌐 حفظ التقرير بصيغة HTML",
+                    data=_cached_html.encode("utf-8"),
+                    file_name=html_filename,
+                    mime="text/html",
+                    key=f"{prefix}btn_dl_html_direct_exp",
+                    use_container_width=True,
+                )
 
-            # Page 8: Column Caps Plan
-            f8 = draw_page8_column_caps(Lx_calc, Ly_calc, cantilevers, ts, top_extra_cols if 'top_extra_cols' in locals() else [], _act_cols, void_boxes=_vboxes)
-            b8 = fig_to_b64(f8)
-
-            proj_title = "Standalone Flat Slab Reinforced Concrete Design (ECP 203)" if is_standalone else "Integrated Structural Design (ECP 203)"
-            return generate_concise_design_report_html(
-                project_name=proj_title,
-                num_floors=num_floors,
-                ts=ts,
-                Fcu=float(Fcu) if 'Fcu' in locals() and Fcu else 250.0,
-                Fy=float(Fy) if 'Fy' in locals() and Fy else 4000.0,
-                Wu=float(Wu) if 'Wu' in locals() and Wu else 1.45,
-                SDL=float(SDL) if 'SDL' in locals() and SDL else 0.15,
-                wall_load=float(wall_load) if 'wall_load' in locals() and wall_load else 0.45,
-                LL=float(LL) if 'LL' in locals() and LL else 0.25,
-                img_page1_b64=b1,
-                img_page2_b64=b2,
-                img_page3_b64=b3,
-                img_page4_b64=b4,
-                img_page5_b64=b5,
-                img_page6_b64=b6,
-                img_page7_b64=b7,
-                img_page8_b64=b8,
-                cols_table_data=cols_tbl,
-                ftgs_table_data=ftgs_tbl,
-                gb_table_data=gb_tbl,
-                rb_table_data=rb_tbl,
-                mesh_btm_str=mesh_btm_str if 'mesh_btm_str' in locals() else f"{n_mesh_btm:.0f}Ø{bottom_mesh_dia}/m'",
-                mesh_top_str=mesh_top_str if 'mesh_top_str' in locals() else f"{n_mesh_top:.0f}Ø{top_mesh_dia}/m'",
-                slab_area_val=slab_area_val if 'slab_area_val' in locals() else sum(Lx_calc)*sum(Ly_calc),
-                btm_extra_spans=btm_extra_spans if 'btm_extra_spans' in locals() else None,
-                cant_rft_list=cant_rft_list if 'cant_rft_list' in locals() else None,
-                cantilevers=cantilevers if 'cantilevers' in locals() else None,
-                top_extra_cols=top_extra_cols if 'top_extra_cols' in locals() else [],
-            )
-
-        # 4 Dedicated Red Export Buttons
-        exp_c1, exp_c2, exp_c3, exp_c4 = st.columns([1.3, 1.5, 1.4, 1.1], gap="medium")
-
-        with exp_c1:
-            # Button 1: تصدير مخرجات التصميم في ملف PDF
-            if st.button("📕 تصدير مخرجات التصميم ملف PDF", key=f"{prefix}btn_export_outputs_pdf", use_container_width=True):
-                with st.spinner("جاري توليد تقرير مخرجات التصميم المعتمد وتحويله إلى PDF..."):
-                    _outputs_html = _build_flat_slab_outputs_html()
-                    pdf_outputs_bytes = html_to_pdf_bytes(_outputs_html)
-                if pdf_outputs_bytes:
-                    b64_pdf = base64.b64encode(pdf_outputs_bytes).decode("utf-8")
-                    js_dl = f"""
-                    <script>
-                    (function() {{
-                        try {{
-                            var b64Data = "{b64_pdf}";
-                            var byteChars = atob(b64Data);
-                            var byteNums = new Array(byteChars.length);
-                            for (var i = 0; i < byteChars.length; i++) {{ byteNums[i] = byteChars.charCodeAt(i); }}
-                            var byteArray = new Uint8Array(byteNums);
-                            var blob = new Blob([byteArray], {{type: "application/pdf"}});
-                            var blobUrl = URL.createObjectURL(blob);
-                            var targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
-                            var a = targetDoc.createElement("a");
-                            a.href = blobUrl;
-                            a.download = "{pdf_outputs_filename}";
-                            a.target = "_blank";
-                            targetDoc.body.appendChild(a);
-                            a.click();
-                            setTimeout(function() {{
-                                try {{ targetDoc.body.removeChild(a); }} catch(e) {{}}
-                                URL.revokeObjectURL(blobUrl);
-                            }}, 4000);
-                        }} catch(err) {{
-                            var aFallback = document.createElement("a");
-                            aFallback.href = "data:application/pdf;base64,{b64_pdf}";
-                            aFallback.download = "{pdf_outputs_filename}";
-                            document.body.appendChild(aFallback);
-                            aFallback.click();
-                        }}
-                    }})();
-                    </script>
-                    """
-                    components.html(js_dl, height=0, width=0)
-                    st.toast("✅ تم تصدير مخرجات التصميم PDF بنجاح!", icon="📕")
-                    st.session_state[f"{prefix}_last_outputs_pdf_bytes"] = pdf_outputs_bytes
-                else:
-                    st.error("تعذر إنشاء ملف الـ PDF عبر المحرك التلقائي، يمكنك تنزيل ملف الـ HTML وفتحه للطباعة.")
-
-            # Show prominent instant download button if outputs PDF is available in session state
+            # Fallback download buttons if already generated
             if st.session_state.get(f"{prefix}_last_outputs_pdf_bytes"):
                 st.download_button(
-                    label=f"📥 حفظ وتحميل ملف مخرجات التصميم ({pdf_outputs_filename})",
+                    label=f"📥 اضغط هنا إذا لم يبدأ تحميل ملف مخرجات التصميم ({pdf_outputs_filename})",
                     data=st.session_state[f"{prefix}_last_outputs_pdf_bytes"],
                     file_name=pdf_outputs_filename,
                     mime="application/pdf",
-                    key=f"{prefix}btn_instant_outputs_pdf_exp",
+                    key=f"{prefix}btn_fallback_outputs_pdf",
                     use_container_width=True,
                 )
-
-        with exp_c2:
-            # Button 2: تصدير مخرجات التصميم المختصرة في ملف PDF (8 صفحات)
-            if st.button("📑 تصدير مخرجات التصميم المختصرة", key=f"{prefix}btn_export_concise_pdf", use_container_width=True):
-                with st.spinner("جاري توليد مخرجات التصميم المختصرة (8 صفحات هندسية معتمدة) وتحويلها إلى PDF..."):
-                    _concise_html = _build_flat_slab_concise_html()
-                    pdf_concise_bytes = html_to_pdf_bytes(_concise_html, timeout_sec=60)
-                if pdf_concise_bytes:
-                    st.session_state[f"{prefix}_last_concise_pdf_bytes"] = pdf_concise_bytes
-                    st.toast("✅ تم تصدير مخرجات التصميم المختصرة (8 صفحات) PDF بنجاح!", icon="📑")
-                    b64_pdf_concise = base64.b64encode(pdf_concise_bytes).decode("utf-8")
-                    js_dl_concise = f"""
-                    <script>
-                    (function() {{
-                        try {{
-                            var b64Data = "{b64_pdf_concise}";
-                            var byteChars = atob(b64Data);
-                            var byteNums = new Array(byteChars.length);
-                            for (var i = 0; i < byteChars.length; i++) {{ byteNums[i] = byteChars.charCodeAt(i); }}
-                            var byteArray = new Uint8Array(byteNums);
-                            var blob = new Blob([byteArray], {{type: "application/pdf"}});
-                            var blobUrl = URL.createObjectURL(blob);
-                            var targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
-                            var a = targetDoc.createElement("a");
-                            a.href = blobUrl;
-                            a.download = "{pdf_concise_filename}";
-                            a.target = "_blank";
-                            targetDoc.body.appendChild(a);
-                            a.click();
-                            setTimeout(function() {{
-                                try {{ targetDoc.body.removeChild(a); }} catch(e) {{}}
-                                URL.revokeObjectURL(blobUrl);
-                            }}, 4000);
-                        }} catch(err) {{
-                            var aFallback = document.createElement("a");
-                            aFallback.href = "data:application/pdf;base64,{b64_pdf_concise}";
-                            aFallback.download = "{pdf_concise_filename}";
-                            document.body.appendChild(aFallback);
-                            aFallback.click();
-                        }}
-                    }})();
-                    </script>
-                    """
-                    components.html(js_dl_concise, height=0, width=0)
-                else:
-                    st.error("تعذر إنشاء ملف الـ PDF عبر المحرك التلقائي، يرجى المحاولة مرة أخرى.")
 
             if st.session_state.get(f"{prefix}_last_concise_pdf_bytes"):
                 st.download_button(
-                    label=f"📥 حفظ وتحميل ملف المخرجات المختصرة ({pdf_concise_filename})",
+                    label=f"📥 اضغط هنا إذا لم يبدأ تحميل ملف مخرجات التصميم المختصرة ({pdf_concise_filename})",
                     data=st.session_state[f"{prefix}_last_concise_pdf_bytes"],
                     file_name=pdf_concise_filename,
                     mime="application/pdf",
-                    key=f"{prefix}btn_instant_concise_pdf_exp",
+                    key=f"{prefix}btn_fallback_concise_pdf",
                     use_container_width=True,
                 )
 
-        with exp_c3:
-            # Button 3: تصدير جميع المدخلات والمخرجات في ملف PDF
-            if st.button("📑 تصدير جميع المدخلات والمخرجات ملف PDF", key=f"{prefix}btn_export_full_pdf", use_container_width=True):
-                with st.spinner("جاري توليد التقرير الاستشاري الكامل بجميع الرسومات والمخرجات وتحويله إلى PDF..."):
-                    _full_html = _build_flat_slab_full_html()
-                    pdf_full_bytes = html_to_pdf_bytes(_full_html, timeout_sec=60)
-                if pdf_full_bytes:
-                    st.session_state[f"{prefix}_last_full_pdf_bytes"] = pdf_full_bytes
-                    st.toast("✅ تم تصدير كامل المدخلات والمخرجات PDF بنجاح!", icon="📑")
-                    b64_pdf_full = base64.b64encode(pdf_full_bytes).decode("utf-8")
-                    js_dl_full = f"""
-                    <script>
-                    (function() {{
-                        try {{
-                            var b64Data = "{b64_pdf_full}";
-                            var byteChars = atob(b64Data);
-                            var byteNums = new Array(byteChars.length);
-                            for (var i = 0; i < byteChars.length; i++) {{ byteNums[i] = byteChars.charCodeAt(i); }}
-                            var byteArray = new Uint8Array(byteNums);
-                            var blob = new Blob([byteArray], {{type: "application/pdf"}});
-                            var blobUrl = URL.createObjectURL(blob);
-                            var targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
-                            var a = targetDoc.createElement("a");
-                            a.href = blobUrl;
-                            a.download = "{pdf_full_filename}";
-                            a.target = "_blank";
-                            targetDoc.body.appendChild(a);
-                            a.click();
-                            setTimeout(function() {{
-                                try {{ targetDoc.body.removeChild(a); }} catch(e) {{}}
-                                URL.revokeObjectURL(blobUrl);
-                            }}, 4000);
-                        }} catch(err) {{
-                            var aFallback = document.createElement("a");
-                            aFallback.href = "data:application/pdf;base64,{b64_pdf_full}";
-                            aFallback.download = "{pdf_full_filename}";
-                            document.body.appendChild(aFallback);
-                            aFallback.click();
-                        }}
-                    }})();
-                    </script>
-                    """
-                    components.html(js_dl_full, height=0, width=0)
-                else:
-                    st.error("تعذر إنشاء ملف الـ PDF عبر المحرك التلقائي، يمكنك تنزيل ملف الـ HTML وفتحه للطباعة.")
-
-            # Show prominent instant download button if full PDF is available in session state
             if st.session_state.get(f"{prefix}_last_full_pdf_bytes"):
                 st.download_button(
-                    label=f"📥 حفظ وتحميل ملف التقرير الشامل ({pdf_full_filename})",
+                    label=f"📥 اضغط هنا إذا لم يبدأ تحميل ملف التقرير الشامل ({pdf_full_filename})",
                     data=st.session_state[f"{prefix}_last_full_pdf_bytes"],
                     file_name=pdf_full_filename,
                     mime="application/pdf",
-                    key=f"{prefix}btn_instant_full_pdf_exp",
+                    key=f"{prefix}btn_fallback_full_pdf",
                     use_container_width=True,
                 )
 
-        with exp_c4:
-            # Button 4: حفظ التقرير بصيغة HTML
-            _cached_html = st.session_state.get(f"{prefix}_cached_report_html")
-            if not _cached_html:
-                _cached_html = _build_flat_slab_full_html()
-                st.session_state[f"{prefix}_cached_report_html"] = _cached_html
-
-            st.download_button(
-                label="🌐 حفظ التقرير بصيغة HTML",
-                data=_cached_html.encode("utf-8"),
-                file_name=html_filename,
-                mime="text/html",
-                key=f"{prefix}btn_dl_html_direct_exp",
-                use_container_width=True,
-            )
-
-        # Fallback download buttons if already generated
-        if st.session_state.get(f"{prefix}_last_outputs_pdf_bytes"):
-            st.download_button(
-                label=f"📥 اضغط هنا إذا لم يبدأ تحميل ملف مخرجات التصميم ({pdf_outputs_filename})",
-                data=st.session_state[f"{prefix}_last_outputs_pdf_bytes"],
-                file_name=pdf_outputs_filename,
-                mime="application/pdf",
-                key=f"{prefix}btn_fallback_outputs_pdf",
-                use_container_width=True,
-            )
-
-        if st.session_state.get(f"{prefix}_last_concise_pdf_bytes"):
-            st.download_button(
-                label=f"📥 اضغط هنا إذا لم يبدأ تحميل ملف مخرجات التصميم المختصرة ({pdf_concise_filename})",
-                data=st.session_state[f"{prefix}_last_concise_pdf_bytes"],
-                file_name=pdf_concise_filename,
-                mime="application/pdf",
-                key=f"{prefix}btn_fallback_concise_pdf",
-                use_container_width=True,
-            )
-
-        if st.session_state.get(f"{prefix}_last_full_pdf_bytes"):
-            st.download_button(
-                label=f"📥 اضغط هنا إذا لم يبدأ تحميل ملف التقرير الشامل ({pdf_full_filename})",
-                data=st.session_state[f"{prefix}_last_full_pdf_bytes"],
-                file_name=pdf_full_filename,
-                mime="application/pdf",
-                key=f"{prefix}btn_fallback_full_pdf",
-                use_container_width=True,
-            )
-
-        # ════════════════════════════════════════════════════════════════════════
-        #  🎯 EXPORT SELECTED STRUCTURAL DRAWINGS TO MULTI-PAGE PDF
-        # ════════════════════════════════════════════════════════════════════════
-        st.markdown(
-            """
-            <div style="margin-top: 24px; margin-bottom: 12px; padding: 12px 16px; background: rgba(30, 41, 59, 0.7); border: 1.5px solid #334155; border-radius: 10px;" dir="rtl">
-                <div style="font-size: 15.5px; font-weight: 800; color: #f8fafc; display: flex; align-items: center; gap: 8px;">
-                    <span>📐 تصدير اللوحات والمخططات الإنشائية إلى ملف PDF مجمع (Vector PDF Drawings)</span>
+            # ════════════════════════════════════════════════════════════════════════
+            #  🎯 EXPORT SELECTED STRUCTURAL DRAWINGS TO MULTI-PAGE PDF
+            # ════════════════════════════════════════════════════════════════════════
+            st.markdown(
+                """
+                <div style="margin-top: 24px; margin-bottom: 12px; padding: 12px 16px; background: rgba(30, 41, 59, 0.7); border: 1.5px solid #334155; border-radius: 10px;" dir="rtl">
+                    <div style="font-size: 15.5px; font-weight: 800; color: #f8fafc; display: flex; align-items: center; gap: 8px;">
+                        <span>📐 تصدير اللوحات والمخططات الإنشائية إلى ملف PDF مجمع (Vector PDF Drawings)</span>
+                    </div>
+                    <div style="font-size: 12.8px; color: #94a3b8; margin-top: 4px;">
+                        اختر رسماً هندسياً أو أكثر من القائمة المنسدلة أدناه، ثم اضغط على زر <b>بدء التصدير</b> لتجميع وطباعة الرسومات المحددة بالترتيب في ملف PDF هندسي عالي النقاء بصفحات متعددة.
+                    </div>
                 </div>
-                <div style="font-size: 12.8px; color: #94a3b8; margin-top: 4px;">
-                    اختر رسماً هندسياً أو أكثر من القائمة المنسدلة أدناه، ثم اضغط على زر <b>بدء التصدير</b> لتجميع وطباعة الرسومات المحددة بالترتيب في ملف PDF هندسي عالي النقاء بصفحات متعددة.
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+                """,
+                unsafe_allow_html=True,
+            )
 
-        sketches_options = [
-            "🗺️ Structural Geometry Sketch & Verification (مخطط التحقق الهندسي وتوزيع المحاور والأعمدة)",
-            "🥊 Punching Shear Verification Plan (مخطط القص الثاقب للأعمدة وفحص الاختراق)",
-            "📉 Long-Term Deflection Contour Plan (مخطط هبوط وترخيم البلاطة طويل المدى)",
-            "📈 Moment M11 Contour Plan (كنتور عزوم الانحناء M11 — X-Direction Moment)",
-            "📈 Moment M22 Contour Plan (كنتور عزوم الانحناء M22 — Y-Direction Moment)",
-            "📊 Vertical Bending Moment Cross-Sections (القطاعات الرأسية لعزوم الانحناء BMD)",
-            "🔴 1. Column Caps Layout (Top Extra) (كابات وتفريد الإضافي العلوي للأعمدة)",
-            "🔶 2A. Bottom Extra (X-Direction) & Base Meshes (الحديد الإضافي السفلي اتجاه X وشبكات التسليح)",
-            "🔶 2B. Bottom Extra (Y-Direction) & Base Meshes (الحديد الإضافي السفلي اتجاه Y وشبكات التسليح)",
-            "🔵 3A. Top Slab Extra & Shawka (X-Direction) (الرقة العلوية والإضافي وشوك الكوابيل اتجاه X)",
-            "🔵 3B. Top Slab Extra & Shawka (Y-Direction) (الرقة العلوية والإضافي وشوك الكوابيل اتجاه Y)",
-            "📋 Master Steel Layout & Detailing (لوحة تجميع التسليح الماستر)",
-            "⚖️ Column Reactions Layout (مخطط ردود أفعال وأحمال الأعمدة التصميمية Purl)",
-            "📐 Rebar Bending & Detailing Details (تفاصيل وتفريد تكسيح وأطوال الأسياخ Bar Bending Details)",
-            "🏛️ Roof Beams 2D Framing Plan (المسقط الأفقي التنفيذي لكمرات السقف ونماذجها B1, B2, B3, CB1)",
-            "🗺️ Ground Beams 2D Framing Plan (المسقط الأفقي التنفيذي لميدات وسملات الأساسات B1, B2, B3, ST)", 
-        ]
+            sketches_options = [
+                "🗺️ Structural Geometry Sketch & Verification (مخطط التحقق الهندسي وتوزيع المحاور والأعمدة)",
+                "🥊 Punching Shear Verification Plan (مخطط القص الثاقب للأعمدة وفحص الاختراق)",
+                "📉 Long-Term Deflection Contour Plan (مخطط هبوط وترخيم البلاطة طويل المدى)",
+                "📈 Moment M11 Contour Plan (كنتور عزوم الانحناء M11 — X-Direction Moment)",
+                "📈 Moment M22 Contour Plan (كنتور عزوم الانحناء M22 — Y-Direction Moment)",
+                "📊 Vertical Bending Moment Cross-Sections (القطاعات الرأسية لعزوم الانحناء BMD)",
+                "🔴 1. Column Caps Layout (Top Extra) (كابات وتفريد الإضافي العلوي للأعمدة)",
+                "🔶 2A. Bottom Extra (X-Direction) & Base Meshes (الحديد الإضافي السفلي اتجاه X وشبكات التسليح)",
+                "🔶 2B. Bottom Extra (Y-Direction) & Base Meshes (الحديد الإضافي السفلي اتجاه Y وشبكات التسليح)",
+                "🔵 3A. Top Slab Extra & Shawka (X-Direction) (الرقة العلوية والإضافي وشوك الكوابيل اتجاه X)",
+                "🔵 3B. Top Slab Extra & Shawka (Y-Direction) (الرقة العلوية والإضافي وشوك الكوابيل اتجاه Y)",
+                "📋 Master Steel Layout & Detailing (لوحة تجميع التسليح الماستر)",
+                "⚖️ Column Reactions Layout (مخطط ردود أفعال وأحمال الأعمدة التصميمية Purl)",
+                "📐 Rebar Bending & Detailing Details (تفاصيل وتفريد تكسيح وأطوال الأسياخ Bar Bending Details)",
+                "🏛️ Roof Beams 2D Framing Plan (المسقط الأفقي التنفيذي لكمرات السقف ونماذجها B1, B2, B3, CB1)",
+                "🗺️ Ground Beams 2D Framing Plan (المسقط الأفقي التنفيذي لميدات وسملات الأساسات B1, B2, B3, ST)", 
+            ]
 
-        selected_sketches = st.multiselect(
-            "اختر رسومات للتصدير الي ملف PDF:",
-            options=sketches_options,
-            default=[],
-            placeholder="اختر رسماً أو أكثر من القائمة...",
-            key=f"{prefix}multiselect_export_sketches",
-            help="يمكنك اختيار لوحة واحدة أو مجموعة من اللوحات، وسيتم ترتيب الصفحات داخل ملف الـ PDF بنفس ترتيب الاختيار.",
-        )
+            selected_sketches = st.multiselect(
+                "اختر رسومات للتصدير الي ملف PDF:",
+                options=sketches_options,
+                default=[],
+                placeholder="اختر رسماً أو أكثر من القائمة...",
+                key=f"{prefix}multiselect_export_sketches",
+                help="يمكنك اختيار لوحة واحدة أو مجموعة من اللوحات، وسيتم ترتيب الصفحات داخل ملف الـ PDF بنفس ترتيب الاختيار.",
+            )
 
-        pdf_drawings_filename = f"{prefix}Flat_Slab_Drawings_ts{ts:.0f}cm_{len(selected_sketches)}Plates.pdf"
+            pdf_drawings_filename = f"{prefix}Flat_Slab_Drawings_ts{ts:.0f}cm_{len(selected_sketches)}Plates.pdf"
 
-        if st.button("🚀 بدء التصدير", key=f"{prefix}btn_start_export_sketches_pdf", use_container_width=True):
-            if not selected_sketches:
-                st.warning("⚠️ يرجى اختيار رسم واحد على الأقل من القائمة المنسدلة للتصدير.")
-            else:
-                from matplotlib.backends.backend_pdf import PdfPages
-                with st.spinner(f"جاري إعداد وتجميع {len(selected_sketches)} لوحة إنشائية عالية الدقة إلى ملف PDF..."):
-                    pdf_sketches_buf = io.BytesIO()
-                    with PdfPages(pdf_sketches_buf) as pdf_doc:
-                        for sk_title in selected_sketches:
-                            fig_sk = None
-                            try:
-                                if "Structural Geometry Sketch" in sk_title:
-                                    fig_sk = generate_flat_slab_sketch(
-                                        Lx_spans, Ly_spans, cantilevers,
-                                        ts_initial=ts_initial if ts_initial is not None else 20,
-                                        n_floors=num_floors,
-                                        bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
-                                        bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
-                                        top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
-                                        top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
-                                        col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
-                                        strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
-                                        strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
-                                        concrete_cover=cov if cov is not None else 1.5,
-                                        fcu=Fcu if Fcu is not None else 250,
-                                        fy=Fy if Fy is not None else 4000,
-                                        live_load=LL if LL is not None else 0.25,
-                                        flooring_load=SDL if SDL is not None else 0.15,
-                                        wall_load=wall_load if wall_load is not None else 0.50,
-                                        col_w_cm=_col_w_sk,
-                                        col_d_cm=_col_d_sk,
-                                        removed_col_ids=_effective_removed_ids,
-                                        pending_col_ids=set(st.session_state.get("_fs_pending_snapshot", [])
-                                                            if st.session_state.get("_fs_show_confirm") else _pending_removals),
-                                        void_panel_ids=set(_confirmed_voids),
-                                        pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", [])
-                                                             if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
-                                        col_transforms=_col_transforms,
-                                        edge_columns=_edge_columns,
-                                        col_props=_col_props,
-                                        active_cols=_active_cols,
-                                    )
-                                elif "1. Column Caps Layout" in sk_title:
-                                    fig_sk = generate_flat_slab_column_caps_sketch(
-                                        Lx_calc, Ly_calc, cantilevers, ts,
-                                        top_extra_cols=top_extra_cols,
-                                        col_w_cm=bc_s, col_d_cm=tc_s,
-                                        removed_cols=_removed_col_objs,
-                                        void_panel_ids=set(_confirmed_voids),
-                                        col_transforms=_col_transforms,
-                                        edge_columns=_edge_columns,
-                                        active_cols=_active_cols,
-                                        active_x_labels=_active_x_labels,
-                                        active_y_labels=_active_y_labels,
-                                        void_boxes=_void_boxes_sk,
-                                    )
-                                elif "2A. Bottom Extra (X-Direction)" in sk_title:
-                                    fig_sk = generate_flat_slab_bottom_extra_shawka_sketch(
-                                        Lx_calc, Ly_calc, cantilevers, ts,
-                                        btm_extra_spans=btm_extra_spans,
-                                        cant_rft_list=None,
-                                        n_mesh_btm=n_mesh_btm,
-                                        bottom_mesh_dia=bottom_mesh_dia,
-                                        n_mesh_top=n_mesh_top,
-                                        top_mesh_dia=top_mesh_dia,
-                                        col_w_cm=bc_s, col_d_cm=tc_s,
-                                        removed_cols=_removed_col_objs,
-                                        void_panel_ids=set(_confirmed_voids),
-                                        direction="X",
-                                        col_transforms=_col_transforms,
-                                        edge_columns=_edge_columns,
-                                        active_cols=_active_cols,
-                                        active_x_labels=_active_x_labels,
-                                        active_y_labels=_active_y_labels,
-                                        void_boxes=_void_boxes_sk,
-                                    )
-                                elif "2B. Bottom Extra (Y-Direction)" in sk_title:
-                                    fig_sk = generate_flat_slab_bottom_extra_shawka_sketch(
-                                        Lx_calc, Ly_calc, cantilevers, ts,
-                                        btm_extra_spans=btm_extra_spans,
-                                        cant_rft_list=None,
-                                        n_mesh_btm=n_mesh_btm,
-                                        bottom_mesh_dia=bottom_mesh_dia,
-                                        n_mesh_top=n_mesh_top,
-                                        top_mesh_dia=top_mesh_dia,
-                                        col_w_cm=bc_s, col_d_cm=tc_s,
-                                        removed_cols=_removed_col_objs,
-                                        void_panel_ids=set(_confirmed_voids),
-                                        direction="Y",
-                                        col_transforms=_col_transforms,
-                                        edge_columns=_edge_columns,
-                                        active_cols=_active_cols,
-                                        active_x_labels=_active_x_labels,
-                                        active_y_labels=_active_y_labels,
-                                        void_boxes=_void_boxes_sk,
-                                    )
-                                elif "3A. Top Slab Extra & Shawka (X-Direction)" in sk_title:
-                                    fig_sk = generate_flat_slab_top_mesh_extra_sketch(
-                                        Lx_calc, Ly_calc, cantilevers, ts,
-                                        top_extra_slab_bays=top_extra_slab_bays,
-                                        cant_rft_list=cant_rft_list,
-                                        n_mesh_top=n_mesh_top,
-                                        top_mesh_dia=top_mesh_dia,
-                                        n_mesh_btm=n_mesh_btm,
-                                        bottom_mesh_dia=bottom_mesh_dia,
-                                        col_w_cm=bc_s, col_d_cm=tc_s,
-                                        removed_cols=_removed_col_objs,
-                                        void_panel_ids=set(_confirmed_voids),
-                                        direction="X",
-                                        col_transforms=_col_transforms,
-                                        edge_columns=_edge_columns,
-                                        active_cols=_active_cols,
-                                        active_x_labels=_active_x_labels,
-                                        active_y_labels=_active_y_labels,
-                                        void_boxes=_void_boxes_sk,
-                                    )
-                                elif "3B. Top Slab Extra & Shawka (Y-Direction)" in sk_title:
-                                    fig_sk = generate_flat_slab_top_mesh_extra_sketch(
-                                        Lx_calc, Ly_calc, cantilevers, ts,
-                                        top_extra_slab_bays=top_extra_slab_bays,
-                                        cant_rft_list=cant_rft_list,
-                                        n_mesh_top=n_mesh_top,
-                                        top_mesh_dia=top_mesh_dia,
-                                        n_mesh_btm=n_mesh_btm,
-                                        bottom_mesh_dia=bottom_mesh_dia,
-                                        col_w_cm=bc_s, col_d_cm=tc_s,
-                                        removed_cols=_removed_col_objs,
-                                        void_panel_ids=set(_confirmed_voids),
-                                        direction="Y",
-                                        col_transforms=_col_transforms,
-                                        edge_columns=_edge_columns,
-                                        active_cols=_active_cols,
-                                        active_x_labels=_active_x_labels,
-                                        active_y_labels=_active_y_labels,
-                                        void_boxes=_void_boxes_sk,
-                                    )
-                                elif "Punching Shear Verification Plan" in sk_title:
-                                    fig_sk = generate_flat_slab_punching_shear_sketch(
-                                        Lx_spans, Ly_spans, cantilevers, ts, d, Fcu, Wu,
-                                        punching_results,
-                                        col_w_cm=bc_s, col_d_cm=tc_s,
-                                        removed_cols=_removed_col_objs,
-                                        void_panel_ids=set(_confirmed_voids),
-                                        edge_columns=_edge_columns,
-                                        void_boxes=_void_boxes_sk,
-                                        active_cols=_active_cols,
-                                        active_x_labels=_active_x_labels,
-                                        active_y_labels=_active_y_labels,
-                                    )
-                                elif "Long-Term Deflection Contour Plan" in sk_title:
-                                    fig_sk = generate_flat_slab_deflection_contour_sketch(
-                                        Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, DL_tot, LL,
-                                        deflection_results,
-                                        col_w_cm=bc_s, col_d_cm=tc_s,
-                                        removed_cols=_removed_col_objs,
-                                        void_panel_ids=set(_confirmed_voids),
-                                        col_transforms=_col_transforms,
-                                        edge_columns=_edge_columns,
-                                        void_boxes=_void_boxes_sk,
-                                        active_cols=_active_cols,
-                                        active_x_labels=_active_x_labels,
-                                        active_y_labels=_active_y_labels,
-                                    )
-                                elif "Moment M11 Contour Plan" in sk_title:
-                                    fig_sk = generate_flat_slab_moment_contour(
-                                        Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
-                                        mode="M11", col_w_cm=bc_s, col_d_cm=tc_s,
-                                        removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
-                                        top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
-                                        col_transforms=_col_transforms, edge_columns=_edge_columns,
-                                        active_cols=_active_cols,
-                                        active_x_labels=_active_x_labels,
-                                        active_y_labels=_active_y_labels,
-                                        void_boxes=_void_boxes_sk,
-                                    )
-                                elif "Moment M22 Contour Plan" in sk_title:
-                                    fig_sk = generate_flat_slab_moment_contour(
-                                        Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
-                                        mode="M22", col_w_cm=bc_s, col_d_cm=tc_s,
-                                        removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
-                                        top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
-                                        col_transforms=_col_transforms, edge_columns=_edge_columns,
-                                        active_cols=_active_cols,
-                                        active_x_labels=_active_x_labels,
-                                        active_y_labels=_active_y_labels,
-                                        void_boxes=_void_boxes_sk,
-                                    )
-                                elif "Vertical Bending Moment Cross-Sections" in sk_title:
-                                    _X_sec, _Y_sec, _, _, _M11_raw_sec, _M22_raw_sec = build_slab_moment_field(
-                                        Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
-                                        void_panel_ids=set(_confirmed_voids),
-                                        grid_res=220,
-                                        void_boxes=_void_boxes_sk,
-                                        btm_extra_spans=btm_extra_spans,
-                                        active_cols=_active_cols,
-                                        removed_cols=_removed_col_objs,
-                                        drop_beams=_cur_beams_list,
-                                    )
-                                    fig_sk = generate_flat_slab_moment_cross_section(
-                                        Lx_calc, Ly_calc, cantilevers, ts_cm=ts,
-                                        direction="X", strip_type="field", strip_coord=None,
-                                        X_mf=_X_sec, Y_mf=_Y_sec, M11_raw_mf=_M11_raw_sec, M22_raw_mf=_M22_raw_sec,
-                                        active_cols=_active_cols, drop_beams=_cur_beams_list, void_boxes=_void_boxes_sk,
-                                        M_cap_top_m=M_cap_top_m, M_cap_btm_m=M_cap_btm_m,
-                                        mesh_top_str=mesh_top_str, mesh_btm_str=mesh_btm_str, Wu=Wu,
-                                        show_labels=True, show_capacities=True,
-                                        active_x_labels=_active_x_labels, active_y_labels=_active_y_labels,
-                                        rows_x=rows_x, rows_y=rows_y, removed_cols=_removed_col_objs,
-                                        void_panel_ids=set(_confirmed_voids), btm_extra_spans=btm_extra_spans,
-                                    )
-                                elif "Master Steel Layout" in sk_title:
-                                    fig_sk = generate_flat_slab_master_steel_layout_sketch(
-                                        Lx_calc, Ly_calc, cantilevers, ts,
-                                        n_mesh_btm=n_mesh_btm, bottom_mesh_dia=bottom_mesh_dia,
-                                        n_mesh_top=n_mesh_top, top_mesh_dia=top_mesh_dia,
-                                        top_extra_cols=top_extra_cols, cant_rft_list=cant_rft_list,
-                                        btm_extra_spans=btm_extra_spans,
-                                        col_w_cm=bc_s, col_d_cm=tc_s,
-                                        removed_cols=_removed_col_objs,
-                                        void_panel_ids=set(_confirmed_voids),
-                                        col_transforms=_col_transforms,
-                                        edge_columns=_edge_columns,
-                                    )
-                                elif "Column Reactions" in sk_title:
-                                    fig_sk = generate_flat_slab_reactions_sketch(
-                                        Lx_calc, Ly_calc, cantilevers, num_floors, Wu,
-                                        col_reactions_data,
-                                        col_w_cm=bc_s, col_d_cm=tc_s,
-                                        removed_cols=_removed_col_objs,
-                                        void_panel_ids=set(_confirmed_voids),
-                                        col_sf=col_sf_val,
-                                        edge_columns=_edge_columns,
-                                    )
-                                elif "Rebar Bending" in sk_title:
-                                    fig_sk = generate_flat_slab_rebar_bending_details(
-                                        Lx_calc, Ly_calc, cantilevers, ts,
-                                        mesh_btm_n=n_mesh_btm, mesh_btm_dia=bottom_mesh_dia,
-                                        mesh_top_n=n_mesh_top, mesh_top_dia=top_mesh_dia,
-                                        col_extras=top_extra_cols, cant_rft_list=cant_rft_list,
-                                        btm_extra_spans=btm_extra_spans,
-                                        void_panels=_void_boxes_sk,
-                                        bc_cm=bc_s, tc_cm=tc_s,
-                                    )
-                                elif "Roof Beams 2D Framing Plan" in sk_title:
-                                    fig_sk = draw_roof_beams_layout_sketch(
-                                        active_columns=_act_cols,
-                                        roof_beams_analysis=st.session_state.get("fs_rb_analysis", {}),
-                                        slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
-                                        title=f"ECP 203 — Roof Drop Beams & Cantilevers 2D Framing Plan",
-                                    )
-                                elif "Ground Beams 2D Framing Plan" in sk_title:
-                                    from modules.ground_beam_layout import draw_ground_beams_layout_sketch
-                                    fig_sk = draw_ground_beams_layout_sketch(
-                                        active_columns=_act_cols,
-                                        gb_analysis=st.session_state.get("fs_gb_analysis", {}),
-                                        slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
-                                        title=f"ECP 203 — Ground Beams & Tie Beams 2D Framing Plan",
-                                    )
-
-                                if fig_sk is not None:
-                                    pdf_doc.savefig(fig_sk, bbox_inches="tight")
-                                    plt.close(fig_sk)
-                            except Exception as e_sk:
-                                if fig_sk is not None:
-                                    try:
-                                        plt.close(fig_sk)
-                                    except Exception:
-                                        pass
-                                st.warning(f"تنبيه أثناء معالجة الرسم '{sk_title}': {e_sk}")
-
-                    pdf_sketches_buf.seek(0)
-                    pdf_sketches_bytes = pdf_sketches_buf.getvalue()
-
-                if pdf_sketches_bytes and len(pdf_sketches_bytes) > 1000:
-                    st.session_state[f"{prefix}_last_drawings_pdf_bytes"] = pdf_sketches_bytes
-                    st.session_state[f"{prefix}_last_drawings_pdf_filename"] = pdf_drawings_filename
-                    b64_drawings = base64.b64encode(pdf_sketches_bytes).decode("utf-8")
-                    js_dl_drawings = f"""
-                    <script>
-                    (function() {{
-                        try {{
-                            var b64Data = "{b64_drawings}";
-                            var byteChars = atob(b64Data);
-                            var byteNums = new Array(byteChars.length);
-                            for (var i = 0; i < byteChars.length; i++) {{ byteNums[i] = byteChars.charCodeAt(i); }}
-                            var byteArray = new Uint8Array(byteNums);
-                            var blob = new Blob([byteArray], {{type: "application/pdf"}});
-                            var blobUrl = URL.createObjectURL(blob);
-                            var targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
-                            var a = targetDoc.createElement("a");
-                            a.href = blobUrl;
-                            a.download = "{pdf_drawings_filename}";
-                            a.target = "_blank";
-                            targetDoc.body.appendChild(a);
-                            a.click();
-                            setTimeout(function() {{
-                                try {{ targetDoc.body.removeChild(a); }} catch(e) {{}}
-                                URL.revokeObjectURL(blobUrl);
-                            }}, 4000);
-                        }} catch(err) {{
-                            var aFallback = document.createElement("a");
-                            aFallback.href = "data:application/pdf;base64,{b64_drawings}";
-                            aFallback.download = "{pdf_drawings_filename}";
-                            document.body.appendChild(aFallback);
-                            aFallback.click();
-                        }}
-                    }})();
-                    </script>
-                    """
-                    components.html(js_dl_drawings, height=0, width=0)
-                    st.toast(f"✅ تم تصدير {len(selected_sketches)} لوحات بنجاح إلى ملف PDF!", icon="📐")
-                    st.success(f"🎉 تم توليد وتنزيل ملف المخططات الهندسية بنجاح: **{pdf_drawings_filename}** ({len(selected_sketches)} صفحة)")
+            if st.button("🚀 بدء التصدير", key=f"{prefix}btn_start_export_sketches_pdf", use_container_width=True):
+                if not selected_sketches:
+                    st.warning("⚠️ يرجى اختيار رسم واحد على الأقل من القائمة المنسدلة للتصدير.")
                 else:
-                    st.error("تعذر توليد ملف الـ PDF للرسومات المختارة، يرجى إعادة المحاولة.")
+                    from matplotlib.backends.backend_pdf import PdfPages
+                    with st.spinner(f"جاري إعداد وتجميع {len(selected_sketches)} لوحة إنشائية عالية الدقة إلى ملف PDF..."):
+                        pdf_sketches_buf = io.BytesIO()
+                        with PdfPages(pdf_sketches_buf) as pdf_doc:
+                            for sk_title in selected_sketches:
+                                fig_sk = None
+                                try:
+                                    if "Structural Geometry Sketch" in sk_title:
+                                        fig_sk = generate_flat_slab_sketch(
+                                            Lx_spans, Ly_spans, cantilevers,
+                                            ts_initial=ts_initial if ts_initial is not None else 20,
+                                            n_floors=num_floors,
+                                            bottom_mesh_dia=bottom_mesh_dia if bottom_mesh_dia is not None else 12,
+                                            bottom_mesh_n=int(n_btm_mesh_usr) if n_btm_mesh_usr else 5,
+                                            top_mesh_dia=top_mesh_dia if top_mesh_dia is not None else 10,
+                                            top_mesh_n=int(n_top_mesh_usr) if n_top_mesh_usr else 5,
+                                            col_extra_dia=col_extra_dia if col_extra_dia is not None else 12,
+                                            strip_top_extra_dia=strip_top_extra_dia if strip_top_extra_dia is not None else 12,
+                                            strip_bottom_extra_dia=strip_bottom_extra_dia if strip_bottom_extra_dia is not None else 12,
+                                            concrete_cover=cov if cov is not None else 1.5,
+                                            fcu=Fcu if Fcu is not None else 250,
+                                            fy=Fy if Fy is not None else 4000,
+                                            live_load=LL if LL is not None else 0.25,
+                                            flooring_load=SDL if SDL is not None else 0.15,
+                                            wall_load=wall_load if wall_load is not None else 0.50,
+                                            col_w_cm=_col_w_sk,
+                                            col_d_cm=_col_d_sk,
+                                            removed_col_ids=_effective_removed_ids,
+                                            pending_col_ids=set(st.session_state.get("_fs_pending_snapshot", [])
+                                                                if st.session_state.get("_fs_show_confirm") else _pending_removals),
+                                            void_panel_ids=set(_confirmed_voids),
+                                            pending_void_ids=set(st.session_state.get("_fs_pending_void_snapshot", [])
+                                                                 if st.session_state.get("_fs_show_void_confirm") else _pending_voids),
+                                            col_transforms=_col_transforms,
+                                            edge_columns=_edge_columns,
+                                            col_props=_col_props,
+                                            active_cols=_active_cols,
+                                        )
+                                    elif "1. Column Caps Layout" in sk_title:
+                                        fig_sk = generate_flat_slab_column_caps_sketch(
+                                            Lx_calc, Ly_calc, cantilevers, ts,
+                                            top_extra_cols=top_extra_cols,
+                                            col_w_cm=bc_s, col_d_cm=tc_s,
+                                            removed_cols=_removed_col_objs,
+                                            void_panel_ids=set(_confirmed_voids),
+                                            col_transforms=_col_transforms,
+                                            edge_columns=_edge_columns,
+                                            active_cols=_active_cols,
+                                            active_x_labels=_active_x_labels,
+                                            active_y_labels=_active_y_labels,
+                                            void_boxes=_void_boxes_sk,
+                                        )
+                                    elif "2A. Bottom Extra (X-Direction)" in sk_title:
+                                        fig_sk = generate_flat_slab_bottom_extra_shawka_sketch(
+                                            Lx_calc, Ly_calc, cantilevers, ts,
+                                            btm_extra_spans=btm_extra_spans,
+                                            cant_rft_list=None,
+                                            n_mesh_btm=n_mesh_btm,
+                                            bottom_mesh_dia=bottom_mesh_dia,
+                                            n_mesh_top=n_mesh_top,
+                                            top_mesh_dia=top_mesh_dia,
+                                            col_w_cm=bc_s, col_d_cm=tc_s,
+                                            removed_cols=_removed_col_objs,
+                                            void_panel_ids=set(_confirmed_voids),
+                                            direction="X",
+                                            col_transforms=_col_transforms,
+                                            edge_columns=_edge_columns,
+                                            active_cols=_active_cols,
+                                            active_x_labels=_active_x_labels,
+                                            active_y_labels=_active_y_labels,
+                                            void_boxes=_void_boxes_sk,
+                                        )
+                                    elif "2B. Bottom Extra (Y-Direction)" in sk_title:
+                                        fig_sk = generate_flat_slab_bottom_extra_shawka_sketch(
+                                            Lx_calc, Ly_calc, cantilevers, ts,
+                                            btm_extra_spans=btm_extra_spans,
+                                            cant_rft_list=None,
+                                            n_mesh_btm=n_mesh_btm,
+                                            bottom_mesh_dia=bottom_mesh_dia,
+                                            n_mesh_top=n_mesh_top,
+                                            top_mesh_dia=top_mesh_dia,
+                                            col_w_cm=bc_s, col_d_cm=tc_s,
+                                            removed_cols=_removed_col_objs,
+                                            void_panel_ids=set(_confirmed_voids),
+                                            direction="Y",
+                                            col_transforms=_col_transforms,
+                                            edge_columns=_edge_columns,
+                                            active_cols=_active_cols,
+                                            active_x_labels=_active_x_labels,
+                                            active_y_labels=_active_y_labels,
+                                            void_boxes=_void_boxes_sk,
+                                        )
+                                    elif "3A. Top Slab Extra & Shawka (X-Direction)" in sk_title:
+                                        fig_sk = generate_flat_slab_top_mesh_extra_sketch(
+                                            Lx_calc, Ly_calc, cantilevers, ts,
+                                            top_extra_slab_bays=top_extra_slab_bays,
+                                            cant_rft_list=cant_rft_list,
+                                            n_mesh_top=n_mesh_top,
+                                            top_mesh_dia=top_mesh_dia,
+                                            n_mesh_btm=n_mesh_btm,
+                                            bottom_mesh_dia=bottom_mesh_dia,
+                                            col_w_cm=bc_s, col_d_cm=tc_s,
+                                            removed_cols=_removed_col_objs,
+                                            void_panel_ids=set(_confirmed_voids),
+                                            direction="X",
+                                            col_transforms=_col_transforms,
+                                            edge_columns=_edge_columns,
+                                            active_cols=_active_cols,
+                                            active_x_labels=_active_x_labels,
+                                            active_y_labels=_active_y_labels,
+                                            void_boxes=_void_boxes_sk,
+                                        )
+                                    elif "3B. Top Slab Extra & Shawka (Y-Direction)" in sk_title:
+                                        fig_sk = generate_flat_slab_top_mesh_extra_sketch(
+                                            Lx_calc, Ly_calc, cantilevers, ts,
+                                            top_extra_slab_bays=top_extra_slab_bays,
+                                            cant_rft_list=cant_rft_list,
+                                            n_mesh_top=n_mesh_top,
+                                            top_mesh_dia=top_mesh_dia,
+                                            n_mesh_btm=n_mesh_btm,
+                                            bottom_mesh_dia=bottom_mesh_dia,
+                                            col_w_cm=bc_s, col_d_cm=tc_s,
+                                            removed_cols=_removed_col_objs,
+                                            void_panel_ids=set(_confirmed_voids),
+                                            direction="Y",
+                                            col_transforms=_col_transforms,
+                                            edge_columns=_edge_columns,
+                                            active_cols=_active_cols,
+                                            active_x_labels=_active_x_labels,
+                                            active_y_labels=_active_y_labels,
+                                            void_boxes=_void_boxes_sk,
+                                        )
+                                    elif "Punching Shear Verification Plan" in sk_title:
+                                        fig_sk = generate_flat_slab_punching_shear_sketch(
+                                            Lx_spans, Ly_spans, cantilevers, ts, d, Fcu, Wu,
+                                            punching_results,
+                                            col_w_cm=bc_s, col_d_cm=tc_s,
+                                            removed_cols=_removed_col_objs,
+                                            void_panel_ids=set(_confirmed_voids),
+                                            edge_columns=_edge_columns,
+                                            void_boxes=_void_boxes_sk,
+                                            active_cols=_active_cols,
+                                            active_x_labels=_active_x_labels,
+                                            active_y_labels=_active_y_labels,
+                                        )
+                                    elif "Long-Term Deflection Contour Plan" in sk_title:
+                                        fig_sk = generate_flat_slab_deflection_contour_sketch(
+                                            Lx_calc, Ly_calc, cantilevers, ts, d, Fcu, DL_tot, LL,
+                                            deflection_results,
+                                            col_w_cm=bc_s, col_d_cm=tc_s,
+                                            removed_cols=_removed_col_objs,
+                                            void_panel_ids=set(_confirmed_voids),
+                                            col_transforms=_col_transforms,
+                                            edge_columns=_edge_columns,
+                                            void_boxes=_void_boxes_sk,
+                                            active_cols=_active_cols,
+                                            active_x_labels=_active_x_labels,
+                                            active_y_labels=_active_y_labels,
+                                        )
+                                    elif "Moment M11 Contour Plan" in sk_title:
+                                        fig_sk = generate_flat_slab_moment_contour(
+                                            Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+                                            mode="M11", col_w_cm=bc_s, col_d_cm=tc_s,
+                                            removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
+                                            top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
+                                            col_transforms=_col_transforms, edge_columns=_edge_columns,
+                                            active_cols=_active_cols,
+                                            active_x_labels=_active_x_labels,
+                                            active_y_labels=_active_y_labels,
+                                            void_boxes=_void_boxes_sk,
+                                        )
+                                    elif "Moment M22 Contour Plan" in sk_title:
+                                        fig_sk = generate_flat_slab_moment_contour(
+                                            Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+                                            mode="M22", col_w_cm=bc_s, col_d_cm=tc_s,
+                                            removed_cols=_removed_col_objs, void_panel_ids=set(_confirmed_voids),
+                                            top_extra_cols=top_extra_cols, btm_extra_spans=btm_extra_spans,
+                                            col_transforms=_col_transforms, edge_columns=_edge_columns,
+                                            active_cols=_active_cols,
+                                            active_x_labels=_active_x_labels,
+                                            active_y_labels=_active_y_labels,
+                                            void_boxes=_void_boxes_sk,
+                                        )
+                                    elif "Vertical Bending Moment Cross-Sections" in sk_title:
+                                        _X_sec, _Y_sec, _, _, _M11_raw_sec, _M22_raw_sec = build_slab_moment_field(
+                                            Lx_calc, Ly_calc, cantilevers, rows_x, rows_y, Wu,
+                                            void_panel_ids=set(_confirmed_voids),
+                                            grid_res=220,
+                                            void_boxes=_void_boxes_sk,
+                                            btm_extra_spans=btm_extra_spans,
+                                            active_cols=_active_cols,
+                                            removed_cols=_removed_col_objs,
+                                            drop_beams=_cur_beams_list,
+                                        )
+                                        fig_sk = generate_flat_slab_moment_cross_section(
+                                            Lx_calc, Ly_calc, cantilevers, ts_cm=ts,
+                                            direction="X", strip_type="field", strip_coord=None,
+                                            X_mf=_X_sec, Y_mf=_Y_sec, M11_raw_mf=_M11_raw_sec, M22_raw_mf=_M22_raw_sec,
+                                            active_cols=_active_cols, drop_beams=_cur_beams_list, void_boxes=_void_boxes_sk,
+                                            M_cap_top_m=M_cap_top_m, M_cap_btm_m=M_cap_btm_m,
+                                            mesh_top_str=mesh_top_str, mesh_btm_str=mesh_btm_str, Wu=Wu,
+                                            show_labels=True, show_capacities=True,
+                                            active_x_labels=_active_x_labels, active_y_labels=_active_y_labels,
+                                            rows_x=rows_x, rows_y=rows_y, removed_cols=_removed_col_objs,
+                                            void_panel_ids=set(_confirmed_voids), btm_extra_spans=btm_extra_spans,
+                                        )
+                                    elif "Master Steel Layout" in sk_title:
+                                        fig_sk = generate_flat_slab_master_steel_layout_sketch(
+                                            Lx_calc, Ly_calc, cantilevers, ts,
+                                            n_mesh_btm=n_mesh_btm, bottom_mesh_dia=bottom_mesh_dia,
+                                            n_mesh_top=n_mesh_top, top_mesh_dia=top_mesh_dia,
+                                            top_extra_cols=top_extra_cols, cant_rft_list=cant_rft_list,
+                                            btm_extra_spans=btm_extra_spans,
+                                            col_w_cm=bc_s, col_d_cm=tc_s,
+                                            removed_cols=_removed_col_objs,
+                                            void_panel_ids=set(_confirmed_voids),
+                                            col_transforms=_col_transforms,
+                                            edge_columns=_edge_columns,
+                                        )
+                                    elif "Column Reactions" in sk_title:
+                                        fig_sk = generate_flat_slab_reactions_sketch(
+                                            Lx_calc, Ly_calc, cantilevers, num_floors, Wu,
+                                            col_reactions_data,
+                                            col_w_cm=bc_s, col_d_cm=tc_s,
+                                            removed_cols=_removed_col_objs,
+                                            void_panel_ids=set(_confirmed_voids),
+                                            col_sf=col_sf_val,
+                                            edge_columns=_edge_columns,
+                                        )
+                                    elif "Rebar Bending" in sk_title:
+                                        fig_sk = generate_flat_slab_rebar_bending_details(
+                                            Lx_calc, Ly_calc, cantilevers, ts,
+                                            mesh_btm_n=n_mesh_btm, mesh_btm_dia=bottom_mesh_dia,
+                                            mesh_top_n=n_mesh_top, mesh_top_dia=top_mesh_dia,
+                                            col_extras=top_extra_cols, cant_rft_list=cant_rft_list,
+                                            btm_extra_spans=btm_extra_spans,
+                                            void_panels=_void_boxes_sk,
+                                            bc_cm=bc_s, tc_cm=tc_s,
+                                        )
+                                    elif "Roof Beams 2D Framing Plan" in sk_title:
+                                        fig_sk = draw_roof_beams_layout_sketch(
+                                            active_columns=_act_cols,
+                                            roof_beams_analysis=st.session_state.get("fs_rb_analysis", {}),
+                                            slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
+                                            title=f"ECP 203 — Roof Drop Beams & Cantilevers 2D Framing Plan",
+                                        )
+                                    elif "Ground Beams 2D Framing Plan" in sk_title:
+                                        from modules.ground_beam_layout import draw_ground_beams_layout_sketch
+                                        fig_sk = draw_ground_beams_layout_sketch(
+                                            active_columns=_act_cols,
+                                            gb_analysis=st.session_state.get("fs_gb_analysis", {}),
+                                            slab_bounds=_slab_bounds_current if '_slab_bounds_current' in locals() else None,
+                                            title=f"ECP 203 — Ground Beams & Tie Beams 2D Framing Plan",
+                                        )
 
-        # Fallback button for drawings PDF
-        if st.session_state.get(f"{prefix}_last_drawings_pdf_bytes"):
-            _drawings_dl_fn = st.session_state.get(f"{prefix}_last_drawings_pdf_filename", pdf_drawings_filename)
-            st.download_button(
-                label=f"📥 اضغط هنا إذا لم يبدأ تحميل ملف اللوحات المجمعة ({_drawings_dl_fn})",
-                data=st.session_state[f"{prefix}_last_drawings_pdf_bytes"],
-                file_name=_drawings_dl_fn,
-                mime="application/pdf",
-                key=f"{prefix}btn_fallback_drawings_pdf",
-                use_container_width=True,
-            )
+                                    if fig_sk is not None:
+                                        pdf_doc.savefig(fig_sk, bbox_inches="tight")
+                                        plt.close(fig_sk)
+                                except Exception as e_sk:
+                                    if fig_sk is not None:
+                                        try:
+                                            plt.close(fig_sk)
+                                        except Exception:
+                                            pass
+                                    st.warning(f"تنبيه أثناء معالجة الرسم '{sk_title}': {e_sk}")
 
-    st.markdown("---")
-    # ── Final Info Summary ────────────────────────────────────────────────────
-    st.info(
-        f"📐 **Design Complete:** Flat Slab ts = {ts:.0f} cm  │  Floors: {num_floors}  │  Bottom Mesh: {mesh_btm_str}  │  "
-        f"Top Mesh: {mesh_top_str}  │  Wu = {Wu:.3f} t/m²  │  "
-        f"Concrete: {boq['concrete_vol_m3']:.1f} m³  │  Steel: {boq['total_steel_ton']:.2f} Ton ({boq['steel_ratio_kg_m3']:.0f} kg/m³)"
-    )
+                        pdf_sketches_buf.seek(0)
+                        pdf_sketches_bytes = pdf_sketches_buf.getvalue()
+
+                    if pdf_sketches_bytes and len(pdf_sketches_bytes) > 1000:
+                        st.session_state[f"{prefix}_last_drawings_pdf_bytes"] = pdf_sketches_bytes
+                        st.session_state[f"{prefix}_last_drawings_pdf_filename"] = pdf_drawings_filename
+                        b64_drawings = base64.b64encode(pdf_sketches_bytes).decode("utf-8")
+                        js_dl_drawings = f"""
+                        <script>
+                        (function() {{
+                            try {{
+                                var b64Data = "{b64_drawings}";
+                                var byteChars = atob(b64Data);
+                                var byteNums = new Array(byteChars.length);
+                                for (var i = 0; i < byteChars.length; i++) {{ byteNums[i] = byteChars.charCodeAt(i); }}
+                                var byteArray = new Uint8Array(byteNums);
+                                var blob = new Blob([byteArray], {{type: "application/pdf"}});
+                                var blobUrl = URL.createObjectURL(blob);
+                                var targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+                                var a = targetDoc.createElement("a");
+                                a.href = blobUrl;
+                                a.download = "{pdf_drawings_filename}";
+                                a.target = "_blank";
+                                targetDoc.body.appendChild(a);
+                                a.click();
+                                setTimeout(function() {{
+                                    try {{ targetDoc.body.removeChild(a); }} catch(e) {{}}
+                                    URL.revokeObjectURL(blobUrl);
+                                }}, 4000);
+                            }} catch(err) {{
+                                var aFallback = document.createElement("a");
+                                aFallback.href = "data:application/pdf;base64,{b64_drawings}";
+                                aFallback.download = "{pdf_drawings_filename}";
+                                document.body.appendChild(aFallback);
+                                aFallback.click();
+                            }}
+                        }})();
+                        </script>
+                        """
+                        components.html(js_dl_drawings, height=0, width=0)
+                        st.toast(f"✅ تم تصدير {len(selected_sketches)} لوحات بنجاح إلى ملف PDF!", icon="📐")
+                        st.success(f"🎉 تم توليد وتنزيل ملف المخططات الهندسية بنجاح: **{pdf_drawings_filename}** ({len(selected_sketches)} صفحة)")
+                    else:
+                        st.error("تعذر توليد ملف الـ PDF للرسومات المختارة، يرجى إعادة المحاولة.")
+
+            # Fallback button for drawings PDF
+            if st.session_state.get(f"{prefix}_last_drawings_pdf_bytes"):
+                _drawings_dl_fn = st.session_state.get(f"{prefix}_last_drawings_pdf_filename", pdf_drawings_filename)
+                st.download_button(
+                    label=f"📥 اضغط هنا إذا لم يبدأ تحميل ملف اللوحات المجمعة ({_drawings_dl_fn})",
+                    data=st.session_state[f"{prefix}_last_drawings_pdf_bytes"],
+                    file_name=_drawings_dl_fn,
+                    mime="application/pdf",
+                    key=f"{prefix}btn_fallback_drawings_pdf",
+                    use_container_width=True,
+                )
+
+        st.markdown("---")
+        # ── Final Info Summary ────────────────────────────────────────────────────
+        st.info(
+            f"📐 **Design Complete:** Flat Slab ts = {ts:.0f} cm  │  Floors: {num_floors}  │  Bottom Mesh: {mesh_btm_str}  │  "
+            f"Top Mesh: {mesh_top_str}  │  Wu = {Wu:.3f} t/m²  │  "
+            f"Concrete: {boq['concrete_vol_m3']:.1f} m³  │  Steel: {boq['total_steel_ton']:.2f} Ton ({boq['steel_ratio_kg_m3']:.0f} kg/m³)"
+        )
