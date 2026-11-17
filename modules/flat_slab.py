@@ -25234,7 +25234,7 @@ def render(is_standalone: bool = False):
         st.markdown("---")
 
     if not _ftg_collapsed:
-        # ── 🏗️ COMPREHENSIVE BUILDING WORKS QUANTITY SURVEY (حصر شامل لجميع الأعمال الخاصة بالمبنى) ──
+        # ── 🏗️ حصر شامل لجميع الأعمال الخاصة بالمبنى (COMPREHENSIVE BUILDING WORKS SURVEY) ────────
         comp_works_table_rows = []
         with st.expander(
             f"🏗️ حصر شامل لجميع الأعمال الخاصة بالمبنى{_ftg_exp_suf}",
