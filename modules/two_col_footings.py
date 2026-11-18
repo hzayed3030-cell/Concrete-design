@@ -576,11 +576,18 @@ def design_isolated_footing_model(
         "B_cm": B_cm,
         "t_cm": t_cm,
         "tc_cm": t_cm,
+        "L_pc_cm": L_cm + 20,
+        "B_pc_cm": B_cm + 20,
+        "t_pc_cm": 10,
+        "L_pc": (L_cm + 20.0) / 100.0,
+        "B_pc": (B_cm + 20.0) / 100.0,
+        "t_pc": 0.10,
         "L_cm_calc": L_cm_calc,
         "B_cm_calc": B_cm_calc,
         "t_cm_calc": t_cm_calc,
         "d_cm": d_cm,
         "dims_str": f"{L_cm} × {B_cm} × {t_cm} cm",
+        "pc_dims_str": f"{L_cm + 20} × {B_cm + 20} × 10 cm",
         "is_manual_override": has_manual_override,
         "selected_phi": Phi_mm,
         "Phi_mm": actual_phi,
@@ -754,7 +761,14 @@ def design_combined_footing_model(
         "Bc_cm": Bc_cm,
         "tc_cm": tc_cm,
         "dc_cm": dc_cm,
+        "Lc_pc_cm": Lc_cm + 20,
+        "Bc_pc_cm": Bc_cm + 20,
+        "tc_pc_cm": 10,
+        "L_pc": (Lc_cm + 20.0) / 100.0,
+        "B_pc": (Bc_cm + 20.0) / 100.0,
+        "t_pc": 0.10,
         "dims_str": f"{Lc_cm} × {Bc_cm} × {tc_cm} cm",
+        "pc_dims_str": f"{Lc_cm + 20} × {Bc_cm + 20} × 10 cm",
         "rft_bot_str": f"{n_bot_total}Ø{Phi_mm} ({n_bot_total/Bc_m:.0f}Ø/m)",
         "rft_top_str": f"{n_top_total}Ø{Phi_mm} ({n_top_total/Bc_m:.0f}Ø/m)",
         "rft_trans_str": f"{n_trans_m}Ø{Phi_mm}/m'",
@@ -1184,6 +1198,14 @@ def draw_foundation_layout_plan(
         x0 = cx - L_m / 2.0
         y0 = cy - B_m / 2.0
 
+        # Draw P.C. blinding layer (10 cm projection on all sides)
+        pc_rect = patches.Rectangle(
+            (x0 - 0.10, y0 - 0.10), L_m + 0.20, B_m + 0.20,
+            linewidth=1.1, edgecolor="#64748b", facecolor="#f1f5f9",
+            linestyle=":", alpha=0.80, zorder=1.8
+        )
+        ax.add_patch(pc_rect)
+
         rect = patches.Rectangle(
             (x0, y0), L_m, B_m,
             linewidth=1.8, edgecolor="#1e40af", facecolor="#e2e8f0",
@@ -1222,6 +1244,14 @@ def draw_foundation_layout_plan(
                 cf_w, cf_h = Bc_m, Lc_m
                 dim_L = f"L = {cf['Lc_cm']} cm"
                 dim_B = f"B = {cf['Bc_cm']} cm"
+
+            # Draw P.C. blinding layer for combined footing (10 cm projection on all sides)
+            cf_pc_rect = patches.Rectangle(
+                (cf_x0 - 0.10, cf_y0 - 0.10), cf_w + 0.20, cf_h + 0.20,
+                linewidth=1.2, edgecolor="#64748b", facecolor="#f1f5f9",
+                linestyle=":", alpha=0.80, zorder=2.5
+            )
+            ax.add_patch(cf_pc_rect)
 
             cf_rect = patches.Rectangle(
                 (cf_x0, cf_y0), cf_w, cf_h,
@@ -1315,7 +1345,7 @@ def draw_foundation_layout_plan(
             "Isolated",
             fm.get("supported_col_str", fm.get("col_spec_str", "—")),
             f"{Lc_i} × {Bc_i} × {tc_i}",
-            f"{Lc_i + 40} × {Bc_i + 40} × 20",
+            f"{Lc_i + 20} × {Bc_i + 20} × 10",
             f"X:{nx_i}Ø{phi_i}/m | Y:{ny_i}Ø{phi_i}/m",
         ])
         row_colors.append("#eff6ff")
@@ -1330,7 +1360,7 @@ def draw_foundation_layout_plan(
                 "Combined",
                 cf["supported_cols"],
                 f"{Lc_ci} × {Bc_ci} × {tc_ci}",
-                f"{Lc_ci + 40} × {Bc_ci + 40} × 20",
+                f"{Lc_ci + 20} × {Bc_ci + 20} × 10",
                 f"Bot:{cf.get('rft_bot_str', '—')}",
             ])
             row_colors.append("#f0fdf4")
@@ -2299,9 +2329,7 @@ def classify_and_design_building_foundations(
         L_net = max(1.0, S_m - L1 / 2.0 - L2 / 2.0)
 
         v_rc_strap = sb_m * sD_m * L_net
-        v_pc_strap = (sb_m + 0.20) * L_net * 0.10
         ftgs_conc_rc_val += v_rc_strap
-        ftgs_conc_pc_val += v_pc_strap
 
         n_top_sb = int(r9.get("n_top", 5))
         wt_top_sb = n_top_sb * (S_m + 1.20) * (22.0**2 / 162.0)
@@ -2427,9 +2455,7 @@ def classify_and_design_building_foundations(
         L_net = max(1.0, S_m - diag1 / 2.0 - diag2 / 2.0)
 
         v_rc_strap = sb_m * sD_m * L_net
-        v_pc_strap = (sb_m + 0.20) * L_net * 0.10
         ftgs_conc_rc_val += v_rc_strap
-        ftgs_conc_pc_val += v_pc_strap
 
         n_top_dsb = int(r10.get("n_top", 4))
         wt_top_dsb = n_top_dsb * (S_m + 1.20) * (22.0**2 / 162.0)
@@ -2682,6 +2708,8 @@ def draw_comprehensive_foundation_sketch(
         B_m = f["B_cm"] / 100.0
         x0 = col["x"] - L_m / 2.0
         y0 = col["y"] - B_m / 2.0
+        pc_rect = patches.Rectangle((x0 - 0.10, y0 - 0.10), L_m + 0.20, B_m + 0.20, facecolor="#f1f5f9", edgecolor="#64748b", ls=":", lw=1.1, alpha=0.80, zorder=1.8)
+        ax.add_patch(pc_rect)
         rect = patches.Rectangle((x0, y0), L_m, B_m, facecolor="#bae6fd", edgecolor="#0284c7", lw=1.8, alpha=0.85, zorder=2)
         ax.add_patch(rect)
         f_lbl = str(f.get("name", "F1"))
@@ -2704,6 +2732,8 @@ def draw_comprehensive_foundation_sketch(
             cf_x0 = cA["x"] - Bc_m / 2.0
             cf_y0 = cA["y"] - x1_m
             cf_w, cf_h = Bc_m, Lc_m
+        cf_pc_rect = patches.Rectangle((cf_x0 - 0.10, cf_y0 - 0.10), cf_w + 0.20, cf_h + 0.20, facecolor="#f1f5f9", edgecolor="#64748b", ls=":", lw=1.1, alpha=0.80, zorder=2.5)
+        ax.add_patch(cf_pc_rect)
         cf_rect = patches.Rectangle((cf_x0, cf_y0), cf_w, cf_h, facecolor="#bbf7d0", edgecolor="#15803d", linestyle="--", lw=2.2, alpha=0.75, zorder=3)
         ax.add_patch(cf_rect)
         ax.text(cf_x0 + 0.12, cf_y0 + cf_h - 0.18, str(cf.get("name", "CF1")), color="#15803d", fontweight="bold", fontsize=10, zorder=5)
@@ -2720,6 +2750,8 @@ def draw_comprehensive_foundation_sketch(
 
         # F1 Exterior Footing: Flush with neighbor boundary
         f1_g = sf.get("f1_geom") or compute_strap_f1_geometry(sf, edge_columns=eff_edge_cols, slab_bounds=eff_sb)
+        r1_pc = patches.Rectangle((f1_g["x0"] - 0.10, f1_g["y0"] - 0.10), f1_g["w"] + 0.20, f1_g["h"] + 0.20, facecolor="#f1f5f9", edgecolor="#64748b", ls=":", lw=1.1, alpha=0.80, zorder=1.8)
+        ax.add_patch(r1_pc)
         r1 = patches.Rectangle((f1_g["x0"], f1_g["y0"]), f1_g["w"], f1_g["h"], facecolor="#fed7aa", edgecolor="#ea580c", lw=2.0, alpha=0.85, zorder=2)
         ax.add_patch(r1)
         ax.text(f1_g["x0"] + 0.08, f1_g["y0"] + 0.08, str(sf.get('name', st_tag)), color="#9a3412", fontweight="bold", fontsize=9.0, zorder=4)
@@ -2730,6 +2762,8 @@ def draw_comprehensive_foundation_sketch(
             f2_w, f2_h = B2, L2
         else:
             f2_w, f2_h = L2, B2
+        r2_pc = patches.Rectangle((c2["x"] - f2_w/2.0 - 0.10, c2["y"] - f2_h/2.0 - 0.10), f2_w + 0.20, f2_h + 0.20, facecolor="#f1f5f9", edgecolor="#64748b", ls=":", lw=1.1, alpha=0.80, zorder=1.8)
+        ax.add_patch(r2_pc)
         r2 = patches.Rectangle((c2["x"] - f2_w/2.0, c2["y"] - f2_h/2.0), f2_w, f2_h, facecolor="#fed7aa", edgecolor="#ea580c", lw=2.0, alpha=0.85, zorder=2)
         ax.add_patch(r2)
         ax.text(c2["x"] - f2_w/2.0 + 0.08, c2["y"] - f2_h/2.0 + 0.08, str(sf.get('name', st_tag)), color="#9a3412", fontweight="bold", fontsize=9.0, zorder=4)
@@ -2766,10 +2800,14 @@ def draw_comprehensive_foundation_sketch(
 
         # F1 Corner Footing
         f1_g = dsf.get("f1_geom") or compute_corner_strap_f1_geometry(dsf, edge_columns=eff_edge_cols, slab_bounds=eff_sb)
+        r1_pc = patches.Rectangle((f1_g["x0"] - 0.10, f1_g["y0"] - 0.10), f1_g["w"] + 0.20, f1_g["h"] + 0.20, facecolor="#f1f5f9", edgecolor="#64748b", ls=":", lw=1.1, alpha=0.80, zorder=1.8)
+        ax.add_patch(r1_pc)
         r1 = patches.Rectangle((f1_g["x0"], f1_g["y0"]), f1_g["w"], f1_g["h"], facecolor="#fed7aa", edgecolor="#ea580c", lw=2.0, alpha=0.85, zorder=2)
         ax.add_patch(r1)
         ax.text(f1_g["x0"] + 0.08, f1_g["y0"] + 0.08, str(dsf.get('name', st_tag)), color="#9a3412", fontweight="bold", fontsize=9.0, zorder=4)
 
+        r2_pc = patches.Rectangle((c2["x"] - L2x/2.0 - 0.10, c2["y"] - L2y/2.0 - 0.10), L2x + 0.20, L2y + 0.20, facecolor="#f1f5f9", edgecolor="#64748b", ls=":", lw=1.1, alpha=0.80, zorder=1.8)
+        ax.add_patch(r2_pc)
         r2 = patches.Rectangle((c2["x"] - L2x/2.0, c2["y"] - L2y/2.0), L2x, L2y, facecolor="#fed7aa", edgecolor="#ea580c", lw=2.0, alpha=0.85, zorder=2)
         ax.add_patch(r2)
         ax.text(c2["x"] - L2x/2.0 + 0.08, c2["y"] - L2y/2.0 + 0.08, str(dsf.get('name', st_tag)), color="#9a3412", fontweight="bold", fontsize=9.0, zorder=4)
@@ -3008,15 +3046,18 @@ def draw_comprehensive_foundation_sketch(
             nx_c = int(m.get("n_m_L", 5))
             ny_c = int(m.get("n_m_B", 5))
             phi_c = int(m.get("Phi_mm", 16))
-            pc_L = L_c + 40
-            pc_B = B_c + 40
+            pc_L = L_c + 20
+            pc_B = B_c + 20
             grp_name = m.get("raw_type", "Isolated")
-            ftg_lines.append(f"■ {mk} ({grp_name}): RC {L_c}×{B_c}×{t_c} cm | X:{nx_c}Ø{phi_c}/m Y:{ny_c}Ø{phi_c}/m | PC {pc_L}×{pc_B}×20 cm")
+            ftg_lines.append(f"■ {mk} ({grp_name}): RC {L_c}×{B_c}×{t_c} cm | X:{nx_c}Ø{phi_c}/m Y:{ny_c}Ø{phi_c}/m | PC {pc_L}×{pc_B}×10 cm")
 
         comb_list = foundation_res.get("combined_footings", [])
         if comb_list:
             cf0 = comb_list[0]
-            ftg_lines.append(f"■ {cf0.get('name', 'CF1')} (Combined): RC {int(cf0.get('Lc_cm', 400))}×{int(cf0.get('Bc_cm', 200))}×{int(cf0.get('tc_cm', 70))} cm  |  Top: {cf0.get('rft_top_str', '6Ø18/m')}  |  Bot: {cf0.get('rft_bot_str', '6Ø16/m')}")
+            cf_Lc = int(cf0.get('Lc_cm', 400))
+            cf_Bc = int(cf0.get('Bc_cm', 200))
+            cf_tc = int(cf0.get('tc_cm', 70))
+            ftg_lines.append(f"■ {cf0.get('name', 'CF1')} (Combined): RC {cf_Lc}×{cf_Bc}×{cf_tc} cm | PC {cf_Lc+20}×{cf_Bc+20}×10 cm | Top: {cf0.get('rft_top_str', '6Ø18/m')} | Bot: {cf0.get('rft_bot_str', '6Ø16/m')}")
 
         st_footings = edge_straps or corner_straps
         if st_footings:

@@ -445,6 +445,11 @@ def draw_page3_footings_plan(
 
         cfg = ftg_style.get(ftg_tag, ftg_style["F1"])
 
+        # Draw PC blinding (10 cm projection on all sides = +0.20 m)
+        pc_fr = patches.Rectangle((cx - (L_ftg + 0.20) / 2.0, cy - (B_ftg + 0.20) / 2.0), L_ftg + 0.20, B_ftg + 0.20,
+                                  facecolor="#f1f5f9", edgecolor="#64748b", ls=":", lw=1.1, alpha=0.80, zorder=2.5)
+        ax.add_patch(pc_fr)
+
         # Draw RC footing
         fr = patches.Rectangle((cx - L_ftg / 2.0, cy - B_ftg / 2.0), L_ftg, B_ftg,
                                facecolor=cfg["fc"], edgecolor=cfg["ec"], lw=1.8, alpha=0.88, zorder=3)

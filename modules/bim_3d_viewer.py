@@ -750,9 +750,9 @@ def extract_bim_3d_scene_data(
             t_cm_raw = float(f_iso.get("t_cm", f_iso.get("tc_cm", f_iso.get("t_rc", 0.50))))
             t_rc = max(0.35, t_cm_raw if t_cm_raw < 5.0 else t_cm_raw / 100.0)
 
-            L_pc = float(f_iso.get("L_pc", L_rc + 0.40))
-            B_pc = float(f_iso.get("B_pc", B_rc + 0.40))
-            t_pc = 0.20
+            L_pc = L_rc + 0.20
+            B_pc = B_rc + 0.20
+            t_pc = 0.10
 
             f_id = f"ftg_iso_{cid}" if cid else f"ftg_iso_{fx:.1f}_{fy_coord:.1f}"
             m_name = f_iso.get("model_name", f_iso.get("name", f"F-{cid}"))
@@ -798,8 +798,8 @@ def extract_bim_3d_scene_data(
                 "color": "#94a3b8",
                 "details": {
                     "النوع": "خرسانة عادية أسفل القاعدة المسلحة (P.C.)",
-                    "الأبعاد": f"{int(round(L_pc * 100))} × {int(round(B_pc * 100))} × 20 سم",
-                    "الرفرفة القياسية": "20 سم من جميع الجهات",
+                    "الأبعاد": f"{int(round(L_pc * 100))} × {int(round(B_pc * 100))} × 10 سم",
+                    "الرفرفة القياسية": "10 سم من جميع الجهات",
                 }
             })
 
@@ -915,14 +915,14 @@ def extract_bim_3d_scene_data(
                 "type": "Plain Concrete (PC)",
                 "x": cx_cf,
                 "y": cy_cf,
-                "z": z_ground - t_rc - 0.10,
-                "dx": dx_cf + 0.40,
-                "dy": dy_cf + 0.40,
-                "dz": 0.20,
+                "z": z_ground - t_rc - 0.05,
+                "dx": dx_cf + 0.20,
+                "dy": dy_cf + 0.20,
+                "dz": 0.10,
                 "color": "#94a3b8",
                 "details": {
-                    "النوع": "فرشة خرسانة عادية 20 سم",
-                    "الأبعاد": f"{int((dx_cf+0.4)*100)} × {int((dy_cf+0.4)*100)} × 20 سم",
+                    "النوع": "فرشة خرسانة عادية 10 سم",
+                    "الأبعاد": f"{int(round((dx_cf+0.20)*100))} × {int(round((dy_cf+0.20)*100))} × 10 سم",
                 }
             })
 
@@ -1026,28 +1026,12 @@ def extract_bim_3d_scene_data(
                 }
             })
 
-            # F1 Edge Plain Concrete (0 projection on neighbor side, 20 cm on interior sides)
+            # F1 Edge Plain Concrete (10 cm projection on all sides, 10 cm thick)
             nbr_face = f1_g.get("nbr_face", "Left")
-            if nbr_face == "Left":
-                pc_x0 = f1_g["x0"]
-                pc_w = f1_g["w"] + 0.20
-                pc_y0 = f1_g["y0"] - 0.20
-                pc_h = f1_g["h"] + 0.40
-            elif nbr_face == "Right":
-                pc_x0 = f1_g["x0"] - 0.20
-                pc_w = f1_g["w"] + 0.20
-                pc_y0 = f1_g["y0"] - 0.20
-                pc_h = f1_g["h"] + 0.40
-            elif nbr_face == "Bottom":
-                pc_x0 = f1_g["x0"] - 0.20
-                pc_w = f1_g["w"] + 0.40
-                pc_y0 = f1_g["y0"]
-                pc_h = f1_g["h"] + 0.20
-            else:  # Top
-                pc_x0 = f1_g["x0"] - 0.20
-                pc_w = f1_g["w"] + 0.40
-                pc_y0 = f1_g["y0"] - 0.20
-                pc_h = f1_g["h"] + 0.20
+            pc_x0 = f1_g["x0"] - 0.10
+            pc_w = f1_g["w"] + 0.20
+            pc_y0 = f1_g["y0"] - 0.10
+            pc_h = f1_g["h"] + 0.20
 
             concrete_elements.append({
                 "id": f"{f1_id}_pc",
@@ -1056,14 +1040,14 @@ def extract_bim_3d_scene_data(
                 "type": "Plain Concrete (PC)",
                 "x": pc_x0 + pc_w / 2.0,
                 "y": pc_y0 + pc_h / 2.0,
-                "z": z_ground - t1 - 0.10,
+                "z": z_ground - t1 - 0.05,
                 "dx": pc_w,
                 "dy": pc_h,
-                "dz": 0.20,
+                "dz": 0.10,
                 "color": "#94a3b8",
                 "details": {
-                    "النوع": f"فرشة خرسانة عادية أسفل قاعدة الجار {sf_name} (رفرفة صفرية جهة جار {nbr_face})",
-                    "الأبعاد": f"{int(round(pc_w*100))} × {int(round(pc_h*100))} × 20 سم",
+                    "النوع": f"فرشة خرسانة عادية أسفل قاعدة الجار {sf_name}",
+                    "الأبعاد": f"{int(round(pc_w*100))} × {int(round(pc_h*100))} × 10 سم",
                 }
             })
 
@@ -1136,14 +1120,14 @@ def extract_bim_3d_scene_data(
                 "type": "Plain Concrete (PC)",
                 "x": x2,
                 "y": y2,
-                "z": z_ground - t2 - 0.10,
-                "dx": f2_w + 0.40,
-                "dy": f2_h + 0.40,
-                "dz": 0.20,
+                "z": z_ground - t2 - 0.05,
+                "dx": f2_w + 0.20,
+                "dy": f2_h + 0.20,
+                "dz": 0.10,
                 "color": "#94a3b8",
                 "details": {
                     "النوع": f"فرشة خرسانة عادية أسفل قاعدة الشداد الداخلية {sf_name}",
-                    "الأبعاد": f"{int(round((f2_w+0.4)*100))} × {int(round((f2_h+0.4)*100))} × 20 سم",
+                    "الأبعاد": f"{int(round((f2_w+0.20)*100))} × {int(round((f2_h+0.20)*100))} × 10 سم",
                 }
             })
 
@@ -1359,22 +1343,13 @@ def extract_bim_3d_scene_data(
                 }
             })
 
-            # F1 Corner PC (0 projection on both neighbor sides, 20 cm on interior sides)
+            # F1 Corner PC (10 cm projection on all sides, 10 cm thick)
             nbr_x = f1_g.get("nbr_x", "Left")
             nbr_y = f1_g.get("nbr_y", "Bottom")
-            if nbr_x == "Left":
-                c_pc_x0 = f1_g["x0"]
-                c_pc_w = f1_g["w"] + 0.20
-            else:
-                c_pc_x0 = f1_g["x0"] - 0.20
-                c_pc_w = f1_g["w"] + 0.20
-
-            if nbr_y == "Bottom":
-                c_pc_y0 = f1_g["y0"]
-                c_pc_h = f1_g["h"] + 0.20
-            else:
-                c_pc_y0 = f1_g["y0"] - 0.20
-                c_pc_h = f1_g["h"] + 0.20
+            c_pc_x0 = f1_g["x0"] - 0.10
+            c_pc_w = f1_g["w"] + 0.20
+            c_pc_y0 = f1_g["y0"] - 0.10
+            c_pc_h = f1_g["h"] + 0.20
 
             concrete_elements.append({
                 "id": f"{f1_corner_id}_pc",
@@ -1383,14 +1358,14 @@ def extract_bim_3d_scene_data(
                 "type": "Plain Concrete (PC)",
                 "x": c_pc_x0 + c_pc_w / 2.0,
                 "y": c_pc_y0 + c_pc_h / 2.0,
-                "z": z_ground - t1 - 0.10,
+                "z": z_ground - t1 - 0.05,
                 "dx": c_pc_w,
                 "dy": c_pc_h,
-                "dz": 0.20,
+                "dz": 0.10,
                 "color": "#94a3b8",
                 "details": {
-                    "النوع": f"فرشة خرسانة عادية أسفل قاعدة الركن {dsf_name} (رفرفة صفرية جهتي جار {nbr_x} و {nbr_y})",
-                    "الأبعاد": f"{int(round(c_pc_w*100))} × {int(round(c_pc_h*100))} × 20 سم",
+                    "النوع": f"فرشة خرسانة عادية أسفل قاعدة الركن {dsf_name}",
+                    "الأبعاد": f"{int(round(c_pc_w*100))} × {int(round(c_pc_h*100))} × 10 سم",
                 }
             })
 
@@ -1455,12 +1430,15 @@ def extract_bim_3d_scene_data(
                 "type": "Plain Concrete (PC)",
                 "x": x2,
                 "y": y2,
-                "z": z_ground - t2 - 0.10,
-                "dx": L2x + 0.40,
-                "dy": L2y + 0.40,
-                "dz": 0.20,
+                "z": z_ground - t2 - 0.05,
+                "dx": L2x + 0.20,
+                "dy": L2y + 0.20,
+                "dz": 0.10,
                 "color": "#94a3b8",
-                "details": {"النوع": "فرشة خرسانة عادية 20 سم"}
+                "details": {
+                    "النوع": "فرشة خرسانة عادية 10 سم",
+                    "الأبعاد": f"{int(round((L2x+0.20)*100))} × {int(round((L2y+0.20)*100))} × 10 سم",
+                }
             })
 
             # F2 Interior Rebar Mesh (Bottom 2-way with 90° upward hooks)
@@ -1625,9 +1603,9 @@ def extract_bim_3d_scene_data(
         L_rc = max(1.40, math.ceil(side_m * 20.0) / 20.0)
         B_rc = L_rc
         t_rc = max(0.40, min(0.80, math.ceil((0.40 + (pu_tot / 350.0) * 0.25) * 20.0) / 20.0))
-        L_pc = L_rc + 0.40
-        B_pc = B_rc + 0.40
-        t_pc = 0.20
+        L_pc = L_rc + 0.20
+        B_pc = B_rc + 0.20
+        t_pc = 0.10
 
         f_id = f"ftg_iso_{cid}"
         m_name = f"F-{cid}"
@@ -1670,8 +1648,8 @@ def extract_bim_3d_scene_data(
             "color": "#94a3b8",
             "details": {
                 "النوع": "خرسانة عادية أسفل القاعدة المسلحة (P.C.)",
-                "الأبعاد": f"{int(round(L_pc * 100))} × {int(round(B_pc * 100))} × 20 سم",
-                "الرفرفة القياسية": "20 سم من جميع الجهات",
+                "الأبعاد": f"{int(round(L_pc * 100))} × {int(round(B_pc * 100))} × 10 سم",
+                "الرفرفة القياسية": "10 سم من جميع الجهات",
             }
         })
 
