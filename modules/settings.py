@@ -2514,6 +2514,7 @@ def set_active_profile(profile_name: str, clear_cache: bool = True) -> None:
 
     st.session_state["cfg"] = new_cfg
     st.session_state["current_project"] = new_cfg
+    st.session_state["selected_module_idx"] = int(new_cfg.get("selected_module_idx", 0))
     st.session_state["_settings_loaded_from_file"] = True
 
     # Wipe old Module 9, 10, 11, 12 & 15 session data so the new project's values are loaded cleanly

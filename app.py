@@ -2282,10 +2282,106 @@ def trigger_rocket_celebration():
         st.markdown(html_content, unsafe_allow_html=True)
 
 
+@st.dialog("🧭 نسخ محاور وأعمدة من مشروع (إنشاء مشروع جديد)", width="large")
+def _copy_axes_columns_dialog():
+    """Dialog: إنشاء مشروع جديد كلياً بالاعتماد على نسخ (المحاور، الأبعاد، الأعمدة، الترحيل، الاتجاه) من مشروع قائم."""
+    import modules.axes_columns_copy as ACR
+
+    st.markdown(
+        """
+        <div dir="rtl" style="text-align:right; font-size:0.95rem; line-height:1.7; margin-bottom:12px;">
+            سيتم <b>إنشاء مشروع جديد كلياً</b> ونقل <b>(المحاور + أبعاد البحور + الأعمدة بقطاعاتها + قيم الترحيل Offsets + اتجاهات ضرب الأعمدة Orientation)</b> 
+            إليه مباشرة من المشروع المصدر المحدد، مع تهيئة باقي بيانات المشروع الجديد بالقيم الافتراضية النظيفة.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    with st.expander("🗺️ خريطة توافق الموديولات (Compatibility Map)", expanded=False):
+        cmap = ACR.get_compatibility_map()
+        rows = []
+        for idx, info in cmap.items():
+            rows.append({
+                "الموديول": info["short"],
+                "مؤهل للنسخ": "✅" if info["eligible"] else "⛔ مستبعد",
+                "بنية البيانات": ACR.FAMILY_LABEL.get(info["family"], "—"),
+                "الموديولات المتوافقة": "، ".join(ACR._mod_short(j) for j in info["compatible_with"]) or "—",
+            })
+        st.dataframe(rows, use_container_width=True, hide_index=True)
+        st.caption("يُسمح بالنسخ فقط بين الموديولات التي تتطابق في حقول الإدخال الخمسة: المحاور، الأبعاد، الأعمدة، الترحيل، والاتجاه. الموديولات الأخرى مستبعدة تماماً.")
+
+    sources = ACR.list_sources()
+    if not sources:
+        st.warning("لا توجد مشاريع حالية تحتوي على شبكة محاور وأعمدة في موديول مؤهل للنسخ.")
+        return
+
+    src_labels = {ACR.endpoint_label(s): s for s in sources}
+    src_choice = st.selectbox(
+        "📤 1. اختر المشروع المصدر الموجود بالفعل (Existing Source Project):",
+        options=list(src_labels.keys()),
+        key="acr_src_sel",
+    )
+    source = src_labels[src_choice]
+
+    try:
+        st.info(f"📊 بيانات المصدر المتاحة: **{ACR.summarize(*source)}**")
+    except Exception:
+        pass
+
+    # 2. تحديد موديول المشروع الجديد (فقط الموديولات المتوافقة مع المصدر)
+    compatible_mods = ACR.list_compatible_target_modules(source[1])
+    mod_options = {ACR._mod_name(m): m for m in compatible_mods}
+    selected_mod_name = st.selectbox(
+        "🎯 2. حدد موديول المشروع الجديد (Target Module for New Project):",
+        options=list(mod_options.keys()),
+        key="acr_tgt_mod_sel",
+    )
+    target_module_idx = mod_options[selected_mod_name]
+
+    # 3. اسم المشروع الجديد المراد إنشاؤه
+    default_new_name = f"مشروع جديد - محاور {source[0]}"
+    new_proj_name = st.text_input(
+        "📝 3. اسم المشروع الجديد المراد إنشاؤه (New Project Name):",
+        value=default_new_name,
+        key="acr_new_pname_input",
+    )
+
+    c_ok, c_cancel = st.columns(2)
+    with c_ok:
+        if st.button("🚀 إنشاء المشروع الجديد وتطبيق المحاور والأعمدة", type="primary", use_container_width=True, key="acr_do_create"):
+            try:
+                res = ACR.create_project_with_copied_axes(
+                    source=source,
+                    target_module_idx=target_module_idx,
+                    new_project_name=new_proj_name,
+                )
+                st.session_state["_acr_flash"] = (
+                    f"✅ تم إنشاء المشروع الجديد «{res['project_name']}» ({res['target_mod_name']}) "
+                    f"بنجاح ونقل شبكة المحاور ({res['n_x']}×{res['n_y']}) و ({res['n_cols']} عمود) بترحيلاتها واتجاهاتها من «{source[0]}»."
+                    + (f" (تم تنظيف {res['pruned']} عنصر غير متطابق)" if res.get("pruned") else "")
+                )
+                st.rerun()
+            except ValueError as e:
+                st.error(f"⚠️ {e}")
+            except Exception as e:
+                st.error(f"❌ تعذر إنشاء المشروع: {e}")
+    with c_cancel:
+        if st.button("إلغاء", use_container_width=True, key="acr_cancel"):
+            st.rerun()
+
+
 def render_profile_manager():
     """Start Screen: Ultra-Compact High-Density Dark Mode Projects Dashboard."""
     projects = get_all_projects()
     active_name = get_active_project_name()
+
+    if st.session_state.get("_acr_flash"):
+        _flash = st.session_state.pop("_acr_flash")
+        try:
+            st.toast(_flash, icon="✅")
+        except Exception:
+            pass
+        st.success(_flash)
 
     if st.session_state.get("git_push_success_msg"):
         st.success(st.session_state["git_push_success_msg"])
@@ -2376,13 +2472,30 @@ def render_profile_manager():
     st.markdown(
         """
         <style>
+        /* Compact toolbar buttons styling */
+        div[class*="st-key-btn_global_"] button,
+        div[class*="st-key-btn_global_"] a,
+        .st-key-btn_global_new button,
+        .st-key-btn_global_import button,
+        .st-key-btn_global_backup button,
+        .st-key-btn_global_github_sync button,
+        .st-key-btn_global_github_explore a,
+        .st-key-btn_global_github_pull button,
+        .st-key-btn_global_copy_axes_cols button {
+            padding: 0.30rem 0.25rem !important;
+            font-size: 0.77rem !important;
+            font-weight: 800 !important;
+            white-space: nowrap !important;
+            min-height: 2.25rem !important;
+            line-height: 1.2 !important;
+        }
+
         /* Pull from GitHub button - Dark Teal Tint at 30% with enhanced prominent turquoise border */
         div[class*="st-key-btn_global_github_pull"] button,
         .st-key-btn_global_github_pull button {
             background: linear-gradient(135deg, rgba(20, 184, 166, 0.30) 0%, rgba(13, 148, 136, 0.30) 100%) !important;
-            border: 2.5px solid rgba(45, 212, 191, 0.80) !important;
+            border: 2px solid rgba(45, 212, 191, 0.80) !important;
             color: #ffffff !important;
-            font-weight: 800 !important;
             box-shadow: 0 2px 10px rgba(45, 212, 191, 0.25) !important;
             transition: all 0.2s ease-in-out !important;
         }
@@ -2393,12 +2506,30 @@ def render_profile_manager():
             box-shadow: 0 4px 18px rgba(45, 212, 191, 0.50) !important;
             transform: translateY(-1px) !important;
         }
+
+        /* Copy Axes & Columns button - distinctive amber/violet, compact */
+        div[class*="st-key-btn_global_copy_axes_cols"] button,
+        .st-key-btn_global_copy_axes_cols button {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.32) 0%, rgba(245, 158, 11, 0.32) 100%) !important;
+            border: 2px solid rgba(251, 191, 36, 0.85) !important;
+            color: #ffffff !important;
+            font-weight: 800 !important;
+            box-shadow: 0 2px 10px rgba(251, 191, 36, 0.25) !important;
+            transition: all 0.2s ease-in-out !important;
+        }
+        div[class*="st-key-btn_global_copy_axes_cols"] button:hover,
+        .st-key-btn_global_copy_axes_cols button:hover {
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.48) 0%, rgba(245, 158, 11, 0.48) 100%) !important;
+            border-color: #fbbf24 !important;
+            box-shadow: 0 4px 18px rgba(251, 191, 36, 0.5) !important;
+            transform: translateY(-1px) !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    g1, g2, g3, g4, g5, g6 = st.columns([1.0, 1.0, 1.25, 1.25, 1.2, 1.45])
+    g1, g2, g3, g4, g5, g6, g7 = st.columns([0.9, 0.9, 1.15, 1.1, 1.05, 1.3, 1.45])
     with g1:
         if st.button("➕ مشروع جديد", use_container_width=True, type="primary", key="btn_global_new"):
             is_open = st.session_state.get("show_create_profile_form", False)
@@ -2449,7 +2580,7 @@ def render_profile_manager():
                     st.rerun()
     with g5:
         gh_url = get_github_repo_url()
-        st.link_button("🌐 Explore git hub", gh_url, use_container_width=True)
+        st.link_button("🌐 Explore git hub", gh_url, use_container_width=True, key="btn_global_github_explore")
     with g6:
         if st.button("⬇️ سحب التعديلات من Github", use_container_width=True, key="btn_global_github_pull"):
             st.session_state["show_git_pull_form"] = not st.session_state.get("show_git_pull_form", False)
@@ -2457,6 +2588,14 @@ def render_profile_manager():
             st.session_state["show_import_profile_form"] = False
             st.session_state["show_git_update_form"] = False
             st.rerun()
+    with g7:
+        if st.button(
+            "🧭 نسخ محاور وأعمدة من مشروع",
+            use_container_width=True,
+            key="btn_global_copy_axes_cols",
+            help="إنشاء مشروع جديد بنسخ المحاور والأبعاد والأعمدة وترحيلاتها واتجاهاتها من مشروع مصدر متوافق",
+        ):
+            _copy_axes_columns_dialog()
 
     # ── Immediate Notification Banner (Positioned directly below the toolbar) ─
     if st.session_state.get("git_push_info_msg"):

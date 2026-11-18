@@ -36,7 +36,7 @@ M15_SHIFT_Y_OPTIONS = [
     "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)",
 ]
 _CLR_WALL_12="#EFA368"; _CLR_WALL_25="#8B1A1A"; _CLR_WALL_PARAPET="#7E22CE"
-_CLR_COL="#2F4F8F"; _CLR_COL_REMOVED="#BBBBBB"
+_CLR_COL="#1e293b"; _CLR_COL_REMOVED="#BBBBBB"
 _CLR_WIN="#87CEEB"; _CLR_DOOR="#2E7D32"
 _CLR_AXIS_X="#E53935"; _CLR_AXIS_Y="#1565C0"
 
@@ -900,7 +900,7 @@ def _get_active_columns():
     ys = st.session_state.get("m15_y_axes", [])
     nx, ny = len(xs), len(ys)
     return [
-        (i, j) for (i, j) in sorted(placed)
+        (i, j) for (i, j) in sorted(placed, key=lambda ij: (ij[1], ij[0]))
         if (i, j) not in removed and 0 <= i < nx and 0 <= j < ny
     ]
 
@@ -2296,8 +2296,11 @@ def _apply_smart_plan_labels(
         has_E = any(wk in active_walls_set for wk in [(ci, cj, ci+1, cj), (ci+1, cj, ci, cj)])
         has_W = any(wk in active_walls_set for wk in [(ci-1, cj, ci, cj), (ci, cj, ci-1, cj)])
 
-        pad_x = cw / 2.0 + 0.12
-        pad_y = ch / 2.0 + 0.12
+        pad_x = cw / 2.0 + 0.08
+        pad_y = ch / 2.0 + 0.03
+        parity = (int(ci) + int(cj)) % 2
+        is_right_edge = (int(ci) == len(xs) - 1)
+        pref_q = ("SW" if is_right_edge else "SE") if parity == 0 else "NW"
 
         candidates = [
             ("NE", cx + pad_x, cy + pad_y, "left", "bottom", (has_N or has_E), (not has_N and not has_E)),
@@ -2325,7 +2328,7 @@ def _apply_smart_plan_labels(
                 if ov > 0: score += 800.0 * ov + 200.0
             if has_w: score += 180.0
             if is_clear: score -= 80.0
-            if qname == "NE": score -= 20.0
+            if qname == pref_q: score -= 25.0
             if score < best_score:
                 best_score = score
                 best_cand = (qx, qy, qha, qva, False)
@@ -2349,13 +2352,13 @@ def _apply_smart_plan_labels(
                     best_box = box
 
         fx, fy, fha, fva, leader = best_cand
-        bg_col = "#FEE2E2" if is_pending else "#EEF2FF"
-        edge_col = "#DC2626" if is_pending else "#6366F1"
+        bg_col = "#FEE2E2" if is_pending else "#ffffff"
+        edge_col = "#DC2626" if is_pending else "#64748b"
         if leader:
             ax.annotate("", xy=(cx, cy), xytext=(fx, fy),
                         arrowprops=dict(arrowstyle="-", color="#94A3B8", lw=0.7, ls=":"), zorder=6.8)
-        ax.text(fx, fy, txt, ha=fha, va=fva, fontsize=fs_col, color=clr, fontweight="bold", zorder=7.2,
-                bbox=dict(boxstyle="round,pad=0.20", facecolor=bg_col, edgecolor=edge_col, lw=0.9, alpha=0.94))
+        ax.text(fx, fy, txt, ha=fha, va=fva, fontsize=fs_col, color=clr, fontweight="bold", zorder=9.0,
+                bbox=dict(boxstyle="round,pad=0.20", facecolor=bg_col, edgecolor=edge_col, lw=0.9, alpha=0.95))
         placed_boxes.append(best_box)
 
     # 3. الشبابيك (Window Labels)
@@ -2498,62 +2501,73 @@ def _draw_plan(with_dim=True):
         ax.text(0.5,0.5,"No axes yet",ha="center",va="center",fontsize=round(14*1.4,1),transform=ax.transAxes)
 
         ax.axis("off"); buf=io.BytesIO(); fig.savefig(buf,format="png",dpi=120); plt.close(fig); buf.seek(0); return buf
-    x_min,x_max=min(xs),max(xs); y_min,y_max=min(ys),max(ys)
-    span_x=x_max-x_min or 1.0; span_y=y_max-y_min or 1.0
-    fig_w=min(20,max(12,span_x*1.7+3.5)); fig_h=min(18,max(9,span_y*1.7+3.5))
-    fig,ax=plt.subplots(figsize=(fig_w,fig_h)); ax.set_aspect("equal")
-    # ── تباعد خطوط الأبعاد والمحيط الخارجي بنمط الأوتوكاد الهندسي المتناسق ──
-    min_span = min(span_x, span_y) if (span_x and span_y) else 5.0
-    d_bay = max(1.20, min(2.00, min_span * 0.14))
-    d_tot = max(0.65, min(1.10, min_span * 0.085))
-    d_bub = max(0.65, min(1.10, min_span * 0.085))
-    cad_bubble_r = max(0.18, min(0.24, min_span * 0.028))
-    dt_tick = max(0.09, min(0.15, min_span * 0.016))
+    x_min, x_max = min(xs), max(xs)
+    y_min, y_max = min(ys), max(ys)
+    span_x = x_max - x_min or 1.0
+    span_y = y_max - y_min or 1.0
 
-    # إحداثيات خطوط الأبعاد والفقاعات الخارجية
-    y_dim_bot_bay = y_min - d_bay
-    y_dim_bot_tot = y_dim_bot_bay - d_tot
-    y_bub_bot     = y_dim_bot_tot - d_bub
+    # ── حساب أبعاد اللوحة والهوامش بنفس فلسفة وتكنيك Module 1 (Flat Slab) ──
+    bubble_radius = max(0.28, min(span_x, span_y) * 0.030)
+    offset_grid_top = max(1.0, span_y * 0.09)
+    offset_grid_left = max(1.0, min(1.8, span_x * 0.09))
+    dim_offset_bot = max(0.9, span_y * 0.08)
+    dim_offset_right = max(0.9, min(1.6, span_x * 0.08))
 
-    y_dim_top_bay = y_max + d_bay
-    y_dim_top_tot = y_dim_top_bay + d_tot
-    y_bub_top     = y_dim_top_tot + d_bub
+    margin_left = offset_grid_left + bubble_radius * 2 + 0.3
+    margin_right = dim_offset_right + 2.0
+    margin_top = offset_grid_top + bubble_radius * 2 + 0.3
+    margin_bot = dim_offset_bot + 1.6
 
-    x_dim_left_bay = x_min - d_bay
-    x_dim_left_tot = x_dim_left_bay - d_tot
-    x_bub_left     = x_dim_left_tot - d_bub
+    x_lim_min = x_min - margin_left
+    x_lim_max = x_max + margin_right
+    y_lim_min = y_min - margin_bot
+    y_lim_max = y_max + margin_top
 
-    x_dim_right_bay = x_max + d_bay
-    x_dim_right_tot = x_dim_right_bay + d_tot
-    x_bub_right     = x_dim_right_tot + d_bub
+    total_data_w = x_lim_max - x_lim_min
+    total_data_h = y_lim_max - y_lim_min
+    aspect = total_data_h / max(total_data_w, 0.001)
 
-    margin_extra = max(0.85, min_span * 0.055)
-    margin_x = d_bay + d_tot + d_bub + cad_bubble_r + margin_extra
-    margin_y = d_bay + d_tot + d_bub + cad_bubble_r + margin_extra
+    if aspect <= 1.0:
+        fig_w = 14.5
+        fig_h = max(5.5, min(14.5, fig_w * aspect))
+    else:
+        fig_h = 13.0
+        fig_w = max(6.0, min(14.5, fig_h / aspect))
 
-    ax.set_xlim(x_min - margin_x, x_max + margin_x)
-    ax.set_ylim(y_min - margin_y, y_max + margin_y)
-    ax.set_facecolor("#FBFBFB")
-    fig.patch.set_facecolor("#F0F2F5")
-    fs_scale = 1.4
-    fs_axis = round(9.5 * fs_scale, 1)    # 13.3
-    fs_thick = round(8.0 * fs_scale, 1)   # 11.2
-    fs_wall = round(8.5 * fs_scale, 1)    # 11.9
-    fs_col = round(10.0 * fs_scale, 1)    # 14.0
-    fs_win = round(8.5 * fs_scale, 1)     # 11.9
-    fs_door = round(8.0 * fs_scale, 1)    # 11.2
-    fs_leg = round(8.5 * fs_scale, 1)     # 11.9
-    fs_title = round(11.0 * fs_scale, 1)  # 15.4
-    fs_lbl = round(9.0 * fs_scale, 1)     # 12.6
-    fs_tick = round(8.0 * fs_scale, 1)    # 11.2
-    fs_dim = round(8.5 * fs_scale, 1)     # 11.9
-    fs_bubble = round((fs_axis * 0.72) * 1.3, 1)
+    fig = plt.figure(figsize=(fig_w, fig_h), dpi=120, facecolor="#ffffff")
+    ax = fig.add_subplot(1, 1, 1)
+    ax.set_facecolor("#ffffff")
 
-    # رسم خطوط المحاور الهندسية الواصلة مباشرة بين دوائر المحاور بنمط الأوتوكاد
+    fs_scale = 1.15
+    fs_axis = round(9.5 * fs_scale, 1)
+    fs_thick = round(8.0 * fs_scale, 1)
+    fs_wall = round(8.5 * fs_scale, 1)
+    fs_col = 11.0
+    fs_win = round(8.5 * fs_scale, 1)
+    fs_door = round(8.0 * fs_scale, 1)
+    fs_leg = round(8.5 * fs_scale, 1)
+    fs_title = round(11.0 * fs_scale, 1)
+    fs_lbl = round(9.0 * fs_scale, 1)
+    fs_tick = round(8.0 * fs_scale, 1)
+    fs_dim = 11.5
+    fs_bubble = 11.5
+
+    # ── حدود البلاطة والمسقط الإنشائي (نفس تصميم Module 1) ──
+    slab_rect = patches.Rectangle(
+        (x_min, y_min), span_x, span_y,
+        linewidth=2.5, edgecolor="#0f172a", facecolor="#e8f0fe", zorder=1
+    )
+    ax.add_patch(slab_rect)
+
+    # ── خطوط المحاور الهندسية المتصلة بدوائر المحاور العلوية واليسرى ──
+    y_top_ext = y_max + offset_grid_top
+    y_bot_ext = y_min - 0.4
     for x in xs:
-        ax.plot([x, x], [y_bub_bot, y_bub_top], color=_CLR_AXIS_Y, lw=0.9, ls="--", alpha=0.50, zorder=1)
+        ax.plot([x, x], [y_bot_ext, y_top_ext], color="#dc2626", linestyle="--", linewidth=1.2, alpha=0.8, zorder=1.5)
+    x_left_ext = x_min - offset_grid_left
+    x_right_ext = x_max + 0.4
     for y in ys:
-        ax.plot([x_bub_left, x_bub_right], [y, y], color=_CLR_AXIS_X, lw=0.9, ls="--", alpha=0.50, zorder=1)
+        ax.plot([x_left_ext, x_right_ext], [y, y], color="#dc2626", linestyle="--", linewidth=1.2, alpha=0.8, zorder=1.5)
 
     active_walls_set = set(w for w in _get_all_walls() if not _is_wall_removed(w, removed_walls))
     plan_obstacles = []
@@ -3052,10 +3066,10 @@ def _draw_plan(with_dim=True):
                     bbox=dict(boxstyle="round,pad=0.22", facecolor="#fee2e2", edgecolor="#dc2626", lw=1.6, alpha=0.98))
             plan_obstacles.append([cx - ew / 2.0, cy - eh / 2.0, cx + ew / 2.0, cy + eh / 2.0 + 0.35])
         else:
-            ax.add_patch(patches.Rectangle((cx - cw / 2, cy - ch / 2), cw, ch, lw=1.0, edgecolor="#000022", facecolor=_CLR_COL, alpha=0.92, zorder=6))
+            ax.add_patch(patches.Rectangle((cx - cw / 2, cy - ch / 2), cw, ch, lw=1.8, edgecolor="#0f172a", facecolor=_CLR_COL, alpha=1.0, zorder=8))
         cname = cm.get((i, j), "")
         if cname:
-            col_lbl_clr = "#991b1b" if is_pending_col else "#1A1A6E"
+            col_lbl_clr = "#991b1b" if is_pending_col else "#0f172a"
             plan_col_labels.append({
                 "text": cname, "grid": (i, j), "cx": cx, "cy": cy, "cw": cw, "ch": ch,
                 "color": col_lbl_clr, "is_pending": is_pending_col
@@ -3235,202 +3249,102 @@ def _draw_plan(with_dim=True):
                                 rotation=90, fontsize=fs_dim + 1.2, color="#1E3A8A", fontweight="bold",
                                 bbox=dict(boxstyle="round,pad=0.32", facecolor="#EFF6FF", edgecolor="#2563EB", lw=1.5, alpha=0.98), zorder=10.3)
 
-    # ── خطوط الأبعاد المعمارية الخارجية على نمط الأوتوكاد (AutoCAD Dimension Chains) ──
-    def _draw_cad_tick(tx, ty):
-        ax.plot([tx - dt_tick, tx + dt_tick], [ty - dt_tick, ty + dt_tick], color="#0f172a", lw=1.6, zorder=4.5)
+    # ── دوائر المحاور العلوية واليسرى + خطوط الأبعاد السفلية واليمنى (نفس تكنيك Module 1) ──
+    for idx, x in enumerate(xs):
+        bub = patches.Circle((x, y_top_ext), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=1.6, zorder=6)
+        ax.add_patch(bub)
+        ax.text(x, y_top_ext, f"Y{idx + 1}", color="#991b1b", fontsize=fs_bubble, fontweight="bold", ha="center", va="center", zorder=7)
 
-    # 1. الأبعاد السفلية (Bottom Chains) — المحاور الرأسية Y1, Y2, Y3...
-    ax.plot([xs[0], xs[-1]], [y_dim_bot_bay, y_dim_bot_bay], color="#0f172a", lw=1.1, zorder=3)
-    for x in xs:
-        _draw_cad_tick(x, y_dim_bot_bay)
+    for idx, y in enumerate(ys):
+        bub = patches.Circle((x_left_ext, y), radius=bubble_radius, facecolor="#fee2e2", edgecolor="#dc2626", lw=1.6, zorder=6)
+        ax.add_patch(bub)
+        ax.text(x_left_ext, y, f"X{idx + 1}", color="#991b1b", fontsize=fs_bubble, fontweight="bold", ha="center", va="center", zorder=7)
+
+    # أبعاد البحور السفلية (X-Spans along Bottom)
+    y_dim_lx = y_min - dim_offset_bot
     for i in range(len(xs) - 1):
         x1, x2 = xs[i], xs[i + 1]
         sp = abs(x2 - x1)
-        ax.text((x1 + x2) / 2.0, y_dim_bot_bay + dt_tick * 1.2, f"{sp:.2f}m", ha="center", va="bottom",
-                fontsize=fs_dim, fontweight="bold", color="#0f172a", zorder=5,
-                bbox=dict(boxstyle="square,pad=0.15", facecolor="#ffffff", edgecolor="none", alpha=0.90))
+        mid_x = (x1 + x2) / 2.0
+        ax.annotate(
+            "", xy=(x2, y_dim_lx), xytext=(x1, y_dim_lx),
+            arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6, shrinkA=0, shrinkB=0), zorder=4
+        )
+        ax.plot([x1, x1], [y_dim_lx - 0.2, y_dim_lx + 0.2], color="#0f172a", lw=1.3, zorder=4)
+        ax.plot([x2, x2], [y_dim_lx - 0.2, y_dim_lx + 0.2], color="#0f172a", lw=1.3, zorder=4)
+        ax.text(
+            mid_x, y_dim_lx - 0.25, f"{sp:.2f} m",
+            color="#0f172a", fontsize=fs_dim, fontweight="bold", ha="center", va="top", zorder=5
+        )
 
-    # خط البعد الكلي الأفقي السفلي (Total Lx)
-    ax.plot([xs[0], xs[-1]], [y_dim_bot_tot, y_dim_bot_tot], color="#1e3a8a", lw=1.2, zorder=3)
-    _draw_cad_tick(xs[0], y_dim_bot_tot)
-    _draw_cad_tick(xs[-1], y_dim_bot_tot)
-    ax.text((xs[0] + xs[-1]) / 2.0, y_dim_bot_tot + dt_tick * 1.2, f"Total Lx = {span_x:.2f}m", ha="center", va="bottom",
-            fontsize=fs_dim, fontweight="bold", color="#1e3a8a", zorder=5,
-            bbox=dict(boxstyle="square,pad=0.15", facecolor="#ffffff", edgecolor="none", alpha=0.90))
-
-    # دوائر المحاور السفلية (Bottom CAD Bubbles)
-    for idx, x in enumerate(xs):
-        bub = patches.Circle((x, y_bub_bot), radius=cad_bubble_r, facecolor="#ffffff", edgecolor=_CLR_AXIS_Y, lw=1.6, zorder=6)
-        ax.add_patch(bub)
-        ax.text(x, y_bub_bot, f"Y{idx+1}", color=_CLR_AXIS_Y, fontsize=fs_bubble, fontweight="bold", ha="center", va="center", zorder=7)
-
-    # 2. الأبعاد العلوية (Top Chains) — المحاور الرأسية Y1, Y2, Y3...
-    ax.plot([xs[0], xs[-1]], [y_dim_top_bay, y_dim_top_bay], color="#0f172a", lw=1.1, zorder=3)
-    for x in xs:
-        _draw_cad_tick(x, y_dim_top_bay)
-    for i in range(len(xs) - 1):
-        x1, x2 = xs[i], xs[i + 1]
-        sp = abs(x2 - x1)
-        ax.text((x1 + x2) / 2.0, y_dim_top_bay + dt_tick * 1.2, f"{sp:.2f}m", ha="center", va="bottom",
-                fontsize=fs_dim, fontweight="bold", color="#0f172a", zorder=5,
-                bbox=dict(boxstyle="square,pad=0.15", facecolor="#ffffff", edgecolor="none", alpha=0.90))
-
-    # خط البعد الكلي الأفقي العلوي (Total Lx)
-    ax.plot([xs[0], xs[-1]], [y_dim_top_tot, y_dim_top_tot], color="#1e3a8a", lw=1.2, zorder=3)
-    _draw_cad_tick(xs[0], y_dim_top_tot)
-    _draw_cad_tick(xs[-1], y_dim_top_tot)
-    ax.text((xs[0] + xs[-1]) / 2.0, y_dim_top_tot + dt_tick * 1.2, f"Total Lx = {span_x:.2f}m", ha="center", va="bottom",
-            fontsize=fs_dim, fontweight="bold", color="#1e3a8a", zorder=5,
-            bbox=dict(boxstyle="square,pad=0.15", facecolor="#ffffff", edgecolor="none", alpha=0.90))
-
-    # دوائر المحاور العلوية (Top CAD Bubbles)
-    for idx, x in enumerate(xs):
-        bub = patches.Circle((x, y_bub_top), radius=cad_bubble_r, facecolor="#ffffff", edgecolor=_CLR_AXIS_Y, lw=1.6, zorder=6)
-        ax.add_patch(bub)
-        ax.text(x, y_bub_top, f"Y{idx+1}", color=_CLR_AXIS_Y, fontsize=fs_bubble, fontweight="bold", ha="center", va="center", zorder=7)
-
-    # 3. الأبعاد باليسار (Left Chains) — المحاور الأفقية X1, X2, X3...
-    ax.plot([x_dim_left_bay, x_dim_left_bay], [ys[0], ys[-1]], color="#0f172a", lw=1.1, zorder=3)
-    for y in ys:
-        _draw_cad_tick(x_dim_left_bay, y)
-    for j in range(len(ys) - 1):
-        y1, y2 = ys[j], ys[j + 1]
-        sp = abs(y2 - y1)
-        ax.text(x_dim_left_bay - dt_tick * 1.2, (y1 + y2) / 2.0, f"{sp:.2f}m", ha="center", va="center", rotation=90,
-                fontsize=fs_dim, fontweight="bold", color="#0f172a", zorder=5,
-                bbox=dict(boxstyle="square,pad=0.15", facecolor="#ffffff", edgecolor="none", alpha=0.90))
-
-    # خط البعد الكلي الرأسي باليسار (Total Ly)
-    ax.plot([x_dim_left_tot, x_dim_left_tot], [ys[0], ys[-1]], color="#1e3a8a", lw=1.2, zorder=3)
-    _draw_cad_tick(x_dim_left_tot, ys[0])
-    _draw_cad_tick(x_dim_left_tot, ys[-1])
-    ax.text(x_dim_left_tot - dt_tick * 1.2, (ys[0] + ys[-1]) / 2.0, f"Total Ly = {span_y:.2f}m", ha="center", va="center", rotation=90,
-            fontsize=fs_dim, fontweight="bold", color="#1e3a8a", zorder=5,
-            bbox=dict(boxstyle="square,pad=0.15", facecolor="#ffffff", edgecolor="none", alpha=0.90))
-
-    # دوائر المحاور باليسار (Left CAD Bubbles)
-    for idx, y in enumerate(ys):
-        bub = patches.Circle((x_bub_left, y), radius=cad_bubble_r, facecolor="#ffffff", edgecolor=_CLR_AXIS_X, lw=1.6, zorder=6)
-        ax.add_patch(bub)
-        ax.text(x_bub_left, y, f"X{idx+1}", color=_CLR_AXIS_X, fontsize=fs_bubble, fontweight="bold", ha="center", va="center", zorder=7)
-
-    # 4. الأبعاد باليمين (Right Chains) — المحاور الأفقية X1, X2, X3...
-    ax.plot([x_dim_right_bay, x_dim_right_bay], [ys[0], ys[-1]], color="#0f172a", lw=1.1, zorder=3)
-    for y in ys:
-        _draw_cad_tick(x_dim_right_bay, y)
-    for j in range(len(ys) - 1):
-        y1, y2 = ys[j], ys[j + 1]
-        sp = abs(y2 - y1)
-        ax.text(x_dim_right_bay + dt_tick * 1.2, (y1 + y2) / 2.0, f"{sp:.2f}m", ha="center", va="center", rotation=90,
-                fontsize=fs_dim, fontweight="bold", color="#0f172a", zorder=5,
-                bbox=dict(boxstyle="square,pad=0.15", facecolor="#ffffff", edgecolor="none", alpha=0.90))
-
-    # خط البعد الكلي الرأسي باليمين (Total Ly)
-    ax.plot([x_dim_right_tot, x_dim_right_tot], [ys[0], ys[-1]], color="#1e3a8a", lw=1.2, zorder=3)
-    _draw_cad_tick(x_dim_right_tot, ys[0])
-    _draw_cad_tick(x_dim_right_tot, ys[-1])
-    ax.text(x_dim_right_tot + dt_tick * 1.2, (ys[0] + ys[-1]) / 2.0, f"Total Ly = {span_y:.2f}m", ha="center", va="center", rotation=90,
-            fontsize=fs_dim, fontweight="bold", color="#1e3a8a", zorder=5,
-            bbox=dict(boxstyle="square,pad=0.15", facecolor="#ffffff", edgecolor="none", alpha=0.90))
-
-    # دوائر المحاور باليمين (Right CAD Bubbles)
-    for idx, y in enumerate(ys):
-        bub = patches.Circle((x_bub_right, y), radius=cad_bubble_r, facecolor="#ffffff", edgecolor=_CLR_AXIS_X, lw=1.6, zorder=6)
-        ax.add_patch(bub)
-        ax.text(x_bub_right, y, f"X{idx+1}", color=_CLR_AXIS_X, fontsize=fs_bubble, fontweight="bold", ha="center", va="center", zorder=7)
-
-    # إخفاء تدرجات المحاور الإحداثية لتجنب التشويش مع خطوط الأبعاد
-    ax.set_xticks([])
-    ax.set_yticks([])
-    for spine in ax.spines.values():
-        spine.set_color("#e2e8f0")
-        spine.set_linewidth(1.0)
-
-    from matplotlib.patches import Patch
-    from matplotlib.lines import Line2D
-    from matplotlib.offsetbox import TextArea, HPacker, AnnotationBbox
-
-    leg = []
-    # تخصيص باتشات الألوان لجميع الارتفاعات الموجودة بالمشروع
-    for h in sorted_heights:
-        c = color_map.get(h, _WALL_HEIGHT_COLORS[0])
-        leg.append(Patch(facecolor=c, edgecolor="#1e293b", lw=1.2, label=f"حائط ع={h:.2f}م"))
-
-    leg.extend([
-        Patch(facecolor=_CLR_WIN, alpha=0.85, label="شباك (W#)"),
-        Patch(facecolor=_CLR_DOOR, alpha=0.90, label="باب (D#)"),
-        Patch(facecolor=_CLR_COL, alpha=0.90, label="عمود (C#)"),
-        Patch(facecolor="#f0f9ff", edgecolor="#0284c7", lw=1.5, label="مساحة (A#)"),
-        Patch(facecolor="none", edgecolor="#EC4899", hatch="/", lw=1.5, label="وجه محارة"),
-        Line2D([0], [0], color="#94a3b8", ls=":", lw=round(1.5 * 1.8, 1), label="محذوف"),
-        Line2D([0], [0], color="#0f172a", lw=round(1.2 * 1.8, 1), marker="|", markersize=round(7 * 1.8, 1), label="خط بعد"),
-    ])
-    ncol_leg = min(len(leg), 6)
-    l = ax.legend(
-        handles=leg,
-        loc="lower center",
-        bbox_to_anchor=(0.5, 1.01),
-        ncol=ncol_leg,
-        fontsize=round(fs_leg * 0.80 * 1.8, 1),
-        frameon=True,
-        framealpha=0.96,
-        edgecolor="#cbd5e1",
-        facecolor="#ffffff",
-        borderaxespad=0.15,
-        columnspacing=1.0,
-        handletextpad=0.4,
-        handlelength=1.4,
-        handleheight=0.9,
+    # البعد الكلي الأفقي (Total Lx)
+    y_dim_tot = y_dim_lx - 0.85
+    ax.annotate(
+        "", xy=(x_max, y_dim_tot), xytext=(x_min, y_dim_tot),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=1.8, shrinkA=0, shrinkB=0), zorder=4
+    )
+    ax.plot([x_min, x_min], [y_dim_tot - 0.22, y_dim_tot + 0.22], color="#1e3a8a", lw=1.6, zorder=4)
+    ax.plot([x_max, x_max], [y_dim_tot - 0.22, y_dim_tot + 0.22], color="#1e3a8a", lw=1.6, zorder=4)
+    ax.text(
+        (x_min + x_max) / 2.0, y_dim_tot - 0.30, f"Total Lx = {span_x:.2f} m",
+        color="#1e3a8a", fontsize=12.0, fontweight="bold", ha="center", va="top", zorder=5
     )
 
-    # حساب الارتفاع الفعلي لجدول المصطلحات (Legend) بالنقاط لمنع أي تداخل
-    fig.canvas.draw()
-    renderer = fig.canvas.get_renderer()
-    lb = l.get_window_extent(renderer)
-    dpi = fig.dpi
-    axes_top_display = ax.transAxes.transform((0, 1.0))[1]
-    leg_top_pts = max(32.0, (lb.y1 - axes_top_display) * 72.0 / dpi)
+    # أبعاد البحور اليمنى (Y-Spans along Right)
+    x_dim_ly = x_max + dim_offset_right
+    for j in range(len(ys) - 1):
+        y1, y2 = ys[j], ys[j + 1]
+        sp = abs(y2 - y1)
+        mid_y = (y1 + y2) / 2.0
+        ax.annotate(
+            "", xy=(x_dim_ly, y2), xytext=(x_dim_ly, y1),
+            arrowprops=dict(arrowstyle="<->", color="#0f172a", lw=1.6, shrinkA=0, shrinkB=0), zorder=4
+        )
+        ax.plot([x_dim_ly - 0.2, x_dim_ly + 0.2], [y1, y1], color="#0f172a", lw=1.3, zorder=4)
+        ax.plot([x_dim_ly - 0.2, x_dim_ly + 0.2], [y2, y2], color="#0f172a", lw=1.3, zorder=4)
+        ax.text(
+            x_dim_ly + 0.25, mid_y, f"{sp:.2f} m",
+            color="#0f172a", fontsize=fs_dim, fontweight="bold", ha="left", va="center", zorder=5
+        )
 
-    # ── كتابة دليل ألوان الارتفاعات أعلى جدول المصطلحات بمسافة نقاط ثابتة مدروسة ──
-    badge_y_pts = leg_top_pts + 20.0
-    badge_boxes = [TextArea("دليل ألوان ارتفاعات الحوائط: ", textprops=dict(fontsize=round(fs_leg * 0.80 * 1.8, 1), fontweight="bold", color="#0f172a"))]
-    for h in sorted_heights:
-        c = color_map.get(h, _WALL_HEIGHT_COLORS[0])
-        t_box = TextArea(f"  ارتفاع {h:.2f}م  ", textprops=dict(
-            fontsize=round(fs_leg * 0.76 * 1.8, 1),
-            fontweight="bold",
-            color="#ffffff",
-            bbox=dict(boxstyle="round,pad=0.25", facecolor=c, edgecolor="#1e293b", lw=1.0)
-        ))
-        badge_boxes.append(t_box)
-    packer = HPacker(children=badge_boxes, align="center", pad=0, sep=8)
-    ann = AnnotationBbox(packer, (0.5, 1.0), xybox=(0, badge_y_pts), xycoords="axes fraction", boxcoords="offset points", frameon=False, box_alignment=(0.5, 0.5))
-    ax.add_artist(ann)
+    # البعد الكلي الرأسي (Total Ly)
+    x_dim_tot = x_dim_ly + 1.15
+    ax.annotate(
+        "", xy=(x_dim_tot, y_max), xytext=(x_dim_tot, y_min),
+        arrowprops=dict(arrowstyle="<->", color="#1e3a8a", lw=1.8, shrinkA=0, shrinkB=0), zorder=4
+    )
+    ax.plot([x_dim_tot - 0.22, x_dim_tot + 0.22], [y_min, y_min], color="#1e3a8a", lw=1.6, zorder=4)
+    ax.plot([x_dim_tot - 0.22, x_dim_tot + 0.22], [y_max, y_max], color="#1e3a8a", lw=1.6, zorder=4)
+    ax.text(
+        x_dim_tot + 0.30, (y_min + y_max) / 2.0, f"Total Ly = {span_y:.2f} m",
+        color="#1e3a8a", fontsize=12.0, fontweight="bold", ha="left", va="center", rotation=270, zorder=5
+    )
 
-    # حساب الموضع الفعلي لشريط الأدلة لتحديد إزاحة العنوان (pad_title) فوقه تماماً بمسافة مريحة
-    fig.canvas.draw()
-    ab = ann.get_window_extent(renderer)
-    badge_top_pts = max(badge_y_pts + 14.0, (ab.y1 - axes_top_display) * 72.0 / dpi)
+    # الحدود القصوى والتناسب — تخصيص 100% من اللوحة للرسم الهندسي (نفس Module 1)
+    ax.set_xlim(x_lim_min, x_lim_max)
+    ax.set_ylim(y_lim_min, y_lim_max)
+    ax.set_aspect("equal", adjustable="box")
+    ax.axis("off")
 
-    pad_title = badge_top_pts + 24.0
-    ax.set_title("Floor Plan — Module 15: Brick & Plastering Survey", fontsize=fs_title, fontweight="bold", pad=pad_title)
-
-    plt.tight_layout()
-    pos = ax.get_position()
-    xlim = ax.get_xlim()
-    ylim = ax.get_ylim()
-    st.session_state["m15_plan_bbox_info"] = {
-        "x0": float(pos.x0),
-        "y0": float(pos.y0),
-        "x1": float(pos.x1),
-        "y1": float(pos.y1),
-        "xlim": [float(xlim[0]), float(xlim[1])],
-        "ylim": [float(ylim[0]), float(ylim[1])],
-        "xs": [float(x) for x in xs],
-        "ys": [float(y) for y in ys]
-    }
+    fig.tight_layout(pad=0.08)
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=150)
+    fig.savefig(buf, format="png", dpi=120)
+    try:
+        pos = ax.get_position()
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        st.session_state["m15_plan_bbox_info"] = {
+            "x0": float(pos.x0),
+            "y0": float(pos.y0),
+            "x1": float(pos.x1),
+            "y1": float(pos.y1),
+            "xlim": [float(xlim[0]), float(xlim[1])],
+            "ylim": [float(ylim[0]), float(ylim[1])],
+            "xs": [float(x) for x in xs],
+            "ys": [float(y) for y in ys]
+        }
+    except Exception:
+        pass
     plt.close(fig)
     buf.seek(0)
     try:
@@ -3532,10 +3446,8 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     ys = st.session_state.get("m15_y_axes", [])
     span_x = max(xs) - min(xs) if xs else 1.0
     span_y = max(ys) - min(ys) if ys else 1.0
-    fig_w = min(18, max(10, span_x * 1.6 + 2.5))
-    fig_h = min(15, max(8, span_y * 1.6 + 2.5))
-    ratio = fig_h / fig_w
-    viewer_h = int(max(540, min(820, 740 * ratio)))
+    ratio = (span_y + 3.0) / max(span_x + 3.0, 1.0)
+    viewer_h = int(max(520, min(780, 680 * ratio)))
 
     cm = _get_col_name_map()
     wm = _get_wall_name_map()
@@ -3859,13 +3771,15 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
   }}
 
   #plan-img {{
-    max-width: 98%;
-    max-height: 98%;
+    max-width: 99%;
+    max-height: 99%;
     object-fit: contain;
     display: block;
     user-select: none;
     -webkit-user-drag: none;
     pointer-events: none;
+    border-radius: 6px;
+    background: #ffffff;
     box-shadow: 0 2px 10px rgba(0,0,0,0.06);
   }}
 </style>
