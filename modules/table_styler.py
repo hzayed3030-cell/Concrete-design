@@ -131,7 +131,9 @@ def _is_total_row(row_vals: list) -> bool:
         return False
     first_cell = str(row_vals[0]).strip()
     keywords = ["الإجمالي", "Grand Total", "Total", "TOTAL", "المجموع", "★", "📌 الإجمالي", "✅ الإجمالي", "🔷 إجمالي"]
-    return any(k in first_cell for k in keywords)
+    if any(k in first_cell for k in keywords):
+        return True
+    return any(any(k in str(cell) for k in keywords) for cell in row_vals)
 
 
 def get_styled_table_html(
@@ -217,7 +219,7 @@ def get_styled_table_html(
             h_str = str(h).lower()
             if i == 0 and not any(k in h_str for k in ["#", "م", "ø", "dia", "id", "grid"]):
                 alignments.append("right")
-            elif any(k in h_str for k in ["item", "بند", "وصف", "desc", "parameter", "name", "location", "application", "note", "ملاحظ"]):
+            elif any(k in h_str for k in ["item", "بند", "وصف", "desc", "parameter", "name", "location", "application", "note", "ملاحظ", "تفصيل", "محدد", "details"]):
                 alignments.append("right")
             else:
                 alignments.append("center")
@@ -289,14 +291,15 @@ def get_styled_table_html(
                 )
             elif is_tot:
                 # Highlighted total row cell
-                text_color = "#fbbf24" if c_idx == 0 else ("#38bdf8" if _is_numeric_or_measurement(val_str) else "#ffffff")
+                is_label = (c_idx == 0 and not _is_numeric_or_measurement(val_str)) or any(k in val_str for k in ["الإجمالي", "Grand Total", "Total", "TOTAL", "المجموع"])
+                text_color = "#fbbf24" if is_label else ("#38bdf8" if _is_numeric_or_measurement(val_str) else "#ffffff")
                 dir_attr = ' dir="rtl"' if has_ar else (' dir="ltr"' if _is_numeric_or_measurement(val_str) else '')
                 tds.append(
                     f'<td style="padding: {pad_v + 2}px {pad_h}px !important; font-size: {fs_num:.1f}px !important; '
                     f'font-weight: 900 !important; color: {text_color} !important; text-align: {align} !important; vertical-align: middle !important; line-height: 1.35 !important; white-space: normal !important; word-wrap: break-word !important;"{dir_attr}>'
                     f'{val_html}</td>'
                 )
-            elif c_idx == 0 and align == "right":
+            elif (c_idx == 0 or any(k in str(hdr_list[c_idx]).lower() for k in ["item", "بند", "وصف"])) and align == "right" and not any(k in str(hdr_list[c_idx]).lower() for k in ["تفصيل", "محدد", "details"]):
                 # Primary text / parameter column
                 dir_attr = ' dir="rtl"' if has_ar else ''
                 tds.append(
@@ -324,6 +327,8 @@ def get_styled_table_html(
                     text_color = "#ffffff"
                 elif any(k in h_name for k in ["allow", "مسموح", "ref", "مرجع"]):
                     text_color = "#fbbf24"
+                elif any(k in h_name for k in ["item", "بند", "وصف"]):
+                    text_color = "#ffffff"
                 else:
                     text_color = "#cbd5e1"
                 dir_attr = ' dir="rtl"' if has_ar else ''
