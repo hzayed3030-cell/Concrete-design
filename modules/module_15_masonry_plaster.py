@@ -160,6 +160,24 @@ def _init_state():
         st.session_state["m15_add_door_mode"] = False
     if "m15_named_spaces" not in st.session_state:
         st.session_state["m15_named_spaces"] = []
+    if "m15_bath_kitchen_spaces" not in st.session_state:
+        m15_data = st.session_state.get("module_15_data")
+        if isinstance(m15_data, dict) and "bath_kitchen_spaces" in m15_data:
+            st.session_state["m15_bath_kitchen_spaces"] = list(m15_data["bath_kitchen_spaces"])
+        else:
+            st.session_state["m15_bath_kitchen_spaces"] = []
+    if "m15_active_bath_kitchen" not in st.session_state:
+        st.session_state["m15_active_bath_kitchen"] = None
+    if "m15_parapet_h_cm" not in st.session_state:
+        st.session_state["m15_parapet_h_cm"] = 140.0
+    if "m15_parapet_wall_thick" not in st.session_state:
+        st.session_state["m15_parapet_wall_thick"] = "حائط نصف طوبة"
+    if "m15_shafts_area_m2" not in st.session_state:
+        m15_data = st.session_state.get("module_15_data")
+        if isinstance(m15_data, dict) and "shafts_area_m2" in m15_data:
+            st.session_state["m15_shafts_area_m2"] = float(m15_data["shafts_area_m2"])
+        else:
+            st.session_state["m15_shafts_area_m2"] = 0.0
     if "m15_merged_wall_label_style" not in st.session_state:
         st.session_state["m15_merged_wall_label_style"] = "single"
     if "m15_new_wall_thick_choice" not in st.session_state:
@@ -2569,6 +2587,131 @@ def _draw_plan(with_dim=True):
     for y in ys:
         ax.plot([x_left_ext, x_right_ext], [y, y], color="#dc2626", linestyle="--", linewidth=1.2, alpha=0.8, zorder=1.5)
 
+    # ── رسم وتظليل أحياز الحمامات والمطابخ على المسقط الأفقي ──
+    plan_bk_spaces = list(st.session_state.get("m15_bath_kitchen_spaces", []))
+    cur_del_idx = int(st.session_state.get("m15_sel_del_bk_idx", 0))
+    del_target_idx = (cur_del_idx - 1) if (0 < cur_del_idx <= len(plan_bk_spaces)) else -1
+
+    # فحص الحيز النشط قيد الاختيار قبل الاعتماد
+    active_bk = st.session_state.get("m15_active_bath_kitchen")
+    cur_bk_sig = None
+    if active_bk:
+        cur_bk_sig = (
+            active_bk.get("x1_lbl"),
+            active_bk.get("x2_lbl"),
+            active_bk.get("y1_lbl"),
+            active_bk.get("y2_lbl"),
+            "حمام" if active_bk.get("type") == "bath" else "مطبخ",
+            active_bk.get("name", "").strip()
+        )
+    is_bk_cancelled = (st.session_state.get("m15_bk_cancelled_sig") == cur_bk_sig) if cur_bk_sig else False
+
+    is_active_already_saved = False
+    if active_bk and not is_bk_cancelled:
+        for sp in plan_bk_spaces:
+            if (sp.get("x1_lbl") == active_bk.get("x1_lbl") and
+                sp.get("x2_lbl") == active_bk.get("x2_lbl") and
+                sp.get("y1_lbl") == active_bk.get("y1_lbl") and
+                sp.get("y2_lbl") == active_bk.get("y2_lbl")):
+                is_active_already_saved = True
+                break
+
+    # 1. رسم الأحياز المعتمدة بنمط شطرنج، أو بلون باهت عند التحديد للحذف
+    for idx, bk_s in enumerate(plan_bk_spaces):
+        s_xmin = float(bk_s.get("xmin", 0.0))
+        s_ymin = float(bk_s.get("ymin", 0.0))
+        s_dx = float(bk_s.get("dx", 0.0))
+        s_dy = float(bk_s.get("dy", 0.0))
+        s_xmax = s_xmin + s_dx
+        s_ymax = s_ymin + s_dy
+        if s_dx > 0.01 and s_dy > 0.01:
+            is_shaft = (bk_s.get("type") in ["shaft", "void", "منور"] or "منور" in bk_s.get("name", ""))
+            is_kitchen = (bk_s.get("type") == "kitchen" and not is_shaft)
+            is_pending_del = (idx == del_target_idx)
+
+            if is_pending_del:
+                # عند التحديد للحذف: تظليل بلون باهت مع إطار أحمر متقطع وتهشير
+                del_rect = patches.Rectangle(
+                    (s_xmin, s_ymin), s_dx, s_dy,
+                    fill=True, facecolor="#fca5a5", alpha=0.35,
+                    edgecolor="#dc2626", linestyle="--", linewidth=2.2,
+                    hatch="//", zorder=1.85
+                )
+                ax.add_patch(del_rect)
+            elif is_shaft:
+                # منور: فراغ معماري مفرغ مع خطين متقاطعين diagonal على شكل X
+                ax.add_patch(
+                    patches.Rectangle(
+                        (s_xmin, s_ymin), s_dx, s_dy,
+                        fill=True, facecolor="#f8fafc", alpha=0.92,
+                        edgecolor="#334155", linestyle="-", linewidth=2.2, zorder=1.82
+                    )
+                )
+                ax.plot([s_xmin, s_xmax], [s_ymin, s_ymax], color="#475569", linestyle="-", linewidth=2.0, zorder=1.84)
+                ax.plot([s_xmin, s_xmax], [s_ymax, s_ymin], color="#475569", linestyle="-", linewidth=2.0, zorder=1.84)
+            else:
+                # عند الاعتماد: نمط شطرنج (أبيض في أزرق للحمامات، أبيض في أخضر للمطابخ)
+                tile_size = 0.40  # مقاس البلاطة النمطية 40 سم
+                nx_tiles = max(2, int(round(s_dx / tile_size)))
+                ny_tiles = max(2, int(round(s_dy / tile_size)))
+                grid = np.indices((ny_tiles, nx_tiles)).sum(axis=0) % 2
+                rgba = np.zeros((ny_tiles, nx_tiles, 4), dtype=float)
+                if not is_kitchen:
+                    # حمام: أبيض في أزرق سيراميك
+                    rgba[grid == 0] = [1.0, 1.0, 1.0, 0.92]        # White
+                    rgba[grid == 1] = [0.12, 0.45, 0.88, 0.88]     # Ceramic Blue
+                    border_color = "#1e40af"
+                else:
+                    # مطبخ: أبيض في أخضر سيراميك
+                    rgba[grid == 0] = [1.0, 1.0, 1.0, 0.92]        # White
+                    rgba[grid == 1] = [0.10, 0.60, 0.28, 0.88]     # Ceramic Green
+                    border_color = "#15803d"
+
+                ax.imshow(
+                    rgba,
+                    extent=[s_xmin, s_xmax, s_ymin, s_ymax],
+                    origin="lower",
+                    zorder=1.82,
+                    aspect="auto",
+                    interpolation="nearest"
+                )
+                ax.add_patch(
+                    patches.Rectangle(
+                        (s_xmin, s_ymin), s_dx, s_dy,
+                        fill=False, edgecolor=border_color, linewidth=2.2, zorder=1.85
+                    )
+                )
+
+    # 2. رسم الحيز النشط قبل الاعتماد بلون باهت بصورة مؤقتة
+    if active_bk and not is_bk_cancelled and not is_active_already_saved:
+        p_xmin = float(active_bk.get("xmin", 0.0))
+        p_ymin = float(active_bk.get("ymin", 0.0))
+        p_dx = float(active_bk.get("dx", 0.0))
+        p_dy = float(active_bk.get("dy", 0.0))
+        if p_dx > 0.01 and p_dy > 0.01:
+            p_is_shaft = (active_bk.get("type") in ["shaft", "void", "منور"] or "منور" in active_bk.get("name", ""))
+            p_is_k = (active_bk.get("type") == "kitchen" and not p_is_shaft)
+            if p_is_shaft:
+                p_fc = "#f1f5f9"
+                p_ec = "#64748b"
+            elif p_is_k:
+                p_fc = "#bbf7d0"
+                p_ec = "#16a34a"
+            else:
+                p_fc = "#bfdbfe"
+                p_ec = "#2563eb"
+            prev_rect = patches.Rectangle(
+                (p_xmin, p_ymin), p_dx, p_dy,
+                fill=True, facecolor=p_fc, alpha=0.32,
+                edgecolor=p_ec, linestyle=":", linewidth=2.0, zorder=1.82
+            )
+            ax.add_patch(prev_rect)
+            if p_is_shaft:
+                p_xmax = p_xmin + p_dx
+                p_ymax = p_ymin + p_dy
+                ax.plot([p_xmin, p_xmax], [p_ymin, p_ymax], color="#475569", linestyle="--", linewidth=1.8, zorder=1.84)
+                ax.plot([p_xmin, p_xmax], [p_ymax, p_ymin], color="#475569", linestyle="--", linewidth=1.8, zorder=1.84)
+
     active_walls_set = set(w for w in _get_all_walls() if not _is_wall_removed(w, removed_walls))
     plan_obstacles = []
     plan_door_labels = []
@@ -3133,6 +3276,86 @@ def _draw_plan(with_dim=True):
                     edgecolor="#0284c7",
                     lw=1.6,
                     alpha=0.94
+                )
+            )
+
+    # ── كتابة مسميات ومساحات الحمامات والمطابخ في منتصف الحيز بالمسقط ──
+    # 1. للأحياز المعتمدة والأحياز قيد الحذف
+    for idx, bk_s in enumerate(plan_bk_spaces):
+        s_xmin = float(bk_s.get("xmin", 0.0))
+        s_ymin = float(bk_s.get("ymin", 0.0))
+        s_dx = float(bk_s.get("dx", 0.0))
+        s_dy = float(bk_s.get("dy", 0.0))
+        if s_dx > 0.01 and s_dy > 0.01:
+            s_name = bk_s.get("name", "حمام")
+            s_area = float(bk_s.get("area_m2", s_dx * s_dy))
+            s_cx = s_xmin + s_dx / 2.0
+            s_cy = s_ymin + s_dy / 2.0
+            is_shaft = (bk_s.get("type") in ["shaft", "void", "منور"] or "منور" in bk_s.get("name", ""))
+            is_kitchen = (bk_s.get("type") == "kitchen" and not is_shaft)
+            is_pending_del = (idx == del_target_idx)
+
+            if is_pending_del:
+                # كتابة (قيد الحذف) بلون باهت تحذيري
+                txt_lbl = f"{s_name} (قيد الحذف)\n({s_area:.2f} م²)"
+                txt_fc = "#991b1b"
+                box_bg = "#fee2e2"
+                box_ec = "#dc2626"
+                box_lw = 1.8
+                box_alpha = 0.96
+            else:
+                txt_lbl = f"{s_name}\n({s_area:.2f} م²)"
+                if is_shaft:
+                    txt_fc = "#334155"
+                    box_bg = "#f8fafc"
+                    box_ec = "#64748b"
+                elif is_kitchen:
+                    txt_fc = "#14532d"
+                    box_bg = "#ffffff"
+                    box_ec = "#15803d"
+                else:
+                    txt_fc = "#1e3a8a"
+                    box_bg = "#ffffff"
+                    box_ec = "#1e40af"
+                box_lw = 1.6
+                box_alpha = 0.94
+
+            ax.text(
+                s_cx, s_cy, txt_lbl,
+                color=txt_fc, fontsize=fs_col * 0.95, fontweight="bold",
+                ha="center", va="center", zorder=7.6,
+                bbox=dict(
+                    boxstyle="round,pad=0.38",
+                    facecolor=box_bg,
+                    edgecolor=box_ec,
+                    lw=box_lw,
+                    alpha=box_alpha
+                )
+            )
+
+    # 2. للمعاينة المؤقتة قبل الاعتماد (كتابة الاسم بلون باهت)
+    if active_bk and not is_bk_cancelled and not is_active_already_saved:
+        p_xmin = float(active_bk.get("xmin", 0.0))
+        p_ymin = float(active_bk.get("ymin", 0.0))
+        p_dx = float(active_bk.get("dx", 0.0))
+        p_dy = float(active_bk.get("dy", 0.0))
+        if p_dx > 0.01 and p_dy > 0.01:
+            p_name = active_bk.get("name", "حمام")
+            p_area = float(active_bk.get("area_m2", p_dx * p_dy))
+            p_cx = p_xmin + p_dx / 2.0
+            p_cy = p_ymin + p_dy / 2.0
+            prev_txt = f"{p_name} (معاينة مؤقتة)\n({p_area:.2f} م²)"
+            ax.text(
+                p_cx, p_cy, prev_txt,
+                color="#475569", fontsize=fs_col * 0.90, fontweight="bold",
+                ha="center", va="center", zorder=7.6,
+                bbox=dict(
+                    boxstyle="round,pad=0.35",
+                    facecolor="#f8fafc",
+                    edgecolor="#94a3b8",
+                    linestyle=":",
+                    lw=1.2,
+                    alpha=0.88
                 )
             )
 
@@ -3782,11 +4005,48 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     background: #ffffff;
     box-shadow: 0 2px 10px rgba(0,0,0,0.06);
   }}
+
+  /* أيقونة ملء الشاشة في ركن المسقط الأفقي المصمم بدون عنوان */
+  .corner-fs-btn {{
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 1010;
+    width: 38px;
+    height: 38px;
+    background: rgba(15, 23, 42, 0.85);
+    backdrop-filter: blur(4px);
+    border: 1.5px solid rgba(255, 255, 255, 0.45);
+    border-radius: 8px;
+    color: #ffffff;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    transition: all 0.18s ease;
+  }}
+  .corner-fs-btn:hover {{
+    background: #2563eb;
+    border-color: #60a5fa;
+    transform: scale(1.08);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+  }}
+  .corner-fs-btn:active {{
+    transform: scale(0.96);
+  }}
 </style>
 </head>
 <body>
 
 <div id="viewport" class="{viewport_box_class}">
+  <!-- Corner Fullscreen Icon Button (أيقونة كامل الشاشة بدون عنوان) -->
+  <button class="corner-fs-btn" id="btn-fullscreen-corner" title="Fullscreen" aria-label="Fullscreen">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+    </svg>
+  </button>
+
   <!-- Floating CAD Toolbar -->
   <div class="cad-toolbar" style="{cad_toolbar_style}">
     <button class="tb-btn tb-btn-fp" id="btn-toggle-floating-plan" title="عرض / إخفاء المسقط المعماري الاسترشادي (Ctrl + Alt + F)">🖼️ المسقط الاسترشادي</button>
@@ -3929,16 +4189,27 @@ def _render_interactive_plan(b64_override=None, b64_clean=None, rem_ms=0, box_mo
     resetView();
   }});
 
-  document.getElementById('btn-fullscreen').addEventListener('click', function(e) {{
-    e.stopPropagation();
+  function toggleViewportFullscreen(e) {{
+    if (e) e.stopPropagation();
     if (!document.fullscreenElement) {{
       if (viewport.requestFullscreen) viewport.requestFullscreen();
       else if (viewport.webkitRequestFullscreen) viewport.webkitRequestFullscreen();
+      else if (viewport.msRequestFullscreen) viewport.msRequestFullscreen();
     }} else {{
       if (document.exitFullscreen) document.exitFullscreen();
       else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      else if (document.msExitFullscreen) document.msExitFullscreen();
     }}
-  }});
+  }}
+
+  const cornerFs = document.getElementById('btn-fullscreen-corner');
+  if (cornerFs) {{
+    cornerFs.addEventListener('click', toggleViewportFullscreen);
+  }}
+  const tbFs = document.getElementById('btn-fullscreen');
+  if (tbFs) {{
+    tbFs.addEventListener('click', toggleViewportFullscreen);
+  }}
 
   // ── Sync to Streamlit Bridge ──
   function syncToStreamlit(payload) {{
@@ -7725,6 +7996,247 @@ def _section_add_columns():
             st.rerun()
 
 
+def _get_total_wall_ceramic_m2(bldg_area=0.0):
+    """
+    حساب إجمالي مسطح سيراميك الحوائط للحمامات والمطابخ:
+    - فقط من قائمة الأحياز المعتمدة m15_bath_kitchen_spaces.
+    - إذا لم تكن هناك أحياز معتمدة، تكون الكمية 0.00 م².
+    """
+    spaces = st.session_state.get("m15_bath_kitchen_spaces", [])
+    if spaces:
+        return round(sum(float(s.get("ceramic_wall_m2", 0.0)) for s in spaces), 2)
+    return 0.0
+
+
+def _section_bathrooms_kitchens():
+    """
+    قسم تحديد الحمامات والمطابخ والمناور:
+    - اختيار حدود البلاطة عبر 4 قوائم منسدلة (محاور X من/إلى، ومحاور Y من/إلى).
+    - كتابة حمام أو مطبخ أو منور على المساحة في المسقط الأفقي المصمم.
+    - حصر مسطح سيراميك الحوائط للحمامات والمطابخ، وخصم مساحة المناور من محارة ودهانات السقف والأسطح والأرضيات.
+    """
+    xs = st.session_state.get("m15_x_axes", [])
+    ys = st.session_state.get("m15_y_axes", [])
+    if len(xs) < 2 or len(ys) < 2:
+        st.info("⚠️ يرجى ضبط محاور X و Y أولاً (محورين على الأقل لكل اتجاه) من قسم '1️⃣ شبكة المحاور'.")
+        return
+
+    x_labels = [f"X{j+1}" for j in range(len(ys))]
+    y_labels = [f"Y{i+1}" for i in range(len(xs))]
+
+    c_type, c_name = st.columns([1.2, 1.8])
+    with c_type:
+        space_type = st.selectbox(
+            "🏷️ نوع الحيز:",
+            options=["حمام", "مطبخ", "منور"],
+            index=0,
+            key="m15_bk_type"
+        )
+    with c_name:
+        default_name = "منور" if space_type == "منور" else ("حمام" if space_type == "حمام" else "مطبخ")
+        space_name = st.text_input(
+            "✏️ مسمى الحيز بالمسقط:",
+            value=default_name,
+            key="m15_bk_custom_name",
+            help="الاسم الذي سيظهر في منتصف الحيز على المسقط الأفقي المصمم"
+        )
+
+    st.markdown("<div style='font-weight:700; font-size:0.92rem; color:#60a5fa; margin: 8px 0 4px 0;' dir='rtl'>📍 اختيار المحاور المحيطة بالبلاطة:</div>", unsafe_allow_html=True)
+
+    col_x1, col_x2 = st.columns(2)
+    with col_x1:
+        sel_x1 = st.selectbox(
+            "محور X (من):",
+            options=x_labels,
+            index=0,
+            key="m15_bk_sel_x1",
+            help="محور X البداية (خط أفقي)"
+        )
+    with col_x2:
+        def_idx_x2 = min(1, len(x_labels) - 1)
+        sel_x2 = st.selectbox(
+            "محور X (إلى):",
+            options=x_labels,
+            index=def_idx_x2,
+            key="m15_bk_sel_x2",
+            help="محور X النهاية (خط أفقي)"
+        )
+
+    col_y1, col_y2 = st.columns(2)
+    with col_y1:
+        sel_y1 = st.selectbox(
+            "محور Y (من):",
+            options=y_labels,
+            index=0,
+            key="m15_bk_sel_y1",
+            help="محور Y البداية (خط رأسي)"
+        )
+    with col_y2:
+        def_idx_y2 = min(1, len(y_labels) - 1)
+        sel_y2 = st.selectbox(
+            "محور Y (إلى):",
+            options=y_labels,
+            index=def_idx_y2,
+            key="m15_bk_sel_y2",
+            help="محور Y النهاية (خط رأسي)"
+        )
+
+    idx_x1 = x_labels.index(sel_x1)
+    idx_x2 = x_labels.index(sel_x2)
+    idx_y1 = y_labels.index(sel_y1)
+    idx_y2 = y_labels.index(sel_y2)
+
+    y_a = ys[idx_x1]
+    y_b = ys[idx_x2]
+    ymin = min(y_a, y_b)
+    ymax = max(y_a, y_b)
+    dy = abs(ymax - ymin)
+
+    x_a = xs[idx_y1]
+    x_b = xs[idx_y2]
+    xmin = min(x_a, x_b)
+    xmax = max(x_a, x_b)
+    dx = abs(xmax - xmin)
+
+    if dx < 0.001 or dy < 0.001:
+        st.warning("⚠️ يرجى اختيار محورين مختلفين لتحديد أبعاد البلاطة (الطول والعرض يجب أن يكونا أكبر من 0).")
+        st.session_state["m15_active_bath_kitchen"] = None
+        return
+
+    area_m2 = round(dx * dy, 2)
+    perim_m = round(2.0 * (dx + dy), 2)
+    cur_dh = float(st.session_state.get("m15_default_wall_height", 3.0))
+    # مسطح سيراميك الحوائط بكامل الارتفاع بعد خصم فتحة باب نمطية (0.9 × 2.1 = 1.89 م²) للحمامات والمطابخ فقط (المناور = 0)
+    if space_type == "منور":
+        wall_cer_m2 = 0.0
+    else:
+        wall_cer_m2 = max(0.0, round(perim_m * cur_dh - 1.89, 2))
+
+    active_space = {
+        "name": space_name.strip() or default_name,
+        "type": "shaft" if space_type == "منور" else ("bath" if space_type == "حمام" else "kitchen"),
+        "x1_lbl": sel_x1,
+        "x2_lbl": sel_x2,
+        "y1_lbl": sel_y1,
+        "y2_lbl": sel_y2,
+        "xmin": float(xmin),
+        "xmax": float(xmax),
+        "ymin": float(ymin),
+        "ymax": float(ymax),
+        "dx": float(dx),
+        "dy": float(dy),
+        "area_m2": float(area_m2),
+        "perim_m": float(perim_m),
+        "ceramic_wall_m2": float(wall_cer_m2),
+    }
+
+    cur_sig = (sel_x1, sel_x2, sel_y1, sel_y2, space_type, space_name.strip())
+    is_cancelled = (st.session_state.get("m15_bk_cancelled_sig") == cur_sig)
+    if is_cancelled:
+        st.session_state["m15_active_bath_kitchen"] = None
+        st.caption("⚠️ تم إلغاء تحديد هذا الحيز (اضغط على «إعتماد الحيز» لتفعيله أو اختر محاور أخرى).")
+    else:
+        st.session_state["m15_active_bath_kitchen"] = active_space
+
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        if st.button("إعتماد الحيز", key="m15_btn_add_bk", type="primary", use_container_width=True):
+            if "m15_bath_kitchen_spaces" not in st.session_state:
+                st.session_state["m15_bath_kitchen_spaces"] = []
+            exists = any(
+                s["x1_lbl"] == sel_x1 and s["x2_lbl"] == sel_x2 and s["y1_lbl"] == sel_y1 and s["y2_lbl"] == sel_y2
+                for s in st.session_state["m15_bath_kitchen_spaces"]
+            )
+            if not exists:
+                st.session_state["m15_bath_kitchen_spaces"].append(dict(active_space))
+                st.session_state["m15_bk_cancelled_sig"] = None
+                st.session_state["m15_wall_ceramic_m2"] = _get_total_wall_ceramic_m2()
+                m15_data = st.session_state.get("module_15_data")
+                if isinstance(m15_data, dict):
+                    m15_data["bath_kitchen_spaces"] = st.session_state["m15_bath_kitchen_spaces"]
+                save_settings()
+                st.success(f"✅ تم إعتماد {active_space['name']} بنجاح!")
+                st.rerun()
+            else:
+                st.info("ℹ️ هذا الحيز مسجل ومضاف بالفعل.")
+
+    with btn_col2:
+        if st.button("الغاء الحيز", key="m15_btn_cancel_bk", use_container_width=True):
+            st.session_state["m15_bk_cancelled_sig"] = cur_sig
+            st.session_state["m15_active_bath_kitchen"] = None
+            st.session_state["m15_wall_ceramic_m2"] = _get_total_wall_ceramic_m2()
+            st.info("ℹ️ تم إلغاء الحيز الحالي.")
+            st.rerun()
+
+    saved_spaces = st.session_state.get("m15_bath_kitchen_spaces", [])
+    if saved_spaces:
+        st.markdown("<hr style='margin:12px 0; border:0; border-top:1.5px dashed #475569;'>", unsafe_allow_html=True)
+        del_options_idx = [0] + list(range(1, len(saved_spaces) + 1))
+        def _fmt_del_space(i):
+            if i == 0:
+                return "-- اختر حيز حمام أو مطبخ للحذف --"
+            sp = saved_spaces[i - 1]
+            icon = "🍽️" if sp.get("type") == "kitchen" else "🛁"
+            return f"{icon} {sp['name']} ({sp['x1_lbl']}-{sp['x2_lbl']} / {sp['y1_lbl']}-{sp['y2_lbl']}) — مساحة {sp['area_m2']:.2f}م²"
+
+        cur_del_idx = int(st.session_state.get("m15_sel_del_bk_idx", 0))
+        if cur_del_idx >= len(del_options_idx):
+            cur_del_idx = 0
+            st.session_state["m15_sel_del_bk_idx"] = 0
+
+        sel_del_idx = st.selectbox(
+            "حذف حيز حمام او مطبخ",
+            options=del_options_idx,
+            index=cur_del_idx,
+            format_func=_fmt_del_space,
+            key="m15_sel_del_bk_idx",
+            help="اختر الحيز المراد حذفه من القائمة المنسدلة، ثم اضغط على زر تاكيد الحذف النهائي."
+        )
+
+        if sel_del_idx > 0 and sel_del_idx <= len(saved_spaces):
+            chosen_del = saved_spaces[sel_del_idx - 1]
+            c_del1, c_del2 = st.columns([1.5, 1.0])
+            with c_del1:
+                if st.button("🗑️ تاكيد الحذف النهائي", key="m15_btn_confirm_del_bk", type="primary", use_container_width=True):
+                    del_name = chosen_del['name']
+                    st.session_state["m15_bath_kitchen_spaces"].pop(sel_del_idx - 1)
+                    st.session_state["m15_sel_del_bk_idx"] = 0
+                    st.session_state["m15_wall_ceramic_m2"] = _get_total_wall_ceramic_m2()
+                    m15_data = st.session_state.get("module_15_data")
+                    if isinstance(m15_data, dict):
+                        m15_data["bath_kitchen_spaces"] = st.session_state["m15_bath_kitchen_spaces"]
+                    save_settings()
+                    st.success(f"✅ تم حذف {del_name} بنجاح.")
+                    st.rerun()
+            with c_del2:
+                if st.button("✕ إلغاء التحديد", key="m15_btn_cancel_del_bk", use_container_width=True):
+                    st.session_state["m15_sel_del_bk_idx"] = 0
+                    st.rerun()
+
+        st.markdown("<div style='margin-top:12px;'></div>", unsafe_allow_html=True)
+        if st.button("🗑️ حذف جميع الأحياز المعتمدة", key="m15_clear_all_bk", use_container_width=True):
+            st.session_state["m15_bath_kitchen_spaces"] = []
+            st.session_state["m15_sel_del_bk_idx"] = 0
+            st.session_state["m15_active_bath_kitchen"] = None
+            st.session_state["m15_wall_ceramic_m2"] = _get_total_wall_ceramic_m2()
+            m15_data = st.session_state.get("module_15_data")
+            if isinstance(m15_data, dict):
+                m15_data["bath_kitchen_spaces"] = []
+            save_settings()
+            st.success("✅ تم مسح كافة الأحياز المعتمدة.")
+            st.rerun()
+    else:
+        st.markdown("<hr style='margin:12px 0; border:0; border-top:1px dashed #475569;'>", unsafe_allow_html=True)
+        st.selectbox(
+            "حذف حيز حمام او مطبخ",
+            options=["-- لا توجد أحياز معتمدة حالياً للحذف --"],
+            index=0,
+            disabled=True,
+            key="m15_sel_del_bk_empty",
+            help="ستظهر الأحياز هنا بعد إعتمادها لتتمكن من حذفها"
+        )
+
+
 def _check_col_orientation_conflict(si, sj, dir_code, norm_sx, norm_sy):
     """
     فحص التحقق من عدم تعارض ضرب العمود مع أي شباك أو باب قائم.
@@ -9989,11 +10501,12 @@ def _section_plaster_walls():
 
 def _section_plaster_boq():
     """
-    قسم منفصل مطوي: جدول الحصر وخامات البياض (طبقاً للكود المصري ECP):
+    قسم منفصل مطوي: جدول الحصر وخامات البياض والتشطيبات التكميلية (طبقاً للكود المصري ECP):
+    - جدول حصر تفصيلي شامل لبنود المحارة والتشطيبات (السقف، الدهانات الداخلية، الواجهات، الدهانات الخارجية، السيراميك).
     - جدول تفصيلي لكل حائط والأوجه المحددة ومساحات الخصم وصافي المسطح والأسمنت والرمل.
     - خيار تحديد أسلوب خصم الفتحات (الكود المصري ECP مقابل الخصم الصافي الكامل).
-    - ملخص تنفيذي بارز لكميات المحارة الإجمالية.
-    - زر تحميل جدول الحصر بصيغة CSV.
+    - معامل زيادة للكميات التي تم حسابها مع جدول ملخص الكميات الإجمالية (طبقاً لفلسفة Module 1).
+    - تحميل شيت إكسيل متكامل بصفحتين (حصر تفصيلي + ملخص بالمعامل).
     """
     # ── أسلوب حصر وخصم الفتحات في أعمال البياض ──
     rule_opts = [
@@ -10022,76 +10535,715 @@ def _section_plaster_boq():
     p_res = _compute_plaster_survey(deduction_rule=rule_key)
     p_rows = p_res["rows"]
 
-    if not p_rows:
-        st.info("💡 لم يتم تفعيل المحارة لأي حائط بعد. قم باختيار أوجه المحارة من قسم '7️⃣ تحديد حوائط المحارة' لتظهر النتائج والكميات هنا.")
+    # ── حساب مسطح المبنى وأبعاد المحيط الخارجي والواجهات ──
+    xs = st.session_state.get("m15_x_axes", [])
+    ys = st.session_state.get("m15_y_axes", [])
+    span_x = (max(xs) - min(xs)) if len(xs) >= 2 else 0.0
+    span_y = (max(ys) - min(ys)) if len(ys) >= 2 else 0.0
+    bldg_area = round(span_x * span_y, 2)
+    if bldg_area <= 0:
+        bldg_area = float(st.session_state.get("bldg_footprint_m2", st.session_state.get("slab_area_val", 100.0)))
+
+    perimeter = round(2.0 * (span_x + span_y), 2) if (span_x > 0 and span_y > 0) else round(4.0 * math.sqrt(max(1.0, bldg_area)), 2)
+    default_h = float(st.session_state.get("m15_default_wall_height", 3.0))
+
+    # حصر فتحات الواجهات الخارجية (المحيط الخارجي)
+    op_facade = 0.0
+    perim_walls = _detect_perimeter_walls()
+    for pwk in perim_walls:
+        for wi in _get_wall_windows(pwk):
+            if not wi.get("removed", False):
+                op_facade += float(wi.get("w_m", 1.0)) * float(wi.get("h_m", 1.2))
+        for di in _get_wall_doors(pwk):
+            if not di.get("removed", False):
+                op_facade += float(di.get("w_m", 0.9)) * float(di.get("h_m", 2.1))
+
+    facade_ded = 0.0
+    if rule_key == "ecp":
+        for pwk in perim_walls:
+            for wi in _get_wall_windows(pwk):
+                if not wi.get("removed", False):
+                    ar_w = float(wi.get("w_m", 1.0)) * float(wi.get("h_m", 1.2))
+                    if ar_w > 4.0:
+                        facade_ded += (ar_w - 4.0)
+            for di in _get_wall_doors(pwk):
+                if not di.get("removed", False):
+                    ar_d = float(di.get("w_m", 0.9)) * float(di.get("h_m", 2.1))
+                    if ar_d > 4.0:
+                        facade_ded += (ar_d - 4.0)
     else:
-        display_rows = []
-        for r in p_rows:
-            display_rows.append({
-                "الحائط": r["الحائط"],
-                "الوجه المحدد": r["الوجه المحدد"],
-                "عدد الأوجه": r["عدد الأوجه"],
-                "الطول (م)": r["الطول (م)"],
-                "الارتفاع (م)": r["الارتفاع (م)"],
-                "إجمالي المسطح (م²)": r["إجمالي مسطح المحارة (m^2)"],
-                "مساحة الفتحات (م²)": r["إجمالي مساحة الفتحات (m^2)"],
-                "الخصم المعتمد (م²)": r["الفتحات المخصومة المعتمدة (m^2)"],
-                "صافي مسطح المحارة (م²)": r["صافي مسطح المحارة النهائي (m^2)"],
-                "الرمل المطلوب (م³)": r["كمية الرمل المطلوبة (m^3)"],
-                "الأسمنت المطلوب": r["كمية الأسمنت المطلوبة"],
-            })
+        facade_ded = op_facade
 
-        tot_display = {
-            "الحائط": "✅ الإجمالي العام",
-            "الوجه المحدد": f"{sum(r['عدد الأوجه'] for r in p_rows)} وجه",
-            "عدد الأوجه": sum(r["عدد الأوجه"] for r in p_rows),
-            "الطول (م)": round(sum(r["الطول (م)"] for r in p_rows), 2),
-            "الارتفاع (م)": "—",
-            "إجمالي المسطح (م²)": round(p_res["tot_gross"], 2),
-            "مساحة الفتحات (م²)": round(p_res["tot_op_gross"], 2),
-            "الخصم المعتمد (م²)": round(p_res["tot_ded"], 2),
-            "صافي مسطح المحارة (م²)": round(p_res["tot_net"], 2),
-            "الرمل المطلوب (م³)": round(p_res["tot_sand"], 2),
-            "الأسمنت المطلوب": f"{p_res['tot_cement_tons']:.2f} طن ({p_res['tot_cement_bags']} شكارة)",
-        }
+    # ── مدخلات عرض الرصيف وارتفاع دروة المبنى وسمك المباني ومساحة المناور بجوار بعضها ──
+    saved_sidewalk_w = float(st.session_state.get("m15_sidewalk_w_m", st.session_state.get("cw_sidewalk_w_m", 1.00)))
+    saved_parapet_h_cm = float(st.session_state.get("m15_parapet_h_cm", 140.0))
+    saved_parapet_thick = st.session_state.get("m15_parapet_wall_thick", "حائط نصف طوبة")
 
-        df_p = pd.DataFrame(display_rows + [tot_display])
-        def _st_plaster(row):
-            if row["الحائط"] == "✅ الإجمالي العام":
-                return ["background-color:#1e3a8a;color:white;font-weight:bold"] * len(row)
-            return [""] * len(row)
+    # حساب مساحة المناور المفرغة التلقائية
+    auto_shaft_m2 = 0.0
+    bk_all_s = list(st.session_state.get("m15_bath_kitchen_spaces", []))
+    for s in bk_all_s:
+        if s.get("type") in ["shaft", "void", "منور"] or "منور" in s.get("name", ""):
+            auto_shaft_m2 += float(s.get("area_m2", 0.0))
+    saved_shaft_m2 = float(st.session_state.get("m15_shafts_area_m2", auto_shaft_m2))
 
-        st.dataframe(df_p.style.apply(_st_plaster, axis=1).format(lambda v: f"{v:.2f}" if isinstance(v, float) else v), use_container_width=True, hide_index=True)
-
-        cb_p = io.StringIO()
-        df_p.to_csv(cb_p, index=False, encoding="utf-8-sig")
-        st.download_button(
-            "⬇️ تحميل جدول حصر المحارة CSV",
-            data=cb_p.getvalue().encode("utf-8-sig"),
-            file_name="plaster_survey_ecp.csv",
-            mime="text/csv",
-            key="m15_dl_plaster_sec"
+    c_sw, c_parapet_h, c_parapet_thick, c_shafts = st.columns([1.0, 1.0, 1.2, 1.0])
+    with c_sw:
+        sidewalk_w_m = st.number_input(
+            "🚶 عرض الرصيف الخارجي [m]:",
+            min_value=0.0, max_value=20.0,
+            value=saved_sidewalk_w,
+            step=0.10, format="%.2f",
+            key="m15_input_sidewalk_w_m",
+            help="عرض الرصيف الخارجي المحيط بالمبنى لحساب مسطح الانترلوك وطول البردورات بنفس فلسفة Module 1."
         )
+        st.session_state["m15_sidewalk_w_m"] = sidewalk_w_m
 
-        rule_badge = "الكود المصري ECP (خصم الفتحات > 4م²)" if rule_key == "ecp" else "الحصر الصافي الكامل (خصم كافة الفتحات)"
-        st.markdown(f"""
-        <div style='background:linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border:1.5px solid #0284c7; border-radius:8px; padding:14px 18px; margin-top:12px;' dir='rtl'>
-            <div style='display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #334155; padding-bottom:8px; margin-bottom:10px;'>
-                <b style='color:#38bdf8; font-size:0.98rem;'>📊 ملخص كميات المحارة التنفيذية ({rule_badge}):</b>
-                <span style='background:#0284c7; color:#fff; font-size:0.75rem; font-weight:bold; padding:3px 10px; border-radius:12px;'>
-                    {p_res['active_walls_count']} حائط مشمول
-                </span>
+    with c_parapet_h:
+        parapet_h_cm = st.number_input(
+            "🧱 ارتفاع دروة المبني [cm]:",
+            min_value=0.0, max_value=500.0,
+            value=saved_parapet_h_cm,
+            step=5.0, format="%.1f",
+            key="m15_input_parapet_h_cm",
+            help="ارتفاع دروة سطح المبنى بالسنتيمتر لحساب مسطحات الدروة والواجهات (الافتراضي = 140 cm = 1.40 م)."
+        )
+        st.session_state["m15_parapet_h_cm"] = parapet_h_cm
+        parapet_h_m = round(parapet_h_cm / 100.0, 3)
+
+    with c_parapet_thick:
+        thick_opts = ["حائط نصف طوبة", "حائط طوبة كاملة"]
+        parapet_thick_idx = 0 if saved_parapet_thick not in thick_opts else thick_opts.index(saved_parapet_thick)
+        parapet_thick_choice = st.selectbox(
+            "🧱 سمك المباني (الدروة):",
+            options=thick_opts,
+            index=parapet_thick_idx,
+            key="m15_input_parapet_wall_thick",
+            help="سمك مباني دروة السطح طبقاً لمواصفات حائط نصف طوبة بالقسم 6 (الافتراضي: حائط نصف طوبة)."
+        )
+        st.session_state["m15_parapet_wall_thick"] = parapet_thick_choice
+
+    with c_shafts:
+        shafts_area_m2 = st.number_input(
+            "🕳️ مساحة حيز المناور [m²]:",
+            min_value=0.0, max_value=max(2000.0, float(bldg_area)),
+            value=saved_shaft_m2,
+            step=0.50, format="%.2f",
+            key="m15_input_shafts_area_m2",
+            help="إجمالي مساحة المناور المفرغة لخصمها من سيراميك الأرضيات طبقاً للمعادلة (مساحة المبنى - الحمامات - المطابخ - المناور)."
+        )
+        st.session_state["m15_shafts_area_m2"] = shafts_area_m2
+        m15_d = st.session_state.get("module_15_data")
+        if isinstance(m15_d, dict):
+            m15_d["shafts_area_m2"] = shafts_area_m2
+
+    # ── حساب أبعاد وارتفاعات الواجهات والدروة ──
+    total_facade_h = round(default_h + parapet_h_m, 2)
+    gross_facade = round(perimeter * total_facade_h, 2)
+    facade_plaster_net = max(0.0, round(gross_facade - facade_ded, 2))
+
+    # مساحة دروة المبنى
+    area_parapet_m2 = round(perimeter * parapet_h_m, 2)
+
+    # مواصفات الطوب من قسم 6
+    brick_type_v = st.session_state.get("m15_brick_type", "طوب طفلي مثقب")
+    brick_size_v = st.session_state.get("m15_brick_size", "25×12×6")
+    mortar_v = float(st.session_state.get("m15_mortar_thickness_cm", 1.0))
+    if brick_size_v == _CUSTOM_SIZE_LABEL:
+        bl = float(st.session_state.get("m15_brick_custom_l", 25.0))
+        bw = float(st.session_state.get("m15_brick_custom_w", 12.0))
+        bh = float(st.session_state.get("m15_brick_custom_h", 6.0))
+        size_display = f"{bl}×{bw}×{bh} سم"
+    else:
+        size_display = f"{brick_size_v} سم"
+        bl, bw, bh = _parse_brick_size(brick_size_v)
+    upm2 = (100.0 / (bl + mortar_v)) * (100.0 / (bh + mortar_v)) if (bl > 0 and bh > 0) else 55.0
+    approx_parapet_bricks = int(round(area_parapet_m2 * upm2)) if parapet_thick_choice == "حائط نصف طوبة" else int(round(area_parapet_m2 * upm2 * 2))
+
+    # رسالة بالسطور توضح مساحة المبنى، إجمالي ارتفاع المبنى، محيط المبنى، وارتفاع الدروة ومساحة المناور
+    st.markdown(
+        f"""
+        <div style="background: rgba(30, 41, 59, 0.7); border: 1.5px solid #334155; border-right: 5px solid #3b82f6; border-radius: 8px; padding: 8px 14px; margin: 10px 0 8px 0; line-height: 1.6;" dir="rtl">
+            <div style="font-weight: 800; font-size: 0.94rem; color: #60a5fa; margin-bottom: 4px;">
+                📐 البيانات الهندسية المعتمدة للمبنى والدروة:
             </div>
-            <div style='display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:10px; font-size:0.86rem; color:#cbd5e1;'>
-                <div>• إجمالي مسطح البياض: <b style='color:#93c5fd;'>{p_res['tot_gross']:.2f} م²</b></div>
-                <div>• إجمالي الفتحات: <b style='color:#fbbf24;'>{p_res['tot_op_gross']:.2f} م²</b></div>
-                <div>• الخصم المعتمد: <b style='color:#f87171;'>{p_res['tot_ded']:.2f} م²</b></div>
-                <div>• صافي مسطح البياض: <b style='color:#4ade80;'>{p_res['tot_net']:.2f} م²</b></div>
-                <div>• الرمل (5% هالك): <b style='color:#fde047;'>{p_res['tot_sand']:.2f} م³</b></div>
-                <div>• الأسمنت: <b style='color:#67e8f9;'>{p_res['tot_cement_tons']:.2f} طن</b> <span style='color:#94a3b8;'>({p_res['tot_cement_bags']} شكارة)</span></div>
+            <div style="color: #f1f5f9; font-size: 0.88rem; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;">
+                <span><b style="font-size: 1.25rem; color: #38bdf8; line-height: 1; vertical-align: middle;">•</b> <b>مسطح المبنى:</b> {bldg_area:.2f} م²</span>
+                <span style="color: #64748b;">│</span>
+                <span><b style="font-size: 1.25rem; color: #38bdf8; line-height: 1; vertical-align: middle;">•</b> <b>ارتفاع المبنى:</b> {default_h:.2f} م</span>
+                <span style="color: #64748b;">│</span>
+                <span><b style="font-size: 1.25rem; color: #38bdf8; line-height: 1; vertical-align: middle;">•</b> <b>ارتفاع الدروة:</b> {parapet_h_m:.2f} م ({parapet_h_cm:.0f} سم)</span>
+                <span style="color: #64748b;">│</span>
+                <span><b style="font-size: 1.25rem; color: #38bdf8; line-height: 1; vertical-align: middle;">•</b> <b>إجمالي ارتفاع الواجهات:</b> {total_facade_h:.2f} م</span>
+                <span style="color: #64748b;">│</span>
+                <span><b style="font-size: 1.25rem; color: #38bdf8; line-height: 1; vertical-align: middle;">•</b> <b>محيط المبنى الخارجي:</b> {perimeter:.2f} م.ط</span>
+                <span style="color: #64748b;">│</span>
+                <span><b style="font-size: 1.25rem; color: #38bdf8; line-height: 1; vertical-align: middle;">•</b> <b>مسطح دروة المبنى:</b> {area_parapet_m2:.2f} م² ({parapet_thick_choice})</span>
+                <span style="color: #64748b;">│</span>
+                <span><b style="font-size: 1.25rem; color: #38bdf8; line-height: 1; vertical-align: middle;">•</b> <b>مساحة حيز المناور:</b> {shafts_area_m2:.2f} م²</span>
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+        unsafe_allow_html=True
+    )
+
+    # تفصيل أحياز الحمامات والمطابخ والمناور المعتمدة وفصل كميات سيراميك الأرضيات والحوائط
+    bk_list = list(st.session_state.get("m15_bath_kitchen_spaces", []))
+    baths_list = [s for s in bk_list if s.get("type") == "bath" or ("مطبخ" not in s.get("name", "") and s.get("type") not in ["kitchen", "shaft", "void", "منور"] and "منور" not in s.get("name", ""))]
+    kitchens_list = [s for s in bk_list if s.get("type") == "kitchen" or ("مطبخ" in s.get("name", "") and s.get("type") not in ["shaft", "void", "منور"] and "منور" not in s.get("name", ""))]
+    shafts_list = [s for s in bk_list if s.get("type") in ["shaft", "void", "منور"] or "منور" in s.get("name", "")]
+
+    # مساحات أرضيات الحمامات والمطابخ والمناور
+    total_bath_floor_m2 = round(sum(float(s.get("area_m2", 0.0)) for s in baths_list), 2)
+    total_kitchen_floor_m2 = round(sum(float(s.get("area_m2", 0.0)) for s in kitchens_list), 2)
+    total_shafts_spaces_m2 = round(sum(float(s.get("area_m2", 0.0)) for s in shafts_list), 2)
+    eff_shaft_m2 = shafts_area_m2 if shafts_area_m2 > 0 else total_shafts_spaces_m2
+
+    # ── حصر بنود أعمال البياض والتشطيبات الهندسية المعتمدة (بعد خصم مساحة المنور) ──
+    # 1- كمية المحارة الداخلية بالسقف بالمتر المسطح (مسطح المبنى بعد خصم مساحة المنور)
+    qty_ceiling_plaster = max(0.0, round(bldg_area - eff_shaft_m2, 2))
+    # 2- كمية الدهانات الداخلية للسقف (مسطح المبنى بعد خصم مساحة المنور)
+    qty_ceiling_paint = max(0.0, round(bldg_area - eff_shaft_m2, 2))
+    # 3- كمية المحارة للحوائط بالمتر المسطح (صافي مسطح محارة الحوائط ECP)
+    qty_wall_plaster = round(p_res["tot_net"], 2)
+    # 4- كمية الدهانات الداخلية للحوائط بالمتر المسطح
+    qty_wall_paint = round(p_res["tot_net"], 2)
+    # 5- كمية المحارة الخارجية (الواجهات) (تشمل ارتفاع المبنى + ارتفاع الدروة)
+    qty_facade_plaster = facade_plaster_net
+    # 6- كمية الدهانات الخارجية (الواجهات) (تشمل ارتفاع المبنى + ارتفاع الدروة)
+    qty_facade_paint = facade_plaster_net
+
+    # 7- كمية سيراميك الأرضيات (Floor Ceramic Tiles) طبقاً للمعادلة:
+    # (مساحة المبني - مساحة حيز الحمامات - مساحة حيز المطابخ - مساحة حيز المناور)
+    qty_floor_ceramic = max(0.0, round(bldg_area - total_bath_floor_m2 - total_kitchen_floor_m2 - eff_shaft_m2, 2))
+    # 8- كمية سيراميك الحمامات (أرضيات)
+    qty_bath_floor_ceramic = total_bath_floor_m2
+    # 9- كمية سيراميك المطابخ (أرضيات)
+    qty_kitchen_floor_ceramic = total_kitchen_floor_m2
+
+    # سيراميك الحوائط للحمامات والمطابخ
+    wall_ceramic_bath_m2 = round(sum(float(s.get("ceramic_wall_m2", 0.0)) for s in baths_list), 2)
+    wall_ceramic_kitchen_m2 = round(sum(float(s.get("ceramic_wall_m2", 0.0)) for s in kitchens_list), 2)
+    wall_ceramic_val = round(wall_ceramic_bath_m2 + wall_ceramic_kitchen_m2, 2)
+
+    st.session_state["m15_wall_ceramic_m2"] = wall_ceramic_val
+    st.session_state["m15_wall_ceramic_bath_m2"] = wall_ceramic_bath_m2
+    st.session_state["m15_wall_ceramic_kitchen_m2"] = wall_ceramic_kitchen_m2
+    st.session_state["m15_floor_ceramic_m2"] = qty_floor_ceramic
+    st.session_state["m15_floor_ceramic_bath_m2"] = qty_bath_floor_ceramic
+    st.session_state["m15_floor_ceramic_kitchen_m2"] = qty_kitchen_floor_ceramic
+
+    # نصوص المحددات والتفاصيل لسيراميك الأرضيات والحوائط
+    floor_ceramic_details_str = f"مساحة المبنى ({bldg_area:.2f} م²) − حمامات ({total_bath_floor_m2:.2f} م²) − مطابخ ({total_kitchen_floor_m2:.2f} م²) − مناور ({eff_shaft_m2:.2f} م²) = {qty_floor_ceramic:.2f} م²"
+
+    if baths_list:
+        bath_floor_details_str = "حصر مسطح أرضيات الحمامات المعتمدة: " + " + ".join([
+            f"{s['name']} ({s['x1_lbl']}-{s['x2_lbl']}/{s['y1_lbl']}-{s['y2_lbl']}: {float(s.get('area_m2', 0.0)):.2f} م²)"
+            for s in baths_list
+        ])
+    else:
+        bath_floor_details_str = "لا توجد أحياز حمامات معتمدة بالمبنى (0.00 م²)"
+
+    if kitchens_list:
+        kitchen_floor_details_str = "حصر مسطح أرضيات المطابخ المعتمدة: " + " + ".join([
+            f"{s['name']} ({s['x1_lbl']}-{s['x2_lbl']}/{s['y1_lbl']}-{s['y2_lbl']}: {float(s.get('area_m2', 0.0)):.2f} م²)"
+            for s in kitchens_list
+        ])
+    else:
+        kitchen_floor_details_str = "لا توجد أحياز مطابخ معتمدة بالمبنى (0.00 م²)"
+
+    if baths_list:
+        bath_details_str = "حصر مسطح سيراميك الحوائط للحمامات: " + " + ".join([
+            f"{s['name']} ({s['x1_lbl']}-{s['x2_lbl']}/{s['y1_lbl']}-{s['y2_lbl']}: {s['ceramic_wall_m2']:.2f} م²)"
+            for s in baths_list
+        ])
+    else:
+        bath_details_str = "لا توجد أحياز حمامات معتمدة بالمبنى (0.00 م²)"
+
+    if kitchens_list:
+        kitchen_details_str = "حصر مسطح سيراميك الحوائط للمطابخ: " + " + ".join([
+            f"{s['name']} ({s['x1_lbl']}-{s['x2_lbl']}/{s['y1_lbl']}-{s['y2_lbl']}: {s['ceramic_wall_m2']:.2f} م²)"
+            for s in kitchens_list
+        ])
+    else:
+        kitchen_details_str = "لا توجد أحياز مطابخ معتمدة بالمبنى (0.00 م²)"
+
+    # ── حصر بنود أعمال الأرصفة والعزل والأسطح بنفس فلسفة Module 1 (بعد خصم مساحة المنور) ──
+    # انترلوك ارصفة: محيط المساحة الخارجية للمبنى × عرض الرصيف الخارجي
+    area_interlock_m2 = round(perimeter * sidewalk_w_m, 2)
+    # بردورة ارصفة: المحيط الخارجي لداير الانترلوك الخارجي = محيط المبنى + 8 × عرض الرصيف
+    len_curb_m = round(perimeter + 8.0 * sidewalk_w_m, 2) if sidewalk_w_m > 0 else 0.0
+    # بند العزل المائي للسطح (انسومات): مسطح المبنى بعد خصم مساحة المنور
+    qty_waterproof_roof = max(0.0, round(bldg_area - eff_shaft_m2, 2))
+    # عازل حراري: مسطح المبنى بعد خصم مساحة المنور
+    qty_thermal_ins = max(0.0, round(bldg_area - eff_shaft_m2, 2))
+    # بلاط اسطح: مسطح المبنى بعد خصم مساحة المنور
+    qty_roof_tiles = max(0.0, round(bldg_area - eff_shaft_m2, 2))
+
+    # حساب إجمالي مسطحات المحارة لكامل المبنى (حوائط + سقف + واجهات + محارة داخلية للدروة) وخامات المونة
+    tot_plaster_all_net = round(qty_wall_plaster + qty_ceiling_plaster + qty_facade_plaster + area_parapet_m2, 2)
+    total_sand_plaster = round((tot_plaster_all_net / 42.0) * 1.05, 2) if tot_plaster_all_net > 0 else 0.0
+    total_cement_plaster_kg = total_sand_plaster * 350.0
+    total_cement_plaster_tons = round(total_cement_plaster_kg / 1000.0, 2)
+    total_cement_plaster_bags = math.ceil(total_cement_plaster_kg / 50.0) if total_cement_plaster_kg > 0 else 0
+
+    st.markdown("<div style='margin-top: 14px;'></div>", unsafe_allow_html=True)
+
+    # ═════════════════════════════════════════════════════════════════════════
+    #  الجدول الأول: جدول حصر بنود أعمال البياض والتشطيبات التكميلية
+    # ═════════════════════════════════════════════════════════════════════════
+    st.markdown(
+        """
+        <div dir="rtl" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 1.5px solid #0284c7; border-right: 6px solid #0284c7; border-radius: 10px; padding: 10px 16px; margin: 12px 0; box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2);">
+            <div style="font-size: 1.05rem; font-weight: 800; color: #38bdf8;">
+                📋 الجدول الأول: حصر بنود أعمال البياض والتشطيبات التفصيلية للمبنى (Finishes & Plastering Works BOQ)
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    table_1_rows = [
+        {
+            "البند / بيان الأعمال (Work Item)": "1. كمية المحارة الداخلية بالسقف بالمتر المسطح (Internal Ceiling Plaster)",
+            "الكمية (Quantity)": f"{qty_ceiling_plaster:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"مسطح المبنى المعتمد بعد خصم المنور ({bldg_area:.2f} م² − {eff_shaft_m2:.2f} م² = {qty_ceiling_plaster:.2f} م²)" if eff_shaft_m2 > 0 else f"تساوي تماماً مسطح المبنى المعتمد (Footprint Area = {bldg_area:.2f} م²)",
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "2. كمية الدهانات الداخلية للسقف (Internal Ceiling Paints)",
+            "الكمية (Quantity)": f"{qty_ceiling_paint:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"مسطح المبنى المعتمد بعد خصم المنور ({bldg_area:.2f} م² − {eff_shaft_m2:.2f} م² = {qty_ceiling_paint:.2f} م²)" if eff_shaft_m2 > 0 else f"تساوي تماماً مسطح المبنى المعتمد (Footprint Area = {bldg_area:.2f} م²)",
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "3. كمية المحارة للحوائط بالمتر المسطح (Wall Plaster Net)",
+            "الكمية (Quantity)": f"{qty_wall_plaster:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"صافي مسطح محارة الحوائط طبقاً للكود المصري (إجمالي {p_res['tot_gross']:.2f} م² − خصم الفتحات {p_res['tot_ded']:.2f} م²)",
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "4. كمية الدهانات الداخلية للحوائط بالمتر المسطح (Internal Wall Paints)",
+            "الكمية (Quantity)": f"{qty_wall_paint:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"مساوية لصافي مسطح محارة الحوائط المعتمد ({qty_wall_plaster:.2f} م²)",
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "5. كمية المحارة الخارجية (الواجهات) (External Facade Plaster)",
+            "الكمية (Quantity)": f"{qty_facade_plaster:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"مسطح محيط الواجهات الصافي بعد خصم الفتحات بارتفاع المبنى + الدروة ({perimeter:.2f} م × ({default_h:.2f} م مبنى + {parapet_h_m:.2f} م دروة = {total_facade_h:.2f} م) − خصم {facade_ded:.2f} م² = {qty_facade_plaster:.2f} م²)",
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "6. كمية الدهانات الخارجية (الواجهات) (External Facade Paints)",
+            "الكمية (Quantity)": f"{qty_facade_paint:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"مسطح محيط الواجهات الخارجي بارتفاع المبنى + الدروة ({perimeter:.2f} م × ({default_h:.2f} م مبنى + {parapet_h_m:.2f} م دروة = {total_facade_h:.2f} م) − خصم {facade_ded:.2f} م² = {qty_facade_paint:.2f} م²)",
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "7. كمية سيراميك الأرضيات (Floor Ceramic Tiles)",
+            "الكمية (Quantity)": f"{qty_floor_ceramic:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": floor_ceramic_details_str,
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "8. كمية سيراميك الحمامات (Bathroom Floor Ceramic)",
+            "الكمية (Quantity)": f"{qty_bath_floor_ceramic:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": bath_floor_details_str,
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "9. كمية سيراميك المطابخ (Kitchen Floor Ceramic)",
+            "الكمية (Quantity)": f"{qty_kitchen_floor_ceramic:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": kitchen_floor_details_str,
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "10. كمية سيراميك الحوائط للحمامات (Bathroom Wall Ceramic)",
+            "الكمية (Quantity)": f"{wall_ceramic_bath_m2:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": bath_details_str,
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "11. كمية سيراميك الحوائط للمطابخ (Kitchen Wall Ceramic)",
+            "الكمية (Quantity)": f"{wall_ceramic_kitchen_m2:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": kitchen_details_str,
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "12. بند طوب للدروة (Parapet Masonry)",
+            "الكمية (Quantity)": f"{area_parapet_m2:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"محيط المبنى ({perimeter:.2f} م) × ارتفاع الدروة ({parapet_h_m:.2f} م) │ سمك المباني: {parapet_thick_choice} ({brick_type_v} مقاس {size_display} ≈ {approx_parapet_bricks} طوبة)",
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "13. بند محارة داخلية للدروة (Internal Parapet Plaster)",
+            "الكمية (Quantity)": f"{area_parapet_m2:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"محيط المبنى ({perimeter:.2f} م) × ارتفاع الدروة ({parapet_h_m:.2f} م) = {area_parapet_m2:.2f} م²",
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "14. بند دهانات داخلية للدروة (Internal Parapet Paint)",
+            "الكمية (Quantity)": f"{area_parapet_m2:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"محيط المبنى ({perimeter:.2f} م) × ارتفاع الدروة ({parapet_h_m:.2f} م) = {area_parapet_m2:.2f} م²",
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "15. انترلوك ارصفة (Sidewalk Interlock)",
+            "الكمية (Quantity)": f"{area_interlock_m2:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"محيط المساحة الخارجية للمبنى ({perimeter:.2f} م) × عرض الرصيف الخارجي ({sidewalk_w_m:.2f} م)",
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "16. بردورة أرصفة (Sidewalk Curbs)",
+            "الكمية (Quantity)": f"{len_curb_m:.2f}",
+            "الوحدة (Unit)": "م.ط (m)",
+            "المحددات والتفصيل (Details)": f"المحيط الخارجي لداير الانترلوك الخارجي = {len_curb_m:.2f} م (محيط المبنى {perimeter:.2f} م + 8 × {sidewalk_w_m:.2f} م)",
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "17. بند العزل المائي للسطح (انسومات)",
+            "الكمية (Quantity)": f"{qty_waterproof_roof:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"مسطح السطح بعد خصم المنور ({bldg_area:.2f} م² − {eff_shaft_m2:.2f} م² = {qty_waterproof_roof:.2f} م²)" if eff_shaft_m2 > 0 else f"يساوي تماماً مسطح المبنى المعتمد ({bldg_area:.2f} م²)",
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "18. عازل حراري (Thermal Insulation)",
+            "الكمية (Quantity)": f"{qty_thermal_ins:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"مسطح السطح بعد خصم المنور ({bldg_area:.2f} م² − {eff_shaft_m2:.2f} م² = {qty_thermal_ins:.2f} م²)" if eff_shaft_m2 > 0 else f"يساوي تماماً مسطح المبنى المعتمد ({bldg_area:.2f} م²)",
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "19. بلاط اسطح (Roof Tiles)",
+            "الكمية (Quantity)": f"{qty_roof_tiles:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"مسطح السطح بعد خصم المنور ({bldg_area:.2f} م² − {eff_shaft_m2:.2f} م² = {qty_roof_tiles:.2f} م²)" if eff_shaft_m2 > 0 else f"يساوي تماماً مسطح المبنى المعتمد ({bldg_area:.2f} م²)",
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "20. إجمالي مسطح المحارة لكامل المبنى (Total Plaster Area)",
+            "الكمية (Quantity)": f"{tot_plaster_all_net:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"محارة السقف ({qty_ceiling_plaster:.2f} م²) + محارة الحوائط ({qty_wall_plaster:.2f} م²) + محارة الواجهات ({qty_facade_plaster:.2f} م²) + محارة الدروة الداخلية ({area_parapet_m2:.2f} م²)",
+        },
+    ]
+
+    render_styled_table(table_1_rows, font_size_override=9.8)
+
+    # تفاصيل أوجه محارة الحوائط لكل حائط
+    with st.expander("🔍 تفاصيل أوجه محارة الحوائط لكل حائط (Wall-by-Wall Plaster Survey)", expanded=False):
+        if not p_rows:
+            st.info("💡 لم يتم تفعيل المحارة لأي حائط بعد. قم باختيار أوجه المحارة من قسم '7️⃣ تحديد حوائط المحارة' لتظهر النتائج والكميات هنا.")
+        else:
+            display_rows = []
+            for r in p_rows:
+                display_rows.append({
+                    "الحائط": r["الحائط"],
+                    "الوجه المحدد": r["الوجه المحدد"],
+                    "عدد الأوجه": r["عدد الأوجه"],
+                    "الطول (م)": r["الطول (م)"],
+                    "الارتفاع (م)": r["الارتفاع (م)"],
+                    "إجمالي المسطح (م²)": r["إجمالي مسطح المحارة (m^2)"],
+                    "مساحة الفتحات (م²)": r["إجمالي مساحة الفتحات (m^2)"],
+                    "الخصم المعتمد (م²)": r["الفتحات المخصومة المعتمدة (m^2)"],
+                    "صافي مسطح المحارة (م²)": r["صافي مسطح المحارة النهائي (m^2)"],
+                    "الرمل المطلوب (م³)": r["كمية الرمل المطلوبة (m^3)"],
+                    "الأسمنت المطلوب": r["كمية الأسمنت المطلوبة"],
+                })
+
+            tot_display = {
+                "الحائط": "✅ الإجمالي العام",
+                "الوجه المحدد": f"{sum(r['عدد الأوجه'] for r in p_rows)} وجه",
+                "عدد الأوجه": sum(r["عدد الأوجه"] for r in p_rows),
+                "الطول (م)": round(sum(r["الطول (م)"] for r in p_rows), 2),
+                "الارتفاع (م)": "—",
+                "إجمالي المسطح (م²)": round(p_res["tot_gross"], 2),
+                "مساحة الفتحات (م²)": round(p_res["tot_op_gross"], 2),
+                "الخصم المعتمد (م²)": round(p_res["tot_ded"], 2),
+                "صافي مسطح المحارة (م²)": round(p_res["tot_net"], 2),
+                "الرمل المطلوب (م³)": round(p_res["tot_sand"], 2),
+                "الأسمنت المطلوب": f"{p_res['tot_cement_tons']:.2f} طن ({p_res['tot_cement_bags']} شكارة)",
+            }
+
+            df_p = pd.DataFrame(display_rows + [tot_display])
+            def _st_plaster(row):
+                if row["الحائط"] == "✅ الإجمالي العام":
+                    return ["background-color:#1e3a8a;color:white;font-weight:bold"] * len(row)
+                return [""] * len(row)
+
+            st.dataframe(df_p.style.apply(_st_plaster, axis=1).format(lambda v: f"{v:.2f}" if isinstance(v, float) else v), use_container_width=True, hide_index=True)
+
+            cb_p = io.StringIO()
+            df_p.to_csv(cb_p, index=False, encoding="utf-8-sig")
+            st.download_button(
+                "⬇️ تحميل جدول حصر المحارة التفصيلي CSV",
+                data=cb_p.getvalue().encode("utf-8-sig"),
+                file_name="plaster_survey_detail_ecp.csv",
+                mime="text/csv",
+                key="m15_dl_plaster_sec"
+            )
+
+    # ═════════════════════════════════════════════════════════════════════════
+    #  ثالثاً: اتباع نفس فلسفة Module 1 — معامل زيادة للكميات والجدول الثاني
+    # ═════════════════════════════════════════════════════════════════════════
+    st.markdown(
+        """
+        <style>
+        div[class*="m15_input_plaster_qty_factor"],
+        div[class*="m15_plaster_qty_factor"] {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%) !important;
+            border: 2.5px solid #d97706 !important;
+            border-radius: 14px !important;
+            padding: 14px 20px !important;
+            margin-top: 14px !important;
+            margin-bottom: 6px !important;
+            box-shadow: 0 6px 18px rgba(217, 119, 6, 0.25) !important;
+            text-align: center !important;
+        }
+        div[class*="m15_input_plaster_qty_factor"] label,
+        div[class*="m15_input_plaster_qty_factor"] [data-testid="stWidgetLabel"],
+        div[class*="m15_input_plaster_qty_factor"] [data-testid="stWidgetLabel"] p,
+        div[class*="m15_plaster_qty_factor"] label,
+        div[class*="m15_plaster_qty_factor"] [data-testid="stWidgetLabel"],
+        div[class*="m15_plaster_qty_factor"] [data-testid="stWidgetLabel"] p {
+            color: #92400e !important;
+            -webkit-text-fill-color: #92400e !important;
+            font-size: 1.22rem !important;
+            font-weight: 900 !important;
+            text-align: center !important;
+            justify-content: center !important;
+            width: 100% !important;
+        }
+        div[class*="m15_input_plaster_qty_factor"] input,
+        div[class*="m15_plaster_qty_factor"] input {
+            color: #7c2d12 !important;
+            -webkit-text-fill-color: #7c2d12 !important;
+            background-color: #fffbeb !important;
+            font-size: 1.32rem !important;
+            font-weight: 900 !important;
+            text-align: center !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    _saved_plaster_factor = float(st.session_state.get("m15_plaster_qty_factor", 1.00))
+    _, plaster_col_center, _ = st.columns([1.15, 1.70, 1.15])
+    with plaster_col_center:
+        plaster_qty_factor = st.number_input(
+            "✨ معامل زيادة للكميات التي تم حسابها:",
+            min_value=0.10, max_value=5.00,
+            value=_saved_plaster_factor,
+            step=0.05, format="%.2f",
+            key="m15_input_plaster_qty_factor",
+        )
+    st.session_state["m15_plaster_qty_factor"] = plaster_qty_factor
+
+    # ═════════════════════════════════════════════════════════════════════════
+    #  الجدول الثاني: إجمالي الحصر مضروباً في معامل زيادة الكميات المحسوبة
+    # ═════════════════════════════════════════════════════════════════════════
+    st.markdown(
+        f"""
+        <div dir="rtl" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border: 2px solid #f59e0b; border-right: 6px solid #f59e0b; border-radius: 12px; padding: 12px 18px; margin: 20px 0 12px 0; text-align: center; box-shadow: 0 4px 14px rgba(245, 158, 11, 0.25);">
+            <div style="font-size: 1.25rem; font-weight: 900; color: #fbbf24;">
+                📊 ملخص الكميات (شامل معامل الزيادة للكميات التي تم حسابها = {plaster_qty_factor:.2f})
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    table_2_summary_rows = [
+        {
+            "البند / ملخص الكميات (Summary Item)": "1- كمية المحارة الداخلية بالسقف بالمتر المسطح (تساوي تماماً مسطح المبنى بعد خصم المنور)",
+            "الكمية قبل المعامل (Net Qty)": f"{qty_ceiling_plaster:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{qty_ceiling_plaster * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_ceiling_plaster:.2f} م²) × {plaster_qty_factor:.2f}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²) × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "2- كمية الدهانات الداخلية للسقف (تساوي تماماً مسطح المبنى بعد خصم المنور)",
+            "الكمية قبل المعامل (Net Qty)": f"{qty_ceiling_paint:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{qty_ceiling_paint * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_ceiling_paint:.2f} م²) × {plaster_qty_factor:.2f}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²) × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "3- كمية المحارة للحوائط بالمتر المسطح",
+            "الكمية قبل المعامل (Net Qty)": f"{qty_wall_plaster:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{qty_wall_plaster * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"صافي مسطح محارة الحوائط ({qty_wall_plaster:.2f} م²) × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "4- كمية الدهانات الداخلية للحوائط بالمتر المسطح",
+            "الكمية قبل المعامل (Net Qty)": f"{qty_wall_paint:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{qty_wall_paint * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"صافي مسطح دهان الحوائط ({qty_wall_paint:.2f} م²) × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "5- كمية المحارة الخارجية (الواجهات) (تشمل ارتفاع المبنى + ارتفاع الدروة)",
+            "الكمية قبل المعامل (Net Qty)": f"{qty_facade_plaster:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{qty_facade_plaster * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"مسطح الواجهات الخارجي الصافي بارتفاع المبنى + الدروة ({qty_facade_plaster:.2f} م²) × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "6- كمية الدهانات الخارجية (الواجهات) (تشمل ارتفاع المبنى + ارتفاع الدروة)",
+            "الكمية قبل المعامل (Net Qty)": f"{qty_facade_paint:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{qty_facade_paint * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"مسطح دهان الواجهات بارتفاع المبنى + الدروة ({qty_facade_paint:.2f} م²) × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "7- كمية سيراميك الأرضيات (Floor Ceramic Tiles)",
+            "الكمية قبل المعامل (Net Qty)": f"{qty_floor_ceramic:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{qty_floor_ceramic * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"صافي مسطح سيراميك الأرضيات ({qty_floor_ceramic:.2f} م²) × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "8- كمية سيراميك الحمامات",
+            "الكمية قبل المعامل (Net Qty)": f"{qty_bath_floor_ceramic:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{qty_bath_floor_ceramic * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"{bath_floor_details_str} × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "9- كمية سيراميك المطابخ",
+            "الكمية قبل المعامل (Net Qty)": f"{qty_kitchen_floor_ceramic:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{qty_kitchen_floor_ceramic * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"{kitchen_floor_details_str} × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "10- كمية سيراميك الحوائط للحمامات",
+            "الكمية قبل المعامل (Net Qty)": f"{wall_ceramic_bath_m2:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{wall_ceramic_bath_m2 * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"{bath_details_str} × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "11- كمية سيراميك الحوائط للمطابخ",
+            "الكمية قبل المعامل (Net Qty)": f"{wall_ceramic_kitchen_m2:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{wall_ceramic_kitchen_m2 * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"{kitchen_details_str} × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "12- بند طوب للدروة (مساحة مباني دروة السطح)",
+            "الكمية قبل المعامل (Net Qty)": f"{area_parapet_m2:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{area_parapet_m2 * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"مساحة مباني الدروة ({area_parapet_m2:.2f} م² │ {parapet_thick_choice}) × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "13- بند محارة داخلية للدروة (مسطح محارة الدروة الداخلية)",
+            "الكمية قبل المعامل (Net Qty)": f"{area_parapet_m2:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{area_parapet_m2 * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"مسطح محارة الدروة الداخلية ({area_parapet_m2:.2f} م²) × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "14- بند دهانات داخلية للدروة (مسطح دهان الدروة الداخلية)",
+            "الكمية قبل المعامل (Net Qty)": f"{area_parapet_m2:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{area_parapet_m2 * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"مسطح دهان الدروة الداخلية ({area_parapet_m2:.2f} م²) × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "15- انترلوك ارصفة (مساحة انترلوك الأرصفة)",
+            "الكمية قبل المعامل (Net Qty)": f"{area_interlock_m2:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{area_interlock_m2 * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"مساحة انترلوك الأرصفة ({area_interlock_m2:.2f} م²) × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "16- بردورة أرصفة (إجمالي طول البردورات)",
+            "الكمية قبل المعامل (Net Qty)": f"{len_curb_m:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{len_curb_m * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م.ط (m)",
+            "المحددات والتفصيل (Details)": f"إجمالي طول البردورات للمحيط الخارجي ({len_curb_m:.2f} م.ط) × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "17- بند العزل المائي للسطح (انسومات)",
+            "الكمية قبل المعامل (Net Qty)": f"{qty_waterproof_roof:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{qty_waterproof_roof * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_waterproof_roof:.2f} م²) × {plaster_qty_factor:.2f}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²) × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "18- عازل حراري",
+            "الكمية قبل المعامل (Net Qty)": f"{qty_thermal_ins:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{qty_thermal_ins * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_thermal_ins:.2f} م²) × {plaster_qty_factor:.2f}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²) × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "19- بلاط اسطح",
+            "الكمية قبل المعامل (Net Qty)": f"{qty_roof_tiles:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{qty_roof_tiles * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_roof_tiles:.2f} م²) × {plaster_qty_factor:.2f}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²) × {plaster_qty_factor:.2f}",
+        },
+        {
+            "البند / ملخص الكميات (Summary Item)": "20- إجمالي مسطح المحارة لكامل المبنى (سقف + حوائط + واجهات + دروة)",
+            "الكمية قبل المعامل (Net Qty)": f"{tot_plaster_all_net:.2f}",
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{tot_plaster_all_net * plaster_qty_factor:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"(محارة السقف + الحوائط + الواجهات + الدروة = {tot_plaster_all_net:.2f} م²) × {plaster_qty_factor:.2f}",
+        },
+    ]
+
+    render_styled_table(table_2_summary_rows, font_size_override=9.8)
+
+    # ── زر تحميل شيت إكسيل متكامل (صفحتين: حصر تفصيلي + ملخص بالمعامل) ──
+    def _build_plaster_two_sheets_excel_bytes(rows_t1, rows_t2, qf):
+        buf_xl = io.BytesIO()
+        df_t1 = pd.DataFrame(rows_t1)
+        df_t2 = pd.DataFrame(rows_t2)
+        sh1_name = "حصر خامات البياض والتشطيبات"
+        sh2_name = f"ملخص الكميات (معامل {qf:.2f})"[:31]
+        with pd.ExcelWriter(buf_xl, engine="openpyxl") as writer:
+            df_t1.to_excel(writer, index=False, sheet_name=sh1_name)
+            df_t2.to_excel(writer, index=False, sheet_name=sh2_name)
+            try:
+                from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+                header_fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
+                header_font = Font(name="Calibri", size=12, bold=True, color="FFFFFF")
+                body_font = Font(name="Calibri", size=11, bold=True, color="0F172A")
+                thin_side = Side(border_style="thin", color="CBD5E1")
+                cell_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+                for ws in writer.book.worksheets:
+                    ws.views.sheetView[0].rightToLeft = True
+                    for col_cells in ws.columns:
+                        max_len = 0
+                        for cell in col_cells:
+                            val_str = str(cell.value or "")
+                            max_len = max(max_len, len(val_str))
+                            cell.border = cell_border
+                            if cell.row == 1:
+                                cell.fill = header_fill
+                                cell.font = header_font
+                                cell.alignment = Alignment(horizontal="center", vertical="center")
+                            else:
+                                cell.font = body_font
+                                cell.alignment = Alignment(horizontal="right" if cell.column == 1 or cell.column == 4 else "center", vertical="center")
+                        col_letter = col_cells[0].column_letter
+                        ws.column_dimensions[col_letter].width = max(max_len + 4, 16)
+            except Exception:
+                pass
+        buf_xl.seek(0)
+        return buf_xl.getvalue()
+
+    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+    xl_bytes = _build_plaster_two_sheets_excel_bytes(table_1_rows, table_2_summary_rows, plaster_qty_factor)
+    st.download_button(
+        "📊 تحميل شيت إكسيل بحصر أعمال البياض والتشطيبات وملخص الكميات (2 Sheets Excel)",
+        data=xl_bytes,
+        file_name=f"plastering_finishes_boq_summary_{plaster_qty_factor:.2f}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="m15_dl_plaster_summary_excel"
+    )
 
 
 _FLOATING_PLAN_CSS = """
@@ -17136,7 +18288,7 @@ def render_masonry_plaster_module():
     elif "m15_op_move" in st.query_params:
         _handle_sync_payload(st.query_params["m15_op_move"])
 
-    lc,rc=st.columns([0.82,1.65],gap="medium")
+    lc, rc = st.columns([0.82, 1.65], gap="medium")
     with lc:
         with st.expander("🖼️ تحميل صورة مسقط افقي استرشادي للمباني [ Ctrl + Alt + F ب ]", expanded=False):
             _section_upload_image()
@@ -17144,6 +18296,8 @@ def render_masonry_plaster_module():
         is_add_wall_active = bool(st.session_state.get("m15_add_wall_mode", False))
         with st.expander("2️⃣ إسقاط الحوائط على المحاور", expanded=is_add_wall_active): _section_add_walls()
         with st.expander("➕ إضافة الأعمدة على المحاور", expanded=is_add_active): _section_add_columns()
+        with st.expander("🛁 تحديد الحمامات والمطابخ والمناور", expanded=False):
+            _section_bathrooms_kitchens()
         with st.expander("🚪🪟 نماذج الشبابيك والأبواب", expanded=False):
             _section_opening_types()
         with st.expander("4️⃣ إسقاط الشبابيك", expanded=is_add_win_active):
@@ -17284,125 +18438,6 @@ def render_masonry_plaster_module():
                 <span style='color:#888;font-weight:bold;'>┄ خط استرشادي (محذوف)</span>
             </div>""",unsafe_allow_html=True)
 
-    # ═════════════════════════════════════════════════════════════════════════
-    #  PHASE 1 -> PHASE 2 TRIGGER: "🚀 إبدأ التصميم" BUTTON (الزر الأحمر الكبير ثلاثي الأبعاد)
-    # ═════════════════════════════════════════════════════════════════════════
-    st.markdown(
-        """
-        <style>
-        /* زر إبدأ التصميم الإنشائي وتوليد المخططات التخصصية - تصميم عريض متدرج أحمر ثلاثي الأبعاد */
-        div[class*="st-key-"][class*="m15_btn_run_design"] button,
-        div.stButton > button[key*="m15_btn_run_design"],
-        button[key*="m15_btn_run_design"],
-        .st-key-m15_btn_run_design button,
-        div[data-testid="stVerticalBlock"] div:has(> button[key*="m15_btn_run_design"]) button {
-            background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%) !important;
-            background-color: #dc2626 !important;
-            color: #ffffff !important;
-            font-size: 24px !important;
-            font-weight: 900 !important;
-            padding: 18px 36px !important;
-            border-radius: 14px !important;
-            border: 3.5px solid #ffffff !important;
-            box-shadow: 0 8px 26px rgba(220, 38, 38, 0.65), 0 4px 0 #7f1d1d, inset 0 1px 2px rgba(255, 255, 255, 0.45) !important;
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
-            letter-spacing: 0.5px !important;
-            margin: 20px 0px !important;
-            min-height: 76px !important;
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            cursor: pointer !important;
-            width: 100% !important;
-        }
-        div[class*="st-key-"][class*="m15_btn_run_design"] button:hover,
-        div.stButton > button[key*="m15_btn_run_design"]:hover,
-        button[key*="m15_btn_run_design"]:hover {
-            background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%) !important;
-            background-color: #ef4444 !important;
-            color: #ffffff !important;
-            border-color: #fee2e2 !important;
-            box-shadow: 0 12px 34px rgba(220, 38, 38, 0.85), 0 5px 0 #991b1b, inset 0 1px 3px rgba(255, 255, 255, 0.6) !important;
-            transform: translateY(-2px) scale(1.008) !important;
-        }
-        div[class*="st-key-"][class*="m15_btn_run_design"] button:active,
-        button[key*="m15_btn_run_design"]:active {
-            transform: translateY(2px) !important;
-            box-shadow: 0 4px 14px rgba(220, 38, 38, 0.6), 0 2px 0 #7f1d1d !important;
-        }
-        div[class*="st-key-"][class*="m15_btn_run_design"] button *,
-        div.stButton > button[key*="m15_btn_run_design"] *,
-        button[key*="m15_btn_run_design"] * {
-            color: #ffffff !important;
-            font-size: 24px !important;
-            font-weight: 900 !important;
-            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6) !important;
-            line-height: 1.3 !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # بصمة هندسية دقيقة لكافة مدخلات النموذج والمحاور والأعمدة والحوائط والفتحات والمواصفات
-    import hashlib
-    _m15_geom_raw = (
-        f"x:{list(st.session_state.get('m15_x_axes', []))}|"
-        f"y:{list(st.session_state.get('m15_y_axes', []))}|"
-        f"wp:{sorted(str(w) for w in st.session_state.get('m15_walls_placed', []))}|"
-        f"wr:{sorted(str(w) for w in st.session_state.get('m15_wall_removed', []))}|"
-        f"wt:{sorted(f'{k}:{v}' for k, v in st.session_state.get('m15_wall_thickness', {}).items())}|"
-        f"wh:{sorted(f'{k}:{v}' for k, v in st.session_state.get('m15_wall_heights', {}).items())}|"
-        f"cp:{sorted(str(c) for c in st.session_state.get('m15_col_placed', []))}|"
-        f"cr:{sorted(str(c) for c in st.session_state.get('m15_col_removed', []))}|"
-        f"cd:{sorted(f'{k}:{v}' for k, v in st.session_state.get('m15_col_dirs', {}).items())}|"
-        f"win:{sorted(f'{k}:{len(v)}' for k, v in st.session_state.get('m15_windows', {}).items())}|"
-        f"dr:{sorted(f'{k}:{len(v)}' for k, v in st.session_state.get('m15_doors', {}).items())}|"
-        f"bt:{st.session_state.get('m15_brick_type', '')}|"
-        f"bs:{st.session_state.get('m15_brick_size', '')}|"
-        f"m:{st.session_state.get('m15_mortar_thickness_cm', 1.0)}|"
-        f"pw:{sorted(str(w) for w in st.session_state.get('m15_plaster_walls', []))}|"
-        f"spaces:{len(st.session_state.get('m15_named_spaces', {}))}"
-    )
-    _m15_fingerprint = hashlib.md5(_m15_geom_raw.encode("utf-8")).hexdigest()
-
-    if st.button("🚀 إبدأ التصميم", key="m15_btn_run_design", use_container_width=True, help="بدء الحسابات والتصميم الإنشائي الكامل وتوليد المخططات الهندسية والقطاعات الـ 10 التخصصية"):
-        st.session_state["m15_design_started"] = True
-        st.session_state["m15_last_designed_state"] = _m15_fingerprint
-        st.rerun()
-
-    _is_design_started = bool(st.session_state.get("m15_design_started", False))
-    _last_designed_state = st.session_state.get("m15_last_designed_state")
-
-    # تنبيه ذكي مضاف (Smart Invalidation Warning)
-    if _is_design_started and _last_designed_state and _last_designed_state != _m15_fingerprint:
-        st.warning(
-            "⚠️ **تنبيه ذكي (Smart Invalidation Warning):** تم تعديل عناصر المسقط أو النموذج (المحاور، الحوائط، الأعمدة، الفتحات، أو المواصفات) بعد آخر عملية تصميم. "
-            "يرجى إعادة الضغط على الزر الأحمر بالأعلى **«🚀 إبدأ التصميم»** لتحديث وتوليد الحسابات والمخططات والقطاعات الـ 10 التخصصية وجداول الحصر طبقاً للمسقط الجديد."
-        )
-
-    # فحص بدء التصميم للمرحلة الثانية
-    if not _is_design_started:
-        st.info("ℹ️ **المرحلة الأولى (Phase 1 — Geometry & Plan Setup):** تم تحديث وعكس مدخلات المسقط الأفقي والمحاور والحوائط والأعمدة والفتحات بنجاح وبسرعة فائقة. اضغط على الزر الأحمر الكبير أعلاه **«🚀 إبدأ التصميم»** لبدء المرحلة الثانية وتوليد الحسابات والتصميم الإنشائي الكامل وكافة القطاعات الـ 10 التخصصية وجداول الحصر.")
-        save_settings()
-        _inject_floating_plan_viewer()
-        return
-
-    # ═════════════════════════════════════════════════════════════════════════
-    #  المرحلة الثانية: الحسابات والتصميم الإنشائي الكامل (Phase 2 — Structural Design & Detailing)
-    # ═════════════════════════════════════════════════════════════════════════
-    from modules.m15_structural_engine import render_m15_structural_phase_2
-    buf_plan_clean = _draw_plan(with_dim=False)
-    render_m15_structural_phase_2(
-        walls_placed=st.session_state.get("m15_walls_placed", []),
-        wall_thickness=st.session_state.get("m15_wall_thickness", {}),
-        wall_heights=st.session_state.get("m15_wall_heights", {}),
-        windows=st.session_state.get("m15_windows", {}),
-        doors=st.session_state.get("m15_doors", {}),
-        col_placed=st.session_state.get("m15_col_placed", set()),
-        buf_plan_clean=buf_plan_clean
-    )
-
     st.divider()
     with st.expander("🌐 3D (Data Processing & Rendering) — العارض ثلاثي الأبعاد التفاعلي", expanded=False):
         _section_3d_viewer()
@@ -17416,4 +18451,5 @@ def render_masonry_plaster_module():
     _section_export_pdf()
     save_settings()
     _inject_floating_plan_viewer()
+
 

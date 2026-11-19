@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.patches import Rectangle, Arc, FancyBboxPatch, Polygon
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 
 
@@ -142,28 +143,307 @@ def _fig_to_bytes(fig):
     return buf
 
 
+def render_interactive_cad_drawing(img_bytes_or_buf, height=640, download_name="cad_drawing.png", unique_id="cad_viewer"):
+    """
+    عارض CAD تفاعلي هندسي متقدم يدعم:
+    - Zoom In / Zoom Out
+    - Pan بالسحب بالماوس في أي اتجاه
+    - عجلة الماوس للتكبير والتصغير الديناميكي بالنسبة لموضع المؤشر
+    - زر Reset لاستعادة الحجم 100%
+    - زر Fullscreen لملء الشاشة
+    - زر Download مدمج
+    - شارة نسبة التكبير الحالية (Zoom Badge)
+    """
+    if hasattr(img_bytes_or_buf, "getvalue"):
+        raw_bytes = img_bytes_or_buf.getvalue()
+    elif isinstance(img_bytes_or_buf, bytes):
+        raw_bytes = img_bytes_or_buf
+    elif hasattr(img_bytes_or_buf, "read"):
+        img_bytes_or_buf.seek(0)
+        raw_bytes = img_bytes_or_buf.read()
+    else:
+        raw_bytes = b""
+
+    b64_img = base64.b64encode(raw_bytes).decode("utf-8")
+
+    html_code = f"""<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="utf-8">
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body, html {{ width: 100%; height: 100%; overflow: hidden; background: #0f172a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }}
+  
+  #cad-viewport {{
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #0f172a;
+    border: 1.5px solid #334155;
+    border-radius: 10px;
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+  }}
+  #cad-viewport:active, #cad-viewport.panning {{
+    cursor: grabbing !important;
+  }}
+  
+  .cad-toolbar {{
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(15, 23, 42, 0.94);
+    backdrop-filter: blur(8px);
+    border: 1.5px solid rgba(59, 130, 246, 0.45);
+    border-radius: 8px;
+    padding: 6px 12px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+    direction: rtl;
+  }}
+  
+  .tb-btn {{
+    background: #1e293b;
+    border: 1px solid #475569;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    transition: all 0.15s ease;
+    text-decoration: none;
+    line-height: 1.2;
+    user-select: none;
+  }}
+  .tb-btn:hover {{
+    background: #334155;
+    border-color: #60a5fa;
+    color: #60a5fa;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.3);
+  }}
+  .tb-btn:active {{
+    transform: translateY(0);
+    background: #475569;
+  }}
+  
+  .zoom-badge {{
+    font-size: 12px;
+    font-weight: 800;
+    color: #ffffff;
+    background: #1e40af;
+    border: 1px solid #3b82f6;
+    border-radius: 12px;
+    padding: 3px 9px;
+    min-width: 48px;
+    text-align: center;
+    user-select: none;
+  }}
+  
+  .tb-hint {{
+    font-size: 11px;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-right: 6px;
+    white-space: nowrap;
+  }}
+
+  #canvas-wrapper {{
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    transform-origin: 0 0;
+    will-change: transform;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }}
+
+  #cad-img {{
+    max-width: 98%;
+    max-height: 98%;
+    object-fit: contain;
+    display: block;
+    user-select: none;
+    -webkit-user-drag: none;
+    pointer-events: none;
+    border-radius: 6px;
+    background: #ffffff;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.45);
+  }}
+</style>
+</head>
+<body>
+
+<div id="cad-viewport">
+  <div class="cad-toolbar">
+    <button class="tb-btn" id="btn-zoom-in" title="تكبير (Zoom In)">🔍➕ تكبير</button>
+    <button class="tb-btn" id="btn-zoom-out" title="تصغير (Zoom Out)">🔍➖ تصغير</button>
+    <button class="tb-btn" id="btn-reset" title="استعادة المركز والحجم الطبيعي (Reset 100%)">🔄 ضبط</button>
+    <button class="tb-btn" id="btn-fullscreen" title="عرض ملء الشاشة (Fullscreen)">⛶ ملء الشاشة</button>
+    <a class="tb-btn" id="btn-download" href="data:image/png;base64,{b64_img}" download="{download_name}" title="تنزيل الصورة">💾 حفظ</a>
+    <span class="zoom-badge" id="zoom-badge">100%</span>
+    <span class="tb-hint">✋ اسحب بالفأرة للتحريك (Pan) | 🔍 عجلة الفأرة للتكبير (Zoom)</span>
+  </div>
+
+  <div id="canvas-wrapper">
+    <img id="cad-img" src="data:image/png;base64,{b64_img}" alt="CAD Drawing" />
+  </div>
+</div>
+
+<script>
+(function() {{
+  const viewport = document.getElementById('cad-viewport');
+  const wrapper = document.getElementById('canvas-wrapper');
+  const badge = document.getElementById('zoom-badge');
+
+  let scale = 1.0;
+  let panX = 0;
+  let panY = 0;
+  let isDragging = false;
+  let startX = 0;
+  let startY = 0;
+
+  function updateTransform() {{
+    wrapper.style.transform = 'translate(' + panX + 'px, ' + panY + 'px) scale(' + scale + ')';
+    if (badge) badge.textContent = Math.round(scale * 100) + '%';
+  }}
+  updateTransform();
+
+  function applyZoom(factor, clientX, clientY) {{
+    const newScale = Math.min(Math.max(scale * factor, 0.25), 8.0);
+    if (newScale === scale) return;
+
+    let cx, cy;
+    if (clientX === undefined || clientY === undefined) {{
+      const rect = viewport.getBoundingClientRect();
+      cx = rect.width / 2;
+      cy = rect.height / 2;
+    }} else {{
+      const rect = viewport.getBoundingClientRect();
+      cx = clientX - rect.left;
+      cy = clientY - rect.top;
+    }}
+
+    panX = cx - (cx - panX) * (newScale / scale);
+    panY = cy - (cy - panY) * (newScale / scale);
+    scale = newScale;
+    updateTransform();
+  }}
+
+  function resetView() {{
+    scale = 1.0;
+    panX = 0;
+    panY = 0;
+    updateTransform();
+  }}
+
+  document.getElementById('btn-zoom-in').addEventListener('click', function(e) {{
+    e.stopPropagation();
+    applyZoom(1.25);
+  }});
+
+  document.getElementById('btn-zoom-out').addEventListener('click', function(e) {{
+    e.stopPropagation();
+    applyZoom(0.80);
+  }});
+
+  document.getElementById('btn-reset').addEventListener('click', function(e) {{
+    e.stopPropagation();
+    resetView();
+  }});
+
+  document.getElementById('btn-fullscreen').addEventListener('click', function(e) {{
+    e.stopPropagation();
+    if (!document.fullscreenElement) {{
+      if (viewport.requestFullscreen) viewport.requestFullscreen();
+      else if (viewport.webkitRequestFullscreen) viewport.webkitRequestFullscreen();
+    }} else {{
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    }}
+  }});
+
+  viewport.addEventListener('contextmenu', function(e) {{
+    e.preventDefault();
+  }});
+
+  viewport.addEventListener('mousedown', function(e) {{
+    if (e.target.closest('.cad-toolbar')) return;
+    isDragging = true;
+    startX = e.clientX - panX;
+    startY = e.clientY - panY;
+    viewport.classList.add('panning');
+    e.preventDefault();
+  }});
+
+  window.addEventListener('mousemove', function(e) {{
+    if (isDragging) {{
+      panX = e.clientX - startX;
+      panY = e.clientY - startY;
+      updateTransform();
+      e.preventDefault();
+    }}
+  }});
+
+  window.addEventListener('mouseup', function(e) {{
+    if (isDragging) {{
+      isDragging = false;
+      viewport.classList.remove('panning');
+    }}
+  }});
+
+  viewport.addEventListener('wheel', function(e) {{
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.15 : 0.87;
+    applyZoom(factor, e.clientX, e.clientY);
+  }}, {{ passive: false }});
+
+  viewport.addEventListener('dblclick', function(e) {{
+    if (e.target.closest('.cad-toolbar')) return;
+    if (Math.abs(scale - 1.0) > 0.05 || Math.abs(panX) > 10 || Math.abs(panY) > 10) {{
+      resetView();
+    }} else {{
+      applyZoom(1.6, e.clientX, e.clientY);
+    }}
+  }});
+}})();
+</script>
+</body>
+</html>
+"""
+    components.html(html_code, height=height, scrolling=False)
+
+
 def draw_section_1_wall_layout(buf_plan_clean):
     """
     القطاع/المخطط 1: مخطط توقيع وتوزيع حوائط المباني والسماكات الإنشائية
     (Masonry Wall Layout & Thicknesses Engineering Plan)
+    يعكس مباشرة التعديلات المصممة في المسقط الأفقي بأعلى دقة، وبدون البانيل العلوي القديم.
     """
-    fig = plt.figure(figsize=(11, 7.5), facecolor="#ffffff")
-    ax = fig.add_subplot(111)
-    ax.set_facecolor("#f8fafc")
-
     if buf_plan_clean:
         try:
-            import PIL.Image as PILImage
-            img = PILImage.open(buf_plan_clean)
-            ax.imshow(img, aspect="auto", extent=[0, 10, 0, 7])
+            buf_plan_clean.seek(0)
+            return buf_plan_clean
         except Exception:
             pass
 
-    title_box = patches.FancyBboxPatch((0.2, 6.2), 9.6, 0.65, boxstyle="round,pad=0.08",
-                                       fc="#0f172a", ec="#38bdf8", lw=2)
-    ax.add_patch(title_box)
-    ax.text(5.0, 6.52, ar("المخطط الإنشائي 1: توقيع وتوزيع حوائط المباني والسماكات (Masonry Layout Plan)"),
-            color="#ffffff", fontsize=11, fontweight="bold", ha="center", va="center")
+    fig = plt.figure(figsize=(11, 7.5), facecolor="#ffffff")
+    ax = fig.add_subplot(111)
+    ax.set_facecolor("#f8fafc")
 
     leg_box = patches.FancyBboxPatch((0.5, 0.2), 9.0, 0.85, boxstyle="round,pad=0.05",
                                      fc="#ffffff", ec="#cbd5e1", lw=1.5)
@@ -655,154 +935,5 @@ def draw_section_10_crack_control_wire_mesh():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def render_m15_structural_phase_2(walls_placed, wall_thickness, wall_heights, windows, doors, col_placed, buf_plan_clean=None):
-    """
-    Renders Phase 2:
-      - Structural Analysis & Code Compliance Dashboard
-      - The 10 Specialized Engineering Drawings & Sections in an interactive UI
-    """
-    st.markdown(
-        """
-        <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-                    border-radius: 12px; border: 2px solid #3b82f6; padding: 16px 22px;
-                    margin: 18px 0; box-shadow: 0 6px 20px rgba(15, 23, 42, 0.35);" dir="rtl">
-            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <span style="font-size: 28px;">🏗️</span>
-                    <div>
-                        <div style="color: #60a5fa; font-size: 20px; font-weight: 900; line-height: 1.3;">
-                            المرحلة الثانية: الحسابات والتصميم الإنشائي الكامل والقطاعات التخصصية
-                        </div>
-                        <div style="color: #94a3b8; font-size: 13.5px; font-weight: 600;">
-                            Phase 2 — Structural Design, Capacity Checks & 10 Specialized Engineering Drawings (ECP 203 & ECP 204)
-                        </div>
-                    </div>
-                </div>
-                <div style="background: rgba(16, 185, 129, 0.2); border: 1.5px solid #10b981; color: #34d399;
-                            border-radius: 8px; padding: 6px 14px; font-size: 13.5px; font-weight: 800;">
-                    ✓ تم التنفيذ بنجاح
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    # 1. Compute Structural Design Metrics
-    res_struct = compute_m15_structural_design(walls_placed, wall_thickness, wall_heights, windows, doors, col_placed)
-
-    # Metric Cards
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.markdown(
-            f"""<div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:10px; padding:12px; text-align:center;">
-                <div style="color:#64748b; font-size:12px; font-weight:700;">أقصى معامل نحافة للحوائط (λ)</div>
-                <div style="color:#0f172a; font-size:22px; font-weight:900;">{res_struct['max_slenderness_12']}</div>
-                <div style="color:#16a34a; font-size:11px; font-weight:700;">✓ آمن إنشائياً (الحد ≤ 28)</div>
-            </div>""", unsafe_allow_html=True)
-    with c2:
-        st.markdown(
-            f"""<div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:10px; padding:12px; text-align:center;">
-                <div style="color:#64748b; font-size:12px; font-weight:700;">حمولة حائط 25سم على الكمرة</div>
-                <div style="color:#0f172a; font-size:22px; font-weight:900;">{res_struct['w25_dl_m']:.2f} <span style="font-size:13px;">t/m</span></div>
-                <div style="color:#2563eb; font-size:11px; font-weight:700;">شامل البياض والمونة (3م)</div>
-            </div>""", unsafe_allow_html=True)
-    with c3:
-        st.markdown(
-            f"""<div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:10px; padding:12px; text-align:center;">
-                <div style="color:#64748b; font-size:12px; font-weight:700;">حمولة قاطع 12سم على البلاطة</div>
-                <div style="color:#0f172a; font-size:22px; font-weight:900;">{res_struct['w12_dl_m']:.2f} <span style="font-size:13px;">t/m</span></div>
-                <div style="color:#2563eb; font-size:11px; font-weight:700;">شامل البياض والمونة (3م)</div>
-            </div>""", unsafe_allow_html=True)
-    with c4:
-        st.markdown(
-            f"""<div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:10px; padding:12px; text-align:center;">
-                <div style="color:#64748b; font-size:12px; font-weight:700;">إجمالي الأعتاب الخرسانية</div>
-                <div style="color:#0f172a; font-size:22px; font-weight:900;">{res_struct['total_lintels']} <span style="font-size:13px;">عتب</span></div>
-                <div style="color:#16a34a; font-size:11px; font-weight:700;">توليد أوتوماتيكي كامل</div>
-            </div>""", unsafe_allow_html=True)
-
-    st.markdown("<div style='margin-top: 14px;'></div>", unsafe_allow_html=True)
-
-    # 2. Specialized Expander for the 10 Engineering Sections & Drawings
-    with st.expander("📐 كافة المخططات والرسومات الهندسية والقطاعات الـ 10 التخصصية (The 10 Specialized CAD Drawings)", expanded=True):
-        st.markdown(
-            """
-            <div style="color: #cbd5e1; font-size: 13.5px; font-weight: 700; margin-bottom: 12px;" dir="rtl">
-                📌 تم توليد كافة المخططات والقطاعات الـ 10 التخصصية لأعمال المباني والبياض التنفيذية طبقاً للكود المصري للمباني (ECP 204) والكود المصري للخرسانة (ECP 203). اختر القطاع المطلوب للاستعراض والتحميل:
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        tabs = st.tabs([
-            "1. مخطط الحوائط والسماكات",
-            "2. الفتحات وجدول الأعتاب",
-            "3. قطاع حائط خارجي 25سم",
-            "4. قطاع قاطع داخلي 12سم",
-            "5. رباط الزوايا وتقاطعات T",
-            "6. كانات ربط الأعمدة",
-            "7. مراحل المحارة الداخلية",
-            "8. محارة الواجهات ودروة السطح",
-            "9. التفصيلة الإنشائية للعتب",
-            "10. شبك الفايبر ومنع الشروخ"
-        ])
-
-        with tabs[0]:
-            st.markdown("#### 1️⃣ مخطط توقيع وتوزيع حوائط المباني والسماكات الإنشائية (Masonry Layout & Wall Thicknesses)")
-            b1 = draw_section_1_wall_layout(buf_plan_clean)
-            st.image(b1, use_container_width=True)
-            st.download_button("💾 تحميل المخطط 1 (High-Res PNG)", data=b1.getvalue(), file_name="01_masonry_layout_plan.png", mime="image/png", key="m15_dl_sec_1")
-
-        with tabs[1]:
-            st.markdown("#### 2️⃣ مخطط توقيع وتفاصيل فتحات الأبواب والشبابيك وجدول الأعتاب (Openings & Lintel Schedule)")
-            b2 = draw_section_2_openings_and_lintels(res_struct["lintel_list"])
-            st.image(b2, use_container_width=True)
-            st.download_button("💾 تحميل المخطط 2 (High-Res PNG)", data=b2.getvalue(), file_name="02_openings_lintels_schedule.png", mime="image/png", key="m15_dl_sec_2")
-
-        with tabs[2]:
-            st.markdown("#### 3️⃣ قطاع رأسي كامل في حائط خارجي 25 سم مع العتب والخرسانة والعزل (Vertical Section 25cm Wall)")
-            b3 = draw_section_3_external_wall_25cm()
-            st.image(b3, use_container_width=True)
-            st.download_button("💾 تحميل القطاع 3 (High-Res PNG)", data=b3.getvalue(), file_name="03_external_wall_25cm_section.png", mime="image/png", key="m15_dl_sec_3")
-
-        with tabs[3]:
-            st.markdown("#### 4️⃣ قطاع رأسي في قاطع داخلي 12 سم وتثبيت الأبواب والوزرة (Vertical Section 12cm Partition)")
-            b4 = draw_section_4_internal_partition_12cm()
-            st.image(b4, use_container_width=True)
-            st.download_button("💾 تحميل القطاع 4 (High-Res PNG)", data=b4.getvalue(), file_name="04_internal_partition_12cm_section.png", mime="image/png", key="m15_dl_sec_4")
-
-        with tabs[4]:
-            st.markdown("#### 5️⃣ تفصيلة رباط الزوايا وتقاطع الحوائط T-Junction والرباط الإنجليزي (Interlocking Masonry Bonds)")
-            b5 = draw_section_5_corner_and_junction_bonds()
-            st.image(b5, use_container_width=True)
-            st.download_button("💾 تحميل القطاع 5 (High-Res PNG)", data=b5.getvalue(), file_name="05_corner_and_junction_bonds.png", mime="image/png", key="m15_dl_sec_5")
-
-        with tabs[5]:
-            st.markdown("#### 6️⃣ تفصيلة ربط المباني بالأعمدة والكمرات الخرسانية بالكانات (Wall-to-Column Steel Ties)")
-            b6 = draw_section_6_wall_to_column_ties()
-            st.image(b6, use_container_width=True)
-            st.download_button("💾 تحميل القطاع 6 (High-Res PNG)", data=b6.getvalue(), file_name="06_wall_to_column_ties.png", mime="image/png", key="m15_dl_sec_6")
-
-        with tabs[6]:
-            st.markdown("#### 7️⃣ قطاع تفصيلي لطبقات المحارة الداخلية ومراحل التنفيذ (Internal Plastering System)")
-            b7 = draw_section_7_internal_plaster_layers()
-            st.image(b7, use_container_width=True)
-            st.download_button("💾 تحميل القطاع 7 (High-Res PNG)", data=b7.getvalue(), file_name="07_internal_plaster_layers.png", mime="image/png", key="m15_dl_sec_7")
-
-        with tabs[7]:
-            st.markdown("#### 8️⃣ قطاع تفصيلي لمحارة الواجهات الخارجية ودروة السطح (External Facade & Parapet Detail)")
-            b8 = draw_section_8_external_facade_and_parapet()
-            st.image(b8, use_container_width=True)
-            st.download_button("💾 تحميل القطاع 8 (High-Res PNG)", data=b8.getvalue(), file_name="08_external_facade_parapet.png", mime="image/png", key="m15_dl_sec_8")
-
-        with tabs[8]:
-            st.markdown("#### 9️⃣ التفصيلة الإنشائية لعتب الفتحات الخرساني المسلح وتوزيعه (RC Lintel Detailing)")
-            b9 = draw_section_9_lintel_structural_detail()
-            st.image(b9, use_container_width=True)
-            st.download_button("💾 تحميل القطاع 9 (High-Res PNG)", data=b9.getvalue(), file_name="09_lintel_structural_detail.png", mime="image/png", key="m15_dl_sec_9")
-
-        with tabs[9]:
-            st.markdown("#### 🔟 مخطط تفاصيل شبك الفايبر المعدني والفواصل لمنع الشروخ (Crack Control & Mesh Detailing)")
-            b10 = draw_section_10_crack_control_wire_mesh()
-            st.image(b10, use_container_width=True)
-            st.download_button("💾 تحميل القطاع 10 (High-Res PNG)", data=b10.getvalue(), file_name="10_crack_control_wire_mesh.png", mime="image/png", key="m15_dl_sec_10")
+    """Phase 2 UI removed per user requirements."""
+    pass
