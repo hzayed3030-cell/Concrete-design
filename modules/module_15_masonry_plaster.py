@@ -11014,6 +11014,377 @@ def _section_all_items_detailed_survey():
                      "حصر كميات الرمل والأسمنت لكافة أسطح المحارة بالمنشأ (سقف + حوائط داخلية + واجهات ودروة من الجانبين): المتر المكعب رمل يفرد 42 م² سمك 2 سم بمعدل 350 كجم أسمنت/م³ (معامل هالك 5%).", df18)
 
 
+def _get_openings_takeoff_data():
+    """
+    تجميع بيانات حصر الشبابيك والأبواب هندسياً:
+    - نماذج الشبابيك المنفذة، مقاساتها وأعدادها ومسطحاتها.
+    - نماذج الأبواب المنفذة، مقاساتها وأعدادها ومسطحاتها.
+    - كشف تفصيلي بكل فتحة مسقطة على الحوائط.
+    """
+    active_wins = _get_active_windows_list()
+    active_doors = _get_active_doors_list()
+
+    win_models_dict = {}
+    for (_, _, win, _) in active_wins:
+        t_lbl = win.get("type_label") or win.get("name", "W1").split("-")[0]
+        w_m = float(win.get("w_m", 1.0))
+        h_m = float(win.get("h_m", 1.2))
+        sill_m = float(win.get("sill_m", 1.0))
+        if t_lbl not in win_models_dict:
+            win_models_dict[t_lbl] = {
+                "name": t_lbl,
+                "w_m": w_m,
+                "h_m": h_m,
+                "area_m2": round(w_m * h_m, 2),
+                "sill_m": sill_m,
+                "count": 0,
+            }
+        win_models_dict[t_lbl]["count"] += 1
+
+    windows_models = []
+    for m in win_models_dict.values():
+        m["total_area_m2"] = round(m["count"] * m["area_m2"], 2)
+        windows_models.append(m)
+    windows_models.sort(key=lambda x: x["name"])
+
+    door_models_dict = {}
+    for (_, _, door, _) in active_doors:
+        t_lbl = door.get("type_label") or door.get("name", "D1").split("-")[0]
+        w_m = float(door.get("w_m", 0.9))
+        h_m = float(door.get("h_m", 2.1))
+        if t_lbl not in door_models_dict:
+            door_models_dict[t_lbl] = {
+                "name": t_lbl,
+                "w_m": w_m,
+                "h_m": h_m,
+                "area_m2": round(w_m * h_m, 2),
+                "sill_m": 0.0,
+                "count": 0,
+            }
+        door_models_dict[t_lbl]["count"] += 1
+
+    doors_models = []
+    for m in door_models_dict.values():
+        m["total_area_m2"] = round(m["count"] * m["area_m2"], 2)
+        doors_models.append(m)
+    doors_models.sort(key=lambda x: x["name"])
+
+    cm = _get_col_name_map()
+    wm = _get_wall_name_map()
+    wm_win = _get_window_name_map()
+    wm_door = _get_door_name_map()
+
+    wall_openings_details = []
+    for (_, _, w, wk) in active_wins:
+        wid = w.get("id")
+        wname = wm_win.get(wid) or w.get("name", "W")
+        w_lbl = _wall_display_label(wk, cm, wm)
+        w_m = float(w.get("w_m", 1.0))
+        h_m = float(w.get("h_m", 1.2))
+        sill_m = float(w.get("sill_m", 1.0))
+        wall_openings_details.append({
+            "id": wid,
+            "kind": "شباك",
+            "name": wname,
+            "wall": w_lbl,
+            "w_m": w_m,
+            "h_m": h_m,
+            "sill_m": sill_m,
+            "area_m2": round(w_m * h_m, 2),
+            "pos_m": float(w.get("pos_m", 0.0))
+        })
+    for (_, _, d, wk) in active_doors:
+        did = d.get("id")
+        dname = wm_door.get(did) or d.get("name", "D")
+        w_lbl = _wall_display_label(wk, cm, wm)
+        w_m = float(d.get("w_m", 0.9))
+        h_m = float(d.get("h_m", 2.1))
+        wall_openings_details.append({
+            "id": did,
+            "kind": "باب",
+            "name": dname,
+            "wall": w_lbl,
+            "w_m": w_m,
+            "h_m": h_m,
+            "sill_m": 0.0,
+            "area_m2": round(w_m * h_m, 2),
+            "pos_m": float(d.get("pos_m", 0.0))
+        })
+
+    return {
+        "windows_models": windows_models,
+        "doors_models": doors_models,
+        "wall_openings_details": wall_openings_details,
+        "total_wins_count": sum(m["count"] for m in windows_models),
+        "total_doors_count": sum(m["count"] for m in doors_models),
+        "total_wins_area": round(sum(m["total_area_m2"] for m in windows_models), 2),
+        "total_doors_area": round(sum(m["total_area_m2"] for m in doors_models), 2),
+    }
+
+
+def _compute_plaster_boq_data(rule_key=None, plaster_qty_factor_override=None):
+    """
+    حساب بيانات ومخرجات جدول حصر وتكلفة جميع البنود والتشطيبات التكميلية (17 بند)
+    طبقاً للكود المصري ECP ومعامل الزيادة والأسعار المعتمدة.
+    """
+    if rule_key is None:
+        rule_key = st.session_state.get("m15_plaster_deduction_rule", "ecp")
+    if plaster_qty_factor_override is not None:
+        plaster_qty_factor = float(plaster_qty_factor_override)
+    else:
+        plaster_qty_factor = float(st.session_state.get("m15_plaster_qty_factor", 1.00))
+
+    p_res = _compute_plaster_survey(deduction_rule=rule_key)
+
+    xs = st.session_state.get("m15_x_axes", [])
+    ys = st.session_state.get("m15_y_axes", [])
+    span_x = (max(xs) - min(xs)) if len(xs) >= 2 else 0.0
+    span_y = (max(ys) - min(ys)) if len(ys) >= 2 else 0.0
+    bldg_area = round(span_x * span_y, 2)
+    if bldg_area <= 0:
+        bldg_area = float(st.session_state.get("bldg_footprint_m2", st.session_state.get("slab_area_val", 100.0)))
+
+    perimeter = round(2.0 * (span_x + span_y), 2) if (span_x > 0 and span_y > 0) else round(4.0 * math.sqrt(max(1.0, bldg_area)), 2)
+    default_h = float(st.session_state.get("m15_default_wall_height", 3.0))
+
+    op_facade = 0.0
+    perim_walls = _detect_perimeter_walls()
+    for pwk in perim_walls:
+        for wi in _get_wall_windows(pwk):
+            if not wi.get("removed", False):
+                op_facade += float(wi.get("w_m", 1.0)) * float(wi.get("h_m", 1.2))
+        for di in _get_wall_doors(pwk):
+            if not di.get("removed", False):
+                op_facade += float(di.get("w_m", 0.9)) * float(di.get("h_m", 2.1))
+
+    facade_ded = 0.0
+    if rule_key == "ecp":
+        for pwk in perim_walls:
+            for wi in _get_wall_windows(pwk):
+                if not wi.get("removed", False):
+                    ar_w = float(wi.get("w_m", 1.0)) * float(wi.get("h_m", 1.2))
+                    if ar_w > 4.0:
+                        facade_ded += (ar_w - 4.0)
+            for di in _get_wall_doors(pwk):
+                if not di.get("removed", False):
+                    ar_d = float(di.get("w_m", 0.9)) * float(di.get("h_m", 2.1))
+                    if ar_d > 4.0:
+                        facade_ded += (ar_d - 4.0)
+    else:
+        facade_ded = op_facade
+
+    sidewalk_w_m = float(st.session_state.get("m15_sidewalk_w_m", st.session_state.get("cw_sidewalk_w_m", 1.00)))
+    parapet_h_cm = float(st.session_state.get("m15_parapet_h_cm", 140.0))
+    parapet_h_m = round(parapet_h_cm / 100.0, 3)
+    parapet_thick_choice = st.session_state.get("m15_parapet_wall_thick", "حائط نصف طوبة")
+
+    auto_shaft_m2 = 0.0
+    bk_all_s = list(st.session_state.get("m15_bath_kitchen_spaces", []))
+    for s in bk_all_s:
+        if s.get("type") in ["shaft", "void", "منور"] or "منور" in s.get("name", ""):
+            auto_shaft_m2 += float(s.get("area_m2", 0.0))
+    shafts_area_m2 = round(auto_shaft_m2, 2)
+
+    total_facade_h = round(default_h + 2.0 * parapet_h_m, 2)
+    gross_facade = round(perimeter * total_facade_h, 2)
+    facade_plaster_net = max(0.0, round(gross_facade - facade_ded, 2))
+    area_parapet_m2 = round(perimeter * parapet_h_m, 2)
+
+    brick_type_v = st.session_state.get("m15_brick_type", "طوب طفلي مثقب")
+    brick_size_v = st.session_state.get("m15_brick_size", "25×12×6")
+    mortar_v = float(st.session_state.get("m15_mortar_thickness_cm", 1.0))
+    if brick_size_v == _CUSTOM_SIZE_LABEL:
+        bl = float(st.session_state.get("m15_brick_custom_l", 25.0))
+        bw = float(st.session_state.get("m15_brick_custom_w", 12.0))
+        bh = float(st.session_state.get("m15_brick_custom_h", 6.0))
+        size_display = f"{bl}×{bw}×{bh} سم"
+    else:
+        size_display = f"{brick_size_v} سم"
+        bl, bw, bh = _parse_brick_size(brick_size_v)
+    upm2 = (100.0 / (bl + mortar_v)) * (100.0 / (bh + mortar_v)) if (bl > 0 and bh > 0) else 55.0
+    approx_parapet_bricks = int(round(area_parapet_m2 * upm2)) if parapet_thick_choice == "حائط نصف طوبة" else int(round(area_parapet_m2 * upm2 * 2))
+
+    bk_list = list(st.session_state.get("m15_bath_kitchen_spaces", []))
+    baths_list = [s for s in bk_list if s.get("type") == "bath" or ("مطبخ" not in s.get("name", "") and s.get("type") not in ["kitchen", "shaft", "void", "منور"] and "منور" not in s.get("name", ""))]
+    kitchens_list = [s for s in bk_list if s.get("type") == "kitchen" or ("مطبخ" in s.get("name", "") and s.get("type") not in ["shaft", "void", "منور"] and "منور" not in s.get("name", ""))]
+    shafts_list = [s for s in bk_list if s.get("type") in ["shaft", "void", "منور"] or "منور" in s.get("name", "")]
+
+    total_bath_floor_m2 = round(sum(float(s.get("area_m2", 0.0)) for s in baths_list), 2)
+    total_kitchen_floor_m2 = round(sum(float(s.get("area_m2", 0.0)) for s in kitchens_list), 2)
+    total_shafts_spaces_m2 = round(sum(float(s.get("area_m2", 0.0)) for s in shafts_list), 2)
+    eff_shaft_m2 = shafts_area_m2 if shafts_area_m2 > 0 else total_shafts_spaces_m2
+
+    qty_ceiling_plaster = max(0.0, round(bldg_area - eff_shaft_m2, 2))
+    qty_ceiling_paint = max(0.0, round(bldg_area - eff_shaft_m2, 2))
+    qty_wall_plaster = round(p_res["tot_net"], 2)
+    qty_wall_paint = round(p_res["tot_net"], 2)
+    qty_facade_plaster = facade_plaster_net
+    qty_facade_paint = facade_plaster_net
+
+    qty_floor_ceramic = max(0.0, round(bldg_area - total_bath_floor_m2 - total_kitchen_floor_m2 - eff_shaft_m2, 2))
+    qty_bath_floor_ceramic = total_bath_floor_m2
+    qty_kitchen_floor_ceramic = total_kitchen_floor_m2
+
+    wall_ceramic_bath_m2 = round(sum(float(s.get("ceramic_wall_m2", 0.0)) for s in baths_list), 2)
+    wall_ceramic_kitchen_m2 = round(sum(float(s.get("ceramic_wall_m2", 0.0)) for s in kitchens_list), 2)
+
+    floor_ceramic_details_str = f"مساحة المبنى ({bldg_area:.2f} م²) − حمامات ({total_bath_floor_m2:.2f} م²) − مطابخ ({total_kitchen_floor_m2:.2f} م²) − مناور ({eff_shaft_m2:.2f} م²) = {qty_floor_ceramic:.2f} م²"
+    bath_floor_details_str = "حصر مسطح أرضيات الحمامات المعتمدة: " + (" + ".join([f"{s['name']} ({s['x1_lbl']}-{s['x2_lbl']}/{s['y1_lbl']}-{s['y2_lbl']}: {float(s.get('area_m2', 0.0)):.2f} م²)" for s in baths_list]) if baths_list else "لا توجد أحياز حمامات معتمدة بالمبنى (0.00 م²)")
+    kitchen_floor_details_str = "حصر مسطح أرضيات المطابخ المعتمدة: " + (" + ".join([f"{s['name']} ({s['x1_lbl']}-{s['x2_lbl']}/{s['y1_lbl']}-{s['y2_lbl']}: {float(s.get('area_m2', 0.0)):.2f} م²)" for s in kitchens_list]) if kitchens_list else "لا توجد أحياز مطابخ معتمدة بالمبنى (0.00 م²)")
+    bath_details_str = "حصر مسطح سيراميك الحوائط للحمامات: " + (" + ".join([f"{s['name']} ({s['x1_lbl']}-{s['x2_lbl']}/{s['y1_lbl']}-{s['y2_lbl']}: {s['ceramic_wall_m2']:.2f} م²)" for s in baths_list]) if baths_list else "لا توجد أحياز حمامات معتمدة بالمبنى (0.00 م²)")
+    kitchen_details_str = "حصر مسطح سيراميك الحوائط للمطابخ: " + (" + ".join([f"{s['name']} ({s['x1_lbl']}-{s['x2_lbl']}/{s['y1_lbl']}-{s['y2_lbl']}: {s['ceramic_wall_m2']:.2f} م²)" for s in kitchens_list]) if kitchens_list else "لا توجد أحياز مطابخ معتمدة بالمبنى (0.00 م²)")
+
+    area_interlock_m2 = round(perimeter * sidewalk_w_m, 2)
+    len_curb_m = round(perimeter + 8.0 * sidewalk_w_m, 2) if sidewalk_w_m > 0 else 0.0
+    qty_waterproof_roof = max(0.0, round(bldg_area - eff_shaft_m2, 2))
+    qty_thermal_ins = max(0.0, round(bldg_area - eff_shaft_m2, 2))
+    qty_roof_tiles = max(0.0, round(bldg_area - eff_shaft_m2, 2))
+
+    price_brick = float(st.session_state.get("m15_rate_brick", 150.0))
+    price_wall_plaster = float(st.session_state.get("m15_rate_wall_plaster", 85.0))
+    price_ceiling_plaster = float(st.session_state.get("m15_rate_ceiling_plaster", 95.0))
+    price_facade_plaster = float(st.session_state.get("m15_rate_facade_plaster", 140.0))
+    price_wall_paint = float(st.session_state.get("m15_rate_wall_paint", 75.0))
+    price_ceiling_paint = float(st.session_state.get("m15_rate_ceiling_paint", 80.0))
+    price_facade_paint = float(st.session_state.get("m15_rate_facade_paint", 110.0))
+    price_interlock = float(st.session_state.get("m15_rate_interlock", 220.0))
+    price_curbs = float(st.session_state.get("m15_rate_curbs", 160.0))
+    price_waterproof = float(st.session_state.get("m15_rate_waterproof", 170.0))
+    price_thermal = float(st.session_state.get("m15_rate_thermal", 130.0))
+    price_roof_tiles = float(st.session_state.get("m15_rate_roof_tiles", 150.0))
+    price_floor_ceramic = float(st.session_state.get("m15_rate_floor_ceramic", 260.0))
+    price_bath_ceramic = float(st.session_state.get("m15_rate_bath_ceramic", 290.0))
+    price_kitchen_ceramic = float(st.session_state.get("m15_rate_kitchen_ceramic", 290.0))
+
+    factor_suffix = f" × {plaster_qty_factor:.2f}" if abs(plaster_qty_factor - 1.0) > 1e-4 else ""
+
+    t2_items_data = [
+        ("1- كمية المحارة الداخلية بالسقف بالمتر المسطح (تساوي تماماً مسطح المبنى بعد خصم المنور)",
+         qty_ceiling_plaster, "م² (m²)", price_ceiling_plaster,
+         f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_ceiling_plaster:.2f} م²){factor_suffix}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²){factor_suffix}"),
+
+        ("2- كمية الدهانات الداخلية للسقف (تساوي تماماً مسطح المبنى بعد خصم المنور)",
+         qty_ceiling_paint, "م² (m²)", price_ceiling_paint,
+         f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_ceiling_paint:.2f} م²){factor_suffix}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²){factor_suffix}"),
+
+        ("3- كمية المحارة للحوائط بالمتر المسطح",
+         qty_wall_plaster, "م² (m²)", price_wall_plaster,
+         f"صافي مسطح محارة الحوائط ({qty_wall_plaster:.2f} م²){factor_suffix}"),
+
+        ("4- كمية الدهانات الداخلية للحوائط بالمتر المسطح",
+         qty_wall_paint, "م² (m²)", price_wall_paint,
+         f"صافي مسطح دهان الحوائط ({qty_wall_paint:.2f} م²){factor_suffix}"),
+
+        ("5- كمية المحارة الخارجية (الواجهات والدروة من الجانبين)",
+         qty_facade_plaster, "م² (m²)", price_facade_plaster,
+         f"مسطح الواجهات والدروة من الجانبين ({qty_facade_plaster:.2f} م²){factor_suffix}"),
+
+        ("6- كمية الدهانات الخارجية (الواجهات والدروة من الجانبين)",
+         qty_facade_paint, "م² (m²)", price_facade_paint,
+         f"مسطح دهان الواجهات والدروة من الجانبين ({qty_facade_paint:.2f} م²){factor_suffix}"),
+
+        ("7- كمية سيراميك الأرضيات (Floor Ceramic Tiles)",
+         qty_floor_ceramic, "م² (m²)", price_floor_ceramic,
+         f"صافي مسطح سيراميك الأرضيات ({qty_floor_ceramic:.2f} م²){factor_suffix}"),
+
+        ("8- كمية سيراميك الحمامات (أرضيات)",
+         qty_bath_floor_ceramic, "م² (m²)", price_bath_ceramic,
+         f"{bath_floor_details_str}{factor_suffix}"),
+
+        ("9- كمية سيراميك المطابخ (أرضيات)",
+         qty_kitchen_floor_ceramic, "م² (m²)", price_kitchen_ceramic,
+         f"{kitchen_floor_details_str}{factor_suffix}"),
+
+        ("10- كمية سيراميك الحوائط للحمامات",
+         wall_ceramic_bath_m2, "م² (m²)", price_bath_ceramic,
+         f"{bath_details_str}{factor_suffix}"),
+
+        ("11- كمية سيراميك الحوائط للمطابخ",
+         wall_ceramic_kitchen_m2, "م² (m²)", price_kitchen_ceramic,
+         f"{kitchen_details_str}{factor_suffix}"),
+
+        ("12- بند طوب للدروة (مساحة مباني دروة السطح)",
+         area_parapet_m2, "م² (m²)", price_brick,
+         f"مساحة مباني الدروة ({area_parapet_m2:.2f} م² │ {parapet_thick_choice}){factor_suffix}"),
+
+        ("13- انترلوك ارصفة (مساحة انترلوك الأرصفة)",
+         area_interlock_m2, "م² (m²)", price_interlock,
+         f"مساحة انترلوك الأرصفة ({area_interlock_m2:.2f} م²){factor_suffix}"),
+
+        ("14- بردورة أرصفة (إجمالي طول البردورات)",
+         len_curb_m, "م.ط (m)", price_curbs,
+         f"إجمالي طول البردورات للمحيط الخارجي ({len_curb_m:.2f} م.ط){factor_suffix}"),
+
+        ("15- بند العزل المائي للسطح (انسومات)",
+         qty_waterproof_roof, "م² (m²)", price_waterproof,
+         f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_waterproof_roof:.2f} م²){factor_suffix}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²){factor_suffix}"),
+
+        ("16- عازل حراري",
+         qty_thermal_ins, "م² (m²)", price_thermal,
+         f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_thermal_ins:.2f} م²){factor_suffix}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²){factor_suffix}"),
+
+        ("17- بلاط اسطح",
+         qty_roof_tiles, "م² (m²)", price_roof_tiles,
+         f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_roof_tiles:.2f} م²){factor_suffix}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²){factor_suffix}"),
+    ]
+
+    boq_items_list = []
+    table_2_summary_rows = []
+    grand_total_cost = 0.0
+
+    for idx, (name, net_q, unit, u_price, details) in enumerate(t2_items_data, start=1):
+        tot_q = round(net_q * plaster_qty_factor, 2)
+        tot_cost = round(tot_q * u_price, 2)
+        grand_total_cost += tot_cost
+
+        boq_items_list.append({
+            "idx": idx,
+            "name": name,
+            "net_q": net_q,
+            "tot_q": tot_q,
+            "unit": unit,
+            "u_price": u_price,
+            "tot_cost": tot_cost,
+            "details": details,
+        })
+
+        table_2_summary_rows.append({
+            "المحددات والتفصيل (Details)": details,
+            "إجمالي التكلفة (ج.م)": f"{tot_cost:,.2f}",
+            "تكلفة الوحدة (ج.م)": f"{u_price:.2f}",
+            "الوحدة (Unit)": unit,
+            f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": f"{tot_q:.2f}",
+            "الكمية قبل المعامل (Net Qty)": f"{net_q:.2f}",
+            "البند / ملخص الكميات (Summary Item)": name,
+        })
+
+    table_2_summary_rows.append({
+        "المحددات والتفصيل (Details)": f"إجمالي تكلفة جميع بنود التشطيبات والبياض والدروة والأرصفة والعزل شامل معامل الزيادة ({plaster_qty_factor:.2f})",
+        "إجمالي التكلفة (ج.م)": f"{grand_total_cost:,.2f}",
+        "تكلفة الوحدة (ج.م)": "—",
+        "الوحدة (Unit)": "ج.م (EGP)",
+        f"الكمية الإجمالية (× {plaster_qty_factor:.2f})": "—",
+        "الكمية قبل المعامل (Net Qty)": "—",
+        "البند / ملخص الكميات (Summary Item)": "💰 الإجمالي العام للتكلفة (Grand Total Cost)",
+    })
+
+    return {
+        "t2_items_data": t2_items_data,
+        "table_2_summary_rows": table_2_summary_rows,
+        "boq_items_list": boq_items_list,
+        "grand_total_cost": grand_total_cost,
+        "plaster_qty_factor": plaster_qty_factor,
+        "bldg_area": bldg_area,
+        "perimeter": perimeter,
+        "default_h": default_h,
+        "total_facade_h": total_facade_h,
+        "parapet_h_m": parapet_h_m,
+        "parapet_thick_choice": parapet_thick_choice,
+        "shafts_area_m2": eff_shaft_m2,
+        "rule_key": rule_key,
+    }
+
+
 def _section_plaster_boq():
     """
     قسم منفصل مطوي: جداول الحصر والتكلفة لجميع البنود والتشطيبات التكميلية (طبقاً للكود المصري ECP):
@@ -17633,7 +18004,11 @@ def _section_export_pdf():
     قسم حفظ وتصدير مخرجات الموديول 15 (أعمال المباني والمحارة) كملف PDF وملف HTML مستقل.
     يقع بعد جميع أقسام الموديول.
     """
-    from modules.report_generator import generate_masonry_plaster_report_html, html_to_pdf_bytes
+    from modules.report_generator import (
+        generate_masonry_plaster_report_html,
+        generate_masonry_plaster_concise_survey_report_html,
+        html_to_pdf_bytes
+    )
     from modules.settings import get_safe_profile_filename_prefix, get_active_profile_name
 
     active_proj = get_active_profile_name() or "Masonry_Plaster_Project"
@@ -17954,6 +18329,25 @@ def _section_export_pdf():
         inputs_data=inputs_data,
     )
 
+    # تقرير جداول الحصر المختصر PDF (المسقط الأفقي المصمم بأكبر مساحة + حصر الشبابيك والأبواب + حصر البنود المسعر + حصر البنود غير المسعر)
+    boq_calc_concise = _compute_plaster_boq_data(rule_key=st.session_state.get("m15_plaster_deduction_rule", "ecp"))
+    openings_calc_concise = _get_openings_takeoff_data()
+
+    report_html_concise = generate_masonry_plaster_concise_survey_report_html(
+        project_name=active_proj,
+        img_plan_b64=img_plan_b64,
+        windows_models=openings_calc_concise.get("windows_models", []),
+        doors_models=openings_calc_concise.get("doors_models", []),
+        openings_wall_details=openings_calc_concise.get("wall_openings_details", []),
+        boq_items=boq_calc_concise.get("boq_items_list", []),
+        plaster_qty_factor=boq_calc_concise.get("plaster_qty_factor", 1.00),
+        grand_total_cost=boq_calc_concise.get("grand_total_cost", 0.0),
+        brick_type_display=brick_type_display,
+        brick_size_display=brick_size_display,
+        mortar_cm=mortar_v,
+        deduction_rule_str=deduction_rule_str,
+    )
+
     # تنسيق رسالة التحميل في منتصف الشاشة بخلفية معتمة
     spinner_modal_css = """
     <style>
@@ -18002,6 +18396,7 @@ def _section_export_pdf():
 
     /* توحيد ألوان وخلفيات وخطوط جميع أزرار التصدير: خلفية حمراء ونصوص بيضاء */
     .st-key-m15_btn_export_pdf_outputs button,
+    .st-key-m15_btn_export_pdf_concise button,
     .st-key-m15_btn_export_pdf_all button,
     .st-key-m15_btn_download_html button,
     div[class*="st-key-m15_btn_export_pdf_"] button,
@@ -18016,6 +18411,7 @@ def _section_export_pdf():
         transition: all 0.2s ease !important;
     }
     .st-key-m15_btn_export_pdf_outputs button *,
+    .st-key-m15_btn_export_pdf_concise button *,
     .st-key-m15_btn_export_pdf_all button *,
     .st-key-m15_btn_download_html button *,
     div[class*="st-key-m15_btn_export_pdf_"] button *,
@@ -18024,6 +18420,7 @@ def _section_export_pdf():
         font-weight: 700 !important;
     }
     .st-key-m15_btn_export_pdf_outputs button:hover,
+    .st-key-m15_btn_export_pdf_concise button:hover,
     .st-key-m15_btn_export_pdf_all button:hover,
     .st-key-m15_btn_download_html button:hover,
     div[class*="st-key-m15_btn_export_pdf_"] button:hover,
@@ -18040,13 +18437,14 @@ def _section_export_pdf():
     st.markdown(spinner_modal_css, unsafe_allow_html=True)
 
     pdf_fname_outputs = f"{prefix}ECP_Masonry_Plaster_Outputs.pdf"
+    pdf_fname_concise = f"{prefix}ECP_Masonry_Plaster_Concise_Survey.pdf"
     pdf_fname_all = f"{prefix}ECP_Masonry_Plaster_Full_Report.pdf"
     html_fname = f"{prefix}ECP_Masonry_Plaster_Calculation_Sheet.html"
 
     # 1. قسم "تصدير ملفات المدخلات والمخرجات" يظهر كـ Expander مطوي افتراضياً
     with st.expander("تصدير ملفات المدخلات والمخرجات", expanded=False):
-        # أزرار التصدير في الأعلى (3 أزرار متناسقة بدون زر التحديث)
-        c_exp1, c_exp2, c_exp3 = st.columns([1.3, 1.6, 1.4], gap="medium")
+        # أزرار التصدير في الأعلى (4 أزرار متناسقة)
+        c_exp1, c_exp2, c_exp3, c_exp4 = st.columns([1.15, 1.45, 1.45, 1.25], gap="small")
 
         with c_exp1:
             if st.button("📕 تصدير ملف المخرجات PDF", key="m15_btn_export_pdf_outputs", type="primary", use_container_width=True):
@@ -18059,6 +18457,16 @@ def _section_export_pdf():
                     st.error("تعذر إنشاء ملف الـ PDF تلقائياً، يمكنك تنزيل ملف الـ HTML وفتحه للطباعة كـ PDF مباشرة.")
 
         with c_exp2:
+            if st.button("📋 تصدير جداول الحصر المختصر PDF", key="m15_btn_export_pdf_concise", type="primary", use_container_width=True):
+                with st.spinner("جاري تحميل الملف"):
+                    pdf_bytes_concise = html_to_pdf_bytes(report_html_concise)
+                if pdf_bytes_concise:
+                    _trigger_browser_download(pdf_bytes_concise, pdf_fname_concise)
+                    st.toast("✅ تم تصدير جداول الحصر المختصر PDF بنجاح وفتح نافذة الحفظ!", icon="📋")
+                else:
+                    st.error("تعذر إنشاء ملف الـ PDF تلقائياً، يمكنك تنزيل ملف الـ HTML وفتحه للطباعة كـ PDF مباشرة.")
+
+        with c_exp3:
             if st.button("📑 تصدير جميع المدخلات والمخرجات ملف pdf", key="m15_btn_export_pdf_all", type="primary", use_container_width=True):
                 with st.spinner("جاري تحميل الملف"):
                     pdf_bytes_all = html_to_pdf_bytes(report_html_all)
@@ -18068,7 +18476,7 @@ def _section_export_pdf():
                 else:
                     st.error("تعذر إنشاء ملف الـ PDF تلقائياً، يمكنك تنزيل ملف الـ HTML وفتحه للطباعة كـ PDF مباشرة.")
 
-        with c_exp3:
+        with c_exp4:
             st.download_button(
                 label="🌐 حفظ التقرير بصيغة HTML (فتح بالمتصفح)",
                 data=report_html_all.encode("utf-8"),
@@ -18103,6 +18511,7 @@ def _section_export_pdf():
                 يتضمن ملف التقرير المُصدَّر:
                 <ul style='margin: 6px 20px 0 0; padding: 0; color:#e2e8f0; font-size:0.85rem; text-align:right; direction:rtl;'>
                     <li>📐 <b>المسقط الأفقي المصمم عالي الدقة (2D Plan):</b> موضحاً عليه المحاور، أبعاد الحوائط، الأعمدة، الشبابيك والأبواب، وأوجه المحارة المميزة بالألوان.</li>
+                    <li>📋 <b>تقرير جداول الحصر المختصر (Concise Survey PDF):</b> المسقط الأفقي المصمم بأكبر مساحة، جدول حصر الشبابيك والأبواب، جدول حصر البنود المسعر، وجدول حصر البنود غير المسعر بدون أي تكلفة للتنفيذ والطرح.</li>
                     <li>🧱 <b>جداول حصر أعمال المباني التفصيلية:</b> لمباني 12 سم (م²) ومباني 25 سم (م³) متضمنة طول المحور، خصم الأعمدة الخالص، المساحات وعدد الطوب.</li>
                     <li>🎨 <b>جدول حصر أعمال المحارة (البياض):</b> لكل حائط مع الأوجه ومساحات الفتحات والخصم المعتمد طبقاً للكود المصري ECP والكميات.</li>
                     <li>📦 <b>مقايسة الخامات والمونة الشاملة:</b> رمل صافي وشامل الهالك 5%، أسمنت بالطن والشكاير، وعدد الطوب الإجمالي.</li>

@@ -3753,3 +3753,529 @@ def generate_masonry_plaster_report_html(
 </html>
 """
     return html_content
+
+
+def generate_masonry_plaster_concise_survey_report_html(
+    project_name: str = "ECP Masonry & Plaster Design",
+    owner_name: Optional[str] = None,
+    img_plan_b64: Optional[str] = None,
+    windows_models: Optional[List[Dict[str, Any]]] = None,
+    doors_models: Optional[List[Dict[str, Any]]] = None,
+    openings_wall_details: Optional[List[Dict[str, Any]]] = None,
+    boq_items: Optional[List[Dict[str, Any]]] = None,
+    plaster_qty_factor: float = 1.00,
+    grand_total_cost: float = 0.0,
+    brick_type_display: str = "الطوب الأحمر الطفلي",
+    brick_size_display: str = "25×12×6 سم",
+    mortar_cm: float = 1.0,
+    deduction_rule_str: str = "الكود المصري ECP",
+) -> str:
+    """
+    توليد تقرير جداول الحصر المختصر كملف HTML مستقل قابل للطباعة والحفظ كـ PDF بجودة هندسية فائقة:
+    1- المسقط الأفقي المصمم بأكبر مساحة ممكنة (Page 1)
+    2- جدول حصر للشبابيك والأبواب (Page 2)
+    3- جدول حصر البنود في قسم جداول الحصر والتكلفة لجميع البنود (مع الأسعار والتكلفة) (Page 3)
+    4- جدول حصر البنود بدون أعمدة تكلفة الوحدة وبدون عمود إجمالي التكلفة (بدون أي شيء يخص التكلفة) (Page 4)
+    """
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    wins = windows_models or []
+    doors = doors_models or []
+    wall_ops = openings_wall_details or []
+    b_items = boq_items or []
+
+    tot_w_cnt = sum(int(w.get("count", 0)) for w in wins)
+    tot_w_area = sum(float(w.get("total_area_m2", 0.0)) for w in wins)
+    tot_d_cnt = sum(int(d.get("count", 0)) for d in doors)
+    tot_d_area = sum(float(d.get("total_area_m2", 0.0)) for d in doors)
+    grand_op_cnt = tot_w_cnt + tot_d_cnt
+    grand_op_area = round(tot_w_area + tot_d_area, 2)
+
+    owner_html = ""
+    if owner_name and str(owner_name).strip():
+        owner_html = f"""<span style="font-size:0.85rem; color:#334155;"> | المالك: <b style="color:#0f172a;">{str(owner_name).strip()}</b></span>"""
+
+    # ── 1. صفوف نماذج الشبابيك والأبواب ──
+    op_models_trs = ""
+    idx_m = 1
+    for w in wins:
+        cnt = int(w.get("count", 0))
+        u_area = float(w.get("area_m2", 0.0))
+        t_area = float(w.get("total_area_m2", cnt * u_area))
+        op_models_trs += f"""
+        <tr>
+            <td class="val-cell">{idx_m}</td>
+            <td style="font-weight:700; text-align:right; color:#0284c7;">🪟 شباك ({w.get('name', '—')})</td>
+            <td class="val-cell">شباك</td>
+            <td class="val-cell" style="font-weight:700; color:#0369a1;">{w.get('name', '—')}</td>
+            <td class="val-cell"><span dir="ltr">{float(w.get('w_m', 1.0)):.2f} م</span></td>
+            <td class="val-cell"><span dir="ltr">{float(w.get('h_m', 1.2)):.2f} م</span></td>
+            <td class="val-cell"><span dir="ltr">{float(w.get('sill_m', 1.0)):.2f} م</span></td>
+            <td class="val-cell"><span dir="ltr">{u_area:.2f} م²</span></td>
+            <td class="val-cell" style="font-weight:700; color:#0369a1;"><span dir="ltr">{cnt}</span></td>
+            <td class="val-cell" style="font-weight:700; color:#0f766e;"><span dir="ltr">{t_area:.2f} م²</span></td>
+        </tr>
+        """
+        idx_m += 1
+
+    if wins:
+        op_models_trs += f"""
+        <tr style="background:#e0f2fe; font-weight:800; border-top:1.5px solid #0284c7;">
+            <td colspan="4" style="text-align:right; color:#0369a1;">⬅️ إجمالي نماذج الشبابيك (Windows Total)</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell" style="color:#0369a1; font-size:0.95rem;"><span dir="ltr">{tot_w_cnt} شباك</span></td>
+            <td class="val-cell" style="color:#0f766e; font-size:0.95rem;"><span dir="ltr">{tot_w_area:.2f} م²</span></td>
+        </tr>
+        """
+
+    for d in doors:
+        cnt = int(d.get("count", 0))
+        u_area = float(d.get("area_m2", 0.0))
+        t_area = float(d.get("total_area_m2", cnt * u_area))
+        op_models_trs += f"""
+        <tr>
+            <td class="val-cell">{idx_m}</td>
+            <td style="font-weight:700; text-align:right; color:#15803d;">🚪 باب ({d.get('name', '—')})</td>
+            <td class="val-cell">باب</td>
+            <td class="val-cell" style="font-weight:700; color:#15803d;">{d.get('name', '—')}</td>
+            <td class="val-cell"><span dir="ltr">{float(d.get('w_m', 0.9)):.2f} م</span></td>
+            <td class="val-cell"><span dir="ltr">{float(d.get('h_m', 2.1)):.2f} م</span></td>
+            <td class="val-cell">—</td>
+            <td class="val-cell"><span dir="ltr">{u_area:.2f} م²</span></td>
+            <td class="val-cell" style="font-weight:700; color:#15803d;"><span dir="ltr">{cnt}</span></td>
+            <td class="val-cell" style="font-weight:700; color:#0f766e;"><span dir="ltr">{t_area:.2f} م²</span></td>
+        </tr>
+        """
+        idx_m += 1
+
+    if doors:
+        op_models_trs += f"""
+        <tr style="background:#dcfce7; font-weight:800; border-top:1.5px solid #16a34a;">
+            <td colspan="4" style="text-align:right; color:#15803d;">⬅️ إجمالي نماذج الأبواب (Doors Total)</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell">—</td>
+            <td class="val-cell" style="color:#15803d; font-size:0.95rem;"><span dir="ltr">{tot_d_cnt} باب</span></td>
+            <td class="val-cell" style="color:#0f766e; font-size:0.95rem;"><span dir="ltr">{tot_d_area:.2f} م²</span></td>
+        </tr>
+        """
+
+    if not wins and not doors:
+        op_models_trs = "<tr><td colspan='10' style='text-align:center; padding:14px; color:#64748b;'>لا توجد نماذج شبابيك أو أبواب نشطة مسقطة بالمسقط</td></tr>"
+    else:
+        op_models_trs += f"""
+        <tr style="background:linear-gradient(90deg, #1e3a8a, #065f46); color:#ffffff; font-weight:900; font-size:0.92rem;">
+            <td colspan="4" style="text-align:right; color:#ffffff;">🏆 الإجمالي العام لجميع فتحات المشروع (أبواب + شبابيك)</td>
+            <td class="val-cell" style="color:#ffffff;">—</td>
+            <td class="val-cell" style="color:#ffffff;">—</td>
+            <td class="val-cell" style="color:#ffffff;">—</td>
+            <td class="val-cell" style="color:#ffffff;">—</td>
+            <td class="val-cell" style="color:#fde047; font-size:1.0rem;"><span dir="ltr">{grand_op_cnt} فتحة</span></td>
+            <td class="val-cell" style="color:#86efac; font-size:1.0rem;"><span dir="ltr">{grand_op_area:.2f} م²</span></td>
+        </tr>
+        """
+
+    # ── 2. جدول تفصيل الفتحات الموزعة على الحوائط ──
+    wall_ops_trs = ""
+    if wall_ops:
+        for w_idx, o in enumerate(wall_ops, start=1):
+            is_win = o.get("kind") == "شباك"
+            k_color = "#0284c7" if is_win else "#15803d"
+            k_icon = "🪟" if is_win else "🚪"
+            sill_txt = f"{float(o.get('sill_m', 0.0)):.2f} م" if is_win else "—"
+            wall_ops_trs += f"""
+            <tr>
+                <td class="val-cell">{w_idx}</td>
+                <td style="font-weight:700; text-align:right; color:{k_color};">{k_icon} {o.get('name', '—')}</td>
+                <td class="val-cell">{o.get('kind', '—')}</td>
+                <td style="text-align:right; font-weight:600;">{o.get('wall', '—')}</td>
+                <td class="val-cell"><span dir="ltr">{float(o.get('w_m', 0.0)):.2f} × {float(o.get('h_m', 0.0)):.2f} م</span></td>
+                <td class="val-cell">{sill_txt}</td>
+                <td class="val-cell" style="font-weight:700; color:#0f766e;"><span dir="ltr">{float(o.get('area_m2', 0.0)):.2f} م²</span></td>
+                <td class="val-cell"><span dir="ltr">{float(o.get('pos_m', 0.0)):.2f} م</span></td>
+            </tr>
+            """
+    else:
+        wall_ops_trs = "<tr><td colspan='8' style='text-align:center; padding:12px; color:#64748b;'>لا توجد فتحات نشطة مسقطة على الحوائط</td></tr>"
+
+    # ── 3. صفوف جدول حصر البنود المسعر (Priced BOQ) ──
+    import re
+    priced_trs = ""
+    for b in b_items:
+        i_idx = b.get("idx", 1)
+        i_name = b.get("name", "")
+        tot_q = float(b.get("tot_q", 0.0))
+        unit = b.get("unit", "")
+        u_price = float(b.get("u_price", 0.0))
+        tot_cost = float(b.get("tot_cost", 0.0))
+        details = b.get("details", "")
+
+        clean_details = re.sub(r'\s*×\s*1\.00?', '', details)
+        clean_details = clean_details.replace("معامل زيادة الكميات", "").strip()
+
+        priced_trs += f"""
+        <tr>
+            <td class="val-cell">{i_idx}</td>
+            <td style="font-weight:700; text-align:right; color:#1e293b;">{i_name}</td>
+            <td class="val-cell" style="font-weight:700; color:#1d4ed8;"><span dir="ltr">{tot_q:.2f}</span></td>
+            <td class="val-cell">{unit}</td>
+            <td class="val-cell"><span dir="ltr">{u_price:.2f}</span></td>
+            <td class="val-cell" style="font-weight:800; color:#047857;"><span dir="ltr">{tot_cost:,.2f}</span></td>
+            <td style="text-align:right; font-size:0.74rem; color:#475569; line-height:1.35;">{clean_details}</td>
+        </tr>
+        """
+
+    priced_trs += f"""
+    <tr style="background:linear-gradient(90deg, #1e3a8a, #065f46); color:#ffffff; font-weight:900; font-size:0.88rem;">
+        <td colspan="4" style="text-align:right; color:#ffffff; padding:7px 10px;">💰 الإجمالي العام للتكلفة (Grand Total Cost)</td>
+        <td class="val-cell" style="color:#ffffff;">—</td>
+        <td class="val-cell" style="color:#86efac; font-size:1.02rem;"><span dir="ltr">{grand_total_cost:,.2f} ج.م</span></td>
+        <td style="text-align:right; color:#e0f2fe; font-size:0.76rem;">إجمالي تكلفة جميع بنود التشطيبات والبياض والدروة والأرصفة والعزل</td>
+    </tr>
+    """
+
+    # ── 4. صفوف جدول حصر البنود غير المسعر (Unpriced BOQ - بدون أي تكلفة) ──
+    unpriced_trs = ""
+    for b in b_items:
+        i_idx = b.get("idx", 1)
+        i_name = b.get("name", "")
+        tot_q = float(b.get("tot_q", 0.0))
+        unit = b.get("unit", "")
+        details = b.get("details", "")
+
+        clean_details = re.sub(r'\s*×\s*1\.00?', '', details)
+        clean_details = clean_details.replace("معامل زيادة الكميات", "").strip()
+
+        unpriced_trs += f"""
+        <tr>
+            <td class="val-cell">{i_idx}</td>
+            <td style="font-weight:700; text-align:right; color:#1e293b;">{i_name}</td>
+            <td class="val-cell" style="font-weight:700; color:#0f766e;"><span dir="ltr">{tot_q:.2f}</span></td>
+            <td class="val-cell">{unit}</td>
+            <td style="text-align:right; font-size:0.75rem; color:#475569; line-height:1.35;">{clean_details}</td>
+        </tr>
+        """
+
+    # الصورة بصيغة data URI
+    img_plan_tag = f'<img src="data:image/png;base64,{img_plan_b64}" alt="Designed Floor Plan" style="max-width:100%; max-height:232mm; width:auto; height:auto; object-fit:contain; border-radius:6px; border:1px solid #cbd5e1; box-shadow:0 2px 8px rgba(0,0,0,0.06);" />' if img_plan_b64 else '<div style="padding:40px; color:#64748b; font-weight:bold;">لا يوجد مخطط مسقط متاح حالياً</div>'
+
+    html_content = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تصدير جداول الحصر المختصر — {project_name}</title>
+    {_get_base_report_css()}
+    <style>
+        @media print {{
+            .no-print {{
+                display: none !important;
+            }}
+            body {{
+                background: #ffffff !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                font-size: 8.5pt !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }}
+            .report-container {{
+                box-shadow: none !important;
+                border: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                max-width: 100% !important;
+            }}
+            @page {{
+                size: A4 portrait;
+                margin: 8mm 8mm 10mm 8mm;
+            }}
+        }}
+
+        /* منع الفراغات غير الضرورية وإتاحة استمرار الجداول عبر الصفحات بسلاسة */
+        table, .data-table {{
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+            margin-top: 6px !important;
+            width: 100% !important;
+            border-collapse: collapse !important;
+        }}
+        tr {{
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+        }}
+        thead {{
+            display: table-header-group !important;
+        }}
+        tbody {{
+            display: table-row-group !important;
+        }}
+        .header-box {{
+            page-break-after: avoid !important;
+            break-after: avoid !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            margin-bottom: 8px !important;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #1e3a8a;
+            padding-bottom: 6px;
+        }}
+        .page-sheet {{
+            box-sizing: border-box;
+            padding: 0;
+            margin: 0 0 16px 0;
+            min-height: auto !important;
+            height: auto !important;
+        }}
+        .break-before-page {{
+            page-break-before: always !important;
+            break-before: page !important;
+        }}
+
+        .header-title-text {{
+            font-size: 1.15rem;
+            font-weight: 900;
+            color: #1e3a8a;
+            margin: 0 0 4px 0;
+        }}
+        .header-meta-text {{
+            font-size: 0.80rem;
+            color: #475569;
+        }}
+        .badge-code {{
+            background: #dbeafe;
+            color: #1e40af;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.76rem;
+            border: 1px solid #bfdbfe;
+        }}
+        .badge-param {{
+            background: #f1f5f9;
+            color: #334155;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.76rem;
+            border: 1px solid #cbd5e1;
+        }}
+        .data-table th {{
+            padding: 5px 6px !important;
+            font-size: 0.78rem !important;
+            vertical-align: middle;
+        }}
+        .data-table td {{
+            padding: 4px 6px !important;
+            font-size: 0.74rem !important;
+            vertical-align: middle;
+            line-height: 1.35;
+        }}
+        .data-table tr:nth-child(even) {{
+            background-color: #f8fafc;
+        }}
+    </style>
+</head>
+<body>
+
+<div class="report-container">
+
+    <!-- Action Bar (hidden in print) -->
+    <div class="action-bar no-print" style="margin-bottom:14px;">
+        <div style="font-weight:700; font-size:1.0rem; display:flex; align-items:center; gap:8px;">
+            <span>📋</span>
+            <span>تقرير جداول الحصر المختصر (المسقط + حصر الشبابيك والأبواب + حصر البنود التنفيذي والمسعر)</span>
+        </div>
+        <button class="btn-print" onclick="window.print()">
+            🖨️ طباعة المذكرة / تصدير PDF
+        </button>
+    </div>
+
+    <!-- ==================== الصفحة الأولى: المسقط الأفقي المصمم بأكبر مساحة ممكنة ==================== -->
+    <div class="page-sheet">
+        <div class="header-box">
+            <div>
+                <div class="header-title-text">1. المخطط الهندسي للمسقط الأفقي المصمم (Designed Structural Plan Layout)</div>
+                <div class="header-meta-text">
+                    <span class="badge-code">الكود المصري ECP للمباني والبياض</span>
+                    المشروع: <b style="color:#1e3a8a;">{project_name}</b>{owner_html}
+                    <span class="badge-param">طوب: <b>{brick_type_display} ({brick_size_display})</b> | مونة <b>{mortar_cm} سم</b></span>
+                </div>
+            </div>
+            <div style="text-align:left; font-size:0.80rem; color:#64748b;" dir="ltr">
+                <div><b>التاريخ:</b> {now_str}</div>
+                <div><b>الصفحة:</b> 1 من 4 (المسقط الأفقي)</div>
+            </div>
+        </div>
+
+        <!-- Plan Image Box filling maximum printable height -->
+        <div style="display:flex; justify-content:center; align-items:center; width:100%; min-height:228mm; max-height:235mm; text-align:center; margin:4px auto;">
+            {img_plan_tag}
+        </div>
+
+        <!-- Legend Footer -->
+        <div style="font-size:0.76rem; margin-top:6px; display:flex; gap:14px; justify-content:center; flex-wrap:wrap; color:#334155; font-weight:bold; border-top:1px solid #e2e8f0; padding-top:6px;">
+            <span style="color:#EFA368;">■ حائط 12سم</span>
+            <span style="color:#8B1A1A;">■ حائط 25سم</span>
+            <span style="color:#0284C7;">■ حائط دروة</span>
+            <span style="color:#87CEEB;">■ شباك (W#)</span>
+            <span style="color:#2E7D32;">■ باب (D#)</span>
+            <span style="color:#2F4F8F;">■ عمود (C#)</span>
+            <span style="color:#EC4899;">▨ وجه محارة معتمد</span>
+        </div>
+    </div>
+
+    <!-- ==================== الصفحة الثانية: جدول حصر للشبابيك والأبواب ==================== -->
+    <div class="page-sheet break-before-page">
+        <div class="header-box">
+            <div>
+                <div class="header-title-text">2. جدول حصر وتوصيف فتحات الشبابيك والأبواب (Windows & Doors Takeoff Schedule)</div>
+                <div class="header-meta-text">
+                    <span class="badge-code">الكود المصري ECP</span>
+                    المشروع: <b style="color:#1e3a8a;">{project_name}</b>{owner_html}
+                    <span class="badge-param">إجمالي الفتحات المنفذة: <b>{grand_op_cnt} فتحة</b> ({grand_op_area:.2f} م²)</span>
+                </div>
+            </div>
+            <div style="text-align:left; font-size:0.80rem; color:#64748b;" dir="ltr">
+                <div><b>التاريخ:</b> {now_str}</div>
+                <div><b>الصفحة:</b> 2 من 4 (حصر الشبابيك والأبواب)</div>
+            </div>
+        </div>
+
+        <div class="section-title">2.1 جدول حصر نماذج ومقاسات الشبابيك والأبواب (Openings Summary by Type & Model)</div>
+        <table class="data-table" style="width:100%; border-collapse:collapse; margin-top:8px; font-size:0.85rem;">
+            <thead>
+                <tr style="background:#1e3a8a; color:#ffffff;">
+                    <th style="width:30px;">م</th>
+                    <th style="text-align:right;">بيان الفتحة</th>
+                    <th>النوع</th>
+                    <th>كود النموذج</th>
+                    <th>العرض (م)</th>
+                    <th>الارتفاع (م)</th>
+                    <th>ارتفاع الجلسة (م)</th>
+                    <th>مسطح الوحدة (م²)</th>
+                    <th>العدد المنفذ</th>
+                    <th>إجمالي المسطح (م²)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {op_models_trs}
+            </tbody>
+        </table>
+
+        <div class="section-title" style="margin-top:18px;">2.2 كشف حصر الفتحات التفصيلي الموزع على الحوائط (Openings Distributed by Wall Layout)</div>
+        <table class="data-table" style="width:100%; border-collapse:collapse; margin-top:8px; font-size:0.83rem;">
+            <thead>
+                <tr style="background:#0f172a; color:#ffffff;">
+                    <th style="width:30px;">م</th>
+                    <th style="text-align:right;">كود الفتحة</th>
+                    <th>النوع</th>
+                    <th style="text-align:right;">الحائط وموقعه الإنشائي</th>
+                    <th>العرض × الارتفاع (م)</th>
+                    <th>ارتفاع الجلسة (م)</th>
+                    <th>المسطح الصافي (م²)</th>
+                    <th>الموضع على الحائط (م)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {wall_ops_trs}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ==================== الصفحة الثالثة: جدول حصر كميات البنود بدون أسعار (Technical BOQ) ==================== -->
+    <div class="page-sheet break-before-page">
+        <div class="header-box">
+            <div>
+                <div class="header-title-text">3. جدول حصر كميات البنود والتشطيبات التكميلية (Technical BOQ - بدون أسعار)</div>
+                <div class="header-meta-text">
+                    <span class="badge-code">الكود المصري ECP</span>
+                    المشروع: <b style="color:#1e3a8a;">{project_name}</b>{owner_html}
+                    <span class="badge-param">طريقة الخصم: <b>{deduction_rule_str}</b></span>
+                    <span class="badge-param">مقايسة تنفيذية للموقع والطرح بدون أسعار</span>
+                </div>
+            </div>
+            <div style="text-align:left; font-size:0.80rem; color:#64748b;" dir="ltr">
+                <div><b>التاريخ:</b> {now_str}</div>
+                <div><b>الصفحة:</b> 3 من 4 (جدول الحصر التنفيذي)</div>
+            </div>
+        </div>
+
+        <table class="data-table">
+            <thead>
+                <tr style="background:#0f766e; color:#ffffff;">
+                    <th style="width:28px;">م</th>
+                    <th style="text-align:right;">البند / بيان الأعمال (Work Item)</th>
+                    <th style="width:110px;">الكمية الإجمالية</th>
+                    <th style="width:85px;">الوحدة (Unit)</th>
+                    <th style="text-align:right;">المحددات ومعادلة الحصر الهندسية التفصيلية</th>
+                </tr>
+            </thead>
+            <tbody>
+                {unpriced_trs}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ==================== الصفحة الرابعة: جدول حصر وتكلفة جميع البنود (Priced BOQ) ==================== -->
+    <div class="page-sheet break-before-page">
+        <div class="header-box">
+            <div>
+                <div class="header-title-text">4. جدول حصر وتكلفة جميع البنود والتشطيبات التكميلية (Priced BOQ & Cost Schedule)</div>
+                <div class="header-meta-text">
+                    <span class="badge-code">الكود المصري ECP</span>
+                    المشروع: <b style="color:#1e3a8a;">{project_name}</b>{owner_html}
+                    <span class="badge-param">طريقة الخصم: <b>{deduction_rule_str}</b></span>
+                    <span class="badge-param">جدول التكلفة والمقايسة المالية المعتمدة</span>
+                </div>
+            </div>
+            <div style="text-align:left; font-size:0.80rem; color:#64748b;" dir="ltr">
+                <div><b>التاريخ:</b> {now_str}</div>
+                <div><b>الصفحة:</b> 4 من 4 (جدول الحصر والتكلفة)</div>
+            </div>
+        </div>
+
+        <table class="data-table">
+            <thead>
+                <tr style="background:#1e3a8a; color:#ffffff;">
+                    <th style="width:26px;">م</th>
+                    <th style="text-align:right;">البند / بيان الأعمال (Work Item)</th>
+                    <th style="width:95px;">الكمية الإجمالية</th>
+                    <th style="width:75px;">الوحدة</th>
+                    <th style="width:90px;">تكلفة الوحدة (ج.م)</th>
+                    <th style="width:105px;">إجمالي التكلفة (ج.م)</th>
+                    <th style="text-align:right;">المحددات ومعادلة الحصر الهندسية التفصيلية</th>
+                </tr>
+            </thead>
+            <tbody>
+                {priced_trs}
+            </tbody>
+        </table>
+
+        <!-- Sign-off / Approval Block -->
+        <div class="signature-block" style="display:flex; justify-content:space-between; margin-top:20px; padding-top:12px; border-top:2px solid #cbd5e1; page-break-inside: avoid; break-inside: avoid;">
+            <div class="sig-box" style="flex:1; text-align:center; padding:8px;">
+                <div class="sig-title" style="font-weight:700; color:#1e3a8a; font-size:0.84rem;">مهندس المكتب الفني والتسعير:</div>
+                <div style="margin-top:24px; color:#94a3b8; font-size:0.78rem;">التوقيع: ___________________</div>
+            </div>
+            <div class="sig-box" style="flex:1; text-align:center; padding:8px;">
+                <div class="sig-title" style="font-weight:700; color:#1e3a8a; font-size:0.84rem;">مهندس التنفيذ وإدارة المشروع:</div>
+                <div style="margin-top:24px; color:#94a3b8; font-size:0.78rem;">التوقيع: ___________________</div>
+            </div>
+            <div class="sig-box" style="flex:1; text-align:center; padding:8px;">
+                <div class="sig-title" style="font-weight:700; color:#1e3a8a; font-size:0.84rem;">اعتماد الاستشاري المشرف:</div>
+                <div style="margin-top:24px; color:#94a3b8; font-size:0.78rem;">الختم والتاريخ: ______________</div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>
+"""
+    return html_content
