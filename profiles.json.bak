@@ -5,8 +5,8 @@
       "name": "Control room (مباني)",
       "description": "مشروع جديد منسوخ المحاور والأعمدة من «Control room (نسخة)»",
       "created_at": "2026-11-18 15:34",
-      "updated_at": "2026-11-20 11:24",
-      "last_used_at": "2026-11-20 11:24:18",
+      "updated_at": "2026-11-21 20:35",
+      "last_used_at": "2026-11-21 20:35:56",
       "data": {
         "selected_module_idx": 14,
         "apartment_name": "Control room (مباني)",
@@ -684,7 +684,30 @@
           "uploaded_image_w": null,
           "uploaded_image_h": null,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {
+            "item_1": "مححححححارة هذه المساحة ستكون هي المساحات التي تمثل حوائط سيراميك الحمامات ويتم حصرها وادراج القيم مباشرة في جداول القسم",
+            "item_2": "الدهانات الداخلية للسقف (تساوي تماماً مسطح المبنى بعد خصم المنور)",
+            "item_3": "المحارة للحوائط بالمتر المسطح",
+            "item_4": "nan",
+            "item_5": "nan",
+            "item_6": "nan",
+            "item_7": "nan",
+            "item_8": "nan",
+            "item_9": "nan",
+            "item_10": "nan",
+            "item_11": "nan",
+            "item_12": "nan",
+            "item_13": "nan",
+            "item_14": "nan",
+            "item_15": "nan",
+            "item_16": "nan",
+            "item_17": "17- بلاط اسطح17- بلاط اسطح17- بلاط اسطح17- بلاط اسطح",
+            "item_18": "بالمتر المسطح، توريد وتركيب شبابيك ألوميتال للواجهات والمساقط قطاع معتمد (جامبو/بي اس أو ما يماثله) وزجاج دبل مع الإكسسوارات وسلك مانع للحشرات والمقابض والتثبيت الهندسي طبقاً لأبعاد الرسم والمواصفات.",
+            "item_19": "بالعدد، توريد وتركيب أبواب حمامات الوحدة (عرض 80 سم أو أقل) تشمل الحلوق والضلف المقاومة للرطوبة والمياه والمفصلات والكوالين والشناكل والمقابض ودهان الحلق والتثبيت الهندسي التام طبقاً لأصول الصناعة.",
+            "item_20": "بالعدد، توريد وتركيب أبواب غرف الوحدة والمدخل (عرض أكبر من 80 سم) تشمل الحلوق الخشبية والضلف التجليد قشرة معتمدة والمفصلات والأقفال والمقابض والبرور والدهانات والتثبيت الهندسي طبقاً للمواصفات.",
+            "total_cost": "إجمالي تكلفة جميع بنود التشطيبات والمباني والمحارة والدروة والأرصفة والعزل شامل معامل الزيادة"
+          }
         },
         "fs_drop_beams": [],
         "nav_view": "module",
@@ -1437,7 +1460,8 @@
           "uploaded_image_w": null,
           "uploaded_image_h": null,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {}
         },
         "nav_view": "profile_manager",
         "fs_building_columns": [
@@ -4592,7 +4616,8 @@
           "uploaded_image_w": null,
           "uploaded_image_h": null,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {}
         },
         "fs_drop_beams": [],
         "nav_view": "profile_manager",
@@ -5325,7 +5350,8 @@
           "uploaded_image_w": null,
           "uploaded_image_h": null,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {}
         },
         "fs_drop_beams": [
           {
@@ -8647,7 +8673,8 @@
           "uploaded_image_w": null,
           "uploaded_image_h": null,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {}
         },
         "nav_view": "profile_manager",
         "fs_drop_beams": [
@@ -10488,7 +10515,8 @@
           "uploaded_image_w": null,
           "uploaded_image_h": null,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {}
         },
         "fs_drop_beams": [],
         "nav_view": "profile_manager",
@@ -11995,7 +12023,8 @@
           "uploaded_image_w": null,
           "uploaded_image_h": null,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {}
         },
         "fs_drop_beams": [
           {
@@ -20468,7 +20497,8 @@
           "uploaded_image_w": null,
           "uploaded_image_h": null,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {}
         },
         "fs_drop_beams": [],
         "nav_view": "profile_manager",
@@ -21234,7 +21264,8 @@
           "uploaded_image_w": null,
           "uploaded_image_h": null,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {}
         },
         "nav_view": "profile_manager",
         "fs_building_columns": [
@@ -26781,7 +26812,8 @@
           "uploaded_image_w": 314,
           "uploaded_image_h": 406,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {}
         },
         "nav_view": "profile_manager",
         "fs_col_pu_int": 79.59599999999999,
@@ -30305,7 +30337,8 @@
           "uploaded_image_w": 592,
           "uploaded_image_h": 760,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {}
         },
         "nav_view": "profile_manager",
         "fs_col_pu_int": 79.59599999999999,
@@ -30858,7 +30891,8 @@
           "uploaded_image_w": null,
           "uploaded_image_h": null,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {}
         },
         "nav_view": "profile_manager",
         "enabled_modules": [
@@ -34017,7 +34051,8 @@
           "uploaded_image_w": 314,
           "uploaded_image_h": 406,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {}
         },
         "nav_view": "profile_manager",
         "fs_col_pu_int": 79.59599999999999,
@@ -34669,7 +34704,8 @@
           "uploaded_image_w": null,
           "uploaded_image_h": null,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {}
         },
         "_schema_mod8_removed": true,
         "nav_view": "profile_manager",
@@ -35333,7 +35369,8 @@
           "uploaded_image_w": null,
           "uploaded_image_h": null,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {}
         },
         "fs_high_safety_mode": false,
         "nav_view": "profile_manager",
@@ -35778,7 +35815,8 @@
           "uploaded_image_w": null,
           "uploaded_image_h": null,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {}
         },
         "nav_view": "profile_manager",
         "_schema_mod8_removed": true,
@@ -37276,7 +37314,8 @@
           "uploaded_image_w": 592,
           "uploaded_image_h": 760,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {}
         },
         "_schema_mod8_removed": true,
         "nav_view": "profile_manager",
@@ -37781,7 +37820,8 @@
           "uploaded_image_w": null,
           "uploaded_image_h": null,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {}
         },
         "_schema_mod8_removed": true,
         "nav_view": "profile_manager",
@@ -38573,7 +38613,8 @@
           "uploaded_image_w": null,
           "uploaded_image_h": null,
           "named_spaces": [],
-          "merged_wall_label_style": "single"
+          "merged_wall_label_style": "single",
+          "item_descriptions": {}
         },
         "nav_view": "profile_manager",
         "fs_moment_contour_view_mode_idx": 1,
@@ -39679,7 +39720,8 @@
           "new_col_t": 60.0,
           "named_spaces": [],
           "merged_wall_label_style": "single",
-          "price_plaster_labor_per_m2": 70.0
+          "price_plaster_labor_per_m2": 70.0,
+          "item_descriptions": {}
         },
         "nav_view": "profile_manager",
         "enabled_modules": [
@@ -40846,7 +40888,8 @@
           "uploaded_image_h": null,
           "named_spaces": [],
           "merged_wall_label_style": "single",
-          "price_plaster_labor_per_m2": 70.0
+          "price_plaster_labor_per_m2": 70.0,
+          "item_descriptions": {}
         }
       }
     },
@@ -42008,7 +42051,8 @@
           "uploaded_image_h": null,
           "named_spaces": [],
           "merged_wall_label_style": "single",
-          "price_plaster_labor_per_m2": 70.0
+          "price_plaster_labor_per_m2": 70.0,
+          "item_descriptions": {}
         }
       }
     },
@@ -43474,7 +43518,8 @@
           "uploaded_image_h": null,
           "named_spaces": [],
           "merged_wall_label_style": "single",
-          "price_plaster_labor_per_m2": 70.0
+          "price_plaster_labor_per_m2": 70.0,
+          "item_descriptions": {}
         }
       }
     },
@@ -45416,7 +45461,8 @@
           "uploaded_image_h": null,
           "named_spaces": [],
           "merged_wall_label_style": "single",
-          "price_plaster_labor_per_m2": 70.0
+          "price_plaster_labor_per_m2": 70.0,
+          "item_descriptions": {}
         }
       }
     },
@@ -46549,7 +46595,8 @@
           "uploaded_image_h": null,
           "named_spaces": [],
           "merged_wall_label_style": "single",
-          "price_plaster_labor_per_m2": 70.0
+          "price_plaster_labor_per_m2": 70.0,
+          "item_descriptions": {}
         }
       }
     },
@@ -47669,7 +47716,8 @@
           "uploaded_image_h": null,
           "named_spaces": [],
           "merged_wall_label_style": "single",
-          "price_plaster_labor_per_m2": 70.0
+          "price_plaster_labor_per_m2": 70.0,
+          "item_descriptions": {}
         }
       }
     },
@@ -48570,7 +48618,8 @@
           "uploaded_image_h": null,
           "named_spaces": [],
           "merged_wall_label_style": "single",
-          "price_plaster_labor_per_m2": 70.0
+          "price_plaster_labor_per_m2": 70.0,
+          "item_descriptions": {}
         }
       }
     },
@@ -49186,7 +49235,8 @@
           "uploaded_image_h": null,
           "named_spaces": [],
           "merged_wall_label_style": "single",
-          "price_plaster_labor_per_m2": 70.0
+          "price_plaster_labor_per_m2": 70.0,
+          "item_descriptions": {}
         }
       }
     },
@@ -49777,7 +49827,8 @@
           "uploaded_image_h": null,
           "named_spaces": [],
           "merged_wall_label_style": "single",
-          "price_plaster_labor_per_m2": 70.0
+          "price_plaster_labor_per_m2": 70.0,
+          "item_descriptions": {}
         }
       }
     },
@@ -50404,7 +50455,8 @@
           "uploaded_image_h": null,
           "named_spaces": [],
           "merged_wall_label_style": "single",
-          "price_plaster_labor_per_m2": 70.0
+          "price_plaster_labor_per_m2": 70.0,
+          "item_descriptions": {}
         }
       }
     },
@@ -51318,7 +51370,8 @@
           "uploaded_image_h": null,
           "named_spaces": [],
           "merged_wall_label_style": "single",
-          "price_plaster_labor_per_m2": 70.0
+          "price_plaster_labor_per_m2": 70.0,
+          "item_descriptions": {}
         }
       }
     }

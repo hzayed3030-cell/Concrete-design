@@ -708,6 +708,7 @@ def get_default_module_15_state() -> dict:
         "uploaded_image_h": None,
         "named_spaces": [],
         "merged_wall_label_style": "single",
+        "item_descriptions": {},
     }
 
 get_default_masonry_plaster_state = get_default_module_15_state
@@ -2157,6 +2158,7 @@ def _serialize_module_15_state(state: dict) -> dict:
         "uploaded_image_h": uploaded_image_h,
         "named_spaces": clean_spaces,
         "merged_wall_label_style": str(state.get("m15_merged_wall_label_style", "single")),
+        "item_descriptions": dict(state.get("m15_item_descriptions", {})),
     }
 
 
@@ -2376,6 +2378,7 @@ def _deserialize_module_15_state(data: dict) -> dict:
         "m15_uploaded_image_h": uploaded_image_h,
         "m15_named_spaces": named_spaces,
         "m15_merged_wall_label_style": str(data.get("merged_wall_label_style", schema.get("merged_wall_label_style", "single"))),
+        "m15_item_descriptions": dict(data.get("item_descriptions", {})),
     }
 
 
@@ -2412,6 +2415,8 @@ def _ensure_module15_state(cfg: dict | None = None) -> None:
             st.session_state["m15_price_cement_per_ton"] = float(nested.get("price_cement_per_ton", 4000.0))
         if "m15_price_plaster_labor_per_m2" not in st.session_state:
             st.session_state["m15_price_plaster_labor_per_m2"] = float(nested.get("price_plaster_labor_per_m2", 70.0))
+        if "m15_item_descriptions" not in st.session_state:
+            st.session_state["m15_item_descriptions"] = dict(nested.get("item_descriptions", {}))
         return
 
     deserialized = _deserialize_module_15_state(nested)
@@ -3396,6 +3401,8 @@ def save_settings() -> None:
             cfg["module_15_masonry_plaster"]["price_sand_per_m3"] = float(st.session_state["m15_price_sand_per_m3"])
         if "m15_price_plaster_labor_per_m2" in st.session_state:
             cfg["module_15_masonry_plaster"]["price_plaster_labor_per_m2"] = float(st.session_state["m15_price_plaster_labor_per_m2"])
+        if "m15_item_descriptions" in st.session_state and isinstance(st.session_state["m15_item_descriptions"], dict):
+            cfg["module_15_masonry_plaster"]["item_descriptions"] = dict(st.session_state["m15_item_descriptions"])
     # ── End Module 15 persistence ────────────────────────────────────────────
 
     active_name = get_active_project_name()

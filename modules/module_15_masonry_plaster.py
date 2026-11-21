@@ -11255,6 +11255,18 @@ def _compute_plaster_boq_data(rule_key=None, plaster_qty_factor_override=None):
     price_floor_ceramic = float(st.session_state.get("m15_rate_floor_ceramic", 260.0))
     price_bath_ceramic = float(st.session_state.get("m15_rate_bath_ceramic", 290.0))
     price_kitchen_ceramic = float(st.session_state.get("m15_rate_kitchen_ceramic", 290.0))
+    price_alum_windows = float(st.session_state.get("m15_rate_alum_windows", 2800.0))
+    price_bath_doors = float(st.session_state.get("m15_rate_bath_doors", 1800.0))
+    price_room_doors = float(st.session_state.get("m15_rate_room_doors", 2400.0))
+
+    active_wins = _get_active_windows_list()
+    qty_alum_windows = round(sum(float(w[2].get("w_m", 1.0)) * float(w[2].get("h_m", 1.2)) for w in active_wins), 2)
+
+    active_doors = _get_active_doors_list()
+    bath_doors = [d for d in active_doors if float(d[2].get("w_m", 0.9)) <= 0.80 + 1e-4]
+    qty_bath_doors = len(bath_doors)
+    room_doors = [d for d in active_doors if float(d[2].get("w_m", 0.9)) > 0.80 + 1e-4]
+    qty_room_doors = len(room_doors)
 
     factor_suffix = f" × {plaster_qty_factor:.2f}" if abs(plaster_qty_factor - 1.0) > 1e-4 else ""
 
@@ -11326,6 +11338,18 @@ def _compute_plaster_boq_data(rule_key=None, plaster_qty_factor_override=None):
         ("17- بلاط اسطح",
          qty_roof_tiles, "م² (m²)", price_roof_tiles,
          f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_roof_tiles:.2f} م²){factor_suffix}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²){factor_suffix}"),
+
+        ("18- شبابيك الوميتال (م2)",
+         qty_alum_windows, "م² (m²)", price_alum_windows,
+         f"مسطح شبابيك الألوميتال بناءً على الرسم ({qty_alum_windows:.2f} م² │ {len(active_wins)} شباك){factor_suffix}"),
+
+        ("19- أبواب حمامات الوحدة (عرض ≤ 80 سم)",
+         qty_bath_doors, "عدد (No.)", price_bath_doors,
+         f"حصر أبواب الحمامات عرض ≤ 80 سم بالعدد ({qty_bath_doors} باب){factor_suffix}"),
+
+        ("20- أبواب غرف الوحدة (عرض > 80 سم)",
+         qty_room_doors, "عدد (No.)", price_room_doors,
+         f"حصر أبواب الغرف والمدخل عرض > 80 سم بالعدد ({qty_room_doors} باب){factor_suffix}"),
     ]
 
     boq_items_list = []
@@ -11383,6 +11407,167 @@ def _compute_plaster_boq_data(rule_key=None, plaster_qty_factor_override=None):
         "shafts_area_m2": eff_shaft_m2,
         "rule_key": rule_key,
     }
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# توصيفات البنود الافتراضية ودوال تصدير جدول الحصر الكامل إلى Excel
+# ═════════════════════════════════════════════════════════════════════════════
+
+DEFAULT_ITEM_DESCRIPTIONS = {
+    "item_1": "بالمتر المسطح، توريد وعمل بياض تخشين للأسقف الداخلية (طرطشة عمومية متجانسة بمونة 450 كجم أسمنت/م³ رمل + بياض بطانة وضهارة بمونة 350 كجم أسمنت/م³ رمل) مع استواء الأسطح وضبط الزوايا والأوتار طبقاً للكود المصري وأصول الصناعة.",
+    "item_2": "بالمتر المسطح، توريد ودهان أسقف داخلية 5 أوجه متتالية تشمل: وجه برايمر سيلر مائي مقاوم للقلويات + 2 سكينة معجون داخلي ناعم للتسوية + 2 وجه دهان بلاستيك نصف لامع عالي البياض قابل للغسيل طبقاً لأصول الصناعة.",
+    "item_3": "بالمتر المسطح، توريد وعمل بياض تخشين للحوائط الداخلية على بؤج وأوتار وسلك شبك فواصل تمدد (طرطشة عمومية + بياض تخشين بمونة 350 كجم أسمنت/م³ رمل) مخصوماً منه الفتحات طبقاً لاشتراطات الكود المصري لأعمال البياض ECP.",
+    "item_4": "بالمتر المسطح، توريد ودهان حوائط داخلية 5 أوجه متتالية تشمل: وجه برايمر سيلر مائي عازل + 2 سكينة معجون داخلي ناعم + 2 وجه دهان بلاستيك مط/نصف لامع قابل للغسيل بالألوان المعتمدة طبقاً للمواصفات الفنية.",
+    "item_5": "بالمتر المسطح، توريد وعمل بياض واجهات خارجية ودروة السطح من الجانبين يشمل طرطشة عمومية مسامية كثيفة + بياض أسمنتي بمونة 350 كجم أسمنت/م³ رمل مع إضافة مواد عازلة ومقاومة للأملاح والعوامل الجوية طبقاً لأصول الصناعة.",
+    "item_6": "بالمتر المسطح، توريد ودهان واجهات خارجية ودروة السطح بمواد دهانات مطاطية أكريليكية مقاومة للشمس والأشعة فوق البنفسجية والأمطار (Weatherproof) تشمل وجه سيلر مائي ومعجون واجهات ووجهين دهان مطاطي معتمد.",
+    "item_7": "بالمتر المسطح، توريد وتركيب سيراميك أرضيات للغرف والصالات فرز أول مقاس معتمد يركب بمونة أسمنتية فوق فرشة رمل نظيف مع السقية بلباني الأسمنت الأبيض أو الملون والمواد العازلة ومراعاة فواصل التمدد.",
+    "item_8": "بالمتر المسطح، توريد وتركيب سيراميك أرضيات حمامات مانع للانزلاق (Anti-slip) فرز أول بمونة أسمنتية فوق فرشة رمل مع ملء الفواصل بمادة روبة إيبوكسية أو أسمنتية مانعة لتسرب المياه والميول نحو الجاليتراب.",
+    "item_9": "بالمتر المسطح، توريد وتركيب سيراميك أرضيات مطابخ فرز أول مقاوم للشحوم والمنظفات والمياه يركب بمونة أسمنتية فوق فرشة رمل مع السقية الكاملة للفواصل ومراعاة الميول المطلوبة هندسياً.",
+    "item_10": "بالمتر المسطح، توريد وتركيب سيراميك حوائط حمامات بكامل الارتفاع فرز أول يركب بمونة أسمنتية أو مادة لاصقة مع السقية بمادة عازلة ومراعاة الأفقية والرأسية التامة ووزن الزوايا والغرانيق.",
+    "item_11": "بالمتر المسطح، توريد وتركيب سيراميك حوائط مطابخ بكامل الارتفاع فرز أول مقاوم للحرارة والرطوبة يركب بمونة أسمنتية أو مادة لاصقة مع السقية الكاملة ومراعاة فتحات التغذية والصرف والشفاطات.",
+    "item_12": "بالمتر المسطح، توريد وبناء مباني دروة السطح بطوب طفلي/أسمنتي معتمد ومونة أسمنتية بنسبة 350 كجم أسمنت/م³ رمل مع الربط المحكم وتفريغ اللحامات لعمق 1 سم لاستقبال أعمال البياض طبقاً لأصول الصناعة.",
+    "item_13": "بالمتر المسطح، توريد وتركيب بلاط انترلوك خرساني إجهاد لا يقل عن 400 كجم/سم² سمك 6-8 سم للأرصفة المحيطة فوق طبقة رمل تسوية مدموك جيداً سمك 5 سم مع غلق الفواصل برمل ناعم نظيف.",
+    "item_14": "بالمتر الطولي، توريد وتركيب بردورات خرسانية مسبقة الصنع 15×30×50 سم لرصيف المشاة الخارجي مثبتة على فرشة ودعامات خرسانة عادية مع كحلة اللحامات بمونة أسمنتية والدهان بلونين متتاليين.",
+    "item_15": "بالمتر المسطح، توريد وعمل عزل مائي للسطح بلفائف ممبرين بيتوميني معدل بالبوليستر (أنسومات) سمك 4 مم مع دهان وجه برايمر بيتوميني ورقبة زجاجة وركوب 10 سم واختبار الغمر بالماء لمدة 48 ساعة.",
+    "item_16": "بالمتر المسطح، توريد وتركيب ألواح عزل حراري من الفوم المبثوق (XPS) عالي الكثافة سمك 5 سم كثافة 35 كجم/م³ بنظام التراكب (Shiplap) لحماية الأسطح من الإشعاع الحراري طبقاً لكود العزل الحراري.",
+    "item_17": "بالمتر المسطح، توريد وتركيب بلاط أسطح أسمنتي سنجابي أو موزاييك مقاس معتمد فوق فرشة رمل تسوية ومونة أسمنتية مع عمل فواصل تمدد كل 20 م² وسقية الفواصل بلباني الأسمنت ومراعاة ميول صرف الأمطار.",
+    "item_18": "بالمتر المسطح، توريد وتركيب شبابيك ألوميتال للواجهات والمساقط قطاع معتمد (جامبو/بي اس أو ما يماثله) وزجاج دبل مع الإكسسوارات وسلك مانع للحشرات والمقابض والتثبيت الهندسي طبقاً لأبعاد الرسم والمواصفات.",
+    "item_19": "بالعدد، توريد وتركيب أبواب حمامات الوحدة (عرض 80 سم أو أقل) تشمل الحلوق والضلف المقاومة للرطوبة والمياه والمفصلات والكوالين والشناكل والمقابض ودهان الحلق والتثبيت الهندسي التام طبقاً لأصول الصناعة.",
+    "item_20": "بالعدد، توريد وتركيب أبواب غرف الوحدة والمدخل (عرض أكبر من 80 سم) تشمل الحلوق الخشبية والضلف التجليد قشرة معتمدة والمفصلات والأقفال والمقابض والبرور والدهانات والتثبيت الهندسي طبقاً للمواصفات.",
+}
+
+
+def _style_openpyxl_worksheet(ws, desc_cols=None):
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    ws.views.sheetView[0].rightToLeft = True
+    header_fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    body_font = Font(name="Calibri", size=10, color="0F172A")
+    summary_font = Font(name="Calibri", size=10, bold=True, color="0F172A")
+    grand_font = Font(name="Calibri", size=11, bold=True, color="065F46")
+    summary_fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
+    grand_fill = PatternFill(start_color="D1FAE5", end_color="D1FAE5", fill_type="solid")
+    thin_side = Side(border_style="thin", color="CBD5E1")
+    double_bottom = Side(border_style="double", color="065F46")
+    cell_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+    grand_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=double_bottom)
+    ws.row_dimensions[1].height = 32
+
+    desc_cols = desc_cols or []
+    for col_idx in range(1, ws.max_column + 1):
+        col_letter = get_column_letter(col_idx)
+        max_len = 0
+        header_val = str(ws.cell(row=1, column=col_idx).value or "")
+        is_desc_col = (col_idx in desc_cols) or ("توصيف" in header_val)
+
+        for row_idx in range(1, ws.max_row + 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            cell.border = cell_border
+            val_str = str(cell.value or "")
+            if row_idx == 1:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            else:
+                row_text_all = "".join(str(ws.cell(row=row_idx, column=c).value or "") for c in range(1, ws.max_column + 1))
+                is_grand = ("إجمالي" in row_text_all and "التكلفة" in row_text_all) or "الإجمالي العام" in row_text_all or "المجموع" in row_text_all
+                is_sub = "✅" in row_text_all
+                if is_grand:
+                    cell.fill = grand_fill
+                    cell.font = grand_font
+                    cell.border = grand_border
+                elif is_sub:
+                    cell.fill = summary_fill
+                    cell.font = summary_font
+                else:
+                    cell.font = body_font
+
+                if isinstance(cell.value, float) and header_val != "م":
+                    cell.number_format = "#,##0.00"
+
+                if is_desc_col:
+                    # التفاف النص فقط إذا تجاوز طول التوصيف عرض العمود (65 حرف) أو وجد سطر جديد
+                    needs_wrap = (len(val_str) > 65) or ("\n" in val_str)
+                    cell.alignment = Alignment(horizontal="right", vertical="center", wrap_text=needs_wrap)
+                elif any(k in header_val for k in ["البند", "ملخص"]):
+                    needs_wrap = (len(val_str) > 40) or ("\n" in val_str)
+                    cell.alignment = Alignment(horizontal="right", vertical="center", wrap_text=needs_wrap)
+                elif header_val == "م":
+                    cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=False)
+                else:
+                    cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=False)
+                if len(val_str) < 50:
+                    max_len = max(max_len, len(val_str))
+
+        if header_val == "م":
+            ws.column_dimensions[col_letter].width = 8
+        elif is_desc_col:
+            ws.column_dimensions[col_letter].width = 65
+        elif any(k in header_val for k in ["البند", "ملخص"]):
+            ws.column_dimensions[col_letter].width = 40
+        elif "الكمية" in header_val:
+            ws.column_dimensions[col_letter].width = 24
+        elif "سعر" in header_val:
+            ws.column_dimensions[col_letter].width = 18
+        elif "إجمالي" in header_val or "التكلفة" in header_val:
+            ws.column_dimensions[col_letter].width = 22
+        elif "الوحدة" in header_val:
+            ws.column_dimensions[col_letter].width = 14
+        else:
+            ws.column_dimensions[col_letter].width = max(max_len + 4, 15)
+
+
+def _build_full_takeoff_excel_bytes(
+    t2_items_data,
+    live_descriptions,
+    plaster_qty_factor=1.0,
+    grand_total_cost=0.0,
+    **kwargs
+):
+    import io, openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "حصر وتكلفة جميع البنود"
+
+    headers = [
+        "م",
+        "توصيف البند",
+        "الوحدة",
+        "الكمية (بعد الضرب في معامل الزيادة)",
+        "سعر الوحدة (ج.م)",
+        "إجمالي التكلفة (ج.م)",
+        "البند / ملخص الكميات (Summary Item)",
+    ]
+    ws.append(headers)
+
+    calc_total_cost = 0.0
+    for idx, (name, net_q, unit, u_price, details) in enumerate(t2_items_data, start=1):
+        c_key = f"item_{idx}"
+        desc = live_descriptions.get(c_key, DEFAULT_ITEM_DESCRIPTIONS.get(c_key, ""))
+        tot_q = round(net_q * plaster_qty_factor, 2)
+        tot_cost = round(tot_q * u_price, 2)
+        calc_total_cost += tot_cost
+        import re as _re_mod
+        clean_name = _re_mod.sub(r'^\d+\s*[-–.]\s*', '', str(name)).strip()
+        excel_name = f"{idx} - {clean_name}"
+        ws.append([idx, desc, unit, tot_q, u_price, tot_cost, excel_name])
+
+    # صف يحتوي على المجموع
+    actual_grand = grand_total_cost if grand_total_cost > 0 else calc_total_cost
+    total_desc = live_descriptions.get(
+        "total_cost",
+        f"إجمالي تكلفة جميع بنود التشطيبات والمباني والمحارة والدروة والأرصفة والعزل شامل معامل الزيادة ({plaster_qty_factor:.2f})"
+    )
+    ws.append(["", total_desc, "ج.م (EGP)", "—", "—", actual_grand, "💰 إجمالي التكلفة لجميع البنود (Grand Total Cost)"])
+
+    _style_openpyxl_worksheet(ws, desc_cols=[2])
+
+    buf_xl = io.BytesIO()
+    wb.save(buf_xl)
+    buf_xl.seek(0)
+    return buf_xl.getvalue()
 
 
 def _section_plaster_boq():
@@ -11911,6 +12096,36 @@ def _section_plaster_boq():
             help="سعر (م2) سيراميك مطابخ (ارضيات / حوائط)"
         )
 
+    # صف رابع لأسعار الشبابيك الألوميتال وأبواب الحمامات وأبواب الغرف
+    p_r4_c1, p_r4_c2, p_r4_c3 = st.columns(3)
+    with p_r4_c1:
+        price_alum_windows = st.number_input(
+            "(م2) شبابيك ألوميتال:",
+            min_value=0.0, max_value=50000.0,
+            value=float(st.session_state.get("m15_rate_alum_windows", 2800.0)),
+            step=50.0, format="%.1f",
+            key="m15_rate_alum_windows",
+            help="سعر المتر المسطح لشبابيك الألوميتال للواجهات والمساقط"
+        )
+    with p_r4_c2:
+        price_bath_doors = st.number_input(
+            "(عدد) أبواب حمامات (≤ 80سم):",
+            min_value=0.0, max_value=50000.0,
+            value=float(st.session_state.get("m15_rate_bath_doors", 1800.0)),
+            step=50.0, format="%.1f",
+            key="m15_rate_bath_doors",
+            help="سعر الباب الواحد لأبواب حمامات الوحدة عرض 80 سم أو أقل"
+        )
+    with p_r4_c3:
+        price_room_doors = st.number_input(
+            "(عدد) أبواب غرف (> 80سم):",
+            min_value=0.0, max_value=50000.0,
+            value=float(st.session_state.get("m15_rate_room_doors", 2400.0)),
+            step=50.0, format="%.1f",
+            key="m15_rate_room_doors",
+            help="سعر الباب الواحد لأبواب غرف الوحدة والمدخل عرض أكبر من 80 سم"
+        )
+
     # ═════════════════════════════════════════════════════════════════════════
     #  رابعاً: معامل زيادة للكميات (على سطر واحد مباشرة أعلى الجدول الثاني)
     # ═════════════════════════════════════════════════════════════════════════
@@ -12063,6 +12278,15 @@ def _section_plaster_boq():
         )
     st.session_state["m15_plaster_qty_factor"] = plaster_qty_factor
 
+    active_wins = _get_active_windows_list()
+    qty_alum_windows = round(sum(float(w[2].get("w_m", 1.0)) * float(w[2].get("h_m", 1.2)) for w in active_wins), 2)
+
+    active_doors = _get_active_doors_list()
+    bath_doors = [d for d in active_doors if float(d[2].get("w_m", 0.9)) <= 0.80 + 1e-4]
+    qty_bath_doors = len(bath_doors)
+    room_doors = [d for d in active_doors if float(d[2].get("w_m", 0.9)) > 0.80 + 1e-4]
+    qty_room_doors = len(room_doors)
+
     t2_items_data = [
         # (item_name, net_qty, unit, unit_price, details)
         ("1- كمية المحارة الداخلية بالسقف بالمتر المسطح (تساوي تماماً مسطح المبنى بعد خصم المنور)",
@@ -12132,6 +12356,18 @@ def _section_plaster_boq():
         ("17- بلاط اسطح",
          qty_roof_tiles, "م² (m²)", price_roof_tiles,
          f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_roof_tiles:.2f} م²) × {plaster_qty_factor:.2f}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²) × {plaster_qty_factor:.2f}"),
+
+        ("18- شبابيك الوميتال (م2)",
+         qty_alum_windows, "م² (m²)", price_alum_windows,
+         f"مسطح شبابيك الألوميتال بناءً على الرسم ({qty_alum_windows:.2f} م² │ {len(active_wins)} شباك) × {plaster_qty_factor:.2f}"),
+
+        ("19- أبواب حمامات الوحدة (عرض ≤ 80 سم)",
+         qty_bath_doors, "عدد (No.)", price_bath_doors,
+         f"حصر أبواب الحمامات عرض ≤ 80 سم بالعدد ({qty_bath_doors} باب) × {plaster_qty_factor:.2f}"),
+
+        ("20- أبواب غرف الوحدة (عرض > 80 سم)",
+         qty_room_doors, "عدد (No.)", price_room_doors,
+         f"حصر أبواب الغرف والمدخل عرض > 80 سم بالعدد ({qty_room_doors} باب) × {plaster_qty_factor:.2f}"),
     ]
 
     table_2_summary_rows = []
@@ -12162,7 +12398,237 @@ def _section_plaster_boq():
         "البند / ملخص الكميات (Summary Item)": "💰 الإجمالي العام للتكلفة (Grand Total Cost)",
     })
 
-    render_styled_table(table_2_summary_rows, font_size_override=9.5)
+    # ── إعداد جدول st.data_editor لإدخال التوصيفات الملخص والمريح ──
+    cur_desc_dict = dict(st.session_state.get("m15_item_descriptions", {}))
+    if not cur_desc_dict:
+        cur_desc_dict = dict(st.session_state.get("cfg", {}).get("module_15_masonry_plaster", {}).get("item_descriptions", {}))
+
+    editor_rows = []
+    import re as _re_mod
+    for idx, (name, net_q, unit, u_price, details) in enumerate(t2_items_data, start=1):
+        c_key = f"item_{idx}"
+        tot_q = round(net_q * plaster_qty_factor, 2)
+        tot_cost = round(tot_q * u_price, 2)
+        saved_d = cur_desc_dict.get(c_key) or cur_desc_dict.get(name) or DEFAULT_ITEM_DESCRIPTIONS.get(c_key, "")
+        
+        # تثبيت الرقم المتسلسل 1 و 2 و 3 .. في أقصى يمين بداية اسم البند برمز RLM (‏) لضمان ظهوره دائماً وعدم إزاحته بالـ BiDi
+        clean_name = _re_mod.sub(r'^\d+\s*[-–.]\s*', '', str(name)).strip()
+        display_item_name = f"‏{idx} - {clean_name}"
+
+        editor_rows.append({
+            "_item_code": c_key,
+            "توصيف البند": saved_d,
+            "إجمالي التكلفة (ج.م)": f"{tot_cost:,.2f}",
+            "تكلفة الوحدة (ج.م)": f"{u_price:,.2f}",
+            "الكمية الإجمالية": f"{tot_q:,.2f}",
+            "الوحدة (Unit)": unit,
+            "البند / ملخص الكميات (Summary Item)": display_item_name,
+        })
+
+    # صف إجمالي التكلفة في نهاية الجدول
+    saved_total_d = cur_desc_dict.get("total_cost", "إجمالي تكلفة جميع بنود التشطيبات والمباني والمحارة والدروة والأرصفة والعزل شامل معامل الزيادة")
+    editor_rows.append({
+        "_item_code": "total_cost",
+        "توصيف البند": saved_total_d,
+        "إجمالي التكلفة (ج.م)": f"{grand_total_cost:,.2f}",
+        "تكلفة الوحدة (ج.م)": "—",
+        "الكمية الإجمالية": "—",
+        "الوحدة (Unit)": "ج.م (EGP)",
+        "البند / ملخص الكميات (Summary Item)": "💰 إجمالي التكلفة (Total Cost)",
+    })
+
+    st.markdown(
+        """
+        <style>
+        /* تكبير حجم الخط العام داخل الجدول التفاعلي وحاويته */
+        div[class*="st-key-m15_boq_data_editor"] {
+            position: relative !important;
+            display: flow-root !important;
+            margin-top: 10px !important;
+            border-radius: 10px !important;
+            clear: both !important;
+            box-sizing: border-box !important;
+            border: 1.5px solid #ea580c !important;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.30) !important;
+            overflow: hidden !important;
+            zoom: 1.15 !important;
+        }
+        /* إخفاء شريط عناوين الجدول الافتراضي الرمادي لصالح شريط البانيلات الملونة الناصعة */
+        div[class*="st-key-m15_boq_data_editor"] div[data-testid="stDataEditor"],
+        div[class*="st-key-m15_boq_data_editor"] div[data-testid="stDataFrame"] {
+            position: relative !important;
+            margin-top: -36px !important;
+            border: none !important;
+            border-radius: 10px !important;
+            overflow: hidden !important;
+        }
+        div[class*="st-key-m15_boq_data_editor"] div[data-testid="stDataEditorToolbar"],
+        div[class*="st-key-m15_boq_data_editor"] div[data-testid="stElementToolbar"] {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+        }
+        div[class*="st-key-m15_boq_data_editor"] header,
+        div[class*="st-key-m15_boq_data_editor"] [role="columnheader"] {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0 !important;
+            pointer-events: none !important;
+        }
+        </style>
+        <div dir="rtl" style="margin: 16px 0 0 0; position: relative; z-index: 10;">
+            <!-- شريط التنبيه وإرشادات التعديل المباشر -->
+            <div style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.98) 0%, rgba(15, 23, 42, 0.98) 100%); border: 2px solid #ea580c; border-right: 6px solid #f97316; border-radius: 10px; padding: 12px 18px; margin-bottom: 8px; box-shadow: 0 4px 16px rgba(234, 88, 12, 0.20);">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-weight: 900; font-size: 1.05rem; color: #fb923c;">📋 جدول ملخص الكميات وتوصيفات البنود (BOQ Takeoff & Descriptions):</span>
+                        <span style="font-size: 0.85rem; color: #fdba74; font-weight: 700; background: rgba(234, 88, 12, 0.22); padding: 3px 10px; border-radius: 6px; border: 1px solid rgba(249, 115, 22, 0.4);">
+                            ترتيب الأعمدة من اليمين إلى اليسار (RTL) • ترتيب البنود من 1 إلى 20 مع سطر إجمالي التكلفة 🔒
+                        </span>
+                    </div>
+                    <div style="background: linear-gradient(135deg, rgba(2, 132, 199, 0.25) 0%, rgba(14, 165, 233, 0.15) 100%); border: 2px solid #38bdf8; border-radius: 8px; padding: 7px 16px; color: #38bdf8; font-weight: 900; font-size: 0.95rem; box-shadow: 0 0 14px rgba(56, 189, 248, 0.35);">
+                        ✏️ يمكن التعديل في هذا العمود («توصيف البند») من المستخدم (يدعم النسخ واللصق Ctrl+C / Ctrl+V)
+                    </div>
+                </div>
+            </div>
+            <!-- شريط رؤوس الأعمدة (البانيلات) بألوان ناصعة ومميزة وخط مكبر متطابق العرض مع الأعمدة تماماً -->
+            <div style="direction: ltr; display: grid; grid-template-columns: 500fr 110fr 100fr 95fr 85fr 340fr; gap: 0px; text-align: center; border: 1.5px solid #ea580c; border-radius: 10px; background: #0f172a; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.25); position: relative; z-index: 10; margin-bottom: 8px;">
+                <!-- بانيل توصيف البند (ناصع بالأزرق الكهربائي السماوي) -->
+                <div style="background: linear-gradient(135deg, rgba(2, 132, 199, 0.40) 0%, rgba(14, 165, 233, 0.22) 100%); border-right: 1.5px solid rgba(56, 189, 248, 0.5); padding: 8px 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 56px; box-sizing: border-box;">
+                    <span style="font-size: 0.98rem; font-weight: 900; color: #00f5ff; text-shadow: 0 0 12px rgba(0, 245, 255, 0.8), 0 1px 3px #000000; line-height: 1.25;">✏️ توصيف البند</span>
+                    <span style="font-size: 0.82rem; color: #7dd3fc; font-weight: 800; margin-top: 3px; text-shadow: 0 0 8px rgba(125, 211, 252, 0.7);">متاح للتعديل ✍️</span>
+                </div>
+                <!-- بانيل إجمالي التكلفة (ناصع بالأصفر الذهبي البراق) -->
+                <div style="background: rgba(245, 158, 11, 0.22); border-right: 1.5px solid rgba(251, 191, 36, 0.45); padding: 8px 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 56px; box-sizing: border-box;">
+                    <span style="font-size: 0.92rem; font-weight: 900; color: #fbbf24; text-shadow: 0 0 12px rgba(251, 191, 36, 0.85), 0 1px 3px #000000; line-height: 1.2;">🟠 إجمالي التكلفة</span>
+                    <span style="font-size: 0.78rem; color: #fef08a; font-weight: 700;">(ج.م)</span>
+                </div>
+                <!-- بانيل تكلفة الوحدة (ناصع بالبرتقالي الصريح) -->
+                <div style="background: rgba(234, 88, 12, 0.22); border-right: 1.5px solid rgba(249, 115, 22, 0.45); padding: 8px 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 56px; box-sizing: border-box;">
+                    <span style="font-size: 0.92rem; font-weight: 900; color: #fb923c; text-shadow: 0 0 12px rgba(251, 146, 60, 0.85), 0 1px 3px #000000; line-height: 1.2;">🟠 تكلفة الوحدة</span>
+                    <span style="font-size: 0.78rem; color: #fed7aa; font-weight: 700;">(ج.م)</span>
+                </div>
+                <!-- بانيل الكمية الإجمالية (ناصع بالأخضر الزمردي البراق) -->
+                <div style="background: rgba(16, 185, 129, 0.22); border-right: 1.5px solid rgba(52, 211, 153, 0.45); padding: 8px 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 56px; box-sizing: border-box;">
+                    <span style="font-size: 0.92rem; font-weight: 900; color: #34d399; text-shadow: 0 0 12px rgba(52, 211, 153, 0.85), 0 1px 3px #000000; line-height: 1.2;">🟠 الكمية</span>
+                    <span style="font-size: 0.78rem; color: #a7f3d0; font-weight: 700;">الإجمالية</span>
+                </div>
+                <!-- بانيل الوحدة (ناصع بالبنفسجي / اللافندر الفاقع) -->
+                <div style="background: rgba(168, 85, 247, 0.22); border-right: 1.5px solid rgba(192, 132, 252, 0.45); padding: 8px 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 56px; box-sizing: border-box;">
+                    <span style="font-size: 0.92rem; font-weight: 900; color: #c084fc; text-shadow: 0 0 12px rgba(192, 132, 252, 0.85), 0 1px 3px #000000; line-height: 1.2;">🟠 الوحدة</span>
+                    <span style="font-size: 0.78rem; color: #e9d5ff; font-weight: 700;">(Unit)</span>
+                </div>
+                <!-- بانيل البند / ملخص الكميات (ناصع بالمرجاني البرتقالي المتوهج) -->
+                <div style="background: linear-gradient(135deg, rgba(234, 88, 12, 0.32) 0%, rgba(194, 65, 12, 0.18) 100%); padding: 8px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 56px; box-sizing: border-box;">
+                    <span style="font-size: 0.98rem; font-weight: 900; color: #f97316; text-shadow: 0 0 12px rgba(249, 115, 22, 0.85), 0 1px 3px #000000; line-height: 1.25;">🟠 البند / ملخص الكميات (Summary Item)</span>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    df_editor = pd.DataFrame(editor_rows)
+
+    def _style_boq_table_cells(row):
+        is_total = (
+            str(row.get("_item_code", "")).strip() == "total_cost"
+            or "إجمالي التكلفة" in str(row.get("البند / ملخص الكميات (Summary Item)", ""))
+        )
+        if is_total:
+            return [
+                "font-weight: 900; font-size: 15px; color: #10b981; background-color: rgba(16, 185, 129, 0.22);"
+            ] * len(row)
+        styles = []
+        for col in row.index:
+            if col == "توصيف البند":
+                styles.append("font-weight: 600; color: #ffffff;")
+            elif col == "إجمالي التكلفة (ج.م)":
+                styles.append("font-weight: 800; color: #fbbf24;")
+            elif col == "تكلفة الوحدة (ج.م)":
+                styles.append("font-weight: 700; color: #fdba74;")
+            elif col == "الكمية الإجمالية":
+                styles.append("font-weight: 700; color: #f1f5f9;")
+            elif col == "الوحدة (Unit)":
+                styles.append("font-weight: 600; color: #cbd5e1;")
+            elif col == "البند / ملخص الكميات (Summary Item)":
+                styles.append("font-weight: 700; color: #f8fafc;")
+            else:
+                styles.append("font-weight: 700; color: #ffffff;")
+        return styles
+
+    styled_df_editor = df_editor.style.apply(_style_boq_table_cells, axis=1)
+
+    edited_df = st.data_editor(
+        styled_df_editor,
+        column_order=[
+            "توصيف البند",
+            "إجمالي التكلفة (ج.م)",
+            "تكلفة الوحدة (ج.م)",
+            "الكمية الإجمالية",
+            "الوحدة (Unit)",
+            "البند / ملخص الكميات (Summary Item)",
+        ],
+        column_config={
+            "_item_code": None,
+            "توصيف البند": st.column_config.TextColumn(
+                " ",
+                disabled=False,
+                width=500,
+                help="✏️ يمكن التعديل في هذا العمود من المستخدم — يدعم التحرير المباشر والنسخ واللصق (Ctrl+C / Ctrl+V)",
+            ),
+            "إجمالي التكلفة (ج.م)": st.column_config.TextColumn(
+                " ",
+                disabled=True,
+                width=110,
+            ),
+            "تكلفة الوحدة (ج.م)": st.column_config.TextColumn(
+                " ",
+                disabled=True,
+                width=100,
+            ),
+            "الكمية الإجمالية": st.column_config.TextColumn(
+                " ",
+                disabled=True,
+                width=95,
+            ),
+            "الوحدة (Unit)": st.column_config.TextColumn(
+                " ",
+                disabled=True,
+                width=85,
+            ),
+            "البند / ملخص الكميات (Summary Item)": st.column_config.TextColumn(
+                " ",
+                disabled=True,
+                width=340,
+                alignment="right",
+            ),
+        },
+        use_container_width=True,
+        hide_index=True,
+        num_rows="fixed",
+        row_height=None,
+        height=780,
+        key="m15_boq_data_editor",
+    )
+
+    # حفظ وتحديث التوصيفات في session_state و profiles.json فورياً عند أي تعديل لضمان بقائها
+    live_descriptions = {}
+    desc_changed = False
+    for r_idx, erow in edited_df.iterrows():
+        c = str(erow.get("_item_code") or f"item_{r_idx + 1}")
+        v = str(erow.get("توصيف البند") or "").strip()
+        if c:
+            live_descriptions[c] = v
+            if cur_desc_dict.get(c) != v:
+                desc_changed = True
+
+    if desc_changed or "m15_item_descriptions" not in st.session_state:
+        st.session_state["m15_item_descriptions"] = live_descriptions
+        cfg = st.session_state.get("cfg", {})
+        if "module_15_masonry_plaster" in cfg and isinstance(cfg["module_15_masonry_plaster"], dict):
+            cfg["module_15_masonry_plaster"]["item_descriptions"] = dict(live_descriptions)
+        save_settings()
 
     # بانر الإجمالي العام للتكلفة بلون بارز ومميز
     st.markdown(
@@ -12179,62 +12645,25 @@ def _section_plaster_boq():
         unsafe_allow_html=True,
     )
 
-    # ── زر تحميل شيت إكسيل متكامل (صفحتين: حصر تفصيلي + ملخص بالمعامل والتكلفة) ──
-    def _build_plaster_two_sheets_excel_bytes(rows_t1, rows_t2, qf):
-        buf_xl = io.BytesIO()
-        df_t1 = pd.DataFrame(rows_t1)
-        df_t2 = pd.DataFrame(rows_t2)
-        # في شيت الإكسيل، نظراً لتفعيل rightToLeft = True فإن العمود A يظهر يميناً،
-        # نعيد ترتيب أعمدة df_t2 لتبدأ بالبند في العمود A على اليمين وصولاً للتفاصيل يساراً
-        if "البند / ملخص الكميات (Summary Item)" in df_t2.columns and df_t2.columns[0] != "البند / ملخص الكميات (Summary Item)":
-            df_t2 = df_t2[list(reversed(df_t2.columns))]
-        sh1_name = "حصر خامات البياض والتشطيبات"
-        sh2_name = f"ملخص الكميات والتكلفة ({qf:.2f})"[:31]
-        with pd.ExcelWriter(buf_xl, engine="openpyxl") as writer:
-            df_t1.to_excel(writer, index=False, sheet_name=sh1_name)
-            df_t2.to_excel(writer, index=False, sheet_name=sh2_name)
-            try:
-                from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-                header_fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
-                header_font = Font(name="Calibri", size=12, bold=True, color="FFFFFF")
-                body_font = Font(name="Calibri", size=11, bold=True, color="0F172A")
-                thin_side = Side(border_style="thin", color="CBD5E1")
-                cell_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
-                for ws in writer.book.worksheets:
-                    ws.views.sheetView[0].rightToLeft = True
-                    num_cols = len(list(ws.columns))
-                    for c_idx, col_cells in enumerate(ws.columns, start=1):
-                        max_len = 0
-                        for cell in col_cells:
-                            val_str = str(cell.value or "")
-                            max_len = max(max_len, len(val_str))
-                            cell.border = cell_border
-                            if cell.row == 1:
-                                cell.fill = header_fill
-                                cell.font = header_font
-                                cell.alignment = Alignment(horizontal="center", vertical="center")
-                            else:
-                                cell.font = body_font
-                                if c_idx == 1 or c_idx == num_cols:
-                                    cell.alignment = Alignment(horizontal="right", vertical="center")
-                                else:
-                                    cell.alignment = Alignment(horizontal="center", vertical="center")
-                        col_letter = col_cells[0].column_letter
-                        ws.column_dimensions[col_letter].width = min(max(max_len + 4, 16), 55)
-            except Exception:
-                pass
-        buf_xl.seek(0)
-        return buf_xl.getvalue()
+    # ── زر تصدير جدول الحصر الكامل EXCEL SHEET ──
+    full_xl_bytes = _build_full_takeoff_excel_bytes(
+        t2_items_data=t2_items_data,
+        live_descriptions=live_descriptions,
+        plaster_qty_factor=plaster_qty_factor,
+        grand_total_cost=grand_total_cost,
+    )
 
     st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
-    xl_bytes = _build_plaster_two_sheets_excel_bytes(table_1_rows, table_2_summary_rows, plaster_qty_factor)
     st.download_button(
-        "📊 تحميل شيت إكسيل بحصر أعمال البياض والتشطيبات وملخص الكميات والتكلفة (2 Sheets Excel)",
-        data=xl_bytes,
-        file_name=f"plastering_finishes_boq_summary_{plaster_qty_factor:.2f}.xlsx",
+        "📥 تصدير جدول الحصر EXCEL SHEET",
+        data=full_xl_bytes,
+        file_name=f"حصر_وتكلفة_جميع_البنود_{plaster_qty_factor:.2f}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        key="m15_dl_plaster_summary_excel"
+        key="m15_dl_takeoff_excel_full"
     )
+
+    with st.expander("📊 تفاصيل أسعار وتكلفة البنود التقديرية (Unit Rates & Cost Breakdown)", expanded=False):
+        st.dataframe(pd.DataFrame(table_2_summary_rows), use_container_width=True, hide_index=True, row_height=70)
 
 
 _FLOATING_PLAN_CSS = """
