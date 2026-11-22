@@ -196,6 +196,12 @@ def _init_state():
         st.session_state["m15_price_cement_per_ton"] = float(m15_cfg_data.get("price_cement_per_ton", 4000.0))
     if "m15_price_plaster_labor_per_m2" not in st.session_state:
         st.session_state["m15_price_plaster_labor_per_m2"] = float(m15_cfg_data.get("price_plaster_labor_per_m2", 70.0))
+    if "m15_item_descriptions" not in st.session_state:
+        st.session_state["m15_item_descriptions"] = dict(m15_cfg_data.get("item_descriptions", {}))
+    if "m15_plaster_qty_factor" not in st.session_state:
+        st.session_state["m15_plaster_qty_factor"] = float(m15_cfg_data.get("plaster_qty_factor", 1.00))
+    if "m15_input_plaster_qty_factor" not in st.session_state:
+        st.session_state["m15_input_plaster_qty_factor"] = float(st.session_state["m15_plaster_qty_factor"])
 
     # تنظيف المتغيرات القديمة الخاصة بآلية الإضافة والاستعادة السابقة والمفاتيح المتضاربة
     for old_k in ["m15_add_col_sel", "m15_del_active_col_sel", "m15_confirm_del_col_tab", "m15_col_restore_expander_open"]:
@@ -7634,6 +7640,20 @@ def _execute_add_door_box(data):
     st.rerun()
 
 
+def _on_m15_3d_sync_input_change():
+    """
+    Callback يُنفَّذ فور وصول إشارة المزامنة من الواجهة قبل إنشاء أي عنصر واجهة،
+    مما يسمح بتفريغ الحقل بأمان وحفظ الإشارة في طابور المعالجة دون أخطاء StreamlitAPIException.
+    """
+    raw = st.session_state.get("m15_3d_sync_input", "")
+    if raw:
+        st.session_state["_m15_queued_sync_payload"] = raw
+        try:
+            st.session_state["m15_3d_sync_input"] = ""
+        except Exception:
+            pass
+
+
 def _handle_sync_payload(payload_str=None):
     """
     معالجة جميع الإشارات التفاعلية الواردة من المسقط الأفقي والعارض ثلاثي الأبعاد 3D:
@@ -7646,7 +7666,7 @@ def _handle_sync_payload(payload_str=None):
     """
     val = payload_str
     if not val:
-        val = st.session_state.get("m15_3d_sync_input")
+        val = st.session_state.pop("_m15_queued_sync_payload", None) or st.session_state.get("m15_3d_sync_input")
     from_query = False
     if not val and "m15_op_move" in st.query_params:
         val = st.query_params["m15_op_move"]
@@ -7657,6 +7677,16 @@ def _handle_sync_payload(payload_str=None):
 
     try:
         data = json.loads(val) if isinstance(val, str) else val
+        if not isinstance(data, dict):
+            return
+
+        # منع تكرار تنفيذ نفس الإشارة مرتين عبر الطابع الزمني
+        op_ts = data.get("ts")
+        if op_ts is not None:
+            if st.session_state.get("_m15_last_processed_sync_ts") == op_ts:
+                return
+            st.session_state["_m15_last_processed_sync_ts"] = op_ts
+
         action = str(data.get("action", "")).lower()
         op_type = str(data.get("type", "")).lower()
 
@@ -7668,7 +7698,10 @@ def _handle_sync_payload(payload_str=None):
                 try: del st.query_params["module"]
                 except Exception: pass
 
-        st.session_state["m15_3d_sync_input"] = ""
+        try:
+            st.session_state["m15_3d_sync_input"] = ""
+        except Exception:
+            pass
 
         if action == "exit_box_mode":
             st.session_state["m15_add_col_mode"] = False
@@ -7744,6 +7777,27 @@ def _handle_sync_payload(payload_str=None):
         elif action == "abort_cancel_all_interior":
             st.session_state.pop("m15_confirm_cancel_all_interior", None)
             st.rerun()
+            return
+
+        elif action == "update_boq_descriptions":
+            new_descs = data.get("descriptions")
+            if isinstance(new_descs, dict):
+                cur_descs = dict(st.session_state.get("m15_item_descriptions", {}))
+                changed = False
+                for k, v in new_descs.items():
+                    ks = str(k)
+                    vs = str(v).strip()
+                    if cur_descs.get(ks) != vs:
+                        cur_descs[ks] = vs
+                        changed = True
+                if changed:
+                    st.session_state["m15_item_descriptions"] = cur_descs
+                    cfg = st.session_state.get("cfg", {})
+                    if "module_15_masonry_plaster" in cfg and isinstance(cfg["module_15_masonry_plaster"], dict):
+                        cfg["module_15_masonry_plaster"]["item_descriptions"] = dict(cur_descs)
+                    if "module_15_data" in st.session_state and isinstance(st.session_state["module_15_data"], dict):
+                        st.session_state["module_15_data"]["item_descriptions"] = dict(cur_descs)
+                    save_settings()
             return
 
         elif action in ["add_window_box", "add_window"]:
@@ -10559,12 +10613,170 @@ def _section_parapet_works():
     st.session_state["m15_parapet_wall_thick"] = parapet_thick_choice
 
 
+def _get_openings_takeoff_data():
+    """
+    تجميع بيانات حصر الشبابيك والأبواب هندسياً:
+    - نماذج الشبابيك المنفذة، مقاساتها وأعدادها ومسطحاتها.
+    - نماذج الأبواب المنفذة، مقاساتها وأعدادها ومسطحاتها.
+    - كشف تفصيلي بكل فتحة مسقطة على الحوائط.
+    """
+    active_wins = _get_active_windows_list()
+    active_doors = _get_active_doors_list()
+
+    win_models_dict = {}
+    for (_, _, win, _) in active_wins:
+        t_lbl = win.get("type_label") or win.get("name", "W1").split("-")[0]
+        w_m = float(win.get("w_m", 1.0))
+        h_m = float(win.get("h_m", 1.2))
+        sill_m = float(win.get("sill_m", 1.0))
+        if t_lbl not in win_models_dict:
+            win_models_dict[t_lbl] = {
+                "name": t_lbl,
+                "w_m": w_m,
+                "h_m": h_m,
+                "area_m2": round(w_m * h_m, 2),
+                "sill_m": sill_m,
+                "count": 0,
+            }
+        win_models_dict[t_lbl]["count"] += 1
+
+    windows_models = []
+    for m in win_models_dict.values():
+        m["total_area_m2"] = round(m["count"] * m["area_m2"], 2)
+        windows_models.append(m)
+    windows_models.sort(key=lambda x: x["name"])
+
+    door_models_dict = {}
+    for (_, _, door, _) in active_doors:
+        t_lbl = door.get("type_label") or door.get("name", "D1").split("-")[0]
+        w_m = float(door.get("w_m", 0.9))
+        h_m = float(door.get("h_m", 2.1))
+        if t_lbl not in door_models_dict:
+            door_models_dict[t_lbl] = {
+                "name": t_lbl,
+                "w_m": w_m,
+                "h_m": h_m,
+                "area_m2": round(w_m * h_m, 2),
+                "sill_m": 0.0,
+                "count": 0,
+            }
+        door_models_dict[t_lbl]["count"] += 1
+
+    doors_models = []
+    for m in door_models_dict.values():
+        m["total_area_m2"] = round(m["count"] * m["area_m2"], 2)
+        doors_models.append(m)
+    doors_models.sort(key=lambda x: x["name"])
+
+    cm = _get_col_name_map()
+    wm = _get_wall_name_map()
+    wm_win = _get_window_name_map()
+    wm_door = _get_door_name_map()
+
+    wall_openings_details = []
+    for (_, _, w, wk) in active_wins:
+        wid = w.get("id")
+        wname = wm_win.get(wid) or w.get("name", "W")
+        w_lbl = _wall_display_label(wk, cm, wm)
+        w_m = float(w.get("w_m", 1.0))
+        h_m = float(w.get("h_m", 1.2))
+        sill_m = float(w.get("sill_m", 1.0))
+        wall_openings_details.append({
+            "id": wid,
+            "kind": "شباك",
+            "name": wname,
+            "wall": w_lbl,
+            "w_m": w_m,
+            "h_m": h_m,
+            "sill_m": sill_m,
+            "area_m2": round(w_m * h_m, 2),
+            "pos_m": float(w.get("pos_m", 0.0))
+        })
+    for (_, _, d, wk) in active_doors:
+        did = d.get("id")
+        dname = wm_door.get(did) or d.get("name", "D")
+        w_lbl = _wall_display_label(wk, cm, wm)
+        w_m = float(d.get("w_m", 0.9))
+        h_m = float(d.get("h_m", 2.1))
+        wall_openings_details.append({
+            "id": did,
+            "kind": "باب",
+            "name": dname,
+            "wall": w_lbl,
+            "w_m": w_m,
+            "h_m": h_m,
+            "sill_m": 0.0,
+            "area_m2": round(w_m * h_m, 2),
+            "pos_m": float(d.get("pos_m", 0.0))
+        })
+
+    return {
+        "windows_models": windows_models,
+        "doors_models": doors_models,
+        "wall_openings_details": wall_openings_details,
+        "total_wins_count": sum(m["count"] for m in windows_models),
+        "total_doors_count": sum(m["count"] for m in doors_models),
+        "total_wins_area": round(sum(m["total_area_m2"] for m in windows_models), 2),
+        "total_doors_area": round(sum(m["total_area_m2"] for m in doors_models), 2),
+    }
+
+
+def _df_to_custom_html_table(df: pd.DataFrame) -> str:
+    """تحويل DataFrame إلى جدول HTML بدون خاصية sort أو hide مع خط كبير وتلوين صف الصافي/الإجمالي بلون مميز."""
+    cols = list(df.columns)
+    html = ['<div dir="rtl" style="overflow-x: auto; width: 100%; margin-bottom: 16px; border-radius: 9px; border: 1.5px solid #334155; box-shadow: 0 4px 14px rgba(0,0,0,0.25);">']
+    html.append('<table style="width: 100%; border-collapse: collapse; font-family: Cairo, Tahoma, Segoe UI, sans-serif; text-align: center; font-size: 1.05rem; background: #0f172a; color: #e2e8f0;">')
+    
+    # رأس الجدول
+    html.append('<thead><tr style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-bottom: 2.5px solid #0284c7;">')
+    for c in cols:
+        html.append(f'<th style="padding: 12px 14px; font-weight: 800; font-size: 1.10rem; color: #38bdf8; border: 1px solid #334155; white-space: nowrap; background: #1e293b;">{c}</th>')
+    html.append('</tr></thead>')
+    
+    # جسم الجدول
+    html.append('<tbody>')
+    n_rows = len(df)
+    for i, (_, row) in enumerate(df.iterrows()):
+        first_val = str(row.iloc[0]).strip() if len(row) > 0 else ""
+        is_total_row = (
+            first_val.startswith("✅") or 
+            "إجمالي" in first_val or 
+            "صافي" in first_val or 
+            "مجموع" in first_val or 
+            (i == n_rows - 1 and n_rows > 1)
+        )
+        
+        if is_total_row:
+            row_style = 'background: linear-gradient(90deg, #064e3b 0%, #065f46 50%, #047857 100%); border-top: 2.5px solid #10b981; border-bottom: 2.5px solid #10b981; font-weight: 900; color: #ffffff;'
+        else:
+            bg = '#1e293b' if i % 2 == 1 else '#0f172a'
+            row_style = f'background: {bg}; border-bottom: 1px solid #334155; color: #cbd5e1;'
+            
+        html.append(f'<tr style="{row_style}">')
+        for j, c in enumerate(cols):
+            val = str(row[c]) if pd.notna(row[c]) else "—"
+            if is_total_row:
+                align = 'right' if j == 0 else 'center'
+                if any(ch.isdigit() for ch in val):
+                    val_display = f'<span style="color: #fef08a; font-weight: 900; font-size: 1.16rem; text-shadow: 0 1px 3px rgba(0,0,0,0.5);">{val}</span>'
+                else:
+                    val_display = f'<span style="color: #6ee7b7; font-weight: 900; font-size: 1.12rem;">{val}</span>'
+                html.append(f'<td style="padding: 12px 14px; text-align: {align}; border: 1px solid #047857; font-size: 1.10rem; background: inherit;">{val_display}</td>')
+            else:
+                align = 'right' if j == 0 or any(k in c for k in ['فلسفة', 'بيان', 'مواصفات', 'المحددات', 'ملاحظات', 'المعادلة']) else 'center'
+                html.append(f'<td style="padding: 10px 13px; text-align: {align}; border: 1px solid #334155; font-size: 1.02rem; background: inherit; color: #e2e8f0;">{val}</td>')
+        html.append('</tr>')
+    html.append('</tbody>')
+    html.append('</table></div>')
+    return ''.join(html)
+
+
 def _section_all_items_detailed_survey():
     """
     قسم تفاصيل حصر جميع البنود:
-    جداول حصر تفصيلية مستقلة لكل بند من بنود المشروع الـ 18 المعتمدة بجدول الـ BOQ،
+    جداول حصر تفصيلية مستقلة لكل بند من بنود المشروع الـ 20 المعتمدة بجدول الـ BOQ،
     موضحاً بها تفاصيل الأبعاد الهندسية، الفتحات المخصومة، الصافي المعتمد،
-    وفلسفة الحصر الهندسية المتبعة لكل بند.
+    وفلسفة الحصر الهندسية المتبعة لكل بند بالترتيب العادي والخط المكبر.
     """
     rule_key = st.session_state.get("m15_plaster_deduction_rule", "ecp")
     p_res = _compute_plaster_survey(deduction_rule=rule_key)
@@ -10673,33 +10885,72 @@ def _section_all_items_detailed_survey():
     qty_thermal_ins = qty_waterproof_roof
     qty_roof_tiles = qty_waterproof_roof
 
+    # حصر الشبابيك والأبواب
+    active_wins = _get_active_windows_list()
+    qty_alum_windows = round(sum(float(w[2].get("w_m", 1.0)) * float(w[2].get("h_m", 1.2)) for w in active_wins), 2)
+
+    active_doors = _get_active_doors_list()
+    bath_doors = [d for d in active_doors if float(d[2].get("w_m", 0.9)) <= 0.80 + 1e-4]
+    qty_bath_doors = len(bath_doors)
+    room_doors = [d for d in active_doors if float(d[2].get("w_m", 0.9)) > 0.80 + 1e-4]
+    qty_room_doors = len(room_doors)
+
     tot_plaster_all_net = round(qty_wall_plaster + qty_ceiling_plaster + qty_facade_plaster, 2)
     total_sand_plaster = round((tot_plaster_all_net / 42.0) * 1.05, 2) if tot_plaster_all_net > 0 else 0.0
     total_cement_plaster_kg = total_sand_plaster * 350.0
     total_cement_plaster_tons = round(total_cement_plaster_kg / 1000.0, 2)
     total_cement_plaster_bags = math.ceil(total_cement_plaster_kg / 50.0) if total_cement_plaster_kg > 0 else 0
 
+    # حصر حوائط الطوب نصف طوبة (12 سم) وطوبة كاملة (25 سم) ودروة السطح
+    s_res = _compute_survey()
+    walls_12_net_m2 = round(sum(r.get("المساحة الصافية (م2)", 0.0) for r in s_res.get("rows_12", [])), 2)
+    walls_25_net_m2 = round(sum(r.get("المساحة الصافية (م2)", 0.0) for r in s_res.get("rows_25", [])), 2)
+    walls_25_vol_m3 = round(sum(r.get("حجم الطوب (م3)", 0.0) for r in s_res.get("rows_25", [])), 2)
+
+    is_parapet_half = ("نصف" in str(parapet_thick_choice) or "12" in str(parapet_thick_choice))
+    parapet_12_m2 = area_parapet_m2 if is_parapet_half else 0.0
+    parapet_25_m3 = round(area_parapet_m2 * 0.25, 2) if not is_parapet_half else 0.0
+
+    qty_brick_12 = round(walls_12_net_m2 + parapet_12_m2, 2)
+    qty_brick_25 = round(walls_25_vol_m3 + parapet_25_m3, 2)
+
     item_opts = [
-        "📋 عرض جميع جداول تفاصيل الحصر للبنود الـ 18 معاً",
-        "1️⃣ بند (1): محارة السقف الداخلية بالمتر المسطح (Internal Ceiling Plaster)",
-        "2️⃣ بند (2): دهانات السقف الداخلية بالمتر المسطح (Internal Ceiling Paints)",
-        "3️⃣ بند (3): محارة الحوائط الداخلية حائط بحائط (Wall-by-Wall Plaster Survey)",
-        "4️⃣ بند (4): دهانات الحوائط الداخلية بالمتر المسطح (Internal Wall Paints)",
-        "5️⃣ بند (5): محارة الواجهات والدروة من الجانبين (External Facade & Parapet Plaster)",
-        "6️⃣ بند (6): دهانات الواجهات والدروة من الجانبين (External Facade & Parapet Paints)",
-        "7️⃣ بند (7): سيراميك الأرضيات للغرف والصالات (Floor Ceramic Tiles)",
-        "8️⃣ بند (8): سيراميك أرضيات الحمامات (Bathroom Floor Ceramic)",
-        "9️⃣ بند (9): سيراميك أرضيات المطابخ (Kitchen Floor Ceramic)",
-        "🔟 بند (10): سيراميك حوائط الحمامات (Bathroom Wall Ceramic)",
-        "1️⃣1️⃣ بند (11): سيراميك حوائط المطابخ (Kitchen Wall Ceramic)",
-        "1️⃣2️⃣ بند (12): مباني طوب الدروة (Roof Parapet Masonry)",
-        "1️⃣3️⃣ بند (13): انترلوك الأرصفة الخارجية (Sidewalk Interlock)",
-        "1️⃣4️⃣ بند (14): بردورات الأرصفة الخارجية (Sidewalk Curbs)",
-        "1️⃣5️⃣ بند (15): العزل المائي للسطح - أنسومات (Roof Waterproofing)",
-        "1️⃣6️⃣ بند (16): العزل الحراري للسطح (Roof Thermal Insulation)",
-        "1️⃣7️⃣ بند (17): بلاط أسطح المبنى (Roof Tiles)",
-        "1️⃣8️⃣ بند (18): خامات مونة البياض لكامل المبنى (Plaster Mortar: Sand & Cement)",
+        "📋 عرض جميع جداول تفاصيل الحصر للبنود الـ 22 معاً",
+        "1️⃣ بند (1): مباني طوب أحمر تخانة نصف طوبة 12 سم (12cm Half-Brick Masonry)",
+        "2️⃣ بند (2): مباني طوب أحمر تخانة طوبة 25 سم (25cm Full-Brick Masonry)",
+        "3️⃣ بند (3): كمية المحارة الداخلية بالسقف بالمتر المسطح (Internal Ceiling Plaster)",
+        "4️⃣ بند (4): كمية الدهانات الداخلية للسقف بالمتر المسطح (Internal Ceiling Paints)",
+        "5️⃣ بند (5): كمية المحارة للحوائط بالمتر المسطح حائط بحائط (Wall-by-Wall Plaster Survey)",
+        "6️⃣ بند (6): كمية الدهانات الداخلية للحوائط بالمتر المسطح (Internal Wall Paints)",
+        "7️⃣ بند (7): كمية المحارة الخارجية (الواجهات والدروة من الجانبين) (External Facade & Parapet Plaster)",
+        "8️⃣ بند (8): كمية الدهانات الخارجية (الواجهات والدروة من الجانبين) (External Facade & Parapet Paints)",
+        "9️⃣ بند (9): سيراميك الأرضيات للغرف والصالات (Floor Ceramic Tiles)",
+        "🔟 بند (10): سيراميك أرضيات الحمامات (Bathroom Floor Ceramic)",
+        "1️⃣1️⃣ بند (11): سيراميك أرضيات المطابخ (Kitchen Floor Ceramic)",
+        "1️⃣2️⃣ بند (12): سيراميك حوائط الحمامات (Bathroom Wall Ceramic)",
+        "1️⃣3️⃣ بند (13): سيراميك حوائط المطابخ (Kitchen Wall Ceramic)",
+        "1️⃣4️⃣ بند (14): انترلوك الأرصفة الخارجية (Sidewalk Interlock)",
+        "1️⃣5️⃣ بند (15): بردورات الأرصفة الخارجية (Sidewalk Curbs)",
+        "1️⃣6️⃣ بند (16): العزل المائي للسطح - أنسومات (Roof Waterproofing)",
+        "1️⃣7️⃣ بند (17): العزل الحراري للسطح (Roof Thermal Insulation)",
+        "1️⃣8️⃣ بند (18): بلاط أسطح المبنى (Roof Tiles)",
+        "1️⃣9️⃣ بند (19): شبابيك ألوميتال (Aluminum Windows Takeoff)",
+        "2️⃣0️⃣ بند (20): أبواب حمامات الوحدة عرض ≤ 80 سم (Bathroom Doors)",
+        "2️⃣1️⃣ بند (21): أبواب غرف الوحدة عرض > 80 سم (Room & Entry Doors)",
+        "2️⃣2️⃣ بند (22): خامات مونة البياض لكامل المبنى (Plaster Mortar: Sand & Cement)",
     ]
+
+    st.markdown(
+        """<style>
+div[data-testid="stExpander"]:has(#m15-survey-details-anchor) label,
+div[data-testid="stExpander"]:has(#m15-survey-details-anchor) div[data-testid="stSelectbox"] div {
+    font-size: 1.08rem !important;
+    font-weight: 700 !important;
+}
+</style>
+<div id="m15-survey-details-anchor" style="display:none;"></div>""",
+        unsafe_allow_html=True
+    )
 
     selected_view = st.selectbox(
         "🔎 تصفية وعرض تفاصيل حصر بند محدد (أو عرض جميع البنود):",
@@ -10709,47 +10960,137 @@ def _section_all_items_detailed_survey():
     )
     show_all = (selected_view == item_opts[0])
 
-    def _render_card(num_str, title_ar, title_en, philosophy, df, bottom_fn=None):
-        st.markdown(
-            f"""
-            <div style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.95) 100%); border: 1.5px solid #0284c7; border-right: 5px solid #38bdf8; border-radius: 8px; padding: 7px 14px; margin: 14px 0 6px 0;" dir="rtl">
-                <span style="font-weight: 800; font-size: 0.96rem; color: #38bdf8;">📌 بند ({num_str}): {title_ar}</span>
-                <span style="font-size: 0.82rem; color: #94a3b8; margin-right: 6px;">({title_en})</span>
-            </div>
-            <div style="background: rgba(15, 23, 42, 0.65); border: 1px solid #334155; border-radius: 6px; padding: 6px 12px; margin-bottom: 8px; font-size: 0.84rem; color: #cbd5e1; line-height: 1.55;" dir="rtl">
-                <b style="color: #fbbf24;">💡 فلسفة ومعادلة الحصر الهندسية:</b> {philosophy}
-            </div>
-            """,
-            unsafe_allow_html=True
+    def _render_card(num_str, title_ar, title_en, net_qty_val, unit_str, philosophy, df, bottom_fn=None):
+        qty_badge = ""
+        if net_qty_val is not None and str(net_qty_val).strip() != "":
+            unit_display = f" {unit_str}" if unit_str else ""
+            qty_badge = (
+                f'<span style="display:inline-flex; align-items:center; background:linear-gradient(135deg, #0284c7 0%, #0369a1 100%); '
+                f'color:#ffffff; border:1.5px solid #38bdf8; border-radius:8px; padding:5px 16px; font-weight:900; font-size:1.12rem; '
+                f'box-shadow:0 2px 8px rgba(2, 132, 199, 0.45); white-space:nowrap; margin-right:8px;">'
+                f'<span style="color:#fef08a; margin-left:6px; font-weight:800;">الصافي المعتمد:</span> {net_qty_val}{unit_display}'
+                f'</span>'
+            )
+
+        card_html = (
+            f'<div dir="rtl" style="background:linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border:2px solid #0284c7; '
+            f'border-radius:10px; padding:12px 20px; margin:22px 0 10px 0; text-align:center; box-shadow:0 4px 16px rgba(2, 132, 199, 0.25);">'
+            f'<div style="display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:14px; text-align:center;">'
+            f'<span style="font-weight:900; font-size:1.22rem; color:#38bdf8; text-shadow:0 1px 3px rgba(0,0,0,0.5);">'
+            f'📌 بند ({num_str}): {title_ar} <span style="font-size:0.95rem; font-weight:700; color:#94a3b8;">({title_en})</span>'
+            f'</span>'
+            f'{qty_badge}'
+            f'</div>'
+            f'</div>'
+            f'<div dir="rtl" style="background:rgba(15, 23, 42, 0.85); border:1.5px solid #334155; border-radius:8px; '
+            f'padding:10px 16px; margin-bottom:12px; font-size:1.02rem; color:#e2e8f0; line-height:1.65; box-shadow:0 2px 8px rgba(0,0,0,0.2);">'
+            f'<b style="color:#fbbf24; font-size:1.05rem;">💡 فلسفة ومعادلة الحصر الهندسية:</b> {philosophy}'
+            f'</div>'
         )
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        st.markdown(card_html, unsafe_allow_html=True)
+        st.markdown(_df_to_custom_html_table(df), unsafe_allow_html=True)
         if bottom_fn:
             bottom_fn()
 
-    # 1. محارة السقف الداخلية
+    # 1. مباني طوب أحمر نصف طوبة (12 سم)
     if show_all or selected_view == item_opts[1]:
-        df1 = pd.DataFrame([
+        df1_rows = []
+        for r in s_res.get("rows_12", []):
+            df1_rows.append({
+                "عنصر الأعمال": f"حائط {r.get('الحائط', '')}",
+                "الطول (م)": f"{r.get('الطول (م)', 0.0):.2f}",
+                "الارتفاع (م)": f"{r.get('الارتفاع (م)', 0.0):.2f}",
+                "المساحة الكلية (م²)": f"{r.get('المساحة الإجمالية (م2)', 0.0):.2f}",
+                "خصم الفتحات (م²)": f"{r.get('خصم الفتحات (م2)', 0.0):.2f}",
+                "المساحة الصافية (م²)": f"{r.get('المساحة الصافية (م2)', 0.0):.2f}",
+                "ملاحظات": "حائط قواطيع داخلي نصف طوبة سمك 12 سم"
+            })
+        if is_parapet_half and area_parapet_m2 > 0:
+            df1_rows.append({
+                "عنصر الأعمال": "دروة السطح الخارجي",
+                "الطول (م)": f"{perimeter:.2f}",
+                "الارتفاع (م)": f"{parapet_h_m:.2f}",
+                "المساحة الكلية (م²)": f"{area_parapet_m2:.2f}",
+                "خصم الفتحات (م²)": "0.00",
+                "المساحة الصافية (م²)": f"{area_parapet_m2:.2f}",
+                "ملاحظات": f"دروة السطح ({parapet_thick_choice}) محيط المبنى × ارتفاع الدروة"
+            })
+        df1_rows.append({
+            "عنصر الأعمال": "✅ إجمالي مسطح مباني نصف طوبة 12 سم المعتمدة",
+            "الطول (م)": "—",
+            "الارتفاع (م)": "—",
+            "المساحة الكلية (م²)": "—",
+            "خصم الفتحات (م²)": "—",
+            "المساحة الصافية (م²)": f"{qty_brick_12:.2f}",
+            "ملاحظات": f"إجمالي حوائط 12 سم ({walls_12_net_m2:.2f} م²)" + (f" + دروة السطح ({parapet_12_m2:.2f} م²)" if parapet_12_m2 > 0 else "")
+        })
+        df1 = pd.DataFrame(df1_rows if df1_rows else [{"عنصر الأعمال": "لا توجد حوائط نصف طوبة 12 سم بالمشروع حالياً", "الطول (م)": "—", "الارتفاع (م)": "—", "المساحة الكلية (م²)": "0.00", "خصم الفتحات (م²)": "0.00", "المساحة الصافية (م²)": "0.00", "ملاحظات": "—"}])
+        _render_card("1", "بند طوب أحمر تخانة نصف طوبة 12 سم", "12cm Half-Brick Masonry",
+                     f"{qty_brick_12:.2f}", "م²",
+                     "حصر مسطحات حوائط الطوب نصف طوبة (سمك 12 سم) بالمتر المسطح بعد خصم الفتحات، مضافاً إليها مساحة دروة السطح إذا تم اختيارها بسمك نصف طوبة.", df1)
+
+    # 2. مباني طوب أحمر طوبة كاملة (25 سم)
+    if show_all or selected_view == item_opts[2]:
+        df2_rows = []
+        for r in s_res.get("rows_25", []):
+            df2_rows.append({
+                "عنصر الأعمال": f"حائط {r.get('الحائط', '')}",
+                "الطول (م)": f"{r.get('الطول (م)', 0.0):.2f}",
+                "الارتفاع (م)": f"{r.get('الارتفاع (م)', 0.0):.2f}",
+                "المساحة الصافية (م²)": f"{r.get('المساحة الصافية (م2)', 0.0):.2f}",
+                "الحجم الصافي (م³)": f"{r.get('حجم الطوب (م3)', 0.0):.2f}",
+                "ملاحظات": "حائط خارجي/حامل سمك 25 سم كامل طوبة"
+            })
+        if not is_parapet_half and area_parapet_m2 > 0:
+            df2_rows.append({
+                "عنصر الأعمال": "دروة السطح الخارجي",
+                "الطول (م)": f"{perimeter:.2f}",
+                "الارتفاع (م)": f"{parapet_h_m:.2f}",
+                "المساحة الصافية (م²)": f"{area_parapet_m2:.2f}",
+                "الحجم الصافي (م³)": f"{parapet_25_m3:.2f}",
+                "ملاحظات": f"دروة السطح ({parapet_thick_choice}) الحجم = المسطح × 0.25 م"
+            })
+        df2_rows.append({
+            "عنصر الأعمال": "✅ إجمالي حجم مباني طوبة كاملة 25 سم المعتمدة",
+            "الطول (م)": "—",
+            "الارتفاع (م)": "—",
+            "المساحة الصافية (م²)": f"{walls_25_net_m2 + (area_parapet_m2 if not is_parapet_half else 0.0):.2f}",
+            "الحجم الصافي (م³)": f"{qty_brick_25:.2f}",
+            "ملاحظات": f"إجمالي حجم حوائط 25 سم ({walls_25_vol_m3:.2f} م³)" + (f" + دروة السطح ({parapet_25_m3:.2f} م³)" if parapet_25_m3 > 0 else "")
+        })
+        df2 = pd.DataFrame(df2_rows if df2_rows else [{"عنصر الأعمال": "لا توجد حوائط طوبة 25 سم بالمشروع حالياً", "الطول (م)": "—", "الارتفاع (م)": "—", "المساحة الصافية (م²)": "0.00", "الحجم الصافي (م³)": "0.00", "ملاحظات": "—"}])
+        _render_card("2", "بند طوب أحمر تخانة طوبة 25 سم", "25cm Full-Brick Masonry",
+                     f"{qty_brick_25:.2f}", "م³",
+                     "حصر حجم حوائط الطوب طوبة كاملة (سمك 25 سم) بالمتر المكعب بعد خصم الفتحات (المساحة الصافية × 0.25 م)، مضافاً إليها حجم دروة السطح إذا تم اختيارها بسمك طوبة كاملة.", df2)
+
+    # 3. محارة السقف الداخلية
+    if show_all or selected_view == item_opts[3]:
+        df3_ceiling = pd.DataFrame([
             {"العنصر الهندسي": "مسطح صبة السقف الخرساني (Footprint Area)", "الطول X (م)": f"{span_x:.2f}" if span_x > 0 else "—", "العرض Y (م)": f"{span_y:.2f}" if span_y > 0 else "—", "المسطح الإجمالي (م²)": f"{bldg_area:.2f}", "الاستقطاع / الخصم (م²)": "0.00", "صافي مسطح المحارة (م²)": f"{bldg_area:.2f}", "فلسفة ومعادلة الحصر": "مسطح بلاطة السقف المحصورة بين المحاور الخارجية للمبنى"},
             {"العنصر الهندسي": "فراغات المناور السماوية المفرغة (Shafts/Voids)", "الطول X (م)": "—", "العرض Y (م)": "—", "المسطح الإجمالي (م²)": "0.00", "الاستقطاع / الخصم (م²)": f"{eff_shaft_m2:.2f}", "صافي مسطح المحارة (م²)": f"-{eff_shaft_m2:.2f}", "فلسفة ومعادلة الحصر": "خصم مسطح المنور بالكامل لعدم وجود صب خرساني أو محارة سقف به"},
             {"العنصر الهندسي": "✅ صافي مسطح محارة السقف المعتمدة", "الطول X (م)": "—", "العرض Y (م)": "—", "المسطح الإجمالي (م²)": f"{bldg_area:.2f}", "الاستقطاع / الخصم (م²)": f"{eff_shaft_m2:.2f}", "صافي مسطح المحارة (م²)": f"{qty_ceiling_plaster:.2f}", "فلسفة ومعادلة الحصر": f"الصافي = مسطح المبنى ({bldg_area:.2f} م²) − مسطح المناور ({eff_shaft_m2:.2f} م²)"},
         ])
-        _render_card("1", "كمية المحارة الداخلية بالسقف بالمتر المسطح", "Internal Ceiling Plaster",
-                     "مسطح بلاطة السقف الصافي يساوي مساحة المسقط الأفقي للمبنى (Footprint Area) مخصوماً منها مسطح فراغات المناور المفتوحة (Shafts/Voids) لعدم وجود صب أو محارة سقف بها.", df1)
+        _render_card("3", "كمية المحارة الداخلية بالسقف بالمتر المسطح", "Internal Ceiling Plaster",
+                     f"{qty_ceiling_plaster:.2f}", "م²",
+                     "مسطح بلاطة السقف الصافي يساوي مساحة المسقط الأفقي للمبنى (Footprint Area) مخصوماً منها مسطح فراغات المناور المفتوحة (Shafts/Voids) لعدم وجود صب أو محارة سقف بها.", df3_ceiling)
 
-    # 2. دهانات السقف الداخلية
-    if show_all or selected_view == item_opts[2]:
-        df2 = pd.DataFrame([
-            {"العنصر": "دهانات بياض الأسقف الداخلية", "المسطح الصافي (م²)": f"{qty_ceiling_paint:.2f}", "عدد الطبقات": "5 طبقات متتالية", "المواصفات الفنية المعتمدة": "1 وجه سيلر مائي + 2 سكينة معجون داخلي + 2 وجه دهان بلاستيك مط/نصف لامع عالي البياض", "فلسفة ومعادلة الحصر": f"مساوية تماماً لصافي مسطح محارة السقف المعتمدة بعد خصم فراغات المناور ({qty_ceiling_plaster:.2f} م²)"}
+    # 4. دهانات السقف الداخلية
+    if show_all or selected_view == item_opts[4]:
+        df4_ceiling_paint = pd.DataFrame([
+            {"العنصر الهندسي": "مسطح صبة السقف الخرساني (Footprint Area)", "المسطح الإجمالي (م²)": f"{bldg_area:.2f}", "خصم المناور (م²)": "0.00", "صافي مسطح الدهان (م²)": f"{bldg_area:.2f}", "المواصفات الفنية المعتمدة": "1 وجه سيلر مائي + 2 سكينة معجون داخلي + 2 وجه بلاستيك مط/نصف لامع عالي البياض"},
+            {"العنصر الهندسي": "فراغات المناور السماوية المفرغة (Shafts)", "المسطح الإجمالي (م²)": "0.00", "خصم المناور (م²)": f"{eff_shaft_m2:.2f}", "صافي مسطح الدهان (م²)": f"-{eff_shaft_m2:.2f}", "المواصفات الفنية المعتمدة": "خصم مسطح المنور السماوي بالكامل"},
+            {"العنصر الهندسي": "✅ صافي مسطح دهانات السقف الداخلية المعتمدة", "المسطح الإجمالي (م²)": f"{bldg_area:.2f}", "خصم المناور (م²)": f"{eff_shaft_m2:.2f}", "صافي مسطح الدهان (م²)": f"{qty_ceiling_paint:.2f}", "المواصفات الفنية المعتمدة": f"مطابقة تماماً لصافي مسطح محارة السقف بعد خصم المناور ({qty_ceiling_paint:.2f} م²)"},
         ])
-        _render_card("2", "كمية الدهانات الداخلية للسقف", "Internal Ceiling Paints",
-                     "تطابق تماماً صافي مسطح محارة الأسقف المعتمدة (بعد خصم فراغات المناور)، وتتكون من 5 طبقات متتالية (سيلر مائي + 2 سكينة معجون + 2 وجه دهان بلاستيك عالي الجودة).", df2)
+        _render_card("4", "كمية الدهانات الداخلية للسقف بالمتر المسطح", "Internal Ceiling Paints",
+                     f"{qty_ceiling_paint:.2f}", "م²",
+                     "تطابق تماماً صافي مسطح محارة الأسقف المعتمدة (بعد خصم فراغات المناور)، وتتكون من 5 طبقات متتالية (سيلر مائي + 2 سكينة معجون + 2 وجه دهان بلاستيك عالي الجودة).", df4_ceiling_paint)
 
-    # 3. محارة الحوائط الداخلية
-    if show_all or selected_view == item_opts[3]:
+    # 5. محارة الحوائط الداخلية
+    if show_all or selected_view == item_opts[5]:
         if p_rows:
-            df3_rows = []
+            df5_rows = []
             for r in p_rows:
-                df3_rows.append({
+                df5_rows.append({
                     "الحائط": r["الحائط"],
                     "الوجه المحدد": r["الوجه المحدد"],
                     "عدد الأوجه": r["عدد الأوجه"],
@@ -10762,8 +11103,8 @@ def _section_all_items_detailed_survey():
                     "الرمل المطلوب (م³)": f"{r['كمية الرمل المطلوبة (m^3)']:.2f}",
                     "الأسمنت المطلوب": r["كمية الأسمنت المطلوبة"],
                 })
-            df3_rows.append({
-                "الحائط": "✅ الإجمالي العام",
+            df5_rows.append({
+                "الحائط": "✅ الإجمالي العام لمحارة الحوائط (ECP)",
                 "الوجه المحدد": f"{sum(r['عدد الأوجه'] for r in p_rows)} وجه",
                 "عدد الأوجه": sum(r["عدد الأوجه"] for r in p_rows),
                 "الطول (م)": f"{sum(r['الطول (م)'] for r in p_rows):.2f}",
@@ -10775,10 +11116,10 @@ def _section_all_items_detailed_survey():
                 "الرمل المطلوب (م³)": f"{p_res['tot_sand']:.2f}",
                 "الأسمنت المطلوب": f"{p_res['tot_cement_tons']:.2f} طن ({p_res['tot_cement_bags']} شكارة)",
             })
-            df3 = pd.DataFrame(df3_rows)
-            def _dl_btn3():
+            df5_wall = pd.DataFrame(df5_rows)
+            def _dl_btn5():
                 cb_p = io.StringIO()
-                df3.to_csv(cb_p, index=False, encoding="utf-8-sig")
+                df5_wall.to_csv(cb_p, index=False, encoding="utf-8-sig")
                 st.download_button(
                     "⬇️ تحميل جدول حصر المحارة التفصيلي حائط بحائط CSV",
                     data=cb_p.getvalue().encode("utf-8-sig"),
@@ -10786,58 +11127,68 @@ def _section_all_items_detailed_survey():
                     mime="text/csv",
                     key="m15_dl_plaster_wall_btn"
                 )
-            _render_card("3", "كمية المحارة للحوائط بالمتر المسطح (حائط بحائط)", "Wall-by-Wall Plaster Survey ECP",
-                         "حصر هندسي تفصيلي لكل حائط والأوجه المحددة طبقاً لاشتراطات الكود المصري للبياض (ECP): الفتحات حتى 4.0 م² لا تُخصم لأنها تقابل تكلفة ومؤونة بياض الجوانب والأكتاف والسوك والجلسات، وما زاد عنها يُخصم الفارق فقط.", df3, _dl_btn3)
+            _render_card("5", "كمية المحارة للحوائط بالمتر المسطح (حائط بحائط)", "Wall-by-Wall Plaster Survey ECP",
+                         f"{qty_wall_plaster:.2f}", "م²",
+                         "حصر هندسي تفصيلي لكل حائط والأوجه المحددة طبقاً لاشتراطات الكود المصري للبياض (ECP): الفتحات حتى 4.0 م² لا تُخصم لأنها تقابل تكلفة ومؤونة بياض الجوانب والأكتاف والسوك والجلسات، وما زاد عنها يُخصم الفارق فقط.", df5_wall, _dl_btn5)
         else:
-            df3_empty = pd.DataFrame([{"الحائط": "لم يتم اختيار أوجه محارة للحوائط بعد", "الوجه المحدد": "—", "إجمالي المسطح (م²)": "0.00", "الخصم المعتمد (م²)": "0.00", "صافي مسطح المحارة (م²)": "0.00", "ملاحظات": "قم باختيار وتفعيل أوجه المحارة من قسم «7️⃣ تحديد حوائط المحارة»"}])
-            _render_card("3", "كمية المحارة للحوائط بالمتر المسطح (حائط بحائط)", "Wall-by-Wall Plaster Survey ECP",
-                         "حصر هندسي تفصيلي لكل حائط والأوجه المحددة طبقاً لاشتراطات الكود المصري للبياض (ECP).", df3_empty)
+            df5_empty = pd.DataFrame([{"الحائط": "لم يتم اختيار أوجه محارة للحوائط بعد", "الوجه المحدد": "—", "إجمالي المسطح (م²)": "0.00", "الخصم المعتمد (م²)": "0.00", "صافي مسطح المحارة (م²)": "0.00", "ملاحظات": "قم باختيار وتفعيل أوجه المحارة من قسم «7️⃣ تحديد حوائط المحارة»"}])
+            _render_card("5", "كمية المحارة للحوائط بالمتر المسطح (حائط بحائط)", "Wall-by-Wall Plaster Survey ECP",
+                         f"{qty_wall_plaster:.2f}", "م²",
+                         "حصر هندسي تفصيلي لكل حائط والأوجه المحددة طبقاً لاشتراطات الكود المصري للبياض (ECP).", df5_empty)
 
-    # 4. دهانات الحوائط الداخلية
-    if show_all or selected_view == item_opts[4]:
-        df4 = pd.DataFrame([
-            {"العنصر": "دهانات الحوائط الداخلية بالمتر المسطح", "المسطح الصافي (م²)": f"{qty_wall_paint:.2f}", "عدد الطبقات": "5 طبقات متتالية", "المواصفات الفنية": "1 وجه برايمر مائي سيلر مقاوم للقلويات + 2 سكينة معجون داخلي ناعم + 2 وجه دهان بلاستيك قابل للغسيل", "فلسفة ومعادلة الحصر": f"مساوية تماماً لصافي مسطح محارة الحوائط المعتمد طبقاً لحصر الكود المصري حائط بحائط ({qty_wall_plaster:.2f} م²)"}
+    # 6. دهانات الحوائط الداخلية
+    if show_all or selected_view == item_opts[6]:
+        df6_wall_paint = pd.DataFrame([
+            {"العنصر الهندسي": "إجمالي مسطح حوائط المبنى المعتمدة", "المسطح الكلي (م²)": f"{p_res.get('tot_gross', 0.0):.2f}", "الخصم المعتمد (م²)": "0.00", "صافي مسطح الدهان (م²)": f"{p_res.get('tot_gross', 0.0):.2f}", "المواصفات الفنية المعتمدة": "1 وجه برايمر سيلر + 2 سكينة معجون + 2 وجه بلاستيك قابل للغسيل"},
+            {"العنصر الهندسي": "خصم الفتحات المعتمدة طبقاً للكود المصري (ECP)", "المسطح الكلي (م²)": "0.00", "الخصم المعتمد (م²)": f"{p_res.get('tot_ded', 0.0):.2f}", "صافي مسطح الدهان (م²)": f"-{p_res.get('tot_ded', 0.0):.2f}", "المواصفات الفنية المعتمدة": "خصم ما زاد عن 4.0 م² من الفتحات الكبيرة طبقاً للكود"},
+            {"العنصر الهندسي": "✅ صافي مسطح دهانات الحوائط الداخلية المعتمدة", "المسطح الكلي (م²)": f"{p_res.get('tot_gross', 0.0):.2f}", "الخصم المعتمد (م²)": f"{p_res.get('tot_ded', 0.0):.2f}", "صافي مسطح الدهان (م²)": f"{qty_wall_paint:.2f}", "المواصفات الفنية المعتمدة": f"مساوية لصافي محارة الحوائط حائط بحائط ({qty_wall_paint:.2f} م²)"},
         ])
-        _render_card("4", "كمية الدهانات الداخلية للحوائط بالمتر المسطح", "Internal Wall Paints",
-                     "مساوية لصافي مسطح محارة الحوائط الداخلية المعتمد طبقاً لحصر الكود المصري حائط بحائط (5 طبقات: 1 وجه برايمر مائي سيلر + 2 سكينة معجون داخلي + 2 وجه دهان بلاستيك قابل للغسيل).", df4)
+        _render_card("6", "كمية الدهانات الداخلية للحوائط بالمتر المسطح", "Internal Wall Paints",
+                     f"{qty_wall_paint:.2f}", "م²",
+                     "مساوية لصافي مسطح محارة الحوائط الداخلية المعتمد طبقاً لحصر الكود المصري حائط بحائط (5 طبقات: 1 وجه برايمر مائي سيلر + 2 سكينة معجون داخلي + 2 وجه دهان بلاستيك قابل للغسيل).", df6_wall_paint)
 
-    # 5. محارة الواجهات والدروة من الجانبين
-    if show_all or selected_view == item_opts[5]:
-        df5 = pd.DataFrame([
+    # 7. محارة الواجهات والدروة من الجانبين
+    if show_all or selected_view == item_opts[7]:
+        df7_facade = pd.DataFrame([
             {"الواجهة / العنصر": "واجهات المبنى الخارجية (Exterior Facades)", "المحيط الخارجي (م.ط)": f"{perimeter:.2f}", "الارتفاع المعتمد (م)": f"{default_h:.2f}", "المسطح الإجمالي (م²)": f"{perimeter * default_h:.2f}", "الخصم المعتمد (م²)": f"{facade_ded:.2f}", "صافي مسطح المحارة (م²)": f"{max(0.0, perimeter * default_h - facade_ded):.2f}", "فلسفة ومعادلة الحصر": "محيط المبنى بالكامل بارتفاع الدور مع خصم الفتحات > 4 م² طبقاً للكود المصري"},
             {"الواجهة / العنصر": "دروة السطح - الوجه الخارجي (Outer Parapet Face)", "المحيط الخارجي (م.ط)": f"{perimeter:.2f}", "الارتفاع المعتمد (م)": f"{parapet_h_m:.2f}", "المسطح الإجمالي (م²)": f"{perimeter * parapet_h_m:.2f}", "الخصم المعتمد (م²)": "0.00", "صافي مسطح المحارة (م²)": f"{perimeter * parapet_h_m:.2f}", "فلسفة ومعادلة الحصر": "امتداد الواجهة الخارجية لأعلى شامل الدروة لحماية السطح"},
             {"الواجهة / العنصر": "دروة السطح - الوجه الداخلي (Inner Parapet Face)", "المحيط الخارجي (م.ط)": f"{perimeter:.2f}", "الارتفاع المعتمد (م)": f"{parapet_h_m:.2f}", "المسطح الإجمالي (م²)": f"{perimeter * parapet_h_m:.2f}", "الخصم المعتمد (م²)": "0.00", "صافي مسطح المحارة (م²)": f"{perimeter * parapet_h_m:.2f}", "فلسفة ومعادلة الحصر": "بياض الوجه الداخلي للدروة المطل على بلاط وعزل السطح"},
             {"الواجهة / العنصر": "✅ إجمالي محارة الواجهات والدروة من الجانبين", "المحيط الخارجي (م.ط)": f"{perimeter:.2f}", "الارتفاع المعتمد (م)": f"{total_facade_h:.2f}", "المسطح الإجمالي (م²)": f"{gross_facade:.2f}", "الخصم المعتمد (م²)": f"{facade_ded:.2f}", "صافي مسطح المحارة (م²)": f"{qty_facade_plaster:.2f}", "فلسفة ومعادلة الحصر": f"المحيط ({perimeter:.2f} م) × إجمالي الارتفاع ({default_h:.2f} + 2×{parapet_h_m:.2f} = {total_facade_h:.2f} م) − خصم فتحات ({facade_ded:.2f} م²)"},
         ])
-        _render_card("5", "كمية المحارة الخارجية (الواجهات والدروة من الجانبين)", "External Facade & Parapet Plaster",
-                     "تشمل محيط المبنى الخارجي بكامل ارتفاع المبنى بالإضافة إلى دروة السطح من الجانبين (الوجه الخارجي + الوجه الداخلي) مخصوماً منها فتحات الواجهات الخارجية طبقاً للكود المصري: المحيط × (ارتفاع المبنى + 2 × ارتفاع الدروة) − خصم الفتحات.", df5)
+        _render_card("7", "كمية المحارة الخارجية (الواجهات والدروة من الجانبين)", "External Facade & Parapet Plaster",
+                     f"{qty_facade_plaster:.2f}", "م²",
+                     "تشمل محيط المبنى الخارجي بكامل ارتفاع المبنى بالإضافة إلى دروة السطح من الجانبين (الوجه الخارجي + الوجه الداخلي) مخصوماً منها فتحات الواجهات الخارجية طبقاً للكود المصري: المحيط × (ارتفاع المبنى + 2 × ارتفاع الدروة) − خصم الفتحات.", df7_facade)
 
-    # 6. دهانات الواجهات والدروة من الجانبين
-    if show_all or selected_view == item_opts[6]:
-        df6 = pd.DataFrame([
-            {"العنصر": "دهانات الواجهات والدروة من الجانبين", "المسطح الصافي (م²)": f"{qty_facade_paint:.2f}", "الارتفاع الكلي (م)": f"{total_facade_h:.2f}", "المواصفات الفنية المعتمدة": "سيلر مائي مقاوم للعوامل الجوية + معجون واجهات أكريليك + وجهين دهان مطاطي عازل للأمطار والشمس (Weatherproof)", "فلسفة ومعادلة الحصر الهندسية": f"مطابقة لمسطح محارة الواجهات والدروة من الجانبين بعد خصم الفتحات الخارجية ({qty_facade_plaster:.2f} م²)"}
+    # 8. دهانات الواجهات والدروة من الجانبين
+    if show_all or selected_view == item_opts[8]:
+        df8_facade_paint = pd.DataFrame([
+            {"الواجهة / العنصر": "واجهات المبنى الخارجية والدروة من الجانبين", "المسطح الكلي (م²)": f"{gross_facade:.2f}", "الخصم المعتمد (م²)": "0.00", "صافي مسطح الدهان (م²)": f"{gross_facade:.2f}", "المواصفات الفنية المعتمدة": "سيلر مائي + معجون أكريليك + وجهين دهان مطاطي عازل (Weatherproof)"},
+            {"الواجهة / العنصر": "خصم فتحات الواجهات الخارجية (ECP)", "المسطح الكلي (م²)": "0.00", "الخصم المعتمد (م²)": f"{facade_ded:.2f}", "صافي مسطح الدهان (م²)": f"-{facade_ded:.2f}", "المواصفات الفنية المعتمدة": "خصم الفتحات > 4 م² طبقاً لاشتراطات الكود المصري"},
+            {"الواجهة / العنصر": "✅ صافي مسطح دهانات الواجهات والدروة من الجانبين", "المسطح الكلي (م²)": f"{gross_facade:.2f}", "الخصم المعتمد (م²)": f"{facade_ded:.2f}", "صافي مسطح الدهان (م²)": f"{qty_facade_paint:.2f}", "المواصفات الفنية المعتمدة": f"مطابقة لصافي محارة الواجهات والدروة ({qty_facade_paint:.2f} م²)"},
         ])
-        _render_card("6", "كمية الدهانات الخارجية (الواجهات والدروة من الجانبين)", "External Facade & Parapet Paints",
-                     "مطابقة لمسطح محارة الواجهات والدروة من الجانبين بعد خصم الفتحات الخارجية، بمواصفات دهانات مطاطية مقاومة للأمطار والشمس والأشعة فوق البنفسجية (Weatherproof).", df6)
+        _render_card("8", "كمية الدهانات الخارجية (الواجهات والدروة من الجانبين)", "External Facade & Parapet Paints",
+                     f"{qty_facade_paint:.2f}", "م²",
+                     "مطابقة لمسطح محارة الواجهات والدروة من الجانبين بعد خصم الفتحات الخارجية، بمواصفات دهانات مطاطية مقاومة للأمطار والشمس والأشعة فوق البنفسجية (Weatherproof).", df8_facade_paint)
 
-    # 7. سيراميك الأرضيات للغرف والصالات
-    if show_all or selected_view == item_opts[7]:
-        df7 = pd.DataFrame([
+    # 9. سيراميك الأرضيات للغرف والصالات
+    if show_all or selected_view == item_opts[9]:
+        df9_floor = pd.DataFrame([
             {"البيان / الفراغ": "مسطح صبة المبنى الإجمالي (Footprint Area)", "المساحة (م²)": f"{bldg_area:.2f}", "الحالة في المعادلة": "مساحة كلية (+)", "فلسفة ومعادلة الحصر": "إجمالي مساحة البلاطة المحصورة بين المحاور الخارجية للمبنى"},
             {"البيان / الفراغ": "أحياز الحمامات المعتمدة (Wet Areas)", "المساحة (م²)": f"{total_bath_floor_m2:.2f}", "الحالة في المعادلة": "استقطاع (-)", "فلسفة ومعادلة الحصر": "تفريغ أرضيات الحمامات لأنها تُحصر بسيراميك أرضيات حمامات مانع للانزلاق"},
             {"البيان / الفراغ": "أحياز المطابخ المعتمدة (Kitchen Areas)", "المساحة (م²)": f"{total_kitchen_floor_m2:.2f}", "الحالة في المعادلة": "استقطاع (-)", "فلسفة ومعادلة الحصر": "تفريغ أرضيات المطابخ لأنها تُحصر بسيراميك أرضيات مطابخ منفصل"},
             {"البيان / الفراغ": "أحياز المناور المفرغة (Shafts/Voids)", "المساحة (م²)": f"{eff_shaft_m2:.2f}", "الحالة في المعادلة": "استقطاع (-)", "فلسفة ومعادلة الحصر": "تفريغ فراغات المناور السماوية لعدم وجود أرضيات بها"},
-            {"البيان / الفراغ": "✅ صافي سيراميك أرضيات الغرف والصالات", "المساحة (م²)": f"{qty_floor_ceramic:.2f}", "الحالة في المعادلة": "الصافي المعتمد", "فلسفة ومعادلة الحصر": f"المعادلة: مساحة المبنى ({bldg_area:.2f}) − حمامات ({total_bath_floor_m2:.2f}) − مطابخ ({total_kitchen_floor_m2:.2f}) − مناور ({eff_shaft_m2:.2f})"},
+            {"البيان / الفراغ": "✅ صافي سيراميك أرضيات الغرف والصالات المعتمد", "المساحة (م²)": f"{qty_floor_ceramic:.2f}", "الحالة في المعادلة": "الصافي المعتمد", "فلسفة ومعادلة الحصر": f"المعادلة: مساحة المبنى ({bldg_area:.2f}) − حمامات ({total_bath_floor_m2:.2f}) − مطابخ ({total_kitchen_floor_m2:.2f}) − مناور ({eff_shaft_m2:.2f})"},
         ])
-        _render_card("7", "كمية سيراميك الأرضيات (Floor Ceramic Tiles)", "Living & Bed Rooms Floor Ceramic",
-                     "مسطح صبة المبنى الإجمالي مخصوماً منه أرضيات الحمامات (المفرغة لسيراميك خاص مانع للانزلاق) وأرضيات المطابخ والمناور طبقاً للمعادلة: (مساحة المبنى − مساحة الحمامات − مساحة المطابخ − مساحة المناور).", df7)
+        _render_card("9", "كمية سيراميك الأرضيات (Floor Ceramic Tiles)", "Living & Bed Rooms Floor Ceramic",
+                     f"{qty_floor_ceramic:.2f}", "م²",
+                     "مسطح صبة المبنى الإجمالي مخصوماً منه أرضيات الحمامات (المفرغة لسيراميك خاص مانع للانزلاق) وأرضيات المطابخ والمناور طبقاً للمعادلة: (مساحة المبنى − مساحة الحمامات − مساحة المطابخ − مساحة المناور).", df9_floor)
 
-    # 8. سيراميك أرضيات الحمامات
-    if show_all or selected_view == item_opts[8]:
+    # 10. سيراميك أرضيات الحمامات
+    if show_all or selected_view == item_opts[10]:
         if baths_list:
-            df8_rows = []
+            df10_rows = []
             for s in baths_list:
-                df8_rows.append({
+                df10_rows.append({
                     "اسم الحيز": s.get("name", "حمام"),
                     "المحاور المحيطة": f"{s.get('x1_lbl')}-{s.get('x2_lbl')} / {s.get('y1_lbl')}-{s.get('y2_lbl')}",
                     "البعد X (م)": f"{float(s.get('dx', 0.0)):.2f}",
@@ -10845,26 +11196,27 @@ def _section_all_items_detailed_survey():
                     "المساحة الصافية (م²)": f"{float(s.get('area_m2', 0.0)):.2f}",
                     "فلسفة الحصر": "سيراميك أرضيات حمام مانع للانزلاق طبقاً لإحداثيات البلاطة بالمسقط"
                 })
-            df8_rows.append({
-                "اسم الحيز": "✅ إجمالي أرضيات الحمامات",
+            df10_rows.append({
+                "اسم الحيز": "✅ إجمالي أرضيات الحمامات المعتمدة",
                 "المحاور المحيطة": f"{len(baths_list)} حيز معتمد",
                 "البعد X (م)": "—",
                 "البعد Y (م)": "—",
                 "المساحة الصافية (م²)": f"{qty_bath_floor_ceramic:.2f}",
-                "فلسفة الحصر": "إجمالي مساحات أرضيات الحمامات المعتمدة بالمسقط الأفقي"
+                "فلسفة الحصر": f"إجمالي مساحات أرضيات الحمامات المعتمدة بالمسقط الأفقي ({qty_bath_floor_ceramic:.2f} م²)"
             })
-            df8 = pd.DataFrame(df8_rows)
+            df10_bath = pd.DataFrame(df10_rows)
         else:
-            df8 = pd.DataFrame([{"اسم الحيز": "لا توجد أحياز حمامات معتمدة بالمبنى حالياً", "المحاور المحيطة": "—", "البعد X (م)": "—", "البعد Y (م)": "—", "المساحة الصافية (م²)": "0.00", "فلسفة الحصر": "يمكن تحديد واعتماد الحمامات من قسم «🛁 تحديد الحمامات والمطابخ والمناور»"}])
-        _render_card("8", "كمية سيراميك الحمامات (أرضيات)", "Bathroom Floor Ceramic",
-                     "حصر مساحات أرضيات أحياز الحمامات المعتمدة بالمسقط الأفقي والمحددة بإحداثيات المحاور، بسيراميك مانع للانزلاق (Anti-slip).", df8)
+            df10_bath = pd.DataFrame([{"اسم الحيز": "لا توجد أحياز حمامات معتمدة بالمبنى حالياً", "المحاور المحيطة": "—", "البعد X (م)": "—", "البعد Y (م)": "—", "المساحة الصافية (م²)": "0.00", "فلسفة الحصر": "يمكن تحديد واعتماد الحمامات من قسم «🛁 تحديد الحمامات والمطابخ والمناور»"}])
+        _render_card("10", "كمية سيراميك الحمامات (أرضيات)", "Bathroom Floor Ceramic",
+                     f"{qty_bath_floor_ceramic:.2f}", "م²",
+                     "حصر مساحات أرضيات أحياز الحمامات المعتمدة بالمسقط الأفقي والمحددة بإحداثيات المحاور، بسيراميك مانع للانزلاق (Anti-slip).", df10_bath)
 
-    # 9. سيراميك أرضيات المطابخ
-    if show_all or selected_view == item_opts[9]:
+    # 11. سيراميك أرضيات المطابخ
+    if show_all or selected_view == item_opts[11]:
         if kitchens_list:
-            df9_rows = []
+            df11_rows = []
             for s in kitchens_list:
-                df9_rows.append({
+                df11_rows.append({
                     "اسم الحيز": s.get("name", "مطبخ"),
                     "المحاور المحيطة": f"{s.get('x1_lbl')}-{s.get('x2_lbl')} / {s.get('y1_lbl')}-{s.get('y2_lbl')}",
                     "البعد X (م)": f"{float(s.get('dx', 0.0)):.2f}",
@@ -10872,29 +11224,30 @@ def _section_all_items_detailed_survey():
                     "المساحة الصافية (م²)": f"{float(s.get('area_m2', 0.0)):.2f}",
                     "فلسفة الحصر": "سيراميك أرضيات مطبخ مقاوم للدهون والمياه طبقاً لإحداثيات البلاطة"
                 })
-            df9_rows.append({
-                "اسم الحيز": "✅ إجمالي أرضيات المطابخ",
+            df11_rows.append({
+                "اسم الحيز": "✅ إجمالي أرضيات المطابخ المعتمدة",
                 "المحاور المحيطة": f"{len(kitchens_list)} حيز معتمد",
                 "البعد X (م)": "—",
                 "البعد Y (م)": "—",
                 "المساحة الصافية (م²)": f"{qty_kitchen_floor_ceramic:.2f}",
-                "فلسفة الحصر": "إجمالي مساحات أرضيات المطابخ المعتمدة بالمسقط الأفقي"
+                "فلسفة الحصر": f"إجمالي مساحات أرضيات المطابخ المعتمدة بالمسقط الأفقي ({qty_kitchen_floor_ceramic:.2f} م²)"
             })
-            df9 = pd.DataFrame(df9_rows)
+            df11_kitchen = pd.DataFrame(df11_rows)
         else:
-            df9 = pd.DataFrame([{"اسم الحيز": "لا توجد أحياز مطابخ معتمدة بالمبنى حالياً", "المحاور المحيطة": "—", "البعد X (م)": "—", "البعد Y (م)": "—", "المساحة الصافية (م²)": "0.00", "فلسفة الحصر": "يمكن تحديد واعتماد المطابخ من قسم «🛁 تحديد الحمامات والمطابخ والمناور»"}])
-        _render_card("9", "كمية سيراميك المطابخ (أرضيات)", "Kitchen Floor Ceramic",
-                     "حصر مساحات أرضيات أحياز المطابخ المعتمدة بالمسقط الأفقي والمحددة بإحداثيات المحاور، بسيراميك ثقيل مقاوم للشحوم والمياه.", df9)
+            df11_kitchen = pd.DataFrame([{"اسم الحيز": "لا توجد أحياز مطابخ معتمدة بالمبنى حالياً", "المحاور المحيطة": "—", "البعد X (م)": "—", "البعد Y (م)": "—", "المساحة الصافية (م²)": "0.00", "فلسفة الحصر": "يمكن تحديد واعتماد المطابخ من قسم «🛁 تحديد الحمامات والمطابخ والمناور»"}])
+        _render_card("11", "كمية سيراميك المطابخ (أرضيات)", "Kitchen Floor Ceramic",
+                     f"{qty_kitchen_floor_ceramic:.2f}", "م²",
+                     "حصر مساحات أرضيات أحياز المطابخ المعتمدة بالمسقط الأفقي والمحددة بإحداثيات المحاور، بسيراميك ثقيل مقاوم للشحوم والمياه.", df11_kitchen)
 
-    # 10. سيراميك حوائط الحمامات
-    if show_all or selected_view == item_opts[10]:
+    # 12. سيراميك حوائط الحمامات
+    if show_all or selected_view == item_opts[12]:
         if baths_list:
-            df10_rows = []
+            df12_rows = []
             for s in baths_list:
                 perim_s = float(s.get("perim_m", 2.0 * (float(s.get("dx", 0.0)) + float(s.get("dy", 0.0)))))
                 gross_w = round(perim_s * default_h, 2)
                 net_w = float(s.get("ceramic_wall_m2", max(0.0, gross_w - 1.89)))
-                df10_rows.append({
+                df12_rows.append({
                     "اسم الحيز": s.get("name", "حمام"),
                     "المحاور": f"{s.get('x1_lbl')}-{s.get('x2_lbl')} / {s.get('y1_lbl')}-{s.get('y2_lbl')}",
                     "محيط الحيز (م.ط)": f"{perim_s:.2f}",
@@ -10904,8 +11257,8 @@ def _section_all_items_detailed_survey():
                     "صافي سيراميك الحوائط (م²)": f"{net_w:.2f}",
                     "فلسفة ومعادلة الحصر": "تجليد كامل الارتفاع مع خصم فتحة باب نمطية (0.9 × 2.1 م)"
                 })
-            df10_rows.append({
-                "اسم الحيز": "✅ إجمالي سيراميك حوائط الحمامات",
+            df12_rows.append({
+                "اسم الحيز": "✅ إجمالي سيراميك حوائط الحمامات المعتمد",
                 "المحاور": f"{len(baths_list)} حيز معتمد",
                 "محيط الحيز (م.ط)": "—",
                 "ارتفاع التجليد (م)": "—",
@@ -10914,21 +11267,22 @@ def _section_all_items_detailed_survey():
                 "صافي سيراميك الحوائط (م²)": f"{wall_ceramic_bath_m2:.2f}",
                 "فلسفة ومعادلة الحصر": f"مجموع مسطحات سيراميك الحوائط لكافة أحياز الحمامات ({wall_ceramic_bath_m2:.2f} م²)"
             })
-            df10 = pd.DataFrame(df10_rows)
+            df12_bath_wall = pd.DataFrame(df12_rows)
         else:
-            df10 = pd.DataFrame([{"اسم الحيز": "لا توجد أحياز حمامات معتمدة بالمبنى حالياً", "المحاور": "—", "محيط الحيز (م.ط)": "—", "ارتفاع التجليد (م)": "—", "المسطح الكلي للحوائط (م²)": "0.00", "خصم فتحة الباب (م²)": "0.00", "صافي سيراميك الحوائط (م²)": "0.00", "فلسفة ومعادلة الحصر": "—"}])
-        _render_card("10", "كمية سيراميك الحوائط للحمامات", "Bathroom Wall Ceramic",
-                     "محيط كل حيز حمام معتمد × كامل ارتفاع الحائط مخصوماً منه فتحة باب الحمام النمطية (0.90 × 2.10 م = 1.89 م²) لعزل الحوائط تماماً ضد بخار الماء والرطوبة.", df10)
+            df12_bath_wall = pd.DataFrame([{"اسم الحيز": "لا توجد أحياز حمامات معتمدة بالمبنى حالياً", "المحاور": "—", "محيط الحيز (م.ط)": "—", "ارتفاع التجليد (م)": "—", "المسطح الكلي للحوائط (م²)": "0.00", "خصم فتحة الباب (م²)": "0.00", "صافي سيراميك الحوائط (م²)": "0.00", "فلسفة ومعادلة الحصر": "—"}])
+        _render_card("12", "كمية سيراميك الحوائط للحمامات", "Bathroom Wall Ceramic",
+                     f"{wall_ceramic_bath_m2:.2f}", "م²",
+                     "محيط كل حيز حمام معتمد × كامل ارتفاع الحائط مخصوماً منه فتحة باب الحمام النمطية (0.90 × 2.10 م = 1.89 م²) لعزل الحوائط تماماً ضد بخار الماء والرطوبة.", df12_bath_wall)
 
-    # 11. سيراميك حوائط المطابخ
-    if show_all or selected_view == item_opts[11]:
+    # 13. سيراميك حوائط المطابخ
+    if show_all or selected_view == item_opts[13]:
         if kitchens_list:
-            df11_rows = []
+            df13_rows = []
             for s in kitchens_list:
                 perim_s = float(s.get("perim_m", 2.0 * (float(s.get("dx", 0.0)) + float(s.get("dy", 0.0)))))
                 gross_w = round(perim_s * default_h, 2)
                 net_w = float(s.get("ceramic_wall_m2", max(0.0, gross_w - 1.89)))
-                df11_rows.append({
+                df13_rows.append({
                     "اسم الحيز": s.get("name", "مطبخ"),
                     "المحاور": f"{s.get('x1_lbl')}-{s.get('x2_lbl')} / {s.get('y1_lbl')}-{s.get('y2_lbl')}",
                     "محيط الحيز (م.ط)": f"{perim_s:.2f}",
@@ -10938,8 +11292,8 @@ def _section_all_items_detailed_survey():
                     "صافي سيراميك الحوائط (م²)": f"{net_w:.2f}",
                     "فلسفة ومعادلة الحصر": "تجليد كامل الارتفاع مع خصم فتحة باب نمطية (0.9 × 2.1 م)"
                 })
-            df11_rows.append({
-                "اسم الحيز": "✅ إجمالي سيراميك حوائط المطابخ",
+            df13_rows.append({
+                "اسم الحيز": "✅ إجمالي سيراميك حوائط المطابخ المعتمد",
                 "المحاور": f"{len(kitchens_list)} حيز معتمد",
                 "محيط الحيز (م.ط)": "—",
                 "ارتفاع التجليد (م)": "—",
@@ -10948,178 +11302,207 @@ def _section_all_items_detailed_survey():
                 "صافي سيراميك الحوائط (م²)": f"{wall_ceramic_kitchen_m2:.2f}",
                 "فلسفة ومعادلة الحصر": f"مجموع مسطحات سيراميك الحوائط لكافة أحياز المطابخ ({wall_ceramic_kitchen_m2:.2f} م²)"
             })
-            df11 = pd.DataFrame(df11_rows)
+            df13_kitchen_wall = pd.DataFrame(df13_rows)
         else:
-            df11 = pd.DataFrame([{"اسم الحيز": "لا توجد أحياز مطابخ معتمدة بالمبنى حالياً", "المحاور": "—", "محيط الحيز (م.ط)": "—", "ارتفاع التجليد (م)": "—", "المسطح الكلي للحوائط (م²)": "0.00", "خصم فتحة الباب (م²)": "0.00", "صافي سيراميك الحوائط (م²)": "0.00", "فلسفة ومعادلة الحصر": "—"}])
-        _render_card("11", "كمية سيراميك الحوائط للمطابخ", "Kitchen Wall Ceramic",
-                     "محيط كل حيز مطبخ معتمد × كامل ارتفاع الحائط مخصوماً منه فتحة باب المطبخ النمطية (1.89 م²) لسهولة التنظيف ومقاومة الأبخرة والحرارة والدهون.", df11)
+            df13_kitchen_wall = pd.DataFrame([{"اسم الحيز": "لا توجد أحياز مطابخ معتمدة بالمبنى حالياً", "المحاور": "—", "محيط الحيز (م.ط)": "—", "ارتفاع التجليد (م)": "—", "المسطح الكلي للحوائط (م²)": "0.00", "خصم فتحة الباب (م²)": "0.00", "صافي سيراميك الحوائط (م²)": "0.00", "فلسفة ومعادلة الحصر": "—"}])
+        _render_card("13", "كمية سيراميك الحوائط للمطابخ", "Kitchen Wall Ceramic",
+                     f"{wall_ceramic_kitchen_m2:.2f}", "م²",
+                     "محيط كل حيز مطبخ معتمد × كامل ارتفاع الحائط مخصوماً منه فتحة باب المطبخ النمطية (1.89 م²) لسهولة التنظيف ومقاومة الأبخرة والحرارة والدهون.", df13_kitchen_wall)
 
-    # 12. مباني طوب الدروة
-    if show_all or selected_view == item_opts[12]:
-        df12 = pd.DataFrame([
-            {"عنصر الأعمال": "مباني دروة السطح", "المحيط (م.ط)": f"{perimeter:.2f}", "الارتفاع (م)": f"{parapet_h_m:.2f}", "مسطح المباني (م²)": f"{area_parapet_m2:.2f}", "سمك الحائط": parapet_thick_choice, "نوع ومقاس الطوب": f"{brick_type_v} ({size_display})", "معدل الطوب (طوبة/م²)": f"{upm2:.1f}" if parapet_thick_choice == "حائط نصف طوبة" else f"{upm2 * 2:.1f}", "إجمالي عدد الطوب التقديري": f"{approx_parapet_bricks} طوبة", "فلسفة ومعادلة الحصر": f"محيط المبنى ({perimeter:.2f} م) × ارتفاع الدروة ({parapet_h_m:.2f} م) مع حساب المونة ({mortar_v:.1f} سم)"}
-        ])
-        _render_card("12", "بند طوب للدروة (مساحة مباني دروة السطح)", "Roof Parapet Masonry",
-                     "محيط المبنى الخارجي × ارتفاع دروة السطح، مع حساب عدد الطوب التقديري وفقاً لسمك الحائط (نصف طوبة أو طوبة كاملة) ومقاس الطوب المعتمد ومونة البناء.", df12)
-
-    # 13. انترلوك الأرصفة الخارجية
-    if show_all or selected_view == item_opts[13]:
-        df13 = pd.DataFrame([
-            {"عنصر الأعمال": "انترلوك الأرصفة الخارجية المحيطة", "محيط المبنى (م.ط)": f"{perimeter:.2f}", "عرض الرصيف (م)": f"{sidewalk_w_m:.2f}", "المسطح الإجمالي (م²)": f"{area_interlock_m2:.2f}", "مواصفات البلاط": "بلاط انترلوك خرساني إجهاد 400 كجم/سم² سمك 6-8 سم فوق فرشة رمل 5 سم", "فلسفة ومعادلة الحصر": f"محيط المبنى الخارجي ({perimeter:.2f} م) × عرض الرصيف المعتمد ({sidewalk_w_m:.2f} م)"}
-        ])
-        _render_card("13", "انترلوك ارصفة (مساحة انترلوك الأرصفة)", "Sidewalk Interlock",
-                     "رصيف مشاة محيط بكامل المبنى = محيط المبنى الخارجي × عرض الرصيف المعتمد، لحماية الأساسات من مياه الأمطار وتوفير ممر حركة آمن للمشاة.", df13)
-
-    # 14. بردورات الأرصفة الخارجية
+    # 14. انترلوك الأرصفة الخارجية
     if show_all or selected_view == item_opts[14]:
-        df14 = pd.DataFrame([
-            {"عنصر الأعمال": "بردورات الأرصفة الخارجية المحيطة", "محيط المبنى الداخلي (م.ط)": f"{perimeter:.2f}", "عرض الرصيف (م)": f"{sidewalk_w_m:.2f}", "إضافة الأركان الأربعة (م.ط)": f"{8.0 * sidewalk_w_m:.2f}", "إجمالي طول البردورة (م.ط)": f"{len_curb_m:.2f}", "مواصفات البردورة": "بردورات خرسانية مسبقة الصنع 15×30×50 سم مثبتة على فرشة خرسانة عادية", "فلسفة ومعادلة الحصر": f"المحيط الخارجي لداير الرصيف = محيط المبنى ({perimeter:.2f}) + 8 × عرض الرصيف ({sidewalk_w_m:.2f})"}
+        df14_interlock = pd.DataFrame([
+            {"عنصر الأعمال": "رصيف المشاة المحيط بالمبنى", "محيط المبنى (م.ط)": f"{perimeter:.2f}", "عرض الرصيف (م)": f"{sidewalk_w_m:.2f}", "المسطح الإجمالي (م²)": f"{area_interlock_m2:.2f}", "مواصفات البلاط": "انترلوك خرساني إجهاد 400 كجم/سم² سمك 6-8 سم فوق فرشة رمل 5 سم", "فلسفة الحصر": f"المحيط ({perimeter:.2f} م) × عرض الرصيف ({sidewalk_w_m:.2f} م)"},
+            {"عنصر الأعمال": "✅ صافي مسطح انترلوك الأرصفة الخارجية المعتمد", "محيط المبنى (م.ط)": f"{perimeter:.2f}", "عرض الرصيف (م)": f"{sidewalk_w_m:.2f}", "المسطح الإجمالي (م²)": f"{area_interlock_m2:.2f}", "مواصفات البلاط": "انترلوك خرساني إجهاد 400 كجم/سم² سمك 6-8 سم فوق فرشة رمل 5 سم", "فلسفة الحصر": f"إجمالي مسطح رصيف المشاة المعتمد = {area_interlock_m2:.2f} م²"},
         ])
-        _render_card("14", "بردورة أرصفة (إجمالي طول البردورات)", "Sidewalk Curbs",
-                     "المحيط الخارجي لداير رصيف الانترلوك = محيط المبنى + 8 × عرض الرصيف (لحساب دوران الأركان الأربعة لرصيف المشاة بنفس فلسفة Module 1).", df14)
+        _render_card("14", "انترلوك ارصفة (مساحة انترلوك الأرصفة)", "Sidewalk Interlock",
+                     f"{area_interlock_m2:.2f}", "م²",
+                     "رصيف مشاة محيط بكامل المبنى = محيط المبنى الخارجي × عرض الرصيف المعتمد، لحماية الأساسات من مياه الأمطار وتوفير ممر حركة آمن للمشاة.", df14_interlock)
 
-    # 15. العزل المائي للسطح (أنسومات)
+    # 15. بردورات الأرصفة الخارجية
     if show_all or selected_view == item_opts[15]:
-        df15 = pd.DataFrame([
-            {"بيان المسطح": "مسطح بلاطة السقف الإجمالية", "المساحة الكلية (م²)": f"{bldg_area:.2f}", "خصم المناور المفتوحة (م²)": f"{eff_shaft_m2:.2f}", "صافي المسطح الخاضع للعزل (م²)": f"{qty_waterproof_roof:.2f}", "المواصفات الفنية": "دهان برايمر بيتوميني على البارد + لفائف ممبرين أنسومات 4 مم مسلحة بالبوليستر مع ركوب 10 سم ورقبة زجاجة", "فلسفة ومعادلة الحصر": f"مسطح السطح الخرساني المعرض للأمطار مخصوماً منه فراغ المنور السماوي ({bldg_area:.2f} − {eff_shaft_m2:.2f})"}
+        df15_curbs = pd.DataFrame([
+            {"عنصر الأعمال": "بردورات داير الرصيف المحيط", "محيط المبنى (م.ط)": f"{perimeter:.2f}", "عرض الرصيف (م)": f"{sidewalk_w_m:.2f}", "إضافة الأركان الـ 4 (م.ط)": f"{8.0 * sidewalk_w_m:.2f}", "إجمالي طول البردورة (م.ط)": f"{len_curb_m:.2f}", "مواصفات البردورة": "بردورات خرسانية مسبقة الصنع 15×30×50 سم مثبتة على فرشة خرسانة عادية", "فلسفة الحصر": f"المحيط ({perimeter:.2f}) + 8 × عرض الرصيف ({sidewalk_w_m:.2f})"},
+            {"عنصر الأعمال": "✅ إجمالي أطوال بردورات الأرصفة المعتمدة", "محيط المبنى (م.ط)": f"{perimeter:.2f}", "عرض الرصيف (م)": f"{sidewalk_w_m:.2f}", "إضافة الأركان الـ 4 (م.ط)": f"{8.0 * sidewalk_w_m:.2f}", "إجمالي طول البردورة (م.ط)": f"{len_curb_m:.2f}", "مواصفات البردورة": "بردورات خرسانية مسبقة الصنع 15×30×50 سم", "فلسفة الحصر": f"إجمالي طول البردورات المعتمد = {len_curb_m:.2f} م.ط"},
         ])
-        _render_card("15", "بند العزل المائي للسطح (انسومات)", "Roof Waterproofing Membrane",
-                     "مسطح بلاطة السقف المعرض للأمطار مخصوماً منه فراغات المناور السماوية المفتوحة، برولات أنسومات بيتومينية 4 مم مسلحة بالبوليستر مع ركوب 10 سم ورقبة زجاجة ومصبعات تصريف الأمطار.", df15)
+        _render_card("15", "بردورة أرصفة (إجمالي طول البردورات)", "Sidewalk Curbs",
+                     f"{len_curb_m:.2f}", "م.ط",
+                     "المحيط الخارجي لداير رصيف الانترلوك = محيط المبنى + 8 × عرض الرصيف (لحساب دوران الأركان الأربعة لرصيف المشاة بنفس فلسفة Module 1).", df15_curbs)
 
-    # 16. العزل الحراري للسطح
+    # 16. العزل المائي للسطح (أنسومات)
     if show_all or selected_view == item_opts[16]:
-        df16 = pd.DataFrame([
-            {"بيان المسطح": "مسطح بلاطة السقف الإجمالية", "المساحة الكلية (م²)": f"{bldg_area:.2f}", "خصم المناور المفتوحة (م²)": f"{eff_shaft_m2:.2f}", "صافي مسطح العزل الحراري (م²)": f"{qty_thermal_ins:.2f}", "المواصفات الفنية": "ألواح فوم بوليسترين مقذوف عالي الكثافة (XPS) سمك 5 سم كثافة 35 كجم/م³ بنظام التراكب (Shiplap)", "فلسفة ومعادلة الحصر": f"تغطية كامل السطح الخرساني بعد خصم المنور لحماية المبنى من حرارة الشمس المباشرة ({bldg_area:.2f} − {eff_shaft_m2:.2f})"}
+        df16_waterproof = pd.DataFrame([
+            {"العنصر الهندسي": "مسطح صبة السقف الخرساني الإجمالي", "المساحة (م²)": f"{bldg_area:.2f}", "الاستقطاع / الخصم (م²)": "0.00", "صافي مسطح العزل (م²)": f"{bldg_area:.2f}", "فلسفة ومعادلة الحصر": "إجمالي مساحة بلاطة السطح المحصورة بين المحاور"},
+            {"العنصر الهندسي": "فراغات المناور السماوية المفرغة (Shafts)", "المساحة (م²)": "0.00", "الاستقطاع / الخصم (م²)": f"{eff_shaft_m2:.2f}", "صافي مسطح العزل (م²)": f"-{eff_shaft_m2:.2f}", "فلسفة ومعادلة الحصر": "خصم مسطح المنور لعدم وجود صب أو عزل به"},
+            {"العنصر الهندسي": "✅ صافي مسطح العزل المائي المعتمد (أنسومات)", "المساحة (م²)": f"{bldg_area:.2f}", "الاستقطاع / الخصم (م²)": f"{eff_shaft_m2:.2f}", "صافي مسطح العزل (م²)": f"{qty_waterproof_roof:.2f}", "فلسفة ومعادلة الحصر": f"الصافي = مسطح السقف ({bldg_area:.2f}) − المنور ({eff_shaft_m2:.2f}) = {qty_waterproof_roof:.2f} م² (ممبرين 4 مم)"},
         ])
-        _render_card("16", "عازل حراري", "Roof Thermal Insulation",
-                     "مسطح السطح الخرساني مخصوماً منه فراغات المناور، بألواح فوم بوليسترين مقذوف XPS سمك 5 سم كثافة 35 كجم/م³ لعزل حرارة الشمس المباشرة وحماية المبنى.", df16)
+        _render_card("16", "بند العزل المائي للسطح (انسومات)", "Roof Waterproofing Membrane",
+                     f"{qty_waterproof_roof:.2f}", "م²",
+                     "مسطح بلاطة السقف المعرض للأمطار مخصوماً منه فراغات المناور السماوية المفتوحة، برولات أنسومات بيتومينية 4 مم مسلحة بالبوليستر مع ركوب 10 سم ورقبة زجاجة ومصبعات تصريف الأمطار.", df16_waterproof)
 
-    # 17. بلاط أسطح المبنى
+    # 17. العزل الحراري للسطح
     if show_all or selected_view == item_opts[17]:
-        df17 = pd.DataFrame([
-            {"بيان المسطح": "مسطح بلاطة السقف الإجمالية", "المساحة الكلية (م²)": f"{bldg_area:.2f}", "خصم المناور المفتوحة (م²)": f"{eff_shaft_m2:.2f}", "صافي مسطح البلاط المعتمد (م²)": f"{qty_roof_tiles:.2f}", "المواصفات الفنية": "بلاط أسطح أسمنتي سنجابي أو موزاييك 25×25 أو 30×30 سم فوق فرشة رمل تسوية مع فواصل تمدد كل 20 م² وسقية لباني أسمنت", "فلسفة ومعادلة الحصر": f"تبليط كامل مسطح السطح بعد خصم فراغ المنور لحماية طبقات العزل وتصريف مياه الأمطار ({bldg_area:.2f} − {eff_shaft_m2:.2f})"}
+        df17_thermal = pd.DataFrame([
+            {"العنصر الهندسي": "مسطح بلاطة السقف الخرسانية", "المساحة (م²)": f"{bldg_area:.2f}", "الاستقطاع / الخصم (م²)": "0.00", "صافي مسطح العزل (م²)": f"{bldg_area:.2f}", "فلسفة ومعادلة الحصر": "إجمالي مساحة بلاطة السطح المعرضة للشمس المباشرة"},
+            {"العنصر الهندسي": "فراغات المناور السماوية (Shafts)", "المساحة (م²)": "0.00", "الاستقطاع / الخصم (م²)": f"{eff_shaft_m2:.2f}", "صافي مسطح العزل (م²)": f"-{eff_shaft_m2:.2f}", "فلسفة ومعادلة الحصر": "خصم مسطح المنور السماوي المفتوح"},
+            {"العنصر الهندسي": "✅ صافي مسطح العزل الحراري المعتمد (XPS)", "المساحة (م²)": f"{bldg_area:.2f}", "الاستقطاع / الخصم (م²)": f"{eff_shaft_m2:.2f}", "صافي مسطح العزل (م²)": f"{qty_thermal_ins:.2f}", "فلسفة ومعادلة الحصر": f"الصافي = مسطح السقف ({bldg_area:.2f}) − المنور ({eff_shaft_m2:.2f}) = {qty_thermal_ins:.2f} م² (فوم XPS سمك 5 سم)"},
         ])
-        _render_card("17", "بلاط اسطح", "Roof Cement Tiles",
-                     "تبليط كامل مسطح السطح بعد خصم فراغات المناور، ببلاط أسطح أسمنتي سنجابي أو موزاييك مع فواصل تمدد كل 20 م² ورمل تسوية مع ملء اللحامات بلباني الأسمنت لحماية العزل وتصريف المياه.", df17)
+        _render_card("17", "عازل حراري", "Roof Thermal Insulation",
+                     f"{qty_thermal_ins:.2f}", "م²",
+                     "مسطح السطح الخرساني مخصوماً منه فراغات المناور، بألواح فوم بوليسترين مقذوف XPS سمك 5 سم كثافة 35 كجم/م³ لعزل حرارة الشمس المباشرة وحماية المبنى.", df17_thermal)
 
-    # 18. خامات مونة البياض لكامل المبنى
+    # 18. بلاط أسطح المبنى
     if show_all or selected_view == item_opts[18]:
-        df18 = pd.DataFrame([
+        df18_tiles = pd.DataFrame([
+            {"العنصر الهندسي": "مسطح صبة السقف الإجمالي", "المساحة (م²)": f"{bldg_area:.2f}", "الاستقطاع / الخصم (م²)": "0.00", "صافي مسطح البلاط (م²)": f"{bldg_area:.2f}", "فلسفة ومعادلة الحصر": "كامل مساحة مسطح السطح الخرساني"},
+            {"العنصر الهندسي": "فراغات المناور السماوية (Shafts)", "المساحة (م²)": "0.00", "الاستقطاع / الخصم (م²)": f"{eff_shaft_m2:.2f}", "صافي مسطح البلاط (م²)": f"-{eff_shaft_m2:.2f}", "فلسفة ومعادلة الحصر": "خصم مسطح فراغ المنور لعدم وجود بلاط به"},
+            {"العنصر الهندسي": "✅ صافي مسطح بلاط السطح المعتمد", "المساحة (م²)": f"{bldg_area:.2f}", "الاستقطاع / الخصم (م²)": f"{eff_shaft_m2:.2f}", "صافي مسطح البلاط (م²)": f"{qty_roof_tiles:.2f}", "فلسفة ومعادلة الحصر": f"الصافي = مسطح السقف ({bldg_area:.2f}) − المنور ({eff_shaft_m2:.2f}) = {qty_roof_tiles:.2f} م² (بلاط سنجابي 25×25 سم)"},
+        ])
+        _render_card("18", "بلاط اسطح", "Roof Cement Tiles",
+                     f"{qty_roof_tiles:.2f}", "م²",
+                     "تبليط كامل مسطح السطح بعد خصم فراغات المناور، ببلاط أسطح أسمنتي سنجابي أو موزاييك مع فواصل تمدد كل 20 م² ورمل تسوية مع ملء اللحامات بلباني الأسمنت لحماية العزل وتصريف المياه.", df18_tiles)
+
+    # 19. شبابيك ألوميتال بناءً على الرسم
+    if show_all or selected_view == item_opts[19]:
+        openings_data = _get_openings_takeoff_data()
+        win_models = openings_data.get("windows_models", [])
+        if win_models:
+            df19_rows = []
+            for m in win_models:
+                df19_rows.append({
+                    "نموذج الشباك": m["name"],
+                    "العرض (م)": f"{m['w_m']:.2f}",
+                    "الارتفاع (م)": f"{m['h_m']:.2f}",
+                    "مساحة الشباك (م²)": f"{m['area_m2']:.2f}",
+                    "العدد المنفذ": f"{m['count']} شباك",
+                    "إجمالي المسطح (م²)": f"{m['total_area_m2']:.2f}",
+                    "المواصفات الفنية": "قطاعات ألوميتال جامبو/بي اس زجاج سنجل/دبل مع إكسسوارات إيطالي وسلك",
+                    "فلسفة الحصر": f"نموذج {m['name']} ({m['w_m']:.2f} × {m['h_m']:.2f} م) مساحته {m['area_m2']:.2f} م² × {m['count']} شباك"
+                })
+            df19_rows.append({
+                "نموذج الشباك": "✅ إجمالي مسطح شبابيك الألوميتال المعتمد",
+                "العرض (م)": "—",
+                "الارتفاع (م)": "—",
+                "مساحة الشباك (م²)": "—",
+                "العدد المنفذ": f"{openings_data.get('total_wins_count', len(active_wins))} شباك",
+                "إجمالي المسطح (م²)": f"{qty_alum_windows:.2f}",
+                "المواصفات الفنية": "إجمالي شبابيك الألوميتال المنفذة بالمنشأ",
+                "فلسفة الحصر": f"إجمالي مسطحات جميع نماذج شبابيك الألوميتال المسقطة على الحوائط ({qty_alum_windows:.2f} م²)"
+            })
+            df19_alum = pd.DataFrame(df19_rows)
+        else:
+            df19_alum = pd.DataFrame([{
+                "نموذج الشباك": "لا توجد شبابيك مسقطة على الحوائط حالياً",
+                "العرض (م)": "—", "الارتفاع (م)": "—", "مساحة الشباك (م²)": "0.00",
+                "العدد المنفذ": "0", "إجمالي المسطح (م²)": "0.00",
+                "المواصفات الفنية": "—",
+                "فلسفة الحصر": "يمكن إضافة وتسكين الشبابيك من قسم «5️⃣ الفتحات (أبواب وشبابيك)»"
+            }])
+        _render_card("19", "شبابيك الوميتال بناءً على الرسم", "Aluminum Windows Takeoff",
+                     f"{qty_alum_windows:.2f}", "م²",
+                     "حصر مسطحات شبابيك الألوميتال بناءً على المقاسات المسقطة على حوائط المشروع ونماذج الفتحات المعمارية المعتمدة بقطاعات جامبو/بي اس مع الزجاج والإكسسوارات.", df19_alum)
+
+    # 20. أبواب حمامات الوحدة (عرض ≤ 80 سم)
+    if show_all or selected_view == item_opts[20]:
+        cm = _get_col_name_map()
+        wm = _get_wall_name_map()
+        wm_door = _get_door_name_map()
+        if bath_doors:
+            df20_rows = []
+            for idx_d, (_, _, d, wk) in enumerate(bath_doors, start=1):
+                did = d.get("id")
+                dname = wm_door.get(did) or d.get("name", f"D{idx_d}")
+                w_lbl = _wall_display_label(wk, cm, wm)
+                w_m = float(d.get("w_m", 0.8))
+                h_m = float(d.get("h_m", 2.1))
+                df20_rows.append({
+                    "م": str(idx_d),
+                    "اسم الباب": dname,
+                    "الحائط المسقط عليه": w_lbl,
+                    "العرض (م)": f"{w_m:.2f}",
+                    "الارتفاع (م)": f"{h_m:.2f}",
+                    "النوع والمواصفة": "باب حمام خشب موسكي تجليد قشرة أرو / ألوميتال مقاوم للمياه والرطوبة",
+                    "فلسفة الحصر": f"باب حيز مبلل عرض ≤ 0.80 م ({w_m:.2f} × {h_m:.2f} م) محصور بالعدد"
+                })
+            df20_rows.append({
+                "م": "✅",
+                "اسم الباب": "✅ إجمالي عدد أبواب الحمامات المعتمدة",
+                "الحائط المسقط عليه": f"{len(bath_doors)} باب معتمد",
+                "العرض (م)": "—",
+                "الارتفاع (م)": "—",
+                "النوع والمواصفة": "أبواب حمامات معتمدة بالعدد",
+                "فلسفة الحصر": f"إجمالي حصر أبواب الحمامات عرض ≤ 80 سم بالعدد = {qty_bath_doors} باب"
+            })
+            df20_bath_doors = pd.DataFrame(df20_rows)
+        else:
+            df20_bath_doors = pd.DataFrame([{
+                "م": "1",
+                "اسم الباب": "لا توجد أبواب حمامات (عرض ≤ 80 سم) مسقطة حالياً",
+                "الحائط المسقط عليه": "—",
+                "العرض (م)": "—", "الارتفاع (م)": "—",
+                "النوع والمواصفة": "—",
+                "فلسفة الحصر": "يمكن إضافة الأبواب من قسم «5️⃣ الفتحات (أبواب وشبابيك)»"
+            }])
+        _render_card("20", "أبواب حمامات الوحدة (عرض ≤ 80 سم)", "Bathroom Doors",
+                     f"{qty_bath_doors}", "باب",
+                     "حصر أبواب الحمامات والأحياز المبللة ذات العرض حتى 80 سم بالعدد وفقاً لبيانات الفتحات المسقطة بالحوائط، شاملة الحلوق والإكسسوارات والمقابض.", df20_bath_doors)
+
+    # 21. أبواب غرف الوحدة (عرض > 80 سم)
+    if show_all or selected_view == item_opts[21]:
+        cm = _get_col_name_map()
+        wm = _get_wall_name_map()
+        wm_door = _get_door_name_map()
+        if room_doors:
+            df21_rows = []
+            for idx_d, (_, _, d, wk) in enumerate(room_doors, start=1):
+                did = d.get("id")
+                dname = wm_door.get(did) or d.get("name", f"D{idx_d}")
+                w_lbl = _wall_display_label(wk, cm, wm)
+                w_m = float(d.get("w_m", 0.9))
+                h_m = float(d.get("h_m", 2.1))
+                df21_rows.append({
+                    "م": str(idx_d),
+                    "اسم الباب": dname,
+                    "الحائط المسقط عليه": w_lbl,
+                    "العرض (م)": f"{w_m:.2f}",
+                    "الارتفاع (م)": f"{h_m:.2f}",
+                    "النوع والمواصفة": "باب غرف نوم واستقبال / مدخل خشب سويد كبس قشرة أرو مع حلوق وبرور وكالون كمبيوتر",
+                    "فلسفة الحصر": f"باب غرفة / مدخل عرض > 0.80 م ({w_m:.2f} × {h_m:.2f} م) محصور بالعدد"
+                })
+            df21_rows.append({
+                "م": "✅",
+                "اسم الباب": "✅ إجمالي عدد أبواب الغرف والمدخل المعتمدة",
+                "الحائط المسقط عليه": f"{len(room_doors)} باب معتمد",
+                "العرض (م)": "—",
+                "الارتفاع (م)": "—",
+                "النوع والمواصفة": "أبواب غرف ومدخل معتمدة بالعدد",
+                "فلسفة الحصر": f"إجمالي حصر أبواب الغرف والمدخل عرض > 80 سم بالعدد = {qty_room_doors} باب"
+            })
+            df21_room_doors = pd.DataFrame(df21_rows)
+        else:
+            df21_room_doors = pd.DataFrame([{
+                "م": "1",
+                "اسم الباب": "لا توجد أبواب غرف (عرض > 80 سم) مسقطة حالياً",
+                "الحائط المسقط عليه": "—",
+                "العرض (م)": "—", "الارتفاع (م)": "—",
+                "النوع والمواصفة": "—",
+                "فلسفة الحصر": "يمكن إضافة الأبواب من قسم «5️⃣ الفتحات (أبواب وشبابيك)»"
+            }])
+        _render_card("21", "أبواب غرف الوحدة (عرض > 80 سم)", "Room & Entry Doors",
+                     f"{qty_room_doors}", "باب",
+                     "حصر أبواب الغرف والمدخل ذات العرض الأكبر من 80 سم بالعدد وفقاً لبيانات الفتحات المسقطة بالحوائط، شاملة الحلوق والبرور والأقفال والكوالين.", df21_room_doors)
+
+    # 22. خامات مونة البياض لكامل أسطح المبنى
+    if show_all or selected_view == item_opts[22]:
+        df22_mortar = pd.DataFrame([
             {"عنصر البياض": "محارة الأسقف الداخلية", "المسطح الصافي (م²)": f"{qty_ceiling_plaster:.2f}", "الرمل المطلوب (م³)": f"{(qty_ceiling_plaster / 42.0) * 1.05:.2f}" if qty_ceiling_plaster > 0 else "0.00", "الأسمنت المطلوب (طن)": f"{((qty_ceiling_plaster / 42.0) * 1.05 * 350.0) / 1000.0:.2f}" if qty_ceiling_plaster > 0 else "0.00", "عدد شكاير الأسمنت (شكارة)": f"{math.ceil(((qty_ceiling_plaster / 42.0) * 1.05 * 350.0) / 50.0)}" if qty_ceiling_plaster > 0 else "0", "فلسفة ومعدلات المونة الكودية": "المتر المكعب رمل يفرد 42 م² سمك 2 سم بمعدل 350 كجم أسمنت/م³ (معامل هالك 5%)"},
             {"عنصر البياض": "محارة الحوائط الداخلية (صافي ECP)", "المسطح الصافي (م²)": f"{qty_wall_plaster:.2f}", "الرمل المطلوب (م³)": f"{p_res.get('tot_sand', 0.0):.2f}", "الأسمنت المطلوب (طن)": f"{p_res.get('tot_cement_tons', 0.0):.2f}", "عدد شكاير الأسمنت (شكارة)": f"{p_res.get('tot_cement_bags', 0)}", "فلسفة ومعدلات المونة الكودية": "محسوبة حائط بحائط طبقاً للكود المصري مع خصم الفتحات"},
             {"عنصر البياض": "محارة الواجهات والدروة من الجانبين", "المسطح الصافي (م²)": f"{qty_facade_plaster:.2f}", "الرمل المطلوب (م³)": f"{(qty_facade_plaster / 42.0) * 1.05:.2f}" if qty_facade_plaster > 0 else "0.00", "الأسمنت المطلوب (طن)": f"{((qty_facade_plaster / 42.0) * 1.05 * 350.0) / 1000.0:.2f}" if qty_facade_plaster > 0 else "0.00", "عدد شكاير الأسمنت (شكارة)": f"{math.ceil(((qty_facade_plaster / 42.0) * 1.05 * 350.0) / 50.0)}" if qty_facade_plaster > 0 else "0", "فلسفة ومعدلات المونة الكودية": "محسوبة لمحيط الواجهات والدروة من الجانبين بعد خصم فتحات الواجهات"},
             {"عنصر البياض": "✅ إجمالي خامات المونة لكامل أسطح البياض", "المسطح الصافي (م²)": f"{tot_plaster_all_net:.2f}", "الرمل المطلوب (م³)": f"{total_sand_plaster:.2f}", "الأسمنت المطلوب (طن)": f"{total_cement_plaster_tons:.2f}", "عدد شكاير الأسمنت (شكارة)": f"{total_cement_plaster_bags}", "فلسفة ومعدلات المونة الكودية": f"إجمالي مسطحات المحارة ({tot_plaster_all_net:.2f} م²) تحتاج {total_sand_plaster:.2f} م³ رمل و {total_cement_plaster_tons:.2f} طن أسمنت ({total_cement_plaster_bags} شكارة)"},
         ])
-        _render_card("18", "خامات مونة البياض لكامل أسطح المبنى (رمل وأسمنت)", "Plaster Mortar Materials: Sand & Cement",
-                     "حصر كميات الرمل والأسمنت لكافة أسطح المحارة بالمنشأ (سقف + حوائط داخلية + واجهات ودروة من الجانبين): المتر المكعب رمل يفرد 42 م² سمك 2 سم بمعدل 350 كجم أسمنت/م³ (معامل هالك 5%).", df18)
-
-
-def _get_openings_takeoff_data():
-    """
-    تجميع بيانات حصر الشبابيك والأبواب هندسياً:
-    - نماذج الشبابيك المنفذة، مقاساتها وأعدادها ومسطحاتها.
-    - نماذج الأبواب المنفذة، مقاساتها وأعدادها ومسطحاتها.
-    - كشف تفصيلي بكل فتحة مسقطة على الحوائط.
-    """
-    active_wins = _get_active_windows_list()
-    active_doors = _get_active_doors_list()
-
-    win_models_dict = {}
-    for (_, _, win, _) in active_wins:
-        t_lbl = win.get("type_label") or win.get("name", "W1").split("-")[0]
-        w_m = float(win.get("w_m", 1.0))
-        h_m = float(win.get("h_m", 1.2))
-        sill_m = float(win.get("sill_m", 1.0))
-        if t_lbl not in win_models_dict:
-            win_models_dict[t_lbl] = {
-                "name": t_lbl,
-                "w_m": w_m,
-                "h_m": h_m,
-                "area_m2": round(w_m * h_m, 2),
-                "sill_m": sill_m,
-                "count": 0,
-            }
-        win_models_dict[t_lbl]["count"] += 1
-
-    windows_models = []
-    for m in win_models_dict.values():
-        m["total_area_m2"] = round(m["count"] * m["area_m2"], 2)
-        windows_models.append(m)
-    windows_models.sort(key=lambda x: x["name"])
-
-    door_models_dict = {}
-    for (_, _, door, _) in active_doors:
-        t_lbl = door.get("type_label") or door.get("name", "D1").split("-")[0]
-        w_m = float(door.get("w_m", 0.9))
-        h_m = float(door.get("h_m", 2.1))
-        if t_lbl not in door_models_dict:
-            door_models_dict[t_lbl] = {
-                "name": t_lbl,
-                "w_m": w_m,
-                "h_m": h_m,
-                "area_m2": round(w_m * h_m, 2),
-                "sill_m": 0.0,
-                "count": 0,
-            }
-        door_models_dict[t_lbl]["count"] += 1
-
-    doors_models = []
-    for m in door_models_dict.values():
-        m["total_area_m2"] = round(m["count"] * m["area_m2"], 2)
-        doors_models.append(m)
-    doors_models.sort(key=lambda x: x["name"])
-
-    cm = _get_col_name_map()
-    wm = _get_wall_name_map()
-    wm_win = _get_window_name_map()
-    wm_door = _get_door_name_map()
-
-    wall_openings_details = []
-    for (_, _, w, wk) in active_wins:
-        wid = w.get("id")
-        wname = wm_win.get(wid) or w.get("name", "W")
-        w_lbl = _wall_display_label(wk, cm, wm)
-        w_m = float(w.get("w_m", 1.0))
-        h_m = float(w.get("h_m", 1.2))
-        sill_m = float(w.get("sill_m", 1.0))
-        wall_openings_details.append({
-            "id": wid,
-            "kind": "شباك",
-            "name": wname,
-            "wall": w_lbl,
-            "w_m": w_m,
-            "h_m": h_m,
-            "sill_m": sill_m,
-            "area_m2": round(w_m * h_m, 2),
-            "pos_m": float(w.get("pos_m", 0.0))
-        })
-    for (_, _, d, wk) in active_doors:
-        did = d.get("id")
-        dname = wm_door.get(did) or d.get("name", "D")
-        w_lbl = _wall_display_label(wk, cm, wm)
-        w_m = float(d.get("w_m", 0.9))
-        h_m = float(d.get("h_m", 2.1))
-        wall_openings_details.append({
-            "id": did,
-            "kind": "باب",
-            "name": dname,
-            "wall": w_lbl,
-            "w_m": w_m,
-            "h_m": h_m,
-            "sill_m": 0.0,
-            "area_m2": round(w_m * h_m, 2),
-            "pos_m": float(d.get("pos_m", 0.0))
-        })
-
-    return {
-        "windows_models": windows_models,
-        "doors_models": doors_models,
-        "wall_openings_details": wall_openings_details,
-        "total_wins_count": sum(m["count"] for m in windows_models),
-        "total_doors_count": sum(m["count"] for m in doors_models),
-        "total_wins_area": round(sum(m["total_area_m2"] for m in windows_models), 2),
-        "total_doors_area": round(sum(m["total_area_m2"] for m in doors_models), 2),
-    }
+        _render_card("22", "خامات مونة البياض لكامل أسطح المبنى (رمل وأسمنت)", "Plaster Mortar Materials: Sand & Cement",
+                     f"{tot_plaster_all_net:.2f}", "م² محارة",
+                     "حصر كميات الرمل والأسمنت لكافة أسطح المحارة بالمنشأ (سقف + حوائط داخلية + واجهات ودروة من الجانبين): المتر المكعب رمل يفرد 42 م² سمك 2 سم بمعدل 350 كجم أسمنت/م³ (معامل هالك 5%).", df22_mortar)
 
 
 def _compute_plaster_boq_data(rule_key=None, plaster_qty_factor_override=None):
@@ -11240,7 +11623,8 @@ def _compute_plaster_boq_data(rule_key=None, plaster_qty_factor_override=None):
     qty_thermal_ins = max(0.0, round(bldg_area - eff_shaft_m2, 2))
     qty_roof_tiles = max(0.0, round(bldg_area - eff_shaft_m2, 2))
 
-    price_brick = float(st.session_state.get("m15_rate_brick", 150.0))
+    price_brick_12 = float(st.session_state.get("m15_rate_brick_12", st.session_state.get("m15_rate_brick", 150.0)))
+    price_brick_25 = float(st.session_state.get("m15_rate_brick_25", 1200.0))
     price_wall_plaster = float(st.session_state.get("m15_rate_wall_plaster", 85.0))
     price_ceiling_plaster = float(st.session_state.get("m15_rate_ceiling_plaster", 95.0))
     price_facade_plaster = float(st.session_state.get("m15_rate_facade_plaster", 140.0))
@@ -11259,6 +11643,33 @@ def _compute_plaster_boq_data(rule_key=None, plaster_qty_factor_override=None):
     price_bath_doors = float(st.session_state.get("m15_rate_bath_doors", 1800.0))
     price_room_doors = float(st.session_state.get("m15_rate_room_doors", 2400.0))
 
+    # حصر حوائط الطوب نصف طوبة (12 سم) وطوبة كاملة (25 سم) ودروة السطح
+    s_res = _compute_survey()
+    walls_12_net_m2 = round(sum(r.get("المساحة الصافية (م2)", 0.0) for r in s_res.get("rows_12", [])), 2)
+    walls_25_net_m2 = round(sum(r.get("المساحة الصافية (م2)", 0.0) for r in s_res.get("rows_25", [])), 2)
+    walls_25_vol_m3 = round(sum(r.get("حجم الطوب (م3)", 0.0) for r in s_res.get("rows_25", [])), 2)
+
+    is_parapet_half = ("نصف" in str(parapet_thick_choice) or "12" in str(parapet_thick_choice))
+    if is_parapet_half:
+        parapet_12_m2 = area_parapet_m2
+        parapet_25_m3 = 0.0
+    else:
+        parapet_12_m2 = 0.0
+        parapet_25_m3 = round(area_parapet_m2 * 0.25, 2)
+
+    qty_brick_12 = round(walls_12_net_m2 + parapet_12_m2, 2)
+    qty_brick_25 = round(walls_25_vol_m3 + parapet_25_m3, 2)
+
+    if is_parapet_half and area_parapet_m2 > 0:
+        details_12 = f"حوائط المبنى نصف طوبة ({walls_12_net_m2:.2f} م²) + دروة السطح نصف طوبة ({area_parapet_m2:.2f} م²)"
+    else:
+        details_12 = f"صافي مسطح حوائط المبنى نصف طوبة ({walls_12_net_m2:.2f} م²)"
+
+    if not is_parapet_half and area_parapet_m2 > 0:
+        details_25 = f"حوائط المبنى طوبة كاملة ({walls_25_vol_m3:.2f} م³ مسطح {walls_25_net_m2:.2f} م²) + دروة السطح طوبة كاملة ({parapet_25_m3:.2f} م³ مسطح {area_parapet_m2:.2f} م²)"
+    else:
+        details_25 = f"صافي حجم حوائط المبنى طوبة كاملة ({walls_25_vol_m3:.2f} م³ مسطح {walls_25_net_m2:.2f} م²)"
+
     active_wins = _get_active_windows_list()
     qty_alum_windows = round(sum(float(w[2].get("w_m", 1.0)) * float(w[2].get("h_m", 1.2)) for w in active_wins), 2)
 
@@ -11271,83 +11682,87 @@ def _compute_plaster_boq_data(rule_key=None, plaster_qty_factor_override=None):
     factor_suffix = f" × {plaster_qty_factor:.2f}" if abs(plaster_qty_factor - 1.0) > 1e-4 else ""
 
     t2_items_data = [
-        ("1- كمية المحارة الداخلية بالسقف بالمتر المسطح (تساوي تماماً مسطح المبنى بعد خصم المنور)",
+        ("1- بند طوب أحمر تخانة نصف طوبة 12 سم (يشمل الحوائط ودروة السطح)",
+         qty_brick_12, "م² (m²)", price_brick_12,
+         f"{details_12}{factor_suffix}"),
+
+        ("2- بند طوب أحمر تخانة طوبة 25 سم (يشمل الحوائط ودروة السطح)",
+         qty_brick_25, "م³ (m³)", price_brick_25,
+         f"{details_25}{factor_suffix}"),
+
+        ("3- كمية المحارة الداخلية بالسقف بالمتر المسطح (تساوي تماماً مسطح المبنى بعد خصم المنور)",
          qty_ceiling_plaster, "م² (m²)", price_ceiling_plaster,
          f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_ceiling_plaster:.2f} م²){factor_suffix}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²){factor_suffix}"),
 
-        ("2- كمية الدهانات الداخلية للسقف (تساوي تماماً مسطح المبنى بعد خصم المنور)",
+        ("4- كمية الدهانات الداخلية للسقف (تساوي تماماً مسطح المبنى بعد خصم المنور)",
          qty_ceiling_paint, "م² (m²)", price_ceiling_paint,
          f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_ceiling_paint:.2f} م²){factor_suffix}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²){factor_suffix}"),
 
-        ("3- كمية المحارة للحوائط بالمتر المسطح",
+        ("5- كمية المحارة للحوائط بالمتر المسطح",
          qty_wall_plaster, "م² (m²)", price_wall_plaster,
          f"صافي مسطح محارة الحوائط ({qty_wall_plaster:.2f} م²){factor_suffix}"),
 
-        ("4- كمية الدهانات الداخلية للحوائط بالمتر المسطح",
+        ("6- كمية الدهانات الداخلية للحوائط بالمتر المسطح",
          qty_wall_paint, "م² (m²)", price_wall_paint,
          f"صافي مسطح دهان الحوائط ({qty_wall_paint:.2f} م²){factor_suffix}"),
 
-        ("5- كمية المحارة الخارجية (الواجهات والدروة من الجانبين)",
+        ("7- كمية المحارة الخارجية (الواجهات والدروة من الجانبين)",
          qty_facade_plaster, "م² (m²)", price_facade_plaster,
          f"مسطح الواجهات والدروة من الجانبين ({qty_facade_plaster:.2f} م²){factor_suffix}"),
 
-        ("6- كمية الدهانات الخارجية (الواجهات والدروة من الجانبين)",
+        ("8- كمية الدهانات الخارجية (الواجهات والدروة من الجانبين)",
          qty_facade_paint, "م² (m²)", price_facade_paint,
          f"مسطح دهان الواجهات والدروة من الجانبين ({qty_facade_paint:.2f} م²){factor_suffix}"),
 
-        ("7- كمية سيراميك الأرضيات (Floor Ceramic Tiles)",
+        ("9- كمية سيراميك الأرضيات (Floor Ceramic Tiles)",
          qty_floor_ceramic, "م² (m²)", price_floor_ceramic,
          f"صافي مسطح سيراميك الأرضيات ({qty_floor_ceramic:.2f} م²){factor_suffix}"),
 
-        ("8- كمية سيراميك الحمامات (أرضيات)",
+        ("10- كمية سيراميك الحمامات (أرضيات)",
          qty_bath_floor_ceramic, "م² (m²)", price_bath_ceramic,
          f"{bath_floor_details_str}{factor_suffix}"),
 
-        ("9- كمية سيراميك المطابخ (أرضيات)",
+        ("11- كمية سيراميك المطابخ (أرضيات)",
          qty_kitchen_floor_ceramic, "م² (m²)", price_kitchen_ceramic,
          f"{kitchen_floor_details_str}{factor_suffix}"),
 
-        ("10- كمية سيراميك الحوائط للحمامات",
+        ("12- كمية سيراميك الحوائط للحمامات",
          wall_ceramic_bath_m2, "م² (m²)", price_bath_ceramic,
          f"{bath_details_str}{factor_suffix}"),
 
-        ("11- كمية سيراميك الحوائط للمطابخ",
+        ("13- كمية سيراميك الحوائط للمطابخ",
          wall_ceramic_kitchen_m2, "م² (m²)", price_kitchen_ceramic,
          f"{kitchen_details_str}{factor_suffix}"),
 
-        ("12- بند طوب للدروة (مساحة مباني دروة السطح)",
-         area_parapet_m2, "م² (m²)", price_brick,
-         f"مساحة مباني الدروة ({area_parapet_m2:.2f} م² │ {parapet_thick_choice}){factor_suffix}"),
-
-        ("13- انترلوك ارصفة (مساحة انترلوك الأرصفة)",
+        ("14- انترلوك ارصفة (مساحة انترلوك الأرصفة)",
          area_interlock_m2, "م² (m²)", price_interlock,
          f"مساحة انترلوك الأرصفة ({area_interlock_m2:.2f} م²){factor_suffix}"),
 
-        ("14- بردورة أرصفة (إجمالي طول البردورات)",
+        ("15- بردورة أرصفة (إجمالي طول البردورات)",
          len_curb_m, "م.ط (m)", price_curbs,
          f"إجمالي طول البردورات للمحيط الخارجي ({len_curb_m:.2f} م.ط){factor_suffix}"),
 
-        ("15- بند العزل المائي للسطح (انسومات)",
+        ("16- بند العزل المائي للسطح (انسومات)",
          qty_waterproof_roof, "م² (m²)", price_waterproof,
          f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_waterproof_roof:.2f} م²){factor_suffix}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²){factor_suffix}"),
 
-        ("16- عازل حراري",
+        ("17- عازل حراري",
          qty_thermal_ins, "م² (m²)", price_thermal,
          f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_thermal_ins:.2f} م²){factor_suffix}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²){factor_suffix}"),
 
-        ("17- بلاط اسطح",
+        ("18- بلاط اسطح",
          qty_roof_tiles, "م² (m²)", price_roof_tiles,
          f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_roof_tiles:.2f} م²){factor_suffix}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²){factor_suffix}"),
 
-        ("18- شبابيك الوميتال (م2)",
+        ("19- شبابيك الوميتال (م2)",
          qty_alum_windows, "م² (m²)", price_alum_windows,
          f"مسطح شبابيك الألوميتال بناءً على الرسم ({qty_alum_windows:.2f} م² │ {len(active_wins)} شباك){factor_suffix}"),
 
-        ("19- أبواب حمامات الوحدة (عرض ≤ 80 سم)",
+        ("20- أبواب حمامات الوحدة (عرض ≤ 80 سم)",
          qty_bath_doors, "عدد (No.)", price_bath_doors,
          f"حصر أبواب الحمامات عرض ≤ 80 سم بالعدد ({qty_bath_doors} باب){factor_suffix}"),
 
-        ("20- أبواب غرف الوحدة (عرض > 80 سم)",
+        ("21- أبواب غرف الوحدة (عرض > 80 سم)",
          qty_room_doors, "عدد (No.)", price_room_doors,
          f"حصر أبواب الغرف والمدخل عرض > 80 سم بالعدد ({qty_room_doors} باب){factor_suffix}"),
     ]
@@ -11355,11 +11770,21 @@ def _compute_plaster_boq_data(rule_key=None, plaster_qty_factor_override=None):
     boq_items_list = []
     table_2_summary_rows = []
     grand_total_cost = 0.0
+    cur_desc_dict = dict(st.session_state.get("m15_item_descriptions", {}))
+    if not cur_desc_dict:
+        cur_desc_dict = dict(st.session_state.get("cfg", {}).get("module_15_masonry_plaster", {}).get("item_descriptions", {}))
 
     for idx, (name, net_q, unit, u_price, details) in enumerate(t2_items_data, start=1):
         tot_q = round(net_q * plaster_qty_factor, 2)
         tot_cost = round(tot_q * u_price, 2)
         grand_total_cost += tot_cost
+        c_key = f"item_{idx}"
+        if c_key in cur_desc_dict and cur_desc_dict[c_key] is not None:
+            item_desc = str(cur_desc_dict[c_key]).strip()
+        elif name in cur_desc_dict and cur_desc_dict[name] is not None:
+            item_desc = str(cur_desc_dict[name]).strip()
+        else:
+            item_desc = str(DEFAULT_ITEM_DESCRIPTIONS.get(c_key, "")).strip()
 
         boq_items_list.append({
             "idx": idx,
@@ -11370,6 +11795,7 @@ def _compute_plaster_boq_data(rule_key=None, plaster_qty_factor_override=None):
             "u_price": u_price,
             "tot_cost": tot_cost,
             "details": details,
+            "description": item_desc,
         })
 
         table_2_summary_rows.append({
@@ -11414,26 +11840,27 @@ def _compute_plaster_boq_data(rule_key=None, plaster_qty_factor_override=None):
 # ═════════════════════════════════════════════════════════════════════════════
 
 DEFAULT_ITEM_DESCRIPTIONS = {
-    "item_1": "بالمتر المسطح، توريد وعمل بياض تخشين للأسقف الداخلية (طرطشة عمومية متجانسة بمونة 450 كجم أسمنت/م³ رمل + بياض بطانة وضهارة بمونة 350 كجم أسمنت/م³ رمل) مع استواء الأسطح وضبط الزوايا والأوتار طبقاً للكود المصري وأصول الصناعة.",
-    "item_2": "بالمتر المسطح، توريد ودهان أسقف داخلية 5 أوجه متتالية تشمل: وجه برايمر سيلر مائي مقاوم للقلويات + 2 سكينة معجون داخلي ناعم للتسوية + 2 وجه دهان بلاستيك نصف لامع عالي البياض قابل للغسيل طبقاً لأصول الصناعة.",
-    "item_3": "بالمتر المسطح، توريد وعمل بياض تخشين للحوائط الداخلية على بؤج وأوتار وسلك شبك فواصل تمدد (طرطشة عمومية + بياض تخشين بمونة 350 كجم أسمنت/م³ رمل) مخصوماً منه الفتحات طبقاً لاشتراطات الكود المصري لأعمال البياض ECP.",
-    "item_4": "بالمتر المسطح، توريد ودهان حوائط داخلية 5 أوجه متتالية تشمل: وجه برايمر سيلر مائي عازل + 2 سكينة معجون داخلي ناعم + 2 وجه دهان بلاستيك مط/نصف لامع قابل للغسيل بالألوان المعتمدة طبقاً للمواصفات الفنية.",
-    "item_5": "بالمتر المسطح، توريد وعمل بياض واجهات خارجية ودروة السطح من الجانبين يشمل طرطشة عمومية مسامية كثيفة + بياض أسمنتي بمونة 350 كجم أسمنت/م³ رمل مع إضافة مواد عازلة ومقاومة للأملاح والعوامل الجوية طبقاً لأصول الصناعة.",
-    "item_6": "بالمتر المسطح، توريد ودهان واجهات خارجية ودروة السطح بمواد دهانات مطاطية أكريليكية مقاومة للشمس والأشعة فوق البنفسجية والأمطار (Weatherproof) تشمل وجه سيلر مائي ومعجون واجهات ووجهين دهان مطاطي معتمد.",
-    "item_7": "بالمتر المسطح، توريد وتركيب سيراميك أرضيات للغرف والصالات فرز أول مقاس معتمد يركب بمونة أسمنتية فوق فرشة رمل نظيف مع السقية بلباني الأسمنت الأبيض أو الملون والمواد العازلة ومراعاة فواصل التمدد.",
-    "item_8": "بالمتر المسطح، توريد وتركيب سيراميك أرضيات حمامات مانع للانزلاق (Anti-slip) فرز أول بمونة أسمنتية فوق فرشة رمل مع ملء الفواصل بمادة روبة إيبوكسية أو أسمنتية مانعة لتسرب المياه والميول نحو الجاليتراب.",
-    "item_9": "بالمتر المسطح، توريد وتركيب سيراميك أرضيات مطابخ فرز أول مقاوم للشحوم والمنظفات والمياه يركب بمونة أسمنتية فوق فرشة رمل مع السقية الكاملة للفواصل ومراعاة الميول المطلوبة هندسياً.",
-    "item_10": "بالمتر المسطح، توريد وتركيب سيراميك حوائط حمامات بكامل الارتفاع فرز أول يركب بمونة أسمنتية أو مادة لاصقة مع السقية بمادة عازلة ومراعاة الأفقية والرأسية التامة ووزن الزوايا والغرانيق.",
-    "item_11": "بالمتر المسطح، توريد وتركيب سيراميك حوائط مطابخ بكامل الارتفاع فرز أول مقاوم للحرارة والرطوبة يركب بمونة أسمنتية أو مادة لاصقة مع السقية الكاملة ومراعاة فتحات التغذية والصرف والشفاطات.",
-    "item_12": "بالمتر المسطح، توريد وبناء مباني دروة السطح بطوب طفلي/أسمنتي معتمد ومونة أسمنتية بنسبة 350 كجم أسمنت/م³ رمل مع الربط المحكم وتفريغ اللحامات لعمق 1 سم لاستقبال أعمال البياض طبقاً لأصول الصناعة.",
-    "item_13": "بالمتر المسطح، توريد وتركيب بلاط انترلوك خرساني إجهاد لا يقل عن 400 كجم/سم² سمك 6-8 سم للأرصفة المحيطة فوق طبقة رمل تسوية مدموك جيداً سمك 5 سم مع غلق الفواصل برمل ناعم نظيف.",
-    "item_14": "بالمتر الطولي، توريد وتركيب بردورات خرسانية مسبقة الصنع 15×30×50 سم لرصيف المشاة الخارجي مثبتة على فرشة ودعامات خرسانة عادية مع كحلة اللحامات بمونة أسمنتية والدهان بلونين متتاليين.",
-    "item_15": "بالمتر المسطح، توريد وعمل عزل مائي للسطح بلفائف ممبرين بيتوميني معدل بالبوليستر (أنسومات) سمك 4 مم مع دهان وجه برايمر بيتوميني ورقبة زجاجة وركوب 10 سم واختبار الغمر بالماء لمدة 48 ساعة.",
-    "item_16": "بالمتر المسطح، توريد وتركيب ألواح عزل حراري من الفوم المبثوق (XPS) عالي الكثافة سمك 5 سم كثافة 35 كجم/م³ بنظام التراكب (Shiplap) لحماية الأسطح من الإشعاع الحراري طبقاً لكود العزل الحراري.",
-    "item_17": "بالمتر المسطح، توريد وتركيب بلاط أسطح أسمنتي سنجابي أو موزاييك مقاس معتمد فوق فرشة رمل تسوية ومونة أسمنتية مع عمل فواصل تمدد كل 20 م² وسقية الفواصل بلباني الأسمنت ومراعاة ميول صرف الأمطار.",
-    "item_18": "بالمتر المسطح، توريد وتركيب شبابيك ألوميتال للواجهات والمساقط قطاع معتمد (جامبو/بي اس أو ما يماثله) وزجاج دبل مع الإكسسوارات وسلك مانع للحشرات والمقابض والتثبيت الهندسي طبقاً لأبعاد الرسم والمواصفات.",
-    "item_19": "بالعدد، توريد وتركيب أبواب حمامات الوحدة (عرض 80 سم أو أقل) تشمل الحلوق والضلف المقاومة للرطوبة والمياه والمفصلات والكوالين والشناكل والمقابض ودهان الحلق والتثبيت الهندسي التام طبقاً لأصول الصناعة.",
-    "item_20": "بالعدد، توريد وتركيب أبواب غرف الوحدة والمدخل (عرض أكبر من 80 سم) تشمل الحلوق الخشبية والضلف التجليد قشرة معتمدة والمفصلات والأقفال والمقابض والبرور والدهانات والتثبيت الهندسي طبقاً للمواصفات.",
+    "item_1": "بالمتر المسطح، توريد وبناء حوائط طوب أحمر طفلي/أسمنتي تخانة نصف طوبة (12 سم) بالمونة الأسمنتية بنسبة 350 كجم أسمنت/م³ رمل، تشمل جميع قواطيع وحوائط المبنى نصف طوبة مع دروة السطح (إذا كانت نصف طوبة)، والربط بالأعمدة والكانات وتفريغ اللحامات لعمق 1 سم لاستقبال أعمال البياض طبقاً للمواصفات وأصول الصناعة.",
+    "item_2": "بالمتر المكعب، توريد وبناء حوائط طوب أحمر طفلي/أسمنتي تخانة طوبة كاملة (25 سم) بالمونة الأسمنتية بنسبة 350 كجم أسمنت/م³ رمل، تشمل جميع الحوائط الخارجية والداخلية طوبة كاملة مع دروة السطح (إذا كانت طوبة كاملة)، وربط الشناوي والاديات وتفريغ العراميس طبقاً للمواصفات الفنية والكود المصري.",
+    "item_3": "بالمتر المسطح، توريد وعمل بياض تخشين للأسقف الداخلية (طرطشة عمومية متجانسة بمونة 450 كجم أسمنت/م³ رمل + بياض بطانة وضهارة بمونة 350 كجم أسمنت/م³ رمل) مع استواء الأسطح وضبط الزوايا والأوتار طبقاً للكود المصري وأصول الصناعة.",
+    "item_4": "بالمتر المسطح، توريد ودهان أسقف داخلية 5 أوجه متتالية تشمل: وجه برايمر سيلر مائي مقاوم للقلويات + 2 سكينة معجون داخلي ناعم للتسوية + 2 وجه دهان بلاستيك نصف لامع عالي البياض قابل للغسيل طبقاً لأصول الصناعة.",
+    "item_5": "بالمتر المسطح، توريد وعمل بياض تخشين للحوائط الداخلية على بؤج وأوتار وسلك شبك فواصل تمدد (طرطشة عمومية + بياض تخشين بمونة 350 كجم أسمنت/م³ رمل) مخصوماً منه الفتحات طبقاً لاشتراطات الكود المصري لأعمال البياض ECP.",
+    "item_6": "بالمتر المسطح، توريد ودهان حوائط داخلية 5 أوجه متتالية تشمل: وجه برايمر سيلر مائي عازل + 2 سكينة معجون داخلي ناعم + 2 وجه دهان بلاستيك مط/نصف لامع قابل للغسيل بالألوان المعتمدة طبقاً للمواصفات الفنية.",
+    "item_7": "بالمتر المسطح، توريد وعمل بياض واجهات خارجية ودروة السطح من الجانبين يشمل طرطشة عمومية مسامية كثيفة + بياض أسمنتي بمونة 350 كجم أسمنت/م³ رمل مع إضافة مواد عازلة ومقاومة للأملاح والعوامل الجوية طبقاً لأصول الصناعة.",
+    "item_8": "بالمتر المسطح، توريد ودهان واجهات خارجية ودروة السطح بمواد دهانات مطاطية أكريليكية مقاومة للشمس والأشعة فوق البنفسجية والأمطار (Weatherproof) تشمل وجه سيلر مائي ومعجون واجهات ووجهين دهان مطاطي معتمد.",
+    "item_9": "بالمتر المسطح، توريد وتركيب سيراميك أرضيات للغرف والصالات فرز أول مقاس معتمد يركب بمونة أسمنتية فوق فرشة رمل نظيف مع السقية بلباني الأسمنت الأبيض أو الملون والمواد العازلة ومراعاة فواصل التمدد.",
+    "item_10": "بالمتر المسطح، توريد وتركيب سيراميك أرضيات حمامات مانع للانزلاق (Anti-slip) فرز أول بمونة أسمنتية فوق فرشة رمل مع ملء الفواصل بمادة روبة إيبوكسية أو أسمنتية مانعة لتسرب المياه والميول نحو الجاليتراب.",
+    "item_11": "بالمتر المسطح، توريد وتركيب سيراميك أرضيات مطابخ فرز أول مقاوم للشحوم والمنظفات والمياه يركب بمونة أسمنتية فوق فرشة رمل مع السقية الكاملة للفواصل ومراعاة الميول المطلوبة هندسياً.",
+    "item_12": "بالمتر المسطح، توريد وتركيب سيراميك حوائط حمامات بكامل الارتفاع فرز أول يركب بمونة أسمنتية أو مادة لاصقة مع السقية بمادة عازلة ومراعاة الأفقية والرأسية التامة ووزن الزوايا والغرانيق.",
+    "item_13": "بالمتر المسطح، توريد وتركيب سيراميك حوائط مطابخ بكامل الارتفاع فرز أول مقاوم للحرارة والرطوبة يركب بمونة أسمنتية أو مادة لاصقة مع السقية الكاملة ومراعاة فتحات التغذية والصرف والشفاطات.",
+    "item_14": "بالمتر المسطح، توريد وتركيب بلاط انترلوك خرساني إجهاد لا يقل عن 400 كجم/سم² سمك 6-8 سم للأرصفة المحيطة فوق طبقة رمل تسوية مدموك جيداً سمك 5 سم مع غلق الفواصل برمل ناعم نظيف.",
+    "item_15": "بالمتر الطولي، توريد وتركيب بردورات خرسانية مسبقة الصنع 15×30×50 سم لرصيف المشاة الخارجي مثبتة على فرشة ودعامات خرسانة عادية مع كحلة اللحامات بمونة أسمنتية والدهان بلونين متتاليين.",
+    "item_16": "بالمتر المسطح، توريد وعمل عزل مائي للسطح بلفائف ممبرين بيتوميني معدل بالبوليستر (أنسومات) سمك 4 مم مع دهان وجه برايمر بيتوميني ورقبة زجاجة وركوب 10 سم واختبار الغمر بالماء لمدة 48 ساعة.",
+    "item_17": "بالمتر المسطح، توريد وتركيب ألواح عزل حراري من الفوم المبثوق (XPS) عالي الكثافة سمك 5 سم كثافة 35 كجم/م³ بنظام التراكب (Shiplap) لحماية الأسطح من الإشعاع الحراري طبقاً لكود العزل الحراري.",
+    "item_18": "بالمتر المسطح، توريد وتركيب بلاط أسطح أسمنتي سنجابي أو موزاييك مقاس معتمد فوق فرشة رمل تسوية ومونة أسمنتية مع عمل فواصل تمدد كل 20 م² وسقية الفواصل بلباني الأسمنت ومراعاة ميول صرف الأمطار.",
+    "item_19": "بالمتر المسطح، توريد وتركيب شبابيك ألوميتال للواجهات والمساقط قطاع معتمد (جامبو/بي اس أو ما يماثله) وزجاج دبل مع الإكسسوارات وسلك مانع للحشرات والمقابض والتثبيت الهندسي طبقاً لأبعاد الرسم والمواصفات.",
+    "item_20": "بالعدد، توريد وتركيب أبواب حمامات الوحدة (عرض 80 سم أو أقل) تشمل الحلوق والضلف المقاومة للرطوبة والمياه والمفصلات والكوالين والشناكل والمقابض ودهان الحلق والتثبيت الهندسي التام طبقاً لأصول الصناعة.",
+    "item_21": "بالعدد، توريد وتركيب أبواب غرف الوحدة والمدخل (عرض أكبر من 80 سم) تشمل الحلوق الخشبية والضلف التجليد قشرة معتمدة والمفصلات والأقفال والمقابض والبرور والدهانات والتثبيت الهندسي طبقاً للمواصفات.",
 }
 
 
@@ -11810,112 +12237,172 @@ def _section_plaster_boq():
     total_cement_plaster_tons = round(total_cement_plaster_kg / 1000.0, 2)
     total_cement_plaster_bags = math.ceil(total_cement_plaster_kg / 50.0) if total_cement_plaster_kg > 0 else 0
 
+    # ── حصر حوائط الطوب نصف طوبة (12 سم) وطوبة كاملة (25 سم) ودروة السطح ──
+    s_res = _compute_survey()
+    walls_12_net_m2 = round(sum(r.get("المساحة الصافية (م2)", 0.0) for r in s_res.get("rows_12", [])), 2)
+    walls_25_net_m2 = round(sum(r.get("المساحة الصافية (م2)", 0.0) for r in s_res.get("rows_25", [])), 2)
+    walls_25_vol_m3 = round(sum(r.get("حجم الطوب (م3)", 0.0) for r in s_res.get("rows_25", [])), 2)
+
+    is_parapet_half = ("نصف" in str(parapet_thick_choice) or "12" in str(parapet_thick_choice))
+    if is_parapet_half:
+        parapet_12_m2 = area_parapet_m2
+        parapet_25_m3 = 0.0
+    else:
+        parapet_12_m2 = 0.0
+        parapet_25_m3 = round(area_parapet_m2 * 0.25, 2)
+
+    qty_brick_12 = round(walls_12_net_m2 + parapet_12_m2, 2)
+    qty_brick_25 = round(walls_25_vol_m3 + parapet_25_m3, 2)
+
+    if is_parapet_half and area_parapet_m2 > 0:
+        details_12 = f"حوائط المبنى نصف طوبة ({walls_12_net_m2:.2f} م²) + دروة السطح نصف طوبة ({area_parapet_m2:.2f} م²)"
+    else:
+        details_12 = f"صافي مسطح حوائط المبنى نصف طوبة ({walls_12_net_m2:.2f} م²)"
+
+    if not is_parapet_half and area_parapet_m2 > 0:
+        details_25 = f"حوائط المبنى طوبة كاملة ({walls_25_vol_m3:.2f} م³ مسطح {walls_25_net_m2:.2f} م²) + دروة السطح طوبة كاملة ({parapet_25_m3:.2f} م³ مسطح {area_parapet_m2:.2f} م²)"
+    else:
+        details_25 = f"صافي حجم حوائط المبنى طوبة كاملة ({walls_25_vol_m3:.2f} م³ مسطح {walls_25_net_m2:.2f} م²)"
+
+    active_wins = _get_active_windows_list()
+    qty_alum_windows = round(sum(float(w[2].get("w_m", 1.0)) * float(w[2].get("h_m", 1.2)) for w in active_wins), 2)
+
+    active_doors = _get_active_doors_list()
+    bath_doors = [d for d in active_doors if float(d[2].get("w_m", 0.9)) <= 0.80 + 1e-4]
+    qty_bath_doors = len(bath_doors)
+    room_doors = [d for d in active_doors if float(d[2].get("w_m", 0.9)) > 0.80 + 1e-4]
+    qty_room_doors = len(room_doors)
+
     st.markdown("<div style='margin-top: 14px;'></div>", unsafe_allow_html=True)
 
-    # ── إعداد بيانات حصر البنود الـ 17 لشيت الإكسيل (في الذاكرة) ──
+    # ── إعداد بيانات حصر البنود الـ 21 لشيت الإكسيل (في الذاكرة) ──
 
     table_1_rows = [
         {
-            "البند / بيان الأعمال (Work Item)": "1. كمية المحارة الداخلية بالسقف بالمتر المسطح (Internal Ceiling Plaster)",
+            "البند / بيان الأعمال (Work Item)": "1. بند طوب أحمر تخانة نصف طوبة 12 سم (12cm Half-Brick Masonry)",
+            "الكمية (Quantity)": f"{qty_brick_12:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": details_12,
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "2. بند طوب أحمر تخانة طوبة 25 سم (25cm Full-Brick Masonry)",
+            "الكمية (Quantity)": f"{qty_brick_25:.2f}",
+            "الوحدة (Unit)": "م³ (m³)",
+            "المحددات والتفصيل (Details)": details_25,
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "3. كمية المحارة الداخلية بالسقف بالمتر المسطح (Internal Ceiling Plaster)",
             "الكمية (Quantity)": f"{qty_ceiling_plaster:.2f}",
             "الوحدة (Unit)": "م² (m²)",
             "المحددات والتفصيل (Details)": f"مسطح المبنى المعتمد بعد خصم المنور ({bldg_area:.2f} م² − {eff_shaft_m2:.2f} م² = {qty_ceiling_plaster:.2f} م²)" if eff_shaft_m2 > 0 else f"تساوي تماماً مسطح المبنى المعتمد (Footprint Area = {bldg_area:.2f} م²)",
         },
         {
-            "البند / بيان الأعمال (Work Item)": "2. كمية الدهانات الداخلية للسقف (Internal Ceiling Paints)",
+            "البند / بيان الأعمال (Work Item)": "4. كمية الدهانات الداخلية للسقف (Internal Ceiling Paints)",
             "الكمية (Quantity)": f"{qty_ceiling_paint:.2f}",
             "الوحدة (Unit)": "م² (m²)",
             "المحددات والتفصيل (Details)": f"مسطح المبنى المعتمد بعد خصم المنور ({bldg_area:.2f} م² − {eff_shaft_m2:.2f} م² = {qty_ceiling_paint:.2f} م²)" if eff_shaft_m2 > 0 else f"تساوي تماماً مسطح المبنى المعتمد (Footprint Area = {bldg_area:.2f} م²)",
         },
         {
-            "البند / بيان الأعمال (Work Item)": "3. كمية المحارة للحوائط بالمتر المسطح (Wall Plaster Net)",
+            "البند / بيان الأعمال (Work Item)": "5. كمية المحارة للحوائط بالمتر المسطح (Wall Plaster Net)",
             "الكمية (Quantity)": f"{qty_wall_plaster:.2f}",
             "الوحدة (Unit)": "م² (m²)",
             "المحددات والتفصيل (Details)": f"صافي مسطح محارة الحوائط طبقاً للكود المصري (إجمالي {p_res['tot_gross']:.2f} م² − خصم الفتحات {p_res['tot_ded']:.2f} م²)",
         },
         {
-            "البند / بيان الأعمال (Work Item)": "4. كمية الدهانات الداخلية للحوائط بالمتر المسطح (Internal Wall Paints)",
+            "البند / بيان الأعمال (Work Item)": "6. كمية الدهانات الداخلية للحوائط بالمتر المسطح (Internal Wall Paints)",
             "الكمية (Quantity)": f"{qty_wall_paint:.2f}",
             "الوحدة (Unit)": "م² (m²)",
             "المحددات والتفصيل (Details)": f"مساوية لصافي مسطح محارة الحوائط المعتمد ({qty_wall_plaster:.2f} م²)",
         },
         {
-            "البند / بيان الأعمال (Work Item)": "5. كمية المحارة الخارجية (الواجهات والدروة من الجانبين) (External Facade & Parapet Plaster)",
+            "البند / بيان الأعمال (Work Item)": "7. كمية المحارة الخارجية (الواجهات والدروة من الجانبين) (External Facade & Parapet Plaster)",
             "الكمية (Quantity)": f"{qty_facade_plaster:.2f}",
             "الوحدة (Unit)": "م² (m²)",
             "المحددات والتفصيل (Details)": f"مسطح محيط الواجهات الصافي بارتفاع المبنى + الدروة من الجانبين بعد خصم الفتحات ({perimeter:.2f} م × ({default_h:.2f} م مبنى + 2 × {parapet_h_m:.2f} م دروة = {total_facade_h:.2f} م) − خصم {facade_ded:.2f} م² = {qty_facade_plaster:.2f} م²)",
         },
         {
-            "البند / بيان الأعمال (Work Item)": "6. كمية الدهانات الخارجية (الواجهات والدروة من الجانبين) (External Facade & Parapet Paints)",
+            "البند / بيان الأعمال (Work Item)": "8. كمية الدهانات الخارجية (الواجهات والدروة من الجانبين) (External Facade & Parapet Paints)",
             "الكمية (Quantity)": f"{qty_facade_paint:.2f}",
             "الوحدة (Unit)": "م² (m²)",
             "المحددات والتفصيل (Details)": f"مسطح محيط الواجهات الخارجي بارتفاع المبنى + الدروة من الجانبين ({perimeter:.2f} م × ({default_h:.2f} م مبنى + 2 × {parapet_h_m:.2f} م دروة = {total_facade_h:.2f} م) − خصم {facade_ded:.2f} م² = {qty_facade_paint:.2f} م²)",
         },
         {
-            "البند / بيان الأعمال (Work Item)": "7. كمية سيراميك الأرضيات (Floor Ceramic Tiles)",
+            "البند / بيان الأعمال (Work Item)": "9. كمية سيراميك الأرضيات (Floor Ceramic Tiles)",
             "الكمية (Quantity)": f"{qty_floor_ceramic:.2f}",
             "الوحدة (Unit)": "م² (m²)",
             "المحددات والتفصيل (Details)": floor_ceramic_details_str,
         },
         {
-            "البند / بيان الأعمال (Work Item)": "8. كمية سيراميك الحمامات (Bathroom Floor Ceramic)",
+            "البند / بيان الأعمال (Work Item)": "10. كمية سيراميك الحمامات (Bathroom Floor Ceramic)",
             "الكمية (Quantity)": f"{qty_bath_floor_ceramic:.2f}",
             "الوحدة (Unit)": "م² (m²)",
             "المحددات والتفصيل (Details)": bath_floor_details_str,
         },
         {
-            "البند / بيان الأعمال (Work Item)": "9. كمية سيراميك المطابخ (Kitchen Floor Ceramic)",
+            "البند / بيان الأعمال (Work Item)": "11. كمية سيراميك المطابخ (Kitchen Floor Ceramic)",
             "الكمية (Quantity)": f"{qty_kitchen_floor_ceramic:.2f}",
             "الوحدة (Unit)": "م² (m²)",
             "المحددات والتفصيل (Details)": kitchen_floor_details_str,
         },
         {
-            "البند / بيان الأعمال (Work Item)": "10. كمية سيراميك الحوائط للحمامات (Bathroom Wall Ceramic)",
+            "البند / بيان الأعمال (Work Item)": "12. كمية سيراميك الحوائط للحمامات (Bathroom Wall Ceramic)",
             "الكمية (Quantity)": f"{wall_ceramic_bath_m2:.2f}",
             "الوحدة (Unit)": "م² (m²)",
             "المحددات والتفصيل (Details)": bath_details_str,
         },
         {
-            "البند / بيان الأعمال (Work Item)": "11. كمية سيراميك الحوائط للمطابخ (Kitchen Wall Ceramic)",
+            "البند / بيان الأعمال (Work Item)": "13. كمية سيراميك الحوائط للمطابخ (Kitchen Wall Ceramic)",
             "الكمية (Quantity)": f"{wall_ceramic_kitchen_m2:.2f}",
             "الوحدة (Unit)": "م² (m²)",
             "المحددات والتفصيل (Details)": kitchen_details_str,
         },
         {
-            "البند / بيان الأعمال (Work Item)": "12. بند طوب للدروة (Parapet Masonry)",
-            "الكمية (Quantity)": f"{area_parapet_m2:.2f}",
-            "الوحدة (Unit)": "م² (m²)",
-            "المحددات والتفصيل (Details)": f"محيط المبنى ({perimeter:.2f} م) × ارتفاع الدروة ({parapet_h_m:.2f} م) │ سمك المباني: {parapet_thick_choice} ({brick_type_v} مقاس {size_display} ≈ {approx_parapet_bricks} طوبة)",
-        },
-        {
-            "البند / بيان الأعمال (Work Item)": "13. انترلوك ارصفة (Sidewalk Interlock)",
+            "البند / بيان الأعمال (Work Item)": "14. انترلوك ارصفة (Sidewalk Interlock)",
             "الكمية (Quantity)": f"{area_interlock_m2:.2f}",
             "الوحدة (Unit)": "م² (m²)",
             "المحددات والتفصيل (Details)": f"محيط المساحة الخارجية للمبنى ({perimeter:.2f} م) × عرض الرصيف الخارجي ({sidewalk_w_m:.2f} م)",
         },
         {
-            "البند / بيان الأعمال (Work Item)": "14. بردورة أرصفة (Sidewalk Curbs)",
+            "البند / بيان الأعمال (Work Item)": "15. بردورة أرصفة (Sidewalk Curbs)",
             "الكمية (Quantity)": f"{len_curb_m:.2f}",
             "الوحدة (Unit)": "م.ط (m)",
             "المحددات والتفصيل (Details)": f"المحيط الخارجي لداير الانترلوك الخارجي = {len_curb_m:.2f} م (محيط المبنى {perimeter:.2f} م + 8 × {sidewalk_w_m:.2f} م)",
         },
         {
-            "البند / بيان الأعمال (Work Item)": "15. بند العزل المائي للسطح (انسومات)",
+            "البند / بيان الأعمال (Work Item)": "16. بند العزل المائي للسطح (انسومات)",
             "الكمية (Quantity)": f"{qty_waterproof_roof:.2f}",
             "الوحدة (Unit)": "م² (m²)",
             "المحددات والتفصيل (Details)": f"مسطح السطح بعد خصم المنور ({bldg_area:.2f} م² − {eff_shaft_m2:.2f} م² = {qty_waterproof_roof:.2f} م²)" if eff_shaft_m2 > 0 else f"يساوي تماماً مسطح المبنى المعتمد ({bldg_area:.2f} م²)",
         },
         {
-            "البند / بيان الأعمال (Work Item)": "16. عازل حراري (Thermal Insulation)",
+            "البند / بيان الأعمال (Work Item)": "17. عازل حراري (Thermal Insulation)",
             "الكمية (Quantity)": f"{qty_thermal_ins:.2f}",
             "الوحدة (Unit)": "م² (m²)",
             "المحددات والتفصيل (Details)": f"مسطح السطح بعد خصم المنور ({bldg_area:.2f} م² − {eff_shaft_m2:.2f} م² = {qty_thermal_ins:.2f} م²)" if eff_shaft_m2 > 0 else f"يساوي تماماً مسطح المبنى المعتمد ({bldg_area:.2f} م²)",
         },
         {
-            "البند / بيان الأعمال (Work Item)": "17. بلاط اسطح (Roof Tiles)",
+            "البند / بيان الأعمال (Work Item)": "18. بلاط اسطح (Roof Tiles)",
             "الكمية (Quantity)": f"{qty_roof_tiles:.2f}",
             "الوحدة (Unit)": "م² (m²)",
             "المحددات والتفصيل (Details)": f"مسطح السطح بعد خصم المنور ({bldg_area:.2f} م² − {eff_shaft_m2:.2f} م² = {qty_roof_tiles:.2f} م²)" if eff_shaft_m2 > 0 else f"يساوي تماماً مسطح المبنى المعتمد ({bldg_area:.2f} م²)",
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "19. شبابيك ألوميتال (Aluminum Windows)",
+            "الكمية (Quantity)": f"{qty_alum_windows:.2f}",
+            "الوحدة (Unit)": "م² (m²)",
+            "المحددات والتفصيل (Details)": f"مسطح شبابيك الألوميتال المسقطة على الحوائط ({qty_alum_windows:.2f} م² │ {len(active_wins)} شباك)",
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "20. أبواب حمامات الوحدة (عرض ≤ 80 سم)",
+            "الكمية (Quantity)": f"{qty_bath_doors}",
+            "الوحدة (Unit)": "عدد (No.)",
+            "المحددات والتفصيل (Details)": f"حصر أبواب الحمامات عرض ≤ 80 سم بالعدد ({qty_bath_doors} باب)",
+        },
+        {
+            "البند / بيان الأعمال (Work Item)": "21. أبواب غرف الوحدة والمدخل (عرض > 80 سم)",
+            "الكمية (Quantity)": f"{qty_room_doors}",
+            "الوحدة (Unit)": "عدد (No.)",
+            "المحددات والتفصيل (Details)": f"حصر أبواب الغرف والمدخل عرض > 80 سم بالعدد ({qty_room_doors} باب)",
         },
     ]
 
@@ -11957,13 +12444,13 @@ def _section_plaster_boq():
     # 15 مدخل على 3 أسطر ضيقة ومنظمة (5 أعمدة في كل سطر)
     p_r1_c1, p_r1_c2, p_r1_c3, p_r1_c4, p_r1_c5 = st.columns(5)
     with p_r1_c1:
-        price_brick = st.number_input(
-            "(م2) طوب:",
+        price_brick_12 = st.number_input(
+            "(م2) طوب 12 سم:",
             min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_brick", 150.0)),
+            value=float(st.session_state.get("m15_rate_brick_12", st.session_state.get("m15_rate_brick", 160.0))),
             step=5.0, format="%.1f",
-            key="m15_rate_brick",
-            help="سعر المتر المسطح لمباني الطوب للدروة"
+            key="m15_rate_brick_12",
+            help="سعر المتر المسطح لمباني طوب 12 سم (يشمل الحوائط والدروة)"
         )
     with p_r1_c2:
         price_wall_plaster = st.number_input(
@@ -12096,9 +12583,18 @@ def _section_plaster_boq():
             help="سعر (م2) سيراميك مطابخ (ارضيات / حوائط)"
         )
 
-    # صف رابع لأسعار الشبابيك الألوميتال وأبواب الحمامات وأبواب الغرف
-    p_r4_c1, p_r4_c2, p_r4_c3 = st.columns(3)
+    # صف رابع لأسعار طوب 25 سم والشبابيك الألوميتال وأبواب الحمامات وأبواب الغرف
+    p_r4_c1, p_r4_c2, p_r4_c3, p_r4_c4 = st.columns(4)
     with p_r4_c1:
+        price_brick_25 = st.number_input(
+            "(م3) طوب 25 سم:",
+            min_value=0.0, max_value=50000.0,
+            value=float(st.session_state.get("m15_rate_brick_25", 1200.0)),
+            step=25.0, format="%.1f",
+            key="m15_rate_brick_25",
+            help="سعر المتر المكعب لمباني طوب 25 سم (يشمل الحوائط والدروة)"
+        )
+    with p_r4_c2:
         price_alum_windows = st.number_input(
             "(م2) شبابيك ألوميتال:",
             min_value=0.0, max_value=50000.0,
@@ -12107,7 +12603,7 @@ def _section_plaster_boq():
             key="m15_rate_alum_windows",
             help="سعر المتر المسطح لشبابيك الألوميتال للواجهات والمساقط"
         )
-    with p_r4_c2:
+    with p_r4_c3:
         price_bath_doors = st.number_input(
             "(عدد) أبواب حمامات (≤ 80سم):",
             min_value=0.0, max_value=50000.0,
@@ -12116,7 +12612,7 @@ def _section_plaster_boq():
             key="m15_rate_bath_doors",
             help="سعر الباب الواحد لأبواب حمامات الوحدة عرض 80 سم أو أقل"
         )
-    with p_r4_c3:
+    with p_r4_c4:
         price_room_doors = st.number_input(
             "(عدد) أبواب غرف (> 80سم):",
             min_value=0.0, max_value=50000.0,
@@ -12258,7 +12754,22 @@ def _section_plaster_boq():
         """,
         unsafe_allow_html=True,
     )
+    def _sync_m15_plaster_qty_factor():
+        val = float(st.session_state.get("m15_input_plaster_qty_factor", 1.00))
+        st.session_state["m15_plaster_qty_factor"] = val
+        cfg = st.session_state.get("cfg", {})
+        if "module_15_masonry_plaster" in cfg and isinstance(cfg["module_15_masonry_plaster"], dict):
+            cfg["module_15_masonry_plaster"]["plaster_qty_factor"] = val
+        if "module_15_data" in st.session_state and isinstance(st.session_state["module_15_data"], dict):
+            st.session_state["module_15_data"]["plaster_qty_factor"] = val
+        save_settings()
+
     _saved_plaster_factor = float(st.session_state.get("m15_plaster_qty_factor", 1.00))
+    if "m15_input_plaster_qty_factor" not in st.session_state:
+        st.session_state["m15_input_plaster_qty_factor"] = _saved_plaster_factor
+    else:
+        _saved_plaster_factor = float(st.session_state["m15_input_plaster_qty_factor"])
+
     c_factor_lbl, c_factor_inp = st.columns([1, 1], gap="small")
     with c_factor_lbl:
         st.markdown(
@@ -12274,9 +12785,19 @@ def _section_plaster_boq():
             value=_saved_plaster_factor,
             step=0.05, format="%.2f",
             key="m15_input_plaster_qty_factor",
+            on_change=_sync_m15_plaster_qty_factor,
             label_visibility="collapsed"
         )
-    st.session_state["m15_plaster_qty_factor"] = plaster_qty_factor
+    if abs(plaster_qty_factor - float(st.session_state.get("m15_plaster_qty_factor", 1.00))) > 1e-4:
+        st.session_state["m15_plaster_qty_factor"] = plaster_qty_factor
+        cfg = st.session_state.get("cfg", {})
+        if "module_15_masonry_plaster" in cfg and isinstance(cfg["module_15_masonry_plaster"], dict):
+            cfg["module_15_masonry_plaster"]["plaster_qty_factor"] = plaster_qty_factor
+        if "module_15_data" in st.session_state and isinstance(st.session_state["module_15_data"], dict):
+            st.session_state["module_15_data"]["plaster_qty_factor"] = plaster_qty_factor
+        save_settings()
+    else:
+        st.session_state["m15_plaster_qty_factor"] = plaster_qty_factor
 
     active_wins = _get_active_windows_list()
     qty_alum_windows = round(sum(float(w[2].get("w_m", 1.0)) * float(w[2].get("h_m", 1.2)) for w in active_wins), 2)
@@ -12289,83 +12810,87 @@ def _section_plaster_boq():
 
     t2_items_data = [
         # (item_name, net_qty, unit, unit_price, details)
-        ("1- كمية المحارة الداخلية بالسقف بالمتر المسطح (تساوي تماماً مسطح المبنى بعد خصم المنور)",
+        ("1- بند طوب أحمر تخانة نصف طوبة 12 سم (يشمل الحوائط ودروة السطح)",
+         qty_brick_12, "م² (m²)", price_brick_12,
+         f"{details_12} × {plaster_qty_factor:.2f}"),
+
+        ("2- بند طوب أحمر تخانة طوبة 25 سم (يشمل الحوائط ودروة السطح)",
+         qty_brick_25, "م³ (m³)", price_brick_25,
+         f"{details_25} × {plaster_qty_factor:.2f}"),
+
+        ("3- كمية المحارة الداخلية بالسقف بالمتر المسطح (تساوي تماماً مسطح المبنى بعد خصم المنور)",
          qty_ceiling_plaster, "م² (m²)", price_ceiling_plaster,
          f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_ceiling_plaster:.2f} م²) × {plaster_qty_factor:.2f}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²) × {plaster_qty_factor:.2f}"),
 
-        ("2- كمية الدهانات الداخلية للسقف (تساوي تماماً مسطح المبنى بعد خصم المنور)",
+        ("4- كمية الدهانات الداخلية للسقف (تساوي تماماً مسطح المبنى بعد خصم المنور)",
          qty_ceiling_paint, "م² (m²)", price_ceiling_paint,
          f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_ceiling_paint:.2f} م²) × {plaster_qty_factor:.2f}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²) × {plaster_qty_factor:.2f}"),
 
-        ("3- كمية المحارة للحوائط بالمتر المسطح",
+        ("5- كمية المحارة للحوائط بالمتر المسطح",
          qty_wall_plaster, "م² (m²)", price_wall_plaster,
          f"صافي مسطح محارة الحوائط ({qty_wall_plaster:.2f} م²) × {plaster_qty_factor:.2f}"),
 
-        ("4- كمية الدهانات الداخلية للحوائط بالمتر المسطح",
+        ("6- كمية الدهانات الداخلية للحوائط بالمتر المسطح",
          qty_wall_paint, "م² (m²)", price_wall_paint,
          f"صافي مسطح دهان الحوائط ({qty_wall_paint:.2f} م²) × {plaster_qty_factor:.2f}"),
 
-        ("5- كمية المحارة الخارجية (الواجهات والدروة من الجانبين)",
+        ("7- كمية المحارة الخارجية (الواجهات والدروة من الجانبين)",
          qty_facade_plaster, "م² (m²)", price_facade_plaster,
          f"مسطح الواجهات والدروة من الجانبين ({qty_facade_plaster:.2f} م²) × {plaster_qty_factor:.2f}"),
 
-        ("6- كمية الدهانات الخارجية (الواجهات والدروة من الجانبين)",
+        ("8- كمية الدهانات الخارجية (الواجهات والدروة من الجانبين)",
          qty_facade_paint, "م² (m²)", price_facade_paint,
          f"مسطح دهان الواجهات والدروة من الجانبين ({qty_facade_paint:.2f} م²) × {plaster_qty_factor:.2f}"),
 
-        ("7- كمية سيراميك الأرضيات (Floor Ceramic Tiles)",
+        ("9- كمية سيراميك الأرضيات (Floor Ceramic Tiles)",
          qty_floor_ceramic, "م² (m²)", price_floor_ceramic,
          f"صافي مسطح سيراميك الأرضيات ({qty_floor_ceramic:.2f} م²) × {plaster_qty_factor:.2f}"),
 
-        ("8- كمية سيراميك الحمامات (أرضيات)",
+        ("10- كمية سيراميك الحمامات (أرضيات)",
          qty_bath_floor_ceramic, "م² (m²)", price_bath_ceramic,
          f"{bath_floor_details_str} × {plaster_qty_factor:.2f}"),
 
-        ("9- كمية سيراميك المطابخ (أرضيات)",
+        ("11- كمية سيراميك المطابخ (أرضيات)",
          qty_kitchen_floor_ceramic, "م² (m²)", price_kitchen_ceramic,
          f"{kitchen_floor_details_str} × {plaster_qty_factor:.2f}"),
 
-        ("10- كمية سيراميك الحوائط للحمامات",
+        ("12- كمية سيراميك الحوائط للحمامات",
          wall_ceramic_bath_m2, "م² (m²)", price_bath_ceramic,
          f"{bath_details_str} × {plaster_qty_factor:.2f}"),
 
-        ("11- كمية سيراميك الحوائط للمطابخ",
+        ("13- كمية سيراميك الحوائط للمطابخ",
          wall_ceramic_kitchen_m2, "م² (m²)", price_kitchen_ceramic,
          f"{kitchen_details_str} × {plaster_qty_factor:.2f}"),
 
-        ("12- بند طوب للدروة (مساحة مباني دروة السطح)",
-         area_parapet_m2, "م² (m²)", price_brick,
-         f"مساحة مباني الدروة ({area_parapet_m2:.2f} م² │ {parapet_thick_choice}) × {plaster_qty_factor:.2f}"),
-
-        ("13- انترلوك ارصفة (مساحة انترلوك الأرصفة)",
+        ("14- انترلوك ارصفة (مساحة انترلوك الأرصفة)",
          area_interlock_m2, "م² (m²)", price_interlock,
          f"مساحة انترلوك الأرصفة ({area_interlock_m2:.2f} م²) × {plaster_qty_factor:.2f}"),
 
-        ("14- بردورة أرصفة (إجمالي طول البردورات)",
+        ("15- بردورة أرصفة (إجمالي طول البردورات)",
          len_curb_m, "م.ط (m)", price_curbs,
          f"إجمالي طول البردورات للمحيط الخارجي ({len_curb_m:.2f} م.ط) × {plaster_qty_factor:.2f}"),
 
-        ("15- بند العزل المائي للسطح (انسومات)",
+        ("16- بند العزل المائي للسطح (انسومات)",
          qty_waterproof_roof, "م² (m²)", price_waterproof,
          f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_waterproof_roof:.2f} م²) × {plaster_qty_factor:.2f}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²) × {plaster_qty_factor:.2f}"),
 
-        ("16- عازل حراري",
+        ("17- عازل حراري",
          qty_thermal_ins, "م² (m²)", price_thermal,
          f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_thermal_ins:.2f} م²) × {plaster_qty_factor:.2f}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²) × {plaster_qty_factor:.2f}"),
 
-        ("17- بلاط اسطح",
+        ("18- بلاط اسطح",
          qty_roof_tiles, "م² (m²)", price_roof_tiles,
          f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_roof_tiles:.2f} م²) × {plaster_qty_factor:.2f}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²) × {plaster_qty_factor:.2f}"),
 
-        ("18- شبابيك الوميتال (م2)",
+        ("19- شبابيك الوميتال (م2)",
          qty_alum_windows, "م² (m²)", price_alum_windows,
          f"مسطح شبابيك الألوميتال بناءً على الرسم ({qty_alum_windows:.2f} م² │ {len(active_wins)} شباك) × {plaster_qty_factor:.2f}"),
 
-        ("19- أبواب حمامات الوحدة (عرض ≤ 80 سم)",
+        ("20- أبواب حمامات الوحدة (عرض ≤ 80 سم)",
          qty_bath_doors, "عدد (No.)", price_bath_doors,
          f"حصر أبواب الحمامات عرض ≤ 80 سم بالعدد ({qty_bath_doors} باب) × {plaster_qty_factor:.2f}"),
 
-        ("20- أبواب غرف الوحدة (عرض > 80 سم)",
+        ("21- أبواب غرف الوحدة (عرض > 80 سم)",
          qty_room_doors, "عدد (No.)", price_room_doors,
          f"حصر أبواب الغرف والمدخل عرض > 80 سم بالعدد ({qty_room_doors} باب) × {plaster_qty_factor:.2f}"),
     ]
@@ -12398,254 +12923,1138 @@ def _section_plaster_boq():
         "البند / ملخص الكميات (Summary Item)": "💰 الإجمالي العام للتكلفة (Grand Total Cost)",
     })
 
-    # ── إعداد جدول st.data_editor لإدخال التوصيفات الملخص والمريح ──
+    # ── إعداد جدول ملخص الكميات وتوصيفات البنود التفاعلي المدمج ──
     cur_desc_dict = dict(st.session_state.get("m15_item_descriptions", {}))
     if not cur_desc_dict:
         cur_desc_dict = dict(st.session_state.get("cfg", {}).get("module_15_masonry_plaster", {}).get("item_descriptions", {}))
+    if not cur_desc_dict and isinstance(st.session_state.get("module_15_data"), dict):
+        cur_desc_dict = dict(st.session_state.get("module_15_data", {}).get("item_descriptions", {}))
 
-    editor_rows = []
+    live_descriptions = {}
+    boq_table_rows_data = []
     import re as _re_mod
+    import html as _html_mod
+
     for idx, (name, net_q, unit, u_price, details) in enumerate(t2_items_data, start=1):
         c_key = f"item_{idx}"
         tot_q = round(net_q * plaster_qty_factor, 2)
         tot_cost = round(tot_q * u_price, 2)
-        saved_d = cur_desc_dict.get(c_key) or cur_desc_dict.get(name) or DEFAULT_ITEM_DESCRIPTIONS.get(c_key, "")
-        
-        # تثبيت الرقم المتسلسل 1 و 2 و 3 .. في أقصى يمين بداية اسم البند برمز RLM (‏) لضمان ظهوره دائماً وعدم إزاحته بالـ BiDi
-        clean_name = _re_mod.sub(r'^\d+\s*[-–.]\s*', '', str(name)).strip()
-        display_item_name = f"‏{idx} - {clean_name}"
+        if c_key in cur_desc_dict and cur_desc_dict[c_key] is not None:
+            saved_d = str(cur_desc_dict[c_key]).strip()
+        elif name in cur_desc_dict and cur_desc_dict[name] is not None:
+            saved_d = str(cur_desc_dict[name]).strip()
+        else:
+            saved_d = str(DEFAULT_ITEM_DESCRIPTIONS.get(c_key, "")).strip()
+        live_descriptions[c_key] = saved_d
 
-        editor_rows.append({
-            "_item_code": c_key,
-            "توصيف البند": saved_d,
-            "إجمالي التكلفة (ج.م)": f"{tot_cost:,.2f}",
-            "تكلفة الوحدة (ج.م)": f"{u_price:,.2f}",
-            "الكمية الإجمالية": f"{tot_q:,.2f}",
-            "الوحدة (Unit)": unit,
-            "البند / ملخص الكميات (Summary Item)": display_item_name,
+        clean_name = _re_mod.sub(r'^\d+\s*[-–.]\s*', '', str(name)).strip()
+
+        boq_table_rows_data.append({
+            "code": c_key,
+            "seq": str(idx),
+            "clean_name": clean_name,
+            "unit": str(unit),
+            "tot_qty": f"{tot_q:,.2f}",
+            "unit_price": f"{u_price:,.2f}",
+            "tot_cost": f"{tot_cost:,.2f}",
+            "desc": saved_d,
+            "is_total": False,
         })
 
     # صف إجمالي التكلفة في نهاية الجدول
-    saved_total_d = cur_desc_dict.get("total_cost", "إجمالي تكلفة جميع بنود التشطيبات والمباني والمحارة والدروة والأرصفة والعزل شامل معامل الزيادة")
-    editor_rows.append({
-        "_item_code": "total_cost",
-        "توصيف البند": saved_total_d,
-        "إجمالي التكلفة (ج.م)": f"{grand_total_cost:,.2f}",
-        "تكلفة الوحدة (ج.م)": "—",
-        "الكمية الإجمالية": "—",
-        "الوحدة (Unit)": "ج.م (EGP)",
-        "البند / ملخص الكميات (Summary Item)": "💰 إجمالي التكلفة (Total Cost)",
+    if "total_cost" in cur_desc_dict and cur_desc_dict["total_cost"] is not None:
+        saved_total_d = str(cur_desc_dict["total_cost"]).strip()
+    else:
+        saved_total_d = "إجمالي تكلفة جميع بنود التشطيبات والمباني والمحارة والدروة والأرصفة والعزل شامل معامل الزيادة"
+    live_descriptions["total_cost"] = saved_total_d
+    boq_table_rows_data.append({
+        "code": "total_cost",
+        "seq": "💰",
+        "clean_name": "إجمالي التكلفة (Total Cost)",
+        "unit": "ج.م (EGP)",
+        "tot_qty": "—",
+        "unit_price": "—",
+        "tot_cost": f"{grand_total_cost:,.2f}",
+        "desc": saved_total_d,
+        "is_total": True,
     })
 
-    st.markdown(
-        """
-        <style>
-        /* تكبير حجم الخط العام داخل الجدول التفاعلي وحاويته */
-        div[class*="st-key-m15_boq_data_editor"] {
-            position: relative !important;
-            display: flow-root !important;
-            margin-top: 10px !important;
-            border-radius: 10px !important;
-            clear: both !important;
-            box-sizing: border-box !important;
-            border: 1.5px solid #ea580c !important;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.30) !important;
-            overflow: hidden !important;
-            zoom: 1.15 !important;
-        }
-        /* إخفاء شريط عناوين الجدول الافتراضي الرمادي لصالح شريط البانيلات الملونة الناصعة */
-        div[class*="st-key-m15_boq_data_editor"] div[data-testid="stDataEditor"],
-        div[class*="st-key-m15_boq_data_editor"] div[data-testid="stDataFrame"] {
-            position: relative !important;
-            margin-top: -36px !important;
-            border: none !important;
-            border-radius: 10px !important;
-            overflow: hidden !important;
-        }
-        div[class*="st-key-m15_boq_data_editor"] div[data-testid="stDataEditorToolbar"],
-        div[class*="st-key-m15_boq_data_editor"] div[data-testid="stElementToolbar"] {
-            display: none !important;
-            visibility: hidden !important;
-            height: 0 !important;
-        }
-        div[class*="st-key-m15_boq_data_editor"] header,
-        div[class*="st-key-m15_boq_data_editor"] [role="columnheader"] {
-            display: none !important;
-            visibility: hidden !important;
-            height: 0 !important;
-            pointer-events: none !important;
-        }
-        </style>
-        <div dir="rtl" style="margin: 16px 0 0 0; position: relative; z-index: 10;">
-            <!-- شريط التنبيه وإرشادات التعديل المباشر -->
-            <div style="background: linear-gradient(135deg, rgba(30, 41, 59, 0.98) 0%, rgba(15, 23, 42, 0.98) 100%); border: 2px solid #ea580c; border-right: 6px solid #f97316; border-radius: 10px; padding: 12px 18px; margin-bottom: 8px; box-shadow: 0 4px 16px rgba(234, 88, 12, 0.20);">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-weight: 900; font-size: 1.05rem; color: #fb923c;">📋 جدول ملخص الكميات وتوصيفات البنود (BOQ Takeoff & Descriptions):</span>
-                        <span style="font-size: 0.85rem; color: #fdba74; font-weight: 700; background: rgba(234, 88, 12, 0.22); padding: 3px 10px; border-radius: 6px; border: 1px solid rgba(249, 115, 22, 0.4);">
-                            ترتيب الأعمدة من اليمين إلى اليسار (RTL) • ترتيب البنود من 1 إلى 20 مع سطر إجمالي التكلفة 🔒
-                        </span>
-                    </div>
-                    <div style="background: linear-gradient(135deg, rgba(2, 132, 199, 0.25) 0%, rgba(14, 165, 233, 0.15) 100%); border: 2px solid #38bdf8; border-radius: 8px; padding: 7px 16px; color: #38bdf8; font-weight: 900; font-size: 0.95rem; box-shadow: 0 0 14px rgba(56, 189, 248, 0.35);">
-                        ✏️ يمكن التعديل في هذا العمود («توصيف البند») من المستخدم (يدعم النسخ واللصق Ctrl+C / Ctrl+V)
-                    </div>
-                </div>
-            </div>
-            <!-- شريط رؤوس الأعمدة (البانيلات) بألوان ناصعة ومميزة وخط مكبر متطابق العرض مع الأعمدة تماماً -->
-            <div style="direction: ltr; display: grid; grid-template-columns: 500fr 110fr 100fr 95fr 85fr 340fr; gap: 0px; text-align: center; border: 1.5px solid #ea580c; border-radius: 10px; background: #0f172a; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.25); position: relative; z-index: 10; margin-bottom: 8px;">
-                <!-- بانيل توصيف البند (ناصع بالأزرق الكهربائي السماوي) -->
-                <div style="background: linear-gradient(135deg, rgba(2, 132, 199, 0.40) 0%, rgba(14, 165, 233, 0.22) 100%); border-right: 1.5px solid rgba(56, 189, 248, 0.5); padding: 8px 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 56px; box-sizing: border-box;">
-                    <span style="font-size: 0.98rem; font-weight: 900; color: #00f5ff; text-shadow: 0 0 12px rgba(0, 245, 255, 0.8), 0 1px 3px #000000; line-height: 1.25;">✏️ توصيف البند</span>
-                    <span style="font-size: 0.82rem; color: #7dd3fc; font-weight: 800; margin-top: 3px; text-shadow: 0 0 8px rgba(125, 211, 252, 0.7);">متاح للتعديل ✍️</span>
-                </div>
-                <!-- بانيل إجمالي التكلفة (ناصع بالأصفر الذهبي البراق) -->
-                <div style="background: rgba(245, 158, 11, 0.22); border-right: 1.5px solid rgba(251, 191, 36, 0.45); padding: 8px 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 56px; box-sizing: border-box;">
-                    <span style="font-size: 0.92rem; font-weight: 900; color: #fbbf24; text-shadow: 0 0 12px rgba(251, 191, 36, 0.85), 0 1px 3px #000000; line-height: 1.2;">🟠 إجمالي التكلفة</span>
-                    <span style="font-size: 0.78rem; color: #fef08a; font-weight: 700;">(ج.م)</span>
-                </div>
-                <!-- بانيل تكلفة الوحدة (ناصع بالبرتقالي الصريح) -->
-                <div style="background: rgba(234, 88, 12, 0.22); border-right: 1.5px solid rgba(249, 115, 22, 0.45); padding: 8px 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 56px; box-sizing: border-box;">
-                    <span style="font-size: 0.92rem; font-weight: 900; color: #fb923c; text-shadow: 0 0 12px rgba(251, 146, 60, 0.85), 0 1px 3px #000000; line-height: 1.2;">🟠 تكلفة الوحدة</span>
-                    <span style="font-size: 0.78rem; color: #fed7aa; font-weight: 700;">(ج.م)</span>
-                </div>
-                <!-- بانيل الكمية الإجمالية (ناصع بالأخضر الزمردي البراق) -->
-                <div style="background: rgba(16, 185, 129, 0.22); border-right: 1.5px solid rgba(52, 211, 153, 0.45); padding: 8px 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 56px; box-sizing: border-box;">
-                    <span style="font-size: 0.92rem; font-weight: 900; color: #34d399; text-shadow: 0 0 12px rgba(52, 211, 153, 0.85), 0 1px 3px #000000; line-height: 1.2;">🟠 الكمية</span>
-                    <span style="font-size: 0.78rem; color: #a7f3d0; font-weight: 700;">الإجمالية</span>
-                </div>
-                <!-- بانيل الوحدة (ناصع بالبنفسجي / اللافندر الفاقع) -->
-                <div style="background: rgba(168, 85, 247, 0.22); border-right: 1.5px solid rgba(192, 132, 252, 0.45); padding: 8px 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 56px; box-sizing: border-box;">
-                    <span style="font-size: 0.92rem; font-weight: 900; color: #c084fc; text-shadow: 0 0 12px rgba(192, 132, 252, 0.85), 0 1px 3px #000000; line-height: 1.2;">🟠 الوحدة</span>
-                    <span style="font-size: 0.78rem; color: #e9d5ff; font-weight: 700;">(Unit)</span>
-                </div>
-                <!-- بانيل البند / ملخص الكميات (ناصع بالمرجاني البرتقالي المتوهج) -->
-                <div style="background: linear-gradient(135deg, rgba(234, 88, 12, 0.32) 0%, rgba(194, 65, 12, 0.18) 100%); padding: 8px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 56px; box-sizing: border-box;">
-                    <span style="font-size: 0.98rem; font-weight: 900; color: #f97316; text-shadow: 0 0 12px rgba(249, 115, 22, 0.85), 0 1px 3px #000000; line-height: 1.25;">🟠 البند / ملخص الكميات (Summary Item)</span>
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    df_editor = pd.DataFrame(editor_rows)
-
-    def _style_boq_table_cells(row):
-        is_total = (
-            str(row.get("_item_code", "")).strip() == "total_cost"
-            or "إجمالي التكلفة" in str(row.get("البند / ملخص الكميات (Summary Item)", ""))
-        )
-        if is_total:
-            return [
-                "font-weight: 900; font-size: 15px; color: #10b981; background-color: rgba(16, 185, 129, 0.22);"
-            ] * len(row)
-        styles = []
-        for col in row.index:
-            if col == "توصيف البند":
-                styles.append("font-weight: 600; color: #ffffff;")
-            elif col == "إجمالي التكلفة (ج.م)":
-                styles.append("font-weight: 800; color: #fbbf24;")
-            elif col == "تكلفة الوحدة (ج.م)":
-                styles.append("font-weight: 700; color: #fdba74;")
-            elif col == "الكمية الإجمالية":
-                styles.append("font-weight: 700; color: #f1f5f9;")
-            elif col == "الوحدة (Unit)":
-                styles.append("font-weight: 600; color: #cbd5e1;")
-            elif col == "البند / ملخص الكميات (Summary Item)":
-                styles.append("font-weight: 700; color: #f8fafc;")
-            else:
-                styles.append("font-weight: 700; color: #ffffff;")
-        return styles
-
-    styled_df_editor = df_editor.style.apply(_style_boq_table_cells, axis=1)
-
-    edited_df = st.data_editor(
-        styled_df_editor,
-        column_order=[
-            "توصيف البند",
-            "إجمالي التكلفة (ج.م)",
-            "تكلفة الوحدة (ج.م)",
-            "الكمية الإجمالية",
-            "الوحدة (Unit)",
-            "البند / ملخص الكميات (Summary Item)",
-        ],
-        column_config={
-            "_item_code": None,
-            "توصيف البند": st.column_config.TextColumn(
-                " ",
-                disabled=False,
-                width=500,
-                help="✏️ يمكن التعديل في هذا العمود من المستخدم — يدعم التحرير المباشر والنسخ واللصق (Ctrl+C / Ctrl+V)",
-            ),
-            "إجمالي التكلفة (ج.م)": st.column_config.TextColumn(
-                " ",
-                disabled=True,
-                width=110,
-            ),
-            "تكلفة الوحدة (ج.م)": st.column_config.TextColumn(
-                " ",
-                disabled=True,
-                width=100,
-            ),
-            "الكمية الإجمالية": st.column_config.TextColumn(
-                " ",
-                disabled=True,
-                width=95,
-            ),
-            "الوحدة (Unit)": st.column_config.TextColumn(
-                " ",
-                disabled=True,
-                width=85,
-            ),
-            "البند / ملخص الكميات (Summary Item)": st.column_config.TextColumn(
-                " ",
-                disabled=True,
-                width=340,
-                alignment="right",
-            ),
-        },
-        use_container_width=True,
-        hide_index=True,
-        num_rows="fixed",
-        row_height=None,
-        height=780,
-        key="m15_boq_data_editor",
-    )
-
-    # حفظ وتحديث التوصيفات في session_state و profiles.json فورياً عند أي تعديل لضمان بقائها
-    live_descriptions = {}
-    desc_changed = False
-    for r_idx, erow in edited_df.iterrows():
-        c = str(erow.get("_item_code") or f"item_{r_idx + 1}")
-        v = str(erow.get("توصيف البند") or "").strip()
-        if c:
-            live_descriptions[c] = v
-            if cur_desc_dict.get(c) != v:
-                desc_changed = True
-
-    if desc_changed or "m15_item_descriptions" not in st.session_state:
-        st.session_state["m15_item_descriptions"] = live_descriptions
+    if st.session_state.get("m15_item_descriptions") != live_descriptions:
+        st.session_state["m15_item_descriptions"] = dict(live_descriptions)
         cfg = st.session_state.get("cfg", {})
         if "module_15_masonry_plaster" in cfg and isinstance(cfg["module_15_masonry_plaster"], dict):
             cfg["module_15_masonry_plaster"]["item_descriptions"] = dict(live_descriptions)
-        save_settings()
+        if "module_15_data" in st.session_state and isinstance(st.session_state["module_15_data"], dict):
+            st.session_state["module_15_data"]["item_descriptions"] = dict(live_descriptions)
 
-    # بانر الإجمالي العام للتكلفة بلون بارز ومميز
-    st.markdown(
-        f"""
-        <div dir="rtl" style="background: linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%); border: 2.5px solid #10b981; border-radius: 12px; padding: 14px 24px; margin: 16px 0; text-align: center; box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35);">
-            <div style="font-size: 1.05rem; font-weight: 700; color: #a7f3d0; margin-bottom: 4px;">
-                💵 إجمالي التكلفة التقديرية العامة للأعمال (Grand Total Cost):
+    # بناء صفوف HTML للجدول المدمج
+    tbody_rows_html = []
+    for r_idx, r_info in enumerate(boq_table_rows_data):
+        code_esc = _html_mod.escape(r_info["code"])
+        seq_esc = _html_mod.escape(r_info["seq"])
+        name_esc = _html_mod.escape(r_info["clean_name"])
+        unit_esc = _html_mod.escape(r_info["unit"])
+        qty_esc = _html_mod.escape(r_info["tot_qty"])
+        uprice_esc = _html_mod.escape(r_info["unit_price"])
+        tcost_esc = _html_mod.escape(r_info["tot_cost"])
+        desc_esc = _html_mod.escape(r_info["desc"])
+        is_tot = r_info["is_total"]
+
+        row_cls = "boq-row boq-total-row" if is_tot else ("boq-row boq-even-row" if r_idx % 2 == 0 else "boq-row boq-odd-row")
+        seq_html = (
+            f'<span class="seq-badge total-seq-badge">{seq_esc}</span>'
+            if is_tot else
+            f'<span class="seq-badge">{seq_esc} -</span>'
+        )
+
+        tbody_rows_html.append(f"""
+        <tr class="{row_cls}" data-row-idx="{r_idx}" data-item-code="{code_esc}">
+            <td class="boq-td cell-summary">
+                <div class="summary-item-wrap">
+                    {seq_html}
+                    <span class="item-name-txt">{name_esc}</span>
+                </div>
+                <div class="col-resizer" data-col="0" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                <div class="row-resizer" data-row="{r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+            </td>
+            <td class="boq-td cell-unit">
+                <div class="cell-center-wrap">{unit_esc}</div>
+                <div class="col-resizer" data-col="1" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                <div class="row-resizer" data-row="{r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+            </td>
+            <td class="boq-td cell-qty">
+                <div class="cell-center-wrap" dir="ltr">{qty_esc}</div>
+                <div class="col-resizer" data-col="2" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                <div class="row-resizer" data-row="{r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+            </td>
+            <td class="boq-td cell-uprice">
+                <div class="cell-center-wrap" dir="ltr">{uprice_esc}</div>
+                <div class="col-resizer" data-col="3" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                <div class="row-resizer" data-row="{r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+            </td>
+            <td class="boq-td cell-tcost">
+                <div class="cell-center-wrap" dir="ltr">{tcost_esc}</div>
+                <div class="col-resizer" data-col="4" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                <div class="row-resizer" data-row="{r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+            </td>
+            <td class="boq-td cell-desc">
+                <div class="desc-editor" contenteditable="true" spellcheck="false" data-item-code="{code_esc}" title="انقر للتعديل المباشر — يدعم النسخ واللصق Ctrl+C / Ctrl+V">{desc_esc}</div>
+                <div class="row-resizer" data-row="{r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+            </td>
+        </tr>
+        """)
+
+    tbody_joined = "\n".join(tbody_rows_html)
+    initial_descs_json = json.dumps(live_descriptions, ensure_ascii=False)
+
+    boq_interactive_html = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<style>
+  * {{
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }}
+  body, html {{
+    width: 100%;
+    background: transparent;
+    font-family: 'Segoe UI', 'Cairo', Tahoma, Geneva, Verdana, sans-serif;
+    color: #f8fafc;
+    direction: rtl;
+    overflow-x: hidden;
+  }}
+  #boq-root-container {{
+    width: 100%;
+    padding: 4px 0 10px 0;
+    direction: rtl;
+  }}
+  /* شريط العنوان والإرشادات العلوي */
+  .boq-top-banner {{
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.98) 0%, rgba(15, 23, 42, 0.98) 100%);
+    border: 2px solid #ea580c;
+    border-right: 6px solid #f97316;
+    border-radius: 10px;
+    padding: 12px 18px;
+    margin-bottom: 10px;
+    box-shadow: 0 4px 16px rgba(234, 88, 12, 0.20);
+  }}
+  .boq-top-flex {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }}
+  .boq-title-group {{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }}
+  .boq-main-title {{
+    font-weight: 900;
+    font-size: 1.15rem;
+    color: #fb923c;
+  }}
+  .boq-sub-badge {{
+    font-size: 0.90rem;
+    color: #fdba74;
+    font-weight: 700;
+    background: rgba(234, 88, 12, 0.22);
+    padding: 4px 11px;
+    border-radius: 6px;
+    border: 1px solid rgba(249, 115, 22, 0.45);
+  }}
+  .boq-actions-group {{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }}
+  .boq-edit-hint {{
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.28) 0%, rgba(14, 165, 233, 0.16) 100%);
+    border: 1.5px solid #38bdf8;
+    border-radius: 8px;
+    padding: 6px 14px;
+    color: #38bdf8;
+    font-weight: 900;
+    font-size: 0.95rem;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.30);
+  }}
+  .boq-reset-btn {{
+    background: rgba(234, 88, 12, 0.22);
+    border: 1.5px solid #f97316;
+    color: #fed7aa;
+    font-weight: 800;
+    font-size: 0.88rem;
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    font-family: inherit;
+  }}
+  .boq-reset-btn:hover {{
+    background: rgba(234, 88, 12, 0.45);
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(249, 115, 22, 0.45);
+  }}
+  .boq-save-status {{
+    font-size: 0.85rem;
+    font-weight: 800;
+    color: #34d399;
+    display: none;
+    align-items: center;
+    gap: 4px;
+    background: rgba(16, 185, 129, 0.16);
+    border: 1px solid rgba(52, 211, 153, 0.4);
+    padding: 4px 10px;
+    border-radius: 6px;
+  }}
+
+  /* حاوية الجدول الموحد (دمج البانيلات مع الجدول بدون أي فصل) */
+  .boq-table-wrapper {{
+    width: 100%;
+    border: 2px solid #ea580c;
+    border-radius: 12px;
+    background: #0f172a;
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
+    overflow-x: auto;
+    overflow-y: visible;
+    position: relative;
+  }}
+  table#m15-boq-table {{
+    width: 100%;
+    min-width: 980px;
+    table-layout: fixed;
+    border-collapse: collapse;
+    border-spacing: 0;
+    direction: rtl;
+    background: #0f172a;
+  }}
+
+  /* ── بانيلات عناوين الجدول المدمجة في thead (برتقالي وأزرق) ── */
+  thead.boq-thead tr.boq-header-row {{
+    height: 68px;
+  }}
+  th.boq-th {{
+    position: relative;
+    padding: 10px 8px;
+    vertical-align: middle;
+    text-align: center;
+    border-bottom: 2.5px solid #ea580c;
+    user-select: none;
+    overflow: visible;
+  }}
+  /* البانيلات البرتقالية المدمجة */
+  th.boq-th-orange {{
+    background: linear-gradient(180deg, rgba(234, 88, 12, 0.42) 0%, rgba(194, 65, 12, 0.26) 100%);
+    border-left: 1.5px solid rgba(251, 146, 60, 0.50);
+  }}
+  th.boq-th-orange .th-main-title {{
+    display: block;
+    font-size: 1.12rem;
+    font-weight: 900;
+    color: #fb923c;
+    text-shadow: 0 0 12px rgba(251, 146, 60, 0.75), 0 1px 3px #000000;
+    line-height: 1.3;
+  }}
+  th.boq-th-orange .th-sub-title {{
+    display: block;
+    font-size: 0.92rem;
+    font-weight: 800;
+    color: #fed7aa;
+    margin-top: 3px;
+    line-height: 1.2;
+  }}
+  /* البانيل الأزرق المدمج لعمود توصيف البند */
+  th.boq-th-blue {{
+    background: linear-gradient(180deg, rgba(2, 132, 199, 0.48) 0%, rgba(14, 165, 233, 0.26) 100%);
+    border-left: none;
+    border-bottom: 2.5px solid #38bdf8;
+  }}
+  th.boq-th-blue .th-main-title {{
+    display: block;
+    font-size: 1.14rem;
+    font-weight: 900;
+    color: #00f5ff;
+    text-shadow: 0 0 12px rgba(0, 245, 255, 0.80), 0 1px 3px #000000;
+    line-height: 1.3;
+  }}
+  th.boq-th-blue .th-sub-title {{
+    display: block;
+    font-size: 0.92rem;
+    font-weight: 800;
+    color: #7dd3fc;
+    margin-top: 3px;
+    text-shadow: 0 0 8px rgba(125, 211, 252, 0.65);
+    line-height: 1.2;
+  }}
+
+  /* ── صفوف وخلايا الجدول مع تكبير حجم الخط ── */
+  tr.boq-row {{
+    transition: background-color 0.12s ease;
+    min-height: 58px;
+  }}
+  tr.boq-even-row {{
+    background-color: rgba(15, 23, 42, 0.92);
+  }}
+  tr.boq-odd-row {{
+    background-color: rgba(30, 41, 59, 0.78);
+  }}
+  tr.boq-row:hover:not(.boq-total-row) {{
+    background-color: rgba(51, 65, 85, 0.65);
+  }}
+  td.boq-td {{
+    position: relative;
+    vertical-align: middle;
+    border-bottom: 1.5px solid rgba(148, 163, 184, 0.24);
+    border-left: 1.5px solid rgba(148, 163, 184, 0.22);
+    overflow: visible;
+  }}
+  td.boq-td:last-child {{
+    border-left: none;
+  }}
+
+  /* ── تنسيق عمود البند / ملخص الكميات (Summary Item) مع هامش مناسب لرقم التسلسل ── */
+  td.cell-summary {{
+    direction: rtl;
+    text-align: right;
+    padding: 12px 22px 12px 14px;
+    background: rgba(234, 88, 12, 0.05);
+  }}
+  .summary-item-wrap {{
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 8px;
+    direction: rtl;
+    text-align: right;
+    width: 100%;
+    margin-right: 4px;
+  }}
+  .seq-badge {{
+    flex-shrink: 0;
+    display: inline-block;
+    font-size: 1.12rem;
+    font-weight: 900;
+    color: #fb923c;
+    min-width: 34px;
+    text-align: right;
+    line-height: 1.55;
+    user-select: text;
+  }}
+  .item-name-txt {{
+    flex: 1;
+    font-size: 1.08rem;
+    font-weight: 800;
+    color: #f8fafc;
+    line-height: 1.55;
+    text-align: right;
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    user-select: text;
+  }}
+
+  /* ── تنسيق الأعمدة الرقمية والوحدة بخط مكبر وواضح ── */
+  .cell-center-wrap {{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    width: 100%;
+    height: 100%;
+    padding: 10px 8px;
+    white-space: normal;
+    word-wrap: break-word;
+    user-select: text;
+  }}
+  td.cell-unit .cell-center-wrap {{
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #e2e8f0;
+  }}
+  td.cell-qty .cell-center-wrap {{
+    font-size: 1.14rem;
+    font-weight: 800;
+    color: #f8fafc;
+  }}
+  td.cell-uprice .cell-center-wrap {{
+    font-size: 1.12rem;
+    font-weight: 800;
+    color: #fdba74;
+  }}
+  td.cell-tcost .cell-center-wrap {{
+    font-size: 1.15rem;
+    font-weight: 900;
+    color: #fbbf24;
+  }}
+
+  /* ── تنسيق عمود توصيف البند القابل للتعديل بخط مكبر ── */
+  td.cell-desc {{
+    direction: rtl;
+    text-align: right;
+    padding: 8px 12px;
+    background: rgba(2, 132, 199, 0.04);
+  }}
+  .desc-editor {{
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 12px;
+    direction: rtl;
+    text-align: right;
+    font-size: 1.06rem;
+    font-weight: 600;
+    color: #ffffff;
+    line-height: 1.65;
+    border: 1.5px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    outline: none;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    transition: all 0.15s ease;
+    cursor: text;
+    user-select: text;
+  }}
+  .desc-editor:hover {{
+    border-color: rgba(56, 189, 248, 0.40);
+    background: rgba(15, 23, 42, 0.65);
+  }}
+  .desc-editor:focus {{
+    border-color: #38bdf8;
+    background: rgba(15, 23, 42, 0.95);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.22);
+  }}
+
+  /* ── تنسيق صف إجمالي التكلفة في نهاية الجدول ── */
+  tr.boq-total-row {{
+    background: linear-gradient(90deg, rgba(6, 78, 59, 0.70) 0%, rgba(4, 120, 87, 0.50) 100%) !important;
+    border-top: 2.5px solid #10b981;
+  }}
+  tr.boq-total-row td.boq-td {{
+    border-bottom: none;
+  }}
+  tr.boq-total-row .seq-badge,
+  tr.boq-total-row .item-name-txt {{
+    font-size: 1.20rem !important;
+    font-weight: 900 !important;
+    color: #34d399 !important;
+  }}
+  tr.boq-total-row td.cell-unit .cell-center-wrap,
+  tr.boq-total-row td.cell-qty .cell-center-wrap,
+  tr.boq-total-row td.cell-uprice .cell-center-wrap {{
+    font-size: 1.14rem !important;
+    font-weight: 900 !important;
+    color: #6ee7b7 !important;
+  }}
+  tr.boq-total-row td.cell-tcost .cell-center-wrap {{
+    font-size: 1.26rem !important;
+    font-weight: 900 !important;
+    color: #10b981 !important;
+    text-shadow: 0 0 10px rgba(16, 185, 129, 0.45);
+  }}
+  tr.boq-total-row .desc-editor {{
+    font-size: 1.10rem !important;
+    font-weight: 800 !important;
+    color: #a7f3d0 !important;
+  }}
+
+  /* ── مقابض التحكم في عرض الأعمدة وعرض/ارتفاع الصفوف بالماوس ── */
+  .col-resizer {{
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -5px;
+    width: 10px;
+    cursor: col-resize;
+    z-index: 30;
+    background: transparent;
+    transition: background-color 0.15s ease;
+  }}
+  .col-resizer:hover,
+  .col-resizer.active-resize {{
+    background: rgba(249, 115, 22, 0.85);
+    box-shadow: 0 0 8px rgba(249, 115, 22, 0.9);
+  }}
+  .row-resizer {{
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -4px;
+    height: 8px;
+    cursor: row-resize;
+    z-index: 25;
+    background: transparent;
+    transition: background-color 0.15s ease;
+  }}
+  .row-resizer:hover,
+  .row-resizer.active-resize {{
+    background: rgba(56, 189, 248, 0.85);
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.9);
+  }}
+  body.is-resizing-col,
+  body.is-resizing-col * {{
+    cursor: col-resize !important;
+    user-select: none !important;
+  }}
+  body.is-resizing-row,
+  body.is-resizing-row * {{
+    cursor: row-resize !important;
+    user-select: none !important;
+  }}
+</style>
+</head>
+<body>
+<div id="boq-root-container" dir="rtl">
+    <!-- شريط التنبيه وإرشادات التعديل والتحكم بالماوس -->
+    <div class="boq-top-banner">
+        <div class="boq-top-flex">
+            <div class="boq-title-group">
+                <span class="boq-main-title">📋 جدول ملخص الكميات وتوصيفات البنود (BOQ Takeoff & Descriptions):</span>
+                <span class="boq-sub-badge">
+                    ترتيب الأعمدة من اليمين إلى اليسار (RTL) • اسحب فواصل الأعمدة (⟷) أو الصفوف (↕) بالماوس للتحكم في العرض والارتفاع
+                </span>
             </div>
-            <div style="font-size: 1.90rem; font-weight: 900; color: #ffffff; text-shadow: 0 2px 8px rgba(0,0,0,0.4);">
-                {grand_total_cost:,.2f} <span style="font-size: 1.2rem; color: #6ee7b7;">جنيه مصري (EGP)</span>
+            <div class="boq-actions-group">
+                <span id="boq-save-indicator" class="boq-save-status">💾 تم حفظ التعديل</span>
+                <button type="button" id="boq-reset-dims-btn" class="boq-reset-btn" title="إعادة ضبط عرض الأعمدة وارتفاع الصفوف للوضع الافتراضي">
+                    ↺ إعادة ضبط مقاسات الجدول
+                </button>
+                <div class="boq-edit-hint">
+                    ✏️ يمكن التعديل في عمود («توصيف البند») (يدعم النسخ واللصق Ctrl+C / Ctrl+V)
+                </div>
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    </div>
 
-    # ── زر تصدير جدول الحصر الكامل EXCEL SHEET ──
+    <!-- الجدول الموحد المدمج به بانيلات العناوين البرتقالية والزرقاء -->
+    <div class="boq-table-wrapper" id="boq-table-wrapper">
+        <table id="m15-boq-table" dir="rtl">
+            <colgroup>
+                <col id="boq-col-0" style="width: 27%;">
+                <col id="boq-col-1" style="width: 8%;">
+                <col id="boq-col-2" style="width: 9%;">
+                <col id="boq-col-3" style="width: 9.5%;">
+                <col id="boq-col-4" style="width: 10.5%;">
+                <col id="boq-col-5" style="width: 36%;">
+            </colgroup>
+            <thead class="boq-thead">
+                <tr class="boq-header-row" id="boq-header-tr" data-row-idx="header">
+                    <!-- 1. بانيل البند / ملخص الكميات (برتقالي) -->
+                    <th class="boq-th boq-th-orange">
+                        <span class="th-main-title">🟠 البند / ملخص الكميات</span>
+                        <span class="th-sub-title">(Summary Item)</span>
+                        <div class="col-resizer" data-col="0" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                    <!-- 2. بانيل الوحدة (برتقالي) -->
+                    <th class="boq-th boq-th-orange">
+                        <span class="th-main-title">🟠 الوحدة</span>
+                        <span class="th-sub-title">(Unit)</span>
+                        <div class="col-resizer" data-col="1" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                    <!-- 3. بانيل الكمية الإجمالية (برتقالي) -->
+                    <th class="boq-th boq-th-orange">
+                        <span class="th-main-title">🟠 الكمية</span>
+                        <span class="th-sub-title">الإجمالية</span>
+                        <div class="col-resizer" data-col="2" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                    <!-- 4. بانيل تكلفة الوحدة (برتقالي) -->
+                    <th class="boq-th boq-th-orange">
+                        <span class="th-main-title">🟠 تكلفة الوحدة</span>
+                        <span class="th-sub-title">(ج.م)</span>
+                        <div class="col-resizer" data-col="3" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                    <!-- 5. بانيل إجمالي التكلفة (برتقالي) -->
+                    <th class="boq-th boq-th-orange">
+                        <span class="th-main-title">🟠 إجمالي التكلفة</span>
+                        <span class="th-sub-title">(ج.م)</span>
+                        <div class="col-resizer" data-col="4" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                    <!-- 6. بانيل توصيف البند (أزرق) -->
+                    <th class="boq-th boq-th-blue">
+                        <span class="th-main-title">✏️ توصيف البند</span>
+                        <span class="th-sub-title">متاح للتعديل ✍️</span>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="boq-tbody">
+                {tbody_joined}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+(function() {{
+    const COL_STORAGE_KEY = 'm15_boq_col_widths_v2';
+    const ROW_STORAGE_KEY = 'm15_boq_row_heights_v2';
+    const DEFAULT_RATIOS = [0.27, 0.08, 0.09, 0.095, 0.105, 0.36];
+    const MIN_COL_WIDTHS = [210, 65, 75, 80, 90, 240];
+
+    const table = document.getElementById('m15-boq-table');
+    const wrapper = document.getElementById('boq-table-wrapper');
+    const rootContainer = document.getElementById('boq-root-container');
+    const cols = [
+        document.getElementById('boq-col-0'),
+        document.getElementById('boq-col-1'),
+        document.getElementById('boq-col-2'),
+        document.getElementById('boq-col-3'),
+        document.getElementById('boq-col-4'),
+        document.getElementById('boq-col-5')
+    ];
+
+    let descriptionsMap = {initial_descs_json};
+    let lastSyncedJson = JSON.stringify(descriptionsMap);
+    let hasInitializedVisibleWidth = false;
+
+    // ضبط ارتفاع الـ iframe وجميع الحاويات الأب في Streamlit تلقائياً لمنع أي تداخل مع الأقسام التالية
+    function updateIframeHeight() {{
+        try {{
+            if (!rootContainer) return;
+            const contentH = Math.max(rootContainer.offsetHeight || 0, rootContainer.scrollHeight || 0);
+            if (contentH < 300) return; // القسم مطوي حالياً
+            const h = contentH + 24;
+            if (window.frameElement) {{
+                window.frameElement.style.height = h + 'px';
+                window.frameElement.style.minHeight = h + 'px';
+                window.frameElement.setAttribute('height', String(h));
+
+                let p = window.frameElement.parentElement;
+                let depth = 0;
+                while (p && depth < 5) {{
+                    const testId = (p.getAttribute && p.getAttribute('data-testid')) || '';
+                    const cls = (typeof p.className === 'string') ? p.className : '';
+                    if (
+                        testId === 'stVerticalBlock' ||
+                        testId === 'stVerticalBlockBorderWrapper' ||
+                        testId === 'stExpander' ||
+                        testId === 'stExpanderDetails' ||
+                        testId === 'stColumn' ||
+                        testId === 'stMainBlockContainer' ||
+                        cls.indexOf('stExpander') !== -1 ||
+                        p.tagName === 'DETAILS' ||
+                        p.tagName === 'SECTION' ||
+                        p.tagName === 'MAIN' ||
+                        p.tagName === 'BODY'
+                    ) {{
+                        break;
+                    }}
+                    p.style.height = h + 'px';
+                    p.style.minHeight = h + 'px';
+                    p = p.parentElement;
+                    depth++;
+                }}
+            }}
+        }} catch (e) {{}}
+    }}
+
+    if (typeof ResizeObserver !== 'undefined' && rootContainer) {{
+        const ro = new ResizeObserver(function() {{
+            if (wrapper && wrapper.clientWidth > 400 && !hasInitializedVisibleWidth) {{
+                hasInitializedVisibleWidth = true;
+                initColumnWidths(false);
+                initRowHeights(false);
+            }}
+            updateIframeHeight();
+        }});
+        ro.observe(rootContainer);
+        if (wrapper) ro.observe(wrapper);
+    }}
+
+    // رصد فتح الـ Expander الأب في نافذة Streamlit الرئيسية لضبط الارتفاع فور فتح القسم
+    try {{
+        if (window.frameElement) {{
+            const parentDetails = window.frameElement.closest('details');
+            if (parentDetails) {{
+                parentDetails.addEventListener('toggle', function() {{
+                    if (parentDetails.open) {{
+                        setTimeout(function() {{
+                            initColumnWidths(false);
+                            initRowHeights(false);
+                            updateIframeHeight();
+                        }}, 40);
+                        setTimeout(updateIframeHeight, 200);
+                    }}
+                }});
+            }}
+        }}
+    }} catch (e) {{}}
+
+    window.addEventListener('load', updateIframeHeight);
+    window.addEventListener('resize', updateIframeHeight);
+    setTimeout(updateIframeHeight, 80);
+    setTimeout(updateIframeHeight, 300);
+    setTimeout(updateIframeHeight, 700);
+
+    // تهيئة واستعادة عرض الأعمدة
+    function initColumnWidths(forceDefault) {{
+        const availW = Math.max(980, (wrapper ? wrapper.clientWidth : 1200) - 4);
+        let savedWidths = null;
+        if (!forceDefault) {{
+            try {{
+                const raw = localStorage.getItem(COL_STORAGE_KEY);
+                if (raw) {{
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed) && parsed.length === 6 && parsed.every(x => typeof x === 'number' && x >= 50)) {{
+                        savedWidths = parsed;
+                    }}
+                }}
+            }} catch (e) {{}}
+        }}
+
+        if (savedWidths) {{
+            let totalW = 0;
+            for (let i = 0; i < 6; i++) {{
+                cols[i].style.width = Math.round(savedWidths[i]) + 'px';
+                totalW += Math.round(savedWidths[i]);
+            }}
+            table.style.width = Math.max(availW, totalW) + 'px';
+        }} else {{
+            for (let i = 0; i < 6; i++) {{
+                const w = Math.max(MIN_COL_WIDTHS[i], Math.round(availW * DEFAULT_RATIOS[i]));
+                cols[i].style.width = w + 'px';
+            }}
+            table.style.width = '100%';
+        }}
+        updateIframeHeight();
+    }}
+
+    // استعادة ارتفاع الصفوف المحفوظة
+    function initRowHeights(forceDefault) {{
+        if (forceDefault) {{
+            const hdrTr = document.getElementById('boq-header-tr');
+            if (hdrTr) hdrTr.style.height = '';
+            document.querySelectorAll('tr.boq-row').forEach(tr => {{
+                tr.style.height = '';
+            }});
+            updateIframeHeight();
+            return;
+        }}
+        try {{
+            const raw = localStorage.getItem(ROW_STORAGE_KEY);
+            if (!raw) return;
+            const savedRows = JSON.parse(raw);
+            if (savedRows && typeof savedRows === 'object') {{
+                if (savedRows['header']) {{
+                    const hdrTr = document.getElementById('boq-header-tr');
+                    if (hdrTr) hdrTr.style.height = savedRows['header'] + 'px';
+                }}
+                document.querySelectorAll('tr.boq-row').forEach(tr => {{
+                    const rIdx = tr.getAttribute('data-row-idx');
+                    if (rIdx && savedRows[rIdx]) {{
+                        tr.style.height = savedRows[rIdx] + 'px';
+                    }}
+                }});
+            }}
+        }} catch (e) {{}}
+        updateIframeHeight();
+    }}
+
+    function saveColumnWidths() {{
+        try {{
+            const ths = table.querySelectorAll('thead th.boq-th');
+            const arr = Array.from(ths).map(th => Math.round(th.getBoundingClientRect().width));
+            if (arr.length === 6) {{
+                localStorage.setItem(COL_STORAGE_KEY, JSON.stringify(arr));
+            }}
+        }} catch (e) {{}}
+    }}
+
+    function saveRowHeight(rowKey, hPx) {{
+        try {{
+            let savedRows = {{}};
+            const raw = localStorage.getItem(ROW_STORAGE_KEY);
+            if (raw) savedRows = JSON.parse(raw) || {{}};
+            savedRows[rowKey] = Math.round(hPx);
+            localStorage.setItem(ROW_STORAGE_KEY, JSON.stringify(savedRows));
+        }} catch (e) {{}}
+    }}
+
+    initColumnWidths(false);
+    initRowHeights(false);
+
+    // ── التحكم بالماوس في عرض الأعمدة (Column Width Resizing) ──
+    let activeColIdx = null;
+    let colStartX = 0;
+    let colStartW = 0;
+    let nextColStartW = 0;
+    let activeColHandle = null;
+
+    document.querySelectorAll('.col-resizer').forEach(handle => {{
+        handle.addEventListener('mousedown', function(e) {{
+            e.preventDefault();
+            e.stopPropagation();
+            const cIdx = parseInt(handle.getAttribute('data-col'), 10);
+            if (isNaN(cIdx) || cIdx < 0 || cIdx >= 5) return;
+
+            const ths = table.querySelectorAll('thead th.boq-th');
+            const curWidths = Array.from(ths).map(th => th.getBoundingClientRect().width);
+            for (let i = 0; i < 6; i++) {{
+                cols[i].style.width = Math.round(curWidths[i]) + 'px';
+            }}
+
+            activeColIdx = cIdx;
+            colStartX = e.clientX;
+            colStartW = curWidths[cIdx];
+            nextColStartW = curWidths[cIdx + 1];
+            activeColHandle = handle;
+            handle.classList.add('active-resize');
+            document.body.classList.add('is-resizing-col');
+        }});
+    }});
+
+    // ── التحكم بالماوس في ارتفاع الصفوف (Row Height Resizing) ──
+    let activeRowTr = null;
+    let activeRowKey = null;
+    let rowStartY = 0;
+    let rowStartH = 0;
+    let activeRowHandle = null;
+
+    document.querySelectorAll('.row-resizer').forEach(handle => {{
+        handle.addEventListener('mousedown', function(e) {{
+            e.preventDefault();
+            e.stopPropagation();
+            const rKey = handle.getAttribute('data-row');
+            const tr = handle.closest('tr');
+            if (!tr) return;
+
+            activeRowTr = tr;
+            activeRowKey = rKey;
+            rowStartY = e.clientY;
+            rowStartH = tr.getBoundingClientRect().height;
+            activeRowHandle = handle;
+            handle.classList.add('active-resize');
+            document.body.classList.add('is-resizing-row');
+        }});
+    }});
+
+    window.addEventListener('mousemove', function(e) {{
+        if (activeColIdx !== null) {{
+            e.preventDefault();
+            // في اتجاه RTL: السحب لليسار (clientX يقل => deltaLeft موجب) يزيد عرض العمود الحالي
+            const deltaLeft = colStartX - e.clientX;
+            const minCur = MIN_COL_WIDTHS[activeColIdx] || 70;
+            const minNext = MIN_COL_WIDTHS[activeColIdx + 1] || 70;
+
+            let newCurW = Math.max(minCur, colStartW + deltaLeft);
+            let actualDelta = newCurW - colStartW;
+            let newNextW = nextColStartW - actualDelta;
+
+            if (newNextW < minNext) {{
+                newNextW = minNext;
+            }}
+
+            cols[activeColIdx].style.width = Math.round(newCurW) + 'px';
+            cols[activeColIdx + 1].style.width = Math.round(newNextW) + 'px';
+
+            let sumW = 0;
+            for (let i = 0; i < 6; i++) {{
+                sumW += parseFloat(cols[i].style.width) || 120;
+            }}
+            const availW = Math.max(980, (wrapper ? wrapper.clientWidth : 1200) - 4);
+            table.style.width = Math.max(availW, Math.round(sumW)) + 'px';
+            updateIframeHeight();
+            return;
+        }}
+
+        if (activeRowTr !== null) {{
+            e.preventDefault();
+            const deltaY = e.clientY - rowStartY;
+            const minH = (activeRowKey === 'header') ? 48 : 42;
+            const newH = Math.max(minH, Math.round(rowStartH + deltaY));
+            activeRowTr.style.height = newH + 'px';
+            updateIframeHeight();
+            return;
+        }}
+    }});
+
+    window.addEventListener('mouseup', function() {{
+        if (activeColIdx !== null) {{
+            saveColumnWidths();
+            activeColIdx = null;
+            if (activeColHandle) {{
+                activeColHandle.classList.remove('active-resize');
+                activeColHandle = null;
+            }}
+            document.body.classList.remove('is-resizing-col');
+            updateIframeHeight();
+        }}
+        if (activeRowTr !== null) {{
+            const finalH = activeRowTr.getBoundingClientRect().height;
+            if (activeRowKey) {{
+                saveRowHeight(activeRowKey, finalH);
+            }}
+            activeRowTr = null;
+            activeRowKey = null;
+            if (activeRowHandle) {{
+                activeRowHandle.classList.remove('active-resize');
+                activeRowHandle = null;
+            }}
+            document.body.classList.remove('is-resizing-row');
+            updateIframeHeight();
+        }}
+    }});
+
+    // زر إعادة ضبط أبعاد الأعمدة والصفوف
+    const resetBtn = document.getElementById('boq-reset-dims-btn');
+    if (resetBtn) {{
+        resetBtn.addEventListener('click', function() {{
+            try {{
+                localStorage.removeItem(COL_STORAGE_KEY);
+                localStorage.removeItem(ROW_STORAGE_KEY);
+            }} catch (e) {{}}
+            initColumnWidths(true);
+            initRowHeights(true);
+        }});
+    }}
+
+    // ── مزامنة تعديلات عمود «توصيف البند» مع Streamlit عند الخروج من الخلية (Blur) فقط ──
+    let activeFocusedEditor = null;
+
+    function collectAllDescriptions() {{
+        document.querySelectorAll('.desc-editor').forEach(ed => {{
+            const code = ed.getAttribute('data-item-code');
+            if (code) {{
+                descriptionsMap[code] = (ed.innerText || ed.textContent || '').trim();
+            }}
+        }});
+    }}
+
+    function syncDescriptionsToStreamlit() {{
+        collectAllDescriptions();
+        const curJson = JSON.stringify(descriptionsMap);
+        if (curJson === lastSyncedJson) return;
+        lastSyncedJson = curJson;
+
+        const saveBadge = document.getElementById('boq-save-indicator');
+        if (saveBadge) {{
+            saveBadge.style.display = 'inline-flex';
+            setTimeout(() => {{ saveBadge.style.display = 'none'; }}, 2500);
+        }}
+
+        const payload = {{
+            action: 'update_boq_descriptions',
+            descriptions: descriptionsMap,
+            ts: Date.now()
+        }};
+        const jsonStr = JSON.stringify(payload);
+        try {{
+            if (window.parent && window.parent.document) {{
+                const pDoc = window.parent.document;
+                let input = pDoc.querySelector('input[aria-label="m15_3d_sync_payload"]');
+                if (!input) {{
+                    input = pDoc.querySelector('div[data-testid="stTextInput"] input');
+                }}
+                if (input) {{
+                    const proto = (window.parent.HTMLInputElement || window.HTMLInputElement).prototype;
+                    const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+                    if (desc && desc.set) {{
+                        desc.set.call(input, jsonStr);
+                    }} else {{
+                        input.value = jsonStr;
+                    }}
+                    if (input._valueTracker) {{
+                        input._valueTracker.setValue('');
+                    }}
+                    input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                    input.dispatchEvent(new KeyboardEvent('keydown', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
+                    input.dispatchEvent(new KeyboardEvent('keyup', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
+                    input.dispatchEvent(new Event('blur', {{ bubbles: true }}));
+                    setTimeout(() => {{
+                        try {{
+                            if (desc && desc.set) {{ desc.set.call(input, ''); }} else {{ input.value = ''; }}
+                        }} catch (e) {{}}
+                    }}, 450);
+                }}
+            }}
+        }} catch (err) {{
+            console.warn('BOQ description sync error:', err);
+        }}
+    }}
+
+    document.querySelectorAll('.desc-editor').forEach(editor => {{
+        editor.addEventListener('focus', function() {{
+            activeFocusedEditor = editor;
+        }});
+        editor.addEventListener('input', function() {{
+            const code = editor.getAttribute('data-item-code');
+            if (code) {{
+                descriptionsMap[code] = (editor.innerText || editor.textContent || '').trim();
+            }}
+            updateIframeHeight();
+        }});
+        editor.addEventListener('blur', function() {{
+            if (activeFocusedEditor === editor) activeFocusedEditor = null;
+            const code = editor.getAttribute('data-item-code');
+            if (code) {{
+                descriptionsMap[code] = (editor.innerText || editor.textContent || '').trim();
+            }}
+            syncDescriptionsToStreamlit();
+        }});
+    }});
+
+    window.addEventListener('blur', function() {{
+        syncDescriptionsToStreamlit();
+    }});
+    document.addEventListener('visibilitychange', function() {{
+        if (document.visibilityState === 'hidden') {{
+            syncDescriptionsToStreamlit();
+        }}
+    }});
+}})();
+</script>
+</body>
+</html>"""
+
+    # ── 📑 قسم جدول البنود المستخدمة في المقايسة (مطوي افتراضياً) ──
+    _m15_used_items = []
+    _m15_unused_items = []
+    for _idx, (_name, _net_q, _unit, _u_price, _details) in enumerate(t2_items_data, start=1):
+        _tot_q = round(_net_q * plaster_qty_factor, 2)
+        _clean_name = _re_mod.sub(r'^\d+\s*[-–.]\s*', '', str(_name)).strip()
+        if _tot_q > 0.0001:
+            _m15_used_items.append((_idx, _clean_name, _tot_q, str(_unit)))
+        else:
+            _m15_unused_items.append((_idx, _clean_name, 0.0, str(_unit)))
+
+    with st.expander("جدول البنود المستخدمة في المقايسة", expanded=False):
+        _max_rows = max(len(_m15_used_items), len(_m15_unused_items))
+        if _max_rows == 0:
+            _max_rows = 1
+
+        _rows_html = []
+        for _r_i in range(_max_rows):
+            _bg_row = "rgba(15, 23, 42, 0.70)" if _r_i % 2 == 0 else "rgba(30, 41, 59, 0.70)"
+
+            # عمود البنود المستخدمة في المقايسة
+            if _r_i < len(_m15_used_items):
+                _u_idx, _u_name, _u_qty, _u_unit = _m15_used_items[_r_i]
+                _u_html = (
+                    f'<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">'
+                    f'<span style="color:#f8fafc; font-weight:800; font-size:0.92rem;">'
+                    f'<span style="color:#38bdf8; font-weight:900; margin-left:4px;">{_u_idx}.</span> {_html_mod.escape(_u_name)}'
+                    f'</span>'
+                    f'<span style="background:rgba(16, 185, 129, 0.18); color:#34d399; border:1px solid rgba(16, 185, 129, 0.45); border-radius:6px; padding:2px 8px; font-weight:900; font-size:0.85rem; white-space:nowrap; direction:ltr;">'
+                    f'{_u_qty:,.2f} {_html_mod.escape(_u_unit)}'
+                    f'</span>'
+                    f'</div>'
+                )
+            elif len(_m15_used_items) == 0 and _r_i == 0:
+                _u_html = '<span style="color:#94a3b8; font-weight:700; font-size:0.90rem; display:block; text-align:center;">لا توجد بنود مستخدمة حتى الآن</span>'
+            else:
+                _u_html = '<span style="color:#64748b; font-weight:700; font-size:0.90rem; display:block; text-align:center;">—</span>'
+
+            # عمود البنود الغير مستخدمة في المقايسة
+            if _r_i < len(_m15_unused_items):
+                _nu_idx, _nu_name, _nu_qty, _nu_unit = _m15_unused_items[_r_i]
+                _nu_html = (
+                    f'<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">'
+                    f'<span style="color:#94a3b8; font-weight:700; font-size:0.90rem;">'
+                    f'<span style="color:#64748b; font-weight:900; margin-left:4px;">{_nu_idx}.</span> {_html_mod.escape(_nu_name)}'
+                    f'</span>'
+                    f'<span style="background:rgba(239, 68, 68, 0.12); color:#fca5a5; border:1px solid rgba(239, 68, 68, 0.35); border-radius:6px; padding:2px 8px; font-weight:800; font-size:0.83rem; white-space:nowrap; direction:ltr;">'
+                    f'0.00 {_html_mod.escape(_nu_unit)}'
+                    f'</span>'
+                    f'</div>'
+                )
+            elif len(_m15_unused_items) == 0 and _r_i == 0:
+                _nu_html = '<span style="color:#38bdf8; font-weight:800; font-size:0.90rem; display:block; text-align:center;">✨ جميع بنود المقايسة مستخدمة ولها حصر كميات</span>'
+            else:
+                _nu_html = '<span style="color:#64748b; font-weight:700; font-size:0.90rem; display:block; text-align:center;">—</span>'
+
+            _rows_html.append(
+                f'<tr style="border-bottom:1px solid rgba(148, 163, 184, 0.18); background:{_bg_row};">'
+                f'<td style="padding:9px 14px; vertical-align:middle; border-left:1.5px solid rgba(56, 189, 248, 0.25);">{_u_html}</td>'
+                f'<td style="padding:9px 14px; vertical-align:middle;">{_nu_html}</td>'
+                f'</tr>'
+            )
+
+        st.markdown(
+            f"""
+            <div dir="rtl" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; background:linear-gradient(90deg, rgba(15,23,42,0.85) 0%, rgba(30,41,59,0.90) 100%); padding:9px 16px; border-radius:8px; border:1.5px solid rgba(56,189,248,0.35); margin-bottom:10px;">
+                <div style="color:#4ade80; font-weight:900; font-size:0.95rem;">
+                    🟢 عدد البنود المستخدمة في المقايسة (الكمية > 0): <span style="background:rgba(16,185,129,0.22); padding:2px 10px; border-radius:6px; border:1px solid #10b981;">{len(_m15_used_items)} بند</span>
+                </div>
+                <div style="color:#f87171; font-weight:900; font-size:0.95rem;">
+                    ⚪ عدد البنود الغير مستخدمة في المقايسة (الكمية = 0): <span style="background:rgba(239,68,68,0.20); padding:2px 10px; border-radius:6px; border:1px solid #ef4444;">{len(_m15_unused_items)} بند</span>
+                </div>
+            </div>
+            <div dir="rtl" style="overflow-x:auto; border:2px solid rgba(56, 189, 248, 0.45); border-radius:10px; box-shadow:0 4px 18px rgba(0,0,0,0.45); margin:6px 0 12px 0;">
+                <table style="width:100%; border-collapse:collapse; text-align:right;">
+                    <thead>
+                        <tr style="border-bottom:2.5px solid rgba(56, 189, 248, 0.55);">
+                            <th style="width:50%; padding:11px 16px; background:linear-gradient(135deg, rgba(6, 78, 59, 0.90) 0%, rgba(15, 23, 42, 0.98) 100%); color:#4ade80; font-size:1.05rem; font-weight:900; border-left:2px solid rgba(56, 189, 248, 0.35);">
+                                البنود المستخدمة في المقايسة
+                            </th>
+                            <th style="width:50%; padding:11px 16px; background:linear-gradient(135deg, rgba(127, 29, 29, 0.90) 0%, rgba(15, 23, 42, 0.98) 100%); color:#f87171; font-size:1.05rem; font-weight:900;">
+                                البنود الغير مستخدمة في المقايسة
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {''.join(_rows_html)}
+                    </tbody>
+                </table>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    components.html(boq_interactive_html, height=1490, scrolling=False)
+
+    # ── زر تصدير جدول الحصر الكامل EXCEL SHEET بتنسيق مميز أحمر وتقليل التباعد ──
     full_xl_bytes = _build_full_takeoff_excel_bytes(
         t2_items_data=t2_items_data,
         live_descriptions=live_descriptions,
@@ -12653,7 +14062,60 @@ def _section_plaster_boq():
         grand_total_cost=grand_total_cost,
     )
 
-    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <style>
+        /* تقليل التباعد الرأسي وتنسيق زر تصدير الحصر EXCEL باللون الأحمر والكتابة البيضاء الغامقة */
+        div[data-testid="stVerticalBlock"]:has(#m15-export-boq-anchor) [data-testid="stDownloadButton"] {
+            margin-top: -18px !important;
+            padding-top: 0 !important;
+            margin-bottom: 8px !important;
+        }
+        div[data-testid="stVerticalBlock"]:has(#m15-export-boq-anchor) [data-testid="stDownloadButton"] button,
+        div:has(> #m15-export-boq-anchor) + div [data-testid="stDownloadButton"] button,
+        div:has(> #m15-export-boq-anchor) ~ div [data-testid="stDownloadButton"] button,
+        button[key="m15_dl_takeoff_excel_full"] {
+            background: linear-gradient(135deg, #dc2626 0%, #b91c1c 50%, #991b1b 100%) !important;
+            background-color: #dc2626 !important;
+            color: #ffffff !important;
+            border: 2px solid #ef4444 !important;
+            border-radius: 9px !important;
+            font-weight: 900 !important;
+            font-size: 1.15rem !important;
+            padding: 11px 32px !important;
+            box-shadow: 0 4px 16px rgba(220, 38, 38, 0.45) !important;
+            transition: all 0.25s ease-in-out !important;
+            cursor: pointer !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+        }
+        div[data-testid="stVerticalBlock"]:has(#m15-export-boq-anchor) [data-testid="stDownloadButton"] button:hover,
+        div:has(> #m15-export-boq-anchor) + div [data-testid="stDownloadButton"] button:hover,
+        div:has(> #m15-export-boq-anchor) ~ div [data-testid="stDownloadButton"] button:hover,
+        button[key="m15_dl_takeoff_excel_full"]:hover {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%) !important;
+            background-color: #ef4444 !important;
+            color: #ffffff !important;
+            border-color: #fca5a5 !important;
+            box-shadow: 0 6px 24px rgba(239, 68, 68, 0.65) !important;
+            transform: translateY(-2px) !important;
+        }
+        div[data-testid="stVerticalBlock"]:has(#m15-export-boq-anchor) [data-testid="stDownloadButton"] button p,
+        div[data-testid="stVerticalBlock"]:has(#m15-export-boq-anchor) [data-testid="stDownloadButton"] button span,
+        div[data-testid="stVerticalBlock"]:has(#m15-export-boq-anchor) [data-testid="stDownloadButton"] button div,
+        button[key="m15_dl_takeoff_excel_full"] p,
+        button[key="m15_dl_takeoff_excel_full"] span {
+            color: #ffffff !important;
+            font-weight: 900 !important;
+            font-size: 1.15rem !important;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5) !important;
+        }
+        </style>
+        <div id="m15-export-boq-anchor" style="display:none; margin:0; padding:0;"></div>
+        """,
+        unsafe_allow_html=True,
+    )
     st.download_button(
         "📥 تصدير جدول الحصر EXCEL SHEET",
         data=full_xl_bytes,
@@ -13674,7 +15136,10 @@ def _prepare_3d_scene_data():
     span_y = max_y - min_y
 
     dh = float(st.session_state.get("m15_default_wall_height", st.session_state.get("m15_default_h_input", 3.0)))
-    ph = float(st.session_state.get("m15_parapet_wall_height", st.session_state.get("m15_parapet_h_input", 1.0)))
+    parapet_h_cm = float(st.session_state.get("m15_parapet_h_cm", 100.0))
+    ph = float(st.session_state.get("m15_parapet_wall_height", st.session_state.get("m15_parapet_h_input", parapet_h_cm / 100.0)))
+    parapet_thick_choice = st.session_state.get("m15_parapet_wall_thick", "حائط نصف طوبة")
+    parapet_thick = 0.25 if ("كاملة" in str(parapet_thick_choice) or str(parapet_thick_choice) == "طوبة") else 0.12
 
     # خرائط الأسماء
     cm = _get_col_name_map()
@@ -13998,6 +15463,52 @@ def _prepare_3d_scene_data():
             # كتلة حائط مصمتة كاملة الارتفاع بعد آخر فتحة
             _add_wall_box(cur, wlen - cur, 0.0, wall_h, "wall_solid")
 
+    # 3. أحياز الحمامات والمطابخ والمناور (Spaces & Zones)
+    plan_bk_spaces = list(st.session_state.get("m15_bath_kitchen_spaces", []))
+    spaces_data = []
+    for idx, sp in enumerate(plan_bk_spaces):
+        s_name = str(sp.get("name", "")).strip()
+        s_type = str(sp.get("type", "bath")).strip().lower()
+        is_shaft = (s_type in ["shaft", "void", "منور"] or "منور" in s_name)
+        is_kitchen = (s_type == "kitchen" or ("مطبخ" in s_name and not is_shaft))
+        is_bath = (not is_shaft and not is_kitchen)
+
+        kind = "shaft" if is_shaft else ("kitchen" if is_kitchen else "bath")
+
+        xmin = float(sp.get("xmin", 0.0))
+        ymin = float(sp.get("ymin", 0.0))
+        dx = float(sp.get("dx", 0.0))
+        dy = float(sp.get("dy", 0.0))
+        if dx <= 0.01 or dy <= 0.01:
+            continue
+
+        xmax = xmin + dx
+        ymax = ymin + dy
+
+        x_3d = round(((xmin + xmax) / 2.0) - cx_mid, 3)
+        z_3d = round(-(((ymin + ymax) / 2.0) - cy_mid), 3)
+
+        spaces_data.append({
+            "id": sp.get("id", f"sp_{idx}"),
+            "name": s_name or ("حمام" if is_bath else ("مطبخ" if is_kitchen else "منور")),
+            "kind": kind,
+            "xmin": round(xmin, 3),
+            "ymin": round(ymin, 3),
+            "xmax": round(xmax, 3),
+            "ymax": round(ymax, 3),
+            "dx": round(dx, 3),
+            "dy": round(dy, 3),
+            "area_m2": round(dx * dy, 2),
+            "x_3d": x_3d,
+            "z_3d": z_3d,
+            "xmin_3d": round(xmin - cx_mid, 3),
+            "xmax_3d": round(xmax - cx_mid, 3),
+            "ymin_3d": round(-(ymax - cy_mid), 3),
+            "ymax_3d": round(-(ymin - cy_mid), 3),
+            "ymin_2d_centered": round(ymin - cy_mid, 3),
+            "ymax_2d_centered": round(ymax - cy_mid, 3),
+        })
+
     ext = max(1.6, max(span_x, span_y) * 0.12)
     axes_x_data = []
     for idx, x_val in enumerate(xs):
@@ -14030,6 +15541,9 @@ def _prepare_3d_scene_data():
         "span_y": round(span_y, 2),
         "default_h": round(dh, 2),
         "parapet_h": round(ph, 2),
+        "parapet_thick": round(parapet_thick, 2),
+        "slab_thick": 0.20,
+        "spaces": spaces_data,
         "n_walls": len(walls_data),
         "n_columns": len(columns_data),
         "n_windows": len(windows_data),
@@ -14053,20 +15567,29 @@ def _section_3d_viewer():
     البارزة ثلاثية الأبعاد والشارات العائمة، منع التعارض الهندسي، عرض أبعاد التحريك في الوقت الفعلي،
     وجعل الحائط وحدة واحدة متكاملة عند النقر على أي جزء منه حول الفتحات.
     """
+    col_rf1, col_rf2 = st.columns([5, 1])
+    with col_rf1:
+        st.caption("✨ يتم تحديث ومعالجة بيانات النموذج ثلاثي الأبعاد والمسقط المصغر لحظياً عند فتح هذا القسم.")
+    with col_rf2:
+        if st.button("🔄 تحديث النموذج", key="m15_btn_refresh_3d_model", use_container_width=True, help="إعادة معالجة وتحديث المجسم ثلاثي الأبعاد بأحدث الإحداثيات"):
+            st.session_state.pop("m15_plan_png_b64", None)
+            st.rerun()
+
     scene_data = _prepare_3d_scene_data()
     if not scene_data:
         st.info("💡 أدخل محاور الشبكة أولاً لمعاينة المبنى ثلاثي الأبعاد.")
         return
 
-    plan_b64 = st.session_state.get("m15_plan_png_b64", "")
-    if not plan_b64:
-        try:
-            pbuf = _draw_plan()
-            if pbuf:
-                plan_b64 = base64.b64encode(pbuf.getvalue()).decode("utf-8")
-                st.session_state["m15_plan_png_b64"] = plan_b64
-        except Exception:
-            plan_b64 = ""
+    # التأكد من تحديث المسقط المصغر لمواكبة أي تعديلات معمارية حديثة
+    try:
+        pbuf = _draw_plan()
+        if pbuf:
+            plan_b64 = base64.b64encode(pbuf.getvalue()).decode("utf-8")
+            st.session_state["m15_plan_png_b64"] = plan_b64
+        else:
+            plan_b64 = st.session_state.get("m15_plan_png_b64", "")
+    except Exception:
+        plan_b64 = st.session_state.get("m15_plan_png_b64", "")
 
     json_str = json.dumps(scene_data)
 
@@ -14599,11 +16122,13 @@ def _section_3d_viewer():
     <button class="btn-tool" id="btn-theme" title="تبديل لون الخلفية">🌙 / ☀️</button>
     <button class="btn-tool" id="btn-fs" title="عرض ملء الشاشة">⛶ ملء الشاشة</button>
     <button class="btn-tool" id="btn-toggle-plan" style="background:#0284c7; border-color:#38bdf8; color:#ffffff; font-weight:700;" title="عرض أو إخفاء المسقط الأفقي المصغر">📐 المسقط الأفقي</button>
+    <button class="btn-tool" id="btn-toggle-roof" style="background:#1e293b; border-color:#10b981; color:#6ee7b7; font-weight:700;" title="إظهار أو إخفاء السقف فلات سلاب (20 سم) والدروة وبلاط الأرضيات الشطرنج">🏛️ السقف والدروة</button>
     <button class="btn-tool" id="btn-toggle-axes" style="background:#dc2626; border-color:#f87171; color:#ffffff; font-weight:700;" title="إظهار أو إخفاء محاور الشبكة وأسمائها ثلاثية الأبعاد">🔴 المحاور</button>
     <button class="btn-tool" id="btn-measure" title="أداة قياس تفاعلية ثلاثية الأبعاد بين أي نقطتين">📏 أداة القياس</button>
     <button class="btn-tool" id="btn-clear-measure" style="display:none; background:#7f1d1d; border-color:#ef4444; color:#ffffff; font-weight:700;" title="مسح القياس والعودة للوضع الافتراضي">🗑️ مسح القياس</button>
   </div>
   <div class="tb-group">
+    <span class="badge-legend" style="color:#6ee7b7;"><span class="dot" style="background:#059669; border:1px solid #34d399;"></span> السقف والدروة والأرضيات</span>
     <span class="badge-legend" style="color:#fca5a5;"><span class="dot" style="background:#dc2626; border:1px solid #ef4444;"></span> محاور (حمراء)</span>
     <span class="badge-legend" style="color:#f1f5f9;"><span class="dot" style="background:#cbd5e1; border:1px solid #94a3b8;"></span> حائط كامل (وحدة واحدة)</span>
     <span class="badge-legend" style="color:#cbd5e1;"><span class="dot" style="background:#475569; border:1px solid #334155;"></span> أعمدة</span>
@@ -14707,6 +16232,7 @@ def _section_3d_viewer():
   <span class="stats-item">🪟 الشبابيك: <b>__N_WINS__</b></span>
   <span class="stats-item">🚪 الأبواب: <b>__N_DOORS__</b></span>
   <span class="stats-item">📐 الارتفاع: <b>__DEF_H__م</b> (الدروة: <b>__PAR_H__م</b>)</span>
+  <span class="stats-item">🏛️ السقف: <b>فلات سلاب 20سم</b></span>
 </div>
 
 <div class="help-tip">
@@ -15203,6 +16729,239 @@ def _section_3d_viewer():
     door.mesh = doorGroup;
     allOpenings.push(door);
   });
+
+  // ── Helper: Create crisp procedural checkerboard tile texture on HTML5 Canvas ──
+  function createCheckerTexture(color1, color2, nx, ny, borderCol) {
+    const canvas = document.createElement('canvas');
+    const tilePx = 64;
+    canvas.width = Math.max(128, Math.min(1024, nx * tilePx));
+    canvas.height = Math.max(128, Math.min(1024, ny * tilePx));
+    const ctx = canvas.getContext('2d');
+    
+    const w = canvas.width / nx;
+    const h = canvas.height / ny;
+    
+    for (let r = 0; r < ny; r++) {
+      for (let c = 0; c < nx; c++) {
+        ctx.fillStyle = ((r + c) % 2 === 0) ? color1 : color2;
+        ctx.fillRect(c * w, r * h, w, h);
+        
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.08)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(c * w, r * h, w, h);
+      }
+    }
+    
+    if (borderCol) {
+      ctx.strokeStyle = borderCol;
+      ctx.lineWidth = 6;
+      ctx.strokeRect(0, 0, canvas.width, canvas.height);
+    }
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.minFilter = THREE.LinearFilter;
+    return texture;
+  }
+
+  // ── 5. السقف والدروة وبلاط الأرضيات (Roof Slab, Parapet & Tiled Floors) ──
+  const roofAndFloorsGroup = new THREE.Group();
+  roofAndFloorsGroup.name = "roof_and_floors_group";
+  roofAndFloorsGroup.visible = false; // الوضع الافتراضي: مخفي حتى النقر على زر "السقف والدروة"
+  rootGroup.add(roofAndFloorsGroup);
+
+  const spanX = data.span_x || 10.0;
+  const spanY = data.span_y || 10.0;
+  const defH = data.default_h || 3.0;
+  const slabT = data.slab_thick || 0.20; // فلات سلاب تخانة 20 سم
+  const parH = data.parapet_h || 1.0;
+  const parT = data.parapet_thick || 0.12;
+
+  // أ. بلاط الأرضيات (Floor Tiles: General, Bathrooms White/Blue & Kitchens White/Green)
+  // 1) الأرضية العامة لكامل المسقط مع تفريغ المناور
+  const floorShape = new THREE.Shape();
+  floorShape.moveTo(-spanX / 2, -spanY / 2);
+  floorShape.lineTo(spanX / 2, -spanY / 2);
+  floorShape.lineTo(spanX / 2, spanY / 2);
+  floorShape.lineTo(-spanX / 2, spanY / 2);
+  floorShape.closePath();
+
+  (data.spaces || []).forEach(function(sp) {
+    if (sp.kind === 'shaft') {
+      const hole = new THREE.Path();
+      hole.moveTo(sp.xmin_3d, sp.ymin_2d_centered);
+      hole.lineTo(sp.xmin_3d, sp.ymax_2d_centered);
+      hole.lineTo(sp.xmax_3d, sp.ymax_2d_centered);
+      hole.lineTo(sp.xmax_3d, sp.ymin_2d_centered);
+      hole.closePath();
+      floorShape.holes.push(hole);
+    }
+  });
+
+  const baseFloorGeom = new THREE.ShapeGeometry(floorShape);
+  baseFloorGeom.rotateX(-Math.PI / 2);
+
+  const nTileGenX = Math.max(4, Math.round(spanX / 0.60));
+  const nTileGenY = Math.max(4, Math.round(spanY / 0.60));
+  const genFloorTex = createCheckerTexture('#f8fafc', '#f1f5f9', nTileGenX, nTileGenY, '#cbd5e1');
+  const baseFloorMat = new THREE.MeshStandardMaterial({
+    map: genFloorTex,
+    roughness: 0.65,
+    metalness: 0.05,
+    side: THREE.DoubleSide
+  });
+  const baseFloorMesh = new THREE.Mesh(baseFloorGeom, baseFloorMat);
+  baseFloorMesh.position.y = 0.01;
+  roofAndFloorsGroup.add(baseFloorMesh);
+
+  // إطار خارجي للأرضية
+  const floorEdges = new THREE.LineSegments(
+    new THREE.EdgesGeometry(baseFloorGeom),
+    new THREE.LineBasicMaterial({ color: 0x94a3b8, transparent: true, opacity: 0.6 })
+  );
+  baseFloorMesh.add(floorEdges);
+
+  // 2) أحياز الحمامات والمطابخ والمناور الخاصة
+  (data.spaces || []).forEach(function(sp) {
+    if (sp.kind === 'bath' || sp.kind === 'kitchen') {
+      const sGeom = new THREE.PlaneGeometry(sp.dx, sp.dy);
+      sGeom.rotateX(-Math.PI / 2);
+
+      const nx = Math.max(2, Math.round(sp.dx / 0.40));
+      const ny = Math.max(2, Math.round(sp.dy / 0.40));
+
+      // حمام: أبيض في أزرق سيراميك | مطبخ: أبيض في أخضر سيراميك
+      const c1 = '#ffffff';
+      const c2 = (sp.kind === 'bath') ? '#1e40af' : '#15803d';
+      const borderC = (sp.kind === 'bath') ? '#1e3a8a' : '#14532d';
+
+      const sTex = createCheckerTexture(c1, c2, nx, ny, borderC);
+      const sMat = new THREE.MeshStandardMaterial({
+        map: sTex,
+        roughness: 0.50,
+        metalness: 0.10,
+        side: THREE.DoubleSide
+      });
+      const sMesh = new THREE.Mesh(sGeom, sMat);
+      sMesh.position.set(sp.x_3d, 0.02, sp.z_3d);
+      roofAndFloorsGroup.add(sMesh);
+
+      // خط محيطي بارز للحيز
+      const bGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-sp.dx/2, 0.003, -sp.dy/2),
+        new THREE.Vector3(sp.dx/2, 0.003, -sp.dy/2),
+        new THREE.Vector3(sp.dx/2, 0.003, sp.dy/2),
+        new THREE.Vector3(-sp.dx/2, 0.003, sp.dy/2),
+        new THREE.Vector3(-sp.dx/2, 0.003, -sp.dy/2)
+      ]);
+      const bMat = new THREE.LineBasicMaterial({
+        color: (sp.kind === 'bath') ? 0x1e40af : 0x15803d,
+        linewidth: 2.2
+      });
+      sMesh.add(new THREE.Line(bGeo, bMat));
+    } else if (sp.kind === 'shaft') {
+      // منور: فراغ معماري مفرغ مع خطين متقاطعين على شكل X مطابق تماماً للمسقط الأفقي 2D
+      const xPts = [
+        new THREE.Vector3(-sp.dx/2, 0.015, -sp.dy/2),
+        new THREE.Vector3(sp.dx/2, 0.015, -sp.dy/2),
+        new THREE.Vector3(sp.dx/2, 0.015, sp.dy/2),
+        new THREE.Vector3(-sp.dx/2, 0.015, sp.dy/2),
+        new THREE.Vector3(-sp.dx/2, 0.015, -sp.dy/2),
+        new THREE.Vector3(sp.dx/2, 0.015, sp.dy/2),
+        new THREE.Vector3(sp.dx/2, 0.015, -sp.dy/2),
+        new THREE.Vector3(-sp.dx/2, 0.015, sp.dy/2)
+      ];
+      const shaftGeo = new THREE.BufferGeometry().setFromPoints(xPts);
+      const shaftMat = new THREE.LineBasicMaterial({ color: 0x475569, linewidth: 2.2 });
+      const shaftLine = new THREE.Line(shaftGeo, shaftMat);
+      shaftLine.position.set(sp.x_3d, 0, sp.z_3d);
+      roofAndFloorsGroup.add(shaftLine);
+    }
+  });
+
+  // ب. السقف فلات سلاب تخانة 20 سم مع تفريغ فتحات المناور بدقة هندسية
+  const slabShape = new THREE.Shape();
+  slabShape.moveTo(-spanX / 2, -spanY / 2);
+  slabShape.lineTo(spanX / 2, -spanY / 2);
+  slabShape.lineTo(spanX / 2, spanY / 2);
+  slabShape.lineTo(-spanX / 2, spanY / 2);
+  slabShape.closePath();
+
+  (data.spaces || []).forEach(function(sp) {
+    if (sp.kind === 'shaft') {
+      const hole = new THREE.Path();
+      hole.moveTo(sp.xmin_3d, sp.ymin_2d_centered);
+      hole.lineTo(sp.xmin_3d, sp.ymax_2d_centered);
+      hole.lineTo(sp.xmax_3d, sp.ymax_2d_centered);
+      hole.lineTo(sp.xmax_3d, sp.ymin_2d_centered);
+      hole.closePath();
+      slabShape.holes.push(hole);
+    }
+  });
+
+  const extrudeSettings = {
+    depth: slabT,
+    bevelEnabled: false
+  };
+  const slabGeom = new THREE.ExtrudeGeometry(slabShape, extrudeSettings);
+  slabGeom.rotateX(-Math.PI / 2);
+
+  // خامة خرسانية مصمتة مع شبه شفافية أنيقة (0.85) لرؤية التقسيم الداخلي وشطرنج الأرضيات أسفلها
+  const slabMat = new THREE.MeshStandardMaterial({
+    color: 0xcbd5e1,
+    roughness: 0.60,
+    metalness: 0.15,
+    transparent: true,
+    opacity: 0.85,
+    side: THREE.DoubleSide
+  });
+  const slabMesh = new THREE.Mesh(slabGeom, slabMat);
+  slabMesh.position.y = defH; // يرتكز تماماً فوق رؤوس الحوائط
+  roofAndFloorsGroup.add(slabMesh);
+
+  // خطوط أضلاع السقف والفتحات للوضوح المعماري
+  const slabEdgeMat = new THREE.LineBasicMaterial({ color: 0x334155, transparent: true, opacity: 0.80 });
+  const slabEdges = new THREE.LineSegments(new THREE.EdgesGeometry(slabGeom), slabEdgeMat);
+  slabMesh.add(slabEdges);
+
+  // ج. الدروة المعمارية (Parapet Walls) أعلى السقف على كامل المحيط الخارجي
+  const parapetGroup = new THREE.Group();
+  parapetGroup.name = "parapet_group";
+  roofAndFloorsGroup.add(parapetGroup);
+
+  const parYBase = defH + slabT; // ترتكز فوق ظهر بلاطة السقف مباشرة
+  const parapetMat = new THREE.MeshStandardMaterial({ color: 0xd4d4d8, roughness: 0.75, metalness: 0.10 });
+  const parapetEdgeMat = new THREE.LineBasicMaterial({ color: 0x64748b, transparent: true, opacity: 0.85 });
+  const copingMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.40, metalness: 0.20 });
+
+  function createParapetSection(w, h, d, px, py, pz) {
+    const pGeom = new THREE.BoxGeometry(w, h, d);
+    const pMesh = new THREE.Mesh(pGeom, parapetMat);
+    pMesh.position.set(px, py, pz);
+    pMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(pGeom), parapetEdgeMat));
+    parapetGroup.add(pMesh);
+
+    // كوبستة خرسانية أعلى الدروة (Coping) بارزة طفيفاً 3 سم
+    const copH = 0.06;
+    const copOver = 0.03;
+    const copW = w + copOver * 2;
+    const copD = d + copOver * 2;
+    const copGeom = new THREE.BoxGeometry(copW, copH, copD);
+    const copMesh = new THREE.Mesh(copGeom, copingMat);
+    copMesh.position.set(px, py + h / 2 + copH / 2, pz);
+    copMesh.add(new THREE.LineSegments(new THREE.EdgesGeometry(copGeom), parapetEdgeMat));
+    parapetGroup.add(copMesh);
+  }
+
+  // 1) حائط دروة شمالي (North Parapet)
+  createParapetSection(spanX, parH, parT, 0, parYBase + parH / 2, -spanY / 2 + parT / 2);
+  // 2) حائط دروة جنوبي (South Parapet)
+  createParapetSection(spanX, parH, parT, 0, parYBase + parH / 2, spanY / 2 - parT / 2);
+  // 3) حائط دروة غربي (West Parapet)
+  createParapetSection(parT, parH, Math.max(0.1, spanY - parT * 2), -spanX / 2 + parT / 2, parYBase + parH / 2, 0);
+  // 4) حائط دروة شرقي (East Parapet)
+  createParapetSection(parT, parH, Math.max(0.1, spanY - parT * 2), spanX / 2 - parT / 2, parYBase + parH / 2, 0);
 
   // ── 3D Dimension Lines & Witness Marks ──
   const dimLineGeo = new THREE.BufferGeometry();
@@ -17879,6 +19638,30 @@ def _section_3d_viewer():
     }
   });
 
+  // ── زر تبديل إظهار / إخفاء السقف والدروة وبلاط الأرضيات ──
+  let roofVisible = false;
+  const btnToggleRoof = document.getElementById('btn-toggle-roof');
+  if (btnToggleRoof) {
+    btnToggleRoof.addEventListener('click', function(e) {
+      e.stopPropagation();
+      roofVisible = !roofVisible;
+      roofAndFloorsGroup.visible = roofVisible;
+      if (roofVisible) {
+        btnToggleRoof.style.background = '#059669';
+        btnToggleRoof.style.borderColor = '#34d399';
+        btnToggleRoof.style.color = '#ffffff';
+        btnToggleRoof.style.boxShadow = '0 0 10px rgba(16, 185, 129, 0.45)';
+        btnToggleRoof.textContent = '🏛️ السقف والدروة (ظاهر)';
+      } else {
+        btnToggleRoof.style.background = '#1e293b';
+        btnToggleRoof.style.borderColor = '#10b981';
+        btnToggleRoof.style.color = '#6ee7b7';
+        btnToggleRoof.style.boxShadow = 'none';
+        btnToggleRoof.textContent = '🏛️ السقف والدروة';
+      }
+    });
+  }
+
   // ── زر تبديل إظهار / إخفاء المحاور الإنشائية ثلاثية الأبعاد ──
   let axesVisible = true;
   const btnToggleAxes = document.getElementById('btn-toggle-axes');
@@ -18169,7 +19952,10 @@ def _apply_3d_opening_move(payload_str=None):
                         st.session_state["m15_sel_wall"] = all_walls.index(wk) + 1
 
                     st.session_state.pop("m15_plan_png_b64", None)
-                    st.session_state["m15_3d_sync_input"] = ""
+                    try:
+                        st.session_state["m15_3d_sync_input"] = ""
+                    except Exception:
+                        pass
 
                     if from_query:
                         if "m15_op_move" in st.query_params:
@@ -18208,7 +19994,10 @@ def _apply_3d_opening_move(payload_str=None):
 
                     st.session_state["m15_col_restore_expander_open"] = True
                     st.session_state.pop("m15_plan_png_b64", None)
-                    st.session_state["m15_3d_sync_input"] = ""
+                    try:
+                        st.session_state["m15_3d_sync_input"] = ""
+                    except Exception:
+                        pass
 
                     if from_query:
                         if "m15_op_move" in st.query_params:
@@ -18235,7 +20024,10 @@ def _apply_3d_opening_move(payload_str=None):
                 if win_id:
                     _remove_opening_by_id(win_id, "win")
                     st.session_state.pop("m15_plan_png_b64", None)
-                    st.session_state["m15_3d_sync_input"] = ""
+                    try:
+                        st.session_state["m15_3d_sync_input"] = ""
+                    except Exception:
+                        pass
                     if from_query:
                         if "m15_op_move" in st.query_params:
                             try: del st.query_params["m15_op_move"]
@@ -18254,7 +20046,10 @@ def _apply_3d_opening_move(payload_str=None):
                 if door_id:
                     _remove_opening_by_id(door_id, "door")
                     st.session_state.pop("m15_plan_png_b64", None)
-                    st.session_state["m15_3d_sync_input"] = ""
+                    try:
+                        st.session_state["m15_3d_sync_input"] = ""
+                    except Exception:
+                        pass
                     if from_query:
                         if "m15_op_move" in st.query_params:
                             try: del st.query_params["m15_op_move"]
@@ -18363,7 +20158,10 @@ def _apply_3d_opening_move(payload_str=None):
                     except Exception:
                         pass
 
-            st.session_state["m15_3d_sync_input"] = ""
+            try:
+                st.session_state["m15_3d_sync_input"] = ""
+            except Exception:
+                pass
             _resequence_openings()
             st.session_state.pop("m15_plan_png_b64", None)
             save_settings()
@@ -19002,10 +20800,13 @@ def render_masonry_plaster_module():
         "m15_3d_sync_payload",
         value="",
         key="m15_3d_sync_input",
+        on_change=_on_m15_3d_sync_input_change,
         label_visibility="collapsed"
     )
-    if sync_val:
-        _handle_sync_payload(sync_val)
+    queued_m15 = st.session_state.pop("_m15_queued_sync_payload", None)
+    active_m15_val = queued_m15 or sync_val
+    if active_m15_val:
+        _handle_sync_payload(active_m15_val)
     elif "m15_op_move" in st.query_params:
         _handle_sync_payload(st.query_params["m15_op_move"])
 
@@ -19167,8 +20968,19 @@ def render_masonry_plaster_module():
             </div>""",unsafe_allow_html=True)
 
     st.divider()
-    with st.expander("🌐 3D (Data Processing & Rendering) — العارض ثلاثي الأبعاد التفاعلي", expanded=False):
-        _section_3d_viewer()
+    with st.expander(
+        "🌐 3D (Data Processing & Rendering) — العارض ثلاثي الأبعاد التفاعلي",
+        expanded=False,
+        key="m15_3d_viewer_expander",
+        on_change="rerun",
+    ):
+        if st.session_state.get("m15_3d_viewer_expander", False):
+            _section_3d_viewer()
+        else:
+            st.info(
+                "💡 **الوضع الخفيف (Lazy Loading):** قسم العارض ثلاثي الأبعاد في وضع السكون لتسريع أداء واستجابة البرنامج.\n\n"
+                "انقر على عنوان هذا القسم لتوسيعه والبدء فورياً في معالجة البيانات وتحديث وعرض النموذج ثلاثي الأبعاد (3D Rendering)."
+            )
     st.divider()
     with st.expander("تفاصيل حصر جميع البنود", expanded=False):
         _section_all_items_detailed_survey()

@@ -157,6 +157,30 @@ ECP_DEFAULTS: dict = {
     "fs_show_col_labels": True,
     "fs_show_beam_labels": True,
     "_schema_mod8_removed": True,
+    "cw_df_m": 1.50,
+    "cw_h_above_m": 0.60,
+    "cw_t_wall_m": 0.25,
+    "cw_brick_l_cm": 25.0,
+    "cw_brick_w_cm": 12.0,
+    "cw_brick_h_cm": 6.0,
+    "cw_t_pc_ftg_cm": 10.0,
+    "cw_t_pc_gb_cm": 10.0,
+    "cw_t_rc_floor_cm": 15.0,
+    "cw_sidewalk_w_m": 1.00,
+    "cw_qty_factor": 1.20,
+    "cw_rate_slabs_beams": 4500.0,
+    "cw_rate_cols": 4800.0,
+    "cw_rate_ftgs_gb": 4400.0,
+    "cw_rate_pc": 2200.0,
+    "cw_rate_backfill": 120.0,
+    "cw_rate_bricks": 2.5,
+    "cw_rate_interlock": 220.0,
+    "cw_rate_curbs": 160.0,
+    "cw_rate_damp_proof": 95.0,
+    "cw_rate_waterproof": 170.0,
+    "cw_rate_thermal": 130.0,
+    "cw_rate_roof_tiles": 150.0,
+    "cw_item_descriptions": {},
 
     # Customs Module – Concrete Survey, Flat Slabs & Material Prices
     "cs_n_types": 2,
@@ -709,6 +733,7 @@ def get_default_module_15_state() -> dict:
         "named_spaces": [],
         "merged_wall_label_style": "single",
         "item_descriptions": {},
+        "plaster_qty_factor": 1.00,
     }
 
 get_default_masonry_plaster_state = get_default_module_15_state
@@ -2159,6 +2184,7 @@ def _serialize_module_15_state(state: dict) -> dict:
         "named_spaces": clean_spaces,
         "merged_wall_label_style": str(state.get("m15_merged_wall_label_style", "single")),
         "item_descriptions": dict(state.get("m15_item_descriptions", {})),
+        "plaster_qty_factor": float(state.get("m15_plaster_qty_factor", state.get("m15_input_plaster_qty_factor", 1.00))),
     }
 
 
@@ -2379,6 +2405,8 @@ def _deserialize_module_15_state(data: dict) -> dict:
         "m15_named_spaces": named_spaces,
         "m15_merged_wall_label_style": str(data.get("merged_wall_label_style", schema.get("merged_wall_label_style", "single"))),
         "m15_item_descriptions": dict(data.get("item_descriptions", {})),
+        "m15_plaster_qty_factor": float(data.get("plaster_qty_factor", schema.get("plaster_qty_factor", 1.00))),
+        "m15_input_plaster_qty_factor": float(data.get("plaster_qty_factor", schema.get("plaster_qty_factor", 1.00))),
     }
 
 
@@ -2417,6 +2445,10 @@ def _ensure_module15_state(cfg: dict | None = None) -> None:
             st.session_state["m15_price_plaster_labor_per_m2"] = float(nested.get("price_plaster_labor_per_m2", 70.0))
         if "m15_item_descriptions" not in st.session_state:
             st.session_state["m15_item_descriptions"] = dict(nested.get("item_descriptions", {}))
+        if "m15_plaster_qty_factor" not in st.session_state:
+            st.session_state["m15_plaster_qty_factor"] = float(nested.get("plaster_qty_factor", 1.00))
+        if "m15_input_plaster_qty_factor" not in st.session_state:
+            st.session_state["m15_input_plaster_qty_factor"] = float(nested.get("plaster_qty_factor", 1.00))
         return
 
     deserialized = _deserialize_module_15_state(nested)
@@ -3403,6 +3435,10 @@ def save_settings() -> None:
             cfg["module_15_masonry_plaster"]["price_plaster_labor_per_m2"] = float(st.session_state["m15_price_plaster_labor_per_m2"])
         if "m15_item_descriptions" in st.session_state and isinstance(st.session_state["m15_item_descriptions"], dict):
             cfg["module_15_masonry_plaster"]["item_descriptions"] = dict(st.session_state["m15_item_descriptions"])
+        if "m15_plaster_qty_factor" in st.session_state:
+            cfg["module_15_masonry_plaster"]["plaster_qty_factor"] = float(st.session_state["m15_plaster_qty_factor"])
+        elif "m15_input_plaster_qty_factor" in st.session_state:
+            cfg["module_15_masonry_plaster"]["plaster_qty_factor"] = float(st.session_state["m15_input_plaster_qty_factor"])
     # ── End Module 15 persistence ────────────────────────────────────────────
 
     active_name = get_active_project_name()
@@ -3491,7 +3527,8 @@ def save_settings() -> None:
                 "fs_new_col_b", "fs_new_col_t", "fs_new_col_dir", "fs_new_col_sx", "fs_new_col_sy",
                 "fs_beam_b_cm", "fs_beam_t_cm", "fs_beam_dia_main",
                 "gb_b_unified", "gb_phi_bot", "gb_phi_top", "gb_phi_st", "gb_stirrups_m",
-                "gb_h_wall", "gb_t_wall", "gb_axial_tie_ratio", "gb_level_type", "gb_has_wall"
+                "gb_h_wall", "gb_t_wall", "gb_axial_tie_ratio", "gb_level_type", "gb_has_wall",
+                "cw_item_descriptions", "sfs_cw_item_descriptions", "cw_qty_factor", "sfs_cw_qty_factor"
             ):
                 if geom_key in existing_data and existing_data[geom_key] is not None:
                     clean_cfg[geom_key] = existing_data[geom_key]
@@ -3508,7 +3545,7 @@ def save_settings() -> None:
         for ek, ev in existing_data.items():
             if ek not in clean_cfg or clean_cfg[ek] is None:
                 clean_cfg[ek] = ev
-            elif ek in ("fs_building_columns", "fs_drop_beams", "rb_overrides", "gb_overrides", "ftg_overrides", "confirmed_manual_footings", "fs_void_panels", "fs_col_transforms") and not clean_cfg[ek] and ev:
+            elif ek in ("fs_building_columns", "fs_drop_beams", "rb_overrides", "gb_overrides", "ftg_overrides", "confirmed_manual_footings", "fs_void_panels", "fs_col_transforms", "cw_item_descriptions", "sfs_cw_item_descriptions") and not clean_cfg[ek] and ev:
                 clean_cfg[ek] = ev
                 if "cfg" in st.session_state:
                     st.session_state["cfg"][ek] = ev
