@@ -722,9 +722,31 @@
       "item_19": "بالمتر المسطح، توريد وتركيب شبابيك ألوميتال للواجهات والمساقط قطاع معتمد (جامبو/بي اس أو ما يماثله) وزجاج دبل مع الإكسسوارات وسلك مانع للحشرات والمقابض والتثبيت الهندسي طبقاً لأبعاد الرسم والمواصفات.",
       "item_20": "بالعدد، توريد وتركيب أبواب حمامات الوحدة (عرض 80 سم أو أقل) تشمل الحلوق والضلف المقاومة للرطوبة والمياه والمفصلات والكوالين والشناكل والمقابض ودهان الحلق والتثبيت الهندسي التام طبقاً لأصول الصناعة.",
       "item_21": "Supply and fix hollow core wooden door consists of Moski wood framed and sections claded with 4 MM. Play wood the accessories are lock and handles from El Ah ram product and the price includes three costs of lacquer paint",
-      "total_cost": "إجمالي تكلفة جميع بنود التشطيبات والمباني والمحارة والدروة والأرصفة والعزل شامل معامل الزيادة"
+      "total_cost": "إجمالي تكلفة جميع بنود التشطيبات والمباني والمحارة والدروة والأرصفة والعزل شامل معامل الزيادة",
+      "item_22": "Hagar FEROOOOONy bbdbbb bdfbd fjk hjh  jhjhh gjh hjhjhg hj hjfhg hjhjhg hjgh h  hjfh hjh hjhjdhjh hhj hjh hjhjh jhj hjhjhg hjfdh hjdfh hjh gjhh fhjhg fhgh  jhfh hjhg jhg hjhd hfj hfjhjh تاايتاتابتيالتالتا تلابتال تاتلاالتا لاتاتاتالتااتا",
+      "item_23": "بالمتر المسطح / الوحدة،صاجججججججججججججججججججججججججججججججج."
     },
-    "plaster_qty_factor": 1.25
+    "plaster_qty_factor": 1.25,
+    "manual_boq_items": [
+      {
+        "uid": "eab9c135",
+        "name": "تكسية واجهات وحوائط خارجية بالحجر الفرعوني / الهاشمي",
+        "unit": "م² (m²)",
+        "net_qty": 30.0,
+        "unit_price": 1.0,
+        "mat_category": "stone_cladding",
+        "description": "Hagar FEROOOOONy bbdbbb bdfbd fjk hjh  jhjhh gjh hjhjhg hj hjfhg hjhjhg hjgh h  hjfh hjh hjhjdhjh hhj hjh hjhjh jhj hjhjhg hjfdh hjdfh hjh gjhh fhjhg fhgh  jhfh hjhg jhg hjhd hfj hfjhjh تاايتاتابتيالتالتا تلابتال تاتلاالتا لاتاتاتالتااتا"
+      },
+      {
+        "uid": "59bc5cb6",
+        "name": "صاج اسططططططططح صاج",
+        "unit": "م² (m²)",
+        "net_qty": 50.0,
+        "unit_price": 5000.0,
+        "mat_category": "supply_install",
+        "description": "بالمتر المسطح / الوحدة،صاجججججججججججججججججججججججججججججججج."
+      }
+    ]
   },
   "fs_drop_beams": [],
   "nav_view": "profile_manager",

@@ -734,6 +734,7 @@ def get_default_module_15_state() -> dict:
         "merged_wall_label_style": "single",
         "item_descriptions": {},
         "plaster_qty_factor": 1.00,
+        "manual_boq_items": [],
     }
 
 get_default_masonry_plaster_state = get_default_module_15_state
@@ -2185,6 +2186,7 @@ def _serialize_module_15_state(state: dict) -> dict:
         "merged_wall_label_style": str(state.get("m15_merged_wall_label_style", "single")),
         "item_descriptions": dict(state.get("m15_item_descriptions", {})),
         "plaster_qty_factor": float(state.get("m15_plaster_qty_factor", state.get("m15_input_plaster_qty_factor", 1.00))),
+        "manual_boq_items": [dict(x) for x in state.get("m15_manual_boq_items", []) if isinstance(x, dict)],
     }
 
 
@@ -2407,6 +2409,7 @@ def _deserialize_module_15_state(data: dict) -> dict:
         "m15_item_descriptions": dict(data.get("item_descriptions", {})),
         "m15_plaster_qty_factor": float(data.get("plaster_qty_factor", schema.get("plaster_qty_factor", 1.00))),
         "m15_input_plaster_qty_factor": float(data.get("plaster_qty_factor", schema.get("plaster_qty_factor", 1.00))),
+        "m15_manual_boq_items": [dict(x) for x in data.get("manual_boq_items", []) if isinstance(x, dict)],
     }
 
 
@@ -2419,6 +2422,28 @@ def _ensure_module15_state(cfg: dict | None = None) -> None:
     if not isinstance(nested, dict):
         nested = get_default_module_15_state()
         cfg["module_15_masonry_plaster"] = nested
+
+    if "m15_x_axes" in st.session_state:
+        _ss_x = list(st.session_state.get("m15_x_axes", []))
+        _ss_y = list(st.session_state.get("m15_y_axes", []))
+        _disk_x = list(nested.get("x_axes", [0.0, 4.0, 8.0]))
+        _disk_y = list(nested.get("y_axes", [0.0, 3.0, 6.0]))
+        _ss_is_stale_or_truncated = (
+            len(_ss_x) <= 3
+            and len(_ss_y) <= 3
+            and len(st.session_state.get("m15_col_placed", [])) <= 3
+            and not st.session_state.get("m15_walls_placed")
+            and (
+                len(_disk_x) > 3
+                or len(_disk_y) > 3
+                or len(nested.get("col_placed", [])) > 3
+                or bool(nested.get("walls_placed"))
+            )
+        )
+        if _ss_is_stale_or_truncated:
+            _next_gv = int(st.session_state.get("_m15_grid_ver", 0)) + 1
+            _clear_m15_session_keys()
+            st.session_state["_m15_grid_ver"] = _next_gv
 
     if "m15_x_axes" in st.session_state:
         cfg["module_15_masonry_plaster"] = st.session_state.get("module_15_data", nested)
@@ -2449,6 +2474,8 @@ def _ensure_module15_state(cfg: dict | None = None) -> None:
             st.session_state["m15_plaster_qty_factor"] = float(nested.get("plaster_qty_factor", 1.00))
         if "m15_input_plaster_qty_factor" not in st.session_state:
             st.session_state["m15_input_plaster_qty_factor"] = float(nested.get("plaster_qty_factor", 1.00))
+        if "m15_manual_boq_items" not in st.session_state:
+            st.session_state["m15_manual_boq_items"] = [dict(x) for x in nested.get("manual_boq_items", []) if isinstance(x, dict)]
         return
 
     deserialized = _deserialize_module_15_state(nested)
@@ -2467,6 +2494,15 @@ def _ensure_module15_state(cfg: dict | None = None) -> None:
     for idx in range(len(deserialized["m15_y_axes"]) - 1):
         sp = round(deserialized["m15_y_axes"][idx+1] - deserialized["m15_y_axes"][idx], 2)
         st.session_state[f"m15_y_sp_{idx}"] = float(sp)
+    _gv = int(st.session_state.get("_m15_grid_ver", 0))
+    st.session_state[f"m15_n_v_axes_v{_gv}"] = len(deserialized["m15_x_axes"])
+    st.session_state[f"m15_n_h_axes_v{_gv}"] = len(deserialized["m15_y_axes"])
+    for idx in range(len(deserialized["m15_x_axes"]) - 1):
+        sp = round(deserialized["m15_x_axes"][idx+1] - deserialized["m15_x_axes"][idx], 2)
+        st.session_state[f"m15_x_sp_{idx}_v{_gv}"] = float(sp)
+    for idx in range(len(deserialized["m15_y_axes"]) - 1):
+        sp = round(deserialized["m15_y_axes"][idx+1] - deserialized["m15_y_axes"][idx], 2)
+        st.session_state[f"m15_y_sp_{idx}_v{_gv}"] = float(sp)
     st.session_state["_m15_synced_x_axes"] = list(deserialized["m15_x_axes"])
     st.session_state["_m15_synced_y_axes"] = list(deserialized["m15_y_axes"])
     st.session_state["_m15_synced_nx"] = len(deserialized["m15_x_axes"])
@@ -3439,6 +3475,8 @@ def save_settings() -> None:
             cfg["module_15_masonry_plaster"]["plaster_qty_factor"] = float(st.session_state["m15_plaster_qty_factor"])
         elif "m15_input_plaster_qty_factor" in st.session_state:
             cfg["module_15_masonry_plaster"]["plaster_qty_factor"] = float(st.session_state["m15_input_plaster_qty_factor"])
+        if "m15_manual_boq_items" in st.session_state and isinstance(st.session_state["m15_manual_boq_items"], list):
+            cfg["module_15_masonry_plaster"]["manual_boq_items"] = [dict(x) for x in st.session_state["m15_manual_boq_items"] if isinstance(x, dict)]
     # ── End Module 15 persistence ────────────────────────────────────────────
 
     active_name = get_active_project_name()

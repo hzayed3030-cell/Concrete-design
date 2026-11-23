@@ -2732,6 +2732,11 @@ def generate_masonry_plaster_report_html(
     include_inputs: bool = False,
     inputs_data: Optional[Dict[str, Any]] = None,
     only_summary_and_plan: bool = False,
+    boq_items_list: Optional[List[Dict[str, Any]]] = None,
+    boq_materials_list: Optional[List[Dict[str, Any]]] = None,
+    plaster_qty_factor: float = 1.00,
+    grand_total_boq_cost: float = 0.0,
+    bldg_specs_data: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     Generates a print-ready, professional HTML/PDF calculation sheet for
@@ -2885,6 +2890,68 @@ def generate_masonry_plaster_report_html(
             </table>
             """
 
+        bldg_specs_table = ""
+        bs = bldg_specs_data or (inputs_data.get("bldg_specs_data") if isinstance(inputs_data, dict) else None)
+        if bs and isinstance(bs, dict):
+            b_area = float(bs.get("bldg_area", 0.0))
+            b_perim = float(bs.get("perimeter", 0.0))
+            b_h = float(bs.get("default_h", 3.0))
+            b_parapet_h = float(bs.get("parapet_h_m", 1.4))
+            b_facade_h = float(bs.get("total_facade_h", 4.4))
+            b_parapet_thick = str(bs.get("parapet_thick_choice", "حائط نصف طوبة"))
+            b_shafts = float(bs.get("shafts_area_m2", 0.0))
+            b_sidewalk = float(bs.get("sidewalk_w_m", 1.0))
+            b_factor = float(bs.get("plaster_qty_factor", plaster_qty_factor))
+            bldg_specs_table = f"""
+            <div class="subsection-title" style="margin-top:12px;">3.4 البيانات الهندسية المعتمدة للمبنى والدروة والرصيف:</div>
+            <table class="data-table" style="width:100%; border-collapse:collapse; margin-top:6px; font-size:0.85rem;">
+                <thead>
+                    <tr>
+                        <th style="text-align:right;">البيان الهندسي</th>
+                        <th>القيمة المعتمدة</th>
+                        <th style="text-align:right;">ملاحظات ومعايير الحصر</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td style="font-weight:700; text-align:right; color:#1e40af;">مسطح المبنى (Footprint Area)</td>
+                        <td class="val-cell"><span dir="ltr">{b_area:.2f} م²</span></td>
+                        <td style="text-align:right;">المساحة الإجمالية للمبنى بالمسقط بعد احتساب حدود المحاور</td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight:700; text-align:right; color:#1e40af;">محيط المبنى الخارجي (Perimeter)</td>
+                        <td class="val-cell"><span dir="ltr">{b_perim:.2f} م.ط</span></td>
+                        <td style="text-align:right;">طول داير الواجهات الخارجية للمبنى</td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight:700; text-align:right; color:#1e40af;">ارتفاع المبنى الصافي</td>
+                        <td class="val-cell"><span dir="ltr">{b_h:.2f} م</span></td>
+                        <td style="text-align:right;">الارتفاع الصافي للدور من منسوب التشطيب لبطنية السقف</td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight:700; text-align:right; color:#1e40af;">ارتفاع دروة السطح وسمكها</td>
+                        <td class="val-cell"><span dir="ltr">{b_parapet_h:.2f} م ({b_parapet_thick})</span></td>
+                        <td style="text-align:right;">دروة السطح من الجانبين (ارتفاع الواجهة الإجمالي = {b_facade_h:.2f} م)</td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight:700; text-align:right; color:#1e40af;">مساحة حيز المناور المفرغة</td>
+                        <td class="val-cell"><span dir="ltr">{b_shafts:.2f} م²</span></td>
+                        <td style="text-align:right;">تُخصم من مسطح أسقف المحارة والدهانات وبلاط وعزل السطح</td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight:700; text-align:right; color:#1e40af;">عرض رصيف المشاة الخارجي</td>
+                        <td class="val-cell"><span dir="ltr">{b_sidewalk:.2f} م</span></td>
+                        <td style="text-align:right;">لحصر انترلوك وبردورات الأرصفة المحيطة بالمبنى</td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight:700; text-align:right; color:#1e40af;">معامل زيادة الكميات المعتمد</td>
+                        <td class="val-cell" style="font-weight:900; color:#c2410c;"><span dir="ltr">{b_factor:.2f}</span></td>
+                        <td style="text-align:right;">معامل الأمان والهالك الإجمالي المعتمد في المقايسة التقديرية</td>
+                    </tr>
+                </tbody>
+            </table>
+            """
+
         inputs_section_html = f"""
         <div class="section-title">3. جدول بيانات ومدخلات التصميم والمشروع (Design Inputs & Specifications)</div>
         <div style="margin-bottom: 16px; page-break-inside: avoid;">
@@ -2894,6 +2961,7 @@ def generate_masonry_plaster_report_html(
             {cols_table}
             <div class="subsection-title" style="margin-top:12px;">3.3 جدول نماذج ومقاسات فتحات الشبابيك والأبواب:</div>
             {openings_table}
+            {bldg_specs_table}
         </div>
         """
 
@@ -3282,6 +3350,137 @@ def generate_masonry_plaster_report_html(
         </tbody>
     </table>
     """
+
+    # ── جداول حصر وتكلفة جميع البنود وتفصيل المواد ──
+    boq_items_table_html = ""
+    if boq_items_list and len(boq_items_list) > 0:
+        b_trs = ""
+        calc_grand_boq = 0.0
+        for item in boq_items_list:
+            b_idx = item.get("idx", 1)
+            b_name = item.get("name", "—")
+            b_desc = item.get("description", "—")
+            b_unit = item.get("unit", "—")
+            b_net_q = float(item.get("net_q", 0.0))
+            b_tot_q = float(item.get("tot_q", 0.0))
+            b_price = float(item.get("u_price", 0.0))
+            b_cost = float(item.get("tot_cost", 0.0))
+            calc_grand_boq += b_cost
+
+            b_trs += f"""
+            <tr>
+                <td class="val-cell" style="font-weight:900; color:#0284c7;">{b_idx}</td>
+                <td style="font-weight:700; text-align:right; color:#0f172a;">{b_name}</td>
+                <td style="text-align:right; font-size:0.80rem; color:#475569; line-height:1.5;">{b_desc}</td>
+                <td class="val-cell">{b_unit}</td>
+                <td class="val-cell"><span dir="ltr">{b_net_q:,.2f}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#15803d;"><span dir="ltr">{b_tot_q:,.2f}</span></td>
+                <td class="val-cell"><span dir="ltr">{b_price:,.2f}</span></td>
+                <td class="val-cell" style="font-weight:800; color:#c2410c;"><span dir="ltr">{b_cost:,.2f}</span></td>
+            </tr>
+            """
+        actual_grand_boq = grand_total_boq_cost if grand_total_boq_cost > 0 else calc_grand_boq
+        b_trs += f"""
+        <tr style="background:linear-gradient(90deg, #1e3a8a, #065f46); color:#ffffff; font-weight:900;">
+            <td colspan="7" style="text-align:right; color:#ffffff; font-size:0.95rem;">💰 الإجمالي العام لجميع بنود المقايسة والتشطيبات التكميلية (Grand Total BOQ Cost)</td>
+            <td class="val-cell" style="color:#86efac; font-size:1.15rem; font-weight:900;"><span dir="ltr">{actual_grand_boq:,.2f} ج.م</span></td>
+        </tr>
+        """
+        boq_items_table_html = f"""
+        <div class="section-title">7. جدول حصر ومقايسة وتكلفة جميع بنود التشطيبات والمباني (BOQ Takeoff & Cost Breakdown)</div>
+        <table class="data-table" style="width:100%; border-collapse:collapse; margin-top:8px;">
+            <thead>
+                <tr>
+                    <th style="width:30px;">م</th>
+                    <th style="width:20%; text-align:right;">البند Item</th>
+                    <th style="width:34%; text-align:right;">التوصيف الفني المعتمد للبند</th>
+                    <th style="width:70px;">الوحدة</th>
+                    <th style="width:75px;">الكمية الصافية</th>
+                    <th style="width:85px;">الكمية بعد المعامل</th>
+                    <th style="width:75px;">سعر الوحدة (ج.م)</th>
+                    <th style="width:95px;">إجمالي التكلفة (ج.م)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {b_trs}
+            </tbody>
+        </table>
+        """
+
+    boq_materials_table_html = ""
+    if boq_materials_list and len(boq_materials_list) > 0:
+        m_trs = ""
+        tot_sand_sum = 0.0
+        tot_cem_tons_sum = 0.0
+        tot_cem_bags_sum = 0
+        tot_gravel_sum = 0.0
+        tot_bricks_sum = 0
+        for m in boq_materials_list:
+            m_idx = m.get("idx", 1)
+            m_name = m.get("name", "—")
+            m_unit = m.get("unit", "—")
+            m_tot_q = float(m.get("tot_q", 0.0))
+            m_sand = float(m.get("sand_m3", 0.0))
+            m_cem_tons = float(m.get("cement_tons", 0.0))
+            m_cem_bags = int(m.get("cement_bags", 0))
+            m_gravel = float(m.get("gravel_m3", 0.0))
+            m_bricks = int(m.get("bricks_count", 0))
+            m_other = m.get("other_materials", "—")
+
+            tot_sand_sum += m_sand
+            tot_cem_tons_sum += m_cem_tons
+            tot_cem_bags_sum += m_cem_bags
+            tot_gravel_sum += m_gravel
+            tot_bricks_sum += m_bricks
+
+            s_disp = f"{m_sand:,.2f}" if m_sand > 0 else "—"
+            c_disp = f"{m_cem_tons:,.2f} ط ({m_cem_bags} ش)" if m_cem_tons > 0 else "—"
+            g_disp = f"{m_gravel:,.2f}" if m_gravel > 0 else "—"
+            b_disp = f"{m_bricks:,}" if m_bricks > 0 else "—"
+
+            m_trs += f"""
+            <tr>
+                <td class="val-cell" style="font-weight:900; color:#0284c7;">{m_idx}</td>
+                <td style="font-weight:700; text-align:right;">{m_name}</td>
+                <td class="val-cell"><span dir="ltr">{m_tot_q:,.2f} {m_unit}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#ca8a04;"><span dir="ltr">{s_disp}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#0284c7;"><span dir="ltr">{c_disp}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#15803d;"><span dir="ltr">{g_disp}</span></td>
+                <td class="val-cell" style="font-weight:700; color:#c2410c;"><span dir="ltr">{b_disp}</span></td>
+                <td style="text-align:right; font-size:0.80rem; color:#475569;">{m_other}</td>
+            </tr>
+            """
+        m_trs += f"""
+        <tr style="background:#e0f2fe; font-weight:800; border-top:2px solid #0284c7;">
+            <td colspan="3" style="text-align:right; color:#0369a1; font-size:0.95rem;">🏆 الإجمالي العام لجميع المواد (Total Materials)</td>
+            <td class="val-cell" style="color:#ca8a04; font-size:0.95rem;"><span dir="ltr">{tot_sand_sum:,.2f} م³</span></td>
+            <td class="val-cell" style="color:#0284c7; font-size:0.95rem;"><span dir="ltr">{tot_cem_tons_sum:,.2f} طن ({tot_cem_bags_sum} ش)</span></td>
+            <td class="val-cell" style="color:#15803d; font-size:0.95rem;"><span dir="ltr">{tot_gravel_sum:,.2f} م³</span></td>
+            <td class="val-cell" style="color:#c2410c; font-size:0.95rem;"><span dir="ltr">{tot_bricks_sum:,}</span></td>
+            <td style="text-align:right; font-size:0.80rem; color:#0369a1;">شامل جميع بنود التشطيبات والمباني مع الهالك 5%</td>
+        </tr>
+        """
+        boq_materials_table_html = f"""
+        <div class="section-title">8. جدول حساب كميات المواد المستخدمة في البنود (Materials Quantities per BOQ Item)</div>
+        <table class="data-table" style="width:100%; border-collapse:collapse; margin-top:8px;">
+            <thead>
+                <tr>
+                    <th style="width:30px;">م</th>
+                    <th style="width:24%; text-align:right;">بند الأعمال بالمقايسة</th>
+                    <th style="width:12%;">الكمية الإجمالية</th>
+                    <th style="width:10%;">الرمل (م³)</th>
+                    <th style="width:14%;">الأسمنت (طن/شكارة)</th>
+                    <th style="width:9%;">الزلط (م³)</th>
+                    <th style="width:10%;">الطوب (طوبة)</th>
+                    <th style="width:18%; text-align:right;">المواد التكميلية</th>
+                </tr>
+            </thead>
+            <tbody>
+                {m_trs}
+            </tbody>
+        </table>
+        """
+
     report_heading_title = "مذكرة التصميم وحصر الكميات والمقايسة الشاملة — جميع المدخلات والمخرجات" if include_inputs else ("تقرير مخرجات المسقط والملخص التنفيذي — أعمال المباني والمحارة" if only_summary_and_plan else "مذكرة حصر الكميات والمقايسة التقديرية — مخرجات أعمال المباني والمحارة")
 
     if only_summary_and_plan:
@@ -3696,8 +3895,14 @@ def generate_masonry_plaster_report_html(
     <!-- Section 6: Plaster Survey -->
     {plaster_table_html}
 
-    <!-- Section 7: Materials BOQ -->
-    <div class="section-title">7. مقايسة خامات المونة ومواد البناء الشاملة (طبقاً للكود المصري وأصول الصناعة)</div>
+    <!-- Section 7: BOQ Items Takeoff & Cost Breakdown -->
+    {boq_items_table_html}
+
+    <!-- Section 8: Materials Quantities per Item -->
+    {boq_materials_table_html}
+
+    <!-- Section 9: Materials BOQ -->
+    <div class="section-title">9. مقايسة خامات المونة ومواد البناء الشاملة (طبقاً للكود المصري وأصول الصناعة)</div>
     <table class="data-table" style="width:100%; border-collapse:collapse; margin-top:8px;">
         <thead>
             <tr>
@@ -3716,11 +3921,11 @@ def generate_masonry_plaster_report_html(
         </tbody>
     </table>
 
-    <!-- Section 8: Pricing Table -->
+    <!-- Section 10: Pricing Table -->
     {pricing_table_html}
 
-    <!-- Section 9: ECP Engineering Notes & Specifications -->
-    <div class="section-title">9. الملاحظات الفنية والاشتراطات الهندسية المعتمدة (ECP Technical Specs)</div>
+    <!-- Section 11: ECP Engineering Notes & Specifications -->
+    <div class="section-title">11. الملاحظات الفنية والاشتراطات الهندسية المعتمدة (ECP Technical Specs)</div>
     <div style="background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:16px 20px; font-size:0.86rem; line-height:1.8; color:#334155; margin-top:10px; page-break-inside: avoid;">
         <ol style="padding-right:20px; margin:0;">
             <li><b>قياس أطوال حوائط المباني:</b> تم الاعتماد على الطول الصافي الخالص بين أوجه الأعمدة الخرسانية بعد خصم تداخلات قطاعات الأعمدة آلياً طبقاً للمواصفات الفنية للكود المصري.</li>
@@ -4209,7 +4414,7 @@ def generate_masonry_plaster_concise_survey_report_html(
             <thead>
                 <tr style="background:#0f766e; color:#ffffff;">
                     <th style="width:28px;">م</th>
-                    <th style="text-align:right;">البند / بيان الأعمال (Work Item)</th>
+                    <th style="text-align:right;">البند Item</th>
                     <th style="width:110px;">الكمية الإجمالية</th>
                     <th style="width:85px;">الوحدة (Unit)</th>
                     <th style="text-align:right;">المحددات ومعادلة الحصر الهندسية التفصيلية</th>
@@ -4243,7 +4448,7 @@ def generate_masonry_plaster_concise_survey_report_html(
             <thead>
                 <tr style="background:#1e3a8a; color:#ffffff;">
                     <th style="width:26px;">م</th>
-                    <th style="text-align:right;">البند / بيان الأعمال (Work Item)</th>
+                    <th style="text-align:right;">البند Item</th>
                     <th style="width:95px;">الكمية الإجمالية</th>
                     <th style="width:75px;">الوحدة</th>
                     <th style="width:90px;">تكلفة الوحدة (ج.م)</th>
