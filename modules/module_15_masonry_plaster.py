@@ -12626,6 +12626,297 @@ def _build_full_takeoff_excel_bytes(
     return buf_xl.getvalue()
 
 
+def _render_presets_library_manager(presets: list):
+    """
+    قسم منفصل مطوي: إدارة وتخصيص مكتبة القوالب الجاهزة لجميع المشاريع (إضافة / تعديل / حذف)
+    """
+    with st.expander(
+        f"⚙️ 📚 إدارة وتخصيص مكتبة القوالب الجاهزة ({len(presets)} قالب متاح لجميع المشاريع)",
+        expanded=False,
+    ):
+        st.markdown('<div class="m15-preset-library-marker" style="display:none;"></div>', unsafe_allow_html=True)
+        tab_add_p, tab_edit_p, tab_del_p = st.tabs([
+            "➕ إضافة قالب جديد للمكتبة",
+            "✏️ تعديل القالب الحالي",
+            "🗑️ حذف قالب من المكتبة",
+        ])
+
+        # ── Tab 1: إضافة قالب جديد ──
+        with tab_add_p:
+            st.markdown(
+                """<div dir="rtl" style="color:#7dd3fc; font-weight:800; font-size:1.02rem; margin-bottom:8px;">
+                    ➕ إضافة قالب بند جديد لمكتبة القوالب (سيُحفظ دائماً ويظهر في قائمة القوالب بجميع المشاريع):
+                </div>""",
+                unsafe_allow_html=True,
+            )
+            if st.session_state.pop("_m15_fill_add_preset", False):
+                cur_n = str(st.session_state.get("m15_man_new_name", "")).strip()
+                if cur_n:
+                    st.session_state["m15_add_preset_name"] = cur_n
+                    st.session_state["m15_add_preset_unit"] = st.session_state.get("m15_man_new_unit", MANUAL_BOQ_UNIT_OPTIONS[0])
+                    st.session_state["m15_add_preset_price"] = float(st.session_state.get("m15_man_new_price", 500.0))
+                    st.session_state["m15_add_preset_desc"] = str(st.session_state.get("m15_man_new_desc", "")).strip() or cur_n
+
+            c_ad1, c_ad2, c_ad3 = st.columns([2.2, 1.1, 1.1])
+            with c_ad1:
+                new_p_name = st.text_input(
+                    "📝 اسم البند بالمقايسة:",
+                    key="m15_add_preset_name",
+                    placeholder="مثال: أعمال رخام درج السلالم، أرضيات باركيه، كرتن وول...",
+                )
+            with c_ad2:
+                new_p_unit = st.selectbox(
+                    "📏 وحدة القياس:",
+                    options=MANUAL_BOQ_UNIT_OPTIONS,
+                    key="m15_add_preset_unit",
+                )
+            with c_ad3:
+                new_p_price = st.number_input(
+                    "💵 السعر الاسترشادي (ج.م):",
+                    min_value=0.0,
+                    max_value=1000000.0,
+                    value=500.0,
+                    step=10.0,
+                    format="%.2f",
+                    key="m15_add_preset_price",
+                )
+            new_p_desc = st.text_area(
+                "📄 التوصيف الهندسي الكامل للبند:",
+                height=70,
+                key="m15_add_preset_desc",
+                placeholder="التوصيف الفني المعتمد والمواصفات وأصول الصناعة...",
+            )
+            c_ad_b1, c_ad_b2 = st.columns([1.5, 2.5])
+            with c_ad_b1:
+                btn_save_new_p = st.button(
+                    "➕ حفظ وإضافة القالب للمكتبة لجميع المشاريع",
+                    key="m15_btn_save_new_preset",
+                    type="primary",
+                    use_container_width=True,
+                )
+            with c_ad_b2:
+                btn_fill_from_cur = st.button(
+                    "📥 نسخ البيانات المكتوبة في الخانات الحالية لتعبئة هذا القالب",
+                    key="m15_btn_fill_from_current",
+                    use_container_width=True,
+                )
+                if btn_fill_from_cur:
+                    st.session_state["_m15_fill_add_preset"] = True
+                    st.rerun()
+
+            if btn_save_new_p:
+                clean_pname = str(new_p_name or "").strip()
+                if not clean_pname:
+                    st.warning("⚠️ يرجى إدخال اسم البند بالمقايسة.")
+                elif clean_pname in [p.get("label", "") for p in presets] or clean_pname in [p.get("name", "") for p in presets]:
+                    st.warning(f"⚠️ يوجد قالب آخر مسجل بنفس الاسم «{clean_pname}»، يرجى اختيار اسم مميز.")
+                else:
+                    new_p_entry = {
+                        "label": clean_pname,
+                        "name": clean_pname,
+                        "unit": str(new_p_unit),
+                        "unit_price": round(float(new_p_price), 2),
+                        "mat_category": "supply_install",
+                        "description": str(new_p_desc or "").strip() or clean_pname,
+                    }
+                    presets.append(new_p_entry)
+                    _save_manual_boq_presets_list(presets)
+                    st.session_state["m15_man_preset_sel"] = clean_pname
+                    st.session_state["_m15_last_manual_preset"] = None
+                    st.toast(f"✨ تم إضافة القالب «{clean_pname}» بنجاح للمكتبة العامة لجميع المشاريع!", icon="🎉")
+                    st.rerun()
+
+        # ── Tab 2: تعديل القالب الحالي ──
+        with tab_edit_p:
+            st.markdown(
+                """<div dir="rtl" style="color:#fdba74; font-weight:800; font-size:1.02rem; margin-bottom:8px;">
+                    ✏️ تعديل بيانات القوالب بالمكتبة (سيتم تحديث القالب المختار لجميع المشاريع):
+                </div>""",
+                unsafe_allow_html=True,
+            )
+            if "_m15_set_edit_sel" in st.session_state:
+                st.session_state["m15_edit_preset_sel"] = st.session_state.pop("_m15_set_edit_sel")
+
+            PLACEHOLDER_NO_EDIT = "— لا يوجد بند للتعديل —"
+            editable_presets = [p for p in presets if not str(p.get("label", "")).startswith("✨ بند حر")]
+            edit_options = [PLACEHOLDER_NO_EDIT] + [p["label"] for p in editable_presets]
+
+            if "m15_edit_preset_sel" not in st.session_state or st.session_state["m15_edit_preset_sel"] not in edit_options:
+                st.session_state["m15_edit_preset_sel"] = PLACEHOLDER_NO_EDIT
+
+            selected_edit_lbl = st.selectbox(
+                "📋 قائمة القوالب بالمكتبة للتعديل:",
+                options=edit_options,
+                key="m15_edit_preset_sel",
+                help="اختر قالباً لعرض خانات المدخلات الخاصة به وتعديلها.",
+            )
+
+            if selected_edit_lbl == PLACEHOLDER_NO_EDIT:
+                st.info("ℹ️ الرجاء اختيار بند (قالب) من القائمة المنسدلة أعلاه للبدء في تعديل بياناته.")
+            else:
+                target_preset = next((p for p in editable_presets if p["label"] == selected_edit_lbl), None)
+                if target_preset:
+                    ed_prefix = f"m15_ed_{target_preset['label']}"
+                    if st.session_state.pop(f"_m15_sync_edit_{target_preset['label']}", False):
+                        st.session_state[f"{ed_prefix}_name"] = st.session_state.get("m15_man_new_name", target_preset.get("name", ""))
+                        st.session_state[f"{ed_prefix}_unit"] = st.session_state.get("m15_man_new_unit", target_preset.get("unit", ""))
+                        st.session_state[f"{ed_prefix}_price"] = float(st.session_state.get("m15_man_new_price", target_preset.get("unit_price", 0.0)))
+                        st.session_state[f"{ed_prefix}_desc"] = st.session_state.get("m15_man_new_desc", target_preset.get("description", ""))
+
+                    c_ed1, c_ed2, c_ed3 = st.columns([2.2, 1.1, 1.1])
+                    with c_ed1:
+                        ed_name = st.text_input(
+                            "📝 اسم البند:",
+                            value=target_preset.get("name", target_preset.get("label", "")),
+                            key=f"{ed_prefix}_name",
+                        )
+                    with c_ed2:
+                        cur_u = target_preset.get("unit", MANUAL_BOQ_UNIT_OPTIONS[0])
+                        if cur_u in ["م.ط (m)", "متر طولي m", "م.ط", "متر طولي (m)"]:
+                            cur_u = "متر طولي L.M"
+                        u_idx = MANUAL_BOQ_UNIT_OPTIONS.index(cur_u) if cur_u in MANUAL_BOQ_UNIT_OPTIONS else 0
+                        ed_unit = st.selectbox(
+                            "📏 وحدة القياس:",
+                            options=MANUAL_BOQ_UNIT_OPTIONS,
+                            index=u_idx,
+                            key=f"{ed_prefix}_unit",
+                        )
+                    with c_ed3:
+                        ed_price = st.number_input(
+                            "💵 السعر الاسترشادي (ج.م):",
+                            min_value=0.0,
+                            max_value=1000000.0,
+                            value=float(target_preset.get("unit_price", 0.0)),
+                            step=10.0,
+                            format="%.2f",
+                            key=f"{ed_prefix}_price",
+                        )
+
+                    ed_desc = st.text_area(
+                        "📄 توصيف البند بالمقايسة:",
+                        value=target_preset.get("description", ""),
+                        height=75,
+                        key=f"{ed_prefix}_desc",
+                    )
+
+                    c_ed_b1, c_ed_b2 = st.columns([1.5, 2.5])
+                    with c_ed_b1:
+                        btn_save_ed = st.button(
+                            "💾 حفظ التعديلات على هذا القالب لجميع المشاريع",
+                            key=f"{ed_prefix}_btn_save",
+                            type="primary",
+                            use_container_width=True,
+                        )
+                    with c_ed_b2:
+                        btn_sync_from_inp = st.button(
+                            "🔄 نسخ القيم الحالية من خانات البند الرئيسية",
+                            key=f"{ed_prefix}_btn_sync",
+                            use_container_width=True,
+                        )
+                        if btn_sync_from_inp:
+                            st.session_state[f"_m15_sync_edit_{target_preset['label']}"] = True
+                            st.rerun()
+
+                    if btn_save_ed:
+                        new_name_clean = str(ed_name or "").strip()
+                        if not new_name_clean:
+                            st.warning("⚠️ يرجى إدخال اسم البند.")
+                        else:
+                            old_lbl = target_preset["label"]
+                            conflict = any(p["label"] == new_name_clean and p["label"] != old_lbl for p in presets)
+                            if conflict:
+                                st.warning(f"⚠️ يوجد قالب آخر مسجل باسم «{new_name_clean}»، يرجى اختيار اسم غير مكرر.")
+                            else:
+                                for p in presets:
+                                    if p["label"] == old_lbl:
+                                        p["label"] = new_name_clean
+                                        p["name"] = new_name_clean
+                                        p["unit"] = str(ed_unit)
+                                        p["unit_price"] = round(float(ed_price), 2)
+                                        p["description"] = str(ed_desc or "").strip() or new_name_clean
+                                        break
+                                _save_manual_boq_presets_list(presets)
+                                if st.session_state.get("m15_man_preset_sel") == old_lbl:
+                                    st.session_state["m15_man_preset_sel"] = new_name_clean
+                                st.session_state["_m15_last_manual_preset"] = None
+                                st.session_state["_m15_set_edit_sel"] = new_name_clean
+                                st.toast(f"💾 تم حفظ وتحديث القالب «{new_name_clean}» بنجاح في المكتبة لجميع المشاريع!", icon="✨")
+                                st.rerun()
+
+        # ── Tab 3: حذف قالب من المكتبة ──
+        with tab_del_p:
+            st.markdown(
+                """<div dir="rtl" style="color:#f87171; font-weight:800; font-size:1.02rem; margin-bottom:8px;">
+                    🗑️ حذف قالب من المكتبة العامة (سيُزال من قائمة القوالب لجميع المشاريع):
+                </div>""",
+                unsafe_allow_html=True,
+            )
+            PLACEHOLDER_NO_DEL = "— لا يوجد بند محدد للحذف —"
+            if st.session_state.pop("_m15_reset_del_sel", False):
+                st.session_state["m15_del_preset_sel"] = PLACEHOLDER_NO_DEL
+
+            deletable_presets = [p for p in presets if not str(p.get("label", "")).startswith("✨ بند حر")]
+            del_options = [PLACEHOLDER_NO_DEL] + [p["label"] for p in deletable_presets]
+
+            if "m15_del_preset_sel" not in st.session_state or st.session_state["m15_del_preset_sel"] not in del_options:
+                st.session_state["m15_del_preset_sel"] = PLACEHOLDER_NO_DEL
+
+            selected_del_lbl = st.selectbox(
+                "🗑️ اختر القالب المراد حذفه من المكتبة:",
+                options=del_options,
+                key="m15_del_preset_sel",
+                help="اختر قالباً لحذفه نهائياً من مكتبة القوالب لجميع المشاريع.",
+            )
+
+            if selected_del_lbl == PLACEHOLDER_NO_DEL:
+                st.info("ℹ️ اختر قالباً من القائمة المنسدلة أعلاه لحذفه من المكتبة.")
+            else:
+                # إطلاق صفارة تحذيرية فور اختيار البند
+                token = f"m15_whistle_del_preset_{selected_del_lbl}"
+                play_delete_confirmation_whistle(token)
+
+                st.markdown(
+                    f"""
+                    <div dir="rtl" style="background:rgba(220,38,38,0.18); border:1.5px solid #ef4444; border-radius:8px; padding:12px; margin-bottom:12px; color:#fca5a5; font-size:1.02rem; font-weight:700;">
+                        ⚠️ هل أنت متأكد من رغبتك في حذف القالب: <b style="color:#ffffff;">«{selected_del_lbl}»</b> نهائياً من المكتبة العامة لجميع المشاريع؟
+                        <br><span style="font-size:0.88rem; color:#fecaca;">(لن تتأثر البنود المضافة مسبقاً في جداول الحصر للمشاريع الحالية، بل سيتم فقط إزالة القالب من القائمة المنسدلة).</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                c_del_cancel, c_del_confirm = st.columns([1, 1])
+                with c_del_cancel:
+                    btn_cancel_del = st.button(
+                        "❌ إلغاء",
+                        key=f"m15_btn_cancel_del_{selected_del_lbl}",
+                        use_container_width=True,
+                    )
+                with c_del_confirm:
+                    btn_confirm_del = st.button(
+                        "🗑️ تأكيد الحذف",
+                        key=f"m15_btn_confirm_del_{selected_del_lbl}",
+                        type="primary",
+                        use_container_width=True,
+                    )
+
+                if btn_cancel_del:
+                    st.session_state["_m15_reset_del_sel"] = True
+                    st.session_state.pop("_last_del_confirm_whistle_token", None)
+                    st.rerun()
+
+                if btn_confirm_del:
+                    new_presets = [p for p in presets if p["label"] != selected_del_lbl]
+                    _save_manual_boq_presets_list(new_presets)
+                    st.session_state["_m15_reset_del_sel"] = True
+                    st.session_state.pop("_last_del_confirm_whistle_token", None)
+                    if st.session_state.get("m15_man_preset_sel") == selected_del_lbl:
+                        st.session_state["m15_man_preset_sel"] = new_presets[0]["label"] if new_presets else ""
+                    st.session_state["_m15_last_manual_preset"] = None
+                    st.toast(f"🗑️ تم حذف القالب «{selected_del_lbl}» بنجاح من المكتبة العامة لجميع المشاريع!", icon="✨")
+                    st.rerun()
+
+
 def _render_manual_boq_items_manager():
     """
     قسم إضافة وإدارة البنود اليدوية الإضافية (Direct Quantity + قوالب جاهزة)
@@ -12652,76 +12943,103 @@ def _render_manual_boq_items_manager():
     )
     plaster_qty_factor = cur_factor
 
+    # ── حقن CSS لتكبير الخطوط في كامل القسمين للعناوين والمدخلات والجداول ──
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stExpander"]:has(div[class*="st-key-m15_man_"]) summary p,
+        div[data-testid="stExpander"]:has(.m15-preset-library-marker) summary p,
+        div[data-testid="stExpander"]:has(div[class*="st-key-m15_add_preset_"]) summary p,
+        div[data-testid="stExpander"]:has(div[class*="st-key-m15_edit_preset_"]) summary p,
+        div[data-testid="stExpander"]:has(div[class*="st-key-m15_del_preset_"]) summary p {
+            font-size: 1.25rem !important;
+            font-weight: 900 !important;
+            color: #38bdf8 !important;
+        }
+        div[class*="st-key-m15_man_"] label p,
+        div[class*="st-key-m15_man_"] [data-testid="stWidgetLabel"] p,
+        div[class*="st-key-m15_man_"] label,
+        div[class*="st-key-m15_add_preset_"] label p,
+        div[class*="st-key-m15_add_preset_"] label,
+        div[class*="st-key-m15_edit_preset_"] label p,
+        div[class*="st-key-m15_edit_preset_"] label,
+        div[class*="st-key-m15_del_preset_"] label p,
+        div[class*="st-key-m15_del_preset_"] label {
+            font-size: 1.15rem !important;
+            font-weight: 800 !important;
+            color: #f8fafc !important;
+        }
+        div[class*="st-key-m15_man_"] input,
+        div[class*="st-key-m15_add_preset_"] input,
+        div[class*="st-key-m15_edit_preset_"] input {
+            font-size: 1.16rem !important;
+            font-weight: 800 !important;
+            color: #ffffff !important;
+        }
+        div[class*="st-key-m15_man_"] textarea,
+        div[class*="st-key-m15_add_preset_"] textarea,
+        div[class*="st-key-m15_edit_preset_"] textarea {
+            font-size: 1.10rem !important;
+            font-weight: 600 !important;
+            color: #ffffff !important;
+            line-height: 1.5 !important;
+        }
+        div[class*="st-key-m15_man_"] div[data-baseweb="select"] *,
+        div[class*="st-key-m15_add_preset_"] div[data-baseweb="select"] *,
+        div[class*="st-key-m15_edit_preset_"] div[data-baseweb="select"] *,
+        div[class*="st-key-m15_del_preset_"] div[data-baseweb="select"] * {
+            font-size: 1.12rem !important;
+            font-weight: 700 !important;
+        }
+        div[class*="st-key-m15_man_add_btn"] button,
+        div[class*="st-key-m15_btn_save_new_preset"] button {
+            font-size: 1.18rem !important;
+            font-weight: 900 !important;
+            padding: 10px 24px !important;
+            min-height: 46px !important;
+        }
+        .m15-man-table-hdr {
+            background: linear-gradient(180deg, rgba(234, 88, 12, 0.45) 0%, rgba(194, 65, 12, 0.28) 100%);
+            border: 1.5px solid #ea580c;
+            border-radius: 6px;
+            padding: 6px 4px;
+            text-align: center;
+            font-size: 1.05rem;
+            font-weight: 900;
+            color: #fb923c;
+            text-shadow: 0 0 10px rgba(251, 146, 60, 0.6);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 48px;
+        }
+        .m15-man-table-hdr-blue {
+            background: linear-gradient(180deg, rgba(2, 132, 199, 0.45) 0%, rgba(14, 165, 233, 0.28) 100%);
+            border: 1.5px solid #0284c7;
+            color: #38bdf8;
+            text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    presets = _get_manual_boq_presets_list()
+
+    # ═════════════════════════════════════════════════════════════════════════
+    #  أولاً: قسم إدارة وتخصيص مكتبة القوالب الجاهزة (مفصول تماماً ومطوي للأعلى)
+    # ═════════════════════════════════════════════════════════════════════════
+    _render_presets_library_manager(presets)
+
+    # ═════════════════════════════════════════════════════════════════════════
+    #  ثانياً: قسم إضافة وإدارة بنود الحصر اليدوية الإضافية (مفصول تماماً ومطوي للأسفل)
+    # ═════════════════════════════════════════════════════════════════════════
     with st.expander(
         "➕ إضافة وإدارة بنود الحصر اليدوية الإضافية (رخام سلالم، حجر فرعوني، وبنود أخرى)",
         expanded=False,
     ):
-        # ── حقن CSS لتكبير الخطوط في كامل القسم للعناوين والمدخلات والجداول ──
-        st.markdown(
-            """
-            <style>
-            div[data-testid="stExpander"]:has(div[class*="st-key-m15_man_"]) summary p {
-                font-size: 1.25rem !important;
-                font-weight: 900 !important;
-                color: #38bdf8 !important;
-            }
-            div[class*="st-key-m15_man_"] label p,
-            div[class*="st-key-m15_man_"] [data-testid="stWidgetLabel"] p,
-            div[class*="st-key-m15_man_"] label {
-                font-size: 1.15rem !important;
-                font-weight: 800 !important;
-                color: #f8fafc !important;
-            }
-            div[class*="st-key-m15_man_"] input {
-                font-size: 1.16rem !important;
-                font-weight: 800 !important;
-                color: #ffffff !important;
-            }
-            div[class*="st-key-m15_man_"] textarea {
-                font-size: 1.10rem !important;
-                font-weight: 600 !important;
-                color: #ffffff !important;
-                line-height: 1.5 !important;
-            }
-            div[class*="st-key-m15_man_"] div[data-baseweb="select"] * {
-                font-size: 1.12rem !important;
-                font-weight: 700 !important;
-            }
-            div[class*="st-key-m15_man_add_btn"] button {
-                font-size: 1.18rem !important;
-                font-weight: 900 !important;
-                padding: 10px 24px !important;
-                min-height: 46px !important;
-            }
-            .m15-man-table-hdr {
-                background: linear-gradient(180deg, rgba(234, 88, 12, 0.45) 0%, rgba(194, 65, 12, 0.28) 100%);
-                border: 1.5px solid #ea580c;
-                border-radius: 6px;
-                padding: 6px 4px;
-                text-align: center;
-                font-size: 1.05rem;
-                font-weight: 900;
-                color: #fb923c;
-                text-shadow: 0 0 10px rgba(251, 146, 60, 0.6);
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                min-height: 48px;
-            }
-            .m15-man-table-hdr-blue {
-                background: linear-gradient(180deg, rgba(2, 132, 199, 0.45) 0%, rgba(14, 165, 233, 0.28) 100%);
-                border: 1.5px solid #0284c7;
-                color: #38bdf8;
-                text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
-
         # اختيار القالب الجاهز أو البند الحر من المكتبة العامة لجميع المشاريع
-        presets = _get_manual_boq_presets_list()
         preset_labels = [p["label"] for p in presets]
         if "m15_man_preset_sel" not in st.session_state or st.session_state["m15_man_preset_sel"] not in preset_labels:
             st.session_state["m15_man_preset_sel"] = preset_labels[0]
@@ -12733,292 +13051,6 @@ def _render_manual_boq_items_manager():
             help="اختيار أي قالب يملأ الاسم والوحدة والسعر الاسترشادي وفئة الخامات والتوصيف تلقائياً مع إمكانية تعديل أي خانة.",
         )
         sel_preset = next((p for p in presets if p["label"] == sel_preset_lbl), presets[0])
-
-        # ── قسم إدارة وتخصيص مكتبة القوالب الجاهزة لجميع المشاريع (إضافة / تعديل / حذف) ──
-        with st.expander(
-            f"⚙️ 📚 إدارة وتخصيص مكتبة القوالب الجاهزة ({len(presets)} قالب متاح لجميع المشاريع)",
-            expanded=False,
-        ):
-            tab_add_p, tab_edit_p, tab_del_p = st.tabs([
-                "➕ إضافة قالب جديد للمكتبة",
-                "✏️ تعديل القالب الحالي",
-                "🗑️ حذف قالب من المكتبة",
-            ])
-
-            # ── Tab 1: إضافة قالب جديد ──
-            with tab_add_p:
-                st.markdown(
-                    """<div dir="rtl" style="color:#7dd3fc; font-weight:800; font-size:1.02rem; margin-bottom:8px;">
-                        ➕ إضافة قالب بند جديد لمكتبة القوالب (سيُحفظ دائماً ويظهر في قائمة القوالب بجميع المشاريع):
-                    </div>""",
-                    unsafe_allow_html=True,
-                )
-                if st.session_state.pop("_m15_fill_add_preset", False):
-                    cur_n = str(st.session_state.get("m15_man_new_name", "")).strip()
-                    if cur_n:
-                        st.session_state["m15_add_preset_name"] = cur_n
-                        st.session_state["m15_add_preset_unit"] = st.session_state.get("m15_man_new_unit", MANUAL_BOQ_UNIT_OPTIONS[0])
-                        st.session_state["m15_add_preset_price"] = float(st.session_state.get("m15_man_new_price", 500.0))
-                        st.session_state["m15_add_preset_desc"] = str(st.session_state.get("m15_man_new_desc", "")).strip() or cur_n
-
-                c_ad1, c_ad2, c_ad3 = st.columns([2.2, 1.1, 1.1])
-                with c_ad1:
-                    new_p_name = st.text_input(
-                        "📝 اسم البند بالمقايسة:",
-                        key="m15_add_preset_name",
-                        placeholder="مثال: أعمال رخام درج السلالم، أرضيات باركيه، كرتن وول...",
-                    )
-                with c_ad2:
-                    new_p_unit = st.selectbox(
-                        "📏 وحدة القياس:",
-                        options=MANUAL_BOQ_UNIT_OPTIONS,
-                        key="m15_add_preset_unit",
-                    )
-                with c_ad3:
-                    new_p_price = st.number_input(
-                        "💵 السعر الاسترشادي (ج.م):",
-                        min_value=0.0,
-                        max_value=1000000.0,
-                        value=500.0,
-                        step=10.0,
-                        format="%.2f",
-                        key="m15_add_preset_price",
-                    )
-                new_p_desc = st.text_area(
-                    "📄 التوصيف الهندسي الكامل للبند:",
-                    height=70,
-                    key="m15_add_preset_desc",
-                    placeholder="التوصيف الفني المعتمد والمواصفات وأصول الصناعة...",
-                )
-                c_ad_b1, c_ad_b2 = st.columns([1.5, 2.5])
-                with c_ad_b1:
-                    btn_save_new_p = st.button(
-                        "➕ حفظ وإضافة القالب للمكتبة لجميع المشاريع",
-                        key="m15_btn_save_new_preset",
-                        type="primary",
-                        use_container_width=True,
-                    )
-                with c_ad_b2:
-                    btn_fill_from_cur = st.button(
-                        "📥 نسخ البيانات المكتوبة في الخانات الحالية لتعبئة هذا القالب",
-                        key="m15_btn_fill_from_current",
-                        use_container_width=True,
-                    )
-                    if btn_fill_from_cur:
-                        st.session_state["_m15_fill_add_preset"] = True
-                        st.rerun()
-
-                if btn_save_new_p:
-                    clean_pname = str(new_p_name or "").strip()
-                    if not clean_pname:
-                        st.warning("⚠️ يرجى إدخال اسم البند بالمقايسة.")
-                    elif clean_pname in [p.get("label", "") for p in presets] or clean_pname in [p.get("name", "") for p in presets]:
-                        st.warning(f"⚠️ يوجد قالب آخر مسجل بنفس الاسم «{clean_pname}»، يرجى اختيار اسم مميز.")
-                    else:
-                        new_p_entry = {
-                            "label": clean_pname,
-                            "name": clean_pname,
-                            "unit": str(new_p_unit),
-                            "unit_price": round(float(new_p_price), 2),
-                            "mat_category": "supply_install",
-                            "description": str(new_p_desc or "").strip() or clean_pname,
-                        }
-                        presets.append(new_p_entry)
-                        _save_manual_boq_presets_list(presets)
-                        st.session_state["m15_man_preset_sel"] = clean_pname
-                        st.session_state["_m15_last_manual_preset"] = None
-                        st.toast(f"✨ تم إضافة القالب «{clean_pname}» بنجاح للمكتبة العامة لجميع المشاريع!", icon="🎉")
-                        st.rerun()
-
-            # ── Tab 2: تعديل القالب الحالي ──
-            with tab_edit_p:
-                st.markdown(
-                    """<div dir="rtl" style="color:#fdba74; font-weight:800; font-size:1.02rem; margin-bottom:8px;">
-                        ✏️ تعديل بيانات القوالب بالمكتبة (سيتم تحديث القالب المختار لجميع المشاريع):
-                    </div>""",
-                    unsafe_allow_html=True,
-                )
-                if "_m15_set_edit_sel" in st.session_state:
-                    st.session_state["m15_edit_preset_sel"] = st.session_state.pop("_m15_set_edit_sel")
-
-                PLACEHOLDER_NO_EDIT = "— لا يوجد بند للتعديل —"
-                editable_presets = [p for p in presets if not str(p.get("label", "")).startswith("✨ بند حر")]
-                edit_options = [PLACEHOLDER_NO_EDIT] + [p["label"] for p in editable_presets]
-
-                if "m15_edit_preset_sel" not in st.session_state or st.session_state["m15_edit_preset_sel"] not in edit_options:
-                    st.session_state["m15_edit_preset_sel"] = PLACEHOLDER_NO_EDIT
-
-                selected_edit_lbl = st.selectbox(
-                    "📋 قائمة القوالب بالمكتبة للتعديل:",
-                    options=edit_options,
-                    key="m15_edit_preset_sel",
-                    help="اختر قالباً لعرض خانات المدخلات الخاصة به وتعديلها.",
-                )
-
-                if selected_edit_lbl == PLACEHOLDER_NO_EDIT:
-                    st.info("ℹ️ الرجاء اختيار بند (قالب) من القائمة المنسدلة أعلاه للبدء في تعديل بياناته.")
-                else:
-                    target_preset = next((p for p in editable_presets if p["label"] == selected_edit_lbl), None)
-                    if target_preset:
-                        ed_prefix = f"m15_ed_{target_preset['label']}"
-                        if st.session_state.pop(f"_m15_sync_edit_{target_preset['label']}", False):
-                            st.session_state[f"{ed_prefix}_name"] = st.session_state.get("m15_man_new_name", target_preset.get("name", ""))
-                            st.session_state[f"{ed_prefix}_unit"] = st.session_state.get("m15_man_new_unit", target_preset.get("unit", ""))
-                            st.session_state[f"{ed_prefix}_price"] = float(st.session_state.get("m15_man_new_price", target_preset.get("unit_price", 0.0)))
-                            st.session_state[f"{ed_prefix}_desc"] = st.session_state.get("m15_man_new_desc", target_preset.get("description", ""))
-
-                        c_ed1, c_ed2, c_ed3 = st.columns([2.2, 1.1, 1.1])
-                        with c_ed1:
-                            ed_name = st.text_input(
-                                "📝 اسم البند:",
-                                value=target_preset.get("name", target_preset.get("label", "")),
-                                key=f"{ed_prefix}_name",
-                            )
-                        with c_ed2:
-                            cur_u = target_preset.get("unit", MANUAL_BOQ_UNIT_OPTIONS[0])
-                            if cur_u in ["م.ط (m)", "متر طولي m", "م.ط", "متر طولي (m)"]:
-                                cur_u = "متر طولي L.M"
-                            u_idx = MANUAL_BOQ_UNIT_OPTIONS.index(cur_u) if cur_u in MANUAL_BOQ_UNIT_OPTIONS else 0
-                            ed_unit = st.selectbox(
-                                "📏 وحدة القياس:",
-                                options=MANUAL_BOQ_UNIT_OPTIONS,
-                                index=u_idx,
-                                key=f"{ed_prefix}_unit",
-                            )
-                        with c_ed3:
-                            ed_price = st.number_input(
-                                "💵 السعر الاسترشادي (ج.م):",
-                                min_value=0.0,
-                                max_value=1000000.0,
-                                value=float(target_preset.get("unit_price", 0.0)),
-                                step=10.0,
-                                format="%.2f",
-                                key=f"{ed_prefix}_price",
-                            )
-
-                        ed_desc = st.text_area(
-                            "📄 توصيف البند بالمقايسة:",
-                            value=target_preset.get("description", ""),
-                            height=75,
-                            key=f"{ed_prefix}_desc",
-                        )
-
-                        c_ed_b1, c_ed_b2 = st.columns([1.5, 2.5])
-                        with c_ed_b1:
-                            btn_save_ed = st.button(
-                                "💾 حفظ التعديلات على هذا القالب لجميع المشاريع",
-                                key=f"{ed_prefix}_btn_save",
-                                type="primary",
-                                use_container_width=True,
-                            )
-                        with c_ed_b2:
-                            btn_sync_from_inp = st.button(
-                                "🔄 نسخ القيم الحالية من خانات البند الرئيسية",
-                                key=f"{ed_prefix}_btn_sync",
-                                use_container_width=True,
-                            )
-                            if btn_sync_from_inp:
-                                st.session_state[f"_m15_sync_edit_{target_preset['label']}"] = True
-                                st.rerun()
-
-                        if btn_save_ed:
-                            new_name_clean = str(ed_name or "").strip()
-                            if not new_name_clean:
-                                st.warning("⚠️ يرجى إدخال اسم البند.")
-                            else:
-                                old_lbl = target_preset["label"]
-                                conflict = any(p["label"] == new_name_clean and p["label"] != old_lbl for p in presets)
-                                if conflict:
-                                    st.warning(f"⚠️ يوجد قالب آخر مسجل باسم «{new_name_clean}»، يرجى اختيار اسم غير مكرر.")
-                                else:
-                                    for p in presets:
-                                        if p["label"] == old_lbl:
-                                            p["label"] = new_name_clean
-                                            p["name"] = new_name_clean
-                                            p["unit"] = str(ed_unit)
-                                            p["unit_price"] = round(float(ed_price), 2)
-                                            p["description"] = str(ed_desc or "").strip() or new_name_clean
-                                            break
-                                    _save_manual_boq_presets_list(presets)
-                                    if st.session_state.get("m15_man_preset_sel") == old_lbl:
-                                        st.session_state["m15_man_preset_sel"] = new_name_clean
-                                    st.session_state["_m15_last_manual_preset"] = None
-                                    st.session_state["_m15_set_edit_sel"] = new_name_clean
-                                    st.toast(f"💾 تم حفظ وتحديث القالب «{new_name_clean}» بنجاح في المكتبة لجميع المشاريع!", icon="✨")
-                                    st.rerun()
-
-            # ── Tab 3: حذف قالب من المكتبة ──
-            with tab_del_p:
-                st.markdown(
-                    """<div dir="rtl" style="color:#f87171; font-weight:800; font-size:1.02rem; margin-bottom:8px;">
-                        🗑️ حذف قالب من المكتبة العامة (سيُزال من قائمة القوالب لجميع المشاريع):
-                    </div>""",
-                    unsafe_allow_html=True,
-                )
-                PLACEHOLDER_NO_DEL = "— لا يوجد بند محدد للحذف —"
-                if st.session_state.pop("_m15_reset_del_sel", False):
-                    st.session_state["m15_del_preset_sel"] = PLACEHOLDER_NO_DEL
-
-                deletable_presets = [p for p in presets if not str(p.get("label", "")).startswith("✨ بند حر")]
-                del_options = [PLACEHOLDER_NO_DEL] + [p["label"] for p in deletable_presets]
-
-                if "m15_del_preset_sel" not in st.session_state or st.session_state["m15_del_preset_sel"] not in del_options:
-                    st.session_state["m15_del_preset_sel"] = PLACEHOLDER_NO_DEL
-
-                selected_del_lbl = st.selectbox(
-                    "🗑️ اختر القالب المراد حذفه من المكتبة:",
-                    options=del_options,
-                    key="m15_del_preset_sel",
-                    help="اختر قالباً لحذفه نهائياً من مكتبة القوالب لجميع المشاريع.",
-                )
-
-                if selected_del_lbl == PLACEHOLDER_NO_DEL:
-                    st.info("ℹ️ اختر قالباً من القائمة المنسدلة أعلاه لحذفه من المكتبة.")
-                else:
-                    # إطلاق صفارة تحذيرية فور اختيار البند
-                    token = f"m15_whistle_del_preset_{selected_del_lbl}"
-                    play_delete_confirmation_whistle(token)
-
-                    st.markdown(
-                        f"""
-                        <div dir="rtl" style="background:rgba(220,38,38,0.18); border:1.5px solid #ef4444; border-radius:8px; padding:12px; margin-bottom:12px; color:#fca5a5; font-size:1.02rem; font-weight:700;">
-                            ⚠️ هل أنت متأكد من رغبتك في حذف القالب: <b style="color:#ffffff;">«{selected_del_lbl}»</b> نهائياً من المكتبة العامة لجميع المشاريع؟
-                            <br><span style="font-size:0.88rem; color:#fecaca;">(لن تتأثر البنود المضافة مسبقاً في جداول الحصر للمشاريع الحالية، بل سيتم فقط إزالة القالب من القائمة المنسدلة).</span>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
-
-                    c_del_cancel, c_del_confirm = st.columns([1, 1])
-                    with c_del_cancel:
-                        btn_cancel_del = st.button(
-                            "❌ إلغاء",
-                            key=f"m15_btn_cancel_del_{selected_del_lbl}",
-                            use_container_width=True,
-                        )
-                    with c_del_confirm:
-                        btn_confirm_del = st.button(
-                            "🗑️ تأكيد الحذف",
-                            key=f"m15_btn_confirm_del_{selected_del_lbl}",
-                            type="primary",
-                            use_container_width=True,
-                        )
-
-                    if btn_cancel_del:
-                        st.session_state["_m15_reset_del_sel"] = True
-                        st.session_state.pop("_last_del_confirm_whistle_token", None)
-                        st.rerun()
-
-                    if btn_confirm_del:
-                        new_presets = [p for p in presets if p["label"] != selected_del_lbl]
-                        _save_manual_boq_presets_list(new_presets)
-                        st.session_state["_m15_reset_del_sel"] = True
-                        st.session_state.pop("_last_del_confirm_whistle_token", None)
-                        if st.session_state.get("m15_man_preset_sel") == selected_del_lbl:
-                            st.session_state["m15_man_preset_sel"] = new_presets[0]["label"] if new_presets else ""
-                        st.session_state["_m15_last_manual_preset"] = None
-                        st.toast(f"🗑️ تم حذف القالب «{selected_del_lbl}» بنجاح من المكتبة العامة لجميع المشاريع!", icon="✨")
-                        st.rerun()
 
         # مزامنة الحقول عند تغيير القالب
         if st.session_state.get("_m15_last_manual_preset") != sel_preset_lbl:
@@ -13384,7 +13416,7 @@ def _render_manual_boq_items_manager():
                     <td class="boq-td cell-summary">
                         <div class="summary-item-wrap">
                             <span class="seq-badge">{seq_no} -</span>
-                            <div class="name-editor" contenteditable="true" spellcheck="false" data-uid="{uid}" title="انقر لتعديل اسم البند — يدعم النسخ واللصق Ctrl+C / Ctrl+V">{name_esc}</div>
+                            <div class="name-editor" contenteditable="true" spellcheck="false" dir="auto" data-uid="{uid}" title="انقر لتعديل اسم البند — يدعم النسخ واللصق Ctrl+C / Ctrl+V">{name_esc}</div>
                         </div>
                         <div class="col-resizer" data-col="0" title="اسحب بالماوس لتغيير عرض العمود"></div>
                         <div class="row-resizer" data-row="{off}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
@@ -13397,9 +13429,9 @@ def _render_manual_boq_items_manager():
                     </td>
                     <!-- Col 2: الكمية الصافية قبل المعامل -->
                     <td class="boq-td cell-qty">
-                        <div class="cell-center-wrap" style="flex-direction:column; gap:2px;">
+                        <div class="cell-center-wrap" style="flex-direction:column; gap:1px;">
                             <div class="cell-num-editor qty-editor" contenteditable="true" spellcheck="false" dir="ltr" data-uid="{uid}" title="انقر لتعديل الكمية الصافية قبل المعامل">{m_net_q:,.2f}</div>
-                            <div class="sub-qty-info" style="font-size:0.78rem; color:#86efac; font-weight:800;">الإجمالي: <span class="eff-tot-q-txt">{eff_tot_q:,.2f}</span></div>
+                            <div class="sub-qty-info" style="font-size:0.50rem; color:#86efac; font-weight:800;">الإجمالي: <span class="eff-tot-q-txt">{eff_tot_q:,.2f}</span></div>
                         </div>
                         <div class="col-resizer" data-col="2" title="اسحب بالماوس لتغيير عرض العمود"></div>
                         <div class="row-resizer" data-row="{off}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
@@ -13420,7 +13452,7 @@ def _render_manual_boq_items_manager():
                     </td>
                     <!-- Col 5: توصيف البند -->
                     <td class="boq-td cell-desc">
-                        <div class="desc-editor" contenteditable="true" spellcheck="false" data-uid="{uid}" title="انقر للتعديل المباشر — يدعم النسخ واللصق Ctrl+C / Ctrl+V">{desc_esc}</div>
+                        <div class="desc-editor" contenteditable="true" spellcheck="false" dir="auto" data-uid="{uid}" title="انقر للتعديل المباشر — يدعم النسخ واللصق Ctrl+C / Ctrl+V">{desc_esc}</div>
                         <div class="col-resizer" data-col="5" title="اسحب بالماوس لتغيير عرض العمود"></div>
                         <div class="row-resizer" data-row="{off}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
                     </td>
@@ -13442,14 +13474,14 @@ def _render_manual_boq_items_manager():
                 <td class="boq-td cell-summary">
                     <div class="summary-item-wrap">
                         <span class="seq-badge total-seq-badge">💰</span>
-                        <span class="item-name-txt">إجمالي البنود اليدوية المضافة (Manual Items Total)</span>
+                        <span class="item-name-txt" dir="auto">إجمالي البنود اليدوية المضافة (Manual Items Total)</span>
                     </div>
                 </td>
                 <td class="boq-td cell-unit"><div class="cell-center-wrap">ج.م</div></td>
                 <td class="boq-td cell-qty"><div class="cell-center-wrap">—</div></td>
                 <td class="boq-td cell-uprice"><div class="cell-center-wrap">—</div></td>
                 <td class="boq-td cell-tcost"><div class="cell-center-wrap grand-manual-cost" dir="ltr">{grand_manual_cost:,.2f}</div></td>
-                <td class="boq-td cell-desc" style="color:#a7f3d0; font-weight:800; font-size:0.95rem; padding:8px 14px;">إجمالي تكلفة البنود اليدوية الإضافية شاملة معامل الزيادة (×{cur_factor:.2f})</td>
+                <td class="boq-td cell-desc" dir="auto" style="color:#a7f3d0; font-weight:800; font-size:0.68rem; padding:4px 8px;">إجمالي تكلفة البنود اليدوية الإضافية شاملة معامل الزيادة (×{cur_factor:.2f})</td>
                 <td class="boq-td cell-del"><div class="cell-center-wrap">—</div></td>
             </tr>
             """)
@@ -13504,42 +13536,42 @@ def _render_manual_boq_items_manager():
   }}
   .boq-main-title {{
     font-weight: 900;
-    font-size: 1.15rem;
+    font-size: 0.68rem;
     color: #fb923c;
   }}
   .boq-sub-badge {{
-    font-size: 0.90rem;
+    font-size: 0.56rem;
     color: #fdba74;
     font-weight: 700;
     background: rgba(234, 88, 12, 0.22);
-    padding: 4px 11px;
-    border-radius: 6px;
+    padding: 2px 6px;
+    border-radius: 4px;
     border: 1px solid rgba(249, 115, 22, 0.45);
   }}
   .boq-actions-group {{
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
   }}
   .boq-edit-hint {{
     background: linear-gradient(135deg, rgba(2, 132, 199, 0.28) 0%, rgba(14, 165, 233, 0.16) 100%);
     border: 1.5px solid #38bdf8;
-    border-radius: 8px;
-    padding: 6px 14px;
+    border-radius: 5px;
+    padding: 2px 6px;
     color: #38bdf8;
     font-weight: 900;
-    font-size: 0.95rem;
-    box-shadow: 0 0 12px rgba(56, 189, 248, 0.30);
+    font-size: 0.66rem;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.30);
   }}
   .boq-reset-btn {{
     background: rgba(234, 88, 12, 0.22);
     border: 1.5px solid #f97316;
     color: #fed7aa;
     font-weight: 800;
-    font-size: 0.88rem;
-    padding: 6px 12px;
-    border-radius: 8px;
+    font-size: 0.56rem;
+    padding: 2px 6px;
+    border-radius: 5px;
     cursor: pointer;
     transition: all 0.18s ease;
     font-family: inherit;
@@ -13547,35 +13579,36 @@ def _render_manual_boq_items_manager():
   .boq-reset-btn:hover {{
     background: rgba(234, 88, 12, 0.45);
     color: #ffffff;
-    box-shadow: 0 0 10px rgba(249, 115, 22, 0.45);
+    box-shadow: 0 0 6px rgba(249, 115, 22, 0.45);
   }}
   .boq-save-status {{
-    font-size: 0.85rem;
+    font-size: 0.54rem;
     font-weight: 800;
     color: #34d399;
     display: none;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
     background: rgba(16, 185, 129, 0.16);
     border: 1px solid rgba(52, 211, 153, 0.4);
-    padding: 4px 10px;
-    border-radius: 6px;
+    padding: 2px 5px;
+    border-radius: 4px;
   }}
 
   /* حاوية الجدول الموحد */
   .boq-table-wrapper {{
     width: 100%;
     border: 2px solid #ea580c;
-    border-radius: 12px;
+    border-radius: 10px;
     background: #0f172a;
     box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: visible;
     position: relative;
   }}
   table#m15-manual-boq-table {{
-    width: 100%;
-    min-width: 980px;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
     table-layout: fixed;
     border-collapse: collapse;
     border-spacing: 0;
@@ -13585,14 +13618,14 @@ def _render_manual_boq_items_manager():
 
   /* ── بانيلات عناوين الجدول المدمجة في thead ── */
   thead.boq-thead tr.boq-header-row {{
-    height: 68px;
+    height: 38px;
   }}
   th.boq-th {{
     position: relative;
-    padding: 10px 8px;
+    padding: 4px 2px;
     vertical-align: middle;
     text-align: center;
-    border-bottom: 2.5px solid #ea580c;
+    border-bottom: 2px solid #ea580c;
     user-select: none;
     overflow: visible;
   }}
@@ -13603,70 +13636,70 @@ def _render_manual_boq_items_manager():
   }}
   th.boq-th-orange .th-main-title {{
     display: block;
-    font-size: 1.10rem;
+    font-size: 0.68rem;
     font-weight: 900;
     color: #fb923c;
-    text-shadow: 0 0 12px rgba(251, 146, 60, 0.75), 0 1px 3px #000000;
-    line-height: 1.3;
+    text-shadow: 0 0 8px rgba(251, 146, 60, 0.75), 0 1px 2px #000000;
+    line-height: 1.25;
   }}
   th.boq-th-orange .th-sub-title {{
     display: block;
-    font-size: 0.88rem;
+    font-size: 0.56rem;
     font-weight: 800;
     color: #fed7aa;
-    margin-top: 3px;
-    line-height: 1.2;
+    margin-top: 1px;
+    line-height: 1.15;
   }}
   /* البانيل الأزرق المدمج لعمود توصيف البند */
   th.boq-th-blue {{
     background: linear-gradient(180deg, rgba(2, 132, 199, 0.48) 0%, rgba(14, 165, 233, 0.26) 100%);
     border-left: 1.5px solid rgba(56, 189, 248, 0.50);
-    border-bottom: 2.5px solid #38bdf8;
+    border-bottom: 2px solid #38bdf8;
   }}
   th.boq-th-blue .th-main-title {{
     display: block;
-    font-size: 1.12rem;
+    font-size: 0.68rem;
     font-weight: 900;
     color: #00f5ff;
-    text-shadow: 0 0 12px rgba(0, 245, 255, 0.80), 0 1px 3px #000000;
-    line-height: 1.3;
+    text-shadow: 0 0 8px rgba(0, 245, 255, 0.80), 0 1px 2px #000000;
+    line-height: 1.25;
   }}
   th.boq-th-blue .th-sub-title {{
     display: block;
-    font-size: 0.88rem;
+    font-size: 0.56rem;
     font-weight: 800;
     color: #7dd3fc;
-    margin-top: 3px;
-    text-shadow: 0 0 8px rgba(125, 211, 252, 0.65);
-    line-height: 1.2;
+    margin-top: 1px;
+    text-shadow: 0 0 6px rgba(125, 211, 252, 0.65);
+    line-height: 1.15;
   }}
   /* البانيل الأحمر لزر الحذف */
   th.boq-th-red {{
     background: linear-gradient(180deg, rgba(220, 38, 38, 0.42) 0%, rgba(153, 27, 27, 0.26) 100%);
     border-left: none;
-    border-bottom: 2.5px solid #ef4444;
+    border-bottom: 2px solid #ef4444;
   }}
   th.boq-th-red .th-main-title {{
     display: block;
-    font-size: 1.10rem;
+    font-size: 0.68rem;
     font-weight: 900;
     color: #f87171;
-    text-shadow: 0 0 12px rgba(239, 68, 68, 0.75), 0 1px 3px #000000;
-    line-height: 1.3;
+    text-shadow: 0 0 8px rgba(239, 68, 68, 0.75), 0 1px 2px #000000;
+    line-height: 1.25;
   }}
   th.boq-th-red .th-sub-title {{
     display: block;
-    font-size: 0.88rem;
+    font-size: 0.56rem;
     font-weight: 800;
     color: #fca5a5;
-    margin-top: 3px;
-    line-height: 1.2;
+    margin-top: 1px;
+    line-height: 1.15;
   }}
 
-  /* ── صفوف وخلايا الجدول مع تكبير حجم الخط ── */
+  /* ── صفوف وخلايا الجدول ── */
   tr.boq-row {{
     transition: background-color 0.12s ease;
-    min-height: 58px;
+    min-height: 30px;
   }}
   tr.boq-even-row {{
     background-color: rgba(15, 23, 42, 0.92);
@@ -13680,8 +13713,8 @@ def _render_manual_boq_items_manager():
   td.boq-td {{
     position: relative;
     vertical-align: middle;
-    border-bottom: 1.5px solid rgba(148, 163, 184, 0.24);
-    border-left: 1.5px solid rgba(148, 163, 184, 0.22);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.20);
+    border-left: 1px solid rgba(148, 163, 184, 0.18);
     overflow: visible;
   }}
   td.boq-td:last-child {{
@@ -13692,7 +13725,7 @@ def _render_manual_boq_items_manager():
   td.cell-summary {{
     direction: rtl;
     text-align: right;
-    padding: 10px 14px;
+    padding: 3px 6px;
     background: rgba(234, 88, 12, 0.05);
   }}
   .summary-item-wrap {{
@@ -13700,7 +13733,7 @@ def _render_manual_boq_items_manager():
     flex-direction: row;
     align-items: center;
     justify-content: flex-start;
-    gap: 8px;
+    gap: 4px;
     direction: rtl;
     text-align: right;
     width: 100%;
@@ -13708,26 +13741,30 @@ def _render_manual_boq_items_manager():
   .seq-badge {{
     flex-shrink: 0;
     display: inline-block;
-    font-size: 1.10rem;
+    font-size: 0.68rem;
     font-weight: 900;
     color: #fb923c;
-    min-width: 32px;
+    min-width: 20px;
     text-align: right;
     line-height: 1.4;
     user-select: text;
   }}
   .name-editor {{
     flex: 1;
-    font-size: 1.06rem;
+    font-size: 0.68rem;
     font-weight: 800;
     color: #f8fafc;
-    line-height: 1.5;
-    text-align: right;
-    padding: 5px 8px;
+    line-height: 1.4;
+    text-align: start;
+    unicode-bidi: plaintext;
+    padding: 2px 4px;
     border: 1.5px solid transparent;
-    border-radius: 6px;
+    border-radius: 4px;
     background: transparent;
     outline: none;
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
     cursor: text;
     user-select: text;
     transition: all 0.15s ease;
@@ -13750,7 +13787,7 @@ def _render_manual_boq_items_manager():
     text-align: center;
     width: 100%;
     height: 100%;
-    padding: 8px 6px;
+    padding: 3px 2px;
     white-space: normal;
     word-wrap: break-word;
     user-select: text;
@@ -13760,34 +13797,34 @@ def _render_manual_boq_items_manager():
   .unit-select {{
     background: #0f172a;
     color: #38bdf8;
-    border: 1.5px solid rgba(56, 189, 248, 0.4);
-    border-radius: 6px;
-    font-size: 0.98rem;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    border-radius: 4px;
+    font-size: 0.66rem;
     font-weight: 800;
-    padding: 5px 6px;
+    padding: 2px 2px;
     outline: none;
     font-family: inherit;
     cursor: pointer;
     text-align: center;
     width: 100%;
-    max-width: 130px;
+    max-width: 100%;
     transition: all 0.15s ease;
   }}
   .unit-select:hover, .unit-select:focus {{
     border-color: #38bdf8;
-    box-shadow: 0 0 8px rgba(56, 189, 248, 0.35);
+    box-shadow: 0 0 6px rgba(56, 189, 248, 0.35);
   }}
 
   /* محرر الأرقام للكمية والسعر */
   .cell-num-editor {{
     display: inline-block;
-    min-width: 65px;
-    padding: 4px 8px;
-    font-size: 1.12rem;
+    min-width: 40px;
+    padding: 2px 4px;
+    font-size: 0.68rem;
     font-weight: 800;
     color: #f8fafc;
     border: 1.5px solid transparent;
-    border-radius: 6px;
+    border-radius: 4px;
     background: transparent;
     outline: none;
     text-align: center;
@@ -13807,30 +13844,29 @@ def _render_manual_boq_items_manager():
     color: #fdba74;
   }}
   td.cell-tcost .total-cost-val {{
-    font-size: 1.15rem;
+    font-size: 0.68rem;
     font-weight: 900;
     color: #fbbf24;
   }}
 
   /* عمود التوصيف */
   td.cell-desc {{
-    direction: rtl;
-    text-align: right;
-    padding: 8px 10px;
+    padding: 3px 6px;
     background: rgba(2, 132, 199, 0.04);
+    overflow: visible;
   }}
   .desc-editor {{
     width: 100%;
-    min-height: 44px;
-    padding: 6px 10px;
-    direction: rtl;
-    text-align: right;
-    font-size: 1.04rem;
+    min-height: 26px;
+    padding: 3px 6px;
+    text-align: start;
+    unicode-bidi: plaintext;
+    font-size: 0.68rem;
     font-weight: 600;
     color: #ffffff;
-    line-height: 1.6;
+    line-height: 1.4;
     border: 1.5px solid transparent;
-    border-radius: 8px;
+    border-radius: 5px;
     background: transparent;
     outline: none;
     white-space: pre-wrap;
@@ -13847,18 +13883,18 @@ def _render_manual_boq_items_manager():
   .desc-editor:focus {{
     border-color: #38bdf8;
     background: rgba(15, 23, 42, 0.95);
-    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.22);
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.22);
   }}
 
   /* زر الحذف */
   .boq-row-del-btn {{
     background: rgba(220, 38, 38, 0.22);
-    border: 1.5px solid #ef4444;
+    border: 1px solid #ef4444;
     color: #fca5a5;
     font-weight: 800;
-    font-size: 0.90rem;
-    padding: 6px 12px;
-    border-radius: 8px;
+    font-size: 0.57rem;
+    padding: 2px 5px;
+    border-radius: 4px;
     cursor: pointer;
     transition: all 0.18s ease;
     font-family: inherit;
@@ -13867,34 +13903,34 @@ def _render_manual_boq_items_manager():
   .boq-row-del-btn:hover {{
     background: rgba(220, 38, 38, 0.55);
     color: #ffffff;
-    box-shadow: 0 0 10px rgba(239, 68, 68, 0.6);
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
   }}
   .boq-row-del-btn.del-confirming {{
     background: #dc2626 !important;
     color: #ffffff !important;
     border-color: #fca5a5 !important;
-    box-shadow: 0 0 14px rgba(220, 38, 38, 0.9) !important;
+    box-shadow: 0 0 10px rgba(220, 38, 38, 0.9) !important;
   }}
 
   /* صف الإجمالي */
   tr.boq-total-row {{
     background: linear-gradient(90deg, rgba(6, 78, 59, 0.70) 0%, rgba(4, 120, 87, 0.50) 100%) !important;
-    border-top: 2.5px solid #10b981;
+    border-top: 2px solid #10b981;
   }}
   tr.boq-total-row td.boq-td {{
     border-bottom: none;
   }}
   tr.boq-total-row .seq-badge,
   tr.boq-total-row .item-name-txt {{
-    font-size: 1.15rem !important;
+    font-size: 0.70rem !important;
     font-weight: 900 !important;
     color: #34d399 !important;
   }}
   tr.boq-total-row td.cell-tcost .grand-manual-cost {{
-    font-size: 1.25rem !important;
+    font-size: 0.73rem !important;
     font-weight: 900 !important;
     color: #10b981 !important;
-    text-shadow: 0 0 10px rgba(16, 185, 129, 0.45);
+    text-shadow: 0 0 6px rgba(16, 185, 129, 0.45);
   }}
 
   /* مقابض التحجيم */
@@ -13967,13 +14003,13 @@ def _render_manual_boq_items_manager():
     <div class="boq-table-wrapper" id="man-table-wrapper">
         <table id="m15-manual-boq-table" dir="rtl">
             <colgroup>
-                <col id="man-col-0" style="width: 24%;">
+                <col id="man-col-0" style="width: 23%;">
                 <col id="man-col-1" style="width: 9%;">
-                <col id="man-col-2" style="width: 10%;">
+                <col id="man-col-2" style="width: 9%;">
                 <col id="man-col-3" style="width: 9%;">
-                <col id="man-col-4" style="width: 11%;">
-                <col id="man-col-5" style="width: 30%;">
-                <col id="man-col-6" style="width: 7%;">
+                <col id="man-col-4" style="width: 10%;">
+                <col id="man-col-5" style="width: 34%;">
+                <col id="man-col-6" style="width: 6%;">
             </colgroup>
             <thead class="boq-thead">
                 <tr class="boq-header-row" id="man-header-tr" data-row-idx="header">
@@ -14031,8 +14067,8 @@ def _render_manual_boq_items_manager():
 (function() {{
     const COL_STORAGE_KEY = 'm15_man_boq_col_widths_v2';
     const ROW_STORAGE_KEY = 'm15_man_boq_row_heights_v2';
-    const DEFAULT_RATIOS = [0.24, 0.09, 0.10, 0.09, 0.11, 0.30, 0.07];
-    const MIN_COL_WIDTHS = [180, 65, 80, 75, 85, 200, 60];
+    const DEFAULT_RATIOS = [0.23, 0.09, 0.09, 0.09, 0.10, 0.34, 0.06];
+    const MIN_COL_WIDTHS = [70, 35, 40, 40, 45, 100, 30];
     const curFactor = {cur_factor:.2f};
 
     const table = document.getElementById('m15-manual-boq-table');
@@ -14158,14 +14194,13 @@ def _render_manual_boq_items_manager():
     setTimeout(updateIframeHeight, 300);
 
     function initColumnWidths(forceDefault) {{
-        const availW = Math.max(980, (wrapper ? wrapper.clientWidth : 1200) - 4);
         let savedWidths = null;
         if (!forceDefault) {{
             try {{
                 const raw = localStorage.getItem(COL_STORAGE_KEY);
                 if (raw) {{
                     const parsed = JSON.parse(raw);
-                    if (Array.isArray(parsed) && parsed.length === 7 && parsed.every(x => typeof x === 'number' && x >= 40)) {{
+                    if (Array.isArray(parsed) && parsed.length === 7 && parsed.every(x => typeof x === 'number' && x >= 25)) {{
                         savedWidths = parsed;
                     }}
                 }}
@@ -14173,19 +14208,20 @@ def _render_manual_boq_items_manager():
         }}
 
         if (savedWidths) {{
-            let totalW = 0;
-            for (let i = 0; i < 7; i++) {{
-                cols[i].style.width = Math.round(savedWidths[i]) + 'px';
-                totalW += Math.round(savedWidths[i]);
+            let totalW = savedWidths.reduce((a, b) => a + b, 0);
+            if (totalW > 0) {{
+                for (let i = 0; i < 7; i++) {{
+                    const pct = ((savedWidths[i] / totalW) * 100).toFixed(2);
+                    cols[i].style.width = pct + '%';
+                }}
             }}
-            table.style.width = Math.max(availW, totalW) + 'px';
         }} else {{
             for (let i = 0; i < 7; i++) {{
-                const w = Math.max(MIN_COL_WIDTHS[i], Math.round(availW * DEFAULT_RATIOS[i]));
-                cols[i].style.width = w + 'px';
+                const pct = (DEFAULT_RATIOS[i] * 100).toFixed(2);
+                cols[i].style.width = pct + '%';
             }}
-            table.style.width = '100%';
         }}
+        table.style.width = '100%';
         updateIframeHeight();
     }}
 
@@ -14301,8 +14337,8 @@ def _render_manual_boq_items_manager():
         if (activeColIdx !== null) {{
             e.preventDefault();
             const deltaLeft = colStartX - e.clientX;
-            const minCur = MIN_COL_WIDTHS[activeColIdx] || 60;
-            const minNext = MIN_COL_WIDTHS[activeColIdx + 1] || 60;
+            const minCur = MIN_COL_WIDTHS[activeColIdx] || 30;
+            const minNext = MIN_COL_WIDTHS[activeColIdx + 1] || 30;
 
             let newCurW = Math.max(minCur, colStartW + deltaLeft);
             let actualDelta = newCurW - colStartW;
@@ -14310,17 +14346,18 @@ def _render_manual_boq_items_manager():
 
             if (newNextW < minNext) {{
                 newNextW = minNext;
+                actualDelta = nextColStartW - minNext;
+                newCurW = colStartW + actualDelta;
             }}
 
-            cols[activeColIdx].style.width = Math.round(newCurW) + 'px';
-            cols[activeColIdx + 1].style.width = Math.round(newNextW) + 'px';
+            const tblW = table.getBoundingClientRect().width || (wrapper ? wrapper.clientWidth : 1000) || 1000;
+            const pctCur = ((newCurW / tblW) * 100).toFixed(2);
+            const pctNext = ((newNextW / tblW) * 100).toFixed(2);
 
-            let sumW = 0;
-            for (let i = 0; i < 7; i++) {{
-                sumW += parseFloat(cols[i].style.width) || 100;
-            }}
-            const availW = Math.max(980, (wrapper ? wrapper.clientWidth : 1200) - 4);
-            table.style.width = Math.max(availW, Math.round(sumW)) + 'px';
+            cols[activeColIdx].style.width = pctCur + '%';
+            cols[activeColIdx + 1].style.width = pctNext + '%';
+
+            table.style.width = '100%';
             updateIframeHeight();
             return;
         }}
@@ -14444,6 +14481,42 @@ def _render_manual_boq_items_manager():
         }});
     }}
 
+    // ── ضبط اتجاه ومحاذاة الكتابة تلقائياً (RTL للعربية / LTR للإنجليزية) ──
+    function applyBiDiDirection(elem) {{
+        if (!elem) return;
+        const txt = (elem.innerText || elem.textContent || '').trim();
+        if (!txt) {{
+            elem.setAttribute('dir', 'auto');
+            elem.style.textAlign = 'start';
+            return;
+        }}
+        const arabicRegex = /[\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF]/;
+        const latinRegex = /[a-zA-Z]/;
+
+        let isArabic = false;
+        for (let i = 0; i < txt.length; i++) {{
+            const ch = txt[i];
+            if (arabicRegex.test(ch)) {{
+                isArabic = true;
+                break;
+            }} else if (latinRegex.test(ch)) {{
+                isArabic = false;
+                break;
+            }}
+        }}
+
+        if (isArabic) {{
+            elem.setAttribute('dir', 'rtl');
+            elem.style.textAlign = 'right';
+        }} else {{
+            elem.setAttribute('dir', 'ltr');
+            elem.style.textAlign = 'left';
+        }}
+    }}
+
+    // تطبيق ضبط الاتجاه والمحاذاة المبدئي لجميع خلايا الجدول اليدوي
+    document.querySelectorAll('.desc-editor, .name-editor').forEach(applyBiDiDirection);
+
     // مستمعات التعديل في خلايا الجدول
     document.querySelectorAll('.qty-editor, .price-editor').forEach(el => {{
         el.addEventListener('input', function() {{
@@ -14454,8 +14527,24 @@ def _render_manual_boq_items_manager():
         }});
     }});
 
+    document.querySelectorAll('.name-editor, .desc-editor').forEach(el => {{
+        el.addEventListener('input', function() {{
+            applyBiDiDirection(el);
+            updateIframeHeight();
+        }});
+        el.addEventListener('paste', function() {{
+            setTimeout(() => {{
+                applyBiDiDirection(el);
+                updateIframeHeight();
+            }}, 25);
+        }});
+    }});
+
     document.querySelectorAll('.name-editor, .desc-editor, .qty-editor, .price-editor').forEach(el => {{
         el.addEventListener('blur', function() {{
+            if (el.classList.contains('name-editor') || el.classList.contains('desc-editor')) {{
+                applyBiDiDirection(el);
+            }}
             updateGrandTotal();
             syncManualItemsToStreamlit();
         }});
@@ -14509,7 +14598,7 @@ def _render_manual_boq_items_manager():
 </body>
 </html>"""
 
-            _man_iframe_h = 240 + len(manual_items) * 68
+            _man_iframe_h = 180 + len(manual_items) * 48
             components.html(manual_boq_interactive_html, height=_man_iframe_h, scrolling=False)
         else:
             st.markdown(
@@ -14938,14 +15027,31 @@ def _section_plaster_boq():
     # ═════════════════════════════════════════════════════════════════════════
     st.markdown(
         """
-        <div dir="rtl" style="text-align: center; margin: 18px auto 14px auto; background: linear-gradient(135deg, rgba(30, 41, 59, 0.90) 0%, rgba(15, 23, 42, 0.96) 100%); border: 1.5px solid rgba(56, 189, 248, 0.5); border-top: 3px solid #38bdf8; border-radius: 8px; padding: 9px 24px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);">
-            <span style="font-size: 1.45rem; font-weight: 900; color: #38bdf8; text-shadow: 0 2px 6px rgba(0,0,0,0.7); letter-spacing: 0.5px;">
+        <div dir="rtl" style="text-align: center; margin: 18px auto 14px auto; background: linear-gradient(135deg, rgba(30, 41, 59, 0.90) 0%, rgba(15, 23, 42, 0.96) 100%); border: 1.5px solid rgba(245, 158, 11, 0.5); border-top: 3px solid #f59e0b; border-radius: 8px; padding: 9px 24px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);">
+            <span style="font-size: 1.45rem; font-weight: 900; color: #fbbf24; text-shadow: 0 2px 6px rgba(0,0,0,0.7); letter-spacing: 0.5px;">
                 💰 أسعار البنود
             </span>
         </div>
         <style>
+        /* برواز سميك بلون عنبري ذهبي مختلف تماماً عن حواف خانات الإدخال السماوية */
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.m15-rates-container-marker),
+        div[class*="st-key-m15_rates_container"] {
+            border: 3.5px solid #f59e0b !important;
+            border-radius: 12px !important;
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.90) 0%, rgba(30, 41, 59, 0.75) 100%) !important;
+            padding: 14px 16px 12px 16px !important;
+            margin-top: 6px !important;
+            margin-bottom: 16px !important;
+            box-shadow: 0 4px 22px rgba(0, 0, 0, 0.50), 0 0 18px rgba(245, 158, 11, 0.30) !important;
+            transition: all 0.25s ease !important;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.m15-rates-container-marker):hover,
+        div[class*="st-key-m15_rates_container"]:hover {
+            border-color: #fbbf24 !important;
+            box-shadow: 0 6px 28px rgba(251, 191, 36, 0.45) !important;
+        }
         div[data-testid="stColumn"]:has(div[class*="m15_rate_"]) label p {
-            font-size: 0.80rem !important;
+            font-size: 0.82rem !important;
             font-weight: 700 !important;
             color: #e2e8f0 !important;
             white-space: nowrap !important;
@@ -14954,200 +15060,209 @@ def _section_plaster_boq():
             margin-bottom: 2px !important;
         }
         div[data-testid="stColumn"]:has(div[class*="m15_rate_"]) input {
-            font-size: 0.88rem !important;
+            font-size: 0.90rem !important;
             font-weight: 800 !important;
             color: #38bdf8 !important;
             background-color: #0f172a !important;
-            border: 1px solid #334155 !important;
+            border: 1.8px solid #38bdf8 !important;
             border-radius: 6px !important;
             padding: 3px 5px !important;
             text-align: center !important;
+            transition: all 0.2s ease !important;
+        }
+        div[data-testid="stColumn"]:has(div[class*="m15_rate_"]) input:focus {
+            border-color: #60a5fa !important;
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.5) !important;
+            outline: none !important;
         }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
-    # 15 مدخل على 3 أسطر ضيقة ومنظمة (5 أعمدة في كل سطر)
-    p_r1_c1, p_r1_c2, p_r1_c3, p_r1_c4, p_r1_c5 = st.columns(5)
-    with p_r1_c1:
-        price_brick_12 = st.number_input(
-            "(م2) طوب 12 سم:",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_brick_12", st.session_state.get("m15_rate_brick", 160.0))),
-            step=5.0, format="%.1f",
-            key="m15_rate_brick_12",
-            help="سعر المتر المسطح لمباني طوب 12 سم (يشمل الحوائط والدروة)"
-        )
-    with p_r1_c2:
-        price_wall_plaster = st.number_input(
-            "(م2) محارة داخلية حوائط:",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_wall_plaster", 85.0)),
-            step=5.0, format="%.1f",
-            key="m15_rate_wall_plaster",
-            help="سعر المتر المسطح لمحارة الحوائط الداخلية"
-        )
-    with p_r1_c3:
-        price_ceiling_plaster = st.number_input(
-            "(م2) محارة السقف:",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_ceiling_plaster", 95.0)),
-            step=5.0, format="%.1f",
-            key="m15_rate_ceiling_plaster",
-            help="سعر المتر المسطح لمحارة الأسقف الداخلية"
-        )
-    with p_r1_c4:
-        price_facade_plaster = st.number_input(
-            "(م2) محارة واجهات:",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_facade_plaster", 140.0)),
-            step=5.0, format="%.1f",
-            key="m15_rate_facade_plaster",
-            help="سعر المتر المسطح لمحارة الواجهات الخارجية والدروة"
-        )
-    with p_r1_c5:
-        price_wall_paint = st.number_input(
-            "(م2) دهانات داخلية حوائط:",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_wall_paint", 75.0)),
-            step=5.0, format="%.1f",
-            key="m15_rate_wall_paint",
-            help="سعر المتر المسطح لدهانات الحوائط الداخلية"
-        )
+    # برواز حاوٍ سميك يضم جميع خانات ومدخلات أسعار البنود
+    with st.container(border=True, key="m15_rates_container"):
+        st.markdown('<div class="m15-rates-container-marker" style="display:none;"></div>', unsafe_allow_html=True)
+        # 15 مدخل على 3 أسطر ضيقة ومنظمة (5 أعمدة في كل سطر)
+        p_r1_c1, p_r1_c2, p_r1_c3, p_r1_c4, p_r1_c5 = st.columns(5)
+        with p_r1_c1:
+            price_brick_12 = st.number_input(
+                "(م2) طوب 12 سم:",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_brick_12", st.session_state.get("m15_rate_brick", 160.0))),
+                step=5.0, format="%.1f",
+                key="m15_rate_brick_12",
+                help="سعر المتر المسطح لمباني طوب 12 سم (يشمل الحوائط والدروة)"
+            )
+        with p_r1_c2:
+            price_wall_plaster = st.number_input(
+                "(م2) محارة داخلية حوائط:",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_wall_plaster", 85.0)),
+                step=5.0, format="%.1f",
+                key="m15_rate_wall_plaster",
+                help="سعر المتر المسطح لمحارة الحوائط الداخلية"
+            )
+        with p_r1_c3:
+            price_ceiling_plaster = st.number_input(
+                "(م2) محارة السقف:",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_ceiling_plaster", 95.0)),
+                step=5.0, format="%.1f",
+                key="m15_rate_ceiling_plaster",
+                help="سعر المتر المسطح لمحارة الأسقف الداخلية"
+            )
+        with p_r1_c4:
+            price_facade_plaster = st.number_input(
+                "(م2) محارة واجهات:",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_facade_plaster", 140.0)),
+                step=5.0, format="%.1f",
+                key="m15_rate_facade_plaster",
+                help="سعر المتر المسطح لمحارة الواجهات الخارجية والدروة"
+            )
+        with p_r1_c5:
+            price_wall_paint = st.number_input(
+                "(م2) دهانات داخلية حوائط:",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_wall_paint", 75.0)),
+                step=5.0, format="%.1f",
+                key="m15_rate_wall_paint",
+                help="سعر المتر المسطح لدهانات الحوائط الداخلية"
+            )
 
-    p_r2_c1, p_r2_c2, p_r2_c3, p_r2_c4, p_r2_c5 = st.columns(5)
-    with p_r2_c1:
-        price_ceiling_paint = st.number_input(
-            "(م2) دهانات السقف:",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_ceiling_paint", 80.0)),
-            step=5.0, format="%.1f",
-            key="m15_rate_ceiling_paint",
-            help="سعر المتر المسطح لدهانات الأسقف الداخلية"
-        )
-    with p_r2_c2:
-        price_facade_paint = st.number_input(
-            "(م2) دهانات واجهات:",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_facade_paint", 110.0)),
-            step=5.0, format="%.1f",
-            key="m15_rate_facade_paint",
-            help="سعر المتر المسطح لدهانات الواجهات الخارجية والدروة"
-        )
-    with p_r2_c3:
-        price_interlock = st.number_input(
-            "(م2) الانترلوك:",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_interlock", 220.0)),
-            step=5.0, format="%.1f",
-            key="m15_rate_interlock",
-            help="سعر المتر المسطح لبلاط انترلوك الأرصفة"
-        )
-    with p_r2_c4:
-        price_curbs = st.number_input(
-            "(م.ط) البردورات:",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_curbs", 160.0)),
-            step=5.0, format="%.1f",
-            key="m15_rate_curbs",
-            help="سعر المتر الطولي/المسطح لبردورات الأرصفة"
-        )
-    with p_r2_c5:
-        price_waterproof = st.number_input(
-            "(م2) عازل مائي (انسومات):",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_waterproof", 170.0)),
-            step=5.0, format="%.1f",
-            key="m15_rate_waterproof",
-            help="سعر المتر المسطح للعزل المائي للأسطح بمادة الأنسومات"
-        )
+        p_r2_c1, p_r2_c2, p_r2_c3, p_r2_c4, p_r2_c5 = st.columns(5)
+        with p_r2_c1:
+            price_ceiling_paint = st.number_input(
+                "(م2) دهانات السقف:",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_ceiling_paint", 80.0)),
+                step=5.0, format="%.1f",
+                key="m15_rate_ceiling_paint",
+                help="سعر المتر المسطح لدهانات الأسقف الداخلية"
+            )
+        with p_r2_c2:
+            price_facade_paint = st.number_input(
+                "(م2) دهانات واجهات:",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_facade_paint", 110.0)),
+                step=5.0, format="%.1f",
+                key="m15_rate_facade_paint",
+                help="سعر المتر المسطح لدهانات الواجهات الخارجية والدروة"
+            )
+        with p_r2_c3:
+            price_interlock = st.number_input(
+                "(م2) الانترلوك:",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_interlock", 220.0)),
+                step=5.0, format="%.1f",
+                key="m15_rate_interlock",
+                help="سعر المتر المسطح لبلاط انترلوك الأرصفة"
+            )
+        with p_r2_c4:
+            price_curbs = st.number_input(
+                "(م.ط) البردورات:",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_curbs", 160.0)),
+                step=5.0, format="%.1f",
+                key="m15_rate_curbs",
+                help="سعر المتر الطولي/المسطح لبردورات الأرصفة"
+            )
+        with p_r2_c5:
+            price_waterproof = st.number_input(
+                "(م2) عازل مائي (انسومات):",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_waterproof", 170.0)),
+                step=5.0, format="%.1f",
+                key="m15_rate_waterproof",
+                help="سعر المتر المسطح للعزل المائي للأسطح بمادة الأنسومات"
+            )
 
-    p_r3_c1, p_r3_c2, p_r3_c3, p_r3_c4, p_r3_c5 = st.columns(5)
-    with p_r3_c1:
-        price_thermal = st.number_input(
-            "(م2) عازل حراري للسطح:",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_thermal", 130.0)),
-            step=5.0, format="%.1f",
-            key="m15_rate_thermal",
-            help="سعر المتر المسطح للعزل الحراري للأسطح"
-        )
-    with p_r3_c2:
-        price_roof_tiles = st.number_input(
-            "(م2) بلاط اسطح:",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_roof_tiles", 150.0)),
-            step=5.0, format="%.1f",
-            key="m15_rate_roof_tiles",
-            help="سعر المتر المسطح لبلاط أسطح المبنى"
-        )
-    with p_r3_c3:
-        price_floor_ceramic = st.number_input(
-            "(م2) سيراميك ارضيات:",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_floor_ceramic", 260.0)),
-            step=5.0, format="%.1f",
-            key="m15_rate_floor_ceramic",
-            help="سعر المتر المسطح لسيراميك الأرضيات للغرف والصالات"
-        )
-    with p_r3_c4:
-        price_bath_ceramic = st.number_input(
-            "سعر سيراميك حمامات:",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_bath_ceramic", 290.0)),
-            step=5.0, format="%.1f",
-            key="m15_rate_bath_ceramic",
-            help="سعر (م2) سيراميك حمامات (ارضيات / حوائط)"
-        )
-    with p_r3_c5:
-        price_kitchen_ceramic = st.number_input(
-            "سعر سيراميك مطابخ:",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_kitchen_ceramic", 290.0)),
-            step=5.0, format="%.1f",
-            key="m15_rate_kitchen_ceramic",
-            help="سعر (م2) سيراميك مطابخ (ارضيات / حوائط)"
-        )
+        p_r3_c1, p_r3_c2, p_r3_c3, p_r3_c4, p_r3_c5 = st.columns(5)
+        with p_r3_c1:
+            price_thermal = st.number_input(
+                "(م2) عازل حراري للسطح:",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_thermal", 130.0)),
+                step=5.0, format="%.1f",
+                key="m15_rate_thermal",
+                help="سعر المتر المسطح للعزل الحراري للأسطح"
+            )
+        with p_r3_c2:
+            price_roof_tiles = st.number_input(
+                "(م2) بلاط اسطح:",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_roof_tiles", 150.0)),
+                step=5.0, format="%.1f",
+                key="m15_rate_roof_tiles",
+                help="سعر المتر المسطح لبلاط أسطح المبنى"
+            )
+        with p_r3_c3:
+            price_floor_ceramic = st.number_input(
+                "(م2) سيراميك ارضيات:",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_floor_ceramic", 260.0)),
+                step=5.0, format="%.1f",
+                key="m15_rate_floor_ceramic",
+                help="سعر المتر المسطح لسيراميك الأرضيات للغرف والصالات"
+            )
+        with p_r3_c4:
+            price_bath_ceramic = st.number_input(
+                "سعر سيراميك حمامات:",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_bath_ceramic", 290.0)),
+                step=5.0, format="%.1f",
+                key="m15_rate_bath_ceramic",
+                help="سعر (م2) سيراميك حمامات (ارضيات / حوائط)"
+            )
+        with p_r3_c5:
+            price_kitchen_ceramic = st.number_input(
+                "سعر سيراميك مطابخ:",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_kitchen_ceramic", 290.0)),
+                step=5.0, format="%.1f",
+                key="m15_rate_kitchen_ceramic",
+                help="سعر (م2) سيراميك مطابخ (ارضيات / حوائط)"
+            )
 
-    # صف رابع لأسعار طوب 25 سم والشبابيك الألوميتال وأبواب الحمامات وأبواب الغرف
-    p_r4_c1, p_r4_c2, p_r4_c3, p_r4_c4 = st.columns(4)
-    with p_r4_c1:
-        price_brick_25 = st.number_input(
-            "(م3) طوب 25 سم:",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_brick_25", 1200.0)),
-            step=25.0, format="%.1f",
-            key="m15_rate_brick_25",
-            help="سعر المتر المكعب لمباني طوب 25 سم (يشمل الحوائط والدروة)"
-        )
-    with p_r4_c2:
-        price_alum_windows = st.number_input(
-            "(م2) شبابيك ألوميتال:",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_alum_windows", 2800.0)),
-            step=50.0, format="%.1f",
-            key="m15_rate_alum_windows",
-            help="سعر المتر المسطح لشبابيك الألوميتال للواجهات والمساقط"
-        )
-    with p_r4_c3:
-        price_bath_doors = st.number_input(
-            "(عدد) أبواب حمامات (≤ 80سم):",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_bath_doors", 1800.0)),
-            step=50.0, format="%.1f",
-            key="m15_rate_bath_doors",
-            help="سعر الباب الواحد لأبواب حمامات الوحدة عرض 80 سم أو أقل"
-        )
-    with p_r4_c4:
-        price_room_doors = st.number_input(
-            "(عدد) أبواب غرف (> 80سم):",
-            min_value=0.0, max_value=50000.0,
-            value=float(st.session_state.get("m15_rate_room_doors", 2400.0)),
-            step=50.0, format="%.1f",
-            key="m15_rate_room_doors",
-            help="سعر الباب الواحد لأبواب غرف الوحدة والمدخل عرض أكبر من 80 سم"
-        )
+        # صف رابع لأسعار طوب 25 سم والشبابيك الألوميتال وأبواب الحمامات وأبواب الغرف
+        p_r4_c1, p_r4_c2, p_r4_c3, p_r4_c4 = st.columns(4)
+        with p_r4_c1:
+            price_brick_25 = st.number_input(
+                "(م3) طوب 25 سم:",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_brick_25", 1200.0)),
+                step=25.0, format="%.1f",
+                key="m15_rate_brick_25",
+                help="سعر المتر المكعب لمباني طوب 25 سم (يشمل الحوائط والدروة)"
+            )
+        with p_r4_c2:
+            price_alum_windows = st.number_input(
+                "(م2) شبابيك ألوميتال:",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_alum_windows", 2800.0)),
+                step=50.0, format="%.1f",
+                key="m15_rate_alum_windows",
+                help="سعر المتر المسطح لشبابيك الألوميتال للواجهات والمساقط"
+            )
+        with p_r4_c3:
+            price_bath_doors = st.number_input(
+                "(عدد) أبواب حمامات (≤ 80سم):",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_bath_doors", 1800.0)),
+                step=50.0, format="%.1f",
+                key="m15_rate_bath_doors",
+                help="سعر الباب الواحد لأبواب حمامات الوحدة عرض 80 سم أو أقل"
+            )
+        with p_r4_c4:
+            price_room_doors = st.number_input(
+                "(عدد) أبواب غرف (> 80سم):",
+                min_value=0.0, max_value=50000.0,
+                value=float(st.session_state.get("m15_rate_room_doors", 2400.0)),
+                step=50.0, format="%.1f",
+                key="m15_rate_room_doors",
+                help="سعر الباب الواحد لأبواب غرف الوحدة والمدخل عرض أكبر من 80 سم"
+            )
 
     # ═════════════════════════════════════════════════════════════════════════
     #  ثالثاً مكرر: إضافة وإدارة بنود الحصر اليدوية ومعامل الزيادة العام
@@ -15368,7 +15483,7 @@ def _section_plaster_boq():
             <td class="boq-td cell-summary">
                 <div class="summary-item-wrap">
                     {seq_html}
-                    <span class="item-name-txt">{name_esc}</span>
+                    <span class="item-name-txt" dir="auto">{name_esc}</span>
                 </div>
                 <div class="col-resizer" data-col="0" title="اسحب بالماوس لتغيير عرض العمود"></div>
                 <div class="row-resizer" data-row="{r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
@@ -15394,7 +15509,7 @@ def _section_plaster_boq():
                 <div class="row-resizer" data-row="{r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
             </td>
             <td class="boq-td cell-desc">
-                <div class="desc-editor" contenteditable="true" spellcheck="false" data-item-code="{code_esc}" title="انقر للتعديل المباشر — يدعم النسخ واللصق Ctrl+C / Ctrl+V">{desc_esc}</div>
+                <div class="desc-editor" contenteditable="true" spellcheck="false" dir="auto" data-item-code="{code_esc}" title="انقر للتعديل المباشر — يدعم النسخ واللصق Ctrl+C / Ctrl+V">{desc_esc}</div>
                 <div class="row-resizer" data-row="{r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
             </td>
         </tr>
@@ -15451,42 +15566,42 @@ def _section_plaster_boq():
   }}
   .boq-main-title {{
     font-weight: 900;
-    font-size: 1.15rem;
+    font-size: 0.68rem;
     color: #fb923c;
   }}
   .boq-sub-badge {{
-    font-size: 0.90rem;
+    font-size: 0.56rem;
     color: #fdba74;
     font-weight: 700;
     background: rgba(234, 88, 12, 0.22);
-    padding: 4px 11px;
-    border-radius: 6px;
+    padding: 2px 6px;
+    border-radius: 4px;
     border: 1px solid rgba(249, 115, 22, 0.45);
   }}
   .boq-actions-group {{
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
   }}
   .boq-edit-hint {{
     background: linear-gradient(135deg, rgba(2, 132, 199, 0.28) 0%, rgba(14, 165, 233, 0.16) 100%);
     border: 1.5px solid #38bdf8;
-    border-radius: 8px;
-    padding: 6px 14px;
+    border-radius: 5px;
+    padding: 2px 6px;
     color: #38bdf8;
     font-weight: 900;
-    font-size: 0.95rem;
-    box-shadow: 0 0 12px rgba(56, 189, 248, 0.30);
+    font-size: 0.60rem;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.30);
   }}
   .boq-reset-btn {{
     background: rgba(234, 88, 12, 0.22);
     border: 1.5px solid #f97316;
     color: #fed7aa;
     font-weight: 800;
-    font-size: 0.88rem;
-    padding: 6px 12px;
-    border-radius: 8px;
+    font-size: 0.56rem;
+    padding: 2px 6px;
+    border-radius: 5px;
     cursor: pointer;
     transition: all 0.18s ease;
     font-family: inherit;
@@ -15494,35 +15609,36 @@ def _section_plaster_boq():
   .boq-reset-btn:hover {{
     background: rgba(234, 88, 12, 0.45);
     color: #ffffff;
-    box-shadow: 0 0 10px rgba(249, 115, 22, 0.45);
+    box-shadow: 0 0 6px rgba(249, 115, 22, 0.45);
   }}
   .boq-save-status {{
-    font-size: 0.85rem;
+    font-size: 0.54rem;
     font-weight: 800;
     color: #34d399;
     display: none;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
     background: rgba(16, 185, 129, 0.16);
     border: 1px solid rgba(52, 211, 153, 0.4);
-    padding: 4px 10px;
-    border-radius: 6px;
+    padding: 2px 5px;
+    border-radius: 4px;
   }}
 
   /* حاوية الجدول الموحد (دمج البانيلات مع الجدول بدون أي فصل) */
   .boq-table-wrapper {{
     width: 100%;
     border: 2px solid #ea580c;
-    border-radius: 12px;
+    border-radius: 10px;
     background: #0f172a;
     box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: visible;
     position: relative;
   }}
   table#m15-boq-table {{
-    width: 100%;
-    min-width: 980px;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
     table-layout: fixed;
     border-collapse: collapse;
     border-spacing: 0;
@@ -15532,14 +15648,14 @@ def _section_plaster_boq():
 
   /* ── بانيلات عناوين الجدول المدمجة في thead (برتقالي وأزرق) ── */
   thead.boq-thead tr.boq-header-row {{
-    height: 68px;
+    height: 38px;
   }}
   th.boq-th {{
     position: relative;
-    padding: 10px 8px;
+    padding: 4px 2px;
     vertical-align: middle;
     text-align: center;
-    border-bottom: 2.5px solid #ea580c;
+    border-bottom: 2px solid #ea580c;
     user-select: none;
     overflow: visible;
   }}
@@ -15550,48 +15666,48 @@ def _section_plaster_boq():
   }}
   th.boq-th-orange .th-main-title {{
     display: block;
-    font-size: 1.12rem;
+    font-size: 0.68rem;
     font-weight: 900;
     color: #fb923c;
-    text-shadow: 0 0 12px rgba(251, 146, 60, 0.75), 0 1px 3px #000000;
-    line-height: 1.3;
+    text-shadow: 0 0 8px rgba(251, 146, 60, 0.75), 0 1px 2px #000000;
+    line-height: 1.25;
   }}
   th.boq-th-orange .th-sub-title {{
     display: block;
-    font-size: 0.92rem;
+    font-size: 0.56rem;
     font-weight: 800;
     color: #fed7aa;
-    margin-top: 3px;
-    line-height: 1.2;
+    margin-top: 1px;
+    line-height: 1.15;
   }}
   /* البانيل الأزرق المدمج لعمود توصيف البند */
   th.boq-th-blue {{
     background: linear-gradient(180deg, rgba(2, 132, 199, 0.48) 0%, rgba(14, 165, 233, 0.26) 100%);
     border-left: none;
-    border-bottom: 2.5px solid #38bdf8;
+    border-bottom: 2px solid #38bdf8;
   }}
   th.boq-th-blue .th-main-title {{
     display: block;
-    font-size: 1.14rem;
+    font-size: 0.68rem;
     font-weight: 900;
     color: #00f5ff;
-    text-shadow: 0 0 12px rgba(0, 245, 255, 0.80), 0 1px 3px #000000;
-    line-height: 1.3;
+    text-shadow: 0 0 8px rgba(0, 245, 255, 0.80), 0 1px 2px #000000;
+    line-height: 1.25;
   }}
   th.boq-th-blue .th-sub-title {{
     display: block;
-    font-size: 0.92rem;
+    font-size: 0.56rem;
     font-weight: 800;
     color: #7dd3fc;
-    margin-top: 3px;
-    text-shadow: 0 0 8px rgba(125, 211, 252, 0.65);
-    line-height: 1.2;
+    margin-top: 1px;
+    text-shadow: 0 0 6px rgba(125, 211, 252, 0.65);
+    line-height: 1.15;
   }}
 
-  /* ── صفوف وخلايا الجدول مع تكبير حجم الخط ── */
+  /* ── صفوف وخلايا الجدول ── */
   tr.boq-row {{
     transition: background-color 0.12s ease;
-    min-height: 58px;
+    min-height: 30px;
   }}
   tr.boq-even-row {{
     background-color: rgba(15, 23, 42, 0.92);
@@ -15605,8 +15721,8 @@ def _section_plaster_boq():
   td.boq-td {{
     position: relative;
     vertical-align: middle;
-    border-bottom: 1.5px solid rgba(148, 163, 184, 0.24);
-    border-left: 1.5px solid rgba(148, 163, 184, 0.22);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.20);
+    border-left: 1px solid rgba(148, 163, 184, 0.18);
     overflow: visible;
   }}
   td.boq-td:last-child {{
@@ -15617,7 +15733,7 @@ def _section_plaster_boq():
   td.cell-summary {{
     direction: rtl;
     text-align: right;
-    padding: 12px 22px 12px 14px;
+    padding: 4px 8px 4px 6px;
     background: rgba(234, 88, 12, 0.05);
   }}
   .summary-item-wrap {{
@@ -15625,37 +15741,38 @@ def _section_plaster_boq():
     flex-direction: row;
     align-items: flex-start;
     justify-content: flex-start;
-    gap: 8px;
+    gap: 4px;
     direction: rtl;
     text-align: right;
     width: 100%;
-    margin-right: 4px;
+    margin-right: 2px;
   }}
   .seq-badge {{
     flex-shrink: 0;
     display: inline-block;
-    font-size: 1.12rem;
+    font-size: 0.68rem;
     font-weight: 900;
     color: #fb923c;
-    min-width: 34px;
+    min-width: 20px;
     text-align: right;
-    line-height: 1.55;
+    line-height: 1.4;
     user-select: text;
   }}
   .item-name-txt {{
     flex: 1;
-    font-size: 1.08rem;
+    font-size: 0.68rem;
     font-weight: 800;
     color: #f8fafc;
-    line-height: 1.55;
-    text-align: right;
+    line-height: 1.4;
+    text-align: start;
+    unicode-bidi: plaintext;
     white-space: normal;
     word-wrap: break-word;
     overflow-wrap: break-word;
     user-select: text;
   }}
 
-  /* ── تنسيق الأعمدة الرقمية والوحدة بخط مكبر وواضح ── */
+  /* ── تنسيق الأعمدة الرقمية والوحدة بحجم مطابق 0.8x ── */
   .cell-center-wrap {{
     display: flex;
     align-items: center;
@@ -15663,51 +15780,50 @@ def _section_plaster_boq():
     text-align: center;
     width: 100%;
     height: 100%;
-    padding: 10px 8px;
+    padding: 3px 2px;
     white-space: normal;
     word-wrap: break-word;
     user-select: text;
   }}
   td.cell-unit .cell-center-wrap {{
-    font-size: 1.05rem;
+    font-size: 0.68rem;
     font-weight: 700;
     color: #e2e8f0;
   }}
   td.cell-qty .cell-center-wrap {{
-    font-size: 1.14rem;
+    font-size: 0.68rem;
     font-weight: 800;
     color: #f8fafc;
   }}
   td.cell-uprice .cell-center-wrap {{
-    font-size: 1.12rem;
+    font-size: 0.68rem;
     font-weight: 800;
     color: #fdba74;
   }}
   td.cell-tcost .cell-center-wrap {{
-    font-size: 1.15rem;
+    font-size: 0.68rem;
     font-weight: 900;
     color: #fbbf24;
   }}
 
-  /* ── تنسيق عمود توصيف البند القابل للتعديل بخط مكبر ── */
+  /* ── تنسيق عمود توصيف البند القابل للتعديل ── */
   td.cell-desc {{
-    direction: rtl;
-    text-align: right;
-    padding: 8px 12px;
+    padding: 3px 6px;
     background: rgba(2, 132, 199, 0.04);
+    overflow: visible;
   }}
   .desc-editor {{
     width: 100%;
-    min-height: 44px;
-    padding: 8px 12px;
-    direction: rtl;
-    text-align: right;
-    font-size: 1.06rem;
+    min-height: 26px;
+    padding: 3px 6px;
+    text-align: start;
+    unicode-bidi: plaintext;
+    font-size: 0.68rem;
     font-weight: 600;
     color: #ffffff;
-    line-height: 1.65;
+    line-height: 1.4;
     border: 1.5px solid transparent;
-    border-radius: 8px;
+    border-radius: 5px;
     background: transparent;
     outline: none;
     white-space: pre-wrap;
@@ -15724,38 +15840,38 @@ def _section_plaster_boq():
   .desc-editor:focus {{
     border-color: #38bdf8;
     background: rgba(15, 23, 42, 0.95);
-    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.22);
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.22);
   }}
 
   /* ── تنسيق صف إجمالي التكلفة في نهاية الجدول ── */
   tr.boq-total-row {{
     background: linear-gradient(90deg, rgba(6, 78, 59, 0.70) 0%, rgba(4, 120, 87, 0.50) 100%) !important;
-    border-top: 2.5px solid #10b981;
+    border-top: 2px solid #10b981;
   }}
   tr.boq-total-row td.boq-td {{
     border-bottom: none;
   }}
   tr.boq-total-row .seq-badge,
   tr.boq-total-row .item-name-txt {{
-    font-size: 1.20rem !important;
+    font-size: 0.70rem !important;
     font-weight: 900 !important;
     color: #34d399 !important;
   }}
   tr.boq-total-row td.cell-unit .cell-center-wrap,
   tr.boq-total-row td.cell-qty .cell-center-wrap,
   tr.boq-total-row td.cell-uprice .cell-center-wrap {{
-    font-size: 1.14rem !important;
+    font-size: 0.68rem !important;
     font-weight: 900 !important;
     color: #6ee7b7 !important;
   }}
   tr.boq-total-row td.cell-tcost .cell-center-wrap {{
-    font-size: 1.26rem !important;
+    font-size: 0.73rem !important;
     font-weight: 900 !important;
     color: #10b981 !important;
-    text-shadow: 0 0 10px rgba(16, 185, 129, 0.45);
+    text-shadow: 0 0 6px rgba(16, 185, 129, 0.45);
   }}
   tr.boq-total-row .desc-editor {{
-    font-size: 1.10rem !important;
+    font-size: 0.68rem !important;
     font-weight: 800 !important;
     color: #a7f3d0 !important;
   }}
@@ -15832,12 +15948,12 @@ def _section_plaster_boq():
     <div class="boq-table-wrapper" id="boq-table-wrapper">
         <table id="m15-boq-table" dir="rtl">
             <colgroup>
-                <col id="boq-col-0" style="width: 27%;">
-                <col id="boq-col-1" style="width: 8%;">
+                <col id="boq-col-0" style="width: 24%;">
+                <col id="boq-col-1" style="width: 7%;">
                 <col id="boq-col-2" style="width: 9%;">
-                <col id="boq-col-3" style="width: 9.5%;">
-                <col id="boq-col-4" style="width: 10.5%;">
-                <col id="boq-col-5" style="width: 36%;">
+                <col id="boq-col-3" style="width: 10%;">
+                <col id="boq-col-4" style="width: 11%;">
+                <col id="boq-col-5" style="width: 39%;">
             </colgroup>
             <thead class="boq-thead">
                 <tr class="boq-header-row" id="boq-header-tr" data-row-idx="header">
@@ -15895,8 +16011,8 @@ def _section_plaster_boq():
 (function() {{
     const COL_STORAGE_KEY = 'm15_boq_col_widths_v2';
     const ROW_STORAGE_KEY = 'm15_boq_row_heights_v2';
-    const DEFAULT_RATIOS = [0.27, 0.08, 0.09, 0.095, 0.105, 0.36];
-    const MIN_COL_WIDTHS = [210, 65, 75, 80, 90, 240];
+    const DEFAULT_RATIOS = [0.24, 0.07, 0.09, 0.10, 0.11, 0.39];
+    const MIN_COL_WIDTHS = [90, 40, 45, 50, 55, 120];
 
     const table = document.getElementById('m15-boq-table');
     const wrapper = document.getElementById('boq-table-wrapper');
@@ -15993,16 +16109,15 @@ def _section_plaster_boq():
     setTimeout(updateIframeHeight, 300);
     setTimeout(updateIframeHeight, 700);
 
-    // تهيئة واستعادة عرض الأعمدة
+    // تهيئة واستعادة عرض الأعمدة بنسب مئوية متناسبة تملأ 100% من الشاشة دائماً بدون أي شريط تمرير أفقي
     function initColumnWidths(forceDefault) {{
-        const availW = Math.max(980, (wrapper ? wrapper.clientWidth : 1200) - 4);
         let savedWidths = null;
         if (!forceDefault) {{
             try {{
                 const raw = localStorage.getItem(COL_STORAGE_KEY);
                 if (raw) {{
                     const parsed = JSON.parse(raw);
-                    if (Array.isArray(parsed) && parsed.length === 6 && parsed.every(x => typeof x === 'number' && x >= 50)) {{
+                    if (Array.isArray(parsed) && parsed.length === 6 && parsed.every(x => typeof x === 'number' && x >= 30)) {{
                         savedWidths = parsed;
                     }}
                 }}
@@ -16010,19 +16125,20 @@ def _section_plaster_boq():
         }}
 
         if (savedWidths) {{
-            let totalW = 0;
-            for (let i = 0; i < 6; i++) {{
-                cols[i].style.width = Math.round(savedWidths[i]) + 'px';
-                totalW += Math.round(savedWidths[i]);
+            let totalW = savedWidths.reduce((a, b) => a + b, 0);
+            if (totalW > 0) {{
+                for (let i = 0; i < 6; i++) {{
+                    const pct = ((savedWidths[i] / totalW) * 100).toFixed(2);
+                    cols[i].style.width = pct + '%';
+                }}
             }}
-            table.style.width = Math.max(availW, totalW) + 'px';
         }} else {{
             for (let i = 0; i < 6; i++) {{
-                const w = Math.max(MIN_COL_WIDTHS[i], Math.round(availW * DEFAULT_RATIOS[i]));
-                cols[i].style.width = w + 'px';
+                const pct = (DEFAULT_RATIOS[i] * 100).toFixed(2);
+                cols[i].style.width = pct + '%';
             }}
-            table.style.width = '100%';
         }}
+        table.style.width = '100%';
         updateIframeHeight();
     }}
 
@@ -16140,8 +16256,8 @@ def _section_plaster_boq():
             e.preventDefault();
             // في اتجاه RTL: السحب لليسار (clientX يقل => deltaLeft موجب) يزيد عرض العمود الحالي
             const deltaLeft = colStartX - e.clientX;
-            const minCur = MIN_COL_WIDTHS[activeColIdx] || 70;
-            const minNext = MIN_COL_WIDTHS[activeColIdx + 1] || 70;
+            const minCur = MIN_COL_WIDTHS[activeColIdx] || 45;
+            const minNext = MIN_COL_WIDTHS[activeColIdx + 1] || 45;
 
             let newCurW = Math.max(minCur, colStartW + deltaLeft);
             let actualDelta = newCurW - colStartW;
@@ -16149,17 +16265,18 @@ def _section_plaster_boq():
 
             if (newNextW < minNext) {{
                 newNextW = minNext;
+                actualDelta = nextColStartW - minNext;
+                newCurW = colStartW + actualDelta;
             }}
 
-            cols[activeColIdx].style.width = Math.round(newCurW) + 'px';
-            cols[activeColIdx + 1].style.width = Math.round(newNextW) + 'px';
+            const tblW = table.getBoundingClientRect().width || (wrapper ? wrapper.clientWidth : 1000) || 1000;
+            const pctCur = ((newCurW / tblW) * 100).toFixed(2);
+            const pctNext = ((newNextW / tblW) * 100).toFixed(2);
 
-            let sumW = 0;
-            for (let i = 0; i < 6; i++) {{
-                sumW += parseFloat(cols[i].style.width) || 120;
-            }}
-            const availW = Math.max(980, (wrapper ? wrapper.clientWidth : 1200) - 4);
-            table.style.width = Math.max(availW, Math.round(sumW)) + 'px';
+            cols[activeColIdx].style.width = pctCur + '%';
+            cols[activeColIdx + 1].style.width = pctNext + '%';
+
+            table.style.width = '100%';
             updateIframeHeight();
             return;
         }}
@@ -16280,11 +16397,48 @@ def _section_plaster_boq():
         }}
     }}
 
+    // ── ضبط اتجاه ومحاذاة الكتابة تلقائياً (RTL للعربية / LTR للإنجليزية) ──
+    function applyBiDiDirection(elem) {{
+        if (!elem) return;
+        const txt = (elem.innerText || elem.textContent || '').trim();
+        if (!txt) {{
+            elem.setAttribute('dir', 'auto');
+            elem.style.textAlign = 'start';
+            return;
+        }}
+        const arabicRegex = /[\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF]/;
+        const latinRegex = /[a-zA-Z]/;
+
+        let isArabic = false;
+        for (let i = 0; i < txt.length; i++) {{
+            const ch = txt[i];
+            if (arabicRegex.test(ch)) {{
+                isArabic = true;
+                break;
+            }} else if (latinRegex.test(ch)) {{
+                isArabic = false;
+                break;
+            }}
+        }}
+
+        if (isArabic) {{
+            elem.setAttribute('dir', 'rtl');
+            elem.style.textAlign = 'right';
+        }} else {{
+            elem.setAttribute('dir', 'ltr');
+            elem.style.textAlign = 'left';
+        }}
+    }}
+
+    // تطبيق ضبط الاتجاه والمحاذاة المبدئي لجميع خلايا الجدول
+    document.querySelectorAll('.desc-editor, .item-name-txt').forEach(applyBiDiDirection);
+
     document.querySelectorAll('.desc-editor').forEach(editor => {{
         editor.addEventListener('focus', function() {{
             activeFocusedEditor = editor;
         }});
         editor.addEventListener('input', function() {{
+            applyBiDiDirection(editor);
             const code = editor.getAttribute('data-item-code');
             if (code) {{
                 descriptionsMap[code] = (editor.innerText || editor.textContent || '').trim();
@@ -16292,12 +16446,19 @@ def _section_plaster_boq():
             updateIframeHeight();
         }});
         editor.addEventListener('blur', function() {{
+            applyBiDiDirection(editor);
             if (activeFocusedEditor === editor) activeFocusedEditor = null;
             const code = editor.getAttribute('data-item-code');
             if (code) {{
                 descriptionsMap[code] = (editor.innerText || editor.textContent || '').trim();
             }}
             syncDescriptionsToStreamlit();
+        }});
+        editor.addEventListener('paste', function() {{
+            setTimeout(() => {{
+                applyBiDiDirection(editor);
+                updateIframeHeight();
+            }}, 25);
         }});
     }});
 
@@ -16314,7 +16475,7 @@ def _section_plaster_boq():
 </body>
 </html>"""
 
-    _boq_iframe_h = 1490 + len(_get_manual_boq_items_list()) * 72
+    _boq_iframe_h = 1200 + len(_get_manual_boq_items_list()) * 48
     components.html(boq_interactive_html, height=_boq_iframe_h, scrolling=False)
 
     # ── زر تصدير جدول الحصر الكامل EXCEL SHEET بتنسيق مميز أحمر وتقليل التباعد ──

@@ -4118,7 +4118,18 @@ def render_3d_bim_viewer(
     """
     Renders the Integrated 3D Structural BIM & Rebar Viewer inside Module 1.
     """
-    with st.expander("🏢 3D Integrated BIM & Rebar Viewer (عارض النماذج الإنشائية ثلاثي الأبعاد والحديد)", expanded=False):
+    _ftg_exp_ver_3d = int(st.session_state.get("ftg_outputs_exp_ver", 0))
+    _exp_3d_key = f"{prefix}exp_bim_3d_viewer_v{_ftg_exp_ver_3d}"
+    _exp_3d = st.expander(
+        "🏢 3D Integrated BIM & Rebar Viewer (عارض النماذج الإنشائية ثلاثي الأبعاد والحديد)",
+        expanded=False,
+        key=_exp_3d_key,
+        on_change="rerun",
+    )
+    with _exp_3d:
+        if not st.session_state.get(_exp_3d_key, False):
+            st.info("💡 انقر لتوسيع هذا القسم وتوليد عارض النماذج الإنشائية ثلاثي الأبعاد والحديد (3D BIM Viewer) طبقاً لآخر المدخلات.")
+            return
         scene_data = extract_bim_3d_scene_data(
             Lx_calc=Lx_calc,
             Ly_calc=Ly_calc,
@@ -6073,7 +6084,18 @@ def render_standalone_flat_slab_3d_bim_viewer(
     """
     Renders the 3D BIM & Rebar Viewer for Module 13: Standalone Flat Slabs.
     """
-    with st.expander("🏢 3D Integrated BIM & Rebar Viewer (عارض النماذج الإنشائية ثلاثي الأبعاد والحديد)", expanded=False):
+    _ftg_exp_ver_3d = int(st.session_state.get("ftg_outputs_exp_ver", 0))
+    _exp_3d_key = f"{prefix}exp_bim_3d_viewer_v{_ftg_exp_ver_3d}"
+    _exp_3d = st.expander(
+        "🏢 3D Integrated BIM & Rebar Viewer (عارض النماذج الإنشائية ثلاثي الأبعاد والحديد)",
+        expanded=False,
+        key=_exp_3d_key,
+        on_change="rerun",
+    )
+    with _exp_3d:
+        if not st.session_state.get(_exp_3d_key, False):
+            st.info("💡 انقر لتوسيع هذا القسم وتوليد عارض النماذج الإنشائية ثلاثي الأبعاد والحديد (3D BIM Viewer) طبقاً لآخر المدخلات.")
+            return
         scene_data = extract_bim_3d_scene_data(
             Lx_calc=Lx_calc,
             Ly_calc=Ly_calc,

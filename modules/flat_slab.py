@@ -31,6 +31,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection, Line3DCollection
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 from modules import settings as S
 from modules.table_styler import render_styled_table
@@ -17578,7 +17579,2329 @@ def inject_module1_drawings_pan_zoom():
 </html>"""
     components.html(PAN_ZOOM_INJECTION_HTML, height=0, width=0)
 
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# ── دوال مكتبة القوالب والبنود اليدوية وحساب المواد لـ Module 1 (BOQ Engine) ──
+# ═════════════════════════════════════════════════════════════════════════════
+_CW_PRESETS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "m1_manual_boq_presets.json")
+CW_MANUAL_BOQ_UNIT_OPTIONS = ["م² (m²)", "م³ (m³)", "متر طولي L.M", "عدد (No.)", "طن (Ton)", "كجم (Kg)", "مقطوعية (L.S)"]
+
+def _get_cw_manual_boq_presets_list():
+    """قراءة قائمة قوالب البنود الجاهزة المحفوظة على مستوى النظام لجميع المشاريع في Module 1."""
+    presets = None
+    if os.path.exists(_CW_PRESETS_FILE):
+        try:
+            with open(_CW_PRESETS_FILE, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+                if isinstance(loaded, list) and len(loaded) > 0:
+                    presets = loaded
+        except Exception:
+            presets = None
+    if not presets:
+        presets = [
+            {
+                "label": "✨ بند حر مخصص (إدخال يدوي حر)",
+                "name": "بند إنشائي / مدني إضافي مخصص",
+                "unit": "م² (m²)",
+                "unit_price": 500.0,
+                "mat_category": "supply_install",
+                "description": "بالمتر المربع، توريد وتركيب وتنفيذ البند طبقاً للمواصفات الفنية وأصول الصناعة المعتمدة واشتراطات المهندس المشرف والكود المصري ECP."
+            },
+            {
+                "label": "🪜 رخام درج السلالم (نائمة وقائمة)",
+                "name": "أعمال رخام درج السلالم (نائمة 4 سم وقائمة 2 سم)",
+                "unit": "متر طولي L.M",
+                "unit_price": 950.0,
+                "mat_category": "marble",
+                "description": "بالمتر الطولي، توريد وتركيب رخام درج السلالم نائمة سماكة 4 سم بحلية مستديرة وقائمة سماكة 2 سم من الرخام الممتاز مع المونة واللصق والسقية وميزان المياه."
+            },
+            {
+                "label": "🏛️ أعمال رخام وجرانيت بسطات وصدفات سلالم وأرضيات مداخل",
+                "name": "رخام وجرانيت بسطات وصدفات السلالم والمداخل",
+                "unit": "م² (m²)",
+                "unit_price": 1300.0,
+                "mat_category": "marble",
+                "description": "بالمتر المربع، توريد وتركيب ألواح وترابيع رخام أو جرانيت سمك 2 سم لبسطات وصدفات السلالم والمداخل شاملاً فرشة الرمل ومونة اللصق والسقية والتشطيب وجلاء وتلميع الفواصل."
+            },
+            {
+                "label": "🏛️ تكسية واجهات وحوائط بالحجر الفرعوني / الهاشمي",
+                "name": "تكسية واجهات بحجر فرعوني / هاشمي هيصم مقاسات متنوعة",
+                "unit": "م² (m²)",
+                "unit_price": 650.0,
+                "mat_category": "stone",
+                "description": "بالمتر المربع، توريد وتركيب حجر فرعوني أو هاشمي للواجهات الخارجية والأسوار شاملاً المونة وتفتيح الفواصل والكانات والتثبيت الميكانيكي أو بالمونة الأسمنتية عيار 350 كجم/م³ ورش المياه."
+            },
+            {
+                "label": "🪨 تكسية حوائط وواجهات بحجر مايكا / حجر طبيعي",
+                "name": "تكسية حوائط بحجر مايكا طبيعي مجمع شرائح ديكورية",
+                "unit": "م² (m²)",
+                "unit_price": 850.0,
+                "mat_category": "stone",
+                "description": "بالمتر المربع، توريد وتركيب حجر مايكا طبيعي شرائح ديكورية للواجهات والأعمدة والمداخل شاملاً مونة اللصق ذات الإضافات ومادة السيلر العازل للرطوبة وتثبيت الزوايا."
+            },
+            {
+                "label": "🛡️ درابزين وهاندريل سلالم وبلكونات (كريتال / استانلس)",
+                "name": "درابزين وهاندريل سلالم وبلكونات حديد كريتال أو استانلس ستيل",
+                "unit": "متر طولي L.M",
+                "unit_price": 1400.0,
+                "mat_category": "metal",
+                "description": "بالمتر الطولي، توريد وتصنيع وتركيب درابزين حديد مشغول كريتال أو مواسير استانلس ستيل 304 للسلالم والتراسات شاملاً التثبيت بالجوايط والمونة والإيبوكسي والدهان المقاوم للصدأ والتشطيب."
+            },
+            {
+                "label": "🚪 رخام أو جرانيت معابر وعتب وجلسات شبابيك",
+                "name": "رخام وجرانيت معابر الأبواب وجلسات الشبابيك والدراوي",
+                "unit": "متر طولي L.M",
+                "unit_price": 450.0,
+                "mat_category": "marble",
+                "description": "بالمتر الطولي، توريد وتركيب جلسات شبابيك ومعابر أبواب من الرخام أو الجرانيت سمك 3-4 سم بعرض الحائط مع عمل شطف وقطر مياه ومونة التثبيت والسقية."
+            },
+            {
+                "label": "🧱 وزرات رخام / جرانيت للسلالم والطرقات",
+                "name": "وزرات رخام وجرانيت ارتفاع 10 سم للسلالم والممرات",
+                "unit": "متر طولي L.M",
+                "unit_price": 220.0,
+                "mat_category": "marble",
+                "description": "بالمتر الطولي، توريد وتركيب وزرات رخام أو جرانيت ارتفاع 10 سم سمك 2 سم بحلية أو شطف مائل شاملاً مونة اللصق والسقية والوزن التام مع التشطيب."
+            },
+            {
+                "label": "🚪 باب رئيسي مصفح / بوابة حديد خارجية",
+                "name": "أبواب مصفحة للمداخل أو بوابات حديد خارجية للمبنى",
+                "unit": "عدد (No.)",
+                "unit_price": 12000.0,
+                "mat_category": "doors",
+                "description": "بالعدد، توريد وتركيب باب شقة مصفح تركي درجة أولى شاملاً الحلق المصفح والضلع والإكسسوارات والكوالين الذكية والتثبيت التام بالكانات الإنشائية وحشو الحلق بالخرسانة والمونة."
+            },
+            {
+                "label": "🏗️ خرسانة رغوية خفيفة لميول الأسطح (Foam Concrete)",
+                "name": "خرسانة رغوية خفيفة الوزن لضبط ميول صرف مياه الأمطار بالأسطح",
+                "unit": "م³ (m³)",
+                "unit_price": 900.0,
+                "mat_category": "concrete_special",
+                "description": "بالمتر المكعب، توريد وصب خرسانة رغوية خفيفة الوزن بكثافة 800-1000 كجم/م³ لعمل ميول تصريف مياه الأمطار بالأسطح باتجاه الجراجير بميول لا تقل عن 1% مع التسوية والتنعيم بالهيلكوبتر."
+            },
+            {
+                "label": "📐 أعمال فواصل التمدد والهبوط والووترستوب (Expansion Joints & Waterstop)",
+                "name": "معالجة وتقفيل فواصل التمدد والهبوط وشرائح الووترستوب PVC",
+                "unit": "متر طولي L.M",
+                "unit_price": 650.0,
+                "mat_category": "structural_joints",
+                "description": "بالمتر الطولي، توريد وتنفيذ فواصل التمدد والهبوط الإنشائية شاملاً شرائح الووترستوب المطاطية PVC وحشو الفوم ومادة البولي يوريثان المطاطية المقاومة للعوامل الجوية وتغطية الفاصل ببلتات ألومنيوم."
+            },
+            {
+                "label": "🛡️ أرضيات إيبوكسية مقاومة للمواد الكيميائية والاحتكاك (Epoxy Flooring)",
+                "name": "أرضيات إيبوكسية ذاتية التسوية للجراجات وغرف الخدمات",
+                "unit": "م² (m²)",
+                "unit_price": 420.0,
+                "mat_category": "epoxy",
+                "description": "بالمتر المربع، توريد وتطبيق دهانات وأرضيات إيبوكسية ذاتية التسوية Self-Leveling Epoxy سمك 2-3 مم شاملاً تجهيز السطح بالصنفرة الميكانيكية وطبقة البرايمر والطبقة الإيبوكسية المقاومة للبري والكيماويات."
+            }
+        ]
+        try:
+            with open(_CW_PRESETS_FILE, "w", encoding="utf-8") as f:
+                json.dump(presets, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+    return presets
+
+def _save_cw_manual_boq_presets_list(presets):
+    """حفظ قائمة القوالب الجاهزة في ملف JSON."""
+    try:
+        with open(_CW_PRESETS_FILE, "w", encoding="utf-8") as f:
+            json.dump(presets, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception:
+        return False
+
+def _get_cw_manual_boq_items_list(prefix=""):
+    """إرجاع قائمة البنود اليدوية المخزنة في session_state وإعدادات المشروع لـ Module 1."""
+    raw = st.session_state.get(f"{prefix}cw_manual_boq_items")
+    if not isinstance(raw, list):
+        raw = st.session_state.get("cw_manual_boq_items")
+    if not isinstance(raw, list):
+        raw = S.cfg_val(f"{prefix}cw_manual_boq_items") or S.cfg_val("cw_manual_boq_items") or []
+    if not isinstance(raw, list):
+        return []
+    cleaned = []
+    for x in raw:
+        if isinstance(x, dict):
+            c = dict(x)
+            u = str(c.get("unit", "")).strip()
+            if u in ("م.ط", "م.ط (m)", "متر طولي", "متر طولي L.M"):
+                c["unit"] = "متر طولي L.M"
+            cleaned.append(c)
+    return cleaned
+
+def _persist_cw_manual_boq_items(items_list, prefix=""):
+    """حفظ البنود اليدوية لـ Module 1 في session_state والإعدادات."""
+    clean_list = [dict(x) for x in items_list if isinstance(x, dict)]
+    st.session_state[f"{prefix}cw_manual_boq_items"] = clean_list
+    st.session_state["cw_manual_boq_items"] = clean_list
+    S.cfg_set(f"{prefix}cw_manual_boq_items", clean_list)
+    S.cfg_set("cw_manual_boq_items", clean_list)
+    S.save_settings()
+
+def _get_cw_manual_boq_t2_tuples(cw_qty_factor=1.00, start_idx=13, prefix=""):
+    """تحويل البنود اليدوية الإضافية إلى صيغة تابل (name, net_q, unit, u_price, details) لتدمج في المقايسة."""
+    manual_items = _get_cw_manual_boq_items_list(prefix=prefix)
+    tuples_out = []
+    for offset, m_item in enumerate(manual_items):
+        idx = start_idx + offset
+        raw_name = str(m_item.get("name", f"بند يدوي {idx}")).strip() or f"بند يدوي {idx}"
+        net_q = round(float(m_item.get("net_qty", 0.0)), 2)
+        unit = str(m_item.get("unit", "م² (m²)")).strip() or "م² (m²)"
+        u_price = round(float(m_item.get("unit_price", 0.0)), 2)
+        tot_q = round(net_q * float(cw_qty_factor), 2)
+        details = (
+            f"إدخال يدوي مباشر (خاضع لمعامل الزيادة): الكمية الصافية المدخلة ({net_q:,.2f} {unit}) "
+            f"× معامل الزيادة ({float(cw_qty_factor):.2f}) = الكمية الإجمالية المعتمدة ({tot_q:,.2f} {unit})"
+        )
+        item_label = f"{idx}- {raw_name} (إدخال يدوي)"
+        tuples_out.append((item_label, net_q, unit, u_price, details))
+    return tuples_out
+
+def _compute_cw_boq_items_materials_breakdown(
+    cw_items_data,
+    cw_qty_factor=1.00,
+    slab_steel_ton=0.0,
+    brick_l=25.0,
+    brick_w=12.0,
+    brick_h=6.0,
+    mortar_cm=1.0,
+    prefix=""
+):
+    """
+    حساب تفصيلي لكميات المواد الأساسية المستخدمة في كل بند من بنود المقايسة الشاملة:
+    (حديد التسليح - الخرسانة - الرمل - الأسمنت - الزلط - الطوب - المواد التكميلية)
+    """
+    mat_items = []
+    tot_sand = 0.0
+    tot_cement_kg = 0.0
+    tot_gravel = 0.0
+    tot_steel_ton = 0.0
+    tot_bricks = 0
+
+    import re as _re_mod
+
+    for idx, (name, net_q, unit, u_price, details) in enumerate(cw_items_data, start=1):
+        tot_q = round(net_q * cw_qty_factor, 2)
+        clean_name = _re_mod.sub(r'^\d+\s*[-–.]\s*', '', str(name)).strip()
+
+        sand_m3 = 0.0
+        cem_kg = 0.0
+        gravel_m3 = 0.0
+        steel_ton = 0.0
+        b_cnt = 0
+        other_mat = "—"
+
+        if tot_q > 0.0001:
+            if idx == 1:
+                # 1. خرسانة مسلحة أسقف وكمرات (م³)
+                sand_m3 = round(tot_q * 0.40, 2)
+                gravel_m3 = round(tot_q * 0.80, 2)
+                cem_kg = round(tot_q * 350.0, 1)
+                steel_ton = round(slab_steel_ton if slab_steel_ton > 0 else (tot_q * 0.110), 2)
+                other_mat = f"خرسانة مسلحة ECP 203 + حديد عالي المقاومة ({steel_ton:,.2f} طن)"
+            elif idx == 2:
+                # 2. خرسانة مسلحة أعمدة (م³)
+                sand_m3 = round(tot_q * 0.40, 2)
+                gravel_m3 = round(tot_q * 0.80, 2)
+                cem_kg = round(tot_q * 375.0, 1)
+                steel_ton = round(tot_q * 0.150, 2)
+                other_mat = f"خرسانة مسلحة أعمدة + حديد تسليح وكانات ({steel_ton:,.2f} طن)"
+            elif idx == 3:
+                # 3. خرسانة مسلحة أساسات وسملات (م³)
+                sand_m3 = round(tot_q * 0.40, 2)
+                gravel_m3 = round(tot_q * 0.80, 2)
+                cem_kg = round(tot_q * 350.0, 1)
+                steel_ton = round(tot_q * 0.090, 2)
+                other_mat = f"أسمنت SRC مقاوم للكبريتات + حديد تسليح ({steel_ton:,.2f} طن)"
+            elif idx == 4:
+                # 4. خرسانة عادية أسفل القواعد والسملات (م³)
+                sand_m3 = round(tot_q * 0.40, 2)
+                gravel_m3 = round(tot_q * 0.80, 2)
+                cem_kg = round(tot_q * 250.0, 1)
+                other_mat = "خرسانة عادية 250 كجم/م³ (5 شكائر) بدون تسليح"
+            elif idx == 5:
+                # 5. أعمال الردم (م³)
+                sand_m3 = round(tot_q, 2)
+                other_mat = "رمال نظيفة متدرجة ودمك ميكانيكي على طبقات"
+            elif idx == 6:
+                # 6. طوب أسمنتي (طوبة)
+                b_cnt = int(tot_q)
+                sand_m3 = round(b_cnt * 0.00075, 2)
+                cem_kg = round(sand_m3 * 350.0, 1)
+                other_mat = "طوب أسمنتي مصمت/مفرغ + مونة أسمنتية عيار 350 كجم/م³"
+            elif idx == 7:
+                # 7. انترلوك أرصفة (م²)
+                sand_m3 = round(tot_q * 0.06, 2)
+                other_mat = f"بلاطات انترلوك سمك 6 سم ({tot_q:,.1f} م²) + فرشة رمل"
+            elif idx == 8:
+                # 8. بردورة أرصفة (م.ط)
+                sand_m3 = round(tot_q * 0.02, 2)
+                cem_kg = round(tot_q * 10.0, 1)
+                gravel_m3 = round(tot_q * 0.03, 2)
+                other_mat = f"بردورات خرسانية جاهزة ({tot_q:,.1f} م.ط) + فرشة خرسانة عادية"
+            elif idx == 9:
+                # 9. عزل رطوبة للقواعد والسملات (م²)
+                other_mat = f"دهان بيتومين مؤكسد وجهين ({tot_q * 0.85:.1f} كجم بيتومين)"
+            elif idx == 10:
+                # 10. عزل مائي للسطح انسومات (م²)
+                other_mat = f"لفائف ممبرين 4 مم ({tot_q * 1.10:.1f} م²) + برايمر ({tot_q * 0.30:.1f} لتر)"
+            elif idx == 11:
+                # 11. عازل حراري (م²)
+                other_mat = f"ألواح بوليسترين XPS كثافة 35 كجم/م³ سمك 5 سم ({tot_q:,.1f} م²)"
+            elif idx == 12:
+                # 12. بلاط أسطح (م²)
+                sand_m3 = round(tot_q * 0.06, 2)
+                cem_kg = round(tot_q * 12.0, 1)
+                other_mat = f"بلاط أسمنتي للسطح ({tot_q:,.1f} م²) + رمل فرشة ومونة وسقية"
+            else:
+                # بنود يدوية إضافية (Manual Items)
+                u_str = str(unit)
+                if "م²" in u_str or "متر مربع" in u_str:
+                    sand_m3 = round(tot_q * 0.04, 2)
+                    cem_kg = round(tot_q * 10.0, 1)
+                    other_mat = f"توريد وتركيب خامات البند ({tot_q:,.2f} {unit}) ومونة التثبيت"
+                elif "متر طولي" in u_str or "L.M" in u_str or "م.ط" in u_str:
+                    sand_m3 = round(tot_q * 0.02, 2)
+                    cem_kg = round(tot_q * 8.0, 1)
+                    other_mat = f"توريد وتركيب خامات البند ({tot_q:,.2f} {unit}) ومونة التثبيت"
+                elif "م³" in u_str or "متر مكعب" in u_str:
+                    sand_m3 = round(tot_q * 0.40, 2)
+                    gravel_m3 = round(tot_q * 0.80, 2)
+                    cem_kg = round(tot_q * 300.0, 1)
+                    other_mat = f"خامات خرسانة ومواد البند ({tot_q:,.2f} {unit})"
+                else:
+                    other_mat = f"توريد وتركيب طبقاً لأصول الصناعة ({tot_q:,.2f} {unit})"
+
+        tot_sand += sand_m3
+        tot_cement_kg += cem_kg
+        tot_gravel += gravel_m3
+        tot_steel_ton += steel_ton
+        tot_bricks += b_cnt
+
+        mat_items.append({
+            "idx": idx,
+            "name": clean_name,
+            "tot_q": tot_q,
+            "unit": unit,
+            "sand_m3": sand_m3,
+            "cem_kg": cem_kg,
+            "cem_bags": int(round(cem_kg / 50.0)),
+            "cem_tons": round(cem_kg / 1000.0, 2),
+            "gravel_m3": gravel_m3,
+            "steel_ton": steel_ton,
+            "bricks": b_cnt,
+            "other": other_mat,
+        })
+
+    tot_cement_tons = round(tot_cement_kg / 1000.0, 2)
+    tot_cement_bags = int(round(tot_cement_kg / 50.0))
+
+    return {
+        "mat_items": mat_items,
+        "tot_sand": round(tot_sand, 2),
+        "tot_cement_kg": round(tot_cement_kg, 1),
+        "tot_cement_tons": tot_cement_tons,
+        "tot_cement_bags": tot_cement_bags,
+        "tot_gravel": round(tot_gravel, 2),
+        "tot_steel_ton": round(tot_steel_ton, 2),
+        "tot_bricks": tot_bricks,
+    }
+
+
+def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
+    """
+    قسم منفصل مطوي: إدارة وتخصيص مكتبة القوالب الجاهزة لجميع المشاريع (إضافة / تعديل / حذف)
+    """
+    with st.expander(
+        f"⚙️ 📚 إدارة وتخصيص مكتبة القوالب الجاهزة ({len(presets)} قالب متاح لجميع المشاريع)",
+        expanded=False,
+    ):
+        st.markdown('<div class="m1-preset-library-marker" style="display:none;"></div>', unsafe_allow_html=True)
+        tab_add_p, tab_edit_p, tab_del_p = st.tabs([
+            "➕ إضافة قالب جديد للمكتبة",
+            "✏️ تعديل القالب الحالي",
+            "🗑️ حذف قالب من المكتبة",
+        ])
+
+        # ── Tab 1: إضافة قالب جديد ──
+        with tab_add_p:
+            st.markdown(
+                """<div dir="rtl" style="color:#7dd3fc; font-weight:800; font-size:1.02rem; margin-bottom:8px;">
+                    ➕ إضافة قالب بند جديد لمكتبة القوالب (سيُحفظ دائماً ويظهر في قائمة القوالب بجميع المشاريع):
+                </div>""",
+                unsafe_allow_html=True,
+            )
+            if st.session_state.pop(f"_{prefix}m1_fill_add_preset", False):
+                cur_n = str(st.session_state.get(f"{prefix}m1_man_new_name", "")).strip()
+                if cur_n:
+                    st.session_state[f"{prefix}m1_add_preset_name"] = cur_n
+                    st.session_state[f"{prefix}m1_add_preset_unit"] = st.session_state.get(f"{prefix}m1_man_new_unit", CW_MANUAL_BOQ_UNIT_OPTIONS[0])
+                    st.session_state[f"{prefix}m1_add_preset_price"] = float(st.session_state.get(f"{prefix}m1_man_new_price", 500.0))
+                    st.session_state[f"{prefix}m1_add_preset_desc"] = str(st.session_state.get(f"{prefix}m1_man_new_desc", "")).strip() or cur_n
+
+            c_ad1, c_ad2, c_ad3 = st.columns([2.2, 1.1, 1.1])
+            with c_ad1:
+                new_p_name = st.text_input(
+                    "📝 اسم البند بالمقايسة:",
+                    key=f"{prefix}m1_add_preset_name",
+                    placeholder="مثال: أعمال رخام درج السلالم، أرضيات باركيه، كرتن وول...",
+                )
+            with c_ad2:
+                new_p_unit = st.selectbox(
+                    "📏 وحدة القياس:",
+                    options=CW_MANUAL_BOQ_UNIT_OPTIONS,
+                    key=f"{prefix}m1_add_preset_unit",
+                )
+            with c_ad3:
+                new_p_price = st.number_input(
+                    "💵 السعر الاسترشادي (ج.م):",
+                    min_value=0.0,
+                    max_value=1000000.0,
+                    value=500.0,
+                    step=10.0,
+                    format="%.2f",
+                    key=f"{prefix}m1_add_preset_price",
+                )
+            new_p_desc = st.text_area(
+                "📄 التوصيف الهندسي الكامل للبند:",
+                height=70,
+                key=f"{prefix}m1_add_preset_desc",
+                placeholder="التوصيف الفني المعتمد والمواصفات وأصول الصناعة...",
+            )
+            c_ad_b1, c_ad_b2 = st.columns([1.5, 2.5])
+            with c_ad_b1:
+                btn_save_new_p = st.button(
+                    "➕ حفظ وإضافة القالب للمكتبة لجميع المشاريع",
+                    key=f"{prefix}m1_btn_save_new_preset",
+                    type="primary",
+                    use_container_width=True,
+                )
+            with c_ad_b2:
+                btn_fill_from_cur = st.button(
+                    "📥 نسخ البيانات المكتوبة في الخانات الحالية لتعبئة هذا القالب",
+                    key=f"{prefix}m1_btn_fill_from_current",
+                    use_container_width=True,
+                )
+                if btn_fill_from_cur:
+                    st.session_state[f"_{prefix}m1_fill_add_preset"] = True
+                    st.rerun()
+
+            if btn_save_new_p:
+                clean_pname = str(new_p_name or "").strip()
+                if not clean_pname:
+                    st.warning("⚠️ يرجى إدخال اسم البند بالمقايسة.")
+                elif clean_pname in [p.get("label", "") for p in presets] or clean_pname in [p.get("name", "") for p in presets]:
+                    st.warning(f"⚠️ يوجد قالب آخر مسجل بنفس الاسم «{clean_pname}»، يرجى اختيار اسم مميز.")
+                else:
+                    new_p_entry = {
+                        "label": clean_pname,
+                        "name": clean_pname,
+                        "unit": str(new_p_unit),
+                        "unit_price": round(float(new_p_price), 2),
+                        "mat_category": "supply_install",
+                        "description": str(new_p_desc or "").strip() or clean_pname,
+                    }
+                    presets.append(new_p_entry)
+                    _save_cw_manual_boq_presets_list(presets)
+                    st.session_state[f"{prefix}m1_man_preset_sel"] = clean_pname
+                    st.session_state[f"_{prefix}m1_last_manual_preset"] = None
+                    st.toast(f"✨ تم إضافة القالب «{clean_pname}» بنجاح للمكتبة العامة لجميع المشاريع!", icon="🎉")
+                    st.rerun()
+
+        # ── Tab 2: تعديل القالب الحالي ──
+        with tab_edit_p:
+            st.markdown(
+                """<div dir="rtl" style="color:#fdba74; font-weight:800; font-size:1.02rem; margin-bottom:8px;">
+                    ✏️ تعديل بيانات القوالب بالمكتبة (سيتم تحديث القالب المختار لجميع المشاريع):
+                </div>""",
+                unsafe_allow_html=True,
+            )
+            if "_m15_set_edit_sel" in st.session_state:
+                st.session_state[f"{prefix}m1_edit_preset_sel"] = st.session_state.pop("_m15_set_edit_sel")
+
+            PLACEHOLDER_NO_EDIT = "— لا يوجد بند للتعديل —"
+            editable_presets = [p for p in presets if not str(p.get("label", "")).startswith("✨ بند حر")]
+            edit_options = [PLACEHOLDER_NO_EDIT] + [p["label"] for p in editable_presets]
+
+            if f"{prefix}m1_edit_preset_sel" not in st.session_state or st.session_state[f"{prefix}m1_edit_preset_sel"] not in edit_options:
+                st.session_state[f"{prefix}m1_edit_preset_sel"] = PLACEHOLDER_NO_EDIT
+
+            selected_edit_lbl = st.selectbox(
+                "📋 قائمة القوالب بالمكتبة للتعديل:",
+                options=edit_options,
+                key=f"{prefix}m1_edit_preset_sel",
+                help="اختر قالباً لعرض خانات المدخلات الخاصة به وتعديلها.",
+            )
+
+            if selected_edit_lbl == PLACEHOLDER_NO_EDIT:
+                st.info("ℹ️ الرجاء اختيار بند (قالب) من القائمة المنسدلة أعلاه للبدء في تعديل بياناته.")
+            else:
+                target_preset = next((p for p in editable_presets if p["label"] == selected_edit_lbl), None)
+                if target_preset:
+                    ed_prefix = f"m15_ed_{target_preset['label']}"
+                    if st.session_state.pop(f"_m15_sync_edit_{target_preset['label']}", False):
+                        st.session_state[f"{ed_prefix}_name"] = st.session_state.get(f"{prefix}m1_man_new_name", target_preset.get("name", ""))
+                        st.session_state[f"{ed_prefix}_unit"] = st.session_state.get(f"{prefix}m1_man_new_unit", target_preset.get("unit", ""))
+                        st.session_state[f"{ed_prefix}_price"] = float(st.session_state.get(f"{prefix}m1_man_new_price", target_preset.get("unit_price", 0.0)))
+                        st.session_state[f"{ed_prefix}_desc"] = st.session_state.get(f"{prefix}m1_man_new_desc", target_preset.get("description", ""))
+
+                    c_ed1, c_ed2, c_ed3 = st.columns([2.2, 1.1, 1.1])
+                    with c_ed1:
+                        ed_name = st.text_input(
+                            "📝 اسم البند:",
+                            value=target_preset.get("name", target_preset.get("label", "")),
+                            key=f"{ed_prefix}_name",
+                        )
+                    with c_ed2:
+                        cur_u = target_preset.get("unit", CW_MANUAL_BOQ_UNIT_OPTIONS[0])
+                        if cur_u in ["م.ط (m)", "متر طولي m", "م.ط", "متر طولي (m)"]:
+                            cur_u = "متر طولي L.M"
+                        u_idx = CW_MANUAL_BOQ_UNIT_OPTIONS.index(cur_u) if cur_u in CW_MANUAL_BOQ_UNIT_OPTIONS else 0
+                        ed_unit = st.selectbox(
+                            "📏 وحدة القياس:",
+                            options=CW_MANUAL_BOQ_UNIT_OPTIONS,
+                            index=u_idx,
+                            key=f"{ed_prefix}_unit",
+                        )
+                    with c_ed3:
+                        ed_price = st.number_input(
+                            "💵 السعر الاسترشادي (ج.م):",
+                            min_value=0.0,
+                            max_value=1000000.0,
+                            value=float(target_preset.get("unit_price", 0.0)),
+                            step=10.0,
+                            format="%.2f",
+                            key=f"{ed_prefix}_price",
+                        )
+
+                    ed_desc = st.text_area(
+                        "📄 توصيف البند بالمقايسة:",
+                        value=target_preset.get("description", ""),
+                        height=75,
+                        key=f"{ed_prefix}_desc",
+                    )
+
+                    c_ed_b1, c_ed_b2 = st.columns([1.5, 2.5])
+                    with c_ed_b1:
+                        btn_save_ed = st.button(
+                            "💾 حفظ التعديلات على هذا القالب لجميع المشاريع",
+                            key=f"{ed_prefix}_btn_save",
+                            type="primary",
+                            use_container_width=True,
+                        )
+                    with c_ed_b2:
+                        btn_sync_from_inp = st.button(
+                            "🔄 نسخ القيم الحالية من خانات البند الرئيسية",
+                            key=f"{ed_prefix}_btn_sync",
+                            use_container_width=True,
+                        )
+                        if btn_sync_from_inp:
+                            st.session_state[f"_m15_sync_edit_{target_preset['label']}"] = True
+                            st.rerun()
+
+                    if btn_save_ed:
+                        new_name_clean = str(ed_name or "").strip()
+                        if not new_name_clean:
+                            st.warning("⚠️ يرجى إدخال اسم البند.")
+                        else:
+                            old_lbl = target_preset["label"]
+                            conflict = any(p["label"] == new_name_clean and p["label"] != old_lbl for p in presets)
+                            if conflict:
+                                st.warning(f"⚠️ يوجد قالب آخر مسجل باسم «{new_name_clean}»، يرجى اختيار اسم غير مكرر.")
+                            else:
+                                for p in presets:
+                                    if p["label"] == old_lbl:
+                                        p["label"] = new_name_clean
+                                        p["name"] = new_name_clean
+                                        p["unit"] = str(ed_unit)
+                                        p["unit_price"] = round(float(ed_price), 2)
+                                        p["description"] = str(ed_desc or "").strip() or new_name_clean
+                                        break
+                                _save_cw_manual_boq_presets_list(presets)
+                                if st.session_state.get(f"{prefix}m1_man_preset_sel") == old_lbl:
+                                    st.session_state[f"{prefix}m1_man_preset_sel"] = new_name_clean
+                                st.session_state[f"_{prefix}m1_last_manual_preset"] = None
+                                st.session_state["_m15_set_edit_sel"] = new_name_clean
+                                st.toast(f"💾 تم حفظ وتحديث القالب «{new_name_clean}» بنجاح في المكتبة لجميع المشاريع!", icon="✨")
+                                st.rerun()
+
+        # ── Tab 3: حذف قالب من المكتبة ──
+        with tab_del_p:
+            st.markdown(
+                """<div dir="rtl" style="color:#f87171; font-weight:800; font-size:1.02rem; margin-bottom:8px;">
+                    🗑️ حذف قالب من المكتبة العامة (سيُزال من قائمة القوالب لجميع المشاريع):
+                </div>""",
+                unsafe_allow_html=True,
+            )
+            PLACEHOLDER_NO_DEL = "— لا يوجد بند محدد للحذف —"
+            if st.session_state.pop("_m15_reset_del_sel", False):
+                st.session_state[f"{prefix}m1_del_preset_sel"] = PLACEHOLDER_NO_DEL
+
+            deletable_presets = [p for p in presets if not str(p.get("label", "")).startswith("✨ بند حر")]
+            del_options = [PLACEHOLDER_NO_DEL] + [p["label"] for p in deletable_presets]
+
+            if f"{prefix}m1_del_preset_sel" not in st.session_state or st.session_state[f"{prefix}m1_del_preset_sel"] not in del_options:
+                st.session_state[f"{prefix}m1_del_preset_sel"] = PLACEHOLDER_NO_DEL
+
+            selected_del_lbl = st.selectbox(
+                "🗑️ اختر القالب المراد حذفه من المكتبة:",
+                options=del_options,
+                key=f"{prefix}m1_del_preset_sel",
+                help="اختر قالباً لحذفه نهائياً من مكتبة القوالب لجميع المشاريع.",
+            )
+
+            if selected_del_lbl == PLACEHOLDER_NO_DEL:
+                st.info("ℹ️ اختر قالباً من القائمة المنسدلة أعلاه لحذفه من المكتبة.")
+            else:
+                # إطلاق صفارة تحذيرية فور اختيار البند
+                token = f"m15_whistle_del_preset_{selected_del_lbl}"
+                play_delete_confirmation_whistle(token)
+
+                st.markdown(
+                    f"""
+                    <div dir="rtl" style="background:rgba(220,38,38,0.18); border:1.5px solid #ef4444; border-radius:8px; padding:12px; margin-bottom:12px; color:#fca5a5; font-size:1.02rem; font-weight:700;">
+                        ⚠️ هل أنت متأكد من رغبتك في حذف القالب: <b style="color:#ffffff;">«{selected_del_lbl}»</b> نهائياً من المكتبة العامة لجميع المشاريع؟
+                        <br><span style="font-size:0.88rem; color:#fecaca;">(لن تتأثر البنود المضافة مسبقاً في جداول الحصر للمشاريع الحالية، بل سيتم فقط إزالة القالب من القائمة المنسدلة).</span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                c_del_cancel, c_del_confirm = st.columns([1, 1])
+                with c_del_cancel:
+                    btn_cancel_del = st.button(
+                        "❌ إلغاء",
+                        key=f"m15_btn_cancel_del_{selected_del_lbl}",
+                        use_container_width=True,
+                    )
+                with c_del_confirm:
+                    btn_confirm_del = st.button(
+                        "🗑️ تأكيد الحذف",
+                        key=f"m15_btn_confirm_del_{selected_del_lbl}",
+                        type="primary",
+                        use_container_width=True,
+                    )
+
+                if btn_cancel_del:
+                    st.session_state["_m15_reset_del_sel"] = True
+                    st.session_state.pop("_last_del_confirm_whistle_token", None)
+                    st.rerun()
+
+                if btn_confirm_del:
+                    new_presets = [p for p in presets if p["label"] != selected_del_lbl]
+                    _save_cw_manual_boq_presets_list(new_presets)
+                    st.session_state["_m15_reset_del_sel"] = True
+                    st.session_state.pop("_last_del_confirm_whistle_token", None)
+                    if st.session_state.get(f"{prefix}m1_man_preset_sel") == selected_del_lbl:
+                        st.session_state[f"{prefix}m1_man_preset_sel"] = new_presets[0]["label"] if new_presets else ""
+                    st.session_state[f"_{prefix}m1_last_manual_preset"] = None
+                    st.toast(f"🗑️ تم حذف القالب «{selected_del_lbl}» بنجاح من المكتبة العامة لجميع المشاريع!", icon="✨")
+                    st.rerun()
+
+
+
+
+def _render_cw_manual_boq_items_manager(cur_factor=1.00, prefix: str = ''):
+    import streamlit.components.v1 as components
+    """
+    قسم إضافة وإدارة البنود اليدوية الإضافية (Direct Quantity + قوالب جاهزة)
+    لتدمج مباشرةً في جدول حصر وتكلفة جميع البنود مع خضوعها لنفس معامل الزيادة العام.
+    """
+    import uuid as _uuid_mod
+    import html as _html_mod
+
+    _cw_sync_aria_lbl = f'{prefix}cw_boq_sync_payload'
+    manual_items = _get_cw_manual_boq_items_list(prefix=prefix)
+    # التأكد من وجود uid ثابت لكل بند مضاف لتفادي تعارض مفاتيح Streamlit عند الحذف
+    _uid_fixed = False
+    for _it in manual_items:
+        if not _it.get("uid"):
+            _it["uid"] = _uuid_mod.uuid4().hex[:8]
+            _uid_fixed = True
+    if _uid_fixed:
+        _persist_cw_manual_boq_items(manual_items, prefix=prefix)
+
+    cur_factor = float(cur_factor)
+    plaster_qty_factor = cur_factor
+
+    # ── حقن CSS لتكبير الخطوط في كامل القسمين للعناوين والمدخلات والجداول ──
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stExpander"]:has(div[class*="st-key-m15_man_"]) summary p,
+        div[data-testid="stExpander"]:has(.m15-preset-library-marker) summary p,
+        div[data-testid="stExpander"]:has(div[class*="st-key-m15_add_preset_"]) summary p,
+        div[data-testid="stExpander"]:has(div[class*="st-key-m15_edit_preset_"]) summary p,
+        div[data-testid="stExpander"]:has(div[class*="st-key-m15_del_preset_"]) summary p {
+            font-size: 1.25rem !important;
+            font-weight: 900 !important;
+            color: #38bdf8 !important;
+        }
+        div[class*="st-key-m15_man_"] label p,
+        div[class*="st-key-m15_man_"] [data-testid="stWidgetLabel"] p,
+        div[class*="st-key-m15_man_"] label,
+        div[class*="st-key-m15_add_preset_"] label p,
+        div[class*="st-key-m15_add_preset_"] label,
+        div[class*="st-key-m15_edit_preset_"] label p,
+        div[class*="st-key-m15_edit_preset_"] label,
+        div[class*="st-key-m15_del_preset_"] label p,
+        div[class*="st-key-m15_del_preset_"] label {
+            font-size: 1.15rem !important;
+            font-weight: 800 !important;
+            color: #f8fafc !important;
+        }
+        div[class*="st-key-m15_man_"] input,
+        div[class*="st-key-m15_add_preset_"] input,
+        div[class*="st-key-m15_edit_preset_"] input {
+            font-size: 1.16rem !important;
+            font-weight: 800 !important;
+            color: #ffffff !important;
+        }
+        div[class*="st-key-m15_man_"] textarea,
+        div[class*="st-key-m15_add_preset_"] textarea,
+        div[class*="st-key-m15_edit_preset_"] textarea {
+            font-size: 1.10rem !important;
+            font-weight: 600 !important;
+            color: #ffffff !important;
+            line-height: 1.5 !important;
+        }
+        div[class*="st-key-m15_man_"] div[data-baseweb="select"] *,
+        div[class*="st-key-m15_add_preset_"] div[data-baseweb="select"] *,
+        div[class*="st-key-m15_edit_preset_"] div[data-baseweb="select"] *,
+        div[class*="st-key-m15_del_preset_"] div[data-baseweb="select"] * {
+            font-size: 1.12rem !important;
+            font-weight: 700 !important;
+        }
+        div[class*="st-key-m15_man_add_btn"] button,
+        div[class*="st-key-m15_btn_save_new_preset"] button {
+            font-size: 1.18rem !important;
+            font-weight: 900 !important;
+            padding: 10px 24px !important;
+            min-height: 46px !important;
+        }
+        .m15-man-table-hdr {
+            background: linear-gradient(180deg, rgba(234, 88, 12, 0.45) 0%, rgba(194, 65, 12, 0.28) 100%);
+            border: 1.5px solid #ea580c;
+            border-radius: 6px;
+            padding: 6px 4px;
+            text-align: center;
+            font-size: 1.05rem;
+            font-weight: 900;
+            color: #fb923c;
+            text-shadow: 0 0 10px rgba(251, 146, 60, 0.6);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 48px;
+        }
+        .m15-man-table-hdr-blue {
+            background: linear-gradient(180deg, rgba(2, 132, 199, 0.45) 0%, rgba(14, 165, 233, 0.28) 100%);
+            border: 1.5px solid #0284c7;
+            color: #38bdf8;
+            text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    presets = _get_cw_manual_boq_presets_list()
+
+    # ═════════════════════════════════════════════════════════════════════════
+    #  أولاً: قسم إدارة وتخصيص مكتبة القوالب الجاهزة (مفصول تماماً ومطوي للأعلى)
+    # ═════════════════════════════════════════════════════════════════════════
+    # _render_cw_presets_library_manager is called independently in Section 2
+
+    # ═════════════════════════════════════════════════════════════════════════
+    #  ثانياً: قسم إضافة وإدارة بنود الحصر اليدوية الإضافية (مفصول تماماً ومطوي للأسفل)
+    # ═════════════════════════════════════════════════════════════════════════
+    with st.expander(
+        "➕ إضافة وإدارة بنود الحصر اليدوية الإضافية (رخام سلالم، حجر فرعوني، وبنود أخرى)",
+        expanded=False,
+    ):
+        # اختيار القالب الجاهز أو البند الحر من المكتبة العامة لجميع المشاريع
+        preset_labels = [p["label"] for p in presets]
+        if f"{prefix}m1_man_preset_sel" not in st.session_state or st.session_state[f"{prefix}m1_man_preset_sel"] not in preset_labels:
+            st.session_state[f"{prefix}m1_man_preset_sel"] = preset_labels[0]
+
+        sel_preset_lbl = st.selectbox(
+            "📋 مكتبة القوالب الجاهزة (أو اختر «بند حر مخصص»):",
+            options=preset_labels,
+            key=f"{prefix}m1_man_preset_sel",
+            help="اختيار أي قالب يملأ الاسم والوحدة والسعر الاسترشادي وفئة الخامات والتوصيف تلقائياً مع إمكانية تعديل أي خانة.",
+        )
+        sel_preset = next((p for p in presets if p["label"] == sel_preset_lbl), presets[0])
+
+        # مزامنة الحقول عند تغيير القالب
+        if st.session_state.get(f"_{prefix}m1_last_manual_preset") != sel_preset_lbl:
+            st.session_state[f"_{prefix}m1_last_manual_preset"] = sel_preset_lbl
+            st.session_state[f"{prefix}m1_man_new_name"] = sel_preset["name"]
+            st.session_state[f"{prefix}m1_man_new_unit"] = sel_preset["unit"]
+            st.session_state[f"{prefix}m1_man_new_price"] = float(sel_preset["unit_price"])
+            st.session_state[f"{prefix}m1_man_new_desc"] = sel_preset["description"]
+            if f"{prefix}m1_man_new_qty" not in st.session_state:
+                st.session_state[f"{prefix}m1_man_new_qty"] = 0.0
+
+        # التحقق من سلامة المفاتيح بالـ session_state قبل عرض الحقول
+        if st.session_state.pop(f"_{prefix}m1_reset_man_new_qty", False):
+            st.session_state[f"{prefix}m1_man_new_qty"] = 0.0
+        if f"{prefix}m1_man_new_name" not in st.session_state:
+            st.session_state[f"{prefix}m1_man_new_name"] = sel_preset["name"]
+        if st.session_state.get(f"{prefix}m1_man_new_unit") not in CW_MANUAL_BOQ_UNIT_OPTIONS:
+            st.session_state[f"{prefix}m1_man_new_unit"] = sel_preset["unit"]
+        if f"{prefix}m1_man_new_qty" not in st.session_state:
+            st.session_state[f"{prefix}m1_man_new_qty"] = 0.0
+        if f"{prefix}m1_man_new_price" not in st.session_state:
+            st.session_state[f"{prefix}m1_man_new_price"] = float(sel_preset["unit_price"])
+        if f"{prefix}m1_man_new_desc" not in st.session_state:
+            st.session_state[f"{prefix}m1_man_new_desc"] = sel_preset["description"]
+
+        c_m1, c_m2, c_m3, c_m4 = st.columns([2.2, 1.1, 1.3, 1.1])
+        with c_m1:
+            in_name = st.text_input(
+                "📝 اسم البند بالمقايسة:",
+                key=f"{prefix}m1_man_new_name",
+                placeholder="مثال: أعمال رخام درج السلالم أو حجر فرعوني للواجهة...",
+            )
+        with c_m2:
+            in_unit = st.selectbox(
+                "📏 الوحدة (Unit):",
+                options=CW_MANUAL_BOQ_UNIT_OPTIONS,
+                key=f"{prefix}m1_man_new_unit",
+            )
+        with c_m3:
+            in_qty = st.number_input(
+                "🔢 الكمية الصافية (Net Qty) قبل معامل الزيادة:",
+                min_value=0.0,
+                max_value=1000000.0,
+                step=1.0,
+                format="%.2f",
+                key=f"{prefix}m1_man_new_qty",
+                help="الكمية الصافية قبل الضرب في معامل الزيادة العام بالجدول",
+            )
+        with c_m4:
+            in_price = st.number_input(
+                "💵 سعر الوحدة (ج.م):",
+                min_value=0.0,
+                max_value=1000000.0,
+                step=10.0,
+                format="%.2f",
+                key=f"{prefix}m1_man_new_price",
+            )
+
+        in_desc = st.text_area(
+            "📄 توصيف البند بالمقايسة:",
+            height=75,
+            key=f"{prefix}m1_man_new_desc",
+            placeholder="التوصيف الهندسي الكامل للبند كما سيظهر في جدول المقايسة وملف Excel...",
+        )
+
+        # معاينة فورية لمعادلة معامل الزيادة قبل الإضافة
+        prev_tot_q = round(float(in_qty) * cur_factor, 2)
+        prev_tot_cost = round(prev_tot_q * float(in_price), 2)
+        st.markdown(
+            f"""
+            <div dir="rtl" style="background:rgba(88, 28, 135, 0.25); border:1.5px solid #a855f7; border-radius:8px; padding:10px 16px; margin:6px 0 12px 0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <div style="color:#e9d5ff; font-weight:800; font-size:1.05rem;">
+                    ⚡ <b>معاينة تطبيق معامل الزيادة على البند:</b>
+                    الكمية الصافية (<span dir="ltr" style="color:#fef08a;">{float(in_qty):,.2f}</span>)
+                    × معامل الزيادة (<span dir="ltr" style="color:#c084fc;">{cur_factor:.2f}</span>)
+                    = <b style="color:#4ade80;">الكمية الإجمالية المعتمدة بالجدول: <span dir="ltr">{prev_tot_q:,.2f}</span> {_html_mod.escape(in_unit)}</b>
+                </div>
+                <div style="background:rgba(16,185,129,0.22); border:1px solid #10b981; border-radius:6px; padding:4px 14px; color:#34d399; font-weight:900; font-size:1.08rem;">
+                    💰 التكلفة المتوقعة: <span dir="ltr">{prev_tot_cost:,.2f}</span> ج.م
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        c_btn_add, c_btn_info = st.columns([1.5, 2.1])
+        with c_btn_add:
+            add_clicked = st.button(
+                "➕ إضافة البند إلى جدول حصر وتكلفة جميع البنود",
+                key=f"{prefix}m1_man_add_btn",
+                type="primary",
+                use_container_width=True,
+            )
+        with c_btn_info:
+            quick_save_preset = st.button(
+                "💾 حفظ هذه المدخلات كقالب جديد في المكتبة العامة",
+                key=f"{prefix}m1_quick_save_as_preset",
+                help="يحفظ اسم البند ووحدته وسعره وتوصيفه كقالب جديد في مكتبة القوالب ليكون متاحاً دائماً في كل المشاريع",
+                use_container_width=True,
+            )
+
+        if quick_save_preset:
+            clean_q_name = str(in_name or "").strip()
+            if not clean_q_name:
+                st.warning("⚠️ يرجى كتابة اسم البند بالمقايسة أولاً لحفظه كقالب بالمكتبة.")
+            else:
+                q_lbl = f"✨ {clean_q_name}"
+                if q_lbl in [p["label"] for p in presets]:
+                    st.warning(f"⚠️ يوجد قالب مسجل باسم «{q_lbl}» بالمكتبة مسبقاً.")
+                else:
+                    new_q_p = {
+                        "label": q_lbl,
+                        "name": clean_q_name,
+                        "unit": str(in_unit),
+                        "unit_price": round(float(in_price), 2),
+                        "mat_category": str(sel_preset.get("mat_category", "supply_install")),
+                        "description": str(in_desc or "").strip() or clean_q_name,
+                    }
+                    presets.append(new_q_p)
+                    _save_cw_manual_boq_presets_list(presets)
+                    st.session_state[f"{prefix}m1_man_preset_sel"] = q_lbl
+                    st.session_state[f"_{prefix}m1_last_manual_preset"] = None
+                    st.toast(f"💾 تم حفظ «{clean_q_name}» كقالب جديد في المكتبة العامة لجميع المشاريع بنجاح!", icon="🎉")
+                    st.rerun()
+
+        if add_clicked:
+            clean_in_name = str(in_name or "").strip()
+            if not clean_in_name:
+                st.warning("⚠️ يرجى كتابة اسم البند أو اختيار قالب جاهز قبل الإضافة.")
+            else:
+                new_uid = _uuid_mod.uuid4().hex[:8]
+                new_entry = {
+                    "uid": new_uid,
+                    "name": clean_in_name,
+                    "unit": str(in_unit),
+                    "net_qty": round(float(in_qty), 2),
+                    "unit_price": round(float(in_price), 2),
+                    "mat_category": str(sel_preset.get("mat_category", "supply_install")),
+                    "description": str(in_desc or "").strip() or clean_in_name,
+                }
+                manual_items.append(new_entry)
+                _persist_cw_manual_boq_items(manual_items, prefix=prefix)
+                st.session_state[f"_{prefix}m1_reset_man_new_qty"] = True
+                st.rerun()
+
+        # ═════════════════════════════════════════════════════════════════════
+        # بانيل معامل زيادة للكميات التي تم حسابها:
+        # ═════════════════════════════════════════════════════════════════════
+        st.markdown(
+            """
+            <style>
+            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) {
+                background: linear-gradient(135deg, #180828 0%, #311042 35%, #581c87 70%, #1e0933 100%) !important;
+                border: 1.5px solid #c084fc !important;
+                border-right: 6px solid #a855f7 !important;
+                border-radius: 10px !important;
+                padding: 7px 18px !important;
+                margin: 12px 0 14px 0 !important;
+                box-shadow: 0 4px 20px rgba(168, 85, 247, 0.35), inset 0 1px 1px rgba(233, 213, 255, 0.35) !important;
+                display: flex !important;
+                flex-direction: row !important;
+                flex-wrap: nowrap !important;
+                align-items: center !important;
+                justify-content: center !important;
+                gap: 12px !important;
+                direction: rtl !important;
+                min-height: 44px !important;
+            }
+            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) > div[data-testid="stColumn"] {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                height: 100% !important;
+            }
+            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) .stMarkdown,
+            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) [data-testid="stMarkdownContainer"],
+            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) [data-testid="stMarkdownContainer"] p {
+                margin: 0 !important;
+                padding: 0 !important;
+                display: flex !important;
+                align-items: center !important;
+                height: 100% !important;
+            }
+            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) > div[data-testid="stColumn"]:first-child {
+                flex: 0 0 auto !important;
+                width: auto !important;
+                min-width: unset !important;
+            }
+            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) > div[data-testid="stColumn"]:last-child {
+                flex: 0 0 135px !important;
+                width: 135px !important;
+                min-width: 125px !important;
+                max-width: 150px !important;
+            }
+            div[class*="st-key-m15_input_plaster_qty_factor"] label,
+            div[class*="st-key-m15_input_plaster_qty_factor"] [data-testid="stWidgetLabel"],
+            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) label {
+                display: none !important;
+                height: 0 !important;
+                min-height: 0 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                visibility: hidden !important;
+            }
+            div[class*="st-key-m15_input_plaster_qty_factor"] div[data-testid="stNumberInput"] {
+                margin-bottom: 0 !important;
+            }
+            div[class*="st-key-m15_input_plaster_qty_factor"] div[data-testid="stNumberInputContainer"] {
+                display: flex !important;
+                flex-direction: row !important;
+                align-items: center !important;
+                background: #120624 !important;
+                border: 1.5px solid #c084fc !important;
+                border-radius: 8px !important;
+                padding: 0 !important;
+                min-height: 34px !important;
+                height: 34px !important;
+                overflow: hidden !important;
+                box-shadow: 0 0 12px rgba(192, 132, 252, 0.35) !important;
+            }
+            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepDown"],
+            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepUp"] {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                background: rgba(192, 132, 252, 0.22) !important;
+                border: none !important;
+                width: 28px !important;
+                min-width: 28px !important;
+                height: 34px !important;
+                min-height: 34px !important;
+                cursor: pointer !important;
+                transition: all 0.15s ease !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepDown"]:hover,
+            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepUp"]:hover {
+                background: rgba(192, 132, 252, 0.50) !important;
+            }
+            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepUp"] svg,
+            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepDown"] svg {
+                display: none !important;
+            }
+            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepUp"]::after {
+                content: "+" !important;
+                font-size: 18px !important;
+                font-weight: 900 !important;
+                color: #e9d5ff !important;
+                line-height: 1 !important;
+            }
+            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepDown"]::after {
+                content: "−" !important;
+                font-size: 18px !important;
+                font-weight: 900 !important;
+                color: #e9d5ff !important;
+                line-height: 1 !important;
+            }
+            div[class*="st-key-m15_input_plaster_qty_factor"] input {
+                color: #f5f3ff !important;
+                -webkit-text-fill-color: #f5f3ff !important;
+                background-color: transparent !important;
+                font-size: 1.15rem !important;
+                font-weight: 900 !important;
+                text-align: center !important;
+                border: none !important;
+                height: 34px !important;
+                min-height: 34px !important;
+                padding: 0 4px !important;
+                box-shadow: none !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        def _sync_m15_plaster_qty_factor():
+            val = float(st.session_state.get("m15_input_plaster_qty_factor", 1.00))
+            st.session_state["m15_plaster_qty_factor"] = val
+            cfg = st.session_state.get("cfg", {})
+            if "module_15_masonry_plaster" in cfg and isinstance(cfg["module_15_masonry_plaster"], dict):
+                cfg["module_15_masonry_plaster"]["plaster_qty_factor"] = val
+            if "module_15_data" in st.session_state and isinstance(st.session_state["module_15_data"], dict):
+                st.session_state["module_15_data"]["plaster_qty_factor"] = val
+            save_settings()
+
+        _saved_plaster_factor = float(st.session_state.get("m15_plaster_qty_factor", 1.00))
+        if "m15_input_plaster_qty_factor" not in st.session_state:
+            st.session_state["m15_input_plaster_qty_factor"] = _saved_plaster_factor
+        else:
+            _saved_plaster_factor = float(st.session_state["m15_input_plaster_qty_factor"])
+
+        c_factor_lbl, c_factor_inp = st.columns([1, 1], gap="small")
+        with c_factor_lbl:
+            st.markdown(
+                """<div dir="rtl" style="display: flex; align-items: center; justify-content: center; height: 100%; font-size: 1.08rem; font-weight: 900; color: #ffffff; text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 16px rgba(192,132,252,0.7); white-space: nowrap; line-height: 1.2; margin: 0; padding: 0;">
+                    ✨ معامل زيادة للكميات التي تم حسابها:
+                </div>""",
+                unsafe_allow_html=True,
+            )
+        with c_factor_inp:
+            plaster_qty_factor = st.number_input(
+                "",
+                min_value=0.10,
+                max_value=5.00,
+                value=_saved_plaster_factor,
+                step=0.05,
+                format="%.2f",
+                key="m15_input_plaster_qty_factor",
+                on_change=_sync_m15_plaster_qty_factor,
+                label_visibility="collapsed",
+            )
+        if abs(plaster_qty_factor - float(st.session_state.get("m15_plaster_qty_factor", 1.00))) > 1e-4:
+            st.session_state["m15_plaster_qty_factor"] = plaster_qty_factor
+            cfg = st.session_state.get("cfg", {})
+            if "module_15_masonry_plaster" in cfg and isinstance(cfg["module_15_masonry_plaster"], dict):
+                cfg["module_15_masonry_plaster"]["plaster_qty_factor"] = plaster_qty_factor
+            if "module_15_data" in st.session_state and isinstance(st.session_state["module_15_data"], dict):
+                st.session_state["module_15_data"]["plaster_qty_factor"] = plaster_qty_factor
+            save_settings()
+        else:
+            st.session_state["m15_plaster_qty_factor"] = plaster_qty_factor
+
+        cur_factor = plaster_qty_factor
+
+        # عرض وإدارة البنود اليدوية المضافة حالياً في جدول تفاعلي بنفس تنسيق وفلسفة جدول BOQ الرئيسي
+        if manual_items:
+            # بناء صفوف HTML للجدول اليدوي التفاعلي
+            man_tbody_rows_html = []
+            grand_manual_cost = 0.0
+
+            for off, m_it in enumerate(manual_items):
+                seq_no = 22 + off
+                uid = str(m_it.get("uid", f"row_{off}"))
+                m_name = str(m_it.get("name", f"بند يدوي {seq_no}"))
+                m_unit = str(m_it.get("unit", "م² (m²)"))
+                if m_unit in ["م.ط (m)", "متر طولي m", "م.ط", "متر طولي (m)"]:
+                    m_unit = "متر طولي L.M"
+                m_net_q = round(float(m_it.get("net_qty", 0.0)), 2)
+                m_u_price = round(float(m_it.get("unit_price", 0.0)), 2)
+                m_desc = str(m_it.get("description", "")).strip() or str(m_it.get("name", "")).strip() or m_name
+
+                eff_tot_q = round(m_net_q * cur_factor, 2)
+                eff_tot_cost = round(eff_tot_q * m_u_price, 2)
+                grand_manual_cost += eff_tot_cost
+
+                name_esc = _html_mod.escape(m_name)
+                desc_esc = _html_mod.escape(m_desc)
+                row_cls = "boq-row boq-even-row" if off % 2 == 0 else "boq-row boq-odd-row"
+
+                # خيارات select الوحدة
+                unit_opts_html = []
+                for u_opt in CW_MANUAL_BOQ_UNIT_OPTIONS:
+                    sel_attr = "selected" if u_opt == m_unit else ""
+                    unit_opts_html.append(f'<option value="{_html_mod.escape(u_opt)}" {sel_attr}>{_html_mod.escape(u_opt)}</option>')
+                unit_select_html = f'<select class="unit-select" data-uid="{uid}" title="تغيير الوحدة">{"".join(unit_opts_html)}</select>'
+
+                man_tbody_rows_html.append(f"""
+                <tr class="{row_cls}" data-row-idx="{off}" data-uid="{uid}">
+                    <!-- Col 0: البند Item -->
+                    <td class="boq-td cell-summary">
+                        <div class="summary-item-wrap">
+                            <span class="seq-badge">{seq_no} -</span>
+                            <div class="name-editor" contenteditable="true" spellcheck="false" dir="auto" data-uid="{uid}" title="انقر لتعديل اسم البند — يدعم النسخ واللصق Ctrl+C / Ctrl+V">{name_esc}</div>
+                        </div>
+                        <div class="col-resizer" data-col="0" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="{off}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+                    </td>
+                    <!-- Col 1: الوحدة -->
+                    <td class="boq-td cell-unit">
+                        <div class="cell-center-wrap">{unit_select_html}</div>
+                        <div class="col-resizer" data-col="1" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="{off}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+                    </td>
+                    <!-- Col 2: الكمية الصافية قبل المعامل -->
+                    <td class="boq-td cell-qty">
+                        <div class="cell-center-wrap" style="flex-direction:column; gap:1px;">
+                            <div class="cell-num-editor qty-editor" contenteditable="true" spellcheck="false" dir="ltr" data-uid="{uid}" title="انقر لتعديل الكمية الصافية قبل المعامل">{m_net_q:,.2f}</div>
+                            <div class="sub-qty-info" style="font-size:0.50rem; color:#86efac; font-weight:800;">الإجمالي: <span class="eff-tot-q-txt">{eff_tot_q:,.2f}</span></div>
+                        </div>
+                        <div class="col-resizer" data-col="2" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="{off}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+                    </td>
+                    <!-- Col 3: تكلفة الوحدة -->
+                    <td class="boq-td cell-uprice">
+                        <div class="cell-center-wrap">
+                            <div class="cell-num-editor price-editor" contenteditable="true" spellcheck="false" dir="ltr" data-uid="{uid}" title="انقر لتعديل تكلفة الوحدة">{m_u_price:,.2f}</div>
+                        </div>
+                        <div class="col-resizer" data-col="3" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="{off}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+                    </td>
+                    <!-- Col 4: إجمالي التكلفة -->
+                    <td class="boq-td cell-tcost">
+                        <div class="cell-center-wrap total-cost-val" dir="ltr">{eff_tot_cost:,.2f}</div>
+                        <div class="col-resizer" data-col="4" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="{off}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+                    </td>
+                    <!-- Col 5: توصيف البند -->
+                    <td class="boq-td cell-desc">
+                        <div class="desc-editor" contenteditable="true" spellcheck="false" dir="auto" data-uid="{uid}" title="انقر للتعديل المباشر — يدعم النسخ واللصق Ctrl+C / Ctrl+V">{desc_esc}</div>
+                        <div class="col-resizer" data-col="5" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="{off}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+                    </td>
+                    <!-- Col 6: إجراء الحذف -->
+                    <td class="boq-td cell-del">
+                        <div class="cell-center-wrap">
+                            <button type="button" class="boq-row-del-btn" data-uid="{uid}" title="حذف هذا البند نهائياً من المقايسة">
+                                🗑️ حذف
+                            </button>
+                        </div>
+                        <div class="row-resizer" data-row="{off}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+                    </td>
+                </tr>
+                """)
+
+            # صف إجمالي التكلفة للبنود اليدوية
+            man_tbody_rows_html.append(f"""
+            <tr class="boq-row boq-total-row" data-row-idx="total">
+                <td class="boq-td cell-summary">
+                    <div class="summary-item-wrap">
+                        <span class="seq-badge total-seq-badge">💰</span>
+                        <span class="item-name-txt" dir="auto">إجمالي البنود اليدوية المضافة (Manual Items Total)</span>
+                    </div>
+                </td>
+                <td class="boq-td cell-unit"><div class="cell-center-wrap">ج.م</div></td>
+                <td class="boq-td cell-qty"><div class="cell-center-wrap">—</div></td>
+                <td class="boq-td cell-uprice"><div class="cell-center-wrap">—</div></td>
+                <td class="boq-td cell-tcost"><div class="cell-center-wrap grand-manual-cost" dir="ltr">{grand_manual_cost:,.2f}</div></td>
+                <td class="boq-td cell-desc" dir="auto" style="color:#a7f3d0; font-weight:800; font-size:0.68rem; padding:4px 8px;">إجمالي تكلفة البنود اليدوية الإضافية شاملة معامل الزيادة (×{cur_factor:.2f})</td>
+                <td class="boq-td cell-del"><div class="cell-center-wrap">—</div></td>
+            </tr>
+            """)
+
+            man_tbody_joined = "\n".join(man_tbody_rows_html)
+
+            manual_boq_interactive_html = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<style>
+  * {{
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }}
+  body, html {{
+    width: 100%;
+    background: transparent;
+    font-family: 'Segoe UI', 'Cairo', Tahoma, Geneva, Verdana, sans-serif;
+    color: #f8fafc;
+    direction: rtl;
+    overflow-x: hidden;
+  }}
+  #man-root-container {{
+    width: 100%;
+    padding: 4px 0 10px 0;
+    direction: rtl;
+  }}
+  /* شريط العنوان والإرشادات العلوي */
+  .boq-top-banner {{
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.98) 0%, rgba(15, 23, 42, 0.98) 100%);
+    border: 2px solid #ea580c;
+    border-right: 6px solid #f97316;
+    border-radius: 10px;
+    padding: 12px 18px;
+    margin-bottom: 10px;
+    box-shadow: 0 4px 16px rgba(234, 88, 12, 0.20);
+  }}
+  .boq-top-flex {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }}
+  .boq-title-group {{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }}
+  .boq-main-title {{
+    font-weight: 900;
+    font-size: 0.68rem;
+    color: #fb923c;
+  }}
+  .boq-sub-badge {{
+    font-size: 0.56rem;
+    color: #fdba74;
+    font-weight: 700;
+    background: rgba(234, 88, 12, 0.22);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid rgba(249, 115, 22, 0.45);
+  }}
+  .boq-actions-group {{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+  }}
+  .boq-edit-hint {{
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.28) 0%, rgba(14, 165, 233, 0.16) 100%);
+    border: 1.5px solid #38bdf8;
+    border-radius: 5px;
+    padding: 2px 6px;
+    color: #38bdf8;
+    font-weight: 900;
+    font-size: 0.66rem;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.30);
+  }}
+  .boq-reset-btn {{
+    background: rgba(234, 88, 12, 0.22);
+    border: 1.5px solid #f97316;
+    color: #fed7aa;
+    font-weight: 800;
+    font-size: 0.56rem;
+    padding: 2px 6px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    font-family: inherit;
+  }}
+  .boq-reset-btn:hover {{
+    background: rgba(234, 88, 12, 0.45);
+    color: #ffffff;
+    box-shadow: 0 0 6px rgba(249, 115, 22, 0.45);
+  }}
+  .boq-save-status {{
+    font-size: 0.54rem;
+    font-weight: 800;
+    color: #34d399;
+    display: none;
+    align-items: center;
+    gap: 3px;
+    background: rgba(16, 185, 129, 0.16);
+    border: 1px solid rgba(52, 211, 153, 0.4);
+    padding: 2px 5px;
+    border-radius: 4px;
+  }}
+
+  /* حاوية الجدول الموحد */
+  .boq-table-wrapper {{
+    width: 100%;
+    border: 2px solid #ea580c;
+    border-radius: 10px;
+    background: #0f172a;
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
+    overflow-x: hidden;
+    overflow-y: visible;
+    position: relative;
+  }}
+  table#m1-manual-boq-table {{
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    table-layout: fixed;
+    border-collapse: collapse;
+    border-spacing: 0;
+    direction: rtl;
+    background: #0f172a;
+  }}
+
+  /* ── بانيلات عناوين الجدول المدمجة في thead ── */
+  thead.boq-thead tr.boq-header-row {{
+    height: 38px;
+  }}
+  th.boq-th {{
+    position: relative;
+    padding: 4px 2px;
+    vertical-align: middle;
+    text-align: center;
+    border-bottom: 2px solid #ea580c;
+    user-select: none;
+    overflow: visible;
+  }}
+  /* البانيلات البرتقالية المدمجة */
+  th.boq-th-orange {{
+    background: linear-gradient(180deg, rgba(234, 88, 12, 0.42) 0%, rgba(194, 65, 12, 0.26) 100%);
+    border-left: 1.5px solid rgba(251, 146, 60, 0.50);
+  }}
+  th.boq-th-orange .th-main-title {{
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 900;
+    color: #fb923c;
+    text-shadow: 0 0 8px rgba(251, 146, 60, 0.75), 0 1px 2px #000000;
+    line-height: 1.25;
+  }}
+  th.boq-th-orange .th-sub-title {{
+    display: block;
+    font-size: 0.56rem;
+    font-weight: 800;
+    color: #fed7aa;
+    margin-top: 1px;
+    line-height: 1.15;
+  }}
+  /* البانيل الأزرق المدمج لعمود توصيف البند */
+  th.boq-th-blue {{
+    background: linear-gradient(180deg, rgba(2, 132, 199, 0.48) 0%, rgba(14, 165, 233, 0.26) 100%);
+    border-left: 1.5px solid rgba(56, 189, 248, 0.50);
+    border-bottom: 2px solid #38bdf8;
+  }}
+  th.boq-th-blue .th-main-title {{
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 900;
+    color: #00f5ff;
+    text-shadow: 0 0 8px rgba(0, 245, 255, 0.80), 0 1px 2px #000000;
+    line-height: 1.25;
+  }}
+  th.boq-th-blue .th-sub-title {{
+    display: block;
+    font-size: 0.56rem;
+    font-weight: 800;
+    color: #7dd3fc;
+    margin-top: 1px;
+    text-shadow: 0 0 6px rgba(125, 211, 252, 0.65);
+    line-height: 1.15;
+  }}
+  /* البانيل الأحمر لزر الحذف */
+  th.boq-th-red {{
+    background: linear-gradient(180deg, rgba(220, 38, 38, 0.42) 0%, rgba(153, 27, 27, 0.26) 100%);
+    border-left: none;
+    border-bottom: 2px solid #ef4444;
+  }}
+  th.boq-th-red .th-main-title {{
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 900;
+    color: #f87171;
+    text-shadow: 0 0 8px rgba(239, 68, 68, 0.75), 0 1px 2px #000000;
+    line-height: 1.25;
+  }}
+  th.boq-th-red .th-sub-title {{
+    display: block;
+    font-size: 0.56rem;
+    font-weight: 800;
+    color: #fca5a5;
+    margin-top: 1px;
+    line-height: 1.15;
+  }}
+
+  /* ── صفوف وخلايا الجدول ── */
+  tr.boq-row {{
+    transition: background-color 0.12s ease;
+    min-height: 30px;
+  }}
+  tr.boq-even-row {{
+    background-color: rgba(15, 23, 42, 0.92);
+  }}
+  tr.boq-odd-row {{
+    background-color: rgba(30, 41, 59, 0.78);
+  }}
+  tr.boq-row:hover:not(.boq-total-row) {{
+    background-color: rgba(51, 65, 85, 0.65);
+  }}
+  td.boq-td {{
+    position: relative;
+    vertical-align: middle;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.20);
+    border-left: 1px solid rgba(148, 163, 184, 0.18);
+    overflow: visible;
+  }}
+  td.boq-td:last-child {{
+    border-left: none;
+  }}
+
+  /* تنسيق ملخص البند مع رقم التسلسل */
+  td.cell-summary {{
+    direction: rtl;
+    text-align: right;
+    padding: 3px 6px;
+    background: rgba(234, 88, 12, 0.05);
+  }}
+  .summary-item-wrap {{
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 4px;
+    direction: rtl;
+    text-align: right;
+    width: 100%;
+  }}
+  .seq-badge {{
+    flex-shrink: 0;
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 900;
+    color: #fb923c;
+    min-width: 20px;
+    text-align: right;
+    line-height: 1.4;
+    user-select: text;
+  }}
+  .name-editor {{
+    flex: 1;
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: #f8fafc;
+    line-height: 1.4;
+    text-align: start;
+    unicode-bidi: plaintext;
+    padding: 2px 4px;
+    border: 1.5px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    outline: none;
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    cursor: text;
+    user-select: text;
+    transition: all 0.15s ease;
+  }}
+  .name-editor:hover {{
+    border-color: rgba(56, 189, 248, 0.45);
+    background: rgba(15, 23, 42, 0.7);
+  }}
+  .name-editor:focus {{
+    border-color: #38bdf8;
+    background: #0f172a;
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+  }}
+
+  /* مركز الخلايا */
+  .cell-center-wrap {{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    width: 100%;
+    height: 100%;
+    padding: 3px 2px;
+    white-space: normal;
+    word-wrap: break-word;
+    user-select: text;
+  }}
+
+  /* اختيار الوحدة */
+  .unit-select {{
+    background: #0f172a;
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    border-radius: 4px;
+    font-size: 0.66rem;
+    font-weight: 800;
+    padding: 2px 2px;
+    outline: none;
+    font-family: inherit;
+    cursor: pointer;
+    text-align: center;
+    width: 100%;
+    max-width: 100%;
+    transition: all 0.15s ease;
+  }}
+  .unit-select:hover, .unit-select:focus {{
+    border-color: #38bdf8;
+    box-shadow: 0 0 6px rgba(56, 189, 248, 0.35);
+  }}
+
+  /* محرر الأرقام للكمية والسعر */
+  .cell-num-editor {{
+    display: inline-block;
+    min-width: 40px;
+    padding: 2px 4px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: #f8fafc;
+    border: 1.5px solid transparent;
+    border-radius: 4px;
+    background: transparent;
+    outline: none;
+    text-align: center;
+    cursor: text;
+    transition: all 0.15s ease;
+  }}
+  .cell-num-editor:hover {{
+    border-color: rgba(251, 146, 60, 0.45);
+    background: rgba(15, 23, 42, 0.7);
+  }}
+  .cell-num-editor:focus {{
+    border-color: #fb923c;
+    background: #0f172a;
+    box-shadow: 0 0 0 2px rgba(251, 146, 60, 0.25);
+  }}
+  td.cell-uprice .cell-num-editor {{
+    color: #fdba74;
+  }}
+  td.cell-tcost .total-cost-val {{
+    font-size: 0.68rem;
+    font-weight: 900;
+    color: #fbbf24;
+  }}
+
+  /* عمود التوصيف */
+  td.cell-desc {{
+    padding: 3px 6px;
+    background: rgba(2, 132, 199, 0.04);
+    overflow: visible;
+  }}
+  .desc-editor {{
+    width: 100%;
+    min-height: 26px;
+    padding: 3px 6px;
+    text-align: start;
+    unicode-bidi: plaintext;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: #ffffff;
+    line-height: 1.4;
+    border: 1.5px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    outline: none;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    transition: all 0.15s ease;
+    cursor: text;
+    user-select: text;
+  }}
+  .desc-editor:hover {{
+    border-color: rgba(56, 189, 248, 0.40);
+    background: rgba(15, 23, 42, 0.65);
+  }}
+  .desc-editor:focus {{
+    border-color: #38bdf8;
+    background: rgba(15, 23, 42, 0.95);
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.22);
+  }}
+
+  /* زر الحذف */
+  .boq-row-del-btn {{
+    background: rgba(220, 38, 38, 0.22);
+    border: 1px solid #ef4444;
+    color: #fca5a5;
+    font-weight: 800;
+    font-size: 0.57rem;
+    padding: 2px 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    font-family: inherit;
+    white-space: nowrap;
+  }}
+  .boq-row-del-btn:hover {{
+    background: rgba(220, 38, 38, 0.55);
+    color: #ffffff;
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+  }}
+  .boq-row-del-btn.del-confirming {{
+    background: #dc2626 !important;
+    color: #ffffff !important;
+    border-color: #fca5a5 !important;
+    box-shadow: 0 0 10px rgba(220, 38, 38, 0.9) !important;
+  }}
+
+  /* صف الإجمالي */
+  tr.boq-total-row {{
+    background: linear-gradient(90deg, rgba(6, 78, 59, 0.70) 0%, rgba(4, 120, 87, 0.50) 100%) !important;
+    border-top: 2px solid #10b981;
+  }}
+  tr.boq-total-row td.boq-td {{
+    border-bottom: none;
+  }}
+  tr.boq-total-row .seq-badge,
+  tr.boq-total-row .item-name-txt {{
+    font-size: 0.70rem !important;
+    font-weight: 900 !important;
+    color: #34d399 !important;
+  }}
+  tr.boq-total-row td.cell-tcost .grand-manual-cost {{
+    font-size: 0.73rem !important;
+    font-weight: 900 !important;
+    color: #10b981 !important;
+    text-shadow: 0 0 6px rgba(16, 185, 129, 0.45);
+  }}
+
+  /* مقابض التحجيم */
+  .col-resizer {{
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -5px;
+    width: 10px;
+    cursor: col-resize;
+    z-index: 30;
+    background: transparent;
+    transition: background-color 0.15s ease;
+  }}
+  .col-resizer:hover,
+  .col-resizer.active-resize {{
+    background: rgba(249, 115, 22, 0.85);
+    box-shadow: 0 0 8px rgba(249, 115, 22, 0.9);
+  }}
+  .row-resizer {{
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -4px;
+    height: 8px;
+    cursor: row-resize;
+    z-index: 25;
+    background: transparent;
+    transition: background-color 0.15s ease;
+  }}
+  .row-resizer:hover,
+  .row-resizer.active-resize {{
+    background: rgba(56, 189, 248, 0.85);
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.9);
+  }}
+  body.is-resizing-col,
+  body.is-resizing-col * {{
+    cursor: col-resize !important;
+    user-select: none !important;
+  }}
+  body.is-resizing-row,
+  body.is-resizing-row * {{
+    cursor: row-resize !important;
+    user-select: none !important;
+  }}
+</style>
+</head>
+<body>
+<div id="man-root-container" dir="rtl">
+    <div class="boq-top-banner">
+        <div class="boq-top-flex">
+            <div class="boq-title-group">
+                <span class="boq-main-title">📋 جدول البنود اليدوية المضافة بالمقايسة (خانات تفاعلية قابلة للتعديل المباشر):</span>
+                <span class="boq-sub-badge">
+                    ترتيب الأعمدة من اليمين إلى اليسار (RTL) • اسحب فواصل الأعمدة (⟷) أو الصفوف (↕) بالماوس للتحكم في العرض والارتفاع • عدد البنود: {len(manual_items)}
+                </span>
+            </div>
+            <div class="boq-actions-group">
+                <span id="man-save-indicator" class="boq-save-status">💾 تم حفظ التعديل</span>
+                <button type="button" id="man-reset-dims-btn" class="boq-reset-btn" title="إعادة ضبط مقاسات الأعمدة والصفوف للوضع الافتراضي">
+                    ↺ إعادة ضبط مقاسات الجدول
+                </button>
+                <div class="boq-edit-hint">
+                    ✏️ يمكن تعديل الاسم والوحدة والكمية والسعر والتوصيف مباشرةً (يدعم النسخ واللصق Ctrl+C / Ctrl+V)
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="boq-table-wrapper" id="man-table-wrapper">
+        <table id="m1-manual-boq-table" dir="rtl">
+            <colgroup>
+                <col id="man-col-0" style="width: 23%;">
+                <col id="man-col-1" style="width: 9%;">
+                <col id="man-col-2" style="width: 9%;">
+                <col id="man-col-3" style="width: 9%;">
+                <col id="man-col-4" style="width: 10%;">
+                <col id="man-col-5" style="width: 34%;">
+                <col id="man-col-6" style="width: 6%;">
+            </colgroup>
+            <thead class="boq-thead">
+                <tr class="boq-header-row" id="man-header-tr" data-row-idx="header">
+                    <th class="boq-th boq-th-orange">
+                        <span class="th-main-title">🟠 البند</span>
+                        <span class="th-sub-title">(Item)</span>
+                        <div class="col-resizer" data-col="0" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                    <th class="boq-th boq-th-orange">
+                        <span class="th-main-title">🟠 الوحدة</span>
+                        <span class="th-sub-title">(Unit)</span>
+                        <div class="col-resizer" data-col="1" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                    <th class="boq-th boq-th-orange">
+                        <span class="th-main-title">🟠 الكمية الصافية</span>
+                        <span class="th-sub-title">(قبل المعامل)</span>
+                        <div class="col-resizer" data-col="2" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                    <th class="boq-th boq-th-orange">
+                        <span class="th-main-title">🟠 تكلفة الوحدة</span>
+                        <span class="th-sub-title">(ج.م)</span>
+                        <div class="col-resizer" data-col="3" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                    <th class="boq-th boq-th-orange">
+                        <span class="th-main-title">🟠 إجمالي التكلفة</span>
+                        <span class="th-sub-title">(شامل المعامل ج.م)</span>
+                        <div class="col-resizer" data-col="4" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                    <th class="boq-th boq-th-blue">
+                        <span class="th-main-title">✏️ توصيف البند</span>
+                        <span class="th-sub-title">متاح للتعديل ✍️</span>
+                        <div class="col-resizer" data-col="5" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                    <th class="boq-th boq-th-red">
+                        <span class="th-main-title">🗑️ حذف</span>
+                        <span class="th-sub-title">(إجراء)</span>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="man-tbody">
+                {man_tbody_joined}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+(function() {{
+    const COL_STORAGE_KEY = f'{prefix}m1_man_boq_col_widths_v2';
+    const ROW_STORAGE_KEY = f'{prefix}m1_man_boq_row_heights_v2';
+    const DEFAULT_RATIOS = [0.23, 0.09, 0.09, 0.09, 0.10, 0.34, 0.06];
+    const MIN_COL_WIDTHS = [70, 35, 40, 40, 45, 100, 30];
+    const curFactor = {cur_factor:.2f};
+
+    const table = document.getElementById('m1-manual-boq-table');
+    const wrapper = document.getElementById('man-table-wrapper');
+    const rootContainer = document.getElementById('man-root-container');
+    const cols = [
+        document.getElementById('man-col-0'),
+        document.getElementById('man-col-1'),
+        document.getElementById('man-col-2'),
+        document.getElementById('man-col-3'),
+        document.getElementById('man-col-4'),
+        document.getElementById('man-col-5'),
+        document.getElementById('man-col-6')
+    ];
+
+    let hasInitializedVisibleWidth = false;
+    let lastSyncedManualJson = '';
+
+    function sendPayloadToParent(payload) {{
+        const jsonStr = JSON.stringify(payload);
+        try {{
+            if (window.parent && window.parent.document) {{
+                const pDoc = window.parent.document;
+                let input = pDoc.querySelector('input[aria-label="{_cw_sync_aria_lbl}"]');
+                if (!input) {{
+                    input = pDoc.querySelector('div[data-testid="stTextInput"] input');
+                }}
+                if (input) {{
+                    const proto = (window.parent.HTMLInputElement || window.HTMLInputElement).prototype;
+                    const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+                    if (desc && desc.set) {{
+                        desc.set.call(input, jsonStr);
+                    }} else {{
+                        input.value = jsonStr;
+                    }}
+                    if (input._valueTracker) {{
+                        input._valueTracker.setValue('');
+                    }}
+                    input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                    input.dispatchEvent(new KeyboardEvent('keydown', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
+                    input.dispatchEvent(new KeyboardEvent('keyup', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
+                    input.dispatchEvent(new Event('blur', {{ bubbles: true }}));
+                    setTimeout(() => {{
+                        try {{
+                            if (desc && desc.set) {{ desc.set.call(input, ''); }} else {{ input.value = ''; }}
+                        }} catch (e) {{}}
+                    }}, 450);
+                }}
+            }}
+        }} catch (err) {{
+            console.warn('Manual BOQ sync error:', err);
+        }}
+    }}
+
+    function updateIframeHeight() {{
+        try {{
+            if (!rootContainer) return;
+            const contentH = Math.max(rootContainer.offsetHeight || 0, rootContainer.scrollHeight || 0);
+            if (contentH < 100) return;
+            const h = contentH + 24;
+            if (window.frameElement) {{
+                window.frameElement.style.height = h + 'px';
+                window.frameElement.style.minHeight = h + 'px';
+                window.frameElement.setAttribute('height', String(h));
+
+                let p = window.frameElement.parentElement;
+                let depth = 0;
+                while (p && depth < 5) {{
+                    const testId = (p.getAttribute && p.getAttribute('data-testid')) || '';
+                    const cls = (typeof p.className === 'string') ? p.className : '';
+                    if (
+                        testId === 'stVerticalBlock' ||
+                        testId === 'stExpander' ||
+                        cls.indexOf('stExpander') !== -1 ||
+                        p.tagName === 'DETAILS'
+                    ) {{
+                        break;
+                    }}
+                    p.style.height = h + 'px';
+                    p.style.minHeight = h + 'px';
+                    p = p.parentElement;
+                    depth++;
+                }}
+            }}
+        }} catch (e) {{}}
+    }}
+
+    if (typeof ResizeObserver !== 'undefined' && rootContainer) {{
+        const ro = new ResizeObserver(function() {{
+            if (wrapper && wrapper.clientWidth > 400 && !hasInitializedVisibleWidth) {{
+                hasInitializedVisibleWidth = true;
+                initColumnWidths(false);
+                initRowHeights(false);
+            }}
+            updateIframeHeight();
+        }});
+        ro.observe(rootContainer);
+        if (wrapper) ro.observe(wrapper);
+    }}
+
+    try {{
+        if (window.frameElement) {{
+            const parentDetails = window.frameElement.closest('details');
+            if (parentDetails) {{
+                parentDetails.addEventListener('toggle', function() {{
+                    if (parentDetails.open) {{
+                        setTimeout(function() {{
+                            initColumnWidths(false);
+                            initRowHeights(false);
+                            updateIframeHeight();
+                        }}, 40);
+                        setTimeout(updateIframeHeight, 200);
+                    }}
+                }});
+            }}
+        }}
+    }} catch (e) {{}}
+
+    window.addEventListener('load', updateIframeHeight);
+    window.addEventListener('resize', updateIframeHeight);
+    setTimeout(updateIframeHeight, 80);
+    setTimeout(updateIframeHeight, 300);
+
+    function initColumnWidths(forceDefault) {{
+        let savedWidths = null;
+        if (!forceDefault) {{
+            try {{
+                const raw = localStorage.getItem(COL_STORAGE_KEY);
+                if (raw) {{
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed) && parsed.length === 7 && parsed.every(x => typeof x === 'number' && x >= 25)) {{
+                        savedWidths = parsed;
+                    }}
+                }}
+            }} catch (e) {{}}
+        }}
+
+        if (savedWidths) {{
+            let totalW = savedWidths.reduce((a, b) => a + b, 0);
+            if (totalW > 0) {{
+                for (let i = 0; i < 7; i++) {{
+                    const pct = ((savedWidths[i] / totalW) * 100).toFixed(2);
+                    cols[i].style.width = pct + '%';
+                }}
+            }}
+        }} else {{
+            for (let i = 0; i < 7; i++) {{
+                const pct = (DEFAULT_RATIOS[i] * 100).toFixed(2);
+                cols[i].style.width = pct + '%';
+            }}
+        }}
+        table.style.width = '100%';
+        updateIframeHeight();
+    }}
+
+    function initRowHeights(forceDefault) {{
+        if (forceDefault) {{
+            const hdrTr = document.getElementById('man-header-tr');
+            if (hdrTr) hdrTr.style.height = '';
+            document.querySelectorAll('#man-tbody tr.boq-row').forEach(tr => {{
+                tr.style.height = '';
+            }});
+            updateIframeHeight();
+            return;
+        }}
+        try {{
+            const raw = localStorage.getItem(ROW_STORAGE_KEY);
+            if (!raw) return;
+            const savedRows = JSON.parse(raw);
+            if (savedRows && typeof savedRows === 'object') {{
+                if (savedRows['header']) {{
+                    const hdrTr = document.getElementById('man-header-tr');
+                    if (hdrTr) hdrTr.style.height = savedRows['header'] + 'px';
+                }}
+                document.querySelectorAll('#man-tbody tr.boq-row').forEach(tr => {{
+                    const rIdx = tr.getAttribute('data-row-idx');
+                    if (rIdx && savedRows[rIdx]) {{
+                        tr.style.height = savedRows[rIdx] + 'px';
+                    }}
+                }});
+            }}
+        }} catch (e) {{}}
+        updateIframeHeight();
+    }}
+
+    function saveColumnWidths() {{
+        try {{
+            const ths = table.querySelectorAll('thead th.boq-th');
+            const arr = Array.from(ths).map(th => Math.round(th.getBoundingClientRect().width));
+            if (arr.length === 7) {{
+                localStorage.setItem(COL_STORAGE_KEY, JSON.stringify(arr));
+            }}
+        }} catch (e) {{}}
+    }}
+
+    function saveRowHeight(rowKey, hPx) {{
+        try {{
+            let savedRows = {{}};
+            const raw = localStorage.getItem(ROW_STORAGE_KEY);
+            if (raw) savedRows = JSON.parse(raw) || {{}};
+            savedRows[rowKey] = Math.round(hPx);
+            localStorage.setItem(ROW_STORAGE_KEY, JSON.stringify(savedRows));
+        }} catch (e) {{}}
+    }}
+
+    initColumnWidths(false);
+    initRowHeights(false);
+
+    // ── التحكم في عرض الأعمدة بالماوس (Column Resizing RTL) ──
+    let activeColIdx = null;
+    let colStartX = 0;
+    let colStartW = 0;
+    let nextColStartW = 0;
+    let activeColHandle = null;
+
+    document.querySelectorAll('.col-resizer').forEach(handle => {{
+        handle.addEventListener('mousedown', function(e) {{
+            e.preventDefault();
+            e.stopPropagation();
+            const cIdx = parseInt(handle.getAttribute('data-col'), 10);
+            if (isNaN(cIdx) || cIdx < 0 || cIdx >= 6) return;
+
+            const ths = table.querySelectorAll('thead th.boq-th');
+            const curWidths = Array.from(ths).map(th => th.getBoundingClientRect().width);
+            for (let i = 0; i < 7; i++) {{
+                cols[i].style.width = Math.round(curWidths[i]) + 'px';
+            }}
+
+            activeColIdx = cIdx;
+            colStartX = e.clientX;
+            colStartW = curWidths[cIdx];
+            nextColStartW = curWidths[cIdx + 1];
+            activeColHandle = handle;
+            handle.classList.add('active-resize');
+            document.body.classList.add('is-resizing-col');
+        }});
+    }});
+
+    // ── التحكم في ارتفاع الصفوف بالماوس (Row Resizing) ──
+    let activeRowTr = null;
+    let activeRowKey = null;
+    let rowStartY = 0;
+    let rowStartH = 0;
+    let activeRowHandle = null;
+
+    document.querySelectorAll('.row-resizer').forEach(handle => {{
+        handle.addEventListener('mousedown', function(e) {{
+            e.preventDefault();
+            e.stopPropagation();
+            const rKey = handle.getAttribute('data-row');
+            const tr = handle.closest('tr');
+            if (!tr) return;
+
+            activeRowTr = tr;
+            activeRowKey = rKey;
+            rowStartY = e.clientY;
+            rowStartH = tr.getBoundingClientRect().height;
+            activeRowHandle = handle;
+            handle.classList.add('active-resize');
+            document.body.classList.add('is-resizing-row');
+        }});
+    }});
+
+    window.addEventListener('mousemove', function(e) {{
+        if (activeColIdx !== null) {{
+            e.preventDefault();
+            const deltaLeft = colStartX - e.clientX;
+            const minCur = MIN_COL_WIDTHS[activeColIdx] || 30;
+            const minNext = MIN_COL_WIDTHS[activeColIdx + 1] || 30;
+
+            let newCurW = Math.max(minCur, colStartW + deltaLeft);
+            let actualDelta = newCurW - colStartW;
+            let newNextW = nextColStartW - actualDelta;
+
+            if (newNextW < minNext) {{
+                newNextW = minNext;
+                actualDelta = nextColStartW - minNext;
+                newCurW = colStartW + actualDelta;
+            }}
+
+            const tblW = table.getBoundingClientRect().width || (wrapper ? wrapper.clientWidth : 1000) || 1000;
+            const pctCur = ((newCurW / tblW) * 100).toFixed(2);
+            const pctNext = ((newNextW / tblW) * 100).toFixed(2);
+
+            cols[activeColIdx].style.width = pctCur + '%';
+            cols[activeColIdx + 1].style.width = pctNext + '%';
+
+            table.style.width = '100%';
+            updateIframeHeight();
+            return;
+        }}
+
+        if (activeRowTr !== null) {{
+            e.preventDefault();
+            const deltaY = e.clientY - rowStartY;
+            const minH = (activeRowKey === 'header') ? 48 : 42;
+            const newH = Math.max(minH, Math.round(rowStartH + deltaY));
+            activeRowTr.style.height = newH + 'px';
+            updateIframeHeight();
+            return;
+        }}
+    }});
+
+    window.addEventListener('mouseup', function() {{
+        if (activeColIdx !== null) {{
+            saveColumnWidths();
+            activeColIdx = null;
+            if (activeColHandle) {{
+                activeColHandle.classList.remove('active-resize');
+                activeColHandle = null;
+            }}
+            document.body.classList.remove('is-resizing-col');
+            updateIframeHeight();
+        }}
+        if (activeRowTr !== null) {{
+            const finalH = activeRowTr.getBoundingClientRect().height;
+            if (activeRowKey) {{
+                saveRowHeight(activeRowKey, finalH);
+            }}
+            activeRowTr = null;
+            activeRowKey = null;
+            if (activeRowHandle) {{
+                activeRowHandle.classList.remove('active-resize');
+                activeRowHandle = null;
+            }}
+            document.body.classList.remove('is-resizing-row');
+            updateIframeHeight();
+        }}
+    }});
+
+    // زر إعادة ضبط أبعاد الأعمدة والصفوف
+    const resetBtn = document.getElementById('man-reset-dims-btn');
+    if (resetBtn) {{
+        resetBtn.addEventListener('click', function() {{
+            try {{
+                localStorage.removeItem(COL_STORAGE_KEY);
+                localStorage.removeItem(ROW_STORAGE_KEY);
+            }} catch (e) {{}}
+            initColumnWidths(true);
+            initRowHeights(true);
+        }});
+    }}
+
+    // ── الحسابات اللحظية ومزامنة تعديلات البنود مع Streamlit ──
+    function calculateRow(tr) {{
+        const netQStr = (tr.querySelector('.qty-editor')?.innerText || '0').replace(/,/g, '').trim();
+        const priceStr = (tr.querySelector('.price-editor')?.innerText || '0').replace(/,/g, '').trim();
+        const netQ = parseFloat(netQStr) || 0;
+        const uPrice = parseFloat(priceStr) || 0;
+        const effQ = netQ * curFactor;
+        const effCost = effQ * uPrice;
+
+        const effQEl = tr.querySelector('.eff-tot-q-txt');
+        if (effQEl) effQEl.innerText = effQ.toLocaleString('en-US', {{minimumFractionDigits: 2, maximumFractionDigits: 2}});
+
+        const costEl = tr.querySelector('.total-cost-val');
+        if (costEl) costEl.innerText = effCost.toLocaleString('en-US', {{minimumFractionDigits: 2, maximumFractionDigits: 2}});
+
+        return effCost;
+    }}
+
+    function updateGrandTotal() {{
+        let sum = 0;
+        document.querySelectorAll('#man-tbody tr.boq-row:not(.boq-total-row)').forEach(tr => {{
+            sum += calculateRow(tr);
+        }});
+        const grandEl = document.querySelector('.grand-manual-cost');
+        if (grandEl) grandEl.innerText = sum.toLocaleString('en-US', {{minimumFractionDigits: 2, maximumFractionDigits: 2}});
+    }}
+
+    function collectAllManualItems() {{
+        const list = [];
+        document.querySelectorAll('#man-tbody tr.boq-row:not(.boq-total-row)').forEach(tr => {{
+            const uid = tr.getAttribute('data-uid');
+            if (!uid) return;
+            const name = (tr.querySelector('.name-editor')?.innerText || '').trim();
+            const unit = (tr.querySelector('.unit-select')?.value || 'م² (m²)').trim();
+            const netQ = parseFloat((tr.querySelector('.qty-editor')?.innerText || '0').replace(/,/g, '')) || 0;
+            const uPrice = parseFloat((tr.querySelector('.price-editor')?.innerText || '0').replace(/,/g, '')) || 0;
+            const desc = (tr.querySelector('.desc-editor')?.innerText || '').trim();
+            list.push({{
+                uid: uid,
+                name: name,
+                unit: unit,
+                net_qty: netQ,
+                unit_price: uPrice,
+                description: desc
+            }});
+        }});
+        return list;
+    }}
+
+    function syncManualItemsToStreamlit() {{
+        const items = collectAllManualItems();
+        const curJson = JSON.stringify(items);
+        if (curJson === lastSyncedManualJson) return;
+        lastSyncedManualJson = curJson;
+
+        const saveBadge = document.getElementById('man-save-indicator');
+        if (saveBadge) {{
+            saveBadge.style.display = 'inline-flex';
+            setTimeout(() => {{ saveBadge.style.display = 'none'; }}, 2500);
+        }}
+
+        sendPayloadToParent({{
+            action: 'update_manual_boq_items',
+            items: items,
+            ts: Date.now()
+        }});
+    }}
+
+    // ── ضبط اتجاه ومحاذاة الكتابة تلقائياً (RTL للعربية / LTR للإنجليزية) ──
+    function applyBiDiDirection(elem) {{
+        if (!elem) return;
+        const txt = (elem.innerText || elem.textContent || '').trim();
+        if (!txt) {{
+            elem.setAttribute('dir', 'auto');
+            elem.style.textAlign = 'start';
+            return;
+        }}
+        const arabicRegex = /[\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF]/;
+        const latinRegex = /[a-zA-Z]/;
+
+        let isArabic = false;
+        for (let i = 0; i < txt.length; i++) {{
+            const ch = txt[i];
+            if (arabicRegex.test(ch)) {{
+                isArabic = true;
+                break;
+            }} else if (latinRegex.test(ch)) {{
+                isArabic = false;
+                break;
+            }}
+        }}
+
+        if (isArabic) {{
+            elem.setAttribute('dir', 'rtl');
+            elem.style.textAlign = 'right';
+        }} else {{
+            elem.setAttribute('dir', 'ltr');
+            elem.style.textAlign = 'left';
+        }}
+    }}
+
+    // تطبيق ضبط الاتجاه والمحاذاة المبدئي لجميع خلايا الجدول اليدوي
+    document.querySelectorAll('.desc-editor, .name-editor').forEach(applyBiDiDirection);
+
+    // مستمعات التعديل في خلايا الجدول
+    document.querySelectorAll('.qty-editor, .price-editor').forEach(el => {{
+        el.addEventListener('input', function() {{
+            const tr = el.closest('tr');
+            if (tr) calculateRow(tr);
+            updateGrandTotal();
+            updateIframeHeight();
+        }});
+    }});
+
+    document.querySelectorAll('.name-editor, .desc-editor').forEach(el => {{
+        el.addEventListener('input', function() {{
+            applyBiDiDirection(el);
+            updateIframeHeight();
+        }});
+        el.addEventListener('paste', function() {{
+            setTimeout(() => {{
+                applyBiDiDirection(el);
+                updateIframeHeight();
+            }}, 25);
+        }});
+    }});
+
+    document.querySelectorAll('.name-editor, .desc-editor, .qty-editor, .price-editor').forEach(el => {{
+        el.addEventListener('blur', function() {{
+            if (el.classList.contains('name-editor') || el.classList.contains('desc-editor')) {{
+                applyBiDiDirection(el);
+            }}
+            updateGrandTotal();
+            syncManualItemsToStreamlit();
+        }});
+    }});
+
+    document.querySelectorAll('.unit-select').forEach(sel => {{
+        sel.addEventListener('change', function() {{
+            syncManualItemsToStreamlit();
+        }});
+    }});
+
+    // زر الحذف مع تأكيد مرحلي أنيق
+    document.addEventListener('click', function(e) {{
+        const btn = e.target.closest('.boq-row-del-btn');
+        if (!btn) return;
+        const uid = btn.getAttribute('data-uid');
+        if (!uid) return;
+
+        if (!btn.classList.contains('del-confirming')) {{
+            btn.classList.add('del-confirming');
+            btn.innerHTML = '⚠️ تأكيد الحذف؟';
+            setTimeout(() => {{
+                if (btn && btn.classList.contains('del-confirming')) {{
+                    btn.classList.remove('del-confirming');
+                    btn.innerHTML = '🗑️ حذف';
+                }}
+            }}, 4000);
+            return;
+        }}
+
+        // تأكيد الحذف
+        btn.innerHTML = '⏳ جارٍ الحذف...';
+        btn.disabled = true;
+        sendPayloadToParent({{
+            action: 'delete_manual_boq_item',
+            uid: uid,
+            ts: Date.now()
+        }});
+    }});
+
+    window.addEventListener('blur', function() {{
+        syncManualItemsToStreamlit();
+    }});
+    document.addEventListener('visibilitychange', function() {{
+        if (document.visibilityState === 'hidden') {{
+            syncManualItemsToStreamlit();
+        }}
+    }});
+}})();
+</script>
+</body>
+</html>"""
+
+            _man_iframe_h = 180 + len(manual_items) * 48
+            components.html(manual_boq_interactive_html, height=_man_iframe_h, scrolling=False)
+        else:
+            st.markdown(
+                """
+                <div dir="rtl" style="background:rgba(30,41,59,0.5); border:1.5px dashed rgba(148,163,184,0.3); border-radius:8px; padding:12px; margin-top:14px; text-align:center; color:#94a3b8; font-size:1.02rem; font-weight:700;">
+                    ℹ️ لا توجد بنود حصر يدوية إضافية مضافة حالياً. اختر قالباً جاهزاً أو أدخل «بند حر مخصص» واضغط «➕ إضافة البند» ليظهر في جدول المقايسة الموحد.
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    return plaster_qty_factor
+
+
+
+
+
 def render(is_standalone: bool = False):
+    import streamlit.components.v1 as components
     inject_module1_drawings_pan_zoom()
     st.markdown(
         """
@@ -19012,10 +21335,29 @@ def render(is_standalone: bool = False):
     # فحص هل حدث أي تغيير في المدخلات بعد آخر تصميم تم تنفيذه
     _is_state_dirty = bool(_last_designed_state and (_last_designed_state != _current_design_fingerprint))
 
+    def _collapse_all_lazy_output_expanders():
+        for _lz_k in [
+            f"{prefix}exp_punch",
+            f"{prefix}exp_moments_contour",
+            f"{prefix}exp_moments_sections",
+            f"{prefix}exp_steel_layout",
+            f"{prefix}exp_deflection",
+            f"{prefix}exp_bim_3d_viewer",
+        ]:
+            st.session_state.pop(_lz_k, None)
+        for _sk_k in list(st.session_state.keys()):
+            if isinstance(_sk_k, str) and (
+                _sk_k.startswith(f"{prefix}exp_ftg_drawings_v")
+                or _sk_k.startswith(f"{prefix}exp_final_design_v")
+                or _sk_k.startswith(f"{prefix}exp_bim_3d_viewer_v")
+            ):
+                st.session_state.pop(_sk_k, None)
+
     if _is_state_dirty:
-        # إلغاء اعتماد التصميم القديم فوراً ومسح النتائج المؤقتة السابقة
+        # إلغاء اعتماد التصميم القديم فوراً ومسح النتائج المؤقتة السابقة وإغلاق جميع أقسام الرسومات الـ Lazy
         _is_design_started = False
         st.session_state[f"{prefix}fs_design_started"] = False
+        _collapse_all_lazy_output_expanders()
         for _dirty_k in [
             f"{prefix}fs_ftg_analysis", "fs_ftg_analysis",
             f"{prefix}fs_gb_analysis", "fs_gb_analysis",
@@ -19032,6 +21374,7 @@ def render(is_standalone: bool = False):
     if st.button("🚀 إبدأ التصميم الإنشائي وتوليد المخططات", key=f"{prefix}btn_fs_run_design", use_container_width=True, help="بدء الحسابات والتصميم الإنشائي وتوليد مخططات العزوم والتسليح والترخيم والقص الثاقب"): 
         st.session_state[f"{prefix}fs_design_started"] = True
         st.session_state[f"{prefix}fs_last_designed_state"] = _current_design_fingerprint
+        _collapse_all_lazy_output_expanders()
         st.rerun()
 
     if not _is_design_started:
@@ -23549,13 +25892,18 @@ def render(is_standalone: bool = False):
             else:
 
 
-                with st.expander(
+                _exp_ftg_drw_key = f"{prefix}exp_ftg_drawings_v{_ftg_exp_ver}"
+                _exp_ftg_drw = st.expander(
                     f"📐 الرسومات الهندسية وتفاصيل تسليح القواعد (Footings Layout, Plans & Cross-Sections){_ftg_exp_suf}",
-                    expanded=_ftg_out_expanded,
-                    key=f"{prefix}exp_ftg_drawings_v{_ftg_exp_ver}",
-                ):
+                    expanded=False,
+                    key=_exp_ftg_drw_key,
+                    on_change="rerun",
+                )
+                with _exp_ftg_drw:
                     if _ftg_collapsed:
                         st.warning(_ftg_warn_msg)
+                    elif not st.session_state.get(_exp_ftg_drw_key, False):
+                        st.info("💡 انقر لتوسيع هذا القسم وتوليد الرسومات الهندسية وتفاصيل تسليح القواعد طبقاً لآخر المدخلات.")
                     else:
                         try:
                             overlap_disp = check_building_clearances_and_overlaps(fs_active_columns, ftg_analysis.get("models", {}))
@@ -24377,13 +26725,18 @@ def render(is_standalone: bool = False):
             )
 
             # ── 🏛️ FINAL DESIGN OF FOUNDATIONS AND GROUND BEAMS (ECP 203) ───────────────────
-            with st.expander(
+            _exp_final_des_key = f"{prefix}exp_final_design_v{_ftg_exp_ver}"
+            _exp_final_des = st.expander(
                 f"🏛️ Final Design of Columns, Foundations and Ground Beams — {num_floors} Floors (التصميم النهائي للاعمدة و للقواعد والسملات الأرضية){_ftg_exp_suf}",
                 expanded=False,
-                key=f"{prefix}exp_final_design_v{_ftg_exp_ver}",
-            ):
+                key=_exp_final_des_key,
+                on_change="rerun",
+            )
+            with _exp_final_des:
                 if _ftg_collapsed:
                     st.warning(_ftg_warn_msg)
+                elif not st.session_state.get(_exp_final_des_key, False):
+                    st.info("💡 انقر لتوسيع هذا القسم وتوليد المسقط الأفقي التنفيذي وجداول التصميم النهائي طبقاً لآخر المدخلات.")
                 else:
                     ftg_analysis_final = ftg_analysis if ('ftg_analysis' in locals() and ftg_analysis) else st.session_state.get("fs_ftg_analysis")
                     gb_analysis_final = gb_analysis if ('gb_analysis' in locals() and gb_analysis) else st.session_state.get("fs_gb_analysis")
@@ -25272,11 +27625,11 @@ def render(is_standalone: bool = False):
         st.markdown("---")
 
     if not _ftg_collapsed:
-        # ── 🏗️ حصر شامل لجميع الأعمال الخاصة بالمبنى (COMPREHENSIVE BUILDING WORKS SURVEY) ────────
+        # ── جداول الحصر والتكلفة لجميع البنود (COMPREHENSIVE BUILDING WORKS SURVEY) ────────
         comp_works_table_rows = []
         comp_works_summary_rows = []
         with st.expander(
-            f"🏗️ حصر شامل لجميع الأعمال الخاصة بالمبنى{_ftg_exp_suf}",
+            f"جداول الحصر والتكلفة لجميع البنود{_ftg_exp_suf}",
             expanded=False,
             key=f"{prefix}exp_comp_bldg_works_v{_ftg_exp_ver}",
         ):
@@ -25747,7 +28100,8 @@ def render(is_standalone: bool = False):
             ]
             st.session_state[f"{prefix}comp_works_table_rows"] = comp_works_table_rows
 
-            # ── جسر المزامنة الفورية لتوصيفات البنود (Hidden Sync Bridge) ──
+            
+            # ── جسر المزامنة الفورية لتوصيفات البنود والبنود اليدوية (Hidden Sync Bridge) ──
             _cw_sync_aria_lbl = f"{prefix}cw_boq_sync_payload"
             _cw_sync_key = f"{prefix}cw_boq_sync_input"
             st.markdown(
@@ -25778,29 +28132,47 @@ def render(is_standalone: bool = False):
             if _active_cw_val:
                 try:
                     _cw_payload = json.loads(_active_cw_val) if isinstance(_active_cw_val, str) else _active_cw_val
-                    if isinstance(_cw_payload, dict) and _cw_payload.get("action") == "update_cw_boq_descriptions":
-                        _op_ts = _cw_payload.get("ts")
-                        _last_ts = st.session_state.get(f"{prefix}_last_cw_boq_sync_ts")
-                        if _op_ts is None or _op_ts != _last_ts:
-                            if _op_ts is not None:
-                                st.session_state[f"{prefix}_last_cw_boq_sync_ts"] = _op_ts
-                            _new_descs = _cw_payload.get("descriptions")
-                            if isinstance(_new_descs, dict):
-                                _cur_d = dict(st.session_state.get(f"{prefix}cw_item_descriptions") or S.cfg_val(f"{prefix}cw_item_descriptions") or S.cfg_val("cw_item_descriptions") or {})
-                                _d_changed = False
-                                for _k_d, _v_d in _new_descs.items():
-                                    _ks = str(_k_d)
-                                    _vs = str(_v_d).strip()
-                                    if _cur_d.get(_ks) != _vs:
-                                        _cur_d[_ks] = _vs
-                                        _d_changed = True
-                                if _d_changed:
-                                    st.session_state[f"{prefix}cw_item_descriptions"] = dict(_cur_d)
-                                    S.cfg_set(f"{prefix}cw_item_descriptions", dict(_cur_d))
-                                    S.cfg_set("cw_item_descriptions", dict(_cur_d))
-                                    S.save_settings()
-                                    st.session_state.pop(f"{prefix}_cached_report_html", None)
-                                    st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
+                    if isinstance(_cw_payload, dict):
+                        _act = _cw_payload.get("action")
+                        if _act == "update_cw_boq_descriptions":
+                            _op_ts = _cw_payload.get("ts")
+                            _last_ts = st.session_state.get(f"{prefix}_last_cw_boq_sync_ts")
+                            if _op_ts is None or _op_ts != _last_ts:
+                                if _op_ts is not None:
+                                    st.session_state[f"{prefix}_last_cw_boq_sync_ts"] = _op_ts
+                                _new_descs = _cw_payload.get("descriptions")
+                                if isinstance(_new_descs, dict):
+                                    _cur_d = dict(st.session_state.get(f"{prefix}cw_item_descriptions") or S.cfg_val(f"{prefix}cw_item_descriptions") or S.cfg_val("cw_item_descriptions") or {})
+                                    _d_changed = False
+                                    for _k_d, _v_d in _new_descs.items():
+                                        _ks = str(_k_d)
+                                        _vs = str(_v_d).strip()
+                                        if _cur_d.get(_ks) != _vs:
+                                            _cur_d[_ks] = _vs
+                                            _d_changed = True
+                                    if _d_changed:
+                                        st.session_state[f"{prefix}cw_item_descriptions"] = dict(_cur_d)
+                                        S.cfg_set(f"{prefix}cw_item_descriptions", dict(_cur_d))
+                                        S.cfg_set("cw_item_descriptions", dict(_cur_d))
+                                        S.save_settings()
+                                        st.session_state.pop(f"{prefix}_cached_report_html", None)
+                                        st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
+                        elif _act == "update_manual_boq_items":
+                            _upd_items = _cw_payload.get("items")
+                            if isinstance(_upd_items, list):
+                                _persist_cw_manual_boq_items(_upd_items, prefix=prefix)
+                                st.session_state.pop(f"{prefix}_cached_report_html", None)
+                                st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
+                                st.rerun()
+                        elif _act == "delete_manual_boq_item":
+                            _del_id = _cw_payload.get("item_id")
+                            if _del_id:
+                                _m_items = _get_cw_manual_boq_items_list(prefix=prefix)
+                                _new_m = [x for x in _m_items if str(x.get("id")) != str(_del_id)]
+                                _persist_cw_manual_boq_items(_new_m, prefix=prefix)
+                                st.session_state.pop(f"{prefix}_cached_report_html", None)
+                                st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
+                                st.rerun()
                 except Exception:
                     pass
                 finally:
@@ -25810,16 +28182,33 @@ def render(is_standalone: bool = False):
                         pass
 
             # ═════════════════════════════════════════════════════════════════════════
-            #  عنوان أسعار البنود وصناديق إدخال الأسعار (بنفس فلسفة وتنسيق Module 15)
+            #  1. عنوان أسعار البنود وصناديق إدخال الأسعار (برواز سميك عنبري ذهبي مميز)
             # ═════════════════════════════════════════════════════════════════════════
             st.markdown(
                 """
-                <div dir="rtl" style="text-align: center; margin: 18px auto 14px auto; background: linear-gradient(135deg, rgba(30, 41, 59, 0.90) 0%, rgba(15, 23, 42, 0.96) 100%); border: 1.5px solid rgba(56, 189, 248, 0.5); border-top: 3px solid #38bdf8; border-radius: 8px; padding: 9px 24px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);">
-                    <span style="font-size: 1.45rem; font-weight: 900; color: #38bdf8; text-shadow: 0 2px 6px rgba(0,0,0,0.7); letter-spacing: 0.5px;">
+                <div dir="rtl" style="text-align: center; margin: 18px auto 14px auto; background: linear-gradient(135deg, rgba(30, 41, 59, 0.90) 0%, rgba(15, 23, 42, 0.96) 100%); border: 1.5px solid rgba(245, 158, 11, 0.5); border-top: 3px solid #f59e0b; border-radius: 8px; padding: 9px 24px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);">
+                    <span style="font-size: 1.45rem; font-weight: 900; color: #fbbf24; text-shadow: 0 2px 6px rgba(0,0,0,0.7); letter-spacing: 0.5px;">
                         💰 أسعار البنود
                     </span>
                 </div>
                 <style>
+                /* برواز سميك بلون عنبري ذهبي مختلف تماماً عن حواف خانات الإدخال السماوية */
+                div[data-testid="stVerticalBlockBorderWrapper"]:has(.m1-rates-container-marker),
+                div[class*="st-key-m1_rates_container"] {
+                    border: 3.5px solid #f59e0b !important;
+                    border-radius: 12px !important;
+                    background: linear-gradient(180deg, rgba(15, 23, 42, 0.90) 0%, rgba(30, 41, 59, 0.75) 100%) !important;
+                    padding: 14px 16px 12px 16px !important;
+                    margin-top: 6px !important;
+                    margin-bottom: 16px !important;
+                    box-shadow: 0 4px 22px rgba(0, 0, 0, 0.50), 0 0 18px rgba(245, 158, 11, 0.30) !important;
+                    transition: all 0.25s ease !important;
+                }
+                div[data-testid="stVerticalBlockBorderWrapper"]:has(.m1-rates-container-marker):hover,
+                div[class*="st-key-m1_rates_container"]:hover {
+                    border-color: #fbbf24 !important;
+                    box-shadow: 0 6px 28px rgba(0, 0, 0, 0.65), 0 0 24px rgba(251, 191, 36, 0.45) !important;
+                }
                 div[data-testid="stColumn"]:has(div[class*="cw_rate_"]) label p {
                     font-size: 0.80rem !important;
                     font-weight: 700 !important;
@@ -25857,120 +28246,121 @@ def render(is_standalone: bool = False):
             _saved_rate_thermal = float(S.cfg_val(f"{prefix}cw_rate_thermal", S.cfg_val("cw_rate_thermal", 130.0)))
             _saved_rate_roof_tiles = float(S.cfg_val(f"{prefix}cw_rate_roof_tiles", S.cfg_val("cw_rate_roof_tiles", 150.0)))
 
-            # 12 مدخل أسعار على 3 أسطر منظمة (4 أعمدة في كل سطر)
-            cw_pr1_c1, cw_pr1_c2, cw_pr1_c3, cw_pr1_c4 = st.columns(4)
-            with cw_pr1_c1:
-                price_cw_slabs_beams = st.number_input(
-                    "(م3) خرسانة مسلحة سقف وكمرات:",
-                    min_value=0.0, max_value=100000.0,
-                    value=_saved_rate_slabs_beams,
-                    step=50.0, format="%.1f",
-                    key=f"{prefix}cw_rate_slabs_beams",
-                    help="سعر المتر المكعب لخرسانة السقف والكمرات المسلحة شامل الحديد والشدة والصب",
-                )
-            with cw_pr1_c2:
-                price_cw_cols = st.number_input(
-                    "(م3) خرسانة مسلحة أعمدة:",
-                    min_value=0.0, max_value=100000.0,
-                    value=_saved_rate_cols,
-                    step=50.0, format="%.1f",
-                    key=f"{prefix}cw_rate_cols",
-                    help="سعر المتر المكعب للخرسانة المسلحة لأعمدة المبنى",
-                )
-            with cw_pr1_c3:
-                price_cw_ftgs_gb = st.number_input(
-                    "(م3) خرسانة مسلحة قواعد وسملات:",
-                    min_value=0.0, max_value=100000.0,
-                    value=_saved_rate_ftgs_gb,
-                    step=50.0, format="%.1f",
-                    key=f"{prefix}cw_rate_ftgs_gb",
-                    help="سعر المتر المكعب للخرسانة المسلحة للقواعد والسملات والشدادات والقواعد المشتركة",
-                )
-            with cw_pr1_c4:
-                price_cw_pc = st.number_input(
-                    "(م3) خرسانة عادية وأرضيات:",
-                    min_value=0.0, max_value=100000.0,
-                    value=_saved_rate_pc,
-                    step=50.0, format="%.1f",
-                    key=f"{prefix}cw_rate_pc",
-                    help="سعر المتر المكعب للخرسانة العادية أسفل القواعد والسملات ودكة الأرضيات",
-                )
+            with st.container(border=True):
+                st.markdown('<div class="m1-rates-container-marker" style="display:none;"></div>', unsafe_allow_html=True)
+                cw_pr1_c1, cw_pr1_c2, cw_pr1_c3, cw_pr1_c4 = st.columns(4)
+                with cw_pr1_c1:
+                    price_cw_slabs_beams = st.number_input(
+                        "(م3) خرسانة مسلحة سقف وكمرات:",
+                        min_value=0.0, max_value=100000.0,
+                        value=_saved_rate_slabs_beams,
+                        step=50.0, format="%.1f",
+                        key=f"{prefix}cw_rate_slabs_beams",
+                        help="سعر المتر المكعب لخرسانة السقف والكمرات المسلحة شامل الحديد والشدة والصب",
+                    )
+                with cw_pr1_c2:
+                    price_cw_cols = st.number_input(
+                        "(م3) خرسانة مسلحة أعمدة:",
+                        min_value=0.0, max_value=100000.0,
+                        value=_saved_rate_cols,
+                        step=50.0, format="%.1f",
+                        key=f"{prefix}cw_rate_cols",
+                        help="سعر المتر المكعب للخرسانة المسلحة لأعمدة المبنى",
+                    )
+                with cw_pr1_c3:
+                    price_cw_ftgs_gb = st.number_input(
+                        "(م3) خرسانة مسلحة قواعد وسملات:",
+                        min_value=0.0, max_value=100000.0,
+                        value=_saved_rate_ftgs_gb,
+                        step=50.0, format="%.1f",
+                        key=f"{prefix}cw_rate_ftgs_gb",
+                        help="سعر المتر المكعب للخرسانة المسلحة للقواعد والسملات والشدادات والقواعد المشتركة",
+                    )
+                with cw_pr1_c4:
+                    price_cw_pc = st.number_input(
+                        "(م3) خرسانة عادية وأرضيات:",
+                        min_value=0.0, max_value=100000.0,
+                        value=_saved_rate_pc,
+                        step=50.0, format="%.1f",
+                        key=f"{prefix}cw_rate_pc",
+                        help="سعر المتر المكعب للخرسانة العادية أسفل القواعد والسملات ودكة الأرضيات",
+                    )
 
-            cw_pr2_c1, cw_pr2_c2, cw_pr2_c3, cw_pr2_c4 = st.columns(4)
-            with cw_pr2_c1:
-                price_cw_backfill = st.number_input(
-                    "(م3) أعمال الردم:",
-                    min_value=0.0, max_value=100000.0,
-                    value=_saved_rate_backfill,
-                    step=5.0, format="%.1f",
-                    key=f"{prefix}cw_rate_backfill",
-                    help="سعر المتر المكعب لأعمال الردم بالرمل النظيف والدمك أسفل وأعلى سطح الأرض",
-                )
-            with cw_pr2_c2:
-                price_cw_bricks = st.number_input(
-                    "(طوبة) الطوب الأسمنتي:",
-                    min_value=0.0, max_value=100000.0,
-                    value=_saved_rate_bricks,
-                    step=0.25, format="%.2f",
-                    key=f"{prefix}cw_rate_bricks",
-                    help="سعر الطوبة الأسمنتية الواحدة شاملة التوريد والمونة والبناء (مثلاً 2.50 ج.م أي 2500 ج.م للألف طوبة)",
-                )
-            with cw_pr2_c3:
-                price_cw_interlock = st.number_input(
-                    "(م2) الانترلوك:",
-                    min_value=0.0, max_value=100000.0,
-                    value=_saved_rate_interlock,
-                    step=5.0, format="%.1f",
-                    key=f"{prefix}cw_rate_interlock",
-                    help="سعر المتر المسطح لبلاط انترلوك الأرصفة الخارجية",
-                )
-            with cw_pr2_c4:
-                price_cw_curbs = st.number_input(
-                    "(م.ط) البردورات:",
-                    min_value=0.0, max_value=100000.0,
-                    value=_saved_rate_curbs,
-                    step=5.0, format="%.1f",
-                    key=f"{prefix}cw_rate_curbs",
-                    help="سعر المتر الطولي لبردورات الأرصفة الخارجية",
-                )
+                cw_pr2_c1, cw_pr2_c2, cw_pr2_c3, cw_pr2_c4 = st.columns(4)
+                with cw_pr2_c1:
+                    price_cw_backfill = st.number_input(
+                        "(م3) أعمال الردم:",
+                        min_value=0.0, max_value=100000.0,
+                        value=_saved_rate_backfill,
+                        step=5.0, format="%.1f",
+                        key=f"{prefix}cw_rate_backfill",
+                        help="سعر المتر المكعب لأعمال الردم بالرمل النظيف والدمك أسفل وأعلى سطح الأرض",
+                    )
+                with cw_pr2_c2:
+                    price_cw_bricks = st.number_input(
+                        "(طوبة) الطوب الأسمنتي:",
+                        min_value=0.0, max_value=100000.0,
+                        value=_saved_rate_bricks,
+                        step=0.25, format="%.2f",
+                        key=f"{prefix}cw_rate_bricks",
+                        help="سعر الطوبة الأسمنتية الواحدة شاملة التوريد والمونة والبناء (مثلاً 2.50 ج.م أي 2500 ج.م للألف طوبة)",
+                    )
+                with cw_pr2_c3:
+                    price_cw_interlock = st.number_input(
+                        "(م2) الانترلوك:",
+                        min_value=0.0, max_value=100000.0,
+                        value=_saved_rate_interlock,
+                        step=5.0, format="%.1f",
+                        key=f"{prefix}cw_rate_interlock",
+                        help="سعر المتر المسطح لبلاط انترلوك الأرصفة الخارجية",
+                    )
+                with cw_pr2_c4:
+                    price_cw_curbs = st.number_input(
+                        "(م.ط) البردورات:",
+                        min_value=0.0, max_value=100000.0,
+                        value=_saved_rate_curbs,
+                        step=5.0, format="%.1f",
+                        key=f"{prefix}cw_rate_curbs",
+                        help="سعر المتر الطولي لبردورات الأرصفة الخارجية",
+                    )
 
-            cw_pr3_c1, cw_pr3_c2, cw_pr3_c3, cw_pr3_c4 = st.columns(4)
-            with cw_pr3_c1:
-                price_cw_damp_proof = st.number_input(
-                    "(م2) عزل الرطوبة للأساسات:",
-                    min_value=0.0, max_value=100000.0,
-                    value=_saved_rate_damp_proof,
-                    step=5.0, format="%.1f",
-                    key=f"{prefix}cw_rate_damp_proof",
-                    help="سعر المتر المسطح لعزل الرطوبة البيتوميني للقواعد المسلحة والسملات",
-                )
-            with cw_pr3_c2:
-                price_cw_waterproof = st.number_input(
-                    "(م2) عازل مائي (انسومات):",
-                    min_value=0.0, max_value=100000.0,
-                    value=_saved_rate_waterproof,
-                    step=5.0, format="%.1f",
-                    key=f"{prefix}cw_rate_waterproof",
-                    help="سعر المتر المسطح للعزل المائي للأسطح بمادة الأنسومات",
-                )
-            with cw_pr3_c3:
-                price_cw_thermal = st.number_input(
-                    "(م2) عازل حراري للسطح:",
-                    min_value=0.0, max_value=100000.0,
-                    value=_saved_rate_thermal,
-                    step=5.0, format="%.1f",
-                    key=f"{prefix}cw_rate_thermal",
-                    help="سعر المتر المسطح للعزل الحراري للأسطح",
-                )
-            with cw_pr3_c4:
-                price_cw_roof_tiles = st.number_input(
-                    "(م2) بلاط اسطح:",
-                    min_value=0.0, max_value=100000.0,
-                    value=_saved_rate_roof_tiles,
-                    step=5.0, format="%.1f",
-                    key=f"{prefix}cw_rate_roof_tiles",
-                    help="سعر المتر المسطح لبلاط أسطح المبنى",
-                )
+                cw_pr3_c1, cw_pr3_c2, cw_pr3_c3, cw_pr3_c4 = st.columns(4)
+                with cw_pr3_c1:
+                    price_cw_damp_proof = st.number_input(
+                        "(م2) عزل الرطوبة للأساسات:",
+                        min_value=0.0, max_value=100000.0,
+                        value=_saved_rate_damp_proof,
+                        step=5.0, format="%.1f",
+                        key=f"{prefix}cw_rate_damp_proof",
+                        help="سعر المتر المسطح لعزل الرطوبة البيتوميني للقواعد المسلحة والسملات",
+                    )
+                with cw_pr3_c2:
+                    price_cw_waterproof = st.number_input(
+                        "(م2) عازل مائي (انسومات):",
+                        min_value=0.0, max_value=100000.0,
+                        value=_saved_rate_waterproof,
+                        step=5.0, format="%.1f",
+                        key=f"{prefix}cw_rate_waterproof",
+                        help="سعر المتر المسطح للعزل المائي للأسطح بمادة الأنسومات",
+                    )
+                with cw_pr3_c3:
+                    price_cw_thermal = st.number_input(
+                        "(م2) عازل حراري للسطح:",
+                        min_value=0.0, max_value=100000.0,
+                        value=_saved_rate_thermal,
+                        step=5.0, format="%.1f",
+                        key=f"{prefix}cw_rate_thermal",
+                        help="سعر المتر المسطح للعزل الحراري للأسطح",
+                    )
+                with cw_pr3_c4:
+                    price_cw_roof_tiles = st.number_input(
+                        "(م2) بلاط اسطح:",
+                        min_value=0.0, max_value=100000.0,
+                        value=_saved_rate_roof_tiles,
+                        step=5.0, format="%.1f",
+                        key=f"{prefix}cw_rate_roof_tiles",
+                        help="سعر المتر المسطح لبلاط أسطح المبنى",
+                    )
 
             if (
                 abs(price_cw_slabs_beams - _saved_rate_slabs_beams) > 1e-4
@@ -26014,139 +28404,9 @@ def render(is_standalone: bool = False):
                 st.session_state.pop(f"{prefix}_cached_report_html", None)
                 st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
 
-            # ═════════════════════════════════════════════════════════════════════════
-            #  معامل زيادة للكميات التي تم حسابها (على سطر واحد مباشرة أعلى الجدول — بنفس فلسفة Module 15)
-            # ═════════════════════════════════════════════════════════════════════════
+            # معامل زيادة للكميات التي تم حسابها
             _qf_key = f"{prefix}w_cw_qty_factor"
-            st.markdown(
-                f"""
-                <style>
-                div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-{_qf_key}"]) {{
-                    background: linear-gradient(135deg, #180828 0%, #311042 35%, #581c87 70%, #1e0933 100%) !important;
-                    border: 1.5px solid #c084fc !important;
-                    border-right: 6px solid #a855f7 !important;
-                    border-radius: 10px !important;
-                    padding: 7px 18px !important;
-                    margin: 10px 0 12px 0 !important;
-                    box-shadow: 0 4px 20px rgba(168, 85, 247, 0.35), inset 0 1px 1px rgba(233, 213, 255, 0.35) !important;
-                    display: flex !important;
-                    flex-direction: row !important;
-                    flex-wrap: nowrap !important;
-                    align-items: center !important;
-                    justify-content: center !important;
-                    gap: 12px !important;
-                    direction: rtl !important;
-                    min-height: 44px !important;
-                }}
-                div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-{_qf_key}"]) > div[data-testid="stColumn"] {{
-                    display: flex !important;
-                    align-items: center !important;
-                    justify-content: center !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    height: 100% !important;
-                }}
-                div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-{_qf_key}"]) .stMarkdown,
-                div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-{_qf_key}"]) [data-testid="stMarkdownContainer"],
-                div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-{_qf_key}"]) [data-testid="stMarkdownContainer"] p {{
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    display: flex !important;
-                    align-items: center !important;
-                    height: 100% !important;
-                }}
-                div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-{_qf_key}"]) > div[data-testid="stColumn"]:first-child {{
-                    flex: 0 0 auto !important;
-                    width: auto !important;
-                    min-width: unset !important;
-                }}
-                div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-{_qf_key}"]) > div[data-testid="stColumn"]:last-child {{
-                    flex: 0 0 135px !important;
-                    width: 135px !important;
-                    min-width: 125px !important;
-                    max-width: 150px !important;
-                }}
-                div[class*="st-key-{_qf_key}"] label,
-                div[class*="st-key-{_qf_key}"] [data-testid="stWidgetLabel"],
-                div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-{_qf_key}"]) label {{
-                    display: none !important;
-                    height: 0 !important;
-                    min-height: 0 !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    visibility: hidden !important;
-                }}
-                div[class*="st-key-{_qf_key}"] div[data-testid="stNumberInput"] {{
-                    margin-bottom: 0 !important;
-                }}
-                div[class*="st-key-{_qf_key}"] div[data-testid="stNumberInputContainer"] {{
-                    display: flex !important;
-                    flex-direction: row !important;
-                    align-items: center !important;
-                    background: #120624 !important;
-                    border: 1.5px solid #c084fc !important;
-                    border-radius: 8px !important;
-                    padding: 0 !important;
-                    min-height: 34px !important;
-                    height: 34px !important;
-                    overflow: hidden !important;
-                    box-shadow: 0 0 12px rgba(192, 132, 252, 0.35) !important;
-                }}
-                div[class*="st-key-{_qf_key}"] button[data-testid="stNumberInputStepDown"],
-                div[class*="st-key-{_qf_key}"] button[data-testid="stNumberInputStepUp"] {{
-                    display: flex !important;
-                    align-items: center !important;
-                    justify-content: center !important;
-                    background: rgba(192, 132, 252, 0.22) !important;
-                    border: none !important;
-                    width: 28px !important;
-                    min-width: 28px !important;
-                    height: 34px !important;
-                    min-height: 34px !important;
-                    cursor: pointer !important;
-                    transition: all 0.15s ease !important;
-                    padding: 0 !important;
-                    margin: 0 !important;
-                }}
-                div[class*="st-key-{_qf_key}"] button[data-testid="stNumberInputStepDown"]:hover,
-                div[class*="st-key-{_qf_key}"] button[data-testid="stNumberInputStepUp"]:hover {{
-                    background: rgba(192, 132, 252, 0.50) !important;
-                }}
-                div[class*="st-key-{_qf_key}"] button[data-testid="stNumberInputStepUp"] svg,
-                div[class*="st-key-{_qf_key}"] button[data-testid="stNumberInputStepDown"] svg {{
-                    display: none !important;
-                }}
-                div[class*="st-key-{_qf_key}"] button[data-testid="stNumberInputStepUp"]::after {{
-                    content: "+" !important;
-                    font-size: 18px !important;
-                    font-weight: 900 !important;
-                    color: #e9d5ff !important;
-                    line-height: 1 !important;
-                }}
-                div[class*="st-key-{_qf_key}"] button[data-testid="stNumberInputStepDown"]::after {{
-                    content: "−" !important;
-                    font-size: 18px !important;
-                    font-weight: 900 !important;
-                    color: #e9d5ff !important;
-                    line-height: 1 !important;
-                }}
-                div[class*="st-key-{_qf_key}"] input {{
-                    color: #f5f3ff !important;
-                    -webkit-text-fill-color: #f5f3ff !important;
-                    background-color: transparent !important;
-                    font-size: 1.15rem !important;
-                    font-weight: 900 !important;
-                    text-align: center !important;
-                    border: none !important;
-                    height: 34px !important;
-                    min-height: 34px !important;
-                    padding: 0 4px !important;
-                    box-shadow: none !important;
-                }}
-                </style>
-                """,
-                unsafe_allow_html=True,
-            )
+            _saved_qty_factor = float(S.cfg_val(f"{prefix}cw_qty_factor", S.cfg_val("cw_qty_factor", 1.20)))
 
             def _sync_cw_qty_factor():
                 _v_qf = float(st.session_state.get(_qf_key, 1.20))
@@ -26186,64 +28446,36 @@ def render(is_standalone: bool = False):
                 st.session_state.pop(f"{prefix}_cached_report_html", None)
                 st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
 
-            # ── حساب كميات ملخص البنود والأسعار والتكاليف ──
+            # ═════════════════════════════════════════════════════════════════════════
+            #  2. إدارة وتخصيص مكتبة القوالب الجاهزة (12 قالب متاح لجميع المشاريع)
+            # ═════════════════════════════════════════════════════════════════════════
+            _cw_presets = _get_cw_manual_boq_presets_list()
+            _render_cw_presets_library_manager(_cw_presets, prefix=prefix)
+
+            # ═════════════════════════════════════════════════════════════════════════
+            #  3. إضافة وإدارة بنود الحصر اليدوية الإضافية (رخام سلالم، حجر فرعوني، وبنود أخرى)
+            # ═════════════════════════════════════════════════════════════════════════
+            _render_cw_manual_boq_items_manager(cur_factor=cw_qty_factor, prefix=prefix)
+
+            # ── دمج البنود الأساسية الـ 12 مع البنود اليدوية المضافة ──
             _sum_slabs_beams_net = round(_v_slabs_conc + _v_beams_conc, 2)
-            _sum_slabs_beams_tot = round(_sum_slabs_beams_net * cw_qty_factor, 2)
-
             _sum_cols_net = round(_v_cols_conc, 2)
-            _sum_cols_tot = round(_sum_cols_net * cw_qty_factor, 2)
-
-            _sum_ftgs_gb_net = round(_v_ftgs_rc + _v_gb_conc + _v_rc_floor, 2)
             _sum_ftgs_gb_only_net = round(_v_ftgs_rc + _v_gb_conc, 2)
-            _sum_ftgs_gb_tot = round(_sum_ftgs_gb_only_net * cw_qty_factor, 2)
-            _sum_ftgs_gb_with_floor_tot = round(_sum_ftgs_gb_net * cw_qty_factor, 2)
-
+            _sum_ftgs_gb_with_floor_tot = round((_v_ftgs_rc + _v_gb_conc + _v_rc_floor) * cw_qty_factor, 2)
             _sum_pc_net = round(_v_pc_ftg_floor + _v_pc_gb + _v_rc_floor, 2)
             _sum_pc_only_net = round(_v_pc_ftg_floor + _v_pc_gb, 2)
-            _sum_pc_tot = round(_sum_pc_net * cw_qty_factor, 2)
-
             _sum_backfill_net = round(_v_backfill_sub + _v_backfill_above, 2)
-            _sum_backfill_tot = round(_sum_backfill_net * cw_qty_factor, 2)
-
             _sum_bricks_net = _n_bricks_total
             _sum_bricks_tot = int(math.ceil(_sum_bricks_net * cw_qty_factor))
             _sum_masonry_m3_tot = round(_v_masonry_m3 * cw_qty_factor, 2)
-
             _sum_interlock_net = round(_area_interlock_m2, 2)
-            _sum_interlock_tot = round(_sum_interlock_net * cw_qty_factor, 2)
-
             _sum_curb_net = round(_len_curb_m, 2)
-            _sum_curb_tot = round(_sum_curb_net * cw_qty_factor, 2)
-
             _sum_damp_proof_net = round(_area_damp_proof_m2, 2)
-            _sum_damp_proof_tot = round(_sum_damp_proof_net * cw_qty_factor, 2)
-
             _sum_waterproof_net = round(_area_waterproof_m2, 2)
-            _sum_waterproof_tot = round(_sum_waterproof_net * cw_qty_factor, 2)
-
             _sum_thermal_ins_net = round(_area_thermal_ins_m2, 2)
-            _sum_thermal_ins_tot = round(_sum_thermal_ins_net * cw_qty_factor, 2)
-
             _sum_roof_tiles_net = round(_area_roof_tiles_m2, 2)
-            _sum_roof_tiles_tot = round(_sum_roof_tiles_net * cw_qty_factor, 2)
 
-            DEFAULT_CW_ITEM_DESCRIPTIONS = {
-                "item_1": "بالمتر المكعب، توريد وصب خرسانة مسلحة للأسقف والكمرات (بلاطات لاكمرية Flat Slab وكمرات ساقطة/مدفونة) بمحتوى أسمنتي لا يقل عن 350 كجم أسمنت بورتلاندي عادي/م³ خرسانة ومقاومة مميزة طبقاً للتصميم الإنشائي، والسعر يشمل الشدات الخشبية أو المعدنية وحديد التسليح والفرم والصب والدمك الميكانيكي والمعالجة بالمياه طبقاً للكود المصري ECP 203.",
-                "item_2": "بالمتر المكعب، توريد وصب خرسانة مسلحة للأعمدة الإنشائية لكافة أدوار المبنى بمحتوى أسمنتي لا يقل عن 350-400 كجم/م³ ومقاومة مميزة طبقاً للتصميم، والسعر يشمل أعمال النجارة والتقويات والشدات وحديد التسليح الطولي والكانات والصب والدمك والمعالجة طبقاً لاشتراطات الكود المصري ECP 203.",
-                "item_3": "بالمتر المكعب، توريد وصب خرسانة مسلحة للأساسات (قواعد منفصلة + قواعد مشتركة + شدادات + سملات وميد أرضية) باستخدام أسمنت مقاوم للكبريتات (أو حسب تقرير التربة) بمحتوى لا يقل عن 350 كجم/م³، شاملاً الشدات وحديد التسليح والصب والدمك والمعالجة طبقاً للكود المصري ECP 203.",
-                "item_4": "بالمتر المكعب، توريد وصب خرسانة عادية للفرشات أسفل القواعد المسلحة وأسفل السملات ودكة الأرضيات بمحتوى أسمنتي 250 كجم أسمنت/م³ خرسانة، والسعر يشمل النظافة وضبط المناسيب والفرم والصب والدمك والتسوية والمعالجة بالمياه طبقاً للمواصفات الفنية والكود المصري.",
-                "item_5": "بالمتر المكعب، توريد وردم برمل نظيف خالٍ من الشوائب والأملاح والطفلة حول الأساسات أسفل سطح الأرض وداخل أحواض الردم أعلى سطح الأرض حتى منسوب دكة الأرضية، على طبقات لا يتجاوز سمك الطبقة 25 سم مع الرش الغزير بالمياه والدمك الميكانيكي الجيد للوصول لأقصى كثافة جافة طبقاً لأصول الصناعة.",
-                "item_6": "بالعدد (طوبة)، توريد وبناء طوب أسمنتي مصمت لمباني قصية الردم والأساسات أعلى السملات حتى منسوب الردم بالمونة الأسمنتية بنسبة لا تقل عن 350 كجم أسمنت/م³ رمل، شاملاً التشحيط وضبط الرأسية والأفقية وتفريغ اللحامات والمعالجة بالمياه طبقاً للمواصفات الفنية والكود المصري.",
-                "item_7": "بالمتر المسطح، توريد وتركيب بلاط انترلوك خرساني متداخل للأرصفة الخارجية حول محيط المبنى سمك 6-8 سم على فرشة رمل نظيف مدكوك مع الدك الهزاز الميكانيكي وملء الفواصل بالرمل الناعم وضبط المناسيب والميول السطحية طبقاً لأصول الصناعة.",
-                "item_8": "بالمتر الطولي، توريد وتركيب بردورات خرسانية جاهزة للأرصفة الخارجية حول داير الانترلوك شاملة الحفر والفرشة الخرسانية العادية أسفلها والتثبيت والسنادة الخلفية بالخرسانة وتكحيل اللحامات بمونة الأسمنت والرمل طبقاً للمواصفات.",
-                "item_9": "بالمتر المسطح، توريد ودهان عزل رطوبة بيتوميني (وجهين أو ثلاثة أوجه متعامدة من البيتومين المؤكسد الساخن أو المستحلب البيتوميني المطاطي البارد) لجميع جوانب وأسطح القواعد المسلحة وجوانب السملات ومباني قصية الردم الملامسة للتربة بعد النظافة التامة طبقاً لأصول الصناعة.",
-                "item_10": "بالمتر المسطح، توريد وتنفيذ طبقة عزل مائي للسطح النهائي باستخدام لفائف البيتومين المعدل المسلح بالبوليستر (أنسومات سمك 4 مم) تركب باللهب فوق وجه برايمر بيتوميني مع عمل ركوب لا يقل عن 10 سم ورفع العزل على الدروة وعمل رقبة القزازة والاختبار بالغمر بالمياه لمدة 48 ساعة.",
-                "item_11": "بالمتر المسطح، توريد وتركيب ألواح عزل حراري للسطح من البوليستيرين المبثوق عالي الكثافة (Extruded Polystyrene - XPS / فوم أزرق) سمك 5 سم عاشق ومعشوق يرص فوق طبقة العزل المائي وحمايته بطبقة مشمع بولي إيثيلين قبل عمل خرسانة الميول والبلاط.",
-                "item_12": "بالمتر المسطح، توريد وتركيب بلاط أسطح (بلاط موزايكو / سنجابي / أسمنتي مقاس 20×20×2 سم) فوق فرشة الرمل والمونة الأسمنتية مع ضبط أوتار الميول نحو جرجوري صرف الأمطار وعمل الوزرات المائلة والسقية بلباني الأسمنت وفواصل التمدد المملوءة بالبيتومين.",
-            }
-
-            cw_items_data = [
-                # (item_name, net_qty, unit, unit_price, details)
+            base_cw_items_data = [
                 ("1- اجمالي خرسانه مسلحة للسقف والكمرات (سقف + كمرات)",
                  _sum_slabs_beams_net, "م³ (m³)", price_cw_slabs_beams,
                  f"(سقف {_v_slabs_conc:.2f} m³ + كمرات {_v_beams_conc:.2f} m³) × {cw_qty_factor:.2f}"),
@@ -26293,35 +28525,37 @@ def render(is_standalone: bool = False):
                  f"مسطح المبنى ({_bldg_footprint_m2:.2f} m²) × {cw_qty_factor:.2f}"),
             ]
 
-            comp_works_summary_rows = []
-            cw_grand_total_cost = 0.0
+            _cw_manual_tuples = _get_cw_manual_boq_t2_tuples(cw_qty_factor=cw_qty_factor, start_idx=13, prefix=prefix)
+            cw_items_data = base_cw_items_data + _cw_manual_tuples
 
+            DEFAULT_CW_ITEM_DESCRIPTIONS = {
+                "item_1": "بالمتر المكعب، توريد وصب خرسانة مسلحة للأسقف والكمرات (بلاطات لاكمرية Flat Slab وكمرات ساقطة/مدفونة) بمحتوى أسمنتي لا يقل عن 350 كجم أسمنت بورتلاندي عادي/م³ خرسانة ومقاومة مميزة طبقاً للتصميم الإنشائي، والسعر يشمل الشدات الخشبية أو المعدنية وحديد التسليح والفرم والصب والدمك الميكانيكي والمعالجة بالمياه طبقاً للكود المصري ECP 203.",
+                "item_2": "بالمتر المكعب، توريد وصب خرسانة مسلحة للأعمدة الإنشائية لكافة أدوار المبنى بمحتوى أسمنتي لا يقل عن 350-400 كجم/م³ ومقاومة مميزة طبقاً للتصميم، والسعر يشمل أعمال النجارة والتقويات والشدات وحديد التسليح الطولي والكانات والصب والدمك والمعالجة طبقاً لاشتراطات الكود المصري ECP 203.",
+                "item_3": "بالمتر المكعب، توريد وصب خرسانة مسلحة للأساسات (قواعد منفصلة + قواعد مشتركة + شدادات + سملات وميد أرضية) باستخدام أسمنت مقاوم للكبريتات (أو حسب تقرير التربة) بمحتوى لا يقل عن 350 كجم/م³، شاملاً الشدات وحديد التسليح والصب والدمك والمعالجة طبقاً للكود المصري ECP 203.",
+                "item_4": "بالمتر المكعب، توريد وصب خرسانة عادية للفرشات أسفل القواعد المسلحة وأسفل السملات ودكة الأرضيات بمحتوى أسمنتي 250 كجم أسمنت/م³ خرسانة، والسعر يشمل النظافة وضبط المناسيب والفرم والصب والدمك والتسوية والمعالجة بالمياه طبقاً للمواصفات الفنية والكود المصري.",
+                "item_5": "بالمتر المكعب، توريد وردم برمل نظيف خالٍ من الشوائب والأملاح والطفلة حول الأساسات أسفل سطح الأرض وداخل أحواض الردم أعلى سطح الأرض حتى منسوب دكة الأرضية، على طبقات لا يتجاوز سمك الطبقة 25 سم مع الرش الغزير بالمياه والدمك الميكانيكي الجيد للوصول لأقصى كثافة جافة طبقاً لأصول الصناعة.",
+                "item_6": "بالعدد (طوبة)، توريد وبناء طوب أسمنتي مصمت لمباني قصية الردم والأساسات أعلى السملات حتى منسوب الردم بالمونة الأسمنتية بنسبة لا تقل عن 350 كجم أسمنت/م³ رمل، شاملاً التشحيط وضبط الرأسية والأفقية وتفريغ اللحامات والمعالجة بالمياه طبقاً للمواصفات الفنية والكود المصري.",
+                "item_7": "بالمتر المسطح، توريد وتركيب بلاط انترلوك خرساني متداخل للأرصفة الخارجية حول محيط المبنى سمك 6-8 سم على فرشة رمل نظيف مدكوك مع الدك الهزاز الميكانيكي وملء الفواصل بالرمل الناعم وضبط المناسيب والميول السطحية طبقاً لأصول الصناعة.",
+                "item_8": "بالمتر الطولي، توريد وتركيب بردورات خرسانية جاهزة للأرصفة الخارجية حول داير الانترلوك شاملة الحفر والفرشة الخرسانية العادية أسفلها والتثبيت والسنادة الخلفية بالخرسانة وتكحيل اللحامات بمونة الأسمنت والرمل طبقاً للمواصفات.",
+                "item_9": "بالمتر المسطح، توريد ودهان عزل رطوبة بيتوميني (وجهين أو ثلاثة أوجه متعامدة من البيتومين المؤكسد الساخن أو المستحلب البيتوميني المطاطي البارد) لجميع جوانب وأسطح القواعد المسلحة وجوانب السملات ومباني قصية الردم الملامسة للتربة بعد النظافة التامة طبقاً لأصول الصناعة.",
+                "item_10": "بالمتر المسطح، توريد وتنفيذ طبقة عزل مائي للسطح النهائي باستخدام لفائف البيتومين المعدل المسلح بالبوليستر (أنسومات سمك 4 مم) تركب باللهب فوق وجه برايمر بيتوميني مع عمل ركوب لا يقل عن 10 سم ورفع العزل على الدروة وعمل رقبة القزازة والاختبار بالغمر بالمياه لمدة 48 ساعة.",
+                "item_11": "بالمتر المسطح، توريد وتركيب ألواح عزل حراري للسطح من البوليستيرين المبثوق عالي الكثافة (Extruded Polystyrene - XPS / فوم أزرق) سمك 5 سم عاشق ومعشوق يرص فوق طبقة العزل المائي وحمايته بطبقة مشمع بولي إيثيلين قبل عمل خرسانة الميول والبلاط.",
+                "item_12": "بالمتر المسطح، توريد وتركيب بلاط أسطح (بلاط موزايكو / سنجابي / أسمنتي مقاس 20×20×2 سم) فوق فرشة الرمل والمونة الأسمنتية مع ضبط أوتار الميول نحو جرجوري صرف الأمطار وعمل الوزرات المائلة والسقية بلباني الأسمنت وفواصل التمدد المملوءة بالبيتومين.",
+            }
+
+            # إضافة توصيفات البنود اليدوية للقائمة الافتراضية
+            _cur_manual_items_list = _get_cw_manual_boq_items_list(prefix=prefix)
+            for _m_idx, _m_item in enumerate(_cur_manual_items_list, start=13):
+                _k = f"item_{_m_idx}"
+                DEFAULT_CW_ITEM_DESCRIPTIONS[_k] = str(_m_item.get("description", "")).strip() or "توريد وتركيب وتنفيذ البند طبقاً للمواصفات الفنية وأصول الصناعة المعتمدة واشتراطات المهندس المشرف."
+
+            cw_grand_total_cost = 0.0
             for _name, _net_q, _unit, _u_price, _details in cw_items_data:
                 _tot_q = round(_net_q * cw_qty_factor, 2)
                 _tot_cost = round(_tot_q * _u_price, 2)
                 cw_grand_total_cost += _tot_cost
-                comp_works_summary_rows.append({
-                    "المحددات والتفصيل (Details)": _details,
-                    "إجمالي التكلفة (ج.م)": f"{_tot_cost:,.2f}",
-                    "تكلفة الوحدة (ج.م)": f"{_u_price:.2f}",
-                    "الوحدة (Unit)": _unit,
-                    f"الكمية الإجمالية (× {cw_qty_factor:.2f})": f"{_tot_q:.2f}",
-                    "الكمية قبل المعامل (Net Qty)": f"{_net_q:.2f}",
-                    "البند / ملخص الكميات (Summary Item)": _name,
-                })
 
-            comp_works_summary_rows.append({
-                "المحددات والتفصيل (Details)": f"إجمالي تكلفة جميع بنود الخرسانات والحفر والردم والمباني والأرصفة والعزل شامل معامل الزيادة ({cw_qty_factor:.2f})",
-                "إجمالي التكلفة (ج.م)": f"{cw_grand_total_cost:,.2f}",
-                "تكلفة الوحدة (ج.م)": "—",
-                "الوحدة (Unit)": "ج.م (EGP)",
-                f"الكمية الإجمالية (× {cw_qty_factor:.2f})": "—",
-                "الكمية قبل المعامل (Net Qty)": "—",
-                "البند / ملخص الكميات (Summary Item)": "💰 الإجمالي العام للتكلفة (Grand Total Cost)",
-            })
-            st.session_state[f"{prefix}comp_works_summary_rows"] = comp_works_summary_rows
-
-            # ── إعداد جدول ملخص الكميات وتوصيفات البنود التفاعلي المدمج (بنفس فلسفة وتنسيق Module 15) ──
+            # ── إعداد جدول ملخص الكميات وتوصيفات البنود التفاعلي المدمج (تنسيق 1.1x المدمج من موديول 15) ──
             _cur_cw_desc_dict = dict(st.session_state.get(f"{prefix}cw_item_descriptions", {}) or {})
             if not _cur_cw_desc_dict:
                 _cur_cw_desc_dict = dict(S.cfg_val(f"{prefix}cw_item_descriptions", S.cfg_val("cw_item_descriptions", {})) or {})
@@ -26391,54 +28625,68 @@ def render(is_standalone: bool = False):
                 _desc_esc = _html_mod.escape(_r_info["desc"])
                 _is_tot = _r_info["is_total"]
 
-                _row_cls = "boq-row boq-total-row" if _is_tot else ("boq-row boq-even-row" if _r_idx % 2 == 0 else "boq-row boq-odd-row")
-                _seq_html = (
-                    f'<span class="seq-badge total-seq-badge">{_seq_esc}</span>'
-                    if _is_tot else
-                    f'<span class="seq-badge">{_seq_esc} -</span>'
-                )
+                if _is_tot:
+                    _cw_tbody_rows_html.append(f"""
+                    <tr class="boq-row boq-total-row" id="boq-tr-total" data-row-idx="{_r_idx}">
+                        <td class="boq-td cell-summary" id="cell-0-{_r_idx}">
+                            <div class="summary-item-wrap">
+                                <span class="seq-badge">{_seq_esc}</span>
+                                <span class="item-name-txt" style="color: #10b981; font-weight: 900;">{_name_esc}</span>
+                            </div>
+                            <div class="row-resizer" data-row="{_r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+                        </td>
+                        <td class="boq-td cell-unit" id="cell-1-{_r_idx}">
+                            <div class="cell-center-wrap" style="color: #6ee7b7; font-weight: 900;">{_unit_esc}</div>
+                        </td>
+                        <td class="boq-td cell-qty" id="cell-2-{_r_idx}">
+                            <div class="cell-center-wrap" style="color: #6ee7b7; font-weight: 900;">—</div>
+                        </td>
+                        <td class="boq-td cell-uprice" id="cell-3-{_r_idx}">
+                            <div class="cell-center-wrap" style="color: #6ee7b7; font-weight: 900;">—</div>
+                        </td>
+                        <td class="boq-td cell-tcost" id="cell-4-{_r_idx}">
+                            <div class="cell-center-wrap" style="color: #34d399; font-weight: 900; font-size: 0.73rem;">{_tcost_esc}</div>
+                        </td>
+                        <td class="boq-td cell-desc" id="cell-5-{_r_idx}">
+                            <div class="desc-editor" contenteditable="true" data-item-code="{_code_esc}" id="desc-edit-{_code_esc}" style="color: #e2e8f0; font-weight: 700;">{_desc_esc}</div>
+                        </td>
+                    </tr>
+                    """)
+                else:
+                    _row_cls = "boq-even-row" if (_r_idx % 2 == 0) else "boq-odd-row"
+                    _cw_tbody_rows_html.append(f"""
+                    <tr class="boq-row {_row_cls}" id="boq-tr-{_r_idx}" data-row-idx="{_r_idx}">
+                        <td class="boq-td cell-summary" id="cell-0-{_r_idx}">
+                            <div class="summary-item-wrap">
+                                <span class="seq-badge">{_seq_esc}.</span>
+                                <span class="item-name-txt">{_name_esc}</span>
+                            </div>
+                            <div class="row-resizer" data-row="{_r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+                        </td>
+                        <td class="boq-td cell-unit" id="cell-1-{_r_idx}">
+                            <div class="cell-center-wrap">{_unit_esc}</div>
+                        </td>
+                        <td class="boq-td cell-qty" id="cell-2-{_r_idx}">
+                            <div class="cell-center-wrap">{_qty_esc}</div>
+                        </td>
+                        <td class="boq-td cell-uprice" id="cell-3-{_r_idx}">
+                            <div class="cell-center-wrap">{_uprice_esc}</div>
+                        </td>
+                        <td class="boq-td cell-tcost" id="cell-4-{_r_idx}">
+                            <div class="cell-center-wrap">{_tcost_esc}</div>
+                        </td>
+                        <td class="boq-td cell-desc" id="cell-5-{_r_idx}">
+                            <div class="desc-editor" contenteditable="true" data-item-code="{_code_esc}" id="desc-edit-{_code_esc}">{_desc_esc}</div>
+                        </td>
+                    </tr>
+                    """)
 
-                _cw_tbody_rows_html.append(f"""
-                <tr class="{_row_cls}" data-row-idx="{_r_idx}" data-item-code="{_code_esc}">
-                    <td class="boq-td cell-summary">
-                        <div class="summary-item-wrap">
-                            {_seq_html}
-                            <span class="item-name-txt">{_name_esc}</span>
-                        </div>
-                        <div class="col-resizer" data-col="0" title="اسحب بالماوس لتغيير عرض العمود"></div>
-                        <div class="row-resizer" data-row="{_r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
-                    </td>
-                    <td class="boq-td cell-unit">
-                        <div class="cell-center-wrap">{_unit_esc}</div>
-                        <div class="col-resizer" data-col="1" title="اسحب بالماوس لتغيير عرض العمود"></div>
-                        <div class="row-resizer" data-row="{_r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
-                    </td>
-                    <td class="boq-td cell-qty">
-                        <div class="cell-center-wrap" dir="ltr">{_qty_esc}</div>
-                        <div class="col-resizer" data-col="2" title="اسحب بالماوس لتغيير عرض العمود"></div>
-                        <div class="row-resizer" data-row="{_r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
-                    </td>
-                    <td class="boq-td cell-uprice">
-                        <div class="cell-center-wrap" dir="ltr">{_uprice_esc}</div>
-                        <div class="col-resizer" data-col="3" title="اسحب بالماوس لتغيير عرض العمود"></div>
-                        <div class="row-resizer" data-row="{_r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
-                    </td>
-                    <td class="boq-td cell-tcost">
-                        <div class="cell-center-wrap" dir="ltr">{_tcost_esc}</div>
-                        <div class="col-resizer" data-col="4" title="اسحب بالماوس لتغيير عرض العمود"></div>
-                        <div class="row-resizer" data-row="{_r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
-                    </td>
-                    <td class="boq-td cell-desc">
-                        <div class="desc-editor" contenteditable="true" spellcheck="false" data-item-code="{_code_esc}" title="انقر للتعديل المباشر — يدعم النسخ واللصق Ctrl+C / Ctrl+V">{_desc_esc}</div>
-                        <div class="row-resizer" data-row="{_r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
-                    </td>
-                </tr>
-                """)
+            _initial_cw_descs_json = json.dumps(cw_live_descriptions, ensure_ascii=False)
+            _cw_tbody_combined = "".join(_cw_tbody_rows_html)
 
-            _cw_tbody_joined = "\n".join(_cw_tbody_rows_html)
-            _cw_initial_descs_json = json.dumps(cw_live_descriptions, ensure_ascii=False)
-
-            cw_boq_interactive_html = f"""<!DOCTYPE html>
+            # حقن الجدول التفاعلي الكامل مع دعم الـ BiDi ومقاسات الخطوط 1.1x
+            _cw_full_table_html = f"""
+<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
@@ -26448,128 +28696,129 @@ def render(is_standalone: bool = False):
     margin: 0;
     padding: 0;
   }}
-  body, html {{
+  html, body {{
     width: 100%;
+    margin: 0;
+    padding: 0;
     background: transparent;
-    font-family: 'Segoe UI', 'Cairo', Tahoma, Geneva, Verdana, sans-serif;
-    color: #f8fafc;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Kufi Arabic", sans-serif;
     direction: rtl;
-    overflow-x: hidden;
+    color: #e2e8f0;
+    overflow-x: hidden !important;
   }}
-  #boq-root-container {{
-    width: 100%;
-    padding: 4px 0 10px 0;
-    direction: rtl;
+  body.is-resizing-col {{
+    cursor: col-resize !important;
+    user-select: none !important;
   }}
-  .boq-top-banner {{
-    background: linear-gradient(135deg, rgba(30, 41, 59, 0.98) 0%, rgba(15, 23, 42, 0.98) 100%);
-    border: 2px solid #ea580c;
-    border-right: 6px solid #f97316;
-    border-radius: 10px;
-    padding: 12px 18px;
-    margin-bottom: 10px;
-    box-shadow: 0 4px 16px rgba(234, 88, 12, 0.20);
+  body.is-resizing-row {{
+    cursor: row-resize !important;
+    user-select: none !important;
   }}
-  .boq-top-flex {{
+
+  .boq-root-container {{
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 4px 2px 14px 2px;
+    box-sizing: border-box;
+    overflow-x: hidden !important;
+  }}
+
+  /* ── شريط الأدوات العلوي المدمج ── */
+  .boq-top-bar {{
     display: flex;
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
+    border: 1.5px solid rgba(56, 189, 248, 0.50);
+    border-radius: 8px;
+    padding: 6px 12px;
+    margin-bottom: 8px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
   }}
-  .boq-title-group {{
+  .boq-top-title {{
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
-    gap: 10px;
-  }}
-  .boq-main-title {{
+    gap: 8px;
+    font-size: 0.82rem;
     font-weight: 900;
-    font-size: 1.15rem;
-    color: #fb923c;
+    color: #38bdf8;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
   }}
-  .boq-sub-badge {{
-    font-size: 0.90rem;
-    color: #fdba74;
-    font-weight: 700;
-    background: rgba(234, 88, 12, 0.22);
-    padding: 4px 11px;
-    border-radius: 6px;
-    border: 1px solid rgba(249, 115, 22, 0.45);
-  }}
-  .boq-actions-group {{
+  .boq-controls-group {{
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
     gap: 8px;
   }}
-  .boq-edit-hint {{
-    background: linear-gradient(135deg, rgba(2, 132, 199, 0.28) 0%, rgba(14, 165, 233, 0.16) 100%);
-    border: 1.5px solid #38bdf8;
-    border-radius: 8px;
-    padding: 6px 14px;
-    color: #38bdf8;
-    font-weight: 900;
-    font-size: 0.95rem;
-    box-shadow: 0 0 12px rgba(56, 189, 248, 0.30);
-  }}
-  .boq-reset-btn {{
-    background: rgba(234, 88, 12, 0.22);
-    border: 1.5px solid #f97316;
-    color: #fed7aa;
-    font-weight: 800;
-    font-size: 0.88rem;
-    padding: 6px 12px;
-    border-radius: 8px;
+  .boq-btn {{
+    background: rgba(15, 23, 42, 0.85);
+    color: #e2e8f0;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.65rem;
+    font-weight: 700;
     cursor: pointer;
-    transition: all 0.18s ease;
-    font-family: inherit;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    user-select: none;
   }}
-  .boq-reset-btn:hover {{
-    background: rgba(234, 88, 12, 0.45);
+  .boq-btn:hover {{
+    background: rgba(56, 189, 248, 0.20);
+    border-color: #38bdf8;
     color: #ffffff;
-    box-shadow: 0 0 10px rgba(249, 115, 22, 0.45);
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
   }}
-  .boq-save-status {{
-    font-size: 0.85rem;
-    font-weight: 800;
-    color: #34d399;
+  .boq-save-badge {{
     display: none;
     align-items: center;
     gap: 4px;
-    background: rgba(16, 185, 129, 0.16);
-    border: 1px solid rgba(52, 211, 153, 0.4);
-    padding: 4px 10px;
+    background: rgba(16, 185, 129, 0.25);
+    color: #34d399;
+    border: 1px solid #10b981;
     border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 0.62rem;
+    font-weight: 800;
+    animation: fadeInOut 2.5s ease forwards;
   }}
+
+  /* ── جدول المقايسة الكامل ── */
   .boq-table-wrapper {{
-    width: 100%;
-    border: 2px solid #ea580c;
-    border-radius: 12px;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    border: 2px solid rgba(56, 189, 248, 0.50);
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.50);
     background: #0f172a;
-    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
-    overflow-x: auto;
-    overflow-y: visible;
-    position: relative;
+    box-sizing: border-box;
   }}
+
   table#m1-cw-boq-table {{
-    width: 100%;
-    min-width: 980px;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
     table-layout: fixed;
     border-collapse: collapse;
     border-spacing: 0;
     direction: rtl;
     background: #0f172a;
   }}
+
+  /* ── عناوين الجدول (برتقالي وأزرق) ── */
   thead.boq-thead tr.boq-header-row {{
-    height: 68px;
+    height: 38px;
   }}
   th.boq-th {{
     position: relative;
-    padding: 10px 8px;
+    padding: 4px 2px;
     vertical-align: middle;
     text-align: center;
-    border-bottom: 2.5px solid #ea580c;
+    border-bottom: 2px solid #ea580c;
     user-select: none;
     overflow: visible;
   }}
@@ -26579,45 +28828,47 @@ def render(is_standalone: bool = False):
   }}
   th.boq-th-orange .th-main-title {{
     display: block;
-    font-size: 1.12rem;
+    font-size: 0.68rem;
     font-weight: 900;
     color: #fb923c;
-    text-shadow: 0 0 12px rgba(251, 146, 60, 0.75), 0 1px 3px #000000;
-    line-height: 1.3;
+    text-shadow: 0 0 8px rgba(251, 146, 60, 0.75), 0 1px 2px #000000;
+    line-height: 1.25;
   }}
   th.boq-th-orange .th-sub-title {{
     display: block;
-    font-size: 0.92rem;
+    font-size: 0.56rem;
     font-weight: 800;
     color: #fed7aa;
-    margin-top: 3px;
-    line-height: 1.2;
+    margin-top: 1px;
+    line-height: 1.15;
   }}
   th.boq-th-blue {{
     background: linear-gradient(180deg, rgba(2, 132, 199, 0.48) 0%, rgba(14, 165, 233, 0.26) 100%);
     border-left: none;
-    border-bottom: 2.5px solid #38bdf8;
+    border-bottom: 2px solid #38bdf8;
   }}
   th.boq-th-blue .th-main-title {{
     display: block;
-    font-size: 1.14rem;
+    font-size: 0.68rem;
     font-weight: 900;
     color: #00f5ff;
-    text-shadow: 0 0 12px rgba(0, 245, 255, 0.80), 0 1px 3px #000000;
-    line-height: 1.3;
+    text-shadow: 0 0 8px rgba(0, 245, 255, 0.80), 0 1px 2px #000000;
+    line-height: 1.25;
   }}
   th.boq-th-blue .th-sub-title {{
     display: block;
-    font-size: 0.92rem;
+    font-size: 0.56rem;
     font-weight: 800;
     color: #7dd3fc;
-    margin-top: 3px;
-    text-shadow: 0 0 8px rgba(125, 211, 252, 0.65);
-    line-height: 1.2;
+    margin-top: 1px;
+    text-shadow: 0 0 6px rgba(125, 211, 252, 0.65);
+    line-height: 1.15;
   }}
+
+  /* ── صفوف وخلايا الجدول ── */
   tr.boq-row {{
     transition: background-color 0.12s ease;
-    min-height: 58px;
+    min-height: 30px;
   }}
   tr.boq-even-row {{
     background-color: rgba(15, 23, 42, 0.92);
@@ -26631,17 +28882,19 @@ def render(is_standalone: bool = False):
   td.boq-td {{
     position: relative;
     vertical-align: middle;
-    border-bottom: 1.5px solid rgba(148, 163, 184, 0.24);
-    border-left: 1.5px solid rgba(148, 163, 184, 0.22);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.20);
+    border-left: 1px solid rgba(148, 163, 184, 0.18);
     overflow: visible;
   }}
   td.boq-td:last-child {{
     border-left: none;
   }}
+
+  /* ── تنسيق عمود البند ── */
   td.cell-summary {{
     direction: rtl;
     text-align: right;
-    padding: 12px 22px 12px 14px;
+    padding: 4px 8px 4px 6px;
     background: rgba(234, 88, 12, 0.05);
   }}
   .summary-item-wrap {{
@@ -26649,35 +28902,38 @@ def render(is_standalone: bool = False):
     flex-direction: row;
     align-items: flex-start;
     justify-content: flex-start;
-    gap: 8px;
+    gap: 4px;
     direction: rtl;
     text-align: right;
     width: 100%;
-    margin-right: 4px;
+    margin-right: 2px;
   }}
   .seq-badge {{
     flex-shrink: 0;
     display: inline-block;
-    font-size: 1.12rem;
+    font-size: 0.68rem;
     font-weight: 900;
     color: #fb923c;
-    min-width: 34px;
+    min-width: 20px;
     text-align: right;
-    line-height: 1.55;
+    line-height: 1.4;
     user-select: text;
   }}
   .item-name-txt {{
     flex: 1;
-    font-size: 1.08rem;
+    font-size: 0.68rem;
     font-weight: 800;
     color: #f8fafc;
-    line-height: 1.55;
-    text-align: right;
+    line-height: 1.4;
+    text-align: start;
+    unicode-bidi: plaintext;
     white-space: normal;
     word-wrap: break-word;
     overflow-wrap: break-word;
     user-select: text;
   }}
+
+  /* ── تنسيق الأعمدة الرقمية والوحدة بحجم 1.1x ── */
   .cell-center-wrap {{
     display: flex;
     align-items: center;
@@ -26685,49 +28941,50 @@ def render(is_standalone: bool = False):
     text-align: center;
     width: 100%;
     height: 100%;
-    padding: 10px 8px;
+    padding: 3px 2px;
     white-space: normal;
     word-wrap: break-word;
     user-select: text;
   }}
   td.cell-unit .cell-center-wrap {{
-    font-size: 1.05rem;
+    font-size: 0.68rem;
     font-weight: 700;
     color: #e2e8f0;
   }}
   td.cell-qty .cell-center-wrap {{
-    font-size: 1.14rem;
+    font-size: 0.68rem;
     font-weight: 800;
     color: #f8fafc;
   }}
   td.cell-uprice .cell-center-wrap {{
-    font-size: 1.12rem;
+    font-size: 0.68rem;
     font-weight: 800;
     color: #fdba74;
   }}
   td.cell-tcost .cell-center-wrap {{
-    font-size: 1.15rem;
+    font-size: 0.68rem;
     font-weight: 900;
     color: #fbbf24;
   }}
+
+  /* ── تنسيق عمود توصيف البند القابل للتعديل ── */
   td.cell-desc {{
-    direction: rtl;
-    text-align: right;
-    padding: 8px 12px;
+    padding: 3px 6px;
     background: rgba(2, 132, 199, 0.04);
+    overflow: visible;
   }}
   .desc-editor {{
     width: 100%;
-    min-height: 44px;
-    padding: 8px 12px;
-    direction: rtl;
-    text-align: right;
-    font-size: 1.06rem;
+    min-height: 26px;
+    padding: 3px 6px;
+    text-align: start;
+    unicode-bidi: plaintext;
+    font-size: 0.68rem;
     font-weight: 600;
     color: #ffffff;
-    line-height: 1.65;
+    line-height: 1.4;
     border: 1.5px solid transparent;
-    border-radius: 8px;
+    border-radius: 5px;
     background: transparent;
     outline: none;
     white-space: pre-wrap;
@@ -26744,120 +29001,83 @@ def render(is_standalone: bool = False):
   .desc-editor:focus {{
     border-color: #38bdf8;
     background: rgba(15, 23, 42, 0.95);
-    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.22);
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.22);
   }}
+
+  /* ── تنسيق صف إجمالي التكلفة ── */
   tr.boq-total-row {{
     background: linear-gradient(90deg, rgba(6, 78, 59, 0.70) 0%, rgba(4, 120, 87, 0.50) 100%) !important;
-    border-top: 2.5px solid #10b981;
+    border-top: 2px solid #10b981;
   }}
   tr.boq-total-row td.boq-td {{
     border-bottom: none;
   }}
   tr.boq-total-row .seq-badge,
   tr.boq-total-row .item-name-txt {{
-    font-size: 1.20rem !important;
+    font-size: 0.70rem !important;
     font-weight: 900 !important;
-    color: #34d399 !important;
   }}
-  tr.boq-total-row td.cell-unit .cell-center-wrap,
-  tr.boq-total-row td.cell-qty .cell-center-wrap,
-  tr.boq-total-row td.cell-uprice .cell-center-wrap {{
-    font-size: 1.14rem !important;
-    font-weight: 900 !important;
-    color: #6ee7b7 !important;
-  }}
-  tr.boq-total-row td.cell-tcost .cell-center-wrap {{
-    font-size: 1.26rem !important;
-    font-weight: 900 !important;
-    color: #10b981 !important;
-    text-shadow: 0 0 10px rgba(16, 185, 129, 0.45);
-  }}
-  tr.boq-total-row .desc-editor {{
-    font-size: 1.10rem !important;
-    font-weight: 800 !important;
-    color: #a7f3d0 !important;
-  }}
+
+  /* ── مقابض تغيير الأبعاد ── */
   .col-resizer {{
     position: absolute;
     top: 0;
-    bottom: 0;
-    left: -5px;
-    width: 10px;
+    left: 0;
+    width: 7px;
+    height: 100%;
     cursor: col-resize;
-    z-index: 30;
-    background: transparent;
-    transition: background-color 0.15s ease;
+    z-index: 10;
+    user-select: none;
   }}
-  .col-resizer:hover,
-  .col-resizer.active-resize {{
-    background: rgba(249, 115, 22, 0.85);
-    box-shadow: 0 0 8px rgba(249, 115, 22, 0.9);
+  .col-resizer:hover, .col-resizer.active-resize {{
+    background: rgba(56, 189, 248, 0.85);
+    box-shadow: 0 0 8px #38bdf8;
   }}
   .row-resizer {{
     position: absolute;
+    bottom: 0;
     left: 0;
     right: 0;
-    bottom: -4px;
-    height: 8px;
+    height: 6px;
     cursor: row-resize;
-    z-index: 25;
-    background: transparent;
-    transition: background-color 0.15s ease;
+    z-index: 9;
+    user-select: none;
   }}
-  .row-resizer:hover,
-  .row-resizer.active-resize {{
-    background: rgba(56, 189, 248, 0.85);
-    box-shadow: 0 0 8px rgba(56, 189, 248, 0.9);
-  }}
-  body.is-resizing-col,
-  body.is-resizing-col * {{
-    cursor: col-resize !important;
-    user-select: none !important;
-  }}
-  body.is-resizing-row,
-  body.is-resizing-row * {{
-    cursor: row-resize !important;
-    user-select: none !important;
+  .row-resizer:hover, .row-resizer.active-resize {{
+    background: rgba(234, 88, 12, 0.85);
+    box-shadow: 0 0 8px #ea580c;
   }}
 </style>
 </head>
 <body>
-<div id="boq-root-container" dir="rtl">
-    <div class="boq-top-banner">
-        <div class="boq-top-flex">
-            <div class="boq-title-group">
-                <span class="boq-main-title">📋 جدول ملخص الكميات وتوصيفات البنود (BOQ Takeoff & Descriptions):</span>
-                <span class="boq-sub-badge">
-                    ترتيب الأعمدة من اليمين إلى اليسار (RTL) • اسحب فواصل الأعمدة (⟷) أو الصفوف (↕) بالماوس للتحكم في العرض والارتفاع
-                </span>
-            </div>
-            <div class="boq-actions-group">
-                <span id="boq-save-indicator" class="boq-save-status">💾 تم حفظ التعديل</span>
-                <button type="button" id="boq-reset-dims-btn" class="boq-reset-btn" title="إعادة ضبط عرض الأعمدة وارتفاع الصفوف للوضع الافتراضي">
-                    ↺ إعادة ضبط مقاسات الجدول
-                </button>
-                <div class="boq-edit-hint">
-                    ✏️ يمكن التعديل في عمود («توصيف البند») (يدعم النسخ واللصق Ctrl+C / Ctrl+V)
-                </div>
-            </div>
+<div class="boq-root-container" id="boq-root-container">
+    <div class="boq-top-bar">
+        <div class="boq-top-title">
+            <span>📋 جدول ملخص الكميات وتوصيفات البنود (BOQ Takeoff & Descriptions)</span>
+        </div>
+        <div class="boq-controls-group">
+            <span class="boq-save-badge" id="boq-save-indicator">💾 تم حفظ التوصيفات تلقائياً</span>
+            <button type="button" class="boq-btn" id="boq-reset-dims-btn" title="إعادة ضبط أبعاد الأعمدة والصفوف إلى الوضع التلقائي">
+                🔄 ضبط الأبعاد
+            </button>
         </div>
     </div>
 
     <div class="boq-table-wrapper" id="boq-table-wrapper">
         <table id="m1-cw-boq-table" dir="rtl">
             <colgroup>
-                <col id="boq-col-0" style="width: 27%;">
-                <col id="boq-col-1" style="width: 8%;">
+                <col id="boq-col-0" style="width: 24%;">
+                <col id="boq-col-1" style="width: 7%;">
                 <col id="boq-col-2" style="width: 9%;">
-                <col id="boq-col-3" style="width: 9.5%;">
-                <col id="boq-col-4" style="width: 10.5%;">
-                <col id="boq-col-5" style="width: 36%;">
+                <col id="boq-col-3" style="width: 10%;">
+                <col id="boq-col-4" style="width: 11%;">
+                <col id="boq-col-5" style="width: 39%;">
             </colgroup>
             <thead class="boq-thead">
                 <tr class="boq-header-row" id="boq-header-tr" data-row-idx="header">
                     <th class="boq-th boq-th-orange">
-                        <span class="th-main-title">🟠 البند / ملخص الكميات</span>
-                        <span class="th-sub-title">(Summary Item)</span>
+                        <span class="th-main-title">🟠 البند</span>
+                        <span class="th-sub-title">(Item)</span>
                         <div class="col-resizer" data-col="0" title="اسحب بالماوس لتغيير عرض العمود"></div>
                         <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
                     </th>
@@ -26892,8 +29112,8 @@ def render(is_standalone: bool = False):
                     </th>
                 </tr>
             </thead>
-            <tbody id="boq-tbody">
-                {_cw_tbody_joined}
+            <tbody>
+                {_cw_tbody_combined}
             </tbody>
         </table>
     </div>
@@ -26903,8 +29123,8 @@ def render(is_standalone: bool = False):
 (function() {{
     const COL_STORAGE_KEY = 'm1_cw_boq_col_widths_v1';
     const ROW_STORAGE_KEY = 'm1_cw_boq_row_heights_v1';
-    const DEFAULT_RATIOS = [0.27, 0.08, 0.09, 0.095, 0.105, 0.36];
-    const MIN_COL_WIDTHS = [210, 65, 75, 80, 90, 240];
+    const DEFAULT_RATIOS = [0.24, 0.07, 0.09, 0.10, 0.11, 0.39];
+    const MIN_COL_WIDTHS = [90, 40, 45, 50, 55, 120];
 
     const table = document.getElementById('m1-cw-boq-table');
     const wrapper = document.getElementById('boq-table-wrapper');
@@ -26918,7 +29138,7 @@ def render(is_standalone: bool = False):
         document.getElementById('boq-col-5')
     ];
 
-    let descriptionsMap = {_cw_initial_descs_json};
+    let descriptionsMap = {_initial_cw_descs_json};
     let lastSyncedJson = JSON.stringify(descriptionsMap);
     let hasInitializedVisibleWidth = false;
 
@@ -26926,7 +29146,7 @@ def render(is_standalone: bool = False):
         try {{
             if (!rootContainer) return;
             const contentH = Math.max(rootContainer.offsetHeight || 0, rootContainer.scrollHeight || 0);
-            if (contentH < 300) return;
+            if (contentH < 200) return;
             const h = contentH + 24;
             if (window.frameElement) {{
                 window.frameElement.style.height = h + 'px';
@@ -27000,14 +29220,13 @@ def render(is_standalone: bool = False):
     setTimeout(updateIframeHeight, 700);
 
     function initColumnWidths(forceDefault) {{
-        const availW = Math.max(980, (wrapper ? wrapper.clientWidth : 1200) - 4);
         let savedWidths = null;
         if (!forceDefault) {{
             try {{
                 const raw = localStorage.getItem(COL_STORAGE_KEY);
                 if (raw) {{
                     const parsed = JSON.parse(raw);
-                    if (Array.isArray(parsed) && parsed.length === 6 && parsed.every(x => typeof x === 'number' && x >= 50)) {{
+                    if (Array.isArray(parsed) && parsed.length === 6 && parsed.every(x => typeof x === 'number' && x >= 30)) {{
                         savedWidths = parsed;
                     }}
                 }}
@@ -27015,19 +29234,20 @@ def render(is_standalone: bool = False):
         }}
 
         if (savedWidths) {{
-            let totalW = 0;
-            for (let i = 0; i < 6; i++) {{
-                cols[i].style.width = Math.round(savedWidths[i]) + 'px';
-                totalW += Math.round(savedWidths[i]);
+            let totalW = savedWidths.reduce((a, b) => a + b, 0);
+            if (totalW > 0) {{
+                for (let i = 0; i < 6; i++) {{
+                    const pct = ((savedWidths[i] / totalW) * 100).toFixed(2);
+                    cols[i].style.width = pct + '%';
+                }}
             }}
-            table.style.width = Math.max(availW, totalW) + 'px';
         }} else {{
             for (let i = 0; i < 6; i++) {{
-                const w = Math.max(MIN_COL_WIDTHS[i], Math.round(availW * DEFAULT_RATIOS[i]));
-                cols[i].style.width = w + 'px';
+                const pct = (DEFAULT_RATIOS[i] * 100).toFixed(2);
+                cols[i].style.width = pct + '%';
             }}
-            table.style.width = '100%';
         }}
+        table.style.width = '100%';
         updateIframeHeight();
     }}
 
@@ -27141,8 +29361,8 @@ def render(is_standalone: bool = False):
         if (activeColIdx !== null) {{
             e.preventDefault();
             const deltaLeft = colStartX - e.clientX;
-            const minCur = MIN_COL_WIDTHS[activeColIdx] || 70;
-            const minNext = MIN_COL_WIDTHS[activeColIdx + 1] || 70;
+            const minCur = MIN_COL_WIDTHS[activeColIdx] || 45;
+            const minNext = MIN_COL_WIDTHS[activeColIdx + 1] || 45;
 
             let newCurW = Math.max(minCur, colStartW + deltaLeft);
             let actualDelta = newCurW - colStartW;
@@ -27150,17 +29370,18 @@ def render(is_standalone: bool = False):
 
             if (newNextW < minNext) {{
                 newNextW = minNext;
+                actualDelta = nextColStartW - minNext;
+                newCurW = colStartW + actualDelta;
             }}
 
-            cols[activeColIdx].style.width = Math.round(newCurW) + 'px';
-            cols[activeColIdx + 1].style.width = Math.round(newNextW) + 'px';
+            const tblW = table.getBoundingClientRect().width || (wrapper ? wrapper.clientWidth : 1000) || 1000;
+            const pctCur = ((newCurW / tblW) * 100).toFixed(2);
+            const pctNext = ((newNextW / tblW) * 100).toFixed(2);
 
-            let sumW = 0;
-            for (let i = 0; i < 6; i++) {{
-                sumW += parseFloat(cols[i].style.width) || 120;
-            }}
-            const availW = Math.max(980, (wrapper ? wrapper.clientWidth : 1200) - 4);
-            table.style.width = Math.max(availW, Math.round(sumW)) + 'px';
+            cols[activeColIdx].style.width = pctCur + '%';
+            cols[activeColIdx + 1].style.width = pctNext + '%';
+
+            table.style.width = '100%';
             updateIframeHeight();
             return;
         }}
@@ -27168,7 +29389,7 @@ def render(is_standalone: bool = False):
         if (activeRowTr !== null) {{
             e.preventDefault();
             const deltaY = e.clientY - rowStartY;
-            const minH = (activeRowKey === 'header') ? 48 : 42;
+            const minH = (activeRowKey === 'header') ? 48 : 32;
             const newH = Math.max(minH, Math.round(rowStartH + deltaY));
             activeRowTr.style.height = newH + 'px';
             updateIframeHeight();
@@ -27215,7 +29436,6 @@ def render(is_standalone: bool = False):
         }});
     }}
 
-    // ── مزامنة تعديلات عمود «توصيف البند» مع Streamlit عند الخروج من الخلية (Blur) فقط ──
     let activeFocusedEditor = null;
 
     function collectAllDescriptions() {{
@@ -27249,6 +29469,9 @@ def render(is_standalone: bool = False):
             if (window.parent && window.parent.document) {{
                 const pDoc = window.parent.document;
                 let input = pDoc.querySelector('input[aria-label="{_cw_sync_aria_lbl}"]');
+                if (!input) {{
+                    input = pDoc.querySelector('div[data-testid="stTextInput"] input');
+                }}
                 if (input) {{
                     const proto = (window.parent.HTMLInputElement || window.HTMLInputElement).prototype;
                     const desc = Object.getOwnPropertyDescriptor(proto, 'value');
@@ -27273,15 +29496,50 @@ def render(is_standalone: bool = False):
                 }}
             }}
         }} catch (err) {{
-            console.warn('CW BOQ description sync error:', err);
+            console.warn('BOQ description sync error:', err);
         }}
     }}
+
+    function applyBiDiDirection(elem) {{
+        if (!elem) return;
+        const txt = (elem.innerText || elem.textContent || '').trim();
+        if (!txt) {{
+            elem.setAttribute('dir', 'auto');
+            elem.style.textAlign = 'start';
+            return;
+        }}
+        const arabicRegex = /[\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF]/;
+        const latinRegex = /[a-zA-Z]/;
+
+        let isArabic = false;
+        for (let i = 0; i < txt.length; i++) {{
+            const ch = txt[i];
+            if (arabicRegex.test(ch)) {{
+                isArabic = true;
+                break;
+            }} else if (latinRegex.test(ch)) {{
+                isArabic = false;
+                break;
+            }}
+        }}
+
+        if (isArabic) {{
+            elem.setAttribute('dir', 'rtl');
+            elem.style.textAlign = 'right';
+        }} else {{
+            elem.setAttribute('dir', 'ltr');
+            elem.style.textAlign = 'left';
+        }}
+    }}
+
+    document.querySelectorAll('.desc-editor, .item-name-txt').forEach(applyBiDiDirection);
 
     document.querySelectorAll('.desc-editor').forEach(editor => {{
         editor.addEventListener('focus', function() {{
             activeFocusedEditor = editor;
         }});
         editor.addEventListener('input', function() {{
+            applyBiDiDirection(editor);
             const code = editor.getAttribute('data-item-code');
             if (code) {{
                 descriptionsMap[code] = (editor.innerText || editor.textContent || '').trim();
@@ -27289,12 +29547,19 @@ def render(is_standalone: bool = False):
             updateIframeHeight();
         }});
         editor.addEventListener('blur', function() {{
+            applyBiDiDirection(editor);
             if (activeFocusedEditor === editor) activeFocusedEditor = null;
             const code = editor.getAttribute('data-item-code');
             if (code) {{
                 descriptionsMap[code] = (editor.innerText || editor.textContent || '').trim();
             }}
             syncDescriptionsToStreamlit();
+        }});
+        editor.addEventListener('paste', function() {{
+            setTimeout(() => {{
+                applyBiDiDirection(editor);
+                updateIframeHeight();
+            }}, 25);
         }});
     }});
 
@@ -27309,95 +29574,100 @@ def render(is_standalone: bool = False):
 }})();
 </script>
 </body>
-</html>"""
+</html>
+"""
+            _cw_tbl_lines = len(cw_items_data) + 2
+            _cw_tbl_calc_height = max(420, min(1400, _cw_tbl_lines * 48 + 120))
+            import streamlit.components.v1 as components
+            components.html(_cw_full_table_html, height=_cw_tbl_calc_height, scrolling=False)
 
-            # ── 📑 قسم جدول البنود المستخدمة في المقايسة (مطوي افتراضياً) ──
-            _cw_used_items = []
-            _cw_unused_items = []
+            # ═════════════════════════════════════════════════════════════════════════
+            #  4. جدول البنود المستخدمة في المقايسة
+            # ═════════════════════════════════════════════════════════════════════════
+            _m1_used_items = []
+            _m1_unused_items = []
             for _idx, (_name, _net_q, _unit, _u_price, _details) in enumerate(cw_items_data, start=1):
                 _tot_q = round(_net_q * cw_qty_factor, 2)
                 _clean_name = _re_mod.sub(r'^\d+\s*[-–.]\s*', '', str(_name)).strip()
                 if _tot_q > 0.0001:
-                    _cw_used_items.append((_idx, _clean_name, _tot_q, str(_unit)))
+                    _m1_used_items.append((_idx, _clean_name, _tot_q, str(_unit)))
                 else:
-                    _cw_unused_items.append((_idx, _clean_name, 0.0, str(_unit)))
+                    _m1_unused_items.append((_idx, _clean_name, 0.0, str(_unit)))
 
             with st.expander("جدول البنود المستخدمة في المقايسة", expanded=False):
-                _max_rows = max(len(_cw_used_items), len(_cw_unused_items))
+                _max_rows = max(len(_m1_used_items), len(_m1_unused_items))
                 if _max_rows == 0:
                     _max_rows = 1
 
-                _rows_html = []
+                _u_nu_rows_html = []
                 for _r_i in range(_max_rows):
-                    _bg_row = "rgba(15, 23, 42, 0.70)" if _r_i % 2 == 0 else "rgba(30, 41, 59, 0.70)"
+                    _bg_row = "rgba(15, 23, 42, 0.75)" if _r_i % 2 == 0 else "rgba(30, 41, 59, 0.75)"
 
-                    # عمود البنود المستخدمة في المقايسة
-                    if _r_i < len(_cw_used_items):
-                        _u_idx, _u_name, _u_qty, _u_unit = _cw_used_items[_r_i]
+                    if _r_i < len(_m1_used_items):
+                        _u_idx, _u_name, _u_qty, _u_unit = _m1_used_items[_r_i]
                         _u_html = (
-                            f'<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">'
-                            f'<span style="color:#f8fafc; font-weight:800; font-size:0.92rem;">'
-                            f'<span style="color:#38bdf8; font-weight:900; margin-left:4px;">{_u_idx}.</span> {_html_mod.escape(_u_name)}'
+                            f'<div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">'
+                            f'<span style="color:#f8fafc; font-weight:800; font-size:1.00rem; line-height:1.4;">'
+                            f'<span style="color:#38bdf8; font-weight:900; margin-left:6px; font-size:1.05rem;">{_u_idx}.</span> {_html_mod.escape(_u_name)}'
                             f'</span>'
-                            f'<span style="background:rgba(16, 185, 129, 0.18); color:#34d399; border:1px solid rgba(16, 185, 129, 0.45); border-radius:6px; padding:2px 8px; font-weight:900; font-size:0.85rem; white-space:nowrap; direction:ltr;">'
+                            f'<span style="background:rgba(16, 185, 129, 0.22); color:#34d399; border:1.5px solid rgba(16, 185, 129, 0.60); border-radius:6px; padding:3px 10px; font-weight:900; font-size:0.95rem; white-space:nowrap; direction:ltr; box-shadow:0 2px 6px rgba(16,185,129,0.25);">'
                             f'{_u_qty:,.2f} {_html_mod.escape(_u_unit)}'
                             f'</span>'
                             f'</div>'
                         )
-                    elif len(_cw_used_items) == 0 and _r_i == 0:
-                        _u_html = '<span style="color:#94a3b8; font-weight:700; font-size:0.90rem; display:block; text-align:center;">لا توجد بنود مستخدمة حتى الآن</span>'
+                    elif len(_m1_used_items) == 0 and _r_i == 0:
+                        _u_html = '<span style="color:#94a3b8; font-weight:800; font-size:0.95rem; display:block; text-align:center;">لا توجد بنود مستخدمة حتى الآن</span>'
                     else:
-                        _u_html = '<span style="color:#64748b; font-weight:700; font-size:0.90rem; display:block; text-align:center;">—</span>'
+                        _u_html = '<span style="color:#64748b; font-weight:700; font-size:0.95rem; display:block; text-align:center;">—</span>'
 
-                    # عمود البنود الغير مستخدمة في المقايسة
-                    if _r_i < len(_cw_unused_items):
-                        _nu_idx, _nu_name, _nu_qty, _nu_unit = _cw_unused_items[_r_i]
+                    if _r_i < len(_m1_unused_items):
+                        _nu_idx, _nu_name, _nu_qty, _nu_unit = _m1_unused_items[_r_i]
                         _nu_html = (
-                            f'<div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">'
-                            f'<span style="color:#94a3b8; font-weight:700; font-size:0.90rem;">'
-                            f'<span style="color:#64748b; font-weight:900; margin-left:4px;">{_nu_idx}.</span> {_html_mod.escape(_nu_name)}'
+                            f'<div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">'
+                            f'<span style="color:#cbd5e1; font-weight:700; font-size:0.95rem; line-height:1.4;">'
+                            f'<span style="color:#94a3b8; font-weight:900; margin-left:6px; font-size:1.00rem;">{_nu_idx}.</span> {_html_mod.escape(_nu_name)}'
                             f'</span>'
-                            f'<span style="background:rgba(239, 68, 68, 0.12); color:#fca5a5; border:1px solid rgba(239, 68, 68, 0.35); border-radius:6px; padding:2px 8px; font-weight:800; font-size:0.83rem; white-space:nowrap; direction:ltr;">'
+                            f'<span style="background:rgba(239, 68, 68, 0.16); color:#fca5a5; border:1.5px solid rgba(239, 68, 68, 0.45); border-radius:6px; padding:3px 8px; font-weight:800; font-size:0.92rem; white-space:nowrap; direction:ltr;">'
                             f'0.00 {_html_mod.escape(_nu_unit)}'
                             f'</span>'
                             f'</div>'
                         )
-                    elif len(_cw_unused_items) == 0 and _r_i == 0:
-                        _nu_html = '<span style="color:#38bdf8; font-weight:800; font-size:0.90rem; display:block; text-align:center;">✨ جميع بنود المقايسة مستخدمة ولها حصر كميات</span>'
+                    elif len(_m1_unused_items) == 0 and _r_i == 0:
+                        _nu_html = '<span style="color:#38bdf8; font-weight:800; font-size:0.95rem; display:block; text-align:center;">✨ جميع بنود المقايسة مستخدمة ولها حصر كميات</span>'
                     else:
-                        _nu_html = '<span style="color:#64748b; font-weight:700; font-size:0.90rem; display:block; text-align:center;">—</span>'
+                        _nu_html = '<span style="color:#64748b; font-weight:700; font-size:0.95rem; display:block; text-align:center;">—</span>'
 
-                    _rows_html.append(
-                        f'<tr style="border-bottom:1px solid rgba(148, 163, 184, 0.18); background:{_bg_row};">'
-                        f'<td style="padding:9px 14px; vertical-align:middle; border-left:1.5px solid rgba(56, 189, 248, 0.25);">{_u_html}</td>'
-                        f'<td style="padding:9px 14px; vertical-align:middle;">{_nu_html}</td>'
+                    _u_nu_rows_html.append(
+                        f'<tr style="border-bottom:1px solid rgba(148, 163, 184, 0.22); background:{_bg_row};">'
+                        f'<td style="padding:10px 14px; vertical-align:middle; border-left:1.5px solid rgba(56, 189, 248, 0.35);">{_u_html}</td>'
+                        f'<td style="padding:10px 14px; vertical-align:middle;">{_nu_html}</td>'
                         f'</tr>'
                     )
 
                 st.markdown(
                     f"""
-                    <div dir="rtl" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; background:linear-gradient(90deg, rgba(15,23,42,0.85) 0%, rgba(30,41,59,0.90) 100%); padding:9px 16px; border-radius:8px; border:1.5px solid rgba(56,189,248,0.35); margin-bottom:10px;">
-                        <div style="color:#4ade80; font-weight:900; font-size:0.95rem;">
-                            🟢 عدد البنود المستخدمة في المقايسة (الكمية > 0): <span style="background:rgba(16,185,129,0.22); padding:2px 10px; border-radius:6px; border:1px solid #10b981;">{len(_cw_used_items)} بند</span>
+                    <div dir="rtl" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; background:linear-gradient(90deg, rgba(15,23,42,0.90) 0%, rgba(30,41,59,0.95) 100%); padding:10px 16px; border-radius:8px; border:1.5px solid rgba(56,189,248,0.45); margin-bottom:10px;">
+                        <div style="color:#4ade80; font-weight:900; font-size:1.02rem;">
+                            🟢 عدد البنود المستخدمة في المقايسة (الكمية > 0): <span style="background:rgba(16,185,129,0.25); padding:2px 10px; border-radius:6px; border:1.5px solid #10b981; font-size:1.05rem;">{len(_m1_used_items)} بند</span>
                         </div>
-                        <div style="color:#f87171; font-weight:900; font-size:0.95rem;">
-                            ⚪ عدد البنود الغير مستخدمة في المقايسة (الكمية = 0): <span style="background:rgba(239,68,68,0.20); padding:2px 10px; border-radius:6px; border:1px solid #ef4444;">{len(_cw_unused_items)} بند</span>
+                        <div style="color:#f87171; font-weight:900; font-size:1.02rem;">
+                            ⚪ عدد البنود الغير مستخدمة في المقايسة (الكمية = 0): <span style="background:rgba(239,68,68,0.25); padding:2px 10px; border-radius:6px; border:1.5px solid #ef4444; font-size:1.05rem;">{len(_m1_unused_items)} بند</span>
                         </div>
                     </div>
-                    <div dir="rtl" style="overflow-x:auto; border:2px solid rgba(56, 189, 248, 0.45); border-radius:10px; box-shadow:0 4px 18px rgba(0,0,0,0.45); margin:6px 0 12px 0;">
+                    <div dir="rtl" style="overflow-x:auto; border:2px solid rgba(56, 189, 248, 0.50); border-radius:8px; box-shadow:0 4px 18px rgba(0,0,0,0.45); margin:6px 0 14px 0;">
                         <table style="width:100%; border-collapse:collapse; text-align:right;">
                             <thead>
-                                <tr style="border-bottom:2.5px solid rgba(56, 189, 248, 0.55);">
-                                    <th style="width:50%; padding:11px 16px; background:linear-gradient(135deg, rgba(6, 78, 59, 0.90) 0%, rgba(15, 23, 42, 0.98) 100%); color:#4ade80; font-size:1.05rem; font-weight:900; border-left:2px solid rgba(56, 189, 248, 0.35);">
-                                        البنود المستخدمة في المقايسة
+                                <tr style="border-bottom:2px solid rgba(56, 189, 248, 0.60);">
+                                    <th style="width:50%; padding:12px 16px; background:linear-gradient(135deg, rgba(6, 78, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%); color:#4ade80; font-size:1.08rem; font-weight:900; border-left:2px solid rgba(56, 189, 248, 0.40);">
+                                        🟢 البنود المستخدمة في المقايسة
                                     </th>
-                                    <th style="width:50%; padding:11px 16px; background:linear-gradient(135deg, rgba(127, 29, 29, 0.90) 0%, rgba(15, 23, 42, 0.98) 100%); color:#f87171; font-size:1.05rem; font-weight:900;">
-                                        البنود الغير مستخدمة في المقايسة
+                                    <th style="width:50%; padding:12px 16px; background:linear-gradient(135deg, rgba(127, 29, 29, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%); color:#f87171; font-size:1.08rem; font-weight:900;">
+                                        ⚪ البنود الغير مستخدمة في المقايسة
                                     </th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {''.join(_rows_html)}
+                                {''.join(_u_nu_rows_html)}
                             </tbody>
                         </table>
                     </div>
@@ -27405,10 +29675,162 @@ def render(is_standalone: bool = False):
                     unsafe_allow_html=True,
                 )
 
-            import streamlit.components.v1 as _cw_components
-            _cw_components.html(cw_boq_interactive_html, height=1120, scrolling=False)
+            # ═════════════════════════════════════════════════════════════════════════
+            #  5. تفاصيل حصر جميع البنود
+            # ═════════════════════════════════════════════════════════════════════════
+            with st.expander("تفاصيل حصر جميع البنود", expanded=False):
+                # دمج بنود الحصر الأساسية مع البنود اليدوية الإضافية في جدول الحصر التفصيلي
+                _full_detailed_takeoff_rows = list(comp_works_table_rows)
+                for _m_idx, _m_item in enumerate(_cur_manual_items_list, start=13):
+                    _m_name = str(_m_item.get("name", f"بند يدوي {_m_idx}")).strip()
+                    _m_net_q = float(_m_item.get("net_qty", 0.0))
+                    _m_unit = str(_m_item.get("unit", "م² (m²)")).strip()
+                    _m_tot_q = round(_m_net_q * cw_qty_factor, 2)
+                    _full_detailed_takeoff_rows.append({
+                        "م (No.)": str(_m_idx),
+                        "بند الأعمال (Work Item)": f"{_m_idx}- {_m_name} (بند إضافي)",
+                        "الكمية الصافية (Net Qty)": f"{_m_net_q:,.2f}",
+                        "الوحدة (Unit)": _m_unit,
+                        "المحددات والتفصيل (Details)": f"إدخال يدوي: {_m_net_q:,.2f} × معامل الزيادة ({cw_qty_factor:.2f}) = {_m_tot_q:,.2f} {_m_unit}",
+                    })
+                render_styled_table(_full_detailed_takeoff_rows, font_size_override=9.8)
 
-            # ── بناء وتنسيق ملف الإكسيل بنفس فلسفة Module 15 ──
+            # ═════════════════════════════════════════════════════════════════════════
+            #  6. حساب كميات المواد المستخدمة في البنود
+            # ═════════════════════════════════════════════════════════════════════════
+            _slab_steel_ton_val = float(st.session_state.get(f"{prefix}slab_steel_ton") or st.session_state.get("slab_steel_ton") or 0.0)
+            _boq_materials_dict = _compute_cw_boq_items_materials_breakdown(
+                cw_items_data=cw_items_data,
+                cw_qty_factor=cw_qty_factor,
+                slab_steel_ton=_slab_steel_ton_val,
+                prefix=prefix,
+            )
+            _mat_items = _boq_materials_dict["mat_items"]
+            _tot_sand = _boq_materials_dict["tot_sand"]
+            _tot_cem_tons = _boq_materials_dict["tot_cement_tons"]
+            _tot_cem_bags = _boq_materials_dict["tot_cement_bags"]
+            _tot_gravel = _boq_materials_dict["tot_gravel"]
+            _tot_steel_ton = _boq_materials_dict["tot_steel_ton"]
+            _tot_bricks = _boq_materials_dict["tot_bricks"]
+
+            with st.expander("حساب كميات المواد المستخدمة في البنود", expanded=False):
+                # بانيلات المؤشرات الرقمية التراكمية لكميات المواد (6 مؤشرات مميزة)
+                st.markdown(
+                    f"""
+                    <div dir="rtl" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:14px;">
+                        <div style="background:linear-gradient(135deg, rgba(220,38,38,0.25) 0%, rgba(15,23,42,0.92) 100%); border:1.5px solid #dc2626; border-radius:9px; padding:10px 12px; text-align:center; box-shadow:0 3px 12px rgba(220,38,38,0.25);">
+                            <div style="font-size:0.95rem; font-weight:800; color:#fca5a5;">🏗️ حديد التسليح الكلي</div>
+                            <div style="font-size:1.50rem; font-weight:900; color:#ef4444; margin-top:3px;"><span dir="ltr">{_tot_steel_ton:,.2f}</span> <span style="font-size:0.95rem;">طن</span></div>
+                            <div style="font-size:0.80rem; color:#fee2e2; margin-top:2px;">أسقف + كمرات + أعمدة + قواعد</div>
+                        </div>
+                        <div style="background:linear-gradient(135deg, rgba(234,88,12,0.25) 0%, rgba(15,23,42,0.92) 100%); border:1.5px solid #ea580c; border-radius:9px; padding:10px 12px; text-align:center; box-shadow:0 3px 12px rgba(234,88,12,0.25);">
+                            <div style="font-size:0.95rem; font-weight:800; color:#fdba74;">🧱 إجمالي عدد الطوب الكلي</div>
+                            <div style="font-size:1.50rem; font-weight:900; color:#fb923c; margin-top:3px;"><span dir="ltr">{_tot_bricks:,}</span> <span style="font-size:0.95rem;">طوبة</span></div>
+                            <div style="font-size:0.80rem; color:#fed7aa; margin-top:2px;">طوب أسمنتي مصمت لمباني الردم</div>
+                        </div>
+                        <div style="background:linear-gradient(135deg, rgba(202,138,4,0.25) 0%, rgba(15,23,42,0.92) 100%); border:1.5px solid #ca8a04; border-radius:9px; padding:10px 12px; text-align:center; box-shadow:0 3px 12px rgba(202,138,4,0.25);">
+                            <div style="font-size:0.95rem; font-weight:800; color:#fef08a;">🏜️ إجمالي الرمل الكلي</div>
+                            <div style="font-size:1.50rem; font-weight:900; color:#facc15; margin-top:3px;"><span dir="ltr">{_tot_sand:,.2f}</span> <span style="font-size:0.95rem;">م³</span></div>
+                            <div style="font-size:0.80rem; color:#fef9c3; margin-top:2px;">خرسانات + ردم + أرضيات + مباني</div>
+                        </div>
+                        <div style="background:linear-gradient(135deg, rgba(2,132,199,0.25) 0%, rgba(15,23,42,0.92) 100%); border:1.5px solid #0284c7; border-radius:9px; padding:10px 12px; text-align:center; box-shadow:0 3px 12px rgba(2,132,199,0.25);">
+                            <div style="font-size:0.95rem; font-weight:800; color:#bae6fd;">🏗️ إجمالي الأسمنت الكلي</div>
+                            <div style="font-size:1.50rem; font-weight:900; color:#38bdf8; margin-top:3px;"><span dir="ltr">{_tot_cem_tons:,.2f}</span> <span style="font-size:0.95rem;">طن</span></div>
+                            <div style="font-size:0.80rem; color:#e0f2fe; margin-top:2px;">ما يعادل <span dir="ltr">{_tot_cem_bags:,}</span> شكارة 50 كجم</div>
+                        </div>
+                        <div style="background:linear-gradient(135deg, rgba(16,185,129,0.25) 0%, rgba(15,23,42,0.92) 100%); border:1.5px solid #10b981; border-radius:9px; padding:10px 12px; text-align:center; box-shadow:0 3px 12px rgba(16,185,129,0.25);">
+                            <div style="font-size:0.95rem; font-weight:800; color:#a7f3d0;">🪨 إجمالي الزلط الكلي (السن)</div>
+                            <div style="font-size:1.50rem; font-weight:900; color:#34d399; margin-top:3px;"><span dir="ltr">{_tot_gravel:,.2f}</span> <span style="font-size:0.95rem;">م³</span></div>
+                            <div style="font-size:0.80rem; color:#d1fae5; margin-top:2px;">للخرسانات المسلحة والعادية والبردورات</div>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+                _mat_rows_html = []
+                for _m_item in _mat_items:
+                    _m_idx = _m_item["idx"]
+                    _m_name = _m_item["name"]
+                    _m_tot_q = _m_item["tot_q"]
+                    _m_unit = _m_item["unit"]
+                    _m_sand = _m_item["sand_m3"]
+                    _m_cem_tons = _m_item["cem_tons"]
+                    _m_cem_bags = _m_item["cem_bags"]
+                    _m_gravel = _m_item["gravel_m3"]
+                    _m_steel = _m_item["steel_ton"]
+                    _m_bricks = _m_item["bricks"]
+                    _m_other = _m_item["other"]
+
+                    _bg_mat_row = "rgba(15, 23, 42, 0.75)" if _m_idx % 2 == 1 else "rgba(30, 41, 59, 0.75)"
+                    _is_used = (_m_tot_q > 0.0001)
+
+                    _sand_disp = f"{_m_sand:,.2f}" if _m_sand > 0 else "—"
+                    _cem_disp = f"{_m_cem_tons:,.2f} ط ({_m_cem_bags} ش)" if _m_cem_tons > 0 else "—"
+                    _gravel_disp = f"{_m_gravel:,.2f}" if _m_gravel > 0 else "—"
+                    _steel_disp = f"{_m_steel:,.2f} طن" if _m_steel > 0 else "—"
+                    _bricks_disp = f"{_m_bricks:,}" if _m_bricks > 0 else "—"
+
+                    _name_color = "#f8fafc" if _is_used else "#94a3b8"
+                    _qty_badge = (
+                        f'<span style="background:rgba(16, 185, 129, 0.20); color:#34d399; border:1px solid rgba(16, 185, 129, 0.5); border-radius:5px; padding:2px 8px; font-weight:900; font-size:0.92rem; white-space:nowrap; direction:ltr;">{_m_tot_q:,.2f} {_html_mod.escape(_m_unit)}</span>'
+                        if _is_used else
+                        f'<span style="background:rgba(239, 68, 68, 0.14); color:#fca5a5; border:1px solid rgba(239, 68, 68, 0.35); border-radius:5px; padding:2px 6px; font-weight:800; font-size:0.88rem; white-space:nowrap; direction:ltr;">0.00 {_html_mod.escape(_m_unit)}</span>'
+                    )
+
+                    _mat_rows_html.append(
+                        f'<tr style="border-bottom:1px solid rgba(148, 163, 184, 0.22); background:{_bg_mat_row};">'
+                        f'<td style="padding:8px 6px; text-align:center; font-weight:900; color:#38bdf8; font-size:0.98rem; border-left:1px solid rgba(148,163,184,0.2);">{_m_idx}</td>'
+                        f'<td style="padding:8px 12px; text-align:right; font-weight:800; color:{_name_color}; font-size:0.95rem; border-left:1px solid rgba(148,163,184,0.2); line-height:1.4;">{_html_mod.escape(_m_name)}</td>'
+                        f'<td style="padding:8px 8px; text-align:center; border-left:1px solid rgba(148,163,184,0.2);">{_qty_badge}</td>'
+                        f'<td style="padding:8px 8px; text-align:center; font-weight:900; color:#fde047; font-size:0.95rem; border-left:1px solid rgba(148,163,184,0.2); direction:ltr;">{_sand_disp}</td>'
+                        f'<td style="padding:8px 8px; text-align:center; font-weight:900; color:#7dd3fc; font-size:0.95rem; border-left:1px solid rgba(148,163,184,0.2); direction:ltr;">{_cem_disp}</td>'
+                        f'<td style="padding:8px 8px; text-align:center; font-weight:900; color:#6ee7b7; font-size:0.95rem; border-left:1px solid rgba(148,163,184,0.2); direction:ltr;">{_gravel_disp}</td>'
+                        f'<td style="padding:8px 8px; text-align:center; font-weight:900; color:#f87171; font-size:0.95rem; border-left:1px solid rgba(148,163,184,0.2); direction:ltr;">{_steel_disp}</td>'
+                        f'<td style="padding:8px 8px; text-align:center; font-weight:900; color:#fdba74; font-size:0.95rem; border-left:1px solid rgba(148,163,184,0.2); direction:ltr;">{_bricks_disp}</td>'
+                        f'<td style="padding:8px 12px; text-align:right; font-weight:700; color:#e2e8f0; font-size:0.90rem; line-height:1.4;">{_html_mod.escape(_m_other)}</td>'
+                        f'</tr>'
+                    )
+
+                st.markdown(
+                    f"""
+                    <div dir="rtl" style="overflow-x:auto; border:2px solid rgba(56, 189, 248, 0.50); border-radius:8px; box-shadow:0 4px 18px rgba(0,0,0,0.45); margin:6px 0 14px 0;">
+                        <table style="width:100%; border-collapse:collapse; text-align:right;">
+                            <thead>
+                                <tr style="border-bottom:2px solid rgba(56, 189, 248, 0.60); background:linear-gradient(135deg, rgba(15,23,42,0.98) 0%, rgba(30,41,59,0.95) 100%);">
+                                    <th style="padding:10px 6px; color:#38bdf8; font-size:0.98rem; font-weight:900; text-align:center; width:40px; border-left:1px solid rgba(148,163,184,0.25);">م</th>
+                                    <th style="padding:10px 12px; color:#f8fafc; font-size:1.00rem; font-weight:900; width:24%; border-left:1px solid rgba(148,163,184,0.25);">بند الأعمال بالمقايسة</th>
+                                    <th style="padding:10px 8px; color:#a7f3d0; font-size:0.98rem; font-weight:900; text-align:center; width:13%; border-left:1px solid rgba(148,163,184,0.25);">الكمية الإجمالية</th>
+                                    <th style="padding:10px 8px; color:#fde047; font-size:0.98rem; font-weight:900; text-align:center; width:9%; border-left:1px solid rgba(148,163,184,0.25);">الرمل (م³)</th>
+                                    <th style="padding:10px 8px; color:#7dd3fc; font-size:0.98rem; font-weight:900; text-align:center; width:13%; border-left:1px solid rgba(148,163,184,0.25);">الأسمنت (طن / شكارة)</th>
+                                    <th style="padding:10px 8px; color:#6ee7b7; font-size:0.98rem; font-weight:900; text-align:center; width:8%; border-left:1px solid rgba(148,163,184,0.25);">الزلط (م³)</th>
+                                    <th style="padding:10px 8px; color:#f87171; font-size:0.98rem; font-weight:900; text-align:center; width:9%; border-left:1px solid rgba(148,163,184,0.25);">الحديد (طن)</th>
+                                    <th style="padding:10px 8px; color:#fdba74; font-size:0.98rem; font-weight:900; text-align:center; width:9%; border-left:1px solid rgba(148,163,184,0.25);">الطوب (طوبة)</th>
+                                    <th style="padding:10px 12px; color:#c084fc; font-size:0.98rem; font-weight:900; text-align:right; width:15%;">المواد التكميلية</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {''.join(_mat_rows_html)}
+                                <tr style="background:linear-gradient(90deg, rgba(6,78,59,0.92) 0%, rgba(15,23,42,0.96) 100%); border-top:2.5px solid #10b981; font-weight:900;">
+                                    <td colspan="2" style="padding:12px 14px; color:#34d399; font-size:1.08rem; text-align:center; border-left:1px solid rgba(16,185,129,0.4);">🏆 الإجمالي العام لجميع المواد</td>
+                                    <td style="padding:12px 8px; color:#6ee7b7; font-size:1.00rem; text-align:center; border-left:1px solid rgba(16,185,129,0.4);">—</td>
+                                    <td style="padding:12px 8px; color:#facc15; font-size:1.08rem; text-align:center; border-left:1px solid rgba(16,185,129,0.4); direction:ltr;"><span dir="ltr">{_tot_sand:,.2f} م³</span></td>
+                                    <td style="padding:12px 8px; color:#38bdf8; font-size:1.08rem; text-align:center; border-left:1px solid rgba(16,185,129,0.4); direction:ltr;"><span dir="ltr">{_tot_cem_tons:,.2f} ط ({_tot_cem_bags} ش)</span></td>
+                                    <td style="padding:12px 8px; color:#34d399; font-size:1.08rem; text-align:center; border-left:1px solid rgba(16,185,129,0.4); direction:ltr;"><span dir="ltr">{_tot_gravel:,.2f} م³</span></td>
+                                    <td style="padding:12px 8px; color:#f87171; font-size:1.08rem; text-align:center; border-left:1px solid rgba(16,185,129,0.4); direction:ltr;"><span dir="ltr">{_tot_steel_ton:,.2f} طن</span></td>
+                                    <td style="padding:12px 8px; color:#fb923c; font-size:1.08rem; text-align:center; border-left:1px solid rgba(16,185,129,0.4); direction:ltr;"><span dir="ltr">{_tot_bricks:,}</span></td>
+                                    <td style="padding:12px 14px; color:#d8b4fe; font-size:0.95rem; text-align:right;">شامل جميع بنود الأعمال والمواد التكميلية</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+            # ═════════════════════════════════════════════════════════════════════════
+            #  7. تصدير ملف الاكسيل بنفس الفلسفة (زر أحمر مميز مع ملف إكسيل متعدد الصفحات)
+            # ═════════════════════════════════════════════════════════════════════════
             def _style_cw_openpyxl_worksheet(ws, desc_cols=None):
                 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
                 from openpyxl.utils import get_column_letter
@@ -27492,46 +29914,153 @@ def render(is_standalone: bool = False):
             def _build_cw_full_takeoff_excel_bytes(items_data, live_descs, qf_val=1.0, grand_tot=0.0):
                 try:
                     import openpyxl
+                    import io
                     wb = openpyxl.Workbook()
-                    ws = wb.active
-                    ws.title = "حصر وتكلفة جميع البنود"
 
-                    headers = [
+                    # ── الورقة الأولى: جدول ملخص المقايسة والتكلفة ──
+                    ws1 = wb.active
+                    ws1.title = "حصر وتكلفة جميع البنود"
+
+                    headers1 = [
                         "م",
                         "توصيف البند",
                         "الوحدة",
-                        "الكمية (بعد الضرب في معامل الزيادة)",
+                        f"الكمية بالمعامل (× {qf_val:.2f})",
                         "سعر الوحدة (ج.م)",
                         "إجمالي التكلفة (ج.م)",
                         "البند / ملخص الكميات (Summary Item)",
                     ]
-                    ws.append(headers)
+                    ws1.append(headers1)
 
                     calc_total_cost = 0.0
                     for idx, (name, net_q, unit, u_price, details) in enumerate(items_data, start=1):
                         c_key = f"item_{idx}"
-                        desc = live_descs.get(c_key, DEFAULT_CW_ITEM_DESCRIPTIONS.get(c_key, ""))
                         tot_q = round(net_q * qf_val, 2)
                         tot_cost = round(tot_q * u_price, 2)
                         calc_total_cost += tot_cost
+                        desc_text = str(live_descs.get(c_key, "")).strip() or str(DEFAULT_CW_ITEM_DESCRIPTIONS.get(c_key, ""))
                         clean_name = _re_mod.sub(r'^\d+\s*[-–.]\s*', '', str(name)).strip()
-                        excel_name = f"{idx} - {clean_name}"
-                        ws.append([idx, desc, unit, tot_q, u_price, tot_cost, excel_name])
+                        ws1.append([
+                            idx,
+                            desc_text,
+                            unit,
+                            tot_q,
+                            u_price,
+                            tot_cost,
+                            clean_name,
+                        ])
 
-                    actual_grand = grand_tot if grand_tot > 0 else calc_total_cost
-                    total_desc = live_descs.get(
-                        "total_cost",
-                        f"إجمالي تكلفة جميع بنود الخرسانات المسلحة والعادية والردم والمباني والأرصفة والعزل شامل معامل الزيادة ({qf_val:.2f})",
-                    )
-                    ws.append(["", total_desc, "ج.م (EGP)", "—", "—", actual_grand, "💰 إجمالي التكلفة لجميع البنود (Grand Total Cost)"])
+                    tot_desc = str(live_descs.get("total_cost", "")).strip() or "إجمالي تكلفة جميع بنود الخرسانات المسلحة والعادية والردم والمباني والأرصفة والعزل شامل معامل الزيادة"
+                    ws1.append([
+                        "💰",
+                        tot_desc,
+                        "ج.م (EGP)",
+                        "",
+                        "",
+                        calc_total_cost,
+                        "الإجمالي العام للتكلفة (Grand Total Cost)",
+                    ])
+                    _style_cw_openpyxl_worksheet(ws1, desc_cols=[2])
 
-                    _style_cw_openpyxl_worksheet(ws, desc_cols=[2])
+                    # ── الورقة الثانية: حساب كميات المواد المستخدمة ──
+                    ws2 = wb.create_sheet(title="كميات المواد المستخدمة")
+                    headers2 = [
+                        "م",
+                        "بند الأعمال بالمقايسة",
+                        "الكمية الإجمالية",
+                        "الوحدة",
+                        "الرمل (م³)",
+                        "الأسمنت (طن)",
+                        "الأسمنت (شكارة)",
+                        "الزلط (م³)",
+                        "حديد التسليح (طن)",
+                        "الطوب (طوبة)",
+                        "المواد التكميلية",
+                    ]
+                    ws2.append(headers2)
 
-                    buf_xl = io.BytesIO()
-                    wb.save(buf_xl)
-                    buf_xl.seek(0)
-                    return buf_xl.getvalue()
-                except Exception:
+                    for _m_item in _mat_items:
+                        ws2.append([
+                            _m_item["idx"],
+                            _m_item["name"],
+                            _m_item["tot_q"],
+                            _m_item["unit"],
+                            _m_item["sand_m3"] if _m_item["sand_m3"] > 0 else "",
+                            _m_item["cem_tons"] if _m_item["cem_tons"] > 0 else "",
+                            _m_item["cem_bags"] if _m_item["cem_bags"] > 0 else "",
+                            _m_item["gravel_m3"] if _m_item["gravel_m3"] > 0 else "",
+                            _m_item["steel_ton"] if _m_item["steel_ton"] > 0 else "",
+                            _m_item["bricks"] if _m_item["bricks"] > 0 else "",
+                            _m_item["other"],
+                        ])
+
+                    ws2.append([
+                        "🏆",
+                        "الإجمالي العام لجميع المواد",
+                        "",
+                        "",
+                        _tot_sand,
+                        _tot_cem_tons,
+                        _tot_cem_bags,
+                        _tot_gravel,
+                        _tot_steel_ton,
+                        _tot_bricks,
+                        "شامل كافة بنود الأعمال",
+                    ])
+                    _style_cw_openpyxl_worksheet(ws2)
+
+                    # ── الورقة الثالثة: تفاصيل الحصر الهندسي ──
+                    ws3 = wb.create_sheet(title="تفاصيل الحصر الهندسي")
+                    headers3 = [
+                        "م (No.)",
+                        "بند الأعمال (Work Item)",
+                        "الكمية الصافية (Net Qty)",
+                        "الوحدة (Unit)",
+                        "المحددات والتفصيل (Details)",
+                    ]
+                    ws3.append(headers3)
+                    for row in _full_detailed_takeoff_rows:
+                        ws3.append([
+                            row.get("م (No.)", ""),
+                            row.get("بند الأعمال (Work Item)", ""),
+                            row.get("الكمية الصافية (Net Qty)", ""),
+                            row.get("الوحدة (Unit)", ""),
+                            row.get("المحددات والتفصيل (Details)", ""),
+                        ])
+                    _style_cw_openpyxl_worksheet(ws3, desc_cols=[5])
+
+                    # ── الورقة الرابعة: البنود المستخدمة والغير مستخدمة ──
+                    ws4 = wb.create_sheet(title="البنود المستخدمة والغير مستخدمة")
+                    headers4 = [
+                        "م",
+                        "البند المستخدم بالمقايسة",
+                        "الكمية الإجمالية",
+                        "الوحدة",
+                        "م",
+                        "البند الغير مستخدم (كمية = 0)",
+                        "الوحدة",
+                    ]
+                    ws4.append(headers4)
+                    _max_r_xl = max(len(_m1_used_items), len(_m1_unused_items))
+                    for _ri in range(_max_r_xl):
+                        _u_row = _m1_used_items[_ri] if _ri < len(_m1_used_items) else ("", "", "", "")
+                        _nu_row = _m1_unused_items[_ri] if _ri < len(_m1_unused_items) else ("", "", "", "")
+                        ws4.append([
+                            _u_row[0],
+                            _u_row[1],
+                            _u_row[2] if _u_row[0] != "" else "",
+                            _u_row[3],
+                            _nu_row[0],
+                            _nu_row[1],
+                            _nu_row[3],
+                        ])
+                    _style_cw_openpyxl_worksheet(ws4)
+
+                    output = io.BytesIO()
+                    wb.save(output)
+                    return output.getvalue()
+                except Exception as e:
+                    print(f"Error generating Excel: {e}")
                     return None
 
             _cw_full_xl_bytes = _build_cw_full_takeoff_excel_bytes(
@@ -27541,42 +30070,31 @@ def render(is_standalone: bool = False):
                 grand_tot=cw_grand_total_cost,
             )
 
-            # ── زر تصدير جدول الحصر الكامل EXCEL SHEET بتنسيق مميز أحمر وتقليل التباعد (بنفس فلسفة Module 15) ──
-            _cw_dl_key = f"{prefix}btn_dl_comp_works_excel"
+            _cw_dl_key = f"{prefix}dl_comp_bldg_works_excel_red_v{_ftg_exp_ver}"
             st.markdown(
                 f"""
                 <style>
-                div[data-testid="stVerticalBlock"]:has(#m1-cw-export-boq-anchor) [data-testid="stDownloadButton"] {{
-                    margin-top: -18px !important;
-                    padding-top: 0 !important;
-                    margin-bottom: 8px !important;
-                }}
+                div.stDownloadButton:has(> button[key="{_cw_dl_key}"]),
+                div.stDownloadButton:has(> button#m1-cw-export-btn),
                 div[data-testid="stVerticalBlock"]:has(#m1-cw-export-boq-anchor) [data-testid="stDownloadButton"] button,
-                div:has(> #m1-cw-export-boq-anchor) + div [data-testid="stDownloadButton"] button,
-                div:has(> #m1-cw-export-boq-anchor) ~ div [data-testid="stDownloadButton"] button,
                 button[key="{_cw_dl_key}"] {{
-                    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 50%, #991b1b 100%) !important;
-                    background-color: #dc2626 !important;
+                    width: 100% !important;
+                    background: linear-gradient(135deg, #b91c1c 0%, #dc2626 50%, #ef4444 100%) !important;
                     color: #ffffff !important;
-                    border: 2px solid #ef4444 !important;
+                    border: 1.5px solid #f87171 !important;
                     border-radius: 9px !important;
-                    font-weight: 900 !important;
+                    padding: 12px 18px !important;
                     font-size: 1.15rem !important;
-                    padding: 11px 32px !important;
-                    box-shadow: 0 4px 16px rgba(220, 38, 38, 0.45) !important;
-                    transition: all 0.25s ease-in-out !important;
-                    cursor: pointer !important;
-                    display: inline-flex !important;
-                    align-items: center !important;
-                    justify-content: center !important;
+                    font-weight: 900 !important;
+                    box-shadow: 0 4px 18px rgba(220, 38, 38, 0.45) !important;
+                    transition: all 0.25s ease !important;
+                    margin: 8px 0 14px 0 !important;
+                    text-align: center !important;
                 }}
-                div[data-testid="stVerticalBlock"]:has(#m1-cw-export-boq-anchor) [data-testid="stDownloadButton"] button:hover,
-                div:has(> #m1-cw-export-boq-anchor) + div [data-testid="stDownloadButton"] button:hover,
-                div:has(> #m1-cw-export-boq-anchor) ~ div [data-testid="stDownloadButton"] button:hover,
-                button[key="{_cw_dl_key}"]:hover {{
-                    background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%) !important;
-                    background-color: #ef4444 !important;
-                    color: #ffffff !important;
+                div.stDownloadButton:has(> button[key="{_cw_dl_key}"]):hover,
+                button[key="{_cw_dl_key}"]:hover,
+                div[data-testid="stVerticalBlock"]:has(#m1-cw-export-boq-anchor) [data-testid="stDownloadButton"] button:hover {{
+                    background: linear-gradient(135deg, #991b1b 0%, #b91c1c 50%, #dc2626 100%) !important;
                     border-color: #fca5a5 !important;
                     box-shadow: 0 6px 24px rgba(239, 68, 68, 0.65) !important;
                     transform: translateY(-2px) !important;
@@ -27604,12 +30122,6 @@ def render(is_standalone: bool = False):
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     key=_cw_dl_key,
                 )
-
-            with st.expander("📊 تفاصيل أسعار وتكلفة البنود التقديرية (Unit Rates & Cost Breakdown)", expanded=False):
-                st.dataframe(pd.DataFrame(comp_works_summary_rows), use_container_width=True, hide_index=True, row_height=70)
-
-            with st.expander("📋 جدول الحصر الهندسي التفصيلي لأعمال المبنى (Detailed Engineering Quantities)", expanded=False):
-                render_styled_table(comp_works_table_rows, font_size_override=9.8)
 
         # ── 💾 SAVE & EXPORT COMPLETE CALCULATION SHEET (COLLAPSED EXPANDER) ────────
         with st.expander(

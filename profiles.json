@@ -1,776 +1,12 @@
 {
-  "active_profile": "Control room (مباني)",
+  "active_profile": "Control room (نسخة)",
   "profiles": {
-    "Control room (مباني)": {
-      "name": "Control room (مباني)",
-      "description": "مشروع جديد منسوخ المحاور والأعمدة من «Control room (نسخة)»",
-      "created_at": "2026-11-18 15:34",
-      "updated_at": "2026-11-23 14:54",
-      "last_used_at": "2026-11-23 14:54:08",
-      "data": {
-        "selected_module_idx": 14,
-        "apartment_name": "Control room (مباني)",
-        "col_Pu_input": 160.0,
-        "col_Safety_Factor": 1.2,
-        "col_b": 30,
-        "col_H_clear": 300,
-        "col_K_index": 1,
-        "col_Fcu": 250,
-        "col_Fy": 4000,
-        "col_Fyk": 2400,
-        "col_mu_target": 1.0,
-        "col_Phi_index": 3,
-        "col_Phi_st_index": 1,
-        "ftg_bc": 30,
-        "ftg_tc": 50,
-        "ftg_Pu": 160.0,
-        "ftg_Wf_est": 10.0,
-        "ftg_q_all": 1.5,
-        "ftg_Df": 1.5,
-        "ftg_gamma_soil": 1.8,
-        "ftg_Fcu": 250,
-        "ftg_Fy": 4000,
-        "ftg_cover": 7,
-        "ftg_Phi_index": 2,
-        "ftg_L_override": null,
-        "ftg_B_override": null,
-        "ftg_trc_override": null,
-        "tcf_P1": 80.0,
-        "tcf_P2": 120.0,
-        "tcf_c1": 40,
-        "tcf_b1": 40,
-        "tcf_c2": 50,
-        "tcf_b2": 40,
-        "tcf_S": 4.0,
-        "tcf_q_net": 1.5,
-        "tcf_Fcu": 250,
-        "tcf_Fy": 4000,
-        "tcf_cover": 7,
-        "tcf_Phi_index": 1,
-        "tcf_L1_ov": null,
-        "tcf_B1_ov": null,
-        "tcf_t1_ov": null,
-        "tcf_L2_ov": null,
-        "tcf_B2_ov": null,
-        "tcf_t2_ov": null,
-        "tcf_Lc_ov": null,
-        "tcf_Bc_ov": null,
-        "tcf_tc_ov": null,
-        "fs_n_lx": 2,
-        "fs_n_ly": 2,
-        "slab_bc": 30,
-        "slab_tc": 50,
-        "slab_SDL": 0.15,
-        "slab_wall_load": 0.5,
-        "slab_LL": 0.25,
-        "slab_gamma_c": 2.5,
-        "slab_Fcu": 250,
-        "slab_Fy": 4000,
-        "slab_cover": 1.5,
-        "slab_ts_initial": 20,
-        "slab_n_floors": 1,
-        "slab_col_safety_factor": 1.1,
-        "slab_bottom_mesh_dia_idx": 2,
-        "slab_n_btm_mesh": 5,
-        "slab_top_mesh_dia_idx": 1,
-        "slab_n_top_mesh": 5,
-        "slab_col_extra_dia_idx": 2,
-        "slab_strip_top_extra_dia_idx": 2,
-        "slab_strip_bottom_extra_dia_idx": 2,
-        "slab_Phi_index": 2,
-        "fs_lx_0": 6.0,
-        "fs_lx_1": 6.0,
-        "fs_lx_2": 6.0,
-        "fs_lx_3": 6.0,
-        "fs_lx_4": 6.0,
-        "fs_lx_5": 6.0,
-        "fs_lx_6": 6.0,
-        "fs_lx_7": 6.0,
-        "fs_lx_8": 6.0,
-        "fs_lx_9": 6.0,
-        "fs_ly_0": 6.0,
-        "fs_ly_1": 6.0,
-        "fs_ly_2": 6.0,
-        "fs_ly_3": 6.0,
-        "fs_ly_4": 6.0,
-        "fs_ly_5": 6.0,
-        "fs_ly_6": 6.0,
-        "fs_ly_7": 6.0,
-        "fs_ly_8": 6.0,
-        "fs_ly_9": 6.0,
-        "fs_cant_left": 0.0,
-        "fs_cant_right": 0.0,
-        "fs_cant_bottom": 0.0,
-        "fs_cant_top": 0.0,
-        "fs_removed_cols": [],
-        "fs_void_panels": [],
-        "fs_col_transforms": {},
-        "fs_edge_columns": {},
-        "fs_zero_col_mode": true,
-        "fs_placed_cols": [],
-        "fs_col_props": {},
-        "fs_new_col_b": 30.0,
-        "fs_new_col_t": 50.0,
-        "fs_new_col_dir": "اتجاه Y",
-        "fs_new_col_sx": "متمركز على المحور (Centered)",
-        "fs_new_col_sy": "متمركز على المحور (Centered)",
-        "fs_beam_b_cm": 25.0,
-        "fs_beam_t_cm": 60.0,
-        "fs_beam_dia_main": 16,
-        "fs_show_panel_labels": true,
-        "fs_show_col_labels": true,
-        "fs_show_beam_labels": true,
-        "_schema_mod8_removed": true,
-        "cw_df_m": 1.5,
-        "cw_h_above_m": 0.6,
-        "cw_t_wall_m": 0.25,
-        "cw_brick_l_cm": 25.0,
-        "cw_brick_w_cm": 12.0,
-        "cw_brick_h_cm": 6.0,
-        "cw_t_pc_ftg_cm": 10.0,
-        "cw_t_pc_gb_cm": 10.0,
-        "cw_t_rc_floor_cm": 15.0,
-        "cw_sidewalk_w_m": 1.0,
-        "cw_qty_factor": 1.2,
-        "cw_rate_slabs_beams": 4500.0,
-        "cw_rate_cols": 4800.0,
-        "cw_rate_ftgs_gb": 4400.0,
-        "cw_rate_pc": 2200.0,
-        "cw_rate_backfill": 120.0,
-        "cw_rate_bricks": 2.5,
-        "cw_rate_interlock": 220.0,
-        "cw_rate_curbs": 160.0,
-        "cw_rate_damp_proof": 95.0,
-        "cw_rate_waterproof": 170.0,
-        "cw_rate_thermal": 130.0,
-        "cw_rate_roof_tiles": 150.0,
-        "cw_item_descriptions": {},
-        "cs_n_types": 2,
-        "cs_col_h": 300.0,
-        "cs_t_slab": 20.0,
-        "cs_fcu": 350.0,
-        "cs_fs_n_slabs": 1,
-        "cs_fs_ts": 20.0,
-        "cs_fs_fcu": 350.0,
-        "cs_fs_phi_btm": 12,
-        "cs_fs_nb_btm": 6,
-        "cs_fs_phi_top": 10,
-        "cs_fs_nb_top": 6,
-        "cs_fs_phi_btm_x": 12,
-        "cs_fs_phi_btm_y": 12,
-        "cs_fs_nb_btm_x": 6,
-        "cs_fs_nb_btm_y": 6,
-        "cs_fs_phi_top_x": 10,
-        "cs_fs_phi_top_y": 10,
-        "cs_fs_nb_top_x": 6,
-        "cs_fs_nb_top_y": 6,
-        "cs_fs_phi_top_add": 12,
-        "cs_fs_add_top_lx": 3.0,
-        "cs_fs_add_top_ly": 2.5,
-        "cs_fs_n_top_add_x": 0,
-        "cs_fs_n_top_add_y": 0,
-        "cs_fs_phi_btm_add": 12,
-        "cs_fs_add_btm_lx": 4.0,
-        "cs_fs_add_btm_ly": 3.0,
-        "cs_fs_n_btm_add_x": 0,
-        "cs_fs_n_btm_add_y": 0,
-        "cs_price_steel": 40000.0,
-        "cs_price_cement": 4000.0,
-        "cs_price_gravel": 600.0,
-        "cs_price_sand": 200.0,
-        "cs_price_labor": 2000.0,
-        "cs_project_name": "Control room (مباني)",
-        "gs_lx": 30.0,
-        "gs_ly": 20.0,
-        "gs_ts": 20.0,
-        "gs_cover": 4.0,
-        "gs_fcu": 300.0,
-        "gs_fy": 4200.0,
-        "gs_ks": 5.0,
-        "gs_q_all": 1.5,
-        "gs_h_base": 20.0,
-        "gs_w_ll": 2.5,
-        "gs_p_wheel": 4.0,
-        "gs_wheel_b": 20.0,
-        "gs_wheel_l": 25.0,
-        "gs_p_post": 3.5,
-        "gs_post_bp": 15.0,
-        "gs_post_tp": 15.0,
-        "gs_rebar_mesh_type": "شبكة علوية وسفلية (Double Mesh)",
-        "gs_phi_mesh": 10,
-        "gs_mesh_spacing": 20.0,
-        "gs_joint_spacing_x": 4.5,
-        "gs_joint_spacing_y": 4.5,
-        "gs_dowel_phi": 20,
-        "gs_dowel_len": 45.0,
-        "gs_dowel_spacing": 30.0,
-        "font_size_inputs": 14,
-        "font_size_outputs": 14,
-        "module_9_strap_footing": {
-          "S": 5.0,
-          "edge_clearance": 0.0,
-          "a1": 30.0,
-          "b1": 60.0,
-          "a2": 40.0,
-          "b2": 50.0,
-          "P1_w": 80.0,
-          "P1_u": 120.0,
-          "P2_w": 120.0,
-          "P2_u": 180.0,
-          "col_weight_factor": 1.0,
-          "q_all_net": 1.5,
-          "fcu": 250.0,
-          "fy": 4000.0,
-          "t_pc": 10.0,
-          "strap_b": 40.0,
-          "strap_D": 100.0,
-          "L1_override": 2.2,
-          "L1_ov": 2.2,
-          "B1_ov": 0.0,
-          "t1_ov": 50.0,
-          "L2_ov": 0.0,
-          "B2_ov": 0.0,
-          "t2_ov": 50.0,
-          "long_bar_dia": 22,
-          "stirrup_dia": 10,
-          "stirrup_per_m": 5,
-          "stirrup_spacing": 20,
-          "trans_bar_dia": 16,
-          "final_B1": null,
-          "final_L2": null,
-          "final_B2": null,
-          "is_calculated": false
-        },
-        "m9_S": 5.0,
-        "m9_edge_clearance": 0.0,
-        "m9_a1": 30.0,
-        "m9_b1": 60.0,
-        "m9_a2": 40.0,
-        "m9_b2": 50.0,
-        "m9_P1_w": 80.0,
-        "m9_P1_u": 120.0,
-        "m9_P2_w": 120.0,
-        "m9_P2_u": 180.0,
-        "m9_q_all_net": 1.5,
-        "m9_fcu": 250.0,
-        "m9_fy": 4000.0,
-        "m9_t_pc": 10.0,
-        "m9_strap_b": 40.0,
-        "m9_strap_D": 100.0,
-        "m9_L1_ov": 2.2,
-        "m9_B1_ov": 0.0,
-        "m9_t1_ov": 50.0,
-        "m9_L2_ov": 0.0,
-        "m9_B2_ov": 0.0,
-        "m9_t2_ov": 50.0,
-        "m9_long_bar_dia": 22,
-        "m9_stirrup_dia": 10,
-        "m9_stirrup_per_m": 5,
-        "m9_stirrup_spacing": 20,
-        "m9_trans_bar_dia": 16,
-        "module_12_brick_survey": {
-          "x_axes": [
-            0.0,
-            4.0,
-            8.0
-          ],
-          "y_axes": [
-            0.0,
-            3.0,
-            6.0
-          ],
-          "col_length_cm": 60.0,
-          "col_width_cm": 30.0,
-          "col_placed": [],
-          "col_removed": [],
-          "col_dirs": {},
-          "col_shifts": {},
-          "col_shifted": {},
-          "wall_thickness": {},
-          "wall_removed": [],
-          "default_wall_height": 3.0,
-          "parapet_wall_height": 1.0,
-          "parapet_walls": [],
-          "wall_heights": {},
-          "windows": {},
-          "doors": {},
-          "next_op_id": 1,
-          "window_types": [],
-          "door_types": [],
-          "brick_type": "الطوب الأحمر الطفلي",
-          "brick_size": "25×12×6",
-          "mortar_thickness_cm": 1.0,
-          "brick_custom_l": 25.0,
-          "brick_custom_w": 12.0,
-          "brick_custom_h": 6.0,
-          "plaster_faces": {},
-          "price_brick_per_thousand": 2500.0,
-          "price_sand_per_m3": 200.0,
-          "price_cement_per_ton": 4000.0,
-          "uploaded_image_b64": "",
-          "uploaded_image_name": "",
-          "uploaded_image_type": "image/png",
-          "col_props": {},
-          "deleted_cols_history": {}
-        },
-        "module_10_diagonal_strap": {
-          "edge_clearance_x": 0.0,
-          "edge_clearance_y": 0.0,
-          "a1": 30.0,
-          "b1": 60.0,
-          "X2": 4.5,
-          "Y2": 3.8,
-          "a2": 40.0,
-          "b2": 50.0,
-          "P1_w": 80.0,
-          "P1_u": 120.0,
-          "P2_w": 120.0,
-          "P2_u": 180.0,
-          "col_weight_factor": 1.0,
-          "q_all_net": 1.5,
-          "fcu": 250.0,
-          "fy": 4000.0,
-          "t_pc": 10.0,
-          "strap_b": 40.0,
-          "strap_D": 170.0,
-          "L1x": 2.95,
-          "L1y": 2.75,
-          "t1": 80.0,
-          "L2x": 2.85,
-          "L2y": 2.85,
-          "t2": 60.0,
-          "long_bar_dia": 22,
-          "stirrup_dia": 10,
-          "stirrup_per_m": 5,
-          "stirrup_spacing": 20.0,
-          "trans_bar_dia": 16,
-          "is_manual_override": false,
-          "is_calculated": false
-        },
-        "module_11_ground_beam": {
-          "level_type": "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)",
-          "support_condition": "Simply Supported (حر من الطرفين)",
-          "L_m": 5.0,
-          "b_cm": 25.0,
-          "t_cm": 60.0,
-          "t_calc_cm": 60.0,
-          "auto_sync_depth": true,
-          "cover_cm": 4.0,
-          "t_footing_cm": 60.0,
-          "delta_settlement_mm": 10.0,
-          "q_all_soil": 1.5,
-          "soil_contact_type": "Clay / Medium Dense Sand (تربة طينية / رملية متوسطة)",
-          "h_backfill_m": 1.0,
-          "has_wall_at_footing": true,
-          "has_wall": true,
-          "h_wall_m": 3.0,
-          "t_wall_cm": 12.0,
-          "gamma_brick": 1.8,
-          "w_add_dl": 0.0,
-          "w_add_ll": 0.0,
-          "fcu": 250.0,
-          "fy": 4000.0,
-          "fy_stirrup": 2400.0,
-          "phi_bot_mm": 16,
-          "phi_top_mm": 12,
-          "phi_stirrup_mm": 8,
-          "stirrups_per_m": 6,
-          "n_stirrup_branches": 2,
-          "phi_side_mm": 10,
-          "is_calculated": true
-        },
-        "module_15_masonry_plaster": {
-          "x_axes": [
-            0.0,
-            5.15,
-            10.71,
-            16.44,
-            19.14,
-            22.59
-          ],
-          "y_axes": [
-            0.0,
-            2.5,
-            5.27,
-            7.56
-          ],
-          "col_length_cm": 80.0,
-          "col_width_cm": 30.0,
-          "new_col_b": 30.0,
-          "new_col_t": 80.0,
-          "col_placed": [
-            [
-              0,
-              1
-            ],
-            [
-              0,
-              3
-            ],
-            [
-              2,
-              0
-            ],
-            [
-              3,
-              0
-            ],
-            [
-              2,
-              3
-            ],
-            [
-              3,
-              3
-            ],
-            [
-              5,
-              0
-            ],
-            [
-              1,
-              0
-            ],
-            [
-              1,
-              3
-            ],
-            [
-              5,
-              2
-            ]
-          ],
-          "col_removed": [],
-          "col_dirs": {
-            "0,1": "EW",
-            "0,3": "EW",
-            "1,0": "EW",
-            "1,3": "NS",
-            "2,0": "NS",
-            "2,3": "EW",
-            "3,0": "EW",
-            "3,3": "EW",
-            "5,0": "EW",
-            "5,2": "EW"
-          },
-          "col_shifts": {
-            "0,1": {
-              "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
-              "shift_y": "متمركز على المحور (Centered)"
-            },
-            "0,3": {
-              "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
-              "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
-            },
-            "1,0": {
-              "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
-              "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
-            },
-            "1,3": {
-              "shift_x": "متمركز على المحور (Centered)",
-              "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
-            },
-            "2,0": {
-              "shift_x": "متمركز على المحور (Centered)",
-              "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
-            },
-            "2,3": {
-              "shift_x": "متمركز على المحور (Centered)",
-              "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
-            },
-            "3,0": {
-              "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
-              "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
-            },
-            "3,3": {
-              "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
-              "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
-            },
-            "5,0": {
-              "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
-              "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
-            },
-            "5,2": {
-              "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
-              "shift_y": "متمركز على المحور (Centered)"
-            }
-          },
-          "col_shifted": {
-            "0,1": [
-              34.0,
-              0.0
-            ],
-            "0,3": [
-              14.0,
-              -9.0
-            ],
-            "1,0": [
-              34.0,
-              9.0
-            ],
-            "1,3": [
-              0.0,
-              -34.0
-            ],
-            "2,0": [
-              0.0,
-              34.0
-            ],
-            "2,3": [
-              0.0,
-              -9.0
-            ],
-            "3,0": [
-              -34.0,
-              9.0
-            ],
-            "3,3": [
-              -34.0,
-              -9.0
-            ],
-            "5,0": [
-              -14.0,
-              9.0
-            ],
-            "5,2": [
-              -34.0,
-              0.0
-            ]
-          },
-          "walls_placed": [
-            [
-              2,
-              3,
-              3,
-              3
-            ]
-          ],
-          "wall_thickness": {
-            "2,3,3,3": 12,
-            "3,3,2,3": 12
-          },
-          "wall_removed": [],
-          "default_wall_height": 3.0,
-          "parapet_wall_height": 1.0,
-          "parapet_walls": [],
-          "wall_heights": {
-            "2,3,3,3": 3.0,
-            "3,3,2,3": 3.0
-          },
-          "windows": {},
-          "doors": {},
-          "next_op_id": 1,
-          "window_types": [
-            {
-              "id": "wt_1",
-              "label": "W1",
-              "w_cm": 100.0,
-              "h_cm": 120.0,
-              "sill_cm": 90.0
-            }
-          ],
-          "door_types": [
-            {
-              "id": "dt_1",
-              "label": "D1",
-              "w_cm": 90.0,
-              "h_cm": 210.0
-            }
-          ],
-          "brick_type": "الطوب الأحمر الطفلي",
-          "brick_size": "25×12×6",
-          "mortar_thickness_cm": 1.0,
-          "brick_custom_l": 25.0,
-          "brick_custom_w": 12.0,
-          "brick_custom_h": 6.0,
-          "plaster_faces": {},
-          "col_props": {
-            "0,1": {
-              "model": "C(30x80)",
-              "b_cm": 30.0,
-              "t_cm": 80.0,
-              "dir": "أفقي",
-              "dir_code": "EW",
-              "anchor": "السنتر",
-              "corner": "أعلى اليمين",
-              "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
-              "shift_y": "متمركز على المحور (Centered)"
-            },
-            "0,3": {
-              "model": "C(30x40)",
-              "b_cm": 30.0,
-              "t_cm": 40.0,
-              "dir": "أفقي",
-              "dir_code": "EW",
-              "anchor": "السنتر",
-              "corner": "أعلى اليمين",
-              "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
-              "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
-            },
-            "1,0": {
-              "model": "C(30x80)",
-              "b_cm": 30.0,
-              "t_cm": 80.0,
-              "dir": "أفقي",
-              "dir_code": "EW",
-              "anchor": "السنتر",
-              "corner": "أعلى اليمين",
-              "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
-              "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
-            },
-            "1,3": {
-              "model": "C(30x80)",
-              "b_cm": 30.0,
-              "t_cm": 80.0,
-              "dir": "رأسي",
-              "dir_code": "NS",
-              "anchor": "السنتر",
-              "corner": "أعلى اليمين",
-              "shift_x": "متمركز على المحور (Centered)",
-              "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
-            },
-            "2,0": {
-              "model": "C(30x80)",
-              "b_cm": 30.0,
-              "t_cm": 80.0,
-              "dir": "رأسي",
-              "dir_code": "NS",
-              "anchor": "السنتر",
-              "corner": "أعلى اليمين",
-              "shift_x": "متمركز على المحور (Centered)",
-              "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
-            },
-            "2,3": {
-              "model": "C(30x80)",
-              "b_cm": 30.0,
-              "t_cm": 80.0,
-              "dir": "أفقي",
-              "dir_code": "EW",
-              "anchor": "السنتر",
-              "corner": "أعلى اليمين",
-              "shift_x": "متمركز على المحور (Centered)",
-              "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
-            },
-            "3,0": {
-              "model": "C(30x80)",
-              "b_cm": 30.0,
-              "t_cm": 80.0,
-              "dir": "أفقي",
-              "dir_code": "EW",
-              "anchor": "السنتر",
-              "corner": "أعلى اليمين",
-              "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
-              "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
-            },
-            "3,3": {
-              "model": "C(30x80)",
-              "b_cm": 30.0,
-              "t_cm": 80.0,
-              "dir": "أفقي",
-              "dir_code": "EW",
-              "anchor": "السنتر",
-              "corner": "أعلى اليمين",
-              "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
-              "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
-            },
-            "5,0": {
-              "model": "C(30x40)",
-              "b_cm": 30.0,
-              "t_cm": 40.0,
-              "dir": "أفقي",
-              "dir_code": "EW",
-              "anchor": "السنتر",
-              "corner": "أعلى اليمين",
-              "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
-              "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
-            },
-            "5,2": {
-              "model": "C(30x80)",
-              "b_cm": 30.0,
-              "t_cm": 80.0,
-              "dir": "أفقي",
-              "dir_code": "EW",
-              "anchor": "السنتر",
-              "corner": "أعلى اليمين",
-              "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
-              "shift_y": "متمركز على المحور (Centered)"
-            }
-          },
-          "deleted_cols_history": {},
-          "price_brick_per_thousand": 2500.0,
-          "price_sand_per_m3": 200.0,
-          "price_cement_per_ton": 4000.0,
-          "price_plaster_labor_per_m2": 70.0,
-          "uploaded_image_b64": "",
-          "uploaded_image_name": "",
-          "uploaded_image_type": "image/png",
-          "uploaded_image_size_kb": 0.0,
-          "uploaded_image_w": null,
-          "uploaded_image_h": null,
-          "named_spaces": [],
-          "merged_wall_label_style": "single",
-          "item_descriptions": {
-            "item_1": "Hollow\n  clay block masonry block size 12 cm with mortar consists of 300 kg ordinary\n  Portland cement including any charge for delivering the works finished.",
-            "item_2": "بالمتر المكعب، توريد وبناء حوائط طوب أحمر طفلي/أسمنتي تخانة طوبة كاملة (25 سم) بالمونة الأسمنتية بنسبة 350 كجم أسمنت/م³ رمل، تشمل جميع الحوائط الخارجية والداخلية طوبة كاملة مع دروة السطح (إذا كانت طوبة كاملة)، وربط الشناوي والاديات وتفريغ العراميس طبقاً للمواصفات الفنية والكود المصري.",
-            "item_3": "بالمتر المسطح، توريد وعمل بياض تخشين للأسقف الداخلية (طرطشة عمومية متجانسة بمونة 450 كجم أسمنت/م³ رمل + بياض بطانة وضهارة بمونة 350 كجم أسمنت/م³ رمل) مع استواء الأسطح وضبط الزوايا والأوتار طبقاً للكود المصري وأصول الصناعة.",
-            "item_4": "بالمتر المسطح، توريد ودهان أسقف داخلية 5 أوجه متتالية تشمل: وجه برايمر سيلر مائي مقاوم للقلويات + 2 سكينة معجون داخلي ناعم للتسوية + 2 وجه دهان بلاستيك نصف لامع عالي البياض قابل للغسيل طبقاً لأصول الصناعة.",
-            "item_5": "بالمتر المسطح، توريد وعمل بياض تخشين للحوائط الداخلية على بؤج وأوتار وسلك شبك فواصل تمدد (طرطشة عمومية + بياض تخشين بمونة 350 كجم أسمنت/م³ رمل) مخصوماً منه الفتحات طبقاً لاشتراطات الكود المصري لأعمال البياض ECP.",
-            "item_6": "بالمتر المسطح، توريد ودهان حوائط داخلية 5 أوجه متتالية تشمل: وجه برايمر سيلر مائي عازل + 2 سكينة معجون داخلي ناعم + 2 وجه دهان بلاستيك مط/نصف لامع قابل للغسيل بالألوان المعتمدة طبقاً للمواصفات الفنية.",
-            "item_7": "بالمتر المسطح، توريد وعمل بياض واجهات خارجية ودروة السطح من الجانبين يشمل طرطشة عمومية مسامية كثيفة + بياض أسمنتي بمونة 350 كجم أسمنت/م³ رمل مع إضافة مواد عازلة ومقاومة للأملاح والعوامل الجوية طبقاً لأصول الصناعة.",
-            "item_8": "بالمتر المسطح، توريد ودهان واجهات خارجية ودروة السطح بمواد دهانات مطاطية أكريليكية مقاومة للشمس والأشعة فوق البنفسجية والأمطار (Weatherproof) تشمل وجه سيلر مائي ومعجون واجهات ووجهين دهان مطاطي معتمد.",
-            "item_9": "بالمتر المسطح، توريد وتركيب سيراميك أرضيات للغرف والصالات فرز أول مقاس معتمد يركب بمونة أسمنتية فوق فرشة رمل نظيف مع السقية بلباني الأسمنت الأبيض أو الملون والمواد العازلة ومراعاة فواصل التمدد.",
-            "item_10": "بالمتر المسطح، توريد وتركيب سيراميك أرضيات حمامات مانع للانزلاق (Anti-slip) فرز أول بمونة أسمنتية فوق فرشة رمل مع ملء الفواصل بمادة روبة إيبوكسية أو أسمنتية مانعة لتسرب المياه والميول نحو الجاليتراب.",
-            "item_11": "بالمتر المسطح، توريد وتركيب سيراميك أرضيات مطابخ فرز أول مقاوم للشحوم والمنظفات والمياه يركب بمونة أسمنتية فوق فرشة رمل مع السقية الكاملة للفواصل ومراعاة الميول المطلوبة هندسياً.",
-            "item_12": "بالمتر المسطح، توريد وتركيب سيراميك حوائط حمامات بكامل الارتفاع فرز أول يركب بمونة أسمنتية أو مادة لاصقة مع السقية بمادة عازلة ومراعاة الأفقية والرأسية التامة ووزن الزوايا والغرانيق.",
-            "item_13": "بالمتر المسطح، توريد وتركيب سيراميك حوائط مطابخ بكامل الارتفاع فرز أول مقاوم للحرارة والرطوبة يركب بمونة أسمنتية أو مادة لاصقة مع السقية الكاملة ومراعاة فتحات التغذية والصرف والشفاطات.",
-            "item_14": "بالمتر المسطح، توريد وتركيب بلاط انترلوك خرساني إجهاد لا يقل عن 400 كجم/سم² سمك 6-8 سم للأرصفة المحيطة فوق طبقة رمل تسوية مدموك جيداً سمك 5 سم مع غلق الفواصل برمل ناعم نظيف.",
-            "item_15": "بالمتر الطولي، توريد وتركيب بردورات خرسانية مسبقة الصنع 15×30×50 سم لرصيف المشاة الخارجي مثبتة على فرشة ودعامات خرسانة عادية مع كحلة اللحامات بمونة أسمنتية والدهان بلونين متتاليين.",
-            "item_16": "بالمتر المسطح، توريد وعمل عزل مائي للسطح بلفائف ممبرين بيتوميني معدل بالبوليستر (أنسومات) سمك 4 مم مع دهان وجه برايمر بيتوميني ورقبة زجاجة وركوب 10 سم واختبار الغمر بالماء لمدة 48 ساعة.",
-            "item_17": "بالمتر المسطح، توريد وتركيب ألواح عزل حراري من الفوم المبثوق (XPS) عالي الكثافة سمك 5 سم كثافة 35 كجم/م³ بنظام التراكب (Shiplap) لحماية الأسطح من الإشعاع الحراري طبقاً لكود العزل الحراري.",
-            "item_18": "بالمتر المسطح، توريد وتركيب بلاط أسطح أسمنتي سنجابي أو موزاييك مقاس معتمد فوق فرشة رمل تسوية ومونة أسمنتية مع عمل فواصل تمدد كل 20 م² وسقية الفواصل بلباني الأسمنت ومراعاة ميول صرف الأمطار.",
-            "item_19": "بالمتر المسطح، توريد وتركيب شبابيك ألوميتال للواجهات والمساقط قطاع معتمد (جامبو/بي اس أو ما يماثله) وزجاج دبل مع الإكسسوارات وسلك مانع للحشرات والمقابض والتثبيت الهندسي طبقاً لأبعاد الرسم والمواصفات.",
-            "item_20": "بالعدد، توريد وتركيب أبواب حمامات الوحدة (عرض 80 سم أو أقل) تشمل الحلوق والضلف المقاومة للرطوبة والمياه والمفصلات والكوالين والشناكل والمقابض ودهان الحلق والتثبيت الهندسي التام طبقاً لأصول الصناعة.",
-            "item_21": "Supply and fix hollow core wooden door consists of Moski wood framed and sections claded with 4 MM. Play wood the accessories are lock and handles from El Ah ram product and the price includes three costs of lacquer paint",
-            "total_cost": "إجمالي تكلفة جميع بنود التشطيبات والمباني والمحارة والدروة والأرصفة والعزل شامل معامل الزيادة",
-            "item_22": "Hagar FEROOOOONy bbdbbb bdfbd fjk hjh  jhjhh gjh hjhjhg hj hjfhg hjhjhg hjgh h  hjfh hjh hjhjdhjh hhj hjh hjhjh jhj hjhjhg hjfdh hjdfh hjh gjhh fhjhg fhgh  jhfh hjhg jhg hjhd hfj hfjhjh تاايتاتابتيالتالتا تلابتال تاتلاالتا لاتاتاتالتااتا",
-            "item_23": "بالمتر المسطح / الوحدة،صاجججججججججججججججججججججججججججججججج."
-          },
-          "plaster_qty_factor": 1.25,
-          "manual_boq_items": [
-            {
-              "uid": "eab9c135",
-              "name": "تكسية واجهات وحوائط خارجية بالحجر الفرعوني / الهاشمي",
-              "unit": "م² (m²)",
-              "net_qty": 30.0,
-              "unit_price": 1.0,
-              "mat_category": "stone_cladding",
-              "description": "Hagar FEROOOOONy bbdbbb bdfbd fjk hjh  jhjhh gjh hjhjhg hj hjfhg hjhjhg hjgh h  hjfh hjh hjhjdhjh hhj hjh hjhjh jhj hjhjhg hjfdh hjdfh hjh gjhh fhjhg fhgh  jhfh hjhg jhg hjhd hfj hfjhjh تاايتاتابتيالتالتا تلابتال تاتلاالتا لاتاتاتالتااتا"
-            },
-            {
-              "uid": "59bc5cb6",
-              "name": "صاج اسططططططططح صاج",
-              "unit": "م² (m²)",
-              "net_qty": 50.0,
-              "unit_price": 5000.0,
-              "mat_category": "supply_install",
-              "description": "بالمتر المسطح / الوحدة،صاجججججججججججججججججججججججججججججججج."
-            }
-          ]
-        },
-        "fs_drop_beams": [],
-        "nav_view": "profile_manager",
-        "enabled_modules": [
-          14
-        ],
-        "deleted_modules_trash": {}
-      }
-    },
     "Control room (نسخة)": {
       "name": "Control room (نسخة)",
       "description": "نسخة من Control room",
       "created_at": "2026-11-14 11:08",
-      "updated_at": "2026-11-22 15:57",
-      "last_used_at": "2026-11-22 15:57:39",
+      "updated_at": "2026-11-24 16:06",
+      "last_used_at": "2026-11-24 16:06:45",
       "data": {
         "selected_module_idx": 0,
         "apartment_name": "Control room (نسخة)",
@@ -1773,36 +1009,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 0,
-                "j_eff": 1,
-                "Atrib_0": 3.5663750000000003,
-                "Pu_slab_0": 7.792529374999999,
-                "Pu_slab": 21.005039148187183,
-                "Pu_punch": 4.36,
-                "Pu_beam": 11.780000000000001,
-                "framing_beams": [
-                  "B1",
-                  "B8"
-                ],
-                "Pu_0": 8.5717823125,
-                "Pu": 23.10554306300591,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B1",
-                    "rxn_ton": 6.3,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B8",
-                    "rxn_ton": 5.48,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 1
               }
             },
             "supp2": {
@@ -1847,36 +1054,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 0,
-                "j_eff": 3,
-                "Atrib_0": 2.9483750000000004,
-                "Pu_slab_0": 6.4421993749999995,
-                "Pu_slab": 20.202765312695277,
-                "Pu_punch": 3.61,
-                "Pu_beam": 12.58,
-                "framing_beams": [
-                  "B1",
-                  "B2"
-                ],
-                "Pu_0": 7.0864193125,
-                "Pu": 22.22304184396481,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B1",
-                    "rxn_ton": 6.3,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B2",
-                    "rxn_ton": 6.28,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  }
-                ],
-                "model_mark": "C2",
-                "col_spec_str": "C2 = 30*40 cm"
+                "j_eff": 3
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C5 ⟷ عمود C7)",
@@ -1983,36 +1161,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 0,
-                "j_eff": 3,
-                "Atrib_0": 2.9483750000000004,
-                "Pu_slab_0": 6.4421993749999995,
-                "Pu_slab": 20.202765312695277,
-                "Pu_punch": 3.61,
-                "Pu_beam": 12.58,
-                "framing_beams": [
-                  "B1",
-                  "B2"
-                ],
-                "Pu_0": 7.0864193125,
-                "Pu": 22.22304184396481,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B1",
-                    "rxn_ton": 6.3,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B2",
-                    "rxn_ton": 6.28,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  }
-                ],
-                "model_mark": "C2",
-                "col_spec_str": "C2 = 30*40 cm"
+                "j_eff": 3
               }
             },
             "supp2": {
@@ -2057,44 +1206,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 1,
-                "j_eff": 3,
-                "Atrib_0": 6.131475,
-                "Pu_slab_0": 13.397272874999997,
-                "Pu_slab": 33.7916942525847,
-                "Pu_punch": 4.56,
-                "Pu_beam": 25.080000000000002,
-                "framing_beams": [
-                  "B2",
-                  "B3",
-                  "B11"
-                ],
-                "Pu_0": 14.737000162499998,
-                "Pu": 37.17086367784318,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B2",
-                    "rxn_ton": 6.28,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B3",
-                    "rxn_ton": 7.07,
-                    "net_col_rxn_ton": 0.01,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B11",
-                    "rxn_ton": 11.73,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 3
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C7 ⟷ عمود C8)",
@@ -2201,44 +1313,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 1,
-                "j_eff": 3,
-                "Atrib_0": 6.131475,
-                "Pu_slab_0": 13.397272874999997,
-                "Pu_slab": 33.7916942525847,
-                "Pu_punch": 4.56,
-                "Pu_beam": 25.080000000000002,
-                "framing_beams": [
-                  "B2",
-                  "B3",
-                  "B11"
-                ],
-                "Pu_0": 14.737000162499998,
-                "Pu": 37.17086367784318,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B2",
-                    "rxn_ton": 6.28,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B3",
-                    "rxn_ton": 7.07,
-                    "net_col_rxn_ton": 0.01,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B11",
-                    "rxn_ton": 11.73,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 3
               }
             },
             "supp2": {
@@ -2283,36 +1358,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 2,
-                "j_eff": 3,
-                "Atrib_0": 6.463525000000001,
-                "Pu_slab_0": 14.122802124999998,
-                "Pu_slab": 36.257246206099474,
-                "Pu_punch": 7.91,
-                "Pu_beam": 11.56,
-                "framing_beams": [
-                  "B3",
-                  "B4"
-                ],
-                "Pu_0": 15.535082337499999,
-                "Pu": 39.88297082670942,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B3",
-                    "rxn_ton": 7.07,
-                    "net_col_rxn_ton": 0.01,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B4",
-                    "rxn_ton": 4.49,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": true
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 3
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C8 ⟷ عمود C9)",
@@ -2419,36 +1465,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 2,
-                "j_eff": 3,
-                "Atrib_0": 6.463525000000001,
-                "Pu_slab_0": 14.122802124999998,
-                "Pu_slab": 36.257246206099474,
-                "Pu_punch": 7.91,
-                "Pu_beam": 11.56,
-                "framing_beams": [
-                  "B3",
-                  "B4"
-                ],
-                "Pu_0": 15.535082337499999,
-                "Pu": 39.88297082670942,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B3",
-                    "rxn_ton": 7.07,
-                    "net_col_rxn_ton": 0.01,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B4",
-                    "rxn_ton": 4.49,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": true
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 3
               }
             },
             "supp2": {
@@ -2493,44 +1510,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 3,
-                "j_eff": 3,
-                "Atrib_0": 4.826175,
-                "Pu_slab_0": 10.545192375,
-                "Pu_slab": 35.727946583101904,
-                "Pu_punch": 3.59,
-                "Pu_beam": 26.759999999999998,
-                "framing_beams": [
-                  "B4",
-                  "B10",
-                  "B13"
-                ],
-                "Pu_0": 11.5997116125,
-                "Pu": 39.300741241412105,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B4",
-                    "rxn_ton": 7.77,
-                    "net_col_rxn_ton": 1.64,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": true
-                  },
-                  {
-                    "beam_id": "B10",
-                    "rxn_ton": 13.27,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B13",
-                    "rxn_ton": 5.72,
-                    "net_col_rxn_ton": 5.72,
-                    "Mu_transferred_ton_m": 7.55,
-                    "full_moment_continuity": true
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 3
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C9 ⟷ عمود C10)",
@@ -2639,44 +1619,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 3,
-                "j_eff": 0,
-                "Atrib_0": 5.268750000000001,
-                "Pu_slab_0": 11.512218749999999,
-                "Pu_slab": 33.93850855653044,
-                "Pu_punch": 3.91,
-                "Pu_beam": 28.84,
-                "framing_beams": [
-                  "B5",
-                  "B6",
-                  "B10"
-                ],
-                "Pu_0": 12.663440625,
-                "Pu": 37.332359412183486,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B5",
-                    "rxn_ton": 8.89,
-                    "net_col_rxn_ton": 0.01,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B6",
-                    "rxn_ton": 6.68,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B10",
-                    "rxn_ton": 13.27,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 0
               }
             },
             "supp2": {
@@ -2721,36 +1664,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 4,
-                "j_eff": 0,
-                "Atrib_0": 2.15625,
-                "Pu_slab_0": 4.71140625,
-                "Pu_slab": 21.21583209442061,
-                "Pu_punch": 2.64,
-                "Pu_beam": 15.66,
-                "framing_beams": [
-                  "B5",
-                  "B9"
-                ],
-                "Pu_0": 5.182546875,
-                "Pu": 23.337415303862674,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B5",
-                    "rxn_ton": 8.89,
-                    "net_col_rxn_ton": 0.01,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B9",
-                    "rxn_ton": 6.77,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  }
-                ],
-                "model_mark": "C2",
-                "col_spec_str": "C2 = 30*40 cm"
+                "j_eff": 0
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C3 ⟷ عمود C4)",
@@ -2857,36 +1771,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 2,
-                "j_eff": 0,
-                "Atrib_0": 7.05625,
-                "Pu_slab_0": 15.417906249999998,
-                "Pu_slab": 38.02329912132048,
-                "Pu_punch": 8.63,
-                "Pu_beam": 12.98,
-                "framing_beams": [
-                  "B6",
-                  "B7"
-                ],
-                "Pu_0": 16.959696875,
-                "Pu": 41.82562903345253,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B6",
-                    "rxn_ton": 6.68,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B7",
-                    "rxn_ton": 6.3,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 0
               }
             },
             "supp2": {
@@ -2931,44 +1816,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 3,
-                "j_eff": 0,
-                "Atrib_0": 5.268750000000001,
-                "Pu_slab_0": 11.512218749999999,
-                "Pu_slab": 33.93850855653044,
-                "Pu_punch": 3.91,
-                "Pu_beam": 28.84,
-                "framing_beams": [
-                  "B5",
-                  "B6",
-                  "B10"
-                ],
-                "Pu_0": 12.663440625,
-                "Pu": 37.332359412183486,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B5",
-                    "rxn_ton": 8.89,
-                    "net_col_rxn_ton": 0.01,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B6",
-                    "rxn_ton": 6.68,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B10",
-                    "rxn_ton": 13.27,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 0
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C2 ⟷ عمود C3)",
@@ -3075,36 +1923,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 1,
-                "j_eff": 0,
-                "Atrib_0": 3.4749999999999996,
-                "Pu_slab_0": 7.592874999999998,
-                "Pu_slab": 22.35950079097398,
-                "Pu_punch": 4.25,
-                "Pu_beam": 18.03,
-                "framing_beams": [
-                  "B7",
-                  "B11"
-                ],
-                "Pu_0": 8.352162499999999,
-                "Pu": 24.59545087007138,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B7",
-                    "rxn_ton": 6.3,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B11",
-                    "rxn_ton": 11.73,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 0
               }
             },
             "supp2": {
@@ -3149,36 +1968,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 2,
-                "j_eff": 0,
-                "Atrib_0": 7.05625,
-                "Pu_slab_0": 15.417906249999998,
-                "Pu_slab": 38.02329912132048,
-                "Pu_punch": 8.63,
-                "Pu_beam": 12.98,
-                "framing_beams": [
-                  "B6",
-                  "B7"
-                ],
-                "Pu_0": 16.959696875,
-                "Pu": 41.82562903345253,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B6",
-                    "rxn_ton": 6.68,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B7",
-                    "rxn_ton": 6.3,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 0
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C1 ⟷ عمود C2)",
@@ -3285,36 +2075,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 0,
-                "j_eff": 1,
-                "Atrib_0": 3.5663750000000003,
-                "Pu_slab_0": 7.792529374999999,
-                "Pu_slab": 21.005039148187183,
-                "Pu_punch": 4.36,
-                "Pu_beam": 11.780000000000001,
-                "framing_beams": [
-                  "B1",
-                  "B8"
-                ],
-                "Pu_0": 8.5717823125,
-                "Pu": 23.10554306300591,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B1",
-                    "rxn_ton": 6.3,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B8",
-                    "rxn_ton": 5.48,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 1
               }
             },
             "supp2": {
@@ -3581,36 +2342,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 4,
-                "j_eff": 0,
-                "Atrib_0": 2.15625,
-                "Pu_slab_0": 4.71140625,
-                "Pu_slab": 21.21583209442061,
-                "Pu_punch": 2.64,
-                "Pu_beam": 15.66,
-                "framing_beams": [
-                  "B5",
-                  "B9"
-                ],
-                "Pu_0": 5.182546875,
-                "Pu": 23.337415303862674,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B5",
-                    "rxn_ton": 8.89,
-                    "net_col_rxn_ton": 0.01,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B9",
-                    "rxn_ton": 6.77,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  }
-                ],
-                "model_mark": "C2",
-                "col_spec_str": "C2 = 30*40 cm"
+                "j_eff": 0
               }
             },
             "supp2": {
@@ -3655,36 +2387,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 4,
-                "j_eff": 2,
-                "Atrib_0": 2.389125,
-                "Pu_slab_0": 5.220238124999999,
-                "Pu_slab": 22.150620059085906,
-                "Pu_punch": 2.92,
-                "Pu_beam": 14.489999999999998,
-                "framing_beams": [
-                  "B9",
-                  "B12"
-                ],
-                "Pu_0": 5.7422619374999995,
-                "Pu": 24.365682064994502,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B9",
-                    "rxn_ton": 6.77,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B12",
-                    "rxn_ton": 7.72,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 2
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C4 ⟷ عمود C6)",
@@ -3791,44 +2494,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 3,
-                "j_eff": 0,
-                "Atrib_0": 5.268750000000001,
-                "Pu_slab_0": 11.512218749999999,
-                "Pu_slab": 33.93850855653044,
-                "Pu_punch": 3.91,
-                "Pu_beam": 28.84,
-                "framing_beams": [
-                  "B5",
-                  "B6",
-                  "B10"
-                ],
-                "Pu_0": 12.663440625,
-                "Pu": 37.332359412183486,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B5",
-                    "rxn_ton": 8.89,
-                    "net_col_rxn_ton": 0.01,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B6",
-                    "rxn_ton": 6.68,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B10",
-                    "rxn_ton": 13.27,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 0
               }
             },
             "supp2": {
@@ -3873,44 +2539,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 3,
-                "j_eff": 3,
-                "Atrib_0": 4.826175,
-                "Pu_slab_0": 10.545192375,
-                "Pu_slab": 35.727946583101904,
-                "Pu_punch": 3.59,
-                "Pu_beam": 26.759999999999998,
-                "framing_beams": [
-                  "B4",
-                  "B10",
-                  "B13"
-                ],
-                "Pu_0": 11.5997116125,
-                "Pu": 39.300741241412105,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B4",
-                    "rxn_ton": 7.77,
-                    "net_col_rxn_ton": 1.64,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": true
-                  },
-                  {
-                    "beam_id": "B10",
-                    "rxn_ton": 13.27,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B13",
-                    "rxn_ton": 5.72,
-                    "net_col_rxn_ton": 5.72,
-                    "Mu_transferred_ton_m": 7.55,
-                    "full_moment_continuity": true
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 3
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C3 ⟷ عمود C10)",
@@ -4017,36 +2646,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 1,
-                "j_eff": 0,
-                "Atrib_0": 3.4749999999999996,
-                "Pu_slab_0": 7.592874999999998,
-                "Pu_slab": 22.35950079097398,
-                "Pu_punch": 4.25,
-                "Pu_beam": 18.03,
-                "framing_beams": [
-                  "B7",
-                  "B11"
-                ],
-                "Pu_0": 8.352162499999999,
-                "Pu": 24.59545087007138,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B7",
-                    "rxn_ton": 6.3,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B11",
-                    "rxn_ton": 11.73,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 0
               }
             },
             "supp2": {
@@ -4091,44 +2691,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 1,
-                "j_eff": 3,
-                "Atrib_0": 6.131475,
-                "Pu_slab_0": 13.397272874999997,
-                "Pu_slab": 33.7916942525847,
-                "Pu_punch": 4.56,
-                "Pu_beam": 25.080000000000002,
-                "framing_beams": [
-                  "B2",
-                  "B3",
-                  "B11"
-                ],
-                "Pu_0": 14.737000162499998,
-                "Pu": 37.17086367784318,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B2",
-                    "rxn_ton": 6.28,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B3",
-                    "rxn_ton": 7.07,
-                    "net_col_rxn_ton": 0.01,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B11",
-                    "rxn_ton": 11.73,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 3
               }
             },
             "supports_desc": "كمرة رئيسية (مرتكزة على عمود C1 ⟷ عمود C8)",
@@ -4395,36 +2958,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 4,
-                "j_eff": 2,
-                "Atrib_0": 2.389125,
-                "Pu_slab_0": 5.220238124999999,
-                "Pu_slab": 22.150620059085906,
-                "Pu_punch": 2.92,
-                "Pu_beam": 14.489999999999998,
-                "framing_beams": [
-                  "B9",
-                  "B12"
-                ],
-                "Pu_0": 5.7422619374999995,
-                "Pu": 24.365682064994502,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B9",
-                    "rxn_ton": 6.77,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B12",
-                    "rxn_ton": 7.72,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 2
               }
             },
             "supports_desc": "كمرة ثانوية (مرتكزة على كمرة B10 ⟷ عمود C6)",
@@ -4531,44 +3065,7 @@
                 "placed": true,
                 "removed": false,
                 "i_eff": 3,
-                "j_eff": 3,
-                "Atrib_0": 4.826175,
-                "Pu_slab_0": 10.545192375,
-                "Pu_slab": 35.727946583101904,
-                "Pu_punch": 3.59,
-                "Pu_beam": 26.759999999999998,
-                "framing_beams": [
-                  "B4",
-                  "B10",
-                  "B13"
-                ],
-                "Pu_0": 11.5997116125,
-                "Pu": 39.300741241412105,
-                "beam_reactions": [
-                  {
-                    "beam_id": "B4",
-                    "rxn_ton": 7.77,
-                    "net_col_rxn_ton": 1.64,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": true
-                  },
-                  {
-                    "beam_id": "B10",
-                    "rxn_ton": 13.27,
-                    "net_col_rxn_ton": 0.0,
-                    "Mu_transferred_ton_m": 0.0,
-                    "full_moment_continuity": false
-                  },
-                  {
-                    "beam_id": "B13",
-                    "rxn_ton": 5.72,
-                    "net_col_rxn_ton": 5.72,
-                    "Mu_transferred_ton_m": 7.55,
-                    "full_moment_continuity": true
-                  }
-                ],
-                "model_mark": "C1",
-                "col_spec_str": "C1 = 30*80 cm"
+                "j_eff": 3
               }
             },
             "supp2": {
@@ -4776,6 +3273,7 @@
           "item_12": "بالمتر المسطح، توريد وتركيب بلاط أسطح (بلاط موزايكو / سنجابي / أسمنتي مقاس 20×20×2 سم) فوق فرشة الرمل والمونة الأسمنتية مع ضبط أوتار الميول نحو جرجوري صرف الأمطار وعمل الوزرات المائلة والسقية بلباني الأسمنت وفواصل التمدد المملوءة بالبيتومين.",
           "total_cost": "إجمالي تكلفة جميع بنود الخرسانات المسلحة والعادية والردم والمباني والأرصفة والعزل شامل معامل الزيادة"
         },
+        "Control_room_(نسخة)_cw_qty_factor": 1.2,
         "enabled_modules": [
           0,
           1,
@@ -4784,6 +3282,780 @@
           4,
           5,
           6
+        ],
+        "deleted_modules_trash": {}
+      }
+    },
+    "Control room (مباني)": {
+      "name": "Control room (مباني)",
+      "description": "مشروع جديد منسوخ المحاور والأعمدة من «Control room (نسخة)»",
+      "created_at": "2026-11-18 15:34",
+      "updated_at": "2026-11-24 15:21",
+      "last_used_at": "2026-11-24 15:21:38",
+      "data": {
+        "selected_module_idx": 14,
+        "apartment_name": "Control room (مباني)",
+        "col_Pu_input": 160.0,
+        "col_Safety_Factor": 1.2,
+        "col_b": 30,
+        "col_H_clear": 300,
+        "col_K_index": 1,
+        "col_Fcu": 250,
+        "col_Fy": 4000,
+        "col_Fyk": 2400,
+        "col_mu_target": 1.0,
+        "col_Phi_index": 3,
+        "col_Phi_st_index": 1,
+        "ftg_bc": 30,
+        "ftg_tc": 50,
+        "ftg_Pu": 160.0,
+        "ftg_Wf_est": 10.0,
+        "ftg_q_all": 1.5,
+        "ftg_Df": 1.5,
+        "ftg_gamma_soil": 1.8,
+        "ftg_Fcu": 250,
+        "ftg_Fy": 4000,
+        "ftg_cover": 7,
+        "ftg_Phi_index": 2,
+        "ftg_L_override": null,
+        "ftg_B_override": null,
+        "ftg_trc_override": null,
+        "tcf_P1": 80.0,
+        "tcf_P2": 120.0,
+        "tcf_c1": 40,
+        "tcf_b1": 40,
+        "tcf_c2": 50,
+        "tcf_b2": 40,
+        "tcf_S": 4.0,
+        "tcf_q_net": 1.5,
+        "tcf_Fcu": 250,
+        "tcf_Fy": 4000,
+        "tcf_cover": 7,
+        "tcf_Phi_index": 1,
+        "tcf_L1_ov": null,
+        "tcf_B1_ov": null,
+        "tcf_t1_ov": null,
+        "tcf_L2_ov": null,
+        "tcf_B2_ov": null,
+        "tcf_t2_ov": null,
+        "tcf_Lc_ov": null,
+        "tcf_Bc_ov": null,
+        "tcf_tc_ov": null,
+        "fs_n_lx": 2,
+        "fs_n_ly": 2,
+        "slab_bc": 30,
+        "slab_tc": 50,
+        "slab_SDL": 0.15,
+        "slab_wall_load": 0.5,
+        "slab_LL": 0.25,
+        "slab_gamma_c": 2.5,
+        "slab_Fcu": 250,
+        "slab_Fy": 4000,
+        "slab_cover": 1.5,
+        "slab_ts_initial": 20,
+        "slab_n_floors": 1,
+        "slab_col_safety_factor": 1.1,
+        "slab_bottom_mesh_dia_idx": 2,
+        "slab_n_btm_mesh": 5,
+        "slab_top_mesh_dia_idx": 1,
+        "slab_n_top_mesh": 5,
+        "slab_col_extra_dia_idx": 2,
+        "slab_strip_top_extra_dia_idx": 2,
+        "slab_strip_bottom_extra_dia_idx": 2,
+        "slab_Phi_index": 2,
+        "fs_lx_0": 6.0,
+        "fs_lx_1": 6.0,
+        "fs_lx_2": 6.0,
+        "fs_lx_3": 6.0,
+        "fs_lx_4": 6.0,
+        "fs_lx_5": 6.0,
+        "fs_lx_6": 6.0,
+        "fs_lx_7": 6.0,
+        "fs_lx_8": 6.0,
+        "fs_lx_9": 6.0,
+        "fs_ly_0": 6.0,
+        "fs_ly_1": 6.0,
+        "fs_ly_2": 6.0,
+        "fs_ly_3": 6.0,
+        "fs_ly_4": 6.0,
+        "fs_ly_5": 6.0,
+        "fs_ly_6": 6.0,
+        "fs_ly_7": 6.0,
+        "fs_ly_8": 6.0,
+        "fs_ly_9": 6.0,
+        "fs_cant_left": 0.0,
+        "fs_cant_right": 0.0,
+        "fs_cant_bottom": 0.0,
+        "fs_cant_top": 0.0,
+        "fs_removed_cols": [],
+        "fs_void_panels": [],
+        "fs_col_transforms": {},
+        "fs_edge_columns": {},
+        "fs_zero_col_mode": true,
+        "fs_placed_cols": [],
+        "fs_col_props": {},
+        "fs_new_col_b": 30.0,
+        "fs_new_col_t": 50.0,
+        "fs_new_col_dir": "اتجاه Y",
+        "fs_new_col_sx": "متمركز على المحور (Centered)",
+        "fs_new_col_sy": "متمركز على المحور (Centered)",
+        "fs_beam_b_cm": 25.0,
+        "fs_beam_t_cm": 60.0,
+        "fs_beam_dia_main": 16,
+        "fs_show_panel_labels": true,
+        "fs_show_col_labels": true,
+        "fs_show_beam_labels": true,
+        "_schema_mod8_removed": true,
+        "cw_df_m": 1.5,
+        "cw_h_above_m": 0.6,
+        "cw_t_wall_m": 0.25,
+        "cw_brick_l_cm": 25.0,
+        "cw_brick_w_cm": 12.0,
+        "cw_brick_h_cm": 6.0,
+        "cw_t_pc_ftg_cm": 10.0,
+        "cw_t_pc_gb_cm": 10.0,
+        "cw_t_rc_floor_cm": 15.0,
+        "cw_sidewalk_w_m": 1.0,
+        "cw_qty_factor": 1.2,
+        "cw_rate_slabs_beams": 4500.0,
+        "cw_rate_cols": 4800.0,
+        "cw_rate_ftgs_gb": 4400.0,
+        "cw_rate_pc": 2200.0,
+        "cw_rate_backfill": 120.0,
+        "cw_rate_bricks": 2.5,
+        "cw_rate_interlock": 220.0,
+        "cw_rate_curbs": 160.0,
+        "cw_rate_damp_proof": 95.0,
+        "cw_rate_waterproof": 170.0,
+        "cw_rate_thermal": 130.0,
+        "cw_rate_roof_tiles": 150.0,
+        "cw_item_descriptions": {},
+        "cs_n_types": 2,
+        "cs_col_h": 300.0,
+        "cs_t_slab": 20.0,
+        "cs_fcu": 350.0,
+        "cs_fs_n_slabs": 1,
+        "cs_fs_ts": 20.0,
+        "cs_fs_fcu": 350.0,
+        "cs_fs_phi_btm": 12,
+        "cs_fs_nb_btm": 6,
+        "cs_fs_phi_top": 10,
+        "cs_fs_nb_top": 6,
+        "cs_fs_phi_btm_x": 12,
+        "cs_fs_phi_btm_y": 12,
+        "cs_fs_nb_btm_x": 6,
+        "cs_fs_nb_btm_y": 6,
+        "cs_fs_phi_top_x": 10,
+        "cs_fs_phi_top_y": 10,
+        "cs_fs_nb_top_x": 6,
+        "cs_fs_nb_top_y": 6,
+        "cs_fs_phi_top_add": 12,
+        "cs_fs_add_top_lx": 3.0,
+        "cs_fs_add_top_ly": 2.5,
+        "cs_fs_n_top_add_x": 0,
+        "cs_fs_n_top_add_y": 0,
+        "cs_fs_phi_btm_add": 12,
+        "cs_fs_add_btm_lx": 4.0,
+        "cs_fs_add_btm_ly": 3.0,
+        "cs_fs_n_btm_add_x": 0,
+        "cs_fs_n_btm_add_y": 0,
+        "cs_price_steel": 40000.0,
+        "cs_price_cement": 4000.0,
+        "cs_price_gravel": 600.0,
+        "cs_price_sand": 200.0,
+        "cs_price_labor": 2000.0,
+        "cs_project_name": "Control room (مباني)",
+        "gs_lx": 30.0,
+        "gs_ly": 20.0,
+        "gs_ts": 20.0,
+        "gs_cover": 4.0,
+        "gs_fcu": 300.0,
+        "gs_fy": 4200.0,
+        "gs_ks": 5.0,
+        "gs_q_all": 1.5,
+        "gs_h_base": 20.0,
+        "gs_w_ll": 2.5,
+        "gs_p_wheel": 4.0,
+        "gs_wheel_b": 20.0,
+        "gs_wheel_l": 25.0,
+        "gs_p_post": 3.5,
+        "gs_post_bp": 15.0,
+        "gs_post_tp": 15.0,
+        "gs_rebar_mesh_type": "شبكة علوية وسفلية (Double Mesh)",
+        "gs_phi_mesh": 10,
+        "gs_mesh_spacing": 20.0,
+        "gs_joint_spacing_x": 4.5,
+        "gs_joint_spacing_y": 4.5,
+        "gs_dowel_phi": 20,
+        "gs_dowel_len": 45.0,
+        "gs_dowel_spacing": 30.0,
+        "font_size_inputs": 14,
+        "font_size_outputs": 14,
+        "module_9_strap_footing": {
+          "S": 5.0,
+          "edge_clearance": 0.0,
+          "a1": 30.0,
+          "b1": 60.0,
+          "a2": 40.0,
+          "b2": 50.0,
+          "P1_w": 80.0,
+          "P1_u": 120.0,
+          "P2_w": 120.0,
+          "P2_u": 180.0,
+          "col_weight_factor": 1.0,
+          "q_all_net": 1.5,
+          "fcu": 250.0,
+          "fy": 4000.0,
+          "t_pc": 10.0,
+          "strap_b": 40.0,
+          "strap_D": 100.0,
+          "L1_override": 2.2,
+          "L1_ov": 2.2,
+          "B1_ov": 0.0,
+          "t1_ov": 50.0,
+          "L2_ov": 0.0,
+          "B2_ov": 0.0,
+          "t2_ov": 50.0,
+          "long_bar_dia": 22,
+          "stirrup_dia": 10,
+          "stirrup_per_m": 5,
+          "stirrup_spacing": 20,
+          "trans_bar_dia": 16,
+          "final_B1": null,
+          "final_L2": null,
+          "final_B2": null,
+          "is_calculated": false
+        },
+        "m9_S": 5.0,
+        "m9_edge_clearance": 0.0,
+        "m9_a1": 30.0,
+        "m9_b1": 60.0,
+        "m9_a2": 40.0,
+        "m9_b2": 50.0,
+        "m9_P1_w": 80.0,
+        "m9_P1_u": 120.0,
+        "m9_P2_w": 120.0,
+        "m9_P2_u": 180.0,
+        "m9_q_all_net": 1.5,
+        "m9_fcu": 250.0,
+        "m9_fy": 4000.0,
+        "m9_t_pc": 10.0,
+        "m9_strap_b": 40.0,
+        "m9_strap_D": 100.0,
+        "m9_L1_ov": 2.2,
+        "m9_B1_ov": 0.0,
+        "m9_t1_ov": 50.0,
+        "m9_L2_ov": 0.0,
+        "m9_B2_ov": 0.0,
+        "m9_t2_ov": 50.0,
+        "m9_long_bar_dia": 22,
+        "m9_stirrup_dia": 10,
+        "m9_stirrup_per_m": 5,
+        "m9_stirrup_spacing": 20,
+        "m9_trans_bar_dia": 16,
+        "module_12_brick_survey": {
+          "x_axes": [
+            0.0,
+            4.0,
+            8.0
+          ],
+          "y_axes": [
+            0.0,
+            3.0,
+            6.0
+          ],
+          "col_length_cm": 60.0,
+          "col_width_cm": 30.0,
+          "col_placed": [],
+          "col_removed": [],
+          "col_dirs": {},
+          "col_shifts": {},
+          "col_shifted": {},
+          "wall_thickness": {},
+          "wall_removed": [],
+          "default_wall_height": 3.0,
+          "parapet_wall_height": 1.0,
+          "parapet_walls": [],
+          "wall_heights": {},
+          "windows": {},
+          "doors": {},
+          "next_op_id": 1,
+          "window_types": [],
+          "door_types": [],
+          "brick_type": "الطوب الأحمر الطفلي",
+          "brick_size": "25×12×6",
+          "mortar_thickness_cm": 1.0,
+          "brick_custom_l": 25.0,
+          "brick_custom_w": 12.0,
+          "brick_custom_h": 6.0,
+          "plaster_faces": {},
+          "price_brick_per_thousand": 2500.0,
+          "price_sand_per_m3": 200.0,
+          "price_cement_per_ton": 4000.0,
+          "uploaded_image_b64": "",
+          "uploaded_image_name": "",
+          "uploaded_image_type": "image/png",
+          "col_props": {},
+          "deleted_cols_history": {}
+        },
+        "module_10_diagonal_strap": {
+          "edge_clearance_x": 0.0,
+          "edge_clearance_y": 0.0,
+          "a1": 30.0,
+          "b1": 60.0,
+          "X2": 4.5,
+          "Y2": 3.8,
+          "a2": 40.0,
+          "b2": 50.0,
+          "P1_w": 80.0,
+          "P1_u": 120.0,
+          "P2_w": 120.0,
+          "P2_u": 180.0,
+          "col_weight_factor": 1.0,
+          "q_all_net": 1.5,
+          "fcu": 250.0,
+          "fy": 4000.0,
+          "t_pc": 10.0,
+          "strap_b": 40.0,
+          "strap_D": 170.0,
+          "L1x": 2.95,
+          "L1y": 2.75,
+          "t1": 80.0,
+          "L2x": 2.85,
+          "L2y": 2.85,
+          "t2": 60.0,
+          "long_bar_dia": 22,
+          "stirrup_dia": 10,
+          "stirrup_per_m": 5,
+          "stirrup_spacing": 20.0,
+          "trans_bar_dia": 16,
+          "is_manual_override": false,
+          "is_calculated": false
+        },
+        "module_11_ground_beam": {
+          "level_type": "Above Footing Level (أعلى منسوب القواعد / رقاب الأعمدة)",
+          "support_condition": "Simply Supported (حر من الطرفين)",
+          "L_m": 5.0,
+          "b_cm": 25.0,
+          "t_cm": 60.0,
+          "t_calc_cm": 60.0,
+          "auto_sync_depth": true,
+          "cover_cm": 4.0,
+          "t_footing_cm": 60.0,
+          "delta_settlement_mm": 10.0,
+          "q_all_soil": 1.5,
+          "soil_contact_type": "Clay / Medium Dense Sand (تربة طينية / رملية متوسطة)",
+          "h_backfill_m": 1.0,
+          "has_wall_at_footing": true,
+          "has_wall": true,
+          "h_wall_m": 3.0,
+          "t_wall_cm": 12.0,
+          "gamma_brick": 1.8,
+          "w_add_dl": 0.0,
+          "w_add_ll": 0.0,
+          "fcu": 250.0,
+          "fy": 4000.0,
+          "fy_stirrup": 2400.0,
+          "phi_bot_mm": 16,
+          "phi_top_mm": 12,
+          "phi_stirrup_mm": 8,
+          "stirrups_per_m": 6,
+          "n_stirrup_branches": 2,
+          "phi_side_mm": 10,
+          "is_calculated": true
+        },
+        "module_15_masonry_plaster": {
+          "x_axes": [
+            0.0,
+            5.15,
+            10.71,
+            16.44,
+            19.14,
+            22.59
+          ],
+          "y_axes": [
+            0.0,
+            2.5,
+            5.27,
+            7.56
+          ],
+          "col_length_cm": 80.0,
+          "col_width_cm": 30.0,
+          "new_col_b": 30.0,
+          "new_col_t": 80.0,
+          "col_placed": [
+            [
+              0,
+              1
+            ],
+            [
+              0,
+              3
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              3,
+              0
+            ],
+            [
+              2,
+              3
+            ],
+            [
+              3,
+              3
+            ],
+            [
+              5,
+              0
+            ],
+            [
+              1,
+              0
+            ],
+            [
+              1,
+              3
+            ],
+            [
+              5,
+              2
+            ]
+          ],
+          "col_removed": [],
+          "col_dirs": {
+            "0,1": "EW",
+            "0,3": "EW",
+            "1,0": "EW",
+            "1,3": "NS",
+            "2,0": "NS",
+            "2,3": "EW",
+            "3,0": "EW",
+            "3,3": "EW",
+            "5,0": "EW",
+            "5,2": "EW"
+          },
+          "col_shifts": {
+            "0,1": {
+              "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
+              "shift_y": "متمركز على المحور (Centered)"
+            },
+            "0,3": {
+              "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
+              "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+            },
+            "1,0": {
+              "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
+              "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
+            },
+            "1,3": {
+              "shift_x": "متمركز على المحور (Centered)",
+              "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+            },
+            "2,0": {
+              "shift_x": "متمركز على المحور (Centered)",
+              "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
+            },
+            "2,3": {
+              "shift_x": "متمركز على المحور (Centered)",
+              "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+            },
+            "3,0": {
+              "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+              "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
+            },
+            "3,3": {
+              "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+              "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+            },
+            "5,0": {
+              "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+              "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
+            },
+            "5,2": {
+              "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+              "shift_y": "متمركز على المحور (Centered)"
+            }
+          },
+          "col_shifted": {
+            "0,1": [
+              34.0,
+              0.0
+            ],
+            "0,3": [
+              14.0,
+              -9.0
+            ],
+            "1,0": [
+              34.0,
+              9.0
+            ],
+            "1,3": [
+              0.0,
+              -34.0
+            ],
+            "2,0": [
+              0.0,
+              34.0
+            ],
+            "2,3": [
+              0.0,
+              -9.0
+            ],
+            "3,0": [
+              -34.0,
+              9.0
+            ],
+            "3,3": [
+              -34.0,
+              -9.0
+            ],
+            "5,0": [
+              -14.0,
+              9.0
+            ],
+            "5,2": [
+              -34.0,
+              0.0
+            ]
+          },
+          "walls_placed": [
+            [
+              2,
+              3,
+              3,
+              3
+            ]
+          ],
+          "wall_thickness": {
+            "2,3,3,3": 12,
+            "3,3,2,3": 12
+          },
+          "wall_removed": [],
+          "default_wall_height": 3.0,
+          "parapet_wall_height": 1.0,
+          "parapet_walls": [],
+          "wall_heights": {
+            "2,3,3,3": 3.0,
+            "3,3,2,3": 3.0
+          },
+          "windows": {},
+          "doors": {},
+          "next_op_id": 1,
+          "window_types": [
+            {
+              "id": "wt_1",
+              "label": "W1",
+              "w_cm": 100.0,
+              "h_cm": 120.0,
+              "sill_cm": 90.0
+            }
+          ],
+          "door_types": [
+            {
+              "id": "dt_1",
+              "label": "D1",
+              "w_cm": 90.0,
+              "h_cm": 210.0
+            }
+          ],
+          "brick_type": "الطوب الأحمر الطفلي",
+          "brick_size": "25×12×6",
+          "mortar_thickness_cm": 1.0,
+          "brick_custom_l": 25.0,
+          "brick_custom_w": 12.0,
+          "brick_custom_h": 6.0,
+          "plaster_faces": {},
+          "col_props": {
+            "0,1": {
+              "model": "C(30x80)",
+              "b_cm": 30.0,
+              "t_cm": 80.0,
+              "dir": "أفقي",
+              "dir_code": "EW",
+              "anchor": "السنتر",
+              "corner": "أعلى اليمين",
+              "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
+              "shift_y": "متمركز على المحور (Centered)"
+            },
+            "0,3": {
+              "model": "C(30x40)",
+              "b_cm": 30.0,
+              "t_cm": 40.0,
+              "dir": "أفقي",
+              "dir_code": "EW",
+              "anchor": "السنتر",
+              "corner": "أعلى اليمين",
+              "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
+              "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+            },
+            "1,0": {
+              "model": "C(30x80)",
+              "b_cm": 30.0,
+              "t_cm": 80.0,
+              "dir": "أفقي",
+              "dir_code": "EW",
+              "anchor": "السنتر",
+              "corner": "أعلى اليمين",
+              "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
+              "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
+            },
+            "1,3": {
+              "model": "C(30x80)",
+              "b_cm": 30.0,
+              "t_cm": 80.0,
+              "dir": "رأسي",
+              "dir_code": "NS",
+              "anchor": "السنتر",
+              "corner": "أعلى اليمين",
+              "shift_x": "متمركز على المحور (Centered)",
+              "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+            },
+            "2,0": {
+              "model": "C(30x80)",
+              "b_cm": 30.0,
+              "t_cm": 80.0,
+              "dir": "رأسي",
+              "dir_code": "NS",
+              "anchor": "السنتر",
+              "corner": "أعلى اليمين",
+              "shift_x": "متمركز على المحور (Centered)",
+              "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
+            },
+            "2,3": {
+              "model": "C(30x80)",
+              "b_cm": 30.0,
+              "t_cm": 80.0,
+              "dir": "أفقي",
+              "dir_code": "EW",
+              "anchor": "السنتر",
+              "corner": "أعلى اليمين",
+              "shift_x": "متمركز على المحور (Centered)",
+              "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+            },
+            "3,0": {
+              "model": "C(30x80)",
+              "b_cm": 30.0,
+              "t_cm": 80.0,
+              "dir": "أفقي",
+              "dir_code": "EW",
+              "anchor": "السنتر",
+              "corner": "أعلى اليمين",
+              "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+              "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
+            },
+            "3,3": {
+              "model": "C(30x80)",
+              "b_cm": 30.0,
+              "t_cm": 80.0,
+              "dir": "أفقي",
+              "dir_code": "EW",
+              "anchor": "السنتر",
+              "corner": "أعلى اليمين",
+              "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+              "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+            },
+            "5,0": {
+              "model": "C(30x40)",
+              "b_cm": 30.0,
+              "t_cm": 40.0,
+              "dir": "أفقي",
+              "dir_code": "EW",
+              "anchor": "السنتر",
+              "corner": "أعلى اليمين",
+              "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+              "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
+            },
+            "5,2": {
+              "model": "C(30x80)",
+              "b_cm": 30.0,
+              "t_cm": 80.0,
+              "dir": "أفقي",
+              "dir_code": "EW",
+              "anchor": "السنتر",
+              "corner": "أعلى اليمين",
+              "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+              "shift_y": "متمركز على المحور (Centered)"
+            }
+          },
+          "deleted_cols_history": {},
+          "price_brick_per_thousand": 2500.0,
+          "price_sand_per_m3": 200.0,
+          "price_cement_per_ton": 4000.0,
+          "price_plaster_labor_per_m2": 70.0,
+          "uploaded_image_b64": "",
+          "uploaded_image_name": "",
+          "uploaded_image_type": "image/png",
+          "uploaded_image_size_kb": 0.0,
+          "uploaded_image_w": null,
+          "uploaded_image_h": null,
+          "named_spaces": [],
+          "merged_wall_label_style": "single",
+          "item_descriptions": {
+            "item_1": "Hollow clay block masonry block size 12 cm with mortar consists of 300 kg ordinary Portland cement including any charge for delivering the works finished.",
+            "item_2": "بالمتر المكعب، توريد وبناء حوائط طوب أحمر طفلي/أسمنتي تخانة طوبة كاملة (25 سم) بالمونة الأسمنتية بنسبة 350 كجم أسمنت/م³ رمل، تشمل جميع الحوائط الخارجية والداخلية طوبة كاملة مع دروة السطح (إذا كانت طوبة كاملة)، وربط الشناوي والاديات وتفريغ العراميس طبقاً للمواصفات الفنية والكود المصري.",
+            "item_3": "بالمتر المسطح، توريد وعمل بياض تخشين للأسقف الداخلية (طرطشة عمومية متجانسة بمونة 450 كجم أسمنت/م³ رمل + بياض بطانة وضهارة بمونة 350 كجم أسمنت/م³ رمل) مع استواء الأسطح وضبط الزوايا والأوتار طبقاً للكود المصري وأصول الصناعة.",
+            "item_4": "بالمتر المسطح، توريد ودهان أسقف داخلية 5 أوجه متتالية تشمل: وجه برايمر سيلر مائي مقاوم للقلويات + 2 سكينة معجون داخلي ناعم للتسوية + 2 وجه دهان بلاستيك نصف لامع عالي البياض قابل للغسيل طبقاً لأصول الصناعة.",
+            "item_5": "بالمتر المسطح، توريد وعمل بياض تخشين للحوائط الداخلية على بؤج وأوتار وسلك شبك فواصل تمدد (طرطشة عمومية + بياض تخشين بمونة 350 كجم أسمنت/م³ رمل) مخصوماً منه الفتحات طبقاً لاشتراطات الكود المصري لأعمال البياض ECP.",
+            "item_6": "بالمتر المسطح، توريد ودهان حوائط داخلية 5 أوجه متتالية تشمل: وجه برايمر سيلر مائي عازل + 2 سكينة معجون داخلي ناعم + 2 وجه دهان بلاستيك مط/نصف لامع قابل للغسيل بالألوان المعتمدة طبقاً للمواصفات الفنية.",
+            "item_7": "بالمتر المسطح، توريد وعمل بياض واجهات خارجية ودروة السطح من الجانبين يشمل طرطشة عمومية مسامية كثيفة + بياض أسمنتي بمونة 350 كجم أسمنت/م³ رمل مع إضافة مواد عازلة ومقاومة للأملاح والعوامل الجوية طبقاً لأصول الصناعة.",
+            "item_8": "بالمتر المسطح، توريد ودهان واجهات خارجية ودروة السطح بمواد دهانات مطاطية أكريليكية مقاومة للشمس والأشعة فوق البنفسجية والأمطار (Weatherproof) تشمل وجه سيلر مائي ومعجون واجهات ووجهين دهان مطاطي معتمد.",
+            "item_9": "بالمتر المسطح، توريد وتركيب سيراميك أرضيات للغرف والصالات فرز أول مقاس معتمد يركب بمونة أسمنتية فوق فرشة رمل نظيف مع السقية بلباني الأسمنت الأبيض أو الملون والمواد العازلة ومراعاة فواصل التمدد.",
+            "item_10": "بالمتر المسطح، توريد وتركيب سيراميك أرضيات حمامات مانع للانزلاق (Anti-slip) فرز أول بمونة أسمنتية فوق فرشة رمل مع ملء الفواصل بمادة روبة إيبوكسية أو أسمنتية مانعة لتسرب المياه والميول نحو الجاليتراب.",
+            "item_11": "بالمتر المسطح، توريد وتركيب سيراميك أرضيات مطابخ فرز أول مقاوم للشحوم والمنظفات والمياه يركب بمونة أسمنتية فوق فرشة رمل مع السقية الكاملة للفواصل ومراعاة الميول المطلوبة هندسياً.",
+            "item_12": "بالمتر المسطح، توريد وتركيب سيراميك حوائط حمامات بكامل الارتفاع فرز أول يركب بمونة أسمنتية أو مادة لاصقة مع السقية بمادة عازلة ومراعاة الأفقية والرأسية التامة ووزن الزوايا والغرانيق.",
+            "item_13": "بالمتر المسطح، توريد وتركيب سيراميك حوائط مطابخ بكامل الارتفاع فرز أول مقاوم للحرارة والرطوبة يركب بمونة أسمنتية أو مادة لاصقة مع السقية الكاملة ومراعاة فتحات التغذية والصرف والشفاطات.",
+            "item_14": "بالمتر المسطح، توريد وتركيب بلاط انترلوك خرساني إجهاد لا يقل عن 400 كجم/سم² سمك 6-8 سم للأرصفة المحيطة فوق طبقة رمل تسوية مدموك جيداً سمك 5 سم مع غلق الفواصل برمل ناعم نظيف.",
+            "item_15": "بالمتر الطولي، توريد وتركيب بردورات خرسانية مسبقة الصنع 15×30×50 سم لرصيف المشاة الخارجي مثبتة على فرشة ودعامات خرسانة عادية مع كحلة اللحامات بمونة أسمنتية والدهان بلونين متتاليين.",
+            "item_16": "بالمتر المسطح، توريد وعمل عزل مائي للسطح بلفائف ممبرين بيتوميني معدل بالبوليستر (أنسومات) سمك 4 مم مع دهان وجه برايمر بيتوميني ورقبة زجاجة وركوب 10 سم واختبار الغمر بالماء لمدة 48 ساعة.",
+            "item_17": "بالمتر المسطح، توريد وتركيب ألواح عزل حراري من الفوم المبثوق (XPS) عالي الكثافة سمك 5 سم كثافة 35 كجم/م³ بنظام التراكب (Shiplap) لحماية الأسطح من الإشعاع الحراري طبقاً لكود العزل الحراري.",
+            "item_18": "بالمتر المسطح، توريد وتركيب بلاط أسطح أسمنتي سنجابي أو موزاييك مقاس معتمد فوق فرشة رمل تسوية ومونة أسمنتية مع عمل فواصل تمدد كل 20 م² وسقية الفواصل بلباني الأسمنت ومراعاة ميول صرف الأمطار.",
+            "item_19": "بالمتر المسطح، توريد وتركيب شبابيك ألوميتال للواجهات والمساقط قطاع معتمد (جامبو/بي اس أو ما يماثله) وزجاج دبل مع الإكسسوارات وسلك مانع للحشرات والمقابض والتثبيت الهندسي طبقاً لأبعاد الرسم والمواصفات.",
+            "item_20": "بالعدد، توريد وتركيب أبواب حمامات الوحدة (عرض 80 سم أو أقل) تشمل الحلوق والضلف المقاومة للرطوبة والمياه والمفصلات والكوالين والشناكل والمقابض ودهان الحلق والتثبيت الهندسي التام طبقاً لأصول الصناعة.",
+            "item_21": "Supply and fix hollow core wooden door consists of Moski wood framed and sections claded with 4 MM. Play wood the accessories are lock and handles from El Ah ram product and the price includes three costs of lacquer paint",
+            "total_cost": "إجمالي تكلفة جميع بنود التشطيبات والمباني والمحارة والدروة والأرصفة والعزل شامل معامل الزيادة",
+            "item_22": "Hagar FEROOOOONy bbdbbb bdfbd fjk hjh  jhjhh gjh hjhjhg hj hjfhg hjhjhg hjgh h  hjfh hjh hjhjdhjh hhj hjh hjhjh jhj hjhjhg hjfdh hjdfh hjh gjhh fhjhg fhgh  jhfh hjhg jhg hjhd hfj hfjhjh تاايتاتابتيالتالتا تلابتال تاتلاالتا لاتاتاتالتااتا",
+            "item_23": "بالمتر المسطح / الوحدة،صاجججججججججججججججججججججججججججججججج.",
+            "item_24": "FALSE ttrrr ghdghfgd fhg hdgfhgh hgh hghgfhs ghfgjh sgfhgfh ghjgg"
+          },
+          "plaster_qty_factor": 1.2,
+          "manual_boq_items": [
+            {
+              "uid": "eab9c135",
+              "name": "تكسية واجهات وحوائط خارجية بالحجر الفرعوني / الهاشمي",
+              "unit": "م² (m²)",
+              "net_qty": 30.0,
+              "unit_price": 1.0,
+              "mat_category": "stone_cladding",
+              "description": "Hagar FEROOOOONy bbdbbb bdfbd fjk hjh  jhjhh gjh hjhjhg hj hjfhg hjhjhg hjgh h  hjfh hjh hjhjdhjh hhj hjh hjhjh jhj hjhjhg hjfdh hjdfh hjh gjhh fhjhg fhgh  jhfh hjhg jhg hjhd hfj hfjhjh تاايتاتابتيالتالتا تلابتال تاتلاالتا لاتاتاتالتااتا"
+            },
+            {
+              "uid": "59bc5cb6",
+              "name": "صاج اسططططططططح صاج",
+              "unit": "م² (m²)",
+              "net_qty": 50.0,
+              "unit_price": 5000.0,
+              "mat_category": "supply_install",
+              "description": "بالمتر المسطح / الوحدة،صاجججججججججججججججججججججججججججججججج."
+            },
+            {
+              "uid": "39c70272",
+              "name": "try item1 - FALSE",
+              "unit": "م² (m²)",
+              "net_qty": 700.0,
+              "unit_price": 600.0,
+              "mat_category": "supply_install",
+              "description": "FALSE ttrrr ghdghfgd fhg hdgfhgh hgh hghgfhs ghfgjh sgfhgfh ghjgg"
+            }
+          ]
+        },
+        "fs_drop_beams": [],
+        "nav_view": "profile_manager",
+        "enabled_modules": [
+          14
         ],
         "deleted_modules_trash": {}
       }
