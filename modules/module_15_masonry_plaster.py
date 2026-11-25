@@ -12614,7 +12614,7 @@ def _build_full_takeoff_excel_bytes(
     actual_grand = grand_total_cost if grand_total_cost > 0 else calc_total_cost
     total_desc = live_descriptions.get(
         "total_cost",
-        f"إجمالي تكلفة جميع بنود التشطيبات والمباني والمحارة والدروة والأرصفة والعزل شامل معامل الزيادة ({plaster_qty_factor:.2f})"
+        f"إجمالي تكلفة جميع بنود التشطيبات شامل معامل الزيادة ({plaster_qty_factor:.2f})"
     )
     ws.append(["", total_desc, "ج.م (EGP)", "—", "—", actual_grand, "💰 إجمالي التكلفة لجميع البنود (Grand Total Cost)"])
 
@@ -12630,16 +12630,177 @@ def _render_presets_library_manager(presets: list):
     """
     قسم منفصل مطوي: إدارة وتخصيص مكتبة القوالب الجاهزة لجميع المشاريع (إضافة / تعديل / حذف)
     """
+    _keep_plib_open = bool(st.session_state.pop("_m15_keep_plib_expander_open", False))
+    if _keep_plib_open:
+        st.session_state["m15_presets_lib_expander"] = True
     with st.expander(
         f"⚙️ 📚 إدارة وتخصيص مكتبة القوالب الجاهزة ({len(presets)} قالب متاح لجميع المشاريع)",
-        expanded=False,
+        expanded=_keep_plib_open,
+        key="m15_presets_lib_expander",
     ):
         st.markdown('<div class="m15-preset-library-marker" style="display:none;"></div>', unsafe_allow_html=True)
-        tab_add_p, tab_edit_p, tab_del_p = st.tabs([
-            "➕ إضافة قالب جديد للمكتبة",
-            "✏️ تعديل القالب الحالي",
-            "🗑️ حذف قالب من المكتبة",
-        ])
+        if st.session_state.pop("_m15_show_plib_saved_msg", False):
+            st.markdown(
+                """
+                <style>
+                @keyframes m15PlibCenterToast3s {
+                    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.92); visibility: visible; }
+                    8%   { opacity: 1; transform: translate(-50%, -50%) scale(1.0);  visibility: visible; }
+                    86%  { opacity: 1; transform: translate(-50%, -50%) scale(1.0);  visibility: visible; }
+                    100% { opacity: 0; transform: translate(-50%, -50%) scale(0.95); visibility: hidden; }
+                }
+                .m15-plib-center-toast-3s {
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    z-index: 999999;
+                    pointer-events: none;
+                    background: linear-gradient(135deg, rgba(6, 78, 59, 0.97) 0%, rgba(16, 185, 129, 0.95) 50%, rgba(4, 120, 87, 0.97) 100%);
+                    border: 3px solid #34d399;
+                    border-radius: 16px;
+                    padding: 24px 48px;
+                    text-align: center;
+                    color: #ffffff;
+                    font-size: 1.85rem;
+                    font-weight: 900;
+                    white-space: nowrap;
+                    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.65), 0 0 32px rgba(16, 185, 129, 0.60);
+                    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
+                    animation: m15PlibCenterToast3s 3.2s ease-in-out forwards;
+                }
+                </style>
+                <div dir="rtl" class="m15-plib-center-toast-3s">
+                    ✅ تم حفظ البند في مكتبة البنود
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        if st.session_state.pop("_m15_show_plib_cancel_msg", False):
+            st.markdown(
+                """
+                <style>
+                @keyframes m15PlibCancelToast2s {
+                    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.92); visibility: visible; }
+                    10%  { opacity: 1; transform: translate(-50%, -50%) scale(1.0);  visibility: visible; }
+                    82%  { opacity: 1; transform: translate(-50%, -50%) scale(1.0);  visibility: visible; }
+                    100% { opacity: 0; transform: translate(-50%, -50%) scale(0.95); visibility: hidden; }
+                }
+                .m15-plib-cancel-toast-2s {
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    z-index: 999999;
+                    pointer-events: none;
+                    background: linear-gradient(135deg, rgba(154, 52, 18, 0.97) 0%, rgba(234, 88, 12, 0.95) 50%, rgba(154, 52, 18, 0.97) 100%);
+                    border: 3px solid #fb923c;
+                    border-radius: 16px;
+                    padding: 24px 48px;
+                    text-align: center;
+                    color: #ffffff;
+                    font-size: 1.85rem;
+                    font-weight: 900;
+                    white-space: nowrap;
+                    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.65), 0 0 32px rgba(234, 88, 12, 0.60);
+                    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
+                    animation: m15PlibCancelToast2s 2.2s ease-in-out forwards;
+                }
+                </style>
+                <div dir="rtl" class="m15-plib-cancel-toast-2s">
+                    ⚠️ لم يتم حفظ التغييرات
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        _plib_target_tab = st.session_state.pop("_m15_plib_target_tab", None)
+        if _plib_target_tab:
+            st.session_state["m15_plib_active_tab"] = _plib_target_tab
+        tab_list_p, tab_add_p, tab_edit_p, tab_del_p = st.tabs(
+            [
+                "قائمة القوالب الاضافية المتاحة",
+                "➕ إضافة قالب جديد للمكتبة",
+                "✏️ تعديل القالب الحالي",
+                "🗑️ حذف قالب من المكتبة",
+            ],
+            key="m15_plib_active_tab",
+        )
+
+        # ── Tab 0: قائمة القوالب الاضافية المتاحة ──
+        with tab_list_p:
+            import html as _html_p_mod
+            _saved_presets = [p for p in presets if str(p.get("name", "") or "").strip()]
+            if not _saved_presets:
+                st.info("ℹ️ لا توجد قوالب محفوظة في مكتبة القوالب حالياً.")
+            else:
+                _preset_rows_html = []
+                for p_idx, p_item in enumerate(_saved_presets, start=1):
+                    p_label_raw = str(p_item.get("label", "") or "").strip() or str(p_item.get("name", "") or "").strip()
+                    p_unit_raw = str(p_item.get("unit", "") or "").strip()
+                    try:
+                        p_price_val = float(p_item.get("unit_price", 0.0) or 0.0)
+                    except (TypeError, ValueError):
+                        p_price_val = 0.0
+                    p_desc_raw = str(p_item.get("description", "") or "").strip() or "—"
+
+                    p_label_esc = _html_p_mod.escape(p_label_raw)
+                    p_unit_esc = _html_p_mod.escape(p_unit_raw)
+                    p_price_esc = f"{p_price_val:,.2f}"
+                    p_desc_esc = _html_p_mod.escape(p_desc_raw)
+                    row_bg = "rgba(15, 23, 42, 0.92)" if p_idx % 2 == 1 else "rgba(30, 41, 59, 0.80)"
+
+                    # تحديد اتجاه ومحاذاة عمود توصيف البند تلقائياً (RTL للعربية / LTR للإنجليزية)
+                    _desc_dir = "rtl"
+                    _desc_align = "right"
+                    for _ch in p_desc_raw:
+                        if ("\u0600" <= _ch <= "\u06FF") or ("\u0750" <= _ch <= "\u077F") or ("\u08A0" <= _ch <= "\u08FF"):
+                            _desc_dir = "rtl"
+                            _desc_align = "right"
+                            break
+                        if ("a" <= _ch <= "z") or ("A" <= _ch <= "Z"):
+                            _desc_dir = "ltr"
+                            _desc_align = "left"
+                            break
+
+                    _preset_rows_html.append(
+                        f'<tr class="m15-plib-row" style="background:{row_bg};">'
+                        f'<td class="m15-plib-td m15-plib-name"><span class="m15-plib-seq">{p_idx} -</span> <span dir="auto">{p_label_esc}</span></td>'
+                        f'<td class="m15-plib-td m15-plib-center m15-plib-unit">{p_unit_esc}</td>'
+                        f'<td class="m15-plib-td m15-plib-center m15-plib-price" dir="ltr">{p_price_esc}</td>'
+                        f'<td class="m15-plib-td m15-plib-desc" dir="{_desc_dir}" style="text-align:{_desc_align};">{p_desc_esc}</td>'
+                        f'</tr>'
+                    )
+
+                _preset_table_html = (
+                    "<style>"
+                    ".m15-plib-wrap{width:100%;border:2px solid #ea580c;border-radius:10px;overflow:hidden;background:#0f172a;box-shadow:0 6px 20px rgba(0,0,0,0.35);margin-top:6px;margin-bottom:10px;direction:rtl;}"
+                    "table.m15-plib-table{width:100%;border-collapse:collapse;table-layout:fixed;direction:rtl;font-family:'Segoe UI','Cairo',Tahoma,sans-serif;}"
+                    "table.m15-plib-table thead th{padding:10px 8px;text-align:center;font-size:1.02rem;font-weight:900;border-bottom:2px solid #ea580c;border-left:1.5px solid rgba(251,146,60,0.45);}"
+                    "table.m15-plib-table thead th.m15-plib-th-orange{background:linear-gradient(180deg,rgba(234,88,12,0.42) 0%,rgba(194,65,12,0.26) 100%);color:#fb923c;text-shadow:0 1px 2px #000000;}"
+                    "table.m15-plib-table thead th.m15-plib-th-blue{background:linear-gradient(180deg,rgba(2,132,199,0.48) 0%,rgba(14,165,233,0.26) 100%);color:#38bdf8;border-left:none;border-bottom:2px solid #38bdf8;text-shadow:0 1px 2px #000000;}"
+                    "tr.m15-plib-row:hover{background:rgba(51,65,85,0.72) !important;}"
+                    "td.m15-plib-td{padding:9px 10px;vertical-align:middle;border-bottom:1px solid rgba(148,163,184,0.20);border-left:1px solid rgba(148,163,184,0.18);word-wrap:break-word;overflow-wrap:break-word;}"
+                    "td.m15-plib-td:last-child{border-left:none;}"
+                    "td.m15-plib-name{text-align:right;font-size:0.98rem;font-weight:800;color:#f8fafc;line-height:1.45;}"
+                    ".m15-plib-seq{color:#fb923c;font-weight:900;margin-left:4px;}"
+                    "td.m15-plib-center{text-align:center;}"
+                    "td.m15-plib-unit{font-size:0.96rem;font-weight:700;color:#e2e8f0;}"
+                    "td.m15-plib-price{font-size:1.00rem;font-weight:900;color:#fbbf24;}"
+                    "td.m15-plib-desc{text-align:right;font-size:0.95rem;font-weight:600;color:#f1f5f9;line-height:1.55;}"
+                    "</style>"
+                    '<div class="m15-plib-wrap" dir="rtl">'
+                    '<table class="m15-plib-table" dir="rtl">'
+                    '<colgroup><col style="width:26%;"><col style="width:11%;"><col style="width:15%;"><col style="width:48%;"></colgroup>'
+                    '<thead><tr>'
+                    '<th class="m15-plib-th-orange">القالب</th>'
+                    '<th class="m15-plib-th-orange">الوحدة</th>'
+                    '<th class="m15-plib-th-orange">💵 السعر الاسترشادي (ج.م)</th>'
+                    '<th class="m15-plib-th-blue">توصيف البند</th>'
+                    '</tr></thead>'
+                    f'<tbody>{"".join(_preset_rows_html)}</tbody>'
+                    '</table></div>'
+                )
+                st.markdown(_preset_table_html, unsafe_allow_html=True)
 
         # ── Tab 1: إضافة قالب جديد ──
         with tab_add_p:
@@ -12649,13 +12810,23 @@ def _render_presets_library_manager(presets: list):
                 </div>""",
                 unsafe_allow_html=True,
             )
-            if st.session_state.pop("_m15_fill_add_preset", False):
+            if st.session_state.pop("_m15_reset_add_preset_fields", False):
+                st.session_state["m15_add_preset_name"] = ""
+                st.session_state["m15_add_preset_unit"] = None
+                st.session_state["m15_add_preset_price"] = None
+                st.session_state["m15_add_preset_desc"] = ""
+            elif st.session_state.pop("_m15_fill_add_preset", False):
                 cur_n = str(st.session_state.get("m15_man_new_name", "")).strip()
                 if cur_n:
                     st.session_state["m15_add_preset_name"] = cur_n
-                    st.session_state["m15_add_preset_unit"] = st.session_state.get("m15_man_new_unit", MANUAL_BOQ_UNIT_OPTIONS[0])
-                    st.session_state["m15_add_preset_price"] = float(st.session_state.get("m15_man_new_price", 500.0))
+                    st.session_state["m15_add_preset_unit"] = st.session_state.get("m15_man_new_unit") or MANUAL_BOQ_UNIT_OPTIONS[0]
+                    st.session_state["m15_add_preset_price"] = float(st.session_state.get("m15_man_new_price") or 500.0)
                     st.session_state["m15_add_preset_desc"] = str(st.session_state.get("m15_man_new_desc", "")).strip() or cur_n
+
+            if "m15_add_preset_unit" not in st.session_state:
+                st.session_state["m15_add_preset_unit"] = MANUAL_BOQ_UNIT_OPTIONS[0]
+            if "m15_add_preset_price" not in st.session_state:
+                st.session_state["m15_add_preset_price"] = 500.0
 
             c_ad1, c_ad2, c_ad3 = st.columns([2.2, 1.1, 1.1])
             with c_ad1:
@@ -12668,6 +12839,8 @@ def _render_presets_library_manager(presets: list):
                 new_p_unit = st.selectbox(
                     "📏 وحدة القياس:",
                     options=MANUAL_BOQ_UNIT_OPTIONS,
+                    index=None,
+                    placeholder="اختر الوحدة...",
                     key="m15_add_preset_unit",
                 )
             with c_ad3:
@@ -12675,9 +12848,9 @@ def _render_presets_library_manager(presets: list):
                     "💵 السعر الاسترشادي (ج.م):",
                     min_value=0.0,
                     max_value=1000000.0,
-                    value=500.0,
                     step=10.0,
                     format="%.2f",
+                    placeholder="0.00",
                     key="m15_add_preset_price",
                 )
             new_p_desc = st.text_area(
@@ -12702,29 +12875,125 @@ def _render_presets_library_manager(presets: list):
                 )
                 if btn_fill_from_cur:
                     st.session_state["_m15_fill_add_preset"] = True
+                    st.session_state["_m15_keep_plib_expander_open"] = True
+                    st.session_state["_m15_plib_target_tab"] = "➕ إضافة قالب جديد للمكتبة"
                     st.rerun()
 
             if btn_save_new_p:
                 clean_pname = str(new_p_name or "").strip()
-                if not clean_pname:
-                    st.warning("⚠️ يرجى إدخال اسم البند بالمقايسة.")
+                clean_pdesc = str(new_p_desc or "").strip()
+                _has_missing_p_fields = (
+                    (not clean_pname)
+                    or (not new_p_unit)
+                    or (new_p_price is None or float(new_p_price) <= 0.0)
+                    or (not clean_pdesc)
+                )
+                if _has_missing_p_fields:
+                    st.session_state["_m15_plib_missing_alert"] = True
+                    st.session_state["_m15_plib_play_warn_beep"] = True
+                    st.session_state["_m15_keep_plib_expander_open"] = True
+                    st.session_state["_m15_plib_target_tab"] = "➕ إضافة قالب جديد للمكتبة"
                 elif clean_pname in [p.get("label", "") for p in presets] or clean_pname in [p.get("name", "") for p in presets]:
+                    st.session_state["_m15_plib_missing_alert"] = False
                     st.warning(f"⚠️ يوجد قالب آخر مسجل بنفس الاسم «{clean_pname}»، يرجى اختيار اسم مميز.")
                 else:
+                    st.session_state["_m15_plib_missing_alert"] = False
                     new_p_entry = {
                         "label": clean_pname,
                         "name": clean_pname,
-                        "unit": str(new_p_unit),
-                        "unit_price": round(float(new_p_price), 2),
+                        "unit": str(new_p_unit or MANUAL_BOQ_UNIT_OPTIONS[0]),
+                        "unit_price": round(float(new_p_price or 0.0), 2),
                         "mat_category": "supply_install",
-                        "description": str(new_p_desc or "").strip() or clean_pname,
+                        "description": clean_pdesc,
                     }
                     presets.append(new_p_entry)
                     _save_manual_boq_presets_list(presets)
                     st.session_state["m15_man_preset_sel"] = clean_pname
                     st.session_state["_m15_last_manual_preset"] = None
-                    st.toast(f"✨ تم إضافة القالب «{clean_pname}» بنجاح للمكتبة العامة لجميع المشاريع!", icon="🎉")
+                    st.session_state["_m15_reset_add_preset_fields"] = True
+                    st.session_state["_m15_keep_plib_expander_open"] = True
+                    st.session_state["_m15_plib_target_tab"] = "➕ إضافة قالب جديد للمكتبة"
+                    st.session_state["_m15_show_plib_saved_msg"] = True
                     st.rerun()
+
+            if st.session_state.get("_m15_plib_missing_alert", False):
+                if st.session_state.pop("_m15_plib_play_warn_beep", False):
+                    import time as _t_beep
+                    _beep_ts = int(_t_beep.time() * 1000)
+                    components.html(
+                        f"""
+                        <script>
+                        // beep-{_beep_ts}
+                        (function() {{
+                            try {{
+                                const AudioCtx = window.AudioContext || window.webkitAudioContext || (window.parent && (window.parent.AudioContext || window.parent.webkitAudioContext));
+                                if (!AudioCtx) return;
+                                const ctx = new AudioCtx();
+                                if (ctx.state === 'suspended') ctx.resume();
+                                const now = ctx.currentTime;
+                                [0, 0.22].forEach((offset, idx) => {{
+                                    const osc = ctx.createOscillator();
+                                    const gain = ctx.createGain();
+                                    osc.type = 'sawtooth';
+                                    osc.frequency.setValueAtTime(idx === 0 ? 880 : 660, now + offset);
+                                    gain.gain.setValueAtTime(0.001, now + offset);
+                                    gain.gain.exponentialRampToValueAtTime(0.28, now + offset + 0.02);
+                                    gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.18);
+                                    osc.connect(gain);
+                                    gain.connect(ctx.destination);
+                                    osc.start(now + offset);
+                                    osc.stop(now + offset + 0.19);
+                                }});
+                            }} catch (e) {{}}
+                        }})();
+                        </script>
+                        """,
+                        height=0,
+                        width=0,
+                    )
+                st.markdown(
+                    """
+                    <div dir="rtl" style="
+                        width: 100%;
+                        background: linear-gradient(90deg, rgba(153, 27, 27, 0.94) 0%, rgba(220, 38, 38, 0.88) 50%, rgba(153, 27, 27, 0.94) 100%);
+                        border: 2.5px solid #f87171;
+                        border-radius: 12px;
+                        padding: 14px 20px;
+                        margin: 10px 0 8px 0;
+                        text-align: center;
+                        color: #ffffff;
+                        font-size: 1.30rem;
+                        font-weight: 900;
+                        box-shadow: 0 6px 20px rgba(220, 38, 38, 0.45);
+                    ">
+                        ⚠️ برجاء ملئ جميع خانات المدخلات
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                c_warn_1, c_warn_2 = st.columns([1, 1])
+                with c_warn_1:
+                    if st.button(
+                        "استكمال المدخلات",
+                        key="m15_plib_warn_continue_btn",
+                        type="primary",
+                        use_container_width=True,
+                    ):
+                        st.session_state["_m15_plib_missing_alert"] = False
+                        st.session_state["_m15_keep_plib_expander_open"] = True
+                        st.session_state["_m15_plib_target_tab"] = "➕ إضافة قالب جديد للمكتبة"
+                        st.rerun()
+                with c_warn_2:
+                    if st.button(
+                        "الغاء القالب",
+                        key="m15_plib_warn_cancel_btn",
+                        use_container_width=True,
+                    ):
+                        st.session_state["_m15_plib_missing_alert"] = False
+                        st.session_state["_m15_reset_add_preset_fields"] = True
+                        st.session_state["_m15_keep_plib_expander_open"] = True
+                        st.session_state["_m15_plib_target_tab"] = "➕ إضافة قالب جديد للمكتبة"
+                        st.rerun()
 
         # ── Tab 2: تعديل القالب الحالي ──
         with tab_edit_p:
@@ -12757,11 +13026,16 @@ def _render_presets_library_manager(presets: list):
                 target_preset = next((p for p in editable_presets if p["label"] == selected_edit_lbl), None)
                 if target_preset:
                     ed_prefix = f"m15_ed_{target_preset['label']}"
-                    if st.session_state.pop(f"_m15_sync_edit_{target_preset['label']}", False):
-                        st.session_state[f"{ed_prefix}_name"] = st.session_state.get("m15_man_new_name", target_preset.get("name", ""))
-                        st.session_state[f"{ed_prefix}_unit"] = st.session_state.get("m15_man_new_unit", target_preset.get("unit", ""))
-                        st.session_state[f"{ed_prefix}_price"] = float(st.session_state.get("m15_man_new_price", target_preset.get("unit_price", 0.0)))
-                        st.session_state[f"{ed_prefix}_desc"] = st.session_state.get("m15_man_new_desc", target_preset.get("description", ""))
+                    if st.session_state.pop(f"_m15_cancel_edit_{target_preset['label']}", False):
+                        _orig_u = target_preset.get("unit", MANUAL_BOQ_UNIT_OPTIONS[0])
+                        if _orig_u in ["م.ط (m)", "متر طولي m", "م.ط", "متر طولي (m)"]:
+                            _orig_u = "متر طولي L.M"
+                        if _orig_u not in MANUAL_BOQ_UNIT_OPTIONS:
+                            _orig_u = MANUAL_BOQ_UNIT_OPTIONS[0]
+                        st.session_state[f"{ed_prefix}_name"] = target_preset.get("name", target_preset.get("label", ""))
+                        st.session_state[f"{ed_prefix}_unit"] = _orig_u
+                        st.session_state[f"{ed_prefix}_price"] = float(target_preset.get("unit_price", 0.0))
+                        st.session_state[f"{ed_prefix}_desc"] = target_preset.get("description", "")
 
                     c_ed1, c_ed2, c_ed3 = st.columns([2.2, 1.1, 1.1])
                     with c_ed1:
@@ -12808,13 +13082,16 @@ def _render_presets_library_manager(presets: list):
                             use_container_width=True,
                         )
                     with c_ed_b2:
-                        btn_sync_from_inp = st.button(
-                            "🔄 نسخ القيم الحالية من خانات البند الرئيسية",
-                            key=f"{ed_prefix}_btn_sync",
+                        btn_cancel_ed = st.button(
+                            "الغاء التغيير",
+                            key=f"{ed_prefix}_btn_cancel",
                             use_container_width=True,
                         )
-                        if btn_sync_from_inp:
-                            st.session_state[f"_m15_sync_edit_{target_preset['label']}"] = True
+                        if btn_cancel_ed:
+                            st.session_state[f"_m15_cancel_edit_{target_preset['label']}"] = True
+                            st.session_state["_m15_keep_plib_expander_open"] = True
+                            st.session_state["_m15_plib_target_tab"] = "✏️ تعديل القالب الحالي"
+                            st.session_state["_m15_show_plib_cancel_msg"] = True
                             st.rerun()
 
                     if btn_save_ed:
@@ -13028,16 +13305,15 @@ def _render_manual_boq_items_manager():
     presets = _get_manual_boq_presets_list()
 
     # ═════════════════════════════════════════════════════════════════════════
-    #  أولاً: قسم إدارة وتخصيص مكتبة القوالب الجاهزة (مفصول تماماً ومطوي للأعلى)
+    #  قسم إضافة وإدارة بنود الحصر اليدوية الإضافية (مفصول تماماً ومطوي للأسفل)
     # ═════════════════════════════════════════════════════════════════════════
-    _render_presets_library_manager(presets)
-
-    # ═════════════════════════════════════════════════════════════════════════
-    #  ثانياً: قسم إضافة وإدارة بنود الحصر اليدوية الإضافية (مفصول تماماً ومطوي للأسفل)
-    # ═════════════════════════════════════════════════════════════════════════
+    _keep_man_open = bool(st.session_state.pop("_m15_keep_manual_expander_open", False))
+    if _keep_man_open:
+        st.session_state["m15_manual_boq_expander"] = True
     with st.expander(
         "➕ إضافة وإدارة بنود الحصر اليدوية الإضافية (رخام سلالم، حجر فرعوني، وبنود أخرى)",
-        expanded=False,
+        expanded=_keep_man_open,
+        key="m15_manual_boq_expander",
     ):
         # اختيار القالب الجاهز أو البند الحر من المكتبة العامة لجميع المشاريع
         preset_labels = [p["label"] for p in presets]
@@ -13063,11 +13339,19 @@ def _render_manual_boq_items_manager():
                 st.session_state["m15_man_new_qty"] = 0.0
 
         # التحقق من سلامة المفاتيح بالـ session_state قبل عرض الحقول
-        if st.session_state.pop("_m15_reset_man_new_qty", False):
+        if st.session_state.pop("_m15_reset_man_new_fields", False):
+            st.session_state["m15_man_new_name"] = ""
+            st.session_state["m15_man_new_unit"] = None
+            st.session_state["m15_man_new_qty"] = None
+            st.session_state["m15_man_new_price"] = None
+            st.session_state["m15_man_new_desc"] = ""
+        elif st.session_state.pop("_m15_reset_man_new_qty", False):
             st.session_state["m15_man_new_qty"] = 0.0
         if "m15_man_new_name" not in st.session_state:
             st.session_state["m15_man_new_name"] = sel_preset["name"]
-        if st.session_state.get("m15_man_new_unit") not in MANUAL_BOQ_UNIT_OPTIONS:
+        if "m15_man_new_unit" not in st.session_state:
+            st.session_state["m15_man_new_unit"] = sel_preset["unit"]
+        elif st.session_state.get("m15_man_new_unit") is not None and st.session_state.get("m15_man_new_unit") not in MANUAL_BOQ_UNIT_OPTIONS:
             st.session_state["m15_man_new_unit"] = sel_preset["unit"]
         if "m15_man_new_qty" not in st.session_state:
             st.session_state["m15_man_new_qty"] = 0.0
@@ -13087,6 +13371,8 @@ def _render_manual_boq_items_manager():
             in_unit = st.selectbox(
                 "📏 الوحدة (Unit):",
                 options=MANUAL_BOQ_UNIT_OPTIONS,
+                index=None,
+                placeholder="اختر الوحدة...",
                 key="m15_man_new_unit",
             )
         with c_m3:
@@ -13096,6 +13382,7 @@ def _render_manual_boq_items_manager():
                 max_value=1000000.0,
                 step=1.0,
                 format="%.2f",
+                placeholder="0.00",
                 key="m15_man_new_qty",
                 help="الكمية الصافية قبل الضرب في معامل الزيادة العام بالجدول",
             )
@@ -13106,6 +13393,7 @@ def _render_manual_boq_items_manager():
                 max_value=1000000.0,
                 step=10.0,
                 format="%.2f",
+                placeholder="0.00",
                 key="m15_man_new_price",
             )
 
@@ -13117,16 +13405,19 @@ def _render_manual_boq_items_manager():
         )
 
         # معاينة فورية لمعادلة معامل الزيادة قبل الإضافة
-        prev_tot_q = round(float(in_qty) * cur_factor, 2)
-        prev_tot_cost = round(prev_tot_q * float(in_price), 2)
+        _eff_in_qty = float(in_qty or 0.0)
+        _eff_in_price = float(in_price or 0.0)
+        _eff_in_unit = str(in_unit or "")
+        prev_tot_q = round(_eff_in_qty * cur_factor, 2)
+        prev_tot_cost = round(prev_tot_q * _eff_in_price, 2)
         st.markdown(
             f"""
             <div dir="rtl" style="background:rgba(88, 28, 135, 0.25); border:1.5px solid #a855f7; border-radius:8px; padding:10px 16px; margin:6px 0 12px 0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                 <div style="color:#e9d5ff; font-weight:800; font-size:1.05rem;">
                     ⚡ <b>معاينة تطبيق معامل الزيادة على البند:</b>
-                    الكمية الصافية (<span dir="ltr" style="color:#fef08a;">{float(in_qty):,.2f}</span>)
+                    الكمية الصافية (<span dir="ltr" style="color:#fef08a;">{_eff_in_qty:,.2f}</span>)
                     × معامل الزيادة (<span dir="ltr" style="color:#c084fc;">{cur_factor:.2f}</span>)
-                    = <b style="color:#4ade80;">الكمية الإجمالية المعتمدة بالجدول: <span dir="ltr">{prev_tot_q:,.2f}</span> {_html_mod.escape(in_unit)}</b>
+                    = <b style="color:#4ade80;">الكمية الإجمالية المعتمدة بالجدول: <span dir="ltr">{prev_tot_q:,.2f}</span> {_html_mod.escape(_eff_in_unit)}</b>
                 </div>
                 <div style="background:rgba(16,185,129,0.22); border:1px solid #10b981; border-radius:6px; padding:4px 14px; color:#34d399; font-weight:900; font-size:1.08rem;">
                     💰 التكلفة المتوقعة: <span dir="ltr">{prev_tot_cost:,.2f}</span> ج.م
@@ -13164,8 +13455,8 @@ def _render_manual_boq_items_manager():
                     new_q_p = {
                         "label": q_lbl,
                         "name": clean_q_name,
-                        "unit": str(in_unit),
-                        "unit_price": round(float(in_price), 2),
+                        "unit": str(in_unit or MANUAL_BOQ_UNIT_OPTIONS[0]),
+                        "unit_price": round(_eff_in_price, 2),
                         "mat_category": str(sel_preset.get("mat_category", "supply_install")),
                         "description": str(in_desc or "").strip() or clean_q_name,
                     }
@@ -13176,6 +13467,36 @@ def _render_manual_boq_items_manager():
                     st.toast(f"💾 تم حفظ «{clean_q_name}» كقالب جديد في المكتبة العامة لجميع المشاريع بنجاح!", icon="🎉")
                     st.rerun()
 
+        if st.session_state.pop("_m15_show_man_saved_msg", False):
+            st.toast("✅ تم حفظ البند في مكتبة البنود", icon="✅")
+            st.markdown(
+                """
+                <style>
+                @keyframes m15SavedBanner3s {
+                    0%   { opacity: 1; max-height: 90px; margin: 10px 0; padding: 12px 18px; border-width: 2px; }
+                    82%  { opacity: 1; max-height: 90px; margin: 10px 0; padding: 12px 18px; border-width: 2px; }
+                    100% { opacity: 0; max-height: 0px;  margin: 0;      padding: 0;         border-width: 0px; overflow: hidden; }
+                }
+                .m15-saved-banner-3s {
+                    width: 100%;
+                    background: linear-gradient(90deg, rgba(6, 78, 59, 0.94) 0%, rgba(16, 185, 129, 0.88) 50%, rgba(6, 78, 59, 0.94) 100%);
+                    border: 2px solid #34d399;
+                    border-radius: 10px;
+                    text-align: center;
+                    color: #ffffff;
+                    font-size: 1.15rem;
+                    font-weight: 900;
+                    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.40);
+                    animation: m15SavedBanner3s 3.3s ease-in-out forwards;
+                }
+                </style>
+                <div dir="rtl" class="m15-saved-banner-3s">
+                    ✅ تم حفظ البند في مكتبة البنود
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
         if add_clicked:
             clean_in_name = str(in_name or "").strip()
             if not clean_in_name:
@@ -13185,15 +13506,17 @@ def _render_manual_boq_items_manager():
                 new_entry = {
                     "uid": new_uid,
                     "name": clean_in_name,
-                    "unit": str(in_unit),
-                    "net_qty": round(float(in_qty), 2),
-                    "unit_price": round(float(in_price), 2),
+                    "unit": str(in_unit or MANUAL_BOQ_UNIT_OPTIONS[0]),
+                    "net_qty": round(_eff_in_qty, 2),
+                    "unit_price": round(_eff_in_price, 2),
                     "mat_category": str(sel_preset.get("mat_category", "supply_install")),
                     "description": str(in_desc or "").strip() or clean_in_name,
                 }
                 manual_items.append(new_entry)
                 _persist_manual_boq_items(manual_items)
-                st.session_state["_m15_reset_man_new_qty"] = True
+                st.session_state["_m15_reset_man_new_fields"] = True
+                st.session_state["_m15_keep_manual_expander_open"] = True
+                st.session_state["_m15_show_man_saved_msg"] = True
                 st.rerun()
 
         # ═════════════════════════════════════════════════════════════════════
@@ -13976,10 +14299,24 @@ def _render_manual_boq_items_manager():
     cursor: row-resize !important;
     user-select: none !important;
   }}
+  .man-top-notice {{
+    width: 100%;
+    text-align: center;
+    color: #ffffff;
+    font-size: 1.25rem;
+    font-weight: 900;
+    line-height: 1.3;
+    letter-spacing: 0.01em;
+    margin: 0 0 8px 0;
+    padding: 0;
+  }}
 </style>
 </head>
 <body>
 <div id="man-root-container" dir="rtl">
+    <div class="man-top-notice">
+        هذه البنود المدخلة يدويا سيتم اضافتها الي التالي النهائي المجمع للحصر والتكلفة
+    </div>
     <div class="boq-top-banner">
         <div class="boq-top-flex">
             <div class="boq-title-group">
@@ -14598,7 +14935,7 @@ def _render_manual_boq_items_manager():
 </body>
 </html>"""
 
-            _man_iframe_h = 180 + len(manual_items) * 48
+            _man_iframe_h = 220 + len(manual_items) * 48
             components.html(manual_boq_interactive_html, height=_man_iframe_h, scrolling=False)
         else:
             st.markdown(
@@ -15364,6 +15701,7 @@ def _section_plaster_boq():
          qty_room_doors, "عدد (No.)", price_room_doors,
          f"حصر أبواب الغرف والمدخل عرض > 80 سم بالعدد ({qty_room_doors} باب) × {plaster_qty_factor:.2f}"),
     ]
+    _auto_items_count = len(t2_items_data)
     t2_items_data.extend(_get_manual_boq_t2_tuples(plaster_qty_factor=plaster_qty_factor, start_idx=22))
 
     table_2_summary_rows = []
@@ -15430,13 +15768,20 @@ def _section_plaster_boq():
             "tot_cost": f"{tot_cost:,.2f}",
             "desc": saved_d,
             "is_total": False,
+            "is_manual": idx > _auto_items_count,
         })
 
     # صف إجمالي التكلفة في نهاية الجدول
-    if "total_cost" in cur_desc_dict and cur_desc_dict["total_cost"] is not None:
-        saved_total_d = str(cur_desc_dict["total_cost"]).strip()
+    _default_total_d = f"إجمالي تكلفة جميع بنود التشطيبات شامل معامل الزيادة ({plaster_qty_factor:.2f})"
+    _existing_total_d = str(cur_desc_dict.get("total_cost", "") or "").strip() if "total_cost" in cur_desc_dict else ""
+    if (
+        not _existing_total_d
+        or _existing_total_d.startswith("إجمالي تكلفة جميع بنود التشطيبات والمباني والمحارة والدروة والأرصفة والعزل شامل معامل الزيادة")
+        or _existing_total_d.startswith("إجمالي تكلفة جميع بنود التشطيبات شامل معامل الزيادة")
+    ):
+        saved_total_d = _default_total_d
     else:
-        saved_total_d = "إجمالي تكلفة جميع بنود التشطيبات والمباني والمحارة والدروة والأرصفة والعزل شامل معامل الزيادة"
+        saved_total_d = _existing_total_d
     live_descriptions["total_cost"] = saved_total_d
     boq_table_rows_data.append({
         "code": "total_cost",
@@ -15448,6 +15793,7 @@ def _section_plaster_boq():
         "tot_cost": f"{grand_total_cost:,.2f}",
         "desc": saved_total_d,
         "is_total": True,
+        "is_manual": False,
     })
 
     if st.session_state.get("m15_item_descriptions") != live_descriptions:
@@ -15459,7 +15805,18 @@ def _section_plaster_boq():
             st.session_state["module_15_data"]["item_descriptions"] = dict(live_descriptions)
 
     # بناء صفوف HTML للجدول المدمج
-    tbody_rows_html = []
+    tbody_rows_html = [
+        """
+        <tr class="boq-section-banner-row boq-section-auto">
+            <td colspan="6" class="boq-section-banner-td">
+                <div class="boq-section-banner-inner">
+                    حصر وتكلفة جميع البنود التي يقوم البرنامج بحسابها من الرسم بناء علي تعليمات الي الكود
+                </div>
+            </td>
+        </tr>
+        """
+    ]
+    _manual_section_inserted = False
     for r_idx, r_info in enumerate(boq_table_rows_data):
         code_esc = _html_mod.escape(r_info["code"])
         seq_esc = _html_mod.escape(r_info["seq"])
@@ -15470,6 +15827,31 @@ def _section_plaster_boq():
         tcost_esc = _html_mod.escape(r_info["tot_cost"])
         desc_esc = _html_mod.escape(r_info["desc"])
         is_tot = r_info["is_total"]
+        is_manual = r_info.get("is_manual", False)
+
+        # إدراج الخط الفاصل السميك وعنوان البنود اليدوية بعد نهاية البنود المحسوبة من الرسم مباشرة
+        if (not _manual_section_inserted) and (is_manual or is_tot):
+            _manual_section_inserted = True
+            tbody_rows_html.append("""
+            <tr class="boq-section-divider-row">
+                <td colspan="6" class="boq-section-divider-td"></td>
+            </tr>
+            <tr class="boq-section-banner-row boq-section-manual">
+                <td colspan="6" class="boq-section-banner-td">
+                    <div class="boq-section-banner-inner">
+                        حصر وتكلفة جميع البنود التي تم إضافتها يدويا
+                    </div>
+                </td>
+            </tr>
+            """)
+            if is_tot:
+                tbody_rows_html.append("""
+                <tr class="boq-manual-empty-row">
+                    <td colspan="6" class="boq-manual-empty-td">
+                        لا توجد بنود مضافة يدوياً حالياً — يمكنك إضافتها من قسم «➕ إضافة وإدارة بنود الحصر اليدوية الإضافية»
+                    </td>
+                </tr>
+                """)
 
         row_cls = "boq-row boq-total-row" if is_tot else ("boq-row boq-even-row" if r_idx % 2 == 0 else "boq-row boq-odd-row")
         seq_html = (
@@ -15704,6 +16086,61 @@ def _section_plaster_boq():
     line-height: 1.15;
   }}
 
+  /* ── بانيلات عناوين الأقسام الداخلية المدمجة بعرض الجدول بالكامل والخط الفاصل السميك ── */
+  tr.boq-section-banner-row td.boq-section-banner-td {{
+    padding: 0;
+    border-left: none;
+    border-right: none;
+    text-align: center;
+    vertical-align: middle;
+  }}
+  .boq-section-banner-inner {{
+    width: 100%;
+    padding: 7px 14px;
+    font-size: 0.74rem;
+    font-weight: 900;
+    line-height: 1.35;
+    text-align: center;
+    letter-spacing: 0.01em;
+    user-select: text;
+  }}
+  tr.boq-section-auto td.boq-section-banner-td {{
+    background: linear-gradient(90deg, rgba(49, 46, 129, 0.94) 0%, rgba(109, 40, 217, 0.88) 50%, rgba(49, 46, 129, 0.94) 100%);
+    border-bottom: 2px solid #a78bfa;
+  }}
+  tr.boq-section-auto .boq-section-banner-inner {{
+    color: #fde047;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85), 0 0 10px rgba(253, 224, 71, 0.35);
+  }}
+  tr.boq-section-divider-row td.boq-section-divider-td {{
+    height: 7px;
+    padding: 0;
+    line-height: 0;
+    font-size: 0;
+    border: none;
+    background: linear-gradient(90deg, #f59e0b 0%, #f43f5e 35%, #ec4899 65%, #f59e0b 100%);
+    box-shadow: 0 0 12px rgba(244, 63, 94, 0.70);
+  }}
+  tr.boq-section-manual td.boq-section-banner-td {{
+    background: linear-gradient(90deg, rgba(131, 24, 67, 0.94) 0%, rgba(190, 24, 93, 0.88) 50%, rgba(131, 24, 67, 0.94) 100%);
+    border-bottom: 2px solid #f472b6;
+  }}
+  tr.boq-section-manual .boq-section-banner-inner {{
+    color: #fef08a;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85), 0 0 10px rgba(254, 240, 138, 0.35);
+  }}
+  tr.boq-manual-empty-row td.boq-manual-empty-td {{
+    background: rgba(30, 41, 59, 0.60);
+    color: #cbd5e1;
+    font-size: 0.66rem;
+    font-weight: 600;
+    font-style: italic;
+    text-align: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+    border-left: none;
+  }}
+
   /* ── صفوف وخلايا الجدول ── */
   tr.boq-row {{
     transition: background-color 0.12s ease;
@@ -15927,7 +16364,7 @@ def _section_plaster_boq():
     <div class="boq-top-banner">
         <div class="boq-top-flex">
             <div class="boq-title-group">
-                <span class="boq-main-title">📋 جدول ملخص الكميات وتوصيفات البنود (BOQ Takeoff & Descriptions):</span>
+                <span class="boq-main-title">📋 الجدول المجمع للكميات والتكلفة لجميع البنود (BOQ Takeoff & Descriptions):</span>
                 <span class="boq-sub-badge">
                     ترتيب الأعمدة من اليمين إلى اليسار (RTL) • اسحب فواصل الأعمدة (⟷) أو الصفوف (↕) بالماوس للتحكم في العرض والارتفاع
                 </span>
@@ -16475,7 +16912,7 @@ def _section_plaster_boq():
 </body>
 </html>"""
 
-    _boq_iframe_h = 1200 + len(_get_manual_boq_items_list()) * 48
+    _boq_iframe_h = 1300 + len(_get_manual_boq_items_list()) * 48
     components.html(boq_interactive_html, height=_boq_iframe_h, scrolling=False)
 
     # ── زر تصدير جدول الحصر الكامل EXCEL SHEET بتنسيق مميز أحمر وتقليل التباعد ──
@@ -23689,7 +24126,12 @@ def render_masonry_plaster_module():
                 "انقر على عنوان هذا القسم لتوسيعه والبدء فورياً في معالجة البيانات وتحديث وعرض النموذج ثلاثي الأبعاد (3D Rendering)."
             )
     st.divider()
-    with st.expander("جداول الحصر والتكلفة لجميع البنود", expanded=False):
+    _render_presets_library_manager(_get_manual_boq_presets_list())
+    st.divider()
+    _keep_boq_open = bool(st.session_state.get("_m15_keep_manual_expander_open", False))
+    if _keep_boq_open:
+        st.session_state["m15_boq_main_expander"] = True
+    with st.expander("جداول الحصر والتكلفة لجميع البنود", expanded=_keep_boq_open, key="m15_boq_main_expander"):
         _section_plaster_boq()
     st.divider()
     _section_export_pdf()

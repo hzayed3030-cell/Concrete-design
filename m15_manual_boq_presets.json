@@ -8,7 +8,7 @@
     "description": "بالمتر المسطح / الوحدة، توريد وتركيب البند المخصص طبقاً للمواصفات الفنية المعتمدة وأصول الصناعة والرسومات التنفيذية."
   },
   {
-    "label": "🪜 رخام درج السلالم (نائمة وقائمة)",
+    "label": "أعمال رخام وجرانيت درج السلالم (نائمة جرانيت 4 سم + قائمة رخام 2 سم)",
     "name": "أعمال رخام وجرانيت درج السلالم (نائمة جرانيت 4 سم + قائمة رخام 2 سم)",
     "unit": "متر طولي L.M",
     "unit_price": 950.0,
@@ -94,5 +94,69 @@
     "unit_price": 600.0,
     "mat_category": "supply_install",
     "description": "FALSE ttrrr ghdghfgd fhg hdgfhgh hgh hghgfhs ghfgjh sgfhgfh ghjgg"
+  },
+  {
+    "label": "Pharaonic stone cladding for facades",
+    "name": "Pharaonic stone cladding for facades",
+    "unit": "م² (m²)",
+    "unit_price": 500.0,
+    "mat_category": "supply_install",
+    "description": "Supply and fix pharonic stone cladding 4 cm thickness for the building's elevations, the dimensions and arrangement of the brick should be according to client's desire, the item includes the varnish works."
+  },
+  {
+    "label": "SHINGLE TILES (KARMEED)",
+    "name": "SHINGLE TILES (KARMEED)",
+    "unit": "متر طولي L.M",
+    "unit_price": 510.0,
+    "mat_category": "supply_install",
+    "description": "Supply and fix painted KARMEED tiles above the windows and around the parapets."
+  },
+  {
+    "label": "Galvanized steel handrail",
+    "name": "Galvanized steel handrail",
+    "unit": "متر طولي L.M",
+    "unit_price": 650.0,
+    "mat_category": "supply_install",
+    "description": "Supply & fixing 2\" galvanized steel handrail for stair case, the shape should be according to client desire."
+  },
+  {
+    "label": "Hashemi Stone cladding",
+    "name": "Hashemi Stone cladding",
+    "unit": "م² (m²)",
+    "unit_price": 800.0,
+    "mat_category": "supply_install",
+    "description": "Supply and installation of natural Hashemi Stone cladding, price includes scaffolding, type, profile, and finish as per Client’s selection, and execution strictly in accordance with the Technical Specifications"
+  },
+  {
+    "label": "Thermal Brick cladding",
+    "name": "Thermal Brick cladding",
+    "unit": "م² (m²)",
+    "unit_price": 900.0,
+    "mat_category": "supply_install",
+    "description": "Supply and installation thermal Brick cladding for exterior facades, price includes scaffolding, type, profile, and finish as per Client’s selection, and execution strictly in accordance with the Technical Specifications"
+  },
+  {
+    "label": "Cementic tiles 20X20 cm",
+    "name": "Cementic tiles 20X20 cm",
+    "unit": "م² (m²)",
+    "unit_price": 400.0,
+    "mat_category": "supply_install",
+    "description": "Supply and apply cementic tiles 20 cm x 20 cm, above the slope concrete of the roof."
+  },
+  {
+    "label": "Slope concrete for roof",
+    "name": "Slope concrete for roof",
+    "unit": "م² (m²)",
+    "unit_price": 450.0,
+    "mat_category": "supply_install",
+    "description": "Plain concrete under roof tiles with minimum thickness 4 cm and maximum thickness 10 cm, with compression strength of 200 kg/cm2 after 28 days."
+  },
+  {
+    "label": "Aluminum door (1.00 m x 2.20 m)",
+    "name": "Aluminum door (1.00 m x 2.20 m)",
+    "unit": "عدد (No.)",
+    "unit_price": 7000.0,
+    "mat_category": "supply_install",
+    "description": "Supply and installation of single-leaf aluminum door, Big BS section, glazed with 6 mm thick clear transparent glass, dimensions (1.00 m x 2.20 m)"
   }
 ]
