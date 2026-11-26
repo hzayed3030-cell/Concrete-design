@@ -13013,13 +13013,6 @@ def _render_presets_library_manager(presets: list):
                 st.session_state["m15_add_preset_unit"] = None
                 st.session_state["m15_add_preset_price"] = None
                 st.session_state["m15_add_preset_desc"] = ""
-            elif st.session_state.pop("_m15_fill_add_preset", False):
-                cur_n = str(st.session_state.get("m15_man_new_name", "")).strip()
-                if cur_n:
-                    st.session_state["m15_add_preset_name"] = cur_n
-                    st.session_state["m15_add_preset_unit"] = st.session_state.get("m15_man_new_unit") or MANUAL_BOQ_UNIT_OPTIONS[0]
-                    st.session_state["m15_add_preset_price"] = float(st.session_state.get("m15_man_new_price") or 500.0)
-                    st.session_state["m15_add_preset_desc"] = str(st.session_state.get("m15_man_new_desc", "")).strip() or cur_n
 
             if "m15_add_preset_unit" not in st.session_state:
                 st.session_state["m15_add_preset_unit"] = MANUAL_BOQ_UNIT_OPTIONS[0]
@@ -13057,7 +13050,7 @@ def _render_presets_library_manager(presets: list):
                 key="m15_add_preset_desc",
                 placeholder="التوصيف الفني المعتمد والمواصفات وأصول الصناعة...",
             )
-            c_ad_b1, c_ad_b2 = st.columns([1.5, 2.5])
+            c_ad_b1, c_ad_b2 = st.columns([2.8, 1.2], gap="small")
             with c_ad_b1:
                 btn_save_new_p = st.button(
                     "➕ حفظ وإضافة القالب للمكتبة لجميع المشاريع",
@@ -13066,15 +13059,18 @@ def _render_presets_library_manager(presets: list):
                     use_container_width=True,
                 )
             with c_ad_b2:
-                btn_fill_from_cur = st.button(
-                    "📥 نسخ البيانات المكتوبة في الخانات الحالية لتعبئة هذا القالب",
-                    key="m15_btn_fill_from_current",
+                btn_cancel_add_p = st.button(
+                    "❌ إلغاء",
+                    key="m15_btn_cancel_add_preset",
                     use_container_width=True,
+                    help="تفريغ الخانات والتراجع عن إضافة القالب",
                 )
-                if btn_fill_from_cur:
-                    st.session_state["_m15_fill_add_preset"] = True
+                if btn_cancel_add_p:
+                    st.session_state["_m15_reset_add_preset_fields"] = True
+                    st.session_state["_m15_plib_missing_alert"] = False
                     st.session_state["_m15_keep_plib_expander_open"] = True
                     st.session_state["_m15_plib_target_tab"] = "➕ إضافة قالب جديد للمكتبة"
+                    st.session_state["_m15_show_plib_cancel_msg"] = True
                     st.rerun()
 
             if btn_save_new_p:
@@ -13510,7 +13506,7 @@ def _render_manual_boq_items_manager():
     if _keep_man_open:
         st.session_state["m15_manual_boq_expander"] = True
     with st.expander(
-        "➕ إضافة وإدارة بنود الحصر اليدوية الإضافية (رخام سلالم، حجر فرعوني، وبنود أخرى)",
+        "➕ إضافة وإدارة بنود الحصر اليدوية الإضافية",
         expanded=_keep_man_open,
         key="m15_manual_boq_expander",
     ):
@@ -13626,75 +13622,31 @@ def _render_manual_boq_items_manager():
             unsafe_allow_html=True,
         )
 
-        c_btn_add, c_btn_info = st.columns([1.5, 2.1])
-        with c_btn_add:
+        c_add, c_cancel = st.columns([3.2, 1.0], gap="small")
+        with c_add:
             add_clicked = st.button(
                 "➕ إضافة البند إلى جدول حصر وتكلفة جميع البنود",
                 key="m15_man_add_btn",
                 type="primary",
                 use_container_width=True,
             )
-        with c_btn_info:
-            quick_save_preset = st.button(
-                "💾 حفظ هذه المدخلات كقالب جديد في المكتبة العامة",
-                key="m15_quick_save_as_preset",
-                help="يحفظ اسم البند ووحدته وسعره وتوصيفه كقالب جديد في مكتبة القوالب ليكون متاحاً دائماً في كل المشاريع",
+        with c_cancel:
+            cancel_clicked = st.button(
+                "❌ إلغاء",
+                key="m15_man_cancel_btn",
+                type="secondary",
                 use_container_width=True,
+                help="إلغاء المدخلات الحالية والتراجع وتفريغ الخانات",
             )
 
-        if quick_save_preset:
-            clean_q_name = str(in_name or "").strip()
-            if not clean_q_name:
-                st.warning("⚠️ يرجى كتابة اسم البند بالمقايسة أولاً لحفظه كقالب بالمكتبة.")
-            else:
-                q_lbl = f"✨ {clean_q_name}"
-                if q_lbl in [p["label"] for p in presets]:
-                    st.warning(f"⚠️ يوجد قالب مسجل باسم «{q_lbl}» بالمكتبة مسبقاً.")
-                else:
-                    new_q_p = {
-                        "label": q_lbl,
-                        "name": clean_q_name,
-                        "unit": str(in_unit or MANUAL_BOQ_UNIT_OPTIONS[0]),
-                        "unit_price": round(_eff_in_price, 2),
-                        "mat_category": str(sel_preset.get("mat_category", "supply_install")),
-                        "description": str(in_desc or "").strip() or clean_q_name,
-                    }
-                    presets.append(new_q_p)
-                    _save_manual_boq_presets_list(presets)
-                    st.session_state["m15_man_preset_sel"] = q_lbl
-                    st.session_state["_m15_last_manual_preset"] = None
-                    st.toast(f"💾 تم حفظ «{clean_q_name}» كقالب جديد في المكتبة العامة لجميع المشاريع بنجاح!", icon="🎉")
-                    st.rerun()
-
-        if st.session_state.pop("_m15_show_man_saved_msg", False):
-            st.toast("✅ تم حفظ البند في مكتبة البنود", icon="✅")
-            st.markdown(
-                """
-                <style>
-                @keyframes m15SavedBanner3s {
-                    0%   { opacity: 1; max-height: 90px; margin: 10px 0; padding: 12px 18px; border-width: 2px; }
-                    82%  { opacity: 1; max-height: 90px; margin: 10px 0; padding: 12px 18px; border-width: 2px; }
-                    100% { opacity: 0; max-height: 0px;  margin: 0;      padding: 0;         border-width: 0px; overflow: hidden; }
-                }
-                .m15-saved-banner-3s {
-                    width: 100%;
-                    background: linear-gradient(90deg, rgba(6, 78, 59, 0.94) 0%, rgba(16, 185, 129, 0.88) 50%, rgba(6, 78, 59, 0.94) 100%);
-                    border: 2px solid #34d399;
-                    border-radius: 10px;
-                    text-align: center;
-                    color: #ffffff;
-                    font-size: 1.15rem;
-                    font-weight: 900;
-                    box-shadow: 0 4px 16px rgba(16, 185, 129, 0.40);
-                    animation: m15SavedBanner3s 3.3s ease-in-out forwards;
-                }
-                </style>
-                <div dir="rtl" class="m15-saved-banner-3s">
-                    ✅ تم حفظ البند في مكتبة البنود
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+        if cancel_clicked:
+            st.session_state["_m15_reset_man_new_fields"] = True
+            st.session_state["_m15_last_manual_preset"] = None
+            if presets:
+                st.session_state["m15_man_preset_sel"] = presets[0]["label"]
+            st.session_state["_m15_keep_manual_expander_open"] = False
+            st.session_state["m15_manual_boq_expander"] = False
+            st.rerun()
 
         if add_clicked:
             clean_in_name = str(in_name or "").strip()
@@ -13715,7 +13667,9 @@ def _render_manual_boq_items_manager():
                 _persist_manual_boq_items(manual_items)
                 st.session_state["_m15_reset_man_new_fields"] = True
                 st.session_state["_m15_keep_manual_expander_open"] = True
-                st.session_state["_m15_show_man_saved_msg"] = True
+                st.session_state["_m15_boq_table_ver"] = st.session_state.get("_m15_boq_table_ver", 0) + 1
+                st.session_state["_m15_center_green_toast_msg"] = f"✅ تمت إضافة البند «{clean_in_name}» إلى جدول المقايسة بنجاح"
+                st.session_state["_m15_center_green_toast_dur"] = 3.0
                 st.rerun()
 
         # ═════════════════════════════════════════════════════════════════════
@@ -15151,26 +15105,28 @@ def _render_manual_boq_items_manager():
 
 def _render_center_green_toast():
     """
-    عرض رسائل استرجاع واستعادة البنود المحذوفة في منتصف الشاشة بخط كبير
-    وبانيل عائم ذو خلفية خضراء مبهجة لمدة 3.2 ثوانٍ.
+    عرض رسائل استرجاع واستعادة البنود المحذوفة في منتصف الشاشة بخط متوسط
+    وبانيل عائم ذو خلفية خضراء مبهجة (المدة الافتراضية 3.2 ثوانٍ أو المدة المحددة في session_state).
     """
     _center_toast_msg = st.session_state.pop("_m15_center_green_toast_msg", None)
+    _toast_dur_sec = float(st.session_state.pop("_m15_center_green_toast_dur", 3.2) or 3.2)
     if not _center_toast_msg and st.session_state.pop("_m15_show_design_restored_msg", False):
         _center_toast_msg = "✨ لقد تم استرجاع جميع بنود التصميم الاساسية بنجاح"
 
     if _center_toast_msg:
         import html as _h_esc_mod
         _toast_safe_text = _h_esc_mod.escape(str(_center_toast_msg))
+        _toast_uid = int(time.time() * 1000)
         st.markdown(
             f"""
             <style>
-            @keyframes m15DesignRestoredCenterToast3s {{
-                0%   {{ opacity: 0; transform: translate(-50%, -50%) scale(0.85); visibility: visible; }}
-                8%   {{ opacity: 1; transform: translate(-50%, -50%) scale(1.0);  visibility: visible; }}
-                86%  {{ opacity: 1; transform: translate(-50%, -50%) scale(1.0);  visibility: visible; }}
-                100% {{ opacity: 0; transform: translate(-50%, -50%) scale(0.92); visibility: hidden; }}
+            @keyframes m15CenterGreenToast_{_toast_uid} {{
+                0%   {{ opacity: 0; transform: translate(-50%, -50%) scale(0.88); visibility: visible; }}
+                10%  {{ opacity: 1; transform: translate(-50%, -50%) scale(1.0);  visibility: visible; }}
+                85%  {{ opacity: 1; transform: translate(-50%, -50%) scale(1.0);  visibility: visible; }}
+                100% {{ opacity: 0; transform: translate(-50%, -50%) scale(0.94); visibility: hidden; }}
             }}
-            .m15-design-restored-center-toast {{
+            #m15-center-toast-{_toast_uid} {{
                 position: fixed;
                 top: 50%;
                 left: 50%;
@@ -15191,12 +15147,12 @@ def _render_center_green_toast():
                 width: max-content;
                 box-shadow: 0 16px 45px rgba(0, 0, 0, 0.65), 0 0 24px rgba(16, 185, 129, 0.55);
                 text-shadow: 0 2px 6px rgba(0, 0, 0, 0.60);
-                animation: m15DesignRestoredCenterToast3s 3.2s ease-in-out forwards;
+                animation: m15CenterGreenToast_{_toast_uid} {_toast_dur_sec:.2f}s ease-in-out forwards;
                 direction: rtl;
                 font-family: 'Segoe UI', 'Cairo', Tahoma, sans-serif;
             }}
             </style>
-            <div dir="rtl" class="m15-design-restored-center-toast">
+            <div dir="rtl" id="m15-center-toast-{_toast_uid}" class="m15-design-restored-center-toast">
                 {_toast_safe_text}
             </div>
             <img src="data:image/svg+xml;utf8,<svg></svg>" style="display:none;" onerror="(function(){{ try {{ var pDoc = (window.parent && window.parent.document) ? window.parent.document : document; var b = pDoc.getElementById('m15-boq-del-confirm-modal'); if (b) b.remove(); pDoc.querySelectorAll('[id*=\'m15-boq-del-confirm\']').forEach(function(el) {{ el.remove(); }}); }} catch(e) {{}} }})()">
@@ -17632,203 +17588,140 @@ def _section_plaster_boq():
                     unsafe_allow_html=True,
                 )
 
-    # ── سجل البنود المستبعدة من التصميم الأساسي (auto_calculated) أسفل الجدول المجمع ──
+    # ── القائمة المنسدلة للبنود المستبعدة من التصميم الأساسي (auto_calculated) أسفل الأزرار مباشرة ──
     if _auto_deleted_list:
-        _exp_auto_title = f":red[⚠️ سجل البنود المستبعدة من التصميم الأساسي ({len(_auto_deleted_list)} بنود)]"
-        st.markdown(
-            """
-            <style>
-            /* تنسيق بانيل عنوان سجل البنود المستبعدة: العنوان باللون الأحمر والخلفية البيضاء لتمييزه */
-            div[data-testid="stExpander"]:has(.m15-auto-excluded-log-marker),
-            div[class*="st-key-m15_auto_excluded_log_expander"] {
-                border: 2px solid #ef4444 !important;
-                border-radius: 12px !important;
-                box-shadow: 0 4px 18px rgba(220, 38, 38, 0.20) !important;
-                overflow: hidden !important;
-                margin-top: 10px !important;
-                margin-bottom: 12px !important;
-            }
-            div[data-testid="stExpander"]:has(.m15-auto-excluded-log-marker) summary,
-            div[class*="st-key-m15_auto_excluded_log_expander"] summary {
-                background: #ffffff !important;
-                background-color: #ffffff !important;
-                border: none !important;
-                border-radius: 10px !important;
-                padding: 10px 16px !important;
-                transition: all 0.25s ease !important;
-            }
-            div[data-testid="stExpander"]:has(.m15-auto-excluded-log-marker) summary:hover,
-            div[class*="st-key-m15_auto_excluded_log_expander"] summary:hover {
-                background: #fef2f2 !important;
-                background-color: #fef2f2 !important;
-                box-shadow: 0 2px 14px rgba(239, 68, 68, 0.35) !important;
-            }
-            div[data-testid="stExpander"]:has(.m15-auto-excluded-log-marker) details[open] > summary,
-            div[class*="st-key-m15_auto_excluded_log_expander"] details[open] > summary {
-                background: #ffffff !important;
-                background-color: #ffffff !important;
-                border-bottom: 2px solid #ef4444 !important;
-            }
-            div[data-testid="stExpander"]:has(.m15-auto-excluded-log-marker) summary p,
-            div[data-testid="stExpander"]:has(.m15-auto-excluded-log-marker) summary span,
-            div[data-testid="stExpander"]:has(.m15-auto-excluded-log-marker) summary strong,
-            div[data-testid="stExpander"]:has(.m15-auto-excluded-log-marker) summary *,
-            div[class*="st-key-m15_auto_excluded_log_expander"] summary p,
-            div[class*="st-key-m15_auto_excluded_log_expander"] summary span,
-            div[class*="st-key-m15_auto_excluded_log_expander"] summary strong,
-            div[class*="st-key-m15_auto_excluded_log_expander"] summary * {
-                color: #dc2626 !important;
-                font-size: 1.18rem !important;
-                font-weight: 900 !important;
-                text-shadow: none !important;
-            }
-            div[data-testid="stExpander"]:has(.m15-auto-excluded-log-marker) summary:hover p,
-            div[data-testid="stExpander"]:has(.m15-auto-excluded-log-marker) summary:hover span,
-            div[data-testid="stExpander"]:has(.m15-auto-excluded-log-marker) summary:hover *,
-            div[class*="st-key-m15_auto_excluded_log_expander"] summary:hover p,
-            div[class*="st-key-m15_auto_excluded_log_expander"] summary:hover span,
-            div[class*="st-key-m15_auto_excluded_log_expander"] summary:hover * {
-                color: #b91c1c !important;
-            }
-            div[data-testid="stExpander"]:has(.m15-auto-excluded-log-marker) summary svg,
-            div[class*="st-key-m15_auto_excluded_log_expander"] summary svg {
-                color: #dc2626 !important;
-                fill: #dc2626 !important;
-                stroke: #dc2626 !important;
-            }
-            div[data-testid="stExpander"]:has(.m15-auto-excluded-log-marker) summary:hover svg,
-            div[class*="st-key-m15_auto_excluded_log_expander"] summary:hover svg {
-                color: #b91c1c !important;
-                fill: #b91c1c !important;
-                stroke: #b91c1c !important;
-            }
-            div[data-testid="stExpander"]:has(.m15-auto-excluded-log-marker) div[data-testid="stExpanderDetails"],
-            div[class*="st-key-m15_auto_excluded_log_expander"] div[data-testid="stExpanderDetails"] {
-                border-top: 2px solid #ef4444 !important;
-                background: rgba(15, 23, 42, 0.85) !important;
-                padding: 14px 16px !important;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
-        def _cb_restore_auto_item(_target_id: str, _target_name: str):
+        _placeholder_auto_lbl = "لم يتم اختيار بنود اساسية للاستعادة"
+        _auto_opt_labels = [_placeholder_auto_lbl]
+        _auto_opt_map = {}
+        for _a_del in _auto_deleted_list:
+            _a_del_id = str(_a_del.get("item_id", ""))
+            _a_orig_num = _a_del.get("orig_index", _a_del.get("auto_idx", "-"))
+            _a_name = str(_a_del.get("name", ""))
+            _a_qty = float(_a_del.get("tot_qty", 0.0) or 0.0)
+            _a_unit = str(_a_del.get("unit", ""))
+            _a_cost = float(_a_del.get("tot_cost", 0.0) or 0.0)
+            _opt_lbl = f"بند ({_a_orig_num}): {_a_name} — ({_a_qty:,.2f} {_a_unit}) — ({_a_cost:,.2f} ج.م.)"
+            _auto_opt_labels.append(_opt_lbl)
+            _auto_opt_map[_opt_lbl] = (_a_del_id, _a_name)
+
+        if st.session_state.get("m15_auto_excluded_sel") not in _auto_opt_labels:
+            st.session_state["m15_auto_excluded_sel"] = _placeholder_auto_lbl
+
+        def _cb_restore_selected_auto_item():
+            _chosen_lbl = st.session_state.get("m15_auto_excluded_sel", _placeholder_auto_lbl)
+            if _chosen_lbl not in _auto_opt_map:
+                return
+            _target_id, _target_name = _auto_opt_map[_chosen_lbl]
             _cur_del, _cur_exc = _get_boq_deleted_state()
             _new_del = [x for x in _cur_del if str(x.get("item_id")) != _target_id]
             _new_exc = [x for x in _cur_exc if x != _target_id]
             _persist_boq_deleted_state(_new_del, _new_exc)
+            st.session_state["m15_auto_excluded_sel"] = _placeholder_auto_lbl
             st.session_state["_m15_boq_table_ver"] = st.session_state.get("_m15_boq_table_ver", 0) + 1
             st.session_state["_m15_keep_manual_expander_open"] = True
-            _rem_auto = [x for x in _new_del if x.get("source_type") == "auto_calculated"]
-            st.session_state["_m15_keep_auto_excluded_log_open"] = (len(_rem_auto) > 0)
-            st.session_state["_m15_center_green_toast_msg"] = f"↩️ تمت استعادة البند «{_target_name}» إلى مكانه الأصلي بالجدول بنجاح"
+            st.session_state["_m15_center_green_toast_msg"] = "✅ تم استعادة البند المحذوف من البنود الأساسية"
+            st.session_state["_m15_center_green_toast_dur"] = 3.0
 
         def _cb_ask_perm_clear_auto_log():
             st.session_state["_m15_confirm_perm_clear_auto_log"] = True
             st.session_state["_m15_play_perm_clear_beep"] = True
             st.session_state["_m15_keep_manual_expander_open"] = True
-            st.session_state["_m15_keep_auto_excluded_log_open"] = True
 
         def _cb_confirm_perm_clear_auto_log():
             _cur_del, _cur_exc = _get_boq_deleted_state()
             _new_del = [x for x in _cur_del if x.get("source_type") != "auto_calculated"]
             _persist_boq_deleted_state(_new_del, _cur_exc)
+            st.session_state["m15_auto_excluded_sel"] = _placeholder_auto_lbl
             st.session_state["_m15_boq_table_ver"] = st.session_state.get("_m15_boq_table_ver", 0) + 1
             st.session_state.pop("_m15_confirm_perm_clear_auto_log", None)
             st.session_state["_m15_keep_manual_expander_open"] = True
-            st.session_state["_m15_center_green_toast_msg"] = "🗑️ تم إفراغ سجل البنود المستبعدة بنجاح."
+            st.session_state["_m15_center_green_toast_msg"] = '🗑️ تم الحذف النهائي لجميع البنود .. لاستعادة جميع البنود الأساسية اضغط زر "🔄 استعادة وحساب جميع بنود التصميم"'
+            st.session_state["_m15_center_green_toast_dur"] = 3.0
 
         def _cb_cancel_perm_clear_auto_log():
             st.session_state.pop("_m15_confirm_perm_clear_auto_log", None)
             st.session_state["_m15_keep_manual_expander_open"] = True
-            st.session_state["_m15_keep_auto_excluded_log_open"] = True
 
-        _keep_auto_log = bool(
-            st.session_state.pop("_m15_keep_auto_excluded_log_open", False)
-            or st.session_state.get("_m15_confirm_perm_clear_auto_log", False)
+        st.markdown(
+            """
+            <style>
+            div[class*="st-key-m15_auto_excluded_sel"] label,
+            div[class*="st-key-m15_auto_excluded_sel"] label p,
+            div[class*="st-key-m15_auto_excluded_sel"] label span {
+                color: #ef4444 !important;
+                font-size: 1.05rem !important;
+                font-weight: 900 !important;
+            }
+            div[class*="st-key-m15_auto_excluded_sel"] div[data-baseweb="select"] > div {
+                border: 1.8px solid #ef4444 !important;
+                border-radius: 9px !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
         )
-        with st.expander(
-            _exp_auto_title,
-            expanded=_keep_auto_log,
-            key="m15_auto_excluded_log_expander",
-        ):
-            st.markdown('<div class="m15-auto-excluded-log-marker" style="display:none;"></div>', unsafe_allow_html=True)
-            for _a_del_i, _a_del in enumerate(_auto_deleted_list):
-                _a_del_id = str(_a_del.get("item_id", ""))
-                _a_orig_num = _a_del.get("orig_index", _a_del.get("auto_idx", "-"))
-                _a_name = str(_a_del.get("name", ""))
-                _a_qty = float(_a_del.get("tot_qty", 0.0) or 0.0)
-                _a_unit = str(_a_del.get("unit", ""))
-                _a_cost = float(_a_del.get("tot_cost", 0.0) or 0.0)
 
-                _ac1, _ac2 = st.columns([5.5, 1.2], gap="small")
-                with _ac1:
-                    st.markdown(
-                        f"<div dir='rtl' style='background:rgba(239,68,68,0.10); border:1px solid rgba(239,68,68,0.35); "
-                        f"border-radius:8px; padding:8px 12px; color:#f8fafc; font-size:0.98rem; font-weight:700; line-height:1.55;'>"
-                        f"تم حذف البند رقم (<span style='color:#fbbf24; font-weight:900;'>{_a_orig_num}</span>): "
-                        f"<span style='color:#ffffff; font-weight:900;'>{_html_mod.escape(_a_name)}</span> — "
-                        f"وقيمته: <span style='color:#38bdf8; font-weight:900;'>{_a_qty:,.2f} {_html_mod.escape(_a_unit)}</span> — "
-                        f"وتكلفته: <span style='color:#f87171; font-weight:900;'>{_a_cost:,.2f} ج.م.</span>"
-                        f"</div>",
-                        unsafe_allow_html=True,
-                    )
-                with _ac2:
-                    st.button(
-                        "↩️ استعادة",
-                        key=f"m15_restore_auto_{_a_del_id}",
-                        use_container_width=True,
-                        on_click=_cb_restore_auto_item,
-                        args=(_a_del_id, _a_name),
-                    )
+        _ad_c1, _ad_c2, _ad_c3 = st.columns([4.0, 1.15, 1.75], gap="small", vertical_alignment="bottom")
+        with _ad_c1:
+            _sel_auto_lbl = st.selectbox(
+                f"⚠️ سجل البنود المستبعدة من التصميم الأساسي ({len(_auto_deleted_list)} بنود):",
+                options=_auto_opt_labels,
+                key="m15_auto_excluded_sel",
+            )
+        with _ad_c2:
+            st.button(
+                "↩️ استعادة",
+                key="m15_restore_auto_selected_btn",
+                type="primary",
+                use_container_width=True,
+                disabled=(_sel_auto_lbl == _placeholder_auto_lbl),
+                on_click=_cb_restore_selected_auto_item,
+            )
+        with _ad_c3:
+            st.button(
+                "🗑️ حذف نهائي لجميع البنود",
+                key="m15_perm_clear_auto_log_btn",
+                use_container_width=True,
+                help="حذف نهائي لجميع البنود المستبعدة من السجل",
+                on_click=_cb_ask_perm_clear_auto_log,
+            )
 
-            st.markdown("<hr style='margin:10px 0; border-color:rgba(148,163,184,0.25);'>", unsafe_allow_html=True)
-            if not st.session_state.get("_m15_confirm_perm_clear_auto_log", False):
+        if st.session_state.get("_m15_confirm_perm_clear_auto_log", False):
+            if st.session_state.pop("_m15_play_perm_clear_beep", False):
+                _play_boq_warning_beep("perm_clear_auto")
+            st.markdown(
+                """
+                <div dir="rtl" style="background:rgba(220,38,38,0.18); border:1.5px solid #ef4444;
+                     border-radius:8px; padding:10px 14px; margin-top:6px; margin-bottom:8px; color:#fecaca; font-weight:800; font-size:0.96rem;">
+                    ⚠️ هل أنت متأكد من الحذف النهائي لسجل البنود المستبعدة وإفراغه؟ (يمكنك دائماً استعادة جميع بنود التصميم لاحقاً عبر زر «🔄 استعادة وحساب جميع بنود التصميم»).
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            _pc1, _pc2 = st.columns(2, gap="small")
+            with _pc1:
                 st.button(
-                    "🗑️ حذف نهائي لسجل المستبعدات",
-                    key="m15_perm_clear_auto_log_btn",
+                    "✅ تأكيد الحذف النهائي لجميع البنود",
+                    key="m15_confirm_perm_clear_yes",
+                    type="primary",
                     use_container_width=True,
-                    on_click=_cb_ask_perm_clear_auto_log,
+                    on_click=_cb_confirm_perm_clear_auto_log,
                 )
-            else:
-                if st.session_state.pop("_m15_play_perm_clear_beep", False):
-                    _play_boq_warning_beep("perm_clear_auto")
-                st.markdown(
-                    """
-                    <div dir="rtl" style="background:rgba(220,38,38,0.18); border:1.5px solid #ef4444;
-                         border-radius:8px; padding:10px 14px; margin-bottom:8px; color:#fecaca; font-weight:800; font-size:0.96rem;">
-                        ⚠️ هل أنت متأكد من الحذف النهائي لسجل البنود المستبعدة وإفراغه؟ (يمكنك دائماً استعادة جميع بنود التصميم لاحقاً عبر زر «🔄 استعادة وحساب جميع بنود التصميم»).
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
+            with _pc2:
+                st.button(
+                    "❌ إلغاء",
+                    key="m15_confirm_perm_clear_no",
+                    use_container_width=True,
+                    on_click=_cb_cancel_perm_clear_auto_log,
                 )
-                _pc1, _pc2 = st.columns(2, gap="small")
-                with _pc1:
-                    st.button(
-                        "✅ تأكيد الحذف النهائي للسجل",
-                        key="m15_confirm_perm_clear_yes",
-                        type="primary",
-                        use_container_width=True,
-                        on_click=_cb_confirm_perm_clear_auto_log,
-                    )
-                with _pc2:
-                    st.button(
-                        "❌ إلغاء",
-                        key="m15_confirm_perm_clear_no",
-                        use_container_width=True,
-                        on_click=_cb_cancel_perm_clear_auto_log,
-                    )
 
     # ── تنسيق رؤوس أقسام المقايسة وحصر المواد: كتابة سوداء بخلفية بيضاء ──
     st.markdown(
         """
         <style>
-        /* تنسيق بانيل عناوين أقسام المقايسة باللون الأبيض والكتابة السوداء */
-        div[data-testid="stExpander"]:has(.m15-used-items-table-marker),
+        /* تنسيق بانيل عناوين أقسام المقايسة باللون الأبيض والكتابة السوداء (محصور في هذه الأقسام الثلاثة فقط) */
         div[class*="st-key-m15_expander_used_items_table"],
-        div[data-testid="stExpander"]:has(.m15-detailed-survey-marker),
         div[class*="st-key-m15_expander_detailed_survey_all"],
-        div[data-testid="stExpander"]:has(.m15-materials-breakdown-marker),
         div[class*="st-key-m15_expander_materials_breakdown"] {
             border: 1.5px solid #cbd5e1 !important;
             border-radius: 10px !important;
@@ -17839,11 +17732,8 @@ def _section_plaster_boq():
             background: transparent !important;
         }
 
-        div[data-testid="stExpander"]:has(.m15-used-items-table-marker) summary,
         div[class*="st-key-m15_expander_used_items_table"] summary,
-        div[data-testid="stExpander"]:has(.m15-detailed-survey-marker) summary,
         div[class*="st-key-m15_expander_detailed_survey_all"] summary,
-        div[data-testid="stExpander"]:has(.m15-materials-breakdown-marker) summary,
         div[class*="st-key-m15_expander_materials_breakdown"] summary {
             background: #ffffff !important;
             background-color: #ffffff !important;
@@ -17853,43 +17743,28 @@ def _section_plaster_boq():
             transition: all 0.2s ease !important;
         }
 
-        div[data-testid="stExpander"]:has(.m15-used-items-table-marker) summary:hover,
         div[class*="st-key-m15_expander_used_items_table"] summary:hover,
-        div[data-testid="stExpander"]:has(.m15-detailed-survey-marker) summary:hover,
         div[class*="st-key-m15_expander_detailed_survey_all"] summary:hover,
-        div[data-testid="stExpander"]:has(.m15-materials-breakdown-marker) summary:hover,
         div[class*="st-key-m15_expander_materials_breakdown"] summary:hover {
             background: #f8fafc !important;
             background-color: #f8fafc !important;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.10) !important;
         }
 
-        div[data-testid="stExpander"]:has(.m15-used-items-table-marker) details[open] > summary,
         div[class*="st-key-m15_expander_used_items_table"] details[open] > summary,
-        div[data-testid="stExpander"]:has(.m15-detailed-survey-marker) details[open] > summary,
         div[class*="st-key-m15_expander_detailed_survey_all"] details[open] > summary,
-        div[data-testid="stExpander"]:has(.m15-materials-breakdown-marker) details[open] > summary,
         div[class*="st-key-m15_expander_materials_breakdown"] details[open] > summary {
             background: #ffffff !important;
             background-color: #ffffff !important;
             border-bottom: 1.5px solid #cbd5e1 !important;
         }
 
-        div[data-testid="stExpander"]:has(.m15-used-items-table-marker) summary p,
-        div[data-testid="stExpander"]:has(.m15-used-items-table-marker) summary span,
-        div[data-testid="stExpander"]:has(.m15-used-items-table-marker) summary *,
         div[class*="st-key-m15_expander_used_items_table"] summary p,
         div[class*="st-key-m15_expander_used_items_table"] summary span,
         div[class*="st-key-m15_expander_used_items_table"] summary *,
-        div[data-testid="stExpander"]:has(.m15-detailed-survey-marker) summary p,
-        div[data-testid="stExpander"]:has(.m15-detailed-survey-marker) summary span,
-        div[data-testid="stExpander"]:has(.m15-detailed-survey-marker) summary *,
         div[class*="st-key-m15_expander_detailed_survey_all"] summary p,
         div[class*="st-key-m15_expander_detailed_survey_all"] summary span,
         div[class*="st-key-m15_expander_detailed_survey_all"] summary *,
-        div[data-testid="stExpander"]:has(.m15-materials-breakdown-marker) summary p,
-        div[data-testid="stExpander"]:has(.m15-materials-breakdown-marker) summary span,
-        div[data-testid="stExpander"]:has(.m15-materials-breakdown-marker) summary *,
         div[class*="st-key-m15_expander_materials_breakdown"] summary p,
         div[class*="st-key-m15_expander_materials_breakdown"] summary span,
         div[class*="st-key-m15_expander_materials_breakdown"] summary * {
@@ -17899,11 +17774,8 @@ def _section_plaster_boq():
             text-shadow: none !important;
         }
 
-        div[data-testid="stExpander"]:has(.m15-used-items-table-marker) summary svg,
         div[class*="st-key-m15_expander_used_items_table"] summary svg,
-        div[data-testid="stExpander"]:has(.m15-detailed-survey-marker) summary svg,
         div[class*="st-key-m15_expander_detailed_survey_all"] summary svg,
-        div[data-testid="stExpander"]:has(.m15-materials-breakdown-marker) summary svg,
         div[class*="st-key-m15_expander_materials_breakdown"] summary svg {
             color: #000000 !important;
             fill: #000000 !important;
