@@ -24548,7 +24548,7 @@ def _section_export_pdf():
         font-size: 1.05rem !important;
         user-select: text !important;
         -webkit-user-select: text !important;
-        cursor: text !important;
+        cursor: pointer !important;
     }
     .st-key-m15_btn_export_pdf_concise button:hover,
     .st-key-m15_btn_download_html button:hover,
@@ -24716,7 +24716,7 @@ def render_masonry_plaster_module():
         .stDownloadButton button span,
         button p,
         button span {
-            cursor: text !important;
+            cursor: pointer !important;
             user-select: text !important;
             -webkit-user-select: text !important;
         }
@@ -24728,6 +24728,7 @@ def render_masonry_plaster_module():
         (function() {
             function enableBtnTextCopy() {
                 try {
+                    var pWin = window.parent || window;
                     var doc = (window.parent && window.parent.document) ? window.parent.document : document;
                     var buttons = doc.querySelectorAll('button, [data-testid="stButton"] button, [data-testid="stDownloadButton"] button');
                     buttons.forEach(function(btn) {
@@ -24738,18 +24739,60 @@ def render_masonry_plaster_module():
                             }
                             btn.style.userSelect = 'text';
                             btn.style.webkitUserSelect = 'text';
+                            btn.style.cursor = 'pointer';
                             var inners = btn.querySelectorAll('p, span, div');
                             inners.forEach(function(el) {
                                 el.style.userSelect = 'text';
                                 el.style.webkitUserSelect = 'text';
-                                el.style.cursor = 'text';
+                                el.style.cursor = 'pointer';
                             });
                         }
                     });
+                    if (!pWin.__ecpGlobalBtnDragGuardInstalled) {
+                        pWin.__ecpGlobalBtnDragGuardInstalled = true;
+                        var downX = 0, downY = 0, didDrag = false, activeBtn = null;
+                        doc.addEventListener('mousedown', function(e) {
+                            var b = e.target && e.target.closest ? e.target.closest('button') : null;
+                            if (b) {
+                                activeBtn = b;
+                                downX = e.clientX;
+                                downY = e.clientY;
+                                didDrag = false;
+                            } else {
+                                activeBtn = null;
+                                didDrag = false;
+                            }
+                        }, true);
+                        doc.addEventListener('mousemove', function(e) {
+                            if (activeBtn && (e.buttons & 1)) {
+                                if (Math.hypot(e.clientX - downX, e.clientY - downY) > 4) {
+                                    didDrag = true;
+                                }
+                            }
+                        }, true);
+                        doc.addEventListener('click', function(e) {
+                            var b = e.target && e.target.closest ? e.target.closest('button') : null;
+                            if (!b) return;
+                            var sel = '';
+                            try {
+                                sel = (pWin.getSelection ? pWin.getSelection().toString() : '').trim();
+                            } catch(err) {}
+                            if (didDrag || sel.length > 0) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                e.stopImmediatePropagation();
+                            }
+                            didDrag = false;
+                            activeBtn = null;
+                        }, true);
+                    }
                 } catch(e) {}
             }
             enableBtnTextCopy();
-            setInterval(enableBtnTextCopy, 800);
+            var _pWinM15 = window.parent || window;
+            if (!_pWinM15.__ecpGlobalBtnCopyInterval) {
+                _pWinM15.__ecpGlobalBtnCopyInterval = _pWinM15.setInterval(enableBtnTextCopy, 800);
+            }
         })();
         </script>""",
         height=1,

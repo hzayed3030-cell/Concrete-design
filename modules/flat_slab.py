@@ -17768,6 +17768,7 @@ def _get_cw_manual_boq_t2_tuples(cw_qty_factor=1.00, start_idx=13, prefix=""):
 def _compute_cw_boq_items_materials_breakdown(
     cw_items_data,
     cw_qty_factor=1.00,
+    orig_idx_list=None,
     slab_steel_ton=0.0,
     brick_l=25.0,
     brick_w=12.0,
@@ -17789,6 +17790,7 @@ def _compute_cw_boq_items_materials_breakdown(
     import re as _re_mod
 
     for idx, (name, net_q, unit, u_price, details) in enumerate(cw_items_data, start=1):
+        eff_idx = orig_idx_list[idx - 1] if (orig_idx_list is not None and idx - 1 < len(orig_idx_list)) else idx
         tot_q = round(net_q * cw_qty_factor, 2)
         clean_name = _re_mod.sub(r'^\d+\s*[-–.]\s*', '', str(name)).strip()
 
@@ -17800,63 +17802,63 @@ def _compute_cw_boq_items_materials_breakdown(
         other_mat = "—"
 
         if tot_q > 0.0001:
-            if idx == 1:
+            if eff_idx == 1:
                 # 1. خرسانة مسلحة أسقف وكمرات (م³)
                 sand_m3 = round(tot_q * 0.40, 2)
                 gravel_m3 = round(tot_q * 0.80, 2)
                 cem_kg = round(tot_q * 350.0, 1)
                 steel_ton = round(slab_steel_ton if slab_steel_ton > 0 else (tot_q * 0.110), 2)
                 other_mat = f"خرسانة مسلحة ECP 203 + حديد عالي المقاومة ({steel_ton:,.2f} طن)"
-            elif idx == 2:
+            elif eff_idx == 2:
                 # 2. خرسانة مسلحة أعمدة (م³)
                 sand_m3 = round(tot_q * 0.40, 2)
                 gravel_m3 = round(tot_q * 0.80, 2)
                 cem_kg = round(tot_q * 375.0, 1)
                 steel_ton = round(tot_q * 0.150, 2)
                 other_mat = f"خرسانة مسلحة أعمدة + حديد تسليح وكانات ({steel_ton:,.2f} طن)"
-            elif idx == 3:
+            elif eff_idx == 3:
                 # 3. خرسانة مسلحة أساسات وسملات (م³)
                 sand_m3 = round(tot_q * 0.40, 2)
                 gravel_m3 = round(tot_q * 0.80, 2)
                 cem_kg = round(tot_q * 350.0, 1)
                 steel_ton = round(tot_q * 0.090, 2)
                 other_mat = f"أسمنت SRC مقاوم للكبريتات + حديد تسليح ({steel_ton:,.2f} طن)"
-            elif idx == 4:
+            elif eff_idx == 4:
                 # 4. خرسانة عادية أسفل القواعد والسملات (م³)
                 sand_m3 = round(tot_q * 0.40, 2)
                 gravel_m3 = round(tot_q * 0.80, 2)
                 cem_kg = round(tot_q * 250.0, 1)
                 other_mat = "خرسانة عادية 250 كجم/م³ (5 شكائر) بدون تسليح"
-            elif idx == 5:
+            elif eff_idx == 5:
                 # 5. أعمال الردم (م³)
                 sand_m3 = round(tot_q, 2)
                 other_mat = "رمال نظيفة متدرجة ودمك ميكانيكي على طبقات"
-            elif idx == 6:
+            elif eff_idx == 6:
                 # 6. طوب أسمنتي (طوبة)
                 b_cnt = int(tot_q)
                 sand_m3 = round(b_cnt * 0.00075, 2)
                 cem_kg = round(sand_m3 * 350.0, 1)
                 other_mat = "طوب أسمنتي مصمت/مفرغ + مونة أسمنتية عيار 350 كجم/م³"
-            elif idx == 7:
+            elif eff_idx == 7:
                 # 7. انترلوك أرصفة (م²)
                 sand_m3 = round(tot_q * 0.06, 2)
                 other_mat = f"بلاطات انترلوك سمك 6 سم ({tot_q:,.1f} م²) + فرشة رمل"
-            elif idx == 8:
+            elif eff_idx == 8:
                 # 8. بردورة أرصفة (م.ط)
                 sand_m3 = round(tot_q * 0.02, 2)
                 cem_kg = round(tot_q * 10.0, 1)
                 gravel_m3 = round(tot_q * 0.03, 2)
                 other_mat = f"بردورات خرسانية جاهزة ({tot_q:,.1f} م.ط) + فرشة خرسانة عادية"
-            elif idx == 9:
+            elif eff_idx == 9:
                 # 9. عزل رطوبة للقواعد والسملات (م²)
                 other_mat = f"دهان بيتومين مؤكسد وجهين ({tot_q * 0.85:.1f} كجم بيتومين)"
-            elif idx == 10:
+            elif eff_idx == 10:
                 # 10. عزل مائي للسطح انسومات (م²)
                 other_mat = f"لفائف ممبرين 4 مم ({tot_q * 1.10:.1f} م²) + برايمر ({tot_q * 0.30:.1f} لتر)"
-            elif idx == 11:
+            elif eff_idx == 11:
                 # 11. عازل حراري (م²)
                 other_mat = f"ألواح بوليسترين XPS كثافة 35 كجم/م³ سمك 5 سم ({tot_q:,.1f} م²)"
-            elif idx == 12:
+            elif eff_idx == 12:
                 # 12. بلاط أسطح (م²)
                 sand_m3 = round(tot_q * 0.06, 2)
                 cem_kg = round(tot_q * 12.0, 1)
@@ -17916,20 +17918,2096 @@ def _compute_cw_boq_items_materials_breakdown(
     }
 
 
+def _get_cw_boq_deleted_state(prefix: str = ""):
+    """
+    قراءة سجل البنود المحذوفة القابلة للاستعادة وقائمة المعرّفات المستبعدة من الجدول المجمع
+    في Module 1 (بنفس فلسفة Module 15) بشكل منفصل تماماً عن نموذج الإدخال.
+    """
+    _k_del = f"{prefix}cw_deleted_boq_items"
+    _k_exc = f"{prefix}cw_permanently_excluded_boq_ids"
+    if _k_del not in st.session_state:
+        raw_del = S.cfg_val(_k_del) or S.cfg_val("cw_deleted_boq_items") or []
+        st.session_state[_k_del] = [dict(x) for x in raw_del if isinstance(x, dict)] if isinstance(raw_del, list) else []
+    if _k_exc not in st.session_state:
+        raw_exc = S.cfg_val(_k_exc) or S.cfg_val("cw_permanently_excluded_boq_ids") or []
+        exc_set = []
+        for eid in (raw_exc if isinstance(raw_exc, list) else []):
+            s_id = str(eid).strip()
+            if s_id and s_id not in exc_set:
+                exc_set.append(s_id)
+        for d_item in st.session_state[_k_del]:
+            s_id = str(d_item.get("item_id", "")).strip()
+            if s_id and s_id not in exc_set:
+                exc_set.append(s_id)
+        st.session_state[_k_exc] = exc_set
+    deleted_items = [dict(x) for x in st.session_state.get(_k_del, []) if isinstance(x, dict)]
+    excluded_ids = [str(x).strip() for x in st.session_state.get(_k_exc, []) if str(x).strip()]
+    return deleted_items, excluded_ids
+
+
+def _persist_cw_boq_deleted_state(deleted_items, excluded_ids, prefix: str = ""):
+    """حفظ حالة البنود المحذوفة والمستبعدة من الجدول المجمع في session_state وإعدادات المشروع."""
+    clean_del = [dict(x) for x in deleted_items if isinstance(x, dict)]
+    clean_exc = []
+    for eid in excluded_ids:
+        s_id = str(eid).strip()
+        if s_id and s_id not in clean_exc:
+            clean_exc.append(s_id)
+    st.session_state[f"{prefix}cw_deleted_boq_items"] = clean_del
+    st.session_state[f"{prefix}cw_permanently_excluded_boq_ids"] = clean_exc
+    S.cfg_set(f"{prefix}cw_deleted_boq_items", [dict(x) for x in clean_del])
+    S.cfg_set("cw_deleted_boq_items", [dict(x) for x in clean_del])
+    S.cfg_set(f"{prefix}cw_permanently_excluded_boq_ids", list(clean_exc))
+    S.cfg_set("cw_permanently_excluded_boq_ids", list(clean_exc))
+    S.save_settings()
+    st.session_state.pop(f"{prefix}_cached_report_html", None)
+    st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
+
+def _play_cw_boq_warning_beep(tag: str = "boq"):
+    """تشغيل صفارة تنبيه صوتية قصيرة فورية عبر Web Audio API."""
+    import time
+    _ts = int(time.time() * 1000)
+    render_html_iframe(
+        f"""
+        <script>
+        // boq-beep-{tag}-{_ts}
+        (function() {{
+            try {{
+                const pWin = window.parent || window;
+                const AudioCtx = pWin.AudioContext || pWin.webkitAudioContext || window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+                const ctx = pWin.__m15BoqBeepCtx || new AudioCtx();
+                pWin.__m15BoqBeepCtx = ctx;
+                if (ctx.state === 'suspended') ctx.resume().catch(function(){{}});
+                const now = ctx.currentTime;
+                [0, 0.16].forEach(function(offset, idx) {{
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(idx === 0 ? 920 : 700, now + offset);
+                    gain.gain.setValueAtTime(0.001, now + offset);
+                    gain.gain.exponentialRampToValueAtTime(0.28, now + offset + 0.015);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.13);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(now + offset);
+                    osc.stop(now + offset + 0.14);
+                }});
+            }} catch (e) {{}}
+        }})();
+        </script>
+        """,
+        height=1,
+        width=1,
+    )
+
+def _render_cw_center_green_toast(prefix):
+    """
+    عرض رسائل استرجاع واستعادة البنود المحذوفة في منتصف الشاشة بخط متوسط
+    وبانيل عائم ذو خلفية خضراء مبهجة (المدة الافتراضية 3.2 ثوانٍ أو المدة المحددة في session_state).
+    """
+    _center_toast_msg = st.session_state.pop(f"_{prefix}m1_center_green_toast_msg", None)
+    _toast_dur_sec = float(st.session_state.pop(f"_{prefix}m1_center_green_toast_dur", 3.2) or 3.2)
+    if not _center_toast_msg and st.session_state.pop(f"_{prefix}m1_show_design_restored_msg", False):
+        _center_toast_msg = "✨ لقد تم استرجاع جميع بنود التصميم الاساسية بنجاح"
+
+    if _center_toast_msg:
+        import html as _h_esc_mod
+        import time
+        _toast_safe_text = _h_esc_mod.escape(str(_center_toast_msg))
+        _toast_uid = int(time.time() * 1000)
+        st.markdown(
+            f"""
+            <style>
+            @keyframes m15CenterGreenToast_{_toast_uid} {{
+                0%   {{ opacity: 0; transform: translate(-50%, -50%) scale(0.88); visibility: visible; }}
+                10%  {{ opacity: 1; transform: translate(-50%, -50%) scale(1.0);  visibility: visible; }}
+                85%  {{ opacity: 1; transform: translate(-50%, -50%) scale(1.0);  visibility: visible; }}
+                100% {{ opacity: 0; transform: translate(-50%, -50%) scale(0.94); visibility: hidden; }}
+            }}
+            #m15-center-toast-{_toast_uid} {{
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                z-index: 99999999;
+                pointer-events: none;
+                background: linear-gradient(135deg, rgba(6, 78, 59, 0.98) 0%, rgba(16, 185, 129, 0.96) 50%, rgba(4, 120, 87, 0.98) 100%);
+                border: 2.5px solid #34d399;
+                border-radius: 14px;
+                padding: 16px 32px;
+                text-align: center;
+                color: #ffffff !important;
+                font-size: 1.18rem !important;
+                font-weight: 800 !important;
+                line-height: 1.6 !important;
+                white-space: normal;
+                max-width: 90vw;
+                width: max-content;
+                box-shadow: 0 16px 45px rgba(0, 0, 0, 0.65), 0 0 24px rgba(16, 185, 129, 0.55);
+                text-shadow: 0 2px 6px rgba(0, 0, 0, 0.60);
+                animation: m15CenterGreenToast_{_toast_uid} {_toast_dur_sec:.2f}s ease-in-out forwards;
+                direction: rtl;
+                font-family: 'Segoe UI', 'Cairo', Tahoma, sans-serif;
+            }}
+            </style>
+            <div dir="rtl" id="m15-center-toast-{_toast_uid}" class="m15-design-restored-center-toast">
+                {_toast_safe_text}
+            </div>
+            <img src="data:image/svg+xml;utf8,<svg></svg>" style="display:none;" onerror="(function(){{ try {{ var pDoc = (window.parent && window.parent.document) ? window.parent.document : document; var b = pDoc.getElementById('m1-boq-del-confirm-modal'); if (b) b.remove(); pDoc.querySelectorAll('[id*=\'m1-boq-del-confirm\']').forEach(function(el) {{ el.remove(); }}); }} catch(e) {{}} }})()">
+            <script>
+            (function() {{
+                try {{
+                    var pDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+                    var b = pDoc.getElementById('m1-boq-del-confirm-modal');
+                    if (b) b.remove();
+                    pDoc.querySelectorAll('[id*="m1-boq-del-confirm"]').forEach(function(el) {{ el.remove(); }});
+                }} catch(e) {{}}
+            }})();
+            </script>
+            """,
+            unsafe_allow_html=True,
+        )
+
+def _handle_cw_boq_sync_payload(_cw_payload: dict, prefix: str = ""):
+    """
+    معالجة أوامر الجدول المجمع القادمة من الـ iframe (تعديل التوصيف / تعديل بند يدوي / حذف بند يدوي /
+    حذف صف من الجدول المجمع) بنفس فلسفة Module 15.
+    """
+    _act = _cw_payload.get("action")
+    _ver_key = f"_{prefix}m1_boq_table_ver"
+
+    def _clear_report_cache():
+        st.session_state.pop(f"{prefix}_cached_report_html", None)
+        st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
+
+    if _act in ("update_cw_boq_descriptions", "update_boq_descriptions"):
+        _op_ts = _cw_payload.get("ts")
+        _last_ts = st.session_state.get(f"{prefix}_last_cw_boq_sync_ts")
+        if _op_ts is not None and _op_ts == _last_ts:
+            return
+        if _op_ts is not None:
+            st.session_state[f"{prefix}_last_cw_boq_sync_ts"] = _op_ts
+        _new_descs = _cw_payload.get("descriptions")
+        if not isinstance(_new_descs, dict):
+            return
+        _cur_d = dict(st.session_state.get(f"{prefix}cw_item_descriptions") or S.cfg_val(f"{prefix}cw_item_descriptions") or S.cfg_val("cw_item_descriptions") or {})
+        _manual_list = [dict(x) for x in _get_cw_manual_boq_items_list(prefix=prefix)]
+        _d_changed = False
+        _m_changed = False
+        for _k_d, _v_d in _new_descs.items():
+            _ks = str(_k_d)
+            _vs = str(_v_d).strip()
+            if _cur_d.get(_ks) != _vs:
+                _cur_d[_ks] = _vs
+                _d_changed = True
+                if _ks.startswith("manual_"):
+                    _m_uid = _ks[len("manual_"):]
+                    for _m_obj in _manual_list:
+                        if str(_m_obj.get("uid", "")) == _m_uid:
+                            if _m_obj.get("description") != _vs:
+                                _m_obj["description"] = _vs
+                                _m_changed = True
+                            break
+        if _d_changed:
+            st.session_state[f"{prefix}cw_item_descriptions"] = dict(_cur_d)
+            S.cfg_set(f"{prefix}cw_item_descriptions", dict(_cur_d))
+            S.cfg_set("cw_item_descriptions", dict(_cur_d))
+            if _m_changed:
+                _persist_cw_manual_boq_items(_manual_list, prefix=prefix)
+            S.save_settings()
+            _clear_report_cache()
+        return
+
+    if _act == "update_manual_boq_items":
+        _items_in = _cw_payload.get("items")
+        if isinstance(_items_in, list):
+            _cur_lst = _get_cw_manual_boq_items_list(prefix=prefix)
+            _in_map = {str(x.get("uid")): x for x in _items_in if isinstance(x, dict) and x.get("uid")}
+            _changed = False
+            for _obj in _cur_lst:
+                _u = str(_obj.get("uid"))
+                if _u not in _in_map:
+                    continue
+                _it = _in_map[_u]
+                for _fld in ("name", "unit", "description"):
+                    if _fld in _it:
+                        _v = str(_it[_fld]).strip()
+                        if _obj.get(_fld) != _v:
+                            _obj[_fld] = _v
+                            _changed = True
+                for _fld in ("net_qty", "unit_price"):
+                    if _fld in _it:
+                        try:
+                            _v = round(float(_it[_fld]), 2)
+                        except (ValueError, TypeError):
+                            _v = 0.0
+                        if _obj.get(_fld) != _v:
+                            _obj[_fld] = _v
+                            _changed = True
+            if _changed:
+                _persist_cw_manual_boq_items(_cur_lst, prefix=prefix)
+                _clear_report_cache()
+                st.session_state[_ver_key] = st.session_state.get(_ver_key, 0) + 1
+                st.rerun()
+        return
+
+    if _act == "delete_manual_boq_item":
+        _del_uid = str(_cw_payload.get("uid", "") or _cw_payload.get("item_id", "")).strip()
+        if _del_uid:
+            _cur_lst = _get_cw_manual_boq_items_list(prefix=prefix)
+            _del_obj = next((x for x in _cur_lst if str(x.get("uid")) == _del_uid), None)
+            _del_name = str(_del_obj.get("name", "بند يدوي")) if _del_obj else "البند اليدوي"
+            _new_lst = [x for x in _cur_lst if str(x.get("uid")) != _del_uid]
+            if len(_new_lst) != len(_cur_lst):
+                _persist_cw_manual_boq_items(_new_lst, prefix=prefix)
+                _del_items, _exc_ids = _get_cw_boq_deleted_state(prefix)
+                _m_id = f"manual_{_del_uid}"
+                _del_items = [x for x in _del_items if str(x.get("item_id")) != _m_id]
+                _exc_ids = [x for x in _exc_ids if x != _m_id]
+                _persist_cw_boq_deleted_state(_del_items, _exc_ids, prefix)
+                st.session_state[_ver_key] = st.session_state.get(_ver_key, 0) + 1
+                st.session_state[f"_{prefix}m1_keep_manual_expander_open"] = True
+                st.session_state[f"_{prefix}m1_center_green_toast_msg"] = f"🗑️ تم حذف البند «{_del_name}» بنجاح من المقايسة!"
+                st.rerun()
+        return
+
+    if _act == "delete_boq_table_item":
+        # حذف صف من الجدول المجمع فقط دون المساس بمدخلات نموذج الإضافة
+        _item_id = str(_cw_payload.get("item_id", "")).strip()
+        _source_type = str(_cw_payload.get("source_type", "auto_calculated")).strip()
+        if _item_id:
+            _del_items, _exc_ids = _get_cw_boq_deleted_state(prefix)
+            if _item_id not in _exc_ids:
+                _exc_ids.append(_item_id)
+            _del_items = [x for x in _del_items if str(x.get("item_id")) != _item_id]
+
+            def _num(_key, _cast, _dflt):
+                try:
+                    return _cast(_cw_payload.get(_key, _dflt))
+                except (ValueError, TypeError):
+                    return _dflt
+
+            _del_name_val = str(_cw_payload.get("name", "")).strip()
+            _del_items.append({
+                "item_id": _item_id,
+                "orig_index": _num("orig_index", int, 0),
+                "source_type": "manual" if _source_type == "manual" else "auto_calculated",
+                "name": _del_name_val,
+                "unit": str(_cw_payload.get("unit", "")).strip(),
+                "tot_qty": _num("tot_qty", float, 0.0),
+                "tot_cost": _num("tot_cost", float, 0.0),
+                "uid": str(_cw_payload.get("uid", "")).strip(),
+                "auto_idx": _cw_payload.get("auto_idx"),
+            })
+            _persist_cw_boq_deleted_state(_del_items, _exc_ids, prefix)
+            st.session_state[_ver_key] = st.session_state.get(_ver_key, 0) + 1
+            st.session_state[f"_{prefix}m1_keep_manual_expander_open"] = True
+            st.session_state[f"_{prefix}m1_center_green_toast_msg"] = f"🗑️ تم حذف البند «{_del_name_val}» من الجدول المجمع."
+            st.rerun()
+        return
+
+def _cw_build_boq_tbody_html(boq_table_rows_data, _active_auto_count):
+    import html as _html_mod
+    # بناء صفوف HTML للجدول المدمج (7 أعمدة: أيقونة الحذف ❌ في البداية + 6 أعمدة البيانات)
+    tbody_rows_html = [
+        """
+        <tr class="boq-section-banner-row boq-section-auto">
+            <td colspan="7" class="boq-section-banner-td">
+                <div class="boq-section-banner-inner">
+                    حصر وتكلفة جميع البنود التي يقوم البرنامج بحسابها من الرسم بناء علي تعليمات الي الكود
+                </div>
+            </td>
+        </tr>
+        """
+    ]
+    if _active_auto_count == 0:
+        tbody_rows_html.append("""
+        <tr class="boq-manual-empty-row">
+            <td colspan="7" class="boq-manual-empty-td">
+                تم استبعاد جميع بنود التصميم الأساسية حالياً — يمكنك استعادتها من سجل المستبعدات أسفل الجدول أو عبر زر «🔄 استعادة وحساب جميع بنود التصميم»
+            </td>
+        </tr>
+        """)
+    _manual_section_inserted = False
+    for r_idx, r_info in enumerate(boq_table_rows_data):
+        code_esc = _html_mod.escape(r_info["code"])
+        item_id_esc = _html_mod.escape(r_info["item_id"])
+        source_type_esc = _html_mod.escape(r_info["source_type"])
+        uid_esc = _html_mod.escape(str(r_info.get("uid", "")))
+        auto_idx_esc = _html_mod.escape(str(r_info["auto_idx"]) if r_info.get("auto_idx") is not None else "")
+        seq_esc = _html_mod.escape(r_info["seq"])
+        name_esc = _html_mod.escape(r_info["clean_name"])
+        unit_esc = _html_mod.escape(r_info["unit"])
+        qty_esc = _html_mod.escape(r_info["tot_qty"])
+        uprice_esc = _html_mod.escape(r_info["unit_price"])
+        tcost_esc = _html_mod.escape(r_info["tot_cost"])
+        desc_esc = _html_mod.escape(r_info["desc"])
+        is_tot = r_info["is_total"]
+        is_manual = r_info.get("is_manual", False)
+
+        # إدراج الخط الفاصل السميك وعنوان البنود اليدوية بعد نهاية البنود المحسوبة من الرسم مباشرة
+        if (not _manual_section_inserted) and (is_manual or is_tot):
+            _manual_section_inserted = True
+            tbody_rows_html.append("""
+            <tr class="boq-section-divider-row">
+                <td colspan="7" class="boq-section-divider-td"></td>
+            </tr>
+            <tr class="boq-section-banner-row boq-section-manual">
+                <td colspan="7" class="boq-section-banner-td">
+                    <div class="boq-section-banner-inner">
+                        حصر وتكلفة جميع البنود التي تم إضافتها يدويا
+                    </div>
+                </td>
+            </tr>
+            """)
+            if is_tot:
+                tbody_rows_html.append("""
+                <tr class="boq-manual-empty-row">
+                    <td colspan="7" class="boq-manual-empty-td">
+                        لا توجد بنود مضافة يدوياً حالياً — يمكنك إضافتها من قسم «➕ إضافة وإدارة بنود الحصر اليدوية الإضافية»
+                    </td>
+                </tr>
+                """)
+
+        row_cls = "boq-row boq-total-row" if is_tot else ("boq-row boq-even-row" if r_idx % 2 == 0 else "boq-row boq-odd-row")
+        seq_html = (
+            f'<span class="seq-badge total-seq-badge">{seq_esc}</span>'
+            if is_tot else
+            f'<span class="seq-badge">{seq_esc} -</span>'
+        )
+        del_cell_html = (
+            '<div class="cell-center-wrap" style="color:#64748b; font-size:0.85rem;">—</div>'
+            if is_tot else
+            f'<div class="cell-center-wrap">'
+            f'<button type="button" class="boq-del-x-btn" '
+            f'data-item-id="{item_id_esc}" '
+            f'data-source-type="{source_type_esc}" '
+            f'data-item-name="{name_esc}" '
+            f'data-orig-idx="{r_info["seq_num"]}" '
+            f'data-tot-qty="{r_info["tot_qty_num"]}" '
+            f'data-unit="{unit_esc}" '
+            f'data-tot-cost="{r_info["tot_cost_num"]}" '
+            f'data-uid="{uid_esc}" '
+            f'data-auto-idx="{auto_idx_esc}" '
+            f'title="حذف البند من الجدول المجمع">❌</button>'
+            f'</div>'
+        )
+
+        tbody_rows_html.append(f"""
+        <tr class="{row_cls}" data-row-idx="{r_idx}" data-item-code="{code_esc}">
+            <td class="boq-td cell-del-action">
+                {del_cell_html}
+                <div class="row-resizer" data-row="{r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+            </td>
+            <td class="boq-td cell-summary">
+                <div class="summary-item-wrap">
+                    {seq_html}
+                    <span class="item-name-txt" dir="auto">{name_esc}</span>
+                </div>
+                <div class="col-resizer" data-col="1" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                <div class="row-resizer" data-row="{r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+            </td>
+            <td class="boq-td cell-unit">
+                <div class="cell-center-wrap">{unit_esc}</div>
+                <div class="col-resizer" data-col="2" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                <div class="row-resizer" data-row="{r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+            </td>
+            <td class="boq-td cell-qty">
+                <div class="cell-center-wrap" dir="ltr">{qty_esc}</div>
+                <div class="col-resizer" data-col="3" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                <div class="row-resizer" data-row="{r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+            </td>
+            <td class="boq-td cell-uprice">
+                <div class="cell-center-wrap" dir="ltr">{uprice_esc}</div>
+                <div class="col-resizer" data-col="4" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                <div class="row-resizer" data-row="{r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+            </td>
+            <td class="boq-td cell-tcost">
+                <div class="cell-center-wrap" dir="ltr">{tcost_esc}</div>
+                <div class="col-resizer" data-col="5" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                <div class="row-resizer" data-row="{r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+            </td>
+            <td class="boq-td cell-desc">
+                <div class="desc-editor" contenteditable="true" spellcheck="false" dir="auto" data-item-code="{code_esc}" title="انقر للتعديل المباشر — يدعم النسخ واللصق Ctrl+C / Ctrl+V">{desc_esc}</div>
+                <div class="row-resizer" data-row="{r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
+            </td>
+        </tr>
+        """)
+
+    tbody_joined = "\n".join(tbody_rows_html)
+    return tbody_joined
+
+def _cw_boq_table_html(tbody_joined, initial_descs_json, table_ver, sync_aria_lbl):
+    return f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<!-- boq_table_ver: {table_ver} -->
+<meta charset="utf-8">
+<style>
+  * {{
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }}
+  body, html {{
+    width: 100%;
+    background: transparent;
+    font-family: 'Segoe UI', 'Cairo', Tahoma, Geneva, Verdana, sans-serif;
+    color: #f8fafc;
+    direction: rtl;
+    overflow-x: hidden;
+  }}
+  #boq-root-container {{
+    width: 100%;
+    padding: 2px 0 4px 0;
+    margin: 0;
+    direction: rtl;
+  }}
+  /* شريط العنوان والإرشادات العلوي */
+  .boq-top-banner {{
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.98) 0%, rgba(15, 23, 42, 0.98) 100%);
+    border: 2px solid #ea580c;
+    border-right: 6px solid #f97316;
+    border-radius: 10px;
+    padding: 12px 18px;
+    margin-bottom: 10px;
+    box-shadow: 0 4px 16px rgba(234, 88, 12, 0.20);
+  }}
+  .boq-top-flex {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }}
+  .boq-title-group {{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }}
+  .boq-main-title {{
+    font-weight: 900;
+    font-size: 0.68rem;
+    color: #fb923c;
+  }}
+  .boq-sub-badge {{
+    font-size: 0.56rem;
+    color: #fdba74;
+    font-weight: 700;
+    background: rgba(234, 88, 12, 0.22);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid rgba(249, 115, 22, 0.45);
+  }}
+  .boq-actions-group {{
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+  }}
+  .boq-edit-hint {{
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.28) 0%, rgba(14, 165, 233, 0.16) 100%);
+    border: 1.5px solid #38bdf8;
+    border-radius: 5px;
+    padding: 2px 6px;
+    color: #38bdf8;
+    font-weight: 900;
+    font-size: 0.60rem;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.30);
+  }}
+  .boq-reset-btn {{
+    background: rgba(234, 88, 12, 0.22);
+    border: 1.5px solid #f97316;
+    color: #fed7aa;
+    font-weight: 800;
+    font-size: 0.56rem;
+    padding: 2px 6px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    font-family: inherit;
+  }}
+  .boq-reset-btn:hover {{
+    background: rgba(234, 88, 12, 0.45);
+    color: #ffffff;
+    box-shadow: 0 0 6px rgba(249, 115, 22, 0.45);
+  }}
+  .boq-save-status {{
+    font-size: 0.54rem;
+    font-weight: 800;
+    color: #34d399;
+    display: none;
+    align-items: center;
+    gap: 3px;
+    background: rgba(16, 185, 129, 0.16);
+    border: 1px solid rgba(52, 211, 153, 0.4);
+    padding: 2px 5px;
+    border-radius: 4px;
+  }}
+
+  /* حاوية الجدول الموحد (دمج البانيلات مع الجدول بدون أي فصل) */
+  .boq-table-wrapper {{
+    width: 100%;
+    border: 2px solid #ea580c;
+    border-radius: 10px;
+    background: #0f172a;
+    box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
+    overflow-x: hidden;
+    overflow-y: visible;
+    position: relative;
+  }}
+  table#m1-cw-boq-table {{
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    table-layout: fixed;
+    border-collapse: collapse;
+    border-spacing: 0;
+    direction: rtl;
+    background: #0f172a;
+  }}
+
+  /* ── بانيلات عناوين الجدول المدمجة في thead (برتقالي وأزرق) ── */
+  thead.boq-thead tr.boq-header-row {{
+    height: 38px;
+  }}
+  th.boq-th {{
+    position: relative;
+    padding: 4px 2px;
+    vertical-align: middle;
+    text-align: center;
+    border-bottom: 2px solid #ea580c;
+    user-select: none;
+    overflow: visible;
+  }}
+  /* البانيلات البرتقالية المدمجة */
+  th.boq-th-orange {{
+    background: linear-gradient(180deg, rgba(234, 88, 12, 0.42) 0%, rgba(194, 65, 12, 0.26) 100%);
+    border-left: 1.5px solid rgba(251, 146, 60, 0.50);
+  }}
+  th.boq-th-orange .th-main-title {{
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 900;
+    color: #fb923c;
+    text-shadow: 0 0 8px rgba(251, 146, 60, 0.75), 0 1px 2px #000000;
+    line-height: 1.25;
+  }}
+  th.boq-th-orange .th-sub-title {{
+    display: block;
+    font-size: 0.56rem;
+    font-weight: 800;
+    color: #fed7aa;
+    margin-top: 1px;
+    line-height: 1.15;
+  }}
+  /* البانيل الأزرق المدمج لعمود توصيف البند */
+  th.boq-th-blue {{
+    background: linear-gradient(180deg, rgba(2, 132, 199, 0.48) 0%, rgba(14, 165, 233, 0.26) 100%);
+    border-left: none;
+    border-bottom: 2px solid #38bdf8;
+  }}
+  th.boq-th-blue .th-main-title {{
+    display: block;
+    font-size: 0.68rem;
+    font-weight: 900;
+    color: #00f5ff;
+    text-shadow: 0 0 8px rgba(0, 245, 255, 0.80), 0 1px 2px #000000;
+    line-height: 1.25;
+  }}
+  th.boq-th-blue .th-sub-title {{
+    display: block;
+    font-size: 0.56rem;
+    font-weight: 800;
+    color: #7dd3fc;
+    margin-top: 1px;
+    text-shadow: 0 0 6px rgba(125, 211, 252, 0.65);
+    line-height: 1.15;
+  }}
+
+  /* ── بانيلات عناوين الأقسام الداخلية المدمجة بعرض الجدول بالكامل والخط الفاصل السميك ── */
+  tr.boq-section-banner-row td.boq-section-banner-td {{
+    padding: 0;
+    border-left: none;
+    border-right: none;
+    text-align: center;
+    vertical-align: middle;
+  }}
+  .boq-section-banner-inner {{
+    width: 100%;
+    padding: 7px 14px;
+    font-size: 0.74rem;
+    font-weight: 900;
+    line-height: 1.35;
+    text-align: center;
+    letter-spacing: 0.01em;
+    user-select: text;
+  }}
+  tr.boq-section-auto td.boq-section-banner-td {{
+    background: linear-gradient(90deg, rgba(49, 46, 129, 0.94) 0%, rgba(109, 40, 217, 0.88) 50%, rgba(49, 46, 129, 0.94) 100%);
+    border-bottom: 2px solid #a78bfa;
+  }}
+  tr.boq-section-auto .boq-section-banner-inner {{
+    color: #fde047;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85), 0 0 10px rgba(253, 224, 71, 0.35);
+  }}
+  tr.boq-section-divider-row td.boq-section-divider-td {{
+    height: 7px;
+    padding: 0;
+    line-height: 0;
+    font-size: 0;
+    border: none;
+    background: linear-gradient(90deg, #f59e0b 0%, #f43f5e 35%, #ec4899 65%, #f59e0b 100%);
+    box-shadow: 0 0 12px rgba(244, 63, 94, 0.70);
+  }}
+  tr.boq-section-manual td.boq-section-banner-td {{
+    background: linear-gradient(90deg, rgba(131, 24, 67, 0.94) 0%, rgba(190, 24, 93, 0.88) 50%, rgba(131, 24, 67, 0.94) 100%);
+    border-bottom: 2px solid #f472b6;
+  }}
+  tr.boq-section-manual .boq-section-banner-inner {{
+    color: #fef08a;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85), 0 0 10px rgba(254, 240, 138, 0.35);
+  }}
+  tr.boq-manual-empty-row td.boq-manual-empty-td {{
+    background: rgba(30, 41, 59, 0.60);
+    color: #cbd5e1;
+    font-size: 0.66rem;
+    font-weight: 600;
+    font-style: italic;
+    text-align: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+    border-left: none;
+  }}
+
+  /* ── صفوف وخلايا الجدول ── */
+  tr.boq-row {{
+    transition: background-color 0.12s ease;
+    min-height: 30px;
+  }}
+  tr.boq-even-row {{
+    background-color: rgba(15, 23, 42, 0.92);
+  }}
+  tr.boq-odd-row {{
+    background-color: rgba(30, 41, 59, 0.78);
+  }}
+  tr.boq-row:hover:not(.boq-total-row) {{
+    background-color: rgba(51, 65, 85, 0.65);
+  }}
+  td.boq-td {{
+    position: relative;
+    vertical-align: middle;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.20);
+    border-left: 1px solid rgba(148, 163, 184, 0.18);
+    overflow: visible;
+  }}
+  td.boq-td:last-child {{
+    border-left: none;
+  }}
+
+  /* ── تنسيق عمود البند Item مع هامش مناسب لرقم التسلسل ── */
+  td.cell-summary {{
+    direction: rtl;
+    text-align: right;
+    padding: 4px 8px 4px 6px;
+    background: rgba(234, 88, 12, 0.05);
+  }}
+  .summary-item-wrap {{
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 4px;
+    direction: rtl;
+    text-align: right;
+    width: 100%;
+    margin-right: 2px;
+  }}
+  .seq-badge {{
+    flex-shrink: 0;
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 900;
+    color: #fb923c;
+    min-width: 20px;
+    text-align: right;
+    line-height: 1.4;
+    user-select: text;
+  }}
+  .item-name-txt {{
+    flex: 1;
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: #f8fafc;
+    line-height: 1.4;
+    text-align: start;
+    unicode-bidi: plaintext;
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    user-select: text;
+  }}
+
+  /* ── تنسيق الأعمدة الرقمية والوحدة بحجم مطابق 0.8x ── */
+  .cell-center-wrap {{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    width: 100%;
+    height: 100%;
+    padding: 3px 2px;
+    white-space: normal;
+    word-wrap: break-word;
+    user-select: text;
+  }}
+  td.cell-unit .cell-center-wrap {{
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #e2e8f0;
+  }}
+  td.cell-qty .cell-center-wrap {{
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: #f8fafc;
+  }}
+  td.cell-uprice .cell-center-wrap {{
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: #fdba74;
+  }}
+  td.cell-tcost .cell-center-wrap {{
+    font-size: 0.68rem;
+    font-weight: 900;
+    color: #fbbf24;
+  }}
+
+  /* ── تنسيق عمود توصيف البند القابل للتعديل ── */
+  td.cell-desc {{
+    padding: 3px 6px;
+    background: rgba(2, 132, 199, 0.04);
+    overflow: visible;
+  }}
+  .desc-editor {{
+    width: 100%;
+    min-height: 26px;
+    padding: 3px 6px;
+    text-align: start;
+    unicode-bidi: plaintext;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: #ffffff;
+    line-height: 1.4;
+    border: 1.5px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    outline: none;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    transition: all 0.15s ease;
+    cursor: text;
+    user-select: text;
+  }}
+  .desc-editor:hover {{
+    border-color: rgba(56, 189, 248, 0.40);
+    background: rgba(15, 23, 42, 0.65);
+  }}
+  .desc-editor:focus {{
+    border-color: #38bdf8;
+    background: rgba(15, 23, 42, 0.95);
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.22);
+  }}
+
+  /* ── تنسيق صف إجمالي التكلفة في نهاية الجدول ── */
+  tr.boq-total-row {{
+    background: linear-gradient(90deg, rgba(6, 78, 59, 0.70) 0%, rgba(4, 120, 87, 0.50) 100%) !important;
+    border-top: 2px solid #10b981;
+  }}
+  tr.boq-total-row td.boq-td {{
+    border-bottom: none;
+  }}
+  tr.boq-total-row .seq-badge,
+  tr.boq-total-row .item-name-txt {{
+    font-size: 0.70rem !important;
+    font-weight: 900 !important;
+    color: #34d399 !important;
+  }}
+  tr.boq-total-row td.cell-unit .cell-center-wrap,
+  tr.boq-total-row td.cell-qty .cell-center-wrap,
+  tr.boq-total-row td.cell-uprice .cell-center-wrap {{
+    font-size: 0.68rem !important;
+    font-weight: 900 !important;
+    color: #6ee7b7 !important;
+  }}
+  tr.boq-total-row td.cell-tcost .cell-center-wrap {{
+    font-size: 0.73rem !important;
+    font-weight: 900 !important;
+    color: #10b981 !important;
+    text-shadow: 0 0 6px rgba(16, 185, 129, 0.45);
+  }}
+  tr.boq-total-row .desc-editor {{
+    font-size: 0.68rem !important;
+    font-weight: 800 !important;
+    color: #a7f3d0 !important;
+  }}
+
+  /* ── مقابض التحكم في عرض الأعمدة وعرض/ارتفاع الصفوف بالماوس ── */
+  .col-resizer {{
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -5px;
+    width: 10px;
+    cursor: col-resize;
+    z-index: 30;
+    background: transparent;
+    transition: background-color 0.15s ease;
+  }}
+  .col-resizer:hover,
+  .col-resizer.active-resize {{
+    background: rgba(249, 115, 22, 0.85);
+    box-shadow: 0 0 8px rgba(249, 115, 22, 0.9);
+  }}
+  .row-resizer {{
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -4px;
+    height: 8px;
+    cursor: row-resize;
+    z-index: 25;
+    background: transparent;
+    transition: background-color 0.15s ease;
+  }}
+  .row-resizer:hover,
+  .row-resizer.active-resize {{
+    background: rgba(56, 189, 248, 0.85);
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.9);
+  }}
+  body.is-resizing-col,
+  body.is-resizing-col * {{
+    cursor: col-resize !important;
+    user-select: none !important;
+  }}
+  body.is-resizing-row,
+  body.is-resizing-row * {{
+    cursor: row-resize !important;
+    user-select: none !important;
+  }}
+  /* عمود وزر الحذف المدمج بأيقونة الإكس الحمراء ❌ في بداية كل صف */
+  .th-del-col {{
+    width: 38px !important;
+    min-width: 34px !important;
+    max-width: 44px !important;
+    padding: 4px 2px !important;
+    text-align: center !important;
+  }}
+  .cell-del-action {{
+    width: 38px !important;
+    min-width: 34px !important;
+    max-width: 44px !important;
+    padding: 4px 2px !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+  }}
+  .boq-del-x-btn {{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border-radius: 6px;
+    border: 1px solid rgba(239, 68, 68, 0.45);
+    background: rgba(220, 38, 38, 0.14);
+    color: #ef4444;
+    font-size: 0.85rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }}
+  .boq-del-x-btn:hover {{
+    background: rgba(220, 38, 38, 0.35);
+    border-color: #ef4444;
+    transform: scale(1.12);
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.45);
+  }}
+  .boq-del-x-btn:active {{
+    transform: scale(0.95);
+  }}
+</style>
+</head>
+<body>
+<div id="boq-root-container" dir="rtl">
+    <!-- شريط التنبيه وإرشادات التعديل والتحكم بالماوس -->
+    <div class="boq-top-banner">
+        <div class="boq-top-flex">
+            <div class="boq-title-group">
+                <span class="boq-main-title">📋 الجدول المجمع للكميات والتكلفة لجميع البنود (BOQ Takeoff & Descriptions):</span>
+                <span class="boq-sub-badge">
+                    ترتيب الأعمدة من اليمين إلى اليسار (RTL) • اسحب فواصل الأعمدة (⟷) أو الصفوف (↕) بالماوس للتحكم في العرض والارتفاع
+                </span>
+            </div>
+            <div class="boq-actions-group">
+                <span id="boq-save-indicator" class="boq-save-status">💾 تم حفظ التعديل</span>
+                <button type="button" id="boq-reset-dims-btn" class="boq-reset-btn" title="إعادة ضبط عرض الأعمدة وارتفاع الصفوف للوضع الافتراضي">
+                    ↺ إعادة ضبط مقاسات الجدول
+                </button>
+                <div class="boq-edit-hint">
+                    ✏️ يمكن التعديل في عمود («توصيف البند») (يدعم النسخ واللصق Ctrl+C / Ctrl+V)
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- الجدول الموحد المدمج به بانيلات العناوين البرتقالية والزرقاء -->
+    <div class="boq-table-wrapper" id="boq-table-wrapper">
+        <table id="m1-cw-boq-table" dir="rtl">
+            <colgroup>
+                <col id="boq-col-0" style="width: 3.5%;">
+                <col id="boq-col-1" style="width: 23%;">
+                <col id="boq-col-2" style="width: 7%;">
+                <col id="boq-col-3" style="width: 8.5%;">
+                <col id="boq-col-4" style="width: 9.5%;">
+                <col id="boq-col-5" style="width: 11%;">
+                <col id="boq-col-6" style="width: 37.5%;">
+            </colgroup>
+            <thead class="boq-thead">
+                <tr class="boq-header-row" id="boq-header-tr" data-row-idx="header">
+                    <!-- 0. عمود أيقونة الحذف الضيق في بداية الصف (يمين RTL) -->
+                    <th class="boq-th boq-th-orange th-del-col" title="حذف البند من الجدول المجمع">
+                        <span class="th-main-title" style="font-size:0.82rem;">حذف</span>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                    <!-- 1. بانيل البند Item (برتقالي) -->
+                    <th class="boq-th boq-th-orange">
+                        <span class="th-main-title">🟠 البند</span>
+                        <span class="th-sub-title">(Item)</span>
+                        <div class="col-resizer" data-col="1" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                    <!-- 2. بانيل الوحدة (برتقالي) -->
+                    <th class="boq-th boq-th-orange">
+                        <span class="th-main-title">🟠 الوحدة</span>
+                        <span class="th-sub-title">(Unit)</span>
+                        <div class="col-resizer" data-col="2" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                    <!-- 3. بانيل الكمية الإجمالية (برتقالي) -->
+                    <th class="boq-th boq-th-orange">
+                        <span class="th-main-title">🟠 الكمية</span>
+                        <span class="th-sub-title">الإجمالية</span>
+                        <div class="col-resizer" data-col="3" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                    <!-- 4. بانيل تكلفة الوحدة (برتقالي) -->
+                    <th class="boq-th boq-th-orange">
+                        <span class="th-main-title">🟠 تكلفة الوحدة</span>
+                        <span class="th-sub-title">(ج.م)</span>
+                        <div class="col-resizer" data-col="4" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                    <!-- 5. بانيل إجمالي التكلفة (برتقالي) -->
+                    <th class="boq-th boq-th-orange">
+                        <span class="th-main-title">🟠 إجمالي التكلفة</span>
+                        <span class="th-sub-title">(ج.م)</span>
+                        <div class="col-resizer" data-col="5" title="اسحب بالماوس لتغيير عرض العمود"></div>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                    <!-- 6. بانيل توصيف البند (أزرق) -->
+                    <th class="boq-th boq-th-blue">
+                        <span class="th-main-title">✏️ توصيف البند</span>
+                        <span class="th-sub-title">متاح للتعديل ✍️</span>
+                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="boq-tbody">
+                {tbody_joined}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+(function() {{
+    const COL_STORAGE_KEY = 'm1_cw_boq_col_widths_v3';
+    const ROW_STORAGE_KEY = 'm1_cw_boq_row_heights_v2';
+    const DEFAULT_RATIOS = [0.035, 0.23, 0.07, 0.085, 0.095, 0.11, 0.375];
+    const MIN_COL_WIDTHS = [34, 90, 40, 45, 50, 55, 120];
+
+    const table = document.getElementById('m1-cw-boq-table');
+    const wrapper = document.getElementById('boq-table-wrapper');
+    const rootContainer = document.getElementById('boq-root-container');
+    const cols = [
+        document.getElementById('boq-col-0'),
+        document.getElementById('boq-col-1'),
+        document.getElementById('boq-col-2'),
+        document.getElementById('boq-col-3'),
+        document.getElementById('boq-col-4'),
+        document.getElementById('boq-col-5'),
+        document.getElementById('boq-col-6')
+    ];
+
+    let descriptionsMap = {initial_descs_json};
+    let lastSyncedJson = JSON.stringify(descriptionsMap);
+    let hasInitializedVisibleWidth = false;
+
+    // ضبط ميكانيكي ديناميكي لارتفاع الـ iframe وحاويته في Streamlit لمنع أي فراغ أو تباعد زائد
+    function updateIframeHeight() {{
+        try {{
+            if (!rootContainer) return;
+            const rect = rootContainer.getBoundingClientRect();
+            const contentH = Math.ceil(rect.height || rootContainer.scrollHeight || rootContainer.offsetHeight || 0);
+            if (contentH < 150) return;
+            const h = contentH + 6;
+            if (window.frameElement) {{
+                window.frameElement.style.height = h + 'px';
+                window.frameElement.style.minHeight = h + 'px';
+                window.frameElement.style.maxHeight = h + 'px';
+                window.frameElement.setAttribute('height', String(h));
+
+                let p = window.frameElement.parentElement;
+                let depth = 0;
+                while (p && depth < 5) {{
+                    const testId = (p.getAttribute && p.getAttribute('data-testid')) || '';
+                    const cls = (typeof p.className === 'string') ? p.className : '';
+                    if (
+                        testId === 'stVerticalBlock' ||
+                        testId === 'stVerticalBlockBorderWrapper' ||
+                        testId === 'stExpander' ||
+                        testId === 'stExpanderDetails' ||
+                        testId === 'stColumn' ||
+                        testId === 'stMainBlockContainer' ||
+                        cls.indexOf('stExpander') !== -1 ||
+                        p.tagName === 'DETAILS' ||
+                        p.tagName === 'SECTION' ||
+                        p.tagName === 'MAIN' ||
+                        p.tagName === 'BODY'
+                    ) {{
+                        break;
+                    }}
+                    p.style.height = h + 'px';
+                    p.style.minHeight = h + 'px';
+                    p.style.maxHeight = h + 'px';
+                    p = p.parentElement;
+                    depth++;
+                }}
+            }}
+        }} catch (e) {{}}
+    }}
+
+    if (typeof ResizeObserver !== 'undefined' && rootContainer) {{
+        const ro = new ResizeObserver(function() {{
+            if (wrapper && wrapper.clientWidth > 400 && !hasInitializedVisibleWidth) {{
+                hasInitializedVisibleWidth = true;
+                initColumnWidths(false);
+                initRowHeights(false);
+            }}
+            updateIframeHeight();
+        }});
+        ro.observe(rootContainer);
+        if (wrapper) ro.observe(wrapper);
+    }}
+
+    // رصد فتح الـ Expander الأب في نافذة Streamlit الرئيسية لضبط الارتفاع فور فتح القسم
+    try {{
+        if (window.frameElement) {{
+            const parentDetails = window.frameElement.closest('details');
+            if (parentDetails) {{
+                parentDetails.addEventListener('toggle', function() {{
+                    if (parentDetails.open) {{
+                        setTimeout(function() {{
+                            initColumnWidths(false);
+                            initRowHeights(false);
+                            updateIframeHeight();
+                        }}, 40);
+                        setTimeout(updateIframeHeight, 200);
+                    }}
+                }});
+            }}
+        }}
+    }} catch (e) {{}}
+
+    window.addEventListener('load', updateIframeHeight);
+    window.addEventListener('resize', updateIframeHeight);
+    setTimeout(updateIframeHeight, 80);
+    setTimeout(updateIframeHeight, 300);
+    setTimeout(updateIframeHeight, 700);
+
+    // تهيئة واستعادة عرض الأعمدة بنسب مئوية متناسبة تملأ 100% من الشاشة دائماً بدون أي شريط تمرير أفقي
+    function initColumnWidths(forceDefault) {{
+        let savedWidths = null;
+        if (!forceDefault) {{
+            try {{
+                const raw = localStorage.getItem(COL_STORAGE_KEY);
+                if (raw) {{
+                    const parsed = JSON.parse(raw);
+                    if (Array.isArray(parsed) && parsed.length === 7 && parsed.every(x => typeof x === 'number' && x >= 28)) {{
+                        savedWidths = parsed;
+                    }}
+                }}
+            }} catch (e) {{}}
+        }}
+
+        if (savedWidths) {{
+            let totalW = savedWidths.reduce((a, b) => a + b, 0);
+            if (totalW > 0) {{
+                for (let i = 0; i < 7; i++) {{
+                    const pct = ((savedWidths[i] / totalW) * 100).toFixed(2);
+                    cols[i].style.width = pct + '%';
+                }}
+            }}
+        }} else {{
+            for (let i = 0; i < 7; i++) {{
+                const pct = (DEFAULT_RATIOS[i] * 100).toFixed(2);
+                cols[i].style.width = pct + '%';
+            }}
+        }}
+        table.style.width = '100%';
+        updateIframeHeight();
+    }}
+
+    // استعادة ارتفاع الصفوف المحفوظة
+    function initRowHeights(forceDefault) {{
+        if (forceDefault) {{
+            const hdrTr = document.getElementById('boq-header-tr');
+            if (hdrTr) hdrTr.style.height = '';
+            document.querySelectorAll('tr.boq-row').forEach(tr => {{
+                tr.style.height = '';
+            }});
+            updateIframeHeight();
+            return;
+        }}
+        try {{
+            const raw = localStorage.getItem(ROW_STORAGE_KEY);
+            if (!raw) return;
+            const savedRows = JSON.parse(raw);
+            if (savedRows && typeof savedRows === 'object') {{
+                if (savedRows['header']) {{
+                    const hdrTr = document.getElementById('boq-header-tr');
+                    if (hdrTr) hdrTr.style.height = savedRows['header'] + 'px';
+                }}
+                document.querySelectorAll('tr.boq-row').forEach(tr => {{
+                    const rIdx = tr.getAttribute('data-row-idx');
+                    if (rIdx && savedRows[rIdx]) {{
+                        tr.style.height = savedRows[rIdx] + 'px';
+                    }}
+                }});
+            }}
+        }} catch (e) {{}}
+        updateIframeHeight();
+    }}
+
+    function saveColumnWidths() {{
+        try {{
+            const ths = table.querySelectorAll('thead th.boq-th');
+            const arr = Array.from(ths).map(th => Math.round(th.getBoundingClientRect().width));
+            if (arr.length === 7) {{
+                localStorage.setItem(COL_STORAGE_KEY, JSON.stringify(arr));
+            }}
+        }} catch (e) {{}}
+    }}
+
+    function saveRowHeight(rowKey, hPx) {{
+        try {{
+            let savedRows = {{}};
+            const raw = localStorage.getItem(ROW_STORAGE_KEY);
+            if (raw) savedRows = JSON.parse(raw) || {{}};
+            savedRows[rowKey] = Math.round(hPx);
+            localStorage.setItem(ROW_STORAGE_KEY, JSON.stringify(savedRows));
+        }} catch (e) {{}}
+    }}
+
+    initColumnWidths(false);
+    initRowHeights(false);
+
+    // ── التحكم بالماوس في عرض الأعمدة (Column Width Resizing) ──
+    let activeColIdx = null;
+    let colStartX = 0;
+    let colStartW = 0;
+    let nextColStartW = 0;
+    let activeColHandle = null;
+
+    document.querySelectorAll('.col-resizer').forEach(handle => {{
+        handle.addEventListener('mousedown', function(e) {{
+            e.preventDefault();
+            e.stopPropagation();
+            const cIdx = parseInt(handle.getAttribute('data-col'), 10);
+            if (isNaN(cIdx) || cIdx < 1 || cIdx >= 6) return;
+
+            const ths = table.querySelectorAll('thead th.boq-th');
+            const curWidths = Array.from(ths).map(th => th.getBoundingClientRect().width);
+            for (let i = 0; i < 7; i++) {{
+                cols[i].style.width = Math.round(curWidths[i]) + 'px';
+            }}
+
+            activeColIdx = cIdx;
+            colStartX = e.clientX;
+            colStartW = curWidths[cIdx];
+            nextColStartW = curWidths[cIdx + 1];
+            activeColHandle = handle;
+            handle.classList.add('active-resize');
+            document.body.classList.add('is-resizing-col');
+        }});
+    }});
+
+    // ── التحكم بالماوس في ارتفاع الصفوف (Row Height Resizing) ──
+    let activeRowTr = null;
+    let activeRowKey = null;
+    let rowStartY = 0;
+    let rowStartH = 0;
+    let activeRowHandle = null;
+
+    document.querySelectorAll('.row-resizer').forEach(handle => {{
+        handle.addEventListener('mousedown', function(e) {{
+            e.preventDefault();
+            e.stopPropagation();
+            const rKey = handle.getAttribute('data-row');
+            const tr = handle.closest('tr');
+            if (!tr) return;
+
+            activeRowTr = tr;
+            activeRowKey = rKey;
+            rowStartY = e.clientY;
+            rowStartH = tr.getBoundingClientRect().height;
+            activeRowHandle = handle;
+            handle.classList.add('active-resize');
+            document.body.classList.add('is-resizing-row');
+        }});
+    }});
+
+    window.addEventListener('mousemove', function(e) {{
+        if (activeColIdx !== null) {{
+            e.preventDefault();
+            // في اتجاه RTL: السحب لليسار (clientX يقل => deltaLeft موجب) يزيد عرض العمود الحالي
+            const deltaLeft = colStartX - e.clientX;
+            const minCur = MIN_COL_WIDTHS[activeColIdx] || 45;
+            const minNext = MIN_COL_WIDTHS[activeColIdx + 1] || 45;
+
+            let newCurW = Math.max(minCur, colStartW + deltaLeft);
+            let actualDelta = newCurW - colStartW;
+            let newNextW = nextColStartW - actualDelta;
+
+            if (newNextW < minNext) {{
+                newNextW = minNext;
+                actualDelta = nextColStartW - minNext;
+                newCurW = colStartW + actualDelta;
+            }}
+
+            const tblW = table.getBoundingClientRect().width || (wrapper ? wrapper.clientWidth : 1000) || 1000;
+            const pctCur = ((newCurW / tblW) * 100).toFixed(2);
+            const pctNext = ((newNextW / tblW) * 100).toFixed(2);
+
+            cols[activeColIdx].style.width = pctCur + '%';
+            cols[activeColIdx + 1].style.width = pctNext + '%';
+
+            table.style.width = '100%';
+            updateIframeHeight();
+            return;
+        }}
+
+        if (activeRowTr !== null) {{
+            e.preventDefault();
+            const deltaY = e.clientY - rowStartY;
+            const minH = (activeRowKey === 'header') ? 48 : 42;
+            const newH = Math.max(minH, Math.round(rowStartH + deltaY));
+            activeRowTr.style.height = newH + 'px';
+            updateIframeHeight();
+            return;
+        }}
+    }});
+
+    window.addEventListener('mouseup', function() {{
+        if (activeColIdx !== null) {{
+            saveColumnWidths();
+            activeColIdx = null;
+            if (activeColHandle) {{
+                activeColHandle.classList.remove('active-resize');
+                activeColHandle = null;
+            }}
+            document.body.classList.remove('is-resizing-col');
+            updateIframeHeight();
+        }}
+        if (activeRowTr !== null) {{
+            const finalH = activeRowTr.getBoundingClientRect().height;
+            if (activeRowKey) {{
+                saveRowHeight(activeRowKey, finalH);
+            }}
+            activeRowTr = null;
+            activeRowKey = null;
+            if (activeRowHandle) {{
+                activeRowHandle.classList.remove('active-resize');
+                activeRowHandle = null;
+            }}
+            document.body.classList.remove('is-resizing-row');
+            updateIframeHeight();
+        }}
+    }});
+
+    // زر إعادة ضبط أبعاد الأعمدة والصفوف
+    const resetBtn = document.getElementById('boq-reset-dims-btn');
+    if (resetBtn) {{
+        resetBtn.addEventListener('click', function() {{
+            try {{
+                localStorage.removeItem(COL_STORAGE_KEY);
+                localStorage.removeItem(ROW_STORAGE_KEY);
+            }} catch (e) {{}}
+            initColumnWidths(true);
+            initRowHeights(true);
+        }});
+    }}
+
+    // ── مزامنة تعديلات عمود «توصيف البند» مع Streamlit عند الخروج من الخلية (Blur) فقط ──
+    let activeFocusedEditor = null;
+
+    function collectAllDescriptions() {{
+        document.querySelectorAll('.desc-editor').forEach(ed => {{
+            const code = ed.getAttribute('data-item-code');
+            if (code) {{
+                descriptionsMap[code] = (ed.innerText || ed.textContent || '').trim();
+            }}
+        }});
+    }}
+
+    function syncDescriptionsToStreamlit() {{
+        collectAllDescriptions();
+        const curJson = JSON.stringify(descriptionsMap);
+        if (curJson === lastSyncedJson) return;
+        lastSyncedJson = curJson;
+
+        const saveBadge = document.getElementById('boq-save-indicator');
+        if (saveBadge) {{
+            saveBadge.style.display = 'inline-flex';
+            setTimeout(() => {{ saveBadge.style.display = 'none'; }}, 2500);
+        }}
+
+        const payload = {{
+            action: 'update_cw_boq_descriptions',
+            descriptions: descriptionsMap,
+            ts: Date.now()
+        }};
+        const jsonStr = JSON.stringify(payload);
+        try {{
+            if (window.parent && window.parent.document) {{
+                const pDoc = window.parent.document;
+                let input = pDoc.querySelector('input[aria-label="{sync_aria_lbl}"]');
+                if (!input) {{
+                    input = pDoc.querySelector('div[data-testid="stTextInput"] input');
+                }}
+                if (input) {{
+                    const proto = (window.parent.HTMLInputElement || window.HTMLInputElement).prototype;
+                    const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+                    if (desc && desc.set) {{
+                        desc.set.call(input, jsonStr);
+                    }} else {{
+                        input.value = jsonStr;
+                    }}
+                    if (input._valueTracker) {{
+                        input._valueTracker.setValue('');
+                    }}
+                    input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                    input.dispatchEvent(new KeyboardEvent('keydown', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
+                    input.dispatchEvent(new KeyboardEvent('keyup', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
+                    input.dispatchEvent(new Event('blur', {{ bubbles: true }}));
+                    setTimeout(() => {{
+                        try {{
+                            if (desc && desc.set) {{ desc.set.call(input, ''); }} else {{ input.value = ''; }}
+                        }} catch (e) {{}}
+                    }}, 450);
+                }}
+            }}
+        }} catch (err) {{
+            console.warn('BOQ description sync error:', err);
+        }}
+    }}
+
+    // ── ضبط اتجاه ومحاذاة الكتابة تلقائياً (RTL للعربية / LTR للإنجليزية) ──
+    function applyBiDiDirection(elem) {{
+        if (!elem) return;
+        const txt = (elem.innerText || elem.textContent || '').trim();
+        if (!txt) {{
+            elem.setAttribute('dir', 'auto');
+            elem.style.textAlign = 'start';
+            return;
+        }}
+        const arabicRegex = /[\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF]/;
+        const latinRegex = /[a-zA-Z]/;
+
+        let isArabic = false;
+        for (let i = 0; i < txt.length; i++) {{
+            const ch = txt[i];
+            if (arabicRegex.test(ch)) {{
+                isArabic = true;
+                break;
+            }} else if (latinRegex.test(ch)) {{
+                isArabic = false;
+                break;
+            }}
+        }}
+
+        if (isArabic) {{
+            elem.setAttribute('dir', 'rtl');
+            elem.style.textAlign = 'right';
+        }} else {{
+            elem.setAttribute('dir', 'ltr');
+            elem.style.textAlign = 'left';
+        }}
+    }}
+
+    // تطبيق ضبط الاتجاه والمحاذاة المبدئي لجميع خلايا الجدول
+    document.querySelectorAll('.desc-editor, .item-name-txt').forEach(applyBiDiDirection);
+
+    document.querySelectorAll('.desc-editor').forEach(editor => {{
+        editor.addEventListener('focus', function() {{
+            activeFocusedEditor = editor;
+        }});
+        editor.addEventListener('input', function() {{
+            applyBiDiDirection(editor);
+            const code = editor.getAttribute('data-item-code');
+            if (code) {{
+                descriptionsMap[code] = (editor.innerText || editor.textContent || '').trim();
+            }}
+            updateIframeHeight();
+        }});
+        editor.addEventListener('blur', function() {{
+            applyBiDiDirection(editor);
+            if (activeFocusedEditor === editor) activeFocusedEditor = null;
+            const code = editor.getAttribute('data-item-code');
+            if (code) {{
+                descriptionsMap[code] = (editor.innerText || editor.textContent || '').trim();
+            }}
+            syncDescriptionsToStreamlit();
+        }});
+        editor.addEventListener('paste', function() {{
+            setTimeout(() => {{
+                applyBiDiDirection(editor);
+                updateIframeHeight();
+            }}, 25);
+        }});
+    }});
+
+    // ── تنبيه صوتي (صفارة) + نافذة تأكيد الحذف الفردي عند الضغط على ❌ ──
+    function sendBoqActionToParent(payloadObj) {{
+        const jsonStr = JSON.stringify(payloadObj);
+        try {{
+            if (window.parent && window.parent.document) {{
+                const pDoc = window.parent.document;
+                let input = pDoc.querySelector('input[aria-label="{sync_aria_lbl}"]');
+                if (!input) {{
+                    input = pDoc.querySelector('div[data-testid="stTextInput"] input');
+                }}
+                if (input) {{
+                    const proto = (window.parent.HTMLInputElement || window.HTMLInputElement).prototype;
+                    const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+                    if (desc && desc.set) {{
+                        desc.set.call(input, jsonStr);
+                    }} else {{
+                        input.value = jsonStr;
+                    }}
+                    if (input._valueTracker) {{
+                        input._valueTracker.setValue('');
+                    }}
+                    input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                    input.dispatchEvent(new KeyboardEvent('keydown', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
+                    input.dispatchEvent(new KeyboardEvent('keyup', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
+                    input.dispatchEvent(new Event('blur', {{ bubbles: true }}));
+                    setTimeout(() => {{
+                        try {{
+                            if (desc && desc.set) {{ desc.set.call(input, ''); }} else {{ input.value = ''; }}
+                        }} catch (e) {{}}
+                    }}, 450);
+                }}
+            }}
+        }} catch (err) {{
+            console.warn('BOQ delete sync error:', err);
+        }}
+    }}
+
+    function playBoqDeleteBeep() {{
+        try {{
+            const pWin = window.parent || window;
+            const AudioCtx = pWin.AudioContext || pWin.webkitAudioContext || window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            const ctx = pWin.__m15BoqBeepCtx || new AudioCtx();
+            pWin.__m15BoqBeepCtx = ctx;
+            if (ctx.state === 'suspended') ctx.resume().catch(function(){{}});
+            const now = ctx.currentTime;
+            [0, 0.14].forEach(function(offset, idx) {{
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(idx === 0 ? 920 : 680, now + offset);
+                gain.gain.setValueAtTime(0.001, now + offset);
+                gain.gain.exponentialRampToValueAtTime(0.28, now + offset + 0.015);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.12);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now + offset);
+                osc.stop(now + offset + 0.13);
+            }});
+        }} catch (e) {{}}
+    }}
+
+    function showBoqDeleteConfirmModal(itemMeta) {{
+        const targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+        const MODAL_ID = 'm1-boq-del-confirm-modal';
+        const existing = targetDoc.getElementById(MODAL_ID);
+        if (existing) existing.remove();
+
+        const backdrop = targetDoc.createElement('div');
+        backdrop.id = MODAL_ID;
+        backdrop.setAttribute('dir', 'rtl');
+        backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(2,6,23,0.72);backdrop-filter:blur(4px);z-index:9999999;display:flex;align-items:center;justify-content:center;padding:16px;font-family:Segoe UI,Cairo,Tahoma,sans-serif;';
+
+        const card = targetDoc.createElement('div');
+        card.style.cssText = 'width:100%;max-width:480px;background:linear-gradient(145deg,#0f172a 0%,#1e293b 100%);border:2px solid #ef4444;border-radius:14px;padding:22px 24px;box-shadow:0 20px 50px rgba(0,0,0,0.65),0 0 24px rgba(239,68,68,0.28);color:#f8fafc;text-align:right;';
+
+        const hdr = targetDoc.createElement('div');
+        hdr.style.cssText = 'display:flex;align-items:center;gap:10px;font-size:1.15rem;font-weight:900;color:#fca5a5;margin-bottom:12px;';
+        hdr.textContent = '⚠️ تأكيد حذف البند من الجدول المجمع';
+
+        const msg = targetDoc.createElement('div');
+        msg.style.cssText = 'font-size:1.05rem;font-weight:700;color:#f1f5f9;line-height:1.7;margin-bottom:20px;background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.35);border-radius:10px;padding:12px 14px;';
+        msg.textContent = 'هل أنت متأكد من حذف البند: [' + itemMeta.name + '] من الجدول المجمع؟';
+
+        const btnsRow = targetDoc.createElement('div');
+        btnsRow.style.cssText = 'display:flex;gap:12px;justify-content:flex-start;';
+
+        const btnConfirm = targetDoc.createElement('button');
+        btnConfirm.type = 'button';
+        btnConfirm.textContent = '✅ تأكيد الحذف';
+        btnConfirm.style.cssText = 'flex:1;padding:10px 16px;border-radius:9px;border:1.5px solid #ef4444;background:linear-gradient(135deg,#dc2626 0%,#b91c1c 100%);color:#ffffff;font-size:1rem;font-weight:900;cursor:pointer;box-shadow:0 4px 12px rgba(220,38,38,0.4);';
+
+        const btnCancel = targetDoc.createElement('button');
+        btnCancel.type = 'button';
+        btnCancel.textContent = '❌ إلغاء';
+        btnCancel.style.cssText = 'flex:1;padding:10px 16px;border-radius:9px;border:1.5px solid #475569;background:#1e293b;color:#e2e8f0;font-size:1rem;font-weight:800;cursor:pointer;';
+
+        function closeModal() {{
+            try {{ backdrop.remove(); }} catch(e) {{}}
+        }}
+
+        btnCancel.addEventListener('click', closeModal);
+        backdrop.addEventListener('click', function(ev) {{
+            if (ev.target === backdrop) closeModal();
+        }});
+        btnConfirm.addEventListener('click', function() {{
+            btnConfirm.disabled = true;
+            btnConfirm.textContent = '⏳ جارٍ الحذف...';
+            closeModal();
+            sendBoqActionToParent({{
+                action: 'delete_boq_table_item',
+                item_id: itemMeta.item_id,
+                source_type: itemMeta.source_type,
+                name: itemMeta.name,
+                orig_index: itemMeta.orig_index,
+                tot_qty: itemMeta.tot_qty,
+                unit: itemMeta.unit,
+                tot_cost: itemMeta.tot_cost,
+                uid: itemMeta.uid,
+                auto_idx: itemMeta.auto_idx,
+                ts: Date.now()
+            }});
+        }});
+
+        btnsRow.appendChild(btnConfirm);
+        btnsRow.appendChild(btnCancel);
+        card.appendChild(hdr);
+        card.appendChild(msg);
+        card.appendChild(btnsRow);
+        backdrop.appendChild(card);
+        targetDoc.body.appendChild(backdrop);
+    }}
+
+    document.addEventListener('click', function(e) {{
+        const btn = e.target.closest('.boq-del-x-btn');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        playBoqDeleteBeep();
+        const autoIdxRaw = btn.getAttribute('data-auto-idx');
+        showBoqDeleteConfirmModal({{
+            item_id: btn.getAttribute('data-item-id') || '',
+            source_type: btn.getAttribute('data-source-type') || 'auto_calculated',
+            name: btn.getAttribute('data-item-name') || '',
+            orig_index: parseInt(btn.getAttribute('data-orig-idx') || '0', 10) || 0,
+            tot_qty: parseFloat(btn.getAttribute('data-tot-qty') || '0') || 0.0,
+            unit: btn.getAttribute('data-unit') || '',
+            tot_cost: parseFloat(btn.getAttribute('data-tot-cost') || '0') || 0.0,
+            uid: btn.getAttribute('data-uid') || '',
+            auto_idx: autoIdxRaw ? parseInt(autoIdxRaw, 10) : null
+        }});
+    }});
+
+    window.addEventListener('blur', function() {{
+        syncDescriptionsToStreamlit();
+    }});
+    document.addEventListener('visibilitychange', function() {{
+        if (document.visibilityState === 'hidden') {{
+            syncDescriptionsToStreamlit();
+        }}
+    }});
+}})();
+</script>
+</body>
+</html>"""
+
+def _render_cw_boq_bottom_toolbar(_boq_deleted_items, prefix: str = ''):
+    import html as _html_mod
+    # ── بانيل رسائل استرجاع البنود المحذوفة (تظهر بخط كبير في منتصف الشاشة بخلفية خضراء لمدة 3 ثوانٍ) ──
+    _render_cw_center_green_toast(prefix)
+
+    # ── شريط أدوات أسفل الجدول المجمع: استعادة وحساب بنود التصميم + استعادة بند يدوي محذوف (أزرار حمراء بكتابة بيضاء) ──
+    _auto_deleted_list = sorted(
+        [d for d in _boq_deleted_items if d.get("source_type") == "auto_calculated"],
+        key=lambda x: int(x.get("orig_index", 0) or 0),
+    )
+    _manual_deleted_list = [d for d in _boq_deleted_items if d.get("source_type") == "manual"]
+
+    if st.session_state.pop(f"_{prefix}m1_play_reset_design_beep", False):
+        _play_cw_boq_warning_beep("reset_design")
+
+    st.markdown(
+        """
+        <style>
+        /* تقليص الفراغ والتباعد الميكانيكي بين جدول الحصر المجمع والأزرار أسفله */
+        div[data-testid="stElementContainer"]:has(> div[data-testid="stIFrame"]),
+        div[data-testid="stElementContainer"]:has(iframe[title="st.iframe"]) {
+            margin-bottom: 2px !important;
+            padding-bottom: 0px !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(div[class*="m1_reset_design_items_btn"]) {
+            margin-top: 4px !important;
+            padding-top: 0px !important;
+        }
+        div[class*="m1_reset_design_items_btn"] button,
+        div[class*="m1_restore_man_popover"] button {
+            background: #dc2626 !important;
+            background-color: #dc2626 !important;
+            border: 1.5px solid #ef4444 !important;
+            color: #ffffff !important;
+            border-radius: 8px !important;
+            box-shadow: 0 4px 14px rgba(220, 38, 38, 0.40) !important;
+            transition: all 0.2s ease !important;
+        }
+        div[class*="m1_reset_design_items_btn"] button:hover,
+        div[class*="m1_restore_man_popover"] button:hover {
+            background: #b91c1c !important;
+            background-color: #b91c1c !important;
+            border-color: #f87171 !important;
+            color: #ffffff !important;
+            box-shadow: 0 6px 18px rgba(239, 68, 68, 0.55) !important;
+            transform: translateY(-1px) !important;
+        }
+        div[class*="m1_reset_design_items_btn"] button *,
+        div[class*="m1_restore_man_popover"] button * {
+            color: #ffffff !important;
+            font-weight: 900 !important;
+            font-size: 1.02rem !important;
+            fill: #ffffff !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    def _cb_reset_design_items():
+        _cur_del, _cur_exc = _get_cw_boq_deleted_state(prefix)
+        _new_exc = [x for x in _cur_exc if str(x).startswith("manual_")]
+        _new_del = [x for x in _cur_del if str(x.get("source_type")) == "manual"]
+        _persist_cw_boq_deleted_state(_new_del, _new_exc, prefix)
+        st.session_state[f"_{prefix}m1_boq_table_ver"] = st.session_state.get(f"_{prefix}m1_boq_table_ver", 0) + 1
+        st.session_state.pop(f"_{prefix}m1_confirm_reset_design_items", None)
+        st.session_state.pop(f"_{prefix}m1_confirm_perm_clear_auto_log", None)
+        st.session_state[f"_{prefix}m1_play_reset_design_beep"] = True
+        st.session_state[f"_{prefix}m1_center_green_toast_msg"] = "✨ لقد تم استرجاع جميع بنود التصميم الاساسية بنجاح"
+        st.session_state[f"_{prefix}m1_keep_manual_expander_open"] = True
+
+    def _cb_restore_manual_item(_target_id: str, _target_name: str):
+        _cur_del, _cur_exc = _get_cw_boq_deleted_state(prefix)
+        _new_del = [x for x in _cur_del if str(x.get("item_id")) != _target_id]
+        _new_exc = [x for x in _cur_exc if x != _target_id]
+        _persist_cw_boq_deleted_state(_new_del, _new_exc, prefix)
+        st.session_state[f"_{prefix}m1_boq_table_ver"] = st.session_state.get(f"_{prefix}m1_boq_table_ver", 0) + 1
+        st.session_state[f"_{prefix}m1_keep_manual_expander_open"] = True
+        st.session_state[f"_{prefix}m1_center_green_toast_msg"] = f"↩️ تمت استعادة البند اليدوي «{_target_name}» إلى الجدول المجمع بنجاح"
+
+    def _cb_clear_manual_del_log():
+        _cur_del, _cur_exc = _get_cw_boq_deleted_state(prefix)
+        _new_del = [x for x in _cur_del if str(x.get("source_type")) != "manual"]
+        _persist_cw_boq_deleted_state(_new_del, _cur_exc, prefix)
+        st.session_state[f"_{prefix}m1_boq_table_ver"] = st.session_state.get(f"_{prefix}m1_boq_table_ver", 0) + 1
+        st.session_state[f"_{prefix}m1_keep_manual_expander_open"] = True
+        st.session_state[f"_{prefix}m1_center_green_toast_msg"] = "🗑️ تم مسح وتفريغ سجل المحذوفات اليدوية بنجاح."
+
+    _bot_bar_c1, _bot_bar_c2 = st.columns([1.15, 1.0], gap="small")
+    with _bot_bar_c1:
+        st.button(
+            "🔄 استعادة وحساب جميع بنود التصميم",
+            key=f"{prefix}m1_reset_design_items_btn",
+            use_container_width=True,
+            help="إعادة حساب وتنزيل جميع بنود التصميم الأساسية بالكامل في الجدول المجمع مع الحفاظ التام على البنود اليدوية",
+            on_click=_cb_reset_design_items,
+        )
+
+    with _bot_bar_c2:
+        _man_pop_label = (
+            f"↩️ استعادة بند يدوي محذوف ({len(_manual_deleted_list)}) ▾"
+            if _manual_deleted_list else
+            "↩️ استعادة بند يدوي محذوف ▾"
+        )
+        with st.popover(_man_pop_label, key=f"{prefix}m1_restore_man_popover", use_container_width=True):
+            if _manual_deleted_list:
+                st.markdown(
+                    "<div dir='rtl' style='font-weight:800; color:#38bdf8; font-size:0.95rem; margin-bottom:8px;'>"
+                    "📋 البنود اليدوية المحذوفة من الجدول المجمع:"
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+                for _m_del_idx, _m_del in enumerate(_manual_deleted_list):
+                    _m_del_id = str(_m_del.get("item_id", ""))
+                    _m_del_name = str(_m_del.get("name", "بند يدوي"))
+                    _mc1, _mc2 = st.columns([3.2, 1.3], gap="small")
+                    with _mc1:
+                        st.markdown(
+                            f"<div dir='rtl' style='padding:5px 0; font-weight:700; color:#f1f5f9; font-size:0.92rem;'>"
+                            f"• {_html_mod.escape(_m_del_name)}"
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
+                    with _mc2:
+                        st.button(
+                            "↩️ استعادة",
+                            key=f"{prefix}m1_restore_man_{_m_del_id}",
+                            use_container_width=True,
+                            on_click=_cb_restore_manual_item,
+                            args=(_m_del_id, _m_del_name),
+                        )
+                st.markdown("<hr style='margin:8px 0; border-color:rgba(148,163,184,0.25);'>", unsafe_allow_html=True)
+                st.button(
+                    "🗑️ مسح سجل المحذوفات اليدوية",
+                    key=f"{prefix}m1_clear_manual_del_direct_btn",
+                    use_container_width=True,
+                    help="تفريغ سجل البنود اليدوية المحذوفة مباشرة بضغطة واحدة بدون رسالة تأكيد",
+                    on_click=_cb_clear_manual_del_log,
+                )
+            else:
+                st.markdown(
+                    "<div dir='rtl' style='color:#94a3b8; font-weight:700; font-size:0.90rem; text-align:center; padding:8px 4px;'>"
+                    "لا توجد بنود يدوية محذوفة حالياً."
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+
+    # ── القائمة المنسدلة للبنود المستبعدة من التصميم الأساسي (auto_calculated) أسفل الأزرار مباشرة ──
+    if _auto_deleted_list:
+        _placeholder_auto_lbl = "لم يتم اختيار بنود اساسية للاستعادة"
+        _auto_opt_labels = [_placeholder_auto_lbl]
+        _auto_opt_map = {}
+        for _a_del in _auto_deleted_list:
+            _a_del_id = str(_a_del.get("item_id", ""))
+            _a_orig_num = _a_del.get("orig_index", _a_del.get("auto_idx", "-"))
+            _a_name = str(_a_del.get("name", ""))
+            _a_qty = float(_a_del.get("tot_qty", 0.0) or 0.0)
+            _a_unit = str(_a_del.get("unit", ""))
+            _a_cost = float(_a_del.get("tot_cost", 0.0) or 0.0)
+            _opt_lbl = f"بند ({_a_orig_num}): {_a_name} — ({_a_qty:,.2f} {_a_unit}) — ({_a_cost:,.2f} ج.م.)"
+            _auto_opt_labels.append(_opt_lbl)
+            _auto_opt_map[_opt_lbl] = (_a_del_id, _a_name)
+
+        if st.session_state.get(f"{prefix}m1_auto_excluded_sel") not in _auto_opt_labels:
+            st.session_state[f"{prefix}m1_auto_excluded_sel"] = _placeholder_auto_lbl
+
+        def _cb_restore_selected_auto_item():
+            _chosen_lbl = st.session_state.get(f"{prefix}m1_auto_excluded_sel", _placeholder_auto_lbl)
+            if _chosen_lbl not in _auto_opt_map:
+                return
+            _target_id, _target_name = _auto_opt_map[_chosen_lbl]
+            _cur_del, _cur_exc = _get_cw_boq_deleted_state(prefix)
+            _new_del = [x for x in _cur_del if str(x.get("item_id")) != _target_id]
+            _new_exc = [x for x in _cur_exc if x != _target_id]
+            _persist_cw_boq_deleted_state(_new_del, _new_exc, prefix)
+            st.session_state[f"{prefix}m1_auto_excluded_sel"] = _placeholder_auto_lbl
+            st.session_state[f"_{prefix}m1_boq_table_ver"] = st.session_state.get(f"_{prefix}m1_boq_table_ver", 0) + 1
+            st.session_state[f"_{prefix}m1_keep_manual_expander_open"] = True
+            st.session_state[f"_{prefix}m1_center_green_toast_msg"] = "✅ تم استعادة البند المحذوف من البنود الأساسية"
+            st.session_state[f"_{prefix}m1_center_green_toast_dur"] = 3.0
+
+        def _cb_ask_perm_clear_auto_log():
+            st.session_state[f"_{prefix}m1_confirm_perm_clear_auto_log"] = True
+            st.session_state[f"_{prefix}m1_play_perm_clear_beep"] = True
+            st.session_state[f"_{prefix}m1_keep_manual_expander_open"] = True
+
+        def _cb_confirm_perm_clear_auto_log():
+            _cur_del, _cur_exc = _get_cw_boq_deleted_state(prefix)
+            _new_del = [x for x in _cur_del if x.get("source_type") != "auto_calculated"]
+            _persist_cw_boq_deleted_state(_new_del, _cur_exc, prefix)
+            st.session_state[f"{prefix}m1_auto_excluded_sel"] = _placeholder_auto_lbl
+            st.session_state[f"_{prefix}m1_boq_table_ver"] = st.session_state.get(f"_{prefix}m1_boq_table_ver", 0) + 1
+            st.session_state.pop(f"_{prefix}m1_confirm_perm_clear_auto_log", None)
+            st.session_state[f"_{prefix}m1_keep_manual_expander_open"] = True
+            st.session_state[f"_{prefix}m1_center_green_toast_msg"] = '🗑️ تم الحذف النهائي لجميع البنود .. لاستعادة جميع البنود الأساسية اضغط زر "🔄 استعادة وحساب جميع بنود التصميم"'
+            st.session_state[f"_{prefix}m1_center_green_toast_dur"] = 3.0
+
+        def _cb_cancel_perm_clear_auto_log():
+            st.session_state.pop(f"_{prefix}m1_confirm_perm_clear_auto_log", None)
+            st.session_state[f"_{prefix}m1_keep_manual_expander_open"] = True
+
+        st.markdown(
+            """
+            <style>
+            div[class*="m1_auto_excluded_sel"] label,
+            div[class*="m1_auto_excluded_sel"] label p,
+            div[class*="m1_auto_excluded_sel"] label span {
+                color: #ef4444 !important;
+                font-size: 1.05rem !important;
+                font-weight: 900 !important;
+            }
+            div[class*="m1_auto_excluded_sel"] div[data-baseweb="select"] > div {
+                border: 1.8px solid #ef4444 !important;
+                border-radius: 9px !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        _ad_c1, _ad_c2, _ad_c3 = st.columns([4.0, 1.15, 1.75], gap="small", vertical_alignment="bottom")
+        with _ad_c1:
+            _sel_auto_lbl = st.selectbox(
+                f"⚠️ سجل البنود المستبعدة من التصميم الأساسي ({len(_auto_deleted_list)} بنود):",
+                options=_auto_opt_labels,
+                key=f"{prefix}m1_auto_excluded_sel",
+            )
+        with _ad_c2:
+            st.button(
+                "↩️ استعادة",
+                key=f"{prefix}m1_restore_auto_selected_btn",
+                type="primary",
+                use_container_width=True,
+                disabled=(_sel_auto_lbl == _placeholder_auto_lbl),
+                on_click=_cb_restore_selected_auto_item,
+            )
+        with _ad_c3:
+            st.button(
+                "🗑️ حذف نهائي لجميع البنود",
+                key=f"{prefix}m1_perm_clear_auto_log_btn",
+                use_container_width=True,
+                help="حذف نهائي لجميع البنود المستبعدة من السجل",
+                on_click=_cb_ask_perm_clear_auto_log,
+            )
+
+        if st.session_state.get(f"_{prefix}m1_confirm_perm_clear_auto_log", False):
+            if st.session_state.pop(f"_{prefix}m1_play_perm_clear_beep", False):
+                _play_cw_boq_warning_beep("perm_clear_auto")
+            st.markdown(
+                """
+                <div dir="rtl" style="background:rgba(220,38,38,0.18); border:1.5px solid #ef4444;
+                     border-radius:8px; padding:10px 14px; margin-top:6px; margin-bottom:8px; color:#fecaca; font-weight:800; font-size:0.96rem;">
+                    ⚠️ هل أنت متأكد من الحذف النهائي لسجل البنود المستبعدة وإفراغه؟ (يمكنك دائماً استعادة جميع بنود التصميم لاحقاً عبر زر «🔄 استعادة وحساب جميع بنود التصميم»).
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            _pc1, _pc2 = st.columns(2, gap="small")
+            with _pc1:
+                st.button(
+                    "✅ تأكيد الحذف النهائي لجميع البنود",
+                    key=f"{prefix}m1_confirm_perm_clear_yes",
+                    type="primary",
+                    use_container_width=True,
+                    on_click=_cb_confirm_perm_clear_auto_log,
+                )
+            with _pc2:
+                st.button(
+                    "❌ إلغاء",
+                    key=f"{prefix}m1_confirm_perm_clear_no",
+                    use_container_width=True,
+                    on_click=_cb_cancel_perm_clear_auto_log,
+                )
+
+
 def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
     """
     قسم منفصل مطوي: إدارة وتخصيص مكتبة القوالب الجاهزة لجميع المشاريع (إضافة / تعديل / حذف)
     """
+    _keep_plib_open = bool(st.session_state.pop(f"_{prefix}m1_keep_plib_expander_open", False))
+    if _keep_plib_open:
+        st.session_state[f"{prefix}m1_presets_lib_expander"] = True
     with st.expander(
         f"⚙️ 📚 إدارة وتخصيص مكتبة القوالب الجاهزة ({len(presets)} قالب متاح لجميع المشاريع)",
-        expanded=False,
+        expanded=_keep_plib_open,
+        key=f"{prefix}m1_presets_lib_expander",
     ):
         st.markdown('<div class="m1-preset-library-marker" style="display:none;"></div>', unsafe_allow_html=True)
-        tab_add_p, tab_edit_p, tab_del_p = st.tabs([
-            "➕ إضافة قالب جديد للمكتبة",
-            "✏️ تعديل القالب الحالي",
-            "🗑️ حذف قالب من المكتبة",
-        ])
+        if st.session_state.pop(f"_{prefix}m1_show_plib_saved_msg", False):
+            st.markdown(
+                """
+                <style>
+                @keyframes m15PlibCenterToast3s {
+                    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.92); visibility: visible; }
+                    8%   { opacity: 1; transform: translate(-50%, -50%) scale(1.0);  visibility: visible; }
+                    86%  { opacity: 1; transform: translate(-50%, -50%) scale(1.0);  visibility: visible; }
+                    100% { opacity: 0; transform: translate(-50%, -50%) scale(0.95); visibility: hidden; }
+                }
+                .m15-plib-center-toast-3s {
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    z-index: 999999;
+                    pointer-events: none;
+                    background: linear-gradient(135deg, rgba(6, 78, 59, 0.97) 0%, rgba(16, 185, 129, 0.95) 50%, rgba(4, 120, 87, 0.97) 100%);
+                    border: 3px solid #34d399;
+                    border-radius: 16px;
+                    padding: 24px 48px;
+                    text-align: center;
+                    color: #ffffff;
+                    font-size: 1.85rem;
+                    font-weight: 900;
+                    white-space: nowrap;
+                    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.65), 0 0 32px rgba(16, 185, 129, 0.60);
+                    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
+                    animation: m15PlibCenterToast3s 3.2s ease-in-out forwards;
+                }
+                </style>
+                <div dir="rtl" class="m15-plib-center-toast-3s">
+                    ✅ تم حفظ البند في مكتبة البنود
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        if st.session_state.pop(f"_{prefix}m1_show_plib_cancel_msg", False):
+            st.markdown(
+                """
+                <style>
+                @keyframes m15PlibCancelToast2s {
+                    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.92); visibility: visible; }
+                    10%  { opacity: 1; transform: translate(-50%, -50%) scale(1.0);  visibility: visible; }
+                    82%  { opacity: 1; transform: translate(-50%, -50%) scale(1.0);  visibility: visible; }
+                    100% { opacity: 0; transform: translate(-50%, -50%) scale(0.95); visibility: hidden; }
+                }
+                .m15-plib-cancel-toast-2s {
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    z-index: 999999;
+                    pointer-events: none;
+                    background: linear-gradient(135deg, rgba(154, 52, 18, 0.97) 0%, rgba(234, 88, 12, 0.95) 50%, rgba(154, 52, 18, 0.97) 100%);
+                    border: 3px solid #fb923c;
+                    border-radius: 16px;
+                    padding: 24px 48px;
+                    text-align: center;
+                    color: #ffffff;
+                    font-size: 1.85rem;
+                    font-weight: 900;
+                    white-space: nowrap;
+                    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.65), 0 0 32px rgba(234, 88, 12, 0.60);
+                    text-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
+                    animation: m15PlibCancelToast2s 2.2s ease-in-out forwards;
+                }
+                </style>
+                <div dir="rtl" class="m15-plib-cancel-toast-2s">
+                    ⚠️ لم يتم حفظ التغييرات
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        _plib_target_tab = st.session_state.pop(f"_{prefix}m1_plib_target_tab", None)
+        if _plib_target_tab:
+            st.session_state[f"{prefix}m1_plib_active_tab"] = _plib_target_tab
+        tab_list_p, tab_add_p, tab_edit_p, tab_del_p = st.tabs(
+            [
+                "قائمة القوالب الاضافية المتاحة",
+                "➕ إضافة قالب جديد للمكتبة",
+                "✏️ تعديل القالب الحالي",
+                "🗑️ حذف قالب من المكتبة",
+            ],
+            key=f"{prefix}m1_plib_active_tab",
+        )
+
+        # ── Tab 0: قائمة القوالب الاضافية المتاحة ──
+        with tab_list_p:
+            import html as _html_p_mod
+            _saved_presets = [p for p in presets if str(p.get("name", "") or "").strip()]
+            if not _saved_presets:
+                st.info("ℹ️ لا توجد قوالب محفوظة في مكتبة القوالب حالياً.")
+            else:
+                _preset_rows_html = []
+                for p_idx, p_item in enumerate(_saved_presets, start=1):
+                    p_label_raw = str(p_item.get("label", "") or "").strip() or str(p_item.get("name", "") or "").strip()
+                    p_unit_raw = str(p_item.get("unit", "") or "").strip()
+                    try:
+                        p_price_val = float(p_item.get("unit_price", 0.0) or 0.0)
+                    except (TypeError, ValueError):
+                        p_price_val = 0.0
+                    p_desc_raw = str(p_item.get("description", "") or "").strip() or "—"
+
+                    p_label_esc = _html_p_mod.escape(p_label_raw)
+                    p_unit_esc = _html_p_mod.escape(p_unit_raw)
+                    p_price_esc = f"{p_price_val:,.2f}"
+                    p_desc_esc = _html_p_mod.escape(p_desc_raw)
+                    row_bg = "rgba(15, 23, 42, 0.92)" if p_idx % 2 == 1 else "rgba(30, 41, 59, 0.80)"
+
+                    # تحديد اتجاه ومحاذاة عمود توصيف البند تلقائياً (RTL للعربية / LTR للإنجليزية)
+                    _desc_dir = "rtl"
+                    _desc_align = "right"
+                    for _ch in p_desc_raw:
+                        if ("\u0600" <= _ch <= "\u06FF") or ("\u0750" <= _ch <= "\u077F") or ("\u08A0" <= _ch <= "\u08FF"):
+                            _desc_dir = "rtl"
+                            _desc_align = "right"
+                            break
+                        if ("a" <= _ch <= "z") or ("A" <= _ch <= "Z"):
+                            _desc_dir = "ltr"
+                            _desc_align = "left"
+                            break
+
+                    _preset_rows_html.append(
+                        f'<tr class="m15-plib-row" style="background:{row_bg};">'
+                        f'<td class="m15-plib-td m15-plib-name"><span class="m15-plib-seq">{p_idx} -</span> <span dir="auto">{p_label_esc}</span></td>'
+                        f'<td class="m15-plib-td m15-plib-center m15-plib-unit">{p_unit_esc}</td>'
+                        f'<td class="m15-plib-td m15-plib-center m15-plib-price" dir="ltr">{p_price_esc}</td>'
+                        f'<td class="m15-plib-td m15-plib-desc" dir="{_desc_dir}" style="text-align:{_desc_align};">{p_desc_esc}</td>'
+                        f'</tr>'
+                    )
+
+                _preset_table_html = (
+                    "<style>"
+                    ".m15-plib-wrap{width:100%;border:2px solid #ea580c;border-radius:10px;overflow:hidden;background:#0f172a;box-shadow:0 6px 20px rgba(0,0,0,0.35);margin-top:6px;margin-bottom:10px;direction:rtl;}"
+                    "table.m15-plib-table{width:100%;border-collapse:collapse;table-layout:fixed;direction:rtl;font-family:'Segoe UI','Cairo',Tahoma,sans-serif;}"
+                    "table.m15-plib-table thead th{padding:10px 8px;text-align:center;font-size:1.02rem;font-weight:900;border-bottom:2px solid #ea580c;border-left:1.5px solid rgba(251,146,60,0.45);}"
+                    "table.m15-plib-table thead th.m15-plib-th-orange{background:linear-gradient(180deg,rgba(234,88,12,0.42) 0%,rgba(194,65,12,0.26) 100%);color:#fb923c;text-shadow:0 1px 2px #000000;}"
+                    "table.m15-plib-table thead th.m15-plib-th-blue{background:linear-gradient(180deg,rgba(2,132,199,0.48) 0%,rgba(14,165,233,0.26) 100%);color:#38bdf8;border-left:none;border-bottom:2px solid #38bdf8;text-shadow:0 1px 2px #000000;}"
+                    "tr.m15-plib-row:hover{background:rgba(51,65,85,0.72) !important;}"
+                    "td.m15-plib-td{padding:9px 10px;vertical-align:middle;border-bottom:1px solid rgba(148,163,184,0.20);border-left:1px solid rgba(148,163,184,0.18);word-wrap:break-word;overflow-wrap:break-word;}"
+                    "td.m15-plib-td:last-child{border-left:none;}"
+                    "td.m15-plib-name{text-align:right;font-size:0.98rem;font-weight:800;color:#f8fafc;line-height:1.45;}"
+                    ".m15-plib-seq{color:#fb923c;font-weight:900;margin-left:4px;}"
+                    "td.m15-plib-center{text-align:center;}"
+                    "td.m15-plib-unit{font-size:0.96rem;font-weight:700;color:#e2e8f0;}"
+                    "td.m15-plib-price{font-size:1.00rem;font-weight:900;color:#fbbf24;}"
+                    "td.m15-plib-desc{text-align:right;font-size:0.95rem;font-weight:600;color:#f1f5f9;line-height:1.55;}"
+                    "</style>"
+                    '<div class="m15-plib-wrap" dir="rtl">'
+                    '<table class="m15-plib-table" dir="rtl">'
+                    '<colgroup><col style="width:26%;"><col style="width:11%;"><col style="width:15%;"><col style="width:48%;"></colgroup>'
+                    '<thead><tr>'
+                    '<th class="m15-plib-th-orange">القالب</th>'
+                    '<th class="m15-plib-th-orange">الوحدة</th>'
+                    '<th class="m15-plib-th-orange">💵 السعر الاسترشادي (ج.م)</th>'
+                    '<th class="m15-plib-th-blue">توصيف البند</th>'
+                    '</tr></thead>'
+                    f'<tbody>{"".join(_preset_rows_html)}</tbody>'
+                    '</table></div>'
+                )
+                st.markdown(_preset_table_html, unsafe_allow_html=True)
 
         # ── Tab 1: إضافة قالب جديد ──
         with tab_add_p:
@@ -17939,13 +20017,16 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                 </div>""",
                 unsafe_allow_html=True,
             )
-            if st.session_state.pop(f"_{prefix}m1_fill_add_preset", False):
-                cur_n = str(st.session_state.get(f"{prefix}m1_man_new_name", "")).strip()
-                if cur_n:
-                    st.session_state[f"{prefix}m1_add_preset_name"] = cur_n
-                    st.session_state[f"{prefix}m1_add_preset_unit"] = st.session_state.get(f"{prefix}m1_man_new_unit", CW_MANUAL_BOQ_UNIT_OPTIONS[0])
-                    st.session_state[f"{prefix}m1_add_preset_price"] = float(st.session_state.get(f"{prefix}m1_man_new_price", 500.0))
-                    st.session_state[f"{prefix}m1_add_preset_desc"] = str(st.session_state.get(f"{prefix}m1_man_new_desc", "")).strip() or cur_n
+            if st.session_state.pop(f"_{prefix}m1_reset_add_preset_fields", False):
+                st.session_state[f"{prefix}m1_add_preset_name"] = ""
+                st.session_state[f"{prefix}m1_add_preset_unit"] = None
+                st.session_state[f"{prefix}m1_add_preset_price"] = None
+                st.session_state[f"{prefix}m1_add_preset_desc"] = ""
+
+            if f"{prefix}m1_add_preset_unit" not in st.session_state:
+                st.session_state[f"{prefix}m1_add_preset_unit"] = CW_MANUAL_BOQ_UNIT_OPTIONS[0]
+            if f"{prefix}m1_add_preset_price" not in st.session_state:
+                st.session_state[f"{prefix}m1_add_preset_price"] = 500.0
 
             c_ad1, c_ad2, c_ad3 = st.columns([2.2, 1.1, 1.1])
             with c_ad1:
@@ -17958,6 +20039,8 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                 new_p_unit = st.selectbox(
                     "📏 وحدة القياس:",
                     options=CW_MANUAL_BOQ_UNIT_OPTIONS,
+                    index=None,
+                    placeholder="اختر الوحدة...",
                     key=f"{prefix}m1_add_preset_unit",
                 )
             with c_ad3:
@@ -17965,9 +20048,9 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                     "💵 السعر الاسترشادي (ج.م):",
                     min_value=0.0,
                     max_value=1000000.0,
-                    value=500.0,
                     step=10.0,
                     format="%.2f",
+                    placeholder="0.00",
                     key=f"{prefix}m1_add_preset_price",
                 )
             new_p_desc = st.text_area(
@@ -17976,7 +20059,7 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                 key=f"{prefix}m1_add_preset_desc",
                 placeholder="التوصيف الفني المعتمد والمواصفات وأصول الصناعة...",
             )
-            c_ad_b1, c_ad_b2 = st.columns([1.5, 2.5])
+            c_ad_b1, c_ad_b2 = st.columns([2.8, 1.2], gap="small")
             with c_ad_b1:
                 btn_save_new_p = st.button(
                     "➕ حفظ وإضافة القالب للمكتبة لجميع المشاريع",
@@ -17985,36 +20068,135 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                     use_container_width=True,
                 )
             with c_ad_b2:
-                btn_fill_from_cur = st.button(
-                    "📥 نسخ البيانات المكتوبة في الخانات الحالية لتعبئة هذا القالب",
-                    key=f"{prefix}m1_btn_fill_from_current",
+                btn_cancel_add_p = st.button(
+                    "❌ إلغاء",
+                    key=f"{prefix}m1_btn_cancel_add_preset",
                     use_container_width=True,
+                    help="تفريغ الخانات والتراجع عن إضافة القالب",
                 )
-                if btn_fill_from_cur:
-                    st.session_state[f"_{prefix}m1_fill_add_preset"] = True
+                if btn_cancel_add_p:
+                    st.session_state[f"_{prefix}m1_reset_add_preset_fields"] = True
+                    st.session_state[f"_{prefix}m1_plib_missing_alert"] = False
+                    st.session_state[f"_{prefix}m1_keep_plib_expander_open"] = True
+                    st.session_state[f"_{prefix}m1_plib_target_tab"] = "➕ إضافة قالب جديد للمكتبة"
+                    st.session_state[f"_{prefix}m1_show_plib_cancel_msg"] = True
                     st.rerun()
 
             if btn_save_new_p:
                 clean_pname = str(new_p_name or "").strip()
-                if not clean_pname:
-                    st.warning("⚠️ يرجى إدخال اسم البند بالمقايسة.")
+                clean_pdesc = str(new_p_desc or "").strip()
+                _has_missing_p_fields = (
+                    (not clean_pname)
+                    or (not new_p_unit)
+                    or (new_p_price is None or float(new_p_price) <= 0.0)
+                    or (not clean_pdesc)
+                )
+                if _has_missing_p_fields:
+                    st.session_state[f"_{prefix}m1_plib_missing_alert"] = True
+                    st.session_state[f"_{prefix}m1_plib_play_warn_beep"] = True
+                    st.session_state[f"_{prefix}m1_keep_plib_expander_open"] = True
+                    st.session_state[f"_{prefix}m1_plib_target_tab"] = "➕ إضافة قالب جديد للمكتبة"
                 elif clean_pname in [p.get("label", "") for p in presets] or clean_pname in [p.get("name", "") for p in presets]:
+                    st.session_state[f"_{prefix}m1_plib_missing_alert"] = False
                     st.warning(f"⚠️ يوجد قالب آخر مسجل بنفس الاسم «{clean_pname}»، يرجى اختيار اسم مميز.")
                 else:
+                    st.session_state[f"_{prefix}m1_plib_missing_alert"] = False
                     new_p_entry = {
                         "label": clean_pname,
                         "name": clean_pname,
-                        "unit": str(new_p_unit),
-                        "unit_price": round(float(new_p_price), 2),
+                        "unit": str(new_p_unit or CW_MANUAL_BOQ_UNIT_OPTIONS[0]),
+                        "unit_price": round(float(new_p_price or 0.0), 2),
                         "mat_category": "supply_install",
-                        "description": str(new_p_desc or "").strip() or clean_pname,
+                        "description": clean_pdesc,
                     }
                     presets.append(new_p_entry)
                     _save_cw_manual_boq_presets_list(presets)
                     st.session_state[f"{prefix}m1_man_preset_sel"] = clean_pname
                     st.session_state[f"_{prefix}m1_last_manual_preset"] = None
-                    st.toast(f"✨ تم إضافة القالب «{clean_pname}» بنجاح للمكتبة العامة لجميع المشاريع!", icon="🎉")
+                    st.session_state[f"_{prefix}m1_reset_add_preset_fields"] = True
+                    st.session_state[f"_{prefix}m1_keep_plib_expander_open"] = True
+                    st.session_state[f"_{prefix}m1_plib_target_tab"] = "➕ إضافة قالب جديد للمكتبة"
+                    st.session_state[f"_{prefix}m1_show_plib_saved_msg"] = True
                     st.rerun()
+
+            if st.session_state.get(f"_{prefix}m1_plib_missing_alert", False):
+                if st.session_state.pop(f"_{prefix}m1_plib_play_warn_beep", False):
+                    import time as _t_beep
+                    _beep_ts = int(_t_beep.time() * 1000)
+                    render_html_iframe(
+                        f"""
+                        <script>
+                        // beep-{_beep_ts}
+                        (function() {{
+                            try {{
+                                const AudioCtx = window.AudioContext || window.webkitAudioContext || (window.parent && (window.parent.AudioContext || window.parent.webkitAudioContext));
+                                if (!AudioCtx) return;
+                                const ctx = new AudioCtx();
+                                if (ctx.state === 'suspended') ctx.resume();
+                                const now = ctx.currentTime;
+                                [0, 0.22].forEach((offset, idx) => {{
+                                    const osc = ctx.createOscillator();
+                                    const gain = ctx.createGain();
+                                    osc.type = 'sawtooth';
+                                    osc.frequency.setValueAtTime(idx === 0 ? 880 : 660, now + offset);
+                                    gain.gain.setValueAtTime(0.001, now + offset);
+                                    gain.gain.exponentialRampToValueAtTime(0.28, now + offset + 0.02);
+                                    gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.18);
+                                    osc.connect(gain);
+                                    gain.connect(ctx.destination);
+                                    osc.start(now + offset);
+                                    osc.stop(now + offset + 0.19);
+                                }});
+                            }} catch (e) {{}}
+                        }})();
+                        </script>
+                        """,
+                        height=1,
+                        width=1,
+                    )
+                st.markdown(
+                    """
+                    <div dir="rtl" style="
+                        width: 100%;
+                        background: linear-gradient(90deg, rgba(153, 27, 27, 0.94) 0%, rgba(220, 38, 38, 0.88) 50%, rgba(153, 27, 27, 0.94) 100%);
+                        border: 2.5px solid #f87171;
+                        border-radius: 12px;
+                        padding: 14px 20px;
+                        margin: 10px 0 8px 0;
+                        text-align: center;
+                        color: #ffffff;
+                        font-size: 1.30rem;
+                        font-weight: 900;
+                        box-shadow: 0 6px 20px rgba(220, 38, 38, 0.45);
+                    ">
+                        ⚠️ برجاء ملئ جميع خانات المدخلات
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                c_warn_1, c_warn_2 = st.columns([1, 1])
+                with c_warn_1:
+                    if st.button(
+                        "استكمال المدخلات",
+                        key=f"{prefix}m1_plib_warn_continue_btn",
+                        type="primary",
+                        use_container_width=True,
+                    ):
+                        st.session_state[f"_{prefix}m1_plib_missing_alert"] = False
+                        st.session_state[f"_{prefix}m1_keep_plib_expander_open"] = True
+                        st.session_state[f"_{prefix}m1_plib_target_tab"] = "➕ إضافة قالب جديد للمكتبة"
+                        st.rerun()
+                with c_warn_2:
+                    if st.button(
+                        "الغاء القالب",
+                        key=f"{prefix}m1_plib_warn_cancel_btn",
+                        use_container_width=True,
+                    ):
+                        st.session_state[f"_{prefix}m1_plib_missing_alert"] = False
+                        st.session_state[f"_{prefix}m1_reset_add_preset_fields"] = True
+                        st.session_state[f"_{prefix}m1_keep_plib_expander_open"] = True
+                        st.session_state[f"_{prefix}m1_plib_target_tab"] = "➕ إضافة قالب جديد للمكتبة"
+                        st.rerun()
 
         # ── Tab 2: تعديل القالب الحالي ──
         with tab_edit_p:
@@ -18024,8 +20206,8 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                 </div>""",
                 unsafe_allow_html=True,
             )
-            if "_m15_set_edit_sel" in st.session_state:
-                st.session_state[f"{prefix}m1_edit_preset_sel"] = st.session_state.pop("_m15_set_edit_sel")
+            if f"_{prefix}m1_set_edit_sel" in st.session_state:
+                st.session_state[f"{prefix}m1_edit_preset_sel"] = st.session_state.pop(f"_{prefix}m1_set_edit_sel")
 
             PLACEHOLDER_NO_EDIT = "— لا يوجد بند للتعديل —"
             editable_presets = [p for p in presets if not str(p.get("label", "")).startswith("✨ بند حر")]
@@ -18046,12 +20228,17 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
             else:
                 target_preset = next((p for p in editable_presets if p["label"] == selected_edit_lbl), None)
                 if target_preset:
-                    ed_prefix = f"m15_ed_{target_preset['label']}"
-                    if st.session_state.pop(f"_m15_sync_edit_{target_preset['label']}", False):
-                        st.session_state[f"{ed_prefix}_name"] = st.session_state.get(f"{prefix}m1_man_new_name", target_preset.get("name", ""))
-                        st.session_state[f"{ed_prefix}_unit"] = st.session_state.get(f"{prefix}m1_man_new_unit", target_preset.get("unit", ""))
-                        st.session_state[f"{ed_prefix}_price"] = float(st.session_state.get(f"{prefix}m1_man_new_price", target_preset.get("unit_price", 0.0)))
-                        st.session_state[f"{ed_prefix}_desc"] = st.session_state.get(f"{prefix}m1_man_new_desc", target_preset.get("description", ""))
+                    ed_prefix = f"{prefix}m1_ed_{target_preset['label']}"
+                    if st.session_state.pop(f"_{prefix}m1_cancel_edit_{target_preset['label']}", False):
+                        _orig_u = target_preset.get("unit", CW_MANUAL_BOQ_UNIT_OPTIONS[0])
+                        if _orig_u in ["م.ط (m)", "متر طولي m", "م.ط", "متر طولي (m)"]:
+                            _orig_u = "متر طولي L.M"
+                        if _orig_u not in CW_MANUAL_BOQ_UNIT_OPTIONS:
+                            _orig_u = CW_MANUAL_BOQ_UNIT_OPTIONS[0]
+                        st.session_state[f"{ed_prefix}_name"] = target_preset.get("name", target_preset.get("label", ""))
+                        st.session_state[f"{ed_prefix}_unit"] = _orig_u
+                        st.session_state[f"{ed_prefix}_price"] = float(target_preset.get("unit_price", 0.0))
+                        st.session_state[f"{ed_prefix}_desc"] = target_preset.get("description", "")
 
                     c_ed1, c_ed2, c_ed3 = st.columns([2.2, 1.1, 1.1])
                     with c_ed1:
@@ -18098,13 +20285,16 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                             use_container_width=True,
                         )
                     with c_ed_b2:
-                        btn_sync_from_inp = st.button(
-                            "🔄 نسخ القيم الحالية من خانات البند الرئيسية",
-                            key=f"{ed_prefix}_btn_sync",
+                        btn_cancel_ed = st.button(
+                            "الغاء التغيير",
+                            key=f"{ed_prefix}_btn_cancel",
                             use_container_width=True,
                         )
-                        if btn_sync_from_inp:
-                            st.session_state[f"_m15_sync_edit_{target_preset['label']}"] = True
+                        if btn_cancel_ed:
+                            st.session_state[f"_{prefix}m1_cancel_edit_{target_preset['label']}"] = True
+                            st.session_state[f"_{prefix}m1_keep_plib_expander_open"] = True
+                            st.session_state[f"_{prefix}m1_plib_target_tab"] = "✏️ تعديل القالب الحالي"
+                            st.session_state[f"_{prefix}m1_show_plib_cancel_msg"] = True
                             st.rerun()
 
                     if btn_save_ed:
@@ -18129,7 +20319,7 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                                 if st.session_state.get(f"{prefix}m1_man_preset_sel") == old_lbl:
                                     st.session_state[f"{prefix}m1_man_preset_sel"] = new_name_clean
                                 st.session_state[f"_{prefix}m1_last_manual_preset"] = None
-                                st.session_state["_m15_set_edit_sel"] = new_name_clean
+                                st.session_state[f"_{prefix}m1_set_edit_sel"] = new_name_clean
                                 st.toast(f"💾 تم حفظ وتحديث القالب «{new_name_clean}» بنجاح في المكتبة لجميع المشاريع!", icon="✨")
                                 st.rerun()
 
@@ -18142,7 +20332,7 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                 unsafe_allow_html=True,
             )
             PLACEHOLDER_NO_DEL = "— لا يوجد بند محدد للحذف —"
-            if st.session_state.pop("_m15_reset_del_sel", False):
+            if st.session_state.pop(f"_{prefix}m1_reset_del_sel", False):
                 st.session_state[f"{prefix}m1_del_preset_sel"] = PLACEHOLDER_NO_DEL
 
             deletable_presets = [p for p in presets if not str(p.get("label", "")).startswith("✨ بند حر")]
@@ -18162,8 +20352,8 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                 st.info("ℹ️ اختر قالباً من القائمة المنسدلة أعلاه لحذفه من المكتبة.")
             else:
                 # إطلاق صفارة تحذيرية فور اختيار البند
-                token = f"m15_whistle_del_preset_{selected_del_lbl}"
-                play_delete_confirmation_whistle(token)
+                token = f"{prefix}m1_whistle_del_preset_{selected_del_lbl}"
+                S.play_delete_confirmation_whistle(token)
 
                 st.markdown(
                     f"""
@@ -18179,33 +20369,33 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                 with c_del_cancel:
                     btn_cancel_del = st.button(
                         "❌ إلغاء",
-                        key=f"m15_btn_cancel_del_{selected_del_lbl}",
+                        key=f"{prefix}m1_btn_cancel_del_{selected_del_lbl}",
                         use_container_width=True,
                     )
                 with c_del_confirm:
                     btn_confirm_del = st.button(
                         "🗑️ تأكيد الحذف",
-                        key=f"m15_btn_confirm_del_{selected_del_lbl}",
+                        key=f"{prefix}m1_btn_confirm_del_{selected_del_lbl}",
                         type="primary",
                         use_container_width=True,
                     )
 
                 if btn_cancel_del:
-                    st.session_state["_m15_reset_del_sel"] = True
+                    st.session_state[f"_{prefix}m1_reset_del_sel"] = True
                     st.session_state.pop("_last_del_confirm_whistle_token", None)
                     st.rerun()
 
                 if btn_confirm_del:
                     new_presets = [p for p in presets if p["label"] != selected_del_lbl]
                     _save_cw_manual_boq_presets_list(new_presets)
-                    st.session_state["_m15_reset_del_sel"] = True
+                    st.session_state[f"_{prefix}m1_reset_del_sel"] = True
                     st.session_state.pop("_last_del_confirm_whistle_token", None)
                     if st.session_state.get(f"{prefix}m1_man_preset_sel") == selected_del_lbl:
                         st.session_state[f"{prefix}m1_man_preset_sel"] = new_presets[0]["label"] if new_presets else ""
                     st.session_state[f"_{prefix}m1_last_manual_preset"] = None
-                    st.toast(f"🗑️ تم حذف القالب «{selected_del_lbl}» بنجاح من المكتبة العامة لجميع المشاريع!", icon="✨")
+                    del_preset_msg = f"🗑️ تم حذف القالب «{selected_del_lbl}» بنجاح من المكتبة العامة لجميع المشاريع!"
+                    st.session_state[f"_{prefix}m1_center_green_toast_msg"] = del_preset_msg
                     st.rerun()
-
 
 
 
@@ -18235,52 +20425,52 @@ def _render_cw_manual_boq_items_manager(cur_factor=1.00, prefix: str = ''):
     st.markdown(
         """
         <style>
-        div[data-testid="stExpander"]:has(div[class*="st-key-m15_man_"]) summary p,
-        div[data-testid="stExpander"]:has(.m15-preset-library-marker) summary p,
-        div[data-testid="stExpander"]:has(div[class*="st-key-m15_add_preset_"]) summary p,
-        div[data-testid="stExpander"]:has(div[class*="st-key-m15_edit_preset_"]) summary p,
-        div[data-testid="stExpander"]:has(div[class*="st-key-m15_del_preset_"]) summary p {
+        div[data-testid="stExpander"]:has(div[class*="m1_man_"]) summary p,
+        div[data-testid="stExpander"]:has(.m1-preset-library-marker) summary p,
+        div[data-testid="stExpander"]:has(div[class*="m1_add_preset_"]) summary p,
+        div[data-testid="stExpander"]:has(div[class*="m1_edit_preset_"]) summary p,
+        div[data-testid="stExpander"]:has(div[class*="m1_del_preset_"]) summary p {
             font-size: 1.25rem !important;
             font-weight: 900 !important;
             color: #38bdf8 !important;
         }
-        div[class*="st-key-m15_man_"] label p,
-        div[class*="st-key-m15_man_"] [data-testid="stWidgetLabel"] p,
-        div[class*="st-key-m15_man_"] label,
-        div[class*="st-key-m15_add_preset_"] label p,
-        div[class*="st-key-m15_add_preset_"] label,
-        div[class*="st-key-m15_edit_preset_"] label p,
-        div[class*="st-key-m15_edit_preset_"] label,
-        div[class*="st-key-m15_del_preset_"] label p,
-        div[class*="st-key-m15_del_preset_"] label {
+        div[class*="m1_man_"] label p,
+        div[class*="m1_man_"] [data-testid="stWidgetLabel"] p,
+        div[class*="m1_man_"] label,
+        div[class*="m1_add_preset_"] label p,
+        div[class*="m1_add_preset_"] label,
+        div[class*="m1_edit_preset_"] label p,
+        div[class*="m1_edit_preset_"] label,
+        div[class*="m1_del_preset_"] label p,
+        div[class*="m1_del_preset_"] label {
             font-size: 1.15rem !important;
             font-weight: 800 !important;
             color: #f8fafc !important;
         }
-        div[class*="st-key-m15_man_"] input,
-        div[class*="st-key-m15_add_preset_"] input,
-        div[class*="st-key-m15_edit_preset_"] input {
+        div[class*="m1_man_"] input,
+        div[class*="m1_add_preset_"] input,
+        div[class*="m1_edit_preset_"] input {
             font-size: 1.16rem !important;
             font-weight: 800 !important;
             color: #ffffff !important;
         }
-        div[class*="st-key-m15_man_"] textarea,
-        div[class*="st-key-m15_add_preset_"] textarea,
-        div[class*="st-key-m15_edit_preset_"] textarea {
+        div[class*="m1_man_"] textarea,
+        div[class*="m1_add_preset_"] textarea,
+        div[class*="m1_edit_preset_"] textarea {
             font-size: 1.10rem !important;
             font-weight: 600 !important;
             color: #ffffff !important;
             line-height: 1.5 !important;
         }
-        div[class*="st-key-m15_man_"] div[data-baseweb="select"] *,
-        div[class*="st-key-m15_add_preset_"] div[data-baseweb="select"] *,
-        div[class*="st-key-m15_edit_preset_"] div[data-baseweb="select"] *,
-        div[class*="st-key-m15_del_preset_"] div[data-baseweb="select"] * {
+        div[class*="m1_man_"] div[data-baseweb="select"] *,
+        div[class*="m1_add_preset_"] div[data-baseweb="select"] *,
+        div[class*="m1_edit_preset_"] div[data-baseweb="select"] *,
+        div[class*="m1_del_preset_"] div[data-baseweb="select"] * {
             font-size: 1.12rem !important;
             font-weight: 700 !important;
         }
-        div[class*="st-key-m15_man_add_btn"] button,
-        div[class*="st-key-m15_btn_save_new_preset"] button {
+        div[class*="m1_man_add_btn"] button,
+        div[class*="m1_btn_save_new_preset"] button {
             font-size: 1.18rem !important;
             font-weight: 900 !important;
             padding: 10px 24px !important;
@@ -18316,16 +20506,15 @@ def _render_cw_manual_boq_items_manager(cur_factor=1.00, prefix: str = ''):
     presets = _get_cw_manual_boq_presets_list()
 
     # ═════════════════════════════════════════════════════════════════════════
-    #  أولاً: قسم إدارة وتخصيص مكتبة القوالب الجاهزة (مفصول تماماً ومطوي للأعلى)
+    #  قسم إضافة وإدارة بنود الحصر اليدوية الإضافية (مفصول تماماً ومطوي للأسفل)
     # ═════════════════════════════════════════════════════════════════════════
-    # _render_cw_presets_library_manager is called independently in Section 2
-
-    # ═════════════════════════════════════════════════════════════════════════
-    #  ثانياً: قسم إضافة وإدارة بنود الحصر اليدوية الإضافية (مفصول تماماً ومطوي للأسفل)
-    # ═════════════════════════════════════════════════════════════════════════
+    _keep_man_open = bool(st.session_state.pop(f"_{prefix}m1_keep_manual_expander_open", False))
+    if _keep_man_open:
+        st.session_state[f"{prefix}m1_manual_boq_expander"] = True
     with st.expander(
-        "➕ إضافة وإدارة بنود الحصر اليدوية الإضافية (رخام سلالم، حجر فرعوني، وبنود أخرى)",
-        expanded=False,
+        "➕ إضافة وإدارة بنود الحصر اليدوية الإضافية",
+        expanded=_keep_man_open,
+        key=f"{prefix}m1_manual_boq_expander",
     ):
         # اختيار القالب الجاهز أو البند الحر من المكتبة العامة لجميع المشاريع
         preset_labels = [p["label"] for p in presets]
@@ -18351,11 +20540,19 @@ def _render_cw_manual_boq_items_manager(cur_factor=1.00, prefix: str = ''):
                 st.session_state[f"{prefix}m1_man_new_qty"] = 0.0
 
         # التحقق من سلامة المفاتيح بالـ session_state قبل عرض الحقول
-        if st.session_state.pop(f"_{prefix}m1_reset_man_new_qty", False):
+        if st.session_state.pop(f"_{prefix}m1_reset_man_new_fields", False):
+            st.session_state[f"{prefix}m1_man_new_name"] = ""
+            st.session_state[f"{prefix}m1_man_new_unit"] = None
+            st.session_state[f"{prefix}m1_man_new_qty"] = None
+            st.session_state[f"{prefix}m1_man_new_price"] = None
+            st.session_state[f"{prefix}m1_man_new_desc"] = ""
+        elif st.session_state.pop(f"_{prefix}m1_reset_man_new_qty", False):
             st.session_state[f"{prefix}m1_man_new_qty"] = 0.0
         if f"{prefix}m1_man_new_name" not in st.session_state:
             st.session_state[f"{prefix}m1_man_new_name"] = sel_preset["name"]
-        if st.session_state.get(f"{prefix}m1_man_new_unit") not in CW_MANUAL_BOQ_UNIT_OPTIONS:
+        if f"{prefix}m1_man_new_unit" not in st.session_state:
+            st.session_state[f"{prefix}m1_man_new_unit"] = sel_preset["unit"]
+        elif st.session_state.get(f"{prefix}m1_man_new_unit") is not None and st.session_state.get(f"{prefix}m1_man_new_unit") not in CW_MANUAL_BOQ_UNIT_OPTIONS:
             st.session_state[f"{prefix}m1_man_new_unit"] = sel_preset["unit"]
         if f"{prefix}m1_man_new_qty" not in st.session_state:
             st.session_state[f"{prefix}m1_man_new_qty"] = 0.0
@@ -18375,6 +20572,8 @@ def _render_cw_manual_boq_items_manager(cur_factor=1.00, prefix: str = ''):
             in_unit = st.selectbox(
                 "📏 الوحدة (Unit):",
                 options=CW_MANUAL_BOQ_UNIT_OPTIONS,
+                index=None,
+                placeholder="اختر الوحدة...",
                 key=f"{prefix}m1_man_new_unit",
             )
         with c_m3:
@@ -18384,6 +20583,7 @@ def _render_cw_manual_boq_items_manager(cur_factor=1.00, prefix: str = ''):
                 max_value=1000000.0,
                 step=1.0,
                 format="%.2f",
+                placeholder="0.00",
                 key=f"{prefix}m1_man_new_qty",
                 help="الكمية الصافية قبل الضرب في معامل الزيادة العام بالجدول",
             )
@@ -18394,6 +20594,7 @@ def _render_cw_manual_boq_items_manager(cur_factor=1.00, prefix: str = ''):
                 max_value=1000000.0,
                 step=10.0,
                 format="%.2f",
+                placeholder="0.00",
                 key=f"{prefix}m1_man_new_price",
             )
 
@@ -18405,16 +20606,19 @@ def _render_cw_manual_boq_items_manager(cur_factor=1.00, prefix: str = ''):
         )
 
         # معاينة فورية لمعادلة معامل الزيادة قبل الإضافة
-        prev_tot_q = round(float(in_qty) * cur_factor, 2)
-        prev_tot_cost = round(prev_tot_q * float(in_price), 2)
+        _eff_in_qty = float(in_qty or 0.0)
+        _eff_in_price = float(in_price or 0.0)
+        _eff_in_unit = str(in_unit or "")
+        prev_tot_q = round(_eff_in_qty * cur_factor, 2)
+        prev_tot_cost = round(prev_tot_q * _eff_in_price, 2)
         st.markdown(
             f"""
             <div dir="rtl" style="background:rgba(88, 28, 135, 0.25); border:1.5px solid #a855f7; border-radius:8px; padding:10px 16px; margin:6px 0 12px 0; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                 <div style="color:#e9d5ff; font-weight:800; font-size:1.05rem;">
                     ⚡ <b>معاينة تطبيق معامل الزيادة على البند:</b>
-                    الكمية الصافية (<span dir="ltr" style="color:#fef08a;">{float(in_qty):,.2f}</span>)
+                    الكمية الصافية (<span dir="ltr" style="color:#fef08a;">{_eff_in_qty:,.2f}</span>)
                     × معامل الزيادة (<span dir="ltr" style="color:#c084fc;">{cur_factor:.2f}</span>)
-                    = <b style="color:#4ade80;">الكمية الإجمالية المعتمدة بالجدول: <span dir="ltr">{prev_tot_q:,.2f}</span> {_html_mod.escape(in_unit)}</b>
+                    = <b style="color:#4ade80;">الكمية الإجمالية المعتمدة بالجدول: <span dir="ltr">{prev_tot_q:,.2f}</span> {_html_mod.escape(_eff_in_unit)}</b>
                 </div>
                 <div style="background:rgba(16,185,129,0.22); border:1px solid #10b981; border-radius:6px; padding:4px 14px; color:#34d399; font-weight:900; font-size:1.08rem;">
                     💰 التكلفة المتوقعة: <span dir="ltr">{prev_tot_cost:,.2f}</span> ج.م
@@ -18424,45 +20628,31 @@ def _render_cw_manual_boq_items_manager(cur_factor=1.00, prefix: str = ''):
             unsafe_allow_html=True,
         )
 
-        c_btn_add, c_btn_info = st.columns([1.5, 2.1])
-        with c_btn_add:
+        c_add, c_cancel = st.columns([3.2, 1.0], gap="small")
+        with c_add:
             add_clicked = st.button(
                 "➕ إضافة البند إلى جدول حصر وتكلفة جميع البنود",
                 key=f"{prefix}m1_man_add_btn",
                 type="primary",
                 use_container_width=True,
             )
-        with c_btn_info:
-            quick_save_preset = st.button(
-                "💾 حفظ هذه المدخلات كقالب جديد في المكتبة العامة",
-                key=f"{prefix}m1_quick_save_as_preset",
-                help="يحفظ اسم البند ووحدته وسعره وتوصيفه كقالب جديد في مكتبة القوالب ليكون متاحاً دائماً في كل المشاريع",
+        with c_cancel:
+            cancel_clicked = st.button(
+                "❌ إلغاء",
+                key=f"{prefix}m1_man_cancel_btn",
+                type="secondary",
                 use_container_width=True,
+                help="إلغاء المدخلات الحالية والتراجع وتفريغ الخانات",
             )
 
-        if quick_save_preset:
-            clean_q_name = str(in_name or "").strip()
-            if not clean_q_name:
-                st.warning("⚠️ يرجى كتابة اسم البند بالمقايسة أولاً لحفظه كقالب بالمكتبة.")
-            else:
-                q_lbl = f"✨ {clean_q_name}"
-                if q_lbl in [p["label"] for p in presets]:
-                    st.warning(f"⚠️ يوجد قالب مسجل باسم «{q_lbl}» بالمكتبة مسبقاً.")
-                else:
-                    new_q_p = {
-                        "label": q_lbl,
-                        "name": clean_q_name,
-                        "unit": str(in_unit),
-                        "unit_price": round(float(in_price), 2),
-                        "mat_category": str(sel_preset.get("mat_category", "supply_install")),
-                        "description": str(in_desc or "").strip() or clean_q_name,
-                    }
-                    presets.append(new_q_p)
-                    _save_cw_manual_boq_presets_list(presets)
-                    st.session_state[f"{prefix}m1_man_preset_sel"] = q_lbl
-                    st.session_state[f"_{prefix}m1_last_manual_preset"] = None
-                    st.toast(f"💾 تم حفظ «{clean_q_name}» كقالب جديد في المكتبة العامة لجميع المشاريع بنجاح!", icon="🎉")
-                    st.rerun()
+        if cancel_clicked:
+            st.session_state[f"_{prefix}m1_reset_man_new_fields"] = True
+            st.session_state[f"_{prefix}m1_last_manual_preset"] = None
+            if presets:
+                st.session_state[f"{prefix}m1_man_preset_sel"] = presets[0]["label"]
+            st.session_state[f"_{prefix}m1_keep_manual_expander_open"] = False
+            st.session_state[f"{prefix}m1_manual_boq_expander"] = False
+            st.rerun()
 
         if add_clicked:
             clean_in_name = str(in_name or "").strip()
@@ -18473,198 +20663,20 @@ def _render_cw_manual_boq_items_manager(cur_factor=1.00, prefix: str = ''):
                 new_entry = {
                     "uid": new_uid,
                     "name": clean_in_name,
-                    "unit": str(in_unit),
-                    "net_qty": round(float(in_qty), 2),
-                    "unit_price": round(float(in_price), 2),
+                    "unit": str(in_unit or CW_MANUAL_BOQ_UNIT_OPTIONS[0]),
+                    "net_qty": round(_eff_in_qty, 2),
+                    "unit_price": round(_eff_in_price, 2),
                     "mat_category": str(sel_preset.get("mat_category", "supply_install")),
                     "description": str(in_desc or "").strip() or clean_in_name,
                 }
                 manual_items.append(new_entry)
                 _persist_cw_manual_boq_items(manual_items, prefix=prefix)
-                st.session_state[f"_{prefix}m1_reset_man_new_qty"] = True
+                st.session_state[f"_{prefix}m1_reset_man_new_fields"] = True
+                st.session_state[f"_{prefix}m1_keep_manual_expander_open"] = True
+                st.session_state[f"_{prefix}m1_boq_table_ver"] = st.session_state.get(f"_{prefix}m1_boq_table_ver", 0) + 1
+                st.session_state[f"_{prefix}m1_center_green_toast_msg"] = f"✅ تمت إضافة البند «{clean_in_name}» إلى جدول المقايسة بنجاح"
+                st.session_state[f"_{prefix}m1_center_green_toast_dur"] = 3.0
                 st.rerun()
-
-        # ═════════════════════════════════════════════════════════════════════
-        # بانيل معامل زيادة للكميات التي تم حسابها:
-        # ═════════════════════════════════════════════════════════════════════
-        st.markdown(
-            """
-            <style>
-            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) {
-                background: linear-gradient(135deg, #180828 0%, #311042 35%, #581c87 70%, #1e0933 100%) !important;
-                border: 1.5px solid #c084fc !important;
-                border-right: 6px solid #a855f7 !important;
-                border-radius: 10px !important;
-                padding: 7px 18px !important;
-                margin: 12px 0 14px 0 !important;
-                box-shadow: 0 4px 20px rgba(168, 85, 247, 0.35), inset 0 1px 1px rgba(233, 213, 255, 0.35) !important;
-                display: flex !important;
-                flex-direction: row !important;
-                flex-wrap: nowrap !important;
-                align-items: center !important;
-                justify-content: center !important;
-                gap: 12px !important;
-                direction: rtl !important;
-                min-height: 44px !important;
-            }
-            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) > div[data-testid="stColumn"] {
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                height: 100% !important;
-            }
-            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) .stMarkdown,
-            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) [data-testid="stMarkdownContainer"],
-            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) [data-testid="stMarkdownContainer"] p {
-                margin: 0 !important;
-                padding: 0 !important;
-                display: flex !important;
-                align-items: center !important;
-                height: 100% !important;
-            }
-            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) > div[data-testid="stColumn"]:first-child {
-                flex: 0 0 auto !important;
-                width: auto !important;
-                min-width: unset !important;
-            }
-            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) > div[data-testid="stColumn"]:last-child {
-                flex: 0 0 135px !important;
-                width: 135px !important;
-                min-width: 125px !important;
-                max-width: 150px !important;
-            }
-            div[class*="st-key-m15_input_plaster_qty_factor"] label,
-            div[class*="st-key-m15_input_plaster_qty_factor"] [data-testid="stWidgetLabel"],
-            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) label {
-                display: none !important;
-                height: 0 !important;
-                min-height: 0 !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                visibility: hidden !important;
-            }
-            div[class*="st-key-m15_input_plaster_qty_factor"] div[data-testid="stNumberInput"] {
-                margin-bottom: 0 !important;
-            }
-            div[class*="st-key-m15_input_plaster_qty_factor"] div[data-testid="stNumberInputContainer"] {
-                display: flex !important;
-                flex-direction: row !important;
-                align-items: center !important;
-                background: #120624 !important;
-                border: 1.5px solid #c084fc !important;
-                border-radius: 8px !important;
-                padding: 0 !important;
-                min-height: 34px !important;
-                height: 34px !important;
-                overflow: hidden !important;
-                box-shadow: 0 0 12px rgba(192, 132, 252, 0.35) !important;
-            }
-            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepDown"],
-            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepUp"] {
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                background: rgba(192, 132, 252, 0.22) !important;
-                border: none !important;
-                width: 28px !important;
-                min-width: 28px !important;
-                height: 34px !important;
-                min-height: 34px !important;
-                cursor: pointer !important;
-                transition: all 0.15s ease !important;
-                padding: 0 !important;
-                margin: 0 !important;
-            }
-            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepDown"]:hover,
-            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepUp"]:hover {
-                background: rgba(192, 132, 252, 0.50) !important;
-            }
-            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepUp"] svg,
-            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepDown"] svg {
-                display: none !important;
-            }
-            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepUp"]::after {
-                content: "+" !important;
-                font-size: 18px !important;
-                font-weight: 900 !important;
-                color: #e9d5ff !important;
-                line-height: 1 !important;
-            }
-            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepDown"]::after {
-                content: "−" !important;
-                font-size: 18px !important;
-                font-weight: 900 !important;
-                color: #e9d5ff !important;
-                line-height: 1 !important;
-            }
-            div[class*="st-key-m15_input_plaster_qty_factor"] input {
-                color: #f5f3ff !important;
-                -webkit-text-fill-color: #f5f3ff !important;
-                background-color: transparent !important;
-                font-size: 1.15rem !important;
-                font-weight: 900 !important;
-                text-align: center !important;
-                border: none !important;
-                height: 34px !important;
-                min-height: 34px !important;
-                padding: 0 4px !important;
-                box-shadow: none !important;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        def _sync_m15_plaster_qty_factor():
-            val = float(st.session_state.get("m15_input_plaster_qty_factor", 1.00))
-            st.session_state["m15_plaster_qty_factor"] = val
-            cfg = st.session_state.get("cfg", {})
-            if "module_15_masonry_plaster" in cfg and isinstance(cfg["module_15_masonry_plaster"], dict):
-                cfg["module_15_masonry_plaster"]["plaster_qty_factor"] = val
-            if "module_15_data" in st.session_state and isinstance(st.session_state["module_15_data"], dict):
-                st.session_state["module_15_data"]["plaster_qty_factor"] = val
-            save_settings()
-
-        _saved_plaster_factor = float(st.session_state.get("m15_plaster_qty_factor", 1.00))
-        if "m15_input_plaster_qty_factor" not in st.session_state:
-            st.session_state["m15_input_plaster_qty_factor"] = _saved_plaster_factor
-        else:
-            _saved_plaster_factor = float(st.session_state["m15_input_plaster_qty_factor"])
-
-        c_factor_lbl, c_factor_inp = st.columns([1, 1], gap="small")
-        with c_factor_lbl:
-            st.markdown(
-                """<div dir="rtl" style="display: flex; align-items: center; justify-content: center; height: 100%; font-size: 1.08rem; font-weight: 900; color: #ffffff; text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 16px rgba(192,132,252,0.7); white-space: nowrap; line-height: 1.2; margin: 0; padding: 0;">
-                    ✨ معامل زيادة للكميات التي تم حسابها:
-                </div>""",
-                unsafe_allow_html=True,
-            )
-        with c_factor_inp:
-            plaster_qty_factor = st.number_input(
-                "",
-                min_value=0.10,
-                max_value=5.00,
-                value=_saved_plaster_factor,
-                step=0.05,
-                format="%.2f",
-                key="m15_input_plaster_qty_factor",
-                on_change=_sync_m15_plaster_qty_factor,
-                label_visibility="collapsed",
-            )
-        if abs(plaster_qty_factor - float(st.session_state.get("m15_plaster_qty_factor", 1.00))) > 1e-4:
-            st.session_state["m15_plaster_qty_factor"] = plaster_qty_factor
-            cfg = st.session_state.get("cfg", {})
-            if "module_15_masonry_plaster" in cfg and isinstance(cfg["module_15_masonry_plaster"], dict):
-                cfg["module_15_masonry_plaster"]["plaster_qty_factor"] = plaster_qty_factor
-            if "module_15_data" in st.session_state and isinstance(st.session_state["module_15_data"], dict):
-                st.session_state["module_15_data"]["plaster_qty_factor"] = plaster_qty_factor
-            save_settings()
-        else:
-            st.session_state["m15_plaster_qty_factor"] = plaster_qty_factor
-
-        cur_factor = plaster_qty_factor
 
         # عرض وإدارة البنود اليدوية المضافة حالياً في جدول تفاعلي بنفس تنسيق وفلسفة جدول BOQ الرئيسي
         if manual_items:
@@ -18673,7 +20685,7 @@ def _render_cw_manual_boq_items_manager(cur_factor=1.00, prefix: str = ''):
             grand_manual_cost = 0.0
 
             for off, m_it in enumerate(manual_items):
-                seq_no = 22 + off
+                seq_no = 13 + off
                 uid = str(m_it.get("uid", f"row_{off}"))
                 m_name = str(m_it.get("name", f"بند يدوي {seq_no}"))
                 m_unit = str(m_it.get("unit", "م² (m²)"))
@@ -19264,10 +21276,24 @@ def _render_cw_manual_boq_items_manager(cur_factor=1.00, prefix: str = ''):
     cursor: row-resize !important;
     user-select: none !important;
   }}
+  .man-top-notice {{
+    width: 100%;
+    text-align: center;
+    color: #ffffff;
+    font-size: 1.25rem;
+    font-weight: 900;
+    line-height: 1.3;
+    letter-spacing: 0.01em;
+    margin: 0 0 8px 0;
+    padding: 0;
+  }}
 </style>
 </head>
 <body>
 <div id="man-root-container" dir="rtl">
+    <div class="man-top-notice">
+        هذه البنود المدخلة يدويا سيتم اضافتها الي التالي النهائي المجمع للحصر والتكلفة
+    </div>
     <div class="boq-top-banner">
         <div class="boq-top-flex">
             <div class="boq-title-group">
@@ -19886,7 +21912,7 @@ def _render_cw_manual_boq_items_manager(cur_factor=1.00, prefix: str = ''):
 </body>
 </html>"""
 
-            _man_iframe_h = 180 + len(manual_items) * 48
+            _man_iframe_h = 220 + len(manual_items) * 48
             render_html_iframe(manual_boq_interactive_html, height=_man_iframe_h, scrolling=False)
         else:
             st.markdown(
@@ -28136,46 +30162,7 @@ def render(is_standalone: bool = False):
                 try:
                     _cw_payload = json.loads(_active_cw_val) if isinstance(_active_cw_val, str) else _active_cw_val
                     if isinstance(_cw_payload, dict):
-                        _act = _cw_payload.get("action")
-                        if _act == "update_cw_boq_descriptions":
-                            _op_ts = _cw_payload.get("ts")
-                            _last_ts = st.session_state.get(f"{prefix}_last_cw_boq_sync_ts")
-                            if _op_ts is None or _op_ts != _last_ts:
-                                if _op_ts is not None:
-                                    st.session_state[f"{prefix}_last_cw_boq_sync_ts"] = _op_ts
-                                _new_descs = _cw_payload.get("descriptions")
-                                if isinstance(_new_descs, dict):
-                                    _cur_d = dict(st.session_state.get(f"{prefix}cw_item_descriptions") or S.cfg_val(f"{prefix}cw_item_descriptions") or S.cfg_val("cw_item_descriptions") or {})
-                                    _d_changed = False
-                                    for _k_d, _v_d in _new_descs.items():
-                                        _ks = str(_k_d)
-                                        _vs = str(_v_d).strip()
-                                        if _cur_d.get(_ks) != _vs:
-                                            _cur_d[_ks] = _vs
-                                            _d_changed = True
-                                    if _d_changed:
-                                        st.session_state[f"{prefix}cw_item_descriptions"] = dict(_cur_d)
-                                        S.cfg_set(f"{prefix}cw_item_descriptions", dict(_cur_d))
-                                        S.cfg_set("cw_item_descriptions", dict(_cur_d))
-                                        S.save_settings()
-                                        st.session_state.pop(f"{prefix}_cached_report_html", None)
-                                        st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
-                        elif _act == "update_manual_boq_items":
-                            _upd_items = _cw_payload.get("items")
-                            if isinstance(_upd_items, list):
-                                _persist_cw_manual_boq_items(_upd_items, prefix=prefix)
-                                st.session_state.pop(f"{prefix}_cached_report_html", None)
-                                st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
-                                st.rerun()
-                        elif _act == "delete_manual_boq_item":
-                            _del_id = _cw_payload.get("item_id")
-                            if _del_id:
-                                _m_items = _get_cw_manual_boq_items_list(prefix=prefix)
-                                _new_m = [x for x in _m_items if str(x.get("id")) != str(_del_id)]
-                                _persist_cw_manual_boq_items(_new_m, prefix=prefix)
-                                st.session_state.pop(f"{prefix}_cached_report_html", None)
-                                st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
-                                st.rerun()
+                        _handle_cw_boq_sync_payload(_cw_payload, prefix)
                 except Exception:
                     pass
                 finally:
@@ -28411,6 +30398,136 @@ def render(is_standalone: bool = False):
             _qf_key = f"{prefix}w_cw_qty_factor"
             _saved_qty_factor = float(S.cfg_val(f"{prefix}cw_qty_factor", S.cfg_val("cw_qty_factor", 1.20)))
 
+            st.markdown(
+                """
+                <style>
+                div[data-testid="stHorizontalBlock"]:has(div[class*="w_cw_qty_factor"]) {
+                    background: linear-gradient(135deg, #180828 0%, #311042 35%, #581c87 70%, #1e0933 100%) !important;
+                    border: 1.5px solid #c084fc !important;
+                    border-right: 6px solid #a855f7 !important;
+                    border-radius: 10px !important;
+                    padding: 7px 18px !important;
+                    margin: 12px 0 14px 0 !important;
+                    box-shadow: 0 4px 20px rgba(168, 85, 247, 0.35), inset 0 1px 1px rgba(233, 213, 255, 0.35) !important;
+                    display: flex !important;
+                    flex-direction: row !important;
+                    flex-wrap: nowrap !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    gap: 12px !important;
+                    direction: rtl !important;
+                    min-height: 44px !important;
+                }
+                div[data-testid="stHorizontalBlock"]:has(div[class*="w_cw_qty_factor"]) > div[data-testid="stColumn"] {
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    height: 100% !important;
+                }
+                div[data-testid="stHorizontalBlock"]:has(div[class*="w_cw_qty_factor"]) .stMarkdown,
+                div[data-testid="stHorizontalBlock"]:has(div[class*="w_cw_qty_factor"]) [data-testid="stMarkdownContainer"],
+                div[data-testid="stHorizontalBlock"]:has(div[class*="w_cw_qty_factor"]) [data-testid="stMarkdownContainer"] p {
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    display: flex !important;
+                    align-items: center !important;
+                    height: 100% !important;
+                }
+                div[data-testid="stHorizontalBlock"]:has(div[class*="w_cw_qty_factor"]) > div[data-testid="stColumn"]:first-child {
+                    flex: 0 0 auto !important;
+                    width: auto !important;
+                    min-width: unset !important;
+                }
+                div[data-testid="stHorizontalBlock"]:has(div[class*="w_cw_qty_factor"]) > div[data-testid="stColumn"]:last-child {
+                    flex: 0 0 135px !important;
+                    width: 135px !important;
+                    min-width: 125px !important;
+                    max-width: 150px !important;
+                }
+                div[class*="w_cw_qty_factor"] label,
+                div[class*="w_cw_qty_factor"] [data-testid="stWidgetLabel"],
+                div[data-testid="stHorizontalBlock"]:has(div[class*="w_cw_qty_factor"]) label {
+                    display: none !important;
+                    height: 0 !important;
+                    min-height: 0 !important;
+                    margin: 0 !important;
+                    padding: 0 !important;
+                    visibility: hidden !important;
+                }
+                div[class*="w_cw_qty_factor"] div[data-testid="stNumberInput"] {
+                    margin-bottom: 0 !important;
+                }
+                div[class*="w_cw_qty_factor"] div[data-testid="stNumberInputContainer"] {
+                    display: flex !important;
+                    flex-direction: row !important;
+                    align-items: center !important;
+                    background: #120624 !important;
+                    border: 1.5px solid #c084fc !important;
+                    border-radius: 8px !important;
+                    padding: 0 !important;
+                    min-height: 34px !important;
+                    height: 34px !important;
+                    overflow: hidden !important;
+                    box-shadow: 0 0 12px rgba(192, 132, 252, 0.35) !important;
+                }
+                div[class*="w_cw_qty_factor"] button[data-testid="stNumberInputStepDown"],
+                div[class*="w_cw_qty_factor"] button[data-testid="stNumberInputStepUp"] {
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    background: rgba(192, 132, 252, 0.22) !important;
+                    border: none !important;
+                    width: 28px !important;
+                    min-width: 28px !important;
+                    height: 34px !important;
+                    min-height: 34px !important;
+                    cursor: pointer !important;
+                    transition: all 0.15s ease !important;
+                    padding: 0 !important;
+                    margin: 0 !important;
+                }
+                div[class*="w_cw_qty_factor"] button[data-testid="stNumberInputStepDown"]:hover,
+                div[class*="w_cw_qty_factor"] button[data-testid="stNumberInputStepUp"]:hover {
+                    background: rgba(192, 132, 252, 0.50) !important;
+                }
+                div[class*="w_cw_qty_factor"] button[data-testid="stNumberInputStepUp"] svg,
+                div[class*="w_cw_qty_factor"] button[data-testid="stNumberInputStepDown"] svg {
+                    display: none !important;
+                }
+                div[class*="w_cw_qty_factor"] button[data-testid="stNumberInputStepUp"]::after {
+                    content: "+" !important;
+                    font-size: 18px !important;
+                    font-weight: 900 !important;
+                    color: #e9d5ff !important;
+                    line-height: 1 !important;
+                }
+                div[class*="w_cw_qty_factor"] button[data-testid="stNumberInputStepDown"]::after {
+                    content: "−" !important;
+                    font-size: 18px !important;
+                    font-weight: 900 !important;
+                    color: #e9d5ff !important;
+                    line-height: 1 !important;
+                }
+                div[class*="w_cw_qty_factor"] input {
+                    color: #f5f3ff !important;
+                    -webkit-text-fill-color: #f5f3ff !important;
+                    background-color: transparent !important;
+                    font-size: 1.15rem !important;
+                    font-weight: 900 !important;
+                    text-align: center !important;
+                    border: none !important;
+                    height: 34px !important;
+                    min-height: 34px !important;
+                    padding: 0 4px !important;
+                    box-shadow: none !important;
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
+
             def _sync_cw_qty_factor():
                 _v_qf = float(st.session_state.get(_qf_key, 1.20))
                 S.cfg_set(f"{prefix}cw_qty_factor", _v_qf)
@@ -28434,7 +30551,7 @@ def render(is_standalone: bool = False):
                 )
             with c_cw_factor_inp:
                 cw_qty_factor = st.number_input(
-                    "",
+                    "معامل زيادة للكميات",
                     min_value=0.10, max_value=5.00,
                     value=_saved_qty_factor,
                     step=0.05, format="%.2f",
@@ -28529,7 +30646,41 @@ def render(is_standalone: bool = False):
             ]
 
             _cw_manual_tuples = _get_cw_manual_boq_t2_tuples(cw_qty_factor=cw_qty_factor, start_idx=13, prefix=prefix)
-            cw_items_data = base_cw_items_data + _cw_manual_tuples
+            _cw_manual_items_raw = _get_cw_manual_boq_items_list(prefix=prefix)
+            _cw_boq_del_items, _cw_boq_exc_ids = _get_cw_boq_deleted_state(prefix)
+            _cw_boq_exc_set = set(_cw_boq_exc_ids)
+
+            # بناء القائمة الموحدة مع تمييز مصدر كل بند (source_type) وتصفية البنود المحذوفة من الجدول المجمع
+            _cw_all_entries = []
+            for _a_idx, _a_tup in enumerate(base_cw_items_data, start=1):
+                _item_id = f"auto_{_a_idx}"
+                if _item_id not in _cw_boq_exc_set:
+                    _cw_all_entries.append({
+                        "item_id": _item_id,
+                        "desc_key": f"item_{_a_idx}",
+                        "source_type": "auto_calculated",
+                        "auto_idx": _a_idx,
+                        "uid": "",
+                        "orig_manual_pos": -1,
+                        "tuple": _a_tup,
+                    })
+            for _m_pos, _m_tup in enumerate(_cw_manual_tuples):
+                _m_obj = _cw_manual_items_raw[_m_pos] if _m_pos < len(_cw_manual_items_raw) else {}
+                _m_uid = str(_m_obj.get("uid", f"pos_{_m_pos}")).strip() or f"pos_{_m_pos}"
+                _item_id = f"manual_{_m_uid}"
+                if _item_id not in _cw_boq_exc_set:
+                    _cw_all_entries.append({
+                        "item_id": _item_id,
+                        "desc_key": f"manual_{_m_uid}",
+                        "source_type": "manual",
+                        "auto_idx": None,
+                        "uid": _m_uid,
+                        "orig_manual_pos": _m_pos,
+                        "tuple": _m_tup,
+                    })
+            cw_items_data = [_e["tuple"] for _e in _cw_all_entries]
+            _cw_orig_idx_list = [int(_e["auto_idx"] or 0) for _e in _cw_all_entries]
+            _cw_active_auto_count = sum(1 for _e in _cw_all_entries if _e["source_type"] == "auto_calculated")
 
             DEFAULT_CW_ITEM_DESCRIPTIONS = {
                 "item_1": "بالمتر المكعب، توريد وصب خرسانة مسلحة للأسقف والكمرات (بلاطات لاكمرية Flat Slab وكمرات ساقطة/مدفونة) بمحتوى أسمنتي لا يقل عن 350 كجم أسمنت بورتلاندي عادي/م³ خرسانة ومقاومة مميزة طبقاً للتصميم الإنشائي، والسعر يشمل الشدات الخشبية أو المعدنية وحديد التسليح والفرم والصب والدمك الميكانيكي والمعالجة بالمياه طبقاً للكود المصري ECP 203.",
@@ -28558,40 +30709,56 @@ def render(is_standalone: bool = False):
                 _tot_cost = round(_tot_q * _u_price, 2)
                 cw_grand_total_cost += _tot_cost
 
-            # ── إعداد جدول ملخص الكميات وتوصيفات البنود التفاعلي المدمج (تنسيق 1.1x المدمج من موديول 15) ──
+            # ── إعداد جدول ملخص الكميات وتوصيفات البنود التفاعلي المدمج (نفس فلسفة Module 15) ──
             _cur_cw_desc_dict = dict(st.session_state.get(f"{prefix}cw_item_descriptions", {}) or {})
             if not _cur_cw_desc_dict:
                 _cur_cw_desc_dict = dict(S.cfg_val(f"{prefix}cw_item_descriptions", S.cfg_val("cw_item_descriptions", {})) or {})
 
-            cw_live_descriptions = {}
+            cw_live_descriptions = dict(_cur_cw_desc_dict)
             cw_boq_table_rows_data = []
             import re as _re_mod
             import html as _html_mod
 
-            for _idx, (_name, _net_q, _unit, _u_price, _details) in enumerate(cw_items_data, start=1):
-                _c_key = f"item_{_idx}"
+            for _seq_idx, _entry in enumerate(_cw_all_entries, start=1):
+                _name, _net_q, _unit, _u_price, _details = _entry["tuple"]
+                _c_key = _entry["desc_key"]
                 _tot_q = round(_net_q * cw_qty_factor, 2)
                 _tot_cost = round(_tot_q * _u_price, 2)
+
                 if _c_key in _cur_cw_desc_dict and _cur_cw_desc_dict[_c_key] is not None:
                     _saved_d = str(_cur_cw_desc_dict[_c_key]).strip()
+                elif _entry["source_type"] == "manual" and 0 <= _entry["orig_manual_pos"] < len(_cw_manual_items_raw):
+                    _saved_d = str(_cw_manual_items_raw[_entry["orig_manual_pos"]].get("description", "")).strip()
+                    if not _saved_d:
+                        _saved_d = str(_cur_cw_desc_dict.get(f"item_{13 + _entry['orig_manual_pos']}", "")).strip()
                 elif _name in _cur_cw_desc_dict and _cur_cw_desc_dict[_name] is not None:
                     _saved_d = str(_cur_cw_desc_dict[_name]).strip()
                 else:
                     _saved_d = str(DEFAULT_CW_ITEM_DESCRIPTIONS.get(_c_key, "")).strip()
+                if not _saved_d:
+                    _saved_d = "توريد وتركيب وتنفيذ البند طبقاً للمواصفات الفنية وأصول الصناعة المعتمدة واشتراطات المهندس المشرف."
                 cw_live_descriptions[_c_key] = _saved_d
 
                 _clean_name = _re_mod.sub(r'^\d+\s*[-–.]\s*', '', str(_name)).strip()
 
                 cw_boq_table_rows_data.append({
                     "code": _c_key,
-                    "seq": str(_idx),
+                    "item_id": _entry["item_id"],
+                    "source_type": _entry["source_type"],
+                    "auto_idx": _entry["auto_idx"],
+                    "uid": _entry["uid"],
+                    "seq": str(_seq_idx),
+                    "seq_num": _seq_idx,
                     "clean_name": _clean_name,
                     "unit": str(_unit),
                     "tot_qty": f"{_tot_q:,.2f}",
+                    "tot_qty_num": _tot_q,
                     "unit_price": f"{_u_price:,.2f}",
                     "tot_cost": f"{_tot_cost:,.2f}",
+                    "tot_cost_num": _tot_cost,
                     "desc": _saved_d,
                     "is_total": False,
+                    "is_manual": _entry["source_type"] == "manual",
                 })
 
             if "total_cost" in _cur_cw_desc_dict and _cur_cw_desc_dict["total_cost"] is not None:
@@ -28601,14 +30768,22 @@ def render(is_standalone: bool = False):
             cw_live_descriptions["total_cost"] = _saved_cw_total_d
             cw_boq_table_rows_data.append({
                 "code": "total_cost",
+                "item_id": "total_cost",
+                "source_type": "total",
+                "auto_idx": None,
+                "uid": "",
                 "seq": "💰",
+                "seq_num": 0,
                 "clean_name": "إجمالي التكلفة (Total Cost)",
                 "unit": "ج.م (EGP)",
                 "tot_qty": "—",
+                "tot_qty_num": 0.0,
                 "unit_price": "—",
                 "tot_cost": f"{cw_grand_total_cost:,.2f}",
+                "tot_cost_num": cw_grand_total_cost,
                 "desc": _saved_cw_total_d,
                 "is_total": True,
+                "is_manual": False,
             })
 
             if st.session_state.get(f"{prefix}cw_item_descriptions") != cw_live_descriptions:
@@ -28616,972 +30791,36 @@ def render(is_standalone: bool = False):
                 S.cfg_set(f"{prefix}cw_item_descriptions", dict(cw_live_descriptions))
                 S.cfg_set("cw_item_descriptions", dict(cw_live_descriptions))
 
-            _cw_tbody_rows_html = []
-            for _r_idx, _r_info in enumerate(cw_boq_table_rows_data):
-                _code_esc = _html_mod.escape(_r_info["code"])
-                _seq_esc = _html_mod.escape(_r_info["seq"])
-                _name_esc = _html_mod.escape(_r_info["clean_name"])
-                _unit_esc = _html_mod.escape(_r_info["unit"])
-                _qty_esc = _html_mod.escape(_r_info["tot_qty"])
-                _uprice_esc = _html_mod.escape(_r_info["unit_price"])
-                _tcost_esc = _html_mod.escape(_r_info["tot_cost"])
-                _desc_esc = _html_mod.escape(_r_info["desc"])
-                _is_tot = _r_info["is_total"]
+            # خريطة توصيفات موضعية (item_N) لاستخدامها في تصدير Excel بعد استبعاد/حذف بعض البنود
+            _cw_excel_live_descs = {
+                f"item_{_r_i}": _r["desc"]
+                for _r_i, _r in enumerate([_r for _r in cw_boq_table_rows_data if not _r["is_total"]], start=1)
+            }
+            _cw_excel_live_descs["total_cost"] = _saved_cw_total_d
 
-                if _is_tot:
-                    _cw_tbody_rows_html.append(f"""
-                    <tr class="boq-row boq-total-row" id="boq-tr-total" data-row-idx="{_r_idx}">
-                        <td class="boq-td cell-summary" id="cell-0-{_r_idx}">
-                            <div class="summary-item-wrap">
-                                <span class="seq-badge">{_seq_esc}</span>
-                                <span class="item-name-txt" style="color: #10b981; font-weight: 900;">{_name_esc}</span>
-                            </div>
-                            <div class="row-resizer" data-row="{_r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
-                        </td>
-                        <td class="boq-td cell-unit" id="cell-1-{_r_idx}">
-                            <div class="cell-center-wrap" style="color: #6ee7b7; font-weight: 900;">{_unit_esc}</div>
-                        </td>
-                        <td class="boq-td cell-qty" id="cell-2-{_r_idx}">
-                            <div class="cell-center-wrap" style="color: #6ee7b7; font-weight: 900;">—</div>
-                        </td>
-                        <td class="boq-td cell-uprice" id="cell-3-{_r_idx}">
-                            <div class="cell-center-wrap" style="color: #6ee7b7; font-weight: 900;">—</div>
-                        </td>
-                        <td class="boq-td cell-tcost" id="cell-4-{_r_idx}">
-                            <div class="cell-center-wrap" style="color: #34d399; font-weight: 900; font-size: 0.73rem;">{_tcost_esc}</div>
-                        </td>
-                        <td class="boq-td cell-desc" id="cell-5-{_r_idx}">
-                            <div class="desc-editor" contenteditable="true" data-item-code="{_code_esc}" id="desc-edit-{_code_esc}" style="color: #e2e8f0; font-weight: 700;">{_desc_esc}</div>
-                        </td>
-                    </tr>
-                    """)
-                else:
-                    _row_cls = "boq-even-row" if (_r_idx % 2 == 0) else "boq-odd-row"
-                    _cw_tbody_rows_html.append(f"""
-                    <tr class="boq-row {_row_cls}" id="boq-tr-{_r_idx}" data-row-idx="{_r_idx}">
-                        <td class="boq-td cell-summary" id="cell-0-{_r_idx}">
-                            <div class="summary-item-wrap">
-                                <span class="seq-badge">{_seq_esc}.</span>
-                                <span class="item-name-txt">{_name_esc}</span>
-                            </div>
-                            <div class="row-resizer" data-row="{_r_idx}" title="اسحب بالماوس لتغيير ارتفاع الصف"></div>
-                        </td>
-                        <td class="boq-td cell-unit" id="cell-1-{_r_idx}">
-                            <div class="cell-center-wrap">{_unit_esc}</div>
-                        </td>
-                        <td class="boq-td cell-qty" id="cell-2-{_r_idx}">
-                            <div class="cell-center-wrap">{_qty_esc}</div>
-                        </td>
-                        <td class="boq-td cell-uprice" id="cell-3-{_r_idx}">
-                            <div class="cell-center-wrap">{_uprice_esc}</div>
-                        </td>
-                        <td class="boq-td cell-tcost" id="cell-4-{_r_idx}">
-                            <div class="cell-center-wrap">{_tcost_esc}</div>
-                        </td>
-                        <td class="boq-td cell-desc" id="cell-5-{_r_idx}">
-                            <div class="desc-editor" contenteditable="true" data-item-code="{_code_esc}" id="desc-edit-{_code_esc}">{_desc_esc}</div>
-                        </td>
-                    </tr>
-                    """)
-
+            _cw_tbody_combined = _cw_build_boq_tbody_html(cw_boq_table_rows_data, _cw_active_auto_count)
             _initial_cw_descs_json = json.dumps(cw_live_descriptions, ensure_ascii=False)
-            _cw_tbody_combined = "".join(_cw_tbody_rows_html)
+            _cw_full_table_html = _cw_boq_table_html(
+                _cw_tbody_combined,
+                _initial_cw_descs_json,
+                st.session_state.get(f"_{prefix}m1_boq_table_ver", 0),
+                _cw_sync_aria_lbl,
+            )
 
-            # حقن الجدول التفاعلي الكامل مع دعم الـ BiDi ومقاسات الخطوط 1.1x
-            _cw_full_table_html = f"""
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="utf-8">
-<style>
-  * {{
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-  }}
-  html, body {{
-    width: 100%;
-    margin: 0;
-    padding: 0;
-    background: transparent;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Kufi Arabic", sans-serif;
-    direction: rtl;
-    color: #e2e8f0;
-    overflow-x: hidden !important;
-  }}
-  body.is-resizing-col {{
-    cursor: col-resize !important;
-    user-select: none !important;
-  }}
-  body.is-resizing-row {{
-    cursor: row-resize !important;
-    user-select: none !important;
-  }}
+            # ── ضبط ميكانيكي ديناميكي لارتفاع جدول الحصر المجمع لمنع أي فراغ أو تباعد زائد ──
+            _cw_num_auto_active = sum(1 for _e in _cw_all_entries if _e["source_type"] == "auto_calculated")
+            _cw_num_man_active = sum(1 for _e in _cw_all_entries if _e["source_type"] == "manual")
+            _cw_base_boq_h = 217
+            if _cw_num_auto_active == 0:
+                _cw_base_boq_h += 34
+            if _cw_num_man_active == 0:
+                _cw_base_boq_h += 34
+            _cw_boq_iframe_h = max(300, _cw_base_boq_h + len(_cw_all_entries) * 34)
+            with st.container(key=f"{prefix}m1_boq_table_wrap"):
+                render_html_iframe(_cw_full_table_html, height=_cw_boq_iframe_h, scrolling=False)
 
-  .boq-root-container {{
-    width: 100% !important;
-    max-width: 100% !important;
-    padding: 4px 2px 14px 2px;
-    box-sizing: border-box;
-    overflow-x: hidden !important;
-  }}
-
-  /* ── شريط الأدوات العلوي المدمج ── */
-  .boq-top-bar {{
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-    background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(15, 23, 42, 0.98) 100%);
-    border: 1.5px solid rgba(56, 189, 248, 0.50);
-    border-radius: 8px;
-    padding: 6px 12px;
-    margin-bottom: 8px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-  }}
-  .boq-top-title {{
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.82rem;
-    font-weight: 900;
-    color: #38bdf8;
-    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
-  }}
-  .boq-controls-group {{
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }}
-  .boq-btn {{
-    background: rgba(15, 23, 42, 0.85);
-    color: #e2e8f0;
-    border: 1px solid rgba(148, 163, 184, 0.4);
-    border-radius: 6px;
-    padding: 4px 10px;
-    font-size: 0.65rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    user-select: none;
-  }}
-  .boq-btn:hover {{
-    background: rgba(56, 189, 248, 0.20);
-    border-color: #38bdf8;
-    color: #ffffff;
-    box-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
-  }}
-  .boq-save-badge {{
-    display: none;
-    align-items: center;
-    gap: 4px;
-    background: rgba(16, 185, 129, 0.25);
-    color: #34d399;
-    border: 1px solid #10b981;
-    border-radius: 6px;
-    padding: 3px 8px;
-    font-size: 0.62rem;
-    font-weight: 800;
-    animation: fadeInOut 2.5s ease forwards;
-  }}
-
-  /* ── جدول المقايسة الكامل ── */
-  .boq-table-wrapper {{
-    width: 100% !important;
-    max-width: 100% !important;
-    overflow-x: hidden !important;
-    border: 2px solid rgba(56, 189, 248, 0.50);
-    border-radius: 8px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.50);
-    background: #0f172a;
-    box-sizing: border-box;
-  }}
-
-  table#m1-cw-boq-table {{
-    width: 100% !important;
-    min-width: 100% !important;
-    max-width: 100% !important;
-    table-layout: fixed;
-    border-collapse: collapse;
-    border-spacing: 0;
-    direction: rtl;
-    background: #0f172a;
-  }}
-
-  /* ── عناوين الجدول (برتقالي وأزرق) ── */
-  thead.boq-thead tr.boq-header-row {{
-    height: 38px;
-  }}
-  th.boq-th {{
-    position: relative;
-    padding: 4px 2px;
-    vertical-align: middle;
-    text-align: center;
-    border-bottom: 2px solid #ea580c;
-    user-select: none;
-    overflow: visible;
-  }}
-  th.boq-th-orange {{
-    background: linear-gradient(180deg, rgba(234, 88, 12, 0.42) 0%, rgba(194, 65, 12, 0.26) 100%);
-    border-left: 1.5px solid rgba(251, 146, 60, 0.50);
-  }}
-  th.boq-th-orange .th-main-title {{
-    display: block;
-    font-size: 0.68rem;
-    font-weight: 900;
-    color: #fb923c;
-    text-shadow: 0 0 8px rgba(251, 146, 60, 0.75), 0 1px 2px #000000;
-    line-height: 1.25;
-  }}
-  th.boq-th-orange .th-sub-title {{
-    display: block;
-    font-size: 0.56rem;
-    font-weight: 800;
-    color: #fed7aa;
-    margin-top: 1px;
-    line-height: 1.15;
-  }}
-  th.boq-th-blue {{
-    background: linear-gradient(180deg, rgba(2, 132, 199, 0.48) 0%, rgba(14, 165, 233, 0.26) 100%);
-    border-left: none;
-    border-bottom: 2px solid #38bdf8;
-  }}
-  th.boq-th-blue .th-main-title {{
-    display: block;
-    font-size: 0.68rem;
-    font-weight: 900;
-    color: #00f5ff;
-    text-shadow: 0 0 8px rgba(0, 245, 255, 0.80), 0 1px 2px #000000;
-    line-height: 1.25;
-  }}
-  th.boq-th-blue .th-sub-title {{
-    display: block;
-    font-size: 0.56rem;
-    font-weight: 800;
-    color: #7dd3fc;
-    margin-top: 1px;
-    text-shadow: 0 0 6px rgba(125, 211, 252, 0.65);
-    line-height: 1.15;
-  }}
-
-  /* ── صفوف وخلايا الجدول ── */
-  tr.boq-row {{
-    transition: background-color 0.12s ease;
-    min-height: 30px;
-  }}
-  tr.boq-even-row {{
-    background-color: rgba(15, 23, 42, 0.92);
-  }}
-  tr.boq-odd-row {{
-    background-color: rgba(30, 41, 59, 0.78);
-  }}
-  tr.boq-row:hover:not(.boq-total-row) {{
-    background-color: rgba(51, 65, 85, 0.65);
-  }}
-  td.boq-td {{
-    position: relative;
-    vertical-align: middle;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.20);
-    border-left: 1px solid rgba(148, 163, 184, 0.18);
-    overflow: visible;
-  }}
-  td.boq-td:last-child {{
-    border-left: none;
-  }}
-
-  /* ── تنسيق عمود البند ── */
-  td.cell-summary {{
-    direction: rtl;
-    text-align: right;
-    padding: 4px 8px 4px 6px;
-    background: rgba(234, 88, 12, 0.05);
-  }}
-  .summary-item-wrap {{
-    display: flex;
-    flex-direction: row;
-    align-items: flex-start;
-    justify-content: flex-start;
-    gap: 4px;
-    direction: rtl;
-    text-align: right;
-    width: 100%;
-    margin-right: 2px;
-  }}
-  .seq-badge {{
-    flex-shrink: 0;
-    display: inline-block;
-    font-size: 0.68rem;
-    font-weight: 900;
-    color: #fb923c;
-    min-width: 20px;
-    text-align: right;
-    line-height: 1.4;
-    user-select: text;
-  }}
-  .item-name-txt {{
-    flex: 1;
-    font-size: 0.68rem;
-    font-weight: 800;
-    color: #f8fafc;
-    line-height: 1.4;
-    text-align: start;
-    unicode-bidi: plaintext;
-    white-space: normal;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    user-select: text;
-  }}
-
-  /* ── تنسيق الأعمدة الرقمية والوحدة بحجم 1.1x ── */
-  .cell-center-wrap {{
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    width: 100%;
-    height: 100%;
-    padding: 3px 2px;
-    white-space: normal;
-    word-wrap: break-word;
-    user-select: text;
-  }}
-  td.cell-unit .cell-center-wrap {{
-    font-size: 0.68rem;
-    font-weight: 700;
-    color: #e2e8f0;
-  }}
-  td.cell-qty .cell-center-wrap {{
-    font-size: 0.68rem;
-    font-weight: 800;
-    color: #f8fafc;
-  }}
-  td.cell-uprice .cell-center-wrap {{
-    font-size: 0.68rem;
-    font-weight: 800;
-    color: #fdba74;
-  }}
-  td.cell-tcost .cell-center-wrap {{
-    font-size: 0.68rem;
-    font-weight: 900;
-    color: #fbbf24;
-  }}
-
-  /* ── تنسيق عمود توصيف البند القابل للتعديل ── */
-  td.cell-desc {{
-    padding: 3px 6px;
-    background: rgba(2, 132, 199, 0.04);
-    overflow: visible;
-  }}
-  .desc-editor {{
-    width: 100%;
-    min-height: 26px;
-    padding: 3px 6px;
-    text-align: start;
-    unicode-bidi: plaintext;
-    font-size: 0.68rem;
-    font-weight: 600;
-    color: #ffffff;
-    line-height: 1.4;
-    border: 1.5px solid transparent;
-    border-radius: 5px;
-    background: transparent;
-    outline: none;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    transition: all 0.15s ease;
-    cursor: text;
-    user-select: text;
-  }}
-  .desc-editor:hover {{
-    border-color: rgba(56, 189, 248, 0.40);
-    background: rgba(15, 23, 42, 0.65);
-  }}
-  .desc-editor:focus {{
-    border-color: #38bdf8;
-    background: rgba(15, 23, 42, 0.95);
-    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.22);
-  }}
-
-  /* ── تنسيق صف إجمالي التكلفة ── */
-  tr.boq-total-row {{
-    background: linear-gradient(90deg, rgba(6, 78, 59, 0.70) 0%, rgba(4, 120, 87, 0.50) 100%) !important;
-    border-top: 2px solid #10b981;
-  }}
-  tr.boq-total-row td.boq-td {{
-    border-bottom: none;
-  }}
-  tr.boq-total-row .seq-badge,
-  tr.boq-total-row .item-name-txt {{
-    font-size: 0.70rem !important;
-    font-weight: 900 !important;
-  }}
-
-  /* ── مقابض تغيير الأبعاد ── */
-  .col-resizer {{
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 7px;
-    height: 100%;
-    cursor: col-resize;
-    z-index: 10;
-    user-select: none;
-  }}
-  .col-resizer:hover, .col-resizer.active-resize {{
-    background: rgba(56, 189, 248, 0.85);
-    box-shadow: 0 0 8px #38bdf8;
-  }}
-  .row-resizer {{
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 6px;
-    cursor: row-resize;
-    z-index: 9;
-    user-select: none;
-  }}
-  .row-resizer:hover, .row-resizer.active-resize {{
-    background: rgba(234, 88, 12, 0.85);
-    box-shadow: 0 0 8px #ea580c;
-  }}
-</style>
-</head>
-<body>
-<div class="boq-root-container" id="boq-root-container">
-    <div class="boq-top-bar">
-        <div class="boq-top-title">
-            <span>📋 جدول ملخص الكميات وتوصيفات البنود (BOQ Takeoff & Descriptions)</span>
-        </div>
-        <div class="boq-controls-group">
-            <span class="boq-save-badge" id="boq-save-indicator">💾 تم حفظ التوصيفات تلقائياً</span>
-            <button type="button" class="boq-btn" id="boq-reset-dims-btn" title="إعادة ضبط أبعاد الأعمدة والصفوف إلى الوضع التلقائي">
-                🔄 ضبط الأبعاد
-            </button>
-        </div>
-    </div>
-
-    <div class="boq-table-wrapper" id="boq-table-wrapper">
-        <table id="m1-cw-boq-table" dir="rtl">
-            <colgroup>
-                <col id="boq-col-0" style="width: 24%;">
-                <col id="boq-col-1" style="width: 7%;">
-                <col id="boq-col-2" style="width: 9%;">
-                <col id="boq-col-3" style="width: 10%;">
-                <col id="boq-col-4" style="width: 11%;">
-                <col id="boq-col-5" style="width: 39%;">
-            </colgroup>
-            <thead class="boq-thead">
-                <tr class="boq-header-row" id="boq-header-tr" data-row-idx="header">
-                    <th class="boq-th boq-th-orange">
-                        <span class="th-main-title">🟠 البند</span>
-                        <span class="th-sub-title">(Item)</span>
-                        <div class="col-resizer" data-col="0" title="اسحب بالماوس لتغيير عرض العمود"></div>
-                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
-                    </th>
-                    <th class="boq-th boq-th-orange">
-                        <span class="th-main-title">🟠 الوحدة</span>
-                        <span class="th-sub-title">(Unit)</span>
-                        <div class="col-resizer" data-col="1" title="اسحب بالماوس لتغيير عرض العمود"></div>
-                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
-                    </th>
-                    <th class="boq-th boq-th-orange">
-                        <span class="th-main-title">🟠 الكمية</span>
-                        <span class="th-sub-title">الإجمالية</span>
-                        <div class="col-resizer" data-col="2" title="اسحب بالماوس لتغيير عرض العمود"></div>
-                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
-                    </th>
-                    <th class="boq-th boq-th-orange">
-                        <span class="th-main-title">🟠 تكلفة الوحدة</span>
-                        <span class="th-sub-title">(ج.م)</span>
-                        <div class="col-resizer" data-col="3" title="اسحب بالماوس لتغيير عرض العمود"></div>
-                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
-                    </th>
-                    <th class="boq-th boq-th-orange">
-                        <span class="th-main-title">🟠 إجمالي التكلفة</span>
-                        <span class="th-sub-title">(ج.م)</span>
-                        <div class="col-resizer" data-col="4" title="اسحب بالماوس لتغيير عرض العمود"></div>
-                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
-                    </th>
-                    <th class="boq-th boq-th-blue">
-                        <span class="th-main-title">✏️ توصيف البند</span>
-                        <span class="th-sub-title">متاح للتعديل ✍️</span>
-                        <div class="row-resizer" data-row="header" title="اسحب بالماوس لتغيير ارتفاع صف العناوين"></div>
-                    </th>
-                </tr>
-            </thead>
-            <tbody>
-                {_cw_tbody_combined}
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<script>
-(function() {{
-    const COL_STORAGE_KEY = 'm1_cw_boq_col_widths_v1';
-    const ROW_STORAGE_KEY = 'm1_cw_boq_row_heights_v1';
-    const DEFAULT_RATIOS = [0.24, 0.07, 0.09, 0.10, 0.11, 0.39];
-    const MIN_COL_WIDTHS = [90, 40, 45, 50, 55, 120];
-
-    const table = document.getElementById('m1-cw-boq-table');
-    const wrapper = document.getElementById('boq-table-wrapper');
-    const rootContainer = document.getElementById('boq-root-container');
-    const cols = [
-        document.getElementById('boq-col-0'),
-        document.getElementById('boq-col-1'),
-        document.getElementById('boq-col-2'),
-        document.getElementById('boq-col-3'),
-        document.getElementById('boq-col-4'),
-        document.getElementById('boq-col-5')
-    ];
-
-    let descriptionsMap = {_initial_cw_descs_json};
-    let lastSyncedJson = JSON.stringify(descriptionsMap);
-    let hasInitializedVisibleWidth = false;
-
-    function updateIframeHeight() {{
-        try {{
-            if (!rootContainer) return;
-            const contentH = Math.max(rootContainer.offsetHeight || 0, rootContainer.scrollHeight || 0);
-            if (contentH < 200) return;
-            const h = contentH + 24;
-            if (window.frameElement) {{
-                window.frameElement.style.height = h + 'px';
-                window.frameElement.style.minHeight = h + 'px';
-                window.frameElement.setAttribute('height', String(h));
-
-                let p = window.frameElement.parentElement;
-                let depth = 0;
-                while (p && depth < 5) {{
-                    const testId = (p.getAttribute && p.getAttribute('data-testid')) || '';
-                    const cls = (typeof p.className === 'string') ? p.className : '';
-                    if (
-                        testId === 'stVerticalBlock' ||
-                        testId === 'stVerticalBlockBorderWrapper' ||
-                        testId === 'stExpander' ||
-                        testId === 'stExpanderDetails' ||
-                        testId === 'stColumn' ||
-                        testId === 'stMainBlockContainer' ||
-                        cls.indexOf('stExpander') !== -1 ||
-                        p.tagName === 'DETAILS' ||
-                        p.tagName === 'SECTION' ||
-                        p.tagName === 'MAIN' ||
-                        p.tagName === 'BODY'
-                    ) {{
-                        break;
-                    }}
-                    p.style.height = h + 'px';
-                    p.style.minHeight = h + 'px';
-                    p = p.parentElement;
-                    depth++;
-                }}
-            }}
-        }} catch (e) {{}}
-    }}
-
-    if (typeof ResizeObserver !== 'undefined' && rootContainer) {{
-        const ro = new ResizeObserver(function() {{
-            if (wrapper && wrapper.clientWidth > 400 && !hasInitializedVisibleWidth) {{
-                hasInitializedVisibleWidth = true;
-                initColumnWidths(false);
-                initRowHeights(false);
-            }}
-            updateIframeHeight();
-        }});
-        ro.observe(rootContainer);
-        if (wrapper) ro.observe(wrapper);
-    }}
-
-    try {{
-        if (window.frameElement) {{
-            const parentDetails = window.frameElement.closest('details');
-            if (parentDetails) {{
-                parentDetails.addEventListener('toggle', function() {{
-                    if (parentDetails.open) {{
-                        setTimeout(function() {{
-                            initColumnWidths(false);
-                            initRowHeights(false);
-                            updateIframeHeight();
-                        }}, 40);
-                        setTimeout(updateIframeHeight, 200);
-                    }}
-                }});
-            }}
-        }}
-    }} catch (e) {{}}
-
-    window.addEventListener('load', updateIframeHeight);
-    window.addEventListener('resize', updateIframeHeight);
-    setTimeout(updateIframeHeight, 80);
-    setTimeout(updateIframeHeight, 300);
-    setTimeout(updateIframeHeight, 700);
-
-    function initColumnWidths(forceDefault) {{
-        let savedWidths = null;
-        if (!forceDefault) {{
-            try {{
-                const raw = localStorage.getItem(COL_STORAGE_KEY);
-                if (raw) {{
-                    const parsed = JSON.parse(raw);
-                    if (Array.isArray(parsed) && parsed.length === 6 && parsed.every(x => typeof x === 'number' && x >= 30)) {{
-                        savedWidths = parsed;
-                    }}
-                }}
-            }} catch (e) {{}}
-        }}
-
-        if (savedWidths) {{
-            let totalW = savedWidths.reduce((a, b) => a + b, 0);
-            if (totalW > 0) {{
-                for (let i = 0; i < 6; i++) {{
-                    const pct = ((savedWidths[i] / totalW) * 100).toFixed(2);
-                    cols[i].style.width = pct + '%';
-                }}
-            }}
-        }} else {{
-            for (let i = 0; i < 6; i++) {{
-                const pct = (DEFAULT_RATIOS[i] * 100).toFixed(2);
-                cols[i].style.width = pct + '%';
-            }}
-        }}
-        table.style.width = '100%';
-        updateIframeHeight();
-    }}
-
-    function initRowHeights(forceDefault) {{
-        if (forceDefault) {{
-            const hdrTr = document.getElementById('boq-header-tr');
-            if (hdrTr) hdrTr.style.height = '';
-            document.querySelectorAll('tr.boq-row').forEach(tr => {{
-                tr.style.height = '';
-            }});
-            updateIframeHeight();
-            return;
-        }}
-        try {{
-            const raw = localStorage.getItem(ROW_STORAGE_KEY);
-            if (!raw) return;
-            const savedRows = JSON.parse(raw);
-            if (savedRows && typeof savedRows === 'object') {{
-                if (savedRows['header']) {{
-                    const hdrTr = document.getElementById('boq-header-tr');
-                    if (hdrTr) hdrTr.style.height = savedRows['header'] + 'px';
-                }}
-                document.querySelectorAll('tr.boq-row').forEach(tr => {{
-                    const rIdx = tr.getAttribute('data-row-idx');
-                    if (rIdx && savedRows[rIdx]) {{
-                        tr.style.height = savedRows[rIdx] + 'px';
-                    }}
-                }});
-            }}
-        }} catch (e) {{}}
-        updateIframeHeight();
-    }}
-
-    function saveColumnWidths() {{
-        try {{
-            const ths = table.querySelectorAll('thead th.boq-th');
-            const arr = Array.from(ths).map(th => Math.round(th.getBoundingClientRect().width));
-            if (arr.length === 6) {{
-                localStorage.setItem(COL_STORAGE_KEY, JSON.stringify(arr));
-            }}
-        }} catch (e) {{}}
-    }}
-
-    function saveRowHeight(rowKey, hPx) {{
-        try {{
-            let savedRows = {{}};
-            const raw = localStorage.getItem(ROW_STORAGE_KEY);
-            if (raw) savedRows = JSON.parse(raw) || {{}};
-            savedRows[rowKey] = Math.round(hPx);
-            localStorage.setItem(ROW_STORAGE_KEY, JSON.stringify(savedRows));
-        }} catch (e) {{}}
-    }}
-
-    initColumnWidths(false);
-    initRowHeights(false);
-
-    let activeColIdx = null;
-    let colStartX = 0;
-    let colStartW = 0;
-    let nextColStartW = 0;
-    let activeColHandle = null;
-
-    document.querySelectorAll('.col-resizer').forEach(handle => {{
-        handle.addEventListener('mousedown', function(e) {{
-            e.preventDefault();
-            e.stopPropagation();
-            const cIdx = parseInt(handle.getAttribute('data-col'), 10);
-            if (isNaN(cIdx) || cIdx < 0 || cIdx >= 5) return;
-
-            const ths = table.querySelectorAll('thead th.boq-th');
-            const curWidths = Array.from(ths).map(th => th.getBoundingClientRect().width);
-            for (let i = 0; i < 6; i++) {{
-                cols[i].style.width = Math.round(curWidths[i]) + 'px';
-            }}
-
-            activeColIdx = cIdx;
-            colStartX = e.clientX;
-            colStartW = curWidths[cIdx];
-            nextColStartW = curWidths[cIdx + 1];
-            activeColHandle = handle;
-            handle.classList.add('active-resize');
-            document.body.classList.add('is-resizing-col');
-        }});
-    }});
-
-    let activeRowTr = null;
-    let activeRowKey = null;
-    let rowStartY = 0;
-    let rowStartH = 0;
-    let activeRowHandle = null;
-
-    document.querySelectorAll('.row-resizer').forEach(handle => {{
-        handle.addEventListener('mousedown', function(e) {{
-            e.preventDefault();
-            e.stopPropagation();
-            const rKey = handle.getAttribute('data-row');
-            const tr = handle.closest('tr');
-            if (!tr) return;
-
-            activeRowTr = tr;
-            activeRowKey = rKey;
-            rowStartY = e.clientY;
-            rowStartH = tr.getBoundingClientRect().height;
-            activeRowHandle = handle;
-            handle.classList.add('active-resize');
-            document.body.classList.add('is-resizing-row');
-        }});
-    }});
-
-    window.addEventListener('mousemove', function(e) {{
-        if (activeColIdx !== null) {{
-            e.preventDefault();
-            const deltaLeft = colStartX - e.clientX;
-            const minCur = MIN_COL_WIDTHS[activeColIdx] || 45;
-            const minNext = MIN_COL_WIDTHS[activeColIdx + 1] || 45;
-
-            let newCurW = Math.max(minCur, colStartW + deltaLeft);
-            let actualDelta = newCurW - colStartW;
-            let newNextW = nextColStartW - actualDelta;
-
-            if (newNextW < minNext) {{
-                newNextW = minNext;
-                actualDelta = nextColStartW - minNext;
-                newCurW = colStartW + actualDelta;
-            }}
-
-            const tblW = table.getBoundingClientRect().width || (wrapper ? wrapper.clientWidth : 1000) || 1000;
-            const pctCur = ((newCurW / tblW) * 100).toFixed(2);
-            const pctNext = ((newNextW / tblW) * 100).toFixed(2);
-
-            cols[activeColIdx].style.width = pctCur + '%';
-            cols[activeColIdx + 1].style.width = pctNext + '%';
-
-            table.style.width = '100%';
-            updateIframeHeight();
-            return;
-        }}
-
-        if (activeRowTr !== null) {{
-            e.preventDefault();
-            const deltaY = e.clientY - rowStartY;
-            const minH = (activeRowKey === 'header') ? 48 : 32;
-            const newH = Math.max(minH, Math.round(rowStartH + deltaY));
-            activeRowTr.style.height = newH + 'px';
-            updateIframeHeight();
-            return;
-        }}
-    }});
-
-    window.addEventListener('mouseup', function() {{
-        if (activeColIdx !== null) {{
-            saveColumnWidths();
-            activeColIdx = null;
-            if (activeColHandle) {{
-                activeColHandle.classList.remove('active-resize');
-                activeColHandle = null;
-            }}
-            document.body.classList.remove('is-resizing-col');
-            updateIframeHeight();
-        }}
-        if (activeRowTr !== null) {{
-            const finalH = activeRowTr.getBoundingClientRect().height;
-            if (activeRowKey) {{
-                saveRowHeight(activeRowKey, finalH);
-            }}
-            activeRowTr = null;
-            activeRowKey = null;
-            if (activeRowHandle) {{
-                activeRowHandle.classList.remove('active-resize');
-                activeRowHandle = null;
-            }}
-            document.body.classList.remove('is-resizing-row');
-            updateIframeHeight();
-        }}
-    }});
-
-    const resetBtn = document.getElementById('boq-reset-dims-btn');
-    if (resetBtn) {{
-        resetBtn.addEventListener('click', function() {{
-            try {{
-                localStorage.removeItem(COL_STORAGE_KEY);
-                localStorage.removeItem(ROW_STORAGE_KEY);
-            }} catch (e) {{}}
-            initColumnWidths(true);
-            initRowHeights(true);
-        }});
-    }}
-
-    let activeFocusedEditor = null;
-
-    function collectAllDescriptions() {{
-        document.querySelectorAll('.desc-editor').forEach(ed => {{
-            const code = ed.getAttribute('data-item-code');
-            if (code) {{
-                descriptionsMap[code] = (ed.innerText || ed.textContent || '').trim();
-            }}
-        }});
-    }}
-
-    function syncDescriptionsToStreamlit() {{
-        collectAllDescriptions();
-        const curJson = JSON.stringify(descriptionsMap);
-        if (curJson === lastSyncedJson) return;
-        lastSyncedJson = curJson;
-
-        const saveBadge = document.getElementById('boq-save-indicator');
-        if (saveBadge) {{
-            saveBadge.style.display = 'inline-flex';
-            setTimeout(() => {{ saveBadge.style.display = 'none'; }}, 2500);
-        }}
-
-        const payload = {{
-            action: 'update_cw_boq_descriptions',
-            descriptions: descriptionsMap,
-            ts: Date.now()
-        }};
-        const jsonStr = JSON.stringify(payload);
-        try {{
-            if (window.parent && window.parent.document) {{
-                const pDoc = window.parent.document;
-                let input = pDoc.querySelector('input[aria-label="{_cw_sync_aria_lbl}"]');
-                if (!input) {{
-                    input = pDoc.querySelector('div[data-testid="stTextInput"] input');
-                }}
-                if (input) {{
-                    const proto = (window.parent.HTMLInputElement || window.HTMLInputElement).prototype;
-                    const desc = Object.getOwnPropertyDescriptor(proto, 'value');
-                    if (desc && desc.set) {{
-                        desc.set.call(input, jsonStr);
-                    }} else {{
-                        input.value = jsonStr;
-                    }}
-                    if (input._valueTracker) {{
-                        input._valueTracker.setValue('');
-                    }}
-                    input.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                    input.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                    input.dispatchEvent(new KeyboardEvent('keydown', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
-                    input.dispatchEvent(new KeyboardEvent('keyup', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
-                    input.dispatchEvent(new Event('blur', {{ bubbles: true }}));
-                    setTimeout(() => {{
-                        try {{
-                            if (desc && desc.set) {{ desc.set.call(input, ''); }} else {{ input.value = ''; }}
-                        }} catch (e) {{}}
-                    }}, 450);
-                }}
-            }}
-        }} catch (err) {{
-            console.warn('BOQ description sync error:', err);
-        }}
-    }}
-
-    function applyBiDiDirection(elem) {{
-        if (!elem) return;
-        const txt = (elem.innerText || elem.textContent || '').trim();
-        if (!txt) {{
-            elem.setAttribute('dir', 'auto');
-            elem.style.textAlign = 'start';
-            return;
-        }}
-        const arabicRegex = /[\\u0600-\\u06FF\\u0750-\\u077F\\u08A0-\\u08FF\\uFB50-\\uFDFF\\uFE70-\\uFEFF]/;
-        const latinRegex = /[a-zA-Z]/;
-
-        let isArabic = false;
-        for (let i = 0; i < txt.length; i++) {{
-            const ch = txt[i];
-            if (arabicRegex.test(ch)) {{
-                isArabic = true;
-                break;
-            }} else if (latinRegex.test(ch)) {{
-                isArabic = false;
-                break;
-            }}
-        }}
-
-        if (isArabic) {{
-            elem.setAttribute('dir', 'rtl');
-            elem.style.textAlign = 'right';
-        }} else {{
-            elem.setAttribute('dir', 'ltr');
-            elem.style.textAlign = 'left';
-        }}
-    }}
-
-    document.querySelectorAll('.desc-editor, .item-name-txt').forEach(applyBiDiDirection);
-
-    document.querySelectorAll('.desc-editor').forEach(editor => {{
-        editor.addEventListener('focus', function() {{
-            activeFocusedEditor = editor;
-        }});
-        editor.addEventListener('input', function() {{
-            applyBiDiDirection(editor);
-            const code = editor.getAttribute('data-item-code');
-            if (code) {{
-                descriptionsMap[code] = (editor.innerText || editor.textContent || '').trim();
-            }}
-            updateIframeHeight();
-        }});
-        editor.addEventListener('blur', function() {{
-            applyBiDiDirection(editor);
-            if (activeFocusedEditor === editor) activeFocusedEditor = null;
-            const code = editor.getAttribute('data-item-code');
-            if (code) {{
-                descriptionsMap[code] = (editor.innerText || editor.textContent || '').trim();
-            }}
-            syncDescriptionsToStreamlit();
-        }});
-        editor.addEventListener('paste', function() {{
-            setTimeout(() => {{
-                applyBiDiDirection(editor);
-                updateIframeHeight();
-            }}, 25);
-        }});
-    }});
-
-    window.addEventListener('blur', function() {{
-        syncDescriptionsToStreamlit();
-    }});
-    document.addEventListener('visibilitychange', function() {{
-        if (document.visibilityState === 'hidden') {{
-            syncDescriptionsToStreamlit();
-        }}
-    }});
-}})();
-</script>
-</body>
-</html>
-"""
-            _cw_tbl_lines = len(cw_items_data) + 2
-            _cw_tbl_calc_height = max(420, min(1400, _cw_tbl_lines * 48 + 120))
-            render_html_iframe(_cw_full_table_html, height=_cw_tbl_calc_height, scrolling=False)
+            # ── شريط أدوات أسفل الجدول المجمع: استعادة وحساب بنود التصميم + استعادة بند يدوي + سجل المستبعدات ──
+            _render_cw_boq_bottom_toolbar(_cw_boq_del_items, prefix=prefix)
 
             # ═════════════════════════════════════════════════════════════════════════
             #  4. جدول البنود المستخدمة في المقايسة
@@ -29684,6 +30923,8 @@ def render(is_standalone: bool = False):
                 # دمج بنود الحصر الأساسية مع البنود اليدوية الإضافية في جدول الحصر التفصيلي
                 _full_detailed_takeoff_rows = list(comp_works_table_rows)
                 for _m_idx, _m_item in enumerate(_cur_manual_items_list, start=13):
+                    if f"manual_{_m_item.get('uid', '')}" in _cw_boq_exc_set:
+                        continue
                     _m_name = str(_m_item.get("name", f"بند يدوي {_m_idx}")).strip()
                     _m_net_q = float(_m_item.get("net_qty", 0.0))
                     _m_unit = str(_m_item.get("unit", "م² (m²)")).strip()
@@ -29703,6 +30944,7 @@ def render(is_standalone: bool = False):
             _slab_steel_ton_val = float(st.session_state.get(f"{prefix}slab_steel_ton") or st.session_state.get("slab_steel_ton") or 0.0)
             _boq_materials_dict = _compute_cw_boq_items_materials_breakdown(
                 cw_items_data=cw_items_data,
+                orig_idx_list=_cw_orig_idx_list,
                 cw_qty_factor=cw_qty_factor,
                 slab_steel_ton=_slab_steel_ton_val,
                 prefix=prefix,
@@ -30067,7 +31309,7 @@ def render(is_standalone: bool = False):
 
             _cw_full_xl_bytes = _build_cw_full_takeoff_excel_bytes(
                 items_data=cw_items_data,
-                live_descs=cw_live_descriptions,
+                live_descs=_cw_excel_live_descs,
                 qf_val=cw_qty_factor,
                 grand_tot=cw_grand_total_cost,
             )

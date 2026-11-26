@@ -98,6 +98,7 @@ from modules.raft_foundations import render_raft_foundations_module
 from modules.circular_tank_foundations import render_circular_tank_foundations_module
 from modules.module_philosophy import render_module_header_and_philosophy
 from modules.floating_calculator import inject_floating_calculator
+from modules.iframe_helper import render_html_iframe
 
 
 # ── CSS Injection: Fixed Unified Typography (75% Compact Scale) ─────────────
@@ -1483,6 +1484,115 @@ st.markdown(
 
 # ── Inject Floating Calculator & Inline Expression Evaluator ────────────────
 inject_floating_calculator()
+
+# ── Global Button Policy (All Modules): Selectable/Copyable Text + Pointer Cursor (No "I") + Click-Only Guard ─
+st.markdown(
+    """<style>
+    button,
+    button *,
+    [data-testid="stButton"] button,
+    [data-testid="stButton"] button *,
+    [data-testid="stDownloadButton"] button,
+    [data-testid="stDownloadButton"] button *,
+    [data-testid="stBaseButton-secondary"],
+    [data-testid="stBaseButton-secondary"] *,
+    [data-testid="stBaseButton-primary"],
+    [data-testid="stBaseButton-primary"] *,
+    .stButton button,
+    .stButton button *,
+    .stDownloadButton button,
+    .stDownloadButton button * {
+        user-select: text !important;
+        -webkit-user-select: text !important;
+        -moz-user-select: text !important;
+        -ms-user-select: text !important;
+        cursor: pointer !important;
+    }
+    </style>""",
+    unsafe_allow_html=True,
+)
+render_html_iframe(
+    """<script>
+    (function() {
+        try {
+            var pWin = window.parent || window;
+            var doc = (window.parent && window.parent.document) ? window.parent.document : document;
+
+            function applyGlobalBtnPolicy() {
+                try {
+                    var buttons = doc.querySelectorAll('button, [data-testid="stButton"] button, [data-testid="stDownloadButton"] button');
+                    buttons.forEach(function(btn) {
+                        var txt = (btn.innerText || btn.textContent || '').trim();
+                        if (txt) {
+                            if (!btn.getAttribute('title')) {
+                                btn.setAttribute('title', txt);
+                            }
+                            btn.style.userSelect = 'text';
+                            btn.style.webkitUserSelect = 'text';
+                            btn.style.cursor = 'pointer';
+                            var inners = btn.querySelectorAll('p, span, div');
+                            inners.forEach(function(el) {
+                                el.style.userSelect = 'text';
+                                el.style.webkitUserSelect = 'text';
+                                el.style.cursor = 'pointer';
+                            });
+                        }
+                    });
+                } catch(e) {}
+            }
+
+            applyGlobalBtnPolicy();
+            if (!pWin.__ecpGlobalBtnCopyInterval) {
+                pWin.__ecpGlobalBtnCopyInterval = pWin.setInterval(applyGlobalBtnPolicy, 800);
+            }
+
+            if (!pWin.__ecpGlobalBtnDragGuardInstalled) {
+                pWin.__ecpGlobalBtnDragGuardInstalled = true;
+                var downX = 0, downY = 0, didDrag = false, activeBtn = null;
+
+                doc.addEventListener('mousedown', function(e) {
+                    var b = e.target && e.target.closest ? e.target.closest('button') : null;
+                    if (b) {
+                        activeBtn = b;
+                        downX = e.clientX;
+                        downY = e.clientY;
+                        didDrag = false;
+                    } else {
+                        activeBtn = null;
+                        didDrag = false;
+                    }
+                }, true);
+
+                doc.addEventListener('mousemove', function(e) {
+                    if (activeBtn && (e.buttons & 1)) {
+                        if (Math.hypot(e.clientX - downX, e.clientY - downY) > 4) {
+                            didDrag = true;
+                        }
+                    }
+                }, true);
+
+                doc.addEventListener('click', function(e) {
+                    var b = e.target && e.target.closest ? e.target.closest('button') : null;
+                    if (!b) return;
+                    var sel = '';
+                    try {
+                        sel = (pWin.getSelection ? pWin.getSelection().toString() : '').trim();
+                    } catch(err) {}
+                    if (didDrag || sel.length > 0) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+                    }
+                    didDrag = false;
+                    activeBtn = null;
+                }, true);
+            }
+        } catch(e) {}
+    })();
+    </script>""",
+    height=1,
+    width=1,
+)
 
 # ── PROFILE MANAGEMENT & NAVIGATION HELPERS ─────────────────────────────────
 
