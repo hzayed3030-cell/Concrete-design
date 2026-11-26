@@ -12,7 +12,7 @@ Displays:
 import math
 import os
 import streamlit as st
-import streamlit.components.v1 as components
+from modules.iframe_helper import render_html_iframe, components_shim as components
 import pandas as pd
 from modules.table_styler import render_styled_table
 
@@ -459,8 +459,8 @@ def render() -> None:
                 unsafe_allow_html=True,
             )
 
-            # Inject parent document event listener & floating toast via components.html
-            components.html(
+            # Inject parent document event listener & floating toast via render_html_iframe
+            render_html_iframe(
                 """
                 <script>
                 (function() {
@@ -655,8 +655,8 @@ def render() -> None:
                 })();
                 </script>
                 """,
-                height=0,
-                width=0,
+                height=1,
+                width=1,
             )
 
         # ────────────────────────────────────────────────────────────────────
@@ -1299,7 +1299,7 @@ def render() -> None:
             )
 
         # Toast listener support for Tab 3 copying
-        components.html(
+        render_html_iframe(
             """
             <script>
             (function() {
@@ -1365,7 +1365,7 @@ def render() -> None:
             })();
             </script>
             """,
-            height=0,
-            width=0,
+            height=1,
+            width=1,
         )
 

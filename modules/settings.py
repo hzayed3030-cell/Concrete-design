@@ -4273,7 +4273,7 @@ def play_warning_sound(force: bool = False) -> None:
         pass
 
     try:
-        import streamlit.components.v1 as components
+        from modules.iframe_helper import render_html_iframe
         force_js = "true" if force else "false"
         js_code = f"""
         <html>
@@ -4336,7 +4336,7 @@ def play_warning_sound(force: bool = False) -> None:
         </body>
         </html>
         """
-        components.html(js_code, height=0, width=0)
+        render_html_iframe(js_code, height=1, width=1)
     except Exception:
         pass
 
@@ -4361,7 +4361,7 @@ def play_strong_whistle_siren() -> None:
     threading.Thread(target=_host_beep, daemon=True).start()
 
     try:
-        import streamlit.components.v1 as components
+        from modules.iframe_helper import render_html_iframe
         js_code = """
         <html>
         <head><meta charset="utf-8"></head>
@@ -4441,7 +4441,7 @@ def play_strong_whistle_siren() -> None:
         </body>
         </html>
         """
-        components.html(js_code, height=0, width=0)
+        render_html_iframe(js_code, height=1, width=1)
     except Exception:
         pass
 

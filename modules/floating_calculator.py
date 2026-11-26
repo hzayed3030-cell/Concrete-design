@@ -11,7 +11,7 @@ Provides:
 """
 
 import streamlit as st
-import streamlit.components.v1 as components
+from modules.iframe_helper import render_html_iframe, components_shim as components
 
 CALCULATOR_INJECTION_HTML = """
 <!DOCTYPE html>
@@ -1286,6 +1286,6 @@ CALCULATOR_INJECTION_HTML = """
 def inject_floating_calculator():
     """
     Renders the Floating Engineering Calculator & Inline Expression Evaluator
-    into the application window modelessly via st.components.v1.html with 0 height.
+    into the application window modelessly via st.iframe (or st.components.v1.html).
     """
-    components.html(CALCULATOR_INJECTION_HTML, height=0, width=0)
+    render_html_iframe(CALCULATOR_INJECTION_HTML, height=1, width=1)

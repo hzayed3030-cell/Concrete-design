@@ -14,7 +14,7 @@ import base64
 import datetime
 import numpy as np
 import streamlit as st
-import streamlit.components.v1 as components
+from modules.iframe_helper import render_html_iframe, components_shim as components
 import wave
 import struct
 import matplotlib
@@ -89,7 +89,7 @@ def play_light_whistle_sound(force: bool = False):
     # 2. Browser Audio Playback
     wav_b64 = _get_whistle_wav_base64()
     try:
-        components.html(
+        render_html_iframe(
             f"""
             <div style="position:fixed;top:-100px;left:-100px;width:1px;height:1px;opacity:0.01;pointer-events:none;">
                 <audio id="whistle-audio" autoplay preload="auto">

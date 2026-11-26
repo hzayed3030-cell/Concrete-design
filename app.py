@@ -1448,6 +1448,21 @@ st.markdown(
     /* Responsive Safeguards */
     div[data-testid="column"] { min-width: 0 !important; }
     div[data-testid="stDataFrame"] { width: 100% !important; overflow-x: auto !important; }
+
+    /* Collapse hidden 1x1 st.iframe script/audio bridges out of Flexbox flow (0px height, 0px flex gap, 0ms shift) */
+    div[data-testid="stElementContainer"]:has(> iframe[title="__st_hidden_bridge__"]) {
+        position: absolute !important;
+        width: 0px !important;
+        height: 0px !important;
+        min-width: 0px !important;
+        min-height: 0px !important;
+        margin: 0px !important;
+        padding: 0px !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        border: none !important;
+    }
     </style>
 
     <script>

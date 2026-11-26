@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.patches import Rectangle, Arc, FancyBboxPatch, Polygon
 import streamlit as st
-import streamlit.components.v1 as components
+from modules.iframe_helper import render_html_iframe, components_shim as components
 import pandas as pd
 
 
@@ -425,7 +425,7 @@ def render_interactive_cad_drawing(img_bytes_or_buf, height=640, download_name="
 </body>
 </html>
 """
-    components.html(html_code, height=height, scrolling=False)
+    render_html_iframe(html_code, height=height, scrolling=False)
 
 
 def draw_section_1_wall_layout(buf_plan_clean):

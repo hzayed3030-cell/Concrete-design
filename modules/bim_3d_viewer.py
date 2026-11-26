@@ -22,7 +22,7 @@ import base64
 import json
 import math
 import streamlit as st
-import streamlit.components.v1 as components
+from modules.iframe_helper import render_html_iframe, components_shim as components
 
 
 def extract_bim_3d_scene_data(
@@ -4243,7 +4243,7 @@ def render_3d_bim_viewer(
 
         # Generate WebGL HTML Component
         html_content = generate_bim_3d_html(scene_data, height=height)
-        components.html(html_content, height=height, scrolling=False)
+        render_html_iframe(html_content, height=height, scrolling=False)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -4482,7 +4482,7 @@ def render_column_3d_bim_viewer(
             unsafe_allow_html=True,
         )
         html_content = generate_bim_3d_html(scene_data, height=height)
-        components.html(html_content, height=height, scrolling=False)
+        render_html_iframe(html_content, height=height, scrolling=False)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -4744,7 +4744,7 @@ def render_isolated_footing_3d_bim_viewer(
             unsafe_allow_html=True,
         )
         html_content = generate_bim_3d_html(scene_data, height=height)
-        components.html(html_content, height=height, scrolling=False)
+        render_html_iframe(html_content, height=height, scrolling=False)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -4929,7 +4929,7 @@ def render_ground_slab_3d_bim_viewer(
             unsafe_allow_html=True,
         )
         html_content = generate_bim_3d_html(scene_data, height=height)
-        components.html(html_content, height=height, scrolling=False)
+        render_html_iframe(html_content, height=height, scrolling=False)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -5197,7 +5197,7 @@ def render_combined_footing_3d_bim_viewer(
             unsafe_allow_html=True,
         )
         html_content = generate_bim_3d_html(scene_data, height=height)
-        components.html(html_content, height=height, scrolling=False)
+        render_html_iframe(html_content, height=height, scrolling=False)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -5546,7 +5546,7 @@ def render_strap_footing_3d_bim_viewer(
 
         with tab_3d:
             html_content = generate_bim_3d_html(scene_data, height=height)
-            components.html(html_content, height=height, scrolling=False)
+            render_html_iframe(html_content, height=height, scrolling=False)
 
         with tab_plan:
             if layout_sketch_b64:
@@ -5819,7 +5819,7 @@ def render_diagonal_strap_3d_bim_viewer(
             unsafe_allow_html=True,
         )
         html_content = generate_bim_3d_html(scene_data, height=height)
-        components.html(html_content, height=height, scrolling=False)
+        render_html_iframe(html_content, height=height, scrolling=False)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -6048,7 +6048,7 @@ def render_ground_beam_3d_bim_viewer(
             unsafe_allow_html=True,
         )
         html_content = generate_bim_3d_html(scene_data, height=height)
-        components.html(html_content, height=height, scrolling=False)
+        render_html_iframe(html_content, height=height, scrolling=False)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -6213,5 +6213,5 @@ def render_standalone_flat_slab_3d_bim_viewer(
         )
 
         html_content = generate_bim_3d_html(scene_data, height=height)
-        components.html(html_content, height=height, scrolling=False)
+        render_html_iframe(html_content, height=height, scrolling=False)
 

@@ -31,10 +31,10 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection, Line3DCollection
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 from modules import settings as S
 from modules.table_styler import render_styled_table
+from modules.iframe_helper import render_html_iframe, components_shim as components
 from modules import extra_steel_zones as XZ
 from modules.extra_steel_zones import (
     calculate_additional_reinforcement,
@@ -14372,7 +14372,6 @@ def _render_fs_interactive_plan(
     ونمط إسقاط الكمرات الساقطة بالماوس (Drop Beams Engine) مع الجذب الذكي (Snapping) والتنفيذ المرئي الفوري
     (0ms Instant Canvas Preview + Live Streamlit Sync) مطابقاً لفلسفة موديول 15.
     """
-    import streamlit.components.v1 as components
 
     if box_mode is None:
         if st.session_state.get("fs_draw_beam_mode", False):
@@ -15612,7 +15611,7 @@ def _render_fs_interactive_plan(
 </body>
 </html>"""
 
-    components.html(html_code, height=viewer_h, scrolling=False)
+    render_html_iframe(html_code, height=viewer_h, scrolling=False)
 
 
 def _render_gb_interactive_viewer(b64_img: str, viewer_h: int = 740):
@@ -15624,7 +15623,6 @@ def _render_gb_interactive_viewer(b64_img: str, viewer_h: int = 740):
     - نقر مزدوج (Double-Click) لإعادة ضبط الموضع والحجم إلى 100%.
     - الاعتماد حصراً على الماوس بدون أي أشرطة أدوات أو أزرار أو لوحات عائمة.
     """
-    import streamlit.components.v1 as components
 
     img_max_h = max(int(viewer_h) - 34, 300)
     html_code = f"""<!DOCTYPE html>
@@ -15818,7 +15816,7 @@ def _render_gb_interactive_viewer(b64_img: str, viewer_h: int = 740):
   </script>
 </body>
 </html>"""
-    components.html(html_code, height=viewer_h, scrolling=False)
+    render_html_iframe(html_code, height=viewer_h, scrolling=False)
 
 
 def _render_fs_zoomable_figure(
@@ -16574,8 +16572,7 @@ def _section_fs_add_columns(
                 cur_siren_sel = tuple(selected_del_ids)
                 if st.session_state.get("_fs_last_del_siren_sel") != cur_siren_sel:
                     st.session_state["_fs_last_del_siren_sel"] = cur_siren_sel
-                    import streamlit.components.v1 as _siren_comp
-                    _siren_comp.html(
+                    render_html_iframe(
                         f"""<script>
                         (function() {{
                             try {{
@@ -16608,7 +16605,8 @@ def _section_fs_add_columns(
                         }})();
                         // siren_ts={len(cur_siren_sel)}_{"_".join(cur_siren_sel)}
                         </script>""",
-                        height=0,
+                        height=1,
+                        width=1,
                     )
 
                 del_details_html = " ، ".join(
@@ -17179,7 +17177,6 @@ def inject_module1_drawings_pan_zoom():
     5. تفعيل تلقائي لجميع الرسومات الحالية والمولدة ديناميكياً مع تبديل التبويبات (MutationObserver).
     6. عدم حبس التمرير (Non-trapping wheel): عند الحجم الافتراضي والتمرير لأسفل يتم تمرير الصفحة بشكل طبيعي.
     """
-    import streamlit.components.v1 as components
 
     PAN_ZOOM_INJECTION_HTML = """<!DOCTYPE html>
 <html>
@@ -17207,20 +17204,27 @@ def inject_module1_drawings_pan_zoom():
     parentWin = window;
   }
 
-  // 1. Hide host iframe and wrapper to prevent any UI jump or spacing
+  // 1. Collapse host iframe and wrapper out of flex flow without display:none (keeps timers & observers alive)
   try {
     var myFrame = window.frameElement;
     if (myFrame) {
       myFrame.style.height = '0px';
       myFrame.style.width = '0px';
-      myFrame.style.display = 'none';
-      var pCont = myFrame.closest('div[data-testid="stCustomComponentV1"]') || myFrame.parentElement;
+      myFrame.style.border = 'none';
+      myFrame.style.opacity = '0';
+      myFrame.style.pointerEvents = 'none';
+      var pCont = myFrame.closest('div[data-testid="stElementContainer"]') || myFrame.closest('div[data-testid="stCustomComponentV1"]') || myFrame.parentElement;
       if (pCont) {
+        pCont.style.position = 'absolute';
+        pCont.style.width = '0px';
         pCont.style.height = '0px';
+        pCont.style.minWidth = '0px';
         pCont.style.minHeight = '0px';
         pCont.style.margin = '0px';
         pCont.style.padding = '0px';
-        pCont.style.display = 'none';
+        pCont.style.overflow = 'hidden';
+        pCont.style.opacity = '0';
+        pCont.style.pointerEvents = 'none';
       }
     }
   } catch(e) {}
@@ -17568,7 +17572,8 @@ def inject_module1_drawings_pan_zoom():
   // 5. Observer for dynamically rendered plots (tabs, expanders, toggles)
   if (!parentWin._m1PanZoomObserverAttached) {
     parentWin._m1PanZoomObserverAttached = true;
-    var obs = new MutationObserver(function() {
+    var ObsCtor = parentWin.MutationObserver || MutationObserver;
+    var obs = new ObsCtor(function() {
       scanAndInit();
     });
     obs.observe(parentDoc.body, { childList: true, subtree: true });
@@ -17577,7 +17582,7 @@ def inject_module1_drawings_pan_zoom():
 </script>
 </body>
 </html>"""
-    components.html(PAN_ZOOM_INJECTION_HTML, height=0, width=0)
+    render_html_iframe(PAN_ZOOM_INJECTION_HTML, height=1, width=1)
 
 
 
@@ -18205,7 +18210,6 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
 
 
 def _render_cw_manual_boq_items_manager(cur_factor=1.00, prefix: str = ''):
-    import streamlit.components.v1 as components
     """
     قسم إضافة وإدارة البنود اليدوية الإضافية (Direct Quantity + قوالب جاهزة)
     لتدمج مباشرةً في جدول حصر وتكلفة جميع البنود مع خضوعها لنفس معامل الزيادة العام.
@@ -19883,7 +19887,7 @@ def _render_cw_manual_boq_items_manager(cur_factor=1.00, prefix: str = ''):
 </html>"""
 
             _man_iframe_h = 180 + len(manual_items) * 48
-            components.html(manual_boq_interactive_html, height=_man_iframe_h, scrolling=False)
+            render_html_iframe(manual_boq_interactive_html, height=_man_iframe_h, scrolling=False)
         else:
             st.markdown(
                 """
@@ -19901,7 +19905,6 @@ def _render_cw_manual_boq_items_manager(cur_factor=1.00, prefix: str = ''):
 
 
 def render(is_standalone: bool = False):
-    import streamlit.components.v1 as components
     inject_module1_drawings_pan_zoom()
     st.markdown(
         """
@@ -29578,8 +29581,7 @@ def render(is_standalone: bool = False):
 """
             _cw_tbl_lines = len(cw_items_data) + 2
             _cw_tbl_calc_height = max(420, min(1400, _cw_tbl_lines * 48 + 120))
-            import streamlit.components.v1 as components
-            components.html(_cw_full_table_html, height=_cw_tbl_calc_height, scrolling=False)
+            render_html_iframe(_cw_full_table_html, height=_cw_tbl_calc_height, scrolling=False)
 
             # ═════════════════════════════════════════════════════════════════════════
             #  4. جدول البنود المستخدمة في المقايسة
@@ -30147,7 +30149,6 @@ def render(is_standalone: bool = False):
                 draw_page8_column_caps,
                 fig_to_b64,
             )
-            import streamlit.components.v1 as components
 
             rep_fn_tag = "ECP203_Standalone_Flat_Slab" if is_standalone else "ECP203_Integrated_Structural_Design"
             pdf_concise_filename = f"{prefix}{rep_fn_tag}_Concise_Design_Outputs_{num_floors}Floors.pdf"
@@ -30863,7 +30864,7 @@ def render(is_standalone: bool = False):
                         }})();
                         </script>
                         """
-                        components.html(js_dl_concise, height=0, width=0)
+                        render_html_iframe(js_dl_concise, height=1, width=1)
                     else:
                         st.error("تعذر إنشاء ملف الـ PDF عبر المحرك التلقائي، يرجى المحاولة مرة أخرى.")
 
@@ -31260,7 +31261,7 @@ def render(is_standalone: bool = False):
                         }})();
                         </script>
                         """
-                        components.html(js_dl_drawings, height=0, width=0)
+                        render_html_iframe(js_dl_drawings, height=1, width=1)
                         st.toast(f"✅ تم تصدير {len(selected_sketches)} لوحات بنجاح إلى ملف PDF!", icon="📐")
                         st.success(f"🎉 تم توليد وتنزيل ملف المخططات الهندسية بنجاح: **{pdf_drawings_filename}** ({len(selected_sketches)} صفحة)")
                     else:

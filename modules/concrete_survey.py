@@ -20,7 +20,6 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.patches import FancyBboxPatch, Circle
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 from modules.settings import (
     load_settings,
