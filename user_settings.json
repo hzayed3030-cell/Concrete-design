@@ -1,6 +1,6 @@
 {
-  "selected_module_idx": 10,
-  "apartment_name": "تجربة اسقاط اعمدة فلات",
+  "selected_module_idx": 14,
+  "apartment_name": "Control room (مباني)",
   "col_Pu_input": 160.0,
   "col_Safety_Factor": 1.2,
   "col_b": 30,
@@ -95,51 +95,16 @@
   "fs_cant_top": 0.0,
   "fs_removed_cols": [],
   "fs_void_panels": [],
-  "fs_col_transforms": {
-    "C1": {
-      "direction": "اتجاه X",
-      "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
-      "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)"
-    },
-    "C5": {
-      "direction": "اتجاه X",
-      "shift_x": "متمركز على المحور (Centered)",
-      "shift_y": "متمركز على المحور (Centered)"
-    }
-  },
+  "fs_col_transforms": {},
   "fs_edge_columns": {},
   "fs_zero_col_mode": true,
-  "fs_placed_cols": [
-    "C1",
-    "C5"
-  ],
-  "fs_col_props": {
-    "C1": {
-      "model": "C(30x50)",
-      "b_cm": 30.0,
-      "t_cm": 50.0,
-      "direction": "اتجاه X",
-      "shift_x": "جسم العمود يميناً (الوجه يسار المحور -6 cm)",
-      "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور -6 cm)",
-      "i": 0,
-      "j": 0
-    },
-    "C5": {
-      "model": "C(30x50)",
-      "b_cm": 30.0,
-      "t_cm": 50.0,
-      "direction": "اتجاه X",
-      "shift_x": "متمركز على المحور (Centered)",
-      "shift_y": "متمركز على المحور (Centered)",
-      "i": 1,
-      "j": 1
-    }
-  },
+  "fs_placed_cols": [],
+  "fs_col_props": {},
   "fs_new_col_b": 30.0,
   "fs_new_col_t": 50.0,
-  "fs_new_col_dir": "تلقائي تكيفي حسب الموقع والمسارات (Auto Adaptive)",
-  "fs_new_col_sx": "تلقائي تكيفي مع حدود البلاطة والمحاور (Auto)",
-  "fs_new_col_sy": "تلقائي تكيفي مع حدود البلاطة والمحاور (Auto)",
+  "fs_new_col_dir": "اتجاه Y",
+  "fs_new_col_sx": "متمركز على المحور (Centered)",
+  "fs_new_col_sy": "متمركز على المحور (Centered)",
   "fs_beam_b_cm": 25.0,
   "fs_beam_t_cm": 60.0,
   "fs_beam_dia_main": 16,
@@ -205,7 +170,7 @@
   "cs_price_gravel": 600.0,
   "cs_price_sand": 200.0,
   "cs_price_labor": 2000.0,
-  "cs_project_name": "تجربة اسقاط اعمدة فلات",
+  "cs_project_name": "Control room (مباني)",
   "gs_lx": 30.0,
   "gs_ly": 20.0,
   "gs_ts": 20.0,
@@ -222,12 +187,12 @@
   "gs_p_post": 3.5,
   "gs_post_bp": 15.0,
   "gs_post_tp": 15.0,
-  "gs_rebar_mesh_type": 0,
-  "gs_phi_mesh": 4,
+  "gs_rebar_mesh_type": "شبكة علوية وسفلية (Double Mesh)",
+  "gs_phi_mesh": 10,
   "gs_mesh_spacing": 20.0,
   "gs_joint_spacing_x": 4.5,
   "gs_joint_spacing_y": 4.5,
-  "gs_dowel_phi": 5,
+  "gs_dowel_phi": 20,
   "gs_dowel_len": 45.0,
   "gs_dowel_spacing": 30.0,
   "font_size_inputs": 14,
@@ -408,35 +373,243 @@
   "module_15_masonry_plaster": {
     "x_axes": [
       0.0,
-      4.0,
-      8.0
+      5.15,
+      10.71,
+      16.44,
+      19.14,
+      22.59
     ],
     "y_axes": [
       0.0,
-      3.0,
-      6.0
+      2.5,
+      5.27,
+      7.56
     ],
-    "col_length_cm": 60.0,
-    "col_width_cm": 25.0,
-    "new_col_b": 25.0,
-    "new_col_t": 60.0,
-    "col_placed": [],
+    "col_length_cm": 80.0,
+    "col_width_cm": 30.0,
+    "new_col_b": 30.0,
+    "new_col_t": 80.0,
+    "col_placed": [
+      [
+        0,
+        1
+      ],
+      [
+        0,
+        3
+      ],
+      [
+        2,
+        0
+      ],
+      [
+        3,
+        0
+      ],
+      [
+        2,
+        3
+      ],
+      [
+        3,
+        3
+      ],
+      [
+        5,
+        0
+      ],
+      [
+        1,
+        0
+      ],
+      [
+        1,
+        3
+      ],
+      [
+        5,
+        2
+      ]
+    ],
     "col_removed": [],
-    "col_dirs": {},
-    "col_shifts": {},
-    "col_shifted": {},
-    "walls_placed": [],
-    "wall_thickness": {},
+    "col_dirs": {
+      "0,1": "EW",
+      "0,3": "EW",
+      "1,0": "EW",
+      "1,3": "NS",
+      "2,0": "NS",
+      "2,3": "EW",
+      "3,0": "EW",
+      "3,3": "EW",
+      "5,0": "EW",
+      "5,2": "EW"
+    },
+    "col_shifts": {
+      "0,1": {
+        "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
+        "shift_y": "متمركز على المحور (Centered)"
+      },
+      "0,3": {
+        "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
+        "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+      },
+      "1,0": {
+        "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
+        "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
+      },
+      "1,3": {
+        "shift_x": "متمركز على المحور (Centered)",
+        "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+      },
+      "2,0": {
+        "shift_x": "متمركز على المحور (Centered)",
+        "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
+      },
+      "2,3": {
+        "shift_x": "متمركز على المحور (Centered)",
+        "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+      },
+      "3,0": {
+        "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+        "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
+      },
+      "3,3": {
+        "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+        "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+      },
+      "5,0": {
+        "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+        "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
+      },
+      "5,2": {
+        "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+        "shift_y": "متمركز على المحور (Centered)"
+      }
+    },
+    "col_shifted": {
+      "0,1": [
+        34.0,
+        0.0
+      ],
+      "0,3": [
+        14.0,
+        -9.0
+      ],
+      "1,0": [
+        34.0,
+        9.0
+      ],
+      "1,3": [
+        0.0,
+        -34.0
+      ],
+      "2,0": [
+        0.0,
+        34.0
+      ],
+      "2,3": [
+        0.0,
+        -9.0
+      ],
+      "3,0": [
+        -34.0,
+        9.0
+      ],
+      "3,3": [
+        -34.0,
+        -9.0
+      ],
+      "5,0": [
+        -14.0,
+        9.0
+      ],
+      "5,2": [
+        -34.0,
+        0.0
+      ]
+    },
+    "walls_placed": [
+      [
+        2,
+        3,
+        3,
+        3
+      ],
+      [
+        1,
+        0,
+        2,
+        0
+      ],
+      [
+        2,
+        0,
+        3,
+        0
+      ],
+      [
+        3,
+        0,
+        4,
+        0
+      ],
+      [
+        4,
+        0,
+        5,
+        0
+      ]
+    ],
+    "wall_thickness": {
+      "2,3,3,3": 12,
+      "3,3,2,3": 12,
+      "1,0,2,0": 25,
+      "2,0,1,0": 25,
+      "2,0,3,0": 25,
+      "3,0,2,0": 25,
+      "3,0,4,0": 25,
+      "4,0,3,0": 25,
+      "4,0,5,0": 25,
+      "5,0,4,0": 25,
+      "3,0,5,0": 25
+    },
     "wall_removed": [],
     "default_wall_height": 3.0,
     "parapet_wall_height": 1.0,
     "parapet_walls": [],
-    "wall_heights": {},
+    "wall_heights": {
+      "2,3,3,3": 3.0,
+      "3,3,2,3": 3.0,
+      "1,0,2,0": 3.0,
+      "2,0,1,0": 3.0,
+      "2,0,3,0": 3.0,
+      "3,0,2,0": 3.0,
+      "3,0,4,0": 3.0,
+      "4,0,3,0": 3.0,
+      "4,0,5,0": 3.0,
+      "5,0,4,0": 3.0,
+      "3,0,5,0": 3.0
+    },
     "windows": {},
     "doors": {},
     "next_op_id": 1,
-    "window_types": [],
-    "door_types": [],
+    "window_types": [
+      {
+        "id": "wt_1",
+        "label": "W1",
+        "w_cm": 100.0,
+        "h_cm": 120.0,
+        "sill_cm": 90.0
+      }
+    ],
+    "door_types": [
+      {
+        "id": "dt_1",
+        "label": "D1",
+        "w_cm": 90.0,
+        "h_cm": 210.0
+      }
+    ],
     "brick_type": "الطوب الأحمر الطفلي",
     "brick_size": "25×12×6",
     "mortar_thickness_cm": 1.0,
@@ -444,7 +617,118 @@
     "brick_custom_w": 12.0,
     "brick_custom_h": 6.0,
     "plaster_faces": {},
-    "col_props": {},
+    "col_props": {
+      "0,1": {
+        "model": "C(30x80)",
+        "b_cm": 30.0,
+        "t_cm": 80.0,
+        "dir": "أفقي",
+        "dir_code": "EW",
+        "anchor": "السنتر",
+        "corner": "أعلى اليمين",
+        "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
+        "shift_y": "متمركز على المحور (Centered)"
+      },
+      "0,3": {
+        "model": "C(30x40)",
+        "b_cm": 30.0,
+        "t_cm": 40.0,
+        "dir": "أفقي",
+        "dir_code": "EW",
+        "anchor": "السنتر",
+        "corner": "أعلى اليمين",
+        "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
+        "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+      },
+      "1,0": {
+        "model": "C(30x80)",
+        "b_cm": 30.0,
+        "t_cm": 80.0,
+        "dir": "أفقي",
+        "dir_code": "EW",
+        "anchor": "السنتر",
+        "corner": "أعلى اليمين",
+        "shift_x": "جسم العمود يميناً (الوجه يسار المحور - 6 cm)",
+        "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
+      },
+      "1,3": {
+        "model": "C(30x80)",
+        "b_cm": 30.0,
+        "t_cm": 80.0,
+        "dir": "رأسي",
+        "dir_code": "NS",
+        "anchor": "السنتر",
+        "corner": "أعلى اليمين",
+        "shift_x": "متمركز على المحور (Centered)",
+        "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+      },
+      "2,0": {
+        "model": "C(30x80)",
+        "b_cm": 30.0,
+        "t_cm": 80.0,
+        "dir": "رأسي",
+        "dir_code": "NS",
+        "anchor": "السنتر",
+        "corner": "أعلى اليمين",
+        "shift_x": "متمركز على المحور (Centered)",
+        "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
+      },
+      "2,3": {
+        "model": "C(30x80)",
+        "b_cm": 30.0,
+        "t_cm": 80.0,
+        "dir": "أفقي",
+        "dir_code": "EW",
+        "anchor": "السنتر",
+        "corner": "أعلى اليمين",
+        "shift_x": "متمركز على المحور (Centered)",
+        "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+      },
+      "3,0": {
+        "model": "C(30x80)",
+        "b_cm": 30.0,
+        "t_cm": 80.0,
+        "dir": "أفقي",
+        "dir_code": "EW",
+        "anchor": "السنتر",
+        "corner": "أعلى اليمين",
+        "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+        "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
+      },
+      "3,3": {
+        "model": "C(30x80)",
+        "b_cm": 30.0,
+        "t_cm": 80.0,
+        "dir": "أفقي",
+        "dir_code": "EW",
+        "anchor": "السنتر",
+        "corner": "أعلى اليمين",
+        "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+        "shift_y": "جسم العمود لأسفل (الوجه أعلى المحور + 6 cm)"
+      },
+      "5,0": {
+        "model": "C(30x40)",
+        "b_cm": 30.0,
+        "t_cm": 40.0,
+        "dir": "أفقي",
+        "dir_code": "EW",
+        "anchor": "السنتر",
+        "corner": "أعلى اليمين",
+        "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+        "shift_y": "جسم العمود لأعلى (الوجه أسفل المحور - 6 cm)"
+      },
+      "5,2": {
+        "model": "C(30x80)",
+        "b_cm": 30.0,
+        "t_cm": 80.0,
+        "dir": "أفقي",
+        "dir_code": "EW",
+        "anchor": "السنتر",
+        "corner": "أعلى اليمين",
+        "shift_x": "جسم العمود يساراً (الوجه يمين المحور + 6 cm)",
+        "shift_y": "متمركز على المحور (Centered)"
+      }
+    },
     "deleted_cols_history": {},
     "price_brick_per_thousand": 2500.0,
     "price_sand_per_m3": 200.0,
@@ -458,13 +742,82 @@
     "uploaded_image_h": null,
     "named_spaces": [],
     "merged_wall_label_style": "single",
-    "item_descriptions": {},
-    "plaster_qty_factor": 1.0,
-    "manual_boq_items": []
+    "item_descriptions": {
+      "item_1": "مححححححارة هذه المساحة ستكون هي المساحات التي تمثل حوائط سيراميك الحمامات ويتم حصرها وادراج القيم مباشرة في جداول القسم",
+      "item_2": "الدهانات الداخلية للسقف (تساوي تماماً مسطح المبنى بعد خصم المنور)",
+      "item_3": "المحارة للحوائط بالمتر المسطح",
+      "item_4": "nan",
+      "item_5": "nan ؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤ",
+      "item_6": "nan",
+      "item_7": "nan",
+      "item_8": "nan",
+      "item_9": "nan",
+      "item_10": "nan",
+      "item_11": "nan",
+      "item_12": "nan",
+      "item_13": "nan",
+      "item_14": "nan",
+      "item_15": "nan",
+      "item_16": "nan",
+      "item_17": "17- بلاط اسطح17- بلاط اسطح17- بلاط اسطح17- بلاط اسطح",
+      "item_18": "بالمتر المسطح، توريد وتركيب شبابيك ألوميتال للواجهات والمساقط قطاع معتمد (جامبو/بي اس أو ما يماثله) وزجاج دبل مع الإكسسوارات وسلك مانع للحشرات والمقابض والتثبيت الهندسي طبقاً لأبعاد الرسم والمواصفات.",
+      "item_19": "بالعدد، توريد وتركيب أبواب حمامات الوحدة (عرض 80 سم أو أقل) تشمل الحلوق والضلف المقاومة للرطوبة والمياه والمفصلات والكوالين والشناكل والمقابض ودهان الحلق والتثبيت الهندسي التام طبقاً لأصول الصناعة.",
+      "item_20": "بالعدد، توريد وتركيب أبواب غرف الوحدة والمدخل (عرض أكبر من 80 سم) تشمل الحلوق الخشبية والضلف التجليد قشرة معتمدة والمفصلات والأقفال والمقابض والبرور والدهانات والتثبيت الهندسي طبقاً للمواصفات.",
+      "item_21": "بالعدد، توريد وتركيب أبواب غرف الوحدة والمدخل (عرض أكبر من 80 سم) تشمل الحلوق الخشبية والضلف التجليد قشرة معتمدة والمفصلات والأقفال والمقابض والبرور والدهانات والتثبيت الهندسي طبقاً للمواصفات.",
+      "item_22": "Hagar FEROOOOONy bbdbbb bdfbd fjk hjh  jhjhh gjh hjhjhg hj hjfhg hjhjhg hjgh h  hjfh hjh hjhjdhjh hhj hjh hjhjh jhj hjhjhg hjfdh hjdfh hjh gjhh fhjhg fhgh  jhfh hjhg jhg hjhd hfj hfjhjh تاايتاتابتيالتالتا تلابتال تاتلاالتا لاتاتاتالتااتا",
+      "item_23": "بالمتر المسطح / الوحدة،صاجججججججججججججججججججججججججججججججج.",
+      "item_24": "FALSE ttrrr ghdghfgd fhg hdgfhgh hgh hghgfhs ghfgjh sgfhgfh ghjgg",
+      "item_25": "Supply and fix pharonic stone cladding 4 cm thickness for the building's elevations, the dimensions and arrangement of the brick should be according to client's desire, the item includes the varnish works.",
+      "total_cost": "إجمالي تكلفة جميع بنود التشطيبات شامل معامل الزيادة (1.20)",
+      "manual_eab9c135": "Hagar FEROOOOONy bbdbbb bdfbd fjk hjh  jhjhh gjh hjhjhg hj hjfhg hjhjhg hjgh h  hjfh hjh hjhjdhjh hhj hjh hjhjh jhj hjhjhg hjfdh hjdfh hjh gjhh fhjhg fhgh  jhfh hjhg jhg hjhd hfj hfjhjh تاايتاتابتيالتالتا تلابتال تاتلاالتا لاتاتاتالتااتا",
+      "manual_59bc5cb6": "بالمتر المسطح / الوحدة،صاجججججججججججججججججججججججججججججججج.",
+      "manual_39c70272": "FALSE ttrrr ghdghfgd fhg hdgfhgh hgh hghgfhs ghfgjh sgfhgfh ghjgg",
+      "manual_0c11e0a3": "Supply and fix pharonic stone cladding 4 cm thickness for the building's elevations, the dimensions and arrangement of the brick should be according to client's desire, the item includes the varnish works."
+    },
+    "plaster_qty_factor": 1.2,
+    "manual_boq_items": [
+      {
+        "uid": "eab9c135",
+        "name": "تكسية واجهات وحوائط خارجية بالحجر الفرعوني / الهاشمي",
+        "unit": "م² (m²)",
+        "net_qty": 30.0,
+        "unit_price": 1.0,
+        "mat_category": "stone_cladding",
+        "description": "Hagar FEROOOOONy bbdbbb bdfbd fjk hjh  jhjhh gjh hjhjhg hj hjfhg hjhjhg hjgh h  hjfh hjh hjhjdhjh hhj hjh hjhjh jhj hjhjhg hjfdh hjdfh hjh gjhh fhjhg fhgh  jhfh hjhg jhg hjhd hfj hfjhjh تاايتاتابتيالتالتا تلابتال تاتلاالتا لاتاتاتالتااتا"
+      },
+      {
+        "uid": "59bc5cb6",
+        "name": "صاج اسططططططططح صاج",
+        "unit": "م² (m²)",
+        "net_qty": 50.0,
+        "unit_price": 5000.0,
+        "mat_category": "supply_install",
+        "description": "بالمتر المسطح / الوحدة،صاجججججججججججججججججججججججججججججججج."
+      },
+      {
+        "uid": "39c70272",
+        "name": "try item1 - FALSE",
+        "unit": "م² (m²)",
+        "net_qty": 700.0,
+        "unit_price": 600.0,
+        "mat_category": "supply_install",
+        "description": "FALSE ttrrr ghdghfgd fhg hdgfhgh hgh hghgfhs ghfgjh sgfhgfh ghjgg"
+      },
+      {
+        "uid": "0c11e0a3",
+        "name": "Pharaonic stone cladding for facades",
+        "unit": "م² (m²)",
+        "net_qty": 0.0,
+        "unit_price": 500.0,
+        "mat_category": "supply_install",
+        "description": "Supply and fix pharonic stone cladding 4 cm thickness for the building's elevations, the dimensions and arrangement of the brick should be according to client's desire, the item includes the varnish works."
+      }
+    ]
   },
+  "fs_drop_beams": [],
   "nav_view": "profile_manager",
   "enabled_modules": [
-    10
+    14
   ],
   "deleted_modules_trash": {}
 }

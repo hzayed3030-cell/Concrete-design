@@ -14587,8 +14587,18 @@ def _render_manual_boq_items_manager():
     vertical-align: middle;
     text-align: center;
     border-bottom: 2px solid #ea580c;
-    user-select: none;
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
     overflow: visible;
+  }}
+  th.boq-th .th-main-title,
+  th.boq-th .th-sub-title,
+  .boq-main-title,
+  .boq-sub-badge {{
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
   }}
   /* البانيلات البرتقالية المدمجة */
   th.boq-th-orange {{
@@ -17405,8 +17415,18 @@ def _section_plaster_boq():
     vertical-align: middle;
     text-align: center;
     border-bottom: 2px solid #ea580c;
-    user-select: none;
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
     overflow: visible;
+  }}
+  th.boq-th .th-main-title,
+  th.boq-th .th-sub-title,
+  .boq-main-title,
+  .boq-sub-badge {{
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
   }}
   /* البانيلات البرتقالية المدمجة */
   th.boq-th-orange {{
@@ -25973,10 +25993,18 @@ def render_masonry_plaster_module():
         [data-testid="stTabs"] [role="tab"] p,
         [data-testid="stTabs"] [role="tab"] span,
         button[data-baseweb="tab"] p,
-        button[data-baseweb="tab"] span {
+        button[data-baseweb="tab"] span,
+        table th,
+        table th *,
+        thead th,
+        thead th *,
+        .ecp-styled-dark-table th,
+        .ecp-styled-dark-table th * {
             cursor: text !important;
             user-select: text !important;
             -webkit-user-select: text !important;
+            -moz-user-select: text !important;
+            -ms-user-select: text !important;
         }
         </style>""",
         unsafe_allow_html=True
@@ -26334,6 +26362,9 @@ def render_masonry_plaster_module():
     )
     with st.expander("جداول الحصر والتكلفة لجميع البنود", expanded=_keep_boq_open, key="m15_boq_main_expander"):
         _section_plaster_boq()
+    st.divider()
+    from modules.m15_agreement_wo import render_m15_agreement_wo_section
+    render_m15_agreement_wo_section()
     st.divider()
     _section_export_pdf()
     save_settings()
