@@ -2615,6 +2615,47 @@ def render_profile_manager():
             line-height: 1.2 !important;
         }
 
+        /* New Project button - Bright Sky Blue gradient with Deep Navy text (distinct from Run buttons) */
+        div[class*="st-key-btn_global_new"] button,
+        .st-key-btn_global_new button {
+            background: linear-gradient(135deg, #bae6fd 0%, #38bdf8 100%) !important;
+            border: 2px solid #0284c7 !important;
+            color: #0f172a !important;
+            font-weight: 900 !important;
+            box-shadow: 0 2px 10px rgba(56, 189, 248, 0.35) !important;
+            transition: all 0.2s ease-in-out !important;
+        }
+        div[class*="st-key-btn_global_new"] button p,
+        div[class*="st-key-btn_global_new"] button span,
+        .st-key-btn_global_new button p,
+        .st-key-btn_global_new button span {
+            color: #0f172a !important;
+            font-weight: 900 !important;
+        }
+        div[class*="st-key-btn_global_new"] button:hover,
+        .st-key-btn_global_new button:hover {
+            background: linear-gradient(135deg, #e0f2fe 0%, #7dd3fc 100%) !important;
+            border-color: #38bdf8 !important;
+            color: #020617 !important;
+            box-shadow: 0 4px 18px rgba(56, 189, 248, 0.55) !important;
+            transform: translateY(-1px) !important;
+        }
+        div[class*="st-key-btn_global_new"] button:hover p,
+        div[class*="st-key-btn_global_new"] button:hover span,
+        .st-key-btn_global_new button:hover p,
+        .st-key-btn_global_new button:hover span {
+            color: #020617 !important;
+        }
+        div[class*="st-key-btn_global_new"] button:active,
+        div[class*="st-key-btn_global_new"] button:focus,
+        .st-key-btn_global_new button:active,
+        .st-key-btn_global_new button:focus {
+            background: linear-gradient(135deg, #7dd3fc 0%, #0ea5e9 100%) !important;
+            border-color: #0369a1 !important;
+            color: #0f172a !important;
+            box-shadow: 0 0 0 0.2rem rgba(56, 189, 248, 0.40) !important;
+        }
+
         /* Pull from GitHub button - Dark Teal Tint at 30% with enhanced prominent turquoise border */
         div[class*="st-key-btn_global_github_pull"] button,
         .st-key-btn_global_github_pull button {

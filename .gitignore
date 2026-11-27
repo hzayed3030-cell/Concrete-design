@@ -16,4 +16,6 @@ __pycache__/
 .github_token
 *.token
 .env
+.cache/
+
 

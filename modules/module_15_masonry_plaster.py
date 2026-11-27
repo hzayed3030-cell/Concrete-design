@@ -1,7 +1,8 @@
 """
 Module 15 -- Masonry & Plastering Works (اعمال المباني والمحارة)
 """
-import os, io, math, base64, json, time, html, re
+import os, io, math, base64, json, time, html, re, hashlib
+from collections import OrderedDict
 import html as _html_mod
 import re as _re_mod
 import matplotlib
@@ -2514,11 +2515,199 @@ def _apply_smart_plan_labels(
                 bbox=dict(boxstyle="round,pad=0.18", facecolor=bg_col, edgecolor=edge_col, lw=0.8 if is_p else 0.6, alpha=0.92))
         placed_boxes.append(best_box)
 
+_M15_PLAN_CACHE_VERSION = "m15_plan_v1"
+_M15_PLAN_CACHE_MAX_MEM = 64
+_M15_PLAN_CACHE_MAX_DISK = 120
+_M15_PLAN_DISK_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    ".cache",
+    "m15_plans",
+)
+_M15_PLAN_FALLBACK_MEM = OrderedDict()
+
+_M15_PLAN_HASH_KEYS = (
+    "m15_x_axes",
+    "m15_y_axes",
+    "m15_col_placed",
+    "m15_col_removed",
+    "m15_col_dirs",
+    "m15_col_shifts",
+    "m15_col_shifted",
+    "m15_col_props",
+    "m15_col_length_cm",
+    "m15_col_width_cm",
+    "m15_deleted_cols_history",
+    "m15_walls_placed",
+    "m15_wall_removed",
+    "m15_wall_thickness",
+    "m15_wall_heights",
+    "m15_default_wall_height",
+    "m15_default_h_input",
+    "m15_parapet_walls",
+    "m15_parapet_wall_height",
+    "m15_merged_wall_label_style",
+    "m15_windows",
+    "m15_doors",
+    "m15_plaster_faces",
+    "m15_bath_kitchen_spaces",
+    "m15_named_spaces",
+    "m15_active_bath_kitchen",
+    "m15_bk_cancelled_sig",
+    "m15_sel_del_bk_idx",
+    "m15_add_col_mode",
+    "m15_restore_col_mode",
+    "m15_selected_del_walls",
+    "m15_confirm_del_all_walls",
+    "m15_pending_delete",
+    "m15_preview_opening",
+    "m15_active_move_dim",
+)
+
+
+@st.cache_resource(show_spinner=False)
+def _m15_get_plan_mem_cache():
+    return OrderedDict()
+
+
+def _m15_plan_mem_cache():
+    try:
+        return _m15_get_plan_mem_cache()
+    except Exception:
+        return _M15_PLAN_FALLBACK_MEM
+
+
+def _m15_canonicalize_for_hash(obj):
+    if obj is None or isinstance(obj, (bool, int, str)):
+        return obj
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return str(obj)
+        v = round(obj, 6)
+        return 0.0 if v == 0.0 else v
+    if isinstance(obj, np.generic):
+        return _m15_canonicalize_for_hash(obj.item())
+    if isinstance(obj, (list, tuple)):
+        return [_m15_canonicalize_for_hash(x) for x in obj]
+    if isinstance(obj, (set, frozenset)):
+        items = [_m15_canonicalize_for_hash(x) for x in obj]
+        return sorted(items, key=lambda x: json.dumps(x, sort_keys=True, ensure_ascii=False))
+    if isinstance(obj, dict):
+        out = {}
+        for k, v in obj.items():
+            sk = k if isinstance(k, str) else json.dumps(_m15_canonicalize_for_hash(k), sort_keys=True, ensure_ascii=False)
+            out[sk] = _m15_canonicalize_for_hash(v)
+        return out
+    return str(obj)
+
+
+def _m15_compute_plan_hash(with_dim: bool):
+    payload = {
+        "v": _M15_PLAN_CACHE_VERSION,
+        "with_dim": bool(with_dim),
+    }
+    for k in _M15_PLAN_HASH_KEYS:
+        if k in st.session_state:
+            payload[k] = _m15_canonicalize_for_hash(st.session_state.get(k))
+    raw = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    plan_hash = hashlib.sha256(raw).hexdigest()[:32]
+    is_transient = bool(
+        st.session_state.get("m15_active_move_dim")
+        or st.session_state.get("m15_preview_opening")
+        or st.session_state.get("m15_pending_delete")
+        or st.session_state.get("m15_selected_del_walls")
+        or st.session_state.get("m15_confirm_del_all_walls")
+        or st.session_state.get("m15_active_bath_kitchen")
+        or int(st.session_state.get("m15_sel_del_bk_idx", 0) or 0) > 0
+    )
+    return plan_hash, is_transient
+
+
+def _m15_plan_cache_get(plan_hash: str, allow_disk: bool = True):
+    mem = _m15_plan_mem_cache()
+    if plan_hash in mem:
+        mem.move_to_end(plan_hash)
+        return mem[plan_hash]
+    if allow_disk:
+        png_path = os.path.join(_M15_PLAN_DISK_DIR, f"{plan_hash}.png")
+        meta_path = os.path.join(_M15_PLAN_DISK_DIR, f"{plan_hash}.json")
+        if os.path.isfile(png_path) and os.path.isfile(meta_path):
+            try:
+                with open(png_path, "rb") as f:
+                    png_bytes = f.read()
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    bbox_info = json.load(f)
+                if png_bytes:
+                    b64_str = base64.b64encode(png_bytes).decode("utf-8")
+                    entry = (png_bytes, b64_str, bbox_info)
+                    mem[plan_hash] = entry
+                    mem.move_to_end(plan_hash)
+                    while len(mem) > _M15_PLAN_CACHE_MAX_MEM:
+                        mem.popitem(last=False)
+                    return entry
+            except Exception:
+                pass
+    return None
+
+
+def _m15_plan_cache_set(plan_hash: str, png_bytes: bytes, b64_str: str, bbox_info, persist_disk: bool = True):
+    mem = _m15_plan_mem_cache()
+    mem[plan_hash] = (png_bytes, b64_str, bbox_info)
+    mem.move_to_end(plan_hash)
+    while len(mem) > _M15_PLAN_CACHE_MAX_MEM:
+        mem.popitem(last=False)
+    if persist_disk and png_bytes:
+        try:
+            os.makedirs(_M15_PLAN_DISK_DIR, exist_ok=True)
+            png_path = os.path.join(_M15_PLAN_DISK_DIR, f"{plan_hash}.png")
+            meta_path = os.path.join(_M15_PLAN_DISK_DIR, f"{plan_hash}.json")
+            tmp_png = png_path + ".tmp"
+            tmp_meta = meta_path + ".tmp"
+            with open(tmp_png, "wb") as f:
+                f.write(png_bytes)
+            with open(tmp_meta, "w", encoding="utf-8") as f:
+                json.dump(bbox_info, f, ensure_ascii=False)
+            os.replace(tmp_png, png_path)
+            os.replace(tmp_meta, meta_path)
+            # Prune oldest disk cache files if over limit
+            png_files = [
+                os.path.join(_M15_PLAN_DISK_DIR, fn)
+                for fn in os.listdir(_M15_PLAN_DISK_DIR)
+                if fn.endswith(".png")
+            ]
+            if len(png_files) > _M15_PLAN_CACHE_MAX_DISK:
+                png_files.sort(key=lambda p: os.path.getmtime(p))
+                for old_png in png_files[: len(png_files) - _M15_PLAN_CACHE_MAX_DISK]:
+                    try:
+                        os.remove(old_png)
+                        old_meta = old_png[:-4] + ".json"
+                        if os.path.exists(old_meta):
+                            os.remove(old_meta)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+
 def _draw_plan(with_dim=True):
     xs=st.session_state["m15_x_axes"]; ys=st.session_state["m15_y_axes"]
     removed_cols=st.session_state["m15_col_removed"]
     removed_walls=st.session_state["m15_wall_removed"]
     _resequence_openings()
+    plan_hash = None
+    is_transient = True
+    try:
+        plan_hash, is_transient = _m15_compute_plan_hash(with_dim)
+        cached_entry = _m15_plan_cache_get(plan_hash, allow_disk=not is_transient)
+        if cached_entry is not None:
+            cached_png, cached_b64, cached_bbox = cached_entry
+            if cached_bbox is not None:
+                st.session_state["m15_plan_bbox_info"] = cached_bbox
+            st.session_state["m15_plan_png_b64"] = cached_b64
+            buf_cached = io.BytesIO(cached_png)
+            buf_cached.seek(0)
+            return buf_cached
+    except Exception:
+        plan_hash = None
     cm = _get_col_name_map()
     wm = _get_wall_name_map()
     wm_win = _get_window_name_map()
@@ -3563,11 +3752,12 @@ def _draw_plan(with_dim=True):
     fig.tight_layout(pad=0.08)
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=120)
+    bbox_info = None
     try:
         pos = ax.get_position()
         xlim = ax.get_xlim()
         ylim = ax.get_ylim()
-        st.session_state["m15_plan_bbox_info"] = {
+        bbox_info = {
             "x0": float(pos.x0),
             "y0": float(pos.y0),
             "x1": float(pos.x1),
@@ -3577,12 +3767,17 @@ def _draw_plan(with_dim=True):
             "xs": [float(x) for x in xs],
             "ys": [float(y) for y in ys]
         }
+        st.session_state["m15_plan_bbox_info"] = bbox_info
     except Exception:
         pass
     plt.close(fig)
     buf.seek(0)
     try:
-        st.session_state["m15_plan_png_b64"] = base64.b64encode(buf.getvalue()).decode("utf-8")
+        png_bytes = buf.getvalue()
+        b64_str = base64.b64encode(png_bytes).decode("utf-8")
+        st.session_state["m15_plan_png_b64"] = b64_str
+        if plan_hash:
+            _m15_plan_cache_set(plan_hash, png_bytes, b64_str, bbox_info, persist_disk=not is_transient)
         buf.seek(0)
     except Exception:
         pass
@@ -7948,6 +8143,92 @@ def _handle_sync_payload(payload_str=None):
                 st.rerun()
             return
 
+        elif action == "boq_confirm_action":
+            # معالجة موحدة لجميع إجراءات التأكيد في قسم «جداول الحصر والتكلفة لجميع البنود»
+            sub_action = str(data.get("sub_action", "")).strip()
+            if sub_action == "cancel_manual_form":
+                presets = _get_manual_boq_presets_list()
+                st.session_state["_m15_reset_man_new_fields"] = True
+                st.session_state["_m15_last_manual_preset"] = None
+                if presets:
+                    st.session_state["m15_man_preset_sel"] = presets[0]["label"]
+                st.session_state["_m15_keep_manual_expander_open"] = False
+                st.session_state["m15_manual_boq_expander"] = False
+                st.session_state["m15_boq_main_expander"] = True
+                st.session_state["_m15_center_green_toast_msg"] = "✅ تم إلغاء المدخلات وتفريغ الخانات بنجاح."
+                st.rerun()
+
+            elif sub_action == "reset_design_items":
+                _cur_del, _cur_exc = _get_boq_deleted_state()
+                _new_exc = [x for x in _cur_exc if str(x).startswith("manual_")]
+                _new_del = [x for x in _cur_del if str(x.get("source_type")) == "manual"]
+                _persist_boq_deleted_state(_new_del, _new_exc)
+                save_settings()
+                st.session_state["_m15_boq_table_ver"] = st.session_state.get("_m15_boq_table_ver", 0) + 1
+                st.session_state.pop("_m15_confirm_reset_design_items", None)
+                st.session_state.pop("_m15_confirm_perm_clear_auto_log", None)
+                st.session_state["m15_boq_main_expander"] = True
+                st.session_state["_m15_keep_manual_expander_open"] = True
+                st.session_state["_m15_center_green_toast_msg"] = "✨ لقد تم استرجاع جميع بنود التصميم الاساسية بنجاح"
+                st.rerun()
+
+            elif sub_action == "restore_manual_item":
+                _target_id = str(data.get("item_id", "")).strip()
+                _target_name = str(data.get("item_name", "بند يدوي")).strip() or "بند يدوي"
+                if _target_id:
+                    _cur_del, _cur_exc = _get_boq_deleted_state()
+                    _new_del = [x for x in _cur_del if str(x.get("item_id")) != _target_id]
+                    _new_exc = [x for x in _cur_exc if x != _target_id]
+                    _persist_boq_deleted_state(_new_del, _new_exc)
+                    save_settings()
+                    st.session_state["_m15_boq_table_ver"] = st.session_state.get("_m15_boq_table_ver", 0) + 1
+                    st.session_state["m15_boq_main_expander"] = True
+                    st.session_state["_m15_keep_manual_expander_open"] = True
+                    st.session_state["_m15_center_green_toast_msg"] = f"↩️ تمت استعادة البند اليدوي «{_target_name}» إلى الجدول المجمع بنجاح"
+                    st.rerun()
+
+            elif sub_action == "clear_manual_del_log":
+                _cur_del, _cur_exc = _get_boq_deleted_state()
+                _new_del = [x for x in _cur_del if str(x.get("source_type")) != "manual"]
+                _persist_boq_deleted_state(_new_del, _cur_exc)
+                save_settings()
+                st.session_state["_m15_boq_table_ver"] = st.session_state.get("_m15_boq_table_ver", 0) + 1
+                st.session_state["m15_boq_main_expander"] = True
+                st.session_state["_m15_keep_manual_expander_open"] = True
+                st.session_state["_m15_center_green_toast_msg"] = "🗑️ تم مسح وتفريغ سجل المحذوفات اليدوية بنجاح."
+                st.rerun()
+
+            elif sub_action == "restore_auto_item":
+                _target_id = str(data.get("item_id", "")).strip()
+                if _target_id:
+                    _cur_del, _cur_exc = _get_boq_deleted_state()
+                    _new_del = [x for x in _cur_del if str(x.get("item_id")) != _target_id]
+                    _new_exc = [x for x in _cur_exc if x != _target_id]
+                    _persist_boq_deleted_state(_new_del, _new_exc)
+                    save_settings()
+                    st.session_state["m15_auto_excluded_sel"] = "لم يتم اختيار بنود اساسية للاستعادة"
+                    st.session_state["_m15_boq_table_ver"] = st.session_state.get("_m15_boq_table_ver", 0) + 1
+                    st.session_state["m15_boq_main_expander"] = True
+                    st.session_state["_m15_keep_manual_expander_open"] = True
+                    st.session_state["_m15_center_green_toast_msg"] = "✅ تم استعادة البند المحذوف من البنود الأساسية"
+                    st.session_state["_m15_center_green_toast_dur"] = 3.0
+                    st.rerun()
+
+            elif sub_action == "perm_clear_auto_log":
+                _cur_del, _cur_exc = _get_boq_deleted_state()
+                _new_del = [x for x in _cur_del if x.get("source_type") != "auto_calculated"]
+                _persist_boq_deleted_state(_new_del, _cur_exc)
+                save_settings()
+                st.session_state["m15_auto_excluded_sel"] = "لم يتم اختيار بنود اساسية للاستعادة"
+                st.session_state["_m15_boq_table_ver"] = st.session_state.get("_m15_boq_table_ver", 0) + 1
+                st.session_state.pop("_m15_confirm_perm_clear_auto_log", None)
+                st.session_state["m15_boq_main_expander"] = True
+                st.session_state["_m15_keep_manual_expander_open"] = True
+                st.session_state["_m15_center_green_toast_msg"] = '🗑️ تم الحذف النهائي لجميع البنود .. لاستعادة جميع البنود الأساسية اضغط زر "🔄 استعادة وحساب جميع بنود التصميم"'
+                st.session_state["_m15_center_green_toast_dur"] = 3.0
+                st.rerun()
+            return
+
         elif action in ["add_window_box", "add_window"]:
             _execute_add_window_box(data)
 
@@ -12262,8 +12543,12 @@ def _compute_plaster_boq_data(rule_key=None, plaster_qty_factor_override=None):
     price_thermal = float(st.session_state.get("m15_rate_thermal", 130.0))
     price_roof_tiles = float(st.session_state.get("m15_rate_roof_tiles", 150.0))
     price_floor_ceramic = float(st.session_state.get("m15_rate_floor_ceramic", 260.0))
-    price_bath_ceramic = float(st.session_state.get("m15_rate_bath_ceramic", 290.0))
-    price_kitchen_ceramic = float(st.session_state.get("m15_rate_kitchen_ceramic", 290.0))
+    _legacy_bath_cer = float(st.session_state.get("m15_rate_bath_ceramic", 290.0))
+    _legacy_kitchen_cer = float(st.session_state.get("m15_rate_kitchen_ceramic", 290.0))
+    price_bath_floor_ceramic = float(st.session_state.get("m15_rate_bath_floor_ceramic", _legacy_bath_cer))
+    price_kitchen_floor_ceramic = float(st.session_state.get("m15_rate_kitchen_floor_ceramic", _legacy_kitchen_cer))
+    price_bath_wall_ceramic = float(st.session_state.get("m15_rate_bath_wall_ceramic", _legacy_bath_cer))
+    price_kitchen_wall_ceramic = float(st.session_state.get("m15_rate_kitchen_wall_ceramic", _legacy_kitchen_cer))
     price_alum_windows = float(st.session_state.get("m15_rate_alum_windows", 2800.0))
     price_bath_doors = float(st.session_state.get("m15_rate_bath_doors", 1800.0))
     price_room_doors = float(st.session_state.get("m15_rate_room_doors", 2400.0))
@@ -12344,19 +12629,19 @@ def _compute_plaster_boq_data(rule_key=None, plaster_qty_factor_override=None):
          f"صافي مسطح سيراميك الأرضيات ({qty_floor_ceramic:.2f} م²){factor_suffix}"),
 
         ("10- كمية سيراميك الحمامات (أرضيات)",
-         qty_bath_floor_ceramic, "م² (m²)", price_bath_ceramic,
+         qty_bath_floor_ceramic, "م² (m²)", price_bath_floor_ceramic,
          f"{bath_floor_details_str}{factor_suffix}"),
 
         ("11- كمية سيراميك المطابخ (أرضيات)",
-         qty_kitchen_floor_ceramic, "م² (m²)", price_kitchen_ceramic,
+         qty_kitchen_floor_ceramic, "م² (m²)", price_kitchen_floor_ceramic,
          f"{kitchen_floor_details_str}{factor_suffix}"),
 
         ("12- كمية سيراميك الحوائط للحمامات",
-         wall_ceramic_bath_m2, "م² (m²)", price_bath_ceramic,
+         wall_ceramic_bath_m2, "م² (m²)", price_bath_wall_ceramic,
          f"{bath_details_str}{factor_suffix}"),
 
         ("13- كمية سيراميك الحوائط للمطابخ",
-         wall_ceramic_kitchen_m2, "م² (m²)", price_kitchen_ceramic,
+         wall_ceramic_kitchen_m2, "م² (m²)", price_kitchen_wall_ceramic,
          f"{kitchen_details_str}{factor_suffix}"),
 
         ("14- انترلوك ارصفة (مساحة انترلوك الأرصفة)",
@@ -13622,6 +13907,22 @@ def _render_manual_boq_items_manager():
             unsafe_allow_html=True,
         )
 
+        def _cb_ask_cancel_manual_form():
+            st.session_state["_m15_keep_manual_expander_open"] = True
+            st.session_state["m15_boq_main_expander"] = True
+            st.session_state["_m15_boq_confirm_modal"] = {
+                "token": f"cancel_manual_form_{int(time.time() * 1000)}",
+                "title": "⚠️ تأكيد إلغاء الإدخال",
+                "message": "هل أنت متأكد من إلغاء المدخلات الحالية وتفريغ الخانات وإغلاق قسم إضافة البند اليدوي؟",
+                "confirm_label": "✅ تأكيد الإلغاء",
+                "cancel_label": "❌ تراجع",
+                "loading_label": "⏳ جارٍ الإلغاء...",
+                "payload": {
+                    "action": "boq_confirm_action",
+                    "sub_action": "cancel_manual_form",
+                },
+            }
+
         c_add, c_cancel = st.columns([3.2, 1.0], gap="small")
         with c_add:
             add_clicked = st.button(
@@ -13631,22 +13932,14 @@ def _render_manual_boq_items_manager():
                 use_container_width=True,
             )
         with c_cancel:
-            cancel_clicked = st.button(
+            st.button(
                 "❌ إلغاء",
                 key="m15_man_cancel_btn",
                 type="secondary",
                 use_container_width=True,
                 help="إلغاء المدخلات الحالية والتراجع وتفريغ الخانات",
+                on_click=_cb_ask_cancel_manual_form,
             )
-
-        if cancel_clicked:
-            st.session_state["_m15_reset_man_new_fields"] = True
-            st.session_state["_m15_last_manual_preset"] = None
-            if presets:
-                st.session_state["m15_man_preset_sel"] = presets[0]["label"]
-            st.session_state["_m15_keep_manual_expander_open"] = False
-            st.session_state["m15_manual_boq_expander"] = False
-            st.rerun()
 
         if add_clicked:
             clean_in_name = str(in_name or "").strip()
@@ -13671,188 +13964,6 @@ def _render_manual_boq_items_manager():
                 st.session_state["_m15_center_green_toast_msg"] = f"✅ تمت إضافة البند «{clean_in_name}» إلى جدول المقايسة بنجاح"
                 st.session_state["_m15_center_green_toast_dur"] = 3.0
                 st.rerun()
-
-        # ═════════════════════════════════════════════════════════════════════
-        # بانيل معامل زيادة للكميات التي تم حسابها:
-        # ═════════════════════════════════════════════════════════════════════
-        st.markdown(
-            """
-            <style>
-            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) {
-                background: linear-gradient(135deg, #180828 0%, #311042 35%, #581c87 70%, #1e0933 100%) !important;
-                border: 1.5px solid #c084fc !important;
-                border-right: 6px solid #a855f7 !important;
-                border-radius: 10px !important;
-                padding: 7px 18px !important;
-                margin: 12px 0 14px 0 !important;
-                box-shadow: 0 4px 20px rgba(168, 85, 247, 0.35), inset 0 1px 1px rgba(233, 213, 255, 0.35) !important;
-                display: flex !important;
-                flex-direction: row !important;
-                flex-wrap: nowrap !important;
-                align-items: center !important;
-                justify-content: center !important;
-                gap: 12px !important;
-                direction: rtl !important;
-                min-height: 44px !important;
-            }
-            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) > div[data-testid="stColumn"] {
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                height: 100% !important;
-            }
-            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) .stMarkdown,
-            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) [data-testid="stMarkdownContainer"],
-            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) [data-testid="stMarkdownContainer"] p {
-                margin: 0 !important;
-                padding: 0 !important;
-                display: flex !important;
-                align-items: center !important;
-                height: 100% !important;
-            }
-            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) > div[data-testid="stColumn"]:first-child {
-                flex: 0 0 auto !important;
-                width: auto !important;
-                min-width: unset !important;
-            }
-            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) > div[data-testid="stColumn"]:last-child {
-                flex: 0 0 135px !important;
-                width: 135px !important;
-                min-width: 125px !important;
-                max-width: 150px !important;
-            }
-            div[class*="st-key-m15_input_plaster_qty_factor"] label,
-            div[class*="st-key-m15_input_plaster_qty_factor"] [data-testid="stWidgetLabel"],
-            div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) label {
-                display: none !important;
-                height: 0 !important;
-                min-height: 0 !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                visibility: hidden !important;
-            }
-            div[class*="st-key-m15_input_plaster_qty_factor"] div[data-testid="stNumberInput"] {
-                margin-bottom: 0 !important;
-            }
-            div[class*="st-key-m15_input_plaster_qty_factor"] div[data-testid="stNumberInputContainer"] {
-                display: flex !important;
-                flex-direction: row !important;
-                align-items: center !important;
-                background: #120624 !important;
-                border: 1.5px solid #c084fc !important;
-                border-radius: 8px !important;
-                padding: 0 !important;
-                min-height: 34px !important;
-                height: 34px !important;
-                overflow: hidden !important;
-                box-shadow: 0 0 12px rgba(192, 132, 252, 0.35) !important;
-            }
-            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepDown"],
-            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepUp"] {
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                background: rgba(192, 132, 252, 0.22) !important;
-                border: none !important;
-                width: 28px !important;
-                min-width: 28px !important;
-                height: 34px !important;
-                min-height: 34px !important;
-                cursor: pointer !important;
-                transition: all 0.15s ease !important;
-                padding: 0 !important;
-                margin: 0 !important;
-            }
-            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepDown"]:hover,
-            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepUp"]:hover {
-                background: rgba(192, 132, 252, 0.50) !important;
-            }
-            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepUp"] svg,
-            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepDown"] svg {
-                display: none !important;
-            }
-            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepUp"]::after {
-                content: "+" !important;
-                font-size: 18px !important;
-                font-weight: 900 !important;
-                color: #e9d5ff !important;
-                line-height: 1 !important;
-            }
-            div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepDown"]::after {
-                content: "−" !important;
-                font-size: 18px !important;
-                font-weight: 900 !important;
-                color: #e9d5ff !important;
-                line-height: 1 !important;
-            }
-            div[class*="st-key-m15_input_plaster_qty_factor"] input {
-                color: #f5f3ff !important;
-                -webkit-text-fill-color: #f5f3ff !important;
-                background-color: transparent !important;
-                font-size: 1.15rem !important;
-                font-weight: 900 !important;
-                text-align: center !important;
-                border: none !important;
-                height: 34px !important;
-                min-height: 34px !important;
-                padding: 0 4px !important;
-                box-shadow: none !important;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        def _sync_m15_plaster_qty_factor():
-            val = float(st.session_state.get("m15_input_plaster_qty_factor", 1.00))
-            st.session_state["m15_plaster_qty_factor"] = val
-            cfg = st.session_state.get("cfg", {})
-            if "module_15_masonry_plaster" in cfg and isinstance(cfg["module_15_masonry_plaster"], dict):
-                cfg["module_15_masonry_plaster"]["plaster_qty_factor"] = val
-            if "module_15_data" in st.session_state and isinstance(st.session_state["module_15_data"], dict):
-                st.session_state["module_15_data"]["plaster_qty_factor"] = val
-            save_settings()
-
-        _saved_plaster_factor = float(st.session_state.get("m15_plaster_qty_factor", 1.00))
-        if "m15_input_plaster_qty_factor" not in st.session_state:
-            st.session_state["m15_input_plaster_qty_factor"] = _saved_plaster_factor
-        else:
-            _saved_plaster_factor = float(st.session_state["m15_input_plaster_qty_factor"])
-
-        c_factor_lbl, c_factor_inp = st.columns([1, 1], gap="small")
-        with c_factor_lbl:
-            st.markdown(
-                """<div dir="rtl" style="display: flex; align-items: center; justify-content: center; height: 100%; font-size: 1.08rem; font-weight: 900; color: #ffffff; text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 16px rgba(192,132,252,0.7); white-space: nowrap; line-height: 1.2; margin: 0; padding: 0;">
-                    ✨ معامل زيادة للكميات التي تم حسابها:
-                </div>""",
-                unsafe_allow_html=True,
-            )
-        with c_factor_inp:
-            plaster_qty_factor = st.number_input(
-                "",
-                min_value=0.10,
-                max_value=5.00,
-                value=_saved_plaster_factor,
-                step=0.05,
-                format="%.2f",
-                key="m15_input_plaster_qty_factor",
-                on_change=_sync_m15_plaster_qty_factor,
-                label_visibility="collapsed",
-            )
-        if abs(plaster_qty_factor - float(st.session_state.get("m15_plaster_qty_factor", 1.00))) > 1e-4:
-            st.session_state["m15_plaster_qty_factor"] = plaster_qty_factor
-            cfg = st.session_state.get("cfg", {})
-            if "module_15_masonry_plaster" in cfg and isinstance(cfg["module_15_masonry_plaster"], dict):
-                cfg["module_15_masonry_plaster"]["plaster_qty_factor"] = plaster_qty_factor
-            if "module_15_data" in st.session_state and isinstance(st.session_state["module_15_data"], dict):
-                st.session_state["module_15_data"]["plaster_qty_factor"] = plaster_qty_factor
-            save_settings()
-        else:
-            st.session_state["m15_plaster_qty_factor"] = plaster_qty_factor
-
-        cur_factor = plaster_qty_factor
 
         # عرض وإدارة البنود اليدوية المضافة حالياً في جدول تفاعلي بنفس تنسيق وفلسفة جدول BOQ الرئيسي
         if manual_items:
@@ -14056,6 +14167,30 @@ def _render_manual_boq_items_manager():
     background: rgba(234, 88, 12, 0.45);
     color: #ffffff;
     box-shadow: 0 0 6px rgba(249, 115, 22, 0.45);
+  }}
+  .boq-calc-guide-btn {{
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    border: 1.5px solid #38bdf8;
+    color: #ffffff;
+    font-weight: 900;
+    font-size: 0.66rem;
+    padding: 4px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    font-family: inherit;
+    box-shadow: 0 2px 10px rgba(14, 165, 233, 0.38);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+  }}
+  .boq-calc-guide-btn:hover {{
+    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    border-color: #7dd3fc;
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(56, 189, 248, 0.55);
+    transform: translateY(-1px);
   }}
   .boq-save-status {{
     font-size: 0.54rem;
@@ -15046,33 +15181,113 @@ def _render_manual_boq_items_manager():
         }});
     }});
 
-    // زر الحذف مع تأكيد مرحلي أنيق
+    // تنبيه صوتي (صفارة) + نافذة تأكيد الحذف في منتصف الشاشة بنفس فلسفة الجدول المجمع
+    function playManualBoqDeleteBeep() {{
+        try {{
+            const pWin = window.parent || window;
+            const AudioCtx = pWin.AudioContext || pWin.webkitAudioContext || window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            const ctx = pWin.__m15BoqBeepCtx || new AudioCtx();
+            pWin.__m15BoqBeepCtx = ctx;
+            if (ctx.state === 'suspended') ctx.resume().catch(function(){{}});
+            const now = ctx.currentTime;
+            [0, 0.14].forEach(function(offset, idx) {{
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(idx === 0 ? 920 : 680, now + offset);
+                gain.gain.setValueAtTime(0.001, now + offset);
+                gain.gain.exponentialRampToValueAtTime(0.28, now + offset + 0.015);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.12);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now + offset);
+                osc.stop(now + offset + 0.13);
+            }});
+        }} catch (e) {{}}
+    }}
+
+    function showManualBoqDeleteConfirmModal(uid, itemName) {{
+        const targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+        const MODAL_ID = 'm15-boq-del-confirm-modal';
+        const existing = targetDoc.getElementById(MODAL_ID);
+        if (existing) existing.remove();
+
+        const backdrop = targetDoc.createElement('div');
+        backdrop.id = MODAL_ID;
+        backdrop.setAttribute('dir', 'rtl');
+        backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(2,6,23,0.72);backdrop-filter:blur(4px);z-index:9999999;display:flex;align-items:center;justify-content:center;padding:16px;font-family:Segoe UI,Cairo,Tahoma,sans-serif;';
+
+        const card = targetDoc.createElement('div');
+        card.style.cssText = 'width:100%;max-width:480px;background:linear-gradient(145deg,#0f172a 0%,#1e293b 100%);border:2px solid #ef4444;border-radius:14px;padding:22px 24px;box-shadow:0 20px 50px rgba(0,0,0,0.65),0 0 24px rgba(239,68,68,0.28);color:#f8fafc;text-align:right;';
+
+        const hdr = targetDoc.createElement('div');
+        hdr.style.cssText = 'display:flex;align-items:center;gap:10px;font-size:1.15rem;font-weight:900;color:#fca5a5;margin-bottom:12px;';
+        hdr.textContent = '⚠️ تأكيد حذف البند اليدوي';
+
+        const msg = targetDoc.createElement('div');
+        msg.style.cssText = 'font-size:1.05rem;font-weight:700;color:#f1f5f9;line-height:1.7;margin-bottom:20px;background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.35);border-radius:10px;padding:12px 14px;';
+        msg.textContent = 'هل أنت متأكد من حذف البند اليدوي: [' + itemName + '] نهائياً من المقايسة؟';
+
+        const btnsRow = targetDoc.createElement('div');
+        btnsRow.style.cssText = 'display:flex;gap:12px;justify-content:flex-start;';
+
+        const btnConfirm = targetDoc.createElement('button');
+        btnConfirm.type = 'button';
+        btnConfirm.textContent = '✅ تأكيد الحذف';
+        btnConfirm.style.cssText = 'flex:1;padding:10px 16px;border-radius:9px;border:1.5px solid #ef4444;background:linear-gradient(135deg,#dc2626 0%,#b91c1c 100%);color:#ffffff;font-size:1rem;font-weight:900;cursor:pointer;box-shadow:0 4px 12px rgba(220,38,38,0.4);';
+
+        const btnCancel = targetDoc.createElement('button');
+        btnCancel.type = 'button';
+        btnCancel.textContent = '❌ إلغاء';
+        btnCancel.style.cssText = 'flex:1;padding:10px 16px;border-radius:9px;border:1.5px solid #475569;background:#1e293b;color:#e2e8f0;font-size:1rem;font-weight:800;cursor:pointer;';
+
+        function onKeyDown(ev) {{
+            if (ev.key === 'Escape') closeModal();
+        }}
+
+        function closeModal() {{
+            try {{ targetDoc.removeEventListener('keydown', onKeyDown); }} catch(e) {{}}
+            try {{ backdrop.remove(); }} catch(e) {{}}
+        }}
+
+        targetDoc.addEventListener('keydown', onKeyDown);
+        btnCancel.addEventListener('click', closeModal);
+        backdrop.addEventListener('click', function(ev) {{
+            if (ev.target === backdrop) closeModal();
+        }});
+        btnConfirm.addEventListener('click', function() {{
+            btnConfirm.disabled = true;
+            btnConfirm.textContent = '⏳ جارٍ الحذف...';
+            closeModal();
+            sendPayloadToParent({{
+                action: 'delete_manual_boq_item',
+                uid: uid,
+                ts: Date.now()
+            }});
+        }});
+
+        btnsRow.appendChild(btnConfirm);
+        btnsRow.appendChild(btnCancel);
+        card.appendChild(hdr);
+        card.appendChild(msg);
+        card.appendChild(btnsRow);
+        backdrop.appendChild(card);
+        targetDoc.body.appendChild(backdrop);
+    }}
+
     document.addEventListener('click', function(e) {{
         const btn = e.target.closest('.boq-row-del-btn');
         if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
         const uid = btn.getAttribute('data-uid');
         if (!uid) return;
-
-        if (!btn.classList.contains('del-confirming')) {{
-            btn.classList.add('del-confirming');
-            btn.innerHTML = '⚠️ تأكيد الحذف؟';
-            setTimeout(() => {{
-                if (btn && btn.classList.contains('del-confirming')) {{
-                    btn.classList.remove('del-confirming');
-                    btn.innerHTML = '🗑️ حذف';
-                }}
-            }}, 4000);
-            return;
-        }}
-
-        // تأكيد الحذف
-        btn.innerHTML = '⏳ جارٍ الحذف...';
-        btn.disabled = true;
-        sendPayloadToParent({{
-            action: 'delete_manual_boq_item',
-            uid: uid,
-            ts: Date.now()
-        }});
+        const tr = btn.closest('tr');
+        const nameEl = tr ? tr.querySelector('.name-editor') : null;
+        const itemName = (nameEl ? (nameEl.innerText || nameEl.textContent || '') : '').trim() || 'البند اليدوي';
+        playManualBoqDeleteBeep();
+        showManualBoqDeleteConfirmModal(uid, itemName);
     }});
 
     window.addEventListener('blur', function() {{
@@ -15099,6 +15314,193 @@ def _render_manual_boq_items_manager():
                 """,
                 unsafe_allow_html=True,
             )
+
+    return plaster_qty_factor
+
+
+def _render_plaster_qty_factor_panel():
+    """
+    بانيل معامل زيادة للكميات التي تم حسابها (معروض مباشرة أعلى الجدول المجمع للكميات والتكلفة لجميع البنود).
+    """
+    # ═════════════════════════════════════════════════════════════════════
+    # بانيل معامل زيادة للكميات التي تم حسابها:
+    # ═════════════════════════════════════════════════════════════════════
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) {
+            background: linear-gradient(135deg, #180828 0%, #311042 35%, #581c87 70%, #1e0933 100%) !important;
+            border: 1.5px solid #c084fc !important;
+            border-right: 6px solid #a855f7 !important;
+            border-radius: 10px !important;
+            padding: 7px 18px !important;
+            margin: 12px 0 14px 0 !important;
+            box-shadow: 0 4px 20px rgba(168, 85, 247, 0.35), inset 0 1px 1px rgba(233, 213, 255, 0.35) !important;
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+            justify-content: center !important;
+            gap: 12px !important;
+            direction: rtl !important;
+            min-height: 44px !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) > div[data-testid="stColumn"] {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            height: 100% !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) .stMarkdown,
+        div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) [data-testid="stMarkdownContainer"],
+        div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) [data-testid="stMarkdownContainer"] p {
+            margin: 0 !important;
+            padding: 0 !important;
+            display: flex !important;
+            align-items: center !important;
+            height: 100% !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) > div[data-testid="stColumn"]:first-child {
+            flex: 0 0 auto !important;
+            width: auto !important;
+            min-width: unset !important;
+        }
+        div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) > div[data-testid="stColumn"]:last-child {
+            flex: 0 0 135px !important;
+            width: 135px !important;
+            min-width: 125px !important;
+            max-width: 150px !important;
+        }
+        div[class*="st-key-m15_input_plaster_qty_factor"] label,
+        div[class*="st-key-m15_input_plaster_qty_factor"] [data-testid="stWidgetLabel"],
+        div[data-testid="stHorizontalBlock"]:has(div[class*="st-key-m15_input_plaster_qty_factor"]) label {
+            display: none !important;
+            height: 0 !important;
+            min-height: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            visibility: hidden !important;
+        }
+        div[class*="st-key-m15_input_plaster_qty_factor"] div[data-testid="stNumberInput"] {
+            margin-bottom: 0 !important;
+        }
+        div[class*="st-key-m15_input_plaster_qty_factor"] div[data-testid="stNumberInputContainer"] {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: center !important;
+            background: #120624 !important;
+            border: 1.5px solid #c084fc !important;
+            border-radius: 8px !important;
+            padding: 0 !important;
+            min-height: 34px !important;
+            height: 34px !important;
+            overflow: hidden !important;
+            box-shadow: 0 0 12px rgba(192, 132, 252, 0.35) !important;
+        }
+        div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepDown"],
+        div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepUp"] {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background: rgba(192, 132, 252, 0.22) !important;
+            border: none !important;
+            width: 28px !important;
+            min-width: 28px !important;
+            height: 34px !important;
+            min-height: 34px !important;
+            cursor: pointer !important;
+            transition: all 0.15s ease !important;
+            padding: 0 !important;
+            margin: 0 !important;
+        }
+        div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepDown"]:hover,
+        div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepUp"]:hover {
+            background: rgba(192, 132, 252, 0.50) !important;
+        }
+        div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepUp"] svg,
+        div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepDown"] svg {
+            display: none !important;
+        }
+        div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepUp"]::after {
+            content: "+" !important;
+            font-size: 18px !important;
+            font-weight: 900 !important;
+            color: #e9d5ff !important;
+            line-height: 1 !important;
+        }
+        div[class*="st-key-m15_input_plaster_qty_factor"] button[data-testid="stNumberInputStepDown"]::after {
+            content: "−" !important;
+            font-size: 18px !important;
+            font-weight: 900 !important;
+            color: #e9d5ff !important;
+            line-height: 1 !important;
+        }
+        div[class*="st-key-m15_input_plaster_qty_factor"] input {
+            color: #f5f3ff !important;
+            -webkit-text-fill-color: #f5f3ff !important;
+            background-color: transparent !important;
+            font-size: 1.15rem !important;
+            font-weight: 900 !important;
+            text-align: center !important;
+            border: none !important;
+            height: 34px !important;
+            min-height: 34px !important;
+            padding: 0 4px !important;
+            box-shadow: none !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    def _sync_m15_plaster_qty_factor():
+        val = float(st.session_state.get("m15_input_plaster_qty_factor", 1.00))
+        st.session_state["m15_plaster_qty_factor"] = val
+        cfg = st.session_state.get("cfg", {})
+        if "module_15_masonry_plaster" in cfg and isinstance(cfg["module_15_masonry_plaster"], dict):
+            cfg["module_15_masonry_plaster"]["plaster_qty_factor"] = val
+        if "module_15_data" in st.session_state and isinstance(st.session_state["module_15_data"], dict):
+            st.session_state["module_15_data"]["plaster_qty_factor"] = val
+        save_settings()
+
+    _saved_plaster_factor = float(st.session_state.get("m15_plaster_qty_factor", 1.00))
+    if "m15_input_plaster_qty_factor" not in st.session_state:
+        st.session_state["m15_input_plaster_qty_factor"] = _saved_plaster_factor
+    else:
+        _saved_plaster_factor = float(st.session_state["m15_input_plaster_qty_factor"])
+
+    c_factor_lbl, c_factor_inp = st.columns([1, 1], gap="small")
+    with c_factor_lbl:
+        st.markdown(
+            """<div dir="rtl" style="display: flex; align-items: center; justify-content: center; height: 100%; font-size: 1.08rem; font-weight: 900; color: #ffffff; text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 16px rgba(192,132,252,0.7); white-space: nowrap; line-height: 1.2; margin: 0; padding: 0;">
+                ✨ معامل زيادة للكميات التي تم حسابها:
+            </div>""",
+            unsafe_allow_html=True,
+        )
+    with c_factor_inp:
+        plaster_qty_factor = st.number_input(
+            "",
+            min_value=0.10,
+            max_value=5.00,
+            value=_saved_plaster_factor,
+            step=0.05,
+            format="%.2f",
+            key="m15_input_plaster_qty_factor",
+            on_change=_sync_m15_plaster_qty_factor,
+            label_visibility="collapsed",
+        )
+    if abs(plaster_qty_factor - float(st.session_state.get("m15_plaster_qty_factor", 1.00))) > 1e-4:
+        st.session_state["m15_plaster_qty_factor"] = plaster_qty_factor
+        cfg = st.session_state.get("cfg", {})
+        if "module_15_masonry_plaster" in cfg and isinstance(cfg["module_15_masonry_plaster"], dict):
+            cfg["module_15_masonry_plaster"]["plaster_qty_factor"] = plaster_qty_factor
+        if "module_15_data" in st.session_state and isinstance(st.session_state["module_15_data"], dict):
+            st.session_state["module_15_data"]["plaster_qty_factor"] = plaster_qty_factor
+        save_settings()
+    else:
+        st.session_state["m15_plaster_qty_factor"] = plaster_qty_factor
 
     return plaster_qty_factor
 
@@ -15169,6 +15571,245 @@ def _render_center_green_toast():
             """,
             unsafe_allow_html=True,
         )
+
+
+def _render_boq_confirm_modal():
+    """
+    عرض نافذة تأكيد موحدة في منتصف الشاشة مع الصفارة الصوتية المريحة
+    بنفس التصميم والحجم والألوان المعتمدة في رسالة حذف البند من الجدول المجمع.
+    """
+    cfg = st.session_state.pop("_m15_boq_confirm_modal", None)
+    if not isinstance(cfg, dict):
+        return
+
+    import json as _json_mod
+
+    token = str(cfg.get("token") or f"boq_confirm_{int(time.time() * 1000)}")
+    safe_cfg = {
+        "title": str(cfg.get("title") or "⚠️ تأكيد الإجراء"),
+        "message": str(cfg.get("message") or "هل أنت متأكد من تنفيذ هذا الإجراء؟"),
+        "confirm_label": str(cfg.get("confirm_label") or "✅ تأكيد"),
+        "cancel_label": str(cfg.get("cancel_label") or "❌ إلغاء"),
+        "loading_label": str(cfg.get("loading_label") or "⏳ جارٍ التنفيذ..."),
+        "payload": cfg.get("payload") if isinstance(cfg.get("payload"), dict) else {},
+    }
+    cfg_json = _json_mod.dumps(safe_cfg, ensure_ascii=False).replace("</", "<\\/")
+
+    render_html_iframe(
+        f"""
+        <script>
+        // boq-confirm-modal-{token}
+        (function() {{
+            const cfg = {cfg_json};
+
+            function playBoqConfirmBeep() {{
+                try {{
+                    const pWin = window.parent || window;
+                    const AudioCtx = pWin.AudioContext || pWin.webkitAudioContext || window.AudioContext || window.webkitAudioContext;
+                    if (!AudioCtx) return;
+                    const ctx = pWin.__m15BoqBeepCtx || new AudioCtx();
+                    pWin.__m15BoqBeepCtx = ctx;
+                    if (ctx.state === 'suspended') ctx.resume().catch(function(){{}});
+                    const now = ctx.currentTime;
+                    [0, 0.14].forEach(function(offset, idx) {{
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(idx === 0 ? 920 : 680, now + offset);
+                        gain.gain.setValueAtTime(0.001, now + offset);
+                        gain.gain.exponentialRampToValueAtTime(0.28, now + offset + 0.015);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.12);
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.start(now + offset);
+                        osc.stop(now + offset + 0.13);
+                    }});
+                }} catch (e) {{}}
+            }}
+
+            function sendBoqActionToParent(payloadObj) {{
+                const jsonStr = JSON.stringify(payloadObj);
+                try {{
+                    if (window.parent && window.parent.document) {{
+                        const pDoc = window.parent.document;
+                        let input = pDoc.querySelector('input[aria-label="m15_3d_sync_payload"]');
+                        if (!input) {{
+                            input = pDoc.querySelector('div[data-testid="stTextInput"] input');
+                        }}
+                        if (input) {{
+                            const proto = (window.parent.HTMLInputElement || window.HTMLInputElement).prototype;
+                            const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+                            if (desc && desc.set) {{
+                                desc.set.call(input, jsonStr);
+                            }} else {{
+                                input.value = jsonStr;
+                            }}
+                            if (input._valueTracker) {{
+                                input._valueTracker.setValue('');
+                            }}
+                            input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                            input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                            input.dispatchEvent(new KeyboardEvent('keydown', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
+                            input.dispatchEvent(new KeyboardEvent('keyup', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
+                            input.dispatchEvent(new Event('blur', {{ bubbles: true }}));
+                            setTimeout(() => {{
+                                try {{
+                                    if (desc && desc.set) {{ desc.set.call(input, ''); }} else {{ input.value = ''; }}
+                                }} catch (e) {{}}
+                            }}, 450);
+                        }}
+                    }}
+                }} catch (err) {{
+                    console.warn('BOQ confirm sync error:', err);
+                }}
+            }}
+
+            function showBoqConfirmModal() {{
+                const targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+                const MODAL_ID = 'm15-boq-del-confirm-modal';
+                const existing = targetDoc.getElementById(MODAL_ID);
+                if (existing) existing.remove();
+
+                const backdrop = targetDoc.createElement('div');
+                backdrop.id = MODAL_ID;
+                backdrop.setAttribute('dir', 'rtl');
+                backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(2,6,23,0.72);backdrop-filter:blur(4px);z-index:9999999;display:flex;align-items:center;justify-content:center;padding:16px;font-family:Segoe UI,Cairo,Tahoma,sans-serif;';
+
+                const card = targetDoc.createElement('div');
+                card.style.cssText = 'width:100%;max-width:480px;background:linear-gradient(145deg,#0f172a 0%,#1e293b 100%);border:2px solid #ef4444;border-radius:14px;padding:22px 24px;box-shadow:0 20px 50px rgba(0,0,0,0.65),0 0 24px rgba(239,68,68,0.28);color:#f8fafc;text-align:right;';
+
+                const hdr = targetDoc.createElement('div');
+                hdr.style.cssText = 'display:flex;align-items:center;gap:10px;font-size:1.15rem;font-weight:900;color:#fca5a5;margin-bottom:12px;';
+                hdr.textContent = cfg.title;
+
+                const msg = targetDoc.createElement('div');
+                msg.style.cssText = 'font-size:1.05rem;font-weight:700;color:#f1f5f9;line-height:1.7;margin-bottom:20px;background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.35);border-radius:10px;padding:12px 14px;';
+                msg.textContent = cfg.message;
+
+                const btnsRow = targetDoc.createElement('div');
+                btnsRow.style.cssText = 'display:flex;gap:12px;justify-content:flex-start;';
+
+                const btnConfirm = targetDoc.createElement('button');
+                btnConfirm.type = 'button';
+                btnConfirm.textContent = cfg.confirm_label;
+                btnConfirm.style.cssText = 'flex:1;padding:10px 16px;border-radius:9px;border:1.5px solid #ef4444;background:linear-gradient(135deg,#dc2626 0%,#b91c1c 100%);color:#ffffff;font-size:1rem;font-weight:900;cursor:pointer;box-shadow:0 4px 12px rgba(220,38,38,0.4);';
+
+                const btnCancel = targetDoc.createElement('button');
+                btnCancel.type = 'button';
+                btnCancel.textContent = cfg.cancel_label;
+                btnCancel.style.cssText = 'flex:1;padding:10px 16px;border-radius:9px;border:1.5px solid #475569;background:#1e293b;color:#e2e8f0;font-size:1rem;font-weight:800;cursor:pointer;';
+
+                function onKeyDown(ev) {{
+                    if (ev.key === 'Escape') closeModal();
+                }}
+
+                function closeModal() {{
+                    try {{ targetDoc.removeEventListener('keydown', onKeyDown); }} catch(e) {{}}
+                    try {{ backdrop.remove(); }} catch(e) {{}}
+                }}
+
+                targetDoc.addEventListener('keydown', onKeyDown);
+                btnCancel.addEventListener('click', closeModal);
+                backdrop.addEventListener('click', function(ev) {{
+                    if (ev.target === backdrop) closeModal();
+                }});
+                btnConfirm.addEventListener('click', function() {{
+                    btnConfirm.disabled = true;
+                    btnConfirm.textContent = cfg.loading_label;
+                    closeModal();
+                    const payload = Object.assign({{}}, cfg.payload || {{}}, {{ ts: Date.now() }});
+                    sendBoqActionToParent(payload);
+                }});
+
+                btnsRow.appendChild(btnConfirm);
+                btnsRow.appendChild(btnCancel);
+                card.appendChild(hdr);
+                card.appendChild(msg);
+                card.appendChild(btnsRow);
+                backdrop.appendChild(card);
+                targetDoc.body.appendChild(backdrop);
+            }}
+
+            playBoqConfirmBeep();
+            showBoqConfirmModal();
+        }})();
+        </script>
+        """,
+        height=1,
+        width=1,
+    )
+
+
+def _build_basic_items_calc_guide_data(raw_basic_items: list) -> list:
+    """
+    بناء دليل مبسط وديناميكي لطريقة حساب جميع البنود الأساسية بالمقايسة.
+    يتابع تلقائياً قائمة البنود الأساسية الحالية وأي بنود أساسية جديدة تُضاف مستقبلاً.
+    """
+    import re as _re_guide
+
+    def _explain_basic_item(name: str, details: str) -> str:
+        n = str(name or "").strip()
+        if "نصف طوبة" in n or "12 سم" in n:
+            return "عبارة عن مجموع المساحات الصافية لجميع حوائط المبنى بسمك 12 سم (الطول × الارتفاع بعد خصم الفتحات) مضافاً إليها مساحة دروة السطح (محيط المبنى × ارتفاع الدروة) في حالة اختيار الدروة نصف طوبة."
+        if "طوبة 25" in n or "25 سم" in n:
+            return "عبارة عن إجمالي حجم حوائط المبنى بسمك 25 سم (المساحة الصافية × 0.25 م) مضافاً إليه حجم دروة السطح (مساحة الدروة × 0.25 م) في حالة اختيار الدروة طوبة كاملة."
+        if "المحارة الداخلية بالسقف" in n:
+            return "عبارة عن مساحة المبنى بالكامل (مسطح السقف) مخصوماً منها مساحة فتحات المناور المعتمدة بالمسقط."
+        if "الدهانات الداخلية للسقف" in n:
+            return "عبارة عن مساحة المبنى بالكامل (مسطح السقف) مخصوماً منها مساحة فتحات المناور المعتمدة بالمسقط (مساوية تماماً لمسطح محارة السقف)."
+        if "المحارة للحوائط" in n:
+            return "عبارة عن إجمالي مسطح أوجه الحوائط الداخلية المطلوب محارتها مخصوماً منه فتحات الأبواب والشبابيك طبقاً لأسلوب الخصم المختار (الكود المصري ECP أو الحصر الصافي الكامل) وبعد استبعاد حوائط سيراميك الحمامات والمطابخ."
+        if "الدهانات الداخلية للحوائط" in n:
+            return "عبارة عن صافي مسطح المحارة الداخلية للحوائط المعتمد (مساوية تماماً لكمية محارة الحوائط)."
+        if "المحارة الخارجية" in n:
+            return "عبارة عن محيط المبنى الخارجي × (ارتفاع الدور + ضعف ارتفاع الدروة لاحتساب الدروة من الجانبين الداخلي والخارجي) مخصوماً منه فتحات الواجهات الخارجية طبقاً لأسلوب الخصم المختار."
+        if "الدهانات الخارجية" in n:
+            return "عبارة عن صافي مسطح المحارة الخارجية للواجهات والدروة من الجانبين (مساوية تماماً لكمية المحارة الخارجية)."
+        if "سيراميك الأرضيات" in n:
+            return "عبارة عن مساحة المبنى بالكامل مخصوماً منها مساحة أرضيات الحمامات ومساحة أرضيات المطابخ ومساحة فتحات المناور."
+        if "سيراميك الحمامات" in n and "أرضيات" in n:
+            return "عبارة عن مجموع مساحات أحياز الحمامات المعتمدة على المسقط الأفقي (الطول × العرض لكل حمام)."
+        if "سيراميك المطابخ" in n and "أرضيات" in n:
+            return "عبارة عن مجموع مساحات أحياز المطابخ المعتمدة على المسقط الأفقي (الطول × العرض لكل مطبخ)."
+        if "سيراميك الحوائط للحمامات" in n:
+            return "عبارة عن مجموع محيط حوائط كل حمام معتمد × ارتفاع سيراميك الحوائط المحدد، مخصوماً منه فتحات الأبواب والشبابيك الواقعة داخل حيز الحمام."
+        if "سيراميك الحوائط للمطابخ" in n:
+            return "عبارة عن مجموع محيط حوائط كل مطبخ معتمد × ارتفاع سيراميك الحوائط المحدد، مخصوماً منه فتحات الأبواب والشبابيك الواقعة داخل حيز المطبخ."
+        if "انترلوك" in n or "إنترلوك" in n:
+            return "عبارة عن المحيط الخارجي للمبنى × عرض الرصيف الخارجي المحدد في الإعدادات."
+        if "بردورة" in n:
+            return "عبارة عن المحيط الخارجي لداير الرصيف (محيط المبنى الخارجي + 8 × عرض الرصيف لاحتساب الأركان الأربعة)."
+        if "العزل المائي" in n or "انسومات" in n:
+            return "عبارة عن مساحة المبنى بالكامل مخصوماً منها مساحة فتحات المناور المعتمدة بالمسقط."
+        if "عازل حراري" in n:
+            return "عبارة عن مساحة المبنى بالكامل مخصوماً منها مساحة فتحات المناور المعتمدة بالمسقط."
+        if "بلاط اسطح" in n or "بلاط أسطح" in n:
+            return "عبارة عن مساحة المبنى بالكامل مخصوماً منها مساحة فتحات المناور المعتمدة بالمسقط."
+        if "شبابيك الوميتال" in n or "شبابيك ألوميتال" in n:
+            return "عبارة عن مجموع مساحات جميع الشبابيك النشطة المرسومة على المسقط الأفقي (عرض الشباك × ارتفاع الشباك لكل شباك)."
+        if "أبواب حمامات" in n:
+            return "عبارة عن حصر إجمالي عدد الأبواب النشطة المرسومة على المسقط الأفقي والتي يقل عرضها أو يساوي 80 سم."
+        if "أبواب غرف" in n:
+            return "عبارة عن حصر إجمالي عدد الأبواب النشطة المرسومة على المسقط الأفقي والتي يزيد عرضها عن 80 سم (أبواب الغرف والمدخل)."
+
+        # متابعة تلقائية لأي بند أساسي جديد يُضاف مستقبلاً إلى t2_items_data
+        clean_det = _re_guide.sub(r"\s*×\s*\d+(?:\.\d+)?\s*$", "", str(details or "")).strip()
+        if clean_det:
+            return f"يُحسب تلقائياً من مدخلات التصميم طبقاً للتفصيل المعتمد: {clean_det}."
+        return "يُحسب تلقائياً من أبعاد ومدخلات التصميم الهندسي المعتمدة بالمسقط الأفقي."
+
+    guide_rows = []
+    for idx, tup in enumerate(raw_basic_items, start=1):
+        raw_name = str(tup[0]).strip() if len(tup) > 0 else f"بند {idx}"
+        unit_str = str(tup[2]).strip() if len(tup) > 2 else ""
+        details_str = str(tup[4]).strip() if len(tup) > 4 else ""
+        guide_rows.append({
+            "idx": idx,
+            "name": raw_name,
+            "unit": unit_str,
+            "explanation": _explain_basic_item(raw_name, details_str),
+        })
+    return guide_rows
 
 
 def _section_plaster_boq():
@@ -15581,16 +16222,16 @@ def _section_plaster_boq():
     ]
 
     # ═════════════════════════════════════════════════════════════════════════
-    #  عنوان أسعار البنود وصناديق إدخال الأسعار
+    #  قسم أسعار البنود الاساسية (التي يحسبها البرنامج) - مطوي افتراضياً عند بدء التشغيل
     # ═════════════════════════════════════════════════════════════════════════
     st.markdown(
         """
-        <div dir="rtl" style="text-align: center; margin: 18px auto 14px auto; background: linear-gradient(135deg, rgba(30, 41, 59, 0.90) 0%, rgba(15, 23, 42, 0.96) 100%); border: 1.5px solid rgba(245, 158, 11, 0.5); border-top: 3px solid #f59e0b; border-radius: 8px; padding: 9px 24px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);">
-            <span style="font-size: 1.45rem; font-weight: 900; color: #fbbf24; text-shadow: 0 2px 6px rgba(0,0,0,0.7); letter-spacing: 0.5px;">
-                💰 أسعار البنود
-            </span>
-        </div>
         <style>
+        div[data-testid="stExpander"]:has(.m15-rates-container-marker) summary p {
+            font-size: 1.25rem !important;
+            font-weight: 900 !important;
+            color: #fbbf24 !important;
+        }
         /* برواز سميك بلون عنبري ذهبي مختلف تماماً عن حواف خانات الإدخال السماوية */
         div[data-testid="stVerticalBlockBorderWrapper"]:has(.m15-rates-container-marker),
         div[class*="st-key-m15_rates_container"] {
@@ -15638,195 +16279,7 @@ def _section_plaster_boq():
         unsafe_allow_html=True,
     )
 
-    # برواز حاوٍ سميك يضم جميع خانات ومدخلات أسعار البنود
-    with st.container(border=True, key="m15_rates_container"):
-        st.markdown('<div class="m15-rates-container-marker" style="display:none;"></div>', unsafe_allow_html=True)
-        # 15 مدخل على 3 أسطر ضيقة ومنظمة (5 أعمدة في كل سطر)
-        p_r1_c1, p_r1_c2, p_r1_c3, p_r1_c4, p_r1_c5 = st.columns(5)
-        with p_r1_c1:
-            price_brick_12 = st.number_input(
-                "(م2) طوب 12 سم:",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_brick_12", st.session_state.get("m15_rate_brick", 160.0))),
-                step=5.0, format="%.1f",
-                key="m15_rate_brick_12",
-                help="سعر المتر المسطح لمباني طوب 12 سم (يشمل الحوائط والدروة)"
-            )
-        with p_r1_c2:
-            price_wall_plaster = st.number_input(
-                "(م2) محارة داخلية حوائط:",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_wall_plaster", 85.0)),
-                step=5.0, format="%.1f",
-                key="m15_rate_wall_plaster",
-                help="سعر المتر المسطح لمحارة الحوائط الداخلية"
-            )
-        with p_r1_c3:
-            price_ceiling_plaster = st.number_input(
-                "(م2) محارة السقف:",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_ceiling_plaster", 95.0)),
-                step=5.0, format="%.1f",
-                key="m15_rate_ceiling_plaster",
-                help="سعر المتر المسطح لمحارة الأسقف الداخلية"
-            )
-        with p_r1_c4:
-            price_facade_plaster = st.number_input(
-                "(م2) محارة واجهات:",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_facade_plaster", 140.0)),
-                step=5.0, format="%.1f",
-                key="m15_rate_facade_plaster",
-                help="سعر المتر المسطح لمحارة الواجهات الخارجية والدروة"
-            )
-        with p_r1_c5:
-            price_wall_paint = st.number_input(
-                "(م2) دهانات داخلية حوائط:",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_wall_paint", 75.0)),
-                step=5.0, format="%.1f",
-                key="m15_rate_wall_paint",
-                help="سعر المتر المسطح لدهانات الحوائط الداخلية"
-            )
-
-        p_r2_c1, p_r2_c2, p_r2_c3, p_r2_c4, p_r2_c5 = st.columns(5)
-        with p_r2_c1:
-            price_ceiling_paint = st.number_input(
-                "(م2) دهانات السقف:",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_ceiling_paint", 80.0)),
-                step=5.0, format="%.1f",
-                key="m15_rate_ceiling_paint",
-                help="سعر المتر المسطح لدهانات الأسقف الداخلية"
-            )
-        with p_r2_c2:
-            price_facade_paint = st.number_input(
-                "(م2) دهانات واجهات:",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_facade_paint", 110.0)),
-                step=5.0, format="%.1f",
-                key="m15_rate_facade_paint",
-                help="سعر المتر المسطح لدهانات الواجهات الخارجية والدروة"
-            )
-        with p_r2_c3:
-            price_interlock = st.number_input(
-                "(م2) الانترلوك:",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_interlock", 220.0)),
-                step=5.0, format="%.1f",
-                key="m15_rate_interlock",
-                help="سعر المتر المسطح لبلاط انترلوك الأرصفة"
-            )
-        with p_r2_c4:
-            price_curbs = st.number_input(
-                "(م.ط) البردورات:",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_curbs", 160.0)),
-                step=5.0, format="%.1f",
-                key="m15_rate_curbs",
-                help="سعر المتر الطولي/المسطح لبردورات الأرصفة"
-            )
-        with p_r2_c5:
-            price_waterproof = st.number_input(
-                "(م2) عازل مائي (انسومات):",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_waterproof", 170.0)),
-                step=5.0, format="%.1f",
-                key="m15_rate_waterproof",
-                help="سعر المتر المسطح للعزل المائي للأسطح بمادة الأنسومات"
-            )
-
-        p_r3_c1, p_r3_c2, p_r3_c3, p_r3_c4, p_r3_c5 = st.columns(5)
-        with p_r3_c1:
-            price_thermal = st.number_input(
-                "(م2) عازل حراري للسطح:",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_thermal", 130.0)),
-                step=5.0, format="%.1f",
-                key="m15_rate_thermal",
-                help="سعر المتر المسطح للعزل الحراري للأسطح"
-            )
-        with p_r3_c2:
-            price_roof_tiles = st.number_input(
-                "(م2) بلاط اسطح:",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_roof_tiles", 150.0)),
-                step=5.0, format="%.1f",
-                key="m15_rate_roof_tiles",
-                help="سعر المتر المسطح لبلاط أسطح المبنى"
-            )
-        with p_r3_c3:
-            price_floor_ceramic = st.number_input(
-                "(م2) سيراميك ارضيات:",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_floor_ceramic", 260.0)),
-                step=5.0, format="%.1f",
-                key="m15_rate_floor_ceramic",
-                help="سعر المتر المسطح لسيراميك الأرضيات للغرف والصالات"
-            )
-        with p_r3_c4:
-            price_bath_ceramic = st.number_input(
-                "سعر سيراميك حمامات:",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_bath_ceramic", 290.0)),
-                step=5.0, format="%.1f",
-                key="m15_rate_bath_ceramic",
-                help="سعر (م2) سيراميك حمامات (ارضيات / حوائط)"
-            )
-        with p_r3_c5:
-            price_kitchen_ceramic = st.number_input(
-                "سعر سيراميك مطابخ:",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_kitchen_ceramic", 290.0)),
-                step=5.0, format="%.1f",
-                key="m15_rate_kitchen_ceramic",
-                help="سعر (م2) سيراميك مطابخ (ارضيات / حوائط)"
-            )
-
-        # صف رابع لأسعار طوب 25 سم والشبابيك الألوميتال وأبواب الحمامات وأبواب الغرف
-        p_r4_c1, p_r4_c2, p_r4_c3, p_r4_c4 = st.columns(4)
-        with p_r4_c1:
-            price_brick_25 = st.number_input(
-                "(م3) طوب 25 سم:",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_brick_25", 1200.0)),
-                step=25.0, format="%.1f",
-                key="m15_rate_brick_25",
-                help="سعر المتر المكعب لمباني طوب 25 سم (يشمل الحوائط والدروة)"
-            )
-        with p_r4_c2:
-            price_alum_windows = st.number_input(
-                "(م2) شبابيك ألوميتال:",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_alum_windows", 2800.0)),
-                step=50.0, format="%.1f",
-                key="m15_rate_alum_windows",
-                help="سعر المتر المسطح لشبابيك الألوميتال للواجهات والمساقط"
-            )
-        with p_r4_c3:
-            price_bath_doors = st.number_input(
-                "(عدد) أبواب حمامات (≤ 80سم):",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_bath_doors", 1800.0)),
-                step=50.0, format="%.1f",
-                key="m15_rate_bath_doors",
-                help="سعر الباب الواحد لأبواب حمامات الوحدة عرض 80 سم أو أقل"
-            )
-        with p_r4_c4:
-            price_room_doors = st.number_input(
-                "(عدد) أبواب غرف (> 80سم):",
-                min_value=0.0, max_value=50000.0,
-                value=float(st.session_state.get("m15_rate_room_doors", 2400.0)),
-                step=50.0, format="%.1f",
-                key="m15_rate_room_doors",
-                help="سعر الباب الواحد لأبواب غرف الوحدة والمدخل عرض أكبر من 80 سم"
-            )
-
-    # ═════════════════════════════════════════════════════════════════════════
-    #  ثالثاً مكرر: إضافة وإدارة بنود الحصر اليدوية ومعامل الزيادة العام
-    # ═════════════════════════════════════════════════════════════════════════
-    plaster_qty_factor = _render_manual_boq_items_manager()
-
+    # حساب كميات الشبابيك والأبواب قبل بناء مخطط البنود الأساسية لضمان تطابق 1:1 بين البنود ومدخلات أسعارها
     active_wins = _get_active_windows_list()
     qty_alum_windows = round(sum(float(w[2].get("w_m", 1.0)) * float(w[2].get("h_m", 1.2)) for w in active_wins), 2)
 
@@ -15836,92 +16289,318 @@ def _section_plaster_boq():
     room_doors = [d for d in active_doors if float(d[2].get("w_m", 0.9)) > 0.80 + 1e-4]
     qty_room_doors = len(room_doors)
 
-    t2_items_data = [
-        # (item_name, net_qty, unit, unit_price, details)
-        ("1- بند طوب أحمر تخانة نصف طوبة 12 سم (يشمل الحوائط ودروة السطح)",
-         qty_brick_12, "م² (m²)", price_brick_12,
-         f"{details_12} × {plaster_qty_factor:.2f}"),
-
-        ("2- بند طوب أحمر تخانة طوبة 25 سم (يشمل الحوائط ودروة السطح)",
-         qty_brick_25, "م³ (m³)", price_brick_25,
-         f"{details_25} × {plaster_qty_factor:.2f}"),
-
-        ("3- كمية المحارة الداخلية بالسقف بالمتر المسطح (تساوي تماماً مسطح المبنى بعد خصم المنور)",
-         qty_ceiling_plaster, "م² (m²)", price_ceiling_plaster,
-         f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_ceiling_plaster:.2f} م²) × {plaster_qty_factor:.2f}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²) × {plaster_qty_factor:.2f}"),
-
-        ("4- كمية الدهانات الداخلية للسقف (تساوي تماماً مسطح المبنى بعد خصم المنور)",
-         qty_ceiling_paint, "م² (m²)", price_ceiling_paint,
-         f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_ceiling_paint:.2f} م²) × {plaster_qty_factor:.2f}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²) × {plaster_qty_factor:.2f}"),
-
-        ("5- كمية المحارة للحوائط بالمتر المسطح",
-         qty_wall_plaster, "م² (m²)", price_wall_plaster,
-         f"صافي مسطح محارة الحوائط ({qty_wall_plaster:.2f} م²) × {plaster_qty_factor:.2f}"),
-
-        ("6- كمية الدهانات الداخلية للحوائط بالمتر المسطح",
-         qty_wall_paint, "م² (m²)", price_wall_paint,
-         f"صافي مسطح دهان الحوائط ({qty_wall_paint:.2f} م²) × {plaster_qty_factor:.2f}"),
-
-        ("7- كمية المحارة الخارجية (الواجهات والدروة من الجانبين)",
-         qty_facade_plaster, "م² (m²)", price_facade_plaster,
-         f"مسطح الواجهات والدروة من الجانبين ({qty_facade_plaster:.2f} م²) × {plaster_qty_factor:.2f}"),
-
-        ("8- كمية الدهانات الخارجية (الواجهات والدروة من الجانبين)",
-         qty_facade_paint, "م² (m²)", price_facade_paint,
-         f"مسطح دهان الواجهات والدروة من الجانبين ({qty_facade_paint:.2f} م²) × {plaster_qty_factor:.2f}"),
-
-        ("9- كمية سيراميك الأرضيات (Floor Ceramic Tiles)",
-         qty_floor_ceramic, "م² (m²)", price_floor_ceramic,
-         f"صافي مسطح سيراميك الأرضيات ({qty_floor_ceramic:.2f} م²) × {plaster_qty_factor:.2f}"),
-
-        ("10- كمية سيراميك الحمامات (أرضيات)",
-         qty_bath_floor_ceramic, "م² (m²)", price_bath_ceramic,
-         f"{bath_floor_details_str} × {plaster_qty_factor:.2f}"),
-
-        ("11- كمية سيراميك المطابخ (أرضيات)",
-         qty_kitchen_floor_ceramic, "م² (m²)", price_kitchen_ceramic,
-         f"{kitchen_floor_details_str} × {plaster_qty_factor:.2f}"),
-
-        ("12- كمية سيراميك الحوائط للحمامات",
-         wall_ceramic_bath_m2, "م² (m²)", price_bath_ceramic,
-         f"{bath_details_str} × {plaster_qty_factor:.2f}"),
-
-        ("13- كمية سيراميك الحوائط للمطابخ",
-         wall_ceramic_kitchen_m2, "م² (m²)", price_kitchen_ceramic,
-         f"{kitchen_details_str} × {plaster_qty_factor:.2f}"),
-
-        ("14- انترلوك ارصفة (مساحة انترلوك الأرصفة)",
-         area_interlock_m2, "م² (m²)", price_interlock,
-         f"مساحة انترلوك الأرصفة ({area_interlock_m2:.2f} م²) × {plaster_qty_factor:.2f}"),
-
-        ("15- بردورة أرصفة (إجمالي طول البردورات)",
-         len_curb_m, "م.ط (m)", price_curbs,
-         f"إجمالي طول البردورات للمحيط الخارجي ({len_curb_m:.2f} م.ط) × {plaster_qty_factor:.2f}"),
-
-        ("16- بند العزل المائي للسطح (انسومات)",
-         qty_waterproof_roof, "م² (m²)", price_waterproof,
-         f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_waterproof_roof:.2f} م²) × {plaster_qty_factor:.2f}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²) × {plaster_qty_factor:.2f}"),
-
-        ("17- عازل حراري",
-         qty_thermal_ins, "م² (m²)", price_thermal,
-         f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_thermal_ins:.2f} م²) × {plaster_qty_factor:.2f}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²) × {plaster_qty_factor:.2f}"),
-
-        ("18- بلاط اسطح",
-         qty_roof_tiles, "م² (m²)", price_roof_tiles,
-         f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_roof_tiles:.2f} م²) × {plaster_qty_factor:.2f}" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²) × {plaster_qty_factor:.2f}"),
-
-        ("19- شبابيك الوميتال (م2)",
-         qty_alum_windows, "م² (m²)", price_alum_windows,
-         f"مسطح شبابيك الألوميتال بناءً على الرسم ({qty_alum_windows:.2f} م² │ {len(active_wins)} شباك) × {plaster_qty_factor:.2f}"),
-
-        ("20- أبواب حمامات الوحدة (عرض ≤ 80 سم)",
-         qty_bath_doors, "عدد (No.)", price_bath_doors,
-         f"حصر أبواب الحمامات عرض ≤ 80 سم بالعدد ({qty_bath_doors} باب) × {plaster_qty_factor:.2f}"),
-
-        ("21- أبواب غرف الوحدة (عرض > 80 سم)",
-         qty_room_doors, "عدد (No.)", price_room_doors,
-         f"حصر أبواب الغرف والمدخل عرض > 80 سم بالعدد ({qty_room_doors} باب) × {plaster_qty_factor:.2f}"),
+    # المصدر الموحد لجميع البنود الأساسية التي يحسبها البرنامج (21 بنداً أساسياً)
+    # يضمن وجود مدخل سعر مستقل لكل بند أساسي مع إنشاء مدخل تلقائياً لأي بند يُضاف مستقبلاً
+    _basic_items_blueprint = [
+        {
+            "item_name": "1- بند طوب أحمر تخانة نصف طوبة 12 سم (يشمل الحوائط ودروة السطح)",
+            "net_qty": qty_brick_12,
+            "unit": "م² (m²)",
+            "details_base": f"{details_12}",
+            "rate_key": "m15_rate_brick_12",
+            "fallback_key": "m15_rate_brick",
+            "label": "1. (م2) طوب 12 سم:",
+            "default": 160.0,
+            "step": 5.0,
+            "help": "سعر المتر المسطح لمباني طوب 12 سم (يشمل الحوائط والدروة)",
+        },
+        {
+            "item_name": "2- بند طوب أحمر تخانة طوبة 25 سم (يشمل الحوائط ودروة السطح)",
+            "net_qty": qty_brick_25,
+            "unit": "م³ (m³)",
+            "details_base": f"{details_25}",
+            "rate_key": "m15_rate_brick_25",
+            "label": "2. (م3) طوب 25 سم:",
+            "default": 1200.0,
+            "step": 25.0,
+            "help": "سعر المتر المكعب لمباني طوب 25 سم (يشمل الحوائط والدروة)",
+        },
+        {
+            "item_name": "3- كمية المحارة الداخلية بالسقف بالمتر المسطح (تساوي تماماً مسطح المبنى بعد خصم المنور)",
+            "net_qty": qty_ceiling_plaster,
+            "unit": "م² (m²)",
+            "details_base": f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_ceiling_plaster:.2f} م²)" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²)",
+            "rate_key": "m15_rate_ceiling_plaster",
+            "label": "3. (م2) محارة السقف:",
+            "default": 95.0,
+            "step": 5.0,
+            "help": "سعر المتر المسطح لمحارة الأسقف الداخلية",
+        },
+        {
+            "item_name": "4- كمية الدهانات الداخلية للسقف (تساوي تماماً مسطح المبنى بعد خصم المنور)",
+            "net_qty": qty_ceiling_paint,
+            "unit": "م² (m²)",
+            "details_base": f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_ceiling_paint:.2f} م²)" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²)",
+            "rate_key": "m15_rate_ceiling_paint",
+            "label": "4. (م2) دهانات السقف:",
+            "default": 80.0,
+            "step": 5.0,
+            "help": "سعر المتر المسطح لدهانات الأسقف الداخلية",
+        },
+        {
+            "item_name": "5- كمية المحارة للحوائط بالمتر المسطح",
+            "net_qty": qty_wall_plaster,
+            "unit": "م² (m²)",
+            "details_base": f"صافي مسطح محارة الحوائط ({qty_wall_plaster:.2f} م²)",
+            "rate_key": "m15_rate_wall_plaster",
+            "label": "5. (م2) محارة داخلية حوائط:",
+            "default": 85.0,
+            "step": 5.0,
+            "help": "سعر المتر المسطح لمحارة الحوائط الداخلية",
+        },
+        {
+            "item_name": "6- كمية الدهانات الداخلية للحوائط بالمتر المسطح",
+            "net_qty": qty_wall_paint,
+            "unit": "م² (m²)",
+            "details_base": f"صافي مسطح دهان الحوائط ({qty_wall_paint:.2f} م²)",
+            "rate_key": "m15_rate_wall_paint",
+            "label": "6. (م2) دهانات داخلية حوائط:",
+            "default": 75.0,
+            "step": 5.0,
+            "help": "سعر المتر المسطح لدهانات الحوائط الداخلية",
+        },
+        {
+            "item_name": "7- كمية المحارة الخارجية (الواجهات والدروة من الجانبين)",
+            "net_qty": qty_facade_plaster,
+            "unit": "م² (m²)",
+            "details_base": f"مسطح الواجهات والدروة من الجانبين ({qty_facade_plaster:.2f} م²)",
+            "rate_key": "m15_rate_facade_plaster",
+            "label": "7. (م2) محارة واجهات:",
+            "default": 140.0,
+            "step": 5.0,
+            "help": "سعر المتر المسطح لمحارة الواجهات الخارجية والدروة",
+        },
+        {
+            "item_name": "8- كمية الدهانات الخارجية (الواجهات والدروة من الجانبين)",
+            "net_qty": qty_facade_paint,
+            "unit": "م² (m²)",
+            "details_base": f"مسطح دهان الواجهات والدروة من الجانبين ({qty_facade_paint:.2f} م²)",
+            "rate_key": "m15_rate_facade_paint",
+            "label": "8. (م2) دهانات واجهات:",
+            "default": 110.0,
+            "step": 5.0,
+            "help": "سعر المتر المسطح لدهانات الواجهات الخارجية والدروة",
+        },
+        {
+            "item_name": "9- كمية سيراميك الأرضيات (Floor Ceramic Tiles)",
+            "net_qty": qty_floor_ceramic,
+            "unit": "م² (m²)",
+            "details_base": f"صافي مسطح سيراميك الأرضيات ({qty_floor_ceramic:.2f} م²)",
+            "rate_key": "m15_rate_floor_ceramic",
+            "label": "9. (م2) سيراميك أرضيات:",
+            "default": 260.0,
+            "step": 5.0,
+            "help": "سعر المتر المسطح لسيراميك الأرضيات للغرف والصالات",
+        },
+        {
+            "item_name": "10- كمية سيراميك الحمامات (أرضيات)",
+            "net_qty": qty_bath_floor_ceramic,
+            "unit": "م² (m²)",
+            "details_base": f"{bath_floor_details_str}",
+            "rate_key": "m15_rate_bath_floor_ceramic",
+            "fallback_key": "m15_rate_bath_ceramic",
+            "label": "10. (م2) سيراميك أرضيات حمامات:",
+            "default": 290.0,
+            "step": 5.0,
+            "help": "سعر المتر المسطح لسيراميك أرضيات الحمامات",
+        },
+        {
+            "item_name": "11- كمية سيراميك المطابخ (أرضيات)",
+            "net_qty": qty_kitchen_floor_ceramic,
+            "unit": "م² (m²)",
+            "details_base": f"{kitchen_floor_details_str}",
+            "rate_key": "m15_rate_kitchen_floor_ceramic",
+            "fallback_key": "m15_rate_kitchen_ceramic",
+            "label": "11. (م2) سيراميك أرضيات مطابخ:",
+            "default": 290.0,
+            "step": 5.0,
+            "help": "سعر المتر المسطح لسيراميك أرضيات المطابخ",
+        },
+        {
+            "item_name": "12- كمية سيراميك الحوائط للحمامات",
+            "net_qty": wall_ceramic_bath_m2,
+            "unit": "م² (m²)",
+            "details_base": f"{bath_details_str}",
+            "rate_key": "m15_rate_bath_wall_ceramic",
+            "fallback_key": "m15_rate_bath_ceramic",
+            "label": "12. (م2) سيراميك حوائط حمامات:",
+            "default": 290.0,
+            "step": 5.0,
+            "help": "سعر المتر المسطح لسيراميك حوائط الحمامات",
+        },
+        {
+            "item_name": "13- كمية سيراميك الحوائط للمطابخ",
+            "net_qty": wall_ceramic_kitchen_m2,
+            "unit": "م² (m²)",
+            "details_base": f"{kitchen_details_str}",
+            "rate_key": "m15_rate_kitchen_wall_ceramic",
+            "fallback_key": "m15_rate_kitchen_ceramic",
+            "label": "13. (م2) سيراميك حوائط مطابخ:",
+            "default": 290.0,
+            "step": 5.0,
+            "help": "سعر المتر المسطح لسيراميك حوائط المطابخ",
+        },
+        {
+            "item_name": "14- انترلوك ارصفة (مساحة انترلوك الأرصفة)",
+            "net_qty": area_interlock_m2,
+            "unit": "م² (m²)",
+            "details_base": f"مساحة انترلوك الأرصفة ({area_interlock_m2:.2f} م²)",
+            "rate_key": "m15_rate_interlock",
+            "label": "14. (م2) انترلوك أرصفة:",
+            "default": 220.0,
+            "step": 5.0,
+            "help": "سعر المتر المسطح لبلاط انترلوك الأرصفة",
+        },
+        {
+            "item_name": "15- بردورة أرصفة (إجمالي طول البردورات)",
+            "net_qty": len_curb_m,
+            "unit": "م.ط (m)",
+            "details_base": f"إجمالي طول البردورات للمحيط الخارجي ({len_curb_m:.2f} م.ط)",
+            "rate_key": "m15_rate_curbs",
+            "label": "15. (م.ط) بردورات أرصفة:",
+            "default": 160.0,
+            "step": 5.0,
+            "help": "سعر المتر الطولي لبردورات الأرصفة",
+        },
+        {
+            "item_name": "16- بند العزل المائي للسطح (انسومات)",
+            "net_qty": qty_waterproof_roof,
+            "unit": "م² (m²)",
+            "details_base": f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_waterproof_roof:.2f} م²)" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²)",
+            "rate_key": "m15_rate_waterproof",
+            "label": "16. (م2) عازل مائي (انسومات):",
+            "default": 170.0,
+            "step": 5.0,
+            "help": "سعر المتر المسطح للعزل المائي للأسطح بمادة الأنسومات",
+        },
+        {
+            "item_name": "17- عازل حراري",
+            "net_qty": qty_thermal_ins,
+            "unit": "م² (m²)",
+            "details_base": f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_thermal_ins:.2f} م²)" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²)",
+            "rate_key": "m15_rate_thermal",
+            "label": "17. (م2) عازل حراري للسطح:",
+            "default": 130.0,
+            "step": 5.0,
+            "help": "سعر المتر المسطح للعزل الحراري للأسطح",
+        },
+        {
+            "item_name": "18- بلاط اسطح",
+            "net_qty": qty_roof_tiles,
+            "unit": "م² (m²)",
+            "details_base": f"(مسطح المبنى {bldg_area:.2f} م² − منور {eff_shaft_m2:.2f} م² = {qty_roof_tiles:.2f} م²)" if eff_shaft_m2 > 0 else f"مسطح المبنى المعتمد ({bldg_area:.2f} م²)",
+            "rate_key": "m15_rate_roof_tiles",
+            "label": "18. (م2) بلاط أسطح:",
+            "default": 150.0,
+            "step": 5.0,
+            "help": "سعر المتر المسطح لبلاط أسطح المبنى",
+        },
+        {
+            "item_name": "19- شبابيك الوميتال (م2)",
+            "net_qty": qty_alum_windows,
+            "unit": "م² (m²)",
+            "details_base": f"مسطح شبابيك الألوميتال بناءً على الرسم ({qty_alum_windows:.2f} م² │ {len(active_wins)} شباك)",
+            "rate_key": "m15_rate_alum_windows",
+            "label": "19. (م2) شبابيك ألوميتال:",
+            "default": 2800.0,
+            "step": 50.0,
+            "help": "سعر المتر المسطح لشبابيك الألوميتال للواجهات والمساقط",
+        },
+        {
+            "item_name": "20- أبواب حمامات الوحدة (عرض ≤ 80 سم)",
+            "net_qty": qty_bath_doors,
+            "unit": "عدد (No.)",
+            "details_base": f"حصر أبواب الحمامات عرض ≤ 80 سم بالعدد ({qty_bath_doors} باب)",
+            "rate_key": "m15_rate_bath_doors",
+            "label": "20. (عدد) أبواب حمامات (≤ 80سم):",
+            "default": 1800.0,
+            "step": 50.0,
+            "help": "سعر الباب الواحد لأبواب حمامات الوحدة عرض 80 سم أو أقل",
+        },
+        {
+            "item_name": "21- أبواب غرف الوحدة (عرض > 80 سم)",
+            "net_qty": qty_room_doors,
+            "unit": "عدد (No.)",
+            "details_base": f"حصر أبواب الغرف والمدخل عرض > 80 سم بالعدد ({qty_room_doors} باب)",
+            "rate_key": "m15_rate_room_doors",
+            "label": "21. (عدد) أبواب غرف (> 80سم):",
+            "default": 2400.0,
+            "step": 50.0,
+            "help": "سعر الباب الواحد لأبواب غرف الوحدة والمدخل عرض أكبر من 80 سم",
+        },
     ]
+
+    with st.expander(
+        "💰 أسعار البنود الاساسية (التي يحسبها البرنامج)",
+        expanded=False,
+        key="m15_expander_basic_item_prices",
+    ):
+        st.markdown(
+            f"""
+            <div dir="rtl" style="text-align: center; margin: 4px auto 12px auto; background: linear-gradient(135deg, rgba(30, 41, 59, 0.90) 0%, rgba(15, 23, 42, 0.96) 100%); border: 1.5px solid rgba(245, 158, 11, 0.5); border-top: 3px solid #f59e0b; border-radius: 8px; padding: 9px 24px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);">
+                <span style="font-size: 1.45rem; font-weight: 900; color: #fbbf24; text-shadow: 0 2px 6px rgba(0,0,0,0.7); letter-spacing: 0.5px;">
+                    💰 أسعار البنود الاساسية (التي يحسبها البرنامج) ({len(_basic_items_blueprint)} بنداً)
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # برواز حاوٍ سميك يضم جميع خانات ومدخلات أسعار البنود الأساسية (مدخل مستقل لكل بند)
+        _basic_prices_by_idx = {}
+        with st.container(border=True, key="m15_rates_container"):
+            st.markdown('<div class="m15-rates-container-marker" style="display:none;"></div>', unsafe_allow_html=True)
+            _cols_per_row = 5
+            for _row_start in range(0, len(_basic_items_blueprint), _cols_per_row):
+                _row_chunk = _basic_items_blueprint[_row_start : _row_start + _cols_per_row]
+                _row_cols = st.columns(_cols_per_row)
+                for _col_off, _spec in enumerate(_row_chunk):
+                    _item_idx = _row_start + _col_off + 1
+                    _r_key = _spec.get("rate_key") or f"m15_rate_basic_item_{_item_idx}"
+                    _r_label = _spec.get("label") or f"{_item_idx}. ({_spec.get('unit', '')}) {_spec.get('item_name', '')}:"
+                    _r_default = float(_spec.get("default", 0.0))
+                    _fb_key = _spec.get("fallback_key")
+                    if _r_key in st.session_state:
+                        _init_val = float(st.session_state[_r_key])
+                    elif _fb_key and _fb_key in st.session_state:
+                        _init_val = float(st.session_state[_fb_key])
+                    else:
+                        _init_val = _r_default
+                    with _row_cols[_col_off]:
+                        _basic_prices_by_idx[_item_idx] = st.number_input(
+                            _r_label,
+                            min_value=0.0,
+                            max_value=50000.0,
+                            value=_init_val,
+                            step=float(_spec.get("step", 5.0)),
+                            format="%.1f",
+                            key=_r_key,
+                            help=_spec.get("help") or f"سعر الوحدة للبند الأساسي رقم {_item_idx}",
+                        )
+
+    # ═════════════════════════════════════════════════════════════════════════
+    #  ثالثاً مكرر: إضافة وإدارة بنود الحصر اليدوية، ثم بانيل معامل الزيادة العام أعلى الجدول المجمع
+    # ═════════════════════════════════════════════════════════════════════════
+    _render_manual_boq_items_manager()
+    plaster_qty_factor = _render_plaster_qty_factor_panel()
+
+    # بناء قائمة البنود الأساسية من نفس المصدر الموحد مع التحقق البرمجي من تطابق العدد 1:1
+    t2_items_data = [
+        (
+            _spec["item_name"],
+            _spec["net_qty"],
+            _spec["unit"],
+            _basic_prices_by_idx[_idx],
+            f"{_spec['details_base']} × {plaster_qty_factor:.2f}",
+        )
+        for _idx, _spec in enumerate(_basic_items_blueprint, start=1)
+    ]
+    assert len(_basic_prices_by_idx) == len(t2_items_data), (
+        f"Basic price inputs count ({len(_basic_prices_by_idx)}) != basic items count ({len(t2_items_data)})"
+    )
+    _raw_basic_t2_items = list(t2_items_data)
+    _basic_calc_guide_list = _build_basic_items_calc_guide_data(_raw_basic_t2_items)
+    _basic_calc_guide_json = json.dumps(_basic_calc_guide_list, ensure_ascii=False).replace("</", "<\\/")
     _boq_deleted_items, _boq_excluded_ids = _get_boq_deleted_state()
     _boq_excluded_set = set(_boq_excluded_ids)
     _manual_items_raw = _get_manual_boq_items_list()
@@ -16305,6 +16984,30 @@ def _section_plaster_boq():
     background: rgba(234, 88, 12, 0.45);
     color: #ffffff;
     box-shadow: 0 0 6px rgba(249, 115, 22, 0.45);
+  }}
+  .boq-calc-guide-btn {{
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    border: 1.5px solid #38bdf8;
+    color: #ffffff;
+    font-weight: 900;
+    font-size: 0.66rem;
+    padding: 4px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    font-family: inherit;
+    box-shadow: 0 2px 10px rgba(14, 165, 233, 0.38);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+  }}
+  .boq-calc-guide-btn:hover {{
+    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    border-color: #7dd3fc;
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(56, 189, 248, 0.55);
+    transform: translateY(-1px);
   }}
   .boq-save-status {{
     font-size: 0.54rem;
@@ -16725,6 +17428,9 @@ def _section_plaster_boq():
             </div>
             <div class="boq-actions-group">
                 <span id="boq-save-indicator" class="boq-save-status">💾 تم حفظ التعديل</span>
+                <button type="button" id="boq-calc-guide-btn" class="boq-calc-guide-btn" title="عرض شرح مبسط لطريقة حساب كل بند من البنود الأساسية">
+                    📐 طريقة حساب البنود الاساسية
+                </button>
                 <button type="button" id="boq-reset-dims-btn" class="boq-reset-btn" title="إعادة ضبط عرض الأعمدة وارتفاع الصفوف للوضع الافتراضي">
                     ↺ إعادة ضبط مقاسات الجدول
                 </button>
@@ -17133,6 +17839,178 @@ def _section_plaster_boq():
         }});
     }}
 
+    // ── نافذة شرح طريقة حساب البنود الأساسية (متابعة ديناميكية لجميع البنود الأساسية الحالية والمستقبلية) ──
+    const BASIC_CALC_GUIDE_ITEMS = {_basic_calc_guide_json};
+    const CUR_PLASTER_QTY_FACTOR = {plaster_qty_factor:.2f};
+
+    function showBasicItemsCalcGuideModal() {{
+        const targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+        const MODAL_ID = 'm15-boq-basic-calc-guide-modal';
+        const existing = targetDoc.getElementById(MODAL_ID);
+        if (existing) existing.remove();
+
+        const backdrop = targetDoc.createElement('div');
+        backdrop.id = MODAL_ID;
+        backdrop.setAttribute('dir', 'rtl');
+        backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(2,6,23,0.78);backdrop-filter:blur(5px);z-index:9999999;display:flex;align-items:center;justify-content:center;padding:18px;font-family:Segoe UI,Cairo,Tahoma,sans-serif;direction:rtl;';
+
+        const dialog = targetDoc.createElement('div');
+        dialog.style.cssText = 'width:100%;max-width:860px;max-height:86vh;display:flex;flex-direction:column;background:linear-gradient(155deg,#0f172a 0%,#1e293b 100%);border:2px solid #38bdf8;border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,0.72),0 0 28px rgba(56,189,248,0.24);color:#f8fafc;overflow:hidden;text-align:right;direction:rtl;';
+
+        // Header
+        const header = targetDoc.createElement('div');
+        header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 22px;background:linear-gradient(90deg,rgba(2,132,199,0.28) 0%,rgba(15,23,42,0.95) 100%);border-bottom:1.5px solid rgba(56,189,248,0.40);flex-shrink:0;';
+
+        const titleWrap = targetDoc.createElement('div');
+        titleWrap.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
+
+        const titleEl = targetDoc.createElement('div');
+        titleEl.style.cssText = 'font-size:1.22rem;font-weight:900;color:#7dd3fc;';
+        titleEl.textContent = '📐 طريقة حساب البنود الأساسية للمقايسة';
+
+        const countBadge = targetDoc.createElement('span');
+        countBadge.style.cssText = 'background:rgba(56,189,248,0.18);border:1px solid rgba(56,189,248,0.55);color:#e0f2fe;font-size:0.84rem;font-weight:800;padding:3px 10px;border-radius:999px;';
+        countBadge.textContent = BASIC_CALC_GUIDE_ITEMS.length + ' بند أساسي';
+
+        titleWrap.appendChild(titleEl);
+        titleWrap.appendChild(countBadge);
+
+        const closeTopBtn = targetDoc.createElement('button');
+        closeTopBtn.type = 'button';
+        closeTopBtn.textContent = '✕ إغلاق';
+        closeTopBtn.style.cssText = 'padding:6px 14px;border-radius:8px;border:1.5px solid rgba(248,113,113,0.65);background:rgba(220,38,38,0.22);color:#fecaca;font-size:0.92rem;font-weight:900;cursor:pointer;font-family:inherit;white-space:nowrap;';
+
+        header.appendChild(titleWrap);
+        header.appendChild(closeTopBtn);
+
+        // Search + General Note Bar
+        const subBar = targetDoc.createElement('div');
+        subBar.style.cssText = 'padding:12px 22px;background:rgba(15,23,42,0.75);border-bottom:1px solid rgba(148,163,184,0.22);display:flex;flex-direction:column;gap:10px;flex-shrink:0;';
+
+        const noteBox = targetDoc.createElement('div');
+        noteBox.style.cssText = 'background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.45);border-right:4px solid #f59e0b;border-radius:8px;padding:8px 12px;color:#fde68a;font-size:0.92rem;font-weight:700;line-height:1.6;';
+        noteBox.textContent = '💡 ملحوظة عامة: يتم حساب الكمية الصافية لكل بند كما هو موضح أدناه، ثم تُضرب في «معامل الزيادة العام للكميات» (حالياً × ' + CUR_PLASTER_QTY_FACTOR.toFixed(2) + ') للحصول على الكمية الإجمالية المعتمدة بالجدول المجمع.';
+
+        const searchInput = targetDoc.createElement('input');
+        searchInput.type = 'text';
+        searchInput.placeholder = '🔍 ابحث باسم البند أو رقمه (مثال: العزل، سيراميك، طوب، 16)...';
+        searchInput.setAttribute('dir', 'rtl');
+        searchInput.style.cssText = 'width:100%;box-sizing:border-box;padding:9px 14px;border-radius:9px;border:1.5px solid rgba(56,189,248,0.45);background:#0b1220;color:#f8fafc;font-size:0.95rem;font-weight:700;outline:none;font-family:inherit;text-align:right;';
+
+        subBar.appendChild(noteBox);
+        subBar.appendChild(searchInput);
+
+        // Scrollable Cards Container
+        const body = targetDoc.createElement('div');
+        body.style.cssText = 'padding:16px 22px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:11px;';
+
+        function renderGuideCards(filterText) {{
+            body.innerHTML = '';
+            const q = (filterText || '').trim().toLowerCase();
+            const filtered = BASIC_CALC_GUIDE_ITEMS.filter(function(item) {{
+                if (!q) return true;
+                return (
+                    String(item.idx).indexOf(q) !== -1 ||
+                    String(item.name || '').toLowerCase().indexOf(q) !== -1 ||
+                    String(item.explanation || '').toLowerCase().indexOf(q) !== -1 ||
+                    String(item.unit || '').toLowerCase().indexOf(q) !== -1
+                );
+            }});
+
+            if (filtered.length === 0) {{
+                const emptyDiv = targetDoc.createElement('div');
+                emptyDiv.style.cssText = 'text-align:center;padding:28px 12px;color:#94a3b8;font-size:1rem;font-weight:700;';
+                emptyDiv.textContent = 'لا توجد بنود مطابقة لعبارة البحث الحالية.';
+                body.appendChild(emptyDiv);
+                return;
+            }}
+
+            filtered.forEach(function(item) {{
+                const card = targetDoc.createElement('div');
+                card.style.cssText = 'background:rgba(15,23,42,0.82);border:1px solid rgba(148,163,184,0.25);border-right:4px solid #fb923c;border-radius:10px;padding:12px 16px;box-shadow:0 4px 12px rgba(0,0,0,0.22);';
+
+                const cardTop = targetDoc.createElement('div');
+                cardTop.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px;flex-wrap:wrap;';
+
+                const leftTitle = targetDoc.createElement('div');
+                leftTitle.style.cssText = 'display:flex;align-items:center;gap:9px;flex:1;min-width:200px;';
+
+                const numBadge = targetDoc.createElement('span');
+                numBadge.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 7px;border-radius:8px;background:linear-gradient(135deg,#ea580c 0%,#c2410c 100%);color:#ffffff;font-size:0.88rem;font-weight:900;flex-shrink:0;';
+                numBadge.textContent = String(item.idx);
+
+                const nameEl = targetDoc.createElement('span');
+                nameEl.style.cssText = 'font-size:1.02rem;font-weight:900;color:#fed7aa;line-height:1.45;';
+                nameEl.textContent = item.name;
+
+                leftTitle.appendChild(numBadge);
+                leftTitle.appendChild(nameEl);
+
+                const unitBadge = targetDoc.createElement('span');
+                unitBadge.style.cssText = 'background:rgba(16,185,129,0.16);border:1px solid rgba(52,211,153,0.45);color:#6ee7b7;font-size:0.82rem;font-weight:800;padding:3px 10px;border-radius:6px;white-space:nowrap;';
+                unitBadge.textContent = 'الوحدة: ' + (item.unit || '—');
+
+                cardTop.appendChild(leftTitle);
+                cardTop.appendChild(unitBadge);
+
+                const expEl = targetDoc.createElement('div');
+                expEl.style.cssText = 'font-size:0.96rem;font-weight:600;color:#e2e8f0;line-height:1.75;padding-right:37px;';
+                expEl.textContent = item.explanation;
+
+                card.appendChild(cardTop);
+                card.appendChild(expEl);
+                body.appendChild(card);
+            }});
+        }}
+
+        renderGuideCards('');
+        searchInput.addEventListener('input', function() {{
+            renderGuideCards(searchInput.value);
+        }});
+
+        // Footer
+        const footer = targetDoc.createElement('div');
+        footer.style.cssText = 'padding:12px 22px;background:rgba(15,23,42,0.92);border-top:1px solid rgba(148,163,184,0.22);display:flex;justify-content:flex-end;flex-shrink:0;';
+
+        const closeBotBtn = targetDoc.createElement('button');
+        closeBotBtn.type = 'button';
+        closeBotBtn.textContent = '✕ إغلاق الشاشة';
+        closeBotBtn.style.cssText = 'padding:8px 22px;border-radius:9px;border:1.5px solid #38bdf8;background:linear-gradient(135deg,#0284c7 0%,#0369a1 100%);color:#ffffff;font-size:0.96rem;font-weight:900;cursor:pointer;font-family:inherit;box-shadow:0 4px 12px rgba(2,132,199,0.4);';
+
+        footer.appendChild(closeBotBtn);
+
+        function onKeyDown(ev) {{
+            if (ev.key === 'Escape') closeModal();
+        }}
+        function closeModal() {{
+            try {{ targetDoc.removeEventListener('keydown', onKeyDown); }} catch(e) {{}}
+            try {{ backdrop.remove(); }} catch(e) {{}}
+        }}
+
+        targetDoc.addEventListener('keydown', onKeyDown);
+        closeTopBtn.addEventListener('click', closeModal);
+        closeBotBtn.addEventListener('click', closeModal);
+        backdrop.addEventListener('click', function(ev) {{
+            if (ev.target === backdrop) closeModal();
+        }});
+
+        dialog.appendChild(header);
+        dialog.appendChild(subBar);
+        dialog.appendChild(body);
+        dialog.appendChild(footer);
+        backdrop.appendChild(dialog);
+        targetDoc.body.appendChild(backdrop);
+    }}
+
+    const calcGuideBtn = document.getElementById('boq-calc-guide-btn');
+    if (calcGuideBtn) {{
+        calcGuideBtn.addEventListener('click', function(e) {{
+            e.preventDefault();
+            e.stopPropagation();
+            showBasicItemsCalcGuideModal();
+        }});
+    }}
+
     // ── مزامنة تعديلات عمود «توصيف البند» مع Streamlit عند الخروج من الخلية (Blur) فقط ──
     let activeFocusedEditor = null;
 
@@ -17453,9 +18331,6 @@ def _section_plaster_boq():
     )
     _manual_deleted_list = [d for d in _boq_deleted_items if d.get("source_type") == "manual"]
 
-    if st.session_state.pop("_m15_play_reset_design_beep", False):
-        _play_boq_warning_beep("reset_design")
-
     st.markdown(
         """
         <style>
@@ -17500,34 +18375,52 @@ def _section_plaster_boq():
         unsafe_allow_html=True,
     )
 
-    def _cb_reset_design_items():
-        _cur_del, _cur_exc = _get_boq_deleted_state()
-        _new_exc = [x for x in _cur_exc if str(x).startswith("manual_")]
-        _new_del = [x for x in _cur_del if str(x.get("source_type")) == "manual"]
-        _persist_boq_deleted_state(_new_del, _new_exc)
-        st.session_state["_m15_boq_table_ver"] = st.session_state.get("_m15_boq_table_ver", 0) + 1
-        st.session_state.pop("_m15_confirm_reset_design_items", None)
-        st.session_state.pop("_m15_confirm_perm_clear_auto_log", None)
-        st.session_state["_m15_play_reset_design_beep"] = True
-        st.session_state["_m15_center_green_toast_msg"] = "✨ لقد تم استرجاع جميع بنود التصميم الاساسية بنجاح"
-        st.session_state["_m15_keep_manual_expander_open"] = True
+    def _cb_ask_reset_design_items():
+        st.session_state["m15_boq_main_expander"] = True
+        st.session_state["_m15_boq_confirm_modal"] = {
+            "token": f"reset_design_items_{int(time.time() * 1000)}",
+            "title": "⚠️ تأكيد استعادة جميع بنود التصميم",
+            "message": "هل أنت متأكد من استعادة وحساب جميع بنود التصميم الأساسية في الجدول المجمع؟ (مع الحفاظ التام على جميع البنود اليدوية).",
+            "confirm_label": "✅ تأكيد الاستعادة",
+            "cancel_label": "❌ إلغاء",
+            "loading_label": "⏳ جارٍ الاستعادة...",
+            "payload": {
+                "action": "boq_confirm_action",
+                "sub_action": "reset_design_items",
+            },
+        }
 
-    def _cb_restore_manual_item(_target_id: str, _target_name: str):
-        _cur_del, _cur_exc = _get_boq_deleted_state()
-        _new_del = [x for x in _cur_del if str(x.get("item_id")) != _target_id]
-        _new_exc = [x for x in _cur_exc if x != _target_id]
-        _persist_boq_deleted_state(_new_del, _new_exc)
-        st.session_state["_m15_boq_table_ver"] = st.session_state.get("_m15_boq_table_ver", 0) + 1
-        st.session_state["_m15_keep_manual_expander_open"] = True
-        st.session_state["_m15_center_green_toast_msg"] = f"↩️ تمت استعادة البند اليدوي «{_target_name}» إلى الجدول المجمع بنجاح"
+    def _cb_ask_restore_manual_item(_target_id: str, _target_name: str):
+        st.session_state["m15_boq_main_expander"] = True
+        st.session_state["_m15_boq_confirm_modal"] = {
+            "token": f"restore_manual_{_target_id}_{int(time.time() * 1000)}",
+            "title": "⚠️ تأكيد استعادة البند اليدوي",
+            "message": f"هل أنت متأكد من استعادة البند اليدوي: [{_target_name}] إلى الجدول المجمع؟",
+            "confirm_label": "✅ تأكيد الاستعادة",
+            "cancel_label": "❌ إلغاء",
+            "loading_label": "⏳ جارٍ الاستعادة...",
+            "payload": {
+                "action": "boq_confirm_action",
+                "sub_action": "restore_manual_item",
+                "item_id": _target_id,
+                "item_name": _target_name,
+            },
+        }
 
-    def _cb_clear_manual_del_log():
-        _cur_del, _cur_exc = _get_boq_deleted_state()
-        _new_del = [x for x in _cur_del if str(x.get("source_type")) != "manual"]
-        _persist_boq_deleted_state(_new_del, _cur_exc)
-        st.session_state["_m15_boq_table_ver"] = st.session_state.get("_m15_boq_table_ver", 0) + 1
-        st.session_state["_m15_keep_manual_expander_open"] = True
-        st.session_state["_m15_center_green_toast_msg"] = "🗑️ تم مسح وتفريغ سجل المحذوفات اليدوية بنجاح."
+    def _cb_ask_clear_manual_del_log():
+        st.session_state["m15_boq_main_expander"] = True
+        st.session_state["_m15_boq_confirm_modal"] = {
+            "token": f"clear_manual_del_log_{int(time.time() * 1000)}",
+            "title": "⚠️ تأكيد مسح سجل المحذوفات اليدوية",
+            "message": "هل أنت متأكد من مسح وتفريغ سجل البنود اليدوية المحذوفة نهائياً؟",
+            "confirm_label": "✅ تأكيد المسح",
+            "cancel_label": "❌ إلغاء",
+            "loading_label": "⏳ جارٍ المسح...",
+            "payload": {
+                "action": "boq_confirm_action",
+                "sub_action": "clear_manual_del_log",
+            },
+        }
 
     _bot_bar_c1, _bot_bar_c2 = st.columns([1.15, 1.0], gap="small")
     with _bot_bar_c1:
@@ -17536,7 +18429,7 @@ def _section_plaster_boq():
             key="m15_reset_design_items_btn",
             use_container_width=True,
             help="إعادة حساب وتنزيل جميع بنود التصميم الأساسية بالكامل في الجدول المجمع مع الحفاظ التام على البنود اليدوية",
-            on_click=_cb_reset_design_items,
+            on_click=_cb_ask_reset_design_items,
         )
 
     with _bot_bar_c2:
@@ -17569,7 +18462,7 @@ def _section_plaster_boq():
                             "↩️ استعادة",
                             key=f"m15_restore_man_{_m_del_id}",
                             use_container_width=True,
-                            on_click=_cb_restore_manual_item,
+                            on_click=_cb_ask_restore_manual_item,
                             args=(_m_del_id, _m_del_name),
                         )
                 st.markdown("<hr style='margin:8px 0; border-color:rgba(148,163,184,0.25);'>", unsafe_allow_html=True)
@@ -17577,8 +18470,8 @@ def _section_plaster_boq():
                     "🗑️ مسح سجل المحذوفات اليدوية",
                     key="m15_clear_manual_del_direct_btn",
                     use_container_width=True,
-                    help="تفريغ سجل البنود اليدوية المحذوفة مباشرة بضغطة واحدة بدون رسالة تأكيد",
-                    on_click=_cb_clear_manual_del_log,
+                    help="تفريغ سجل البنود اليدوية المحذوفة بعد تأكيد المستخدم",
+                    on_click=_cb_ask_clear_manual_del_log,
                 )
             else:
                 st.markdown(
@@ -17607,40 +18500,41 @@ def _section_plaster_boq():
         if st.session_state.get("m15_auto_excluded_sel") not in _auto_opt_labels:
             st.session_state["m15_auto_excluded_sel"] = _placeholder_auto_lbl
 
-        def _cb_restore_selected_auto_item():
+        def _cb_ask_restore_selected_auto_item():
             _chosen_lbl = st.session_state.get("m15_auto_excluded_sel", _placeholder_auto_lbl)
             if _chosen_lbl not in _auto_opt_map:
                 return
             _target_id, _target_name = _auto_opt_map[_chosen_lbl]
-            _cur_del, _cur_exc = _get_boq_deleted_state()
-            _new_del = [x for x in _cur_del if str(x.get("item_id")) != _target_id]
-            _new_exc = [x for x in _cur_exc if x != _target_id]
-            _persist_boq_deleted_state(_new_del, _new_exc)
-            st.session_state["m15_auto_excluded_sel"] = _placeholder_auto_lbl
-            st.session_state["_m15_boq_table_ver"] = st.session_state.get("_m15_boq_table_ver", 0) + 1
-            st.session_state["_m15_keep_manual_expander_open"] = True
-            st.session_state["_m15_center_green_toast_msg"] = "✅ تم استعادة البند المحذوف من البنود الأساسية"
-            st.session_state["_m15_center_green_toast_dur"] = 3.0
+            st.session_state["m15_boq_main_expander"] = True
+            st.session_state["_m15_boq_confirm_modal"] = {
+                "token": f"restore_auto_{_target_id}_{int(time.time() * 1000)}",
+                "title": "⚠️ تأكيد استعادة البند الأساسي",
+                "message": f"هل أنت متأكد من استعادة البند الأساسي: [{_target_name}] إلى الجدول المجمع؟",
+                "confirm_label": "✅ تأكيد الاستعادة",
+                "cancel_label": "❌ إلغاء",
+                "loading_label": "⏳ جارٍ الاستعادة...",
+                "payload": {
+                    "action": "boq_confirm_action",
+                    "sub_action": "restore_auto_item",
+                    "item_id": _target_id,
+                    "item_name": _target_name,
+                },
+            }
 
         def _cb_ask_perm_clear_auto_log():
-            st.session_state["_m15_confirm_perm_clear_auto_log"] = True
-            st.session_state["_m15_play_perm_clear_beep"] = True
-            st.session_state["_m15_keep_manual_expander_open"] = True
-
-        def _cb_confirm_perm_clear_auto_log():
-            _cur_del, _cur_exc = _get_boq_deleted_state()
-            _new_del = [x for x in _cur_del if x.get("source_type") != "auto_calculated"]
-            _persist_boq_deleted_state(_new_del, _cur_exc)
-            st.session_state["m15_auto_excluded_sel"] = _placeholder_auto_lbl
-            st.session_state["_m15_boq_table_ver"] = st.session_state.get("_m15_boq_table_ver", 0) + 1
-            st.session_state.pop("_m15_confirm_perm_clear_auto_log", None)
-            st.session_state["_m15_keep_manual_expander_open"] = True
-            st.session_state["_m15_center_green_toast_msg"] = '🗑️ تم الحذف النهائي لجميع البنود .. لاستعادة جميع البنود الأساسية اضغط زر "🔄 استعادة وحساب جميع بنود التصميم"'
-            st.session_state["_m15_center_green_toast_dur"] = 3.0
-
-        def _cb_cancel_perm_clear_auto_log():
-            st.session_state.pop("_m15_confirm_perm_clear_auto_log", None)
-            st.session_state["_m15_keep_manual_expander_open"] = True
+            st.session_state["m15_boq_main_expander"] = True
+            st.session_state["_m15_boq_confirm_modal"] = {
+                "token": f"perm_clear_auto_{int(time.time() * 1000)}",
+                "title": "⚠️ تأكيد الحذف النهائي لسجل البنود المستبعدة",
+                "message": "هل أنت متأكد من الحذف النهائي لسجل البنود المستبعدة وإفراغه؟ (يمكنك دائماً استعادة جميع بنود التصميم لاحقاً عبر زر «🔄 استعادة وحساب جميع بنود التصميم»).",
+                "confirm_label": "✅ تأكيد الحذف النهائي",
+                "cancel_label": "❌ إلغاء",
+                "loading_label": "⏳ جارٍ الحذف...",
+                "payload": {
+                    "action": "boq_confirm_action",
+                    "sub_action": "perm_clear_auto_log",
+                },
+            }
 
         st.markdown(
             """
@@ -17675,7 +18569,7 @@ def _section_plaster_boq():
                 type="primary",
                 use_container_width=True,
                 disabled=(_sel_auto_lbl == _placeholder_auto_lbl),
-                on_click=_cb_restore_selected_auto_item,
+                on_click=_cb_ask_restore_selected_auto_item,
             )
         with _ad_c3:
             st.button(
@@ -17686,34 +18580,8 @@ def _section_plaster_boq():
                 on_click=_cb_ask_perm_clear_auto_log,
             )
 
-        if st.session_state.get("_m15_confirm_perm_clear_auto_log", False):
-            if st.session_state.pop("_m15_play_perm_clear_beep", False):
-                _play_boq_warning_beep("perm_clear_auto")
-            st.markdown(
-                """
-                <div dir="rtl" style="background:rgba(220,38,38,0.18); border:1.5px solid #ef4444;
-                     border-radius:8px; padding:10px 14px; margin-top:6px; margin-bottom:8px; color:#fecaca; font-weight:800; font-size:0.96rem;">
-                    ⚠️ هل أنت متأكد من الحذف النهائي لسجل البنود المستبعدة وإفراغه؟ (يمكنك دائماً استعادة جميع بنود التصميم لاحقاً عبر زر «🔄 استعادة وحساب جميع بنود التصميم»).
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            _pc1, _pc2 = st.columns(2, gap="small")
-            with _pc1:
-                st.button(
-                    "✅ تأكيد الحذف النهائي لجميع البنود",
-                    key="m15_confirm_perm_clear_yes",
-                    type="primary",
-                    use_container_width=True,
-                    on_click=_cb_confirm_perm_clear_auto_log,
-                )
-            with _pc2:
-                st.button(
-                    "❌ إلغاء",
-                    key="m15_confirm_perm_clear_no",
-                    use_container_width=True,
-                    on_click=_cb_cancel_perm_clear_auto_log,
-                )
+    # ── عرض نافذة التأكيد المركزية بالصفارة لأي إجراء يتطلب تأكيد المستخدم داخل هذا القسم ──
+    _render_boq_confirm_modal()
 
     # ── تنسيق رؤوس أقسام المقايسة وحصر المواد: كتابة سوداء بخلفية بيضاء ──
     st.markdown(
@@ -24113,8 +24981,25 @@ def _trigger_browser_download(file_bytes: bytes, filename: str):
 def _section_export_pdf():
     """
     قسم حفظ وتصدير مخرجات الموديول 15 (أعمال المباني والمحارة) كملف PDF وملف HTML مستقل.
-    يقع بعد جميع أقسام الموديول.
+    يقع بعد جميع أقسام الموديول ويستخدم Lazy Loading لتسريع فتح المشروع.
     """
+    with st.expander(
+        "تصدير ملفات المدخلات والمخرجات",
+        expanded=False,
+        key="m15_export_pdf_expander",
+        on_change="rerun",
+    ):
+        if not st.session_state.get("m15_export_pdf_expander", False):
+            st.info(
+                "💡 **الوضع الخفيف (Lazy Loading):** قسم تصدير ملفات PDF و HTML و Excel في وضع السكون لتسريع فتح المشروع.\n\n"
+                "انقر على عنوان هذا القسم لتوسيعه وتجهيز ملفات التصدير فوراً."
+            )
+            return
+        _render_export_pdf_body()
+
+
+def _render_export_pdf_body():
+    """المحتوى الفعلي لقسم تصدير ملفات PDF و HTML و Excel (يُنفَّذ عند فتح القسم فقط)."""
     from modules.report_generator import (
         generate_masonry_plaster_report_html,
         generate_masonry_plaster_concise_survey_report_html,
@@ -24579,8 +25464,8 @@ def _section_export_pdf():
         desc_keys=boq_calc_concise.get("desc_keys"),
     )
 
-    # 1. قسم "تصدير ملفات المدخلات والمخرجات" يظهر كـ Expander مطوي افتراضياً
-    with st.expander("تصدير ملفات المدخلات والمخرجات", expanded=False):
+    # 1. عرض أزرار التصدير داخل الـ Expander المفتوح
+    with st.container():
         # ثلاثة أزرار رئيسية متناسقة بعرض متساوٍ (PDF + HTML + EXCEL)
         c_exp1, c_exp2, c_exp3 = st.columns([1, 1, 1], gap="medium")
 
@@ -24683,10 +25568,10 @@ def render_masonry_plaster_module():
     is_add_win_active = bool(st.session_state.get("m15_add_win_mode", False))
     is_add_door_active = bool(st.session_state.get("m15_add_door_mode", False))
 
-    # ── تفعيل تحديد ونسخ أسماء جميع الأزرار بالمرور بالماوس في كامل الموديول 15 ──
+    # ── تفعيل تحديد ونسخ أسماء جميع الأزرار والتبويبات (Tabs & Expanders) بالماوس في كامل الموديول 15 ──
     st.markdown(
         """<style>
-        /* تمكين تحديد ونسخ نصوص جميع الأزرار بالماوس في كامل Module 15 */
+        /* تمكين تحديد ونسخ نصوص جميع الأزرار والتبويبات والأقسام القابلة للطي بالماوس في كامل Module 15 */
         button,
         button *,
         [data-testid="stButton"] button,
@@ -24700,7 +25585,19 @@ def render_masonry_plaster_module():
         .stButton button,
         .stButton button *,
         .stDownloadButton button,
-        .stDownloadButton button * {
+        .stDownloadButton button *,
+        summary,
+        summary *,
+        [data-testid="stExpander"] summary,
+        [data-testid="stExpander"] summary *,
+        [data-testid="stExpander"] summary p,
+        [data-testid="stExpander"] summary span,
+        [data-testid="stTabs"] [role="tab"],
+        [data-testid="stTabs"] [role="tab"] *,
+        button[data-baseweb="tab"],
+        button[data-baseweb="tab"] *,
+        [role="tablist"] [role="tab"],
+        [role="tablist"] [role="tab"] * {
             user-select: text !important;
             -webkit-user-select: text !important;
             -moz-user-select: text !important;
@@ -24720,13 +25617,23 @@ def render_masonry_plaster_module():
             user-select: text !important;
             -webkit-user-select: text !important;
         }
+        [data-testid="stExpander"] summary p,
+        [data-testid="stExpander"] summary span,
+        [data-testid="stTabs"] [role="tab"] p,
+        [data-testid="stTabs"] [role="tab"] span,
+        button[data-baseweb="tab"] p,
+        button[data-baseweb="tab"] span {
+            cursor: text !important;
+            user-select: text !important;
+            -webkit-user-select: text !important;
+        }
         </style>""",
         unsafe_allow_html=True
     )
     render_html_iframe(
         """<script>
         (function() {
-            function enableBtnTextCopy() {
+            function enableBtnAndTabTextCopy() {
                 try {
                     var pWin = window.parent || window;
                     var doc = (window.parent && window.parent.document) ? window.parent.document : document;
@@ -24745,6 +25652,28 @@ def render_masonry_plaster_module():
                                 el.style.userSelect = 'text';
                                 el.style.webkitUserSelect = 'text';
                                 el.style.cursor = 'pointer';
+                            });
+                        }
+                    });
+                    // تمكين تحديد ونسخ أسماء جميع التبويبات (Tabs & Expanders) بالماوس
+                    var tabsAndExpanders = doc.querySelectorAll(
+                        'summary, [data-testid="stExpander"] summary, [data-testid="stTabs"] [role="tab"], button[data-baseweb="tab"], [role="tablist"] [role="tab"]'
+                    );
+                    tabsAndExpanders.forEach(function(el) {
+                        var txt = (el.innerText || el.textContent || '').trim();
+                        if (txt) {
+                            if (!el.getAttribute('title')) {
+                                el.setAttribute('title', txt);
+                            }
+                            el.style.userSelect = 'text';
+                            el.style.webkitUserSelect = 'text';
+                            var inners = el.querySelectorAll('p, span, div');
+                            inners.forEach(function(inner) {
+                                inner.style.userSelect = 'text';
+                                inner.style.webkitUserSelect = 'text';
+                                if (inner.tagName === 'P' || inner.tagName === 'SPAN') {
+                                    inner.style.cursor = 'text';
+                                }
                             });
                         }
                     });
@@ -24786,13 +25715,58 @@ def render_masonry_plaster_module():
                             activeBtn = null;
                         }, true);
                     }
+                    // منع فتح/طي التبويبة أو تبديلها أثناء سحب الماوس أو النقر المزدوج لتحديد ونسخ اسمها
+                    if (!pWin.__ecpGlobalTabExpanderCopyGuardInstalled) {
+                        pWin.__ecpGlobalTabExpanderCopyGuardInstalled = true;
+                        var tDownX = 0, tDownY = 0, tDidDrag = false, tActiveEl = null;
+                        var tabExpSel = 'summary, [data-testid="stExpander"] summary, [role="tab"], [data-baseweb="tab"]';
+                        doc.addEventListener('mousedown', function(e) {
+                            var el = e.target && e.target.closest ? e.target.closest(tabExpSel) : null;
+                            if (el) {
+                                tActiveEl = el;
+                                tDownX = e.clientX;
+                                tDownY = e.clientY;
+                                tDidDrag = false;
+                            } else {
+                                tActiveEl = null;
+                                tDidDrag = false;
+                            }
+                        }, true);
+                        doc.addEventListener('mousemove', function(e) {
+                            if (tActiveEl && (e.buttons & 1)) {
+                                if (Math.hypot(e.clientX - tDownX, e.clientY - tDownY) > 4) {
+                                    tDidDrag = true;
+                                }
+                            }
+                        }, true);
+                        doc.addEventListener('click', function(e) {
+                            var el = e.target && e.target.closest ? e.target.closest(tabExpSel) : null;
+                            if (!el) return;
+                            var hasSelInside = false;
+                            try {
+                                var selObj = pWin.getSelection ? pWin.getSelection() : null;
+                                var selTxt = selObj ? selObj.toString().trim() : '';
+                                if (selTxt.length > 0 && selObj && selObj.anchorNode && el.contains(selObj.anchorNode)) {
+                                    hasSelInside = true;
+                                }
+                            } catch(err) {}
+                            if (tDidDrag || hasSelInside) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                e.stopImmediatePropagation();
+                            }
+                            tDidDrag = false;
+                            tActiveEl = null;
+                        }, true);
+                    }
                 } catch(e) {}
             }
-            enableBtnTextCopy();
+            enableBtnAndTabTextCopy();
             var _pWinM15 = window.parent || window;
-            if (!_pWinM15.__ecpGlobalBtnCopyInterval) {
-                _pWinM15.__ecpGlobalBtnCopyInterval = _pWinM15.setInterval(enableBtnTextCopy, 800);
+            if (_pWinM15.__ecpGlobalBtnCopyInterval) {
+                try { _pWinM15.clearInterval(_pWinM15.__ecpGlobalBtnCopyInterval); } catch(err) {}
             }
+            _pWinM15.__ecpGlobalBtnCopyInterval = _pWinM15.setInterval(enableBtnAndTabTextCopy, 800);
         })();
         </script>""",
         height=1,
