@@ -1,0 +1,191 @@
+[
+  {
+    "item_key": "item_1",
+    "rate_key": "m15_rate_brick_12",
+    "name": "1- بند طوب أحمر تخانة نصف طوبة 12 سم (يشمل الحوائط ودروة السطح)",
+    "unit": "م² (m²)",
+    "unit_price": 160.0,
+    "description": "مححححححارة هذه المساحة ستكون هي المساحات التي تمثل حوائط سيراميك الحمامات ويتم حصرها وادراج القيم مباشرة في جداول القسم",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_2",
+    "rate_key": "m15_rate_brick_25",
+    "name": "2- بند طوب أحمر تخانة طوبة 25 سم (يشمل الحوائط ودروة السطح)",
+    "unit": "م³ (m³)",
+    "unit_price": 1900.0,
+    "description": "الدهانات الداخلية للسقف (تساوي تماماً مسطح المبنى بعد خصم المنور)",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_3",
+    "rate_key": "m15_rate_ceiling_plaster",
+    "name": "3- كمية المحارة الداخلية بالسقف بالمتر المسطح (تساوي تماماً مسطح المبنى بعد خصم المنور)",
+    "unit": "م² (m²)",
+    "unit_price": 95.0,
+    "description": "المحارة للحوائط بالمتر المسطح",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_4",
+    "rate_key": "m15_rate_ceiling_paint",
+    "name": "4- كمية الدهانات الداخلية للسقف (تساوي تماماً مسطح المبنى بعد خصم المنور)",
+    "unit": "م² (m²)",
+    "unit_price": 80.0,
+    "description": "nan",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_5",
+    "rate_key": "m15_rate_wall_plaster",
+    "name": "5- كمية المحارة للحوائط بالمتر المسطح",
+    "unit": "م² (m²)",
+    "unit_price": 90.0,
+    "description": "nan ؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤؤ",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_6",
+    "rate_key": "m15_rate_wall_paint",
+    "name": "6- كمية الدهانات الداخلية للحوائط بالمتر المسطح",
+    "unit": "م² (m²)",
+    "unit_price": 75.0,
+    "description": "nan",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_7",
+    "rate_key": "m15_rate_facade_plaster",
+    "name": "7- كمية المحارة الخارجية (الواجهات والدروة من الجانبين)",
+    "unit": "م² (m²)",
+    "unit_price": 140.0,
+    "description": "nan",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_8",
+    "rate_key": "m15_rate_facade_paint",
+    "name": "8- كمية الدهانات الخارجية (الواجهات والدروة من الجانبين)",
+    "unit": "م² (m²)",
+    "unit_price": 110.0,
+    "description": "nan",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_9",
+    "rate_key": "m15_rate_floor_ceramic",
+    "name": "9- كمية سيراميك الأرضيات (Floor Ceramic Tiles)",
+    "unit": "م² (m²)",
+    "unit_price": 260.0,
+    "description": "nan",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_10",
+    "rate_key": "m15_rate_bath_floor_ceramic",
+    "name": "10- كمية سيراميك الحمامات (أرضيات)",
+    "unit": "م² (m²)",
+    "unit_price": 290.0,
+    "description": "nan",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_11",
+    "rate_key": "m15_rate_kitchen_floor_ceramic",
+    "name": "11- كمية سيراميك المطابخ (أرضيات)",
+    "unit": "م² (m²)",
+    "unit_price": 290.0,
+    "description": "nan",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_12",
+    "rate_key": "m15_rate_bath_wall_ceramic",
+    "name": "12- كمية سيراميك الحوائط للحمامات",
+    "unit": "م² (m²)",
+    "unit_price": 290.0,
+    "description": "nan",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_13",
+    "rate_key": "m15_rate_kitchen_wall_ceramic",
+    "name": "13- كمية سيراميك الحوائط للمطابخ",
+    "unit": "م² (m²)",
+    "unit_price": 290.0,
+    "description": "nan",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_14",
+    "rate_key": "m15_rate_interlock",
+    "name": "14- انترلوك ارصفة (مساحة انترلوك الأرصفة)",
+    "unit": "م² (m²)",
+    "unit_price": 220.0,
+    "description": "nan",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_15",
+    "rate_key": "m15_rate_curbs",
+    "name": "15- بردورة أرصفة (إجمالي طول البردورات)",
+    "unit": "م.ط (m)",
+    "unit_price": 160.0,
+    "description": "nan",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_16",
+    "rate_key": "m15_rate_waterproof",
+    "name": "16- بند العزل المائي للسطح (انسومات)",
+    "unit": "م² (m²)",
+    "unit_price": 170.0,
+    "description": "nan",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_17",
+    "rate_key": "m15_rate_thermal",
+    "name": "17- عازل حراري",
+    "unit": "م² (m²)",
+    "unit_price": 130.0,
+    "description": "17- بلاط اسطح17- بلاط اسطح17- بلاط اسطح17- بلاط اسطح",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_18",
+    "rate_key": "m15_rate_roof_tiles",
+    "name": "18- بلاط اسطح",
+    "unit": "م² (m²)",
+    "unit_price": 150.0,
+    "description": "بالمتر المسطح، توريد وتركيب شبابيك ألوميتال للواجهات والمساقط قطاع معتمد (جامبو/بي اس أو ما يماثله) وزجاج دبل مع الإكسسوارات وسلك مانع للحشرات والمقابض والتثبيت الهندسي طبقاً لأبعاد الرسم والمواصفات.",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_19",
+    "rate_key": "m15_rate_alum_windows",
+    "name": "19- شبابيك الوميتال (م2)",
+    "unit": "م² (m²)",
+    "unit_price": 2800.0,
+    "description": "بالعدد، توريد وتركيب أبواب حمامات الوحدة (عرض 80 سم أو أقل) تشمل الحلوق والضلف المقاومة للرطوبة والمياه والمفصلات والكوالين والشناكل والمقابض ودهان الحلق والتثبيت الهندسي التام طبقاً لأصول الصناعة.",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_20",
+    "rate_key": "m15_rate_bath_doors",
+    "name": "20- أبواب حمامات الوحدة (عرض ≤ 80 سم)",
+    "unit": "عدد (No.)",
+    "unit_price": 1800.0,
+    "description": "بالعدد، توريد وتركيب أبواب غرف الوحدة والمدخل (عرض أكبر من 80 سم) تشمل الحلوق الخشبية والضلف التجليد قشرة معتمدة والمفصلات والأقفال والمقابض والبرور والدهانات والتثبيت الهندسي طبقاً للمواصفات.",
+    "category": "basic"
+  },
+  {
+    "item_key": "item_21",
+    "rate_key": "m15_rate_room_doors",
+    "name": "21- أبواب غرف الوحدة (عرض > 80 سم)",
+    "unit": "عدد (No.)",
+    "unit_price": 2400.0,
+    "description": "بالعدد، توريد وتركيب أبواب غرف الوحدة والمدخل (عرض أكبر من 80 سم) تشمل الحلوق الخشبية والضلف التجليد قشرة معتمدة والمفصلات والأقفال والمقابض والبرور والدهانات والتثبيت الهندسي طبقاً للمواصفات.",
+    "category": "basic"
+  }
+]

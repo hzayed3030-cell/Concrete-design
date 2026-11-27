@@ -19833,15 +19833,121 @@ def _render_cw_boq_bottom_toolbar(_boq_deleted_items, prefix: str = ''):
                 )
 
 
+_M1_BASIC_PRESETS_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "m1_basic_boq_presets.json",
+)
+
+CW_DEFAULT_BASIC_DESCRIPTIONS = {
+    "item_1": "بالمتر المكعب، توريد وصب خرسانة مسلحة للأسقف والكمرات (بلاطات لاكمرية Flat Slab وكمرات ساقطة/مدفونة) بمحتوى أسمنتي لا يقل عن 350 كجم أسمنت بورتلاندي عادي/م³ خرسانة ومقاومة مميزة طبقاً للتصميم الإنشائي، والسعر يشمل الشدات الخشبية أو المعدنية وحديد التسليح والفرم والصب والدمك الميكانيكي والمعالجة بالمياه طبقاً للكود المصري ECP 203.",
+    "item_2": "بالمتر المكعب، توريد وصب خرسانة مسلحة للأعمدة الإنشائية لكافة أدوار المبنى بمحتوى أسمنتي لا يقل عن 350-400 كجم/م³ ومقاومة مميزة طبقاً للتصميم، والسعر يشمل أعمال النجارة والتقويات والشدات وحديد التسليح الطولي والكانات والصب والدمك والمعالجة طبقاً لاشتراطات الكود المصري ECP 203.",
+    "item_3": "بالمتر المكعب، توريد وصب خرسانة مسلحة للأساسات (قواعد منفصلة + قواعد مشتركة + شدادات + سملات وميد أرضية) باستخدام أسمنت مقاوم للكبريتات (أو حسب تقرير التربة) بمحتوى لا يقل عن 350 كجم/م³، شاملاً الشدات وحديد التسليح والصب والدمك والمعالجة طبقاً للكود المصري ECP 203.",
+    "item_4": "بالمتر المكعب، توريد وصب خرسانة عادية للفرشات أسفل القواعد المسلحة وأسفل السملات ودكة الأرضيات بمحتوى أسمنتي 250 كجم أسمنت/م³ خرسانة، والسعر يشمل النظافة وضبط المناسيب والفرم والصب والدمك والتسوية والمعالجة بالمياه طبقاً للمواصفات الفنية والكود المصري.",
+    "item_5": "بالمتر المكعب، توريد وردم برمل نظيف خالٍ من الشوائب والأملاح والطفلة حول الأساسات أسفل سطح الأرض وداخل أحواض الردم أعلى سطح الأرض حتى منسوب دكة الأرضية، على طبقات لا يتجاوز سمك الطبقة 25 سم مع الرش الغزير بالمياه والدمك الميكانيكي الجيد للوصول لأقصى كثافة جافة طبقاً لأصول الصناعة.",
+    "item_6": "بالعدد (طوبة)، توريد وبناء طوب أسمنتي مصمت لمباني قصية الردم والأساسات أعلى السملات حتى منسوب الردم بالمونة الأسمنتية بنسبة لا تقل عن 350 كجم أسمنت/م³ رمل، شاملاً التشحيط وضبط الرأسية والأفقية وتفريغ اللحامات والمعالجة بالمياه طبقاً للمواصفات الفنية والكود المصري.",
+    "item_7": "بالمتر المسطح، توريد وتركيب بلاط انترلوك خرساني متداخل للأرصفة الخارجية حول محيط المبنى سمك 6-8 سم على فرشة رمل نظيف مدكوك مع الدك الهزاز الميكانيكي وملء الفواصل بالرمل الناعم وضبط المناسيب والميول السطحية طبقاً لأصول الصناعة.",
+    "item_8": "بالمتر الطولي، توريد وتركيب بردورات خرسانية جاهزة للأرصفة الخارجية حول داير الانترلوك شاملة الحفر والفرشة الخرسانية العادية أسفلها والتثبيت والسنادة الخلفية بالخرسانة وتكحيل اللحامات بمونة الأسمنت والرمل طبقاً للمواصفات.",
+    "item_9": "بالمتر المسطح، توريد ودهان عزل رطوبة بيتوميني (وجهين أو ثلاثة أوجه متعامدة من البيتومين المؤكسد الساخن أو المستحلب البيتوميني المطاطي البارد) لجميع جوانب وأسطح القواعد المسلحة وجوانب السملات ومباني قصية الردم الملامسة للتربة بعد النظافة التامة طبقاً لأصول الصناعة.",
+    "item_10": "بالمتر المسطح، توريد وتنفيذ طبقة عزل مائي للسطح النهائي باستخدام لفائف البيتومين المعدل المسلح بالبوليستر (أنسومات سمك 4 مم) تركب باللهب فوق وجه برايمر بيتوميني مع عمل ركوب لا يقل عن 10 سم ورفع العزل على الدروة وعمل رقبة القزازة والاختبار بالغمر بالمياه لمدة 48 ساعة.",
+    "item_11": "بالمتر المسطح، توريد وتركيب ألواح عزل حراري للسطح من البوليستيرين المبثوق عالي الكثافة (Extruded Polystyrene - XPS / فوم أزرق) سمك 5 سم عاشق ومعشوق يرص فوق طبقة العزل المائي وحمايته بطبقة مشمع بولي إيثيلين قبل عمل خرسانة الميول والبلاط.",
+    "item_12": "بالمتر المسطح، توريد وتركيب بلاط أسطح (بلاط موزايكو / سنجابي / أسمنتي مقاس 20×20×2 سم) فوق فرشة الرمل والمونة الأسمنتية مع ضبط أوتار الميول نحو جرجوري صرف الأمطار وعمل الوزرات المائلة والسقية بلباني الأسمنت وفواصل التمدد المملوءة بالبيتومين.",
+}
+
+DEFAULT_CW_BASIC_BOQ_PRESETS = [
+    {"item_key": "item_1", "rate_key": "cw_rate_slabs_beams", "name": "1- اجمالي خرسانه مسلحة للسقف والكمرات (سقف + كمرات)", "unit": "م³ (m³)", "unit_price": 4500.0},
+    {"item_key": "item_2", "rate_key": "cw_rate_cols", "name": "2- اجمالي خرسانة مسلحة الاعمدة", "unit": "م³ (m³)", "unit_price": 4800.0},
+    {"item_key": "item_3", "rate_key": "cw_rate_ftgs_gb", "name": "3- اجمالي خرسانة مسحة للقواعد والسملات (قواعد + سملات + شدادات + قواعد مشتركة)", "unit": "م³ (m³)", "unit_price": 4400.0},
+    {"item_key": "item_4", "rate_key": "cw_rate_pc", "name": "4- اجمالي الخرسانة العادية (اسفل القواعد المسلحة + اسفل السملات + اسفل بلاطة الارضية السلحة) واي خرسانة عادية اخري", "unit": "م³ (m³)", "unit_price": 2200.0},
+    {"item_key": "item_5", "rate_key": "cw_rate_backfill", "name": "5- اجمالي الردم (ردم فوق سطح الارض + ردم اسفل سطح الارض)", "unit": "م³ (m³)", "unit_price": 120.0},
+    {"item_key": "item_6", "rate_key": "cw_rate_bricks", "name": "6- اجمالي الطوب", "unit": "طوبة (Brick)", "unit_price": 2.5},
+    {"item_key": "item_7", "rate_key": "cw_rate_interlock", "name": "7- اجمالي الانترلوك", "unit": "م² (m²)", "unit_price": 220.0},
+    {"item_key": "item_8", "rate_key": "cw_rate_curbs", "name": "8- اجمالي البردورات", "unit": "م.ط (m)", "unit_price": 160.0},
+    {"item_key": "item_9", "rate_key": "cw_rate_damp_proof", "name": "9- اجمالي عزل الرطوبة للقواعد المسلحة للسملات والقواعد المسلحة", "unit": "م² (m²)", "unit_price": 95.0},
+    {"item_key": "item_10", "rate_key": "cw_rate_waterproof", "name": "10- اجمالي بند العزل المائي للسطح (انسومات)", "unit": "م² (m²)", "unit_price": 170.0},
+    {"item_key": "item_11", "rate_key": "cw_rate_thermal", "name": "11- اجمالي عازل حراري", "unit": "م² (m²)", "unit_price": 130.0},
+    {"item_key": "item_12", "rate_key": "cw_rate_roof_tiles", "name": "12- اجمالي بلاط اسطح", "unit": "م² (m²)", "unit_price": 150.0},
+]
+
+
+def _get_cw_basic_boq_presets_list(prefix: str = ''):
+    """قراءة قوالب البنود الأساسية الـ 12 (المحسوبة تلقائياً من التصميم الإنشائي) مع دعم التخصيص العام لجميع المشاريع."""
+    saved_map = {}
+    if os.path.exists(_M1_BASIC_PRESETS_FILE):
+        try:
+            with open(_M1_BASIC_PRESETS_FILE, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+                if isinstance(loaded, list):
+                    for row in loaded:
+                        if isinstance(row, dict) and row.get("item_key"):
+                            saved_map[str(row["item_key"])] = row
+        except Exception:
+            saved_map = {}
+
+    cur_descs = st.session_state.get(f"{prefix}cw_item_descriptions", {}) or {}
+    result = []
+    for base in DEFAULT_CW_BASIC_BOQ_PRESETS:
+        ik = base["item_key"]
+        rk = base["rate_key"]
+        pref_rk = f"{prefix}{rk}"
+        ov = saved_map.get(ik, {})
+        default_desc = str(CW_DEFAULT_BASIC_DESCRIPTIONS.get(ik, "")).strip()
+        desc = str(ov.get("description") or cur_descs.get(ik) or default_desc).strip()
+        if pref_rk in st.session_state:
+            live_price = float(st.session_state[pref_rk])
+        else:
+            live_price = float(ov.get("unit_price", S.cfg_val(pref_rk, S.cfg_val(rk, base["unit_price"]))))
+        if ov.get("description"):
+            CW_DEFAULT_BASIC_DESCRIPTIONS[ik] = str(ov["description"]).strip()
+        result.append({
+            "item_key": ik,
+            "rate_key": rk,
+            "label": str(ov.get("name") or base["name"]),
+            "name": str(ov.get("name") or base["name"]),
+            "unit": str(ov.get("unit") or base["unit"]),
+            "unit_price": round(live_price, 2),
+            "description": desc,
+            "category": "basic",
+            "is_auto_calculated": True,
+        })
+    return result
+
+
+def _save_cw_basic_boq_presets_list(basic_presets_list):
+    """حفظ تعديلات قوالب البنود الأساسية في ملف JSON العام ومزامنتها مع المشروع الحالي."""
+    cleaned = []
+    for row in basic_presets_list:
+        if isinstance(row, dict) and row.get("item_key"):
+            cleaned.append({
+                "item_key": str(row["item_key"]),
+                "rate_key": str(row.get("rate_key", "")),
+                "name": str(row.get("name", row.get("label", ""))),
+                "unit": str(row.get("unit", "")),
+                "unit_price": round(float(row.get("unit_price", 0.0) or 0.0), 2),
+                "description": str(row.get("description", "")).strip(),
+                "category": "basic",
+            })
+            CW_DEFAULT_BASIC_DESCRIPTIONS[str(row["item_key"])] = str(row.get("description", "")).strip()
+    try:
+        with open(_M1_BASIC_PRESETS_FILE, "w", encoding="utf-8") as f:
+            json.dump(cleaned, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+    S.save_settings()
+
+
 def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
     """
-    قسم منفصل مطوي: إدارة وتخصيص مكتبة القوالب الجاهزة لجميع المشاريع (إضافة / تعديل / حذف)
+    قسم منفصل مطوي: إدارة وتخصيص مكتبة القوالب المضافة يدويا لجميع المشاريع (البنود الأساسية + البنود الإضافية)
     """
+    basic_presets = _get_cw_basic_boq_presets_list(prefix=prefix)
+    _saved_additional_presets = [p for p in presets if str(p.get("name", "") or "").strip() and not str(p.get("label", "")).startswith("✨ بند حر")]
+    _total_lib_count = len(basic_presets) + len(_saved_additional_presets)
+
     _keep_plib_open = bool(st.session_state.pop(f"_{prefix}m1_keep_plib_expander_open", False))
     if _keep_plib_open:
         st.session_state[f"{prefix}m1_presets_lib_expander"] = True
     with st.expander(
-        f"⚙️ 📚 إدارة وتخصيص مكتبة القوالب الجاهزة ({len(presets)} قالب متاح لجميع المشاريع)",
+        f"⚙️ 📚 إدارة وتخصيص مكتبة القوالب المضافة يدويا ({_total_lib_count} قالب: {len(basic_presets)} أساسي + {len(_saved_additional_presets)} إضافي)",
         expanded=_keep_plib_open,
         key=f"{prefix}m1_presets_lib_expander",
     ):
@@ -19879,6 +19985,50 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                 </style>
                 <div dir="rtl" class="m15-plib-center-toast-3s">
                     ✅ تم حفظ البند في مكتبة البنود
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        _plib_edit_saved_item_name = st.session_state.pop(f"_{prefix}m1_show_plib_edit_saved_msg", None)
+        if _plib_edit_saved_item_name:
+            import html as _html_ed_toast
+            _ed_item_esc = _html_ed_toast.escape(str(_plib_edit_saved_item_name))
+            st.markdown(
+                f"""
+                <style>
+                @keyframes m1PlibEditSavedToast {{
+                    0%   {{ opacity: 0; transform: translate(-50%, -50%) scale(0.92); visibility: visible; }}
+                    8%   {{ opacity: 1; transform: translate(-50%, -50%) scale(1.0);  visibility: visible; }}
+                    86%  {{ opacity: 1; transform: translate(-50%, -50%) scale(1.0);  visibility: visible; }}
+                    100% {{ opacity: 0; transform: translate(-50%, -50%) scale(0.95); visibility: hidden; }}
+                }}
+                .m1-plib-edit-saved-toast {{
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    z-index: 999999;
+                    pointer-events: none;
+                    max-width: 72vw;
+                    background: linear-gradient(135deg, rgba(6, 78, 59, 0.97) 0%, rgba(16, 185, 129, 0.95) 50%, rgba(4, 120, 87, 0.97) 100%);
+                    border: 2.5px solid #34d399;
+                    border-radius: 14px;
+                    padding: 18px 34px;
+                    text-align: center;
+                    color: #ffffff;
+                    font-size: 1.28rem;
+                    font-weight: 800;
+                    line-height: 1.55;
+                    box-shadow: 0 16px 44px rgba(0, 0, 0, 0.60), 0 0 28px rgba(16, 185, 129, 0.55);
+                    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+                    animation: m1PlibEditSavedToast 3.2s ease-in-out forwards;
+                }}
+                </style>
+                <div dir="rtl" class="m1-plib-edit-saved-toast">
+                    ✅ تم الحفظ
+                    <div style="font-size: 1.08rem; font-weight: 700; color: #d1fae5; margin-top: 4px;">
+                        «{_ed_item_esc}»
+                    </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -19925,23 +20075,74 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
             st.session_state[f"{prefix}m1_plib_active_tab"] = _plib_target_tab
         tab_list_p, tab_add_p, tab_edit_p, tab_del_p = st.tabs(
             [
-                "قائمة القوالب الاضافية المتاحة",
-                "➕ إضافة قالب جديد للمكتبة",
-                "✏️ تعديل القالب الحالي",
+                "قائمة جميع القوالب المتاحة (الأساسية والإضافية)",
+                "➕ اضافة قالب يدوي للمكتبة",
+                "✏️ تعديل القوالب الاضافية المتاحة",
                 "🗑️ حذف قالب من المكتبة",
             ],
             key=f"{prefix}m1_plib_active_tab",
         )
 
-        # ── Tab 0: قائمة القوالب الاضافية المتاحة ──
+        # ── Tab 0: قائمة جميع القوالب المتاحة في جدول واحد موحد بفاصل سميك بين الأساسية والإضافية ──
         with tab_list_p:
             import html as _html_p_mod
-            _saved_presets = [p for p in presets if str(p.get("name", "") or "").strip()]
-            if not _saved_presets:
-                st.info("ℹ️ لا توجد قوالب محفوظة في مكتبة القوالب حالياً.")
+
+            def _detect_desc_dir_align(text_val: str):
+                _d_dir, _d_align = "rtl", "right"
+                for _ch in text_val:
+                    if ("\u0600" <= _ch <= "\u06FF") or ("\u0750" <= _ch <= "\u077F") or ("\u08A0" <= _ch <= "\u08FF"):
+                        return "rtl", "right"
+                    if ("a" <= _ch <= "z") or ("A" <= _ch <= "Z"):
+                        return "ltr", "left"
+                return _d_dir, _d_align
+
+            _preset_rows_html = []
+
+            # 1) عنوان قسم البنود الأساسية (المحسوبة تلقائياً من التصميم الإنشائي)
+            _preset_rows_html.append(
+                '<tr class="m15-plib-sec-row m15-plib-sec-basic">'
+                f'<td colspan="5" class="m15-plib-sec-td">🏗️ البنود الأساسية (التي يحسبها البرنامج تلقائياً من الرسم الهندسي وبناءً على معادلات المبرمج — {len(basic_presets)} بنداً)</td>'
+                '</tr>'
+            )
+            for b_idx, b_item in enumerate(basic_presets, start=1):
+                b_label_raw = str(b_item.get("name", "") or "").strip()
+                b_unit_raw = str(b_item.get("unit", "") or "").strip()
+                try:
+                    b_price_val = float(b_item.get("unit_price", 0.0) or 0.0)
+                except (TypeError, ValueError):
+                    b_price_val = 0.0
+                b_desc_raw = str(b_item.get("description", "") or "").strip() or "—"
+                _b_dir, _b_align = _detect_desc_dir_align(b_desc_raw)
+                row_bg = "rgba(15, 23, 42, 0.94)" if b_idx % 2 == 1 else "rgba(30, 41, 59, 0.82)"
+                _preset_rows_html.append(
+                    f'<tr class="m15-plib-row" style="background:{row_bg};">'
+                    f'<td class="m15-plib-td m15-plib-name"><span class="m15-plib-seq">{b_idx} -</span> <span dir="auto">{_html_p_mod.escape(b_label_raw)}</span></td>'
+                    f'<td class="m15-plib-td m15-plib-center"><span class="m15-plib-badge m15-plib-badge-basic">⚙️ أساسي</span></td>'
+                    f'<td class="m15-plib-td m15-plib-center m15-plib-unit">{_html_p_mod.escape(b_unit_raw)}</td>'
+                    f'<td class="m15-plib-td m15-plib-center m15-plib-price" dir="ltr">{b_price_val:,.2f}</td>'
+                    f'<td class="m15-plib-td m15-plib-desc" dir="{_b_dir}" style="text-align:{_b_align};">{_html_p_mod.escape(b_desc_raw)}</td>'
+                    f'</tr>'
+                )
+
+            # 2) الخط الفاصل السميك بين البنود الأساسية والبنود الإضافية
+            _preset_rows_html.append(
+                '<tr class="m15-plib-divider-row"><td colspan="5" class="m15-plib-divider-td"></td></tr>'
+            )
+
+            # 3) عنوان قسم القوالب الإضافية (البنود اليدوية)
+            _preset_rows_html.append(
+                '<tr class="m15-plib-sec-row m15-plib-sec-add">'
+                f'<td colspan="5" class="m15-plib-sec-td">➕ القوالب الإضافية (البنود التي تُضاف يدوياً — {len(_saved_additional_presets)} قالباً)</td>'
+                '</tr>'
+            )
+            if not _saved_additional_presets:
+                _preset_rows_html.append(
+                    '<tr><td colspan="5" class="m15-plib-td m15-plib-center" style="color:#94a3b8; font-weight:700; padding:14px;">'
+                    'ℹ️ لا توجد قوالب إضافية محفوظة حالياً — يمكنك إضافتها من تبويبة «➕ اضافة قالب يدوي للمكتبة».'
+                    '</td></tr>'
+                )
             else:
-                _preset_rows_html = []
-                for p_idx, p_item in enumerate(_saved_presets, start=1):
+                for p_idx, p_item in enumerate(_saved_additional_presets, start=1):
                     p_label_raw = str(p_item.get("label", "") or "").strip() or str(p_item.get("name", "") or "").strip()
                     p_unit_raw = str(p_item.get("unit", "") or "").strip()
                     try:
@@ -19949,72 +20150,96 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                     except (TypeError, ValueError):
                         p_price_val = 0.0
                     p_desc_raw = str(p_item.get("description", "") or "").strip() or "—"
-
-                    p_label_esc = _html_p_mod.escape(p_label_raw)
-                    p_unit_esc = _html_p_mod.escape(p_unit_raw)
-                    p_price_esc = f"{p_price_val:,.2f}"
-                    p_desc_esc = _html_p_mod.escape(p_desc_raw)
+                    _desc_dir, _desc_align = _detect_desc_dir_align(p_desc_raw)
                     row_bg = "rgba(15, 23, 42, 0.92)" if p_idx % 2 == 1 else "rgba(30, 41, 59, 0.80)"
-
-                    # تحديد اتجاه ومحاذاة عمود توصيف البند تلقائياً (RTL للعربية / LTR للإنجليزية)
-                    _desc_dir = "rtl"
-                    _desc_align = "right"
-                    for _ch in p_desc_raw:
-                        if ("\u0600" <= _ch <= "\u06FF") or ("\u0750" <= _ch <= "\u077F") or ("\u08A0" <= _ch <= "\u08FF"):
-                            _desc_dir = "rtl"
-                            _desc_align = "right"
-                            break
-                        if ("a" <= _ch <= "z") or ("A" <= _ch <= "Z"):
-                            _desc_dir = "ltr"
-                            _desc_align = "left"
-                            break
-
                     _preset_rows_html.append(
                         f'<tr class="m15-plib-row" style="background:{row_bg};">'
-                        f'<td class="m15-plib-td m15-plib-name"><span class="m15-plib-seq">{p_idx} -</span> <span dir="auto">{p_label_esc}</span></td>'
-                        f'<td class="m15-plib-td m15-plib-center m15-plib-unit">{p_unit_esc}</td>'
-                        f'<td class="m15-plib-td m15-plib-center m15-plib-price" dir="ltr">{p_price_esc}</td>'
-                        f'<td class="m15-plib-td m15-plib-desc" dir="{_desc_dir}" style="text-align:{_desc_align};">{p_desc_esc}</td>'
+                        f'<td class="m15-plib-td m15-plib-name"><span class="m15-plib-seq">{p_idx} -</span> <span dir="auto">{_html_p_mod.escape(p_label_raw)}</span></td>'
+                        f'<td class="m15-plib-td m15-plib-center"><span class="m15-plib-badge m15-plib-badge-add">✍️ إضافي</span></td>'
+                        f'<td class="m15-plib-td m15-plib-center m15-plib-unit">{_html_p_mod.escape(p_unit_raw)}</td>'
+                        f'<td class="m15-plib-td m15-plib-center m15-plib-price" dir="ltr">{p_price_val:,.2f}</td>'
+                        f'<td class="m15-plib-td m15-plib-desc" dir="{_desc_dir}" style="text-align:{_desc_align};">{_html_p_mod.escape(p_desc_raw)}</td>'
                         f'</tr>'
                     )
 
-                _preset_table_html = (
-                    "<style>"
-                    ".m15-plib-wrap{width:100%;border:2px solid #ea580c;border-radius:10px;overflow:hidden;background:#0f172a;box-shadow:0 6px 20px rgba(0,0,0,0.35);margin-top:6px;margin-bottom:10px;direction:rtl;}"
-                    "table.m15-plib-table{width:100%;border-collapse:collapse;table-layout:fixed;direction:rtl;font-family:'Segoe UI','Cairo',Tahoma,sans-serif;}"
-                    "table.m15-plib-table thead th{padding:10px 8px;text-align:center;font-size:1.02rem;font-weight:900;border-bottom:2px solid #ea580c;border-left:1.5px solid rgba(251,146,60,0.45);}"
-                    "table.m15-plib-table thead th.m15-plib-th-orange{background:linear-gradient(180deg,rgba(234,88,12,0.42) 0%,rgba(194,65,12,0.26) 100%);color:#fb923c;text-shadow:0 1px 2px #000000;}"
-                    "table.m15-plib-table thead th.m15-plib-th-blue{background:linear-gradient(180deg,rgba(2,132,199,0.48) 0%,rgba(14,165,233,0.26) 100%);color:#38bdf8;border-left:none;border-bottom:2px solid #38bdf8;text-shadow:0 1px 2px #000000;}"
-                    "tr.m15-plib-row:hover{background:rgba(51,65,85,0.72) !important;}"
-                    "td.m15-plib-td{padding:9px 10px;vertical-align:middle;border-bottom:1px solid rgba(148,163,184,0.20);border-left:1px solid rgba(148,163,184,0.18);word-wrap:break-word;overflow-wrap:break-word;}"
-                    "td.m15-plib-td:last-child{border-left:none;}"
-                    "td.m15-plib-name{text-align:right;font-size:0.98rem;font-weight:800;color:#f8fafc;line-height:1.45;}"
-                    ".m15-plib-seq{color:#fb923c;font-weight:900;margin-left:4px;}"
-                    "td.m15-plib-center{text-align:center;}"
-                    "td.m15-plib-unit{font-size:0.96rem;font-weight:700;color:#e2e8f0;}"
-                    "td.m15-plib-price{font-size:1.00rem;font-weight:900;color:#fbbf24;}"
-                    "td.m15-plib-desc{text-align:right;font-size:0.95rem;font-weight:600;color:#f1f5f9;line-height:1.55;}"
-                    "</style>"
-                    '<div class="m15-plib-wrap" dir="rtl">'
-                    '<table class="m15-plib-table" dir="rtl">'
-                    '<colgroup><col style="width:26%;"><col style="width:11%;"><col style="width:15%;"><col style="width:48%;"></colgroup>'
-                    '<thead><tr>'
-                    '<th class="m15-plib-th-orange">القالب</th>'
-                    '<th class="m15-plib-th-orange">الوحدة</th>'
-                    '<th class="m15-plib-th-orange">💵 السعر الاسترشادي (ج.م)</th>'
-                    '<th class="m15-plib-th-blue">توصيف البند</th>'
-                    '</tr></thead>'
-                    f'<tbody>{"".join(_preset_rows_html)}</tbody>'
-                    '</table></div>'
-                )
-                st.markdown(_preset_table_html, unsafe_allow_html=True)
+            _preset_table_html = (
+                "<style>"
+                ".m15-plib-wrap{width:100%;border:2px solid #ea580c;border-radius:10px;overflow:hidden;background:#0f172a;box-shadow:0 6px 20px rgba(0,0,0,0.35);margin-top:6px;margin-bottom:10px;direction:rtl;}"
+                "table.m15-plib-table{width:100%;border-collapse:collapse;table-layout:fixed;direction:rtl;font-family:'Segoe UI','Cairo',Tahoma,sans-serif;}"
+                "table.m15-plib-table thead th{padding:10px 8px;text-align:center;font-size:1.00rem;font-weight:900;border-bottom:2px solid #ea580c;border-left:1.5px solid rgba(251,146,60,0.45);}"
+                "table.m15-plib-table thead th.m15-plib-th-orange{background:linear-gradient(180deg,rgba(234,88,12,0.42) 0%,rgba(194,65,12,0.26) 100%);color:#fb923c;text-shadow:0 1px 2px #000000;}"
+                "table.m15-plib-table thead th.m15-plib-th-blue{background:linear-gradient(180deg,rgba(2,132,199,0.48) 0%,rgba(14,165,233,0.26) 100%);color:#38bdf8;border-left:none;border-bottom:2px solid #38bdf8;text-shadow:0 1px 2px #000000;}"
+                "tr.m15-plib-sec-row td.m15-plib-sec-td{padding:10px 14px;text-align:center;font-size:1.04rem;font-weight:900;letter-spacing:0.2px;}"
+                "tr.m15-plib-sec-basic td.m15-plib-sec-td{background:linear-gradient(90deg,rgba(180,83,9,0.42) 0%,rgba(245,158,11,0.30) 50%,rgba(180,83,9,0.42) 100%);color:#fde68a;border-bottom:2px solid #f59e0b;}"
+                "tr.m15-plib-sec-add td.m15-plib-sec-td{background:linear-gradient(90deg,rgba(3,105,161,0.42) 0%,rgba(14,165,233,0.28) 50%,rgba(3,105,161,0.42) 100%);color:#bae6fd;border-bottom:2px solid #38bdf8;}"
+                "tr.m15-plib-divider-row td.m15-plib-divider-td{height:10px;padding:0;background:linear-gradient(90deg,#f59e0b 0%,#ea580c 50%,#f59e0b 100%);border-top:2px solid #fde68a;border-bottom:2px solid #38bdf8;}"
+                "tr.m15-plib-row:hover{background:rgba(51,65,85,0.72) !important;}"
+                "td.m15-plib-td{padding:9px 10px;vertical-align:middle;border-bottom:1px solid rgba(148,163,184,0.20);border-left:1px solid rgba(148,163,184,0.18);word-wrap:break-word;overflow-wrap:break-word;}"
+                "td.m15-plib-td:last-child{border-left:none;}"
+                "td.m15-plib-name{text-align:right;font-size:0.96rem;font-weight:800;color:#f8fafc;line-height:1.45;}"
+                ".m15-plib-seq{color:#fb923c;font-weight:900;margin-left:4px;}"
+                "td.m15-plib-center{text-align:center;}"
+                "td.m15-plib-unit{font-size:0.94rem;font-weight:700;color:#e2e8f0;}"
+                "td.m15-plib-price{font-size:0.98rem;font-weight:900;color:#fbbf24;}"
+                "td.m15-plib-desc{text-align:right;font-size:0.94rem;font-weight:600;color:#f1f5f9;line-height:1.55;}"
+                ".m15-plib-badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:0.80rem;font-weight:900;white-space:nowrap;}"
+                ".m15-plib-badge-basic{background:rgba(245,158,11,0.22);border:1.5px solid #f59e0b;color:#fde68a;}"
+                ".m15-plib-badge-add{background:rgba(14,165,233,0.20);border:1.5px solid #38bdf8;color:#bae6fd;}"
+                "</style>"
+                '<div class="m15-plib-wrap" dir="rtl">'
+                '<table class="m15-plib-table" dir="rtl">'
+                '<colgroup><col style="width:24%;"><col style="width:10%;"><col style="width:10%;"><col style="width:12%;"><col style="width:44%;"></colgroup>'
+                '<thead><tr>'
+                '<th class="m15-plib-th-orange">البند / القالب</th>'
+                '<th class="m15-plib-th-orange">التصنيف</th>'
+                '<th class="m15-plib-th-orange">الوحدة</th>'
+                '<th class="m15-plib-th-orange">💵 السعر (ج.م)</th>'
+                '<th class="m15-plib-th-blue">توصيف البند</th>'
+                '</tr></thead>'
+                f'<tbody>{"".join(_preset_rows_html)}</tbody>'
+                '</table></div>'
+            )
+            st.markdown(_preset_table_html, unsafe_allow_html=True)
 
-        # ── Tab 1: إضافة قالب جديد ──
+        # ── Tab 1: اضافة قالب يدوي للمكتبة ──
         with tab_add_p:
             st.markdown(
-                """<div dir="rtl" style="color:#7dd3fc; font-weight:800; font-size:1.02rem; margin-bottom:8px;">
-                    ➕ إضافة قالب بند جديد لمكتبة القوالب (سيُحفظ دائماً ويظهر في قائمة القوالب بجميع المشاريع):
-                </div>""",
+                f"""
+                <div dir="rtl" style="text-align: center; margin-bottom: 16px;">
+                    <div style="
+                        display: inline-block;
+                        width: 100%;
+                        background: linear-gradient(135deg, rgba(14, 116, 144, 0.35) 0%, rgba(16, 185, 129, 0.25) 50%, rgba(56, 189, 248, 0.30) 100%);
+                        border: 1.5px solid rgba(56, 189, 248, 0.55);
+                        border-radius: 10px;
+                        padding: 10px 18px;
+                        margin-bottom: 10px;
+                        color: #38bdf8;
+                        font-weight: 900;
+                        font-size: 1.10rem;
+                        line-height: 1.65;
+                        text-align: center;
+                        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.65), 0 0 14px rgba(56, 189, 248, 0.45);
+                        box-shadow: 0 4px 14px rgba(14, 165, 233, 0.20);
+                    ">
+                        ➕ اضافة قالب يدوي جديد لمكتبة القوالب (سيُحفظ دائماً ويظهر في قائمة القوالب بجميع المشاريع):
+                    </div>
+                    <div style="
+                        background: linear-gradient(135deg, rgba(16, 185, 129, 0.16) 0%, rgba(245, 158, 11, 0.16) 100%);
+                        border: 1.5px solid rgba(52, 211, 153, 0.50);
+                        border-radius: 8px;
+                        padding: 8px 16px;
+                        color: #fde68a;
+                        font-size: 0.96rem;
+                        font-weight: 700;
+                        line-height: 1.65;
+                        text-align: center;
+                        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.60);
+                    ">
+                        ℹ️ الإضافة هنا مخصصة للبنود اليدوية الإضافية فقط، أما البنود الأساسية الـ {len(basic_presets)} فتُحسب تلقائياً من الرسم الهندسي بتعليمات الحصر المبرمجة.
+                    </div>
+                </div>
+                """,
                 unsafe_allow_html=True,
             )
             if st.session_state.pop(f"_{prefix}m1_reset_add_preset_fields", False):
@@ -20078,7 +20303,7 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                     st.session_state[f"_{prefix}m1_reset_add_preset_fields"] = True
                     st.session_state[f"_{prefix}m1_plib_missing_alert"] = False
                     st.session_state[f"_{prefix}m1_keep_plib_expander_open"] = True
-                    st.session_state[f"_{prefix}m1_plib_target_tab"] = "➕ إضافة قالب جديد للمكتبة"
+                    st.session_state[f"_{prefix}m1_plib_target_tab"] = "➕ اضافة قالب يدوي للمكتبة"
                     st.session_state[f"_{prefix}m1_show_plib_cancel_msg"] = True
                     st.rerun()
 
@@ -20095,7 +20320,7 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                     st.session_state[f"_{prefix}m1_plib_missing_alert"] = True
                     st.session_state[f"_{prefix}m1_plib_play_warn_beep"] = True
                     st.session_state[f"_{prefix}m1_keep_plib_expander_open"] = True
-                    st.session_state[f"_{prefix}m1_plib_target_tab"] = "➕ إضافة قالب جديد للمكتبة"
+                    st.session_state[f"_{prefix}m1_plib_target_tab"] = "➕ اضافة قالب يدوي للمكتبة"
                 elif clean_pname in [p.get("label", "") for p in presets] or clean_pname in [p.get("name", "") for p in presets]:
                     st.session_state[f"_{prefix}m1_plib_missing_alert"] = False
                     st.warning(f"⚠️ يوجد قالب آخر مسجل بنفس الاسم «{clean_pname}»، يرجى اختيار اسم مميز.")
@@ -20115,7 +20340,7 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                     st.session_state[f"_{prefix}m1_last_manual_preset"] = None
                     st.session_state[f"_{prefix}m1_reset_add_preset_fields"] = True
                     st.session_state[f"_{prefix}m1_keep_plib_expander_open"] = True
-                    st.session_state[f"_{prefix}m1_plib_target_tab"] = "➕ إضافة قالب جديد للمكتبة"
+                    st.session_state[f"_{prefix}m1_plib_target_tab"] = "➕ اضافة قالب يدوي للمكتبة"
                     st.session_state[f"_{prefix}m1_show_plib_saved_msg"] = True
                     st.rerun()
 
@@ -20184,7 +20409,7 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                     ):
                         st.session_state[f"_{prefix}m1_plib_missing_alert"] = False
                         st.session_state[f"_{prefix}m1_keep_plib_expander_open"] = True
-                        st.session_state[f"_{prefix}m1_plib_target_tab"] = "➕ إضافة قالب جديد للمكتبة"
+                        st.session_state[f"_{prefix}m1_plib_target_tab"] = "➕ اضافة قالب يدوي للمكتبة"
                         st.rerun()
                 with c_warn_2:
                     if st.button(
@@ -20195,15 +20420,31 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                         st.session_state[f"_{prefix}m1_plib_missing_alert"] = False
                         st.session_state[f"_{prefix}m1_reset_add_preset_fields"] = True
                         st.session_state[f"_{prefix}m1_keep_plib_expander_open"] = True
-                        st.session_state[f"_{prefix}m1_plib_target_tab"] = "➕ إضافة قالب جديد للمكتبة"
+                        st.session_state[f"_{prefix}m1_plib_target_tab"] = "➕ اضافة قالب يدوي للمكتبة"
                         st.rerun()
 
-        # ── Tab 2: تعديل القالب الحالي ──
+        # ── Tab 2: تعديل القوالب الاضافية المتاحة ──
         with tab_edit_p:
             st.markdown(
-                """<div dir="rtl" style="color:#fdba74; font-weight:800; font-size:1.02rem; margin-bottom:8px;">
-                    ✏️ تعديل بيانات القوالب بالمكتبة (سيتم تحديث القالب المختار لجميع المشاريع):
-                </div>""",
+                """
+                <div dir="rtl" style="
+                    width: 100%;
+                    text-align: center;
+                    background: linear-gradient(135deg, rgba(245, 158, 11, 0.28) 0%, rgba(236, 72, 153, 0.22) 50%, rgba(168, 85, 247, 0.26) 100%);
+                    border: 1.5px solid rgba(251, 191, 36, 0.65);
+                    border-radius: 10px;
+                    padding: 10px 18px;
+                    margin-bottom: 14px;
+                    color: #fde68a;
+                    font-weight: 900;
+                    font-size: 1.08rem;
+                    line-height: 1.65;
+                    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.65), 0 0 14px rgba(251, 191, 36, 0.45);
+                    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.22);
+                ">
+                    ✏️ تعديل بيانات القوالب الإضافية اليدوية بالمكتبة (سيتم تحديث القالب المختار لجميع المشاريع):
+                </div>
+                """,
                 unsafe_allow_html=True,
             )
             if f"_{prefix}m1_set_edit_sel" in st.session_state:
@@ -20211,35 +20452,119 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
 
             PLACEHOLDER_NO_EDIT = "— لا يوجد بند للتعديل —"
             editable_presets = [p for p in presets if not str(p.get("label", "")).startswith("✨ بند حر")]
-            edit_options = [PLACEHOLDER_NO_EDIT] + [p["label"] for p in editable_presets]
+            _basic_edit_map = {f"⚙️ [أساسي] {b['name']}": b for b in basic_presets}
+            _add_edit_map = {f"✍️ [إضافي] {p['label']}": p for p in editable_presets}
+            edit_options = [PLACEHOLDER_NO_EDIT] + list(_basic_edit_map.keys()) + list(_add_edit_map.keys())
 
             if f"{prefix}m1_edit_preset_sel" not in st.session_state or st.session_state[f"{prefix}m1_edit_preset_sel"] not in edit_options:
                 st.session_state[f"{prefix}m1_edit_preset_sel"] = PLACEHOLDER_NO_EDIT
 
             selected_edit_lbl = st.selectbox(
-                "📋 قائمة القوالب بالمكتبة للتعديل:",
+                "📋 قائمة القوالب بالمكتبة للتعديل (أساسية وإضافية):",
                 options=edit_options,
                 key=f"{prefix}m1_edit_preset_sel",
-                help="اختر قالباً لعرض خانات المدخلات الخاصة به وتعديلها.",
+                help="اختر بنداً أساسياً أو قالباً إضافياً لعرض خانات المدخلات الخاصة به وتعديلها.",
             )
 
             if selected_edit_lbl == PLACEHOLDER_NO_EDIT:
                 st.info("ℹ️ الرجاء اختيار بند (قالب) من القائمة المنسدلة أعلاه للبدء في تعديل بياناته.")
+            elif selected_edit_lbl in _basic_edit_map:
+                target_basic = _basic_edit_map[selected_edit_lbl]
+                b_ik = target_basic["item_key"]
+                b_rk = target_basic["rate_key"]
+                ed_b_prefix = f"{prefix}m1_ed_basic_{b_ik}"
+
+                st.info("⚙️ هذا بند أساسي محسوب تلقائياً من التصميم الإنشائي — يمكنك تعديل سعره الاسترشادي وتوصيفه الهندسي لجميع المشاريع (الاسم والوحدة مرتبطان بمعادلة الحساب).")
+                c_eb1, c_eb2, c_eb3 = st.columns([2.2, 1.1, 1.1])
+                with c_eb1:
+                    st.text_input(
+                        "📝 اسم البند الأساسي (للقراءة فقط):",
+                        value=target_basic.get("name", ""),
+                        key=f"{ed_b_prefix}_name_ro",
+                        disabled=True,
+                    )
+                with c_eb2:
+                    st.text_input(
+                        "📏 وحدة القياس:",
+                        value=target_basic.get("unit", ""),
+                        key=f"{ed_b_prefix}_unit_ro",
+                        disabled=True,
+                    )
+                with c_eb3:
+                    ed_b_price = st.number_input(
+                        "💵 السعر الاسترشادي (ج.م):",
+                        min_value=0.0,
+                        max_value=1000000.0,
+                        value=float(target_basic.get("unit_price", 0.0)),
+                        step=10.0,
+                        format="%.2f",
+                        key=f"{ed_b_prefix}_price",
+                    )
+                ed_b_desc = st.text_area(
+                    "📄 توصيف البند الأساسي بالمقايسة:",
+                    value=target_basic.get("description", ""),
+                    height=85,
+                    key=f"{ed_b_prefix}_desc",
+                )
+                c_eb_b1, c_eb_b2 = st.columns([1.5, 2.5])
+                with c_eb_b1:
+                    btn_save_eb = st.button(
+                        "💾 حفظ تعديلات البند الأساسي لجميع المشاريع",
+                        key=f"{ed_b_prefix}_btn_save",
+                        type="primary",
+                        use_container_width=True,
+                    )
+                with c_eb_b2:
+                    btn_cancel_eb = st.button(
+                        "الغاء التغيير",
+                        key=f"{ed_b_prefix}_btn_cancel",
+                        use_container_width=True,
+                    )
+                    if btn_cancel_eb:
+                        st.session_state.pop(f"{ed_b_prefix}_price", None)
+                        st.session_state.pop(f"{ed_b_prefix}_desc", None)
+                        st.session_state.pop(f"{ed_b_prefix}_name_ro", None)
+                        st.session_state.pop(f"{ed_b_prefix}_unit_ro", None)
+                        st.session_state[f"_{prefix}m1_set_edit_sel"] = PLACEHOLDER_NO_EDIT
+                        st.session_state[f"_{prefix}m1_keep_plib_expander_open"] = True
+                        st.session_state[f"_{prefix}m1_plib_target_tab"] = "✏️ تعديل القوالب الاضافية المتاحة"
+                        st.session_state[f"_{prefix}m1_show_plib_cancel_msg"] = True
+                        st.rerun()
+
+                if btn_save_eb:
+                    new_b_desc = str(ed_b_desc or "").strip() or target_basic.get("description", "")
+                    new_b_price = round(float(ed_b_price), 2)
+                    for b_row in basic_presets:
+                        if b_row["item_key"] == b_ik:
+                            b_row["unit_price"] = new_b_price
+                            b_row["description"] = new_b_desc
+                            break
+                    _save_cw_basic_boq_presets_list(basic_presets)
+                    # تحديث المشروع الحالي أيضاً ليظهر التعديل فوراً
+                    st.session_state[f"{prefix}{b_rk}"] = new_b_price
+                    S.cfg_set(f"{prefix}{b_rk}", new_b_price)
+                    S.cfg_set(b_rk, new_b_price)
+                    cur_descs_live = dict(st.session_state.get(f"{prefix}cw_item_descriptions", {}) or {})
+                    cur_descs_live[b_ik] = new_b_desc
+                    st.session_state[f"{prefix}cw_item_descriptions"] = cur_descs_live
+                    S.cfg_set(f"{prefix}cw_item_descriptions", dict(cur_descs_live))
+                    S.cfg_set("cw_item_descriptions", dict(cur_descs_live))
+                    S.save_settings()
+                    st.session_state.pop(f"{prefix}_cached_report_html", None)
+                    st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
+                    st.session_state.pop(f"{ed_b_prefix}_price", None)
+                    st.session_state.pop(f"{ed_b_prefix}_desc", None)
+                    st.session_state.pop(f"{ed_b_prefix}_name_ro", None)
+                    st.session_state.pop(f"{ed_b_prefix}_unit_ro", None)
+                    st.session_state[f"_{prefix}m1_set_edit_sel"] = PLACEHOLDER_NO_EDIT
+                    st.session_state[f"_{prefix}m1_keep_plib_expander_open"] = True
+                    st.session_state[f"_{prefix}m1_plib_target_tab"] = "✏️ تعديل القوالب الاضافية المتاحة"
+                    st.session_state[f"_{prefix}m1_show_plib_edit_saved_msg"] = target_basic["name"]
+                    st.rerun()
             else:
-                target_preset = next((p for p in editable_presets if p["label"] == selected_edit_lbl), None)
+                target_preset = _add_edit_map.get(selected_edit_lbl)
                 if target_preset:
                     ed_prefix = f"{prefix}m1_ed_{target_preset['label']}"
-                    if st.session_state.pop(f"_{prefix}m1_cancel_edit_{target_preset['label']}", False):
-                        _orig_u = target_preset.get("unit", CW_MANUAL_BOQ_UNIT_OPTIONS[0])
-                        if _orig_u in ["م.ط (m)", "متر طولي m", "م.ط", "متر طولي (m)"]:
-                            _orig_u = "متر طولي L.M"
-                        if _orig_u not in CW_MANUAL_BOQ_UNIT_OPTIONS:
-                            _orig_u = CW_MANUAL_BOQ_UNIT_OPTIONS[0]
-                        st.session_state[f"{ed_prefix}_name"] = target_preset.get("name", target_preset.get("label", ""))
-                        st.session_state[f"{ed_prefix}_unit"] = _orig_u
-                        st.session_state[f"{ed_prefix}_price"] = float(target_preset.get("unit_price", 0.0))
-                        st.session_state[f"{ed_prefix}_desc"] = target_preset.get("description", "")
-
                     c_ed1, c_ed2, c_ed3 = st.columns([2.2, 1.1, 1.1])
                     with c_ed1:
                         ed_name = st.text_input(
@@ -20291,9 +20616,13 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                             use_container_width=True,
                         )
                         if btn_cancel_ed:
-                            st.session_state[f"_{prefix}m1_cancel_edit_{target_preset['label']}"] = True
+                            st.session_state.pop(f"{ed_prefix}_name", None)
+                            st.session_state.pop(f"{ed_prefix}_unit", None)
+                            st.session_state.pop(f"{ed_prefix}_price", None)
+                            st.session_state.pop(f"{ed_prefix}_desc", None)
+                            st.session_state[f"_{prefix}m1_set_edit_sel"] = PLACEHOLDER_NO_EDIT
                             st.session_state[f"_{prefix}m1_keep_plib_expander_open"] = True
-                            st.session_state[f"_{prefix}m1_plib_target_tab"] = "✏️ تعديل القالب الحالي"
+                            st.session_state[f"_{prefix}m1_plib_target_tab"] = "✏️ تعديل القوالب الاضافية المتاحة"
                             st.session_state[f"_{prefix}m1_show_plib_cancel_msg"] = True
                             st.rerun()
 
@@ -20319,16 +20648,29 @@ def _render_cw_presets_library_manager(presets: list, prefix: str = ''):
                                 if st.session_state.get(f"{prefix}m1_man_preset_sel") == old_lbl:
                                     st.session_state[f"{prefix}m1_man_preset_sel"] = new_name_clean
                                 st.session_state[f"_{prefix}m1_last_manual_preset"] = None
-                                st.session_state[f"_{prefix}m1_set_edit_sel"] = new_name_clean
-                                st.toast(f"💾 تم حفظ وتحديث القالب «{new_name_clean}» بنجاح في المكتبة لجميع المشاريع!", icon="✨")
+                                st.session_state.pop(f"{ed_prefix}_name", None)
+                                st.session_state.pop(f"{ed_prefix}_unit", None)
+                                st.session_state.pop(f"{ed_prefix}_price", None)
+                                st.session_state.pop(f"{ed_prefix}_desc", None)
+                                st.session_state[f"_{prefix}m1_set_edit_sel"] = PLACEHOLDER_NO_EDIT
+                                st.session_state[f"_{prefix}m1_keep_plib_expander_open"] = True
+                                st.session_state[f"_{prefix}m1_plib_target_tab"] = "✏️ تعديل القوالب الاضافية المتاحة"
+                                st.session_state[f"_{prefix}m1_show_plib_edit_saved_msg"] = new_name_clean
                                 st.rerun()
 
         # ── Tab 3: حذف قالب من المكتبة ──
         with tab_del_p:
             st.markdown(
-                """<div dir="rtl" style="color:#f87171; font-weight:800; font-size:1.02rem; margin-bottom:8px;">
-                    🗑️ حذف قالب من المكتبة العامة (سيُزال من قائمة القوالب لجميع المشاريع):
-                </div>""",
+                f"""
+                <div dir="rtl" style="margin-bottom: 14px;">
+                    <div style="color:#f87171; font-weight:800; font-size:1.05rem; line-height:1.65; margin-bottom:10px;">
+                        🗑️ حذف قالب إضافي من المكتبة العامة (سيُزال من قائمة القوالب لجميع المشاريع):
+                    </div>
+                    <div style="color:#cbd5e1; font-size:0.92rem; font-weight:600; line-height:1.65; padding:6px 12px; background:rgba(30,41,59,0.55); border-right:3px solid #f87171; border-radius:6px;">
+                        ℹ️ البنود الأساسية الـ {len(basic_presets)} (المحسوبة تلقائياً من التصميم الإنشائي) محمية من الحذف من المكتبة العامة للحفاظ على معادلات الحصر؛ يمكنك فقط تعديل سعرها وتوصيفها أو استبعادها مؤقتاً من الجدول المجمع للمشروع الحالي.
+                    </div>
+                </div>
+                """,
                 unsafe_allow_html=True,
             )
             PLACEHOLDER_NO_DEL = "— لا يوجد بند محدد للحذف —"
@@ -21932,6 +22274,120 @@ def _render_cw_manual_boq_items_manager(cur_factor=1.00, prefix: str = ''):
 
 def render(is_standalone: bool = False):
     inject_module1_drawings_pan_zoom()
+    # ── تفعيل تحديد ونسخ أسماء جميع الأزرار والتبويبات (Tabs & Expanders) بالماوس في كامل Module 1 ──
+    st.markdown(
+        """<style>
+        button,
+        button *,
+        summary,
+        summary *,
+        [data-testid="stExpander"] summary,
+        [data-testid="stExpander"] summary *,
+        [data-testid="stTabs"] [role="tab"],
+        [data-testid="stTabs"] [role="tab"] *,
+        button[data-baseweb="tab"],
+        button[data-baseweb="tab"] *,
+        [role="tablist"] [role="tab"],
+        [role="tablist"] [role="tab"] * {
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            -moz-user-select: text !important;
+            -ms-user-select: text !important;
+        }
+        [data-testid="stExpander"] summary p,
+        [data-testid="stExpander"] summary span,
+        [data-testid="stTabs"] [role="tab"] p,
+        [data-testid="stTabs"] [role="tab"] span,
+        button[data-baseweb="tab"] p,
+        button[data-baseweb="tab"] span {
+            cursor: text !important;
+            user-select: text !important;
+            -webkit-user-select: text !important;
+        }
+        </style>""",
+        unsafe_allow_html=True,
+    )
+    render_html_iframe(
+        """<script>
+        (function() {
+            function enableM1TabExpanderCopy() {
+                try {
+                    var pWin = window.parent || window;
+                    var doc = (window.parent && window.parent.document) ? window.parent.document : document;
+                    var els = doc.querySelectorAll(
+                        'summary, [data-testid="stExpander"] summary, [data-testid="stTabs"] [role="tab"], button[data-baseweb="tab"], [role="tablist"] [role="tab"]'
+                    );
+                    els.forEach(function(el) {
+                        var txt = (el.innerText || el.textContent || '').trim();
+                        if (txt) {
+                            if (!el.getAttribute('title')) el.setAttribute('title', txt);
+                            el.style.userSelect = 'text';
+                            el.style.webkitUserSelect = 'text';
+                            el.querySelectorAll('p, span, div').forEach(function(inner) {
+                                inner.style.userSelect = 'text';
+                                inner.style.webkitUserSelect = 'text';
+                                if (inner.tagName === 'P' || inner.tagName === 'SPAN') {
+                                    inner.style.cursor = 'text';
+                                }
+                            });
+                        }
+                    });
+                    if (!pWin.__ecpGlobalTabExpanderCopyGuardInstalled) {
+                        pWin.__ecpGlobalTabExpanderCopyGuardInstalled = true;
+                        var tDownX = 0, tDownY = 0, tDidDrag = false, tActiveEl = null;
+                        var tabExpSel = 'summary, [data-testid="stExpander"] summary, [role="tab"], [data-baseweb="tab"]';
+                        doc.addEventListener('mousedown', function(e) {
+                            var el = e.target && e.target.closest ? e.target.closest(tabExpSel) : null;
+                            if (el) {
+                                tActiveEl = el;
+                                tDownX = e.clientX;
+                                tDownY = e.clientY;
+                                tDidDrag = false;
+                            } else {
+                                tActiveEl = null;
+                                tDidDrag = false;
+                            }
+                        }, true);
+                        doc.addEventListener('mousemove', function(e) {
+                            if (tActiveEl && (e.buttons & 1)) {
+                                if (Math.hypot(e.clientX - tDownX, e.clientY - tDownY) > 4) {
+                                    tDidDrag = true;
+                                }
+                            }
+                        }, true);
+                        doc.addEventListener('click', function(e) {
+                            var el = e.target && e.target.closest ? e.target.closest(tabExpSel) : null;
+                            if (!el) return;
+                            var hasSelInside = false;
+                            try {
+                                var selObj = pWin.getSelection ? pWin.getSelection() : null;
+                                var selTxt = selObj ? selObj.toString().trim() : '';
+                                if (selTxt.length > 0 && selObj && selObj.anchorNode && el.contains(selObj.anchorNode)) {
+                                    hasSelInside = true;
+                                }
+                            } catch(err) {}
+                            if (tDidDrag || hasSelInside) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                e.stopImmediatePropagation();
+                            }
+                            tDidDrag = false;
+                            tActiveEl = null;
+                        }, true);
+                    }
+                } catch(e) {}
+            }
+            enableM1TabExpanderCopy();
+            var _pWinM1 = window.parent || window;
+            if (_pWinM1.__ecpM1TabCopyInterval) {
+                try { _pWinM1.clearInterval(_pWinM1.__ecpM1TabCopyInterval); } catch(err) {}
+            }
+            _pWinM1.__ecpM1TabCopyInterval = _pWinM1.setInterval(enableM1TabExpanderCopy, 800);
+        })();
+        </script>""",
+        height=1,
+        width=1,
+    )
     st.markdown(
         """
         <style>
@@ -30172,16 +30628,16 @@ def render(is_standalone: bool = False):
                         pass
 
             # ═════════════════════════════════════════════════════════════════════════
-            #  1. عنوان أسعار البنود وصناديق إدخال الأسعار (برواز سميك عنبري ذهبي مميز)
+            #  1. قسم أسعار البنود الاساسية (التي يحسبها البرنامج) - مطوي افتراضياً عند بدء التشغيل
             # ═════════════════════════════════════════════════════════════════════════
             st.markdown(
                 """
-                <div dir="rtl" style="text-align: center; margin: 18px auto 14px auto; background: linear-gradient(135deg, rgba(30, 41, 59, 0.90) 0%, rgba(15, 23, 42, 0.96) 100%); border: 1.5px solid rgba(245, 158, 11, 0.5); border-top: 3px solid #f59e0b; border-radius: 8px; padding: 9px 24px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);">
-                    <span style="font-size: 1.45rem; font-weight: 900; color: #fbbf24; text-shadow: 0 2px 6px rgba(0,0,0,0.7); letter-spacing: 0.5px;">
-                        💰 أسعار البنود
-                    </span>
-                </div>
                 <style>
+                div[data-testid="stExpander"]:has(.m1-rates-container-marker) summary p {
+                    font-size: 1.25rem !important;
+                    font-weight: 900 !important;
+                    color: #fbbf24 !important;
+                }
                 /* برواز سميك بلون عنبري ذهبي مختلف تماماً عن حواف خانات الإدخال السماوية */
                 div[data-testid="stVerticalBlockBorderWrapper"]:has(.m1-rates-container-marker),
                 div[class*="st-key-m1_rates_container"] {
@@ -30200,7 +30656,7 @@ def render(is_standalone: bool = False):
                     box-shadow: 0 6px 28px rgba(0, 0, 0, 0.65), 0 0 24px rgba(251, 191, 36, 0.45) !important;
                 }
                 div[data-testid="stColumn"]:has(div[class*="cw_rate_"]) label p {
-                    font-size: 0.80rem !important;
+                    font-size: 0.82rem !important;
                     font-weight: 700 !important;
                     color: #e2e8f0 !important;
                     white-space: nowrap !important;
@@ -30209,195 +30665,131 @@ def render(is_standalone: bool = False):
                     margin-bottom: 2px !important;
                 }
                 div[data-testid="stColumn"]:has(div[class*="cw_rate_"]) input {
-                    font-size: 0.88rem !important;
+                    font-size: 0.90rem !important;
                     font-weight: 800 !important;
                     color: #38bdf8 !important;
                     background-color: #0f172a !important;
-                    border: 1px solid #334155 !important;
+                    border: 1.8px solid #38bdf8 !important;
                     border-radius: 6px !important;
                     padding: 3px 5px !important;
                     text-align: center !important;
+                    transition: all 0.2s ease !important;
+                }
+                div[data-testid="stColumn"]:has(div[class*="cw_rate_"]) input:focus {
+                    border-color: #60a5fa !important;
+                    box-shadow: 0 0 8px rgba(56, 189, 248, 0.5) !important;
+                    outline: none !important;
                 }
                 </style>
                 """,
                 unsafe_allow_html=True,
             )
 
-            _saved_rate_slabs_beams = float(S.cfg_val(f"{prefix}cw_rate_slabs_beams", S.cfg_val("cw_rate_slabs_beams", 4500.0)))
-            _saved_rate_cols = float(S.cfg_val(f"{prefix}cw_rate_cols", S.cfg_val("cw_rate_cols", 4800.0)))
-            _saved_rate_ftgs_gb = float(S.cfg_val(f"{prefix}cw_rate_ftgs_gb", S.cfg_val("cw_rate_ftgs_gb", 4400.0)))
-            _saved_rate_pc = float(S.cfg_val(f"{prefix}cw_rate_pc", S.cfg_val("cw_rate_pc", 2200.0)))
-            _saved_rate_backfill = float(S.cfg_val(f"{prefix}cw_rate_backfill", S.cfg_val("cw_rate_backfill", 120.0)))
-            _saved_rate_bricks = float(S.cfg_val(f"{prefix}cw_rate_bricks", S.cfg_val("cw_rate_bricks", 2.5)))
-            _saved_rate_interlock = float(S.cfg_val(f"{prefix}cw_rate_interlock", S.cfg_val("cw_rate_interlock", 220.0)))
-            _saved_rate_curbs = float(S.cfg_val(f"{prefix}cw_rate_curbs", S.cfg_val("cw_rate_curbs", 160.0)))
-            _saved_rate_damp_proof = float(S.cfg_val(f"{prefix}cw_rate_damp_proof", S.cfg_val("cw_rate_damp_proof", 95.0)))
-            _saved_rate_waterproof = float(S.cfg_val(f"{prefix}cw_rate_waterproof", S.cfg_val("cw_rate_waterproof", 170.0)))
-            _saved_rate_thermal = float(S.cfg_val(f"{prefix}cw_rate_thermal", S.cfg_val("cw_rate_thermal", 130.0)))
-            _saved_rate_roof_tiles = float(S.cfg_val(f"{prefix}cw_rate_roof_tiles", S.cfg_val("cw_rate_roof_tiles", 150.0)))
+            _cw_lib_basic_price_map = {
+                b["rate_key"]: float(b.get("unit_price", 0.0))
+                for b in _get_cw_basic_boq_presets_list(prefix=prefix)
+                if b.get("rate_key")
+            }
 
-            with st.container(border=True):
-                st.markdown('<div class="m1-rates-container-marker" style="display:none;"></div>', unsafe_allow_html=True)
-                cw_pr1_c1, cw_pr1_c2, cw_pr1_c3, cw_pr1_c4 = st.columns(4)
-                with cw_pr1_c1:
-                    price_cw_slabs_beams = st.number_input(
-                        "(م3) خرسانة مسلحة سقف وكمرات:",
-                        min_value=0.0, max_value=100000.0,
-                        value=_saved_rate_slabs_beams,
-                        step=50.0, format="%.1f",
-                        key=f"{prefix}cw_rate_slabs_beams",
-                        help="سعر المتر المكعب لخرسانة السقف والكمرات المسلحة شامل الحديد والشدة والصب",
-                    )
-                with cw_pr1_c2:
-                    price_cw_cols = st.number_input(
-                        "(م3) خرسانة مسلحة أعمدة:",
-                        min_value=0.0, max_value=100000.0,
-                        value=_saved_rate_cols,
-                        step=50.0, format="%.1f",
-                        key=f"{prefix}cw_rate_cols",
-                        help="سعر المتر المكعب للخرسانة المسلحة لأعمدة المبنى",
-                    )
-                with cw_pr1_c3:
-                    price_cw_ftgs_gb = st.number_input(
-                        "(م3) خرسانة مسلحة قواعد وسملات:",
-                        min_value=0.0, max_value=100000.0,
-                        value=_saved_rate_ftgs_gb,
-                        step=50.0, format="%.1f",
-                        key=f"{prefix}cw_rate_ftgs_gb",
-                        help="سعر المتر المكعب للخرسانة المسلحة للقواعد والسملات والشدادات والقواعد المشتركة",
-                    )
-                with cw_pr1_c4:
-                    price_cw_pc = st.number_input(
-                        "(م3) خرسانة عادية وأرضيات:",
-                        min_value=0.0, max_value=100000.0,
-                        value=_saved_rate_pc,
-                        step=50.0, format="%.1f",
-                        key=f"{prefix}cw_rate_pc",
-                        help="سعر المتر المكعب للخرسانة العادية أسفل القواعد والسملات ودكة الأرضيات",
-                    )
+            _cw_basic_price_specs = [
+                {"rate_key": "cw_rate_slabs_beams", "label": "1. (م3) خرسانة مسلحة سقف وكمرات:", "default": 4500.0, "step": 50.0, "fmt": "%.1f", "help": "سعر المتر المكعب لخرسانة السقف والكمرات المسلحة شامل الحديد والشدة والصب"},
+                {"rate_key": "cw_rate_cols", "label": "2. (م3) خرسانة مسلحة أعمدة:", "default": 4800.0, "step": 50.0, "fmt": "%.1f", "help": "سعر المتر المكعب للخرسانة المسلحة لأعمدة المبنى"},
+                {"rate_key": "cw_rate_ftgs_gb", "label": "3. (م3) خرسانة مسلحة قواعد وسملات:", "default": 4400.0, "step": 50.0, "fmt": "%.1f", "help": "سعر المتر المكعب للخرسانة المسلحة للقواعد والسملات والشدادات والقواعد المشتركة"},
+                {"rate_key": "cw_rate_pc", "label": "4. (م3) خرسانة عادية وأرضيات:", "default": 2200.0, "step": 50.0, "fmt": "%.1f", "help": "سعر المتر المكعب للخرسانة العادية أسفل القواعد والسملات ودكة الأرضيات"},
+                {"rate_key": "cw_rate_backfill", "label": "5. (م3) أعمال الردم:", "default": 120.0, "step": 5.0, "fmt": "%.1f", "help": "سعر المتر المكعب لأعمال الردم بالرمل النظيف والدمك أسفل وأعلى سطح الأرض"},
+                {"rate_key": "cw_rate_bricks", "label": "6. (طوبة) الطوب الأسمنتي:", "default": 2.5, "step": 0.25, "fmt": "%.2f", "help": "سعر الطوبة الأسمنتية الواحدة شاملة التوريد والمونة والبناء (مثلاً 2.50 ج.م أي 2500 ج.م للألف طوبة)"},
+                {"rate_key": "cw_rate_interlock", "label": "7. (م2) الانترلوك:", "default": 220.0, "step": 5.0, "fmt": "%.1f", "help": "سعر المتر المسطح لبلاط انترلوك الأرصفة الخارجية"},
+                {"rate_key": "cw_rate_curbs", "label": "8. (م.ط) البردورات:", "default": 160.0, "step": 5.0, "fmt": "%.1f", "help": "سعر المتر الطولي لبردورات الأرصفة الخارجية"},
+                {"rate_key": "cw_rate_damp_proof", "label": "9. (م2) عزل الرطوبة للأساسات:", "default": 95.0, "step": 5.0, "fmt": "%.1f", "help": "سعر المتر المسطح لعزل الرطوبة البيتوميني للقواعد المسلحة والسملات"},
+                {"rate_key": "cw_rate_waterproof", "label": "10. (م2) عازل مائي (انسومات):", "default": 170.0, "step": 5.0, "fmt": "%.1f", "help": "سعر المتر المسطح للعزل المائي للأسطح بمادة الأنسومات"},
+                {"rate_key": "cw_rate_thermal", "label": "11. (م2) عازل حراري للسطح:", "default": 130.0, "step": 5.0, "fmt": "%.1f", "help": "سعر المتر المسطح للعزل الحراري للأسطح"},
+                {"rate_key": "cw_rate_roof_tiles", "label": "12. (م2) بلاط اسطح:", "default": 150.0, "step": 5.0, "fmt": "%.1f", "help": "سعر المتر المسطح لبلاط أسطح المبنى"},
+            ]
 
-                cw_pr2_c1, cw_pr2_c2, cw_pr2_c3, cw_pr2_c4 = st.columns(4)
-                with cw_pr2_c1:
-                    price_cw_backfill = st.number_input(
-                        "(م3) أعمال الردم:",
-                        min_value=0.0, max_value=100000.0,
-                        value=_saved_rate_backfill,
-                        step=5.0, format="%.1f",
-                        key=f"{prefix}cw_rate_backfill",
-                        help="سعر المتر المكعب لأعمال الردم بالرمل النظيف والدمك أسفل وأعلى سطح الأرض",
-                    )
-                with cw_pr2_c2:
-                    price_cw_bricks = st.number_input(
-                        "(طوبة) الطوب الأسمنتي:",
-                        min_value=0.0, max_value=100000.0,
-                        value=_saved_rate_bricks,
-                        step=0.25, format="%.2f",
-                        key=f"{prefix}cw_rate_bricks",
-                        help="سعر الطوبة الأسمنتية الواحدة شاملة التوريد والمونة والبناء (مثلاً 2.50 ج.م أي 2500 ج.م للألف طوبة)",
-                    )
-                with cw_pr2_c3:
-                    price_cw_interlock = st.number_input(
-                        "(م2) الانترلوك:",
-                        min_value=0.0, max_value=100000.0,
-                        value=_saved_rate_interlock,
-                        step=5.0, format="%.1f",
-                        key=f"{prefix}cw_rate_interlock",
-                        help="سعر المتر المسطح لبلاط انترلوك الأرصفة الخارجية",
-                    )
-                with cw_pr2_c4:
-                    price_cw_curbs = st.number_input(
-                        "(م.ط) البردورات:",
-                        min_value=0.0, max_value=100000.0,
-                        value=_saved_rate_curbs,
-                        step=5.0, format="%.1f",
-                        key=f"{prefix}cw_rate_curbs",
-                        help="سعر المتر الطولي لبردورات الأرصفة الخارجية",
-                    )
-
-                cw_pr3_c1, cw_pr3_c2, cw_pr3_c3, cw_pr3_c4 = st.columns(4)
-                with cw_pr3_c1:
-                    price_cw_damp_proof = st.number_input(
-                        "(م2) عزل الرطوبة للأساسات:",
-                        min_value=0.0, max_value=100000.0,
-                        value=_saved_rate_damp_proof,
-                        step=5.0, format="%.1f",
-                        key=f"{prefix}cw_rate_damp_proof",
-                        help="سعر المتر المسطح لعزل الرطوبة البيتوميني للقواعد المسلحة والسملات",
-                    )
-                with cw_pr3_c2:
-                    price_cw_waterproof = st.number_input(
-                        "(م2) عازل مائي (انسومات):",
-                        min_value=0.0, max_value=100000.0,
-                        value=_saved_rate_waterproof,
-                        step=5.0, format="%.1f",
-                        key=f"{prefix}cw_rate_waterproof",
-                        help="سعر المتر المسطح للعزل المائي للأسطح بمادة الأنسومات",
-                    )
-                with cw_pr3_c3:
-                    price_cw_thermal = st.number_input(
-                        "(م2) عازل حراري للسطح:",
-                        min_value=0.0, max_value=100000.0,
-                        value=_saved_rate_thermal,
-                        step=5.0, format="%.1f",
-                        key=f"{prefix}cw_rate_thermal",
-                        help="سعر المتر المسطح للعزل الحراري للأسطح",
-                    )
-                with cw_pr3_c4:
-                    price_cw_roof_tiles = st.number_input(
-                        "(م2) بلاط اسطح:",
-                        min_value=0.0, max_value=100000.0,
-                        value=_saved_rate_roof_tiles,
-                        step=5.0, format="%.1f",
-                        key=f"{prefix}cw_rate_roof_tiles",
-                        help="سعر المتر المسطح لبلاط أسطح المبنى",
-                    )
-
-            if (
-                abs(price_cw_slabs_beams - _saved_rate_slabs_beams) > 1e-4
-                or abs(price_cw_cols - _saved_rate_cols) > 1e-4
-                or abs(price_cw_ftgs_gb - _saved_rate_ftgs_gb) > 1e-4
-                or abs(price_cw_pc - _saved_rate_pc) > 1e-4
-                or abs(price_cw_backfill - _saved_rate_backfill) > 1e-4
-                or abs(price_cw_bricks - _saved_rate_bricks) > 1e-4
-                or abs(price_cw_interlock - _saved_rate_interlock) > 1e-4
-                or abs(price_cw_curbs - _saved_rate_curbs) > 1e-4
-                or abs(price_cw_damp_proof - _saved_rate_damp_proof) > 1e-4
-                or abs(price_cw_waterproof - _saved_rate_waterproof) > 1e-4
-                or abs(price_cw_thermal - _saved_rate_thermal) > 1e-4
-                or abs(price_cw_roof_tiles - _saved_rate_roof_tiles) > 1e-4
+            _cw_saved_rates_map = {}
+            _cw_live_rates_map = {}
+            with st.expander(
+                "💰 أسعار البنود الاساسية (التي يحسبها البرنامج)",
+                expanded=False,
+                key=f"{prefix}m1_expander_basic_item_prices",
             ):
-                S.cfg_set(f"{prefix}cw_rate_slabs_beams", price_cw_slabs_beams)
-                S.cfg_set("cw_rate_slabs_beams", price_cw_slabs_beams)
-                S.cfg_set(f"{prefix}cw_rate_cols", price_cw_cols)
-                S.cfg_set("cw_rate_cols", price_cw_cols)
-                S.cfg_set(f"{prefix}cw_rate_ftgs_gb", price_cw_ftgs_gb)
-                S.cfg_set("cw_rate_ftgs_gb", price_cw_ftgs_gb)
-                S.cfg_set(f"{prefix}cw_rate_pc", price_cw_pc)
-                S.cfg_set("cw_rate_pc", price_cw_pc)
-                S.cfg_set(f"{prefix}cw_rate_backfill", price_cw_backfill)
-                S.cfg_set("cw_rate_backfill", price_cw_backfill)
-                S.cfg_set(f"{prefix}cw_rate_bricks", price_cw_bricks)
-                S.cfg_set("cw_rate_bricks", price_cw_bricks)
-                S.cfg_set(f"{prefix}cw_rate_interlock", price_cw_interlock)
-                S.cfg_set("cw_rate_interlock", price_cw_interlock)
-                S.cfg_set(f"{prefix}cw_rate_curbs", price_cw_curbs)
-                S.cfg_set("cw_rate_curbs", price_cw_curbs)
-                S.cfg_set(f"{prefix}cw_rate_damp_proof", price_cw_damp_proof)
-                S.cfg_set("cw_rate_damp_proof", price_cw_damp_proof)
-                S.cfg_set(f"{prefix}cw_rate_waterproof", price_cw_waterproof)
-                S.cfg_set("cw_rate_waterproof", price_cw_waterproof)
-                S.cfg_set(f"{prefix}cw_rate_thermal", price_cw_thermal)
-                S.cfg_set("cw_rate_thermal", price_cw_thermal)
-                S.cfg_set(f"{prefix}cw_rate_roof_tiles", price_cw_roof_tiles)
-                S.cfg_set("cw_rate_roof_tiles", price_cw_roof_tiles)
+                st.markdown(
+                    f"""
+                    <div dir="rtl" style="text-align: center; margin: 4px auto 12px auto; background: linear-gradient(135deg, rgba(30, 41, 59, 0.90) 0%, rgba(15, 23, 42, 0.96) 100%); border: 1.5px solid rgba(245, 158, 11, 0.5); border-top: 3px solid #f59e0b; border-radius: 8px; padding: 9px 24px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);">
+                        <span style="font-size: 1.45rem; font-weight: 900; color: #fbbf24; text-shadow: 0 2px 6px rgba(0,0,0,0.7); letter-spacing: 0.5px;">
+                            💰 أسعار البنود الاساسية (التي يحسبها البرنامج) ({len(_cw_basic_price_specs)} بنداً)
+                        </span>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                with st.container(border=True, key=f"{prefix}m1_rates_container"):
+                    st.markdown('<div class="m1-rates-container-marker" style="display:none;"></div>', unsafe_allow_html=True)
+                    _cw_cols_per_row = 4
+                    for _r_start in range(0, len(_cw_basic_price_specs), _cw_cols_per_row):
+                        _r_chunk = _cw_basic_price_specs[_r_start : _r_start + _cw_cols_per_row]
+                        _r_cols = st.columns(_cw_cols_per_row)
+                        for _c_off, _sp in enumerate(_r_chunk):
+                            _rk = _sp["rate_key"]
+                            _pref_rk = f"{prefix}{_rk}"
+                            _def_v = float(_cw_lib_basic_price_map.get(_rk, _sp["default"]))
+                            _saved_v = float(S.cfg_val(_pref_rk, S.cfg_val(_rk, _def_v)))
+                            _cw_saved_rates_map[_rk] = _saved_v
+                            with _r_cols[_c_off]:
+                                _cw_live_rates_map[_rk] = st.number_input(
+                                    _sp["label"],
+                                    min_value=0.0,
+                                    max_value=100000.0,
+                                    value=_saved_v,
+                                    step=float(_sp["step"]),
+                                    format=_sp["fmt"],
+                                    key=_pref_rk,
+                                    help=_sp["help"],
+                                )
+
+            if any(abs(_cw_live_rates_map[_rk] - _cw_saved_rates_map[_rk]) > 1e-4 for _rk in _cw_live_rates_map):
+                for _rk, _val in _cw_live_rates_map.items():
+                    S.cfg_set(f"{prefix}{_rk}", _val)
+                    S.cfg_set(_rk, _val)
                 S.save_settings()
                 st.session_state.pop(f"{prefix}_cached_report_html", None)
                 st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
 
-            # معامل زيادة للكميات التي تم حسابها
-            _qf_key = f"{prefix}w_cw_qty_factor"
-            _saved_qty_factor = float(S.cfg_val(f"{prefix}cw_qty_factor", S.cfg_val("cw_qty_factor", 1.20)))
+            price_cw_slabs_beams = _cw_live_rates_map["cw_rate_slabs_beams"]
+            price_cw_cols = _cw_live_rates_map["cw_rate_cols"]
+            price_cw_ftgs_gb = _cw_live_rates_map["cw_rate_ftgs_gb"]
+            price_cw_pc = _cw_live_rates_map["cw_rate_pc"]
+            price_cw_backfill = _cw_live_rates_map["cw_rate_backfill"]
+            price_cw_bricks = _cw_live_rates_map["cw_rate_bricks"]
+            price_cw_interlock = _cw_live_rates_map["cw_rate_interlock"]
+            price_cw_curbs = _cw_live_rates_map["cw_rate_curbs"]
+            price_cw_damp_proof = _cw_live_rates_map["cw_rate_damp_proof"]
+            price_cw_waterproof = _cw_live_rates_map["cw_rate_waterproof"]
+            price_cw_thermal = _cw_live_rates_map["cw_rate_thermal"]
+            price_cw_roof_tiles = _cw_live_rates_map["cw_rate_roof_tiles"]
 
+            # ═════════════════════════════════════════════════════════════════════════
+            #  2. إدارة وتخصيص مكتبة القوالب المضافة يدويا
+            # ═════════════════════════════════════════════════════════════════════════
+            _cw_presets = _get_cw_manual_boq_presets_list()
+            _render_cw_presets_library_manager(_cw_presets, prefix=prefix)
+
+            # ═════════════════════════════════════════════════════════════════════════
+            #  3. إضافة وإدارة بنود الحصر اليدوية الإضافية
+            # ═════════════════════════════════════════════════════════════════════════
+            _qf_key = f"{prefix}w_cw_qty_factor"
+            _saved_qty_factor = float(
+                st.session_state.get(
+                    _qf_key,
+                    S.cfg_val(f"{prefix}cw_qty_factor", S.cfg_val("cw_qty_factor", 1.20)),
+                )
+            )
+            _render_cw_manual_boq_items_manager(cur_factor=_saved_qty_factor, prefix=prefix)
+
+            # ═════════════════════════════════════════════════════════════════════════
+            #  بانيل معامل زيادة للكميات التي تم حسابها (أعلى الجدول المجمع مباشرةً بنفس فلسفة Module 15)
+            # ═════════════════════════════════════════════════════════════════════════
             st.markdown(
                 """
                 <style>
@@ -30566,17 +30958,6 @@ def render(is_standalone: bool = False):
                 st.session_state.pop(f"{prefix}_cached_report_html", None)
                 st.session_state.pop(f"{prefix}_last_concise_pdf_bytes", None)
 
-            # ═════════════════════════════════════════════════════════════════════════
-            #  2. إدارة وتخصيص مكتبة القوالب الجاهزة (12 قالب متاح لجميع المشاريع)
-            # ═════════════════════════════════════════════════════════════════════════
-            _cw_presets = _get_cw_manual_boq_presets_list()
-            _render_cw_presets_library_manager(_cw_presets, prefix=prefix)
-
-            # ═════════════════════════════════════════════════════════════════════════
-            #  3. إضافة وإدارة بنود الحصر اليدوية الإضافية (رخام سلالم، حجر فرعوني، وبنود أخرى)
-            # ═════════════════════════════════════════════════════════════════════════
-            _render_cw_manual_boq_items_manager(cur_factor=cw_qty_factor, prefix=prefix)
-
             # ── دمج البنود الأساسية الـ 12 مع البنود اليدوية المضافة ──
             _sum_slabs_beams_net = round(_v_slabs_conc + _v_beams_conc, 2)
             _sum_cols_net = round(_v_cols_conc, 2)
@@ -30644,6 +31025,9 @@ def render(is_standalone: bool = False):
                  _sum_roof_tiles_net, "م² (m²)", price_cw_roof_tiles,
                  f"مسطح المبنى ({_bldg_footprint_m2:.2f} m²) × {cw_qty_factor:.2f}"),
             ]
+            assert len(_cw_live_rates_map) == len(base_cw_items_data), (
+                f"Module 1 basic price inputs ({len(_cw_live_rates_map)}) != basic items ({len(base_cw_items_data)})"
+            )
 
             _cw_manual_tuples = _get_cw_manual_boq_t2_tuples(cw_qty_factor=cw_qty_factor, start_idx=13, prefix=prefix)
             _cw_manual_items_raw = _get_cw_manual_boq_items_list(prefix=prefix)
@@ -30682,20 +31066,7 @@ def render(is_standalone: bool = False):
             _cw_orig_idx_list = [int(_e["auto_idx"] or 0) for _e in _cw_all_entries]
             _cw_active_auto_count = sum(1 for _e in _cw_all_entries if _e["source_type"] == "auto_calculated")
 
-            DEFAULT_CW_ITEM_DESCRIPTIONS = {
-                "item_1": "بالمتر المكعب، توريد وصب خرسانة مسلحة للأسقف والكمرات (بلاطات لاكمرية Flat Slab وكمرات ساقطة/مدفونة) بمحتوى أسمنتي لا يقل عن 350 كجم أسمنت بورتلاندي عادي/م³ خرسانة ومقاومة مميزة طبقاً للتصميم الإنشائي، والسعر يشمل الشدات الخشبية أو المعدنية وحديد التسليح والفرم والصب والدمك الميكانيكي والمعالجة بالمياه طبقاً للكود المصري ECP 203.",
-                "item_2": "بالمتر المكعب، توريد وصب خرسانة مسلحة للأعمدة الإنشائية لكافة أدوار المبنى بمحتوى أسمنتي لا يقل عن 350-400 كجم/م³ ومقاومة مميزة طبقاً للتصميم، والسعر يشمل أعمال النجارة والتقويات والشدات وحديد التسليح الطولي والكانات والصب والدمك والمعالجة طبقاً لاشتراطات الكود المصري ECP 203.",
-                "item_3": "بالمتر المكعب، توريد وصب خرسانة مسلحة للأساسات (قواعد منفصلة + قواعد مشتركة + شدادات + سملات وميد أرضية) باستخدام أسمنت مقاوم للكبريتات (أو حسب تقرير التربة) بمحتوى لا يقل عن 350 كجم/م³، شاملاً الشدات وحديد التسليح والصب والدمك والمعالجة طبقاً للكود المصري ECP 203.",
-                "item_4": "بالمتر المكعب، توريد وصب خرسانة عادية للفرشات أسفل القواعد المسلحة وأسفل السملات ودكة الأرضيات بمحتوى أسمنتي 250 كجم أسمنت/م³ خرسانة، والسعر يشمل النظافة وضبط المناسيب والفرم والصب والدمك والتسوية والمعالجة بالمياه طبقاً للمواصفات الفنية والكود المصري.",
-                "item_5": "بالمتر المكعب، توريد وردم برمل نظيف خالٍ من الشوائب والأملاح والطفلة حول الأساسات أسفل سطح الأرض وداخل أحواض الردم أعلى سطح الأرض حتى منسوب دكة الأرضية، على طبقات لا يتجاوز سمك الطبقة 25 سم مع الرش الغزير بالمياه والدمك الميكانيكي الجيد للوصول لأقصى كثافة جافة طبقاً لأصول الصناعة.",
-                "item_6": "بالعدد (طوبة)، توريد وبناء طوب أسمنتي مصمت لمباني قصية الردم والأساسات أعلى السملات حتى منسوب الردم بالمونة الأسمنتية بنسبة لا تقل عن 350 كجم أسمنت/م³ رمل، شاملاً التشحيط وضبط الرأسية والأفقية وتفريغ اللحامات والمعالجة بالمياه طبقاً للمواصفات الفنية والكود المصري.",
-                "item_7": "بالمتر المسطح، توريد وتركيب بلاط انترلوك خرساني متداخل للأرصفة الخارجية حول محيط المبنى سمك 6-8 سم على فرشة رمل نظيف مدكوك مع الدك الهزاز الميكانيكي وملء الفواصل بالرمل الناعم وضبط المناسيب والميول السطحية طبقاً لأصول الصناعة.",
-                "item_8": "بالمتر الطولي، توريد وتركيب بردورات خرسانية جاهزة للأرصفة الخارجية حول داير الانترلوك شاملة الحفر والفرشة الخرسانية العادية أسفلها والتثبيت والسنادة الخلفية بالخرسانة وتكحيل اللحامات بمونة الأسمنت والرمل طبقاً للمواصفات.",
-                "item_9": "بالمتر المسطح، توريد ودهان عزل رطوبة بيتوميني (وجهين أو ثلاثة أوجه متعامدة من البيتومين المؤكسد الساخن أو المستحلب البيتوميني المطاطي البارد) لجميع جوانب وأسطح القواعد المسلحة وجوانب السملات ومباني قصية الردم الملامسة للتربة بعد النظافة التامة طبقاً لأصول الصناعة.",
-                "item_10": "بالمتر المسطح، توريد وتنفيذ طبقة عزل مائي للسطح النهائي باستخدام لفائف البيتومين المعدل المسلح بالبوليستر (أنسومات سمك 4 مم) تركب باللهب فوق وجه برايمر بيتوميني مع عمل ركوب لا يقل عن 10 سم ورفع العزل على الدروة وعمل رقبة القزازة والاختبار بالغمر بالمياه لمدة 48 ساعة.",
-                "item_11": "بالمتر المسطح، توريد وتركيب ألواح عزل حراري للسطح من البوليستيرين المبثوق عالي الكثافة (Extruded Polystyrene - XPS / فوم أزرق) سمك 5 سم عاشق ومعشوق يرص فوق طبقة العزل المائي وحمايته بطبقة مشمع بولي إيثيلين قبل عمل خرسانة الميول والبلاط.",
-                "item_12": "بالمتر المسطح، توريد وتركيب بلاط أسطح (بلاط موزايكو / سنجابي / أسمنتي مقاس 20×20×2 سم) فوق فرشة الرمل والمونة الأسمنتية مع ضبط أوتار الميول نحو جرجوري صرف الأمطار وعمل الوزرات المائلة والسقية بلباني الأسمنت وفواصل التمدد المملوءة بالبيتومين.",
-            }
+            DEFAULT_CW_ITEM_DESCRIPTIONS = dict(CW_DEFAULT_BASIC_DESCRIPTIONS)
 
             # إضافة توصيفات البنود اليدوية للقائمة الافتراضية
             _cur_manual_items_list = _get_cw_manual_boq_items_list(prefix=prefix)
@@ -30822,6 +31193,71 @@ def render(is_standalone: bool = False):
             # ── شريط أدوات أسفل الجدول المجمع: استعادة وحساب بنود التصميم + استعادة بند يدوي + سجل المستبعدات ──
             _render_cw_boq_bottom_toolbar(_cw_boq_del_items, prefix=prefix)
 
+            # ── تنسيق رؤوس أقسام المقايسة وحصر المواد: كتابة سوداء بخلفية بيضاء (نفس فلسفة Module 15) ──
+            st.markdown(
+                """
+                <style>
+                div[class*="m1_expander_used_items_table"],
+                div[class*="m1_expander_detailed_survey_all"],
+                div[class*="m1_expander_materials_breakdown"] {
+                    border: 1.5px solid #cbd5e1 !important;
+                    border-radius: 10px !important;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+                    overflow: hidden !important;
+                    margin-top: 8px !important;
+                    margin-bottom: 8px !important;
+                    background: transparent !important;
+                }
+                div[class*="m1_expander_used_items_table"] summary,
+                div[class*="m1_expander_detailed_survey_all"] summary,
+                div[class*="m1_expander_materials_breakdown"] summary {
+                    background: #ffffff !important;
+                    background-color: #ffffff !important;
+                    border: none !important;
+                    border-radius: 9px !important;
+                    padding: 10px 16px !important;
+                    transition: all 0.2s ease !important;
+                }
+                div[class*="m1_expander_used_items_table"] summary:hover,
+                div[class*="m1_expander_detailed_survey_all"] summary:hover,
+                div[class*="m1_expander_materials_breakdown"] summary:hover {
+                    background: #f8fafc !important;
+                    background-color: #f8fafc !important;
+                    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.10) !important;
+                }
+                div[class*="m1_expander_used_items_table"] details[open] > summary,
+                div[class*="m1_expander_detailed_survey_all"] details[open] > summary,
+                div[class*="m1_expander_materials_breakdown"] details[open] > summary {
+                    background: #ffffff !important;
+                    background-color: #ffffff !important;
+                    border-bottom: 1.5px solid #cbd5e1 !important;
+                }
+                div[class*="m1_expander_used_items_table"] summary p,
+                div[class*="m1_expander_used_items_table"] summary span,
+                div[class*="m1_expander_used_items_table"] summary *,
+                div[class*="m1_expander_detailed_survey_all"] summary p,
+                div[class*="m1_expander_detailed_survey_all"] summary span,
+                div[class*="m1_expander_detailed_survey_all"] summary *,
+                div[class*="m1_expander_materials_breakdown"] summary p,
+                div[class*="m1_expander_materials_breakdown"] summary span,
+                div[class*="m1_expander_materials_breakdown"] summary * {
+                    color: #000000 !important;
+                    font-size: 1.15rem !important;
+                    font-weight: 800 !important;
+                    text-shadow: none !important;
+                }
+                div[class*="m1_expander_used_items_table"] summary svg,
+                div[class*="m1_expander_detailed_survey_all"] summary svg,
+                div[class*="m1_expander_materials_breakdown"] summary svg {
+                    color: #000000 !important;
+                    fill: #000000 !important;
+                    stroke: #000000 !important;
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
+
             # ═════════════════════════════════════════════════════════════════════════
             #  4. جدول البنود المستخدمة في المقايسة
             # ═════════════════════════════════════════════════════════════════════════
@@ -30835,7 +31271,7 @@ def render(is_standalone: bool = False):
                 else:
                     _m1_unused_items.append((_idx, _clean_name, 0.0, str(_unit)))
 
-            with st.expander("جدول البنود المستخدمة في المقايسة", expanded=False):
+            with st.expander("جدول البنود المستخدمة في المقايسة", expanded=False, key=f"{prefix}m1_expander_used_items_table"):
                 _max_rows = max(len(_m1_used_items), len(_m1_unused_items))
                 if _max_rows == 0:
                     _max_rows = 1
@@ -30919,7 +31355,7 @@ def render(is_standalone: bool = False):
             # ═════════════════════════════════════════════════════════════════════════
             #  5. تفاصيل حصر جميع البنود
             # ═════════════════════════════════════════════════════════════════════════
-            with st.expander("تفاصيل حصر جميع البنود", expanded=False):
+            with st.expander("تفاصيل حصر جميع البنود", expanded=False, key=f"{prefix}m1_expander_detailed_survey_all"):
                 # دمج بنود الحصر الأساسية مع البنود اليدوية الإضافية في جدول الحصر التفصيلي
                 _full_detailed_takeoff_rows = list(comp_works_table_rows)
                 for _m_idx, _m_item in enumerate(_cur_manual_items_list, start=13):
@@ -30957,7 +31393,7 @@ def render(is_standalone: bool = False):
             _tot_steel_ton = _boq_materials_dict["tot_steel_ton"]
             _tot_bricks = _boq_materials_dict["tot_bricks"]
 
-            with st.expander("حساب كميات المواد المستخدمة في البنود", expanded=False):
+            with st.expander("حساب كميات المواد المستخدمة في البنود", expanded=False, key=f"{prefix}m1_expander_materials_breakdown"):
                 # بانيلات المؤشرات الرقمية التراكمية لكميات المواد (6 مؤشرات مميزة)
                 st.markdown(
                     f"""
