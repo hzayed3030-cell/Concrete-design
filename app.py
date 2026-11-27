@@ -12,6 +12,7 @@ import subprocess
 import shutil
 import datetime
 import re
+import json
 
 # Ensure root directory is always first in sys.path regardless of CMD working directory
 app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -2593,6 +2594,112 @@ def render_profile_manager():
         """
     )
 
+    # ── Hidden bridge & handler for centered project-delete confirmation modal (Module 15 style) ──
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stTextInput"]:has(input[aria-label="app_proj_del_sync_payload"]) {
+            position: fixed !important;
+            top: -9999px !important;
+            left: -9999px !important;
+            width: 1px !important;
+            height: 1px !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+            z-index: -9999 !important;
+        }
+        div[class*="st-key-btn_del_saved_proj_"] button {
+            background: rgba(220, 38, 38, 0.16) !important;
+            border: 1.5px solid rgba(239, 68, 68, 0.55) !important;
+            color: #fca5a5 !important;
+            padding: 4px 6px !important;
+            transition: all 0.15s ease !important;
+        }
+        div[class*="st-key-btn_del_saved_proj_"] button:hover {
+            background: rgba(220, 38, 38, 0.42) !important;
+            border-color: #ef4444 !important;
+            color: #ffffff !important;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.45) !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    def _on_app_proj_del_sync_change():
+        raw_val = str(st.session_state.get("app_proj_del_sync_input", "") or "").strip()
+        if raw_val:
+            st.session_state["_app_queued_proj_del_payload"] = raw_val
+            st.session_state["app_proj_del_sync_input"] = ""
+
+    _proj_del_sync_val = st.text_input(
+        "app_proj_del_sync_payload",
+        value="",
+        key="app_proj_del_sync_input",
+        on_change=_on_app_proj_del_sync_change,
+        label_visibility="collapsed",
+    )
+    _active_proj_del_raw = st.session_state.pop("_app_queued_proj_del_payload", None) or _proj_del_sync_val
+    if _active_proj_del_raw:
+        try:
+            _del_payload = json.loads(_active_proj_del_raw)
+            if isinstance(_del_payload, dict) and _del_payload.get("action") == "confirm_delete_project":
+                _target_p = str(_del_payload.get("project_name") or "").strip()
+                _ts_tok = str(_del_payload.get("ts") or "")
+                if _target_p and _ts_tok != st.session_state.get("_app_last_proj_del_ts"):
+                    st.session_state["_app_last_proj_del_ts"] = _ts_tok
+                    _del_ok = delete_project(_target_p)
+                    if _del_ok:
+                        st.session_state["_app_proj_del_toast_msg"] = f"✅ تم حذف المشروع «{_target_p}» نهائياً بنجاح"
+                    else:
+                        st.session_state["_app_proj_del_toast_err"] = f"⚠️ تعذر حذف المشروع «{_target_p}»"
+                    st.rerun()
+        except Exception:
+            pass
+
+    _proj_del_toast_ok = st.session_state.pop("_app_proj_del_toast_msg", None)
+    if _proj_del_toast_ok:
+        import html as _html_app_toast
+        _ok_esc = _html_app_toast.escape(str(_proj_del_toast_ok))
+        st.markdown(
+            f"""
+            <style>
+            @keyframes appProjDelToast {{
+                0%   {{ opacity: 0; transform: translate(-50%, -50%) scale(0.92); visibility: visible; }}
+                8%   {{ opacity: 1; transform: translate(-50%, -50%) scale(1.0);  visibility: visible; }}
+                86%  {{ opacity: 1; transform: translate(-50%, -50%) scale(1.0);  visibility: visible; }}
+                100% {{ opacity: 0; transform: translate(-50%, -50%) scale(0.95); visibility: hidden; }}
+            }}
+            .app-proj-del-toast {{
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                z-index: 999999;
+                pointer-events: none;
+                max-width: 72vw;
+                background: linear-gradient(135deg, rgba(6, 78, 59, 0.97) 0%, rgba(16, 185, 129, 0.95) 50%, rgba(4, 120, 87, 0.97) 100%);
+                border: 2.5px solid #34d399;
+                border-radius: 14px;
+                padding: 18px 34px;
+                text-align: center;
+                color: #ffffff;
+                font-size: 1.28rem;
+                font-weight: 800;
+                line-height: 1.55;
+                box-shadow: 0 16px 44px rgba(0, 0, 0, 0.60), 0 0 28px rgba(16, 185, 129, 0.55);
+                text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
+                animation: appProjDelToast 3.0s ease-in-out forwards;
+            }}
+            </style>
+            <div dir="rtl" class="app-proj-del-toast">{_ok_esc}</div>
+            """,
+            unsafe_allow_html=True,
+        )
+    _proj_del_toast_err = st.session_state.pop("_app_proj_del_toast_err", None)
+    if _proj_del_toast_err:
+        st.error(_proj_del_toast_err)
+
     # ── Global Actions Toolbar (Compact) & Cohesive Distinctive Buttons ───
     st.markdown(
         """
@@ -3411,23 +3518,26 @@ def render_profile_manager():
     render_custom_html(
         """
         <style>
-        /* ── Top Pinned Active Project Card (Calm Light Mint Green Theme) ── */
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-active) {
-            border: 2.5px solid #059669 !important;
-            border-radius: 14px !important;
-            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 45%, #bbf7d0 100%) !important;
-            box-shadow: 0 6px 24px rgba(5, 150, 105, 0.20), 0 0 14px rgba(16, 185, 129, 0.12) !important;
-            padding: 14px 18px 16px 18px !important;
-            margin-bottom: 20px !important;
+        /* ── Top Pinned Active Project Card (Vibrant Thick Cheerful Emerald-Cyan Frame) ── */
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-active),
+        div[class*="st-key-app_active_project_card"] {
+            border: 4px solid #10b981 !important;
+            border-radius: 16px !important;
+            background: linear-gradient(135deg, rgba(6, 78, 59, 0.42) 0%, rgba(15, 23, 42, 0.95) 50%, rgba(14, 116, 144, 0.32) 100%) !important;
+            box-shadow: 0 8px 32px rgba(16, 185, 129, 0.38), 0 0 22px rgba(56, 189, 248, 0.26), inset 0 1px 1px rgba(167, 243, 208, 0.22) !important;
+            padding: 16px 20px 18px 20px !important;
+            margin-bottom: 22px !important;
             transition: all 0.25s ease-in-out !important;
         }
 
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-active):hover {
-            border-color: #047857 !important;
-            box-shadow: 0 8px 30px rgba(5, 150, 105, 0.32), 0 0 18px rgba(16, 185, 129, 0.22) !important;
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-active):hover,
+        div[class*="st-key-app_active_project_card"]:hover {
+            border-color: #10b981 !important;
+            box-shadow: 0 8px 34px rgba(16, 185, 129, 0.42), 0 0 24px rgba(56, 189, 248, 0.28) !important;
         }
 
-        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-active) > div[data-testid="stVerticalBlock"] {
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(.project-box-active) > div[data-testid="stVerticalBlock"],
+        div[class*="st-key-app_active_project_card"] > div[data-testid="stVerticalBlock"] {
             background: transparent !important;
         }
 
@@ -3608,7 +3718,7 @@ def render_profile_manager():
     else:
         updated_pill_html = ""
 
-    with st.container(border=True):
+    with st.container(border=True, key="app_active_project_card"):
         row_html = f"""<div class="project-box-active">
             <div style="
                 background: transparent;
@@ -3747,11 +3857,15 @@ def render_profile_manager():
                 "🗑️",
                 key=f"btn_del_{pname}",
                 use_container_width=True,
-                help=f"حذف مشروع {pname}",
+                help=f"حذف مشروع «{pname}» نهائياً" if len(projects) > 1 else "لا يمكن حذف المشروع الوحيد المتبقي",
+                disabled=(len(projects) <= 1),
             ):
-                st.session_state["_profile_to_delete"] = pname
-                st.session_state["_play_strong_whistle_now"] = True
-                st.rerun()
+                import time as _t_act_del
+                st.session_state["_profile_to_delete"] = None
+                st.session_state["_app_center_del_proj_modal"] = {
+                    "name": pname,
+                    "token": f"app_proj_del_{int(_t_act_del.time() * 1000)}",
+                }
 
         # ── Interactive Rename Project Drawer (Hide/Show) ───────────────────
         if st.session_state.get(f"_show_rename_{pname}", False):
@@ -4388,7 +4502,7 @@ def render_profile_manager():
                 updated_pill_html = ""
 
             with st.container(border=True):
-                col_row_info, col_row_btn = st.columns([7.7, 2.3])
+                col_row_info, col_row_btn = st.columns([7.2, 2.8])
                 with col_row_info:
                     row_html = f"""<div class="{marker_class}">
                         <div style="
@@ -4421,7 +4535,7 @@ def render_profile_manager():
                     render_custom_html(row_html)
                 with col_row_btn:
                     st.markdown("<div style='margin-top: 5px;'></div>", unsafe_allow_html=True)
-                    b_sub1, b_sub2 = st.columns([1.1, 1.1])
+                    b_sub1, b_sub2, b_sub3 = st.columns([1.15, 1.15, 0.55])
                     with b_sub1:
                         if st.button(
                             "🚀 تشغيل",
@@ -4457,6 +4571,212 @@ def render_profile_manager():
                             st.session_state["selected_module_idx"] = s_target_mod
                             st.session_state["_force_module_idx"] = s_target_mod
                             st.rerun()
+                    with b_sub3:
+                        if st.button(
+                            "🗑️",
+                            key=f"btn_del_saved_proj_{s_pname}",
+                            use_container_width=True,
+                            help=f"حذف مشروع «{s_pname}» نهائياً" if len(projects) > 1 else "لا يمكن حذف المشروع الوحيد المتبقي",
+                            disabled=(len(projects) <= 1),
+                        ):
+                            import time as _t_proj_del
+                            st.session_state["_app_center_del_proj_modal"] = {
+                                "name": s_pname,
+                                "token": f"app_proj_del_{int(_t_proj_del.time() * 1000)}",
+                            }
+
+    # ── عرض نافذة تأكيد حذف المشروع في منتصف الشاشة بنفس تصميم بانيل حذف البند في Module 15 ──
+    _del_modal_cfg = st.session_state.pop("_app_center_del_proj_modal", None)
+    if isinstance(_del_modal_cfg, dict) and _del_modal_cfg.get("name"):
+        _modal_pname = str(_del_modal_cfg["name"])
+        _modal_tok = str(_del_modal_cfg.get("token") or "app_proj_del")
+        _modal_safe = {
+            "title": "⚠️ تأكيد حذف المشروع نهائياً",
+            "message": f"هل أنت متأكد من حذف المشروع: [{_modal_pname}] بالكامل بجميع بياناته وموديولاته نهائياً؟",
+            "confirm_label": "✅ تأكيد الحذف",
+            "cancel_label": "❌ إلغاء",
+            "loading_label": "⏳ جارٍ الحذف...",
+            "project_name": _modal_pname,
+        }
+        _modal_json = json.dumps(_modal_safe, ensure_ascii=False).replace("</", "<\\/")
+        render_html_iframe(
+            f"""
+            <script>
+            // app-proj-del-modal-{_modal_tok}
+            (function() {{
+                const cfg = {_modal_json};
+
+                function playProjDelBeep() {{
+                    try {{
+                        const pWin = window.parent || window;
+                        const AudioCtx = pWin.AudioContext || pWin.webkitAudioContext || window.AudioContext || window.webkitAudioContext;
+                        if (!AudioCtx) return;
+                        const ctx = pWin.__appProjDelBeepCtx || new AudioCtx();
+                        pWin.__appProjDelBeepCtx = ctx;
+                        if (ctx.state === 'suspended') ctx.resume().catch(function(){{}});
+                        const now = ctx.currentTime;
+                        [0, 0.14].forEach(function(offset, idx) {{
+                            const osc = ctx.createOscillator();
+                            const gain = ctx.createGain();
+                            osc.type = 'triangle';
+                            osc.frequency.setValueAtTime(idx === 0 ? 920 : 680, now + offset);
+                            gain.gain.setValueAtTime(0.001, now + offset);
+                            gain.gain.exponentialRampToValueAtTime(0.28, now + offset + 0.015);
+                            gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.12);
+                            osc.connect(gain);
+                            gain.connect(ctx.destination);
+                            osc.start(now + offset);
+                            osc.stop(now + offset + 0.13);
+                        }});
+                    }} catch (e) {{}}
+                }}
+
+                function sendProjDelToParent(payloadObj) {{
+                    const jsonStr = JSON.stringify(payloadObj);
+                    try {{
+                        if (window.parent && window.parent.document) {{
+                            const pDoc = window.parent.document;
+                            let input = pDoc.querySelector('input[aria-label="app_proj_del_sync_payload"]');
+                            if (input) {{
+                                const proto = (window.parent.HTMLInputElement || window.HTMLInputElement).prototype;
+                                const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+                                if (desc && desc.set) {{
+                                    desc.set.call(input, jsonStr);
+                                }} else {{
+                                    input.value = jsonStr;
+                                }}
+                                if (input._valueTracker) {{
+                                    input._valueTracker.setValue('');
+                                }}
+                                input.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                                input.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                                input.dispatchEvent(new KeyboardEvent('keydown', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
+                                input.dispatchEvent(new KeyboardEvent('keyup', {{ bubbles: true, cancelable: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }}));
+                                input.dispatchEvent(new Event('blur', {{ bubbles: true }}));
+                            }}
+                        }}
+                    }} catch (err) {{}}
+                }}
+
+                function showProjDeleteModal() {{
+                    const targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+                    const MODAL_ID = 'app-proj-del-confirm-modal';
+                    const existing = targetDoc.getElementById(MODAL_ID);
+                    if (existing) existing.remove();
+
+                    const backdrop = targetDoc.createElement('div');
+                    backdrop.id = MODAL_ID;
+                    backdrop.setAttribute('dir', 'rtl');
+                    backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(2,6,23,0.72);backdrop-filter:blur(4px);z-index:9999999;display:flex;align-items:center;justify-content:center;padding:16px;font-family:Segoe UI,Cairo,Tahoma,sans-serif;';
+
+                    const card = targetDoc.createElement('div');
+                    card.style.cssText = 'width:100%;max-width:480px;background:linear-gradient(145deg,#0f172a 0%,#1e293b 100%);border:2px solid #ef4444;border-radius:14px;padding:22px 24px;box-shadow:0 20px 50px rgba(0,0,0,0.65),0 0 24px rgba(239,68,68,0.28);color:#f8fafc;text-align:right;';
+
+                    const hdr = targetDoc.createElement('div');
+                    hdr.style.cssText = 'display:flex;align-items:center;gap:10px;font-size:1.15rem;font-weight:900;color:#fca5a5;margin-bottom:12px;';
+                    hdr.textContent = cfg.title;
+
+                    const msg = targetDoc.createElement('div');
+                    msg.style.cssText = 'font-size:1.05rem;font-weight:700;color:#f1f5f9;line-height:1.7;margin-bottom:14px;background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.35);border-radius:10px;padding:12px 14px;';
+                    msg.textContent = cfg.message;
+
+                    const sureWrap = targetDoc.createElement('div');
+                    sureWrap.style.cssText = 'margin-bottom:18px;';
+
+                    const sureLbl = targetDoc.createElement('div');
+                    sureLbl.style.cssText = 'font-size:0.95rem;font-weight:800;color:#fde68a;margin-bottom:8px;';
+                    sureLbl.textContent = '🔐 اكتب "I am sure" لتأكيد حذف المشروع نهائياً:';
+
+                    const sureInput = targetDoc.createElement('input');
+                    sureInput.type = 'text';
+                    sureInput.placeholder = 'I am sure';
+                    sureInput.setAttribute('dir', 'ltr');
+                    sureInput.autocomplete = 'off';
+                    sureInput.style.cssText = 'width:100%;box-sizing:border-box;padding:10px 14px;border-radius:9px;border:1.5px solid #f87171;background:#020617;color:#ffffff;font-size:1.02rem;font-weight:800;text-align:center;outline:none;box-shadow:inset 0 1px 4px rgba(0,0,0,0.6);';
+
+                    sureWrap.appendChild(sureLbl);
+                    sureWrap.appendChild(sureInput);
+
+                    const btnsRow = targetDoc.createElement('div');
+                    btnsRow.style.cssText = 'display:flex;gap:12px;justify-content:flex-start;';
+
+                    const btnConfirm = targetDoc.createElement('button');
+                    btnConfirm.type = 'button';
+                    btnConfirm.textContent = cfg.confirm_label;
+                    btnConfirm.disabled = true;
+                    const enabledConfirmCss = 'flex:1;padding:10px 16px;border-radius:9px;border:1.5px solid #ef4444;background:linear-gradient(135deg,#dc2626 0%,#b91c1c 100%);color:#ffffff;font-size:1rem;font-weight:900;cursor:pointer;box-shadow:0 4px 12px rgba(220,38,38,0.4);opacity:1;transition:all 0.15s ease;';
+                    const disabledConfirmCss = 'flex:1;padding:10px 16px;border-radius:9px;border:1.5px solid rgba(239,68,68,0.35);background:rgba(127,29,29,0.45);color:rgba(255,255,255,0.45);font-size:1rem;font-weight:900;cursor:not-allowed;opacity:0.65;transition:all 0.15s ease;';
+                    btnConfirm.style.cssText = disabledConfirmCss;
+
+                    function isSureMatched() {{
+                        const v = (sureInput.value || '').trim().toLowerCase();
+                        return ['i am sure', "i'm sure", 'im sure', 'نعم'].indexOf(v) !== -1;
+                    }}
+
+                    function updateConfirmState() {{
+                        const ok = isSureMatched();
+                        btnConfirm.disabled = !ok;
+                        btnConfirm.style.cssText = ok ? enabledConfirmCss : disabledConfirmCss;
+                        sureInput.style.borderColor = ok ? '#34d399' : '#f87171';
+                    }}
+
+                    sureInput.addEventListener('input', updateConfirmState);
+                    sureInput.addEventListener('keydown', function(ev) {{
+                        if (ev.key === 'Enter' && isSureMatched()) {{
+                            ev.preventDefault();
+                            btnConfirm.click();
+                        }}
+                    }});
+
+                    const btnCancel = targetDoc.createElement('button');
+                    btnCancel.type = 'button';
+                    btnCancel.textContent = cfg.cancel_label;
+                    btnCancel.style.cssText = 'flex:1;padding:10px 16px;border-radius:9px;border:1.5px solid #475569;background:#1e293b;color:#e2e8f0;font-size:1rem;font-weight:800;cursor:pointer;';
+
+                    function onKeyDown(ev) {{
+                        if (ev.key === 'Escape') closeModal();
+                    }}
+                    function closeModal() {{
+                        try {{ targetDoc.removeEventListener('keydown', onKeyDown); }} catch(e) {{}}
+                        try {{ backdrop.remove(); }} catch(e) {{}}
+                    }}
+
+                    targetDoc.addEventListener('keydown', onKeyDown);
+                    btnCancel.addEventListener('click', closeModal);
+                    backdrop.addEventListener('click', function(ev) {{
+                        if (ev.target === backdrop) closeModal();
+                    }});
+                    btnConfirm.addEventListener('click', function() {{
+                        if (!isSureMatched()) return;
+                        btnConfirm.disabled = true;
+                        btnConfirm.textContent = cfg.loading_label;
+                        closeModal();
+                        sendProjDelToParent({{
+                            action: 'confirm_delete_project',
+                            project_name: cfg.project_name,
+                            ts: Date.now()
+                        }});
+                    }});
+
+                    btnsRow.appendChild(btnConfirm);
+                    btnsRow.appendChild(btnCancel);
+                    card.appendChild(hdr);
+                    card.appendChild(msg);
+                    card.appendChild(sureWrap);
+                    card.appendChild(btnsRow);
+                    backdrop.appendChild(card);
+                    targetDoc.body.appendChild(backdrop);
+                    setTimeout(function() {{ try {{ sureInput.focus(); }} catch(e) {{}} }}, 60);
+                }}
+
+                playProjDelBeep();
+                showProjDeleteModal();
+            }})();
+            </script>
+            """,
+            height=1,
+            width=1,
+        )
 
 
 # ── MAIN EXECUTION & SIDEBAR CONDITIONAL ROUTING ──────────────────────────────
