@@ -38,18 +38,19 @@ _DATA_DIR = os.path.join(_PROJECT_ROOT, "data")
 DEFAULT_EXCEL_PATH = os.path.join(_DATA_DIR, "agreement_m15.xlsx")
 JSON_CACHE_PATH = os.path.join(_DATA_DIR, "agreement_m15.json")
 HASH_FILE_PATH = os.path.join(_DATA_DIR, "agreement_m15.hash")
+UPLOAD_META_PATH = os.path.join(_DATA_DIR, "agreement_m15_upload_meta.json")
 WO_HISTORY_PATH = os.path.join(_DATA_DIR, "wo_history_m15.json")
 
 CANONICAL_COLS = ["Item_Code", "Description", "Unit", "Unit_Price"]
 
 _COL_SYNONYMS: Dict[str, List[str]] = {
     "Item_Code": [
-        "#", "item no.", "item no", "item_no", "item_code", "item code", "code", "no", "no.", "id",
+        "#", "item", "item no.", "item no", "item_no", "item_code", "item code", "code", "no", "no.", "id",
         "رقم البند", "كود البند", "الكود", "الرقم", "بند", "م", "رقم",
     ],
     "Description": [
         "description", "desc", "item_description", "item description", "item_name",
-        "item name", "item", "work item", "details", "specification",
+        "item name", "work item", "details", "specification",
         "التوصيف", "توصيف البند", "بيان الأعمال", "بيان الاعمال", "الوصف",
         "اسم البند", "البند", "وصف البند", "توصيف",
     ],
@@ -66,7 +67,9 @@ _COL_SYNONYMS: Dict[str, List[str]] = {
 }
 
 _HEADER_CORRECTIONS: Dict[str, str] = {
-    "#": "Item No.",
+    "#": "Item",
+    "item no.": "Item",
+    "item no": "Item",
     "heli": "Description",
     "material & labor egp": "Supply & Apply",
     "material & labor": "Supply & Apply",
@@ -428,7 +431,7 @@ def _clean_exact_dataframe(raw_df: pd.DataFrame) -> pd.DataFrame:
 
 def _build_unique_key_map(df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
     """
-    Build an ordered key -> row dict map keyed by the detected code column (e.g. 'Item No.'),
+    Build an ordered key -> row dict map keyed by the detected code column (e.g. 'Item'),
     preserving exact Excel sheet row order.
     """
     key_map: Dict[str, Dict[str, Any]] = {}
@@ -456,7 +459,7 @@ def diff_agreement_data(old_df: pd.DataFrame, new_df: pd.DataFrame) -> pd.DataFr
     """
     changelog_cols = [
         "Change Type",
-        "Item No.",
+        "Item",
         "Modified Column",
         "Old Value",
         "New Value",
@@ -487,7 +490,7 @@ def diff_agreement_data(old_df: pd.DataFrame, new_df: pd.DataFrame) -> pd.DataFr
         if key not in old_map:
             changes.append({
                 "Change Type": "➕ Added Item",
-                "Item No.": key,
+                "Item": key,
                 "Modified Column": "Full Row",
                 "Old Value": "—",
                 "New Value": _row_preview(new_row, new_roles),
@@ -498,7 +501,7 @@ def diff_agreement_data(old_df: pd.DataFrame, new_df: pd.DataFrame) -> pd.DataFr
         if key not in new_map:
             changes.append({
                 "Change Type": "❌ Deleted Item",
-                "Item No.": key,
+                "Item": key,
                 "Modified Column": "Full Row",
                 "Old Value": _row_preview(old_row, old_roles),
                 "New Value": "—",
@@ -524,7 +527,7 @@ def diff_agreement_data(old_df: pd.DataFrame, new_df: pd.DataFrame) -> pd.DataFr
                 if (s_old_empty != s_new_empty) or abs(f_old - f_new) > 1e-4:
                     changes.append({
                         "Change Type": "✏️ Modified",
-                        "Item No.": key,
+                        "Item": key,
                         "Modified Column": str(col),
                         "Old Value": "—" if s_old_empty else f"{f_old:,.2f}",
                         "New Value": "—" if s_new_empty else f"{f_new:,.2f}",
@@ -535,7 +538,7 @@ def diff_agreement_data(old_df: pd.DataFrame, new_df: pd.DataFrame) -> pd.DataFr
                 if s_old != s_new:
                     changes.append({
                         "Change Type": "✏️ Modified",
-                        "Item No.": key,
+                        "Item": key,
                         "Modified Column": str(col),
                         "Old Value": s_old or "—",
                         "New Value": s_new or "—",
@@ -596,6 +599,57 @@ def _write_saved_hash(md5_hex: str) -> None:
         f.write(md5_hex.strip())
 
 
+def _load_upload_meta() -> Optional[Dict[str, Any]]:
+    """Return metadata of the last uploaded Agreement Excel file, or None if never uploaded."""
+    if not os.path.exists(UPLOAD_META_PATH):
+        return None
+    try:
+        with open(UPLOAD_META_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict) and data.get("uploaded") is True and str(data.get("md5", "")).strip():
+            return data
+    except Exception:
+        pass
+    return None
+
+
+def _save_upload_meta(filename: str, md5_hex: str, sheet_name: str, rows_count: int) -> None:
+    """Persist metadata confirming that an Agreement Excel file was explicitly uploaded and synced."""
+    _ensure_data_dir()
+    payload = {
+        "uploaded": True,
+        "filename": str(filename or "agreement_m15.xlsx"),
+        "md5": str(md5_hex or "").strip(),
+        "sheet_name": str(sheet_name or ""),
+        "rows_count": int(rows_count),
+        "uploaded_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    with open(UPLOAD_META_PATH, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+
+def _is_uploaded_file_synced(excel_path: str) -> Tuple[bool, Optional[Dict[str, Any]], str]:
+    """
+    Verify that:
+    1) An Agreement Excel file has been explicitly uploaded via the app,
+    2) The Excel file exists on disk at `excel_path`, and
+    3) Its MD5 matches the last uploaded file's MD5 (confirming exact sync with the uploaded file).
+    """
+    meta = _load_upload_meta()
+    if not meta:
+        return False, None, "No Agreement Excel file has been uploaded yet."
+    if not excel_path or not os.path.exists(excel_path):
+        return False, meta, "The uploaded Agreement Excel file was not found on disk."
+    try:
+        disk_md5 = _compute_file_md5(excel_path)
+    except Exception:
+        return False, meta, "Could not verify the uploaded Agreement Excel file on disk."
+    expected_md5 = str(meta.get("md5", "")).strip()
+    if not expected_md5 or disk_md5 != expected_md5:
+        return False, meta, "The file on disk does not match the last uploaded Agreement Excel file."
+    return True, meta, ""
+
+
 def sync_agreement_excel(
     excel_path: str = DEFAULT_EXCEL_PATH,
     force: bool = False,
@@ -631,7 +685,7 @@ def sync_agreement_excel(
     valid_sheet_names = [s[0] for s in sheets_info]
     resolved_sheet = sheet_name if (sheet_name and sheet_name in valid_sheet_names) else active_sheet
 
-    current_sig = f"v3::{_compute_file_md5(excel_path)}::{resolved_sheet}"
+    current_sig = f"v4::{_compute_file_md5(excel_path)}::{resolved_sheet}"
     saved_sig = _read_saved_hash()
 
     # Fast path: no change & cache exists & same sheet
@@ -668,7 +722,7 @@ def sync_agreement_excel(
     changelog_df = diff_agreement_data(old_df, new_df) if same_sheet_diff else pd.DataFrame()
 
     _save_json_cache(new_df, sheet_name=used_sheet)
-    _write_saved_hash(f"v3::{_compute_file_md5(excel_path)}::{used_sheet}")
+    _write_saved_hash(f"v4::{_compute_file_md5(excel_path)}::{used_sheet}")
 
     if not changelog_df.empty:
         msg = f"🔄 Agreement updated from Excel ({len(new_df)} items — Sheet: `{used_sheet}`) — {len(changelog_df)} change(s) detected."
@@ -923,10 +977,18 @@ def export_wo_to_excel(
 # Main UI Section Renderer ("Agreement & W.O")
 # ═════════════════════════════════════════════════════════════════════════════
 
-_OPTIONAL_UPLOAD_COLS = {
+_FORBIDDEN_UPLOAD_COLS = {
     "req. quantity", "req quantity", "required quantity", "required quntity",
     "req. qty", "req qty", "estimated cost", "select",
 }
+
+
+def _norm_header_for_match(h: Any) -> str:
+    """Normalize a column header for comparison: ignore letter case and all whitespace."""
+    return re.sub(r"\s+", "", str(h or "").strip().lower())
+
+
+_FORBIDDEN_UPLOAD_COLS_NORM = {_norm_header_for_match(c) for c in _FORBIDDEN_UPLOAD_COLS}
 
 
 def _extract_raw_excel_headers_from_bytes(
@@ -1024,37 +1086,52 @@ def _validate_uploaded_excel_headers(
 ) -> Tuple[bool, List[str], List[str], str]:
     """
     Strictly validate that the uploaded Excel sheet's column headers match `expected_cols`
-    in exact spelling and exact order. Optional UI columns ('Req. Quantity', 'Estimated cost', 'Select')
-    are allowed to be omitted (or ignored if present).
+    in the exact same order (ignoring letter case and whitespace differences), and that
+    forbidden UI-only columns ('Required Quantity' / 'Req. Quantity', 'Estimated cost', 'Select')
+    are NOT present.
     Returns: (is_valid, raw_headers_found, diff_messages, used_sheet_name)
     """
     raw_headers, used_sheet = _extract_raw_excel_headers_from_bytes(file_bytes, sheet_name=sheet_name)
     if not raw_headers:
         return False, [], ["The uploaded Excel sheet appears to be empty or has no recognizable header row."], used_sheet
 
-    core_uploaded = [
+    forbidden_found = [
         h for h in raw_headers
-        if h.strip().lower() not in _OPTIONAL_UPLOAD_COLS
+        if _norm_header_for_match(h) in _FORBIDDEN_UPLOAD_COLS_NORM
     ]
     exp_list = list(expected_cols)
+    norm_raw = [_norm_header_for_match(h) for h in raw_headers]
+    norm_exp = [_norm_header_for_match(h) for h in exp_list]
 
-    if core_uploaded == exp_list:
+    if not forbidden_found and len(norm_raw) == len(norm_exp) and norm_raw == norm_exp:
         return True, raw_headers, [], used_sheet
 
     diffs: List[str] = []
-    if set(core_uploaded) == set(exp_list) and len(core_uploaded) == len(exp_list):
+    if len(raw_headers) > len(exp_list):
+        diffs.append(
+            f"Extra column(s) detected: Expected exactly {len(exp_list)} columns, but found {len(raw_headers)} columns. No extra columns are allowed."
+        )
+    elif len(raw_headers) < len(exp_list):
+        diffs.append(
+            f"Missing column(s): Expected exactly {len(exp_list)} columns, but found {len(raw_headers)} columns."
+        )
+
+    for fh in forbidden_found:
+        diffs.append(f'Forbidden column "{fh}" must NOT exist in the uploaded Excel sheet.')
+
+    if not forbidden_found and set(norm_raw) == set(norm_exp) and len(norm_raw) == len(norm_exp):
         diffs.append("Column names exist, but their ORDER does not match the current table.")
 
-    max_len = max(len(exp_list), len(core_uploaded))
+    max_len = max(len(exp_list), len(raw_headers))
     for i in range(max_len):
         exp_h = exp_list[i] if i < len(exp_list) else None
-        got_h = core_uploaded[i] if i < len(core_uploaded) else None
+        got_h = raw_headers[i] if i < len(raw_headers) else None
         if exp_h is not None and got_h is not None:
-            if exp_h != got_h:
+            if _norm_header_for_match(exp_h) != _norm_header_for_match(got_h):
                 diffs.append(f'Column {i + 1}: Expected "{exp_h}" — Found "{got_h}"')
         elif exp_h is not None:
             diffs.append(f'Column {i + 1}: Missing required column "{exp_h}"')
-        elif got_h is not None:
+        elif got_h is not None and got_h not in forbidden_found:
             diffs.append(f'Column {i + 1}: Unexpected extra column "{got_h}"')
 
     return False, raw_headers, diffs, used_sheet
@@ -1163,7 +1240,7 @@ def _render_upload_error_modal(
 
         var note = pDoc.createElement('div');
         note.style.cssText = 'margin-top:12px;font-size:13.5px;font-weight:700;color:#fed7aa;';
-        note.textContent = 'Please update the Excel file column headers and order to match the current table, then upload again. (Optional columns "Req. Quantity" and "Estimated cost" do not need to be present in the Excel file.)';
+        note.textContent = 'Please update the Excel file so it has ONLY the exact required columns in the exact order (no extra columns of any kind, and no "Required Quantity" or "Estimated cost" columns), then upload again.';
         body.appendChild(note);
 
         var footer = pDoc.createElement('div');
@@ -1403,11 +1480,15 @@ def _build_agreement_resizable_table_html(
             unit_val = _clean_cell_str(r[unit_col]) if unit_col else ""
             all_prices_empty = all(_clean_cell_str(r[pc]) == "" for pc in price_cols) if price_cols else True
 
+            # Build lowercased searchable text across all Excel columns for instant live filtering
+            hay_text = " ".join(_clean_cell_str(r[c]) for c in excel_cols).lower()
+            hay_esc = html.escape(hay_text, quote=True)
+
             # Excel sub-section banner row (e.g. "Brick Walls", "Insulation & Plastering")
             is_section_banner = (code_val == "") and (unit_val == "") and all_prices_empty and (desc_val != "")
             if is_section_banner:
                 tbody_parts.append(
-                    f'<tr class="agr-row agr-section-row" data-row-idx="{row_idx}">'
+                    f'<tr class="agr-row agr-section-row" data-row-idx="{row_idx}" data-search="{hay_esc}">'
                     f'<td colspan="{n_cols}" class="agr-td agr-section-td">'
                     f'<div class="agr-section-inner">📌 {html.escape(desc_val)}</div>'
                     f'<div class="row-resizer" data-row="{row_idx}" title="Drag with mouse to resize row height"></div>'
@@ -1503,10 +1584,15 @@ def _build_agreement_resizable_table_html(
                     )
 
             tbody_parts.append(
-                f'<tr class="agr-row {zebra_cls}{sel_cls}" data-row-idx="{row_idx}" data-rk="{rk_esc}">'
+                f'<tr class="agr-row {zebra_cls}{sel_cls}" data-row-idx="{row_idx}" data-rk="{rk_esc}" data-search="{hay_esc}">'
                 + "".join(tds) +
                 f'</tr>'
             )
+        tbody_parts.append(
+            f'<tr id="agr-no-match-row" style="display:none;">'
+            f'<td colspan="{n_cols}" style="padding:28px; text-align:center; color:#94a3b8; font-weight:700; font-size:0.88rem;">'
+            f'No matching items found.</td></tr>'
+        )
 
     tbody_joined = "".join(tbody_parts)
     default_ratios_json = json.dumps(default_ratios)
@@ -1866,7 +1952,7 @@ def _build_agreement_resizable_table_html(
       <div class="agr-title-group">
         <span class="agr-main-title">📋 Agreement Items Table (Excel Sheet Order — LTR)</span>
         <span class="agr-sub-badge">
-          Showing {len(filtered_df)} item(s) • Drag column borders (⟷) or row borders (↕) with mouse to resize widths &amp; heights
+          Showing <span id="agr-showing-count">{len(filtered_df)}</span> item(s) • Drag column borders (⟷) or row borders (↕) with mouse to resize widths &amp; heights
         </span>
       </div>
       <div class="agr-actions-group">
@@ -2281,10 +2367,67 @@ def _build_agreement_resizable_table_html(
     }});
   }});
 
-  window.addEventListener('load', updateIframeHeight);
+  // ── Instant Live Search (filters rows across ALL columns on every keystroke without waiting for Enter) ──
+  function applyLiveSearch(rawQuery) {{
+    const q = String(rawQuery || '').trim().toLowerCase();
+    const tokens = q ? q.split(/\\s+/).filter(Boolean) : [];
+    const rows = Array.from(document.querySelectorAll('#agr-tbody tr.agr-row'));
+    let visibleCount = 0;
+    rows.forEach(tr => {{
+      if (!tokens.length) {{
+        tr.style.display = '';
+        visibleCount++;
+        return;
+      }}
+      const hay = ((tr.getAttribute('data-search') || '') + ' ' + (tr.textContent || '')).toLowerCase();
+      const matched = tokens.every(tok => hay.indexOf(tok) !== -1);
+      tr.style.display = matched ? '' : 'none';
+      if (matched) visibleCount++;
+    }});
+    const cntEl = document.getElementById('agr-showing-count');
+    if (cntEl) cntEl.textContent = String(visibleCount);
+    const noMatchRow = document.getElementById('agr-no-match-row');
+    if (noMatchRow) {{
+      noMatchRow.style.display = (rows.length > 0 && visibleCount === 0) ? '' : 'none';
+    }}
+    updateIframeHeight();
+  }}
+
+  function bindParentLiveSearch() {{
+    try {{
+      if (!window.parent || !window.parent.document) return;
+      const pDoc = window.parent.document;
+      const sInp = (
+        pDoc.querySelector('input[aria-label="🔎 Search (Item, Description, Unit...):"]')
+        || pDoc.querySelector('input[aria-label*="Search (Item"]')
+        || pDoc.querySelector('input[placeholder*="C.009"]')
+      );
+      if (!sInp) return;
+      if (sInp._m15LiveSearchHandler) {{
+        sInp.removeEventListener('input', sInp._m15LiveSearchHandler);
+        sInp.removeEventListener('keyup', sInp._m15LiveSearchHandler);
+        sInp.removeEventListener('change', sInp._m15LiveSearchHandler);
+      }}
+      const handler = function() {{
+        applyLiveSearch(sInp.value);
+      }};
+      sInp._m15LiveSearchHandler = handler;
+      sInp.addEventListener('input', handler);
+      sInp.addEventListener('keyup', handler);
+      sInp.addEventListener('change', handler);
+      applyLiveSearch(sInp.value);
+    }} catch (e) {{}}
+  }}
+
+  bindParentLiveSearch();
+  window.addEventListener('load', function() {{
+    bindParentLiveSearch();
+    updateIframeHeight();
+  }});
   window.addEventListener('resize', updateIframeHeight);
-  setTimeout(updateIframeHeight, 80);
-  setTimeout(updateIframeHeight, 300);
+  setTimeout(function() {{ bindParentLiveSearch(); updateIframeHeight(); }}, 80);
+  setTimeout(function() {{ bindParentLiveSearch(); updateIframeHeight(); }}, 300);
+  setTimeout(function() {{ bindParentLiveSearch(); updateIframeHeight(); }}, 800);
 }})();
 </script>
 </body>
@@ -2320,18 +2463,31 @@ def render_m15_agreement_wo_section() -> None:
         if "m15_agr_page" not in st.session_state:
             st.session_state["m15_agr_page"] = 1
 
-        # ── 1. Automatic Sync Once Per Session ──
+        # ── 1. Automatic Sync Once Per Session (ONLY if an uploaded Excel file exists & is synced) ──
         if not st.session_state.get("m15_agr_synced_once", False):
-            df_synced, chg_df, status_msg, used_sheet = sync_agreement_excel(
-                excel_path=st.session_state["m15_agr_excel_path"],
-                force=False,
-                sheet_name=st.session_state.get("m15_agr_sheet_name") or None,
-            )
-            st.session_state["m15_agr_df"] = df_synced
-            st.session_state["m15_agr_sheet_name"] = used_sheet
-            st.session_state["m15_agr_sync_status"] = status_msg
-            if not chg_df.empty:
-                st.session_state["m15_agr_changelog"] = chg_df
+            has_upload, upload_meta, _upload_err = _is_uploaded_file_synced(st.session_state["m15_agr_excel_path"])
+            if has_upload:
+                df_synced, chg_df, status_msg, used_sheet = sync_agreement_excel(
+                    excel_path=st.session_state["m15_agr_excel_path"],
+                    force=False,
+                    sheet_name=st.session_state.get("m15_agr_sheet_name") or None,
+                )
+                st.session_state["m15_agr_df"] = df_synced
+                st.session_state["m15_agr_sheet_name"] = used_sheet
+                up_fname = str((upload_meta or {}).get("filename") or "")
+                st.session_state["m15_agr_sync_status"] = (
+                    f"{status_msg} [Uploaded: {up_fname}]" if up_fname else status_msg
+                )
+                if not chg_df.empty:
+                    st.session_state["m15_agr_changelog"] = chg_df
+                st.session_state["m15_agr_has_uploaded"] = True
+            else:
+                st.session_state["m15_agr_df"] = pd.DataFrame()
+                st.session_state["m15_agr_sheet_name"] = ""
+                st.session_state["m15_agr_has_uploaded"] = False
+                st.session_state["m15_agr_sync_status"] = (
+                    "⚠️ No uploaded Agreement Excel file — please upload a valid Excel file (.xlsx) below."
+                )
             st.session_state["m15_agr_synced_once"] = True
 
         # ── 2. Configuration & Sync Bar (Separate from W.O Generation Form) ──
@@ -2341,7 +2497,7 @@ def render_m15_agreement_wo_section() -> None:
                 f"""<div dir="ltr" style="direction:ltr; text-align:left; padding:9px 14px; border-radius:8px;
                     background:rgba(14,165,233,0.14); border:1.5px solid rgba(56,189,248,0.55);
                     color:#e0f2fe; font-size:0.92rem; font-weight:700;">
-                    {html.escape(st.session_state.get("m15_agr_sync_status") or "Ready to sync agreement Excel file.")}
+                    {html.escape(st.session_state.get("m15_agr_sync_status") or "Ready to upload Agreement Excel file.")}
                 </div>""",
                 unsafe_allow_html=True,
             )
@@ -2350,139 +2506,32 @@ def render_m15_agreement_wo_section() -> None:
                 "🔄 Sync / Re-check Excel",
                 key="m15_agr_btn_sync_now",
                 use_container_width=True,
-                help="Check Excel MD5 hash, refresh local JSON Cache, and detect any changes",
+                help="Verify uploaded Excel MD5 hash, refresh local JSON Cache, and detect any changes",
             ):
-                df_synced, chg_df, status_msg, used_sheet = sync_agreement_excel(
-                    excel_path=st.session_state["m15_agr_excel_path"],
-                    force=True,
-                    sheet_name=st.session_state.get("m15_agr_sheet_name") or None,
-                )
-                st.session_state["m15_agr_df"] = df_synced
-                st.session_state["m15_agr_sheet_name"] = used_sheet
-                st.session_state["m15_agr_sync_status"] = status_msg
-                if not chg_df.empty:
-                    st.session_state["m15_agr_changelog"] = chg_df
-                st.rerun()
-
-        with st.expander("⚙️ Agreement File Path & Excel Upload (Sync Settings)", expanded=False):
-            new_path = st.text_input(
-                "📁 Agreement Excel File Path:",
-                value=st.session_state["m15_agr_excel_path"],
-                key="m15_agr_path_input",
-                help="Default path: data/agreement_m15.xlsx",
-            )
-
-            # Sheet selector when workbook contains multiple sheets
-            sheets_info, active_sheet_default = _get_excel_sheet_info(st.session_state["m15_agr_excel_path"])
-            if len(sheets_info) > 1:
-                sheet_names_list = [s[0] for s in sheets_info]
-                sheet_label_map = {s[0]: s[1] for s in sheets_info}
-                cur_sheet = st.session_state.get("m15_agr_sheet_name") or active_sheet_default
-                if cur_sheet not in sheet_names_list:
-                    cur_sheet = active_sheet_default if active_sheet_default in sheet_names_list else sheet_names_list[0]
-                chosen_sheet = st.selectbox(
-                    "📑 Select Excel Sheet:",
-                    options=sheet_names_list,
-                    index=sheet_names_list.index(cur_sheet),
-                    format_func=lambda s: sheet_label_map.get(s, s),
-                    key="m15_agr_sheet_select",
-                )
-                if chosen_sheet != st.session_state.get("m15_agr_sheet_name"):
+                has_upload_btn, upload_meta_btn, _ = _is_uploaded_file_synced(st.session_state["m15_agr_excel_path"])
+                if has_upload_btn:
                     df_synced, chg_df, status_msg, used_sheet = sync_agreement_excel(
                         excel_path=st.session_state["m15_agr_excel_path"],
                         force=True,
-                        sheet_name=chosen_sheet,
+                        sheet_name=st.session_state.get("m15_agr_sheet_name") or None,
                     )
                     st.session_state["m15_agr_df"] = df_synced
                     st.session_state["m15_agr_sheet_name"] = used_sheet
-                    st.session_state["m15_agr_sync_status"] = status_msg
-                    st.session_state["m15_agr_cart"] = {}
-                    st.session_state["m15_agr_cart_ver"] += 1
-                    st.session_state["m15_agr_page"] = 1
-                    st.session_state["m15_agr_changelog"] = chg_df if not chg_df.empty else pd.DataFrame()
-                    st.rerun()
-
-            c_p1, c_p2 = st.columns([1.5, 2.5])
-            with c_p1:
-                if st.button("💾 Save Path & Sync", key="m15_agr_save_path_btn", use_container_width=True):
-                    st.session_state["m15_agr_excel_path"] = str(new_path or DEFAULT_EXCEL_PATH).strip()
-                    df_synced, chg_df, status_msg, used_sheet = sync_agreement_excel(
-                        excel_path=st.session_state["m15_agr_excel_path"],
-                        force=True,
-                        sheet_name=None,
+                    up_fname = str((upload_meta_btn or {}).get("filename") or "")
+                    st.session_state["m15_agr_sync_status"] = (
+                        f"{status_msg} [Uploaded: {up_fname}]" if up_fname else status_msg
                     )
-                    st.session_state["m15_agr_df"] = df_synced
-                    st.session_state["m15_agr_sheet_name"] = used_sheet
-                    st.session_state["m15_agr_sync_status"] = status_msg
-                    st.session_state["m15_agr_page"] = 1
+                    st.session_state["m15_agr_has_uploaded"] = True
                     if not chg_df.empty:
                         st.session_state["m15_agr_changelog"] = chg_df
-                    st.rerun()
-            with c_p2:
-                uploaded_xlsx = st.file_uploader(
-                    "📤 Or upload Excel file (.xlsx) to update data/agreement_m15.xlsx:",
-                    type=["xlsx"],
-                    key="m15_agr_file_uploader",
-                )
-                if uploaded_xlsx is not None:
-                    if st.button("✅ Apply Uploaded File & Sync", key="m15_agr_apply_upload_btn", type="primary"):
-                        cur_df_ref = st.session_state.get("m15_agr_df")
-                        if isinstance(cur_df_ref, pd.DataFrame) and not cur_df_ref.empty:
-                            cur_df_clean = _clean_exact_dataframe(cur_df_ref)
-                            expected_upload_cols = [
-                                c for c in cur_df_clean.columns
-                                if not str(c).startswith("_") and str(c).strip().lower() not in _OPTIONAL_UPLOAD_COLS
-                            ]
-                        else:
-                            expected_upload_cols = ["Item No.", "Description", "Unit", "Supply & Apply", "Manpower"]
-
-                        uploaded_bytes = uploaded_xlsx.getvalue()
-                        try:
-                            is_ok, found_hdrs, diff_list, chk_sheet = _validate_uploaded_excel_headers(
-                                file_bytes=uploaded_bytes,
-                                expected_cols=expected_upload_cols,
-                                sheet_name=None,
-                            )
-                        except Exception as val_exc:
-                            is_ok = False
-                            found_hdrs = []
-                            diff_list = [f"Could not read the uploaded Excel file: {val_exc}"]
-                            chk_sheet = ""
-
-                        if not is_ok:
-                            play_warning_sound(force=True)
-                            _render_upload_error_modal(
-                                expected_cols=expected_upload_cols,
-                                found_cols=found_hdrs,
-                                diffs=diff_list,
-                                filename=getattr(uploaded_xlsx, "name", "uploaded.xlsx"),
-                                sheet_name=chk_sheet,
-                            )
-                        else:
-                            _ensure_data_dir()
-                            target_xlsx = st.session_state["m15_agr_excel_path"] or DEFAULT_EXCEL_PATH
-                            os.makedirs(os.path.dirname(os.path.abspath(target_xlsx)), exist_ok=True)
-                            with open(target_xlsx, "wb") as f_out:
-                                f_out.write(uploaded_bytes)
-                            df_synced, chg_df, status_msg, used_sheet = sync_agreement_excel(
-                                excel_path=target_xlsx,
-                                force=True,
-                                sheet_name=None,
-                            )
-                            st.session_state["m15_agr_df"] = df_synced
-                            st.session_state["m15_agr_sheet_name"] = used_sheet
-                            st.session_state["m15_agr_sync_status"] = status_msg
-                            st.session_state["m15_agr_cart"] = {}
-                            st.session_state["m15_agr_cart_ver"] += 1
-                            st.session_state["m15_agr_page"] = 1
-                            if not chg_df.empty:
-                                st.session_state["m15_agr_changelog"] = chg_df
-                            st.session_state["m15_agr_upload_success_toast"] = {
-                                "filename": getattr(uploaded_xlsx, "name", "agreement_m15.xlsx"),
-                                "rows": len(df_synced),
-                                "sheet": used_sheet,
-                            }
-                            st.rerun()
+                else:
+                    st.session_state["m15_agr_df"] = pd.DataFrame()
+                    st.session_state["m15_agr_sheet_name"] = ""
+                    st.session_state["m15_agr_has_uploaded"] = False
+                    st.session_state["m15_agr_sync_status"] = (
+                        "⚠️ No uploaded Agreement Excel file — please upload a valid Excel file (.xlsx) below."
+                    )
+                st.rerun()
 
         # Show 3-second green success panel after a valid Excel upload
         _ok_toast = st.session_state.pop("m15_agr_upload_success_toast", None)
@@ -2506,15 +2555,153 @@ def render_m15_agreement_wo_section() -> None:
                     st.session_state["m15_agr_changelog"] = pd.DataFrame()
                     st.rerun()
 
-        agr_df: pd.DataFrame = st.session_state.get("m15_agr_df", pd.DataFrame())
-        if agr_df is None or agr_df.empty:
-            st.info(
-                "ℹ️ No agreement items are currently loaded. Place `data/agreement_m15.xlsx` "
-                "or upload an Excel file in Sync Settings above, then click **🔄 Sync / Re-check Excel**."
+        # ── Direct Excel Upload Control (above Smart Search & Work Order Item Selection) ──
+        uploaded_xlsx = st.file_uploader(
+            "📤 Upload Agreement Excel File (.xlsx):",
+            type=["xlsx"],
+            key="m15_agr_file_uploader",
+        )
+        if uploaded_xlsx is None:
+            if st.session_state.get("m15_agr_uploader_had_file", False):
+                st.session_state["m15_agr_uploader_had_file"] = False
+                st.session_state["m15_agr_df"] = pd.DataFrame()
+                st.session_state["m15_agr_sheet_name"] = ""
+                st.session_state["m15_agr_has_uploaded"] = False
+                st.session_state["m15_agr_cart"] = {}
+                st.session_state["m15_agr_cart_ver"] += 1
+                st.session_state["m15_agr_sync_status"] = (
+                    "⚠️ No uploaded Agreement Excel file — please upload a valid Excel file (.xlsx) below."
+                )
+                try:
+                    if os.path.exists(UPLOAD_META_PATH):
+                        os.remove(UPLOAD_META_PATH)
+                except Exception:
+                    pass
+                st.rerun()
+
+            # Keep the currently uploaded & synced Excel file visibly displayed in the upload area across reloads
+            _has_persisted_up, _persisted_meta, _ = _is_uploaded_file_synced(
+                st.session_state["m15_agr_excel_path"]
             )
+            if _has_persisted_up and isinstance(_persisted_meta, dict):
+                _p_fname = str(_persisted_meta.get("filename") or "agreement_m15.xlsx")
+                _p_rows = int(_persisted_meta.get("rows_count") or 0)
+                _p_at = str(_persisted_meta.get("uploaded_at") or "")
+                try:
+                    _p_kb = os.path.getsize(st.session_state["m15_agr_excel_path"]) / 1024.0
+                    _p_size_txt = f"{_p_kb:.1f} KB"
+                except Exception:
+                    _p_size_txt = ""
+                c_up_chip, c_up_rm = st.columns([5.2, 0.8], gap="small")
+                with c_up_chip:
+                    st.markdown(
+                        f"""<div dir="ltr" style="direction:ltr; display:flex; align-items:center; justify-content:space-between;
+                            padding:7px 14px; border-radius:8px; margin-top:-6px; margin-bottom:6px;
+                            background:rgba(16,185,129,0.12); border:1.5px solid rgba(16,185,129,0.55); color:#d1fae5;
+                            font-size:0.88rem; font-weight:700;">
+                            <span>📄 <strong style="color:#ffffff;">{html.escape(_p_fname)}</strong>
+                                {f' &nbsp;•&nbsp; <span style="color:#94a3b8;">{_p_size_txt}</span>' if _p_size_txt else ''}
+                                &nbsp;•&nbsp; <span style="color:#6ee7b7;">{_p_rows} items</span>
+                            </span>
+                            <span style="color:#34d399; font-size:0.82rem;">✅ Uploaded &amp; Synced{f' ({html.escape(_p_at)})' if _p_at else ''}</span>
+                        </div>""",
+                        unsafe_allow_html=True,
+                    )
+                with c_up_rm:
+                    if st.button("✕", key="m15_agr_remove_uploaded_file_btn", help="Remove uploaded Excel file", use_container_width=True):
+                        st.session_state["m15_agr_uploader_had_file"] = False
+                        st.session_state["m15_agr_df"] = pd.DataFrame()
+                        st.session_state["m15_agr_sheet_name"] = ""
+                        st.session_state["m15_agr_has_uploaded"] = False
+                        st.session_state["m15_agr_cart"] = {}
+                        st.session_state["m15_agr_cart_ver"] += 1
+                        st.session_state["m15_agr_sync_status"] = (
+                            "⚠️ No uploaded Agreement Excel file — please upload a valid Excel file (.xlsx) below."
+                        )
+                        try:
+                            if os.path.exists(UPLOAD_META_PATH):
+                                os.remove(UPLOAD_META_PATH)
+                        except Exception:
+                            pass
+                        st.rerun()
+        else:
+            st.session_state["m15_agr_uploader_had_file"] = True
+            if st.button("✅ Apply Uploaded File & Sync", key="m15_agr_apply_upload_btn", type="primary"):
+                cur_df_ref = st.session_state.get("m15_agr_df")
+                if isinstance(cur_df_ref, pd.DataFrame) and not cur_df_ref.empty:
+                    cur_df_clean = _clean_exact_dataframe(cur_df_ref)
+                    expected_upload_cols = [
+                        c for c in cur_df_clean.columns
+                        if not str(c).startswith("_") and str(c).strip().lower() not in _FORBIDDEN_UPLOAD_COLS
+                    ]
+                else:
+                    expected_upload_cols = ["Item", "Description", "Unit", "Supply & Apply", "Manpower"]
+
+                uploaded_bytes = uploaded_xlsx.getvalue()
+                try:
+                    is_ok, found_hdrs, diff_list, chk_sheet = _validate_uploaded_excel_headers(
+                        file_bytes=uploaded_bytes,
+                        expected_cols=expected_upload_cols,
+                        sheet_name=None,
+                    )
+                except Exception as val_exc:
+                    is_ok = False
+                    found_hdrs = []
+                    diff_list = [f"Could not read the uploaded Excel file: {val_exc}"]
+                    chk_sheet = ""
+
+                if not is_ok:
+                    play_warning_sound(force=True)
+                    _render_upload_error_modal(
+                        expected_cols=expected_upload_cols,
+                        found_cols=found_hdrs,
+                        diffs=diff_list,
+                        filename=getattr(uploaded_xlsx, "name", "uploaded.xlsx"),
+                        sheet_name=chk_sheet,
+                    )
+                else:
+                    _ensure_data_dir()
+                    target_xlsx = st.session_state["m15_agr_excel_path"] or DEFAULT_EXCEL_PATH
+                    os.makedirs(os.path.dirname(os.path.abspath(target_xlsx)), exist_ok=True)
+                    with open(target_xlsx, "wb") as f_out:
+                        f_out.write(uploaded_bytes)
+                    uploaded_md5 = hashlib.md5(uploaded_bytes).hexdigest()
+                    df_synced, chg_df, status_msg, used_sheet = sync_agreement_excel(
+                        excel_path=target_xlsx,
+                        force=True,
+                        sheet_name=None,
+                    )
+                    up_name = getattr(uploaded_xlsx, "name", "agreement_m15.xlsx")
+                    _save_upload_meta(
+                        filename=up_name,
+                        md5_hex=uploaded_md5,
+                        sheet_name=used_sheet,
+                        rows_count=len(df_synced),
+                    )
+                    st.session_state["m15_agr_df"] = df_synced
+                    st.session_state["m15_agr_sheet_name"] = used_sheet
+                    st.session_state["m15_agr_sync_status"] = f"{status_msg} [Uploaded: {up_name}]"
+                    st.session_state["m15_agr_has_uploaded"] = True
+                    st.session_state["m15_agr_cart"] = {}
+                    st.session_state["m15_agr_cart_ver"] += 1
+                    st.session_state["m15_agr_page"] = 1
+                    if not chg_df.empty:
+                        st.session_state["m15_agr_changelog"] = chg_df
+                    st.session_state["m15_agr_upload_success_toast"] = {
+                        "filename": up_name,
+                        "rows": len(df_synced),
+                        "sheet": used_sheet,
+                    }
+                    st.rerun()
+
+        has_upload_live, _upload_meta_live, upload_err_live = _is_uploaded_file_synced(
+            st.session_state["m15_agr_excel_path"]
+        )
+        agr_df: pd.DataFrame = st.session_state.get("m15_agr_df", pd.DataFrame())
+        if (not has_upload_live) or agr_df is None or agr_df.empty:
             return
 
-        # Clean headers on loaded df to guarantee '# -> Item No.' & 'heli -> Description'
+        # Clean headers on loaded df to guarantee '# -> Item' & 'heli -> Description'
         agr_df = _clean_exact_dataframe(agr_df)
 
         # Resolve dynamic semantic roles while preserving EXACT Excel column names & row order
@@ -2550,7 +2737,7 @@ def render_m15_agreement_wo_section() -> None:
 
         with c_srch:
             search_query = st.text_input(
-                "🔎 Search (Item No., Description, Unit...):",
+                "🔎 Search (Item, Description, Unit...):",
                 value="",
                 key="m15_agr_search_query",
                 placeholder="e.g. C.009, plastering, brick, M2...",
@@ -2572,6 +2759,7 @@ def render_m15_agreement_wo_section() -> None:
         st.session_state["m15_agr_row_lookup"] = row_lookup
 
         # Hidden bridge input for receiving Req. Quantity & per-price Select updates from the resizable table iframe
+        # Also hide "Press Enter to apply" hint on the live search box since filtering happens on every keystroke
         st.markdown(
             """<style>
             div[data-testid="stTextInput"]:has(input[aria-label="m15_agr_cart_sync_payload"]) {
@@ -2585,6 +2773,9 @@ def render_m15_agreement_wo_section() -> None:
                 margin: 0 !important;
                 padding: 0 !important;
                 overflow: hidden !important;
+            }
+            div[data-testid="stTextInput"]:has(input[aria-label="🔎 Search (Item, Description, Unit...):"]) div[data-testid="InputInstructions"] {
+                display: none !important;
             }
             </style>""",
             unsafe_allow_html=True,
@@ -2620,15 +2811,9 @@ def render_m15_agreement_wo_section() -> None:
                 st.session_state["m15_agr_cart_ver"] += 1
                 st.rerun()
 
-        # Filter rows strictly in original Excel sheet order (NO sorting)
+        # Pass full_df to the resizable table so live JS search filters/unfilters instantly on every keystroke
+        # without waiting for Enter (strictly preserving original Excel sheet order, NO sorting)
         filtered_df = full_df.copy()
-        q_clean = str(search_query or "").strip().lower()
-        if q_clean:
-            tokens = [t for t in q_clean.split() if t]
-            def _row_matches(r: pd.Series) -> bool:
-                hay = " ".join(_clean_cell_str(r[c]) for c in excel_cols).lower()
-                return all(tok in hay for tok in tokens)
-            filtered_df = filtered_df[filtered_df.apply(_row_matches, axis=1)].reset_index(drop=True)
 
         # Render full BOQ-style resizable table (mouse-drag column widths & row heights, LTR, non-sortable)
         sheet_sig = hashlib.md5(f"{st.session_state.get('m15_agr_sheet_name', '')}||{'|'.join(excel_cols)}".encode("utf-8")).hexdigest()[:6]
@@ -2751,7 +2936,7 @@ def render_m15_agreement_wo_section() -> None:
                     use_container_width=True,
                     hide_index=True,
                     column_config={
-                        "Item_Code": st.column_config.TextColumn("Item No."),
+                        "Item_Code": st.column_config.TextColumn("Item"),
                         "Description": st.column_config.TextColumn("Description"),
                         "Unit": st.column_config.TextColumn("Unit"),
                         "W.O Qty": st.column_config.NumberColumn("Req. Quantity", format="%.2f"),
@@ -2795,7 +2980,7 @@ def render_m15_agreement_wo_section() -> None:
                         ic = _clean_cell_str(it.get("Item_Code", "")) or _clean_cell_str(it.get("Description", ""))[:30]
                         if ic not in cum_map:
                             cum_map[ic] = {
-                                "Item No.": it.get("Item_Code", ""),
+                                "Item": it.get("Item_Code", ""),
                                 "Description": it.get("Description", ""),
                                 "Unit": it.get("Unit", ""),
                                 "Cumulative Qty": 0.0,

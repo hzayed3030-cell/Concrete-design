@@ -26358,7 +26358,7 @@ def render_masonry_plaster_module():
     st.divider()
     _keep_boq_open = bool(
         st.session_state.get("_m15_keep_manual_expander_open", False)
-        or st.session_state.get("m15_boq_main_expander", True)
+        or st.session_state.get("m15_boq_main_expander", False)
     )
     with st.expander("جداول الحصر والتكلفة لجميع البنود", expanded=_keep_boq_open, key="m15_boq_main_expander"):
         _section_plaster_boq()

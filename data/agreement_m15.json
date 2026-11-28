@@ -1,1390 +1,1390 @@
 {
   "sheet_name": "Sheet1 (7)",
   "columns": [
-    "Item No.",
-    "Description",
+    "Item",
+    "description",
     "Unit",
-    "Supply & Apply",
+    "Supply&apply",
     "Manpower"
   ],
   "rows": [
     {
-      "Item No.": "C.001",
-      "Description": "Cracking and remove plain concrete and load / Haul material to a dump area.",
+      "Item": "C.001",
+      "description": "Cracking and remove plain concrete and load / Haul material to a dump area.",
       "Unit": "M3",
-      "Supply & Apply": 814.8,
+      "Supply&apply": 814.8,
       "Manpower": "814.8"
     },
     {
-      "Item No.": "C.002",
-      "Description": "Cracking and remove Reinforced concrete and load / Haul material to a dump area.",
+      "Item": "C.002",
+      "description": "Cracking and remove Reinforced concrete and load / Haul material to a dump area.",
       "Unit": "M3",
-      "Supply & Apply": 1105.8,
+      "Supply&apply": 1105.8,
       "Manpower": "1105.8"
     },
     {
-      "Item No.": "C.003",
-      "Description": "Cracking and remove brick masonry and load / Haul material to a dump area.",
+      "Item": "C.003",
+      "description": "Cracking and remove brick masonry and load / Haul material to a dump area.",
       "Unit": "M3",
-      "Supply & Apply": 582.0,
+      "Supply&apply": 582.0,
       "Manpower": "1105.8"
     },
     {
-      "Item No.": "C.004",
-      "Description": "Cracking and remove ceramic tiles and load / Haul material to a dump area.",
+      "Item": "C.004",
+      "description": "Cracking and remove ceramic tiles and load / Haul material to a dump area.",
       "Unit": "M2",
-      "Supply & Apply": 314.28,
+      "Supply&apply": 314.28,
       "Manpower": "582"
     },
     {
-      "Item No.": "C.005",
-      "Description": "Cracking and internal plastering and load / Haul material to a dump area.",
+      "Item": "C.005",
+      "description": "Cracking and internal plastering and load / Haul material to a dump area.",
       "Unit": "M2",
-      "Supply & Apply": 291.0,
+      "Supply&apply": 291.0,
       "Manpower": "314.28"
     },
     {
-      "Item No.": "C.006",
-      "Description": "Cracking and external plastering including scaffolding   and load / Haul material to a dump area.",
+      "Item": "C.006",
+      "description": "Cracking and external plastering including scaffolding   and load / Haul material to a dump area.",
       "Unit": "M2",
-      "Supply & Apply": 349.2,
+      "Supply&apply": 349.2,
       "Manpower": "291"
     },
     {
-      "Item No.": "C.007",
-      "Description": "Load /Haul soil to dump area.",
+      "Item": "C.007",
+      "description": "Load /Haul soil to dump area.",
       "Unit": "M3",
-      "Supply & Apply": 349.2,
+      "Supply&apply": 349.2,
       "Manpower": "349.2"
     },
     {
-      "Item No.": "C.008",
-      "Description": "Level field (Manual) and load/haul soil to dump area.",
+      "Item": "C.008",
+      "description": "Level field (Manual) and load/haul soil to dump area.",
       "Unit": "M2",
-      "Supply & Apply": 931.2,
+      "Supply&apply": 931.2,
       "Manpower": "931.2"
     },
     {
-      "Item No.": "",
-      "Description": "Brick Walls",
+      "Item": "",
+      "description": "Brick Walls",
       "Unit": "",
-      "Supply & Apply": null,
+      "Supply&apply": null,
       "Manpower": ""
     },
     {
-      "Item No.": "C.009",
-      "Description": "Hollow cement block masonry block size 12 cm thick including any charge for delivering the works finished in a perfect workman like manner with mortar consist of 300 kg ordinary Portland cement/m3 sand.",
+      "Item": "C.009",
+      "description": "Hollow cement block masonry block size 12 cm thick including any charge for delivering the works finished in a perfect workman like manner with mortar consist of 300 kg ordinary Portland cement/m3 sand.",
       "Unit": "M²",
-      "Supply & Apply": 756.6,
+      "Supply&apply": 756.6,
       "Manpower": "372.48"
     },
     {
-      "Item No.": "C.010",
-      "Description": "Solid cement block masonry for foundation and underground works in general up to the offset of ground floor or mezzanine. Bonded with mortar consist of 300 kg ordinary Portland cement/mᶾ sand including any charge to deliver the works finished in a perfect.",
+      "Item": "C.010",
+      "description": "Solid cement block masonry for foundation and underground works in general up to the offset of ground floor or mezzanine. Bonded with mortar consist of 300 kg ordinary Portland cement/mᶾ sand including any charge to deliver the works finished in a perfect.",
       "Unit": "Mᶾ",
-      "Supply & Apply": 3724.8,
+      "Supply&apply": 3724.8,
       "Manpower": "1978.8"
     },
     {
-      "Item No.": "C.011",
-      "Description": "Hollow cement block masonry block size 25 x 20 x 40 cm for masonry above ground level and bonded with mortar consist of 300 kg ordinary Portland cement/m3 sand including any charge for delivering the works.",
+      "Item": "C.011",
+      "description": "Hollow cement block masonry block size 25 x 20 x 40 cm for masonry above ground level and bonded with mortar consist of 300 kg ordinary Portland cement/m3 sand including any charge for delivering the works.",
       "Unit": "Mᶾ",
-      "Supply & Apply": 4074.0,
+      "Supply&apply": 4074.0,
       "Manpower": "2095.2"
     },
     {
-      "Item No.": "C.012",
-      "Description": "Hollow clay block masonry block size 12 cm with mortar consists of 300 kg ordinary Portland cement including any charge for delivering the works finished.",
+      "Item": "C.012",
+      "description": "Hollow clay block masonry block size 12 cm with mortar consists of 300 kg ordinary Portland cement including any charge for delivering the works finished.",
       "Unit": "M²",
-      "Supply & Apply": 989.4,
+      "Supply&apply": 989.4,
       "Manpower": "407.4"
     },
     {
-      "Item No.": "C.013",
-      "Description": "Hollow clay block masonry for foundation and underground works in general up to the offset of ground floor or mezzanine. Bonded with mortar consist of 300 kg ordinary Portland cement/m3 sand including any charge to deliver the works finished in a perfect.",
+      "Item": "C.013",
+      "description": "Hollow clay block masonry for foundation and underground works in general up to the offset of ground floor or mezzanine. Bonded with mortar consist of 300 kg ordinary Portland cement/m3 sand including any charge to deliver the works finished in a perfect.",
       "Unit": "Mᶾ",
-      "Supply & Apply": 3724.8,
+      "Supply&apply": 3724.8,
       "Manpower": "1978.8"
     },
     {
-      "Item No.": "C.014",
-      "Description": "Supply and execution cladding by using (sandy pink brick) 12 cm thick including delivering the works finished in a perfect workman like manner with mortar consist of 300 kg ordinary Portland.",
+      "Item": "C.014",
+      "description": "Supply and execution cladding by using (sandy pink brick) 12 cm thick including delivering the works finished in a perfect workman like manner with mortar consist of 300 kg ordinary Portland.",
       "Unit": "M²",
-      "Supply & Apply": 1396.8,
+      "Supply&apply": 1396.8,
       "Manpower": "488.88"
     },
     {
-      "Item No.": "C.015",
-      "Description": "Exposed facing brick from two sides (sandy pink brick) 6 x 12 x 25 cm thick including delivering the works finished in a perfect workman like manner with mortar consist of 300 kg ordinary.",
+      "Item": "C.015",
+      "description": "Exposed facing brick from two sides (sandy pink brick) 6 x 12 x 25 cm thick including delivering the works finished in a perfect workman like manner with mortar consist of 300 kg ordinary.",
       "Unit": "Mᶾ",
-      "Supply & Apply": 5310.75,
+      "Supply&apply": 5310.75,
       "Manpower": "1862.4"
     },
     {
-      "Item No.": "C.016",
-      "Description": "Supply and execution flower box including insulation in dim. of 2 x 1.2 x 0.45 m depth without marble cladding.",
+      "Item": "C.016",
+      "description": "Supply and execution flower box including insulation in dim. of 2 x 1.2 x 0.45 m depth without marble cladding.",
       "Unit": "Each",
-      "Supply & Apply": 8148.0,
+      "Supply&apply": 8148.0,
       "Manpower": "2910"
     },
     {
-      "Item No.": "C.017",
-      "Description": "Hollow clay  block masonry block size 25 X 12 X6 cm for masonry above ground level and bonded with mortar consist of 300kg ordinary Portland cement/m3 sand including any charge for delivering the works finished.",
+      "Item": "C.017",
+      "description": "Hollow clay  block masonry block size 25 X 12 X6 cm for masonry above ground level and bonded with mortar consist of 300kg ordinary Portland cement/m3 sand including any charge for delivering the works finished.",
       "Unit": "M3",
-      "Supply & Apply": 3589.0,
+      "Supply&apply": 3589.0,
       "Manpower": "1746"
     },
     {
-      "Item No.": "",
-      "Description": "Insulation & Plastering",
+      "Item": "",
+      "description": "Insulation & Plastering",
       "Unit": "",
-      "Supply & Apply": null,
+      "Supply&apply": null,
       "Manpower": ""
     },
     {
-      "Item No.": "C.018",
-      "Description": "Water proofing of concrete vertical walls with two spreading of cold applied bitumen (ceroplastic), equiv. Including building services and any other charge.",
+      "Item": "C.018",
+      "description": "Water proofing of concrete vertical walls with two spreading of cold applied bitumen (ceroplastic), equiv. Including building services and any other charge.",
       "Unit": "M2",
-      "Supply & Apply": 291.0,
+      "Supply&apply": 291.0,
       "Manpower": "174.6"
     },
     {
-      "Item No.": "C.019",
-      "Description": "Supply and installation of polystyrene foam insulation sheets 50MM thick with density 30kg/m3 for thermal insulation of roofs.",
+      "Item": "C.019",
+      "description": "Supply and installation of polystyrene foam insulation sheets 50MM thick with density 30kg/m3 for thermal insulation of roofs.",
       "Unit": "M2",
-      "Supply & Apply": 436.5,
+      "Supply&apply": 436.5,
       "Manpower": "232.8"
     },
     {
-      "Item No.": "C.020",
-      "Description": "supply and lay water proofing for roof slabs appling membrane 5mm thickness insomat type or equivalent  the work  in accordance with the specification",
+      "Item": "C.020",
+      "description": "supply and lay water proofing for roof slabs appling membrane 5mm thickness insomat type or equivalent  the work  in accordance with the specification",
       "Unit": "M2",
-      "Supply & Apply": 465.6,
+      "Supply&apply": 465.6,
       "Manpower": "232.8"
     },
     {
-      "Item No.": "C.021",
-      "Description": "Troweled plastering on vertical and horizontal surface for internal works. The work in accordance with the specification",
+      "Item": "C.021",
+      "description": "Troweled plastering on vertical and horizontal surface for internal works. The work in accordance with the specification",
       "Unit": "M2",
-      "Supply & Apply": 291.0,
+      "Supply&apply": 291.0,
       "Manpower": "197.88"
     },
     {
-      "Item No.": "C.022",
-      "Description": "Trowelled plastering on vertical and horizontal surface for external works. The work in accordance with the specification",
+      "Item": "C.022",
+      "description": "Trowelled plastering on vertical and horizontal surface for external works. The work in accordance with the specification",
       "Unit": "M2",
-      "Supply & Apply": 314.28,
+      "Supply&apply": 314.28,
       "Manpower": "209.52"
     },
     {
-      "Item No.": "C.023",
-      "Description": "Supply and layig water stop between concrete base and concrete base and concrete wall for tanks due to water permeability.",
+      "Item": "C.023",
+      "description": "Supply and layig water stop between concrete base and concrete base and concrete wall for tanks due to water permeability.",
       "Unit": "ML",
-      "Supply & Apply": 523.8,
+      "Supply&apply": 523.8,
       "Manpower": "232.8"
     },
     {
-      "Item No.": "C.024",
-      "Description": "Water proofing of concrete  with sika 107",
+      "Item": "C.024",
+      "description": "Water proofing of concrete  with sika 107",
       "Unit": "M2",
-      "Supply & Apply": 989.4,
+      "Supply&apply": 989.4,
       "Manpower": "372.48"
     },
     {
-      "Item No.": "C.025",
-      "Description": "Trowelled plastering on- vertical - and horizontal surface for external works including rough surface paint (white cement, powder, colour ,, etc.the work in accordance with the specification",
+      "Item": "C.025",
+      "description": "Trowelled plastering on- vertical - and horizontal surface for external works including rough surface paint (white cement, powder, colour ,, etc.the work in accordance with the specification",
       "Unit": "M2",
-      "Supply & Apply": 465.6,
+      "Supply&apply": 465.6,
       "Manpower": "232.8"
     },
     {
-      "Item No.": "",
-      "Description": "Excavation Work",
+      "Item": "",
+      "description": "Excavation Work",
       "Unit": "",
-      "Supply & Apply": null,
+      "Supply&apply": null,
       "Manpower": ""
     },
     {
-      "Item No.": "C.026",
-      "Description": "Limited section excavation for foundation works. Basins and/or similar works up to 1.5 m Depth, carried out by any suitable means including back filling of volumes after execution of works as well as in soft soil (sand, silt, clay) and removes the excavation result to approved location not less than 500 m away from the buildings.",
+      "Item": "C.026",
+      "description": "Limited section excavation for foundation works. Basins and/or similar works up to 1.5 m Depth, carried out by any suitable means including back filling of volumes after execution of works as well as in soft soil (sand, silt, clay) and removes the excavation result to approved location not less than 500 m away from the buildings.",
       "Unit": "M3",
-      "Supply & Apply": 286.15,
+      "Supply&apply": 286.15,
       "Manpower": "256.08"
     },
     {
-      "Item No.": "C.027",
-      "Description": "Limited section excavation for foundation works. Basins and/or similar works up to 1.5 m Depth, carried out by any suitable means including back filling of volumes after execution of works as well as in soft rock and removes the excavation result to approved location not less than 500m away from the buildings.",
+      "Item": "C.027",
+      "description": "Limited section excavation for foundation works. Basins and/or similar works up to 1.5 m Depth, carried out by any suitable means including back filling of volumes after execution of works as well as in soft rock and removes the excavation result to approved location not less than 500m away from the buildings.",
       "Unit": "M3",
-      "Supply & Apply": 547.08,
+      "Supply&apply": 547.08,
       "Manpower": "291"
     },
     {
-      "Item No.": "C.028",
-      "Description": "Limited section excavation for foundation works. Basins and/or similar works up to 1.5 m Depth, carried out by any suitable means including back filling of volumes after execution of works as well as in hard rock and removes the excavation result to approved location not less than 500 m away from the buildings.",
+      "Item": "C.028",
+      "description": "Limited section excavation for foundation works. Basins and/or similar works up to 1.5 m Depth, carried out by any suitable means including back filling of volumes after execution of works as well as in hard rock and removes the excavation result to approved location not less than 500 m away from the buildings.",
       "Unit": "M3",
-      "Supply & Apply": 488.88,
+      "Supply&apply": 488.88,
       "Manpower": "256.08"
     },
     {
-      "Item No.": "C.029",
-      "Description": "Limited section excavation for foundation works. Basins and/or similar works from 1.5mt to 3mt  depth, carried out by any suitable means including back filling of volumes after execution of works as well as in soft soil (sand, silt, clay) and removes the excavation result to approved location not less than 500 m away from the buildings.",
+      "Item": "C.029",
+      "description": "Limited section excavation for foundation works. Basins and/or similar works from 1.5mt to 3mt  depth, carried out by any suitable means including back filling of volumes after execution of works as well as in soft soil (sand, silt, clay) and removes the excavation result to approved location not less than 500 m away from the buildings.",
       "Unit": "M3",
-      "Supply & Apply": 407.4,
+      "Supply&apply": 407.4,
       "Manpower": "174.6"
     },
     {
-      "Item No.": "C.030",
-      "Description": "Limited section excavation for foundation works. Basins and/or similar works from 1.5mt to 3mt  depth, carried out by any suitable means including back filling of volumes after execution of works as well as in soft rock and removes the excavation result to approved location not less than 500m away from the buildings.",
+      "Item": "C.030",
+      "description": "Limited section excavation for foundation works. Basins and/or similar works from 1.5mt to 3mt  depth, carried out by any suitable means including back filling of volumes after execution of works as well as in soft rock and removes the excavation result to approved location not less than 500m away from the buildings.",
       "Unit": "M3",
-      "Supply & Apply": 523.8,
+      "Supply&apply": 523.8,
       "Manpower": "256.08"
     },
     {
-      "Item No.": "C.031",
-      "Description": "Limited section excavation for foundation works. Basins and/or similar works from 1.5 m to 3 m  depth, carried out by any suitable means including back filling of volumes after execution of works as well as in hard rock and removes the excavation result to approved location not less than 500 m away from the buildings.",
+      "Item": "C.031",
+      "description": "Limited section excavation for foundation works. Basins and/or similar works from 1.5 m to 3 m  depth, carried out by any suitable means including back filling of volumes after execution of works as well as in hard rock and removes the excavation result to approved location not less than 500 m away from the buildings.",
       "Unit": "M3",
-      "Supply & Apply": 558.72,
+      "Supply&apply": 558.72,
       "Manpower": "302.64"
     },
     {
-      "Item No.": "C.032",
-      "Description": "Limited section excavation for foundation works basins and/or similar works over 3m depth carried out by suitable means including backfilling of volumes after excavation of works as well as in soil (sand, clay, silt) including and removes the excavation result to approved location not less than 500 m away from the buildings.",
+      "Item": "C.032",
+      "description": "Limited section excavation for foundation works basins and/or similar works over 3m depth carried out by suitable means including backfilling of volumes after excavation of works as well as in soil (sand, clay, silt) including and removes the excavation result to approved location not less than 500 m away from the buildings.",
       "Unit": "M3",
-      "Supply & Apply": 547.08,
+      "Supply&apply": 547.08,
       "Manpower": "314.28"
     },
     {
-      "Item No.": "C.033",
-      "Description": "Limited section excavation for foundation works basins and/or similar works over 3m depth carried out by suitable means including backfilling of volumes after excavation of works as well as in soft rock and removes the excavation result to approved location not less than 500m away from the buildings.",
+      "Item": "C.033",
+      "description": "Limited section excavation for foundation works basins and/or similar works over 3m depth carried out by suitable means including backfilling of volumes after excavation of works as well as in soft rock and removes the excavation result to approved location not less than 500m away from the buildings.",
       "Unit": "M3",
-      "Supply & Apply": 523.8,
+      "Supply&apply": 523.8,
       "Manpower": "256.08"
     },
     {
-      "Item No.": "C.034",
-      "Description": "Limited section excavation for foundation works basins and/or similar works over 3m depth carried out by suitable means including backfilling of volumes after excavation of works as well as in hard rock and removes the excavation result to approved location not less than 500 m away from the buildings.",
+      "Item": "C.034",
+      "description": "Limited section excavation for foundation works basins and/or similar works over 3m depth carried out by suitable means including backfilling of volumes after excavation of works as well as in hard rock and removes the excavation result to approved location not less than 500 m away from the buildings.",
       "Unit": "M3",
-      "Supply & Apply": 372.48,
+      "Supply&apply": 372.48,
       "Manpower": "174.6"
     },
     {
-      "Item No.": "C.035",
-      "Description": "Limited section excavation for foundation works basins and/or similar works carried out manually   including backfilling of volumes after excavation of works as well as in in soil (sand,clay,silt)and removes the excavation result to approved location not less than 500 m away from the buildings.",
+      "Item": "C.035",
+      "description": "Limited section excavation for foundation works basins and/or similar works carried out manually   including backfilling of volumes after excavation of works as well as in in soil (sand,clay,silt)and removes the excavation result to approved location not less than 500 m away from the buildings.",
       "Unit": "M3",
-      "Supply & Apply": 535.44,
+      "Supply&apply": 535.44,
       "Manpower": "291"
     },
     {
-      "Item No.": "C.036",
-      "Description": "Limited section excavation for foundation works basins and/or similar works carried out manually   including backfilling of volumes after excavation of works as well as in in soft rock and removes the excavation result to approved location not less than 500 m away from the buildings.",
+      "Item": "C.036",
+      "description": "Limited section excavation for foundation works basins and/or similar works carried out manually   including backfilling of volumes after excavation of works as well as in in soft rock and removes the excavation result to approved location not less than 500 m away from the buildings.",
       "Unit": "M3",
-      "Supply & Apply": 407.4,
+      "Supply&apply": 407.4,
       "Manpower": "314.28"
     },
     {
-      "Item No.": "C.037",
-      "Description": "Limited section excavation for foundation works basins and/or similar works carried out manually   including backfilling of volumes after excavation of works as well as in hard rock and removes the excavation result to approved location not less than 500 m away from the buildings.",
+      "Item": "C.037",
+      "description": "Limited section excavation for foundation works basins and/or similar works carried out manually   including backfilling of volumes after excavation of works as well as in hard rock and removes the excavation result to approved location not less than 500 m away from the buildings.",
       "Unit": "M3",
-      "Supply & Apply": 372.48,
+      "Supply&apply": 372.48,
       "Manpower": "325.92"
     },
     {
-      "Item No.": "C.038",
-      "Description": "Trench excavation for laying of underground networks (piping, electric and instrument cables, sewer and/or inspection pits) up to 1.5 m depth, carried out  underground networks and/or the execution of the works. As well as loading, transport including backfilling in soil (sand,clay,silt).",
+      "Item": "C.038",
+      "description": "Trench excavation for laying of underground networks (piping, electric and instrument cables, sewer and/or inspection pits) up to 1.5 m depth, carried out  underground networks and/or the execution of the works. As well as loading, transport including backfilling in soil (sand,clay,silt).",
       "Unit": "M3",
-      "Supply & Apply": 430.68,
+      "Supply&apply": 430.68,
       "Manpower": "337.56"
     },
     {
-      "Item No.": "C.039",
-      "Description": "Trench excavation for laying of underground networks (piping, electric and instrument cables, sewer and/or inspection pits) up to 1.5 m depth, carried out   underground networks and/or the execution of the works. As well as loading, transport including backfilling in soft rock..",
+      "Item": "C.039",
+      "description": "Trench excavation for laying of underground networks (piping, electric and instrument cables, sewer and/or inspection pits) up to 1.5 m depth, carried out   underground networks and/or the execution of the works. As well as loading, transport including backfilling in soft rock..",
       "Unit": "M3",
-      "Supply & Apply": 465.6,
+      "Supply&apply": 465.6,
       "Manpower": "465.6"
     },
     {
-      "Item No.": "C.040",
-      "Description": "Trench excavation for laying of underground networks (piping, electric and instrument cables, sewer and/or inspection pits) up to 1.5 m depth, carried out   underground networks and/or the execution of the works. As well as loading, transport including backfilling in hard rock.",
+      "Item": "C.040",
+      "description": "Trench excavation for laying of underground networks (piping, electric and instrument cables, sewer and/or inspection pits) up to 1.5 m depth, carried out   underground networks and/or the execution of the works. As well as loading, transport including backfilling in hard rock.",
       "Unit": "M3",
-      "Supply & Apply": 488.88,
+      "Supply&apply": 488.88,
       "Manpower": "488.88"
     },
     {
-      "Item No.": "C.041",
-      "Description": "Trench excavation for laying of underground networks (piping, electric and instrument cables, sewer and/or inspection pits)  , carried out manually  underground networks and/or the execution of the works. As well as loading, transport including backfilling in soil (sand,clay,silt).",
+      "Item": "C.041",
+      "description": "Trench excavation for laying of underground networks (piping, electric and instrument cables, sewer and/or inspection pits)  , carried out manually  underground networks and/or the execution of the works. As well as loading, transport including backfilling in soil (sand,clay,silt).",
       "Unit": "M3",
-      "Supply & Apply": 488.88,
+      "Supply&apply": 488.88,
       "Manpower": "488.88"
     },
     {
-      "Item No.": "C.042",
-      "Description": "Trench excavation for laying of underground networks (piping, electric and instrument cables, sewer and/or inspection pits)  , carried out manually underground networks and/or the execution of the works. As well as loading, transport including backfilling in soft rock",
+      "Item": "C.042",
+      "description": "Trench excavation for laying of underground networks (piping, electric and instrument cables, sewer and/or inspection pits)  , carried out manually underground networks and/or the execution of the works. As well as loading, transport including backfilling in soft rock",
       "Unit": "M3",
-      "Supply & Apply": 640.2,
+      "Supply&apply": 640.2,
       "Manpower": "640.2"
     },
     {
-      "Item No.": "C.043",
-      "Description": "Trench excavation for laying of underground networks (piping, electric and instrument cables, sewer and/or inspection pits)  , carried out manually   underground networks and/or the execution of the works. As well as loading, transport including backfilling in hard rock",
+      "Item": "C.043",
+      "description": "Trench excavation for laying of underground networks (piping, electric and instrument cables, sewer and/or inspection pits)  , carried out manually   underground networks and/or the execution of the works. As well as loading, transport including backfilling in hard rock",
       "Unit": "M3",
-      "Supply & Apply": 523.8,
+      "Supply&apply": 523.8,
       "Manpower": "291"
     },
     {
-      "Item No.": "C.044",
-      "Description": "Supply and laying of sand place in 25 cm layers fill by using clean sand and with minimum compaction 95% of the maximum dry density.",
+      "Item": "C.044",
+      "description": "Supply and laying of sand place in 25 cm layers fill by using clean sand and with minimum compaction 95% of the maximum dry density.",
       "Unit": "M3",
-      "Supply & Apply": 552.9,
+      "Supply&apply": 552.9,
       "Manpower": "291"
     },
     {
-      "Item No.": "C.045",
-      "Description": "Supply and laying of fill by using gravel soil (as replacement soil)",
+      "Item": "C.045",
+      "description": "Supply and laying of fill by using gravel soil (as replacement soil)",
       "Unit": "M3",
-      "Supply & Apply": 465.6,
+      "Supply&apply": 465.6,
       "Manpower": "232.8"
     },
     {
-      "Item No.": "C.046",
-      "Description": "Supply and laying of fill by using  sandy gravel soil (as replacement soil)",
+      "Item": "C.046",
+      "description": "Supply and laying of fill by using  sandy gravel soil (as replacement soil)",
       "Unit": "M3",
-      "Supply & Apply": 523.8,
+      "Supply&apply": 523.8,
       "Manpower": "256.08"
     },
     {
-      "Item No.": "C.047",
-      "Description": "Soft sand provision and backfill (0.2 m layer thick) after laying piping/cables.",
+      "Item": "C.047",
+      "description": "Soft sand provision and backfill (0.2 m layer thick) after laying piping/cables.",
       "Unit": "M3",
-      "Supply & Apply": 523.8,
+      "Supply&apply": 523.8,
       "Manpower": "232.8"
     },
     {
-      "Item No.": "C.048",
-      "Description": "Install waring yellow tape after laying cables.",
+      "Item": "C.048",
+      "description": "Install waring yellow tape after laying cables.",
       "Unit": "ML",
-      "Supply & Apply": 139.68,
+      "Supply&apply": 139.68,
       "Manpower": "58.2"
     },
     {
-      "Item No.": "",
-      "Description": "Concrete Work",
+      "Item": "",
+      "description": "Concrete Work",
       "Unit": "",
-      "Supply & Apply": null,
+      "Supply&apply": null,
       "Manpower": ""
     },
     {
-      "Item No.": "C.049",
-      "Description": "Concrete with minimum compression strength C28 250kg/cm2 supply cast form work is included, steel reinforcement supply and installation is not included.",
+      "Item": "C.049",
+      "description": "Concrete with minimum compression strength C28 250kg/cm2 supply cast form work is included, steel reinforcement supply and installation is not included.",
       "Unit": "M3",
-      "Supply & Apply": 7129.5,
+      "Supply&apply": 7129.5,
       "Manpower": "1746"
     },
     {
-      "Item No.": "C.050",
-      "Description": "Concrete with minimum compression strength C28 300kg/cm2 supply cast form work is included, steel reinforcement supply and installation is  included. Up to 100kg/m3",
+      "Item": "C.050",
+      "description": "Concrete with minimum compression strength C28 300kg/cm2 supply cast form work is included, steel reinforcement supply and installation is  included. Up to 100kg/m3",
       "Unit": "M3",
-      "Supply & Apply": 22067.5,
+      "Supply&apply": 22067.5,
       "Manpower": "1862.4"
     },
     {
-      "Item No.": "C.051",
-      "Description": "Apply smooth surface for concrete floor using the helicopter machine.",
+      "Item": "C.051",
+      "description": "Apply smooth surface for concrete floor using the helicopter machine.",
       "Unit": "M2",
-      "Supply & Apply": 139.68,
+      "Supply&apply": 139.68,
       "Manpower": "116.4"
     },
     {
-      "Item No.": "C.052",
-      "Description": "Supply and apply of hard top for concrete surface.",
+      "Item": "C.052",
+      "description": "Supply and apply of hard top for concrete surface.",
       "Unit": "M2",
-      "Supply & Apply": 838.08,
+      "Supply&apply": 838.08,
       "Manpower": "407.4"
     },
     {
-      "Item No.": "C.053",
-      "Description": "Supply and pouring 15 cm thickness concrete with min compressive strength 250 kg/cm2 for paving with dimensions not exceeds 5m x 5 m with rft 5 d 10 mm/m in both directions including applying good surface finish and hard top in addition to apply sika flex for all joints.",
+      "Item": "C.053",
+      "description": "Supply and pouring 15 cm thickness concrete with min compressive strength 250 kg/cm2 for paving with dimensions not exceeds 5m x 5 m with rft 5 d 10 mm/m in both directions including applying good surface finish and hard top in addition to apply sika flex for all joints.",
       "Unit": "M2",
-      "Supply & Apply": 1396.8,
+      "Supply&apply": 1396.8,
       "Manpower": "814.8"
     },
     {
-      "Item No.": "C.054",
-      "Description": "Concrete fair face with minimum compression strength c28 300 kg/cm2 two faces steel reinforcement supply and installation is Included.",
+      "Item": "C.054",
+      "description": "Concrete fair face with minimum compression strength c28 300 kg/cm2 two faces steel reinforcement supply and installation is Included.",
       "Unit": "M3",
-      "Supply & Apply": 22067.5,
+      "Supply&apply": 22067.5,
       "Manpower": "3492"
     },
     {
-      "Item No.": "C.055",
-      "Description": "Concrete fair face with minimum compression strength c28 250 kg/cm2 two faces steel reinforcement supply and installation is not Included.",
+      "Item": "C.055",
+      "description": "Concrete fair face with minimum compression strength c28 250 kg/cm2 two faces steel reinforcement supply and installation is not Included.",
       "Unit": "M3",
-      "Supply & Apply": 4074.0,
+      "Supply&apply": 4074.0,
       "Manpower": "1978.8"
     },
     {
-      "Item No.": "C.056",
-      "Description": "Supplying casting plain concrete for inclination of rain at roof which average thickness of 85 mm.",
+      "Item": "C.056",
+      "description": "Supplying casting plain concrete for inclination of rain at roof which average thickness of 85 mm.",
       "Unit": "M2",
-      "Supply & Apply": 698.4,
+      "Supply&apply": 698.4,
       "Manpower": "523.8"
     },
     {
-      "Item No.": "C.057",
-      "Description": "Supply and laying graded crushed basalt rock or aggregate Basalt for leveling.",
+      "Item": "C.057",
+      "description": "Supply and laying graded crushed basalt rock or aggregate Basalt for leveling.",
       "Unit": "M3",
-      "Supply & Apply": 873.0,
+      "Supply&apply": 873.0,
       "Manpower": "488.88"
     },
     {
-      "Item No.": "C.058",
-      "Description": "Supply and laying gradient gravel for leveling.",
+      "Item": "C.058",
+      "description": "Supply and laying gradient gravel for leveling.",
       "Unit": "M3",
-      "Supply & Apply": 756.6,
+      "Supply&apply": 756.6,
       "Manpower": "291"
     },
     {
-      "Item No.": "C.059",
-      "Description": "Additional cost to add steel reinforcement for concrete work mentioned above. Supply, fabricate and installation (high grade steel 52).",
+      "Item": "C.059",
+      "description": "Additional cost to add steel reinforcement for concrete work mentioned above. Supply, fabricate and installation (high grade steel 52).",
       "Unit": "Ton",
-      "Supply & Apply": 69840.0,
+      "Supply&apply": 69840.0,
       "Manpower": "5238"
     },
     {
-      "Item No.": "C.060",
-      "Description": "Installation new steel reinforcement with diameter 12mm by holes with lenght 1m and fill those holes with epoxy material such as kemapoxy 165 to install steel on it at distance 15cm and depth 5cm in specified places .",
+      "Item": "C.060",
+      "description": "Installation new steel reinforcement with diameter 12mm by holes with lenght 1m and fill those holes with epoxy material such as kemapoxy 165 to install steel on it at distance 15cm and depth 5cm in specified places .",
       "Unit": "Each",
-      "Supply & Apply": 1746.0,
+      "Supply&apply": 1746.0,
       "Manpower": "465.6"
     },
     {
-      "Item No.": "C.061",
-      "Description": "Installation new steel reinforcement with diameter 16mm by holes with lenght 1m and fill those holes with epoxy material such as kemapoxy 165 to install steel on it at distance 15cm and depth 5cm in specified places .",
+      "Item": "C.061",
+      "description": "Installation new steel reinforcement with diameter 16mm by holes with lenght 1m and fill those holes with epoxy material such as kemapoxy 165 to install steel on it at distance 15cm and depth 5cm in specified places .",
       "Unit": "Each",
-      "Supply & Apply": 2095.2,
+      "Supply&apply": 2095.2,
       "Manpower": "523.8"
     },
     {
-      "Item No.": "",
-      "Description": "Painting Work",
+      "Item": "",
+      "description": "Painting Work",
       "Unit": "",
-      "Supply & Apply": null,
+      "Supply&apply": null,
       "Manpower": ""
     },
     {
-      "Item No.": "C.062",
-      "Description": "Supply and apply three coats from lacquer paint for internal walls and ceiling.",
+      "Item": "C.062",
+      "description": "Supply and apply three coats from lacquer paint for internal walls and ceiling.",
       "Unit": "M2",
-      "Supply & Apply": 232.8,
+      "Supply&apply": 232.8,
       "Manpower": "174.6"
     },
     {
-      "Item No.": "C.063",
-      "Description": "Supply and apply washable plastic paint type \"Jotun\" or equivalent with approved  colours  for internal walls and ceiling the item includes surface preparation  under coat and all requirements to finish the work in accordance with the specification",
+      "Item": "C.063",
+      "description": "Supply and apply washable plastic paint type \"Jotun\" or equivalent with approved  colours  for internal walls and ceiling the item includes surface preparation  under coat and all requirements to finish the work in accordance with the specification",
       "Unit": "M2",
-      "Supply & Apply": 256.08,
+      "Supply&apply": 256.08,
       "Manpower": "174.6"
     },
     {
-      "Item No.": "C.064",
-      "Description": "Supply and apply kempleko plaster type \"Jotun\" or equivalent for outside of vertical and horizontal surface, including the necessary external scaffoldings. the work in accordance with the specification",
+      "Item": "C.064",
+      "description": "Supply and apply kempleko plaster type \"Jotun\" or equivalent for outside of vertical and horizontal surface, including the necessary external scaffoldings. the work in accordance with the specification",
       "Unit": "M2",
-      "Supply & Apply": 314.28,
+      "Supply&apply": 314.28,
       "Manpower": "197.88"
     },
     {
-      "Item No.": "C.065",
-      "Description": "Supply and apply paint type \"graffito\" or equivalent for external walls with approved samples and colours  the item includes surface preparation  under coat and all requirements to finish the work in accordance with the specification",
+      "Item": "C.065",
+      "description": "Supply and apply paint type \"graffito\" or equivalent for external walls with approved samples and colours  the item includes surface preparation  under coat and all requirements to finish the work in accordance with the specification",
       "Unit": "M2",
-      "Supply & Apply": 302.64,
+      "Supply&apply": 302.64,
       "Manpower": "174.6"
     },
     {
-      "Item No.": "C.066",
-      "Description": "Paint an existing door (1x2.2m) three coats of lacquer.",
+      "Item": "C.066",
+      "description": "Paint an existing door (1x2.2m) three coats of lacquer.",
       "Unit": "Each",
-      "Supply & Apply": 2910.0,
+      "Supply&apply": 2910.0,
       "Manpower": "989.4"
     },
     {
-      "Item No.": "C.067",
-      "Description": "Paint an existing window (1.2 x 1.2m) three coats of lacquer.",
+      "Item": "C.067",
+      "description": "Paint an existing window (1.2 x 1.2m) three coats of lacquer.",
       "Unit": "Each",
-      "Supply & Apply": 1978.8,
+      "Supply&apply": 1978.8,
       "Manpower": "756.6"
     },
     {
-      "Item No.": "C.068",
-      "Description": "Painting existing wood skirting 4” x 1” with lacquer.",
+      "Item": "C.068",
+      "description": "Painting existing wood skirting 4” x 1” with lacquer.",
       "Unit": "ML",
-      "Supply & Apply": 139.68,
+      "Supply&apply": 139.68,
       "Manpower": "69.84"
     },
     {
-      "Item No.": "C.069",
-      "Description": "Painting existing wood skirting for corners.",
+      "Item": "C.069",
+      "description": "Painting existing wood skirting for corners.",
       "Unit": "ML",
-      "Supply & Apply": 139.68,
+      "Supply&apply": 139.68,
       "Manpower": "69.84"
     },
     {
-      "Item No.": "C.070",
-      "Description": "Supply, installation and fixing roof tilling (over under Spanish tiles) the rate including cement fillet and mortar (penuty product type).",
+      "Item": "C.070",
+      "description": "Supply, installation and fixing roof tilling (over under Spanish tiles) the rate including cement fillet and mortar (penuty product type).",
       "Unit": "M2",
-      "Supply & Apply": 1105.8,
+      "Supply&apply": 1105.8,
       "Manpower": "291"
     },
     {
-      "Item No.": "C.071",
-      "Description": "Supply and laying of Moski wooden floor skirting 4x1 with oil paints.",
+      "Item": "C.071",
+      "description": "Supply and laying of Moski wooden floor skirting 4x1 with oil paints.",
       "Unit": "ML",
-      "Supply & Apply": 372.48,
+      "Supply&apply": 372.48,
       "Manpower": "174.6"
     },
     {
-      "Item No.": "C.072",
-      "Description": "Water proofing of concrete  with sika 107",
+      "Item": "C.072",
+      "description": "Water proofing of concrete  with sika 107",
       "Unit": "M2",
-      "Supply & Apply": 407.4,
+      "Supply&apply": 407.4,
       "Manpower": "197.88"
     },
     {
-      "Item No.": "C.073",
-      "Description": "Supply and apply painting with epoxy paint (kimapoxy 152) two coats for floors.",
+      "Item": "C.073",
+      "description": "Supply and apply painting with epoxy paint (kimapoxy 152) two coats for floors.",
       "Unit": "M2",
-      "Supply & Apply": 407.4,
+      "Supply&apply": 407.4,
       "Manpower": "174.6"
     },
     {
-      "Item No.": "",
-      "Description": "Walls & Floors",
+      "Item": "",
+      "description": "Walls & Floors",
       "Unit": "",
-      "Supply & Apply": null,
+      "Supply&apply": null,
       "Manpower": ""
     },
     {
-      "Item No.": "C.074",
-      "Description": "Supply and laying of complete glazed ceramic filling walls (from - Cleopatra products).",
+      "Item": "C.074",
+      "description": "Supply and laying of complete glazed ceramic filling walls (from - Cleopatra products).",
       "Unit": "M2",
-      "Supply & Apply": 523.8,
+      "Supply&apply": 523.8,
       "Manpower": "256.08"
     },
     {
-      "Item No.": "C.075",
-      "Description": "Supply and laying of tiles from Sornaga products (as approved sample) in size 10 x10 x 1cm thick.",
+      "Item": "C.075",
+      "description": "Supply and laying of tiles from Sornaga products (as approved sample) in size 10 x10 x 1cm thick.",
       "Unit": "M2",
-      "Supply & Apply": 465.6,
+      "Supply&apply": 465.6,
       "Manpower": "197.88"
     },
     {
-      "Item No.": "C.076",
-      "Description": "supply and laying of laying of complete glazed ceramic tilling floor (from Cleopatra products).",
+      "Item": "C.076",
+      "description": "supply and laying of laying of complete glazed ceramic tilling floor (from Cleopatra products).",
       "Unit": "M2",
-      "Supply & Apply": 582.0,
+      "Supply&apply": 582.0,
       "Manpower": "291"
     },
     {
-      "Item No.": "C.077",
-      "Description": "supply and laying of laying of complete porcelain  ceramic tilling floor (from Cleopatra products).",
+      "Item": "C.077",
+      "description": "supply and laying of laying of complete porcelain  ceramic tilling floor (from Cleopatra products).",
       "Unit": "M2",
-      "Supply & Apply": 698.4,
+      "Supply&apply": 698.4,
       "Manpower": "314.28"
     },
     {
-      "Item No.": "C.078",
-      "Description": "Supply and laying of glazed tile floor skirdng 10 cm height.",
+      "Item": "C.078",
+      "description": "Supply and laying of glazed tile floor skirdng 10 cm height.",
       "Unit": "ML",
-      "Supply & Apply": 116.4,
+      "Supply&apply": 116.4,
       "Manpower": "75.66"
     },
     {
-      "Item No.": "C.079",
-      "Description": "Supply and laying of Sornaga skirting 10cm height.",
+      "Item": "C.079",
+      "description": "Supply and laying of Sornaga skirting 10cm height.",
       "Unit": "ML",
-      "Supply & Apply": 162.96,
+      "Supply&apply": 162.96,
       "Manpower": "87.3"
     },
     {
-      "Item No.": "C.080",
-      "Description": "Supply and laying of porcelain tile floor skirdng 10 cm height.",
+      "Item": "C.080",
+      "description": "Supply and laying of porcelain tile floor skirdng 10 cm height.",
       "Unit": "ML",
-      "Supply & Apply": 291.0,
+      "Supply&apply": 291.0,
       "Manpower": "174.6"
     },
     {
-      "Item No.": "C.081",
-      "Description": "Supply and laying of cement tiling to floor in size 20x20x2cm for roof including the skirting.",
+      "Item": "C.081",
+      "description": "Supply and laying of cement tiling to floor in size 20x20x2cm for roof including the skirting.",
       "Unit": "M2",
-      "Supply & Apply": 291.0,
+      "Supply&apply": 291.0,
       "Manpower": "197.88"
     },
     {
-      "Item No.": "C.082",
-      "Description": "Supply and laying VINYL tiles 250 x 250 x 2.5 MM (Ricker Misr) or equivalent cement tiles 200x200x20MM.",
+      "Item": "C.082",
+      "description": "Supply and laying VINYL tiles 250 x 250 x 2.5 MM (Ricker Misr) or equivalent cement tiles 200x200x20MM.",
       "Unit": "M2",
-      "Supply & Apply": 873.0,
+      "Supply&apply": 873.0,
       "Manpower": "488.88"
     },
     {
-      "Item No.": "C.083",
-      "Description": "Supply. And laying of steel crete tiles 20 x 20 x 2 cm with cement bed mortar and over 10 cm sand filling.",
+      "Item": "C.083",
+      "description": "Supply. And laying of steel crete tiles 20 x 20 x 2 cm with cement bed mortar and over 10 cm sand filling.",
       "Unit": "M2",
-      "Supply & Apply": 1105.8,
+      "Supply&apply": 1105.8,
       "Manpower": "523.8"
     },
     {
-      "Item No.": "C.084",
-      "Description": "Supply and laying of Concrete cubs12/15 x 30 x 50 cm. Including 10cm. Thick plain concrete under curbs and painted with two coats oil paint.",
+      "Item": "C.084",
+      "description": "Supply and laying of Concrete cubs12/15 x 30 x 50 cm. Including 10cm. Thick plain concrete under curbs and painted with two coats oil paint.",
       "Unit": "ML",
-      "Supply & Apply": 523.8,
+      "Supply&apply": 523.8,
       "Manpower": "197.88"
     },
     {
-      "Item No.": "C.085",
-      "Description": "Supply and laying all Hassana marble 40 mm thick for tread 300 mm wide and 20 mm thick for rises 110 high.",
+      "Item": "C.085",
+      "description": "Supply and laying all Hassana marble 40 mm thick for tread 300 mm wide and 20 mm thick for rises 110 high.",
       "Unit": "ML",
-      "Supply & Apply": 663.48,
+      "Supply&apply": 663.48,
       "Manpower": "291"
     },
     {
-      "Item No.": "C.086",
-      "Description": "Supply and laying all Hassana marble flooring 40x40x2 cm thickness.",
+      "Item": "C.086",
+      "description": "Supply and laying all Hassana marble flooring 40x40x2 cm thickness.",
       "Unit": "M2",
-      "Supply & Apply": 756.6,
+      "Supply&apply": 756.6,
       "Manpower": "407.4"
     },
     {
-      "Item No.": "C.087",
-      "Description": "Supply and laying granite type \"royal red hurghada \" 40 mm thick for tread 300 mm wide and 20 mm thick for rises 110 high.",
+      "Item": "C.087",
+      "description": "Supply and laying granite type \"royal red hurghada \" 40 mm thick for tread 300 mm wide and 20 mm thick for rises 110 high.",
       "Unit": "ML",
-      "Supply & Apply": 873.0,
+      "Supply&apply": 873.0,
       "Manpower": "430.68"
     },
     {
-      "Item No.": "C.088",
-      "Description": "Supply and laying granite flooring 40 x 40 x 2 cm thickness (feredy & gandola & royal red & aswan red ……. Etc).",
+      "Item": "C.088",
+      "description": "Supply and laying granite flooring 40 x 40 x 2 cm thickness (feredy & gandola & royal red & aswan red ……. Etc).",
       "Unit": "M2",
-      "Supply & Apply": 3142.8,
+      "Supply&apply": 3142.8,
       "Manpower": "523.8"
     },
     {
-      "Item No.": "C.089",
-      "Description": "Supply and laying granite 40 mm thick for tread 300 mm wide for stairs including skirting 15 cm height in both side of stairs (feredy & gandola & royal red & aswan red ……. Etc).",
+      "Item": "C.089",
+      "description": "Supply and laying granite 40 mm thick for tread 300 mm wide for stairs including skirting 15 cm height in both side of stairs (feredy & gandola & royal red & aswan red ……. Etc).",
       "Unit": "ML",
-      "Supply & Apply": 640.2,
+      "Supply&apply": 640.2,
       "Manpower": "314.28"
     },
     {
-      "Item No.": "C.090",
-      "Description": "Supply and laying granite skirting 15 cm high.",
+      "Item": "C.090",
+      "description": "Supply and laying granite skirting 15 cm high.",
       "Unit": "ML",
-      "Supply & Apply": 523.8,
+      "Supply&apply": 523.8,
       "Manpower": "232.8"
     },
     {
-      "Item No.": "C.091",
-      "Description": "Supply and laying India green marble.",
+      "Item": "C.091",
+      "description": "Supply and laying India green marble.",
       "Unit": "M2",
-      "Supply & Apply": 5238.0,
+      "Supply&apply": 5238.0,
       "Manpower": "523.8"
     },
     {
-      "Item No.": "C.092",
-      "Description": "Supply and laying interlock tiles for paving and landscape.",
+      "Item": "C.092",
+      "description": "Supply and laying interlock tiles for paving and landscape.",
       "Unit": "M2",
-      "Supply & Apply": 523.8,
+      "Supply&apply": 523.8,
       "Manpower": "291"
     },
     {
-      "Item No.": "C.093",
-      "Description": "Supply and install HASHMA tiles (80 or HAISSUM) with dimensions (30 x 60 x 2 cm) for walls.",
+      "Item": "C.093",
+      "description": "Supply and install HASHMA tiles (80 or HAISSUM) with dimensions (30 x 60 x 2 cm) for walls.",
       "Unit": "M2",
-      "Supply & Apply": 756.6,
+      "Supply&apply": 756.6,
       "Manpower": "372.48"
     },
     {
-      "Item No.": "C.094",
-      "Description": "Supply and laying thermal bricks .25x.06x.025 m including delivering the works finished in a perfect workman like a manner with mortar consist of 350 kg ordinary Portland cement per m3 sand, including all finishing materials (warnech) used for cleaning and painting",
+      "Item": "C.094",
+      "description": "Supply and laying thermal bricks .25x.06x.025 m including delivering the works finished in a perfect workman like a manner with mortar consist of 350 kg ordinary Portland cement per m3 sand, including all finishing materials (warnech) used for cleaning and painting",
       "Unit": "M2",
-      "Supply & Apply": 1978.8,
+      "Supply&apply": 1978.8,
       "Manpower": "523.8"
     },
     {
-      "Item No.": "C.095",
-      "Description": "Supply and laying brick (karameid) for the entrance roof including masonry parapet needed for inclination cement mortar needed (350 kg/m3) sand and all finishing parts and materials",
+      "Item": "C.095",
+      "description": "Supply and laying brick (karameid) for the entrance roof including masonry parapet needed for inclination cement mortar needed (350 kg/m3) sand and all finishing parts and materials",
       "Unit": "M2",
-      "Supply & Apply": 756.6,
+      "Supply&apply": 756.6,
       "Manpower": "372.48"
     },
     {
-      "Item No.": "C.096",
-      "Description": "Supply and installation of tiles of false ceiling tiles GYPSUM BOARD 60*60 from china production Including all accessories",
+      "Item": "C.096",
+      "description": "Supply and installation of tiles of false ceiling tiles GYPSUM BOARD 60*60 from china production Including all accessories",
       "Unit": "M2",
-      "Supply & Apply": 838.08,
+      "Supply&apply": 838.08,
       "Manpower": "407.4"
     },
     {
-      "Item No.": "C.097",
-      "Description": "Supply and installation of GYPSUM BOARD for ceiling and walls Including all accessories",
+      "Item": "C.097",
+      "description": "Supply and installation of GYPSUM BOARD for ceiling and walls Including all accessories",
       "Unit": "M2",
-      "Supply & Apply": 873.0,
+      "Supply&apply": 873.0,
       "Manpower": "407.4"
     },
     {
-      "Item No.": "C.098",
-      "Description": "Supply and laying veiotic between ceramic wall tiles and ceiling.",
+      "Item": "C.098",
+      "description": "Supply and laying veiotic between ceramic wall tiles and ceiling.",
       "Unit": "ML",
-      "Supply & Apply": 523.8,
+      "Supply&apply": 523.8,
       "Manpower": "232.8"
     },
     {
-      "Item No.": "",
-      "Description": "Aluminium Work",
+      "Item": "",
+      "description": "Aluminium Work",
       "Unit": "",
-      "Supply & Apply": null,
+      "Supply&apply": null,
       "Manpower": ""
     },
     {
-      "Item No.": "C.099",
-      "Description": "Supply and fix colored aluminium windows from.heavy PS. Electrostatic paint clear glass 6mm thickness and wire mesh leaf .",
+      "Item": "C.099",
+      "description": "Supply and fix colored aluminium windows from.heavy PS. Electrostatic paint clear glass 6mm thickness and wire mesh leaf .",
       "Unit": "M2",
-      "Supply & Apply": 4888.8,
+      "Supply&apply": 4888.8,
       "Manpower": "698.4"
     },
     {
-      "Item No.": "C.100",
-      "Description": "Supply and fix colored aluminium windows from ticnal jambo. Electrostatic paint clear glass 6mm thickness and wire mesh leaf .",
+      "Item": "C.100",
+      "description": "Supply and fix colored aluminium windows from ticnal jambo. Electrostatic paint clear glass 6mm thickness and wire mesh leaf .",
       "Unit": "M2",
-      "Supply & Apply": 6634.8,
+      "Supply&apply": 6634.8,
       "Manpower": "756.6"
     },
     {
-      "Item No.": "C.101",
-      "Description": "Supply and fix colored aluminium doors  from.heavy PS. Electrostatic paint clear glass 6mm thickness and  door closer EU. Production",
+      "Item": "C.101",
+      "description": "Supply and fix colored aluminium doors  from.heavy PS. Electrostatic paint clear glass 6mm thickness and  door closer EU. Production",
       "Unit": "M2",
-      "Supply & Apply": 5238.0,
+      "Supply&apply": 5238.0,
       "Manpower": "582"
     },
     {
-      "Item No.": "C.102",
-      "Description": "Supply and fix colored aluminium doors  from.ticnal jambo. Electrostatic paint clear glass 6mm thickness and  door closer EU. Production",
+      "Item": "C.102",
+      "description": "Supply and fix colored aluminium doors  from.ticnal jambo. Electrostatic paint clear glass 6mm thickness and  door closer EU. Production",
       "Unit": "M2",
-      "Supply & Apply": 6751.2,
+      "Supply&apply": 6751.2,
       "Manpower": "756.6"
     },
     {
-      "Item No.": "C.103",
-      "Description": "Supply and fix colored aluminium partitions from ticnal tango local electrostatic paint and clear glass in 6mm",
+      "Item": "C.103",
+      "description": "Supply and fix colored aluminium partitions from ticnal tango local electrostatic paint and clear glass in 6mm",
       "Unit": "M2",
-      "Supply & Apply": 5238.0,
+      "Supply&apply": 5238.0,
       "Manpower": "523.8"
     },
     {
-      "Item No.": "C.104",
-      "Description": "Wooden circumferential work 6” x frame for Aluminium work 6” x 1”.",
+      "Item": "C.104",
+      "description": "Wooden circumferential work 6” x frame for Aluminium work 6” x 1”.",
       "Unit": "M2",
-      "Supply & Apply": 5238.0,
+      "Supply&apply": 5238.0,
       "Manpower": "523.8"
     },
     {
-      "Item No.": "",
-      "Description": "Wooden Work",
+      "Item": "",
+      "description": "Wooden Work",
       "Unit": "",
-      "Supply & Apply": null,
+      "Supply&apply": null,
       "Manpower": ""
     },
     {
-      "Item No.": "C.105",
-      "Description": "Supply and fixing door closer from format product or dorma.",
+      "Item": "C.105",
+      "description": "Supply and fixing door closer from format product or dorma.",
       "Unit": "Each",
-      "Supply & Apply": 17460.0,
+      "Supply&apply": 17460.0,
       "Manpower": "6402"
     },
     {
-      "Item No.": "C.106",
-      "Description": "Supply and fix hollow core wooden door consists of Moski wood framed and sections claded with 4 MM. Play wood the accessories are lock and handles from El Ah ram product and the price includes three costs of lacquer paint.",
+      "Item": "C.106",
+      "description": "Supply and fix hollow core wooden door consists of Moski wood framed and sections claded with 4 MM. Play wood the accessories are lock and handles from El Ah ram product and the price includes three costs of lacquer paint.",
       "Unit": "Each",
-      "Supply & Apply": 5820.0,
+      "Supply&apply": 5820.0,
       "Manpower": "1746"
     },
     {
-      "Item No.": "C.107",
-      "Description": "Supply fabrication and fixation cupboard from Contor Wood leaves in 18MM. Thickness and claded internally with 4MM playwood & required Mosky wood frames the price include washable lacquer paint.",
+      "Item": "C.107",
+      "description": "Supply fabrication and fixation cupboard from Contor Wood leaves in 18MM. Thickness and claded internally with 4MM playwood & required Mosky wood frames the price include washable lacquer paint.",
       "Unit": "M2",
-      "Supply & Apply": 6634.8,
+      "Supply&apply": 6634.8,
       "Manpower": "873"
     },
     {
-      "Item No.": "C.108",
-      "Description": "Supply and fixing solid core wooden door Moski in 5cm. thick and with accessories.",
+      "Item": "C.108",
+      "description": "Supply and fixing solid core wooden door Moski in 5cm. thick and with accessories.",
       "Unit": "Each",
-      "Supply & Apply": 9312.0,
+      "Supply&apply": 9312.0,
       "Manpower": "1396.8"
     },
     {
-      "Item No.": "",
-      "Description": "Grout Work",
+      "Item": "",
+      "description": "Grout Work",
       "Unit": "",
-      "Supply & Apply": null,
+      "Supply&apply": null,
       "Manpower": ""
     },
     {
-      "Item No.": "C.109",
-      "Description": "Supply and install non-shrinkage grou cement grout.",
+      "Item": "C.109",
+      "description": "Supply and install non-shrinkage grou cement grout.",
       "Unit": "M3",
-      "Supply & Apply": 30264.0,
+      "Supply&apply": 30264.0,
       "Manpower": "6518.4"
     },
     {
-      "Item No.": "",
-      "Description": "Steel Work",
+      "Item": "",
+      "description": "Steel Work",
       "Unit": "",
-      "Supply & Apply": null,
+      "Supply&apply": null,
       "Manpower": ""
     },
     {
-      "Item No.": "C.110",
-      "Description": "Supply and install anchor bolts",
+      "Item": "C.110",
+      "description": "Supply and install anchor bolts",
       "Unit": "Kg",
-      "Supply & Apply": 104.76,
+      "Supply&apply": 104.76,
       "Manpower": "104.76"
     },
     {
-      "Item No.": "C.111",
-      "Description": "Supply, fabrication & erection heavy or medium steel structure section for frames and purling - Etc and epoxy paint.",
+      "Item": "C.111",
+      "description": "Supply, fabrication & erection heavy or medium steel structure section for frames and purling - Etc and epoxy paint.",
       "Unit": "Kg",
-      "Supply & Apply": 291.0,
+      "Supply&apply": 291.0,
       "Manpower": "139.68"
     },
     {
-      "Item No.": "C.112",
-      "Description": "Supply and installation of sandwich panels total thick 0.5cm. Polyurethane between two pre paintings corrugated steel sheets 0.5MM thick.",
+      "Item": "C.112",
+      "description": "Supply and installation of sandwich panels total thick 0.5cm. Polyurethane between two pre paintings corrugated steel sheets 0.5MM thick.",
       "Unit": "M2",
-      "Supply & Apply": 3724.8,
+      "Supply&apply": 3724.8,
       "Manpower": "1047.6"
     },
     {
-      "Item No.": "C.113",
-      "Description": "Supply and install galvanized grating consist of steel sheets 3cm,3mm thickness with spacing 3cm",
+      "Item": "C.113",
+      "description": "Supply and install galvanized grating consist of steel sheets 3cm,3mm thickness with spacing 3cm",
       "Unit": "M2",
-      "Supply & Apply": 8730.0,
+      "Supply&apply": 8730.0,
       "Manpower": "1164"
     },
     {
-      "Item No.": "C.114",
-      "Description": "Supply and installation checkered steel plates covers 6 MM thick for cable trench including setting angles.",
+      "Item": "C.114",
+      "description": "Supply and installation checkered steel plates covers 6 MM thick for cable trench including setting angles.",
       "Unit": "Kg",
-      "Supply & Apply": 174.6,
+      "Supply&apply": 174.6,
       "Manpower": "81.48"
     },
     {
-      "Item No.": "",
-      "Description": "Plumping Work",
+      "Item": "",
+      "description": "Plumping Work",
       "Unit": "",
-      "Supply & Apply": null,
+      "Supply&apply": null,
       "Manpower": ""
     },
     {
-      "Item No.": "C.115",
-      "Description": "Supply and installation dia.4”PVC rain water pipes including fittings and accessories.",
+      "Item": "C.115",
+      "description": "Supply and installation dia.4”PVC rain water pipes including fittings and accessories.",
       "Unit": "ML",
-      "Supply & Apply": 1105.8,
+      "Supply&apply": 1105.8,
       "Manpower": "291"
     },
     {
-      "Item No.": "C.116",
-      "Description": "Supply and installation of PVC floor drain traps stainless steel cover of diam. of 20 x 20 cm.",
+      "Item": "C.116",
+      "description": "Supply and installation of PVC floor drain traps stainless steel cover of diam. of 20 x 20 cm.",
       "Unit": "Each",
-      "Supply & Apply": 17460.0,
+      "Supply&apply": 17460.0,
       "Manpower": "4074"
     },
     {
-      "Item No.": "C.117",
-      "Description": "Supply and installation of inspection chamber (M.H) to be built with cement bricks dimen. 60 x 60 cm. up to 0.60 cm with C.1 cover 125 kg.",
+      "Item": "C.117",
+      "description": "Supply and installation of inspection chamber (M.H) to be built with cement bricks dimen. 60 x 60 cm. up to 0.60 cm with C.1 cover 125 kg.",
       "Unit": "Each",
-      "Supply & Apply": 17169.0,
+      "Supply&apply": 17169.0,
       "Manpower": "7566"
     },
     {
-      "Item No.": "C.118",
-      "Description": "Supply and installation of gully trape  thr as per the spcifications",
+      "Item": "C.118",
+      "description": "Supply and installation of gully trape  thr as per the spcifications",
       "Unit": "Each",
-      "Supply & Apply": 4656.0,
+      "Supply&apply": 4656.0,
       "Manpower": "349.2"
     },
     {
-      "Item No.": "C.119",
-      "Description": "Supply and lay half circular vitrified pipe in 20 cm diameter with C.1 grill including excavation and concrete work.",
+      "Item": "C.119",
+      "description": "Supply and lay half circular vitrified pipe in 20 cm diameter with C.1 grill including excavation and concrete work.",
       "Unit": "ML",
-      "Supply & Apply": 582.0,
+      "Supply&apply": 582.0,
       "Manpower": "291"
     },
     {
-      "Item No.": "C.120",
-      "Description": "Supply and installation roof drain trap diam. 100 MM.",
+      "Item": "C.120",
+      "description": "Supply and installation roof drain trap diam. 100 MM.",
       "Unit": "Each",
-      "Supply & Apply": 1396.8,
+      "Supply&apply": 1396.8,
       "Manpower": "291"
     },
     {
-      "Item No.": "C.121",
-      "Description": "PVC pipes must be complying with din. 8061 or 8062 or approved equal joining by special synthetic ring seal size 50 MM according to din 19354.",
+      "Item": "C.121",
+      "description": "PVC pipes must be complying with din. 8061 or 8062 or approved equal joining by special synthetic ring seal size 50 MM according to din 19354.",
       "Unit": "ML",
-      "Supply & Apply": 1746.0,
+      "Supply&apply": 1746.0,
       "Manpower": "523.8"
     },
     {
-      "Item No.": "C.122",
-      "Description": "PVC pipes must be complying with din. 8061 or 8062 or approved equal joining by special synthetic ring seal size 75 MM according to din 19354.",
+      "Item": "C.122",
+      "description": "PVC pipes must be complying with din. 8061 or 8062 or approved equal joining by special synthetic ring seal size 75 MM according to din 19354.",
       "Unit": "ML",
-      "Supply & Apply": 1978.8,
+      "Supply&apply": 1978.8,
       "Manpower": "547.08"
     },
     {
-      "Item No.": "C.123",
-      "Description": "PVC pipes must be complying with din. 8061 or 8062 or approved equal joining by special synthetic ring seal size 100 MM according to din 19354.",
+      "Item": "C.123",
+      "description": "PVC pipes must be complying with din. 8061 or 8062 or approved equal joining by special synthetic ring seal size 100 MM according to din 19354.",
       "Unit": "ML",
-      "Supply & Apply": 756.6,
+      "Supply&apply": 756.6,
       "Manpower": "349.2"
     },
     {
-      "Item No.": "C.124",
-      "Description": "PVC pipes must be complying with din. 8061 or 8062 or approved equal joining by special synthetic ring seal size 150 MM according to din 19354.",
+      "Item": "C.124",
+      "description": "PVC pipes must be complying with din. 8061 or 8062 or approved equal joining by special synthetic ring seal size 150 MM according to din 19354.",
       "Unit": "ML",
-      "Supply & Apply": 814.8,
+      "Supply&apply": 814.8,
       "Manpower": "372.48"
     },
     {
-      "Item No.": "C.125",
-      "Description": "PVC pipes must be complying with din. 8061 or 8062 or approved equal joining by special synthetic ring seal size 200 MM according to din 19354.",
+      "Item": "C.125",
+      "description": "PVC pipes must be complying with din. 8061 or 8062 or approved equal joining by special synthetic ring seal size 200 MM according to din 19354.",
       "Unit": "ML",
-      "Supply & Apply": 989.4,
+      "Supply&apply": 989.4,
       "Manpower": "488.88"
     },
     {
-      "Item No.": "C.126",
-      "Description": "PVC pipes must be complying with din. 8061 or 8062 or approved equal joining by special synthetic ring seal size 250 MM according to din 19354.",
+      "Item": "C.126",
+      "description": "PVC pipes must be complying with din. 8061 or 8062 or approved equal joining by special synthetic ring seal size 250 MM according to din 19354.",
       "Unit": "ML",
-      "Supply & Apply": 1105.8,
+      "Supply&apply": 1105.8,
       "Manpower": "523.8"
     },
     {
-      "Item No.": "C.127",
-      "Description": "Supply and laying of polybroblean pipes for water ,- including  accessories for laying internal diameter size 3/4 ”.",
+      "Item": "C.127",
+      "description": "Supply and laying of polybroblean pipes for water ,- including  accessories for laying internal diameter size 3/4 ”.",
       "Unit": "ML",
-      "Supply & Apply": 523.8,
+      "Supply&apply": 523.8,
       "Manpower": "232.8"
     },
     {
-      "Item No.": "C.128",
-      "Description": "Supply and laying of polypropylene pipes for water ,- including  accessories for laying internal diameter size 1”.",
+      "Item": "C.128",
+      "description": "Supply and laying of polypropylene pipes for water ,- including  accessories for laying internal diameter size 1”.",
       "Unit": "ML",
-      "Supply & Apply": 417.1,
+      "Supply&apply": 417.1,
       "Manpower": "372.48"
     },
     {
-      "Item No.": "C.129",
-      "Description": "Supply and laying of polypropylene pipes for water ,- including  accessories for laying internal diameter size 1.5”.",
+      "Item": "C.129",
+      "description": "Supply and laying of polypropylene pipes for water ,- including  accessories for laying internal diameter size 1.5”.",
       "Unit": "ML",
-      "Supply & Apply": 791.52,
+      "Supply&apply": 791.52,
       "Manpower": "407.4"
     },
     {
-      "Item No.": "C.130",
-      "Description": "Supply and laying of polypropylene pipes for water ,- including  accessories for laying internal diameter size 2”.",
+      "Item": "C.130",
+      "description": "Supply and laying of polypropylene pipes for water ,- including  accessories for laying internal diameter size 2”.",
       "Unit": "ML",
-      "Supply & Apply": 814.8,
+      "Supply&apply": 814.8,
       "Manpower": "465.6"
     },
     {
-      "Item No.": "C.131",
-      "Description": "Supply and laying of polypropylene pipes for water ,- including  accessories for laying internal diameter size 3”.",
+      "Item": "C.131",
+      "description": "Supply and laying of polypropylene pipes for water ,- including  accessories for laying internal diameter size 3”.",
       "Unit": "ML",
-      "Supply & Apply": 873.0,
+      "Supply&apply": 873.0,
       "Manpower": "488.88"
     },
     {
-      "Item No.": "C.132",
-      "Description": "Supply and laying of polypropylene pipes for water ,- including  accessories for laying internal diameter size 4”.",
+      "Item": "C.132",
+      "description": "Supply and laying of polypropylene pipes for water ,- including  accessories for laying internal diameter size 4”.",
       "Unit": "ML",
-      "Supply & Apply": 989.4,
+      "Supply&apply": 989.4,
       "Manpower": "372.48"
     },
     {
-      "Item No.": "C.133",
-      "Description": "Supply and install pedestal type water closet of colour glazed  *ideal standard* first class complete  as per the specifications. The price includes all the necessary water supply pipes to the external boundary of building .water valves and the drainage pipes to the external manholes as per the specifications.",
+      "Item": "C.133",
+      "description": "Supply and install pedestal type water closet of colour glazed  *ideal standard* first class complete  as per the specifications. The price includes all the necessary water supply pipes to the external boundary of building .water valves and the drainage pipes to the external manholes as per the specifications.",
       "Unit": "Each",
-      "Supply & Apply": 11640.0,
+      "Supply&apply": 11640.0,
       "Manpower": "1164"
     },
     {
-      "Item No.": "C.134",
-      "Description": "Supply and install wash basin  of colour  glazed  *ideal standard* first class complete  with mixers. Valves  as per the specifications. The price includes all the necessary water supply pipes to the external boundary of building .water valves and the drainage pipes to the external gully traps  as per the specifications.",
+      "Item": "C.134",
+      "description": "Supply and install wash basin  of colour  glazed  *ideal standard* first class complete  with mixers. Valves  as per the specifications. The price includes all the necessary water supply pipes to the external boundary of building .water valves and the drainage pipes to the external gully traps  as per the specifications.",
       "Unit": "Each",
-      "Supply & Apply": 16005.0,
+      "Supply&apply": 16005.0,
       "Manpower": "1746"
     },
     {
-      "Item No.": "C.135",
-      "Description": "Supply and install heavy urinals   of colour  glazed  *ideal standard* first class complete  with mixers. Valves  as per the specifications. The price includes all the necessary water supply pipes to the external boundary of building .water valves and the drainage pipes to the external gully traps  as per the specifications.",
+      "Item": "C.135",
+      "description": "Supply and install heavy urinals   of colour  glazed  *ideal standard* first class complete  with mixers. Valves  as per the specifications. The price includes all the necessary water supply pipes to the external boundary of building .water valves and the drainage pipes to the external gully traps  as per the specifications.",
       "Unit": "Each",
-      "Supply & Apply": 11640.0,
+      "Supply&apply": 11640.0,
       "Manpower": "2328"
     },
     {
-      "Item No.": "C.136",
-      "Description": "Supply and installation of acrylic feet wash basin in dim 90 x 90 cm complete with taps, gasket, screw, mixing units, drains, valves, accessories from \"ideal standard\" common to deliver the works finished in at work main like manner.",
+      "Item": "C.136",
+      "description": "Supply and installation of acrylic feet wash basin in dim 90 x 90 cm complete with taps, gasket, screw, mixing units, drains, valves, accessories from \"ideal standard\" common to deliver the works finished in at work main like manner.",
       "Unit": "Each",
-      "Supply & Apply": 13968.0,
+      "Supply&apply": 13968.0,
       "Manpower": "2328"
     },
     {
-      "Item No.": "C.137",
-      "Description": "Supply and installation of stainless steel basins with mixer, gasket, screws, drains, valves, accessories from Jacob Delfon common type & pipe fitting including any charge to deliver the works finished in a perfect workman like manner diam. 180x50 cm.",
+      "Item": "C.137",
+      "description": "Supply and installation of stainless steel basins with mixer, gasket, screws, drains, valves, accessories from Jacob Delfon common type & pipe fitting including any charge to deliver the works finished in a perfect workman like manner diam. 180x50 cm.",
       "Unit": "Each",
-      "Supply & Apply": 17460.0,
+      "Supply&apply": 17460.0,
       "Manpower": "2910"
     },
     {
-      "Item No.": "C.138",
-      "Description": "Supply and installation of stainless steel basins with mixer , gaskets, screws, drains, valves, accessories from Jacob Delfon common type & pipe fitting including any charge to deliver the works finished in a perfect workman like manner diam. 120 x 50cm",
+      "Item": "C.138",
+      "description": "Supply and installation of stainless steel basins with mixer , gaskets, screws, drains, valves, accessories from Jacob Delfon common type & pipe fitting including any charge to deliver the works finished in a perfect workman like manner diam. 120 x 50cm",
       "Unit": "Each",
-      "Supply & Apply": 17460.0,
+      "Supply&apply": 17460.0,
       "Manpower": "2910"
     },
     {
-      "Item No.": "C.139",
-      "Description": "Supply and Install of bronze gate valves, with hand wheel with 1” diameter lavatories * From ideal standard product type ovalux.",
+      "Item": "C.139",
+      "description": "Supply and Install of bronze gate valves, with hand wheel with 1” diameter lavatories * From ideal standard product type ovalux.",
       "Unit": "Each",
-      "Supply & Apply": 2328.0,
+      "Supply&apply": 2328.0,
       "Manpower": "814.8"
     },
     {
-      "Item No.": "C.140",
-      "Description": "Supply and Install of bronze gate valves, with hand wheel with 1.5” diameter lavatories * From ideal standard product type ovalux.",
+      "Item": "C.140",
+      "description": "Supply and Install of bronze gate valves, with hand wheel with 1.5” diameter lavatories * From ideal standard product type ovalux.",
       "Unit": "Each",
-      "Supply & Apply": 2910.0,
+      "Supply&apply": 2910.0,
       "Manpower": "931.2"
     },
     {
-      "Item No.": "C.141",
-      "Description": "Supply and Install of bronze gate valves, with hand wheel with 2” diameter lavatories * From ideal standard product type ovalux.",
+      "Item": "C.141",
+      "description": "Supply and Install of bronze gate valves, with hand wheel with 2” diameter lavatories * From ideal standard product type ovalux.",
       "Unit": "Each",
-      "Supply & Apply": 3492.0,
+      "Supply&apply": 3492.0,
       "Manpower": "1164"
     },
     {
-      "Item No.": "C.142",
-      "Description": "Supply and Install of bronze gate valves, with hand wheel with 3” diameter lavatories * From ideal standard product type ovalux.",
+      "Item": "C.142",
+      "description": "Supply and Install of bronze gate valves, with hand wheel with 3” diameter lavatories * From ideal standard product type ovalux.",
       "Unit": "Each",
-      "Supply & Apply": 4656.0,
+      "Supply&apply": 4656.0,
       "Manpower": "1746"
     },
     {
-      "Item No.": "C.143",
-      "Description": "Supply and Install of bronze gate valves, with hand wheel with 4” diameter lavatories * From ideal standard product type ovalux.",
+      "Item": "C.143",
+      "description": "Supply and Install of bronze gate valves, with hand wheel with 4” diameter lavatories * From ideal standard product type ovalux.",
       "Unit": "Each",
-      "Supply & Apply": 5238.0,
+      "Supply&apply": 5238.0,
       "Manpower": "1978.8"
     },
     {
-      "Item No.": "",
-      "Description": "Roads Work",
+      "Item": "",
+      "description": "Roads Work",
       "Unit": "",
-      "Supply & Apply": null,
+      "Supply&apply": null,
       "Manpower": ""
     },
     {
-      "Item No.": "C.144",
-      "Description": "Supply and laying of fill  with red gravel (pit-run gravel).compacted up to 95%",
+      "Item": "C.144",
+      "description": "Supply and laying of fill  with red gravel (pit-run gravel).compacted up to 95%",
       "Unit": "M3",
-      "Supply & Apply": 523.8,
+      "Supply&apply": 523.8,
       "Manpower": "174.6"
     },
     {
-      "Item No.": "C.145",
-      "Description": "Supply & laying of gravel.",
+      "Item": "C.145",
+      "description": "Supply & laying of gravel.",
       "Unit": "M3",
-      "Supply & Apply": 523.8,
+      "Supply&apply": 523.8,
       "Manpower": "174.6"
     },
     {
-      "Item No.": "C.146",
-      "Description": "Formation of base course for roads, yard, or paved area thickness 15-30 cm after compaction with calcareous crushed stones.",
+      "Item": "C.146",
+      "description": "Formation of base course for roads, yard, or paved area thickness 15-30 cm after compaction with calcareous crushed stones.",
       "Unit": "M3",
-      "Supply & Apply": 582.0,
+      "Supply&apply": 582.0,
       "Manpower": "232.8"
     },
     {
-      "Item No.": "C.147",
-      "Description": "Connecting layer (binder) made by bituminous mixture rolled with 6-8T roller included prime coat finished thickness 5 cm.",
+      "Item": "C.147",
+      "description": "Connecting layer (binder) made by bituminous mixture rolled with 6-8T roller included prime coat finished thickness 5 cm.",
       "Unit": "M2",
-      "Supply & Apply": 2910.0,
+      "Supply&apply": 2910.0,
       "Manpower": "314.28"
     },
     {
-      "Item No.": "C.148",
-      "Description": "Wearing course made by bituminous mixture rolled by 618T roller included prime coat finished thickness 3 cm.",
+      "Item": "C.148",
+      "description": "Wearing course made by bituminous mixture rolled by 618T roller included prime coat finished thickness 3 cm.",
       "Unit": "M2",
-      "Supply & Apply": 3142.8,
+      "Supply&apply": 3142.8,
       "Manpower": "989.4"
     },
     {
-      "Item No.": "C.144 A",
-      "Description": "Supply and install sub grade course with thickness 20 cm mixed by water and compacted with minimum compaction 98% of the max. Dry density as proctor density.",
+      "Item": "C.144 A",
+      "description": "Supply and install sub grade course with thickness 20 cm mixed by water and compacted with minimum compaction 98% of the max. Dry density as proctor density.",
       "Unit": "M2",
-      "Supply & Apply": 139.68,
+      "Supply&apply": 139.68,
       "Manpower": "69.84"
     },
     {
-      "Item No.": "C.144 B",
-      "Description": "Supply and install Agg. Base course consists of gradient crushed stone materials mixed by water and supply by finisher with minimum compaction 100% of the max. Dry density as proctor density.",
+      "Item": "C.144 B",
+      "description": "Supply and install Agg. Base course consists of gradient crushed stone materials mixed by water and supply by finisher with minimum compaction 100% of the max. Dry density as proctor density.",
       "Unit": "M2",
-      "Supply & Apply": 139.68,
+      "Supply&apply": 139.68,
       "Manpower": "69.84"
     },
     {
-      "Item No.": "C.144 C",
-      "Description": "Supply and install prime coat (MC) asphalt mixed by kerosene sprayed on Agg. Base course before apply of asphalt by 48 hr with rate from 0.65 liter/m² to 1.75 liter/m².",
+      "Item": "C.144 C",
+      "description": "Supply and install prime coat (MC) asphalt mixed by kerosene sprayed on Agg. Base course before apply of asphalt by 48 hr with rate from 0.65 liter/m² to 1.75 liter/m².",
       "Unit": "M2",
-      "Supply & Apply": 98.94,
+      "Supply&apply": 98.94,
       "Manpower": "69.84"
     },
     {
-      "Item No.": "C.144 D",
-      "Description": "Supply and install B.B.C which is the first layer of asphalt which placed on M.C and consists of  gradient crushed stone materials mixed by bitumen with maximum volume 1.5\" and thickness 6 - 10 cm as designed and product from mixer at temperature 160° C and apply by finisher and compacted by roller compacted.",
+      "Item": "C.144 D",
+      "description": "Supply and install B.B.C which is the first layer of asphalt which placed on M.C and consists of  gradient crushed stone materials mixed by bitumen with maximum volume 1.5\" and thickness 6 - 10 cm as designed and product from mixer at temperature 160° C and apply by finisher and compacted by roller compacted.",
       "Unit": "M2",
-      "Supply & Apply": 203.7,
+      "Supply&apply": 203.7,
       "Manpower": "87.3"
     },
     {
-      "Item No.": "C.144 E",
-      "Description": "Supply and install tack coat (R.C) which sprayed on the B.B.C at temperature 80 - 95° C and spray rate 0.1 - 0.2 liter/m² to fix B.B.C layer with the finish layer.",
+      "Item": "C.144 E",
+      "description": "Supply and install tack coat (R.C) which sprayed on the B.B.C at temperature 80 - 95° C and spray rate 0.1 - 0.2 liter/m² to fix B.B.C layer with the finish layer.",
       "Unit": "M2",
-      "Supply & Apply": 93.12,
+      "Supply&apply": 93.12,
       "Manpower": "64.02"
     },
     {
-      "Item No.": "C.144 F",
-      "Description": "Supply and install the wearing course with thickness 3 - 5 cm according to loads and apply at temperature 160° C, consists of bitumen mixed with crushed stone materials with maximum dimension 3/4\" and compacted as B.B.C layer and test it by take core to indicate the thickness.",
+      "Item": "C.144 F",
+      "description": "Supply and install the wearing course with thickness 3 - 5 cm according to loads and apply at temperature 160° C, consists of bitumen mixed with crushed stone materials with maximum dimension 3/4\" and compacted as B.B.C layer and test it by take core to indicate the thickness.",
       "Unit": "M2",
-      "Supply & Apply": 215.34,
+      "Supply&apply": 215.34,
       "Manpower": "98.94"
     },
     {
-      "Item No.": "",
-      "Description": "Fencing work",
+      "Item": "",
+      "description": "Fencing work",
       "Unit": "",
-      "Supply & Apply": null,
+      "Supply&apply": null,
       "Manpower": ""
     },
     {
-      "Item No.": "C.149",
-      "Description": "supply and install mesh wire fence including install steel posts 3m height /3m interval fixed by (60*60*60cm) plain concrete foundation including all (mesh wire &tension wire&parbed wire) mesh wire chain  5cm*5cm with thickness 5mm (3mm internal and 2mm innsulation pvc) &tension wire galvanized steel 5mm& tension band 25cm galvanized &  claps",
+      "Item": "C.149",
+      "description": "supply and install mesh wire fence including install steel posts 3m height /3m interval fixed by (60*60*60cm) plain concrete foundation including all (mesh wire &tension wire&parbed wire) mesh wire chain  5cm*5cm with thickness 5mm (3mm internal and 2mm innsulation pvc) &tension wire galvanized steel 5mm& tension band 25cm galvanized &  claps",
       "Unit": "M.L",
-      "Supply & Apply": 3142.8,
+      "Supply&apply": 3142.8,
       "Manpower": "989.4"
     },
     {
-      "Item No.": "C.150",
-      "Description": "supply and install mesh wire fence including install steel posts 3m height /3m interval fixed by (60*60*60cm) plain concrete foundation including all (mesh wire &tension wire&parbed wire) mesh wire chain  5cm*5cm with thickness 5mm (3mm internal and 2mm innsulation pvc) &tension wire galvanized steel 5mm& tension band 25cm galvanized &  claps  (posts  supply by nrpetco)",
+      "Item": "C.150",
+      "description": "supply and install mesh wire fence including install steel posts 3m height /3m interval fixed by (60*60*60cm) plain concrete foundation including all (mesh wire &tension wire&parbed wire) mesh wire chain  5cm*5cm with thickness 5mm (3mm internal and 2mm innsulation pvc) &tension wire galvanized steel 5mm& tension band 25cm galvanized &  claps  (posts  supply by nrpetco)",
       "Unit": "M.L",
-      "Supply & Apply": 1387.1,
+      "Supply&apply": 1387.1,
       "Manpower": "582"
     },
     {
-      "Item No.": "C.151",
-      "Description": "Repair wire mesh fence by straightening posts, re-tighten the wire mesh.",
+      "Item": "C.151",
+      "description": "Repair wire mesh fence by straightening posts, re-tighten the wire mesh.",
       "Unit": "ML",
-      "Supply & Apply": 1047.6,
+      "Supply&apply": 1047.6,
       "Manpower": "407.4"
     },
     {
-      "Item No.": "C.152",
-      "Description": "Install mesh wire (mesh wire and tension wire and all accessories supplied by Norpetco)",
+      "Item": "C.152",
+      "description": "Install mesh wire (mesh wire and tension wire and all accessories supplied by Norpetco)",
       "Unit": "M.L",
-      "Supply & Apply": 873.0,
+      "Supply&apply": 873.0,
       "Manpower": "291"
     },
     {
-      "Item No.": "C.153",
-      "Description": "Supply and install barbed wire for fences.",
+      "Item": "C.153",
+      "description": "Supply and install barbed wire for fences.",
       "Unit": "ML",
-      "Supply & Apply": 873.0,
+      "Supply&apply": 873.0,
       "Manpower": "291"
     },
     {
-      "Item No.": "C.154",
-      "Description": "Supply and apply Epoxy painting  two layers",
+      "Item": "C.154",
+      "description": "Supply and apply Epoxy painting  two layers",
       "Unit": "M2",
-      "Supply & Apply": 989.4,
+      "Supply&apply": 989.4,
       "Manpower": "349.2"
     },
     {
-      "Item No.": "",
-      "Description": "Electrical Work",
+      "Item": "",
+      "description": "Electrical Work",
       "Unit": "",
-      "Supply & Apply": null,
+      "Supply&apply": null,
       "Manpower": ""
     },
     {
-      "Item No.": "E.001",
-      "Description": "supply and installation of Socket power outlet  price includes the supply and installation of the wall Magic box and cover face approved by company  and includes the price for electric circuit the outlet of the hose wall and wire 3 mm elswedi  in accordance with the technical specifications.",
+      "Item": "E.001",
+      "description": "supply and installation of Socket power outlet  price includes the supply and installation of the wall Magic box and cover face approved by company  and includes the price for electric circuit the outlet of the hose wall and wire 3 mm elswedi  in accordance with the technical specifications.",
       "Unit": "Each",
-      "Supply & Apply": 3608.4,
+      "Supply&apply": 3608.4,
       "Manpower": "640.2"
     },
     {
-      "Item No.": "E.002",
-      "Description": "supply and installation of Switch power outlet  price includes the supply and installation of the wall Magic box and cover face approved by company  and includes the price for electric circuit the outlet of the hose wall and wire 2 mm elswedi  in accordance with the technical specifications.",
+      "Item": "E.002",
+      "description": "supply and installation of Switch power outlet  price includes the supply and installation of the wall Magic box and cover face approved by company  and includes the price for electric circuit the outlet of the hose wall and wire 2 mm elswedi  in accordance with the technical specifications.",
       "Unit": "Each",
-      "Supply & Apply": 2269.8,
+      "Supply&apply": 2269.8,
       "Manpower": "407.4"
     },
     {
-      "Item No.": "E.003",
-      "Description": "supply and installation of Socket power outlet  price includes the supply and installation of the wall Magic box and cover face approved by company  and includes the price for electric circuit the outlet of the hose wall and wire 4 mm elswedi  in accordance with the technical specifications.",
+      "Item": "E.003",
+      "description": "supply and installation of Socket power outlet  price includes the supply and installation of the wall Magic box and cover face approved by company  and includes the price for electric circuit the outlet of the hose wall and wire 4 mm elswedi  in accordance with the technical specifications.",
       "Unit": "Each",
-      "Supply & Apply": 3375.6,
+      "Supply&apply": 3375.6,
       "Manpower": "814.8"
     },
     {
-      "Item No.": "E.004",
-      "Description": "supply and installation of 26 amp power outlet and the price includes supply and installation of the wall Magic box and key Piceno price also includes special circuit the outlet of the conduit and wire 6 mm elswedi or similar, in accordance with the technical specifications.",
+      "Item": "E.004",
+      "description": "supply and installation of 26 amp power outlet and the price includes supply and installation of the wall Magic box and key Piceno price also includes special circuit the outlet of the conduit and wire 6 mm elswedi or similar, in accordance with the technical specifications.",
       "Unit": "Each",
-      "Supply & Apply": 3026.4,
+      "Supply&apply": 3026.4,
       "Manpower": "698.4"
     },
     {
-      "Item No.": "E.005",
-      "Description": "supply and installation of TV  outlet  and the price includes the supply and installation of the wall Magic box .cover face approved by company   also includes the price for the outlet circuit include conduit  and the price does not include cables , in accordance with the technical specifications.",
+      "Item": "E.005",
+      "description": "supply and installation of TV  outlet  and the price includes the supply and installation of the wall Magic box .cover face approved by company   also includes the price for the outlet circuit include conduit  and the price does not include cables , in accordance with the technical specifications.",
       "Unit": "Each",
-      "Supply & Apply": 1105.8,
+      "Supply&apply": 1105.8,
       "Manpower": "407.4"
     },
     {
-      "Item No.": "E.006",
-      "Description": "supply and installation of lighting outlet   and fans and the price includes the supply and installation of the roof box and  Wall box Magic and cover face approved by company  also includes the price for electric circuit the outlet of the conduit and wire 2 mm elswedi or similar and  installation lighting units in accordance with the specifications",
+      "Item": "E.006",
+      "description": "supply and installation of lighting outlet   and fans and the price includes the supply and installation of the roof box and  Wall box Magic and cover face approved by company  also includes the price for electric circuit the outlet of the conduit and wire 2 mm elswedi or similar and  installation lighting units in accordance with the specifications",
       "Unit": "Each",
-      "Supply & Apply": 2211.6,
+      "Supply&apply": 2211.6,
       "Manpower": "407.4"
     },
     {
-      "Item No.": "E.007",
-      "Description": "Number supply and installation of lighting Deviator director and the price includes the supply and installation of the roof box and Wall box  and the cover  face approved by company also includes the price for electric circuit the outlet of the conduit and wire 2 mm elswedi or similar and  installation  lighting units in accordance with the specifications",
+      "Item": "E.007",
+      "description": "Number supply and installation of lighting Deviator director and the price includes the supply and installation of the roof box and Wall box  and the cover  face approved by company also includes the price for electric circuit the outlet of the conduit and wire 2 mm elswedi or similar and  installation  lighting units in accordance with the specifications",
       "Unit": "Each",
-      "Supply & Apply": 2269.8,
+      "Supply&apply": 2269.8,
       "Manpower": "582"
     },
     {
-      "Item No.": "E.008",
-      "Description": "Supply and installation of  electrical  panel  number 36 lines   production company\" Marilyn Gran\" and the price includes the supply and installation of the special panel keys and unlock accordance with the technical specifications",
+      "Item": "E.008",
+      "description": "Supply and installation of  electrical  panel  number 36 lines   production company\" Marilyn Gran\" and the price includes the supply and installation of the special panel keys and unlock accordance with the technical specifications",
       "Unit": "Each",
-      "Supply & Apply": 39576.0,
+      "Supply&apply": 39576.0,
       "Manpower": "14550"
     },
     {
-      "Item No.": "E.009",
-      "Description": "Supply and installation of electrical  panel  number 24 lines   production company\" Marilyn Gran\" price includes supply and installation of the special panel keys and unlock  accordance with the technical specifications",
+      "Item": "E.009",
+      "description": "Supply and installation of electrical  panel  number 24 lines   production company\" Marilyn Gran\" price includes supply and installation of the special panel keys and unlock  accordance with the technical specifications",
       "Unit": "Each",
-      "Supply & Apply": 33756.0,
+      "Supply&apply": 33756.0,
       "Manpower": "14550"
     },
     {
-      "Item No.": "E.010",
-      "Description": "supply and installation  escape fixture and go out and emergency accordance with the technical specifications",
+      "Item": "E.010",
+      "description": "supply and installation  escape fixture and go out and emergency accordance with the technical specifications",
       "Unit": "Each",
-      "Supply & Apply": 3375.6,
+      "Supply&apply": 3375.6,
       "Manpower": "407.4"
     },
     {
-      "Item No.": "E.011",
-      "Description": "Supply and installation of fixtures 60 * 60 cm reflector 4 lamps  production of the elswedi or the similar, according to the technical specifications",
+      "Item": "E.011",
+      "description": "Supply and installation of fixtures 60 * 60 cm reflector 4 lamps  production of the elswedi or the similar, according to the technical specifications",
       "Unit": "Each",
-      "Supply & Apply": 2095.2,
+      "Supply&apply": 2095.2,
       "Manpower": "407.4"
     },
     {
-      "Item No.": "E.012",
-      "Description": "Supply and installation of walls Ablak 1 lamp accordance with the technical specifications",
+      "Item": "E.012",
+      "description": "Supply and installation of walls Ablak 1 lamp accordance with the technical specifications",
       "Unit": "Each",
-      "Supply & Apply": 2211.6,
+      "Supply&apply": 2211.6,
       "Manpower": "407.4"
     },
     {
-      "Item No.": "E.013",
-      "Description": "Supply and installation of walls Ablak 1 lamp water proof  accordance with the technical specifications",
+      "Item": "E.013",
+      "description": "Supply and installation of walls Ablak 1 lamp water proof  accordance with the technical specifications",
       "Unit": "Each",
-      "Supply & Apply": 2444.4,
+      "Supply&apply": 2444.4,
       "Manpower": "407.4"
     },
     {
-      "Item No.": "E.014",
-      "Description": "Supply and installation of walls Ablak 1 lamp weather proof  accordance with the technical specifications",
+      "Item": "E.014",
+      "description": "Supply and installation of walls Ablak 1 lamp weather proof  accordance with the technical specifications",
       "Unit": "Each",
-      "Supply & Apply": 3142.8,
+      "Supply&apply": 3142.8,
       "Manpower": "407.4"
     },
     {
-      "Item No.": "E.015",
-      "Description": "supply and installation of  lighting fixtures  120 cm 2lamps weather-proof elswedi product or the similar , according to the technical specifications",
+      "Item": "E.015",
+      "description": "supply and installation of  lighting fixtures  120 cm 2lamps weather-proof elswedi product or the similar , according to the technical specifications",
       "Unit": "Each",
-      "Supply & Apply": 2444.4,
+      "Supply&apply": 2444.4,
       "Manpower": "582"
     },
     {
-      "Item No.": "E.016",
-      "Description": "supply and installation of 25 cm Wall fan production of Toshiba or similar with the technical specifications",
+      "Item": "E.016",
+      "description": "supply and installation of 25 cm Wall fan production of Toshiba or similar with the technical specifications",
       "Unit": "Each",
-      "Supply & Apply": 2444.4,
+      "Supply&apply": 2444.4,
       "Manpower": "582"
     },
     {
-      "Item No.": "E.017",
-      "Description": "supply and installation of 60 cm Wall fan production of Toshiba or similar with the technical specifications",
+      "Item": "E.017",
+      "description": "supply and installation of 60 cm Wall fan production of Toshiba or similar with the technical specifications",
       "Unit": "Each",
-      "Supply & Apply": 2910.0,
+      "Supply&apply": 2910.0,
       "Manpower": "582"
     },
     {
-      "Item No.": "E.018",
-      "Description": "supply and installation of air condition split the production of carrier or an equivalent capacity of 3 hp accordance with the technical specifications",
+      "Item": "E.018",
+      "description": "supply and installation of air condition split the production of carrier or an equivalent capacity of 3 hp accordance with the technical specifications",
       "Unit": "Each",
-      "Supply & Apply": 40740.0,
+      "Supply&apply": 40740.0,
       "Manpower": "2910"
     },
     {
-      "Item No.": "E.019",
-      "Description": "supply and installation of air conditioning split the production of carrier or an equivalent 4 hp   accordance with the technical specifications",
+      "Item": "E.019",
+      "description": "supply and installation of air conditioning split the production of carrier or an equivalent 4 hp   accordance with the technical specifications",
       "Unit": "Each",
-      "Supply & Apply": 57036.0,
+      "Supply&apply": 57036.0,
       "Manpower": "2910"
     },
     {
-      "Item No.": "E.020",
-      "Description": "supply and installation of telephone outlet connector on the internal network and the price include supply and install telephone panel to  assemble the building lines the price include the supply and installation of phone for each point and in accordance with the technical specifications",
+      "Item": "E.020",
+      "description": "supply and installation of telephone outlet connector on the internal network and the price include supply and install telephone panel to  assemble the building lines the price include the supply and installation of phone for each point and in accordance with the technical specifications",
       "Unit": "Each",
-      "Supply & Apply": 6402.0,
+      "Supply&apply": 6402.0,
       "Manpower": "1746"
     },
     {
-      "Item No.": "E.021",
-      "Description": "Supply and installation of electric heater capacity of 30 litres production of Toshiba or similar and in accordance with the technical specifications",
+      "Item": "E.021",
+      "description": "Supply and installation of electric heater capacity of 30 litres production of Toshiba or similar and in accordance with the technical specifications",
       "Unit": "Each",
-      "Supply & Apply": 6091.6,
+      "Supply&apply": 6091.6,
       "Manpower": "407.4"
     },
     {
-      "Item No.": "E.022",
-      "Description": "Supply and installation of electric heater capacity of 40 litres production of Toshiba or similar and in accordance with the technical specifications",
+      "Item": "E.022",
+      "description": "Supply and installation of electric heater capacity of 40 litres production of Toshiba or similar and in accordance with the technical specifications",
       "Unit": "Each",
-      "Supply & Apply": 5587.2,
+      "Supply&apply": 5587.2,
       "Manpower": "585"
     },
     {
-      "Item No.": "E.023",
-      "Description": "Supply, installation  Fire Alarm price includes the supply and installation of equipment and alarm also includes the price for the outlet  , the wire circuit , fire panel and  in accordance with the technical specifications director",
+      "Item": "E.023",
+      "description": "Supply, installation  Fire Alarm price includes the supply and installation of equipment and alarm also includes the price for the outlet  , the wire circuit , fire panel and  in accordance with the technical specifications director",
       "Unit": "Each",
-      "Supply & Apply": 0.0,
+      "Supply&apply": 0.0,
       "Manpower": "N/A"
     }
   ]
