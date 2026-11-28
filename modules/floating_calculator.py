@@ -491,21 +491,24 @@ CALCULATOR_INJECTION_HTML = """
   }
 
   // ==========================================================================
-  // 4. FLOATING ACTION BUTTON (FAB) & DRAGGABLE MODELESS WINDOW INJECTION
+  // 4. FLOATING ACTION BUTTONS (SCROLL-TO-TOP & CALCULATOR FAB) + MODAL
   // ==========================================================================
   var existingRoot = parentDoc.getElementById('ecp-floating-calc-root');
   if (existingRoot) {
-    return;
+    if (parentDoc.getElementById('ecp-scroll-top-fab')) {
+      return;
+    }
+    try { existingRoot.remove(); } catch(e) {}
   }
 
   var calcRoot = parentDoc.createElement('div');
   calcRoot.id = 'ecp-floating-calc-root';
   calcRoot.innerHTML = `
-    <!-- INLINE STYLES FOR THE FLOATING CALCULATOR & FAB -->
+    <!-- INLINE STYLES FOR THE FLOATING CALCULATOR, SCROLL-TO-TOP & FABS -->
     <style id="ecp-calc-custom-styles">
-      #ecp-floating-calc-fab {
+      #ecp-floating-calc-fab,
+      #ecp-scroll-top-fab {
         position: fixed;
-        bottom: 24px;
         right: 24px;
         width: 54px;
         height: 54px;
@@ -522,12 +525,20 @@ CALCULATOR_INJECTION_HTML = """
         outline: none;
         user-select: none;
       }
-      #ecp-floating-calc-fab:hover {
+      #ecp-floating-calc-fab {
+        bottom: 24px;
+      }
+      #ecp-scroll-top-fab {
+        bottom: 90px;
+      }
+      #ecp-floating-calc-fab:hover,
+      #ecp-scroll-top-fab:hover {
         transform: scale(1.08) translateY(-2px);
         box-shadow: 0 12px 28px rgba(0, 0, 0, 0.55), 0 0 24px rgba(59, 130, 246, 0.6);
         border-color: #60a5fa;
       }
-      #ecp-floating-calc-fab:active {
+      #ecp-floating-calc-fab:active,
+      #ecp-scroll-top-fab:active {
         transform: scale(0.96);
       }
       #ecp-floating-calc-fab svg {
@@ -539,11 +550,26 @@ CALCULATOR_INJECTION_HTML = """
         stroke-linecap: round;
         stroke-linejoin: round;
       }
+      #ecp-scroll-top-fab svg {
+        width: 30px;
+        height: 30px;
+        fill: #60a5fa;
+        stroke: #60a5fa;
+        stroke-width: 1.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        transition: fill 0.2s ease, stroke 0.2s ease, transform 0.2s ease;
+      }
+      #ecp-scroll-top-fab:hover svg {
+        fill: #93c5fd;
+        stroke: #93c5fd;
+        transform: translateY(-2px);
+      }
 
       /* Modeless Calculator Window (NO backdrop, completely non-blocking) */
       #ecp-floating-calc-modal {
         position: fixed;
-        bottom: 90px;
+        bottom: 156px;
         right: 24px;
         width: 320px;
         background: rgba(17, 24, 39, 0.95);
@@ -816,6 +842,13 @@ CALCULATOR_INJECTION_HTML = """
       }
     </style>
 
+    <!-- SCROLL TO TOP FAB BUTTON (Directly above Calculator FAB) -->
+    <button id="ecp-scroll-top-fab" title="الانتقال إلى أعلى الشاشة">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 3.2L2.8 13.2h5.2v7.6h8v-7.6h5.2L12 3.2z"></path>
+      </svg>
+    </button>
+
     <!-- FAB BUTTON -->
     <button id="ecp-floating-calc-fab" title="آلة حاسبة هندسية (F2)">
       <svg viewBox="0 0 24 24">
@@ -937,6 +970,7 @@ CALCULATOR_INJECTION_HTML = """
   // ==========================================================================
   // 5. CALCULATOR INTERACTIVITY & STATE MACHINE
   // ==========================================================================
+  var scrollTopFab = parentDoc.getElementById('ecp-scroll-top-fab');
   var fab = parentDoc.getElementById('ecp-floating-calc-fab');
   var modal = parentDoc.getElementById('ecp-floating-calc-modal');
   var dragHandle = parentDoc.getElementById('ecp-calc-drag-handle');
@@ -1144,6 +1178,78 @@ CALCULATOR_INJECTION_HTML = """
     } else {
       openCalculator();
     }
+  }
+
+  function scrollToPageTop() {
+    try {
+      if (parentWin && typeof parentWin.scrollTo === 'function') {
+        parentWin.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } catch(e) {}
+
+    try {
+      if (parentDoc.documentElement) {
+        if (typeof parentDoc.documentElement.scrollTo === 'function') {
+          parentDoc.documentElement.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          parentDoc.documentElement.scrollTop = 0;
+        }
+      }
+      if (parentDoc.body) {
+        if (typeof parentDoc.body.scrollTo === 'function') {
+          parentDoc.body.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          parentDoc.body.scrollTop = 0;
+        }
+      }
+    } catch(e) {}
+
+    var selectors = [
+      'section[data-testid="stMain"]',
+      'div[data-testid="stAppViewContainer"]',
+      '[data-testid="stApp"]',
+      'section.main',
+      '.stAppViewContainer',
+      '.main'
+    ];
+    for (var s = 0; s < selectors.length; s++) {
+      try {
+        var nodes = parentDoc.querySelectorAll(selectors[s]);
+        for (var n = 0; n < nodes.length; n++) {
+          var el = nodes[n];
+          if (el) {
+            if (typeof el.scrollTo === 'function') {
+              el.scrollTo({ top: 0, behavior: 'smooth' });
+            } else {
+              el.scrollTop = 0;
+            }
+          }
+        }
+      } catch(e) {}
+    }
+
+    // Also walk ancestors of main block container in case Streamlit wraps scroll in a custom container
+    try {
+      var mainBlock = parentDoc.querySelector('[data-testid="stMainBlockContainer"]') || parentDoc.querySelector('.block-container');
+      var cur = mainBlock;
+      while (cur && cur !== parentDoc.body) {
+        if (cur.scrollTop > 0) {
+          if (typeof cur.scrollTo === 'function') {
+            cur.scrollTo({ top: 0, behavior: 'smooth' });
+          } else {
+            cur.scrollTop = 0;
+          }
+        }
+        cur = cur.parentElement;
+      }
+    } catch(e) {}
+  }
+
+  if (scrollTopFab) {
+    scrollTopFab.addEventListener('click', function(e) {
+      e.stopPropagation();
+      scrollToPageTop();
+    });
   }
 
   if (fab) {

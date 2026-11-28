@@ -1324,6 +1324,10 @@ def _process_m15_agr_cart_sync() -> None:
         return
     try:
         payload = json.loads(raw)
+        if isinstance(payload, dict) and payload.get("action") == "clear_all_selection":
+            st.session_state["m15_agr_cart"] = {}
+            st.session_state["m15_agr_cart_ver"] = int(st.session_state.get("m15_agr_cart_ver", 0)) + 1
+            return
         updates = payload.get("updates") if isinstance(payload, dict) else None
         if isinstance(updates, dict):
             cart: Dict[str, Dict[str, Any]] = dict(st.session_state.get("m15_agr_cart", {}))
@@ -1684,6 +1688,27 @@ def _build_agreement_resizable_table_html(
     border-color: #fb923c;
     color: #ffffff;
   }}
+  .agr-empty-btn {{
+    padding: 4px 11px;
+    border-radius: 7px;
+    border: 1.5px solid rgba(239, 68, 68, 0.72);
+    background: rgba(220, 38, 38, 0.22);
+    color: #fecaca;
+    font-size: 0.74rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: inherit;
+  }}
+  .agr-empty-btn:hover:not(:disabled) {{
+    background: rgba(220, 38, 38, 0.45);
+    border-color: #ef4444;
+    color: #ffffff;
+  }}
+  .agr-empty-btn:disabled {{
+    opacity: 0.42;
+    cursor: not-allowed;
+  }}
 
   /* ── Unified Table Wrapper (Identical to Module 15 BOQ Table) ── */
   .agr-table-wrapper {{
@@ -1957,6 +1982,9 @@ def _build_agreement_resizable_table_html(
       </div>
       <div class="agr-actions-group">
         <span id="agr-save-indicator" class="agr-save-status">💾 Synced</span>
+        <button type="button" id="agr-empty-sel-btn" class="agr-empty-btn" title="Clear all selected items from the Work Order cart"{' disabled' if len(cart) == 0 else ''}>
+          🗑️ Empty all Selection
+        </button>
         <button type="button" id="agr-reset-dims-btn" class="agr-reset-btn" title="Reset column widths and row heights to defaults">
           ↺ Reset Table Dimensions
         </button>
@@ -1988,6 +2016,7 @@ def _build_agreement_resizable_table_html(
   const N_COLS = {n_cols};
   const DEFAULT_RATIOS = {default_ratios_json};
   const MIN_COL_WIDTHS = {min_widths_json};
+  let knownCartCount = {len(cart)};
 
   const table = document.getElementById('m15-agr-table');
   const wrapper = document.getElementById('agr-table-wrapper');
@@ -2281,23 +2310,13 @@ def _build_agreement_resizable_table_html(
     tr.classList.toggle('agr-row-selected', Boolean(selPcol));
 
     pendingUpdates[rk] = {{ selected_price_col: selPcol, qty: qty }};
+    updateEmptySelBtnState();
     if (syncTimer) clearTimeout(syncTimer);
     syncTimer = setTimeout(flushSyncToStreamlit, delayMs);
   }}
 
-  function flushSyncToStreamlit() {{
-    const keys = Object.keys(pendingUpdates);
-    if (!keys.length) return;
-    const payload = {{ ts: Date.now(), updates: Object.assign({{}}, pendingUpdates) }};
-    for (const k of keys) delete pendingUpdates[k];
+  function dispatchCartPayload(payload) {{
     const jsonStr = JSON.stringify(payload);
-
-    const badge = document.getElementById('agr-save-indicator');
-    if (badge) {{
-      badge.style.display = 'inline-flex';
-      setTimeout(() => {{ badge.style.display = 'none'; }}, 2000);
-    }}
-
     try {{
       if (window.parent && window.parent.document) {{
         const pDoc = window.parent.document;
@@ -2318,6 +2337,135 @@ def _build_agreement_resizable_table_html(
     }} catch (err) {{
       console.warn('Agreement cart sync error:', err);
     }}
+  }}
+
+  function flushSyncToStreamlit() {{
+    const keys = Object.keys(pendingUpdates);
+    if (!keys.length) return;
+    const payload = {{ ts: Date.now(), updates: Object.assign({{}}, pendingUpdates) }};
+    for (const k of keys) delete pendingUpdates[k];
+
+    const badge = document.getElementById('agr-save-indicator');
+    if (badge) {{
+      badge.style.display = 'inline-flex';
+      setTimeout(() => {{ badge.style.display = 'none'; }}, 2000);
+    }}
+
+    dispatchCartPayload(payload);
+  }}
+
+  const emptySelBtn = document.getElementById('agr-empty-sel-btn');
+
+  function updateEmptySelBtnState() {{
+    if (!emptySelBtn) return;
+    const anyChecked = document.querySelectorAll('.agr-price-chk:checked').length > 0;
+    emptySelBtn.disabled = !(anyChecked || knownCartCount > 0);
+  }}
+
+  function playEmptySelectionBeep() {{
+    try {{
+      const pWin = window.parent || window;
+      const AudioCtx = pWin.AudioContext || pWin.webkitAudioContext || window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = pWin.__m15BoqBeepCtx || new AudioCtx();
+      pWin.__m15BoqBeepCtx = ctx;
+      if (ctx.state === 'suspended') ctx.resume().catch(function() {{}});
+      const now = ctx.currentTime;
+      [0, 0.14].forEach(function(offset, idx) {{
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(idx === 0 ? 920 : 680, now + offset);
+        gain.gain.setValueAtTime(0.001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(0.28, now + offset + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.12);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.13);
+      }});
+    }} catch (e) {{}}
+  }}
+
+  function showEmptySelectionConfirmModal() {{
+    const targetDoc = (window.parent && window.parent.document) ? window.parent.document : document;
+    const MODAL_ID = 'm15-agr-empty-sel-confirm-modal';
+    const existing = targetDoc.getElementById(MODAL_ID);
+    if (existing) existing.remove();
+
+    const backdrop = targetDoc.createElement('div');
+    backdrop.id = MODAL_ID;
+    backdrop.setAttribute('dir', 'rtl');
+    backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(2,6,23,0.72);backdrop-filter:blur(4px);z-index:9999999;display:flex;align-items:center;justify-content:center;padding:16px;font-family:Segoe UI,Cairo,Tahoma,sans-serif;';
+
+    const card = targetDoc.createElement('div');
+    card.style.cssText = 'width:100%;max-width:480px;background:linear-gradient(145deg,#0f172a 0%,#1e293b 100%);border:2px solid #ef4444;border-radius:14px;padding:22px 24px;box-shadow:0 20px 50px rgba(0,0,0,0.65),0 0 24px rgba(239,68,68,0.28);color:#f8fafc;text-align:right;';
+
+    const hdr = targetDoc.createElement('div');
+    hdr.style.cssText = 'display:flex;align-items:center;gap:10px;font-size:1.15rem;font-weight:900;color:#fca5a5;margin-bottom:12px;';
+    hdr.textContent = '⚠️ تأكيد إلغاء جميع التحديدات (Empty all Selection)';
+
+    const msg = targetDoc.createElement('div');
+    msg.style.cssText = 'font-size:1.03rem;font-weight:700;color:#f1f5f9;line-height:1.7;margin-bottom:20px;background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.35);border-radius:10px;padding:12px 14px;';
+    msg.textContent = 'هل أنت متأكد من إفراغ جميع البنود المحددة وتصفير الكميات في جدول أمر الشغل (W.O)؟';
+
+    const btnsRow = targetDoc.createElement('div');
+    btnsRow.style.cssText = 'display:flex;gap:12px;justify-content:flex-start;';
+
+    const btnConfirm = targetDoc.createElement('button');
+    btnConfirm.type = 'button';
+    btnConfirm.textContent = '✅ تأكيد الإفراغ';
+    btnConfirm.style.cssText = 'flex:1;padding:10px 16px;border-radius:9px;border:1.5px solid #ef4444;background:linear-gradient(135deg,#dc2626 0%,#b91c1c 100%);color:#ffffff;font-size:1rem;font-weight:900;cursor:pointer;box-shadow:0 4px 12px rgba(220,38,38,0.4);';
+
+    const btnCancel = targetDoc.createElement('button');
+    btnCancel.type = 'button';
+    btnCancel.textContent = '❌ إلغاء';
+    btnCancel.style.cssText = 'flex:1;padding:10px 16px;border-radius:9px;border:1.5px solid #475569;background:#1e293b;color:#e2e8f0;font-size:1rem;font-weight:800;cursor:pointer;';
+
+    function onKeyDown(ev) {{
+      if (ev.key === 'Escape') closeModal();
+    }}
+
+    function closeModal() {{
+      try {{ targetDoc.removeEventListener('keydown', onKeyDown); }} catch (e) {{}}
+      try {{ backdrop.remove(); }} catch (e) {{}}
+    }}
+
+    targetDoc.addEventListener('keydown', onKeyDown);
+    btnCancel.addEventListener('click', closeModal);
+    backdrop.addEventListener('click', function(ev) {{
+      if (ev.target === backdrop) closeModal();
+    }});
+    btnConfirm.addEventListener('click', function() {{
+      btnConfirm.disabled = true;
+      btnConfirm.textContent = '⏳ جارٍ الإفراغ...';
+      closeModal();
+      if (syncTimer) {{ clearTimeout(syncTimer); syncTimer = null; }}
+      for (const k of Object.keys(pendingUpdates)) delete pendingUpdates[k];
+      knownCartCount = 0;
+      document.querySelectorAll('.agr-price-chk').forEach(c => {{ c.checked = false; }});
+      document.querySelectorAll('.agr-qty-input').forEach(inp => {{ inp.value = '0'; }});
+      document.querySelectorAll('.agr-est-val').forEach(sp => {{ sp.textContent = '0.00'; }});
+      document.querySelectorAll('#agr-tbody tr.agr-row').forEach(tr => {{ tr.classList.remove('agr-row-selected'); }});
+      updateEmptySelBtnState();
+      dispatchCartPayload({{ ts: Date.now(), action: 'clear_all_selection' }});
+    }});
+
+    btnsRow.appendChild(btnConfirm);
+    btnsRow.appendChild(btnCancel);
+    card.appendChild(hdr);
+    card.appendChild(msg);
+    card.appendChild(btnsRow);
+    backdrop.appendChild(card);
+    targetDoc.body.appendChild(backdrop);
+  }}
+
+  if (emptySelBtn) {{
+    emptySelBtn.addEventListener('click', function() {{
+      if (emptySelBtn.disabled) return;
+      playEmptySelectionBeep();
+      showEmptySelectionConfirmModal();
+    }});
   }}
 
   // Mutually exclusive Select checkboxes per row (only ONE price column can be selected per row)
@@ -2398,7 +2546,7 @@ def _build_agreement_resizable_table_html(
       if (!window.parent || !window.parent.document) return;
       const pDoc = window.parent.document;
       const sInp = (
-        pDoc.querySelector('input[aria-label="🔎 Search (Item, Description, Unit...):"]')
+        pDoc.querySelector('input[aria-label="🔎 Search (Item, Description, Unit...) and create W.O"]')
         || pDoc.querySelector('input[aria-label*="Search (Item"]')
         || pDoc.querySelector('input[placeholder*="C.009"]')
       );
@@ -2463,75 +2611,63 @@ def render_m15_agreement_wo_section() -> None:
         if "m15_agr_page" not in st.session_state:
             st.session_state["m15_agr_page"] = 1
 
-        # ── 1. Automatic Sync Once Per Session (ONLY if an uploaded Excel file exists & is synced) ──
-        if not st.session_state.get("m15_agr_synced_once", False):
-            has_upload, upload_meta, _upload_err = _is_uploaded_file_synced(st.session_state["m15_agr_excel_path"])
-            if has_upload:
+        # ── 1. Automatic Real-Time Sync (Lightweight mtime+size check on every rerun) ──
+        _excel_path_live = st.session_state["m15_agr_excel_path"]
+        _upload_meta_auto = _load_upload_meta()
+        _excel_exists_auto = bool(_excel_path_live) and os.path.exists(_excel_path_live)
+
+        if _upload_meta_auto and _excel_exists_auto:
+            try:
+                _st_stat = os.stat(_excel_path_live)
+                _cur_file_sig = (int(_st_stat.st_mtime_ns), int(_st_stat.st_size))
+            except Exception:
+                _cur_file_sig = None
+
+            _need_auto_sync = (
+                (not st.session_state.get("m15_agr_synced_once", False))
+                or (st.session_state.get("m15_agr_last_file_sig") != _cur_file_sig)
+                or (not os.path.exists(JSON_CACHE_PATH))
+                or (not isinstance(st.session_state.get("m15_agr_df"), pd.DataFrame))
+                or st.session_state["m15_agr_df"].empty
+            )
+
+            if _need_auto_sync:
                 df_synced, chg_df, status_msg, used_sheet = sync_agreement_excel(
-                    excel_path=st.session_state["m15_agr_excel_path"],
+                    excel_path=_excel_path_live,
                     force=False,
                     sheet_name=st.session_state.get("m15_agr_sheet_name") or None,
                 )
+                try:
+                    _disk_md5_auto = _compute_file_md5(_excel_path_live)
+                    if _disk_md5_auto and _disk_md5_auto != str(_upload_meta_auto.get("md5", "")).strip():
+                        _save_upload_meta(
+                            filename=str(_upload_meta_auto.get("filename") or "agreement_m15.xlsx"),
+                            md5_hex=_disk_md5_auto,
+                            sheet_name=used_sheet,
+                            rows_count=len(df_synced),
+                        )
+                except Exception:
+                    pass
                 st.session_state["m15_agr_df"] = df_synced
                 st.session_state["m15_agr_sheet_name"] = used_sheet
-                up_fname = str((upload_meta or {}).get("filename") or "")
+                up_fname = str(_upload_meta_auto.get("filename") or "")
                 st.session_state["m15_agr_sync_status"] = (
                     f"{status_msg} [Uploaded: {up_fname}]" if up_fname else status_msg
                 )
                 if not chg_df.empty:
                     st.session_state["m15_agr_changelog"] = chg_df
                 st.session_state["m15_agr_has_uploaded"] = True
-            else:
-                st.session_state["m15_agr_df"] = pd.DataFrame()
-                st.session_state["m15_agr_sheet_name"] = ""
-                st.session_state["m15_agr_has_uploaded"] = False
-                st.session_state["m15_agr_sync_status"] = (
-                    "⚠️ No uploaded Agreement Excel file — please upload a valid Excel file (.xlsx) below."
-                )
-            st.session_state["m15_agr_synced_once"] = True
-
-        # ── 2. Configuration & Sync Bar (Separate from W.O Generation Form) ──
-        c_top_status, c_top_sync = st.columns([3.4, 1.2], gap="small")
-        with c_top_status:
-            st.markdown(
-                f"""<div dir="ltr" style="direction:ltr; text-align:left; padding:9px 14px; border-radius:8px;
-                    background:rgba(14,165,233,0.14); border:1.5px solid rgba(56,189,248,0.55);
-                    color:#e0f2fe; font-size:0.92rem; font-weight:700;">
-                    {html.escape(st.session_state.get("m15_agr_sync_status") or "Ready to upload Agreement Excel file.")}
-                </div>""",
-                unsafe_allow_html=True,
+                st.session_state["m15_agr_last_file_sig"] = _cur_file_sig
+                st.session_state["m15_agr_synced_once"] = True
+        else:
+            st.session_state["m15_agr_df"] = pd.DataFrame()
+            st.session_state["m15_agr_sheet_name"] = ""
+            st.session_state["m15_agr_has_uploaded"] = False
+            st.session_state["m15_agr_last_file_sig"] = None
+            st.session_state["m15_agr_sync_status"] = (
+                "⚠️ No uploaded Agreement Excel file — please upload a valid Excel file (.xlsx) below."
             )
-        with c_top_sync:
-            if st.button(
-                "🔄 Sync / Re-check Excel",
-                key="m15_agr_btn_sync_now",
-                use_container_width=True,
-                help="Verify uploaded Excel MD5 hash, refresh local JSON Cache, and detect any changes",
-            ):
-                has_upload_btn, upload_meta_btn, _ = _is_uploaded_file_synced(st.session_state["m15_agr_excel_path"])
-                if has_upload_btn:
-                    df_synced, chg_df, status_msg, used_sheet = sync_agreement_excel(
-                        excel_path=st.session_state["m15_agr_excel_path"],
-                        force=True,
-                        sheet_name=st.session_state.get("m15_agr_sheet_name") or None,
-                    )
-                    st.session_state["m15_agr_df"] = df_synced
-                    st.session_state["m15_agr_sheet_name"] = used_sheet
-                    up_fname = str((upload_meta_btn or {}).get("filename") or "")
-                    st.session_state["m15_agr_sync_status"] = (
-                        f"{status_msg} [Uploaded: {up_fname}]" if up_fname else status_msg
-                    )
-                    st.session_state["m15_agr_has_uploaded"] = True
-                    if not chg_df.empty:
-                        st.session_state["m15_agr_changelog"] = chg_df
-                else:
-                    st.session_state["m15_agr_df"] = pd.DataFrame()
-                    st.session_state["m15_agr_sheet_name"] = ""
-                    st.session_state["m15_agr_has_uploaded"] = False
-                    st.session_state["m15_agr_sync_status"] = (
-                        "⚠️ No uploaded Agreement Excel file — please upload a valid Excel file (.xlsx) below."
-                    )
-                st.rerun()
+            st.session_state["m15_agr_synced_once"] = True
 
         # Show 3-second green success panel after a valid Excel upload
         _ok_toast = st.session_state.pop("m15_agr_upload_success_toast", None)
@@ -2562,11 +2698,13 @@ def render_m15_agreement_wo_section() -> None:
             key="m15_agr_file_uploader",
         )
         if uploaded_xlsx is None:
+            st.session_state["m15_agr_last_processed_upload_token"] = None
             if st.session_state.get("m15_agr_uploader_had_file", False):
                 st.session_state["m15_agr_uploader_had_file"] = False
                 st.session_state["m15_agr_df"] = pd.DataFrame()
                 st.session_state["m15_agr_sheet_name"] = ""
                 st.session_state["m15_agr_has_uploaded"] = False
+                st.session_state["m15_agr_last_file_sig"] = None
                 st.session_state["m15_agr_cart"] = {}
                 st.session_state["m15_agr_cart_ver"] += 1
                 st.session_state["m15_agr_sync_status"] = (
@@ -2610,9 +2748,11 @@ def render_m15_agreement_wo_section() -> None:
                 with c_up_rm:
                     if st.button("✕", key="m15_agr_remove_uploaded_file_btn", help="Remove uploaded Excel file", use_container_width=True):
                         st.session_state["m15_agr_uploader_had_file"] = False
+                        st.session_state["m15_agr_last_processed_upload_token"] = None
                         st.session_state["m15_agr_df"] = pd.DataFrame()
                         st.session_state["m15_agr_sheet_name"] = ""
                         st.session_state["m15_agr_has_uploaded"] = False
+                        st.session_state["m15_agr_last_file_sig"] = None
                         st.session_state["m15_agr_cart"] = {}
                         st.session_state["m15_agr_cart_ver"] += 1
                         st.session_state["m15_agr_sync_status"] = (
@@ -2625,8 +2765,17 @@ def render_m15_agreement_wo_section() -> None:
                             pass
                         st.rerun()
         else:
-            st.session_state["m15_agr_uploader_had_file"] = True
-            if st.button("✅ Apply Uploaded File & Sync", key="m15_agr_apply_upload_btn", type="primary"):
+            uploaded_bytes = uploaded_xlsx.getvalue()
+            uploaded_md5 = hashlib.md5(uploaded_bytes).hexdigest()
+            upload_token = (
+                getattr(uploaded_xlsx, "file_id", None),
+                getattr(uploaded_xlsx, "name", ""),
+                len(uploaded_bytes),
+                uploaded_md5,
+            )
+            if st.session_state.get("m15_agr_last_processed_upload_token") != upload_token:
+                st.session_state["m15_agr_last_processed_upload_token"] = upload_token
+
                 cur_df_ref = st.session_state.get("m15_agr_df")
                 if isinstance(cur_df_ref, pd.DataFrame) and not cur_df_ref.empty:
                     cur_df_clean = _clean_exact_dataframe(cur_df_ref)
@@ -2637,7 +2786,6 @@ def render_m15_agreement_wo_section() -> None:
                 else:
                     expected_upload_cols = ["Item", "Description", "Unit", "Supply & Apply", "Manpower"]
 
-                uploaded_bytes = uploaded_xlsx.getvalue()
                 try:
                     is_ok, found_hdrs, diff_list, chk_sheet = _validate_uploaded_excel_headers(
                         file_bytes=uploaded_bytes,
@@ -2660,12 +2808,12 @@ def render_m15_agreement_wo_section() -> None:
                         sheet_name=chk_sheet,
                     )
                 else:
+                    st.session_state["m15_agr_uploader_had_file"] = True
                     _ensure_data_dir()
                     target_xlsx = st.session_state["m15_agr_excel_path"] or DEFAULT_EXCEL_PATH
                     os.makedirs(os.path.dirname(os.path.abspath(target_xlsx)), exist_ok=True)
                     with open(target_xlsx, "wb") as f_out:
                         f_out.write(uploaded_bytes)
-                    uploaded_md5 = hashlib.md5(uploaded_bytes).hexdigest()
                     df_synced, chg_df, status_msg, used_sheet = sync_agreement_excel(
                         excel_path=target_xlsx,
                         force=True,
@@ -2682,6 +2830,12 @@ def render_m15_agreement_wo_section() -> None:
                     st.session_state["m15_agr_sheet_name"] = used_sheet
                     st.session_state["m15_agr_sync_status"] = f"{status_msg} [Uploaded: {up_name}]"
                     st.session_state["m15_agr_has_uploaded"] = True
+                    try:
+                        _st_up = os.stat(target_xlsx)
+                        st.session_state["m15_agr_last_file_sig"] = (int(_st_up.st_mtime_ns), int(_st_up.st_size))
+                    except Exception:
+                        st.session_state["m15_agr_last_file_sig"] = None
+                    st.session_state["m15_agr_synced_once"] = True
                     st.session_state["m15_agr_cart"] = {}
                     st.session_state["m15_agr_cart_ver"] += 1
                     st.session_state["m15_agr_page"] = 1
@@ -2717,30 +2871,50 @@ def render_m15_agreement_wo_section() -> None:
         numeric_cols = roles["numeric_cols"]
 
         # Build ordered row list (strictly preserving Excel sheet order, NO sorting)
+        # Also detect all main section banner titles (e.g. "Deolishing Works", "Brick Walls", "Excavation Work")
         key_map = _build_unique_key_map(agr_df[excel_cols])
         all_rows = []
+        section_titles: List[str] = []
+        seen_sections: set = set()
+        current_section: str = ""
         for u_key, r_dict in key_map.items():
             row_copy = {c: r_dict.get(c, "") for c in excel_cols}
             row_copy["_row_key"] = u_key
+            code_val_r = _clean_cell_str(row_copy.get(code_col, "")) if code_col else ""
+            desc_val_r = _clean_cell_str(row_copy.get(desc_col, "")) if desc_col else ""
+            unit_val_r = _clean_cell_str(row_copy.get(unit_col, "")) if unit_col else ""
+            all_prices_empty_r = (
+                all(_clean_cell_str(row_copy.get(pc, "")) == "" for pc in price_cols)
+                if price_cols else True
+            )
+            if (code_val_r == "") and (unit_val_r == "") and all_prices_empty_r and (desc_val_r != ""):
+                current_section = desc_val_r
+                if desc_val_r not in seen_sections:
+                    seen_sections.add(desc_val_r)
+                    section_titles.append(desc_val_r)
+            row_copy["_section_title"] = current_section
             all_rows.append(row_copy)
         full_df = pd.DataFrame(all_rows)
 
         # ── 4. Smart Search & Resizable Interactive Table (English Only, LTR, BOQ-Style Resizing) ──
-        st.markdown(
-            """<div dir="ltr" style="direction:ltr; text-align:left; font-size:1.05rem; font-weight:900; color:#38bdf8; margin:10px 0 6px 0;">
-                🔍 Smart Search & Work Order Item Selection
-            </div>""",
-            unsafe_allow_html=True,
-        )
-
-        c_srch, c_cart_info, c_cart_clr = st.columns([2.6, 1.25, 0.9], gap="small")
+        c_srch, c_flt, c_cart_info = st.columns([2.4, 1.6, 1.0], gap="small")
 
         with c_srch:
             search_query = st.text_input(
-                "🔎 Search (Item, Description, Unit...):",
+                "🔎 Search (Item, Description, Unit...) and create W.O",
                 value="",
                 key="m15_agr_search_query",
                 placeholder="e.g. C.009, plastering, brick, M2...",
+            )
+
+        with c_flt:
+            filter_options = ["Show all"] + section_titles
+            if st.session_state.get("m15_agr_section_filter") not in filter_options:
+                st.session_state["m15_agr_section_filter"] = "Show all"
+            selected_section = st.selectbox(
+                "📂 Filter (Category):",
+                options=filter_options,
+                key="m15_agr_section_filter",
             )
 
         # Build row metadata lookup (with ALL price columns per row) so iframe cart sync computes exact Unit_Price
@@ -2774,7 +2948,7 @@ def render_m15_agreement_wo_section() -> None:
                 padding: 0 !important;
                 overflow: hidden !important;
             }
-            div[data-testid="stTextInput"]:has(input[aria-label="🔎 Search (Item, Description, Unit...):"]) div[data-testid="InputInstructions"] {
+            div[data-testid="stTextInput"]:has(input[aria-label="🔎 Search (Item, Description, Unit...) and create W.O"]) div[data-testid="InputInstructions"] {
                 display: none !important;
             }
             </style>""",
@@ -2800,20 +2974,17 @@ def render_m15_agreement_wo_section() -> None:
                 f"""<div dir="ltr" style="direction:ltr; margin-top:26px; padding:7px 10px; border-radius:8px;
                     background:rgba(16,185,129,0.16); border:1.5px solid #10b981; color:#a7f3d0;
                     font-weight:800; text-align:center;">
-                    🛒 Selected: {len(cart)}
+                    Selected W.O items: {len(cart)}
                 </div>""",
                 unsafe_allow_html=True,
             )
-        with c_cart_clr:
-            st.markdown("<div style='margin-top:26px;'></div>", unsafe_allow_html=True)
-            if st.button("🗑️ Clear Cart", key="m15_agr_clear_cart_btn", use_container_width=True, disabled=(len(cart) == 0)):
-                st.session_state["m15_agr_cart"] = {}
-                st.session_state["m15_agr_cart_ver"] += 1
-                st.rerun()
 
-        # Pass full_df to the resizable table so live JS search filters/unfilters instantly on every keystroke
-        # without waiting for Enter (strictly preserving original Excel sheet order, NO sorting)
-        filtered_df = full_df.copy()
+        # Filter by selected category (if not "Show all"), while preserving live JS search on every keystroke
+        # and strictly preserving original Excel sheet order (NO sorting)
+        if selected_section and selected_section != "Show all":
+            filtered_df = full_df[full_df["_section_title"] == selected_section].reset_index(drop=True)
+        else:
+            filtered_df = full_df.copy()
 
         # Render full BOQ-style resizable table (mouse-drag column widths & row heights, LTR, non-sortable)
         sheet_sig = hashlib.md5(f"{st.session_state.get('m15_agr_sheet_name', '')}||{'|'.join(excel_cols)}".encode("utf-8")).hexdigest()[:6]

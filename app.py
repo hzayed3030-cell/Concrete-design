@@ -25,7 +25,7 @@ st.set_page_config(
     page_title="ECP 203 - RC Engineering Dashboard",
     page_icon="🏗️",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 # ── Load / initialise persistent settings BEFORE any styling or module renders (Single Whistle Alert Active) ─
@@ -431,6 +431,75 @@ st.markdown(
     [data-testid="stHeader"],
     [data-testid="stHeader"] * {
         font-size: var(--ecp-modules-base-font-size) !important;
+    }
+
+    /* ── Enlarged Dashboard Sidebar Toggle Arrows (>> Expand & << Collapse) ── */
+    [data-testid="stHeader"] button[data-testid="stExpandSidebarButton"],
+    button[data-testid="stExpandSidebarButton"],
+    [data-testid="stSidebarCollapsedControl"] button,
+    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button {
+        width: 26px !important;
+        height: 26px !important;
+        min-width: 26px !important;
+        min-height: 26px !important;
+        padding: 0 !important;
+        border-radius: 7px !important;
+        background: rgba(30, 58, 138, 0.35) !important;
+        border: 1.5px solid rgba(96, 165, 250, 0.55) !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35) !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease !important;
+        cursor: pointer !important;
+    }
+    [data-testid="stHeader"] button[data-testid="stExpandSidebarButton"]:hover,
+    button[data-testid="stExpandSidebarButton"]:hover,
+    [data-testid="stSidebarCollapsedControl"] button:hover,
+    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button:hover {
+        background: rgba(37, 99, 235, 0.65) !important;
+        border-color: #93c5fd !important;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.5) !important;
+        transform: scale(1.08) !important;
+    }
+    [data-testid="stHeader"] button[data-testid="stExpandSidebarButton"] span,
+    [data-testid="stHeader"] button[data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"],
+    button[data-testid="stExpandSidebarButton"] span,
+    button[data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"],
+    [data-testid="stSidebarCollapsedControl"] button span,
+    [data-testid="stSidebarCollapsedControl"] [data-testid="stIconMaterial"],
+    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button span,
+    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"] {
+        font-size: 20px !important;
+        line-height: 1 !important;
+        width: 20px !important;
+        height: 20px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        color: #93c5fd !important;
+        font-weight: 700 !important;
+    }
+    [data-testid="stHeader"] button[data-testid="stExpandSidebarButton"] svg,
+    button[data-testid="stExpandSidebarButton"] svg,
+    [data-testid="stSidebarCollapsedControl"] button svg,
+    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button svg {
+        width: 19px !important;
+        height: 19px !important;
+        color: #93c5fd !important;
+        fill: currentColor !important;
+    }
+    [data-testid="stHeader"] button[data-testid="stExpandSidebarButton"]:hover span,
+    [data-testid="stHeader"] button[data-testid="stExpandSidebarButton"]:hover [data-testid="stIconMaterial"],
+    button[data-testid="stExpandSidebarButton"]:hover span,
+    button[data-testid="stExpandSidebarButton"]:hover [data-testid="stIconMaterial"],
+    [data-testid="stSidebarCollapsedControl"] button:hover span,
+    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button:hover span,
+    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button:hover [data-testid="stIconMaterial"],
+    [data-testid="stHeader"] button[data-testid="stExpandSidebarButton"]:hover svg,
+    button[data-testid="stExpandSidebarButton"]:hover svg,
+    [data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button:hover svg {
+        color: #ffffff !important;
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
@@ -3389,6 +3458,7 @@ def render_profile_manager():
                                 st.session_state.pop(f"chk_new_proj_{m['idx']}", None)
                             st.session_state["nav_view"] = "module"
                             st.session_state["in_module"] = True
+                            st.session_state["_collapse_sidebar_on_project_open"] = True
                             cfg_set("selected_module_idx", chosen_indices[0])
                             st.session_state["selected_module_idx"] = chosen_indices[0]
                             st.session_state["_force_module_idx"] = chosen_indices[0]
@@ -3766,6 +3836,7 @@ def render_profile_manager():
                 set_active_project(pname)
                 st.session_state["nav_view"] = "module"
                 st.session_state["in_module"] = True
+                st.session_state["_collapse_sidebar_on_project_open"] = True
                 saved_mod = summary.get("module_idx", 0)
                 target_mod = saved_mod if saved_mod in enabled_mods else enabled_mods[0]
                 cfg_set("selected_module_idx", target_mod)
@@ -4547,6 +4618,7 @@ def render_profile_manager():
                             set_active_project(s_pname)
                             st.session_state["nav_view"] = "module"
                             st.session_state["in_module"] = True
+                            st.session_state["_collapse_sidebar_on_project_open"] = True
                             s_proj_info = get_all_projects().get(s_pname, {})
                             s_data = s_proj_info.get("data", {}) if isinstance(s_proj_info, dict) else {}
                             s_saved_mod = int(s_summary.get("module_idx", s_data.get("selected_module_idx", 0)))
@@ -4792,16 +4864,20 @@ if "_app_session_started" not in st.session_state:
         st.session_state["in_module"] = False
 
 # 2. Strict Navigation Guard: Once inside a module, modifying ANY input NEVER exits to Projects screen!
+_prev_rendered_nav = st.session_state.get("_last_rendered_nav_view", None)
 if st.session_state.get("in_module", False) or st.session_state.get("nav_view") == "module" or "m12_op_move" in st.query_params:
     current_nav = "module"
     st.session_state["nav_view"] = "module"
     st.session_state["in_module"] = True
+    if _prev_rendered_nav != "module":
+        st.session_state["_collapse_sidebar_on_project_open"] = True
     if "m12_op_move" in st.query_params:
         cfg_set("selected_module_idx", 13)
 else:
     current_nav = "profile_manager"
     st.session_state["nav_view"] = "profile_manager"
     st.session_state["in_module"] = False
+st.session_state["_last_rendered_nav_view"] = current_nav
 
 if current_nav == "profile_manager":
     # ── FULL SCREEN: Projects Manager Mode (Sidebar completely hidden to prevent repetition) ──
@@ -4828,6 +4904,71 @@ if current_nav == "profile_manager":
     render_profile_manager()
 
 else:
+    # ── Auto-collapse Sidebar (Dashboard) once when opening any project ───
+    if st.session_state.pop("_collapse_sidebar_on_project_open", False):
+        import time as _t_sb_collapse
+        _sb_nonce = int(_t_sb_collapse.time() * 1000000)
+        render_html_iframe(
+            f"""<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>
+            <!-- collapse-token:{_sb_nonce} -->
+            <script>
+            (function() {{
+              var token = "{_sb_nonce}";
+              var pWin = (window.parent && window.parent.document) ? window.parent : window;
+              var pDoc = pWin.document;
+              if (pWin.__ecp_last_sb_collapse_token === token) return;
+              pWin.__ecp_last_sb_collapse_token = token;
+
+              var attempts = 0;
+              var maxAttempts = 18;
+              var clicked = false;
+
+              function tryCollapse() {{
+                attempts++;
+                try {{
+                  var sb = pDoc.querySelector('[data-testid="stSidebar"]');
+                  if (sb) {{
+                    var expanded = sb.getAttribute('aria-expanded');
+                    if (expanded === 'false') {{
+                      return; // Already collapsed
+                    }}
+                    if (expanded === 'true' || sb.offsetWidth > 20) {{
+                      var btn =
+                        pDoc.querySelector('[data-testid="stSidebarCollapseButton"] button') ||
+                        pDoc.querySelector('[data-testid="stSidebarHeader"] button[data-testid="stBaseButton-headerNoPadding"]') ||
+                        pDoc.querySelector('[data-testid="stSidebarHeader"] button[data-testid="baseButton-headerNoPadding"]') ||
+                        pDoc.querySelector('[data-testid="stSidebar"] [data-testid="stSidebarHeader"] button') ||
+                        pDoc.querySelector('[data-testid="stSidebar"] button[aria-label*="Close" i]') ||
+                        pDoc.querySelector('[data-testid="stSidebar"] button[aria-label*="Collapse" i]');
+                      if (btn && !clicked) {{
+                        clicked = true;
+                        btn.click();
+                      }}
+                    }}
+                  }}
+                }} catch(e) {{}}
+
+                if (attempts < maxAttempts) {{
+                  setTimeout(function() {{
+                    try {{
+                      var sbCheck = pDoc.querySelector('[data-testid="stSidebar"]');
+                      if (sbCheck && sbCheck.getAttribute('aria-expanded') === 'false') return;
+                      if (clicked && attempts >= 5) {{
+                        clicked = false; // Retry click if React ignored the very first hydration click
+                      }}
+                    }} catch(e) {{}}
+                    tryCollapse();
+                  }}, 80);
+                }}
+              }}
+
+              setTimeout(tryCollapse, 30);
+            }})();
+            </script></body></html>""",
+            height=1,
+            width=1,
+        )
+
     # ── SIDEBAR: Design Modules Dashboard Mode ─────────────────────────────
     with st.sidebar:
         active_project_sidebar = get_active_project_name()
